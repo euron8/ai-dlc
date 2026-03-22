@@ -80,8 +80,9 @@ runs at the end with a pause for your commentary.
 
 ## Patterns
 
-Optional enforcement modules in `patterns/`. Install the ones relevant
-to your project by following the configuration instructions in each file:
+Optional enforcement modules that add gate checks for specific project
+characteristics. The installer copies pattern files to
+`docs/ai-dlc-patterns/` in your project for reference.
 
 | Pattern | Use when |
 |---------|----------|
@@ -90,6 +91,20 @@ to your project by following the configuration instructions in each file:
 | `api-field-verification` | Frontend consumes API data |
 | `high-cost-action-gating` | Project has expensive/irreversible operations |
 | `bundle-verification` | Frontend has a build pipeline |
+
+**Recommended:** `/ai-dlc-setup` (Step 8) walks you through pattern
+selection and configures everything automatically.
+
+**Manual installation** for each pattern you want:
+
+1. Open the pattern file in `docs/ai-dlc-patterns/<pattern>.md`
+2. Copy the markdown block from the **Configuration** section
+3. Paste it into `docs/coding-conventions.md` under the appropriate
+   section (the pattern file tells you where)
+4. Replace the pattern's template variables with your project values
+   (listed under **Template variables** in the pattern file)
+5. If the pattern specifies additions to `code-reviewer.md`, add those
+   to `.claude/team-roles/code-reviewer.md` as well
 
 ## Project Structure
 
