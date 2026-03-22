@@ -85,9 +85,11 @@ Key variables:
 ## Use
 
 ```
-/effort auto
 /ai-dlc Build a user dashboard with real-time metrics
 ```
+
+Effort levels are set automatically — `high` for the lead and planning
+roles, `medium` for implementation roles. No manual `/effort` needed.
 
 The pipeline auto-detects the variant and runs to completion. The only
 human checkpoint is production validation after deployment. The retro
