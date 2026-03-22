@@ -1,7 +1,7 @@
 ---
 name: ai-dlc
 description: Run the full AI Development Lifecycle — from idea to production deployment in a single conversation. Auto-detects pipeline variant (greenfield, feature, bug, carry-over, brownfield analysis). Use when the user says "ai-dlc", "build", "implement", "fix bug", or provides a feature description to run end-to-end.
-effort: auto
+effort: high
 ---
 
 # AI Development Lifecycle (AI/DLC) Orchestrator
@@ -17,8 +17,11 @@ in a single conversation.
    at every phase. If BMAD is not installed, the pipeline will fail at
    the first sub-skill invocation.
 
-2. **Effort level** is set to `auto` via this skill's frontmatter. No
-   manual `/effort` command needed when invoking `/ai-dlc`.
+2. **Effort level** is set to `high` via this skill's frontmatter. The
+   lead orchestrator runs planning, validation cycles, and gate checks
+   that require deep reasoning. Teammates set their own effort level
+   via their role files (high for planning roles, medium for
+   implementation roles).
 
 ## CRITICAL RULES
 

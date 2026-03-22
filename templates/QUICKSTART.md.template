@@ -86,8 +86,10 @@ conversation, from the user's initial request through production deployment.
 
 ### Invocation
 
-Effort is set to `auto` via the skill's frontmatter -- no manual setup
-needed. Teammates set effort via their role files.
+Effort is set to `high` via the skill's frontmatter for the lead
+orchestrator. Teammates set their own effort via role files: `high` for
+planning roles (PM, architect, code-reviewer), `medium` for
+implementation roles (dev, QA).
 
 ```
 /ai-dlc [description of what to build, fix, or analyze]

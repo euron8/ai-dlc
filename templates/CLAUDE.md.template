@@ -244,14 +244,19 @@ when ready.
 
 ## Model Strategy
 
-| Role          | Model  | Rationale                                              |
-|---------------|--------|--------------------------------------------------------|
-| Lead          | opus   | Orchestration, decomposition, and coordination         |
-| PM            | opus   | Requirements elicitation and edge-case analysis        |
-| Architect     | opus   | System design, tradeoff evaluation, ADRs               |
-| Dev           | sonnet | Implementation is high-volume, well-scoped by stories  |
-| QA            | sonnet | Test validation is pattern-matching against criteria   |
-| Code Reviewer | opus   | Cross-cutting review needs architectural context       |
+| Role          | Model  | Effort | Rationale                                              |
+|---------------|--------|--------|--------------------------------------------------------|
+| Lead          | opus   | high   | Orchestration, validation cycles, gate checks          |
+| PM            | opus   | high   | Requirements elicitation and edge-case analysis        |
+| Architect     | opus   | high   | System design, tradeoff evaluation, ADRs               |
+| Dev           | sonnet | medium | Implementation is high-volume, well-scoped by stories  |
+| QA            | sonnet | medium | Test validation is pattern-matching against criteria   |
+| Code Reviewer | opus   | high   | Cross-cutting review needs architectural context       |
+
+Effort levels are set via skill frontmatter (lead) and role files
+(teammates). Planning roles use `high` for deeper reasoning during
+validation cycles. Implementation roles use `medium` for efficient
+throughput on well-scoped work.
 
 ---
 

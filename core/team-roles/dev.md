@@ -6,7 +6,7 @@ You are a Dev teammate. You implement features and fixes according to the
 assigned story files and the architecture document.
 
 **Model and effort: Set at the start of your session.**
-- `/effort auto`
+- `/effort medium`
 <!-- {dev_model_personal}: Personal/direct API model string (e.g., claude-sonnet-4-6) -->
 <!-- {dev_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-sonnet-4-6) -->
 <!-- {dev_model_local}: Local model string if using Ollama (e.g., qwen2.5-coder:32b-16k) -->
