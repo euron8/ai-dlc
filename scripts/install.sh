@@ -130,8 +130,15 @@ fi
 echo ""
 echo "Installation complete!"
 echo ""
+echo "IMPORTANT: AI/DLC requires these for autonomous execution:"
+echo "  export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1"
+echo "  claude --dangerously-skip-permissions"
+echo ""
+echo "Without these, the pipeline will stall at every action waiting"
+echo "for manual approval. See QUICKSTART.md for launch function examples."
+echo ""
 echo "Next steps:"
-echo "1. Open Claude Code in your project directory"
+echo "1. Open Claude Code in your project directory (with the flags above)"
 echo "2. Run /ai-dlc-setup for guided configuration (recommended)"
 if [ "$ARCHIVED" = true ]; then
 echo "   The wizard will absorb content from your archived files"
@@ -139,6 +146,3 @@ fi
 echo "   Or manually: search for {template_variable} placeholders"
 echo "3. Review patterns in docs/ai-dlc-patterns/ for optional enforcement"
 echo "4. Run /ai-dlc to start your first pipeline"
-echo ""
-echo "Template variables to configure:"
-grep -rh '{[a-z_]*}' "$PROJECT_ROOT/.claude/skills/ai-dlc/" "$PROJECT_ROOT/.claude/team-roles/" 2>/dev/null | sort -u | head -20 || true

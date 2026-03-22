@@ -28,6 +28,48 @@ deployment, and retrospective — autonomously in one conversation.
 - [BMAD Method v6](https://github.com/bmad-method/bmad-method) installed
   (`npx bmad-method install` with BMM, CIS, TEA modules)
 
+### Required environment for autonomous execution
+
+AI/DLC runs autonomously — agents edit files, execute commands, spawn
+teammates, and deploy without human approval at each step. This
+requires two environment settings:
+
+```bash
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+```
+
+And launching Claude Code with `--dangerously-skip-permissions`:
+
+```bash
+claude --dangerously-skip-permissions
+```
+
+**Without these, the pipeline will stall** at every file write, shell
+command, and teammate spawn waiting for manual approval — breaking the
+autonomous flow.
+
+**Option: create a launch function** for convenience. Add to your
+shell profile (`~/.zshrc`, `~/.bashrc`, etc.):
+
+```bash
+claude-myproject() {
+  ANTHROPIC_MODEL=claude-opus-4-6[1m] \
+  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 \
+  claude --dangerously-skip-permissions "$@"
+}
+```
+
+Replace `myproject` with your project name and adjust the model string
+for your environment (see `QUICKSTART.md` for Bedrock variants).
+
+**What `--dangerously-skip-permissions` means:** Agents can execute
+any shell command, edit any file, and make network calls without
+confirmation. Risk is mitigated by ownership boundaries in team role
+files, the lead's orchestration, gate validation, and git (work on a
+branch). If you are not comfortable with blanket permissions, you can
+omit the flag and approve each action manually, but expect significant
+interruption to the autonomous flow.
+
 ## Install
 
 ```bash
