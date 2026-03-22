@@ -79,10 +79,88 @@ Wait for the human's response. If they have commentary:
 - Apply any additional process changes they request
 If they have nothing to add, proceed.
 
-### 6. Commit and Push
+### 6. Commit, Push, and PR
 
-Commit all sprint artifacts (retro doc, process improvements, status
-updates) and push to origin.
+**6a. Commit all remaining artifacts.**
+
+Run `git status` to identify any uncommitted files. Stage and commit
+everything produced during the sprint that hasn't been committed yet.
+This typically includes:
+
+**Implementation artifacts** (if not already committed per-story):
+- `_bmad-output/implementation-artifacts/gate-log.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `docs/reviews/*.md` (code review output)
+- `docs/escalations/pending.md` (escalation entries)
+
+**Retro artifacts** (produced in steps 3-5 above):
+- `docs/retro/sprint-N.md` (the retro document)
+- Any files modified by process improvements (CLAUDE.md, team roles,
+  coding-conventions.md, pipeline step files)
+- `docs/ai-dlc-feedback.md` (if updated)
+
+Use a conventional commit message:
+`docs(retro): sprint N retrospective, reviews, and process improvements`
+
+If there are no uncommitted changes, skip this step.
+
+**6b. Push the branch.**
+
+Push the current branch to origin:
+```bash
+git push -u origin HEAD
+```
+
+**6c. Determine if a PR is warranted.**
+
+Check the current branch:
+- If on `main` or `master`: No PR needed — work was committed directly.
+  Announce: "Sprint [N] complete. Pipeline finished."
+- If on any other branch: A PR is warranted. Proceed to 6d.
+
+**6d. Create a pull request.**
+
+Generate a PR using the sprint's artifacts as the source material:
+
+- **Title:** Short description of the work (under 70 characters).
+  Derive from the pipeline variant and user's original request.
+  Examples: "Add user dashboard with real-time metrics",
+  "Fix stale cache in search results"
+
+- **Body:** Use the following structure, populated from sprint artifacts:
+
+  ```
+  ## Summary
+  [2-5 bullet points describing what was built/fixed, derived from
+  the sprint stories and retro summary]
+
+  ## Pipeline
+  - **Variant:** [pipeline variant]
+  - **Stories:** [count] delivered
+  - **Gate log:** see `_bmad-output/implementation-artifacts/gate-log.md`
+
+  ## Autonomous Decisions
+  [List any DECIDED_AUTONOMOUSLY entries from docs/escalations/pending.md,
+  or "None" if clean]
+
+  ## Test Evidence
+  [Brief summary of test coverage — smoke tests, production integrity
+  tests, QA validation results]
+
+  ## Retro Highlights
+  [1-3 key findings from the retrospective, if notable]
+  ```
+
+- Create the PR with `gh pr create` targeting the main branch.
+- If `gh` is not available, provide the user with the branch name
+  and suggest they create the PR manually.
+
+**6e. Announce completion.**
+
+Present to the user:
+- PR URL (if created)
+- Sprint summary (stories delivered, gate results)
+- Any open escalations that need human review
 
 Announce: "Sprint [N] complete. Pipeline finished."
 

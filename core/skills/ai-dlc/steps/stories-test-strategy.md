@@ -80,7 +80,24 @@ risk assessment suggests phasing:
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
 
-### 6. UI Detection and Routing
+### 6. Commit Planning Artifacts
+
+Before transitioning to implementation, commit all planning artifacts
+so they are captured in version control. This ensures the planning
+record is preserved regardless of what happens during implementation.
+
+Stage and commit:
+- `_bmad-output/planning-artifacts/` (brief, PRD, architecture, stories,
+  sprint-backlog, test-strategy, and any other planning output)
+- `docs/escalations/pending.md` (if modified during planning)
+
+Use a conventional commit message:
+`docs(planning): sprint N planning artifacts`
+
+Do NOT commit implementation files, source code, or test files — those
+are committed per-story by dev teammates during implementation.
+
+### 7. UI Detection and Routing
 
 Scan all sprint stories for new visual surfaces (new UI components, pages,
 layout changes):

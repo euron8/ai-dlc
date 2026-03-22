@@ -125,6 +125,35 @@ This is determined during the stories-test-strategy step, not here.
 **Note:** For `feature` variant, the discovery step is scoped — it updates
 existing artifacts rather than creating from scratch.
 
+### Step 6: Branch Strategy
+
+Before starting the pipeline, determine the correct branch strategy:
+
+1. **Check the current branch:** Run `git branch --show-current`.
+
+2. **If on `main` or `master`:** A new branch should be created for
+   this work. Generate a branch name from the pipeline variant and
+   user input:
+   - Format: `ai-dlc/<variant>/<short-description>`
+   - Examples: `ai-dlc/feature/user-dashboard`, `ai-dlc/bug/stale-cache`,
+     `ai-dlc/greenfield/notification-system`
+   - Keep the description to 2-4 kebab-case words derived from the
+     user's request.
+   - Create the branch: `git checkout -b <branch-name>`
+   - Announce: "Created branch `<branch-name>` for this work."
+
+3. **If on an existing `ai-dlc/*` branch:** This is likely a resumed
+   pipeline. Ask the user: "You're on branch `<name>`. Continue on
+   this branch, or create a new one?" If continuing, proceed. If new,
+   create as above.
+
+4. **If on any other branch:** The user is on a custom branch. Ask:
+   "You're on branch `<name>`. Use this branch for AI/DLC work, or
+   create a new branch?" Respect their choice.
+
+5. **If git is not initialized:** Skip branching entirely. Do not
+   initialize a git repo — that is the user's decision.
+
 Announce the detected variant and pipeline to the user, then **READ AND
 FOLLOW** the first step file at:
 `{project-root}/.claude/skills/ai-dlc/steps/<first-step-filename>`
