@@ -47,37 +47,56 @@ echo "Installing setup skill..."
 mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc-setup"
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/"
 
-# Copy team roles (don't overwrite if they exist)
+# Archive existing files that AI/DLC will replace
+# The setup wizard reads these to absorb project-specific content
+ARCHIVED=false
+ARCHIVE_DIR="$PROJECT_ROOT/docs/pre-ai-dlc"
+
+archive_if_exists() {
+  local file="$1"
+  local basename="$(basename "$file")"
+  if [ -f "$file" ]; then
+    if [ "$ARCHIVED" = false ]; then
+      mkdir -p "$ARCHIVE_DIR"
+      echo "Archiving existing files to docs/pre-ai-dlc/..."
+      ARCHIVED=true
+    fi
+    cp "$file" "$ARCHIVE_DIR/$basename"
+    echo "  Archived $basename"
+  fi
+}
+
+archive_if_exists "$PROJECT_ROOT/CLAUDE.md"
+archive_if_exists "$PROJECT_ROOT/QUICKSTART.md"
+archive_if_exists "$PROJECT_ROOT/docs/coding-conventions.md"
+for role in architect code-reviewer dev pm qa; do
+  archive_if_exists "$PROJECT_ROOT/.claude/team-roles/$role.md"
+done
+
+if [ "$ARCHIVED" = true ]; then
+  echo ""
+  echo "  Originals saved to docs/pre-ai-dlc/"
+  echo "  The /ai-dlc-setup wizard will absorb your project-specific"
+  echo "  content from these files during configuration."
+  echo ""
+fi
+
+# Install team roles (always overwrite with AI/DLC versions)
 echo "Installing team roles..."
 for role in architect code-reviewer dev pm qa; do
-  if [ -f "$PROJECT_ROOT/.claude/team-roles/$role.md" ]; then
-    echo "  $role.md already exists — skipping (see core/team-roles/$role.md for reference)"
-  else
-    cp "$SCRIPT_DIR/../core/team-roles/$role.md" "$PROJECT_ROOT/.claude/team-roles/"
-    echo "  $role.md installed"
-  fi
+  cp "$SCRIPT_DIR/../core/team-roles/$role.md" "$PROJECT_ROOT/.claude/team-roles/"
+  echo "  $role.md installed"
 done
 
-# Copy templates (don't overwrite if they exist)
+# Install templates (always overwrite with AI/DLC versions)
 echo "Installing templates..."
 for tmpl in CLAUDE.md QUICKSTART.md; do
-  if [ -f "$PROJECT_ROOT/$tmpl" ]; then
-    echo "  $tmpl already exists — template saved to docs/ai-dlc-$tmpl.template"
-    cp "$SCRIPT_DIR/../templates/$tmpl.template" "$PROJECT_ROOT/docs/ai-dlc-$tmpl.template"
-  else
-    # Remove .template extension for the installed copy
-    cp "$SCRIPT_DIR/../templates/$tmpl.template" "$PROJECT_ROOT/$tmpl"
-    echo "  $tmpl installed (customize template variables)"
-  fi
+  cp "$SCRIPT_DIR/../templates/$tmpl.template" "$PROJECT_ROOT/$tmpl"
+  echo "  $tmpl installed"
 done
 
-if [ -f "$PROJECT_ROOT/docs/coding-conventions.md" ]; then
-  echo "  coding-conventions.md already exists — template saved to docs/ai-dlc-coding-conventions.md.template"
-  cp "$SCRIPT_DIR/../templates/coding-conventions.md.template" "$PROJECT_ROOT/docs/ai-dlc-coding-conventions.md.template"
-else
-  cp "$SCRIPT_DIR/../templates/coding-conventions.md.template" "$PROJECT_ROOT/docs/coding-conventions.md"
-  echo "  coding-conventions.md installed (customize template variables)"
-fi
+cp "$SCRIPT_DIR/../templates/coding-conventions.md.template" "$PROJECT_ROOT/docs/coding-conventions.md"
+echo "  coding-conventions.md installed"
 
 # Copy pattern files for setup reference
 echo "Installing patterns reference..."
@@ -114,6 +133,9 @@ echo ""
 echo "Next steps:"
 echo "1. Open Claude Code in your project directory"
 echo "2. Run /ai-dlc-setup for guided configuration (recommended)"
+if [ "$ARCHIVED" = true ]; then
+echo "   The wizard will absorb content from your archived files"
+fi
 echo "   Or manually: search for {template_variable} placeholders"
 echo "3. Review patterns in docs/ai-dlc-patterns/ for optional enforcement"
 echo "4. Run /ai-dlc to start your first pipeline"

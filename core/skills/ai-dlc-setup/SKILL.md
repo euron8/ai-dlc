@@ -125,6 +125,120 @@ If all exist, proceed to routing.
 
 ---
 
+## STEP 0: Absorb Existing Configuration
+
+**This step runs automatically before Step 1 if archived files exist.**
+
+Check if `docs/pre-ai-dlc/` exists. This directory is created by
+`install.sh` when the project had existing files (CLAUDE.md, team roles,
+coding-conventions.md) before AI/DLC was installed. The originals were
+archived there and replaced with AI/DLC templates.
+
+If `docs/pre-ai-dlc/` does NOT exist, skip to Step 1.
+
+If it exists, read each archived file and extract project-specific
+content that should be preserved. Do this silently — collect the
+information now and apply it during the relevant configuration steps.
+
+### 0a: Absorb CLAUDE.md
+
+Read `docs/pre-ai-dlc/CLAUDE.md` (if it exists) and extract:
+
+- **Project-specific rules or conventions** — anything that governs
+  how agents should behave in this specific project (deployment targets,
+  environment constraints, domain-specific rules)
+- **File paths and references** — project-specific paths, key files,
+  documentation pointers
+- **Tool or service configuration** — API endpoints, service names,
+  infrastructure details
+- **Coding standards** — if coding conventions were inline in CLAUDE.md
+  rather than in a separate file
+
+Do NOT absorb:
+- Generic agent behavior rules that conflict with AI/DLC's autonomy
+  model (e.g., "always ask before proceeding" — AI/DLC has its own
+  gate protocol)
+- Validation or review processes — AI/DLC replaces these with its
+  own three-gate model
+- Team role definitions — AI/DLC provides its own
+
+Store the extracted content. You will use it in:
+- Step 5 (Operations Protocol) — infrastructure rules
+- Step 7 (Coding Conventions) — project-specific conventions
+- Any relevant template variable replacement where the archived
+  content provides the answer
+
+### 0b: Absorb Team Roles
+
+For each archived role file in `docs/pre-ai-dlc/` (architect.md,
+code-reviewer.md, dev.md, pm.md, qa.md), read and extract:
+
+- **Ownership paths** — which directories/files the role owned
+- **Model preferences** — any model strings already configured
+- **Project-specific responsibilities** — domain-specific duties
+  beyond AI/DLC's defaults
+- **Custom constraints** — project-specific rules for the role
+
+Store the extracted content. You will use it in:
+- Step 2 (Models) — if model strings were already configured
+- Step 4 (Ownership) — if ownership paths were already defined
+
+### 0c: Absorb Coding Conventions
+
+Read `docs/pre-ai-dlc/coding-conventions.md` (if it exists) and extract:
+
+- **Language/framework conventions** — linting, formatting, patterns
+- **API conventions** — versioning, schema rules
+- **Review standards** — project-specific review criteria
+- **Impact classifications** — if defined
+- **High-cost action gates** — if defined
+
+Store the extracted content for Step 7 (Coding Conventions).
+
+### 0d: Conflict Detection
+
+Compare the absorbed content against AI/DLC's operating model. Flag
+any directives that contradict AI/DLC's core rules:
+
+| AI/DLC Rule | Potential Conflict |
+|---|---|
+| Autonomous operation with single human checkpoint | "Always ask before proceeding" |
+| Three-gate validation model | Custom review/approval workflows |
+| Escalation tiers (HARD_BLOCK, DECIDED_AUTONOMOUSLY) | Different escalation models |
+| Agent Teams with role ownership | Different team structures |
+| BMAD Method for planning | Different planning frameworks |
+
+For each conflict found, note it. You will present conflicts to the
+user during the relevant configuration step and ask which takes
+precedence. If the user picks their existing rule, add it as an
+explicit override in the `CLAUDE.md` operations protocol or coding
+conventions section with a comment explaining it overrides the AI/DLC
+default.
+
+### 0e: Absorption Summary
+
+After reading all archived files, present a brief summary to the user:
+
+```
+## Existing Configuration Detected
+
+Archived files found in docs/pre-ai-dlc/:
+[list files found]
+
+Absorbed content:
+- [ownership paths / model strings / conventions / etc.]
+
+Conflicts with AI/DLC defaults:
+- [list conflicts, or "none detected"]
+
+This content will be incorporated during setup. You'll have a chance
+to review and confirm at each step.
+```
+
+Wait for acknowledgment, then proceed to Step 1.
+
+---
+
 ## STEP 1: Project Scan
 
 Scan the project to gather context. Check for the existence of each item
@@ -206,8 +320,12 @@ Ask the user:
 > 2. **AWS Bedrock**
 > 3. **Both** — Configure both, switch per session
 
+If Step 0 absorbed model strings from archived team role files, present
+them as the detected defaults instead of the standard defaults below.
+
 Based on the answer, determine the model strings. Use these defaults
-unless the user specifies different models:
+unless the user specifies different models or Step 0 absorbed existing
+model strings:
 
 **Opus roles** (lead, PM, architect, code-reviewer):
 - Personal: `claude-opus-4-6[1m]`
@@ -327,7 +445,10 @@ Replace in these files:
 
 ## STEP 4: Ownership Paths
 
-Based on the directory scan from Step 1, propose ownership assignments.
+Based on the directory scan from Step 1 — and any ownership paths
+absorbed from archived team role files in Step 0 — propose ownership
+assignments. If Step 0 found existing ownership paths, use those as the
+starting proposal instead of generating from scratch.
 
 **Dev ownership** should include application source directories, test
 directories, and dependency files. Example:
@@ -365,7 +486,11 @@ After confirmation, replace:
 ## STEP 5: Operations Protocol
 
 This section defines your project's deployment infrastructure rules in
-`CLAUDE.md`. Based on Step 1 detection, generate a scaffold.
+`CLAUDE.md`. Based on Step 1 detection — and any infrastructure rules
+absorbed from the archived CLAUDE.md in Step 0 — generate a scaffold.
+If Step 0 found existing operations content, use it as the starting
+draft and augment with AI/DLC-specific sections (pre-deploy checks,
+rollback procedures) if missing.
 
 **If Docker detected:**
 ```markdown
@@ -475,6 +600,11 @@ After confirmation, replace `{launch_configuration}` in `QUICKSTART.md`.
 
 Configure the project-specific sections in `docs/coding-conventions.md`.
 For each placeholder, auto-detect what you can and present a proposal.
+If Step 0 absorbed content from an archived `coding-conventions.md`,
+use that as the starting proposal for each relevant sub-section rather
+than generating from scratch. Present absorbed content with a note:
+"(from your existing coding-conventions.md)" so the user knows the
+source.
 
 ### 7a: General Conventions (`{project_general_conventions}`)
 

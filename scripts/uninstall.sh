@@ -128,6 +128,38 @@ for file in "${FILES_TO_REMOVE[@]}"; do
   echo "  Removed $file"
 done
 
+# Restore archived originals if they exist
+RESTORED=false
+ARCHIVE_DIR="$PROJECT_ROOT/docs/pre-ai-dlc"
+if [ -d "$ARCHIVE_DIR" ]; then
+  echo ""
+  echo "Restoring archived originals from docs/pre-ai-dlc/..."
+  for file in "$ARCHIVE_DIR"/*; do
+    basename="$(basename "$file")"
+    case "$basename" in
+      CLAUDE.md|QUICKSTART.md)
+        cp "$file" "$PROJECT_ROOT/$basename"
+        echo "  Restored $basename"
+        RESTORED=true
+        ;;
+      coding-conventions.md)
+        mkdir -p "$PROJECT_ROOT/docs"
+        cp "$file" "$PROJECT_ROOT/docs/$basename"
+        echo "  Restored docs/$basename"
+        RESTORED=true
+        ;;
+      architect.md|code-reviewer.md|dev.md|pm.md|qa.md)
+        mkdir -p "$PROJECT_ROOT/.claude/team-roles"
+        cp "$file" "$PROJECT_ROOT/.claude/team-roles/$basename"
+        echo "  Restored .claude/team-roles/$basename"
+        RESTORED=true
+        ;;
+    esac
+  done
+  rm -rf "$ARCHIVE_DIR"
+  echo "  Removed docs/pre-ai-dlc/ archive"
+fi
+
 # Clean up empty directories (don't remove if they still have content)
 for dir in .claude/skills .claude/team-roles .claude docs/escalations docs; do
   if [ -d "$PROJECT_ROOT/$dir" ] && [ -z "$(ls -A "$PROJECT_ROOT/$dir")" ]; then
@@ -139,6 +171,9 @@ done
 echo ""
 echo "Uninstall complete."
 echo ""
+if [ "$RESTORED" = true ]; then
+  echo "Restored original files from pre-ai-dlc archive."
+fi
 echo "Preserved:"
 echo "  - _bmad-output/ (your planning artifacts)"
 echo "  - docs/reviews/ (your code review output)"

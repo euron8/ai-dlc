@@ -37,7 +37,12 @@ cd ai-dlc
 ```
 
 The installer copies core files, creates directory structure, and
-generates templates. It won't overwrite existing files.
+generates templates. If your project already has `CLAUDE.md`, team
+roles, or coding conventions, the installer archives them to
+`docs/pre-ai-dlc/` before replacing. The `/ai-dlc-setup` wizard
+reads the archived files and absorbs your project-specific content
+(ownership paths, model strings, conventions, infrastructure rules)
+into AI/DLC's templates during configuration.
 
 ## Uninstall
 
