@@ -44,6 +44,21 @@ Parse the user's invocation to determine the entry point.
 | `conventions` | Step 7 (Coding Conventions) |
 | `patterns` | Step 8 (Pattern Selection) |
 | `validate` | Step 9 (Validation Sweep) |
+| `uninstall` | Uninstall (see below) |
+
+If the argument is `uninstall`, skip all other steps. Tell the user:
+
+> To remove AI/DLC from this project, run from the ai-dlc repo:
+> ```
+> ./scripts/uninstall.sh /path/to/this-project
+> ```
+> This removes all AI/DLC skills, team roles, templates, and pattern
+> references. It preserves your planning artifacts (`_bmad-output/`),
+> code reviews (`docs/reviews/`), and retrospectives (`docs/retro/`).
+>
+> Add `--force` to skip the confirmation prompt.
+
+Then stop. Do not proceed to any other step.
 
 If an argument matches, run the project scan (Step 1) silently — do NOT
 present the scan summary or ask for confirmation. Use the scan results
@@ -79,6 +94,7 @@ grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKS
   7. Patterns       — Add or reconfigure enforcement patterns
   8. Validate       — Check for remaining template variables
   9. Full setup     — Re-run the entire wizard from the beginning
+  10. Uninstall     — Remove AI/DLC from this project
 
   Enter a number or name (e.g., "7" or "patterns"):
   ```

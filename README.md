@@ -39,6 +39,16 @@ cd ai-dlc
 The installer copies core files, creates directory structure, and
 generates templates. It won't overwrite existing files.
 
+## Uninstall
+
+```bash
+./scripts/uninstall.sh /path/to/your-project
+```
+
+Removes all AI/DLC skills, team roles, templates, and pattern
+references. Preserves your planning artifacts (`_bmad-output/`),
+code reviews, and retrospectives. Add `--force` to skip confirmation.
+
 ## Configure
 
 **Recommended:** Run the guided setup wizard in Claude Code:
