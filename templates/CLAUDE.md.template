@@ -253,6 +253,12 @@ when ready.
 | QA            | sonnet | medium | Test validation is pattern-matching against criteria   |
 | Code Reviewer | opus   | high   | Cross-cutting review needs architectural context       |
 
+<!-- Model strategy note: The table above assumes access to both opus
+     and sonnet. If your environment only has sonnet (e.g., Bedrock
+     without opus access), /ai-dlc-setup will set all roles to sonnet.
+     Effort levels (high for planning, medium for implementation)
+     compensate partially for using the same model across all roles. -->
+
 Effort levels are set via skill frontmatter (lead) and role files
 (teammates). Planning roles use `high` for deeper reasoning during
 validation cycles. Implementation roles use `medium` for efficient
