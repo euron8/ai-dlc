@@ -36,9 +36,13 @@ design coherence against PRD. Fix any misalignment found.
 
 ### 4. Validation Cycle (Rule 3)
 
+**Execute all sub-skills back-to-back without pausing for human input
+between them:**
+
 1. `/bmad-party-mode` — Architect, Dev, TEA, PM debate every design
    decision, every component boundary, every data flow. Walk through
    exhaustively. Apply all improvements.
+   **Then immediately proceed to step 2:**
 2. `/bmad-review-adversarial-general` — 2+ passes. Focus on security,
    scalability, coupling, single points of failure, backward
    compatibility, migration risk, integration seams. Apply all fixes

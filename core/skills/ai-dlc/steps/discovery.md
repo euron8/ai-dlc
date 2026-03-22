@@ -73,14 +73,18 @@ verbatim or as close to verbatim as the source allows.
 
 ### 5. Validation Cycle (Rule 3)
 
-Run the full validation cycle on the brief:
+Run the full validation cycle on the brief. **Execute all sub-skills
+back-to-back without pausing for human input between them:**
+
 1. `/bmad-party-mode` — PM, Architect, UX, CIS debate the brief. Walk
    through every element. Apply all improvements directly.
    **Requirement fidelity check:** If features originate from carry-over
    items or user instructions with specific details, verify those details
    are preserved. Flag any generalization.
+   **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the brief with every answer.
+   **Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — cynical review. Apply all real
    fixes. Run a second pass. Continue until only nitpicks remain.
    **Source fidelity pass:** Verify the brief preserves the user's stated

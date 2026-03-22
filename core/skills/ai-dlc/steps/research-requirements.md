@@ -13,7 +13,9 @@ creation with full validation cycle.
 
 ### 1. Research
 
-Run all applicable research (skip none unless clearly irrelevant):
+Run all applicable research back-to-back (skip none unless clearly
+irrelevant). **Do not pause between research sub-skills:**
+
 1. `/bmad-domain-research` — problem domain deep dive
 2. `/bmad-market-research` — competitive landscape (skip for internal
    tools or infrastructure work where no market exists)
@@ -48,13 +50,18 @@ gaps found.
 
 ### 4. Validation Cycle (Rule 3)
 
+**Execute all sub-skills back-to-back without pausing for human input
+between them:**
+
 1. `/bmad-party-mode` — PM, Architect, UX, Dev, TEA debate every section
    of the PRD (personas, stories, NFRs, metrics, risks, constraints).
    Walk through exhaustively. Apply all improvements.
    **Requirement fidelity check:** Verify each new requirement preserves
    specific details from its source.
+   **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the PRD with every clarification.
+   **Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes. Apply all fixes
    between passes. Continue until only nitpicks remain.
    **Source fidelity pass:** Verify requirements implement what was

@@ -37,6 +37,16 @@ in a single conversation.
 6. **Production validation is the only human checkpoint.** After deployment
    and smoke tests, present the Production Validation Checkpoint to the
    human (CLAUDE.md Post-Gate Deployment).
+7. **Never pause between sub-skills.** When a step file lists multiple
+   sub-skill invocations in sequence (e.g., `/bmad-party-mode` then
+   `/bmad-advanced-elicitation` then `/bmad-review-adversarial-general`),
+   execute them back-to-back without returning to the conversation or
+   waiting for user input. Each sub-skill's output feeds the next. The
+   pipeline is a continuous flow — completing one sub-skill means
+   immediately starting the next. The ONLY points where you pause for
+   human input are: (a) ambiguity resolution (Rule 4), (b) the
+   Production Validation Checkpoint (Rule 6), and (c) the retro
+   commentary prompt. Everything else runs uninterrupted.
 
 ## INITIALIZATION
 

@@ -14,6 +14,16 @@ is **production validation** after deployment. Agents seek clarity when they
 detect ambiguity, but do not block on human approval at phase transitions.
 Token cost and cycle time are secondary to thoroughness.
 
+**Continuous flow:** When a pipeline step lists multiple sub-skill
+invocations in sequence (e.g., party mode, then elicitation, then
+adversarial review), execute them back-to-back without pausing for
+human input between them. Completing one sub-skill means immediately
+starting the next. Do not return to the conversation, summarize
+progress, or wait for a prompt between sub-skills. The pipeline is
+uninterrupted except at: (a) genuine ambiguity requiring clarification,
+(b) the Production Validation Checkpoint, and (c) the retro commentary
+prompt.
+
 Every planning artifact goes through **Party Mode** (multi-agent debate),
 **Advanced Elicitation** (probe until zero ambiguity), and **Adversarial
 Review** (multi-pass, apply all fixes autonomously between passes).

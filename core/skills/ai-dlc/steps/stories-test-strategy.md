@@ -60,12 +60,16 @@ risk assessment suggests phasing:
 
 ### 4. Story Validation Cycle (Rule 3)
 
+**Execute all sub-skills back-to-back without pausing for human input
+between them:**
+
 1. `/bmad-party-mode` — SM, Dev, Architect, TEA walk through EVERY story.
    Every acceptance criterion, every edge case, every dependency.
    Apply all improvements.
    **Requirement fidelity check:** For each story derived from a carry-over
    item or user instruction, verify: does every AC preserve the specific
    details from the source requirement?
+   **Then immediately proceed to step 2:**
 2. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep, missing
    NFRs. Apply all fixes.
