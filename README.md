@@ -41,13 +41,23 @@ generates templates. It won't overwrite existing files.
 
 ## Configure
 
-After install, search for `{template_variable}` placeholders:
+**Recommended:** Run the guided setup wizard in Claude Code:
+
+```
+/ai-dlc-setup
+```
+
+The wizard scans your project, auto-detects settings, asks targeted
+questions, replaces all template variables, selects enforcement
+patterns, and validates the result.
+
+**Manual alternative:** Search for `{template_variable}` placeholders:
 
 ```bash
 grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/
 ```
 
-Replace with your project-specific values. Key variables:
+Key variables:
 
 | Variable | What to set |
 |----------|------------|
@@ -89,6 +99,8 @@ your-project/
     skills/ai-dlc/
       SKILL.md                    # Entry point
       steps/                      # 18 pipeline step files
+    skills/ai-dlc-setup/
+      SKILL.md                    # Guided configuration wizard
     team-roles/                   # 5 role definitions
   CLAUDE.md                       # Autonomy rules + project config
   QUICKSTART.md                   # Reference documentation

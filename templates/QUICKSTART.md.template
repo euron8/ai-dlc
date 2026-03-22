@@ -1,0 +1,603 @@
+# AI Development Lifecycle (AI/DLC) Reference
+
+Internal reference documentation for the AI/DLC autonomous pipeline. This
+document covers how the pipeline works, how to operate it, how to modify it,
+and how to set it up in a new project.
+
+---
+
+## Table of Contents
+
+1. [Pipeline Overview](#pipeline-overview)
+2. [How to Operate](#how-to-operate)
+3. [Pipeline Variants](#pipeline-variants)
+4. [Phase Reference](#phase-reference)
+5. [Launch Configuration](#launch-configuration)
+6. [Model Assignments](#model-assignments)
+7. [Context Window Guide](#context-window-guide)
+8. [Validation Philosophy](#validation-philosophy)
+9. [How to Modify the Skill](#how-to-modify-the-skill)
+10. [How to Add to a New Project](#how-to-add-to-a-new-project)
+11. [Directory Structure](#directory-structure)
+12. [Key Gotchas](#key-gotchas)
+13. [Useful BMAD Commands](#useful-bmad-commands)
+
+---
+
+## Pipeline Overview
+
+The AI/DLC pipeline replaces the manual multi-session workflow where a human
+copied prompts at each phase transition. Instead, a single `/ai-dlc` skill
+invocation runs the entire development lifecycle autonomously in one
+conversation, from the user's initial request through production deployment.
+
+### How it works
+
+1. The user invokes `/ai-dlc` with a description of what to build, fix, or
+   analyze.
+2. The **router** (`steps/route.md`) reads project state from disk and
+   classifies the user's request to determine which pipeline variant to run.
+3. The router composes a step sequence and loads the first step file.
+4. Each step file executes its work (BMAD commands, validation cycles, file
+   operations), runs autonomous gate validation, then loads the next step.
+5. Steps chain until the pipeline reaches either a terminal point (analysis
+   complete, production deployment checkpoint) or a human-required decision.
+
+### Key design principles
+
+- **Single conversation.** The entire pipeline runs without session breaks.
+  Context is maintained through artifacts on disk, not conversation history.
+- **Autonomous gates.** Phase transitions run the gate validation protocol
+  automatically. No human approval is needed between phases.
+- **One human checkpoint.** The Production Validation Checkpoint at the end
+  of deployment is the only point where the pipeline stops and waits for
+  human input.
+- **Requirements are locked.** The pipeline has autonomy over HOW to
+  implement. It does NOT have autonomy over WHAT is implemented (CLAUDE.md
+  Rule 8).
+
+### File structure
+
+```
+.claude/skills/ai-dlc/
+  SKILL.md                    -- skill entry point, loaded by /ai-dlc
+  steps/
+    route.md                  -- router: detects variant, composes pipeline
+    gate-validation.md        -- shared gate protocol, referenced by all steps
+    discovery.md              -- Phase 1: brainstorm + product brief
+    research-requirements.md  -- Phase 2a-b: research + PRD
+    architecture.md           -- Phase 2c: system design + ADRs
+    stories-test-strategy.md  -- Phase 2d-f: stories + test strategy
+    ui-direction.md           -- Phase 2g: UI mockups (conditional)
+    implementation.md         -- Phase 3: Agent Teams build
+    sprint-review.md          -- Phase 4: sprint-level review
+    deploy-validate.md        -- Phase 4+: deploy + production checkpoint
+    bug-investigation.md      -- bug variant: investigate + fix story
+    carry-over-evaluation.md  -- carry-over variant: evaluate + scope
+    codebase-inventory.md     -- brownfield-a: inventory existing code
+    deep-codebase-analysis.md -- brownfield-b / analysis-only: reverse-engineer
+    doc-reconciliation.md     -- brownfield-c: reconcile docs vs code
+    doc-repair-backfill.md    -- brownfield-c: repair + backfill artifacts
+```
+
+---
+
+## How to Operate
+
+### Invocation
+
+Effort is set to `auto` via the skill's frontmatter -- no manual setup
+needed. Teammates set effort via their role files.
+
+```
+/ai-dlc [description of what to build, fix, or analyze]
+```
+
+Examples:
+```
+/ai-dlc Add user authentication with OAuth2 support
+/ai-dlc Fix: search results showing stale cached data after update
+/ai-dlc Run the next sprint from carry-over backlog
+/ai-dlc Implement the sprint (stories already planned)
+/ai-dlc Analyze this codebase and document its architecture
+/ai-dlc Build a new notification system for real-time alerts
+```
+
+### What to expect
+
+1. **Variant detection.** The pipeline announces which variant it detected
+   and the step sequence it will execute. If ambiguous, it asks one
+   clarifying question.
+2. **Planning phases.** BMAD commands run, validation cycles execute (party
+   mode, adversarial review, elicitation). Artifacts are written to disk.
+   This is the longest phase by token usage.
+3. **Implementation.** Agent Teams are spawned. Dev, code reviewer, and QA
+   teammates run autonomously with the lead orchestrating.
+4. **Deployment.** Services are built and deployed. Smoke tests run.
+5. **Production Validation Checkpoint.** The pipeline presents a summary
+   and stops. Review the deployed instance, any autonomous decisions, and
+   any deferral requests. Approve or request fixes.
+
+### Arguments
+
+The `/ai-dlc` skill accepts a free-text description. The router parses it
+for signal words to classify the request:
+
+| Signal | Detected variant |
+|--------|-----------------|
+| "fix", "bug", "broken", "error", "doesn't work" | bug |
+| "carry-over", "backlog", "next sprint" | carry-over |
+| "analyze", "document", "understand", "inventory" (no build intent) | analysis-only |
+| New capability described + no trusted artifacts on disk | greenfield |
+| New capability described + trusted artifacts exist | feature |
+| Artifacts exist but not trusted or partial | brownfield (a/b/c) |
+
+### Interrupting the pipeline
+
+The pipeline runs autonomously but can be interrupted at any point:
+- Type a message to redirect, add constraints, or correct course.
+- The pipeline will incorporate your input and resume.
+- For UI sprints, the ui-direction step presents mockups inline and
+  continues working. Interrupt if you want to steer the visual direction.
+
+---
+
+## Pipeline Variants
+
+The router (`steps/route.md`) selects a variant based on project state and
+user input. Each variant composes a different step sequence.
+
+### Decision tree
+
+```
+Is this a bug fix?
+  YES --> bug
+  NO  |
+      v
+Is this carry-over / next sprint work?
+  YES --> carry-over
+  NO  |
+      v
+Is this analysis-only (no implementation requested)?
+  YES --> analysis-only
+  NO  |
+      v
+Do trusted planning artifacts exist on disk?
+  (product brief AND prd AND architecture)
+  YES --> feature
+  NO  |
+      v
+Do ANY planning artifacts exist?
+  YES --> Are they trusted / current?
+    NOT SURE --> brownfield-c
+    NO, STALE --> Is code mid-implementation?
+      YES --> brownfield-a
+      NO  --> brownfield-b
+  NO  --> Is there an existing codebase with source files?
+    YES --> brownfield-b
+    NO  --> greenfield
+```
+
+### Variant pipeline sequences
+
+| Variant | Step Sequence |
+|---------|--------------|
+| **greenfield** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
+| **feature** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
+| **bug** | bug-investigation --> implementation --> deploy-validate |
+| **carry-over** | carry-over-evaluation --> stories-test-strategy --> implementation --> sprint-review --> deploy-validate |
+| **brownfield-a** | codebase-inventory --> discovery --> research-requirements --> architecture --> stories-test-strategy --> implementation --> sprint-review --> deploy-validate |
+| **brownfield-b** | deep-codebase-analysis --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
+| **brownfield-c** | doc-reconciliation --> doc-repair-backfill --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
+| **analysis-only** | deep-codebase-analysis --> STOP |
+
+`[ui-direction]` is conditional -- included only when sprint stories
+introduce new visual surfaces (new UI components, pages, or layout changes).
+This is determined during the stories-test-strategy step, not by the router.
+
+---
+
+## Phase Reference
+
+What each pipeline step does, its inputs, outputs, and key behaviors.
+See the individual step files in `.claude/skills/ai-dlc/steps/` for full
+execution sequences. A summary of each step's purpose:
+
+- **Discovery** (Phase 1): CIS ideation + product brief + validation cycle
+- **Research and Requirements** (Phase 2a-b): Research + PRD + validation cycle
+- **Architecture** (Phase 2c): System design + ADRs + solutioning gate + validation
+- **Stories and Test Strategy** (Phase 2d-f): Readiness + stories + sprint planning + test strategy
+- **UI Direction** (Phase 2g, conditional): Visual specs, non-blocking
+- **Bug Investigation** (bug variant): Root cause + fix story
+- **Carry-Over Evaluation** (carry-over variant): Evaluate + scope backlog items
+- **Codebase Inventory** (brownfield-a): Inventory existing code
+- **Deep Codebase Analysis** (brownfield-b/analysis): Reverse-engineer codebase
+- **Doc Reconciliation** (brownfield-c): Compare docs vs code
+- **Doc Repair** (brownfield-c): Fix docs + backfill artifacts
+- **Implementation** (Phase 3): Agent Teams build with three-gate validation
+- **Sprint Review** (Phase 4): Sprint-level adversarial review + party mode
+- **Deploy and Validate** (Phase 4+): Deploy + smoke tests + human checkpoint
+- **Retro** (Phase 5): Retrospective + process improvements
+
+---
+
+## Launch Configuration
+
+<!-- {launch_configuration}: Define your shell functions for launching
+     Claude Code with the correct environment variables. You need:
+     - ANTHROPIC_MODEL set to your lead model
+     - CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+     - --dangerously-skip-permissions for autonomous operation
+     - Any provider-specific variables (AWS for Bedrock, etc.)
+
+     Example template:
+
+     claude-my-project() {
+       ANTHROPIC_MODEL={lead_model_string} \
+       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 \
+       claude --dangerously-skip-permissions "$@"
+     }
+-->
+
+{launch_configuration}
+
+### Why `--dangerously-skip-permissions`
+
+This flag disables all permission prompts for file edits, bash execution,
+and tool use. Without it, every file write and shell command triggers a
+confirmation dialog, which breaks the autonomous workflow.
+
+**What this enables:** Agents can edit files, run tests, execute BMAD
+commands, and install dependencies without pausing for approval.
+
+**What this means for safety:** The flag also allows unrestricted bash
+execution (network calls, package installs, destructive commands). Risk
+is mitigated by:
+- Ownership boundaries in team-role files prevent agents from editing
+  files outside their scope
+- The lead enforces boundaries and reviews teammate output
+- Autonomous gate validation catches issues before they propagate
+- All changes are tracked via git (work on a branch)
+
+If you are not comfortable with blanket permissions, you can remove the
+flag and approve each action manually, but expect significant interruption
+to the autonomous flow.
+
+### Model Strings by Environment
+
+<!-- Update this table with your provider's model strings -->
+
+| Role    | Model   | Personal (Anthropic)  | Bedrock                                  |
+|---------|---------|----------------------|------------------------------------------|
+| Lead    | opus    | {lead_model}         | {lead_model_bedrock}                     |
+| PM      | opus    | {pm_model}           | {pm_model_bedrock}                       |
+| Architect | opus  | {architect_model}    | {architect_model_bedrock}                |
+| Code Reviewer | opus | {reviewer_model}  | {reviewer_model_bedrock}                 |
+| Dev     | sonnet  | {dev_model}          | {dev_model_bedrock}                      |
+| QA      | sonnet  | {qa_model}           | {qa_model_bedrock}                       |
+
+### How Teammates Switch Models
+
+The lead session launches as opus (set by your shell function). Teammates
+that need sonnet must switch after spawning using `/model` inside their
+session. The `/model` command is more reliable than the `--model` flag.
+
+Each team-role file (`.claude/team-roles/*.md`) includes a `/model`
+directive. The teammate runs it as their first action. The model string
+in the role file must match your environment.
+
+---
+
+## Model Assignments
+
+| Role          | Model  | Why                                           |
+|---------------|--------|-----------------------------------------------|
+| Lead          | opus   | Decomposition and coordination                |
+| PM            | opus   | Requirements depth                            |
+| Architect     | opus   | Design tradeoffs                              |
+| Dev (default) | sonnet | High-volume, well-scoped implementation       |
+| Code Reviewer | opus   | Cross-cutting analysis needs deeper reasoning |
+| QA            | sonnet | Pattern-match against acceptance criteria     |
+
+---
+
+## Context Window Guide
+
+The AI/DLC pipeline runs in a single conversation. Context management is
+handled through artifacts on disk rather than session breaks.
+
+**How context is preserved:**
+- Every planning artifact is written to `_bmad-output/planning-artifacts/`
+- Each step file loads only the artifacts it needs at the start
+- Steps do not depend on conversation history from earlier steps
+- Agent Teams teammates each have their own context window and load
+  artifacts from disk independently
+
+**When context degrades:**
+Long conversations will eventually degrade context quality. The pipeline
+mitigates this by:
+- Writing all intermediate results to disk
+- Each step file explicitly listing which artifacts to load
+- The implementation step spawning fresh teammate contexts
+- Step files being self-contained instructions (not dependent on prior
+  conversation)
+
+**If you hit context limits:**
+The pipeline is designed to complete within a single conversation for most
+sprints (3-5 stories). For very large sprints or complex brownfield
+analyses, the pipeline may exhaust the context window. If this happens:
+- Artifacts on disk represent the last successfully completed step
+- Start a new conversation with `/ai-dlc` and describe where you left off
+- The router will detect existing artifacts and resume from the
+  appropriate point
+
+---
+
+## Validation Philosophy
+
+Every artifact gets challenged. Every finding gets fixed. No cherry-picking.
+
+**Planning artifacts** (brief, PRD, architecture, stories):
+Party Mode --> Advanced Elicitation --> Adversarial Review (2+ passes) -->
+Apply all fixes --> Changelog
+
+**Implementation artifacts** (code, tests):
+Code Review (fix-and-re-review loops) --> QA (fix-and-revalidate loops) -->
+Story Validation (remediate-and-rerun) --> Sprint-level adversarial +
+party mode
+
+---
+
+## How to Modify the Skill
+
+### Skill structure
+
+```
+.claude/skills/ai-dlc/
+  SKILL.md          -- entry point, loaded when /ai-dlc is invoked
+  steps/
+    route.md        -- router logic (edit to change variant detection)
+    *.md            -- individual pipeline steps
+```
+
+### Adding a new step
+
+1. Create a new step file in `.claude/skills/ai-dlc/steps/`:
+   ```yaml
+   ---
+   name: my-new-step
+   description: What this step does
+   nextStepFile: ./next-step.md
+   ---
+   ```
+2. Write the execution sequence using the same pattern as existing steps:
+   numbered sections, BMAD command invocations, validation cycles, gate
+   validation at the end.
+3. Update the step that should precede yours to point `nextStepFile` at
+   your new step.
+4. Update the router's pipeline sequence table in `route.md` for the
+   variant(s) that should include your step.
+5. Update the [Phase Reference](#phase-reference) section in this document.
+
+### Modifying routing logic
+
+Edit `steps/route.md`. The routing logic is in Step 3 (decision tree) and
+Step 5 (variant-to-sequence mapping). To add a new variant:
+
+1. Add the variant name to the `pipeline_variant` state variable list
+2. Add detection logic to the decision tree (Step 3)
+3. Add the variant's pipeline sequence to the table (Step 5)
+4. Update this document's [Pipeline Variants](#pipeline-variants) section
+
+### Modifying gate validation
+
+Edit `steps/gate-validation.md`. This is a shared protocol referenced by
+all steps. Changes here affect every phase transition.
+
+### Modifying an existing step
+
+Each step file is self-contained. Edit the step file directly. Key
+conventions to preserve:
+- YAML frontmatter with `name`, `description`, `nextStepFile`
+- Numbered execution sequence sections
+- BMAD command names prefixed with `/bmad-`
+- Gate validation reference at the end: "Run gate validation
+  (`gate-validation.md`)"
+- Next step loading: "READ AND FOLLOW:
+  `{project-root}/.claude/skills/ai-dlc/steps/<filename>`"
+
+---
+
+## How to Add to a New Project
+
+### Prerequisites
+
+1. **Claude Code** installed and updated
+2. **BMAD Method v6** installed:
+   ```bash
+   npx bmad-method install
+   ```
+   Select ALL of these modules:
+   - **BMM** (core framework)
+   - **CIS** (Creative Intelligence Suite)
+   - **TEA** (Test Architect)
+
+### Setup from AI/DLC Standalone
+
+Copy the files from the standalone distribution into your project:
+
+```
+core/skills/ai-dlc/           -> .claude/skills/ai-dlc/
+core/team-roles/               -> .claude/team-roles/
+templates/CLAUDE.md.template   -> CLAUDE.md (customize template variables)
+templates/QUICKSTART.md.template -> QUICKSTART.md (customize template variables)
+templates/coding-conventions.md.template -> docs/coding-conventions.md (customize)
+```
+
+### Configuration
+
+**Recommended:** Run `/ai-dlc-setup` in Claude Code for guided
+configuration. The wizard auto-detects your project settings and walks
+you through every template variable.
+
+**Manual alternative:**
+
+1. **CLAUDE.md:** Replace all `{template_variables}` with your project's
+   values. Key variables:
+   - `{deploy_command}` -- your deployment command
+   - `{smoke_test_command}` -- your smoke test command
+   - `{project_operations_protocol}` -- your infrastructure rules
+2. **Team roles:** Update `.claude/team-roles/*.md` model strings for your
+   environment (Personal or Bedrock model IDs).
+3. **Coding conventions:** Add your project-specific conventions to
+   `docs/coding-conventions.md`.
+4. **Shell functions:** Create launch functions that set `ANTHROPIC_MODEL`,
+   `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, and
+   `--dangerously-skip-permissions`.
+5. **Dev ownership:** Update `{ownership_paths}` in `dev.md` and
+   `{qa_ownership_paths}` in `qa.md` for your directory structure.
+
+### First run
+
+Launch Claude Code and invoke `/ai-dlc` with a description of what to
+build. The router will detect the project state (likely greenfield or
+brownfield-b for a new project) and compose the appropriate pipeline.
+
+---
+
+## Directory Structure
+
+```
+your-project/
+  CLAUDE.md                              <-- project intelligence
+  QUICKSTART.md                          <-- this document
+  .claude/
+    skills/
+      ai-dlc/
+        SKILL.md                         <-- skill entry point
+        steps/
+          route.md                       <-- pipeline router
+          gate-validation.md             <-- shared gate protocol
+          discovery.md                   <-- Phase 1
+          research-requirements.md       <-- Phase 2a-b
+          architecture.md               <-- Phase 2c
+          stories-test-strategy.md       <-- Phase 2d-f
+          ui-direction.md               <-- Phase 2g (conditional)
+          implementation.md             <-- Phase 3
+          sprint-review.md              <-- Phase 4
+          deploy-validate.md            <-- Phase 4+
+          bug-investigation.md          <-- bug variant
+          carry-over-evaluation.md      <-- carry-over variant
+          codebase-inventory.md         <-- brownfield-a
+          deep-codebase-analysis.md     <-- brownfield-b / analysis-only
+          doc-reconciliation.md         <-- brownfield-c
+          doc-repair-backfill.md        <-- brownfield-c continuation
+    team-roles/
+      architect.md                       <-- opus
+      code-reviewer.md                   <-- opus
+      dev.md                             <-- sonnet (default)
+      pm.md                              <-- opus
+      qa.md                              <-- sonnet
+    settings.json                        <-- Agent Teams flag
+  _bmad/                                 <-- BMAD v6 framework
+    core/                                <-- adversarial review, party mode
+    bmm/                                 <-- planning + implementation workflows
+    modules/
+      tea/                               <-- test architect
+      cis/                               <-- creative intelligence
+  _bmad-output/
+    planning-artifacts/
+      product-brief.md
+      prd.md
+      architecture.md
+      stories/
+        story-001-*.md
+        story-002-*.md
+      sprint-backlog.md
+      test-strategy.md
+    implementation-artifacts/
+      sprint-status.yaml
+      gate-log.md
+  docs/
+    architecture.md                      <-- may also live here
+    coding-conventions.md                <-- project coding standards
+    reviews/                             <-- code reviewer output
+      story-001-review.md
+    escalations/                         <-- async blocker queue
+      pending.md
+    retro/
+      sprint-1.md
+```
+
+---
+
+## Key Gotchas
+
+**Adversarial review false positives.** The AI will manufacture some
+findings. The autonomous loop applies real fixes and discards noise. After
+2-3 passes, only nitpicks remain and the cycle terminates.
+
+**Token usage.** This workflow prioritizes thoroughness. Expect 5-10x token
+usage vs. a standard approach. Break sprints to 3-5 stories.
+
+**File conflicts.** Ownership boundaries in `team-roles/*.md` prevent two
+agents editing the same file. The lead enforces this.
+
+**Context loss between teammates.** Teammates do NOT inherit the lead's
+history. Everything they need is in files on disk.
+
+**Model verification.** The lead verifies each teammate's model after spawn.
+
+**`--dangerously-skip-permissions` is required for autonomy.** Without
+this flag, every file edit and bash command triggers a confirmation prompt.
+This breaks the autonomous validation loops (code review --> fix -->
+re-review cycles would stall at every write). Always work on a git branch
+so you can revert if an agent makes an unexpected change.
+
+**Pipeline interruption.** If the pipeline is interrupted (crash, context
+exhaustion, manual stop), artifacts on disk represent the last completed
+step. Re-invoke `/ai-dlc` and describe where you left off; the router
+reads project state and resumes.
+
+**BMAD skips to implementation.** If the agent starts coding during a
+planning step, the step file instructions should prevent this. If it
+happens, interrupt: "This is a planning exercise. Write the output to
+planning artifacts. Do not implement."
+
+---
+
+## Useful BMAD Commands
+
+### Planning
+```
+/bmad-help                 -- context-aware guidance on next steps
+/workflow-status           -- check project phase and progress
+/bmad-brainstorming        -- CIS structured ideation
+/bmad-create-product-brief -- Phase 1 discovery
+/bmad-domain-research      -- domain deep dive
+/bmad-market-research      -- competitive analysis
+/bmad-technical-research   -- technology research
+/bmad-create-prd           -- Phase 2 requirements
+/bmad-validate-prd         -- PRD completeness check
+/bmad-create-architecture  -- Phase 2 system design
+/bmad-check-implementation-readiness -- PRD/arch completeness for stories
+/bmad-create-epics-and-stories  -- Phase 2 story breakdown
+/bmad-sprint-planning      -- Phase 2 sprint selection
+```
+
+### Quality and Validation
+```
+/bmad-party-mode                   -- multi-agent debate
+/bmad-review-adversarial-general   -- cynical review (2+ passes)
+/bmad-advanced-elicitation         -- probe until zero ambiguity
+/bmad-agent-tea-tea                -- TEA test strategy
+```
+
+### Implementation
+```
+/bmad-create-story         -- create a single story
+/bmad-dev-story            -- implement a single story
+/bmad-code-review          -- validate implementation quality
+/bmad-validate-story       -- automated story quality gate
+/bmad-correct-course       -- remediation when validation fails
+```

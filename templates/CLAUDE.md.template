@@ -1,0 +1,419 @@
+# Project Intelligence
+
+## Overview
+
+This project uses the **BMAD Method v6** for structured planning and development,
+orchestrated via **Claude Code Agent Teams** for parallel execution.
+
+**Autonomy principle:** Agents operate autonomously through all validation,
+review, and improvement cycles. They apply recommended improvements directly
+without waiting for human selection. They walk through every element of every
+artifact exhaustively. The AI Development Lifecycle (AI/DLC) runs from idea
+to production deployment in a single conversation. The only human checkpoint
+is **production validation** after deployment. Agents seek clarity when they
+detect ambiguity, but do not block on human approval at phase transitions.
+Token cost and cycle time are secondary to thoroughness.
+
+Every planning artifact goes through **Party Mode** (multi-agent debate),
+**Advanced Elicitation** (probe until zero ambiguity), and **Adversarial
+Review** (multi-pass, apply all fixes autonomously between passes).
+
+Every implementation artifact goes through a **three-gate validation**:
+Code Review (opus), QA functional validation (sonnet), and Story Validation.
+
+## Environment
+
+```bash
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+```
+
+## Required BMAD Modules
+
+Install all during `npx bmad-method install`:
+
+- **BMM** (core): planning, architecture, implementation workflows
+- **CIS** (Creative Intelligence Suite): brainstorming, design thinking,
+  innovation strategy, problem solving, storytelling
+- **TEA** (Test Architect): risk-based test strategy, quality gates,
+  8 specialized testing workflows
+
+---
+
+## Autonomy Rules
+
+These rules apply to ALL agents across ALL phases:
+
+1. **Walk through everything.** Do not skip sections, do not summarize.
+   Review every element of every artifact exhaustively.
+
+2. **Apply all recommended improvements.** When party mode, adversarial
+   review, or advanced elicitation surface a finding, fix it directly in
+   the artifact. Do not present a menu of options. Do not ask "should I
+   fix this?" Just fix it.
+
+3. **Run the full validation cycle.** Every planning artifact goes through
+   Party Mode -> Advanced Elicitation -> Adversarial Review (2+ passes).
+   After each adversarial pass, apply all real fixes, then run the next pass.
+   Continue until a pass produces only nitpicks or false positives.
+
+4. **Escalate asynchronously via file.** Write escalations to
+   `docs/escalations/pending.md` using the format below. Escalations have
+   three tiers that determine whether work blocks or continues:
+
+   **Tier 1 -- HARD_BLOCK (work stops):**
+   - A finding contradicts an explicit human-approved decision
+   - The agent cannot implement a requirement as specified (requirement
+     divergence) and needs human sign-off on an alternative approach
+   - A carry-over item deferral is proposed (`DEFERRAL_REQUEST`)
+   Action: mark task BLOCKED, message lead, move to next unblocked task.
+
+   **Tier 2 -- DECIDED_AUTONOMOUSLY (work continues):**
+   - A trade-off has no objectively correct answer -- agent picks the best
+     option, documents rationale, proceeds
+   - Requirements are ambiguous but can be reasonably inferred from context,
+     project memory, or existing patterns
+   - UI/UX direction decisions where no explicit user preference exists
+   - Implementation option selection among alternatives presented in a
+     carry-over item or story spec
+   Action: document decision and rationale, proceed without blocking.
+
+   **Tier 3 -- not an escalation:**
+   Formatting, naming, phrasing, minor refactors, test structure, or any
+   issue where a professional default exists. Just do it.
+
+   Escalation entry format (append, do not overwrite):
+   ```
+   ## [STORY-ID] [Teammate Name] - [Date/Time]
+   **Status:** HARD_BLOCK | DECIDED_AUTONOMOUSLY | DEFERRAL_REQUEST
+   **Blocker type:** [contradicts decision | requirement divergence | trade-off | missing requirement | scope change | deferral]
+   **Context:** [What you were doing when you hit the issue]
+   **Decision/Question:** [For DECIDED_AUTONOMOUSLY: what was decided and why. For HARD_BLOCK: the specific decision needed from the human]
+   **Options:** [If applicable, the options considered and their trade-offs]
+   **Impact if skipped:** [What happens if work continues without this answer]
+   ```
+
+   Resolution lifecycle:
+   - HARD_BLOCK / DEFERRAL_REQUEST: Human reviews at the production
+     validation checkpoint and updates status to RESOLVED with a decision.
+     Lead notices the resolution and unblocks the task.
+   - DECIDED_AUTONOMOUSLY: Human reviews at the production validation
+     checkpoint. No action needed unless the decision was wrong, in which
+     case human updates status to OVERRIDDEN with corrective direction.
+
+5. **Document what you changed.** After each validation cycle, append a
+   brief changelog to the artifact noting what was improved and why.
+
+6. **Err on the side of doing.** When in doubt, apply the improvement.
+   The human reviews the final production deployment, not intermediate
+   artifacts.
+
+7. **Write large files in sections.** When creating or updating a file
+   that exceeds ~200 lines, break the write into multiple sequential
+   operations (e.g., write the first section, then append or edit
+   subsequent sections). Do not attempt to write an entire large file in
+   a single operation. Single large writes risk output token limits and
+   timeouts that leave files incomplete or truncated. This applies to all
+   file types: planning artifacts, story files, code, tests, and reviews.
+
+8. **Requirements define WHAT is built. Agents have autonomy over HOW.**
+   When carry-over items, brainstorming sessions, or direct user instructions
+   specify concrete details -- UI placement, implementation approach, scope
+   boundaries, feature behavior -- those details are **locked requirements**.
+   Validation cycles (party mode, adversarial review, advanced elicitation)
+   may challenge or question locked requirements, but MUST NOT silently
+   change them. Any divergence from specified requirements -- dropping a
+   requirement, substituting different behavior, or determining a requirement
+   cannot be met as specified -- requires human sign-off via `HARD_BLOCK`
+   escalation (Rule 4, Tier 1). The escalation must quote the original
+   user-specified detail and the proposed change. Agents that rewrite user
+   intent into a vaguer form during planning are violating this rule.
+
+   Agents have full autonomy over execution decisions: technical approach,
+   implementation patterns, UI layout choices (when not specified by user),
+   option selection among presented alternatives, and scheduling. These are
+   HOW decisions and use `DECIDED_AUTONOMOUSLY` (Rule 4, Tier 2) when
+   non-obvious.
+
+9. **Multi-sprint phasing is autonomous.** When the agent determines a
+   feature exceeds single-sprint scope due to size or risk, the agent may
+   autonomously split it into phased sprints without human approval.
+   Requirements: document the phasing rationale, define phase boundaries,
+   ensure each phase delivers standalone value. Each sprint is deployed and
+   validated at the production checkpoint before the next sprint begins.
+   The human reviews each sprint's production deployment before the agent
+   proceeds to the next phase.
+
+10. **Seek clarity when ambiguous.** Agents should not be afraid to ask
+    for clarification when they detect genuine ambiguity in the user's
+    request, requirements, or intent. This applies throughout the pipeline
+    -- not just at routing. Asking a targeted question is better than
+    guessing wrong. However, do not ask about matters that can be resolved
+    by reading existing artifacts, project memory, or applying professional
+    defaults.
+
+---
+
+## Workflow: AI Development Lifecycle (AI/DLC)
+
+The AI/DLC runs from idea to production deployment in a **single
+conversation**. The `/ai-dlc` skill orchestrates the full pipeline. Each
+phase runs autonomously with validation rigor preserved. The only human
+checkpoint is **production validation** after deployment.
+
+The validation cycle for planning artifacts follows Autonomy Rule 3.
+Implementation validation follows the three-gate model defined in Agent
+Teams Configuration > Task Management. Phase reference details are in
+QUICKSTART.md.
+
+| Phase | Model | Key Activity | Gate |
+|---|---|---|---|
+| 1. Brainstorm | opus | CIS ideation -> product brief -> validation cycle | Autonomous |
+| 2a. Research | opus | Domain, market, technical research -> update brief | Autonomous |
+| 2b. Requirements | opus | PRD -> validate -> validation cycle | Autonomous |
+| 2c. Architecture | opus | System design -> ADRs -> solutioning gate -> validation cycle | Autonomous |
+| 2d. Readiness | opus | Implementation readiness check | Autonomous |
+| 2e. Stories | opus | Epics -> stories -> sprint planning -> validation cycle | Autonomous |
+| 2f. Test Strategy | opus | TEA test strategy -> quality gates -> adversarial review | Autonomous |
+| 2g. UI Direction | opus | Mockup + copy (UI epics only); present direction, continue | Autonomous (human can steer) |
+| 3. Build | opus lead, sonnet dev | Agent Teams: lead decomposes, teammates implement | Autonomous |
+| 4. Validate | (same session) | Three-gate validation -> sprint-level review -> deploy | Autonomous |
+| 4+. Production | -- | Deploy -> smoke tests -> signal human | **Human validates** |
+| 5. Retro | sonnet | Party mode -> lessons -> process updates | Human-initiated (separate session) |
+
+### Autonomous Gate Protocol
+
+At each phase transition (where human gates previously existed), the agent
+runs a structured self-validation:
+
+1. Verify the validation cycle completed (party mode + adversarial review +
+   elicitation where applicable per Rule 3).
+2. Verify no unresolved `HARD_BLOCK` escalations exist.
+3. Verify artifact consistency (story status matches sprint-status.yaml, etc.).
+4. Append a gate passage record to `_bmad-output/implementation-artifacts/gate-log.md`.
+5. Proceed to the next phase.
+
+Gate log format:
+```markdown
+## Gate Log: [Sprint/Feature ID]
+
+| Gate | Phase | Timestamp | Validation | Result | Notes |
+|------|-------|-----------|------------|--------|-------|
+| Brief | 1 | ... | PM + AE + AR | PASSED | ... |
+| PRD + Architecture | 2a-c | ... | PM + AE + AR | PASSED | ... |
+| Stories + Test Strategy | 2d-f | ... | PM + AR | PASSED | ... |
+| Task List | 3 | ... | Stories match tasks | PASSED | ... |
+| Sprint Review | 4 | ... | AR + PM | PASSED | ... |
+```
+
+### UI Direction Protocol
+
+For sprints with new visual surfaces (UI epics):
+- Agent generates ASCII wireframe, user-facing copy, and CSS class list
+- Agent presents the direction in conversation output (visible to human)
+- Agent **continues working** -- does not wait for approval
+- Human can interrupt at any point to steer the direction
+- Mockup is documented in artifacts for production validation review
+- Generate mockups when appropriate even for non-blocking review
+
+### Session Model
+
+The AI/DLC pipeline runs in a **single conversation** from entry point
+through production deployment. With 1M context, session breaks for context
+freshness are not required. Artifacts on disk carry durable state regardless.
+Agent Teams teammates are spawned within the same lead session, each with
+their own context window.
+
+If the agent detects context quality degradation during an exceptionally
+long run, it may create an internal checkpoint (summarize progress, re-read
+key artifacts) as a recovery mechanism -- but this is not a mandatory break.
+
+The retro (Phase 5) is a separate conversation, initiated by the human
+when ready.
+
+---
+
+## Model Strategy
+
+| Role          | Model  | Rationale                                              |
+|---------------|--------|--------------------------------------------------------|
+| Lead          | opus   | Orchestration, decomposition, and coordination         |
+| PM            | opus   | Requirements elicitation and edge-case analysis        |
+| Architect     | opus   | System design, tradeoff evaluation, ADRs               |
+| Dev           | sonnet | Implementation is high-volume, well-scoped by stories  |
+| QA            | sonnet | Test validation is pattern-matching against criteria   |
+| Code Reviewer | opus   | Cross-cutting review needs architectural context       |
+
+---
+
+## Agent Teams Configuration
+
+### Teammate Spawn Rules
+
+- Every teammate MUST be spawned with a role file from `.claude/team-roles/`.
+- Every teammate MUST read the architecture doc and its assigned story file
+  before writing any code.
+- Teammates own specific directories (defined in their role file). A teammate
+  MUST NOT edit files outside its ownership boundary without lead approval.
+
+### Task Management
+
+- Use the shared task list for all work items.
+- Tasks include: story reference, owning teammate, blocked-by dependencies.
+- Teammates self-claim the next unblocked task after completing their current one.
+- When a dev agent begins implementing a story that depends on another story in
+  the same sprint, the dev agent must read the dependency story's code review
+  document before writing any code. Critical and Important findings from the
+  dependency review that apply to a shared framework, pattern, or test
+  infrastructure must be proactively applied in the dependent story's
+  implementation. The dev agent record for the dependent story must include a
+  line noting which prior story's code review was read and what pre-applied
+  findings were incorporated.
+- Dev agent record in the story file MUST be populated before marking a task
+  complete. Empty template placeholders (`{{agent_model_name_version}}`) are a
+  gate blocker. The record must include: model name/version, date, and a brief
+  summary of implementation decisions.
+- Story file header `Status:` field must be updated to match sprint-status.yaml
+  when a story transitions (e.g., ready-for-dev -> in-progress -> done).
+  Inconsistent status across artifacts is a gate blocker. Dev agents must
+  update sprint-status.yaml in the same commit that changes a story file
+  `Status:` header.
+- A task is not "done" until ALL THREE gates have approved it:
+  1. Code Review (code-reviewer, opus)
+  2. QA Validation (qa, sonnet), blocked by code review
+  3. Story Validation (/validate-story), blocked by QA
+- Review/fix cycles are autonomous. Dev teammates apply all fixes from
+  reviewers without human intervention. Only escalate to human if a fix
+  would change the story's scope or contradict the architecture.
+
+### Communication Protocol
+
+- Teammates message each other for cross-boundary coordination.
+- The lead monitors for blocked teammates and resolves deadlocks.
+- If two teammates need to edit the same file, the lead mediates.
+- No teammate ever prompts the human directly. Escalations follow
+  Autonomy Rule 4.
+
+### Story Validation Origin Check
+
+When a story is created to address a specific CLAUDE.md requirement, user
+feedback, or carry-over item, the story validation gate MUST verify
+that the **original requirement** is satisfied -- not just the story's own
+acceptance criteria. If the story ACs do not fully satisfy the original
+requirement, the story fails validation regardless of whether its own ACs
+pass.
+
+### Pre-Deploy Schema/API Field Check
+
+<!-- Customize this for your project's API layer:
+     - GraphQL: introspection query against live schema
+     - REST: verify OpenAPI spec matches live endpoint
+     - gRPC: verify proto definitions match deployed service
+     Replace the example below with your project's verification approach. -->
+
+Before adding any new field to an API query, dev teammates MUST verify
+the field exists in the live schema/API via verification against the
+deployed service. If the field does not exist in the currently deployed
+service, the query change MUST be gated behind the service deployment
+(deploy the schema change first, verify the field exists, then update
+queries). Unknown fields cause hard errors.
+
+### Project Operations Protocol
+
+<!-- {project_operations_protocol}: Define your project's deployment
+     infrastructure rules here. This section should contain:
+     - Default deployment commands and presets
+     - Environment-specific deployment configurations
+     - Pre-deployment checks (e.g., indexing status, migration status,
+       health checks)
+     - Service restart policies
+     - Rollback procedures
+     - Any high-cost operations that require human approval
+
+     Example topics:
+     - Docker Compose presets for different scenarios
+     - Kubernetes deployment strategies
+     - Serverless deployment configurations
+     - Database migration protocols
+     - Cache warming/invalidation procedures
+
+     This replaces the project-specific "Autonomous Operation Protocol"
+     from the source project. Adapt to your infrastructure. -->
+
+{project_operations_protocol}
+
+### Post-Gate Deployment and Production Validation Checkpoint
+
+After all three gates pass for every sprint story, the lead MUST:
+1. Run sprint-level review (adversarial + party mode on complete sprint)
+2. Build and deploy to production: `{deploy_command}`
+   <!-- {deploy_command}: Your project's build and deploy command -->
+3. Run live smoke tests: `{smoke_test_command}`
+   <!-- {smoke_test_command}: Your project's live smoke test command -->
+4. Verify the deployed build contains the expected changes
+5. Present the **Production Validation Checkpoint** to the human:
+   - Summary of what was built and deployed
+   - Link to gate log (`_bmad-output/implementation-artifacts/gate-log.md`)
+   - Link to escalation log (`docs/escalations/pending.md`) -- highlight
+     any `DECIDED_AUTONOMOUSLY` or `DEFERRAL_REQUEST` entries
+   - Confirmation that smoke tests passed
+   - For UI sprints: confirm deployed UI renders correctly with production data
+
+This is the **only human checkpoint** in the AI/DLC pipeline. The human
+reviews the deployed production instance, the gate log, and any autonomous
+decisions. For multi-sprint features (Rule 9), this checkpoint occurs after
+each sprint -- the agent does not proceed to the next sprint until the human
+validates the current one.
+
+This applies to every sprint, not just UI work. Never ask the human to
+deploy. Never report "ready for review" without having already deployed
+and validated the running production instance.
+
+### Shutdown Protocol
+
+- Lead requests shutdown from all teammates before cleanup.
+- Teammates approve shutdown (confirming no in-progress work will be lost).
+- Lead runs cleanup only after all teammates have exited.
+
+---
+
+## Validation Philosophy
+
+**Every artifact gets challenged. Every finding gets fixed. No cherry-picking.**
+
+Planning artifacts (brief, PRD, architecture, stories):
+1. **Party Mode** -- exhaustive multi-agent debate, apply all improvements
+2. **Advanced Elicitation** -- probe until zero ambiguity, update artifact
+3. **Adversarial Review** -- 2+ passes, apply all fixes between passes,
+   continue until only nitpicks remain
+4. **Changelog** -- document what changed and why
+
+Implementation artifacts (code, tests):
+1. **Code Review** (opus) -- exhaustive, apply all fixes, re-review until clean
+2. **QA Validation** (sonnet) -- every acceptance criterion, fix and re-validate
+3. **Story Validation** -- automated gate, remediate and re-run until pass
+4. **Sprint-level Review** -- adversarial + party mode on complete sprint
+
+---
+
+## Coding Conventions
+
+**Extracted to `docs/coding-conventions.md`.** Agents performing
+implementation (dev, code-reviewer, QA) must read that file before writing
+or reviewing code. Planning-only sessions do not need to load it.
+
+---
+
+## Key References
+
+<!-- Update these paths for your project structure -->
+- AI/DLC skill (pipeline orchestrator): `.claude/skills/ai-dlc/`
+- AI/DLC phase reference: `QUICKSTART.md`
+- Coding conventions: `docs/coding-conventions.md` (load for implementation sessions)
+- BMAD planning artifacts: `_bmad-output/planning-artifacts/`
+- BMAD implementation artifacts: `_bmad-output/implementation-artifacts/`
+- Gate log: `_bmad-output/implementation-artifacts/gate-log.md`
+- Team role definitions: `.claude/team-roles/`
+- Code reviews: `docs/reviews/`
+- Escalations: `docs/escalations/pending.md`
+- Sprint retros: `docs/retro/`
+- This file: `CLAUDE.md`

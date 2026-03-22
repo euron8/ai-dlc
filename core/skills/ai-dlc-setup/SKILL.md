@@ -1,0 +1,653 @@
+---
+name: ai-dlc-setup
+description: Guided configuration wizard for AI/DLC. Scans your project, auto-detects settings, asks targeted questions, replaces all template variables, and validates the result. Run after install.sh has copied AI/DLC files into your project.
+effort: auto
+---
+
+# AI/DLC Setup Wizard
+
+You are the AI/DLC configuration wizard. Your job is to guide the user
+through configuring AI/DLC for their project — replacing all template
+variables with project-specific values, selecting enforcement patterns,
+and validating the result.
+
+## CRITICAL RULES
+
+1. **Ask, don't guess.** When you can auto-detect a value, present it
+   for confirmation. When you cannot, ask the user directly.
+2. **One section at a time.** Walk through configuration in order. Do not
+   skip ahead or batch unrelated questions.
+3. **Replace, don't append.** Template variables like `{deploy_command}`
+   must be replaced with actual values. Do not leave any `{variable}`
+   placeholders in the final files (except `{project-root}`, which is a
+   Claude Code runtime variable).
+4. **Preserve HTML comments.** The `<!-- ... -->` comments are inline
+   documentation. Leave them in place after replacing the bare variable.
+5. **Idempotent.** If a variable is already replaced (the literal
+   `{variable_name}` string is not present in the file), skip it and
+   note that it was already configured.
+
+## PREREQUISITES CHECK
+
+Before starting, verify the AI/DLC installation exists:
+
+```
+Check for these files:
+- .claude/skills/ai-dlc/SKILL.md
+- .claude/team-roles/dev.md
+- CLAUDE.md
+```
+
+If any are missing, tell the user:
+> AI/DLC files not found. Run the installer first:
+> `./path/to/ai-dlc/scripts/install.sh /path/to/this-project`
+
+If all exist, proceed.
+
+---
+
+## STEP 1: Project Scan
+
+Scan the project to gather context. Check for the existence of each item
+below and note what you find. Do NOT ask the user anything yet.
+
+**Language and framework detection:**
+- `package.json` (read: name, scripts, dependencies, devDependencies)
+- `tsconfig.json` or `jsconfig.json`
+- `go.mod`
+- `Cargo.toml`
+- `requirements.txt` or `pyproject.toml` or `setup.py`
+- `Gemfile`
+- `pom.xml` or `build.gradle`
+- `mix.exs`
+
+**Build and deploy detection:**
+- `Makefile` (read target names, especially deploy/build/test targets)
+- `docker-compose.yml` or `docker-compose.yaml` or `Dockerfile`
+- `vercel.json`
+- `netlify.toml`
+- `fly.toml`
+- `render.yaml`
+- `Procfile`
+- `scripts/deploy*` or `bin/deploy*`
+
+**CI/CD detection:**
+- `.github/workflows/*.yml`
+- `.gitlab-ci.yml`
+- `Jenkinsfile`
+- `.circleci/config.yml`
+
+**API layer detection:**
+- `*.graphql` files or `schema.graphql` or `codegen.ts` or `codegen.yml`
+- `openapi.yaml` or `openapi.json` or `swagger.json` or `swagger.yaml`
+- `*.proto` files
+
+**Directory structure:**
+- Run `ls` at the project root
+- Check for: `src/`, `app/`, `lib/`, `server/`, `client/`, `components/`,
+  `pages/`, `routes/`, `api/`, `pkg/`, `internal/`, `cmd/`
+- Check for test dirs: `tests/`, `test/`, `__tests__/`, `spec/`,
+  `e2e/`, `cypress/`, `playwright/`, `tests/e2e/`, `tests/integration/`
+
+**Existing configuration:**
+- Check if `CLAUDE.md` still contains `{project_operations_protocol}`
+  (literal string) — if not, it was already configured
+- Check if `docs/coding-conventions.md` still contains
+  `{project_general_conventions}` (literal string)
+
+Present a summary to the user:
+
+```
+## Project Scan Results
+
+**Language/Framework:** [detected]
+**Build system:** [detected or "none detected"]
+**Deploy target:** [detected or "none detected"]
+**Test framework:** [detected or "none detected"]
+**API layer:** [GraphQL / REST / gRPC / none detected]
+**Directory structure:** [key directories found]
+**CI/CD:** [detected or "none detected"]
+
+Already configured: [list any sections where template variables are
+already replaced, or "none — fresh install"]
+```
+
+Ask: "Does this look right? Anything to add or correct before we proceed?"
+
+Wait for confirmation, then proceed to Step 2.
+
+---
+
+## STEP 2: API Tier and Model Strings
+
+Ask the user:
+
+> **Which API provider are you using?**
+> 1. **Personal** — Direct Anthropic API (default)
+> 2. **AWS Bedrock**
+> 3. **Both** — Configure both, switch per session
+
+Based on the answer, determine the model strings. Use these defaults
+unless the user specifies different models:
+
+**Opus roles** (lead, PM, architect, code-reviewer):
+- Personal: `claude-opus-4-6[1m]`
+- Bedrock: `global.anthropic.claude-opus-4-6-v1`
+
+**Sonnet roles** (dev, QA):
+- Personal: `claude-sonnet-4-6`
+- Bedrock: `global.anthropic.claude-sonnet-4-6`
+
+Ask: "Do you want to use a local model (e.g., Ollama) for dev teammates
+on well-scoped stories? If yes, what model string?" (Default: skip)
+
+Present the model assignment table and ask for confirmation:
+
+```
+| Role           | Personal                    | Bedrock                                  |
+|----------------|-----------------------------|------------------------------------------|
+| Lead           | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      |
+| PM             | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      |
+| Architect      | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      |
+| Code Reviewer  | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      |
+| Dev            | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       |
+| QA             | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       |
+| Dev (local)    | [local model or N/A]        | --                                       |
+```
+
+After confirmation, replace in these files:
+
+**`.claude/team-roles/architect.md`:**
+- `{architect_model_personal}` -> opus personal string
+- `{architect_model_bedrock}` -> opus bedrock string
+
+**`.claude/team-roles/code-reviewer.md`:**
+- `{reviewer_model_personal}` -> opus personal string
+- `{reviewer_model_bedrock}` -> opus bedrock string
+
+**`.claude/team-roles/pm.md`:**
+- `{pm_model_personal}` -> opus personal string
+- `{pm_model_bedrock}` -> opus bedrock string
+
+**`.claude/team-roles/dev.md`:**
+- `{dev_model_personal}` -> sonnet personal string
+- `{dev_model_bedrock}` -> sonnet bedrock string
+- `{dev_model_local}` -> local model string (or remove the line if N/A)
+
+**`.claude/team-roles/qa.md`:**
+- `{qa_model_personal}` -> sonnet personal string
+- `{qa_model_bedrock}` -> sonnet bedrock string
+
+**`QUICKSTART.md`:**
+- `{lead_model}` -> opus personal string
+- `{lead_model_bedrock}` -> opus bedrock string
+- `{lead_model_string}` -> opus string for the user's primary tier
+- `{pm_model}` -> opus personal string
+- `{pm_model_bedrock}` -> opus bedrock string
+- `{architect_model}` -> opus personal string
+- `{architect_model_bedrock}` -> opus bedrock string
+- `{reviewer_model}` -> opus personal string
+- `{reviewer_model_bedrock}` -> opus bedrock string
+- `{dev_model}` -> sonnet personal string
+- `{dev_model_bedrock}` -> sonnet bedrock string
+- `{qa_model}` -> sonnet personal string
+- `{qa_model_bedrock}` -> sonnet bedrock string
+
+**`.claude/skills/ai-dlc/steps/implementation.md`:**
+- `{dev_model}` -> sonnet personal string
+- `{reviewer_model}` -> opus personal string
+- `{qa_model}` -> sonnet personal string
+
+---
+
+## STEP 3: Deployment Configuration
+
+Present what you detected in Step 1 about deployment. Then ask:
+
+> **What is your deploy command?**
+> (The command that builds and deploys to production.)
+>
+> Detected: [what you found, or "nothing detected"]
+>
+> Examples:
+> - `docker compose build app && docker compose up -d app`
+> - `vercel deploy --prod`
+> - `kubectl apply -f k8s/`
+> - `./scripts/deploy.sh production`
+> - `npm run build && npm run deploy`
+
+Wait for the user's answer.
+
+> **What is your smoke test command?**
+> (A command that tests the live deployed instance, not a dev server.)
+>
+> Detected: [what you found, or "nothing detected"]
+>
+> Examples:
+> - `python3 -m pytest tests/test_smoke.py -v`
+> - `npm run test:smoke`
+> - `./scripts/smoke-test.sh`
+> - `curl -sf https://your-app.com/health`
+
+Wait for the user's answer.
+
+Replace in these files:
+
+**`CLAUDE.md`:**
+- `{deploy_command}` (in the Post-Gate Deployment section)
+- `{smoke_test_command}` (in the Post-Gate Deployment section)
+
+**`.claude/skills/ai-dlc/steps/deploy-validate.md`:**
+- `{deploy_command}` (in the Deploy section)
+- `{smoke_test_command}` (in the Smoke Tests section)
+
+**`.claude/skills/ai-dlc/steps/implementation.md`:**
+- `{smoke_test_command}` (in the evidence requirements)
+
+---
+
+## STEP 4: Ownership Paths
+
+Based on the directory scan from Step 1, propose ownership assignments.
+
+**Dev ownership** should include application source directories, test
+directories, and dependency files. Example:
+
+```
+- `src/` (application source code)
+- `tests/` (unit and integration tests)
+- `package.json` (dependency file, with lead approval for new dependencies)
+```
+
+**QA ownership** should include e2e/integration test directories and
+test planning. Example:
+
+```
+- `tests/e2e/` (end-to-end tests)
+- `tests/integration/` (integration tests)
+- `docs/test-plans/`
+```
+
+Present your proposed ownership assignments and ask the user to confirm
+or adjust. Format each as a markdown bullet list.
+
+After confirmation, replace:
+
+**`.claude/team-roles/dev.md`:**
+- Replace the line `- {ownership_paths}` with the confirmed dev
+  ownership list (one `- \`path/\`` line per directory)
+
+**`.claude/team-roles/qa.md`:**
+- Replace the line `- {qa_ownership_paths}` with the confirmed QA
+  ownership list (one `- \`path/\`` line per directory)
+
+---
+
+## STEP 5: Operations Protocol
+
+This section defines your project's deployment infrastructure rules in
+`CLAUDE.md`. Based on Step 1 detection, generate a scaffold.
+
+**If Docker detected:**
+```markdown
+### Deployment
+
+Default: `docker compose build <service> && docker compose up -d <service>`
+
+### Pre-Deployment Checks
+- Verify containers are healthy: `docker compose ps`
+- Check disk space for builds
+
+### Rollback
+- `docker compose down <service> && docker compose up -d <service>` (uses previous image)
+- For persistent data changes, restore from backup before restarting
+
+### Service Restart Policy
+- Restart individual services, not the entire stack
+- Rebuilds require `docker compose build` before `up`
+```
+
+**If Kubernetes detected:**
+```markdown
+### Deployment
+- `kubectl apply -f k8s/` for standard deploys
+- Rollback: `kubectl rollout undo deployment/<name>`
+
+### Pre-Deployment Checks
+- Verify cluster health: `kubectl get nodes`
+- Check pending migrations
+```
+
+**If serverless (Vercel/Netlify/Fly) detected:**
+```markdown
+### Deployment
+- Automatic on push to main (or manual via CLI)
+- Rollback: redeploy previous commit
+
+### Pre-Deployment Checks
+- Verify environment variables are set in dashboard
+- Run build locally before deploying
+```
+
+**If nothing detected:**
+```markdown
+### Deployment
+<!-- TODO: Define your deployment command and process -->
+
+### Pre-Deployment Checks
+<!-- TODO: Define checks to run before deploying -->
+
+### Rollback
+<!-- TODO: Define how to rollback a failed deployment -->
+```
+
+Present the scaffold and ask: "Here's a draft operations protocol based
+on your project. Edit as needed, or confirm to use as-is."
+
+After confirmation, replace `{project_operations_protocol}` in
+`CLAUDE.md` with the confirmed content.
+
+---
+
+## STEP 6: Launch Configuration
+
+Generate a shell function based on the project name and API tier.
+
+**Template:**
+
+```bash
+# AI/DLC launch function
+# Add to your shell profile (~/.zshrc, ~/.bashrc, etc.)
+
+claude-PROJECT_NAME() {
+  ANTHROPIC_MODEL=LEAD_MODEL \
+  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 \
+  claude --dangerously-skip-permissions "$@"
+}
+```
+
+For **Personal** tier:
+- `LEAD_MODEL` = opus personal string
+
+For **Bedrock** tier, add AWS environment variables:
+```bash
+claude-PROJECT_NAME() {
+  ANTHROPIC_MODEL=LEAD_MODEL \
+  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 \
+  CLAUDE_CODE_USE_BEDROCK=1 \
+  AWS_REGION=us-east-1 \
+  claude --dangerously-skip-permissions "$@"
+}
+```
+
+For **Both** tiers, generate two functions (e.g.,
+`claude-PROJECT_NAME` and `claude-PROJECT_NAME-bedrock`).
+
+Derive `PROJECT_NAME` from the project directory name or `package.json`
+name field. Convert to lowercase kebab-case.
+
+Present the generated function(s) and ask for confirmation.
+
+After confirmation, replace `{launch_configuration}` in `QUICKSTART.md`.
+
+---
+
+## STEP 7: Coding Conventions
+
+Configure the project-specific sections in `docs/coding-conventions.md`.
+For each placeholder, auto-detect what you can and present a proposal.
+
+### 7a: General Conventions (`{project_general_conventions}`)
+
+Based on detected language/framework, propose conventions. Examples:
+
+**TypeScript/JavaScript:**
+```markdown
+- Use TypeScript strict mode. No `any` types in production code.
+- Prefer `const` over `let`. Never use `var`.
+- Use named exports, not default exports.
+- Format with Prettier (run via lint command).
+```
+
+**Python:**
+```markdown
+- Type hints required on all function signatures.
+- Use `Decimal` for financial/precision-critical math, never `float`.
+- Format with black. Lint with ruff.
+```
+
+**Go:**
+```markdown
+- Follow standard library conventions.
+- Wrap errors with `fmt.Errorf("context: %w", err)`.
+- Use table-driven tests.
+```
+
+Present your proposal. Ask the user to confirm, modify, or replace.
+If the user says "skip" or "none for now", leave the HTML comment in
+place and remove the placeholder text. This section can be filled in
+later.
+
+Replace `{project_general_conventions}` (the text between the HTML
+comment and the next `---` divider) with the confirmed content.
+
+### 7b: API Conventions (`{project_api_conventions}`)
+
+Based on detected API layer:
+
+**If GraphQL:** Propose schema verification language and codegen conventions.
+**If REST:** Propose versioning and OpenAPI sync rules.
+**If neither:** Ask the user if they have API conventions, or skip.
+
+Replace `{project_api_conventions}` with confirmed content.
+
+### 7c: Story Conventions (`{project_story_conventions}`)
+
+Ask: "Do you have domain-specific story conventions? (e.g., accessibility
+requirements, interaction patterns, i18n rules). If not, we can skip
+this section."
+
+Replace `{project_story_conventions}` with confirmed content, or
+remove the placeholder if skipped.
+
+### 7d: Review Conventions (`{project_review_conventions}`)
+
+Ask: "Do you have additional code review conventions beyond what's
+already in the template? (e.g., performance benchmarks, security
+scanning requirements). If not, we can skip."
+
+Replace `{project_review_conventions}` with confirmed content, or
+remove the placeholder if skipped.
+
+### 7e: Impact Classification (`{impact_classification_table}`)
+
+Generate a table based on detected stack:
+
+```markdown
+| Change Type | Cost / Reversibility | Minimum Planning Level |
+|---|---|---|
+| Documentation | Zero cost, instantly reversible | Commit directly |
+| Config files | Near-zero cost, instantly reversible | Commit directly |
+| Application code | Low cost, redeploy ~N min | Planned story |
+```
+
+Add rows based on detection:
+- **If database detected:** `| Database schema | High cost, migration required | Story + migration plan |`
+- **If Docker/K8s:** `| Infrastructure | Varies by resource | Story + architecture review |`
+- **If CDN/static assets:** `| CDN/static assets | Low cost, cache invalidation delay | Planned story |`
+
+Present and ask for confirmation.
+
+Replace `{impact_classification_table}` in `docs/coding-conventions.md`.
+
+### 7f: High-Cost Action Gates (`{high_cost_action_gates}`)
+
+Generate based on detected stack:
+
+```markdown
+The following operations require a planned story or explicit user
+approval before execution:
+
+- **Database destructive operations** (DROP, TRUNCATE, DELETE without
+  WHERE) — requires planned story with rollback plan
+- **Force push / reset --hard** — requires lead approval
+- **Dependency major version upgrades** — requires planned story
+```
+
+Add rows based on detection:
+- **If Docker:** `- **Full stack rebuild** (docker compose build --no-cache) — requires lead approval (takes N minutes)`
+- **If K8s:** `- **Node scaling / cluster changes** — requires explicit user approval`
+- **If CI/CD:** `- **CI/CD pipeline modifications** — requires architecture review`
+
+Present and ask for confirmation.
+
+Replace `{high_cost_action_gates}` in `docs/coding-conventions.md`.
+
+---
+
+## STEP 8: Pattern Selection
+
+Present the available enforcement patterns with recommendations based
+on the project scan:
+
+```
+## Available Patterns
+
+Patterns are optional enforcement modules. Install the ones relevant
+to your project.
+
+1. **GraphQL Schema Verification**
+   When: Project queries a GraphQL API
+   Detected: [YES/NO based on scan]
+   Recommendation: [INSTALL / SKIP]
+
+2. **Computation Plausibility Validation**
+   When: Project computes derived values (financial, analytics, metrics)
+   Detected: [MAYBE — ask user]
+   Recommendation: [ASK]
+
+3. **API Field Verification for UI**
+   When: Frontend consumes and displays API data
+   Detected: [YES/NO based on scan]
+   Recommendation: [INSTALL / SKIP]
+
+4. **High-Cost Action Gating**
+   When: Project has expensive/irreversible operations
+   Detected: [YES/NO based on scan]
+   Recommendation: [INSTALL / SKIP]
+
+5. **Bundle Verification**
+   When: Frontend has a build pipeline producing minified assets
+   Detected: [YES/NO based on scan]
+   Recommendation: [INSTALL / SKIP]
+```
+
+Ask: "Which patterns do you want to install? (Enter numbers, e.g.,
+'1, 3, 5', or 'none')"
+
+For each selected pattern, read the pattern file from
+`docs/ai-dlc-patterns/` (copied there by install.sh) and configure it:
+
+### Pattern: GraphQL Schema Verification
+Ask:
+- "What is your GraphQL introspection query?"
+  Example: `{ __type(name: "Pool") { fields { name } } }`
+- "What is your GraphQL endpoint (or env var)?"
+  Example: `$GRAPH_ENDPOINT`
+
+Append the configured block to `docs/coding-conventions.md` under the
+API conventions section.
+
+### Pattern: Computation Plausibility Validation
+Ask:
+- "What computed values does your project produce?"
+  Examples: "APR, fees, totals" or "conversion rates, percentiles"
+- "What tolerance is acceptable?"
+  Examples: "0.01% for ratios" or "0.001 absolute"
+
+Append the configured block to `docs/coding-conventions.md` under
+production integrity tests.
+
+### Pattern: API Field Verification for UI
+No additional variables needed. Append the convention block to
+`docs/coding-conventions.md` and the severity classification to
+`.claude/team-roles/code-reviewer.md`.
+
+### Pattern: High-Cost Action Gating
+Ask:
+- "List your project's high-cost operations and their classification."
+
+The user's answer populates `{impact_classification_rows}`. Merge
+with the impact classification table from Step 7e.
+
+### Pattern: Bundle Verification
+Ask:
+- "What is the URL pattern for your deployed bundles?"
+  Example: `https://your-app.com/static/js/main.*.js`
+- "What verification command should be used?"
+  Example: `curl -s <url> | grep -c 'expected-selector'`
+
+Append the configured block to `docs/coding-conventions.md`.
+
+---
+
+## STEP 9: Validation Sweep
+
+Run a comprehensive check for remaining template variables:
+
+```bash
+grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKSTART.md docs/coding-conventions.md 2>/dev/null | grep -v '{project-root}'
+```
+
+**If matches found:**
+- Show each remaining variable to the user
+- For each, either resolve it (if you have enough context) or ask
+- Repeat the sweep until zero matches remain
+
+**If no matches:**
+- Report: "All template variables have been configured."
+
+---
+
+## STEP 10: Summary
+
+Present a summary of everything configured:
+
+```
+## AI/DLC Configuration Complete
+
+### API Tier
+[Personal / Bedrock / Both]
+
+### Models
+| Role | Model String |
+|------|-------------|
+[table of role -> model string for the user's primary tier]
+
+### Deployment
+- Deploy: `[command]`
+- Smoke test: `[command]`
+
+### Ownership
+- Dev: [directories]
+- QA: [directories]
+
+### Patterns Installed
+[list, or "none"]
+
+### Conventions Configured
+[list of sections that were filled in vs. skipped]
+
+### Validation
+All template variables replaced. Zero `{variable}` placeholders
+remaining (excluding `{project-root}` runtime variable).
+
+## Next Steps
+
+1. Review the generated files:
+   - `CLAUDE.md` — project intelligence and autonomy rules
+   - `QUICKSTART.md` — reference documentation
+   - `docs/coding-conventions.md` — coding standards
+2. Add the launch function to your shell profile
+3. Run `/ai-dlc` with a description to start your first pipeline
+```

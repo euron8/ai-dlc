@@ -1,0 +1,214 @@
+# Coding Conventions
+
+These conventions apply to all implementation work in this project. Agents
+performing implementation (dev, code-reviewer, QA) must read this file
+before writing or reviewing code. Planning-only sessions do not need to
+load this file.
+
+---
+
+## General Development
+
+- Write tests for all new functionality before marking a task complete.
+- Run the project's lint and test suite before marking a task complete.
+- When using `try/except` or equivalent error handling for graceful degradation,
+  the catch clause must include at minimum a log statement identifying what was
+  attempted and which fallback was triggered. Silent exception swallowing makes
+  production triage impossible.
+- Before submitting a story that includes rename or refactor work for code
+  review, the dev agent must grep the old identifier across all files modified
+  in the story and verify zero matches remain in production code. **Evidence
+  required:** Log the grep command and its output in the story file under
+  "Rename Verification". Zero matches required. Gate validation will check
+  for this section.
+- Commit messages follow conventional commits with scope: `feat(scope):`,
+  `fix(scope):`, `docs(scope):`, `test(scope):`. Always include the scope
+  parenthetical.
+- One story per commit. Do not batch multiple stories into a single commit.
+- Before committing any story, the dev agent must run `git diff --staged` and
+  verify every changed file and line is within the story's stated scope.
+  Out-of-scope changes must be stashed or committed separately. **Evidence
+  required:** Log `git diff --staged --stat` output in the story file under
+  "Scope Verification".
+- Pre-commit secret scanning should be configured. Do not rely on code review
+  as the sole defense against credential leaks.
+- When adding new environment variables, update the real `.env` and any
+  environment template file in the same commit.
+- Post-gate hotfixes that change production behavior must include a test case
+  in the same commit or the immediately following commit. Do not defer hotfix
+  test coverage to the next sprint.
+- When live deployment fixes modify response shapes, UI labels, or DOM
+  structure, the same commit (or immediately following commit) must update
+  all affected test fixtures and assertions.
+
+<!-- {project_general_conventions}: Add your project-specific general
+     development conventions here. Examples:
+     - Language-specific patterns (e.g., use Decimal for financial math)
+     - Framework conventions (e.g., React hooks rules, Django patterns)
+     - Dependency management rules
+     - Environment variable naming conventions -->
+
+---
+
+## Production Integrity Tests (Hard Gate -- Non-Deferrable)
+
+Every story that modifies or introduces anything that affects the deployed
+product must include production integrity tests **in the same commit**. These
+are a hard gate equivalent to code review and QA -- they cannot be carried
+over, marked as follow-up, or excused during gate validation. If the tests
+don't exist, the story fails QA automatically. No exceptions.
+
+**1. Data integrity.** For any computed value: a live smoke test that fetches
+the API response, independently recomputes the expected value from the raw
+inputs available in the same response, and asserts they match. No mocking.
+Real endpoint, real data, real math.
+
+**2. API-to-UI fidelity.** For any value displayed on screen that originates
+from the API: a test that fetches the same API endpoint, reads the rendered
+value from the DOM, and verifies the displayed value matches the API value
+with correct formatting.
+
+**3. Visual consistency.** For any CSS or layout change: a test that verifies
+computed styles match the design system values.
+
+**4. Cross-layer contract.** For any new or modified API field: verify the
+full path from computation -> API response -> UI render -> DOM assertion.
+The test must exercise the complete chain, not isolated layers.
+
+**5. Bundle verification.** After every UI deploy: fetch the deployed
+assets and verify the changed selectors/properties are present in the output.
+This catches duplicate selectors, build caching, and deploy failures.
+
+**Evidence required:** Log all production integrity test file paths and
+pass/fail output in the story file under "Production Integrity Tests".
+Gate validation check #6 will reject stories missing this section. QA
+will reject stories missing any of the 5 checks. Code review will
+classify missing production integrity tests as Critical.
+
+**Why this is non-deferrable:** Production validation has repeatedly
+surfaced obvious bugs that these tests would catch mechanically. Deferring
+them transfers the testing burden to the human during production validation
+-- the most expensive place to find bugs.
+
+---
+
+## API, Schemas, and Test Fixtures
+
+- When an epic includes both API-producing and API-consuming stories, the epic
+  spec must include an explicit response schema example for each endpoint.
+- Stories that change an API response shape must audit all test fixtures
+  referencing that endpoint and update them to match the new shape in the same
+  commit.
+- Test fixtures that mock API response shapes must match the response schema
+  documented in the architecture addendum. Fixture/schema mismatches are
+  Important severity (not Suggestion) because synchronized bugs between feature
+  code and test fixtures bypass all automated testing.
+- Tests that validate data against the same system that produced it (circular
+  self-validation) must be flagged as a test gap during code review. A
+  validation test that can never fail is not a test.
+
+<!-- {project_api_conventions}: Add your project-specific API, schema, and
+     test fixture conventions here. Examples:
+     - GraphQL schema verification requirements
+     - REST API versioning conventions
+     - gRPC proto management rules
+     - Specific test framework patterns -->
+
+---
+
+## Story Spec Quality
+
+- Stories should not exceed 7 acceptance criteria. If a story exceeds 7 ACs,
+  split it into smaller stories.
+- Story ACs should reference behaviors or symptoms, not specific file names.
+- Story specs created from carry-over backlog items or user instructions must
+  include a "Source Requirements" section that quotes the original requirement
+  verbatim. The story must address every root cause listed in the carry-over
+  entry. This is the enforcement mechanism for Autonomy Rule 8.
+- Stories that rename a field or label across layers must include ALL surfaces
+  where the old name appears -- not "check and defer" but "check and fix."
+- Stories that remove, rename, or convert identifiers/labels must grep ALL
+  directories in the project, not a hardcoded subset.
+
+<!-- {project_story_conventions}: Add your project-specific story spec
+     conventions here. Examples:
+     - Domain-specific AC patterns
+     - UI interaction pattern requirements
+     - Accessibility requirements for stories -->
+
+---
+
+## Sprint Process
+
+- The sprint-close docs commit is the last commit in the sprint.
+- No informal carry-overs. Every item not resolved in the current sprint must
+  be formally documented in `_bmad-output/planning-artifacts/carry-over-backlog.md`
+  before the retro closes.
+- No conditional deferral. Never mark a retro finding or carry-over item to be
+  fixed "the next time component X is touched."
+- When a code review approves a story with deferred implementations, each
+  deferral must be added as a carry-over backlog item.
+
+---
+
+## Code Review and Validation
+
+- Suggestion-level code review findings that are not fixed during the review
+  cycle are discarded when the story closes. They are NOT added to the
+  carry-over backlog. If a finding is worth tracking, it must be elevated to
+  Important.
+- Dead code (unreferenced constants, always-true conditionals, unused variables)
+  in files modified by the current story must be classified as Important
+  severity, not Suggestion.
+
+<!-- {project_review_conventions}: Add your project-specific code review
+     and validation conventions here. Examples:
+     - Domain-specific validation rules
+     - Performance benchmarking requirements
+     - Security audit requirements -->
+
+---
+
+## Impact Classification
+
+Changes are classified by cost and reversibility. Higher-impact changes require
+more planning and approval.
+
+<!-- {impact_classification_table}: Define your project's impact classification
+     table here. Example format:
+
+     | Change Type | Cost / Reversibility | Minimum Planning Level |
+     |---|---|---|
+     | Documentation | Zero cost, instantly reversible | Commit directly |
+     | Config | Near-zero cost, instantly reversible | Commit directly |
+     | Application code | Low cost, redeploy ~N min | Planned story |
+     | Database schema | High cost, migration required | Story + migration plan |
+     | Infrastructure | Varies | Depends on reversibility |
+-->
+
+{impact_classification_table}
+
+---
+
+## High-Cost Action Gates
+
+<!-- {high_cost_action_gates}: Define operations in your project that require
+     explicit human approval or a planned story before execution. Examples:
+     - Database destructive operations (DROP, TRUNCATE, DELETE)
+     - Infrastructure changes that trigger long rebuilds
+     - On-chain operations (if applicable)
+     - git force push / reset --hard
+     - Service restarts during long-running processes -->
+
+{high_cost_action_gates}
+
+---
+
+## Discovery Session Restrictions
+
+Sessions with discovery intent (`/brainstorm`, `/party-mode`,
+discovery-focused conversations) must not edit deployment-triggering
+source files or run destructive operations. Discovery output is
+documentation only (files under `docs/`, `_bmad-output/`).
+Implementation-intent sessions (spawned with a story assignment and task
+reference) may edit source files within their ownership boundary.

@@ -1,0 +1,93 @@
+---
+name: discovery
+description: Brainstorm + product brief + validation cycle
+nextStepFile: ./research-requirements.md
+---
+
+# Discovery (Phase 1)
+
+**Purpose:** CIS ideation and product brief creation with full validation
+cycle. For feature/brownfield variants, this updates existing artifacts
+rather than creating from scratch.
+
+## EXECUTION SEQUENCE
+
+### 1. Context Loading
+
+Read existing artifacts if they exist:
+- `_bmad-output/planning-artifacts/product-brief.md`
+- `_bmad-output/planning-artifacts/codebase-analysis.md` (brownfield)
+- `_bmad-output/planning-artifacts/brownfield-inventory.md` (brownfield-a)
+- `_bmad-output/planning-artifacts/doc-reconciliation.md` (brownfield-c)
+- Project memory files in user's memory directory
+
+### 2. Option Check (Autonomy Rule 8)
+
+Scan the user's feature description and any referenced carry-over items
+for multiple implementation options or scope levels (e.g., "A: X, B: Y,
+C: Z"). If any item presents options:
+- Evaluate options using project context, user preference history, and
+  technical feasibility
+- Select the best option and document as `DECIDED_AUTONOMOUSLY` in
+  `docs/escalations/pending.md`
+- If options represent fundamentally different features (not just
+  implementation approaches), seek clarity from the user per Rule 10
+
+### 3. Brainstorm
+
+Invoke `/bmad-brainstorming` — structured CIS ideation:
+- For **greenfield**: open ideation for the user's idea
+- For **feature**: scoped ideation constrained by existing architecture
+- For **brownfield**: ideation grounded in codebase analysis
+- Every idea must be feasible within the existing system or explicitly
+  flag what would need to change
+
+### 4. Product Brief
+
+- For **greenfield/brownfield-b**: invoke `/bmad-create-product-brief`
+- For **feature/brownfield-a/c**: UPDATE the existing brief — add a
+  section for the new scope. Do not rewrite existing content.
+
+### 4a. Extract Locked Requirements (Rule 8)
+
+After the brief is created/updated, extract all user-specified requirements
+into a `LOCKED_REQUIREMENTS` block at the top of the artifact:
+
+```markdown
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+<!-- Source: [user input | carry-over item #N | escalation spec path] -->
+- [verbatim user-specified requirement 1]
+- [verbatim user-specified requirement 2]
+<!-- END LOCKED_REQUIREMENTS -->
+```
+
+Sources to extract from:
+- The user's original input to `/ai-dlc`
+- Any carry-over items referenced by the user
+- Any escalation specs or feature docs referenced by the user
+- Project memory entries about user preferences that constrain this feature
+
+Be exhaustive. Every concrete detail the user specified (placement, scope,
+behavior, approach) is a locked requirement. Do not paraphrase — quote
+verbatim or as close to verbatim as the source allows.
+
+### 5. Validation Cycle (Rule 3)
+
+Run the full validation cycle on the brief:
+1. `/bmad-party-mode` — PM, Architect, UX, CIS debate the brief. Walk
+   through every element. Apply all improvements directly.
+   **Requirement fidelity check:** If features originate from carry-over
+   items or user instructions with specific details, verify those details
+   are preserved. Flag any generalization.
+2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
+   Update the brief with every answer.
+3. `/bmad-review-adversarial-general` — cynical review. Apply all real
+   fixes. Run a second pass. Continue until only nitpicks remain.
+   **Source fidelity pass:** Verify the brief preserves the user's stated
+   details and selected options.
+4. Append a changelog to the brief summarizing improvements.
+
+### 6. Gate Validation and Proceed
+
+Run gate validation (`gate-validation.md`), then:
+**READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/research-requirements.md`
