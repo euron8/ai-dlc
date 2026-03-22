@@ -1,6 +1,6 @@
 ---
 name: ai-dlc-setup
-description: Guided configuration wizard for AI/DLC. Scans your project, auto-detects settings, asks targeted questions, replaces all template variables, and validates the result. Run after install.sh has copied AI/DLC files into your project.
+description: "Guided configuration wizard for AI/DLC. Run bare for full setup, or with a section name to jump directly: /ai-dlc-setup [models|deploy|ownership|operations|launch|conventions|patterns|validate]"
 effort: auto
 ---
 
@@ -15,8 +15,8 @@ and validating the result.
 
 1. **Ask, don't guess.** When you can auto-detect a value, present it
    for confirmation. When you cannot, ask the user directly.
-2. **One section at a time.** Walk through configuration in order. Do not
-   skip ahead or batch unrelated questions.
+2. **One section at a time.** When running a section, walk through it
+   completely before moving to the next.
 3. **Replace, don't append.** Template variables like `{deploy_command}`
    must be replaced with actual values. Do not leave any `{variable}`
    placeholders in the final files (except `{project-root}`, which is a
@@ -27,9 +27,72 @@ and validating the result.
    `{variable_name}` string is not present in the file), skip it and
    note that it was already configured.
 
+## ROUTING
+
+Parse the user's invocation to determine the entry point.
+
+**Argument mapping** — if the user provided an argument after
+`/ai-dlc-setup`, map it to a step:
+
+| Argument | Jump to |
+|----------|---------|
+| `models` | Step 2 (API Tier and Model Strings) |
+| `deploy` | Step 3 (Deployment Configuration) |
+| `ownership` | Step 4 (Ownership Paths) |
+| `operations` | Step 5 (Operations Protocol) |
+| `launch` | Step 6 (Launch Configuration) |
+| `conventions` | Step 7 (Coding Conventions) |
+| `patterns` | Step 8 (Pattern Selection) |
+| `validate` | Step 9 (Validation Sweep) |
+
+If an argument matches, run the project scan (Step 1) silently — do NOT
+present the scan summary or ask for confirmation. Use the scan results
+as context, then jump directly to the matched step. After completing
+that step, run the validation sweep (Step 9) and the summary (Step 10),
+scoped to what was just changed.
+
+**No argument — fresh install detection:**
+
+If no argument was provided, run the project scan (Step 1) and check
+for remaining template variables:
+
+```bash
+grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKSTART.md docs/coding-conventions.md 2>/dev/null | grep -v '{project-root}'
+```
+
+- **If template variables remain:** This is a fresh or partial install.
+  Present the scan summary (Step 1) and then walk through steps 2-10
+  sequentially, skipping any step whose variables are already configured.
+
+- **If NO template variables remain:** This is a returning user.
+  Present a section menu:
+
+  ```
+  AI/DLC is already configured. What would you like to update?
+
+  1. Models         — API tier and model strings
+  2. Deploy         — Deploy and smoke test commands
+  3. Ownership      — Dev and QA directory ownership
+  4. Operations     — Deployment infrastructure rules
+  5. Launch         — Shell launch function
+  6. Conventions    — Coding conventions sections
+  7. Patterns       — Add or reconfigure enforcement patterns
+  8. Validate       — Check for remaining template variables
+  9. Full setup     — Re-run the entire wizard from the beginning
+
+  Enter a number or name (e.g., "7" or "patterns"):
+  ```
+
+  Wait for the user's selection, then jump to that step. After
+  completing it, run validation (Step 9) and a scoped summary (Step 10).
+
+  If the user selects "9" or "full setup", run the entire wizard from
+  Step 1 as if it were a fresh install (present scan, walk all steps).
+
 ## PREREQUISITES CHECK
 
-Before starting, verify the AI/DLC installation exists:
+Before starting (regardless of entry point), verify the AI/DLC
+installation exists:
 
 ```
 Check for these files:
@@ -42,7 +105,7 @@ If any are missing, tell the user:
 > AI/DLC files not found. Run the installer first:
 > `./path/to/ai-dlc/scripts/install.sh /path/to/this-project`
 
-If all exist, proceed.
+If all exist, proceed to routing.
 
 ---
 
@@ -611,7 +674,7 @@ grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKS
 
 ## STEP 10: Summary
 
-Present a summary of everything configured:
+**If this was a full setup run**, present a complete summary:
 
 ```
 ## AI/DLC Configuration Complete
@@ -650,4 +713,16 @@ remaining (excluding `{project-root}` runtime variable).
    - `docs/coding-conventions.md` — coding standards
 2. Add the launch function to your shell profile
 3. Run `/ai-dlc` with a description to start your first pipeline
+```
+
+**If this was a single-section update** (via argument or menu selection),
+present a scoped summary covering only what was changed:
+
+```
+## Updated: [Section Name]
+
+[Brief description of what was configured/changed]
+
+### Validation
+[Result of the validation sweep — any remaining variables, or all clear]
 ```
