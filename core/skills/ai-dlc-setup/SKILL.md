@@ -611,12 +611,16 @@ After confirmation, replace `{project_operations_protocol}` in
 ## STEP 6: Launch Configuration
 
 Generate a shell function based on the project name and API tier.
+**This is documentation only** — write it to `QUICKSTART.md` as a
+reference. Do NOT modify the user's shell profile (`.zshrc`,
+`.bashrc`, etc.). The user can copy it to their profile themselves
+if they choose to.
 
 **Template:**
 
 ```bash
 # AI/DLC launch function
-# Add to your shell profile (~/.zshrc, ~/.bashrc, etc.)
+# Copy to your shell profile (~/.zshrc, ~/.bashrc, etc.) if desired
 
 claude-PROJECT_NAME() {
   ANTHROPIC_MODEL=LEAD_MODEL \
@@ -645,9 +649,11 @@ For **Both** tiers, generate two functions (e.g.,
 Derive `PROJECT_NAME` from the project directory name or `package.json`
 name field. Convert to lowercase kebab-case.
 
-Present the generated function(s) and ask for confirmation.
+Present the generated function(s) and tell the user:
+"This launch function has been added to QUICKSTART.md for reference.
+Copy it to your shell profile if you'd like to use it."
 
-After confirmation, replace `{launch_configuration}` in `QUICKSTART.md`.
+Replace `{launch_configuration}` in `QUICKSTART.md`.
 
 ---
 
@@ -912,7 +918,7 @@ remaining (excluding `{project-root}` runtime variable).
    - `CLAUDE.md` — project intelligence and autonomy rules
    - `QUICKSTART.md` — reference documentation
    - `docs/coding-conventions.md` — coding standards
-2. Add the launch function to your shell profile
+2. Optionally copy the launch function from QUICKSTART.md to your shell profile
 3. Run `/ai-dlc` with a description to start your first pipeline
 ```
 
