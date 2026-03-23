@@ -49,12 +49,19 @@ in a single conversation.
 
    At ALL other times — between sub-skills, within sub-skills, during
    long validation cycles, during large artifact generation, during
-   multi-pass adversarial review — you keep working. Do not pause to
-   summarize progress. Do not pause to ask if you should continue. Do
-   not pause because the output is getting long. Do not pause at
-   natural-seeming break points within a step. If you are not at one
-   of the three pause points listed above, you are not done — keep
-   going until you reach one.
+   multi-pass adversarial review — you keep working. Do not stop and
+   wait for human input. Do not ask if you should continue. Do not
+   treat a natural break point within a step as a stopping point. If
+   you are not at one of the three pause points listed above, you are
+   not done — keep going until you reach one.
+
+   **Show your work.** This rule is about not stopping, not about
+   suppressing output. You SHOULD output sub-skill results to the
+   conversation — party mode debates, adversarial review findings,
+   elicitation probes — so the human can observe the pipeline working.
+   Output the work, then immediately continue to the next action. The
+   distinction is: outputting results and continuing (correct) vs.
+   outputting results and waiting for a response (stalling).
 
    This applies to every phase of the pipeline: planning, validation,
    implementation orchestration, deployment, and retro. A stalled

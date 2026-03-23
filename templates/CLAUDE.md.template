@@ -20,11 +20,15 @@ human input: (a) genuine ambiguity requiring clarification, (b) the
 Production Validation Checkpoint, and (c) the retro commentary prompt.
 At ALL other times — between sub-skills, within sub-skills, during
 long validation cycles, during large artifact generation, during
-multi-pass adversarial review — agents keep working. Do not pause to
-summarize progress. Do not pause to ask if you should continue. Do not
-pause because the output is getting long. Do not pause at
-natural-seeming break points within a step. If you are not at one of
-the three pause points, you are not done — keep going.
+multi-pass adversarial review — agents keep working. Do not stop and
+wait for human input. Do not ask if you should continue. Do not treat
+a natural break point within a step as a stopping point. If you are
+not at one of the three pause points, you are not done — keep going.
+**Show your work** — output sub-skill results (party mode debates,
+adversarial findings, elicitation probes) to the conversation so the
+human can observe, then immediately continue to the next action.
+Outputting results and continuing is correct; outputting results and
+waiting for a response is stalling.
 
 Every planning artifact goes through **Party Mode** (multi-agent debate),
 **Advanced Elicitation** (probe until zero ambiguity), and **Adversarial
