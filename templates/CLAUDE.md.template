@@ -14,15 +14,17 @@ is **production validation** after deployment. Agents seek clarity when they
 detect ambiguity, but do not block on human approval at phase transitions.
 Token cost and cycle time are secondary to thoroughness.
 
-**Continuous flow:** When a pipeline step lists multiple sub-skill
-invocations in sequence (e.g., party mode, then elicitation, then
-adversarial review), execute them back-to-back without pausing for
-human input between them. Completing one sub-skill means immediately
-starting the next. Do not return to the conversation, summarize
-progress, or wait for a prompt between sub-skills. The pipeline is
-uninterrupted except at: (a) genuine ambiguity requiring clarification,
-(b) the Production Validation Checkpoint, and (c) the retro commentary
-prompt.
+**Continuous flow:** The pipeline runs as a continuous, uninterrupted
+flow. There are exactly THREE points where agents stop and wait for
+human input: (a) genuine ambiguity requiring clarification, (b) the
+Production Validation Checkpoint, and (c) the retro commentary prompt.
+At ALL other times — between sub-skills, within sub-skills, during
+long validation cycles, during large artifact generation, during
+multi-pass adversarial review — agents keep working. Do not pause to
+summarize progress. Do not pause to ask if you should continue. Do not
+pause because the output is getting long. Do not pause at
+natural-seeming break points within a step. If you are not at one of
+the three pause points, you are not done — keep going.
 
 Every planning artifact goes through **Party Mode** (multi-agent debate),
 **Advanced Elicitation** (probe until zero ambiguity), and **Adversarial

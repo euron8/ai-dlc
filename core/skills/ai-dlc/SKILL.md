@@ -40,16 +40,26 @@ in a single conversation.
 6. **Production validation is the only human checkpoint.** After deployment
    and smoke tests, present the Production Validation Checkpoint to the
    human (CLAUDE.md Post-Gate Deployment).
-7. **Never pause between sub-skills.** When a step file lists multiple
-   sub-skill invocations in sequence (e.g., `/bmad-party-mode` then
-   `/bmad-advanced-elicitation` then `/bmad-review-adversarial-general`),
-   execute them back-to-back without returning to the conversation or
-   waiting for user input. Each sub-skill's output feeds the next. The
-   pipeline is a continuous flow — completing one sub-skill means
-   immediately starting the next. The ONLY points where you pause for
-   human input are: (a) ambiguity resolution (Rule 4), (b) the
-   Production Validation Checkpoint (Rule 6), and (c) the retro
-   commentary prompt. Everything else runs uninterrupted.
+7. **Never stall the pipeline.** The pipeline runs as a continuous,
+   uninterrupted flow. There are exactly THREE points where you stop
+   and wait for human input:
+   - (a) Ambiguity resolution (Rule 4)
+   - (b) Production Validation Checkpoint (Rule 6)
+   - (c) Retro commentary prompt
+
+   At ALL other times — between sub-skills, within sub-skills, during
+   long validation cycles, during large artifact generation, during
+   multi-pass adversarial review — you keep working. Do not pause to
+   summarize progress. Do not pause to ask if you should continue. Do
+   not pause because the output is getting long. Do not pause at
+   natural-seeming break points within a step. If you are not at one
+   of the three pause points listed above, you are not done — keep
+   going until you reach one.
+
+   This applies to every phase of the pipeline: planning, validation,
+   implementation orchestration, deployment, and retro. A stalled
+   pipeline wastes human time and burns tokens on context re-loading
+   when the human prompts you to continue.
 8. **Every step must be completed in full.** When a step file is loaded
    via "READ AND FOLLOW", execute every numbered section in that file
    sequentially. Do not skip sections. Do not jump to the next step
