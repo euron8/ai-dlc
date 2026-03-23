@@ -48,9 +48,10 @@ mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc-setup"
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/"
 
 # Archive existing files that AI/DLC will replace
-# The setup wizard reads these to absorb project-specific content
+# Each install gets a timestamped archive so previous backups aren't clobbered
 ARCHIVED=false
-ARCHIVE_DIR="$PROJECT_ROOT/docs/pre-ai-dlc"
+ARCHIVE_TS="$(date +%Y%m%d-%H%M%S)"
+ARCHIVE_DIR="$PROJECT_ROOT/docs/pre-ai-dlc/$ARCHIVE_TS"
 
 archive_if_exists() {
   local file="$1"
@@ -58,7 +59,7 @@ archive_if_exists() {
   if [ -f "$file" ]; then
     if [ "$ARCHIVED" = false ]; then
       mkdir -p "$ARCHIVE_DIR"
-      echo "Archiving existing files to docs/pre-ai-dlc/..."
+      echo "Archiving existing files to docs/pre-ai-dlc/$ARCHIVE_TS/..."
       ARCHIVED=true
     fi
     cp "$file" "$ARCHIVE_DIR/$basename"
@@ -75,9 +76,9 @@ done
 
 if [ "$ARCHIVED" = true ]; then
   echo ""
-  echo "  Originals saved to docs/pre-ai-dlc/"
+  echo "  Originals saved to docs/pre-ai-dlc/$ARCHIVE_TS/"
   echo "  The /ai-dlc-setup wizard will absorb your project-specific"
-  echo "  content from these files during configuration."
+  echo "  content from the most recent archive during configuration."
   echo ""
 fi
 

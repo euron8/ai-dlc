@@ -132,9 +132,14 @@ If all exist, proceed to routing.
 Check if `docs/pre-ai-dlc/` exists. This directory is created by
 `install.sh` when the project had existing files (CLAUDE.md, team roles,
 coding-conventions.md) before AI/DLC was installed. The originals were
-archived there and replaced with AI/DLC templates.
+archived there in timestamped subdirectories (e.g.,
+`docs/pre-ai-dlc/20260322-143012/`).
 
 If `docs/pre-ai-dlc/` does NOT exist, skip to Step 1.
+
+If it exists, find the **most recent** timestamped subdirectory (sort
+alphabetically, take the last one — the timestamp format ensures
+chronological ordering). Read archived files from that directory.
 
 If it exists, read each archived file and extract project-specific
 content that should be preserved. Do this silently — collect the
@@ -142,7 +147,7 @@ information now and apply it during the relevant configuration steps.
 
 ### 0a: Absorb CLAUDE.md
 
-Read `docs/pre-ai-dlc/CLAUDE.md` (if it exists) and extract:
+Read `CLAUDE.md` from the most recent archive (if it exists) and extract:
 
 - **Project-specific rules or conventions** — anything that governs
   how agents should behave in this specific project (deployment targets,
@@ -170,7 +175,7 @@ Store the extracted content. You will use it in:
 
 ### 0b: Absorb Team Roles
 
-For each archived role file in `docs/pre-ai-dlc/` (architect.md,
+For each archived role file in the most recent archive (architect.md,
 code-reviewer.md, dev.md, pm.md, qa.md), read and extract:
 
 - **Ownership paths** — which directories/files the role owned
@@ -185,7 +190,7 @@ Store the extracted content. You will use it in:
 
 ### 0c: Absorb Coding Conventions
 
-Read `docs/pre-ai-dlc/coding-conventions.md` (if it exists) and extract:
+Read `coding-conventions.md` from the most recent archive (if it exists) and extract:
 
 - **Language/framework conventions** — linting, formatting, patterns
 - **API conventions** — versioning, schema rules

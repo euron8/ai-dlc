@@ -128,13 +128,22 @@ for file in "${FILES_TO_REMOVE[@]}"; do
   echo "  Removed $file"
 done
 
-# Restore archived originals if they exist
+# Restore archived originals from the most recent archive
 RESTORED=false
-ARCHIVE_DIR="$PROJECT_ROOT/docs/pre-ai-dlc"
-if [ -d "$ARCHIVE_DIR" ]; then
+ARCHIVE_BASE="$PROJECT_ROOT/docs/pre-ai-dlc"
+if [ -d "$ARCHIVE_BASE" ]; then
+  # Find the most recent timestamped subdirectory
+  LATEST_ARCHIVE="$(ls -d "$ARCHIVE_BASE"/*/ 2>/dev/null | sort | tail -1)"
+
+  # Fall back to the base dir if no subdirectories (legacy format)
+  if [ -z "$LATEST_ARCHIVE" ]; then
+    LATEST_ARCHIVE="$ARCHIVE_BASE"
+  fi
+
   echo ""
-  echo "Restoring archived originals from docs/pre-ai-dlc/..."
-  for file in "$ARCHIVE_DIR"/*; do
+  echo "Restoring archived originals from $(basename "$LATEST_ARCHIVE")..."
+  for file in "$LATEST_ARCHIVE"/*; do
+    [ -f "$file" ] || continue
     basename="$(basename "$file")"
     case "$basename" in
       CLAUDE.md|QUICKSTART.md)
@@ -156,8 +165,8 @@ if [ -d "$ARCHIVE_DIR" ]; then
         ;;
     esac
   done
-  rm -rf "$ARCHIVE_DIR"
-  echo "  Removed docs/pre-ai-dlc/ archive"
+  rm -rf "$ARCHIVE_BASE"
+  echo "  Removed docs/pre-ai-dlc/ archive directory"
 fi
 
 # Clean up empty directories (don't remove if they still have content)
