@@ -50,6 +50,21 @@ in a single conversation.
    human input are: (a) ambiguity resolution (Rule 4), (b) the
    Production Validation Checkpoint (Rule 6), and (c) the retro
    commentary prompt. Everything else runs uninterrupted.
+8. **Every step must be completed in full.** When a step file is loaded
+   via "READ AND FOLLOW", execute every numbered section in that file
+   sequentially. Do not skip sections. Do not jump to the next step
+   file until the current step's execution sequence is complete and its
+   gate validation has passed. Steps are not optional and sections
+   within steps are not optional. If a step includes a validation cycle,
+   the validation cycle must run — skipping validation to save time or
+   tokens is a pipeline violation.
+9. **Follow the routing, not your judgment.** The pipeline sequence is
+   defined by step file routing (the "READ AND FOLLOW" directives and
+   `nextStepFile` in frontmatter). Do not skip steps, reorder steps,
+   or jump ahead because a step seems unnecessary for this particular
+   run. If a step determines it has nothing to do (e.g., no stories
+   need modification), it completes quickly — but it must still be
+   loaded and its checks must still run.
 
 ## INITIALIZATION
 

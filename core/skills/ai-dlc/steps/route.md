@@ -122,6 +122,12 @@ Based on `pipeline_variant`, load the first step file:
 introduces new visual surfaces (new UI components, pages, or layout changes).
 This is determined during the stories-test-strategy step, not here.
 
+**Note:** For multi-sprint features (Rule 9), each subsequent sprint
+loops through: `sprint-review-next` → `implementation` → `sprint-review`
+→ `deploy-validate`. The `sprint-review-next` step validates the next
+sprint's stories before implementation begins. This loop is handled by
+`deploy-validate.md`'s post-validation routing, not by the router.
+
 **Note:** For `feature` variant, the discovery step is scoped — it updates
 existing artifacts rather than creating from scratch.
 

@@ -123,8 +123,13 @@ After human validates:
   present the checkpoint again.
 
 - If **multi-sprint and more sprints remain:** Update sprint-status.yaml,
-  load next sprint's stories, and:
-  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`
+  then route the next sprint's stories through validation before
+  implementation. The stories were created during initial planning but
+  MUST be validated before each sprint begins — context from the
+  previous sprint's implementation may surface issues that affect
+  upcoming stories.
+
+  **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/sprint-review-next.md`
 
 - If **single sprint or final sprint:** Proceed to retro.
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/retro.md`

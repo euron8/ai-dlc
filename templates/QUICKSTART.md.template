@@ -71,6 +71,7 @@ conversation, from the user's initial request through production deployment.
     ui-direction.md           -- Phase 2g: UI mockups (conditional)
     implementation.md         -- Phase 3: Agent Teams build
     sprint-review.md          -- Phase 4: sprint-level review
+    sprint-review-next.md     -- multi-sprint: validate next sprint's stories
     deploy-validate.md        -- Phase 4+: deploy + production checkpoint
     bug-investigation.md      -- bug variant: investigate + fix story
     carry-over-evaluation.md  -- carry-over variant: evaluate + scope
@@ -487,6 +488,7 @@ your-project/
           ui-direction.md               <-- Phase 2g (conditional)
           implementation.md             <-- Phase 3
           sprint-review.md              <-- Phase 4
+          sprint-review-next.md         <-- multi-sprint transition
           deploy-validate.md            <-- Phase 4+
           bug-investigation.md          <-- bug variant
           carry-over-evaluation.md      <-- carry-over variant
