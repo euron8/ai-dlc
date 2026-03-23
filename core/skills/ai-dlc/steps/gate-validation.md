@@ -143,7 +143,25 @@ when any story adds fields to API queries or schema.
 - **Evidence:** Log the verification query, its response, and the
   field-by-field verification result.
 
-### 11. Append gate log entry.
+### 11. Smoke test coverage for user-facing changes? (Implementation gates only)
+
+Skip this check for planning phase gates. Required for Phase 4+ gates.
+
+- For every story in the sprint that introduces, modifies, or removes
+  user-facing functionality, verify smoke test updates exist:
+  - Check the story file for a "Smoke Test Updates" section listing
+    which test files were added/modified/removed.
+  - Verify the referenced test files exist on disk.
+  - Verify the test changes correspond to the story's user-facing
+    changes (not just copied boilerplate).
+- **Gate FAILS** if any user-facing story is missing smoke test updates.
+  The dev must add the tests before the gate can pass.
+- Stories that are purely internal (no user-facing behavior change),
+  documentation-only, or infrastructure configuration are exempt.
+- **Evidence:** Log which stories were checked, which smoke test files
+  were found, and what functionality they cover.
+
+### 12. Append gate log entry.
 
 Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
 Use the format defined in CLAUDE.md Autonomous Gate Protocol section.
@@ -158,7 +176,7 @@ The gate log entry MUST include:
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
 
-### 12. Announce gate passage.
+### 13. Announce gate passage.
 
 Output a brief line to the conversation:
 "Gate [name]: PASSED — [N/N checks passed] — proceeding to [next phase]"

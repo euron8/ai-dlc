@@ -15,7 +15,7 @@ deployment, and retrospective — autonomously in one conversation.
 - Analysis-only (no implementation)
 
 **Structural enforcement** at every phase:
-- 12 gate validation checks (not advisory — gates fail if violated)
+- 13 gate validation checks (not advisory — gates fail if violated)
 - LOCKED_REQUIREMENTS anchoring (prevents requirement drift)
 - Three-tier escalation (HARD_BLOCK, DECIDED_AUTONOMOUSLY, DEFERRAL_REQUEST)
 - Evidence-producing mandatory checks (dev, code review, QA)
@@ -193,7 +193,7 @@ your-project/
 
 Three layers:
 
-**Core** — Universal pipeline logic. Gate validation (12 checks),
+**Core** — Universal pipeline logic. Gate validation (13 checks),
 escalation model (3 tiers), requirement anchoring, autonomy rules (10),
 session model, team roles. Does not change per project.
 
