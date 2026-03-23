@@ -154,6 +154,15 @@ integrity tests (per coding-conventions), classify as **Critical**.
 This is non-deferrable. The story cannot pass code review without these
 tests. Do not accept "will add in follow-up" or "carry-over item."
 
+### Missing Smoke Test Updates = Important
+
+If a story introduces, modifies, or removes user-facing functionality
+and does not include corresponding smoke test updates, classify as
+**Important**. The story file must contain a "Smoke Test Updates"
+section listing which test files were added/modified/removed and what
+they cover. Stories that only change internal logic with no user-facing
+impact are exempt.
+
 ## Communication
 
 - Message **dev teammate** with review findings. Include the specific file,

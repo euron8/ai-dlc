@@ -92,6 +92,51 @@ them transfers the testing burden to the human during production validation
 
 ---
 
+## Smoke Test Maintenance (Hard Gate)
+
+Smoke tests validate the live deployed instance end-to-end. They are
+the last automated check before the human sees the production build.
+**Smoke tests must pass for deployment to proceed** — a failing smoke
+test blocks the Production Validation Checkpoint.
+
+### Coverage requirement
+
+Every story that introduces, modifies, or removes user-facing
+functionality MUST include corresponding smoke test updates **in the
+same commit**. Specifically:
+
+- **New feature:** Add a smoke test that exercises the feature's
+  primary path against the live deployment.
+- **Modified behavior:** Update existing smoke tests to reflect the
+  changed behavior. Verify the test would have failed against the old
+  behavior to confirm it is actually testing the change.
+- **Removed feature:** Remove or update smoke tests that reference
+  the removed functionality. Stale smoke tests that fail on deploy
+  are as harmful as missing ones.
+- **API changes:** If the story changes an API response shape, update
+  smoke tests that consume that endpoint.
+
+### What smoke tests are NOT
+
+Smoke tests are not unit tests. They run against the live deployed
+instance, not a dev server or mock. They verify that the deployment
+succeeded and critical paths work end-to-end. They should be fast
+(seconds, not minutes) and focused on the happy path plus critical
+error cases.
+
+### Evidence
+
+Log smoke test updates in the story file under "Smoke Test Updates":
+- Which test files were added/modified/removed
+- What functionality the test covers
+- Confirmation the test passes against the deployed instance
+
+QA will reject stories that modify deployed functionality without
+corresponding smoke test updates. Code review will classify missing
+smoke test updates as Important severity.
+
+---
+
 ## API, Schemas, and Test Fixtures
 
 - When an epic includes both API-producing and API-consuming stories, the epic

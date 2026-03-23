@@ -80,6 +80,12 @@ For each completed task, verify:
   - [ ] Bundle verification: deployed assets fetched and changed selectors
     confirmed present in output
   - **If ANY of these are missing, REJECT the story. This is not deferrable.**
+- [ ] **Smoke test updates (HARD GATE):** For stories that introduce,
+  modify, or remove user-facing functionality:
+  - [ ] Smoke tests added/updated/removed in the same commit
+  - [ ] "Smoke Test Updates" section exists in the story file
+  - [ ] Changes cover the story's primary user-facing path
+  - **If smoke tests were not updated for user-facing changes, REJECT.**
 
 ## Communication
 

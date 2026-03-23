@@ -137,6 +137,11 @@ Before starting any task, read these files in order:
           output in the story file under "Production Integrity Tests".
           Gate check #6 will reject stories missing this section.
           This is non-deferrable.
+    - [ ] **Smoke test updates (HARD GATE):** For any story that
+          introduces, modifies, or removes user-facing functionality,
+          smoke tests must be added/updated/removed in the same commit.
+          Log changes in the story file under "Smoke Test Updates".
+          QA will reject stories missing this section.
 16. Mark the task complete (QA will then validate).
 
 ## Communication
