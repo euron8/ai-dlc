@@ -188,7 +188,11 @@ QUICKSTART.md.
 | 3. Build | opus lead, sonnet dev | Agent Teams: lead decomposes, teammates implement | Autonomous |
 | 4. Validate | (same session) | Three-gate validation -> sprint-level review -> deploy | Autonomous |
 | 4+. Production | -- | Deploy -> smoke tests -> signal human | **Human validates** |
-| 5. Retro | sonnet | Party mode -> lessons -> process updates | Human-initiated (separate session) |
+| 5. Retro | (same session) | Party mode -> lessons -> process updates -> commit/push/PR | Autonomous (human comments before close) |
+
+This table is a summary. The authoritative execution sequence for each phase
+is defined in the step files under `.claude/skills/ai-dlc/steps/`. If this
+table diverges from a step file, the step file governs.
 
 ### Autonomous Gate Protocol
 
@@ -201,6 +205,10 @@ runs a structured self-validation:
 3. Verify artifact consistency (story status matches sprint-status.yaml, etc.).
 4. Append a gate passage record to `_bmad-output/implementation-artifacts/gate-log.md`.
 5. Proceed to the next phase.
+
+The full gate protocol is defined in `gate-validation.md` (12 checks with
+evidence requirements). The summary above is for reference — agents MUST
+follow the full protocol in `gate-validation.md`, not this summary.
 
 Gate log format:
 ```markdown
@@ -237,8 +245,8 @@ If the agent detects context quality degradation during an exceptionally
 long run, it may create an internal checkpoint (summarize progress, re-read
 key artifacts) as a recovery mechanism -- but this is not a mandatory break.
 
-The retro (Phase 5) is a separate conversation, initiated by the human
-when ready.
+The retro (Phase 5) runs inline after deployment validation, in the same
+conversation. The human gets a chance to comment before the sprint closes.
 
 ---
 
@@ -363,6 +371,11 @@ queries). Unknown fields cause hard errors.
 {project_operations_protocol}
 
 ### Post-Gate Deployment and Production Validation Checkpoint
+
+The authoritative deployment and validation process is in the step files
+(`sprint-review.md` → `deploy-validate.md` → `retro.md`). This section
+provides project-specific configuration (commands, tests). The step files
+define the execution sequence.
 
 After all three gates pass for every sprint story, the lead MUST:
 1. Run sprint-level review (adversarial + party mode on complete sprint)

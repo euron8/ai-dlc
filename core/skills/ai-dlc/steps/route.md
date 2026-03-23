@@ -89,7 +89,7 @@ Do ANY planning artifacts exist?
     NO  → pipeline_variant = "greenfield"
 ```
 
-### Step 4: Ambiguity Check (Rule 10)
+### Step 4: Ambiguity Check (Autonomy Rule 10)
 
 If you cannot confidently determine the pipeline variant, ask the user ONE
 clarifying question. Examples of genuine ambiguity:
@@ -102,36 +102,7 @@ clarifying question. Examples of genuine ambiguity:
 
 Do NOT ask if the variant is clear from the project state + input.
 
-### Step 5: Compose Pipeline and Begin
-
-Based on `pipeline_variant`, load the first step file:
-
-| Variant | Pipeline Sequence | First Step |
-|---------|------------------|------------|
-| sprint-execute | implementation → sprint-review → deploy-validate → retro | `implementation.md` |
-| greenfield | discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `discovery.md` |
-| feature | discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `discovery.md` |
-| bug | bug-investigation → implementation → deploy-validate → retro | `bug-investigation.md` |
-| carry-over | carry-over-evaluation → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `carry-over-evaluation.md` |
-| brownfield-a | codebase-inventory → discovery → research-requirements → architecture → stories-test-strategy → implementation → sprint-review → deploy-validate → retro | `codebase-inventory.md` |
-| brownfield-b | deep-codebase-analysis → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `deep-codebase-analysis.md` |
-| brownfield-c | doc-reconciliation → doc-repair-backfill → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `doc-reconciliation.md` |
-| analysis-only | deep-codebase-analysis → **STOP** (present analysis to user, do not proceed to implementation) | `deep-codebase-analysis.md` |
-
-**Note:** `[ui-direction]` is conditional — included only when the sprint
-introduces new visual surfaces (new UI components, pages, or layout changes).
-This is determined during the stories-test-strategy step, not here.
-
-**Note:** For multi-sprint features (Rule 9), each subsequent sprint
-loops through: `sprint-review-next` → `implementation` → `sprint-review`
-→ `deploy-validate`. The `sprint-review-next` step validates the next
-sprint's stories before implementation begins. This loop is handled by
-`deploy-validate.md`'s post-validation routing, not by the router.
-
-**Note:** For `feature` variant, the discovery step is scoped — it updates
-existing artifacts rather than creating from scratch.
-
-### Step 6: Branch Strategy
+### Step 5: Branch Strategy
 
 Before starting the pipeline, determine the correct branch strategy:
 
@@ -159,6 +130,35 @@ Before starting the pipeline, determine the correct branch strategy:
 
 5. **If git is not initialized:** Skip branching entirely. Do not
    initialize a git repo — that is the user's decision.
+
+### Step 6: Compose Pipeline and Begin
+
+Based on `pipeline_variant`, load the first step file:
+
+| Variant | Pipeline Sequence | First Step |
+|---------|------------------|------------|
+| sprint-execute | implementation → sprint-review → deploy-validate → retro | `implementation.md` |
+| greenfield | discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `discovery.md` |
+| feature | discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `discovery.md` |
+| bug | bug-investigation → implementation → deploy-validate → retro | `bug-investigation.md` |
+| carry-over | carry-over-evaluation → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `carry-over-evaluation.md` |
+| brownfield-a | codebase-inventory → discovery → research-requirements → architecture → stories-test-strategy → implementation → sprint-review → deploy-validate → retro | `codebase-inventory.md` |
+| brownfield-b | deep-codebase-analysis → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `deep-codebase-analysis.md` |
+| brownfield-c | doc-reconciliation → doc-repair-backfill → discovery → research-requirements → architecture → stories-test-strategy → [ui-direction] → implementation → sprint-review → deploy-validate → retro | `doc-reconciliation.md` |
+| analysis-only | deep-codebase-analysis → **STOP** (present analysis to user, do not proceed to implementation) | `deep-codebase-analysis.md` |
+
+**Note:** `[ui-direction]` is conditional — included only when the sprint
+introduces new visual surfaces (new UI components, pages, or layout changes).
+This is determined during the stories-test-strategy step, not here.
+
+**Note:** For multi-sprint features (Rule 9), each subsequent sprint
+loops through: `sprint-review-next` → `implementation` → `sprint-review`
+→ `deploy-validate`. The `sprint-review-next` step validates the next
+sprint's stories before implementation begins. This loop is handled by
+`deploy-validate.md`'s post-validation routing, not by the router.
+
+**Note:** For `feature` variant, the discovery step is scoped — it updates
+existing artifacts rather than creating from scratch.
 
 Announce the detected variant and pipeline to the user, then **READ AND
 FOLLOW** the first step file at:

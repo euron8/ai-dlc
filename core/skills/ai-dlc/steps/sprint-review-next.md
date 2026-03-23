@@ -53,10 +53,14 @@ between them:**
    **Cross-sprint check:** For each story, verify it accounts for
    patterns, APIs, and components introduced in the previous sprint.
    **Then immediately proceed to step 2:**
-2. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
+2. `/bmad-advanced-elicitation` — probe every story's requirements,
+   acceptance criteria, and edge cases until zero ambiguity remains.
+   Update story files with all findings.
+   **Then immediately proceed to step 3:**
+3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep,
    missing NFRs, and cross-sprint consistency. Apply all fixes.
-3. Append a changelog to each modified story file.
+4. Append a changelog to each modified story file.
 
 ### 4. Commit Updated Stories
 

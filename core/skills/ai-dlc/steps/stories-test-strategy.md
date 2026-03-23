@@ -70,12 +70,16 @@ between them:**
    item or user instruction, verify: does every AC preserve the specific
    details from the source requirement?
    **Then immediately proceed to step 2:**
-2. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
+2. `/bmad-advanced-elicitation` — probe every story's requirements,
+   acceptance criteria, and edge cases until zero ambiguity remains.
+   Update story files with all findings.
+   **Then immediately proceed to step 3:**
+3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep, missing
    NFRs. Apply all fixes.
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
-3. Append a changelog to each story file.
+4. Append a changelog to each story file.
 
 ### 5. Test Strategy
 

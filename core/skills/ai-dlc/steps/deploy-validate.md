@@ -102,8 +102,7 @@ See: docs/escalations/pending.md
 ### Next Steps
 [If multi-sprint: "Sprint 1 of N complete. Awaiting your validation
 before proceeding to Sprint 2."]
-[If single sprint: "Sprint complete. Kick off /bmad-retrospective when
-ready."]
+[If single sprint: "Sprint complete. Retro will run next."]
 ```
 
 ### 6. Wait for Human

@@ -37,6 +37,9 @@ For each missing artifact identified in the gap analysis:
 
 ### 3. Validation Cycle
 
+Execute all sub-skills back-to-back without pausing for human input
+between them:
+
 Run the full validation cycle (CLAUDE.md Rule 3) on all repaired and
 backfilled artifacts:
 - `/bmad-party-mode` — PM, Architect, Dev walk through all artifacts

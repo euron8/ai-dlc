@@ -23,6 +23,9 @@ Read all artifacts from this sprint:
 
 ### 2. Party Mode Retro
 
+Execute all sub-skills back-to-back without pausing for human input
+between them:
+
 Run `/bmad-party-mode` — bring all agent perspectives (PM, Architect,
 Dev, SM, TEA, QA) into the discussion:
 - Walk through every story's journey from plan to merge

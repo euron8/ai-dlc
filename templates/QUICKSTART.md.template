@@ -49,9 +49,11 @@ conversation, from the user's initial request through production deployment.
   Context is maintained through artifacts on disk, not conversation history.
 - **Autonomous gates.** Phase transitions run the gate validation protocol
   automatically. No human approval is needed between phases.
-- **One human checkpoint.** The Production Validation Checkpoint at the end
-  of deployment is the only point where the pipeline stops and waits for
-  human input.
+- **Two pause points.** The Production Validation Checkpoint at the end
+  of deployment stops and waits for human input. The retro commentary
+  prompt (after the retrospective) gives the human a chance to comment
+  before the sprint closes. These are the only two points where the
+  pipeline pauses for human input.
 - **Requirements are locked.** The pipeline has autonomy over HOW to
   implement. It does NOT have autonomy over WHAT is implemented (CLAUDE.md
   Rule 8).
@@ -153,6 +155,10 @@ user input. Each variant composes a different step sequence.
 ### Decision tree
 
 ```
+Is there a planned sprint with stories ready for implementation?
+  YES --> sprint-execute
+  NO  |
+      v
 Is this a bug fix?
   YES --> bug
   NO  |
@@ -185,13 +191,14 @@ Do ANY planning artifacts exist?
 
 | Variant | Step Sequence |
 |---------|--------------|
-| **greenfield** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
-| **feature** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
-| **bug** | bug-investigation --> implementation --> deploy-validate |
-| **carry-over** | carry-over-evaluation --> stories-test-strategy --> implementation --> sprint-review --> deploy-validate |
-| **brownfield-a** | codebase-inventory --> discovery --> research-requirements --> architecture --> stories-test-strategy --> implementation --> sprint-review --> deploy-validate |
-| **brownfield-b** | deep-codebase-analysis --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
-| **brownfield-c** | doc-reconciliation --> doc-repair-backfill --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate |
+| **sprint-execute** | implementation --> sprint-review --> deploy-validate --> retro |
+| **greenfield** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
+| **feature** | discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
+| **bug** | bug-investigation --> implementation --> deploy-validate --> retro |
+| **carry-over** | carry-over-evaluation --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
+| **brownfield-a** | codebase-inventory --> discovery --> research-requirements --> architecture --> stories-test-strategy --> implementation --> sprint-review --> deploy-validate --> retro |
+| **brownfield-b** | deep-codebase-analysis --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
+| **brownfield-c** | doc-reconciliation --> doc-repair-backfill --> discovery --> research-requirements --> architecture --> stories-test-strategy --> [ui-direction] --> implementation --> sprint-review --> deploy-validate --> retro |
 | **analysis-only** | deep-codebase-analysis --> STOP |
 
 `[ui-direction]` is conditional -- included only when sprint stories
@@ -219,8 +226,9 @@ execution sequences. A summary of each step's purpose:
 - **Doc Repair** (brownfield-c): Fix docs + backfill artifacts
 - **Implementation** (Phase 3): Agent Teams build with three-gate validation
 - **Sprint Review** (Phase 4): Sprint-level adversarial review + party mode
+- **Sprint Review Next** (multi-sprint transition): Validate next sprint's stories against previous sprint learnings before implementation
 - **Deploy and Validate** (Phase 4+): Deploy + smoke tests + human checkpoint
-- **Retro** (Phase 5): Retrospective + process improvements
+- **Retro** (Phase 5): Retrospective + process improvements + commit/push/PR creation
 
 ---
 

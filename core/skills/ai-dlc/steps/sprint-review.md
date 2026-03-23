@@ -11,6 +11,9 @@ deployment. Adversarial review + party mode on the complete sprint.
 
 ## EXECUTION SEQUENCE
 
+Execute all sub-skills back-to-back without pausing for human input
+between them:
+
 ### 1. Sprint-Level Adversarial Review
 
 `/bmad-review-adversarial-general` — final adversarial pass on the

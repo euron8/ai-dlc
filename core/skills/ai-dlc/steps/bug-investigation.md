@@ -1,7 +1,7 @@
 ---
 name: bug-investigation
 description: Bug path — investigate root cause, create fix story, route to implementation
-nextStepFile: ./implementation.md
+nextStepFile: conditional (see Step 6)
 ---
 
 # Bug Investigation (Phase 1D-bug)
