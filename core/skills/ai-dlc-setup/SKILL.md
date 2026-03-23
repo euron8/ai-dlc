@@ -72,7 +72,7 @@ If no argument was provided, run the project scan (Step 1) and check
 for remaining template variables:
 
 ```bash
-grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKSTART.md docs/coding-conventions.md 2>/dev/null | grep -v '{project-root}'
+grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKSTART.md docs/coding-conventions.md 2>/dev/null | grep -v '{project-root}' | grep -v '<!--'
 ```
 
 - **If template variables remain:** This is a fresh or partial install.
@@ -871,7 +871,7 @@ Append the configured block to `docs/coding-conventions.md`.
 Run a comprehensive check for remaining template variables:
 
 ```bash
-grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKSTART.md docs/coding-conventions.md 2>/dev/null | grep -v '{project-root}'
+grep -rn '{[a-z_]*}' .claude/skills/ai-dlc/ .claude/team-roles/ CLAUDE.md QUICKSTART.md docs/coding-conventions.md 2>/dev/null | grep -v '{project-root}' | grep -v '<!--'
 ```
 
 **If matches found:**
