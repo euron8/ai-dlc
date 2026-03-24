@@ -66,7 +66,9 @@ between them:**
    between passes. Continue until only nitpicks remain.
    **Source fidelity pass:** Verify requirements implement what was
    requested, not a generalized or lower-effort alternative.
+   **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the PRD.
+   **Then immediately proceed to gate validation:**
 
 ### 5. Gate Validation and Proceed
 

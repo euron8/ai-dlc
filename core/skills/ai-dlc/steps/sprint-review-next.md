@@ -60,7 +60,9 @@ between them:**
 3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep,
    missing NFRs, and cross-sprint consistency. Apply all fixes.
+   **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each modified story file.
+   **Then immediately proceed to Commit Updated Stories:**
 
 ### 4. Commit Updated Stories
 

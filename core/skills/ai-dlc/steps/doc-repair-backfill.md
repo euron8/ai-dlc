@@ -42,11 +42,15 @@ between them:
 
 Run the full validation cycle (CLAUDE.md Rule 3) on all repaired and
 backfilled artifacts:
-- `/bmad-party-mode` — PM, Architect, Dev walk through all artifacts
-  against the codebase. Do they accurately represent reality?
-- `/bmad-advanced-elicitation` — probe until zero ambiguity
-- `/bmad-review-adversarial-general` — 2+ passes, apply all fixes
-- Append changelogs to all modified artifacts
+1. `/bmad-party-mode` — PM, Architect, Dev walk through all artifacts
+   against the codebase. Do they accurately represent reality?
+   **Then immediately proceed to step 2:**
+2. `/bmad-advanced-elicitation` — probe until zero ambiguity
+   **Then immediately proceed to step 3:**
+3. `/bmad-review-adversarial-general` — 2+ passes, apply all fixes.
+   **When the final pass produces only nitpicks, immediately proceed to step 4:**
+4. Append changelogs to all modified artifacts.
+   **Then immediately proceed to gate validation:**
 
 ### 4. Gate Validation and Proceed
 

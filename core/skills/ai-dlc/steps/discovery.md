@@ -89,7 +89,9 @@ back-to-back without pausing for human input between them:**
    fixes. Run a second pass. Continue until only nitpicks remain.
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
+   **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the brief summarizing improvements.
+   **Then immediately proceed to gate validation:**
 
 ### 6. Gate Validation and Proceed
 

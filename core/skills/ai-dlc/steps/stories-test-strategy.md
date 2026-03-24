@@ -79,14 +79,19 @@ between them:**
    NFRs. Apply all fixes.
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
+   **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each story file.
+   **Then immediately proceed to Test Strategy:**
 
 ### 5. Test Strategy
+
+**Execute back-to-back without pausing:**
 
 1. `/bmad-agent-tea-tea` then select test strategy — risk-based test
    strategy for the sprint
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
+   **When done, immediately proceed to Commit Planning Artifacts:**
 
 ### 6. Commit Planning Artifacts
 

@@ -50,7 +50,9 @@ between them:**
    scalability, coupling, single points of failure, backward
    compatibility, migration risk, integration seams. Apply all fixes
    between passes. Continue until only nitpicks remain.
+   **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the architecture doc.
+   **Then immediately proceed to gate validation:**
 
 ### 5. Gate Validation and Proceed
 
