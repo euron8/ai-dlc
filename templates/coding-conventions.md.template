@@ -116,6 +116,26 @@ same commit**. Specifically:
 - **API changes:** If the story changes an API response shape, update
   smoke tests that consume that endpoint.
 
+### Test type must match change type
+
+Smoke tests must verify the change **at the layer the user experiences
+it**. An API health check does not constitute smoke coverage for a UI
+change. Match the test type to the change:
+
+| Change Type | Required Smoke Test |
+|---|---|
+| New/modified UI component | Browser test (e.g., Playwright) that verifies the component renders with production data |
+| New/modified API endpoint | HTTP test that verifies the endpoint returns the expected response shape |
+| New/modified computed value | Live test that fetches and independently verifies the computation |
+| Changed display formatting | Browser test that reads the rendered value and verifies formatting |
+| Removed feature | Verify the removed surface/endpoint is no longer accessible |
+
+**API-returns-200 is not smoke coverage for a UI change.** If a story
+adds a visible UI element, the smoke test must open a browser, navigate
+to the page, and verify the element renders. If the project has an
+existing browser test framework (e.g., Playwright), new UI smoke tests
+must use it.
+
 ### What smoke tests are NOT
 
 Smoke tests are not unit tests. They run against the live deployed
@@ -129,10 +149,13 @@ error cases.
 Log smoke test updates in the story file under "Smoke Test Updates":
 - Which test files were added/modified/removed
 - What functionality the test covers
+- **What layer the test verifies** (browser, API, computation)
 - Confirmation the test passes against the deployed instance
 
 QA will reject stories that modify deployed functionality without
-corresponding smoke test updates. Code review will classify missing
+corresponding smoke test updates. **QA must also verify the test type
+matches the change type** — an API test for a UI change is insufficient
+and must be rejected. Code review will classify missing or mismatched
 smoke test updates as Important severity.
 
 ---

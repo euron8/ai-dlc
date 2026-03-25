@@ -154,7 +154,7 @@ integrity tests (per coding-conventions), classify as **Critical**.
 This is non-deferrable. The story cannot pass code review without these
 tests. Do not accept "will add in follow-up" or "carry-over item."
 
-### Missing Smoke Test Updates = Important
+### Missing or Mismatched Smoke Test Updates = Important
 
 If a story introduces, modifies, or removes user-facing functionality
 and does not include corresponding smoke test updates, classify as
@@ -162,6 +162,13 @@ and does not include corresponding smoke test updates, classify as
 section listing which test files were added/modified/removed and what
 they cover. Stories that only change internal logic with no user-facing
 impact are exempt.
+
+**Test type must match change type.** If a story adds UI components
+but the smoke test only checks an API endpoint (e.g., GET returns 200),
+classify as **Important** — the test does not verify what the story
+changed. UI changes require browser-level tests. If the project has
+an established browser test framework (e.g., Playwright), the review
+must verify the smoke test uses it.
 
 ## Communication
 

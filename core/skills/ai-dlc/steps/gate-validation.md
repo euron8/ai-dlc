@@ -148,18 +148,27 @@ when any story adds fields to API queries or schema.
 Skip this check for planning phase gates. Required for Phase 4+ gates.
 
 - For every story in the sprint that introduces, modifies, or removes
-  user-facing functionality, verify smoke test updates exist:
+  user-facing functionality, verify smoke test updates exist AND are
+  adequate:
   - Check the story file for a "Smoke Test Updates" section listing
     which test files were added/modified/removed.
   - Verify the referenced test files exist on disk.
   - Verify the test changes correspond to the story's user-facing
     changes (not just copied boilerplate).
-- **Gate FAILS** if any user-facing story is missing smoke test updates.
-  The dev must add the tests before the gate can pass.
+  - **Verify test type matches change type:** UI changes must have
+    browser-level tests (e.g., Playwright), not just API health checks.
+    API changes must have HTTP endpoint tests. Computation changes must
+    have live verification tests. If the story adds a visible UI
+    element and the smoke test only checks `GET /endpoint returns 200`,
+    the gate FAILS — the test does not verify what the story changed.
+- **Gate FAILS** if any user-facing story is missing smoke test updates
+  OR if the test type does not match the change type. The dev must add
+  or fix the tests before the gate can pass.
 - Stories that are purely internal (no user-facing behavior change),
   documentation-only, or infrastructure configuration are exempt.
 - **Evidence:** Log which stories were checked, which smoke test files
-  were found, and what functionality they cover.
+  were found, what layer each test verifies (browser/API/computation),
+  and whether the test type matches the change type.
 
 ### 12. Append gate log entry.
 

@@ -85,7 +85,13 @@ For each completed task, verify:
   - [ ] Smoke tests added/updated/removed in the same commit
   - [ ] "Smoke Test Updates" section exists in the story file
   - [ ] Changes cover the story's primary user-facing path
-  - **If smoke tests were not updated for user-facing changes, REJECT.**
+  - [ ] **Test type matches change type:** UI changes require browser
+    tests (e.g., Playwright), not just API health checks. API changes
+    require HTTP endpoint tests. Computation changes require live
+    verification tests. An API-returns-200 test does NOT satisfy smoke
+    coverage for a UI change. If the project has an existing browser
+    test framework, UI smoke tests MUST use it.
+  - **If smoke tests are missing, wrong type, or insufficient: REJECT.**
 
 ## Communication
 
