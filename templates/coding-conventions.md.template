@@ -30,8 +30,8 @@ load this file.
   Out-of-scope changes must be stashed or committed separately. **Evidence
   required:** Log `git diff --staged --stat` output in the story file under
   "Scope Verification".
-- Pre-commit secret scanning should be configured. Do not rely on code review
-  as the sole defense against credential leaks.
+- Configure pre-commit secret scanning. Do not rely on code review as the
+  sole defense against credential leaks.
 - When adding new environment variables, update the real `.env` and any
   environment template file in the same commit.
 - Post-gate hotfixes that change production behavior must include a test case
@@ -85,11 +85,6 @@ Gate validation check #6 will reject stories missing this section. QA
 will reject stories missing any of the 5 checks. Code review will
 classify missing production integrity tests as Critical.
 
-**Why this is non-deferrable:** Production validation has repeatedly
-surfaced obvious bugs that these tests would catch mechanically. Deferring
-them transfers the testing burden to the human during production validation
--- the most expensive place to find bugs.
-
 ---
 
 ## Smoke Test Maintenance (Hard Gate)
@@ -140,9 +135,8 @@ must use it.
 
 Smoke tests are not unit tests. They run against the live deployed
 instance, not a dev server or mock. They verify that the deployment
-succeeded and critical paths work end-to-end. They should be fast
-(seconds, not minutes) and focused on the happy path plus critical
-error cases.
+succeeded and critical paths work end-to-end. They run in seconds
+(not minutes) and cover the happy path plus critical error cases.
 
 ### Evidence
 
@@ -169,8 +163,7 @@ smoke test updates as Important severity.
   commit.
 - Test fixtures that mock API response shapes must match the response schema
   documented in the architecture addendum. Fixture/schema mismatches are
-  Important severity (not Suggestion) because synchronized bugs between feature
-  code and test fixtures bypass all automated testing.
+  Important severity (not Suggestion).
 - Tests that validate data against the same system that produced it (circular
   self-validation) must be flagged as a test gap during code review. A
   validation test that can never fail is not a test.
@@ -186,9 +179,9 @@ smoke test updates as Important severity.
 
 ## Story Spec Quality
 
-- Stories should not exceed 7 acceptance criteria. If a story exceeds 7 ACs,
+- Stories MUST NOT exceed 7 acceptance criteria. If a story exceeds 7 ACs,
   split it into smaller stories.
-- Story ACs should reference behaviors or symptoms, not specific file names.
+- Story ACs MUST reference behaviors or symptoms, not specific file names.
 - Story specs created from carry-over backlog items or user instructions must
   include a "Source Requirements" section that quotes the original requirement
   verbatim. The story must address every root cause listed in the carry-over

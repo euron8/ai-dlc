@@ -170,13 +170,12 @@ These rules apply to ALL agents across ALL phases:
 10. **Seek clarity when ambiguous -- HARD_BLOCK severity (Rule 8 tier).**
     This rule has two observable requirements.
 
-    **(a) Ambiguity resolution.** Agents should not be afraid to ask
-    for clarification when they detect genuine ambiguity in the user's
-    request, requirements, or intent. This applies throughout the pipeline
-    -- not just at routing. Asking a targeted question is better than
-    guessing wrong. However, do not ask about matters that can be resolved
-    by reading existing artifacts, project memory, or applying professional
-    defaults.
+    **(a) Ambiguity resolution.** Ask for clarification when you detect
+    genuine ambiguity in the user's request, requirements, or intent.
+    Do not ask about matters resolvable by reading existing artifacts,
+    project memory, or applying professional defaults. This applies
+    throughout the pipeline -- not just at routing. A targeted question
+    beats a wrong guess.
 
     **(b) In-flight interpretation preamble.** The first line of the
     agent's response to ANY user message that arrives during or after
@@ -188,17 +187,9 @@ These rules apply to ALL agents across ALL phases:
     respond; this adds one line, not a pause -- the pipeline continues
     normally after.
 
-    **Anti-pattern callout.** A known degradation mode in long sessions:
-    as the conversation accumulates execution turns
-    (`[action -> result -> action -> result]`), the agent starts
-    pattern-matching on recent behavior and misreads user questions as
-    directives. Example failure: the user asks *"what about this
-    escalation decision?"* and the agent begins executing the escalation
-    instead of answering the question. The preamble requirement in (b)
-    is the mitigation -- forcing the agent to state its interpretation
-    out loud makes the misread visible before it becomes action. Do NOT
-    reason your way out of this rule because "the intent seems clear" --
-    that rationalization is exactly the failure mode this rule catches.
+    **Absolute.** The preamble requirement has no exceptions. "The
+    intent seems clear" is not a valid reason to skip it. Rationalizing
+    around this rule is itself the failure mode the rule catches.
 
 11. **Rules are hard, directive, and self-contained.** A rule in
     CLAUDE.md, coding-conventions.md, step files, or team role files

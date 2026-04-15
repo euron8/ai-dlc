@@ -136,9 +136,8 @@ Before starting the pipeline, determine the correct branch strategy:
 
 1. **Check the current branch:** Run `git branch --show-current`.
 
-2. **If on `main` or `master`:** A new branch should be created for
-   this work. Generate a branch name from the pipeline variant and
-   user input:
+2. **If on `main` or `master`:** Create a new branch for this work.
+   Generate a branch name from the pipeline variant and user input:
    - Format: `ai-dlc/<variant>/<short-description>`
    - Examples: `ai-dlc/feature/user-dashboard`, `ai-dlc/bug/stale-cache`,
      `ai-dlc/greenfield/notification-system`

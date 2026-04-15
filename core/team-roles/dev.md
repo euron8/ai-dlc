@@ -45,8 +45,8 @@ assigned story files and the architecture document.
 - If you need an API contract or type definition that another teammate is
   producing, message them directly and wait. Do NOT stub it with assumptions.
 - Do NOT create subtasks in the shared task list. Stories are already decomposed
-  into acceptance criteria. Work through ACs sequentially. The only tasks that
-  should exist in the task list are the story-level tasks created by the lead.
+  into acceptance criteria. Work through ACs sequentially. The task list
+  contains only story-level tasks created by the lead.
 - Before starting a new story, commit the current story's changes. Do not begin
   work on a subsequent story with uncommitted changes from the prior story.
 - For well-scoped stories with precise implementation checklists, use the

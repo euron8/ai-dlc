@@ -51,8 +51,8 @@ Walk every directory and file in the project:
 Write the complete analysis to:
 `_bmad-output/planning-artifacts/codebase-analysis.md`
 
-This file should be a standalone reference that someone could read to
-fully understand the system without looking at the code.
+The file MUST be a standalone reference — readable in full without
+looking at the code.
 
 ### 6. Route
 
