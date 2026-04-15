@@ -29,50 +29,90 @@ fi
 # Create directories
 echo "Creating directories..."
 mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/steps"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc-setup"
 mkdir -p "$PROJECT_ROOT/.claude/team-roles"
 mkdir -p "$PROJECT_ROOT/docs"
-mkdir -p "$PROJECT_ROOT/_bmad-output/implementation-artifacts"
-mkdir -p "$PROJECT_ROOT/_bmad-output/planning-artifacts/stories"
+mkdir -p "$PROJECT_ROOT/docs/ai-dlc-patterns"
 mkdir -p "$PROJECT_ROOT/docs/escalations"
 mkdir -p "$PROJECT_ROOT/docs/reviews"
 mkdir -p "$PROJECT_ROOT/docs/retro"
+mkdir -p "$PROJECT_ROOT/_bmad-output/implementation-artifacts"
+mkdir -p "$PROJECT_ROOT/_bmad-output/planning-artifacts/stories"
 
-# Copy core skill files
-echo "Installing AI/DLC skill..."
-cp "$SCRIPT_DIR/../core/skills/ai-dlc/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
-cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/ai-dlc/steps/"
-
-# Copy setup skill
-echo "Installing setup skill..."
-mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc-setup"
-cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/"
-
-# Archive existing files that AI/DLC will replace
-# Each install gets a timestamped archive so previous backups aren't clobbered
+# Archive existing files that AI/DLC will replace, BEFORE any overwrite.
+# Each install gets a timestamped archive so previous backups aren't clobbered.
+#
+# Two archive layouts within docs/pre-ai-dlc/$ARCHIVE_TS/:
+#   - Flat (archive root): files that /ai-dlc-setup Step 0 reads for
+#     project-specific config absorption — CLAUDE.md, QUICKSTART.md,
+#     coding-conventions.md, team role files.
+#   - _divergence/ (mirrors project-relative paths): files that Step 0 does
+#     NOT read but that the export tool needs to diff against installed
+#     upstream — skill files, step files, setup skill, pattern files.
+#     Preserving directory structure lets the export tool walk the tree
+#     with `diff -r`.
 ARCHIVED=false
 ARCHIVE_TS="$(date +%Y%m%d-%H%M%S)"
 ARCHIVE_DIR="$PROJECT_ROOT/docs/pre-ai-dlc/$ARCHIVE_TS"
 
+_ensure_archive_root() {
+  if [ "$ARCHIVED" = false ]; then
+    mkdir -p "$ARCHIVE_DIR"
+    echo "Archiving existing files to docs/pre-ai-dlc/$ARCHIVE_TS/..."
+    ARCHIVED=true
+  fi
+}
+
+# Flat archive — Step 0 absorption targets.
 archive_if_exists() {
   local file="$1"
   local basename="$(basename "$file")"
   if [ -f "$file" ]; then
-    if [ "$ARCHIVED" = false ]; then
-      mkdir -p "$ARCHIVE_DIR"
-      echo "Archiving existing files to docs/pre-ai-dlc/$ARCHIVE_TS/..."
-      ARCHIVED=true
-    fi
+    _ensure_archive_root
     cp "$file" "$ARCHIVE_DIR/$basename"
     echo "  Archived $basename"
   fi
 }
 
+# Structured archive — preserves the project-relative path under _divergence/.
+archive_tree_file() {
+  local file="$1"
+  local rel_path="${file#$PROJECT_ROOT/}"
+  if [ -f "$file" ]; then
+    _ensure_archive_root
+    local dest_dir="$ARCHIVE_DIR/_divergence/$(dirname "$rel_path")"
+    mkdir -p "$dest_dir"
+    cp "$file" "$dest_dir/"
+    echo "  Archived $rel_path"
+  fi
+}
+
+# Archive every file in a directory matching a glob, preserving relative path.
+archive_tree_glob() {
+  local dir="$1"
+  local glob="$2"
+  if [ -d "$dir" ]; then
+    shopt -s nullglob
+    for file in "$dir"/$glob; do
+      archive_tree_file "$file"
+    done
+    shopt -u nullglob
+  fi
+}
+
+# Flat archive (Step 0 absorption targets)
 archive_if_exists "$PROJECT_ROOT/CLAUDE.md"
 archive_if_exists "$PROJECT_ROOT/QUICKSTART.md"
 archive_if_exists "$PROJECT_ROOT/docs/coding-conventions.md"
 for role in architect code-reviewer dev pm qa; do
   archive_if_exists "$PROJECT_ROOT/.claude/team-roles/$role.md"
 done
+
+# Structured archive (export-tool diff targets)
+archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc/SKILL.md"
+archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/steps" "*.md"
+archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
+archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
 
 if [ "$ARCHIVED" = true ]; then
   echo ""
@@ -81,6 +121,15 @@ if [ "$ARCHIVED" = true ]; then
   echo "  content from the most recent archive during configuration."
   echo ""
 fi
+
+# Copy core skill files (always overwrite with AI/DLC versions)
+echo "Installing AI/DLC skill..."
+cp "$SCRIPT_DIR/../core/skills/ai-dlc/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
+cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/ai-dlc/steps/"
+
+# Copy setup skill (always overwrite with AI/DLC versions)
+echo "Installing setup skill..."
+cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/"
 
 # Install team roles (always overwrite with AI/DLC versions)
 echo "Installing team roles..."
@@ -99,9 +148,8 @@ done
 cp "$SCRIPT_DIR/../templates/coding-conventions.md.template" "$PROJECT_ROOT/docs/coding-conventions.md"
 echo "  coding-conventions.md installed"
 
-# Copy pattern files for setup reference
+# Copy pattern files for setup reference (always overwrite with AI/DLC versions)
 echo "Installing patterns reference..."
-mkdir -p "$PROJECT_ROOT/docs/ai-dlc-patterns"
 cp "$SCRIPT_DIR/../patterns/"*.md "$PROJECT_ROOT/docs/ai-dlc-patterns/"
 echo "  Patterns copied to docs/ai-dlc-patterns/ (reference for /ai-dlc-setup)"
 
