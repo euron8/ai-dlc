@@ -61,8 +61,7 @@ requirement must be enforced at ALL applicable layers:
 
 If a retro action item says "hard gate" or "non-deferrable," it MUST
 be applied at all 5 layers. Applying it to only 1-2 layers makes it
-advisory, not structural — and advisory rules have repeatedly failed
-to prevent the problems they were designed to catch.
+advisory, not structural.
 
 **For advisory improvements (best practices, conventions):**
 - Apply the change to the relevant file(s)
@@ -70,6 +69,58 @@ to prevent the problems they were designed to catch.
 **For all improvements:**
 - Document what was changed and why in the retro doc
 - List which files were modified and which enforcement layers were added
+
+**Rule text authoring:**
+Follow CLAUDE.md Rule 11. Rules must be imperative or MUST/MUST NOT/SHALL,
+state the enforcement consequence inline, and contain no origin narrative.
+The WHY of each improvement goes in the commit message below, not in the
+rule file.
+
+**Rule file audit (every retro):**
+
+After applying the process improvements above, scan the following files
+for violations of CLAUDE.md Rule 11:
+
+- `CLAUDE.md`
+- `docs/coding-conventions.md`
+- `.claude/skills/ai-dlc/steps/*.md`
+- `.claude/team-roles/*.md`
+
+Two classes of violation to detect:
+
+**1. Narrative drift.** Rule text contains sprint/story references,
+incident descriptions, "because we" justification, parenthetical origin
+notes, embedded dates, or quoted retro findings.
+
+**2. Rule weakness.** Rule text uses "should", "try to", "consider",
+"prefer", "in most cases", or similar soft language where a mandate is
+intended. Missing enforcement consequence where one would apply.
+
+Per finding, judge case by case:
+- Is the text part of a rule statement (prescriptive/directive), or
+  prose explaining how something works (descriptive)? Descriptive prose
+  is exempt from both classes.
+- For narrative drift: does the bare rule still make sense when the
+  narrative is removed?
+  - **Yes** → strip the narrative; the WHY goes to the audit commit message.
+  - **No** → the rule is leaning on the story. Rewrite it hard (see
+    Rule 11 style), or mark for removal and raise during Step 5 human
+    commentary.
+- For rule weakness: rewrite the rule using imperative or MUST/MUST NOT/SHALL.
+  If the soft language was intentional (genuine advisory preference),
+  the rule does not belong in rule files — move it to the retro doc
+  as a lesson or remove it.
+
+Record audit results in the retro doc under a `## Rule File Audit`
+section: files scanned, narrative drifts found (list each), rule
+weaknesses found (list each), rules rewritten, rules marked for removal.
+
+**Commit the audit as a separate commit** from the process improvements
+above. Commit message:
+`docs(rules): rule file audit (retro) — strip narrative, harden weak rules`
+
+If zero violations found, skip the commit and note "Audit: clean" in
+the retro doc.
 
 ### 5. Human Commentary
 

@@ -200,6 +200,42 @@ These rules apply to ALL agents across ALL phases:
     reason your way out of this rule because "the intent seems clear" --
     that rationalization is exactly the failure mode this rule catches.
 
+11. **Rules are hard, directive, and self-contained.** A rule in
+    CLAUDE.md, coding-conventions.md, step files, or team role files
+    must be writable as a standalone mandate without supporting
+    narrative. A rule that needs origin context ("added after sprint
+    12", "because advisory rules failed") to survive is not a rule --
+    it is a suggestion leaning on a story. Rewrite it hard, or move
+    it to a retro doc as a lesson.
+
+    **Style:**
+    - State mandates with imperative voice ("Do X", "Never Y") or
+      MUST / MUST NOT / SHALL. Forbidden: "should", "try to",
+      "consider", "prefer", "in most cases", and any other language
+      that can be read as optional when the intent is a mandate.
+      "May" is allowed only when granting permission or autonomy,
+      not when stating a mandate.
+    - State the enforcement consequence inline when one applies:
+      "Violation fails gate N" or "Missing = Critical severity".
+    - No sprint or story references.
+    - No incident descriptions or "because we got burned" narrative.
+    - No parenthetical origin notes after a directive.
+    - No embedded dates, retro quotes, or escalation quotes.
+
+    **Scope.** Rule files only: CLAUDE.md, coding-conventions.md,
+    step files, team role files. Planning artifacts (PRDs, stories,
+    reviews, retros) and export bundles are different formats --
+    Rule 5 governs artifact changelogs, and the export bundle format
+    captures origin context for human review of contributions.
+
+    **Cleanup.** The retro's rule file audit (retro.md Step 4) scans
+    rule files each sprint for two classes of violation: **narrative
+    drift** (rule text gained origin context) and **rule weakness**
+    (rule text became readable as optional). Both are cleanup targets.
+    Strip narratives; rewrite weak rules hard. A rule that is too
+    project-specific to survive without its narrative is not
+    portable -- rewrite it unconditional, or remove it.
+
 ---
 
 ## Workflow: AI Development Lifecycle (AI/DLC)
