@@ -19,6 +19,34 @@ nextStepFile: dynamically determined by routing logic
 
 ## EXECUTION SEQUENCE
 
+### Step 0: Resume Check
+
+Before running the full routing sequence, check for an existing
+pipeline snapshot that indicates a resume from a previous session.
+
+1. Check if `_bmad-output/pipeline-snapshot.md` exists and is non-empty.
+2. If YES and the user input contains a resume signal — begins with
+   "Resuming an ai-dlc sprint" OR explicitly references "pipeline
+   snapshot" — this is a resume:
+   - Read the snapshot's **Pipeline Position** section to determine
+     `current_step_file`.
+   - Acknowledge the resume in the first output line:
+     *"Resuming from snapshot at `{current_step_file}`."*
+   - Skip the rest of this routing sequence. Steps 1–6 are for fresh
+     pipeline starts; on resume they would misclassify the input and
+     overwrite the snapshot.
+   - **READ AND FOLLOW** the step file named in `current_step_file`:
+     `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`
+   - The snapshot is already current (kept fresh by
+     `gate-validation.md` Check 14 on each gate passage throughout the
+     previous session); do NOT re-initialize it.
+3. If the snapshot exists but user input does NOT indicate a resume
+   (e.g., the user is starting a new feature while an old snapshot
+   remains on disk from a previous pipeline run), continue to Step 1.
+   Step 6 will detect the stale snapshot and archive it before
+   creating a new one.
+4. If no snapshot exists, continue to Step 1 normally.
+
 ### Step 1: Read Project State
 
 Check for existing artifacts on disk:
@@ -159,6 +187,33 @@ sprint's stories before implementation begins. This loop is handled by
 
 **Note:** For `feature` variant, the discovery step is scoped — it updates
 existing artifacts rather than creating from scratch.
+
+**Initialize the pipeline snapshot.** Before the READ AND FOLLOW, handle
+the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
+
+- **If the file does NOT exist:** create it with initial state:
+  - Pipeline Position (detected variant, first step file, no
+    last-completed step yet, no gates passed yet)
+  - Sprint Context (populate from `sprint-status.yaml` if it exists;
+    else `sprint_id: none`)
+  - Recent Activity (empty — will be populated by `gate-validation.md`
+    Check 14 on each gate passage)
+  - Open Items (empty)
+  - Locked Decisions (empty)
+
+- **If the file ALREADY exists** (a stale snapshot from a previous
+  pipeline run — Step 0 did not dispatch to a resume, so the user is
+  starting fresh with an old snapshot still on disk): do NOT silently
+  overwrite. Archive the old file to
+  `_bmad-output/pipeline-snapshot.archive.{ISO-timestamp}.md`
+  (timestamp format: compact ISO 8601, e.g., `2026-04-15T143000Z`),
+  then create a new snapshot with initial state as above. Announce
+  the archival in the output so the user knows the previous state
+  was preserved.
+
+See SKILL.md Rule 10 for the full snapshot structure. The snapshot is
+maintained throughout the pipeline and is the source of truth for state
+on handoff, post-`/compact` recovery, and lead self-orientation.
 
 Announce the detected variant and pipeline to the user, then **READ AND
 FOLLOW** the first step file at:

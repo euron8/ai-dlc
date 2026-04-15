@@ -192,6 +192,35 @@ Output a brief line to the conversation:
 
 Include the check count so the human can verify completeness at a glance.
 
+### 14. Update pipeline snapshot.
+
+Update `_bmad-output/pipeline-snapshot.md` to reflect the gate passage
+and current pipeline state. The snapshot is a living document maintained
+throughout the pipeline and is the source of truth for state on handoff,
+post-`/compact` recovery, and lead self-orientation.
+
+Refresh these sections:
+
+- **Pipeline Position** — update `current_step_file` (just completed),
+  `last_completed_step_file`, and `last_gate_passed` (gate name +
+  timestamp).
+- **Sprint Context** — sync story statuses with `sprint-status.yaml`
+  (stories_completed_this_sprint, stories_in_progress,
+  stories_not_started). Update sprint_id if it changed.
+- **Recent Activity** — append a one-line entry for this gate passage
+  (gate name, timestamp, key artifacts touched). Keep the last ~10
+  entries; older entries can be pruned.
+- **Open Items** — refresh from current state of `docs/escalations/pending.md`
+  and any open triage items.
+- **Locked Decisions** — append any new locked requirements or
+  direction changes confirmed during this gate.
+
+See SKILL.md Rule 10 for the snapshot's full structure and rationale.
+
+A gate passage without a corresponding snapshot update leaves the
+snapshot stale, which undermines its role as the handoff / recovery /
+self-orientation source of truth. Do not skip this check.
+
 ## Gate Failure
 
 If any check fails:

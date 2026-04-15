@@ -30,6 +30,14 @@ human can observe, then immediately continue to the next action.
 Outputting results and continuing is correct; outputting results and
 waiting for a response is stalling.
 
+**Handoff is not a fourth pause point.** When the user requests
+handoff to a new conversation, the agent finalizes the pipeline
+snapshot, outputs a pasteable resume prompt, and ENDS the current
+session — it does not pause and wait. The new conversation is a
+separate session that resumes from the snapshot. The 40% and 50%
+context reminders are one-line outputs, not pauses — the agent
+continues immediately after issuing them.
+
 Every planning artifact goes through **Party Mode** (multi-agent debate),
 **Advanced Elicitation** (probe until zero ambiguity), and **Adversarial
 Review** (multi-pass, apply all fixes autonomously between passes).
@@ -159,13 +167,38 @@ These rules apply to ALL agents across ALL phases:
    The human reviews each sprint's production deployment before the agent
    proceeds to the next phase.
 
-10. **Seek clarity when ambiguous.** Agents should not be afraid to ask
+10. **Seek clarity when ambiguous -- HARD_BLOCK severity (Rule 8 tier).**
+    This rule has two observable requirements.
+
+    **(a) Ambiguity resolution.** Agents should not be afraid to ask
     for clarification when they detect genuine ambiguity in the user's
     request, requirements, or intent. This applies throughout the pipeline
     -- not just at routing. Asking a targeted question is better than
     guessing wrong. However, do not ask about matters that can be resolved
     by reading existing artifacts, project memory, or applying professional
     defaults.
+
+    **(b) In-flight interpretation preamble.** The first line of the
+    agent's response to ANY user message that arrives during or after
+    an execution phase MUST be a one-sentence interpretation stating
+    whether the message is being treated as a question or a directive.
+    Example: *"Reading this as a question about the escalation decision
+    -- answering below, not acting."* A missing first-line interpretation
+    is a rule violation, not a soft fail. Output the preamble, then
+    respond; this adds one line, not a pause -- the pipeline continues
+    normally after.
+
+    **Anti-pattern callout.** A known degradation mode in long sessions:
+    as the conversation accumulates execution turns
+    (`[action -> result -> action -> result]`), the agent starts
+    pattern-matching on recent behavior and misreads user questions as
+    directives. Example failure: the user asks *"what about this
+    escalation decision?"* and the agent begins executing the escalation
+    instead of answering the question. The preamble requirement in (b)
+    is the mitigation -- forcing the agent to state its interpretation
+    out loud makes the misread visible before it becomes action. Do NOT
+    reason your way out of this rule because "the intent seems clear" --
+    that rationalization is exactly the failure mode this rule catches.
 
 ---
 
@@ -241,15 +274,39 @@ For sprints with new visual surfaces (UI epics):
 
 ### Session Model
 
-The AI/DLC pipeline runs in a **single conversation** from entry point
-through production deployment. With 1M context, session breaks for context
-freshness are not required. Artifacts on disk carry durable state regardless.
-Agent Teams teammates are spawned within the same lead session, each with
-their own context window.
+The AI/DLC pipeline runs in a **single conversation** by default, from
+entry point through production deployment. Agent Teams teammates are
+spawned within the same lead session, each with their own context window.
 
-If the agent detects context quality degradation during an exceptionally
-long run, it may create an internal checkpoint (summarize progress, re-read
-key artifacts) as a recovery mechanism -- but this is not a mandatory break.
+Context management uses a living pipeline snapshot plus two threshold
+reminders:
+
+- **Living snapshot.** The lead maintains
+  `_bmad-output/pipeline-snapshot.md` throughout the sprint, created at
+  pipeline start (in `route.md`) and updated at every gate passage
+  (by `gate-validation.md` Check 14). The snapshot is the source of
+  truth for pipeline state — variant, current step, sprint context,
+  recent activity, open items, locked decisions. When the agent is
+  uncertain about state, it reads the snapshot, not the conversation
+  scrollback.
+- **40% context reminder.** When context window usage first crosses
+  40%, the agent outputs a one-line reminder that `/compact` (safe
+  because of the snapshot) or a fresh conversation are options.
+  Non-blocking — the agent continues after outputting the line.
+- **50% context reminder.** When context window usage first crosses
+  50%, the agent outputs a more urgent one-line reminder. Still
+  non-blocking — critical operations (deployment mid-flight, incident
+  triage) may require continuing past 50%, and the user's judgment
+  is authoritative.
+- **Human-requested handoff.** When the user requests handoff
+  (directly, or in response to either reminder), the agent commits
+  in-flight work, finalizes the snapshot, outputs a pasteable resume
+  prompt pointing at the snapshot, and ends the session. The new
+  conversation resumes from the snapshot.
+
+The agent does NOT force handoff at any context threshold. See
+`.claude/skills/ai-dlc/SKILL.md` Rule 10 for the complete handoff
+protocol and snapshot structure.
 
 The retro (Phase 5) runs inline after deployment validation, in the same
 conversation. The human gets a chance to comment before the sprint closes.
