@@ -272,7 +272,7 @@ runs a structured self-validation:
 4. Append a gate passage record to `_bmad-output/implementation-artifacts/gate-log.md`.
 5. Proceed to the next phase.
 
-The full gate protocol is defined in `gate-validation.md` (13 checks with
+The full gate protocol is defined in `gate-validation.md` (14 checks with
 evidence requirements). The summary above is for reference — agents MUST
 follow the full protocol in `gate-validation.md`, not this summary.
 
