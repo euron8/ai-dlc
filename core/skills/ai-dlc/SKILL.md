@@ -152,12 +152,14 @@ in a single conversation.
     **Finalized** on handoff request (path (a) below).
 
     Structure — lightweight markdown, no YAML frontmatter, no
-    checksums. Five required sections:
+    checksums. Six required sections:
 
     - **Pipeline Position** — pipeline variant, current step file,
       last completed step file, last gate passed with timestamp
     - **Sprint Context** — sprint ID (or `none`), stories in scope
-      with current statuses (completed / in-progress / not started)
+      with current statuses (completed / in-progress / not started),
+      `is_ui_epic` boolean (set by `stories-test-strategy.md` Step 7;
+      read by `deploy-validate.md` for visual verification gating)
     - **Recent Activity** — last ~10 entries covering gate passages,
       significant commits, and key artifacts touched. Older entries
       may be pruned.
@@ -165,6 +167,13 @@ in a single conversation.
       decisions, outstanding adversarial review findings
     - **Locked Decisions** — locked requirements, direction changes
       the human flagged that the lead accepted
+    - **Context Reminders** — a single field:
+      `context_reminders_sent: none | 40pct | 50pct`. Records which
+      threshold reminders have already been output this session.
+      Initialized to `none`. Updated by `gate-validation.md` Check 14
+      whenever a threshold is crossed. The field exists so Check 14
+      can determine whether to emit a reminder without relying on
+      conversation scrollback.
 
     The snapshot is the source of truth for pipeline state. When
     uncertain about current state, the lead reads the snapshot, not

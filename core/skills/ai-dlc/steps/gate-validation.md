@@ -206,7 +206,11 @@ Refresh these sections:
   timestamp).
 - **Sprint Context** — sync story statuses with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,
-  stories_not_started). Update sprint_id if it changed.
+  stories_not_started). Update sprint_id if it changed. If
+  `is_ui_epic` was determined during this gate's step (set in
+  `stories-test-strategy.md` Step 7), record it here so
+  `deploy-validate.md` can read it from the snapshot after a
+  handoff or `/compact` rather than re-detecting.
 - **Recent Activity** — append a one-line entry for this gate passage
   (gate name, timestamp, key artifacts touched). Keep the last ~10
   entries; older entries can be pruned.
@@ -214,6 +218,30 @@ Refresh these sections:
   and any open triage items.
 - **Locked Decisions** — append any new locked requirements or
   direction changes confirmed during this gate.
+- **Context Reminders** — evaluate context usage and update
+  `context_reminders_sent` per the threshold rules below.
+
+**Context reminder threshold check (required at every gate):**
+
+Read `context_reminders_sent` from the snapshot. If the field is
+absent (e.g., snapshot predates this rule), treat it as `none` and
+add it before proceeding. Estimate current context window usage based
+on conversation length and accumulated output. Then:
+
+- If `context_reminders_sent` is `none` and usage appears to be at
+  or past 40%: output the Rule 10(b) reminder line exactly as
+  specified in SKILL.md Rule 10(b), then update the field to `40pct`.
+- If `context_reminders_sent` is `none` or `40pct` and usage appears
+  to be at or past 50%: output the Rule 10(c) reminder line exactly
+  as specified in SKILL.md Rule 10(c), then update the field to `50pct`.
+- If `context_reminders_sent` is `50pct`: thresholds already passed;
+  no reminder output needed.
+- If usage is below 40%: no change to the field; no reminder output.
+
+The threshold check is an estimate — precision is not required.
+Err on the side of outputting the reminder early rather than late.
+The reminder is a non-blocking one-line output; it does not pause the
+pipeline. Output it, update the snapshot field, and continue.
 
 See SKILL.md Rule 10 for the snapshot's full structure and rationale.
 
