@@ -207,8 +207,9 @@ post-`/compact` recovery, and lead self-orientation.
 Refresh these sections:
 
 - **Pipeline Position** — update `current_step_file` (just completed),
-  `last_completed_step_file`, and `last_gate_passed` (gate name +
-  timestamp).
+  `last_completed_step_file`, `last_gate_passed` (gate name +
+  timestamp), and `current_branch` (refresh from
+  `git branch --show-current`).
 - **Sprint Context** — sync story statuses with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,
   stories_not_started). Update sprint_id if it changed. If

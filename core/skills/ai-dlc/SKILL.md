@@ -168,7 +168,10 @@ in a single conversation.
     checksums. Six required sections:
 
     - **Pipeline Position** — pipeline variant, current step file,
-      last completed step file, last gate passed with timestamp
+      last completed step file, last gate passed with timestamp,
+      current git branch (captured at initialization and refreshed at
+      each gate passage so `route.md` Step 0a can verify branch match
+      on resume)
     - **Sprint Context** — sprint ID (or `none`), stories in scope
       with current statuses (completed / in-progress / not started),
       `is_ui_epic` boolean (set by `stories-test-strategy.md` Step 7;
