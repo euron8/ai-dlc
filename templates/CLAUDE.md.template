@@ -350,6 +350,16 @@ model-aware absolute token thresholds (not percentages):
   reminder re-fires every additional 50K tokens OR every 20 turns
   (whichever comes first). Same pattern past the red threshold.
   A single reminder early in a long session is not sufficient.
+- **Context introspection — user is source of truth.** The agent
+  cannot reliably self-measure its own context window. The user is
+  the source of truth for context usage. The agent MAY invite the
+  user to share `/context` output at any point and MUST treat
+  shared `/context` output as the authoritative trigger for
+  threshold reminders. When no user-shared `/context` output is
+  available, the agent MUST fall back to a conservative turn-and-
+  tool-output estimate that errs high (declares a threshold crossed
+  early rather than late). This replaces any implicit assumption
+  that the agent detects crossings on its own.
 - **Human-requested handoff.** When the user requests handoff
   (directly, or in response to either reminder), the agent commits
   in-flight work, finalizes the snapshot, outputs a pasteable resume

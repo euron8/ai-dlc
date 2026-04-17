@@ -271,6 +271,18 @@ in a single conversation.
     token counts, and research-observed degradation is tied to
     absolute tokens, not fraction-of-window.
 
+    **Introspection — user is source of truth.** The lead cannot
+    reliably self-measure its own context window. The user is the
+    source of truth for context usage. The lead MAY invite the user
+    to share `/context` output at any point and MUST treat the most
+    recent user-shared `/context` as the authoritative trigger for
+    the threshold evaluations in (b) and (c). When no user-shared
+    `/context` is available, the lead falls back to a conservative
+    turn-and-tool-output estimate that errs high. This replaces any
+    implicit assumption that the lead can detect threshold crossings
+    on its own. See the CLAUDE.md Session Model "Context
+    introspection" bullet.
+
     **(b) Yellow-threshold reminder.** When conversation context
     first crosses the yellow threshold configured for the active
     model, the lead outputs this line as part of its next response
