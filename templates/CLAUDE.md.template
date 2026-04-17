@@ -338,6 +338,46 @@ protocol and snapshot structure.
 The retro (Phase 5) runs inline after deployment validation, in the same
 conversation. The human gets a chance to comment before the sprint closes.
 
+### Post-Compact Recovery Protocol
+
+This protocol is placed in CLAUDE.md (not only in the skill file) so
+it survives `/compact` and is visible to the lead when conversation
+history has been replaced by a summary. SKILL.md Rule 10 cross-
+references this section as the authoritative recovery directive.
+
+If the previous user turn was `/compact` or an auto-compact event,
+OR if the agent observes signs the conversation history has been
+replaced by a summary (e.g., missing earlier turns referenced by
+the snapshot's Recent Activity, a summary-style opening rather than
+a user directive, or the agent cannot recall specifics that the
+snapshot records), the agent's FIRST action MUST be to read
+`_bmad-output/pipeline-snapshot.md` in full before any pipeline
+action. The first output line MUST acknowledge the recovery,
+naming the current step file and last gate passed. This supersedes
+the Rule 10(b) interpretation-preamble requirement (SKILL.md Rule
+4(b)) for the first post-compact response only.
+
+**Verification turn.** Immediately after the acknowledgment line,
+the agent MUST output:
+- Current step file (from snapshot `Pipeline Position`)
+- Last completed gate with timestamp (from snapshot `Pipeline Position`)
+- Any in-flight sub-step from `Recent Activity`
+- Current git branch and last commit (run `git branch --show-current`
+  and `git log -1 --oneline`)
+
+Then the agent pauses with exactly this question:
+
+> *"Does this match your last state? Reply `proceed`, `correct <what>`,
+> or `handoff`."*
+
+This is a mandatory pause point equivalent to the three pause points
+in SKILL.md Rule 7 — added as pause point (d). The agent does NOT
+resume pipeline work until the user responds. A `proceed` reply
+unblocks the pipeline. A `correct <what>` reply is treated as an
+authoritative directive: update the snapshot to match reality, then
+re-verify. A `handoff` reply initiates the Rule 10(a) handoff
+procedure from the already-degraded session.
+
 ---
 
 ## Model Strategy
