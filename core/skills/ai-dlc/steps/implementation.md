@@ -104,6 +104,17 @@ and teammate. This keeps the snapshot reflective of mid-sprint
 state so a `/compact` or handoff mid-implementation does not lose
 visibility into which stories are in-flight.
 
+**Auto-handoff evaluation after each story transition (Seam C).**
+After each sub-step snapshot update in this step, the lead MUST
+invoke auto-handoff evaluation (see `gate-validation.md`
+"Auto-handoff evaluation") at `Seam C` with the label
+`implementation story transition <story-id> <from-status>→<to-status>`.
+If all preconditions hold — including
+`auto_handoff_mode: safe-seam`, red threshold confirmed under Mode
+1, and no teammate awaiting orchestration — auto-handoff FIRES and
+the session ends. Otherwise evaluation returns CONTINUE and
+orchestration resumes.
+
 ### 7. All Gates Passed
 
 When ALL sprint stories have passed all three gates:

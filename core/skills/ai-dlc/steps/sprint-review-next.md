@@ -62,6 +62,10 @@ between them:**
    missing acceptance criteria, untestable criteria, scope creep,
    missing NFRs, and cross-sprint consistency. Apply all fixes.
    **Run sub-step snapshot update after each adversarial pass.**
+   **Then run auto-handoff evaluation** (see `gate-validation.md`
+   "Auto-handoff evaluation") at `Seam D` with the label
+   `sprint-review-next adversarial pass <N>`. If evaluation returns
+   FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each modified story file.
    **Then immediately proceed to Commit Updated Stories:**
@@ -73,5 +77,8 @@ If any stories were modified, commit the changes:
 
 ### 5. Gate Validation and Proceed
 
-Run gate validation (`gate-validation.md`), then:
+Run auto-handoff evaluation at `Seam B` with the label
+`sprint-review-next end-of-step pre-gate` (see `gate-validation.md`
+"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
+gate validation (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`

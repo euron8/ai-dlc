@@ -355,6 +355,35 @@ in a single conversation.
     to absolute token count rather than fraction-of-window. See the
     footnote at the end of this rule for citation details.
 
+    ### Auto-handoff (configurable, `auto_handoff_mode`)
+
+    The lead MAY automatically execute the path (a) 4-step procedure
+    at defined safe seams when all preconditions hold. The
+    authoritative configuration, mode semantics, precondition list,
+    and distinguishing output line live in CLAUDE.md Session Model
+    "Auto-handoff mode". The shared precondition helper and seam
+    call contract live in `gate-validation.md` "Auto-handoff
+    evaluation".
+
+    Binding constraints:
+
+    - Auto-handoff MUST NOT fire under `auto_handoff_mode: off`.
+    - Auto-handoff MUST NOT fire off a Mode 2 fallback estimate.
+      Only Mode 1 (user-shared `/context`) advances
+      `context_reminders_sent` to `red`, which is the precondition
+      the helper reads. This is an absolute constraint — Mode 2
+      estimates are advisory only.
+    - Auto-handoff is NOT a fifth pause point. It is a
+      session-terminating action that executes the path (a)
+      procedure unchanged. The four pause points in Rule 7 remain
+      the complete set.
+    - Auto-handoff output MUST be distinguishable from a
+      human-requested handoff: the lead outputs the auto-handoff
+      line naming the mode, seam, and confirmed token count
+      immediately before the resume prompt.
+    - Resume itself is NOT automated. The user MUST open a new
+      conversation and paste the resume prompt.
+
     ### Reminders are non-blocking output, not pause points
 
     Paths (b) and (c) produce required one-line outputs at specific
