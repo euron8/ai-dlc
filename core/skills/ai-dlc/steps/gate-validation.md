@@ -187,8 +187,13 @@ rewritten before proceeding.
 
 ### 13. Announce gate passage.
 
-Output a brief line to the conversation:
-"Gate [name]: PASSED — [N/N checks passed] — proceeding to [next phase]"
+Output a brief line to the conversation only AFTER Checks 14 and 15
+below have also passed. (This check is numbered 13 to preserve
+existing cross-references, but execution is deferred until the full
+15-check cycle is complete, so the announcement reflects the final
+count.)
+
+"Gate [name]: PASSED — 15/15 checks passed — proceeding to [next phase]"
 
 Include the check count so the human can verify completeness at a glance.
 
@@ -202,11 +207,16 @@ post-`/compact` recovery, and lead self-orientation.
 Refresh these sections:
 
 - **Pipeline Position** — update `current_step_file` (just completed),
-  `last_completed_step_file`, and `last_gate_passed` (gate name +
-  timestamp).
+  `last_completed_step_file`, `last_gate_passed` (gate name +
+  timestamp), and `current_branch` (refresh from
+  `git branch --show-current`).
 - **Sprint Context** — sync story statuses with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,
-  stories_not_started). Update sprint_id if it changed.
+  stories_not_started). Update sprint_id if it changed. If
+  `is_ui_epic` was determined during this gate's step (set in
+  `stories-test-strategy.md` Step 7), record it here so
+  `deploy-validate.md` can read it from the snapshot after a
+  handoff or `/compact` rather than re-detecting.
 - **Recent Activity** — append a one-line entry for this gate passage
   (gate name, timestamp, key artifacts touched). Keep the last ~10
   entries; older entries can be pruned.
@@ -214,12 +224,115 @@ Refresh these sections:
   and any open triage items.
 - **Locked Decisions** — append any new locked requirements or
   direction changes confirmed during this gate.
+- **Context Reminders** — evaluate context usage and update
+  `context_reminders_sent` per the threshold rules below.
+
+**Context reminder threshold check (required at every gate):**
+
+Read the Context Reminders block from the snapshot. If any required
+field is absent (e.g., snapshot predates this rule), initialize
+missing fields before proceeding: `context_reminders_sent: none`
+and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
+
+Resolve the active thresholds from the project's `{context_thresholds}`
+configuration in CLAUDE.md. Defaults per SKILL.md Rule 10:
+- 200K model context → yellow 80K tokens, red 120K tokens
+- 1M model context  → yellow 120K tokens, red 200K tokens
+
+The lead cannot self-measure its context window reliably (per the
+CLAUDE.md Session Model "introspection" note). Use whichever of these
+is available as the estimate, in priority order:
+1. The most recent user-shared `/context` output this session
+   (authoritative).
+2. A conservative estimate from accumulated tool output and turn
+   count (erring high, not low).
+
+Evaluation rules (in order):
+
+- **First crossing of yellow:** if `context_reminders_sent` is
+  `none` and estimated tokens ≥ yellow_threshold, output the
+  Rule 10(b) yellow-threshold reminder substituting the actual
+  yellow_threshold value. Set `context_reminders_sent: yellow`,
+  `last_yellow_fire_tokens` to the current estimate, and
+  `last_yellow_fire_turns` to the current turn count.
+- **First crossing of red:** if `context_reminders_sent` is
+  `none` or `yellow` and estimated tokens ≥ red_threshold, output
+  the Rule 10(c) red-threshold reminder substituting the actual
+  red_threshold value. Set `context_reminders_sent: red`,
+  `last_red_fire_tokens`, and `last_red_fire_turns`.
+- **Recurring yellow (still below red):** if
+  `context_reminders_sent` is `yellow`, estimated tokens still
+  below red_threshold, and EITHER (estimated_tokens −
+  last_yellow_fire_tokens ≥ 50,000) OR (current_turn −
+  last_yellow_fire_turns ≥ 20), re-output the yellow reminder and
+  refresh `last_yellow_fire_*`.
+- **Recurring red:** if `context_reminders_sent` is `red` and
+  EITHER (estimated_tokens − last_red_fire_tokens ≥ 50,000) OR
+  (current_turn − last_red_fire_turns ≥ 20), re-output the red
+  reminder and refresh `last_red_fire_*`.
+- **Below yellow threshold:** no reminder, no field change.
+
+The threshold check is an estimate — precision is not required.
+Err on the side of outputting the reminder early rather than late.
+Reminders are non-blocking one-line outputs; they do not pause the
+pipeline. Output, update the snapshot fields, and continue. Any user
+reply to a reminder is a Rule 4 directive handled on the next turn.
 
 See SKILL.md Rule 10 for the snapshot's full structure and rationale.
 
 A gate passage without a corresponding snapshot update leaves the
 snapshot stale, which undermines its role as the handoff / recovery /
 self-orientation source of truth. Do not skip this check.
+
+### 15. Verify snapshot reflects this gate.
+
+After Check 14 writes the snapshot, re-read
+`_bmad-output/pipeline-snapshot.md` and confirm:
+
+- The `last_gate_passed` name matches the gate being logged in
+  Check 12.
+- The `last_gate_passed` timestamp matches (equal to, or within a
+  few seconds of) the timestamp in the gate log entry Check 12
+  appended.
+- `current_step_file` matches the step file that invoked this gate.
+- If `context_reminders_sent` was advanced this cycle, the matching
+  `last_*_fire_tokens` / `last_*_fire_turns` were also set to
+  non-null values.
+
+This check exists because Check 14 is an assertion ("update the
+snapshot"); Check 15 is a verification that the assertion took
+effect. A gate could otherwise claim Check 14 passed without the
+snapshot actually being updated.
+
+**Gate FAILS** if any of the above do not match. Remediation: re-run
+Check 14 (re-write the snapshot) and then re-run Check 15. If Check
+15 fails twice in a row, escalate as HARD_BLOCK — the snapshot
+writer is broken and the gate should not pass with a stale
+recovery anchor.
+
+### Sub-step snapshot update (referenced by step files)
+
+Step files invoke this lightweight update after each validation
+sub-skill and after each story transition during implementation.
+Gate passages still run the full Check 14 above; sub-step updates
+are narrower in scope.
+
+When a step file says "run sub-step snapshot update", execute:
+
+1. Append a one-line entry to **Recent Activity** naming the
+   sub-skill completed or transition observed, with timestamp and
+   artifact touched (e.g., `2026-04-17T15:22Z — /bmad-party-mode
+   completed on PRD — _bmad-output/planning-artifacts/prd.md`).
+2. Refresh **Open Items** from current state of
+   `docs/escalations/pending.md` and any open triage items.
+3. Do NOT refresh other sections (Pipeline Position, Sprint Context,
+   Locked Decisions remain gate-scope). Do NOT re-evaluate context
+   reminder thresholds here — reminder evaluation stays at gate
+   boundaries per Check 14 above.
+
+This keeps mid-step compaction survivable: the snapshot's Recent
+Activity reflects the in-flight sub-step rather than only the last
+gate. The full Check 14 still runs at the next gate.
 
 ## Gate Failure
 

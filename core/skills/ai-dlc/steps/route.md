@@ -27,7 +27,9 @@ pipeline snapshot that indicates a resume from a previous session.
 1. Check if `_bmad-output/pipeline-snapshot.md` exists and is non-empty.
 2. If YES and the user input contains a resume signal — begins with
    "Resuming an ai-dlc sprint" OR explicitly references "pipeline
-   snapshot" — this is a resume:
+   snapshot" — this is a resume. **Before dispatching, run Step 0a
+   snapshot integrity validation below.** If integrity validation
+   passes:
    - Read the snapshot's **Pipeline Position** section to determine
      `current_step_file`.
    - Acknowledge the resume in the first output line:
@@ -46,6 +48,61 @@ pipeline snapshot that indicates a resume from a previous session.
    Step 6 will detect the stale snapshot and archive it before
    creating a new one.
 4. If no snapshot exists, continue to Step 1 normally.
+
+### Step 0a: Snapshot Integrity Validation (resume dispatch only)
+
+This sub-step runs only when Step 0 path 2 is taken (a resume). Do
+NOT silently dispatch to `current_step_file` if any check below
+fails. Surface the specific failure to the user with a proposed
+remediation and wait for direction.
+
+Run these integrity checks in order:
+
+1. **Required sections present.** Confirm the snapshot contains all
+   five required sections by heading:
+   - `Pipeline Position`
+   - `Sprint Context`
+   - `Recent Activity`
+   - `Open Items`
+   - `Locked Decisions`
+
+   If any section is missing, FAIL with:
+   > *"Snapshot at `_bmad-output/pipeline-snapshot.md` is missing
+   > section(s): [list]. Resume is unsafe. Reply `archive` to move
+   > this snapshot aside and start fresh, `edit` to have me fill in
+   > the missing sections from git history, or `abort` to stop."*
+
+2. **`current_step_file` exists on disk.** Read the Pipeline Position
+   section and resolve `current_step_file` to
+   `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`.
+   If the file does not exist, FAIL with:
+   > *"Snapshot references `current_step_file: {value}` but that
+   > step file does not exist. Resume cannot dispatch. Reply
+   > `archive`, `override <correct-step-file>`, or `abort`."*
+
+3. **Git branch match.** Run `git branch --show-current`. Read the
+   branch recorded in the snapshot (in Pipeline Position or Recent
+   Activity). If the current branch does not match, do NOT silently
+   resume on the wrong branch:
+   > *"Snapshot was finalized on branch `{snapshot_branch}` but
+   > current branch is `{current_branch}`. Reply `switch` to
+   > `git checkout {snapshot_branch}` and resume, `continue-here`
+   > to resume on the current branch (I will update the snapshot's
+   > branch field), or `abort`."*
+
+4. **`last_gate_passed` recency.** Parse the timestamp from the
+   `last_gate_passed` field. If more than 7 days old relative to
+   today's date, surface a warning (not a hard fail):
+   > *"Warning: snapshot's last gate was {days} days ago. Pipeline
+   > state may be stale relative to the code and external systems.
+   > Reply `proceed` to resume as-is, `archive` to start fresh, or
+   > provide additional context."*
+
+   Wait for the user's reply before dispatching.
+
+If all four checks pass (integrity verified, branch matches or user
+confirmed, recency acceptable), continue with the Step 0 path 2
+dispatch. Otherwise the user's reply directs the next action.
 
 ### Step 1: Read Project State
 
@@ -192,13 +249,20 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 
 - **If the file does NOT exist:** create it with initial state:
   - Pipeline Position (detected variant, first step file, no
-    last-completed step yet, no gates passed yet)
+    last-completed step yet, no gates passed yet, current git
+    branch from `git branch --show-current`)
   - Sprint Context (populate from `sprint-status.yaml` if it exists;
     else `sprint_id: none`)
   - Recent Activity (empty — will be populated by `gate-validation.md`
     Check 14 on each gate passage)
   - Open Items (empty)
   - Locked Decisions (empty)
+  - Context Reminders:
+    - `context_reminders_sent: none`
+    - `last_yellow_fire_tokens: null`
+    - `last_yellow_fire_turns: null`
+    - `last_red_fire_tokens: null`
+    - `last_red_fire_turns: null`
 
 - **If the file ALREADY exists** (a stale snapshot from a previous
   pipeline run — Step 0 did not dispatch to a resume, so the user is

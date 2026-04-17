@@ -42,14 +42,16 @@ between them:**
 1. `/bmad-party-mode` — Architect, Dev, TEA, PM debate every design
    decision, every component boundary, every data flow. Walk through
    exhaustively. Apply all improvements.
-   **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
+   snapshot update"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every design assumption until
    zero ambiguity remains. Update the architecture doc with all findings.
-   **Then immediately proceed to step 3:**
+   **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes. Focus on security,
    scalability, coupling, single points of failure, backward
    compatibility, migration risk, integration seams. Apply all fixes
    between passes. Continue until only nitpicks remain.
+   **Run sub-step snapshot update after each adversarial pass.**
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the architecture doc.
    **Then immediately proceed to gate validation:**
