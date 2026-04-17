@@ -33,8 +33,17 @@ The lead cannot self-measure reliably (CLAUDE.md Session Model
   the fresh session, context is well below the yellow threshold by
   construction and the check is trivially satisfied.
 
-If neither confirmation is available, the lead outputs this line
-and STOPS before Step 1:
+If neither confirmation is available, the lead MUST invoke
+auto-handoff evaluation (see `gate-validation.md` "Auto-handoff
+evaluation") at `Seam A` with the label
+`deploy-validate Step 0 pre-flight` BEFORE outputting the hard-gate
+STOP line. If `auto_handoff_mode` is `deploy-only` or `safe-seam`
+AND all preconditions hold — in particular, the red threshold has
+been confirmed crossed via user-shared `/context` and the snapshot
+is current — auto-handoff FIRES and the session ends. If
+auto-handoff evaluation returns CONTINUE (mode is `off`, red not
+confirmed under Mode 1, or any other precondition fails), the lead
+outputs this line and STOPS before Step 1:
 
 > *"Pre-Flight Context Check: cannot confirm context is below the
 > yellow threshold. Deploying from a degraded session is not
@@ -44,8 +53,8 @@ and STOPS before Step 1:
 > `_bmad-output/pipeline-snapshot.md`."*
 
 This is a hard gate equivalent to a HARD_BLOCK. Do not bypass.
-Record the confirmation (option a) or the handoff dispatch
-(option b) in the gate log.
+Record the confirmation (option a), the handoff dispatch (option
+b), or the auto-handoff fire (mode + seam) in the gate log.
 
 ### 1. Pre-Deployment Check
 
