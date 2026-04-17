@@ -382,6 +382,44 @@ in a single conversation.
     they can be layered in as a v2 with evidence. The v1 rule is
     intentionally minimal.
 
+    ### Research citations (footnote)
+
+    The token thresholds and the "absolute tokens, not percentages"
+    framing come from these sources. A future maintainer must be
+    able to re-check the thresholds against primary research before
+    changing them.
+
+    1. **Chroma Hong et al. 2025, "Context Rot" technical report.**
+       Empirical evidence that LLM reasoning accuracy declines with
+       absolute input length on multi-hop and needle-in-haystack
+       tasks, with degradation measurable well before the nominal
+       context window limit. Supports: (i) use of absolute token
+       thresholds rather than fraction-of-window, (ii) the general
+       shape of a yellow/red two-stage alerting model with the
+       first inflection in the tens-of-thousands-of-tokens range.
+
+    2. **Claude Code empirical observation.** On reasoning-heavy
+       agentic workloads in a 200K context window, practitioners
+       report observable degradation beginning around ~147K input
+       tokens (roughly 70–75% of nominal). Supports: (i) the red
+       threshold at 120K tokens for 200K models (first-order warning
+       zone rather than catastrophe zone), (ii) the yellow threshold
+       at 80K tokens as a planning buffer before degradation.
+
+    3. **Anthropic context engineering guidance (internal).**
+       Guidance to keep agent context dense, reference long-lived
+       state through files rather than conversation history, and
+       avoid letting agentic sessions run open-ended without
+       checkpoints. Supports: (i) the living-snapshot design in the
+       sections above, (ii) the post-compact recovery protocol in
+       CLAUDE.md, (iii) the recurring-reminder pattern over a
+       one-shot alert.
+
+    Citation policy: when thresholds or reminder semantics change,
+    cite the specific source. If a threshold change is not backed
+    by a primary-source update, escalate it as a Rule 4 HARD_BLOCK
+    rather than landing the change silently.
+
 ## INITIALIZATION
 
 Load the router step to determine the pipeline variant and begin execution:
