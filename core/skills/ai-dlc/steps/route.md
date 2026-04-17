@@ -199,7 +199,12 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
     Check 14 on each gate passage)
   - Open Items (empty)
   - Locked Decisions (empty)
-  - Context Reminders: `context_reminders_sent: none`
+  - Context Reminders:
+    - `context_reminders_sent: none`
+    - `last_yellow_fire_tokens: null`
+    - `last_yellow_fire_turns: null`
+    - `last_red_fire_tokens: null`
+    - `last_red_fire_turns: null`
 
 - **If the file ALREADY exists** (a stale snapshot from a previous
   pipeline run — Step 0 did not dispatch to a resume, so the user is

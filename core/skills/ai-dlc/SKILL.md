@@ -33,18 +33,21 @@ in a single conversation.
    - (a) **Human-requested handoff** — the user explicitly asks to
      continue in a new session (directly, or in response to a
      reminder)
-   - (b) **Opportunistic reminder at 40% context usage** — the lead
-     outputs a one-line reminder; non-blocking, user decides
-   - (c) **Stronger reminder at 50% context usage** — the lead
-     outputs a more urgent one-line reminder; still non-blocking,
-     still the user's call whether to act on it
+   - (b) **Yellow-threshold reminder (first token threshold crossed)**
+     — the lead outputs a one-line reminder with routing options;
+     non-blocking, user decides
+   - (c) **Red-threshold reminder (degradation-zone token threshold
+     crossed)** — the lead outputs a more urgent one-line reminder;
+     still non-blocking, still the user's call whether to act on it
 
    Only path (a) initiates a handoff. Paths (b) and (c) are reminders
    only — they do not route the pipeline anywhere on their own. When
    the user responds to a reminder with a handoff directive, it
    becomes path (a). The lead does not force handoff at any threshold
    — critical operations may require continuing past both reminder
-   thresholds, and the user's judgment is authoritative.
+   thresholds, and the user's judgment is authoritative. Thresholds
+   are model-aware absolute token counts defined in Rule 10; they
+   are not percentages.
 3. **Autonomous gates.** At each phase transition, run the Autonomous Gate
    Protocol (CLAUDE.md). Do not wait for human approval.
 4. **Seek clarity when ambiguous — HARD_BLOCK severity (Rule 8 tier).**
@@ -177,13 +180,24 @@ in a single conversation.
       decisions, outstanding adversarial review findings
     - **Locked Decisions** — locked requirements, direction changes
       the human flagged that the lead accepted
-    - **Context Reminders** — a single field:
-      `context_reminders_sent: none | 40pct | 50pct`. Records which
-      threshold reminders have already been output this session.
-      Initialized to `none`. Updated by `gate-validation.md` Check 14
-      whenever a threshold is crossed. The field exists so Check 14
-      can determine whether to emit a reminder without relying on
-      conversation scrollback.
+    - **Context Reminders** — records which threshold reminders
+      have already been output this session and supports recurring
+      reminders past threshold. Required fields:
+      - `context_reminders_sent: none | yellow | red` — highest
+        threshold crossed so far. Initialized to `none`.
+      - `last_yellow_fire_tokens: <integer or null>` — token count
+        at last yellow reminder fire, or `null` if not yet fired.
+      - `last_yellow_fire_turns: <integer or null>` — turn count
+        at last yellow reminder fire, or `null`.
+      - `last_red_fire_tokens: <integer or null>` — token count at
+        last red reminder fire, or `null`.
+      - `last_red_fire_turns: <integer or null>` — turn count at
+        last red reminder fire, or `null`.
+
+      Updated by `gate-validation.md` Check 14 whenever a threshold
+      is crossed or a recurring reminder fires. The field exists so
+      Check 14 can determine whether to emit a reminder without
+      relying on conversation scrollback.
 
     The snapshot is the source of truth for pipeline state. When
     uncertain about current state, the lead reads the snapshot, not
@@ -242,42 +256,83 @@ in a single conversation.
     pauses per Rule 7(d). Do not duplicate the directive here; the
     CLAUDE.md section governs.
 
-    **(b) 40% context reminder.** When context window usage first
-    crosses 40% of the configured limit, the lead outputs a one-line
-    reminder as part of its next response:
+    **Threshold defaults (model-aware, absolute token counts).**
 
-    > *"Context at 40%. You can run `/compact` (I'll re-read the
-    > snapshot after) or start a fresh conversation. Snapshot
-    > current at `_bmad-output/pipeline-snapshot.md`. Otherwise
-    > continuing."*
+    | Model context window | Yellow (first reminder) | Red (urgent reminder) |
+    |---|---|---|
+    | 200K | 80K tokens | 120K tokens |
+    | 1M   | 120K tokens | 200K tokens |
 
-    Non-blocking. Fires ONCE when 40% is first crossed. Because the
-    snapshot is already current (Check 14 keeps it fresh), `/compact`
-    is safe — the post-compact lead re-reads the snapshot to recover
-    state. The user chooses: compact, handoff, or continue. The lead
-    does not pause for the choice; the next action proceeds regardless.
+    These are defaults. A project's CLAUDE.md may override them in
+    the `{context_thresholds}` block (populated by `/ai-dlc-setup`
+    from the selected model strategy — full vs. sonnet-only affects
+    which context-window row applies). Percentages are not used;
+    the same percentage across different models produces different
+    token counts, and research-observed degradation is tied to
+    absolute tokens, not fraction-of-window.
 
-    **(c) 50% context reminder (stronger).** When context window
-    usage first crosses 50%, the lead outputs a more urgent one-line
-    reminder:
+    **(b) Yellow-threshold reminder.** When conversation context
+    first crosses the yellow threshold configured for the active
+    model, the lead outputs this line as part of its next response
+    (substituting the actual threshold value):
 
-    > *"Context past 50% — reasoning accuracy is likely degrading.
-    > A fresh conversation is strongly recommended when you reach a
-    > convenient stopping point. Snapshot current at
-    > `_bmad-output/pipeline-snapshot.md`. Continuing otherwise."*
+    > *"Context at {yellow_threshold}+ tokens. Options: (1) new
+    > session via handoff, recommended before any upcoming gate or
+    > deployment; (2) `/compact` with instruction 'preserve
+    > pipeline-snapshot.md reference and current step file',
+    > acceptable only mid-step; (3) continue, acceptable if wrapping
+    > up current sub-step soon. Snapshot current at
+    > `_bmad-output/pipeline-snapshot.md`."*
 
-    Non-blocking, non-forcing. Fires once. The lead does NOT force a
-    handoff — critical operations (deployment mid-flight, incident
-    triage, long-running infrastructure changes) may require
-    continuing past 50%, and interrupting them to force a handoff
-    could cause more harm than the accumulated context drift. Above
-    50%, the user is making an informed choice to continue.
+    The three options are routed rather than equivalent: handoff is
+    the default recommendation before any gate or deployment;
+    `/compact` is acceptable only mid-step; continuing is acceptable
+    only if the current sub-step is about to wrap. The lead outputs
+    the line and continues immediately — the reminder does not pause
+    the pipeline. Any user reply is a Rule 4 directive.
 
-    The 40% and 50% figures are research-backed: empirical evidence
-    on reasoning-heavy agentic workloads (Chroma's 2025 context-rot
-    study, Claude 4.6 MRCR v2 benchmarks, Anthropic's context-
-    engineering guidance) shows measurable degradation beginning
-    around these thresholds.
+    **Recurrence.** The yellow reminder fires on the first crossing,
+    then re-fires every additional 50,000 tokens past the yellow
+    threshold OR every 20 turns past the first fire, whichever
+    comes first. A single early reminder is not sufficient for long
+    sessions. `gate-validation.md` Check 14 implements the
+    recurrence using the `last_yellow_fire_tokens` and
+    `last_yellow_fire_turns` snapshot fields.
+
+    **(c) Red-threshold reminder (urgent).** When conversation context
+    first crosses the red threshold configured for the active model,
+    the lead outputs this line (substituting the actual threshold
+    value):
+
+    > *"Context past {red_threshold} tokens. Research-observed
+    > reasoning degradation is likely present. Strongly recommend
+    > new session via handoff at the next sub-step boundary. Avoid
+    > `/compact` before any gate, deployment, or adversarial review.
+    > Snapshot current at `_bmad-output/pipeline-snapshot.md`.
+    > Continuing otherwise."*
+
+    Still non-blocking. The lead does NOT force a handoff — critical
+    operations (deployment mid-flight, incident triage, long-running
+    infrastructure changes) may require continuing past the red
+    threshold, and interrupting them to force a handoff could cause
+    more harm than the accumulated context drift. Past the red
+    threshold, the user is making an informed choice to continue;
+    the lead's role is to make the risk visible.
+
+    **Recurrence.** The red reminder fires on the first crossing,
+    then re-fires every additional 50,000 tokens past the red
+    threshold OR every 20 turns past the first fire, whichever
+    comes first. `gate-validation.md` Check 14 implements the
+    recurrence using the `last_red_fire_tokens` and
+    `last_red_fire_turns` snapshot fields.
+
+    The token thresholds are research-backed: empirical evidence on
+    reasoning-heavy agentic workloads (Chroma Hong et al. 2025
+    context-rot study, Claude Code empirical observation of
+    degradation around ~147K tokens in a 200K window, Anthropic
+    context-engineering guidance) shows measurable degradation tied
+    to absolute token count rather than fraction-of-window. See the
+    footnote at the end of this rule for citation details.
 
     ### Reminders are non-blocking output, not pause points
 
@@ -304,12 +359,13 @@ in a single conversation.
 
     ### Starting simple
 
-    This protocol uses a single numeric trigger (context usage %)
-    rather than a set of semantic tripwires. If operational
-    experience shows the 40%/50% thresholds are too coarse, or that
-    additional signals (phase transitions, user-correction frequency,
-    etc.) would meaningfully improve detection, they can be layered
-    in as a v2 with evidence. The v1 rule is intentionally minimal.
+    This protocol uses absolute token thresholds (two per model
+    context window) rather than a set of semantic tripwires. If
+    operational experience shows the yellow/red thresholds are too
+    coarse, or that additional signals (phase transitions, user-
+    correction frequency, etc.) would meaningfully improve detection,
+    they can be layered in as a v2 with evidence. The v1 rule is
+    intentionally minimal.
 
 ## INITIALIZATION
 

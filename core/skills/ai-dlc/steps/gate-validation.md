@@ -223,25 +223,54 @@ Refresh these sections:
 
 **Context reminder threshold check (required at every gate):**
 
-Read `context_reminders_sent` from the snapshot. If the field is
-absent (e.g., snapshot predates this rule), treat it as `none` and
-add it before proceeding. Estimate current context window usage based
-on conversation length and accumulated output. Then:
+Read the Context Reminders block from the snapshot. If any required
+field is absent (e.g., snapshot predates this rule), initialize
+missing fields before proceeding: `context_reminders_sent: none`
+and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
 
-- If `context_reminders_sent` is `none` and usage appears to be at
-  or past 40%: output the Rule 10(b) reminder line exactly as
-  specified in SKILL.md Rule 10(b), then update the field to `40pct`.
-- If `context_reminders_sent` is `none` or `40pct` and usage appears
-  to be at or past 50%: output the Rule 10(c) reminder line exactly
-  as specified in SKILL.md Rule 10(c), then update the field to `50pct`.
-- If `context_reminders_sent` is `50pct`: thresholds already passed;
-  no reminder output needed.
-- If usage is below 40%: no change to the field; no reminder output.
+Resolve the active thresholds from the project's `{context_thresholds}`
+configuration in CLAUDE.md. Defaults per SKILL.md Rule 10:
+- 200K model context → yellow 80K tokens, red 120K tokens
+- 1M model context  → yellow 120K tokens, red 200K tokens
+
+The lead cannot self-measure its context window reliably (per the
+CLAUDE.md Session Model "introspection" note). Use whichever of these
+is available as the estimate, in priority order:
+1. The most recent user-shared `/context` output this session
+   (authoritative).
+2. A conservative estimate from accumulated tool output and turn
+   count (erring high, not low).
+
+Evaluation rules (in order):
+
+- **First crossing of yellow:** if `context_reminders_sent` is
+  `none` and estimated tokens ≥ yellow_threshold, output the
+  Rule 10(b) yellow-threshold reminder substituting the actual
+  yellow_threshold value. Set `context_reminders_sent: yellow`,
+  `last_yellow_fire_tokens` to the current estimate, and
+  `last_yellow_fire_turns` to the current turn count.
+- **First crossing of red:** if `context_reminders_sent` is
+  `none` or `yellow` and estimated tokens ≥ red_threshold, output
+  the Rule 10(c) red-threshold reminder substituting the actual
+  red_threshold value. Set `context_reminders_sent: red`,
+  `last_red_fire_tokens`, and `last_red_fire_turns`.
+- **Recurring yellow (still below red):** if
+  `context_reminders_sent` is `yellow`, estimated tokens still
+  below red_threshold, and EITHER (estimated_tokens −
+  last_yellow_fire_tokens ≥ 50,000) OR (current_turn −
+  last_yellow_fire_turns ≥ 20), re-output the yellow reminder and
+  refresh `last_yellow_fire_*`.
+- **Recurring red:** if `context_reminders_sent` is `red` and
+  EITHER (estimated_tokens − last_red_fire_tokens ≥ 50,000) OR
+  (current_turn − last_red_fire_turns ≥ 20), re-output the red
+  reminder and refresh `last_red_fire_*`.
+- **Below yellow threshold:** no reminder, no field change.
 
 The threshold check is an estimate — precision is not required.
 Err on the side of outputting the reminder early rather than late.
-The reminder is a non-blocking one-line output; it does not pause the
-pipeline. Output it, update the snapshot field, and continue.
+Reminders are non-blocking one-line outputs; they do not pause the
+pipeline. Output, update the snapshot fields, and continue. Any user
+reply to a reminder is a Rule 4 directive handled on the next turn.
 
 See SKILL.md Rule 10 for the snapshot's full structure and rationale.
 

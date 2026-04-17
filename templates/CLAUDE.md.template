@@ -30,13 +30,16 @@ human can observe, then immediately continue to the next action.
 Outputting results and continuing is correct; outputting results and
 waiting for a response is stalling.
 
-**Handoff is not a fourth pause point.** When the user requests
+**Handoff is not a fifth pause point.** When the user requests
 handoff to a new conversation, the agent finalizes the pipeline
 snapshot, outputs a pasteable resume prompt, and ENDS the current
 session — it does not pause and wait. The new conversation is a
-separate session that resumes from the snapshot. The 40% and 50%
-context reminders are one-line outputs, not pauses — the agent
-continues immediately after issuing them.
+separate session that resumes from the snapshot. The yellow- and
+red-threshold context reminders are one-line outputs, not pauses —
+the agent continues immediately after issuing them. The four pause
+points are: ambiguity resolution, Production Validation Checkpoint,
+retro commentary prompt, and post-compact verification turn (see
+"Post-Compact Recovery Protocol" below).
 
 Every planning artifact goes through **Party Mode** (multi-agent debate),
 **Advanced Elicitation** (probe until zero ambiguity), and **Adversarial
@@ -305,26 +308,48 @@ The AI/DLC pipeline runs in a **single conversation** by default, from
 entry point through production deployment. Agent Teams teammates are
 spawned within the same lead session, each with their own context window.
 
-Context management uses a living pipeline snapshot plus two threshold
-reminders:
+Context management uses a living pipeline snapshot plus two
+model-aware absolute token thresholds (not percentages):
 
 - **Living snapshot.** The lead maintains
   `_bmad-output/pipeline-snapshot.md` throughout the sprint, created at
   pipeline start (in `route.md`) and updated at every gate passage
-  (by `gate-validation.md` Check 14). The snapshot is the source of
-  truth for pipeline state — variant, current step, sprint context,
-  recent activity, open items, locked decisions. When the agent is
-  uncertain about state, it reads the snapshot, not the conversation
-  scrollback.
-- **40% context reminder.** When context window usage first crosses
-  40%, the agent outputs a one-line reminder that `/compact` (safe
-  because of the snapshot) or a fresh conversation are options.
-  Non-blocking — the agent continues after outputting the line.
-- **50% context reminder.** When context window usage first crosses
-  50%, the agent outputs a more urgent one-line reminder. Still
-  non-blocking — critical operations (deployment mid-flight, incident
-  triage) may require continuing past 50%, and the user's judgment
-  is authoritative.
+  (by `gate-validation.md` Check 14) and at sub-step boundaries
+  (see `gate-validation.md` and the per-step files). The snapshot is
+  the source of truth for pipeline state — variant, current step,
+  sprint context, recent activity, open items, locked decisions.
+  When the agent is uncertain about state, it reads the snapshot,
+  not the conversation scrollback.
+- **Context thresholds** (defaults; override in `{context_thresholds}`):
+
+  | Model context | Yellow (first reminder) | Red (urgent) |
+  |---|---|---|
+  | 200K | 80K tokens | 120K tokens |
+  | 1M   | 120K tokens | 200K tokens |
+
+  `/ai-dlc-setup` populates `{context_thresholds}` based on the
+  selected model strategy (full vs. sonnet-only affects which
+  context-window row applies). Percentages are not used; research-
+  observed reasoning degradation is tied to absolute tokens, not
+  fraction-of-window.
+- **Yellow-threshold reminder.** When conversation context first
+  crosses the yellow threshold, the agent outputs a one-line
+  reminder with three routed options: (1) new session via handoff
+  (recommended before any gate or deployment), (2) `/compact`
+  (acceptable only mid-step), (3) continue (only if the current
+  sub-step is about to wrap). Non-blocking — the agent continues
+  after outputting the line.
+- **Red-threshold reminder.** When conversation context first
+  crosses the red threshold, the agent outputs an urgent one-line
+  reminder: degradation is likely present; strongly recommend new
+  session at the next sub-step boundary; avoid `/compact` before
+  any gate, deployment, or adversarial review. Non-blocking — the
+  user's judgment is authoritative and critical operations may
+  require continuing past the red threshold.
+- **Recurring reminders.** Past the yellow threshold, the yellow
+  reminder re-fires every additional 50K tokens OR every 20 turns
+  (whichever comes first). Same pattern past the red threshold.
+  A single reminder early in a long session is not sufficient.
 - **Human-requested handoff.** When the user requests handoff
   (directly, or in response to either reminder), the agent commits
   in-flight work, finalizes the snapshot, outputs a pasteable resume
