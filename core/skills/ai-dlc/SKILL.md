@@ -84,29 +84,39 @@ in a single conversation.
    and smoke tests, present the Production Validation Checkpoint to the
    human (CLAUDE.md Post-Gate Deployment).
 7. **Never stall the pipeline.** The pipeline runs as a continuous,
-   uninterrupted flow. There are exactly THREE points where you stop
+   uninterrupted flow. There are exactly FOUR points where you stop
    and wait for human input:
    - (a) Ambiguity resolution (Rule 4) — including the three-option
      prompt when handoff is requested at an unsafe seam
    - (b) Production Validation Checkpoint (Rule 6)
    - (c) Retro commentary prompt
+   - (d) Post-compact verification turn (CLAUDE.md "Post-Compact
+     Recovery Protocol") — after a `/compact` or auto-compact event,
+     the lead re-reads the snapshot, outputs current step file, last
+     gate with timestamp, any in-flight sub-step, and git branch +
+     last commit, then pauses with: *"Does this match your last
+     state? Reply `proceed`, `correct <what>`, or `handoff`."* The
+     pipeline does not resume until the user responds.
 
-   **Handoff is not a fourth pause point.** When Rule 10 handoff is
+   **Handoff is not a fifth pause point.** When Rule 10 handoff is
    triggered (path a), the session ENDS rather than pauses — the
    outgoing lead finalizes the pipeline snapshot, outputs a resume
    prompt pointing at it, then terminates. The new session is a
-   separate conversation, not a continuation of this one. The three
+   separate conversation, not a continuation of this one. The four
    pause points above apply only within a running pipeline; handoff
    is a session-terminating action, not a stop. The Rule 10(b) and
    (c) reminders are also NOT pauses — the lead outputs each reminder
-   line and continues immediately.
+   line and continues immediately. A user reply to a reminder is a
+   separate directive handled per Rule 4, which may request handoff
+   (path a) or correct course (still within path a semantics); the
+   reminder line itself never pauses the pipeline.
 
    At ALL other times — between sub-skills, within sub-skills, during
    long validation cycles, during large artifact generation, during
    multi-pass adversarial review — you keep working. Do not stop and
    wait for human input. Do not ask if you should continue. Do not
    treat a natural break point within a step as a stopping point. If
-   you are not at one of the three pause points listed above, you are
+   you are not at one of the four pause points listed above, you are
    not done — keep going until you reach one.
 
    **Show your work.** This rule is about not stopping, not about
@@ -217,8 +227,20 @@ in a single conversation.
     ```
 
     The incoming lead in the new conversation reads the snapshot and
-    continues. No formal resume protocol, no integrity checksums, no
-    drift verification — the snapshot is the contract.
+    continues. Resume integrity checks are enforced by `route.md`
+    Step 0 and the post-compact verification turn defined in
+    CLAUDE.md "Post-Compact Recovery Protocol" — the snapshot is
+    the contract, and those two mechanisms validate it before action.
+
+    ### Post-compact recovery (cross-reference)
+
+    The authoritative post-compact recovery directive lives in
+    CLAUDE.md "Post-Compact Recovery Protocol" (placed there so it
+    survives compaction). On any `/compact` or auto-compact event,
+    the lead reads the snapshot in full, outputs the recovery
+    acknowledgment line, then executes the verification turn and
+    pauses per Rule 7(d). Do not duplicate the directive here; the
+    CLAUDE.md section governs.
 
     **(b) 40% context reminder.** When context window usage first
     crosses 40% of the configured limit, the lead outputs a one-line
@@ -257,13 +279,28 @@ in a single conversation.
     engineering guidance) shows measurable degradation beginning
     around these thresholds.
 
-    ### Not new gates
+    ### Reminders are non-blocking output, not pause points
 
-    Neither reminder is a new pause point. Paths (b) and (c) are
-    required one-line outputs at specific thresholds (structurally
-    similar to the Rule 4(b) preamble). Path (a) is a user-initiated
-    directive handled via existing Rule 4(a) ambiguity resolution.
-    The three pause points in Rule 7 are unchanged.
+    Paths (b) and (c) produce required one-line outputs at specific
+    thresholds (structurally similar to the Rule 4(b) preamble). The
+    lead outputs the reminder line and the next action proceeds
+    immediately — the reminder itself never pauses the pipeline.
+
+    Any user response to a reminder is a separate user turn and is
+    handled per Rule 4: it is a directive, and the user's judgment
+    is authoritative. If the response requests handoff, route to
+    path (a). If the response requests `/compact`, acknowledge and
+    continue (the lead has no control over the compact event
+    itself). If the response says "continue", no action is required
+    because the pipeline has already continued. There is no
+    contradiction between "non-blocking output" and "user authority":
+    the reminder line is output; the user's reply is a directive.
+
+    Path (a) handoff requests (direct or in reply to a reminder) are
+    user-initiated directives handled via existing Rule 4(a)
+    ambiguity resolution. The four pause points in Rule 7 —
+    (a) ambiguity, (b) production validation, (c) retro, (d)
+    post-compact verification — are the complete set.
 
     ### Starting simple
 
