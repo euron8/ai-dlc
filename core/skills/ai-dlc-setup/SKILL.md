@@ -412,11 +412,6 @@ model variables (including opus roles) get the sonnet bedrock string:
 - `{qa_model}` -> implementation model personal string
 - `{qa_model_bedrock}` -> implementation model bedrock string
 
-**`.claude/skills/ai-dlc/steps/implementation.md`:**
-- `{dev_model}` -> implementation model personal string
-- `{reviewer_model}` -> planning model personal string
-- `{qa_model}` -> implementation model personal string
-
 **`CLAUDE.md` Model Strategy table:**
 
 If **Sonnet-only mode**, update the model strategy table to reflect
