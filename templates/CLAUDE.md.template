@@ -350,15 +350,48 @@ model-aware absolute token thresholds (not percentages):
   (whichever comes first). Same pattern past the red threshold.
   A single reminder early in a long session is not sufficient.
 - **Context introspection — user is source of truth.** The agent
-  cannot reliably self-measure its own context window. The user is
-  the source of truth for context usage. The agent MAY invite the
-  user to share `/context` output at any point and MUST treat
-  shared `/context` output as the authoritative trigger for
-  threshold reminders. When no user-shared `/context` output is
-  available, the agent MUST fall back to a conservative turn-and-
-  tool-output estimate that errs high (declares a threshold crossed
-  early rather than late). This replaces any implicit assumption
-  that the agent detects crossings on its own.
+  cannot reliably self-measure its own context window. Two modes
+  apply:
+
+  **Mode 1 — user-shared `/context` (authoritative).** The most
+  recent user-shared `/context` output this session drives both
+  the threshold-crossing check AND the recurrence arithmetic (the
+  50K-token / 20-turn deltas). When a crossing fires under Mode 1,
+  the agent emits the full Rule 10 yellow or red reminder text
+  and advances `last_yellow_fire_*` / `last_red_fire_*` in the
+  snapshot. The agent MAY invite the user to share `/context`
+  output at any point.
+
+  **Mode 2 — fallback estimate (advisory only).** When no user-
+  shared `/context` is available, the agent computes:
+
+  ```
+  estimate = 15,000  (baseline for CLAUDE.md + skill + system prompt)
+          + (turns_this_session * 2,000)  (approx per-exchange cost)
+          + sum(tool_output_sizes_in_bytes) * 0.25  (bytes-to-tokens conservative high)
+  ```
+
+  If the estimate crosses a threshold, the agent does NOT emit the
+  full Rule 10 reminder. It emits this lighter check-line on its
+  next response instead:
+
+  > *"Context estimate suggests crossing the {yellow|red}
+  > threshold (~{estimate}K tokens, fallback heuristic). Please
+  > share `/context` output to confirm. I will continue with this
+  > estimate as a working assumption until confirmed."*
+
+  Under Mode 2, recurrence arithmetic is NOT advanced — the
+  `last_yellow_fire_*` / `last_red_fire_*` snapshot fields only
+  update when a user-shared `/context` confirms the crossing. This
+  prevents noisy re-firing of unverified estimates on long
+  sessions. When the user responds with `/context` output, the
+  agent treats the shared value as Mode 1 input: evaluates the
+  threshold, emits the full Rule 10 reminder if the shared value
+  confirms the crossing, and advances fire state.
+
+  This two-mode design replaces the earlier "errs high" single
+  fallback. Mode 1 governs the formal reminder and recurrence
+  contract; Mode 2 is a prompt for confirmation, not a reminder.
 - **Human-requested handoff.** When the user requests handoff
   (directly, or in response to either reminder), the agent commits
   in-flight work, finalizes the snapshot, outputs a pasteable resume

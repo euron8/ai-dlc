@@ -239,44 +239,72 @@ configuration in CLAUDE.md. Defaults per SKILL.md Rule 10:
 - 200K model context → yellow 80K tokens, red 120K tokens
 - 1M model context  → yellow 120K tokens, red 200K tokens
 
-The lead cannot self-measure its context window reliably (per the
-CLAUDE.md Session Model "introspection" note). Use whichever of these
-is available as the estimate, in priority order:
-1. The most recent user-shared `/context` output this session
-   (authoritative).
-2. A conservative estimate from accumulated tool output and turn
-   count (erring high, not low).
+The lead cannot self-measure its context window reliably. Two modes
+apply (per CLAUDE.md Session Model "Context introspection"):
 
-Evaluation rules (in order):
+**Mode 1 — user-shared `/context` (authoritative).** The most
+recent user-shared `/context` output this session drives both the
+threshold-crossing check AND the recurrence arithmetic. Under
+Mode 1, the evaluation rules below apply, and on any firing the
+lead emits the full Rule 10(b) / 10(c) reminder text and advances
+`last_yellow_fire_tokens` / `last_yellow_fire_turns` (or the red
+counterparts).
+
+**Mode 2 — fallback estimate (advisory only).** When no user-
+shared `/context` is available, compute:
+
+```
+estimate = 15,000  (baseline for CLAUDE.md + skill + system prompt)
+         + (turns_this_session * 2,000)  (approx per-exchange cost)
+         + sum(tool_output_sizes_in_bytes) * 0.25  (bytes-to-tokens conservative high)
+```
+
+If the estimate crosses a threshold, emit the lighter check-line
+(not the full Rule 10 reminder):
+
+> *"Context estimate suggests crossing the {yellow|red} threshold
+> (~{estimate}K tokens, fallback heuristic). Please share
+> `/context` output to confirm. I will continue with this estimate
+> as a working assumption until confirmed."*
+
+Under Mode 2, DO NOT advance the `last_*_fire_tokens` /
+`last_*_fire_turns` snapshot fields and DO NOT update
+`context_reminders_sent`. Mode 2 is a prompt for confirmation, not
+a reminder; advancing fire state on unverified estimates would
+cause noisy re-firing on long sessions. When the user responds
+with `/context` output, treat the shared value as Mode 1 input:
+evaluate the threshold, emit the full Rule 10 reminder if the
+shared value confirms the crossing, and advance fire state.
+
+Evaluation rules (Mode 1 only — in order):
 
 - **First crossing of yellow:** if `context_reminders_sent` is
-  `none` and estimated tokens ≥ yellow_threshold, output the
+  `none` and shared tokens ≥ yellow_threshold, output the
   Rule 10(b) yellow-threshold reminder substituting the actual
   yellow_threshold value. Set `context_reminders_sent: yellow`,
-  `last_yellow_fire_tokens` to the current estimate, and
+  `last_yellow_fire_tokens` to the shared value, and
   `last_yellow_fire_turns` to the current turn count.
 - **First crossing of red:** if `context_reminders_sent` is
-  `none` or `yellow` and estimated tokens ≥ red_threshold, output
+  `none` or `yellow` and shared tokens ≥ red_threshold, output
   the Rule 10(c) red-threshold reminder substituting the actual
   red_threshold value. Set `context_reminders_sent: red`,
   `last_red_fire_tokens`, and `last_red_fire_turns`.
 - **Recurring yellow (still below red):** if
-  `context_reminders_sent` is `yellow`, estimated tokens still
-  below red_threshold, and EITHER (estimated_tokens −
+  `context_reminders_sent` is `yellow`, shared tokens still below
+  red_threshold, and EITHER (shared_tokens −
   last_yellow_fire_tokens ≥ 50,000) OR (current_turn −
   last_yellow_fire_turns ≥ 20), re-output the yellow reminder and
   refresh `last_yellow_fire_*`.
 - **Recurring red:** if `context_reminders_sent` is `red` and
-  EITHER (estimated_tokens − last_red_fire_tokens ≥ 50,000) OR
+  EITHER (shared_tokens − last_red_fire_tokens ≥ 50,000) OR
   (current_turn − last_red_fire_turns ≥ 20), re-output the red
   reminder and refresh `last_red_fire_*`.
 - **Below yellow threshold:** no reminder, no field change.
 
-The threshold check is an estimate — precision is not required.
-Err on the side of outputting the reminder early rather than late.
 Reminders are non-blocking one-line outputs; they do not pause the
-pipeline. Output, update the snapshot fields, and continue. Any user
-reply to a reminder is a Rule 4 directive handled on the next turn.
+pipeline. Output, update the snapshot fields under Mode 1, and
+continue. Any user reply to a reminder is a Rule 4 directive
+handled on the next turn.
 
 See SKILL.md Rule 10 for the snapshot's full structure and rationale.
 
