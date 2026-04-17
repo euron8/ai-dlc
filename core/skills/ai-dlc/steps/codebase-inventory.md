@@ -41,9 +41,7 @@ incomplete. Write the full inventory and gap report to:
 
 ### 4. Gate Validation
 
-Run the gate validation protocol (`gate-validation.md`). For this step,
-the validation cycle requirement is waived (this is analysis, not a
-planning artifact). Check only for HARD_BLOCKs and log the gate.
+Run gate validation (`gate-validation.md`). Check 1 (validation cycle complete) is waived for this analysis step — there is no planning artifact to validate. All other applicable checks run normally, including Check 14 (snapshot update) and Check 15 (snapshot verification).
 
 ### 5. Proceed
 

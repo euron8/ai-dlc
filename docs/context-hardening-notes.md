@@ -13,7 +13,11 @@ rules, read this first.
 ## What changed
 
 Twelve requirements (R1–R12 from the design spec) were applied
-across five files:
+across eleven files — five with substantive rewrites and six
+validation-cycle step files that gained sub-step snapshot update
+directives.
+
+**Substantive rewrites (5):**
 
 - `core/skills/ai-dlc/SKILL.md` (Rule 7 pause points, Rule 10
   handoff + snapshot + thresholds)
@@ -25,9 +29,10 @@ across five files:
 - `templates/CLAUDE.md.template` (Post-Compact Recovery Protocol,
   token-threshold Session Model)
 
-Validation-cycle step files (`discovery`, `research-requirements`,
-`architecture`, `stories-test-strategy`, `sprint-review-next`,
-`implementation`) gained sub-step snapshot update directives.
+**Sub-step snapshot update directives (6):** `discovery.md`,
+`research-requirements.md`, `architecture.md`,
+`stories-test-strategy.md`, `sprint-review-next.md`,
+`implementation.md`.
 
 ### R1 — Model-aware absolute token thresholds
 
@@ -200,3 +205,128 @@ The 2026-04-16 compliance review (`docs/analysis/compliance-review.md`)
 identified weaknesses in the prior 40%/50% rule. This change set is
 the response. Future retros should cite `context-hardening-notes.md`
 (this file) rather than re-deriving the design from the code.
+
+---
+
+## 2026-04-17 Follow-up (R13–R19)
+
+The R1–R12 change set landed the runtime contract but left six
+adjacent surfaces out of sync: the `/ai-dlc-setup` wizard,
+`QUICKSTART.md.template`, a loose spec in R9's fallback, and two
+unresolved compliance-review findings. Seven follow-up
+requirements (R13–R19) closed those gaps. All are deterministic
+file edits; completion is verifiable by grep.
+
+### R13 — Wire `{context_thresholds}` into `/ai-dlc-setup`
+
+Step 2 of the setup wizard now has a "Populate context thresholds"
+sub-step that derives the active lead model's context window (200K
+or 1M) from the confirmed model strings, offers the Rule 10
+defaults with a custom-override option, and substitutes the
+threshold block into `CLAUDE.md`. `CLAUDE.md.template` was
+restructured so `{context_thresholds}` is a clean standalone
+placeholder (the earlier two-row reference table was moved into
+an HTML comment). A fresh install now passes Step 9 validation
+without manual cleanup.
+
+### R14 — QUICKSTART four pause points
+
+`QUICKSTART.md.template` "Key design principles" updated from
+"Two pause points" to the four points in SKILL.md Rule 7:
+ambiguity resolution, Production Validation Checkpoint, retro
+commentary prompt, and post-compact verification turn.
+
+### R15 — QUICKSTART pipeline interruption gotcha
+
+Replaced "re-invoke `/ai-dlc` and describe where you left off"
+with the Rule 10 resume prompt pointing at
+`_bmad-output/pipeline-snapshot.md`. The old text triggered the
+exact failure mode `route.md` Step 0 is designed to prevent
+(plain-description re-invocation archives the existing snapshot
+and restarts from scratch).
+
+### R16 — QUICKSTART Context Window Guide rewritten
+
+Full rewrite covering (in order): pipeline snapshot as primary
+state vehicle, disk artifacts secondary, context thresholds
+populated via `{context_thresholds}`, recurring reminders
+(50K-token / 20-turn delta), user-is-source-of-truth with Mode 2
+fallback reference, formal Rule 10(a) handoff procedure, and
+post-compact recovery. Teammate-context-isolation retained;
+obsolete "describe where you left off" advice removed entirely.
+
+### R17 — Fallback estimator two-mode spec
+
+Both `templates/CLAUDE.md.template` Session Model and
+`gate-validation.md` Check 14 now specify two explicit modes.
+**Mode 1** (user-shared `/context`, authoritative) drives
+threshold evaluation and recurrence arithmetic; fires the full
+Rule 10 reminder and advances fire state. **Mode 2** (fallback
+estimate, advisory only) uses a deterministic formula —
+`15,000 + turns*2,000 + tool_output_bytes*0.25` — and emits a
+lighter check-line asking the user to share `/context`. Mode 2
+does NOT advance `last_*_fire_tokens` / `last_*_fire_turns`, so
+unverified estimates cannot re-fire noisily. Two identical leads
+in the same state now produce the same Mode 2 estimate, which
+restores the stability R8's 50K-token recurrence needs.
+
+### R18 — `implementation.md` model placeholders
+
+Applied Option B: Step 2 prose now reads "Spawn using the model
+defined in the teammate's role file (`.claude/team-roles/<role>.md`).
+The role file's `/model` directive is the authoritative model
+binding." The three template variables (`{dev_model}`,
+`{reviewer_model}`, `{qa_model}`) were removed from the step and
+from `/ai-dlc-setup` Step 2's file-replacement list.
+
+### R19 — `codebase-inventory.md` Step 4
+
+Step 4 now says "Check 1 (validation cycle complete) is waived
+for this analysis step — there is no planning artifact to
+validate. All other applicable checks run normally, including
+Check 14 (snapshot update) and Check 15 (snapshot verification)."
+This delegates scoping to `gate-validation.md` rather than
+overriding the protocol from the step file, which was silently
+bypassing Check 14 and Check 15 on brownfield-a resumes.
+
+### Compliance-review findings now resolved
+
+The 2026-04-16 review (`docs/analysis/compliance-review.md`)
+produced eight findings. After the R13–R19 follow-up, status:
+
+- **FIND-1** (QUICKSTART "Two pause points" should be three) —
+  **RESOLVED** by R14 (now correctly lists four).
+- **FIND-2** (QUICKSTART pipeline-interruption gotcha bypasses
+  snapshot resume) — **RESOLVED** by R15.
+- **FIND-3** (QUICKSTART Context Window Guide predates Rule 10) —
+  **RESOLVED** by R16.
+- **FIND-4** (CLAUDE.md.template "13 checks" off by one) —
+  **RESOLVED earlier** in the R6 commit (Check 15 addition
+  updated the count to 15/15).
+- **FIND-5** (`implementation.md` model placeholders) —
+  **RESOLVED** by R18.
+- **FIND-6** (`codebase-inventory.md` informal gate waiver) —
+  **RESOLVED** by R19.
+- **INFO-1** (dual rule numbering) — unchanged, still workable
+  with the "Autonomy Rule N" qualifier convention.
+- **INFO-2** (sprint-review-next commit-before-gate) — unchanged,
+  intentional pattern.
+- **INFO-3** (dev.md stale coding-conventions cross-reference) —
+  unchanged, out of scope for this hardening pass.
+
+### What is additionally guaranteed now
+
+- Fresh `/ai-dlc-setup` runs leave no unresolved
+  `{context_thresholds}` or model-template placeholders.
+- Post-compact / handoff recovery guidance in QUICKSTART.md is
+  consistent with SKILL.md Rule 10 — a new user reading
+  QUICKSTART gets snapshot-aware resume instructions, not
+  pre-Rule-10 advice.
+- Fallback-mode reminder arithmetic is deterministic across
+  agents; R8 recurrence doesn't depend on a lead's subjective
+  estimate.
+- Brownfield-a's first gate refreshes the snapshot like every
+  other gate.
+
+No new honest-contract caveats. The R1–R12 dependency re-verification
+checklist still applies when Claude Code updates.

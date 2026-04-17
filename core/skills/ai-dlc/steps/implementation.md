@@ -21,16 +21,16 @@ Read the architecture document.
 
 Create an agent team.
 
-Spawn the following teammates using role files in `.claude/team-roles/`:
-- **dev** from `dev.md` — model: {dev_model}. Assign ownership based on
-  story scope per the ownership paths defined in the dev role file.
-  <!-- {dev_model}: The model used for dev teammates (e.g., claude-sonnet-4-6) -->
-- **code-reviewer** from `code-reviewer.md` — model: {reviewer_model}.
-  Read-only, produces reviews in docs/reviews/.
-  <!-- {reviewer_model}: The model used for code review (e.g., claude-opus-4-6) -->
-- **qa** from `qa.md` — model: {qa_model}. Validates acceptance criteria,
-  runs tests.
-  <!-- {qa_model}: The model used for QA (e.g., claude-sonnet-4-6) -->
+Spawn the following teammates using role files in `.claude/team-roles/`.
+Spawn using the model defined in the teammate's role file
+(`.claude/team-roles/<role>.md`). The role file's `/model` directive is
+the authoritative model binding.
+
+- **dev** from `dev.md`. Assign ownership based on story scope per the
+  ownership paths defined in the dev role file.
+- **code-reviewer** from `code-reviewer.md`. Read-only, produces reviews
+  in docs/reviews/.
+- **qa** from `qa.md`. Validates acceptance criteria, runs tests.
 
 Spawn additional dev teammates if stories span multiple ownership
 boundaries (e.g., dev-frontend + dev-backend).

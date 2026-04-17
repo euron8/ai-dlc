@@ -49,11 +49,24 @@ conversation, from the user's initial request through production deployment.
   Context is maintained through artifacts on disk, not conversation history.
 - **Autonomous gates.** Phase transitions run the gate validation protocol
   automatically. No human approval is needed between phases.
-- **Two pause points.** The Production Validation Checkpoint at the end
-  of deployment stops and waits for human input. The retro commentary
-  prompt (after the retrospective) gives the human a chance to comment
-  before the sprint closes. These are the only two points where the
-  pipeline pauses for human input.
+- **Four pause points.** These are the only four points where the
+  pipeline pauses for human input (SKILL.md Rule 7):
+  1. **Ambiguity resolution.** Whenever the router or a pipeline
+     step detects genuine ambiguity in the user's request,
+     requirements, or intent, the pipeline pauses to ask one
+     targeted clarifying question before proceeding.
+  2. **Production Validation Checkpoint.** After deployment and
+     smoke tests, the pipeline stops and waits for the human to
+     validate the deployed production instance.
+  3. **Retro commentary prompt.** After the retrospective writes
+     lessons and process improvements, the human gets a chance to
+     comment before the sprint closes.
+  4. **Post-compact verification turn.** After a `/compact` or
+     auto-compact event, the lead re-reads the pipeline snapshot,
+     outputs current step, last gate, in-flight sub-step, git
+     branch, and last commit, then pauses with *"Does this match
+     your last state? Reply `proceed`, `correct <what>`, or
+     `handoff`."* (CLAUDE.md "Post-Compact Recovery Protocol").
 - **Requirements are locked.** The pipeline has autonomy over HOW to
   implement. It does NOT have autonomy over WHAT is implemented (CLAUDE.md
   Rule 8).
@@ -314,33 +327,62 @@ in the role file must match your environment.
 
 ## Context Window Guide
 
-The AI/DLC pipeline runs in a single conversation. Context management is
-handled through artifacts on disk rather than session breaks.
+The AI/DLC pipeline runs in a single conversation by default.
+Context management is governed by SKILL.md Rule 10 and CLAUDE.md
+Session Model.
 
-**How context is preserved:**
-- Every planning artifact is written to `_bmad-output/planning-artifacts/`
-- Each step file loads only the artifacts it needs at the start
-- Steps do not depend on conversation history from earlier steps
-- Agent Teams teammates each have their own context window and load
-  artifacts from disk independently
+**Pipeline snapshot is the primary state vehicle.** The lead
+maintains `_bmad-output/pipeline-snapshot.md` throughout the
+sprint — created at pipeline start, refreshed at every gate
+passage (gate-validation.md Check 14) and at sub-step boundaries
+(sub-step snapshot update helper). The snapshot records pipeline
+variant, current step, last gate, sprint context, recent
+activity, open items, locked decisions, and context-reminder fire
+state. When the lead is uncertain about state, it reads the
+snapshot, not the conversation scrollback.
 
-**When context degrades:**
-Long conversations will eventually degrade context quality. The pipeline
-mitigates this by:
-- Writing all intermediate results to disk
-- Each step file explicitly listing which artifacts to load
-- The implementation step spawning fresh teammate contexts
-- Step files being self-contained instructions (not dependent on prior
-  conversation)
+**Disk artifacts are secondary state.** Planning outputs live in
+`_bmad-output/planning-artifacts/` and are loaded by each step
+file as needed. Agent Teams teammates each have their own context
+window and load artifacts independently — they do not inherit the
+lead's conversation history.
 
-**If you hit context limits:**
-The pipeline is designed to complete within a single conversation for most
-sprints (3-5 stories). For very large sprints or complex brownfield
-analyses, the pipeline may exhaust the context window. If this happens:
-- Artifacts on disk represent the last successfully completed step
-- Start a new conversation with `/ai-dlc` and describe where you left off
-- The router will detect existing artifacts and resume from the
-  appropriate point
+**Context thresholds.** The lead emits two non-blocking reminders
+at model-aware absolute token thresholds. Defaults (Rule 10):
+200K model → yellow 80K, red 120K; 1M model → yellow 120K, red
+200K. Projects override via `{context_thresholds}` populated by
+`/ai-dlc-setup`. Reminders are one-line outputs, not pauses — the
+pipeline continues after the lead emits each line.
+
+**Reminders recur.** After the first crossing, each reminder
+re-fires every 50K tokens OR every 20 turns past the last fire,
+whichever comes first. A single early alert is not sufficient for
+long sessions.
+
+**User is source of truth for context usage.** The lead cannot
+reliably self-measure its own context window. User-shared
+`/context` output is authoritative. The lead may invite the user
+to share `/context` at any point. When none is available, the
+lead falls back to an advisory estimate (CLAUDE.md Session Model
+Mode 2) and emits a lighter check-line asking for confirmation
+instead of the full reminder; recurrence arithmetic only advances
+on user-shared values.
+
+**Hitting limits — formal handoff.** When context is degrading,
+use the Rule 10(a) handoff procedure: the lead commits in-flight
+work, finalizes the snapshot, outputs a pasteable resume prompt,
+and ends the session. Resume in a new conversation by pasting
+that resume prompt (beginning with *"Resuming an ai-dlc sprint
+from handoff checkpoint. Pipeline snapshot:
+`_bmad-output/pipeline-snapshot.md`."*). See SKILL.md Rule 10 for
+the full procedure and resume prompt template.
+
+**Recovery from `/compact`.** After a `/compact` or auto-compact
+event, the Post-Compact Recovery Protocol (CLAUDE.md) fires: the
+lead re-reads the snapshot, acknowledges recovery, outputs the
+verification turn (current step, last gate, in-flight sub-step,
+git branch + last commit), and pauses for the user to confirm
+`proceed` / `correct <what>` / `handoff`.
 
 ---
 
@@ -566,10 +608,14 @@ This breaks the autonomous validation loops (code review --> fix -->
 re-review cycles would stall at every write). Always work on a git branch
 so you can revert if an agent makes an unexpected change.
 
-**Pipeline interruption.** If the pipeline is interrupted (crash, context
-exhaustion, manual stop), artifacts on disk represent the last completed
-step. Re-invoke `/ai-dlc` and describe where you left off; the router
-reads project state and resumes.
+**Pipeline interruption.** If the pipeline is interrupted, resume
+using the SKILL.md Rule 10 handoff resume prompt. In a new
+conversation paste: "Resuming an ai-dlc sprint from handoff
+checkpoint. Pipeline snapshot: `_bmad-output/pipeline-snapshot.md`."
+Do NOT re-invoke `/ai-dlc` with a plain description. The router
+treats any input that does not begin with the resume signal as a
+fresh pipeline run and archives the existing snapshot. See SKILL.md
+Rule 10 for the full resume prompt template.
 
 **BMAD skips to implementation.** If the agent starts coding during a
 planning step, the step file instructions should prevent this. If it
