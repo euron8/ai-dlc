@@ -1,5 +1,14 @@
 # AI/DLC Workflow Compliance Review
 
+> **Historical note (added 2026-04-17).** This document references
+> the previous 40%/50% percentage-based context thresholds. Those
+> thresholds were superseded by model-aware absolute token
+> thresholds on 2026-04-17 (SKILL.md Rule 10, commit "fix(context):
+> token thresholds, differentiated text, recurring reminders"). See
+> `docs/context-hardening-notes.md` for the current design.
+> References to 40%/50% below are retained as historical record of
+> the state at review time.
+
 **Date:** 2026-04-16
 **Scope:** Full read of every step file (`core/skills/ai-dlc/steps/*.md`),
 both templates (`templates/CLAUDE.md.template`, `templates/QUICKSTART.md.template`,

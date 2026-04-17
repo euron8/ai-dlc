@@ -160,8 +160,14 @@ in a single conversation.
 
     **Created** at pipeline instantiation (see `route.md` Step 6
     initialization).
-    **Updated** at every gate passage (see `gate-validation.md`
-    Check 14).
+    **Updated** at every gate passage (full refresh, see
+    `gate-validation.md` Check 14) and at sub-step boundaries
+    within validation cycles and during implementation (lightweight
+    Recent-Activity + Open-Items refresh, see `gate-validation.md`
+    "Sub-step snapshot update").
+    **Verified** after each gate-level update by
+    `gate-validation.md` Check 15, and on resume by `route.md`
+    Step 0a.
     **Finalized** on handoff request (path (a) below).
 
     Structure — lightweight markdown, no YAML frontmatter, no
