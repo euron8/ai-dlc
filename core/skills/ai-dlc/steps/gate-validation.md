@@ -362,6 +362,99 @@ This keeps mid-step compaction survivable: the snapshot's Recent
 Activity reflects the in-flight sub-step rather than only the last
 gate. The full Check 14 still runs at the next gate.
 
+### Auto-handoff evaluation (referenced by step files)
+
+Step files invoke this helper at each safe seam defined in CLAUDE.md
+"Auto-handoff mode". When a step file says "run auto-handoff
+evaluation at Seam <X>", execute this procedure. The outcome is
+either CONTINUE (no-op — the step resumes normally) or FIRE (the
+lead executes the Rule 10(a) handoff and the session ENDS). This
+helper MUST NOT be invoked from inside the Check 1–15 sequence
+above; it is only called from step files at the defined seams.
+
+**Inputs:** the seam name (`Seam A`, `Seam B`, `Seam C`, or
+`Seam D`) and a short human-readable label for the distinguishing
+output line (e.g., `deploy-validate Step 0 pre-flight`,
+`implementation story transition`,
+`architecture adversarial pass 2`).
+
+**Evaluate preconditions in this order. The first failing
+precondition returns CONTINUE immediately — no fire, no side
+effects, the step resumes.**
+
+1. **Mode gate.** Read `auto_handoff_mode` from CLAUDE.md Session
+   Model. If `off`, return CONTINUE. If `deploy-only` and the seam
+   is not `Seam A`, return CONTINUE. If `safe-seam`, all four
+   seams are permitted — proceed to precondition 2.
+
+2. **Red threshold confirmed under Mode 1.** Read
+   `context_reminders_sent` from the snapshot Context Reminders
+   block. If it is not `red`, return CONTINUE. Check 14 advances
+   this field to `red` ONLY when a user-shared `/context` confirmed
+   the crossing under Mode 1 — Mode 2 fallback estimates MUST NOT
+   advance the field. This precondition is therefore equivalent to
+   "red threshold confirmed via user-shared `/context`".
+
+3. **Snapshot is current.** Read the most recent Recent Activity
+   entry. If it does not reflect either (a) the gate passage that
+   most recently ran Check 15, or (b) the sub-step snapshot update
+   preceding this seam, run the sub-step snapshot update now and
+   re-read. If the update fails or Recent Activity still does not
+   reflect the preceding sub-step, return CONTINUE — firing
+   auto-handoff on a stale snapshot would produce a broken resume
+   contract.
+
+4. **No gate validation currently executing.** This precondition is
+   satisfied by-construction: step files MUST NOT invoke this
+   helper from inside the Check 1–15 sequence. If the caller is
+   inside Check 1–15, return CONTINUE — treat as a caller bug.
+
+5. **No deployment currently executing.** This precondition is
+   satisfied by-construction: Seam A runs at `deploy-validate.md`
+   Step 0, before Step 1. No other seam runs during
+   `deploy-validate.md` Steps 1–5. If the caller is between Step 1
+   and Step 5, return CONTINUE.
+
+6. **No teammate awaiting lead orchestration response.** Check the
+   task list for in-progress tasks that are blocked on a lead
+   mediation or response. Inspect recent teammate messages
+   awaiting the lead. If any teammate is awaiting a response,
+   return CONTINUE — firing handoff while a teammate is blocked
+   would strand the teammate.
+
+7. **Not at any Rule 7 pause point.** Verify the lead is not
+   currently in ambiguity resolution, the Production Validation
+   Checkpoint, the retro commentary prompt, or the post-compact
+   verification turn. If any pause point is active, return
+   CONTINUE.
+
+If all seven preconditions pass, FIRE auto-handoff. Execute the
+Rule 10(a) 4-step procedure without modification:
+
+1. `git add` and `git commit` any in-flight work with a descriptive
+   message.
+2. Finalize the pipeline snapshot — one last update capturing
+   in-flight state, recent decisions, and current sub-step within
+   the active step file.
+3. Output the distinguishing auto-handoff line (substitute the
+   active mode, the seam label, and the confirmed token count from
+   the most recent user-shared `/context`):
+
+   > *"Auto-handoff triggered by auto_handoff_mode=<mode> at
+   > <seam_name>. Context at <tokens> tokens, red threshold
+   > confirmed via user-shared /context."*
+
+4. Output the pasteable Rule 10 resume prompt (SKILL.md Rule 10
+   template) pointing at the snapshot.
+5. End the session. Do not continue the pipeline in this
+   conversation. Reply to any further messages with a pointer to
+   the snapshot and the resume prompt.
+
+A FIRE outcome does not return control to the calling step. A
+CONTINUE outcome returns silently — the step proceeds with its
+next directive (typically the `gate-validation.md` call, the next
+adversarial pass, or the next story transition orchestration).
+
 ## Gate Failure
 
 If any check fails:
