@@ -429,7 +429,8 @@ effects, the step resumes.**
    CONTINUE.
 
 If all seven preconditions pass, FIRE auto-handoff. Execute the
-Rule 10(a) 4-step procedure without modification:
+Rule 10(a) 4-step procedure with one addition — the distinguishing
+output line in step 3 identifies this handoff as automated:
 
 1. `git add` and `git commit` any in-flight work with a descriptive
    message.
@@ -438,15 +439,15 @@ Rule 10(a) 4-step procedure without modification:
    the active step file.
 3. Output the distinguishing auto-handoff line (substitute the
    active mode, the seam label, and the confirmed token count from
-   the most recent user-shared `/context`):
+   the most recent user-shared `/context`), then output the
+   pasteable Rule 10 resume prompt (SKILL.md Rule 10 template)
+   pointing at the snapshot:
 
    > *"Auto-handoff triggered by auto_handoff_mode=<mode> at
    > <seam_name>. Context at <tokens> tokens, red threshold
    > confirmed via user-shared /context."*
 
-4. Output the pasteable Rule 10 resume prompt (SKILL.md Rule 10
-   template) pointing at the snapshot.
-5. End the session. Do not continue the pipeline in this
+4. End the session. Do not continue the pipeline in this
    conversation. Reply to any further messages with a pointer to
    the snapshot and the resume prompt.
 
