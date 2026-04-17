@@ -49,11 +49,24 @@ conversation, from the user's initial request through production deployment.
   Context is maintained through artifacts on disk, not conversation history.
 - **Autonomous gates.** Phase transitions run the gate validation protocol
   automatically. No human approval is needed between phases.
-- **Two pause points.** The Production Validation Checkpoint at the end
-  of deployment stops and waits for human input. The retro commentary
-  prompt (after the retrospective) gives the human a chance to comment
-  before the sprint closes. These are the only two points where the
-  pipeline pauses for human input.
+- **Four pause points.** These are the only four points where the
+  pipeline pauses for human input (SKILL.md Rule 7):
+  1. **Ambiguity resolution.** Whenever the router or a pipeline
+     step detects genuine ambiguity in the user's request,
+     requirements, or intent, the pipeline pauses to ask one
+     targeted clarifying question before proceeding.
+  2. **Production Validation Checkpoint.** After deployment and
+     smoke tests, the pipeline stops and waits for the human to
+     validate the deployed production instance.
+  3. **Retro commentary prompt.** After the retrospective writes
+     lessons and process improvements, the human gets a chance to
+     comment before the sprint closes.
+  4. **Post-compact verification turn.** After a `/compact` or
+     auto-compact event, the lead re-reads the pipeline snapshot,
+     outputs current step, last gate, in-flight sub-step, git
+     branch, and last commit, then pauses with *"Does this match
+     your last state? Reply `proceed`, `correct <what>`, or
+     `handoff`."* (CLAUDE.md "Post-Compact Recovery Protocol").
 - **Requirements are locked.** The pipeline has autonomy over HOW to
   implement. It does NOT have autonomy over WHAT is implemented (CLAUDE.md
   Rule 8).
