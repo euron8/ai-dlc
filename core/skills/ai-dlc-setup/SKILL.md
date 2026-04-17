@@ -455,6 +455,52 @@ These are prose references, not template variables. Use find-and-replace
 to update them. This ensures the agent's instructions match its actual
 model capabilities.
 
+### Populate context thresholds
+
+After the model strategy and strings are confirmed, populate the
+`{context_thresholds}` placeholder in `CLAUDE.md` (Session Model
+block). This is required — leaving `{context_thresholds}` unresolved
+will fail Step 9 validation.
+
+**1. Determine the active lead model's context window.**
+
+- If any confirmed lead model string contains the `[1m]` suffix, or
+  the user confirmed access to the 1M-token context window during
+  model selection: `window = 1M`.
+- Otherwise: `window = 200K`.
+
+**2. Resolve the default thresholds (Rule 10 / Session Model defaults).**
+
+| Model context | Yellow (first reminder) | Red (urgent) |
+|---|---|---|
+| 200K | 80K tokens | 120K tokens |
+| 1M   | 120K tokens | 200K tokens |
+
+**3. Offer override.** Ask the user:
+
+> "Use these defaults, or override? (Enter `default`, or two
+> integers in thousands of tokens as `yellow,red`, e.g., `60,100`.)"
+
+If the user enters custom integers, use those as `{yellow}` and
+`{red}`. If `default`, use the values from the table above. Validate
+that `yellow < red` and both are positive integers; if not, re-ask.
+
+**4. Emit and replace.** Build the threshold block:
+
+```
+| Model context | Yellow (first reminder) | Red (urgent) |
+|---|---|---|
+| {window} | {yellow} | {red} |
+```
+
+Replace `{context_thresholds}` in `CLAUDE.md` with the block.
+
+**Files to replace in for `{context_thresholds}`:**
+
+**`CLAUDE.md`:**
+- `{context_thresholds}` (in the Session Model block, under
+  "Context thresholds") → the emitted threshold block above
+
 ---
 
 ## STEP 3: Deployment Configuration

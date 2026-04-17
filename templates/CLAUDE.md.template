@@ -320,18 +320,17 @@ model-aware absolute token thresholds (not percentages):
   sprint context, recent activity, open items, locked decisions.
   When the agent is uncertain about state, it reads the snapshot,
   not the conversation scrollback.
-- **Context thresholds** (defaults; override in `{context_thresholds}`):
+- **Context thresholds** (model-aware absolute token counts):
 
-  | Model context | Yellow (first reminder) | Red (urgent) |
-  |---|---|---|
-  | 200K | 80K tokens | 120K tokens |
-  | 1M   | 120K tokens | 200K tokens |
+  <!-- {context_thresholds}: Populated by /ai-dlc-setup Step 2 from
+       the selected model strategy (full vs. sonnet-only affects
+       which context-window row applies). Defaults per SKILL.md
+       Rule 10: 200K model → yellow 80K, red 120K; 1M model →
+       yellow 120K, red 200K. Percentages are not used; research-
+       observed reasoning degradation is tied to absolute tokens,
+       not fraction-of-window. -->
 
-  `/ai-dlc-setup` populates `{context_thresholds}` based on the
-  selected model strategy (full vs. sonnet-only affects which
-  context-window row applies). Percentages are not used; research-
-  observed reasoning degradation is tied to absolute tokens, not
-  fraction-of-window.
+  {context_thresholds}
 - **Yellow-threshold reminder.** When conversation context first
   crosses the yellow threshold, the agent outputs a one-line
   reminder with three routed options: (1) new session via handoff
