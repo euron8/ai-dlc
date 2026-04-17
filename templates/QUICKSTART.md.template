@@ -579,10 +579,14 @@ This breaks the autonomous validation loops (code review --> fix -->
 re-review cycles would stall at every write). Always work on a git branch
 so you can revert if an agent makes an unexpected change.
 
-**Pipeline interruption.** If the pipeline is interrupted (crash, context
-exhaustion, manual stop), artifacts on disk represent the last completed
-step. Re-invoke `/ai-dlc` and describe where you left off; the router
-reads project state and resumes.
+**Pipeline interruption.** If the pipeline is interrupted, resume
+using the SKILL.md Rule 10 handoff resume prompt. In a new
+conversation paste: "Resuming an ai-dlc sprint from handoff
+checkpoint. Pipeline snapshot: `_bmad-output/pipeline-snapshot.md`."
+Do NOT re-invoke `/ai-dlc` with a plain description. The router
+treats any input that does not begin with the resume signal as a
+fresh pipeline run and archives the existing snapshot. See SKILL.md
+Rule 10 for the full resume prompt template.
 
 **BMAD skips to implementation.** If the agent starts coding during a
 planning step, the step file instructions should prevent this. If it
