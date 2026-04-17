@@ -11,6 +11,42 @@ deployment, and present the Production Validation Checkpoint to the human.
 
 ## EXECUTION SEQUENCE
 
+### 0. Pre-Flight Context Check (hard gate)
+
+Deploying from a degraded session is not permitted. Before running
+any subsequent step in this file, the lead MUST confirm the current
+conversation's context is below the yellow threshold configured in
+CLAUDE.md (`{context_thresholds}` or Rule 10 defaults: yellow 80K
+for 200K models, 120K for 1M models).
+
+The lead cannot self-measure reliably (CLAUDE.md Session Model
+"Context introspection" bullet). Two acceptable confirmations:
+
+- **(a) User-shared `/context`.** The user shares `/context` output
+  within this deployment turn, and the reported context usage is
+  below the yellow threshold. The lead records the confirmation in
+  the gate log entry and proceeds.
+- **(b) Handoff to a fresh session.** The user performs a
+  Rule 10(a) handoff; the new session resumes from the snapshot,
+  performs the post-compact verification turn (CLAUDE.md
+  "Post-Compact Recovery Protocol"), then executes this step. In
+  the fresh session, context is well below the yellow threshold by
+  construction and the check is trivially satisfied.
+
+If neither confirmation is available, the lead outputs this line
+and STOPS before Step 1:
+
+> *"Pre-Flight Context Check: cannot confirm context is below the
+> yellow threshold. Deploying from a degraded session is not
+> permitted. Options: (a) share `/context` showing tokens below
+> `{yellow_threshold}`; (b) request handoff to a fresh session
+> before deployment. Snapshot current at
+> `_bmad-output/pipeline-snapshot.md`."*
+
+This is a hard gate equivalent to a HARD_BLOCK. Do not bypass.
+Record the confirmation (option a) or the handoff dispatch
+(option b) in the gate log.
+
 ### 1. Pre-Deployment Check
 
 Verify all sprint stories have passed all three gates (code review, QA,
