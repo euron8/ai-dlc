@@ -69,16 +69,18 @@ between them:**
    **Requirement fidelity check:** For each story derived from a carry-over
    item or user instruction, verify: does every AC preserve the specific
    details from the source requirement?
-   **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
+   snapshot update"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every story's requirements,
    acceptance criteria, and edge cases until zero ambiguity remains.
    Update story files with all findings.
-   **Then immediately proceed to step 3:**
+   **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep, missing
    NFRs. Apply all fixes.
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
+   **Run sub-step snapshot update after each adversarial pass.**
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each story file.
    **Then immediately proceed to Test Strategy:**

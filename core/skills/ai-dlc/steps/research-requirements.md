@@ -58,14 +58,16 @@ between them:**
    Walk through exhaustively. Apply all improvements.
    **Requirement fidelity check:** Verify each new requirement preserves
    specific details from its source.
-   **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
+   snapshot update"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the PRD with every clarification.
-   **Then immediately proceed to step 3:**
+   **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes. Apply all fixes
    between passes. Continue until only nitpicks remain.
    **Source fidelity pass:** Verify requirements implement what was
    requested, not a generalized or lower-effort alternative.
+   **Run sub-step snapshot update after each adversarial pass.**
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the PRD.
    **Then immediately proceed to gate validation:**

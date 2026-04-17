@@ -52,14 +52,16 @@ between them:**
    every dependency. Apply all improvements.
    **Cross-sprint check:** For each story, verify it accounts for
    patterns, APIs, and components introduced in the previous sprint.
-   **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
+   snapshot update"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every story's requirements,
    acceptance criteria, and edge cases until zero ambiguity remains.
    Update story files with all findings.
-   **Then immediately proceed to step 3:**
+   **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep,
    missing NFRs, and cross-sprint consistency. Apply all fixes.
+   **Run sub-step snapshot update after each adversarial pass.**
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each modified story file.
    **Then immediately proceed to Commit Updated Stories:**

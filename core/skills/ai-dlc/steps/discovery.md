@@ -81,14 +81,16 @@ back-to-back without pausing for human input between them:**
    **Requirement fidelity check:** If features originate from carry-over
    items or user instructions with specific details, verify those details
    are preserved. Flag any generalization.
-   **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
+   snapshot update"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the brief with every answer.
-   **Then immediately proceed to step 3:**
+   **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — cynical review. Apply all real
    fixes. Run a second pass. Continue until only nitpicks remain.
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
+   **Run sub-step snapshot update after each adversarial pass.**
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the brief summarizing improvements.
    **Then immediately proceed to gate validation:**

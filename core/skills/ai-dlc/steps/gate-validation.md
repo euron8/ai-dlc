@@ -278,6 +278,30 @@ A gate passage without a corresponding snapshot update leaves the
 snapshot stale, which undermines its role as the handoff / recovery /
 self-orientation source of truth. Do not skip this check.
 
+### Sub-step snapshot update (referenced by step files)
+
+Step files invoke this lightweight update after each validation
+sub-skill and after each story transition during implementation.
+Gate passages still run the full Check 14 above; sub-step updates
+are narrower in scope.
+
+When a step file says "run sub-step snapshot update", execute:
+
+1. Append a one-line entry to **Recent Activity** naming the
+   sub-skill completed or transition observed, with timestamp and
+   artifact touched (e.g., `2026-04-17T15:22Z — /bmad-party-mode
+   completed on PRD — _bmad-output/planning-artifacts/prd.md`).
+2. Refresh **Open Items** from current state of
+   `docs/escalations/pending.md` and any open triage items.
+3. Do NOT refresh other sections (Pipeline Position, Sprint Context,
+   Locked Decisions remain gate-scope). Do NOT re-evaluate context
+   reminder thresholds here — reminder evaluation stays at gate
+   boundaries per Check 14 above.
+
+This keeps mid-step compaction survivable: the snapshot's Recent
+Activity reflects the in-flight sub-step rather than only the last
+gate. The full Check 14 still runs at the next gate.
+
 ## Gate Failure
 
 If any check fails:

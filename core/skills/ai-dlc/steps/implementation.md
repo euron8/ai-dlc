@@ -95,6 +95,15 @@ Monitor task progress:
 - When QA sends failures → ensure dev fixes and QA re-validates
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
 
+**Sub-step snapshot updates during implementation.** The lead MUST
+run a sub-step snapshot update (see `gate-validation.md` "Sub-step
+snapshot update") after every story transition: ready-for-dev →
+in-progress, in-progress → review, review → done. Each transition
+appends a Recent Activity line naming the story ID, new status,
+and teammate. This keeps the snapshot reflective of mid-sprint
+state so a `/compact` or handoff mid-implementation does not lose
+visibility into which stories are in-flight.
+
 ### 7. All Gates Passed
 
 When ALL sprint stories have passed all three gates:
