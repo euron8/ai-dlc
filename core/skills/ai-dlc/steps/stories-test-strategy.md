@@ -81,6 +81,10 @@ between them:**
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
    **Run sub-step snapshot update after each adversarial pass.**
+   **Then run auto-handoff evaluation** (see `gate-validation.md`
+   "Auto-handoff evaluation") at `Seam D` with the label
+   `stories-test-strategy adversarial pass <N>`. If evaluation
+   returns FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each story file.
    **Then immediately proceed to Test Strategy:**
@@ -118,9 +122,17 @@ Scan all sprint stories for new visual surfaces (new UI components, pages,
 layout changes):
 
 - If **new visual surfaces found**: set `is_ui_epic = true`
-  Run gate validation (`gate-validation.md`), then:
+  Run auto-handoff evaluation at `Seam B` with the label
+  `stories-test-strategy end-of-step pre-gate (UI)` (see
+  `gate-validation.md` "Auto-handoff evaluation"). If evaluation
+  returns CONTINUE, run gate validation (`gate-validation.md`),
+  then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/ui-direction.md`
 
 - If **no new visual surfaces**: set `is_ui_epic = false`
-  Run gate validation (`gate-validation.md`), then:
+  Run auto-handoff evaluation at `Seam B` with the label
+  `stories-test-strategy end-of-step pre-gate (no-UI)` (see
+  `gate-validation.md` "Auto-handoff evaluation"). If evaluation
+  returns CONTINUE, run gate validation (`gate-validation.md`),
+  then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`

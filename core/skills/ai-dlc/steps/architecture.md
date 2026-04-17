@@ -52,11 +52,18 @@ between them:**
    compatibility, migration risk, integration seams. Apply all fixes
    between passes. Continue until only nitpicks remain.
    **Run sub-step snapshot update after each adversarial pass.**
+   **Then run auto-handoff evaluation** (see `gate-validation.md`
+   "Auto-handoff evaluation") at `Seam D` with the label
+   `architecture adversarial pass <N>`. If evaluation returns FIRE,
+   the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the architecture doc.
    **Then immediately proceed to gate validation:**
 
 ### 5. Gate Validation and Proceed
 
-Run gate validation (`gate-validation.md`), then:
+Run auto-handoff evaluation at `Seam B` with the label
+`architecture end-of-step pre-gate` (see `gate-validation.md`
+"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
+gate validation (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/stories-test-strategy.md`

@@ -377,6 +377,37 @@ from handoff checkpoint. Pipeline snapshot:
 `_bmad-output/pipeline-snapshot.md`."*). See SKILL.md Rule 10 for
 the full procedure and resume prompt template.
 
+**Auto-handoff (configurable).** The `auto_handoff_mode` setting in
+CLAUDE.md Session Model controls whether the lead automatically
+executes the Rule 10(a) procedure at defined safe seams when the
+red threshold has been confirmed crossed via user-shared
+`/context`. Three modes selected at setup time (`/ai-dlc-setup`
+Step 2):
+
+- `off` — Never fires. Reminders remain non-blocking; you decide
+  when to handoff. Pre-feature behavior preserved.
+- `deploy-only` — Fires only at `deploy-validate.md` Step 0
+  pre-flight when the existing hard gate cannot be satisfied.
+- `safe-seam` — Fires at every safe seam (deploy pre-flight,
+  before each gate, after each story transition, between
+  adversarial review passes) when all preconditions hold. Default
+  for new installs.
+
+Every seam is an EVALUATION point. The shared helper in
+`gate-validation.md` checks seven preconditions (mode permits,
+red confirmed under Mode 1, snapshot current, not mid-gate, not
+mid-deploy, no teammate waiting, not at a pause point) and fires
+only when all hold. Mode 2 fallback estimates cannot trigger
+auto-handoff — only user-shared `/context` advances
+`context_reminders_sent` to `red`.
+
+Auto-handoff is NOT a fifth pause point — it is a
+session-terminating action. Resume itself remains manual: the
+user opens a new conversation and pastes the resume prompt. Auto-
+handoff output is distinguishable from a human-requested handoff
+via a preceding line naming the mode, seam, and confirmed token
+count.
+
 **Recovery from `/compact`.** After a `/compact` or auto-compact
 event, the Post-Compact Recovery Protocol (CLAUDE.md) fires: the
 lead re-reads the snapshot, acknowledges recovery, outputs the

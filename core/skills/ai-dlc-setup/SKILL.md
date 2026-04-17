@@ -173,6 +173,26 @@ Store the extracted content. You will use it in:
 - Any relevant template variable replacement where the archived
   content provides the answer
 
+**Also detect prior-install markers and prior `auto_handoff_mode`:**
+
+- **Prior AI/DLC install marker.** Check whether
+  `docs/pre-ai-dlc/<latest>/_divergence/.claude/skills/ai-dlc/SKILL.md`
+  exists in the latest archive. If present, the archive is from a
+  prior AI/DLC install. Record `prior_ai_dlc_install = true`. If
+  absent (or the `_divergence/` tree is missing), record
+  `prior_ai_dlc_install = false` — the archived CLAUDE.md, if any,
+  is a project file unrelated to AI/DLC.
+
+- **Archived `auto_handoff_mode` value.** Grep the archived
+  `CLAUDE.md` for a line matching `^auto_handoff_mode:\s*(\w+)$` (in
+  or near the Session Model block). If found, record the captured
+  value as `archived_auto_handoff_mode`. If not found, record
+  `archived_auto_handoff_mode = none`.
+
+Store both values. Step 2's "Populate auto-handoff mode" sub-step
+reads them to determine the default selection and the wizard
+prompt branch.
+
 ### 0b: Absorb Team Roles
 
 For each archived role file in the most recent archive (architect.md,
@@ -495,6 +515,54 @@ Replace `{context_thresholds}` in `CLAUDE.md` with the block.
 **`CLAUDE.md`:**
 - `{context_thresholds}` (in the Session Model block, under
   "Context thresholds") → the emitted threshold block above
+
+### Populate auto-handoff mode
+
+After `{context_thresholds}` is populated, resolve
+`{auto_handoff_mode}` in `CLAUDE.md` (Session Model block). Leaving
+`{auto_handoff_mode}` unresolved MUST fail Step 9 validation.
+
+**1. Determine the default selection.** Read the two values recorded
+in Step 0a (`prior_ai_dlc_install` and `archived_auto_handoff_mode`):
+
+| Scenario | Signal | Default |
+|---|---|---|
+| New install (no prior AI/DLC) | `prior_ai_dlc_install = false` | `safe-seam` |
+| Upgrade with existing value | `archived_auto_handoff_mode` ∈ {`off`, `deploy-only`, `safe-seam`} | archived value |
+| Upgrade from pre-feature install | `prior_ai_dlc_install = true` AND `archived_auto_handoff_mode = none` | `off` |
+
+The pre-feature upgrade default is `off`, not `safe-seam`. Returning
+users opt in deliberately; they MUST NOT be auto-migrated.
+
+**2. Prompt the user.** Output the three-mode explainer and the
+detected default. Use this exact prompt, substituting `{default}`:
+
+> **Auto-handoff mode.** AI/DLC can automatically run the Rule 10(a)
+> handoff procedure at safe seams when the red context threshold has
+> been confirmed crossed via user-shared `/context`. Pick a mode:
+>
+> 1. `off` — No auto-handoff. Yellow and red reminders stay
+>    non-blocking; you decide when to handoff.
+> 2. `deploy-only` — Auto-handoff fires only at the `deploy-validate`
+>    Step 0 pre-flight context check when context cannot be
+>    confirmed below yellow.
+> 3. `safe-seam` — Auto-handoff fires at every safe seam (deploy
+>    pre-flight, before each gate, after each story transition,
+>    between adversarial review passes) when all preconditions are
+>    met.
+>
+> Default: `{default}`. Enter `1`, `2`, `3`, a mode name, or press
+> enter to accept the default.
+
+**3. Validate and replace.** Accept only `off`, `deploy-only`, or
+`safe-seam`. On invalid input, re-ask. Replace `{auto_handoff_mode}`
+in `CLAUDE.md` with the confirmed value.
+
+**Files to replace in for `{auto_handoff_mode}`:**
+
+**`CLAUDE.md`:**
+- `{auto_handoff_mode}` (in the Session Model block, under the
+  "Auto-handoff mode" bullet) → the confirmed mode name
 
 ---
 

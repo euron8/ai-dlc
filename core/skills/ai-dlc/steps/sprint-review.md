@@ -23,6 +23,12 @@ complete sprint output:
   integration points, duplicated logic across stories)
 - Apply all fixes autonomously. Dev teammates apply code fixes.
 
+**Run sub-step snapshot update after each adversarial pass.**
+**Then run auto-handoff evaluation** (see `gate-validation.md`
+"Auto-handoff evaluation") at `Seam D` with the label
+`sprint-review adversarial pass <N>`. If evaluation returns FIRE,
+the session ends; otherwise continue.
+
 ### 2. Sprint-Level Party Mode
 
 `/bmad-party-mode` — PM, Architect, Dev, TEA, QA walk through the
@@ -42,5 +48,8 @@ If the sprint review surfaced findings that required code changes:
 
 ### 4. Gate Validation and Proceed
 
-Run gate validation (`gate-validation.md`), then:
+Run auto-handoff evaluation at `Seam B` with the label
+`sprint-review end-of-step pre-gate` (see `gate-validation.md`
+"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
+gate validation (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/deploy-validate.md`

@@ -397,10 +397,73 @@ model-aware absolute token thresholds (not percentages):
   in-flight work, finalizes the snapshot, outputs a pasteable resume
   prompt pointing at the snapshot, and ends the session. The new
   conversation resumes from the snapshot.
+- **Auto-handoff mode.** A configurable setting controls whether the
+  lead MAY automatically execute the Rule 10(a) handoff procedure
+  when the red threshold has been confirmed crossed at a safe seam.
 
-The agent does NOT force handoff at any context threshold. See
-`.claude/skills/ai-dlc/SKILL.md` Rule 10 for the complete handoff
-protocol and snapshot structure.
+  <!-- {auto_handoff_mode}: Populated by /ai-dlc-setup Step 2. One of
+       `off`, `deploy-only`, or `safe-seam`. Defaults: new installs
+       use `safe-seam`; upgrades from a pre-feature install default
+       to `off` (returning users opt in deliberately). -->
+
+  ```
+  auto_handoff_mode: {auto_handoff_mode}
+  ```
+
+  Mode semantics:
+  - `off` — Auto-handoff MUST NOT fire at any seam. Yellow and red
+    reminders remain non-blocking; the user decides when to handoff.
+  - `deploy-only` — Auto-handoff MAY fire only at the
+    `deploy-validate.md` Step 0 pre-flight context check when that
+    check cannot otherwise be satisfied. No other evaluation points.
+  - `safe-seam` — Auto-handoff MAY fire at every safe seam defined
+    in `gate-validation.md` "Auto-handoff evaluation" (Seam A deploy
+    pre-flight, Seam B end-of-step before gate validation, Seam C
+    story transitions, Seam D between adversarial passes) when all
+    preconditions are met.
+
+  Every seam is an EVALUATION point, not an unconditional handoff.
+  Evaluation fires handoff ONLY when ALL of these preconditions hold
+  (failing any is a no-op — the lead continues the pipeline
+  normally):
+
+  1. `auto_handoff_mode` permits firing at this seam.
+  2. `context_reminders_sent: red` in the snapshot (i.e., red
+     threshold was confirmed crossed under Mode 1 via user-shared
+     `/context`). Mode 2 fallback estimates MUST NOT fire
+     auto-handoff — Check 14 does not advance
+     `context_reminders_sent` under Mode 2, so this precondition
+     alone excludes Mode 2.
+  3. Snapshot is current: either `gate-validation.md` Check 15
+     passed on the most recent gate, or the sub-step snapshot
+     update just refreshed the snapshot successfully.
+  4. No gate validation is currently executing (the lead is
+     between step files, not inside the Check 1–15 sequence).
+  5. No deployment is currently executing (the lead is not between
+     `deploy-validate.md` Step 1 and Step 5).
+  6. No teammate is awaiting a lead orchestration response.
+  7. No pending user directive awaits response (the lead is not at
+     any of the four pause points in SKILL.md Rule 7).
+
+  Auto-handoff execution, when preconditions are met, follows the
+  Rule 10(a) 4-step procedure without modification: (a) commit
+  in-flight work, (b) finalize the snapshot, (c) output the
+  pasteable resume prompt, (d) end the session. Auto-handoff is
+  NOT a fifth pause point — it is a session-terminating action.
+
+  Auto-handoff output MUST be distinguishable from a
+  human-requested handoff. The lead outputs this line immediately
+  before the Rule 10 resume prompt:
+
+  > *"Auto-handoff triggered by auto_handoff_mode=<mode> at
+  > <seam_name>. Context at <tokens> tokens, red threshold
+  > confirmed via user-shared /context."*
+
+The agent does NOT force handoff at any context threshold under
+`auto_handoff_mode: off`. See `.claude/skills/ai-dlc/SKILL.md` Rule
+10 for the complete handoff protocol and snapshot structure, and
+`gate-validation.md` "Auto-handoff evaluation" for the shared
+precondition helper invoked at every seam.
 
 The retro (Phase 5) runs inline after deployment validation, in the same
 conversation. The human gets a chance to comment before the sprint closes.

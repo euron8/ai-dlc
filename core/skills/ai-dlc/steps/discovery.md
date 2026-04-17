@@ -91,11 +91,18 @@ back-to-back without pausing for human input between them:**
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
    **Run sub-step snapshot update after each adversarial pass.**
+   **Then run auto-handoff evaluation** (see `gate-validation.md`
+   "Auto-handoff evaluation") at `Seam D` with the label
+   `discovery adversarial pass <N>`. If evaluation returns FIRE, the
+   session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the brief summarizing improvements.
    **Then immediately proceed to gate validation:**
 
 ### 6. Gate Validation and Proceed
 
-Run gate validation (`gate-validation.md`), then:
+Run auto-handoff evaluation at `Seam B` with the label
+`discovery end-of-step pre-gate` (see `gate-validation.md`
+"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
+gate validation (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/research-requirements.md`

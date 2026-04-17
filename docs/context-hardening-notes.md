@@ -330,3 +330,162 @@ produced eight findings. After the R13–R19 follow-up, status:
 
 No new honest-contract caveats. The R1–R12 dependency re-verification
 checklist still applies when Claude Code updates.
+
+---
+
+## 2026-04-17 Follow-up (R20)
+
+R1–R19 hardened the reminders, snapshot contract, and recovery
+protocol, but left the user as the sole actor who can convert a
+confirmed red-threshold crossing into an actual handoff. On long
+sprints — especially during multi-story implementation or
+multi-pass adversarial review — a confirmed red can sit for hours
+while the lead keeps working, because the reminder is
+non-blocking and the handoff is user-initiated. R20 adds an opt-in
+automatic execution path for the Rule 10(a) procedure at defined
+safe seams.
+
+### R20 — Auto-handoff at safe seams (opt-in)
+
+**What changed.** A new setting `auto_handoff_mode` was added to
+the CLAUDE.md Session Model block as template variable
+`{auto_handoff_mode}`, populated by `/ai-dlc-setup` Step 2. A
+shared "Auto-handoff evaluation" helper was added to
+`gate-validation.md` parallel to the existing "Sub-step snapshot
+update" helper. Four safe seams across the pipeline were wired to
+invoke the helper. SKILL.md Rule 10 now cross-references the
+feature and restates the binding constraints directively.
+
+**Three modes, and which is default:**
+
+- `off` — Auto-handoff never fires. Yellow and red reminders remain
+  non-blocking; the user decides when to handoff. This is the
+  pre-feature behavior, preserved exactly.
+- `deploy-only` — Auto-handoff fires only at `deploy-validate.md`
+  Step 0 pre-flight when the existing hard gate cannot be
+  satisfied. No other evaluation points.
+- `safe-seam` — Auto-handoff evaluates at every safe seam and
+  fires when preconditions hold. This is the default for new
+  installs.
+
+Upgrade defaults:
+
+- Fresh install (no prior AI/DLC): `safe-seam`.
+- Upgrade with existing value detected in archive: the detected
+  value, confirmed with one keystroke.
+- Upgrade from pre-feature install (no `auto_handoff_mode` in
+  archive, but `_divergence/.claude/skills/ai-dlc/SKILL.md`
+  present): `off`. Returning users opt in deliberately; no silent
+  migration to `safe-seam`.
+
+Detection uses
+`docs/pre-ai-dlc/<latest>/_divergence/.claude/skills/ai-dlc/SKILL.md`
+as the prior-AI/DLC-install marker, plus a grep of the flat-archived
+CLAUDE.md for a literal `auto_handoff_mode:` line.
+
+**Safe seam evaluation points.**
+
+- **Seam A** — `deploy-validate.md` Step 0 pre-flight context
+  check, invoked when the existing hard gate cannot be satisfied
+  via user-shared `/context` or an explicit handoff. Evaluates
+  under `deploy-only` or `safe-seam`.
+- **Seam B** — end of the invoking step, immediately before
+  `gate-validation.md` is called. Applied in every validation-cycle
+  step file: `discovery.md`, `research-requirements.md`,
+  `architecture.md`, `stories-test-strategy.md` (both UI and
+  no-UI exits), `sprint-review-next.md`, `sprint-review.md`,
+  `doc-repair-backfill.md`. Evaluates under `safe-seam` only.
+  `implementation.md` does not invoke `gate-validation.md`
+  directly (the Phase 3→4 gate lives in `sprint-review.md`), so
+  Seam B lives at sprint-review's pre-gate call rather than at
+  implementation's end.
+- **Seam C** — after each story transition in `implementation.md`
+  Step 6, once the sub-step snapshot update has completed.
+  Evaluates under `safe-seam` only.
+- **Seam D** — between adversarial review passes in every
+  multi-pass validation cycle, after each sub-step snapshot
+  update. Evaluates under `safe-seam` only.
+
+**Precondition-gated firing model.** Every seam is an EVALUATION
+point, not an unconditional handoff. The shared helper evaluates
+seven preconditions in order and short-circuits on the first
+failure with CONTINUE (no-op). Preconditions:
+
+1. Mode permits firing at this seam.
+2. `context_reminders_sent == red` in the snapshot — equivalent to
+   red confirmed under Mode 1 because Check 14 does NOT advance
+   this field under Mode 2. This precondition alone is why Mode 2
+   estimates cannot trigger auto-handoff.
+3. Snapshot is current (Check 15 passed on the last gate, or the
+   sub-step snapshot update preceding this seam just ran).
+4. No gate validation currently executing.
+5. No deployment currently executing.
+6. No teammate awaiting lead orchestration response.
+7. Not at any of the four Rule 7 pause points.
+
+Preconditions 4 and 5 are satisfied by-construction (seam
+placement). The helper still fails closed on caller bugs. The
+remaining five are runtime-evaluated.
+
+**What auto-handoff guarantees.**
+
+- Under `safe-seam` with Mode 1 red confirmed, the lead will
+  commit work, finalize the snapshot, emit the distinguishing
+  auto-handoff line, and emit the Rule 10 resume prompt at the
+  next safe seam it reaches. The session ENDS rather than
+  continuing to degrade.
+- Auto-handoff output is distinguishable from a human-requested
+  handoff: the line preceding the resume prompt names the mode,
+  the seam, and the confirmed token count from the most recent
+  user-shared `/context`.
+- Mid-gate and mid-deployment are excluded by construction. No
+  seam fires inside `gate-validation.md` Check 1–15 or inside
+  `deploy-validate.md` Steps 1–5.
+- Mode 2 fallback estimates cannot trigger auto-handoff. The
+  precondition reads a snapshot field that Check 14 only advances
+  under Mode 1.
+
+**What remains manual.** Resume itself is NOT automated. The user
+opens a new conversation and pastes the resume prompt. The
+incoming lead reads the snapshot and continues per the existing
+`route.md` Step 0 / Step 0a integrity checks. Auto-handoff closes
+the "user sits on a confirmed red because nobody pulled the
+trigger" failure mode; it does not make recovery free.
+
+**Dependency on Mode 1.** The feature deliberately cannot fire
+without a user-shared `/context` confirming the red threshold.
+Mode 2 advisory estimates may prompt the user to share `/context`,
+which (if shared and above red) converts to Mode 1 and allows
+auto-handoff to fire on the next seam evaluation. Firing
+auto-handoff on an unverified estimate would break the contract
+the reminders already carry: fire state advances only on confirmed
+crossings. R20 preserves that contract.
+
+**Manual walkthrough — three modes, red-threshold crossing at an
+adversarial review pass boundary:**
+
+- `off`: Lead emits the Rule 10(c) red reminder per Check 14. The
+  user reads it, chooses to continue, `/compact`, or request
+  handoff. Auto-handoff never evaluates. Pre-feature behavior
+  preserved.
+- `deploy-only`: Same as `off` at Seams B/C/D — adversarial review
+  pass seam evaluates but the mode gate returns CONTINUE. Lead
+  keeps working. At the next deployment, Seam A evaluates;
+  preconditions hold; auto-handoff fires with label
+  `deploy-validate Step 0 pre-flight`. Session ends before
+  deployment begins, forcing a fresh-session deployment per R10.
+- `safe-seam`: Adversarial pass completes; sub-step snapshot
+  update runs; Seam D evaluates immediately after. Mode permits,
+  red confirmed under Mode 1, snapshot fresh, no gate in-flight,
+  no deployment in-flight, no teammate blocking, not in a pause
+  point. Auto-handoff FIRES. Lead commits, finalizes snapshot,
+  emits the auto-handoff line naming mode + seam + token count,
+  emits the resume prompt. Session ends. User pastes the resume
+  prompt into a new conversation; incoming lead continues from
+  the next adversarial pass.
+
+The dependency re-verification checklist still applies. One
+additional item is now load-bearing: Check 14's Mode 1/Mode 2
+distinction. If a future change advances `context_reminders_sent`
+under Mode 2, the Mode-1-only guarantee breaks and R20's
+contract is violated. Preserve the distinction.
