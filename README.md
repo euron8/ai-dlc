@@ -193,7 +193,7 @@ your-project/
 
 Three layers:
 
-**Core** — Universal pipeline logic. Gate validation (13 checks),
+**Core** — Universal pipeline logic. Gate validation (15 checks),
 escalation model (3 tiers), requirement anchoring, autonomy rules (10),
 session model, team roles. Does not change per project.
 

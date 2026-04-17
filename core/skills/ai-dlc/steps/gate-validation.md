@@ -187,8 +187,13 @@ rewritten before proceeding.
 
 ### 13. Announce gate passage.
 
-Output a brief line to the conversation:
-"Gate [name]: PASSED — [N/N checks passed] — proceeding to [next phase]"
+Output a brief line to the conversation only AFTER Checks 14 and 15
+below have also passed. (This check is numbered 13 to preserve
+existing cross-references, but execution is deferred until the full
+15-check cycle is complete, so the announcement reflects the final
+count.)
+
+"Gate [name]: PASSED — 15/15 checks passed — proceeding to [next phase]"
 
 Include the check count so the human can verify completeness at a glance.
 
@@ -277,6 +282,32 @@ See SKILL.md Rule 10 for the snapshot's full structure and rationale.
 A gate passage without a corresponding snapshot update leaves the
 snapshot stale, which undermines its role as the handoff / recovery /
 self-orientation source of truth. Do not skip this check.
+
+### 15. Verify snapshot reflects this gate.
+
+After Check 14 writes the snapshot, re-read
+`_bmad-output/pipeline-snapshot.md` and confirm:
+
+- The `last_gate_passed` name matches the gate being logged in
+  Check 12.
+- The `last_gate_passed` timestamp matches (equal to, or within a
+  few seconds of) the timestamp in the gate log entry Check 12
+  appended.
+- `current_step_file` matches the step file that invoked this gate.
+- If `context_reminders_sent` was advanced this cycle, the matching
+  `last_*_fire_tokens` / `last_*_fire_turns` were also set to
+  non-null values.
+
+This check exists because Check 14 is an assertion ("update the
+snapshot"); Check 15 is a verification that the assertion took
+effect. A gate could otherwise claim Check 14 passed without the
+snapshot actually being updated.
+
+**Gate FAILS** if any of the above do not match. Remediation: re-run
+Check 14 (re-write the snapshot) and then re-run Check 15. If Check
+15 fails twice in a row, escalate as HARD_BLOCK — the snapshot
+writer is broken and the gate should not pass with a stale
+recovery anchor.
 
 ### Sub-step snapshot update (referenced by step files)
 
