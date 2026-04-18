@@ -55,7 +55,7 @@ Before starting any work, read these files in order:
 
 ## Escalation Protocol
 
-Follow the three-tier escalation model in CLAUDE.md Autonomy Rule #4:
+Follow the three-tier escalation model in SKILL.md Rule 12:
 
 - **HARD_BLOCK** (contradicts approved decision, requirement divergence):
   Append to `docs/escalations/pending.md`, mark task BLOCKED, message

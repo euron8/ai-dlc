@@ -155,7 +155,7 @@ Before starting any task, read these files in order:
 
 ## Escalation Protocol
 
-Follow the three-tier escalation model in CLAUDE.md Autonomy Rule #4:
+Follow the three-tier escalation model in SKILL.md Rule 12:
 
 - **HARD_BLOCK** (story contradicts architecture with no resolution,
   requirement cannot be implemented as specified, dependency on external

@@ -52,7 +52,7 @@ Before starting any work, read:
 
 ## Escalation Protocol
 
-Follow the three-tier escalation model in CLAUDE.md Autonomy Rule #4:
+Follow the three-tier escalation model in SKILL.md Rule 12:
 
 - **HARD_BLOCK** (conflicting stakeholder requirements that cannot be
   resolved from context, business decision requiring domain knowledge
