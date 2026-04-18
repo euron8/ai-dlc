@@ -167,6 +167,38 @@ Do NOT absorb:
   own three-gate model
 - Team role definitions — AI/DLC provides its own
 
+**When `prior_ai_dlc_install == true`, also DO NOT absorb any of the
+following sections from the archived CLAUDE.md. These sections were
+owned by AI/DLC in pre-R22 installs and have moved to new
+authoritative locations in R22. The new locations are already
+installed by `install.sh`; re-injecting the archived prose into the
+new thin CLAUDE.md or the new coding-conventions.md would duplicate
+content and create drift.**
+
+Detect these sections by matching header text (case-insensitive,
+match either `## Header` or `### Header` level). Skip the entire
+section body up to the next same-or-higher-level header:
+
+| Pre-R22 section header | Moved to |
+|---|---|
+| Autonomy Rules | SKILL.md Rules 1 through 18 |
+| Autonomy Rule (any individual rule) | SKILL.md Rules 1 through 18 |
+| Autonomous Gate Protocol | gate-validation.md |
+| Phase Reference / Phase Table | route.md Step 6 |
+| Session Model | SKILL.md Handoff Protocol |
+| Post-Gate Deployment | deploy-validate.md |
+| Post-Compact Recovery Protocol | SKILL.md |
+| Story Validation Origin Check | gate-validation.md Check 3a |
+| Pre-Deploy Schema/API Field Check | docs/coding-conventions.md |
+
+Record the list of detected-and-excluded sections as
+`r22_excluded_sections` for use in the Step 0e absorption summary.
+
+When `prior_ai_dlc_install == false`, ignore this rule. The archived
+CLAUDE.md is a project file unrelated to AI/DLC; section headers
+that happen to match the table above are the user's own content and
+should be evaluated against the general absorption criteria above.
+
 Store the extracted content. You will use it in:
 - Step 5 (Operations Protocol) — infrastructure rules
 - Step 7 (Coding Conventions) — project-specific conventions
@@ -223,6 +255,24 @@ Read `coding-conventions.md` from the most recent archive (if it exists) and ext
 
 Store the extracted content for Step 7 (Coding Conventions).
 
+**Pre-Deploy Schema/API Field Check duplicate guard.** The new
+`coding-conventions.md.template` (installed by `install.sh`) already
+contains a Pre-Deploy Schema/API Field Check section. When absorbing
+from the archived `coding-conventions.md`, detect whether a section
+with this name or substantially similar content exists. If found:
+
+- If `prior_ai_dlc_install == true`: DO NOT absorb the archived
+  version. The section is already present in the new template.
+  Record this as `r22_skipped_coding_conventions_pre_deploy = true`
+  for the Step 0e summary.
+- If `prior_ai_dlc_install == false`: the archived content is the
+  user's own work. Present it to the user in Step 7 alongside the
+  template version and ask which to keep.
+
+This guard prevents the most common R22 upgrade duplication case
+(pre-R22 projects with the check in CLAUDE.md, which `install.sh`
+archives to both CLAUDE.md and coding-conventions.md).
+
 ### 0d: Conflict Detection
 
 Compare the absorbed content against AI/DLC's operating model. Flag
@@ -253,6 +303,8 @@ After reading all archived files, present a brief summary to the user:
 Archived files found in docs/pre-ai-dlc/:
 [list files found]
 
+Prior AI/DLC install detected: [yes | no]
+
 Absorbed content:
 - [ownership paths / model strings / conventions / etc.]
 
@@ -263,6 +315,21 @@ Prior auto-handoff mode (if detected): [value, or "none"]
   Auto-handoff configuration now lives in SKILL.md Handoff Protocol,
   not CLAUDE.md. If you ran a non-default mode previously, edit
   `.claude/skills/ai-dlc/SKILL.md` after setup to set it again.
+
+Pre-R22 sections NOT absorbed (moved to new locations):
+  [only shown when prior_ai_dlc_install == true AND at least one
+   section in r22_excluded_sections was detected]
+  - [section name] -> [new location]
+  - ...
+  These sections were owned by AI/DLC in your previous install and
+  have moved. The new locations are already installed. Your archived
+  copies remain in docs/pre-ai-dlc/<timestamp>/ for reference.
+
+Duplicate guards applied:
+  [only shown when prior_ai_dlc_install == true AND at least one
+   guard fired]
+  - Pre-Deploy Schema/API Field Check: skipped (already in the new
+    coding-conventions.md template)
 
 This content will be incorporated during setup. You'll have a chance
 to review and confirm at each step.
