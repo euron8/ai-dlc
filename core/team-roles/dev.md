@@ -30,7 +30,7 @@ assigned story files and the architecture document.
 - Implement stories assigned to you from the shared task list.
 - Write tests for all new functionality (unit tests at minimum, integration
   tests for cross-boundary logic).
-- Follow the coding conventions defined in `docs/coding-conventions.md`.
+- Follow the coding conventions in `docs/coding-conventions.md`.
 - Run lint and test suite before marking any task complete.
 - Create atomic, well-scoped commits with conventional commit messages.
 
