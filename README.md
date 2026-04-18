@@ -15,7 +15,7 @@ deployment, and retrospective — autonomously in one conversation.
 - Analysis-only (no implementation)
 
 **Structural enforcement** at every phase:
-- 13 gate validation checks (not advisory — gates fail if violated)
+- 15 gate validation checks (not advisory — gates fail if violated)
 - LOCKED_REQUIREMENTS anchoring (prevents requirement drift)
 - Three-tier escalation (HARD_BLOCK, DECIDED_AUTONOMOUSLY, DEFERRAL_REQUEST)
 - Evidence-producing mandatory checks (dev, code review, QA)
@@ -176,7 +176,7 @@ your-project/
     skills/ai-dlc-setup/
       SKILL.md                    # Guided configuration wizard
     team-roles/                   # 5 role definitions
-  CLAUDE.md                       # Autonomy rules + project config
+  CLAUDE.md                       # Project config (autonomy rules live in SKILL.md)
   QUICKSTART.md                   # Reference documentation
   docs/
     coding-conventions.md         # Project coding standards
@@ -194,7 +194,7 @@ your-project/
 Three layers:
 
 **Core** — Universal pipeline logic. Gate validation (15 checks),
-escalation model (3 tiers), requirement anchoring, autonomy rules (10),
+escalation model (3 tiers), requirement anchoring, autonomy rules (18, in SKILL.md),
 session model, team roles. Does not change per project.
 
 **Patterns** — Reusable enforcement modules. Each pattern is a

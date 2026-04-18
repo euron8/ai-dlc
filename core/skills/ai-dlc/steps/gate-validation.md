@@ -414,8 +414,9 @@ gate. The full Check 14 still runs at the next gate.
 
 ### Auto-handoff evaluation (referenced by step files)
 
-Step files invoke this helper at each safe seam defined in CLAUDE.md
-"Auto-handoff mode". When a step file says "run auto-handoff
+Step files invoke this helper at each safe seam defined in SKILL.md
+Handoff Protocol "Auto-handoff (configurable via `auto_handoff_mode`)".
+When a step file says "run auto-handoff
 evaluation at Seam <X>", execute this procedure. The outcome is
 either CONTINUE (no-op — the step resumes normally) or FIRE (the
 lead executes the Rule 2(a) handoff and the session ENDS). This
