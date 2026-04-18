@@ -49,7 +49,7 @@ conversation, from the user's initial request through production deployment.
   Context is maintained through artifacts on disk, not conversation history.
 - **Autonomous gates.** Phase transitions run the gate validation protocol
   automatically. No human approval is needed between phases.
-- **Four pause points.** These are the only four points where the
+- **Three pause points.** These are the only three points where the
   pipeline pauses for human input (SKILL.md Rule 7):
   1. **Ambiguity resolution.** Whenever the router or a pipeline
      step detects genuine ambiguity in the user's request,
@@ -61,12 +61,12 @@ conversation, from the user's initial request through production deployment.
   3. **Retro commentary prompt.** After the retrospective writes
      lessons and process improvements, the human gets a chance to
      comment before the sprint closes.
-  4. **Post-compact verification turn.** After a `/compact` or
-     auto-compact event, the lead re-reads the pipeline snapshot,
-     outputs current step, last gate, in-flight sub-step, git
-     branch, and last commit, then pauses with *"Does this match
-     your last state? Reply `proceed`, `correct <what>`, or
-     `handoff`."* (CLAUDE.md "Post-Compact Recovery Protocol").
+
+  Post-compact recovery still outputs a verification turn for
+  transparency (current step, last gate, in-flight sub-step, git
+  branch + last commit) so the user can observe what the lead
+  believes about current state, but it does not block the
+  pipeline. See CLAUDE.md "Post-Compact Recovery Protocol".
 - **Requirements are locked.** The pipeline has autonomy over HOW to
   implement. It does NOT have autonomy over WHAT is implemented (CLAUDE.md
   Rule 8).
@@ -401,7 +401,7 @@ only when all hold. Mode 2 fallback estimates cannot trigger
 auto-handoff — only user-shared `/context` advances
 `context_reminders_sent` to `red`.
 
-Auto-handoff is NOT a fifth pause point — it is a
+Auto-handoff is NOT a fourth pause point — it is a
 session-terminating action. Resume itself remains manual: the
 user opens a new conversation and pastes the resume prompt. Auto-
 handoff output is distinguishable from a human-requested handoff
@@ -412,8 +412,9 @@ count.
 event, the Post-Compact Recovery Protocol (CLAUDE.md) fires: the
 lead re-reads the snapshot, acknowledges recovery, outputs the
 verification turn (current step, last gate, in-flight sub-step,
-git branch + last commit), and pauses for the user to confirm
-`proceed` / `correct <what>` / `handoff`.
+git branch + last commit), and proceeds immediately to the next
+pipeline action in the same response. The user may interrupt on
+the next turn to correct mismatched state or request handoff.
 
 ---
 
