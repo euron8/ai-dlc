@@ -40,7 +40,7 @@ For each missing artifact identified in the gap analysis:
 Execute all sub-skills back-to-back without pausing for human input
 between them:
 
-Run the full validation cycle (CLAUDE.md Rule 3) on all repaired and
+Run the full validation cycle (SKILL.md Rule 8) on all repaired and
 backfilled artifacts:
 1. `/bmad-party-mode` — PM, Architect, Dev walk through all artifacts
    against the codebase. Do they accurately represent reality?

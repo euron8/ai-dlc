@@ -91,7 +91,7 @@ this spec. Do not re-open them unless genuinely blocked.
 
 8. **Candidate bodies are themselves review artifacts** — they capture
    origin/WHY extensively for the intake reviewer. This is an explicit
-   Rule 11 scope carveout (see CLAUDE.md Rule 11 Scope section). When
+   Rule 18 scope carveout (see SKILL.md Rule 18 Scope section). When
    intake accepts a candidate, the applied rule text is stripped of
    narrative before it lands in the upstream file; the WHY goes to
    the intake commit message.

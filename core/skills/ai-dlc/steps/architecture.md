@@ -34,7 +34,7 @@ Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 Invoke `/bmad-check-implementation-readiness` style check — validate
 design coherence against PRD. Fix any misalignment found.
 
-### 4. Validation Cycle (Rule 3)
+### 4. Validation Cycle (Rule 8)
 
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**

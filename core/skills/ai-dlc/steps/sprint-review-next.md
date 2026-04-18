@@ -42,7 +42,7 @@ If any story needs modification, update it directly. If a story is no
 longer needed, mark it as `skipped` in sprint-status.yaml with a
 rationale.
 
-### 3. Story Validation Cycle (Rule 3)
+### 3. Story Validation Cycle (Rule 8)
 
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**

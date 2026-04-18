@@ -174,7 +174,7 @@ Do ANY planning artifacts exist?
     NO  → pipeline_variant = "greenfield"
 ```
 
-### Step 4: Ambiguity Check (Autonomy Rule 10)
+### Step 4: Ambiguity Check (Rule 11)
 
 If you cannot confidently determine the pipeline variant, ask the user ONE
 clarifying question. Examples of genuine ambiguity:
@@ -235,7 +235,7 @@ Based on `pipeline_variant`, load the first step file:
 introduces new visual surfaces (new UI components, pages, or layout changes).
 This is determined during the stories-test-strategy step, not here.
 
-**Note:** For multi-sprint features (Rule 9), each subsequent sprint
+**Note:** For multi-sprint features (Rule 14), each subsequent sprint
 loops through: `sprint-review-next` → `implementation` → `sprint-review`
 → `deploy-validate`. The `sprint-review-next` step validates the next
 sprint's stories before implementation begins. This loop is handled by
@@ -274,7 +274,8 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
   the archival in the output so the user knows the previous state
   was preserved.
 
-See SKILL.md Rule 10 for the full snapshot structure. The snapshot is
+See SKILL.md Handoff Protocol and Pipeline Snapshot section for the
+full snapshot structure. The snapshot is
 maintained throughout the pipeline and is the source of truth for state
 on handoff, post-`/compact` recovery, and lead self-orientation.
 

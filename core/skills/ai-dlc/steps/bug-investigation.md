@@ -44,7 +44,7 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/stories/`:
 - Regression scope (existing tests, new tests needed)
 
 **If the user specified a particular fix approach or scope, preserve it
-(Rule 8). Do not substitute a different approach.**
+(Rule 13). Do not substitute a different approach.**
 
 ### 4. Validation
 

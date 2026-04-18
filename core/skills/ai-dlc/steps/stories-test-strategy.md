@@ -32,7 +32,7 @@ stories with clear acceptance criteria.
   the items; this step creates the actual story files with full ACs.
 - Order dependencies explicitly. Reference existing stories by ID.
 
-### 2a. Propagate Locked Requirements to Stories (Rule 8)
+### 2a. Propagate Locked Requirements to Stories (Rule 13)
 
 For each story created, propagate the relevant locked requirements from
 the PRD's `LOCKED_REQUIREMENTS` block into the story file. Each story
@@ -49,7 +49,7 @@ technical stories, migration stories) do not need the block.
 
 Invoke `/bmad-sprint-planning` — select stories for the sprint.
 
-**Multi-sprint phasing check (Rule 9):** If the total story count exceeds
+**Multi-sprint phasing check (Rule 14):** If the total story count exceeds
 what can be delivered in a single sprint (typically 3-5 stories), or if
 risk assessment suggests phasing:
 - Split into multiple sprints autonomously
@@ -58,7 +58,7 @@ risk assessment suggests phasing:
 - The implementation step will execute sprint 1, deploy, signal human,
   then wait for validation before proceeding to sprint 2
 
-### 4. Story Validation Cycle (Rule 3)
+### 4. Story Validation Cycle (Rule 8)
 
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**

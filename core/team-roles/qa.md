@@ -103,7 +103,7 @@ For each completed task, verify:
 
 ## Escalation Protocol
 
-Follow the three-tier escalation model in CLAUDE.md Autonomy Rule #4:
+Follow the three-tier escalation model in SKILL.md Rule 12:
 
 - **HARD_BLOCK** (quality concern so severe the sprint should not ship,
   test environment issue that prevents validation and cannot be worked

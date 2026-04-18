@@ -189,9 +189,12 @@ Store the extracted content. You will use it in:
   value as `archived_auto_handoff_mode`. If not found, record
   `archived_auto_handoff_mode = none`.
 
-Store both values. Step 2's "Populate auto-handoff mode" sub-step
-reads them to determine the default selection and the wizard
-prompt branch.
+Store both values. Auto-handoff configuration now lives in SKILL.md
+Handoff Protocol "Auto-handoff" section, not in CLAUDE.md, so the
+archived value is recorded for reference only and is NOT written
+back to the new CLAUDE.md. Surface the detected value in the
+absorption summary so the user knows whether to edit SKILL.md to
+preserve a non-default mode.
 
 ### 0b: Absorb Team Roles
 
@@ -255,6 +258,11 @@ Absorbed content:
 
 Conflicts with AI/DLC defaults:
 - [list conflicts, or "none detected"]
+
+Prior auto-handoff mode (if detected): [value, or "none"]
+  Auto-handoff configuration now lives in SKILL.md Handoff Protocol,
+  not CLAUDE.md. If you ran a non-default mode previously, edit
+  `.claude/skills/ai-dlc/SKILL.md` after setup to set it again.
 
 This content will be incorporated during setup. You'll have a chance
 to review and confirm at each step.
@@ -332,7 +340,43 @@ already replaced, or "none — fresh install"]
 
 Ask: "Does this look right? Anything to add or correct before we proceed?"
 
-Wait for confirmation, then proceed to Step 2.
+Wait for confirmation, then proceed to Step 1b.
+
+---
+
+## STEP 1b: Project Identity
+
+CLAUDE.md opens with a one-paragraph description of this project so
+that any engineer (AI/DLC pipeline or not) reading the file knows
+what they are looking at. Resolve the `{project_identity}`
+placeholder.
+
+Detect a candidate description from the project scan: the
+`description` field in `package.json` / `pyproject.toml` /
+`Cargo.toml`, the first paragraph of `README.md`, or the first
+descriptive line of an existing `CLAUDE.md` archive (Step 0).
+
+Prompt the user:
+
+> **Project identity.** CLAUDE.md opens with a one-paragraph
+> description of this project. What is this project, who uses it,
+> what does the codebase contain? A few sentences is plenty.
+>
+> Detected: [insert candidate description, or "nothing detected"]
+
+Accept free-text input. Replace `{project_identity}` in `CLAUDE.md`
+with the confirmed text. If the user enters nothing or skips, leave
+the surrounding HTML comment in place and remove the
+`{project_identity}` placeholder so the file validates cleanly in
+Step 9.
+
+**Files to replace in for `{project_identity}`:**
+
+**`CLAUDE.md`:**
+- `{project_identity}` (top of file, immediately after the
+  Project Intelligence header) → confirmed description text
+
+After confirmation, proceed to Step 2.
 
 ---
 
@@ -470,99 +514,12 @@ These are prose references, not template variables. Use find-and-replace
 to update them. This ensures the agent's instructions match its actual
 model capabilities.
 
-### Populate context thresholds
-
-After the model strategy and strings are confirmed, populate the
-`{context_thresholds}` placeholder in `CLAUDE.md` (Session Model
-block). This is required — leaving `{context_thresholds}` unresolved
-will fail Step 9 validation.
-
-**1. Determine the active lead model's context window.**
-
-- If any confirmed lead model string contains the `[1m]` suffix, or
-  the user confirmed access to the 1M-token context window during
-  model selection: `window = 1M`.
-- Otherwise: `window = 200K`.
-
-**2. Resolve the default thresholds (Rule 10 / Session Model defaults).**
-
-| Model context | Yellow (first reminder) | Red (urgent) |
-|---|---|---|
-| 200K | 80K tokens | 120K tokens |
-| 1M   | 120K tokens | 200K tokens |
-
-**3. Offer override.** Ask the user:
-
-> "Use these defaults, or override? (Enter `default`, or two
-> integers in thousands of tokens as `yellow,red`, e.g., `60,100`.)"
-
-If the user enters custom integers, use those as `{yellow}` and
-`{red}`. If `default`, use the values from the table above. Validate
-that `yellow < red` and both are positive integers; if not, re-ask.
-
-**4. Emit and replace.** Build the threshold block:
-
-```
-| Model context | Yellow (first reminder) | Red (urgent) |
-|---|---|---|
-| {window} | {yellow} | {red} |
-```
-
-Replace `{context_thresholds}` in `CLAUDE.md` with the block.
-
-**Files to replace in for `{context_thresholds}`:**
-
-**`CLAUDE.md`:**
-- `{context_thresholds}` (in the Session Model block, under
-  "Context thresholds") → the emitted threshold block above
-
-### Populate auto-handoff mode
-
-After `{context_thresholds}` is populated, resolve
-`{auto_handoff_mode}` in `CLAUDE.md` (Session Model block). Leaving
-`{auto_handoff_mode}` unresolved MUST fail Step 9 validation.
-
-**1. Determine the default selection.** Read the two values recorded
-in Step 0a (`prior_ai_dlc_install` and `archived_auto_handoff_mode`):
-
-| Scenario | Signal | Default |
-|---|---|---|
-| New install (no prior AI/DLC) | `prior_ai_dlc_install = false` | `safe-seam` |
-| Upgrade with existing value | `archived_auto_handoff_mode` ∈ {`off`, `deploy-only`, `safe-seam`} | archived value |
-| Upgrade from pre-feature install | `prior_ai_dlc_install = true` AND `archived_auto_handoff_mode = none` | `off` |
-
-The pre-feature upgrade default is `off`, not `safe-seam`. Returning
-users opt in deliberately; they MUST NOT be auto-migrated.
-
-**2. Prompt the user.** Output the three-mode explainer and the
-detected default. Use this exact prompt, substituting `{default}`:
-
-> **Auto-handoff mode.** AI/DLC can automatically run the Rule 10(a)
-> handoff procedure at safe seams when the red context threshold has
-> been confirmed crossed via user-shared `/context`. Pick a mode:
->
-> 1. `off` — No auto-handoff. Yellow and red reminders stay
->    non-blocking; you decide when to handoff.
-> 2. `deploy-only` — Auto-handoff fires only at the `deploy-validate`
->    Step 0 pre-flight context check when context cannot be
->    confirmed below yellow.
-> 3. `safe-seam` — Auto-handoff fires at every safe seam (deploy
->    pre-flight, before each gate, after each story transition,
->    between adversarial review passes) when all preconditions are
->    met.
->
-> Default: `{default}`. Enter `1`, `2`, `3`, a mode name, or press
-> enter to accept the default.
-
-**3. Validate and replace.** Accept only `off`, `deploy-only`, or
-`safe-seam`. On invalid input, re-ask. Replace `{auto_handoff_mode}`
-in `CLAUDE.md` with the confirmed value.
-
-**Files to replace in for `{auto_handoff_mode}`:**
-
-**`CLAUDE.md`:**
-- `{auto_handoff_mode}` (in the Session Model block, under the
-  "Auto-handoff mode" bullet) → the confirmed mode name
+Context thresholds and auto-handoff mode are no longer template
+variables in CLAUDE.md. They live in SKILL.md Handoff Protocol
+section as defaults (yellow 80K / red 120K for 200K models;
+yellow 120K / red 200K for 1M models; `auto_handoff_mode: off` by
+default). Projects that need to override either MUST edit SKILL.md
+directly. Do not prompt the user here.
 
 ---
 
@@ -600,8 +557,8 @@ Wait for the user's answer.
 Replace in these files:
 
 **`CLAUDE.md`:**
-- `{deploy_command}` (in the Post-Gate Deployment section)
-- `{smoke_test_command}` (in the Post-Gate Deployment section)
+- `{deploy_command}` (in the Deployment Commands section)
+- `{smoke_test_command}` (in the Deployment Commands section)
 
 **`.claude/skills/ai-dlc/steps/deploy-validate.md`:**
 - `{deploy_command}` (in the Deploy section)

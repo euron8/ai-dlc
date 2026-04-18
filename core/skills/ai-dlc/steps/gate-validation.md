@@ -49,6 +49,55 @@ this protocol. Every check must PASS. Any failure blocks the gate.
   created by re-reading the original user input / carry-over item /
   escalation spec before proceeding.
 
+### 3a. Story validation origin check (story gates only).
+
+**Scope.** This check fires only when the gate being validated is a
+story-level validation gate (invoked from `stories-test-strategy.md`
+for story readiness, or from `implementation.md` for story completion).
+Skip this check for all non-story gates (planning-artifact gates,
+sprint-level gates, deployment gates).
+
+**Check.** For each story being validated, identify its origin:
+
+1. A specific requirement in CLAUDE.md or `docs/coding-conventions.md`.
+2. User feedback captured in an escalation or planning artifact.
+3. A carry-over item from a previous sprint
+   (`_bmad-output/planning-artifacts/carry-over-items.md`).
+4. The locked requirements block from product brief or PRD.
+
+If the story has no identifiable origin in any of the above, the
+story is not origin-anchored; note it and move on (Check 3's general
+requirement anchoring covers this case).
+
+If the story IS origin-anchored, verify that the story's acceptance
+criteria FULLY satisfy the original requirement text. Compare:
+
+- Quote the original requirement verbatim from its source.
+- Quote the story's acceptance criteria.
+- For each substantive element of the original requirement
+  (placement, behavior, scope, specific values), identify which
+  acceptance criterion covers it.
+
+**Gate FAILS** if any substantive element of the original requirement
+is not covered by a story acceptance criterion, REGARDLESS of
+whether the story's own ACs pass their validation. A story whose ACs
+are internally consistent but which does not address the original
+requirement has failed its purpose and cannot pass the gate.
+
+**Remediation.** Expand the story's acceptance criteria to cover the
+uncovered elements, re-validate the story, and re-run Check 3a. If
+the story cannot reasonably be expanded to cover the requirement
+(because the requirement is larger than one story's scope), escalate
+as Rule 12 HARD_BLOCK with `requirement divergence` as the blocker
+type and the original requirement quoted verbatim.
+
+**Why this is a gate-level check.** The story's own validation cycle
+may pass (the story is internally coherent and its ACs are testable)
+while the story still fails to address the thing it was created to
+address. This failure mode cannot be caught by validating the story
+in isolation; it requires comparing the story to its source. Check
+3a enforces that comparison at the gate.
+
 ### 4. Template placeholder detection?
 
 - Scan all story files in the current sprint for template placeholders:
@@ -234,19 +283,19 @@ field is absent (e.g., snapshot predates this rule), initialize
 missing fields before proceeding: `context_reminders_sent: none`
 and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
 
-Resolve the active thresholds from the project's `{context_thresholds}`
-configuration in CLAUDE.md. Defaults per SKILL.md Rule 10:
+Resolve the active thresholds from the SKILL.md Handoff Protocol
+"Threshold defaults" section. Defaults:
 - 200K model context → yellow 80K tokens, red 120K tokens
 - 1M model context  → yellow 120K tokens, red 200K tokens
 
 The lead cannot self-measure its context window reliably. Two modes
-apply (per CLAUDE.md Session Model "Context introspection"):
+apply (per SKILL.md Handoff Protocol "Reminder semantics"):
 
 **Mode 1 — user-shared `/context` (authoritative).** The most
 recent user-shared `/context` output this session drives both the
 threshold-crossing check AND the recurrence arithmetic. Under
 Mode 1, the evaluation rules below apply, and on any firing the
-lead emits the full Rule 10(b) / 10(c) reminder text and advances
+lead emits the full Rule 2(b) / 2(c) reminder text and advances
 `last_yellow_fire_tokens` / `last_yellow_fire_turns` (or the red
 counterparts).
 
@@ -260,7 +309,7 @@ estimate = 15,000  (baseline for CLAUDE.md + skill + system prompt)
 ```
 
 If the estimate crosses a threshold, emit the lighter check-line
-(not the full Rule 10 reminder):
+(not the full Rule 2 reminder):
 
 > *"Context estimate suggests crossing the {yellow|red} threshold
 > (~{estimate}K tokens, fallback heuristic). Please share
@@ -273,20 +322,20 @@ Under Mode 2, DO NOT advance the `last_*_fire_tokens` /
 a reminder; advancing fire state on unverified estimates would
 cause noisy re-firing on long sessions. When the user responds
 with `/context` output, treat the shared value as Mode 1 input:
-evaluate the threshold, emit the full Rule 10 reminder if the
+evaluate the threshold, emit the full Rule 2 reminder if the
 shared value confirms the crossing, and advance fire state.
 
 Evaluation rules (Mode 1 only — in order):
 
 - **First crossing of yellow:** if `context_reminders_sent` is
   `none` and shared tokens ≥ yellow_threshold, output the
-  Rule 10(b) yellow-threshold reminder substituting the actual
+  Rule 2(b) yellow-threshold reminder substituting the actual
   yellow_threshold value. Set `context_reminders_sent: yellow`,
   `last_yellow_fire_tokens` to the shared value, and
   `last_yellow_fire_turns` to the current turn count.
 - **First crossing of red:** if `context_reminders_sent` is
   `none` or `yellow` and shared tokens ≥ red_threshold, output
-  the Rule 10(c) red-threshold reminder substituting the actual
+  the Rule 2(c) red-threshold reminder substituting the actual
   red_threshold value. Set `context_reminders_sent: red`,
   `last_red_fire_tokens`, and `last_red_fire_turns`.
 - **Recurring yellow (still below red):** if
@@ -303,10 +352,11 @@ Evaluation rules (Mode 1 only — in order):
 
 Reminders are non-blocking one-line outputs; they do not pause the
 pipeline. Output, update the snapshot fields under Mode 1, and
-continue. Any user reply to a reminder is a Rule 4 directive
+continue. Any user reply to a reminder is a Rule 11 directive
 handled on the next turn.
 
-See SKILL.md Rule 10 for the snapshot's full structure and rationale.
+See SKILL.md Handoff Protocol and Pipeline Snapshot section for the
+snapshot's full structure and rationale.
 
 A gate passage without a corresponding snapshot update leaves the
 snapshot stale, which undermines its role as the handoff / recovery /
@@ -368,7 +418,7 @@ Step files invoke this helper at each safe seam defined in CLAUDE.md
 "Auto-handoff mode". When a step file says "run auto-handoff
 evaluation at Seam <X>", execute this procedure. The outcome is
 either CONTINUE (no-op — the step resumes normally) or FIRE (the
-lead executes the Rule 10(a) handoff and the session ENDS). This
+lead executes the Rule 2(a) handoff and the session ENDS). This
 helper MUST NOT be invoked from inside the Check 1–15 sequence
 above; it is only called from step files at the defined seams.
 
@@ -382,8 +432,9 @@ output line (e.g., `deploy-validate Step 0 pre-flight`,
 precondition returns CONTINUE immediately — no fire, no side
 effects, the step resumes.**
 
-1. **Mode gate.** Read `auto_handoff_mode` from CLAUDE.md Session
-   Model. If `off`, return CONTINUE. If `deploy-only` and the seam
+1. **Mode gate.** Read `auto_handoff_mode` from SKILL.md Handoff
+   Protocol "Auto-handoff" section. If `off`, return CONTINUE. If
+   `deploy-only` and the seam
    is not `Seam A`, return CONTINUE. If `safe-seam`, all four
    seams are permitted — proceed to precondition 2.
 
@@ -422,14 +473,15 @@ effects, the step resumes.**
    return CONTINUE — firing handoff while a teammate is blocked
    would strand the teammate.
 
-7. **Not at any Rule 7 pause point.** Verify the lead is not
+7. **Not at any Rule 3 pause point.** Verify the lead is not
    currently in ambiguity resolution, the Production Validation
    Checkpoint, the retro commentary prompt, or the post-compact
    verification turn. If any pause point is active, return
    CONTINUE.
 
 If all seven preconditions pass, FIRE auto-handoff. Execute the
-Rule 10(a) 4-step procedure with one addition — the distinguishing
+Rule 2(a) handoff 4-step procedure (defined in SKILL.md Handoff
+Protocol "Handoff triggers") with one addition — the distinguishing
 output line in step 3 identifies this handoff as automated:
 
 1. `git add` and `git commit` any in-flight work with a descriptive
@@ -440,8 +492,8 @@ output line in step 3 identifies this handoff as automated:
 3. Output the distinguishing auto-handoff line (substitute the
    active mode, the seam label, and the confirmed token count from
    the most recent user-shared `/context`), then output the
-   pasteable Rule 10 resume prompt (SKILL.md Rule 10 template)
-   pointing at the snapshot:
+   pasteable resume prompt (SKILL.md Handoff Protocol resume prompt
+   template) pointing at the snapshot:
 
    > *"Auto-handoff triggered by auto_handoff_mode=<mode> at
    > <seam_name>. Context at <tokens> tokens, red threshold
@@ -463,6 +515,6 @@ If any check fails:
    restore drifted requirement, populate template, sync status).
 2. Re-run the FAILED check specifically (not the entire checklist).
 3. If the check now passes, continue with remaining checks.
-4. If still failing after remediation, escalate as HARD_BLOCK per Rule 4.
+4. If still failing after remediation, escalate as HARD_BLOCK per Rule 12.
 5. Do NOT skip a failing check. Do NOT proceed with a known failure.
    "We'll fix it later" is not an acceptable remediation for gate checks.

@@ -141,6 +141,13 @@ bugs bypass all automated testing. **Evidence required:** Include a Field
 Verification section with the grep command, field list, and verification
 source in the review doc.
 
+### Missing Pre-Deploy Field Verification = Important
+
+Any change that adds a new field to an API query without logged
+verification against the deployed schema MUST be classified as
+**Important**. If deployment has already shipped and the query is
+failing in production, escalate to **Critical** in retro.
+
 ### Dead Code in Modified Files = Important
 
 Unreferenced constants, always-true conditionals, and unused variables
@@ -194,7 +201,7 @@ if the code needs rework.
 
 ## Escalation Protocol
 
-Follow the three-tier escalation model in CLAUDE.md Autonomy Rule #4:
+Follow the three-tier escalation model in SKILL.md Rule 12:
 
 - **HARD_BLOCK** (security issue so severe work should stop, design flaw
   that contradicts approved architecture and architect cannot resolve):
