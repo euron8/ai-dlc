@@ -30,16 +30,18 @@ human can observe, then immediately continue to the next action.
 Outputting results and continuing is correct; outputting results and
 waiting for a response is stalling.
 
-**Handoff is not a fifth pause point.** When the user requests
+**Handoff is not a fourth pause point.** When the user requests
 handoff to a new conversation, the agent finalizes the pipeline
 snapshot, outputs a pasteable resume prompt, and ENDS the current
 session — it does not pause and wait. The new conversation is a
 separate session that resumes from the snapshot. The yellow- and
 red-threshold context reminders are one-line outputs, not pauses —
-the agent continues immediately after issuing them. The four pause
-points are: ambiguity resolution, Production Validation Checkpoint,
-retro commentary prompt, and post-compact verification turn (see
-"Post-Compact Recovery Protocol" below).
+the agent continues immediately after issuing them. The three
+pause points are: ambiguity resolution, Production Validation
+Checkpoint, and retro commentary prompt. Post-compact recovery
+outputs a verification turn for transparency (see
+"Post-Compact Recovery Protocol" below) but does not block the
+pipeline.
 
 Every planning artifact goes through **Party Mode** (multi-agent debate),
 **Advanced Elicitation** (probe until zero ambiguity), and **Adversarial
@@ -443,13 +445,13 @@ model-aware absolute token thresholds (not percentages):
      `deploy-validate.md` Step 1 and Step 5).
   6. No teammate is awaiting a lead orchestration response.
   7. No pending user directive awaits response (the lead is not at
-     any of the four pause points in SKILL.md Rule 7).
+     any of the three pause points in SKILL.md Rule 7).
 
   Auto-handoff execution, when preconditions are met, follows the
   Rule 10(a) 4-step procedure without modification: (a) commit
   in-flight work, (b) finalize the snapshot, (c) output the
   pasteable resume prompt, (d) end the session. Auto-handoff is
-  NOT a fifth pause point — it is a session-terminating action.
+  NOT a fourth pause point — it is a session-terminating action.
 
   Auto-handoff output MUST be distinguishable from a
   human-requested handoff. The lead outputs this line immediately
@@ -495,18 +497,16 @@ the agent MUST output:
 - Current git branch and last commit (run `git branch --show-current`
   and `git log -1 --oneline`)
 
-Then the agent pauses with exactly this question:
-
-> *"Does this match your last state? Reply `proceed`, `correct <what>`,
-> or `handoff`."*
-
-This is a mandatory pause point equivalent to the three pause points
-in SKILL.md Rule 7 — added as pause point (d). The agent does NOT
-resume pipeline work until the user responds. A `proceed` reply
-unblocks the pipeline. A `correct <what>` reply is treated as an
-authoritative directive: update the snapshot to match reality, then
-re-verify. A `handoff` reply initiates the Rule 10(a) handoff
-procedure from the already-degraded session.
+After outputting the verification turn content, the agent MUST
+proceed immediately to the next pipeline action in the same
+response. The verification turn is not a pause point. The user
+MAY interrupt on the next turn to correct mismatched state or
+request handoff; until that interrupt arrives, the pipeline
+continues. If the user sends `correct <what>`, treat it as an
+authoritative directive: update the snapshot to match reality,
+then re-verify before the next action. If the user sends
+`handoff`, initiate the Rule 10(a) handoff procedure from the
+already-degraded session.
 
 ---
 
