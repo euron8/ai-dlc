@@ -1,433 +1,78 @@
 # Project Intelligence
 
-Operating rules for the AI/DLC pipeline. The lead reads this file at
-the start of every session (SKILL.md Rule 1). Contains rules only.
-Onboarding, installation, and phase-reference material live in README
-and QUICKSTART.
+Project configuration and references. This file contains project-general
+facts and pointers that apply to any engineer working on this codebase,
+whether or not the AI/DLC pipeline is active.
+
+<!-- {project_identity}: Replace this comment with a one-paragraph
+     description of the project. What it is, who uses it, what the
+     codebase contains. Engineers reading this file for the first time
+     should know what they are looking at. -->
+
+{project_identity}
 
 ---
 
-## Autonomy Rules
-
-These rules apply to ALL agents across ALL phases.
-
-1. **Walk through everything.** Do not skip sections, do not summarize.
-   Review every element of every artifact exhaustively.
-
-2. **Apply all recommended improvements.** When party mode, adversarial
-   review, or advanced elicitation surface a finding, fix it directly
-   in the artifact. Do not present a menu of options. Do not ask
-   "should I fix this?" Just fix it.
-
-3. **Run the full validation cycle.** Every planning artifact goes
-   through Party Mode -> Advanced Elicitation -> Adversarial Review
-   (2+ passes). After each adversarial pass, apply all real fixes,
-   then run the next pass. Continue until a pass produces only
-   nitpicks or false positives.
-
-4. **Escalate asynchronously via file.** Write escalations to
-   `docs/escalations/pending.md` using the format below. Escalations
-   have three tiers that determine whether work blocks or continues.
-
-   **Tier 1 -- HARD_BLOCK (work stops):**
-   - A finding contradicts an explicit human-approved decision
-   - The agent cannot implement a requirement as specified
-     (requirement divergence) and needs human sign-off on an
-     alternative approach
-   - A carry-over item deferral is proposed (`DEFERRAL_REQUEST`)
-
-   Action: mark task BLOCKED, message lead, move to next unblocked
-   task.
-
-   **Tier 2 -- DECIDED_AUTONOMOUSLY (work continues):**
-   - A trade-off has no objectively correct answer -- agent picks
-     the best option, documents rationale, proceeds
-   - Requirements are ambiguous but can be reasonably inferred from
-     context, project memory, or existing patterns
-   - UI/UX direction decisions where no explicit user preference
-     exists
-   - Implementation option selection among alternatives presented
-     in a carry-over item or story spec
-
-   Action: document decision and rationale, proceed without blocking.
-
-   **Tier 3 -- not an escalation:**
-   Formatting, naming, phrasing, minor refactors, test structure,
-   or any issue where a professional default exists. Just do it.
-
-   Escalation entry format (append, do not overwrite):
-
-   ```
-   ## [STORY-ID] [Teammate Name] - [Date/Time]
-   **Status:** HARD_BLOCK | DECIDED_AUTONOMOUSLY | DEFERRAL_REQUEST
-   **Blocker type:** [contradicts decision | requirement divergence | trade-off | missing requirement | scope change | deferral]
-   **Context:** [What you were doing when you hit the issue]
-   **Decision/Question:** [For DECIDED_AUTONOMOUSLY: what was decided and why. For HARD_BLOCK: the specific decision needed from the human]
-   **Options:** [If applicable, the options considered and their trade-offs]
-   **Impact if skipped:** [What happens if work continues without this answer]
-   ```
-
-   Resolution lifecycle:
-   - HARD_BLOCK / DEFERRAL_REQUEST: Human reviews at the production
-     validation checkpoint and updates status to RESOLVED with a
-     decision. Lead notices the resolution and unblocks the task.
-   - DECIDED_AUTONOMOUSLY: Human reviews at the production
-     validation checkpoint. No action needed unless the decision
-     was wrong, in which case human updates status to OVERRIDDEN
-     with corrective direction.
-
-5. **Document what you changed.** After each validation cycle,
-   append a brief changelog to the artifact noting what was improved
-   and why.
-
-6. **Err on the side of doing.** When in doubt, apply the
-   improvement. The human reviews the final production deployment,
-   not intermediate artifacts.
-
-7. **Write large files in sections.** When creating or updating a
-   file that exceeds ~200 lines, break the write into multiple
-   sequential operations. Do not attempt to write an entire large
-   file in a single operation. Single large writes risk output token
-   limits and timeouts that leave files incomplete or truncated.
-   This applies to all file types: planning artifacts, story files,
-   code, tests, and reviews.
-
-8. **Requirements define WHAT is built. Agents have autonomy over
-   HOW.** When carry-over items, brainstorming sessions, or direct
-   user instructions specify concrete details -- UI placement,
-   implementation approach, scope boundaries, feature behavior --
-   those details are **locked requirements**. Validation cycles
-   may challenge or question locked requirements, but MUST NOT
-   silently change them. Any divergence from specified requirements
-   -- dropping a requirement, substituting different behavior, or
-   determining a requirement cannot be met as specified -- requires
-   human sign-off via `HARD_BLOCK` escalation (Rule 4, Tier 1).
-   The escalation must quote the original user-specified detail and
-   the proposed change. Agents that rewrite user intent into a
-   vaguer form during planning are violating this rule.
-
-   Agents have full autonomy over execution decisions: technical
-   approach, implementation patterns, UI layout choices (when not
-   specified by user), option selection among presented
-   alternatives, and scheduling. These are HOW decisions and use
-   `DECIDED_AUTONOMOUSLY` (Rule 4, Tier 2) when non-obvious.
-
-9. **Multi-sprint phasing is autonomous.** When the agent determines
-   a feature exceeds single-sprint scope due to size or risk, the
-   agent may autonomously split it into phased sprints without human
-   approval. Requirements: document the phasing rationale, define
-   phase boundaries, ensure each phase delivers standalone value.
-   Each sprint is deployed and validated at the production
-   checkpoint before the next sprint begins.
-
-10. **Seek clarity when ambiguous -- HARD_BLOCK severity (Rule 8
-    tier).** Two observable requirements.
-
-    **(a) Ambiguity resolution.** Ask for clarification when you
-    detect genuine ambiguity in the user's request, requirements,
-    or intent. Do not ask about matters resolvable by reading
-    existing artifacts, project memory, or applying professional
-    defaults.
-
-    **(b) In-flight interpretation preamble.** The first line of the
-    agent's response to ANY user message that arrives during or
-    after an execution phase MUST be a one-sentence interpretation
-    stating whether the message is being treated as a question or a
-    directive. Example: *"Reading this as a question about the
-    escalation decision -- answering below, not acting."* A missing
-    first-line interpretation is a rule violation, not a soft fail.
-
-    **Absolute.** The preamble requirement has no exceptions. "The
-    intent seems clear" is not a valid reason to skip it.
-    Rationalizing around this rule is itself the failure mode the
-    rule catches.
-
-11. **Rules are hard, directive, and self-contained.** A rule in
-    CLAUDE.md, coding-conventions.md, step files, or team role files
-    must be writable as a standalone mandate without supporting
-    narrative. A rule that needs origin context to survive is not
-    a rule -- it is a suggestion leaning on a story. Rewrite it
-    hard, or move it to a retro doc as a lesson.
-
-    **Style:**
-    - State mandates with imperative voice ("Do X", "Never Y") or
-      MUST / MUST NOT / SHALL. Forbidden: "should", "try to",
-      "consider", "prefer", "in most cases", and any other language
-      that can be read as optional when the intent is a mandate.
-      "May" is allowed only when granting permission or autonomy,
-      not when stating a mandate.
-    - State the enforcement consequence inline when one applies:
-      "Violation fails gate N" or "Missing = Critical severity".
-    - No sprint or story references.
-    - No incident descriptions or "because we got burned" narrative.
-    - No parenthetical origin notes after a directive.
-    - No embedded dates, retro quotes, or escalation quotes.
-
-    **Scope.** Rule files only: CLAUDE.md, coding-conventions.md,
-    step files, team role files. Planning artifacts (PRDs, stories,
-    reviews, retros) and export bundles are different formats --
-    Rule 5 governs artifact changelogs, and the export bundle
-    format captures origin context for human review of
-    contributions.
-
-    **Cleanup.** The retro's rule file audit (retro.md Step 4)
-    scans rule files each sprint for two classes of violation:
-    **narrative drift** (rule text gained origin context) and
-    **rule weakness** (rule text became readable as optional).
-    Both are cleanup targets. Strip narratives; rewrite weak rules
-    hard. A rule that is too project-specific to survive without
-    its narrative is not portable -- rewrite it unconditional, or
-    remove it.
-
----
-
-## Session Model
-
-The pipeline runs in a single conversation by default. Agent Teams
-teammates are spawned within the same lead session, each with their
-own context window. Context management uses a living pipeline
-snapshot plus two model-aware absolute token thresholds (not
-percentages). See SKILL.md Rule 10 for the authoritative snapshot
-structure and handoff protocol.
-
-**Context thresholds** (model-aware absolute token counts):
-
-<!-- {context_thresholds}: Populated by /ai-dlc-setup Step 2 from
-     the selected model strategy. Defaults per SKILL.md Rule 10:
-     200K model → yellow 80K, red 120K; 1M model → yellow 120K,
-     red 200K. -->
-
-{context_thresholds}
-
-**Yellow-threshold reminder.** When conversation context first
-crosses the yellow threshold, the agent outputs a one-line reminder
-with three routed options: (1) new session via handoff (recommended
-before any gate or deployment), (2) `/compact` (acceptable only
-mid-step), (3) continue (only if the current sub-step is about to
-wrap). Non-blocking.
-
-**Red-threshold reminder.** When conversation context first crosses
-the red threshold, the agent outputs an urgent one-line reminder:
-degradation is likely present; strongly recommend new session at the
-next sub-step boundary; avoid `/compact` before any gate,
-deployment, or adversarial review. Non-blocking — the user's
-judgment is authoritative.
-
-**Recurring reminders.** Past the yellow threshold, the yellow
-reminder re-fires every additional 50K tokens OR every 20 turns
-(whichever comes first). Same pattern past the red threshold.
-
-**Context introspection — user is source of truth.** The agent
-cannot reliably self-measure its own context window. Two modes apply.
-
-**Mode 1 — user-shared `/context` (authoritative).** The most recent
-user-shared `/context` output drives both the threshold-crossing
-check AND the recurrence arithmetic. When a crossing fires under
-Mode 1, the agent emits the full Rule 10 reminder and advances
-`last_yellow_fire_*` / `last_red_fire_*` in the snapshot. The agent
-MAY invite the user to share `/context` at any point.
-
-**Mode 2 — fallback estimate (advisory only).** When no user-shared
-`/context` is available, the agent computes:
-
-```
-estimate = 15,000  (baseline for CLAUDE.md + skill + system prompt)
-        + (turns_this_session * 2,000)  (approx per-exchange cost)
-        + sum(tool_output_sizes_in_bytes) * 0.25  (bytes-to-tokens conservative high)
-```
-
-If the estimate crosses a threshold, the agent does NOT emit the
-full Rule 10 reminder. It emits this lighter check-line instead:
-
-> *"Context estimate suggests crossing the {yellow|red} threshold
-> (~{estimate}K tokens, fallback heuristic). Please share
-> `/context` output to confirm. I will continue with this estimate
-> as a working assumption until confirmed."*
-
-Under Mode 2, recurrence arithmetic is NOT advanced — the
-`last_yellow_fire_*` / `last_red_fire_*` snapshot fields only update
-when a user-shared `/context` confirms the crossing. This prevents
-noisy re-firing of unverified estimates. When the user responds
-with `/context` output, the agent treats the shared value as Mode 1
-input.
-
-**Human-requested handoff.** When the user requests handoff, the
-agent commits in-flight work, finalizes the snapshot, outputs a
-pasteable resume prompt pointing at the snapshot, and ends the
-session. The new conversation resumes from the snapshot.
-
-**Auto-handoff mode.** A configurable setting controls whether the
-lead MAY automatically execute the Rule 10(a) handoff procedure
-when the red threshold has been confirmed crossed at a safe seam.
-
-<!-- {auto_handoff_mode}: Populated by /ai-dlc-setup Step 2. One of
-     `off`, `deploy-only`, or `safe-seam`. Defaults: new installs
-     use `safe-seam`; upgrades from a pre-feature install default
-     to `off`. -->
-
-```
-auto_handoff_mode: {auto_handoff_mode}
-```
-
-Mode semantics:
-
-- `off` — Auto-handoff MUST NOT fire at any seam. Yellow and red
-  reminders remain non-blocking; the user decides when to handoff.
-- `deploy-only` — Auto-handoff MAY fire only at the
-  `deploy-validate.md` Step 0 pre-flight context check when that
-  check cannot otherwise be satisfied.
-- `safe-seam` — Auto-handoff MAY fire at every safe seam defined
-  in `gate-validation.md` "Auto-handoff evaluation" (Seam A deploy
-  pre-flight, Seam B end-of-step before gate validation, Seam C
-  story transitions, Seam D between adversarial passes) when all
-  preconditions are met.
-
-Every seam is an EVALUATION point. Evaluation fires handoff ONLY
-when ALL of these preconditions hold:
-
-1. `auto_handoff_mode` permits firing at this seam.
-2. `context_reminders_sent: red` in the snapshot (red threshold
-   confirmed crossed under Mode 1 via user-shared `/context`).
-   Mode 2 fallback estimates MUST NOT fire auto-handoff.
-3. Snapshot is current: either `gate-validation.md` Check 15 passed
-   on the most recent gate, or the sub-step snapshot update just
-   refreshed the snapshot successfully.
-4. No gate validation is currently executing.
-5. No deployment is currently executing.
-6. No teammate is awaiting a lead orchestration response.
-7. No pending user directive awaits response (lead is not at any
-   pause point in SKILL.md Rule 7).
-
-Auto-handoff execution follows the Rule 10(a) 4-step procedure
-without modification. Auto-handoff is NOT an additional pause
-point — it is a session-terminating action.
-
-Auto-handoff output MUST be distinguishable from a human-requested
-handoff. The lead outputs this line immediately before the Rule 10
-resume prompt:
-
-> *"Auto-handoff triggered by auto_handoff_mode=<mode> at
-> <seam_name>. Context at <tokens> tokens, red threshold confirmed
-> via user-shared /context."*
-
-The agent does NOT force handoff at any context threshold under
-`auto_handoff_mode: off`.
-
----
-
-## Post-Compact Recovery Protocol
-
-This protocol is placed in CLAUDE.md (not only in the skill file) so
-it survives `/compact` and is visible to the lead when conversation
-history has been replaced by a summary. SKILL.md Rule 10
-cross-references this section as the authoritative recovery
-directive.
-
-If the previous user turn was `/compact` or an auto-compact event,
-OR if the agent observes signs the conversation history has been
-replaced by a summary (e.g., missing earlier turns referenced by
-the snapshot's Recent Activity, a summary-style opening rather than
-a user directive, or the agent cannot recall specifics that the
-snapshot records), the agent's FIRST action MUST be to read
-`_bmad-output/pipeline-snapshot.md` in full before any pipeline
-action. The first output line MUST acknowledge the recovery,
-naming the current step file and last gate passed. This supersedes
-the Rule 10(b) interpretation-preamble requirement (Rule 10(b)
-above) for the first post-compact response only.
-
-**Verification turn.** Immediately after the acknowledgment line,
-the agent MUST output:
-
-- Current step file (from snapshot `Pipeline Position`)
-- Last completed gate with timestamp (from snapshot `Pipeline
-  Position`)
-- Any in-flight sub-step from `Recent Activity`
-- Current git branch and last commit (run `git branch --show-current`
-  and `git log -1 --oneline`)
-
-The agent then proceeds immediately to the next pipeline action in
-the same response. The agent MUST NOT pause for user confirmation.
-The user retains the ability to interrupt on the next turn by
-sending a correction or requesting handoff. The verification turn
-output exists for transparency — the user sees what the lead
-believes about current state before the lead acts on it.
-
----
-
-## Story Validation Origin Check
-
-When a story is created to address a specific CLAUDE.md requirement,
-user feedback, or carry-over item, the story validation gate MUST
-verify that the original requirement is satisfied -- not just the
-story's own acceptance criteria. If the story ACs do not fully
-satisfy the original requirement, the story fails validation
-regardless of whether its own ACs pass.
-
----
-
-## Pre-Deploy Schema/API Field Check
-
-<!-- Customize this for your project's API layer:
-     - GraphQL: introspection query against live schema
-     - REST: verify OpenAPI spec matches live endpoint
-     - gRPC: verify proto definitions match deployed service -->
-
-Before adding any new field to an API query, dev teammates MUST
-verify the field exists in the live schema/API via verification
-against the deployed service. If the field does not exist in the
-currently deployed service, the query change MUST be gated behind
-the service deployment (deploy the schema change first, verify the
-field exists, then update queries). Unknown fields cause hard
-errors.
+## AI/DLC pipeline
+
+The AI/DLC autonomous development pipeline is available via the
+`/ai-dlc` skill. Pipeline operating rules (autonomy rules, session
+model, recovery protocol, gate validation) live in the skill and
+load into context ONLY when `/ai-dlc` is invoked. When the skill is
+not invoked, this file and project code are the only project-specific
+context Claude sees.
+
+- Skill entry point: `.claude/skills/ai-dlc/SKILL.md`
+- Step files: `.claude/skills/ai-dlc/steps/`
+- Team role definitions: `.claude/team-roles/`
+- Onboarding and phase reference: `QUICKSTART.md`
+
+This file does NOT contain AI/DLC autonomy rules, session model
+directives, or pipeline recovery protocols. If you are looking for
+Rule 1 through Rule 18, the Post-Compact Recovery Protocol, or the
+context threshold reminders, read SKILL.md instead.
 
 ---
 
 ## Project Operations Protocol
 
 <!-- {project_operations_protocol}: Define your project's deployment
-     infrastructure rules here. This section should contain:
-     - Default deployment commands and presets
+     infrastructure rules here. This section applies to any engineer
+     deploying this project, AI/DLC or otherwise. Contents typically
+     include:
+     - Default deployment commands and environment presets
      - Environment-specific deployment configurations
      - Pre-deployment checks (indexing status, migration status,
        health checks)
      - Service restart policies
      - Rollback procedures
-     - Any high-cost operations that require human approval -->
+     - High-cost operations that require human approval -->
 
 {project_operations_protocol}
 
 ---
 
-## Post-Gate Deployment Configuration
+## Deployment Commands
 
-The authoritative deployment and validation sequence is in the step
-files (`sprint-review.md` → `deploy-validate.md` → `retro.md`). The
-step files define execution; this section provides project-specific
-configuration the step files reference.
+These are the project's canonical deployment and smoke-test commands.
+They are referenced by `.claude/skills/ai-dlc/steps/deploy-validate.md`
+during pipeline deployment and are listed here so any engineer can
+find them.
 
+<!-- {deploy_command}: Your project's build and deploy command -->
 - Deploy command: `{deploy_command}`
-  <!-- {deploy_command}: Your project's build and deploy command -->
+
+<!-- {smoke_test_command}: Your project's live smoke test command -->
 - Smoke test command: `{smoke_test_command}`
-  <!-- {smoke_test_command}: Your project's live smoke test command -->
-
-The Production Validation Checkpoint after deployment is the only
-human checkpoint in the pipeline (SKILL.md Rule 6, Rule 7). For
-multi-sprint features (Rule 9), the checkpoint runs after each
-sprint; the agent does not proceed to the next sprint until the
-human validates the current one.
-
-Never ask the human to deploy. Never report "ready for review"
-without having already deployed and validated the running
-production instance.
 
 ---
 
 ## Coding Conventions
 
-Coding conventions for this project live in
-`docs/coding-conventions.md`. Agents performing implementation
-(dev, code-reviewer, QA) MUST read that file before writing or
-reviewing code. Planning-only sessions do not need to load it.
+Coding conventions for this project live in `docs/coding-conventions.md`.
+Any agent writing or reviewing code in this project MUST read that file
+before starting. This applies whether the work is inside the AI/DLC
+pipeline or a one-off change.
 
 ---
 
