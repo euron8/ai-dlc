@@ -489,3 +489,108 @@ additional item is now load-bearing: Check 14's Mode 1/Mode 2
 distinction. If a future change advances `context_reminders_sent`
 under Mode 2, the Mode-1-only guarantee breaks and R20's
 contract is violated. Preserve the distinction.
+
+---
+
+## 2026-04-18 Follow-up (R21)
+
+R3 landed the post-compact verification turn as a mandatory pause —
+the lead re-read the snapshot, output current step / last gate /
+in-flight sub-step / branch + commit, then paused with *"Does this
+match your last state? Reply `proceed`, `correct <what>`, or
+`handoff`."* The pause was specified to surface summary drift
+before any post-compact action. On closer analysis, the pause's
+rescue capability for the drift class it protected against is
+overstated. R21 removes the pause while keeping the protections
+that do real work.
+
+### R21 — Remove the post-compact verification pause
+
+**What changed.**
+
+- `SKILL.md` Rule 7 moves from four pause points to three. Pause
+  point (d) (post-compact verification) is removed. The Rule 10
+  cross-reference to the Post-compact recovery no longer says
+  "executes the verification turn and pauses per Rule 7(d)"; it
+  says the lead outputs the verification turn content and proceeds
+  immediately. Auto-handoff text and the summary enumeration at
+  the end of Rule 10 now say "three pause points" and "not a
+  fourth pause point".
+- `CLAUDE.md.template` Post-Compact Recovery Protocol keeps the
+  snapshot re-read and verification turn output as mandatory,
+  removes the mandatory pause, and states the lead proceeds
+  immediately in the same response. The user retains the ability
+  to interrupt on the next turn with `correct <what>` or
+  `handoff`.
+- `QUICKSTART.md.template` "Key design principles" updates from
+  four pause points to three. A short note explains post-compact
+  recovery still outputs a verification turn for transparency but
+  does not gate the pipeline. The Context Window Guide's "Recovery
+  from `/compact`" bullet drops the "pauses for the user to
+  confirm" framing.
+
+**Why R3's pause requirement was overstated.** R3 framed the pause
+as a rescue for conversation-only state loss during compaction.
+Handoff to a new session does not rescue that class of drift
+either — conversation-only state was never in the snapshot, and
+neither path (proceed through the pause, or handoff) brings it
+back. Both compact-plus-proceed and handoff-to-new-session lose
+the same state. A mandatory pause that gates the pipeline on a
+user reply the user usually cannot meaningfully provide is a pause
+tax, not a rescue.
+
+**What remains in place as protection.**
+
+- **Snapshot re-read (mandatory).** The lead MUST read
+  `_bmad-output/pipeline-snapshot.md` in full as its first action
+  after a `/compact` or auto-compact event. This catches detectable
+  drift against on-disk state (git branch, sprint-status.yaml,
+  story files, gate log) without requiring user input. This is
+  the protection that does real self-correction work.
+- **Verification turn output (mandatory).** The lead MUST output
+  current step file, last completed gate with timestamp, any
+  in-flight sub-step from Recent Activity, and current git branch
+  and last commit. An engaged user sees this output and can
+  interrupt on the next turn if they observe something wrong. The
+  verification turn gives the user a detection window without
+  gating the pipeline.
+- **Rule 10(a) handoff remains available.** Handoff is a
+  user-initiated action the user MAY request at any time,
+  including immediately after reading a post-compact verification
+  turn. It is not a rescue mechanism for conversation-only state
+  loss — handoff and proceed lose the same state — but it remains
+  the escape hatch for a user who chooses to start a fresh session
+  for unrelated reasons.
+
+**Pause points in the updated Rule 7.** The three pause points in
+SKILL.md Rule 7 after R21 are the complete set:
+
+- (a) Ambiguity resolution (Rule 4)
+- (b) Production Validation Checkpoint (Rule 6)
+- (c) Retro commentary prompt
+
+No fourth pause point exists. Auto-handoff and Rule 10(a) handoff
+are session-terminating actions, not pauses. Yellow and red
+reminders are non-blocking output, not pauses.
+
+**Backward compatibility.** Projects that installed AI/DLC before
+R21 have the R3 pause in their CLAUDE.md. Those installations
+continue to function — the pause was itself not harmful, only more
+cautious than necessary. No migration is required. Users who
+re-run `/ai-dlc-setup` against an existing install MAY receive the
+updated CLAUDE.md template during any future re-install. R21 does
+not require setup-wizard changes.
+
+**One stale reference remains.** `gate-validation.md`
+"Auto-handoff evaluation" precondition 7 still lists "the
+post-compact verification turn" among the Rule 7 pause points
+whose active presence returns CONTINUE. Post-R21 the verification
+turn is instantaneous output rather than a pause, so this
+reference never fires in practice. The reference is inert but
+semantically stale; a future cleanup pass may update the text to
+match the three-point Rule 7 enumeration. Out of scope for R21.
+
+**Dependency re-verification checklist unchanged.** R1–R12's
+checklist still applies. R21 does not change the
+CLAUDE.md-survives-compact, `/context` accuracy, or
+system-reminder-injection dependencies.

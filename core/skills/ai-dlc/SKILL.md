@@ -87,25 +87,25 @@ in a single conversation.
    and smoke tests, present the Production Validation Checkpoint to the
    human (CLAUDE.md Post-Gate Deployment).
 7. **Never stall the pipeline.** The pipeline runs as a continuous,
-   uninterrupted flow. There are exactly FOUR points where you stop
+   uninterrupted flow. There are exactly THREE points where you stop
    and wait for human input:
    - (a) Ambiguity resolution (Rule 4) — including the three-option
      prompt when handoff is requested at an unsafe seam
    - (b) Production Validation Checkpoint (Rule 6)
    - (c) Retro commentary prompt
-   - (d) Post-compact verification turn (CLAUDE.md "Post-Compact
-     Recovery Protocol") — after a `/compact` or auto-compact event,
-     the lead re-reads the snapshot, outputs current step file, last
-     gate with timestamp, any in-flight sub-step, and git branch +
-     last commit, then pauses with: *"Does this match your last
-     state? Reply `proceed`, `correct <what>`, or `handoff`."* The
-     pipeline does not resume until the user responds.
 
-   **Handoff is not a fifth pause point.** When Rule 10 handoff is
+   Post-compact recovery outputs a verification turn for user
+   transparency (see CLAUDE.md "Post-Compact Recovery Protocol")
+   but MUST NOT pause the pipeline. The lead outputs the
+   verification turn content and proceeds to the next pipeline
+   action in the same response. The user MAY interrupt on the
+   next turn to correct mismatched state or request handoff.
+
+   **Handoff is not a fourth pause point.** When Rule 10 handoff is
    triggered (path a), the session ENDS rather than pauses — the
    outgoing lead finalizes the pipeline snapshot, outputs a resume
    prompt pointing at it, then terminates. The new session is a
-   separate conversation, not a continuation of this one. The four
+   separate conversation, not a continuation of this one. The three
    pause points above apply only within a running pipeline; handoff
    is a session-terminating action, not a stop. The Rule 10(b) and
    (c) reminders are also NOT pauses — the lead outputs each reminder
@@ -119,7 +119,7 @@ in a single conversation.
    multi-pass adversarial review — you keep working. Do not stop and
    wait for human input. Do not ask if you should continue. Do not
    treat a natural break point within a step as a stopping point. If
-   you are not at one of the four pause points listed above, you are
+   you are not at one of the three pause points listed above, you are
    not done — keep going until you reach one.
 
    **Show your work.** This rule is about not stopping, not about
@@ -261,9 +261,12 @@ in a single conversation.
     CLAUDE.md "Post-Compact Recovery Protocol" (placed there so it
     survives compaction). On any `/compact` or auto-compact event,
     the lead reads the snapshot in full, outputs the recovery
-    acknowledgment line, then executes the verification turn and
-    pauses per Rule 7(d). Do not duplicate the directive here; the
-    CLAUDE.md section governs.
+    acknowledgment line, outputs the verification turn content
+    (current step file, last gate with timestamp, any in-flight
+    sub-step, current git branch and last commit), and proceeds
+    immediately to the next pipeline action in the same response.
+    The verification turn is not a pause point. Do not duplicate
+    the directive here; the CLAUDE.md section governs.
 
     **Threshold defaults (model-aware, absolute token counts).**
 
@@ -373,9 +376,9 @@ in a single conversation.
       `context_reminders_sent` to `red`, which is the precondition
       the helper reads. This is an absolute constraint — Mode 2
       estimates are advisory only.
-    - Auto-handoff is NOT a fifth pause point. It is a
+    - Auto-handoff is NOT a fourth pause point. It is a
       session-terminating action that executes the path (a)
-      procedure unchanged. The four pause points in Rule 7 remain
+      procedure unchanged. The three pause points in Rule 7 remain
       the complete set.
     - Auto-handoff output MUST be distinguishable from a
       human-requested handoff: the lead outputs the auto-handoff
@@ -403,9 +406,9 @@ in a single conversation.
 
     Path (a) handoff requests (direct or in reply to a reminder) are
     user-initiated directives handled via existing Rule 4(a)
-    ambiguity resolution. The four pause points in Rule 7 —
-    (a) ambiguity, (b) production validation, (c) retro, (d)
-    post-compact verification — are the complete set.
+    ambiguity resolution. The three pause points in Rule 7 —
+    (a) ambiguity, (b) production validation, (c) retro — are the
+    complete set.
 
     ### Starting simple
 
