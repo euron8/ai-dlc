@@ -92,6 +92,16 @@ the pipeline working. Output the work, then immediately continue to
 the next action. The distinction: outputting and continuing (correct)
 vs. outputting and waiting for a response (stalling).
 
+**Execute validation sub-skills inline.** `/bmad-party-mode`,
+`/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`, and
+`/bmad-validate-prd` MUST be invoked via the Skill tool in the lead's
+own conversation. Do NOT route them through the Agent or Task tool.
+The lead role-plays each perspective inline so the debate, probe, or
+review enters the lead's working context and is visible to the human.
+Subagent delegation is reserved for implementation-phase teammates
+spawned per `implementation.md`. A validation sub-skill whose output
+appears only as a summarized subagent return is a rule violation.
+
 ### Rule 4 -- Every step must be completed in full
 
 When a step file is loaded via "READ AND FOLLOW", execute every
