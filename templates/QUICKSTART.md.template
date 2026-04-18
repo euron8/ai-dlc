@@ -50,7 +50,7 @@ conversation, from the user's initial request through production deployment.
 - **Autonomous gates.** Phase transitions run the gate validation protocol
   automatically. No human approval is needed between phases.
 - **Three pause points.** These are the only three points where the
-  pipeline pauses for human input (SKILL.md Rule 7):
+  pipeline pauses for human input (SKILL.md Rule 3):
   1. **Ambiguity resolution.** Whenever the router or a pipeline
      step detects genuine ambiguity in the user's request,
      requirements, or intent, the pipeline pauses to ask one
@@ -66,10 +66,10 @@ conversation, from the user's initial request through production deployment.
   transparency (current step, last gate, in-flight sub-step, git
   branch + last commit) so the user can observe what the lead
   believes about current state, but it does not block the
-  pipeline. See CLAUDE.md "Post-Compact Recovery Protocol".
+  pipeline. See SKILL.md "Post-Compact Recovery Protocol".
 - **Requirements are locked.** The pipeline has autonomy over HOW to
-  implement. It does NOT have autonomy over WHAT is implemented (CLAUDE.md
-  Rule 8).
+  implement. It does NOT have autonomy over WHAT is implemented
+  (SKILL.md Rule 13).
 
 ### File structure
 
@@ -328,8 +328,8 @@ in the role file must match your environment.
 ## Context Window Guide
 
 The AI/DLC pipeline runs in a single conversation by default.
-Context management is governed by SKILL.md Rule 10 and CLAUDE.md
-Session Model.
+Context management is governed by SKILL.md Rule 2 and the
+Handoff Protocol section in SKILL.md.
 
 **Pipeline snapshot is the primary state vehicle.** The lead
 maintains `_bmad-output/pipeline-snapshot.md` throughout the
@@ -348,11 +348,12 @@ window and load artifacts independently — they do not inherit the
 lead's conversation history.
 
 **Context thresholds.** The lead emits two non-blocking reminders
-at model-aware absolute token thresholds. Defaults (Rule 10):
-200K model → yellow 80K, red 120K; 1M model → yellow 120K, red
-200K. Projects override via `{context_thresholds}` populated by
-`/ai-dlc-setup`. Reminders are one-line outputs, not pauses — the
-pipeline continues after the lead emits each line.
+at model-aware absolute token thresholds. Defaults (SKILL.md
+Handoff Protocol "Threshold defaults"): 200K model → yellow 80K,
+red 120K; 1M model → yellow 120K, red 200K. Projects override by
+editing the threshold table in SKILL.md directly. Reminders are
+one-line outputs, not pauses — the pipeline continues after the
+lead emits each line.
 
 **Reminders recur.** After the first crossing, each reminder
 re-fires every 50K tokens OR every 20 turns past the last fire,
@@ -363,35 +364,34 @@ long sessions.
 reliably self-measure its own context window. User-shared
 `/context` output is authoritative. The lead may invite the user
 to share `/context` at any point. When none is available, the
-lead falls back to an advisory estimate (CLAUDE.md Session Model
-Mode 2) and emits a lighter check-line asking for confirmation
+lead falls back to an advisory estimate (SKILL.md Handoff Protocol
+"Reminder semantics" Mode 2) and emits a lighter check-line asking
+for confirmation
 instead of the full reminder; recurrence arithmetic only advances
 on user-shared values.
 
 **Hitting limits — formal handoff.** When context is degrading,
-use the Rule 10(a) handoff procedure: the lead commits in-flight
+use the Rule 2(a) handoff procedure: the lead commits in-flight
 work, finalizes the snapshot, outputs a pasteable resume prompt,
 and ends the session. Resume in a new conversation by pasting
 that resume prompt (beginning with *"Resuming an ai-dlc sprint
 from handoff checkpoint. Pipeline snapshot:
-`_bmad-output/pipeline-snapshot.md`."*). See SKILL.md Rule 10 for
-the full procedure and resume prompt template.
+`_bmad-output/pipeline-snapshot.md`."*). See SKILL.md Handoff
+Protocol section for the full procedure and resume prompt template.
 
 **Auto-handoff (configurable).** The `auto_handoff_mode` setting in
-CLAUDE.md Session Model controls whether the lead automatically
-executes the Rule 10(a) procedure at defined safe seams when the
-red threshold has been confirmed crossed via user-shared
-`/context`. Three modes selected at setup time (`/ai-dlc-setup`
-Step 2):
+SKILL.md Handoff Protocol "Auto-handoff" section controls whether
+the lead automatically executes the Rule 2(a) procedure at defined
+safe seams when the red threshold has been confirmed crossed via
+user-shared `/context`. Three modes; edit SKILL.md to change:
 
 - `off` — Never fires. Reminders remain non-blocking; you decide
-  when to handoff. Pre-feature behavior preserved.
+  when to handoff. Default for new installs.
 - `deploy-only` — Fires only at `deploy-validate.md` Step 0
   pre-flight when the existing hard gate cannot be satisfied.
 - `safe-seam` — Fires at every safe seam (deploy pre-flight,
   before each gate, after each story transition, between
-  adversarial review passes) when all preconditions hold. Default
-  for new installs.
+  adversarial review passes) when all preconditions hold.
 
 Every seam is an EVALUATION point. The shared helper in
 `gate-validation.md` checks seven preconditions (mode permits,
@@ -401,15 +401,15 @@ only when all hold. Mode 2 fallback estimates cannot trigger
 auto-handoff — only user-shared `/context` advances
 `context_reminders_sent` to `red`.
 
-Auto-handoff is NOT a fourth pause point — it is a
-session-terminating action. Resume itself remains manual: the
+Auto-handoff is NOT a fourth pause point (the pipeline has only the
+three Rule 3 pause points) — it is a session-terminating action. Resume itself remains manual: the
 user opens a new conversation and pastes the resume prompt. Auto-
 handoff output is distinguishable from a human-requested handoff
 via a preceding line naming the mode, seam, and confirmed token
 count.
 
 **Recovery from `/compact`.** After a `/compact` or auto-compact
-event, the Post-Compact Recovery Protocol (CLAUDE.md) fires: the
+event, the Post-Compact Recovery Protocol (SKILL.md) fires: the
 lead re-reads the snapshot, acknowledges recovery, outputs the
 verification turn (current step, last gate, in-flight sub-step,
 git branch + last commit), and proceeds immediately to the next
@@ -527,8 +527,13 @@ you through every template variable.
 
 **Manual alternative:**
 
-1. **CLAUDE.md:** Replace all `{template_variables}` with your project's
-   values. Key variables:
+1. **CLAUDE.md:** This is a thin file that contains only
+   project-general configuration (project identity, operations
+   protocol, deploy commands, a pointer to coding conventions, and
+   key references). AI/DLC pipeline rules live in SKILL.md and load
+   only when `/ai-dlc` is invoked. Replace all `{template_variables}`
+   with your project's values. Key variables:
+   - `{project_identity}` -- one-paragraph description of the project
    - `{deploy_command}` -- your deployment command
    - `{smoke_test_command}` -- your smoke test command
    - `{project_operations_protocol}` -- your infrastructure rules
@@ -641,13 +646,13 @@ re-review cycles would stall at every write). Always work on a git branch
 so you can revert if an agent makes an unexpected change.
 
 **Pipeline interruption.** If the pipeline is interrupted, resume
-using the SKILL.md Rule 10 handoff resume prompt. In a new
+using the SKILL.md Handoff Protocol resume prompt. In a new
 conversation paste: "Resuming an ai-dlc sprint from handoff
 checkpoint. Pipeline snapshot: `_bmad-output/pipeline-snapshot.md`."
 Do NOT re-invoke `/ai-dlc` with a plain description. The router
 treats any input that does not begin with the resume signal as a
 fresh pipeline run and archives the existing snapshot. See SKILL.md
-Rule 10 for the full resume prompt template.
+Handoff Protocol section for the full resume prompt template.
 
 **BMAD skips to implementation.** If the agent starts coding during a
 planning step, the step file instructions should prevent this. If it
