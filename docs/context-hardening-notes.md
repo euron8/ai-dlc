@@ -811,3 +811,68 @@ Claude Code updates. R22 adds one additional item to watch:
   verification turn, proceeds. If the lead later needs Rule 14
   (multi-sprint phasing) and it appears missing from context, the
   lead asks the user to re-invoke `/ai-dlc`.
+
+---
+
+## 2026-04-18 Follow-up (R23)
+
+R22 relocated pipeline rules from CLAUDE.md to SKILL.md but did not
+update the `/ai-dlc-setup` wizard to recognize pre-R22 CLAUDE.md
+sections that had moved. On upgrade from a pre-R22 install, Step 0a
+could classify old Autonomy Rules, Session Model, Post-Gate
+Deployment, Post-Compact Recovery Protocol, Story Validation Origin
+Check, or inline Pre-Deploy Schema/API Field Check content as
+"project-specific rules" and attempt to re-inject them into the new
+thin CLAUDE.md or the new coding-conventions.md. R23 closes that gap.
+
+### R23 -- Pre-R22 section exclusion in Step 0
+
+`core/skills/ai-dlc-setup/SKILL.md` Step 0a gained an exclusion list
+for pre-R22 section headers, gated on `prior_ai_dlc_install == true`.
+The list enumerates each section that R22 relocated, maps it to its
+new authoritative location, and instructs the wizard to skip the
+entire section body during absorption. Detected-and-excluded
+sections are recorded as `r22_excluded_sections` for display in the
+absorption summary.
+
+Step 0c gained a duplicate guard for Pre-Deploy Schema/API Field
+Check. The new `coding-conventions.md.template` ships with this
+section baked in; on pre-R22 upgrades, the archived coding-
+conventions.md version is skipped to prevent duplication. On non-
+AI/DLC upgrades (`prior_ai_dlc_install == false`) the archived
+version is treated as user content and surfaced in Step 7 for
+reconciliation.
+
+Step 0e absorption summary gained two new blocks, both conditional
+on `prior_ai_dlc_install == true`: a list of pre-R22 sections that
+were not absorbed (with their new locations) and a list of duplicate
+guards that fired. Returning users now see, in one place, what the
+wizard recognized as relocated AI/DLC content versus what it
+absorbed as project-specific.
+
+The `prior_ai_dlc_install` flag, set in Step 0a but previously
+consumed only by auto_handoff_mode handling, now has two additional
+consumers: the Step 0a exclusion list and the Step 0c duplicate
+guard.
+
+### What this fixes
+
+Upgrade from pre-R22 to post-R22 no longer requires manual cleanup
+of duplicated or re-injected rule text. The install flow plus the
+wizard produce the same end state as a fresh install: thin CLAUDE.md
+with only project configuration, pipeline rules in SKILL.md at
+unified numbering.
+
+### What remains outside R23 scope
+
+- Generalizing the section-provenance model for future relocations
+  (Option B in the R23 design conversation). R23 is R22-specific.
+  If a future change relocates rules again, Step 0a needs another
+  surgical edit.
+- Upgrade-specific routing (Option C). Pre-R22 upgrades still run
+  the full wizard starting from Step 0; there is no dedicated
+  upgrade flow.
+- Automated cleanup of pre-R22 content that users may have
+  customized and want to preserve elsewhere. The archive at
+  docs/pre-ai-dlc/<timestamp>/ remains the source of truth for
+  anything a user wants to salvage manually.
