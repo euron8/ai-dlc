@@ -58,7 +58,7 @@ Log task list validation in gate log.
 Instruct all teammates:
 - Read `docs/coding-conventions.md` before writing or reviewing code
 - Read architecture doc and assigned story files before writing code
-- Use three-tier escalation model (Rule 4)
+- Use three-tier escalation model (Rule 12)
 - Update sprint-status.yaml in same commit as story status changes
 
 **Dev teammates — mandatory evidence requirements:**

@@ -28,7 +28,7 @@ For each OPEN item in the backlog, evaluate:
 1. **Still valid?** Has it been superseded? Has affected code changed?
 2. **Effort and complexity?** Single story or multiple?
 3. **Dependencies?** On other backlog items?
-4. **Option check (Rule 8):** Does this item list multiple implementation
+4. **Option check (Rule 13):** Does this item list multiple implementation
    options or scope levels? If YES:
    - Evaluate options using project context and user preferences
    - Select the best option

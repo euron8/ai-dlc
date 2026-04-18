@@ -71,7 +71,7 @@ advisory, not structural.
 - List which files were modified and which enforcement layers were added
 
 **Rule text authoring:**
-Follow CLAUDE.md Rule 11. Rules must be imperative or MUST/MUST NOT/SHALL,
+Follow SKILL.md Rule 18. Rules must be imperative or MUST/MUST NOT/SHALL,
 state the enforcement consequence inline, and contain no origin narrative.
 The WHY of each improvement goes in the commit message below, not in the
 rule file.
@@ -79,7 +79,7 @@ rule file.
 **Rule file audit (every retro):**
 
 After applying the process improvements above, scan the following files
-for violations of CLAUDE.md Rule 11:
+for violations of SKILL.md Rule 18:
 
 - `CLAUDE.md`
 - `docs/coding-conventions.md`
@@ -104,7 +104,7 @@ Per finding, judge case by case:
   narrative is removed?
   - **Yes** → strip the narrative; the WHY goes to the audit commit message.
   - **No** → the rule is leaning on the story. Rewrite it hard (see
-    Rule 11 style), or mark for removal and raise during Step 5 human
+    Rule 18 style), or mark for removal and raise during Step 5 human
     commentary.
 - For rule weakness: rewrite the rule using imperative or MUST/MUST NOT/SHALL.
   If the soft language was intentional (genuine advisory preference),

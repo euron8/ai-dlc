@@ -35,7 +35,7 @@ if research surfaces new constraints or opportunities.
   the source requirement verbatim. Preserve specific details. Do not
   generalize.**
 
-### 2a. Propagate Locked Requirements (Rule 8)
+### 2a. Propagate Locked Requirements (Rule 13)
 
 Copy the `LOCKED_REQUIREMENTS` block from the product brief into the PRD.
 If the PRD adds new requirements derived from research, add those to the
@@ -48,7 +48,7 @@ but does not create new locked WHAT requirements.
 Invoke `/bmad-validate-prd` — structured completeness check. Fix all
 gaps found.
 
-### 4. Validation Cycle (Rule 3)
+### 4. Validation Cycle (Rule 8)
 
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**

@@ -21,7 +21,7 @@ Read existing artifacts if they exist:
 - `_bmad-output/planning-artifacts/doc-reconciliation.md` (brownfield-c)
 - Project memory files in user's memory directory
 
-### 2. Option Check (Autonomy Rule 8)
+### 2. Option Check (Rule 13)
 
 Scan the user's feature description and any referenced carry-over items
 for multiple implementation options or scope levels (e.g., "A: X, B: Y,
@@ -31,7 +31,7 @@ C: Z"). If any item presents options:
 - Select the best option and document as `DECIDED_AUTONOMOUSLY` in
   `docs/escalations/pending.md`
 - If options represent fundamentally different features (not just
-  implementation approaches), seek clarity from the user per Rule 10
+  implementation approaches), seek clarity from the user per Rule 11
 
 ### 3. Brainstorm
 
@@ -48,7 +48,7 @@ Invoke `/bmad-brainstorming` — structured CIS ideation:
 - For **feature/brownfield-a/c**: UPDATE the existing brief — add a
   section for the new scope. Do not rewrite existing content.
 
-### 4a. Extract Locked Requirements (Rule 8)
+### 4a. Extract Locked Requirements (Rule 13)
 
 After the brief is created/updated, extract all user-specified requirements
 into a `LOCKED_REQUIREMENTS` block at the top of the artifact:
@@ -71,7 +71,7 @@ Be exhaustive. Every concrete detail the user specified (placement, scope,
 behavior, approach) is a locked requirement. Do not paraphrase — quote
 verbatim or as close to verbatim as the source allows.
 
-### 5. Validation Cycle (Rule 3)
+### 5. Validation Cycle (Rule 8)
 
 Run the full validation cycle on the brief. **Execute all sub-skills
 back-to-back without pausing for human input between them:**
