@@ -594,3 +594,220 @@ match the three-point Rule 7 enumeration. Out of scope for R21.
 checklist still applies. R21 does not change the
 CLAUDE.md-survives-compact, `/context` accuracy, or
 system-reminder-injection dependencies.
+
+---
+
+## 2026-04-18 Follow-up (R22)
+
+R1–R21 hardened the reminders, snapshot contract, recovery protocol,
+and auto-handoff path. They left one assumption unexamined:
+**CLAUDE.md as the survival surface.** The R3 design placed the
+Post-Compact Recovery Protocol in CLAUDE.md specifically because it
+had to survive compact. That framing overstated what compact removes.
+Per Anthropic's Claude Code documentation, invoked skills are
+re-attached after auto-compact (first 5,000 tokens of each, within a
+25,000-token combined budget across invoked skills). Skills survive
+compact. CLAUDE.md is not the only survival surface.
+
+This has a corollary the design did not face until R22: **CLAUDE.md
+auto-loads on every session, whether or not `/ai-dlc` is invoked.**
+An engineer working on an AI/DLC-installed project without invoking
+the pipeline gets all the AI/DLC rules bled into their context.
+Rule 11(b) preamble, Rule 12 escalation tiers, Rule 3 no-stalling,
+post-compact recovery directives -- all of it -- applies to
+non-pipeline sessions because CLAUDE.md cannot scope itself.
+
+R22 relocates the AI/DLC operating rules from CLAUDE.md to SKILL.md
+so the rules load ONLY when `/ai-dlc` is invoked. CLAUDE.md becomes
+a thin template of project-general configuration (project identity,
+deployment commands, operations protocol, coding conventions
+pointer, key references).
+
+### R22 -- Relocate AI/DLC operating rules to SKILL.md
+
+**What changed.**
+
+- `templates/CLAUDE.md.template` trimmed from ~5,200 tokens to ~880
+  tokens. Retains project identity placeholder, Project Operations
+  Protocol, deployment commands, coding conventions pointer, and
+  Key References. A new section points engineers at SKILL.md for
+  pipeline rules and explains the scoping model: rules load only
+  when `/ai-dlc` is invoked.
+
+- `core/skills/ai-dlc/SKILL.md` restructured to hold the pipeline
+  rules that previously lived in CLAUDE.md. The ten Critical Rules
+  and eleven Autonomy Rules merged into a single unified rule set
+  of eighteen rules, resolving the dual numbering overhead flagged
+  as INFO-1 in the 2026-04-16 compliance review. Rules 1-13 plus
+  the Handoff Protocol section plus the Post-Compact Recovery
+  Protocol fit within the first 5,000 tokens of the file. Rules
+  14-18 sit past the 5K boundary and may be dropped by re-attachment
+  after compact; they are operational quality-of-life rules
+  (multi-sprint phasing, changelog habit, file-write sizing, rule
+  style guidance) rather than immediate-flow directives. The file
+  explicitly documents the re-invocation fallback: if content
+  appears missing after compact, re-invoke `/ai-dlc`.
+
+- `core/skills/ai-dlc/research-citations.md` added as a new
+  supporting file. The research citations that previously lived in
+  Rule 10's footnote move here, referenced from SKILL.md but not
+  loaded automatically. Keeps SKILL.md under the 5K budget.
+
+- `core/skills/ai-dlc/steps/gate-validation.md` gains Check 3a
+  (story validation origin check), placed after Check 3 to avoid
+  renumbering existing Checks 4-15. The check fires only at
+  story-level validation gates. This is where the CLAUDE.md "Story
+  Validation Origin Check" section moves to.
+
+- `templates/coding-conventions.md.template` gains a Pre-Deploy
+  Schema/API Field Check section between API conventions and
+  Production Integrity Tests. The CLAUDE.md section with the same
+  name moves here and gains directive language (verification method
+  examples, evidence requirement, severity classification).
+
+- `core/team-roles/code-reviewer.md` gains a mandatory severity
+  classification entry for missing pre-deploy field verification,
+  parallel to the existing Unverifiable API Field Names entry.
+
+### What is preserved
+
+- Post-Compact Recovery Protocol behavior is unchanged: read
+  snapshot, output acknowledgment, output verification turn, proceed
+  immediately (no pause). The directive text moves from CLAUDE.md to
+  SKILL.md; the pipeline's behavior is identical.
+
+- All gate-validation.md Checks 1-15 continue to work as before.
+  Check 3a is additive and self-scopes to story gates only.
+
+- `/ai-dlc-setup` continues to populate the CLAUDE.md template
+  variables that remain: `{project_identity}`,
+  `{project_operations_protocol}`, `{deploy_command}`,
+  `{smoke_test_command}`. The removed template variables
+  (`{context_thresholds}`, `{auto_handoff_mode}`) move their
+  authoritative home to gate-validation.md and SKILL.md; the setup
+  wizard no longer needs to populate them in CLAUDE.md.
+
+- Auto-handoff configuration and mode semantics: the authoritative
+  location is now SKILL.md Handoff Protocol section "Auto-handoff
+  (configurable via `auto_handoff_mode`)" plus gate-validation.md
+  "Auto-handoff evaluation". The CLAUDE.md Session Model block is
+  removed; its content duplicated gate-validation.md Check 14 and
+  can be dropped without loss.
+
+### What this fixes
+
+**Engineer B bleed-through.** An engineer working on an AI/DLC
+project without invoking `/ai-dlc` no longer has pipeline rules in
+context. CLAUDE.md provides only project configuration; no autonomy
+rules, no session model, no recovery protocol. The `/ai-dlc` skill
+description is still visible in the skill listing (per Claude Code
+documentation, descriptions are always loaded) but the rule text
+loads only on invocation.
+
+**Dual rule numbering.** The INFO-1 finding from 2026-04-16
+persisted through R13-R21 because renumbering touched every step
+file. R22 accepts the renumbering cost as part of the larger
+restructure. Unified Rule N is now unambiguous.
+
+**SKILL.md budget pressure.** The previous SKILL.md was already
+over the 5K re-attachment budget. Content past 5K was silently
+dropped after compact, which likely affected the research citations
+footnote and parts of the auto-handoff binding constraints. R22
+explicitly orders SKILL.md so the critical-flow content fits within
+5K, with less-critical content past the boundary and a documented
+re-invocation fallback.
+
+### What this does NOT fix
+
+- **Re-attachment budget is still a hard cap.** Projects that add
+  project-specific operating rules to CLAUDE.md will not have those
+  rules in SKILL.md's 5K budget. They live in CLAUDE.md and load
+  on every session (whether `/ai-dlc` is invoked or not), which is
+  fine for project-scoped rules but by construction means the
+  engineer-B bleed-through returns for any project-specific rule
+  text a consumer adds.
+
+- **The re-invocation fallback requires the user to act.** If after
+  compact the lead notices rule content is missing (e.g., it cannot
+  recall Rule 14's multi-sprint phasing guidance when a large
+  feature comes in), the recovery path is to ask the user to
+  re-invoke `/ai-dlc`. This is an operational norm, not an
+  automated recovery. It is documented in the Post-Compact Recovery
+  Protocol.
+
+- **Combined skill budget.** If a session invokes many skills, the
+  25K combined budget can push `/ai-dlc` out of the re-attachment
+  set entirely. The re-invocation fallback handles this too, but
+  the user has to notice the symptom and act.
+
+### Step file audit required before landing
+
+The unified rule numbering changes break cross-references in step
+files that say "Autonomy Rule N" (referring to CLAUDE.md) or "Rule
+N" (referring to either file). A mechanical audit is required:
+
+```bash
+grep -rn "Autonomy Rule\|SKILL.md Rule\|CLAUDE.md Rule" \
+  core/skills/ai-dlc/ 2>/dev/null
+```
+
+Update each match to reference the unified rule number. Expected
+mapping (from the unified SKILL.md rules):
+
+| Old reference | New reference |
+|---|---|
+| CLAUDE.md Rule 1 (walk through) | Rule 6 |
+| CLAUDE.md Rule 2 (apply improvements) | Rule 7 |
+| CLAUDE.md Rule 3 (validation cycle) | Rule 8 |
+| CLAUDE.md Rule 4 (escalate via file) | Rule 12 |
+| CLAUDE.md Rule 5 (document changes) | Rule 15 |
+| CLAUDE.md Rule 6 (err on doing) | Rule 16 |
+| CLAUDE.md Rule 7 (large files) | Rule 17 |
+| CLAUDE.md Rule 8 (requirements WHAT/HOW) | Rule 13 |
+| CLAUDE.md Rule 9 (multi-sprint) | Rule 14 |
+| CLAUDE.md Rule 10 (seek clarity) | Rule 11 |
+| CLAUDE.md Rule 11 (hard directive) | Rule 18 |
+| SKILL.md Rule 1 (read CLAUDE.md) | Rule 1 |
+| SKILL.md Rule 2 (single conversation) | Rule 2 |
+| SKILL.md Rule 3 (autonomous gates) | Rule 9 |
+| SKILL.md Rule 4 (seek clarity) | Rule 11 (merged with CLAUDE Rule 10) |
+| SKILL.md Rule 5 (requirements locked) | Rule 13 (merged with CLAUDE Rule 8) |
+| SKILL.md Rule 6 (production validation) | Rule 10 |
+| SKILL.md Rule 7 (pause points) | Rule 3 |
+| SKILL.md Rule 8 (every step in full) | Rule 4 |
+| SKILL.md Rule 9 (follow routing) | Rule 5 |
+| SKILL.md Rule 10 (handoff) | Handoff Protocol section (no number) |
+
+### Dependency re-verification checklist
+
+The R1-R12 dependency re-verification checklist still applies when
+Claude Code updates. R22 adds one additional item to watch:
+
+- **Re-attachment budget.** If Claude Code changes the per-skill
+  5,000-token limit or the 25,000-token combined budget, SKILL.md's
+  ordering invariant (critical rules fit in first 5K) may break.
+  Re-read `https://code.claude.com/docs/en/skills` "Skill content
+  lifecycle" before landing any SKILL.md change that grows the file
+  past its current size.
+
+### Manual walkthrough -- three scenarios
+
+- **Engineer A invokes /ai-dlc on a configured project.** Session
+  starts. CLAUDE.md auto-loads (project config only). `/ai-dlc`
+  loads the skill; SKILL.md content enters the conversation.
+  Pipeline rules are now in context. Runs normally.
+
+- **Engineer B opens the same project, works on an ad-hoc change
+  without invoking /ai-dlc.** Session starts. CLAUDE.md auto-loads
+  (project config only). No pipeline rules. Engineer B's work is
+  not subject to Rule 11(b) preamble, Rule 12 escalation tiers, or
+  Rule 3 no-stalling. They see the `/ai-dlc` skill description in
+  the skill listing but the rule text is not loaded.
+
+- **Engineer A's session crosses the red threshold and auto-compact
+  fires.** Skills re-attach: `/ai-dlc` gets the first 5,000 tokens
+  (Rules 1-13, Handoff Protocol, Post-Compact Recovery). Recovery
+  protocol reads the snapshot, outputs acknowledgment and
+  verification turn, proceeds. If the lead later needs Rule 14
+  (multi-sprint phasing) and it appears missing from context, the
+  lead asks the user to re-invoke `/ai-dlc`.
