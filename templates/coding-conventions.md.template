@@ -50,6 +50,54 @@ load this file.
 
 ---
 
+## Pre-Deploy Schema/API Field Check (Hard Gate)
+
+<!-- Customize the verification method for your project's API layer:
+     - GraphQL: introspection query against the live endpoint
+     - REST: verify the field exists in the OpenAPI spec that matches
+       the deployed service, or fetch a sample response and inspect it
+     - gRPC: verify the field exists in the proto definition deployed
+       to the service
+     - RPC / custom: fetch a live sample response and inspect the
+       payload for the field -->
+
+Before adding any new field to an API query, the agent or engineer
+writing the query MUST verify the field exists in the live deployed
+schema or API. If the field does not exist in the currently deployed
+service, the query change MUST be gated behind the service
+deployment: deploy the schema change first, verify the field exists
+in the live service, then add the query using the new field.
+
+**Failure mode this prevents.** Unknown fields cause hard errors at
+runtime on most API layers. A query that adds `newField` before
+`newField` exists in the deployed service will crash the consumer
+the moment it is called. In pipelines that split backend and frontend
+deployments, this can mean shipping a broken frontend that only
+fails on real user traffic.
+
+**Verification method (project-specific).** Populate this with your
+project's verification command when running `/ai-dlc-setup` or when
+editing this file directly. Examples:
+
+- GraphQL: `curl -s $GRAPH_ENDPOINT -H 'Content-Type: application/json'
+  -d '{"query":"{ __type(name: \"TypeName\") { fields { name } } }"}'`
+- REST (OpenAPI): `jq '.components.schemas.TypeName.properties | keys'
+  spec/openapi.json` (after confirming the spec matches deployed)
+- gRPC: `grpcurl -plaintext <endpoint> describe <service>.<Type>`
+
+**Evidence required.** Log the verification command and its output
+in the story file or commit message for any change that adds a new
+field to a query. Code review MUST verify this evidence is present
+for API-consuming changes.
+
+**Severity.** Missing pre-deploy field verification for a change that
+adds a new field to a query is classified as **Important** by code
+review. If the pipeline deploys without verification and the query
+crashes in production, the failure is reclassified as **Critical**
+in retro.
+
+---
+
 ## Production Integrity Tests (Hard Gate -- Non-Deferrable)
 
 Every story that modifies or introduces anything that affects the deployed
@@ -185,7 +233,7 @@ smoke test updates as Important severity.
 - Story specs created from carry-over backlog items or user instructions must
   include a "Source Requirements" section that quotes the original requirement
   verbatim. The story must address every root cause listed in the carry-over
-  entry. This is the enforcement mechanism for Autonomy Rule 8.
+  entry. This is the enforcement mechanism for SKILL.md Rule 13.
 - Stories that rename a field or label across layers must include ALL surfaces
   where the old name appears -- not "check and defer" but "check and fix."
 - Stories that remove, rename, or convert identifiers/labels must grep ALL
