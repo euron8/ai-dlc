@@ -121,6 +121,24 @@ in isolation; it requires comparing the story to its source. Check
 - **Evidence:** Log the comparison results in the gate log entry.
   List each story ID and its status in both files.
 
+### 5a. Teammate spawn model binding? (Implementation gates only)
+
+Skip this check for planning phase gates. Required for the first
+implementation gate of each sprint (and any gate following a re-spawn
+of teammates).
+
+- For every teammate spawned via the Agent tool this sprint, verify
+  the gate log records the `model` value passed to the Agent tool
+  (not the role file's `/model` directive).
+- Each recorded value MUST match the mapping in `implementation.md`
+  Step 2: dev/qa → `sonnet`; pm/code-reviewer/architect → `opus`.
+- **Gate FAILS** if any teammate spawn has no recorded `model` value,
+  or the recorded value does not match the mapping, or the gate log
+  shows the spawn inherited the lead's model. Re-spawn the teammate
+  with the correct `model` parameter before the gate can pass.
+- **Evidence:** Log each teammate name, role, and the `model` value
+  passed at spawn time.
+
 ### 6. Production integrity tests exist? (Implementation gates only)
 
 Skip this check for planning phase gates. Required for Phase 4+ gates.

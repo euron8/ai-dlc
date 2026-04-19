@@ -22,9 +22,26 @@ Read the architecture document.
 Create an agent team.
 
 Spawn the following teammates using role files in `.claude/team-roles/`.
-Spawn using the model defined in the teammate's role file
-(`.claude/team-roles/<role>.md`). The role file's `/model` directive is
-the authoritative model binding.
+
+**The Agent tool `model` parameter MUST be passed on every teammate
+spawn.** Omitting `model` silently inherits the lead's model. The role
+file's `/model` directive applies only to user-session launches and
+has no effect on Agent-tool subagent spawns.
+
+Map the role file's `/model` line to the Agent tool `model` enum
+(`sonnet` | `opus` | `haiku`) and pass it explicitly on every spawn:
+
+| Role            | Agent tool `model` |
+|-----------------|--------------------|
+| dev             | `sonnet`           |
+| qa              | `sonnet`           |
+| pm              | `opus`             |
+| code-reviewer   | `opus`             |
+| architect       | `opus`             |
+
+If a role file's `/model` directive specifies a model that does not
+map to one of the three Agent enum values, escalate as `HARD_BLOCK`
+(Rule 12, Tier 1) rather than guessing. Do not spawn without `model`.
 
 - **dev** from `dev.md`. Assign ownership based on story scope per the
   ownership paths defined in the dev role file.
@@ -50,6 +67,10 @@ Verify:
 - Dependencies are correct (review blocked by dev, QA blocked by review)
 - Teammate assignments match story scope and ownership boundaries
 - No story is assigned to a teammate outside their ownership boundary
+- Every teammate spawn in Step 2 passed the Agent tool `model`
+  parameter with a value matching the mapping table. Re-spawn any
+  teammate that was created without `model` before proceeding. Record
+  the spawned model per teammate in the gate log.
 
 Log task list validation in gate log.
 

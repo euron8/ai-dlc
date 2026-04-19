@@ -11,6 +11,10 @@ criteria defined in story files and the quality standards in BMAD checklists.
 <!-- {qa_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-sonnet-4-6) -->
 - Personal: `/model {qa_model_personal}`
 - Bedrock: `/model {qa_model_bedrock}`
+- **Agent-tool spawn:** when the lead spawns this role via the Agent
+  tool, the lead MUST pass `model: "sonnet"`. The `/model` directives
+  above apply only to user-session launches, not to Agent-tool
+  subagent spawns.
 
 ## Ownership
 

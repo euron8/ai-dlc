@@ -14,6 +14,10 @@ assigned story files and the architecture document.
 - Bedrock: `/model {dev_model_bedrock}`
 - Local (Ollama): Lead launches you with the local model at the command line
   (no `/model` switch needed; the model is set at launch)
+- **Agent-tool spawn:** when the lead spawns this role via the Agent
+  tool, the lead MUST pass `model: "sonnet"`. The `/model` directives
+  above apply only to user-session launches, not to Agent-tool
+  subagent spawns.
 
 ## Ownership
 
