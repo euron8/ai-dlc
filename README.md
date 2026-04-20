@@ -15,7 +15,7 @@ deployment, and retrospective — autonomously in one conversation.
 - Analysis-only (no implementation)
 
 **Structural enforcement** at every phase:
-- 15 gate validation checks (not advisory — gates fail if violated)
+- 19+ gate validation checks including harness meta-checks (not advisory — gates fail if violated)
 - LOCKED_REQUIREMENTS anchoring (prevents requirement drift)
 - Three-tier escalation (HARD_BLOCK, DECIDED_AUTONOMOUSLY, DEFERRAL_REQUEST)
 - Evidence-producing mandatory checks (dev, code review, QA)
@@ -27,6 +27,11 @@ deployment, and retrospective — autonomously in one conversation.
 - [Claude Code](https://claude.ai/code) with Agent Teams enabled
 - [BMAD Method v6](https://github.com/bmad-method/bmad-method) installed
   (`npx bmad-method install` with BMM, CIS, TEA modules)
+- [context-mode](https://github.com/context-mode/context-mode) plugin
+  installed (`claude mcp add-plugin context-mode`). Provides sandbox
+  execution for large reads and batch operations. AI/DLC's protection
+  hook (`ai-dlc-protect.sh`) prevents context-mode from consolidating
+  rule files that must load verbatim.
 
 ### Required environment for autonomous execution
 
@@ -79,12 +84,35 @@ cd ai-dlc
 ```
 
 The installer copies core files, creates directory structure, and
-generates templates. If your project already has `CLAUDE.md`, team
-roles, or coding conventions, the installer archives them to
-`docs/pre-ai-dlc/` before replacing. The `/ai-dlc-setup` wizard
-reads the archived files and absorbs your project-specific content
-(ownership paths, model strings, conventions, infrastructure rules)
-into AI/DLC's templates during configuration.
+generates templates. It also installs:
+- Protection hook (`.claude/hooks/ai-dlc-protect.sh`)
+- Validation scripts (`scripts/validate-*.sh`)
+- CI workflow templates (if `.github/workflows/` exists)
+- Test fixture scaffolding (`tests/fixtures/`)
+
+If your project already has `CLAUDE.md`, team roles, or coding
+conventions, the installer archives them to `docs/pre-ai-dlc/`
+before replacing. The `/ai-dlc-setup` wizard reads the archived
+files and absorbs your project-specific content (ownership paths,
+model strings, conventions, infrastructure rules) into AI/DLC's
+templates during configuration.
+
+After install, enable the context-mode plugin and verify the
+protection hook is wired in `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "mcp__context-mode__ctx_execute_file|mcp__context-mode__ctx_batch_execute",
+      "hooks": [{
+        "type": "command",
+        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
+      }]
+    }]
+  }
+}
+```
 
 ## Uninstall
 
@@ -92,9 +120,10 @@ into AI/DLC's templates during configuration.
 ./scripts/uninstall.sh /path/to/your-project
 ```
 
-Removes all AI/DLC skills, team roles, templates, and pattern
-references. Preserves your planning artifacts (`_bmad-output/`),
-code reviews, and retrospectives. Add `--force` to skip confirmation.
+Removes all AI/DLC skills, team roles, templates, hooks, validation
+scripts, CI workflows, and fixture templates. Preserves your planning
+artifacts (`_bmad-output/`), code reviews, and retrospectives. Add
+`--force` to skip confirmation.
 
 ## Configure
 
@@ -170,14 +199,22 @@ selection and configures everything automatically.
 ```
 your-project/
   .claude/
+    hooks/
+      ai-dlc-protect.sh           # Context-mode path protection hook
     skills/ai-dlc/
-      SKILL.md                    # Entry point
+      SKILL.md                    # Entry point (Rules 1-19)
       steps/                      # 18 pipeline step files
     skills/ai-dlc-setup/
       SKILL.md                    # Guided configuration wizard
     team-roles/                   # 5 role definitions
   CLAUDE.md                       # Project config (autonomy rules live in SKILL.md)
   QUICKSTART.md                   # Reference documentation
+  scripts/
+    validate-provenance-block.sh  # Provenance block validator
+    validate-retro-evidence.sh    # Retro transcript + SHA enforcement
+    validate-mandatory-rules.sh   # Combined mandatory rule validator
+    validate-ci-gates.sh          # Dormant gate detector
+  tests/fixtures/                 # Adversarial self-test fixtures
   docs/
     coding-conventions.md         # Project coding standards
     ai-dlc-feedback.md            # Feedback loop log
@@ -187,15 +224,18 @@ your-project/
   _bmad-output/
     planning-artifacts/           # Briefs, PRDs, stories
     implementation-artifacts/     # Gate log, sprint status
+    party-mode-transcripts/       # Retro party-mode transcripts
 ```
 
 ## Architecture
 
 Three layers:
 
-**Core** — Universal pipeline logic. Gate validation (15 checks),
-escalation model (3 tiers), requirement anchoring, autonomy rules (18, in SKILL.md),
-session model, team roles. Does not change per project.
+**Core** — Universal pipeline logic. Gate validation (19+ checks
+including harness meta-checks), escalation model (3 tiers),
+requirement anchoring, autonomy rules (19, in SKILL.md), session
+model, team roles, validation scripts, protection hooks. Does not
+change per project.
 
 **Patterns** — Reusable enforcement modules. Each pattern is a
 generalizable gate check with a configuration interface. Install the
