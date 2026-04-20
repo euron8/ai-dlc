@@ -22,6 +22,35 @@ this protocol. Every check must PASS. Any failure blocks the gate.
 - **Evidence:** Gate log must record which validations were run and their
   outcomes. "Completed" without evidence is not completed.
 
+### 1c. Research-invocation enforcement (research-requirements gate only).
+
+**Scope.** This check fires only at the research-requirements gate, and
+only when the pipeline variant (read from
+`_bmad-output/pipeline-snapshot.md` `pipeline_variant` field as-of
+start-of-gate-check) is one of `{greenfield, feature, brownfield-a,
+brownfield-b, brownfield-c, carry-over}`. SKIPS `{bug,
+sprint-execute, analysis-only}`.
+
+On missing/corrupt snapshot, reports PENDING (not FAILED) and escalates
+via HARD_BLOCK to force snapshot reconstruction.
+
+**Check.** Research-requirements phase has invoked technical research.
+Two arms, either satisfies (dual-arm OR):
+
+- **Arm (a) — commit-subject marker.** Grep branch commits (since `main`
+  divergence) for a subject line matching regex
+  `^Sprint [0-9]+ (research-requirements|technical.*research|research.*technical|bmad-technical-research)`.
+  A single match on any commit in the branch satisfies arm (a).
+
+- **Arm (b) — PRD content proxy.** The PRD artifact contains a "Research
+  Findings" section AND ≥1 numbered marker matching regex
+  `^(- |### )?\*{0,2}R[0-9]+\s+[—–-]\s`. The `\*{0,2}` optionally
+  accepts bold-marker prefix `**R1 — ...**` which is the dominant
+  style in real PRDs authored via `/bmad-technical-research`. Single
+  match satisfies arm (b).
+
+**PASS:** arm (a) OR arm (b) matches. **FAIL:** neither matches.
+
 ### 2. No unresolved HARD_BLOCKs?
 
 - Read `docs/escalations/pending.md` (if it exists).
@@ -30,6 +59,19 @@ this protocol. Every check must PASS. Any failure blocks the gate.
 - `DECIDED_AUTONOMOUSLY` entries do not block. They are informational.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
   pipeline. Proceed with non-deferred work.
+- **AC deferral requires a named observable reopen signal.** When an
+  AC is deferred with classification "platform limitation", "external
+  dependency", "awaiting third-party fix", or any similar phrasing,
+  the escalation entry MUST name a specific, observable signal that
+  would reopen the deferral. Invalid signals (examples): "first Linux
+  CI run" when no such run is scheduled, "once upstream fixes it"
+  with no version/date, "when the platform changes" when the platform
+  is not under project control. Valid signals (examples): "first
+  invocation of workflow `<name>` after `<date>`", "release of
+  `<package>` version `>=X.Y`", "fix-forward PR lands". Deferrals
+  missing a valid signal MUST be escalated as `HARD_BLOCK` for
+  root-cause investigation rather than accepted. Gate FAILS if a
+  deferral entry in scope for this gate lacks a valid reopen signal.
 
 ### 3. Requirement anchor integrity?
 
@@ -120,24 +162,6 @@ in isolation; it requires comparing the story to its source. Check
   Fix the mismatch before proceeding.
 - **Evidence:** Log the comparison results in the gate log entry.
   List each story ID and its status in both files.
-
-### 5a. Teammate spawn model binding? (Implementation gates only)
-
-Skip this check for planning phase gates. Required for the first
-implementation gate of each sprint (and any gate following a re-spawn
-of teammates).
-
-- For every teammate spawned via the Agent tool this sprint, verify
-  the gate log records the `model` value passed to the Agent tool
-  (not the role file's `/model` directive).
-- Each recorded value MUST match the mapping in `implementation.md`
-  Step 2: dev/qa → `sonnet`; pm/code-reviewer/architect → `opus`.
-- **Gate FAILS** if any teammate spawn has no recorded `model` value,
-  or the recorded value does not match the mapping, or the gate log
-  shows the spawn inherited the lead's model. Re-spawn the teammate
-  with the correct `model` parameter before the gate can pass.
-- **Evidence:** Log each teammate name, role, and the `model` value
-  passed at spawn time.
 
 ### 6. Production integrity tests exist? (Implementation gates only)
 
@@ -237,6 +261,17 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
   were found, what layer each test verifies (browser/API/computation),
   and whether the test type matches the change type.
 
+### 11a. Live-run attempted under envvar gate? (Implementation gates only)
+
+Skip this check for planning phase gates. Required for Phase 4+ gates.
+
+- For every story in the sprint whose smoke tests include a live-against-production path gated by an environment variable (e.g., `SMOKE_TESTS_LIVE=1`):
+  - Check the story's Dev Agent Record for explicit documentation that the live run was attempted — the command invoked, the envvar that gated it, and the outcome (PASS, FAIL with details, or pool-scoped skip with justification).
+  - A test-suite run with the envvar unset does NOT satisfy this check — the live path was skipped, not exercised.
+- **Gate FAILS** if any story with an envvar-gated live-run path lacks attempt evidence in its Dev Agent Record. The story must re-run under the documented envvar before the gate can pass.
+- Stories whose smoke tests have no live-against-production path are exempt.
+- **Evidence:** Log which stories had envvar-gated live paths, the envvar names, the commands invoked, and the documented outcomes.
+
 ### 12. Append gate log entry.
 
 Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
@@ -260,7 +295,7 @@ existing cross-references, but execution is deferred until the full
 15-check cycle is complete, so the announcement reflects the final
 count.)
 
-"Gate [name]: PASSED — 15/15 checks passed — proceeding to [next phase]"
+"Gate [name]: PASSED — all checks passed — proceeding to [next phase]"
 
 Include the check count so the human can verify completeness at a glance.
 
@@ -405,6 +440,124 @@ Check 14 (re-write the snapshot) and then re-run Check 15. If Check
 15 fails twice in a row, escalate as HARD_BLOCK — the snapshot
 writer is broken and the gate should not pass with a stale
 recovery anchor.
+
+### 16. Stub audit (hot-path files) — content verification.
+
+**Scope.** Runs at every gate whose `changed_files` set includes any
+hot-path file. Hot-path extensions: `.py`, `.ts`, `.tsx`, `.js`,
+`.sh`, `.sql`. Hot-path paths: `.github/workflows/**.yml` (directly
+invoked by GitHub Actions).
+
+**Check.** Grep changed hot-path files for stub markers (regex
+`(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)`).
+For each match, verify FOUR elements in the match's surrounding
+comment block (preceding 5 lines + the matched line):
+
+1. **Numbered carry-over item reference.** Regex `Item [0-9]+`
+   matches somewhere in the comment block.
+2. **OPEN or IN-SPRINT status.** Lookup the referenced item number
+   in `_bmad-output/planning-artifacts/carry-over-backlog.md`;
+   matching line must match regex
+   `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`. CLOSED or absent
+   items fail this element.
+3. **`file:line` reference.** Regex `(^|\s)\S+:[0-9]+(\s|$)` —
+   path token + colon + 1+ digits. Digit-only; rejects `file:FIXME`.
+4. **Deferral-reason line with min-content + density.** Primary
+   regex: `^deferral-reason:\s+\S.{19,}` (at least one non-
+   whitespace char after `deferral-reason:\s+`, then 19+ more chars
+   of any kind). Secondary density check: the reason body
+   (everything after `deferral-reason:\s+`) must contain ≥10
+   non-whitespace characters, computed via
+   `<reason> | tr -d '[:space:]' | wc -c`. Defeats `X` + padding
+   bypass.
+
+**PASS:** every stub match satisfies all four elements. **FAIL:**
+any stub match missing any element. FAIL output names the
+offending `file:line` and the specific missing element(s).
+
+### 17. Skill-invocation provenance (retro gate + sub-skill-gated gates).
+
+**Scope.** Runs at the retro gate unconditionally. Also runs at any
+gate where a validation sub-skill (bmad-party-mode,
+bmad-advanced-elicitation, bmad-review-adversarial-general,
+bmad-validate-prd) was required by the current phase. Skip on gates
+that do not produce a provenance-bearing artifact.
+
+**Check.** Invoke `scripts/validate-provenance-block.sh` against the
+gate's primary artifact.
+
+- **Retro gate:** run `scripts/validate-provenance-block.sh
+  docs/retro/sprint-<N>.md` AND `scripts/validate-retro-evidence.sh
+  <N>`. Both must exit 0. validate-retro-evidence.sh additionally
+  enforces transcript file presence, byte-match against the cited
+  SHA, and non-triviality floors (MIN_CHARS, MIN_PERSONAS,
+  MIN_PHASES).
+- **PRD gate (research-requirements phase):** run
+  `scripts/validate-provenance-block.sh
+  _bmad-output/planning-artifacts/prd.md --require-skill
+  bmad-validate-prd`.
+- **Story readiness gate (stories-test-strategy):** run
+  `scripts/validate-provenance-block.sh <story-file>
+  --require-skill bmad-review-adversarial-general` for each story.
+
+**PASS:** all required provenance scripts exit 0. **FAIL:** any
+script reports a missing block, malformed field, unknown skill,
+missing transcript file (retro only), or SHA byte-mismatch (retro
+only).
+
+### H1. Harness meta-check — each phase-specific check has a self-test fixture.
+
+**Recursion guard.** H1 is NOT subject to H1. When H1 runs, it sets
+environment variable `H1_DEPTH=1`. If H1 observes `H1_DEPTH` already
+set in the environment at entry, it returns PASS immediately without
+re-enumeration to prevent infinite recursion. Check H2 (below)
+verifies the guard fires on a seeded recursive-invocation fixture.
+
+**Scope.** Meta-check. Runs at every gate. Verifies that each
+phase-specific check added to this file (currently: Check 1c, Check
+16's content-verification strengthening, Check 17 provenance) ships
+with an adversarial self-test fixture under `tests/fixtures/` that
+the check catches.
+
+**Check.** For each phase-specific check enumerated below, confirm
+both (i) the fixture directory exists with a README.md describing
+the bypass scenario and a `seed.sh` reproducing it idempotently, and
+(ii) the check's body references the fixture path by name so a
+future reader can trace from check → fixture.
+
+Enumerated checks under H1:
+
+- **Check 1c** — fixture at `tests/fixtures/check-1c-bypass/`.
+- **Check 16 (stub-audit content-verification)** — fixture at
+  `tests/fixtures/check-15-bypass/`.
+- **Check 17 (skill-invocation provenance)** — fixture at
+  `tests/fixtures/check-17-bypass/`.
+
+**PASS:** every enumerated check's fixture exists with README.md +
+seed.sh, and the check's body cites the fixture path. **FAIL:** any
+enumerated check is missing its fixture or check-body cross-reference.
+
+### H2. Harness self-test — seeded forgery fixture + H1 recursion guard.
+
+**Scope.** Meta-meta-check. Runs at every gate. H2 verifies two
+things:
+
+1. **H1 recursion guard fires.** Re-invoke the H1 check with
+   `H1_DEPTH=1` pre-set in the environment; H1 MUST return PASS
+   immediately without re-enumerating fixtures. Fixture at
+   `tests/fixtures/check-h1-recursion/` seeds the recursive-
+   invocation scenario.
+
+2. **Seeded provenance-block forgery is caught.** The fixture at
+   `tests/fixtures/check-17-bypass/` contains an adversarial
+   retro-shaped file with a well-formed-LOOKING provenance block
+   where the `tool_use_id` was copied from a prior real invocation
+   but the transcript_path SHA was hand-edited to a fabricated
+   value. `validate-retro-evidence.sh` MUST flag this variant.
+
+**PASS:** both (1) and (2) hold on a fresh fixture seed. **FAIL:**
+either the recursion guard does not fire OR the seeded forgery
+passes validation.
 
 ### Sub-step snapshot update (referenced by step files)
 

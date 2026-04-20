@@ -11,10 +11,6 @@ implementation delivers user value as defined in the PRD.
 <!-- {pm_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-opus-4-6-v1) -->
 - Personal: `/model {pm_model_personal}`
 - Bedrock: `/model {pm_model_bedrock}`
-- **Agent-tool spawn:** when the lead spawns this role via the Agent
-  tool, the lead MUST pass `model: "opus"`. The `/model` directives
-  above apply only to user-session launches, not to Agent-tool
-  subagent spawns.
 
 ## Ownership
 

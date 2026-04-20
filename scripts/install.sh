@@ -153,6 +153,50 @@ echo "Installing patterns reference..."
 cp "$SCRIPT_DIR/../patterns/"*.md "$PROJECT_ROOT/docs/ai-dlc-patterns/"
 echo "  Patterns copied to docs/ai-dlc-patterns/ (reference for /ai-dlc-setup)"
 
+# Install hooks (always overwrite with AI/DLC versions)
+echo "Installing hooks..."
+mkdir -p "$PROJECT_ROOT/.claude/hooks"
+cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
+chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
+echo "  ai-dlc-protect.sh installed"
+
+# Install validation scripts (always overwrite with AI/DLC versions)
+echo "Installing validation scripts..."
+mkdir -p "$PROJECT_ROOT/scripts"
+for script in validate-provenance-block.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh; do
+  if [ -f "$SCRIPT_DIR/../core/scripts/$script" ]; then
+    cp "$SCRIPT_DIR/../core/scripts/$script" "$PROJECT_ROOT/scripts/"
+    chmod +x "$PROJECT_ROOT/scripts/$script"
+    echo "  $script installed"
+  fi
+done
+
+# Install CI workflow templates (copy only if .github/workflows/ exists)
+if [ -d "$PROJECT_ROOT/.github/workflows" ]; then
+  echo "Installing CI workflow templates..."
+  for wf in validate-retro-compliance.yml validate-ci-gates.yml; do
+    if [ -f "$SCRIPT_DIR/../core/ci-templates/$wf" ]; then
+      cp "$SCRIPT_DIR/../core/ci-templates/$wf" "$PROJECT_ROOT/.github/workflows/"
+      echo "  $wf installed"
+    fi
+  done
+else
+  echo "Skipping CI workflows (.github/workflows/ not found)"
+  echo "  Copy from ai-dlc/core/ci-templates/ when ready"
+fi
+
+# Install test fixture templates (always overwrite with AI/DLC versions)
+echo "Installing test fixture templates..."
+mkdir -p "$PROJECT_ROOT/tests/fixtures"
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion; do
+  if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
+    mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
+    cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"
+    chmod +x "$PROJECT_ROOT/tests/fixtures/$fixture_dir/seed.sh" 2>/dev/null || true
+    echo "  $fixture_dir/ installed"
+  fi
+done
+
 # Create feedback log
 if [ ! -f "$PROJECT_ROOT/docs/ai-dlc-feedback.md" ]; then
   cat > "$PROJECT_ROOT/docs/ai-dlc-feedback.md" << 'FEEDBACK'

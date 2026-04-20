@@ -20,20 +20,55 @@ Read all artifacts from this sprint:
 - Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
 - Escalation log at `docs/escalations/pending.md`
 - Sprint-status.yaml
+- Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
 
 ### 2. Party Mode Retro
 
 Execute all sub-skills back-to-back without pausing for human input
-between them:
+between them.
 
-Run `/bmad-party-mode` — bring all agent perspectives (PM, Architect,
-Dev, SM, TEA, QA) into the discussion:
+**Invoke `/bmad-party-mode` via the Skill tool.** The Skill invocation
+IS the satisfier for this step — role-playing PM/Architect/Dev/SM/
+TEA/QA perspectives inline in the retro doc without invoking the
+Skill is a Rule 3 violation per SKILL.md, regardless of how
+well-formed the output appears. This is non-negotiable.
+
+Bring all agent perspectives (PM, Architect, Dev, SM, TEA, QA) into
+the discussion:
 - Walk through every story's journey from plan to merge
 - What worked well in the pipeline
 - What caused friction or rework
 - Where requirements drifted (check LOCKED_REQUIREMENTS fidelity)
 - Where evidence requirements caught issues vs where they were missed
 - Process improvements to propose
+
+**Mandatory artifacts from this step (all three):**
+
+1. **Skill invocation evidence.** The `/bmad-party-mode` Skill tool
+   call must occur in the lead's own conversation. A `SKILL_INVOCATION_PROVENANCE v1`
+   block (schema in SKILL.md Rule 3) is written to the retro doc
+   citing the invocation's `tool_use_id`, `invoked_at` timestamp,
+   `mode` (solo or subagent), and `transcript_path`.
+
+2. **Transcript file commit.** The party-mode transcript (all agent
+   responses in full, not summarized) is committed to
+   `_bmad-output/party-mode-transcripts/sprint-<N>-retro.md`. This
+   file is the byte-for-byte authoritative record; the retro doc's
+   "Agent findings" section in Step 3 summarizes but does not
+   replace it.
+
+3. **Provenance block cites transcript@sha.** The provenance block's
+   `transcript_path` field uses the `path@<sha>` format where
+   `<sha>` is the git blob SHA of the committed transcript file.
+   `scripts/validate-retro-evidence.sh` enforces byte-match between
+   the cited SHA and the file contents on HEAD.
+
+Local enforcement: `scripts/validate-mandatory-rules.sh <N>` (runs
+`validate-retro-evidence.sh`, `validate-cycle-commits.sh`, and
+`validate-provenance-block.sh`) MUST pass before Step 6 commits the
+retro. CI enforcement:
+`.github/workflows/validate-retro-compliance.yml` re-runs the same
+scripts on the retro PR.
 
 ### 3. Write Retro Document
 
@@ -121,6 +156,45 @@ above. Commit message:
 
 If zero violations found, skip the commit and note "Audit: clean" in
 the retro doc.
+
+**Path-filter dormancy scan (every retro):**
+
+After the rule-file audit, enumerate CI jobs in `.github/workflows/**`
+that use `paths:` or `paths-ignore:` filters. For each such job,
+determine the last main-branch SHA on which the job actually ran
+(not SKIPPED). If ≥3 sprints have elapsed with zero non-SKIPPED runs
+on `main`, the retro MUST either (a) cite an existing `schedule:`
+cron trigger on the workflow that exercises the job independent of
+path filters, or (b) file a Sprint N+1 task to add a weekly
+`schedule:` cron run to that workflow. Reporting-only is not
+sufficient — a dormancy finding without a remediation path is
+narrative drift. Record results in the retro doc under
+`## Rule File Audit` in a `Path-filter dormancy scan` sub-section,
+including for each dormant job: evidence
+(`gh run list --workflow=<wf> --branch=main --limit 30`), sprint
+window, and (a) or (b) remediation.
+
+## Empirical gate validation
+
+Every gate added via retro MUST be exercised on a green run within the next
+PR that naturally touches the gate's enforcement domain. Absence of exercise
+within that window fails the next retro. Shipping a gate wired to no workflow
+trigger, or wired only to a workflow that does not run on any PR in the
+exercise window, is the dormant-gate anti-pattern.
+
+Enforcement: `scripts/validate-ci-gates.sh` runs on every pull request via
+`.github/workflows/validate-ci-gates.yml`. The script scans `docs/retro/**/*.md`
+for declared gate names and grep's `.github/workflows/**` for each; any
+declared gate with zero workflow matches is flagged as DORMANT and the
+workflow exits non-zero, failing the PR check. Retro authors MUST ship the
+gate's workflow wiring in the same PR as the retro's gate declaration, or
+cite the wiring PR that did.
+
+Declaration convention: when a retro adds a new CI gate, name it using the
+canonical form `` CI gate `<gate-name>` `` (the gate name enclosed in
+backticks, preceded by the literal phrase "CI gate"). This is the only form
+the shallow detector harvests; gate names mentioned in free-form prose are
+intentionally out of scope.
 
 ### 5. Human Commentary
 
