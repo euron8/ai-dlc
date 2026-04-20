@@ -12,10 +12,6 @@ model than the dev teammates to catch issues they may miss.
 <!-- {reviewer_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-opus-4-6-v1) -->
 - Personal: `/model {reviewer_model_personal}`
 - Bedrock: `/model {reviewer_model_bedrock}`
-- **Agent-tool spawn:** when the lead spawns this role via the Agent
-  tool, the lead MUST pass `model: "opus"`. The `/model` directives
-  above apply only to user-session launches, not to Agent-tool
-  subagent spawns.
 
 ## Ownership
 
@@ -180,6 +176,47 @@ classify as **Important** — the test does not verify what the story
 changed. UI changes require browser-level tests. If the project has
 an established browser test framework (e.g., Playwright), the review
 must verify the smoke test uses it.
+
+### Stubs in Execution Path = Critical
+
+A stub marker (`stub`, `TODO`, `FIXME`, `wired later`, `Phase N`,
+`NotImplementedError`) in a hot-path file (`.py`, `.ts`, `.tsx`, `.js`,
+`.sh`, `.sql`, `.github/workflows/**.yml`) is a **Critical** finding
+UNLESS the stub's surrounding comment block satisfies ALL FOUR
+elements enforced by `gate-validation.md` Check 16:
+
+1. Numbered carry-over item reference — regex `Item [0-9]+`.
+2. OPEN or IN-SPRINT status in
+   `_bmad-output/planning-artifacts/carry-over-backlog.md` for that
+   item (regex `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`).
+3. `file:line` reference — regex `(^|\s)\S+:[0-9]+(\s|$)`.
+4. `deferral-reason:` line matching `^deferral-reason:\s+\S.{19,}`
+   AND reason body has ≥10 non-whitespace characters.
+
+"Will add in follow-up" with no item reference, deferral-reason `TBD`,
+or a CLOSED item reference → **Critical**, not deferrable. Reviewer's
+only valid responses: (a) APPROVED if all four elements are present
+and verifiable; (b) NEEDS_REWORK naming the missing element(s). This
+wording is the review-layer counterpart of Check 16; keep the two
+surfaces aligned on any future edit.
+
+### Missing Skill-Invocation Provenance Block = Critical
+
+A retro doc (`docs/retro/sprint-*.md`), PRD
+(`_bmad-output/planning-artifacts/prd.md`), or story file that
+should carry a `SKILL_INVOCATION_PROVENANCE v1` block (schema in
+SKILL.md Rule 3) but does not is a **Critical** finding.
+Non-deferrable. Inline role-played PM/Architect/Dev/TEA/QA
+perspectives in a retro doc WITHOUT a provenance block citing the
+`/bmad-party-mode` Skill invocation is the exact failure mode this
+rule prevents and must be rejected.
+
+Reviewer's valid responses: (a) APPROVED only if
+`scripts/validate-provenance-block.sh <artifact>` exits 0 AND
+(for retro docs)
+`scripts/validate-retro-evidence.sh <sprint-number>` also exits 0;
+(b) NEEDS_REWORK naming the missing block, missing field, or
+script failure output.
 
 ## Communication
 

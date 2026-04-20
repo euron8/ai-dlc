@@ -14,10 +14,6 @@ assigned story files and the architecture document.
 - Bedrock: `/model {dev_model_bedrock}`
 - Local (Ollama): Lead launches you with the local model at the command line
   (no `/model` switch needed; the model is set at launch)
-- **Agent-tool spawn:** when the lead spawns this role via the Agent
-  tool, the lead MUST pass `model: "sonnet"`. The `/model` directives
-  above apply only to user-session launches, not to Agent-tool
-  subagent spawns.
 
 ## Ownership
 
@@ -146,6 +142,31 @@ Before starting any task, read these files in order:
           smoke tests must be added/updated/removed in the same commit.
           Log changes in the story file under "Smoke Test Updates".
           QA will reject stories missing this section.
+    - [ ] **Metric reproduction command embedded (HARD).** Every numeric
+          metric quoted in the Dev Agent Record (test counts, failure
+          counts, coverage numbers, benchmark timings) MUST be accompanied
+          by the literal shell command that produced it, on the line
+          immediately before the quoted metric. Grep-narrowed or
+          `-k`-filtered invocations are not acceptable substitutes for
+          full-file or full-suite runs when the metric claims to cover
+          the full scope. Reviewer will re-run the embedded command;
+          output mismatch is an Important-severity finding.
+    - [ ] **Cross-CI plugin-installation parity (HARD GATE):** If this
+          story adds a pytest or vitest plugin dependency or CLI flag,
+          grep `.github/workflows/**` for every `pytest` or `vitest`
+          invocation. For each invocation, verify either (a) the plugin
+          is installed in that job's deps install step, or (b) the flag
+          is not applied to that invocation (co-located pattern).
+          Log the grep output and plugin-install confirmation in the
+          story file under "Cross-CI Parity". Violation = Critical
+          code-review finding.
+- When a story requires a validation sub-skill (`/bmad-party-mode`,
+  `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
+  `/bmad-validate-prd`), the artifact produced MUST carry a
+  `SKILL_INVOCATION_PROVENANCE v1` block (schema in SKILL.md Rule 3).
+  Writing skill-shaped output without invoking the Skill tool is a
+  Rule 3 violation. Pre-submission: run
+  `scripts/validate-provenance-block.sh <artifact>` and confirm exit 0.
 16. Mark the task complete (QA will then validate).
 
 ## Communication

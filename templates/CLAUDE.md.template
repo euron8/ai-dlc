@@ -29,7 +29,7 @@ context Claude sees.
 
 This file does NOT contain AI/DLC autonomy rules, session model
 directives, or pipeline recovery protocols. If you are looking for
-Rule 1 through Rule 18, the Post-Compact Recovery Protocol, or the
+Rule 1 through Rule 19, the Post-Compact Recovery Protocol, or the
 context threshold reminders, read SKILL.md instead.
 
 ---
@@ -73,6 +73,37 @@ Coding conventions for this project live in `docs/coding-conventions.md`.
 Any agent writing or reviewing code in this project MUST read that file
 before starting. This applies whether the work is inside the AI/DLC
 pipeline or a one-off change.
+
+---
+
+## Context-Mode Usage
+
+If the context-mode plugin is installed, its default routing is
+conservative. For medium-cost operations where native tools are
+technically allowed but sandbox would be more efficient, prefer the
+sandbox tool:
+
+- For reading planning artifacts, story files, or code files over
+  ~2K tokens that won't be directly edited, prefer ctx_execute_file
+  over Read.
+
+- For gathering context that requires multiple tool calls (reading
+  several files, running several greps, listing multiple directories),
+  prefer ctx_batch_execute over sequential Read/Grep/Bash calls.
+
+- For shell commands whose output is likely to exceed ~20 lines
+  (git log, grep across repo, large test output), prefer ctx_execute
+  over Bash.
+
+**Scope.** These nudges apply whether or not the AI/DLC pipeline is
+active. They do NOT apply to:
+
+- Rule files (SKILL.md, CLAUDE.md, coding-conventions.md, step files,
+  team role files). Must load verbatim — consolidation drops directives.
+- Pipeline snapshot at `_bmad-output/pipeline-snapshot.md`. Must be
+  read verbatim for recovery fidelity.
+- Gate log and escalations. Must be read verbatim.
+- Files being read for direct Edit operations.
 
 ---
 

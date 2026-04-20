@@ -87,6 +87,32 @@ if [ -f "$PROJECT_ROOT/docs/escalations/pending.md" ]; then
   FILES_TO_REMOVE+=("docs/escalations/pending.md")
 fi
 
+# -- Hooks installed by AI/DLC --
+if [ -f "$PROJECT_ROOT/.claude/hooks/ai-dlc-protect.sh" ]; then
+  FILES_TO_REMOVE+=(".claude/hooks/ai-dlc-protect.sh")
+fi
+
+# -- Validation scripts installed by AI/DLC --
+for script in validate-provenance-block.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh; do
+  if [ -f "$PROJECT_ROOT/scripts/$script" ]; then
+    FILES_TO_REMOVE+=("scripts/$script")
+  fi
+done
+
+# -- CI workflows installed by AI/DLC --
+for wf in validate-retro-compliance.yml validate-ci-gates.yml; do
+  if [ -f "$PROJECT_ROOT/.github/workflows/$wf" ]; then
+    FILES_TO_REMOVE+=(".github/workflows/$wf")
+  fi
+done
+
+# -- Test fixture templates installed by AI/DLC --
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion; do
+  if [ -d "$PROJECT_ROOT/tests/fixtures/$fixture_dir" ]; then
+    DIRS_TO_REMOVE+=("tests/fixtures/$fixture_dir/")
+  fi
+done
+
 # Print what we found
 for dir in "${DIRS_TO_REMOVE[@]}"; do
   echo "  [dir]  $dir"

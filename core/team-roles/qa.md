@@ -11,10 +11,6 @@ criteria defined in story files and the quality standards in BMAD checklists.
 <!-- {qa_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-sonnet-4-6) -->
 - Personal: `/model {qa_model_personal}`
 - Bedrock: `/model {qa_model_bedrock}`
-- **Agent-tool spawn:** when the lead spawns this role via the Agent
-  tool, the lead MUST pass `model: "sonnet"`. The `/model` directives
-  above apply only to user-session launches, not to Agent-tool
-  subagent spawns.
 
 ## Ownership
 
@@ -96,6 +92,16 @@ For each completed task, verify:
     coverage for a UI change. If the project has an existing browser
     test framework, UI smoke tests MUST use it.
   - **If smoke tests are missing, wrong type, or insufficient: REJECT.**
+- [ ] **Live-run attempted under envvar gate (HARD GATE):** For stories whose smoke tests include a live-against-production path gated by an envvar (e.g., `SMOKE_TESTS_LIVE=1`), verify the Dev Agent Record documents that the live run was attempted (not merely that the code path exists). Missing live-run attempt evidence = REJECT. A passing test suite run with the envvar unset does NOT satisfy this gate — the live path was skipped, not exercised.
+- [ ] **Skill-invocation provenance (HARD GATE):** For artifacts that
+  require a validation sub-skill (retros, PRDs, stories, architecture
+  docs), verify `scripts/validate-provenance-block.sh <artifact>`
+  exits 0. For retro docs, additionally run
+  `scripts/validate-retro-evidence.sh <sprint-number>` and confirm
+  exit 0 (enforces transcript file + byte-match). Missing or
+  malformed `SKILL_INVOCATION_PROVENANCE v1` block = REJECT. Inline
+  role-play without the Skill tool invocation is a structural
+  reject per gate-validation.md Check 17.
 
 ## Communication
 

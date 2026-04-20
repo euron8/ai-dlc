@@ -22,26 +22,28 @@ Read the architecture document.
 Create an agent team.
 
 Spawn the following teammates using role files in `.claude/team-roles/`.
+Spawn using the model defined in the teammate's role file
+(`.claude/team-roles/<role>.md`). The role file's `/model` directive is
+the authoritative model binding.
 
-**The Agent tool `model` parameter MUST be passed on every teammate
-spawn.** Omitting `model` silently inherits the lead's model. The role
-file's `/model` directive applies only to user-session launches and
-has no effect on Agent-tool subagent spawns.
+**Agent spawn model parameter MUST be passed explicitly.** Every
+Agent tool invocation MUST include the `model` parameter. Map roles:
+`dev`, `qa`, `pm` -> `sonnet`; `code-reviewer`, `architect`, `tea`
+-> `opus`. Omitted `model` inherits from the parent conversation
+and bypasses the role contract. Violation fails gate-validation
+Check 15 on detection at retro. Per SKILL.md Rule 19.
 
-Map the role file's `/model` line to the Agent tool `model` enum
-(`sonnet` | `opus` | `haiku`) and pass it explicitly on every spawn:
-
-| Role            | Agent tool `model` |
-|-----------------|--------------------|
-| dev             | `sonnet`           |
-| qa              | `sonnet`           |
-| pm              | `opus`             |
-| code-reviewer   | `opus`             |
-| architect       | `opus`             |
-
-If a role file's `/model` directive specifies a model that does not
-map to one of the three Agent enum values, escalate as `HARD_BLOCK`
-(Rule 12, Tier 1) rather than guessing. Do not spawn without `model`.
+**Canonical-story-file pre-flight check before dev dispatch.** Before
+dispatching dev for any story, the lead MUST verify two conditions:
+(a) the canonical story file exists at
+`_bmad-output/planning-artifacts/stories/story-<id>-*.md`; (b) the
+canonical story file is reachable on the dev's branch base (on `main`
+or merged into the sprint branch before dev spawn). If (b) fails
+because the canonical spec lives on an unmerged PR, the lead MUST
+either merge that PR first or pin the dev branch base to a commit
+that includes it. Dispatching dev without both conditions satisfied
+is a story-scope failure mode. Violation fails gate-validation
+Check 15 on detection at retro.
 
 - **dev** from `dev.md`. Assign ownership based on story scope per the
   ownership paths defined in the dev role file.
@@ -68,9 +70,8 @@ Verify:
 - Teammate assignments match story scope and ownership boundaries
 - No story is assigned to a teammate outside their ownership boundary
 - Every teammate spawn in Step 2 passed the Agent tool `model`
-  parameter with a value matching the mapping table. Re-spawn any
-  teammate that was created without `model` before proceeding. Record
-  the spawned model per teammate in the gate log.
+  parameter per SKILL.md Rule 19. Record the spawned model per
+  teammate in the gate log.
 
 Log task list validation in gate log.
 
@@ -103,6 +104,15 @@ Instruct all teammates:
   validation check #4 will reject templates with `{{...}}`.
 - Update sprint-status.yaml in the same commit as story Status: change.
   Gate validation check #5 will reject mismatches.
+
+**Day-1 Variant-Lock Evidence.** For any story whose plan calls for a
+runtime-variant lock (per `.claude/skills/ai-dlc/steps/architecture.md`
+section 2a), the dev teammate MUST commit a variant-lock artifact on Day 1
+of the story containing BOTH (a) reproduction of the failure mode that
+motivates the lock AND (b) measurement of each candidate variant's observed
+behavior under the same conditions. Declaration-only variant-lock entries
+(pick a winner without captured reproduction + measurement) are rejected at
+Gate 2.
 
 **Code reviewer — mandatory severity rules (see code-reviewer.md).**
 **QA — validate every AC, send failures to dev, re-validate.**

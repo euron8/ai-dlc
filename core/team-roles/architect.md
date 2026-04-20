@@ -11,10 +11,6 @@ tradeoffs for this project.
 <!-- {architect_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-opus-4-6-v1) -->
 - Personal: `/model {architect_model_personal}`
 - Bedrock: `/model {architect_model_bedrock}`
-- **Agent-tool spawn:** when the lead spawns this role via the Agent
-  tool, the lead MUST pass `model: "opus"`. The `/model` directives
-  above apply only to user-session launches, not to Agent-tool
-  subagent spawns.
 
 ## Ownership
 

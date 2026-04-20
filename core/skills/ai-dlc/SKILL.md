@@ -92,15 +92,58 @@ the pipeline working. Output the work, then immediately continue to
 the next action. The distinction: outputting and continuing (correct)
 vs. outputting and waiting for a response (stalling).
 
-**Execute validation sub-skills inline.** `/bmad-party-mode`,
-`/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`, and
-`/bmad-validate-prd` MUST be invoked via the Skill tool in the lead's
-own conversation. Do NOT route them through the Agent or Task tool.
-The lead role-plays each perspective inline so the debate, probe, or
-review enters the lead's working context and is visible to the human.
-Subagent delegation is reserved for implementation-phase teammates
-spawned per `implementation.md`. A validation sub-skill whose output
-appears only as a summarized subagent return is a rule violation.
+**Execute validation sub-skills inline via the Skill tool.**
+`/bmad-party-mode`, `/bmad-advanced-elicitation`,
+`/bmad-review-adversarial-general`, and `/bmad-validate-prd` MUST
+be invoked via the Skill tool in the lead's own conversation. Do
+NOT route them through the Agent or Task tool. The lead role-plays
+each perspective inline so the debate, probe, or review enters the
+lead's working context and is visible to the human. Subagent
+delegation is reserved for implementation-phase teammates spawned
+per `implementation.md`.
+
+**Provenance block is mandatory.** Every validation sub-skill
+invocation MUST emit a `SKILL_INVOCATION_PROVENANCE v1` block into
+the artifact it produces (retro doc, PRD after validation cycle,
+story after party-mode, etc.). Block schema:
+
+```
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
+invoked_at: <ISO 8601 UTC timestamp>
+tool_use_id: <toolu_... from the Skill tool response>
+mode: <solo|subagent>
+lead_role: <step-file-that-invoked>
+transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
+SKILL_INVOCATION_PROVENANCE_END -->
+```
+
+`scripts/validate-provenance-block.sh` parses the block;
+`scripts/validate-retro-evidence.sh` additionally enforces the
+transcript artifact + byte-matched SHA citation for retro
+party-mode (see `gate-validation.md` Check 17). Both run on every
+retro PR via `.github/workflows/validate-retro-compliance.yml`.
+Absence of the block at gate-validation is a HARD_BLOCK.
+
+**Explicitly forbidden failure mode.** Writing skill-shaped output
+in a document (role-played personas, section headers, findings
+lists) WITHOUT having invoked the Skill tool and WITHOUT emitting
+the provenance block is the exact rule-avoidance pattern this rule
+exists to prevent. "The findings are real" is not a valid
+rationalization — the process IS the validation. A validation
+sub-skill whose output appears only as a summarized subagent
+return, or appears as skill-shaped text without the provenance
+block, is a rule violation.
+
+**Forgeability caveat.** The v1 provenance block is pattern-match,
+not cryptographic attestation. A motivated forger can paste a
+well-formed block without invoking the Skill. This mitigation
+raises the cost of accidental or rationalized skipping; it does
+not prevent deliberate spoofing. For retro party-mode, the
+transcript file + byte-matched SHA citation in
+`validate-retro-evidence.sh` narrows the forgery surface further
+by requiring the transcript content to exist and not be edited
+post-citation.
 
 ### Rule 4 -- Every step must be completed in full
 
@@ -472,6 +515,16 @@ different formats.
 rule files each sprint for two classes of violation: **narrative
 drift** (rule text gained origin context) and **rule weakness** (rule
 text became readable as optional). Both are cleanup targets.
+
+### Rule 19 -- Agent spawns MUST pass the `model` parameter
+
+When the lead invokes the Agent tool to spawn a teammate, the `model`
+parameter MUST be set explicitly. Map each role to its model per the
+role file's `/model` directive: `dev`, `qa`, `pm` -> `sonnet`;
+`code-reviewer`, `architect`, `tea` -> `opus`. Omitted `model`
+inherits from the parent conversation and bypasses the role's
+cost/capability contract. Violation fails gate-validation Check 15
+on detection at retro.
 
 ## INITIALIZATION
 

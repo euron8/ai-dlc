@@ -1,0 +1,83 @@
+name: Validate Retro Compliance
+
+# Root-cause fix for Sprint 154+155 skipped-party-mode pattern.
+#
+# Enforcement scripts (validate-retro-evidence.sh, validate-cycle-commits.sh,
+# validate-mandatory-rules.sh) have existed since Sprint 137-140 but were
+# never wired to CI. This workflow wires them so retro PRs that skip the
+# /bmad-party-mode Skill invocation, or that omit the transcript + SHA
+# citation, fail PR checks.
+#
+# Triggers on any PR that modifies docs/retro/sprint-*.md OR adds/modifies
+# any file under _bmad-output/party-mode-transcripts/. Extracts the sprint
+# number from the touched retro path and runs validate-mandatory-rules.sh
+# against it.
+
+on:
+  pull_request:
+    paths:
+      - "docs/retro/sprint-*.md"
+      - "_bmad-output/party-mode-transcripts/**"
+      - "scripts/validate-retro-evidence.sh"
+      - "scripts/validate-cycle-commits.sh"
+      - "scripts/validate-mandatory-rules.sh"
+      - "scripts/validate-provenance-block.sh"
+      - ".github/workflows/validate-retro-compliance.yml"
+
+jobs:
+  validate-retro-compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Determine sprint number from touched retro files
+        id: sprint
+        run: |
+          set -euo pipefail
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+          git fetch --no-tags --depth=50 origin "$base_sha" "$head_sha" || true
+          changed=$(git diff --name-only "$base_sha" "$head_sha" -- 'docs/retro/sprint-*.md' || true)
+          if [[ -z "$changed" ]]; then
+              echo "No retro files touched. Skipping."
+              echo "sprint=" >> "$GITHUB_OUTPUT"
+              exit 0
+          fi
+          sprint=""
+          for f in $changed; do
+              n=$(basename "$f" .md | sed 's/^sprint-//')
+              if [[ "$n" =~ ^[0-9]+$ ]]; then
+                  if [[ -z "$sprint" ]]; then
+                      sprint="$n"
+                  elif [[ "$sprint" != "$n" ]]; then
+                      echo "ERROR: retro PR touches multiple sprint files ($sprint and $n)" >&2
+                      exit 1
+                  fi
+              fi
+          done
+          echo "sprint=$sprint" >> "$GITHUB_OUTPUT"
+          echo "Sprint number resolved: $sprint"
+
+      - name: Run validate-mandatory-rules.sh
+        if: steps.sprint.outputs.sprint != ''
+        run: |
+          set -euo pipefail
+          chmod +x scripts/validate-mandatory-rules.sh \
+                   scripts/validate-retro-evidence.sh \
+                   scripts/validate-cycle-commits.sh \
+                   scripts/validate-retro-prereq.sh \
+                   scripts/validate-phase-sequencing.sh 2>/dev/null || true
+          ./scripts/validate-mandatory-rules.sh "${{ steps.sprint.outputs.sprint }}"
+
+      - name: Run validate-provenance-block.sh on retro doc
+        if: steps.sprint.outputs.sprint != ''
+        run: |
+          set -euo pipefail
+          chmod +x scripts/validate-provenance-block.sh
+          ./scripts/validate-provenance-block.sh "docs/retro/sprint-${{ steps.sprint.outputs.sprint }}.md"
