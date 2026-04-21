@@ -60,90 +60,27 @@ section below and in `gate-validation.md` Check 14.
 
 ### Rule 3 -- Never stall the pipeline
 
-The pipeline runs as a continuous, uninterrupted flow. There are
-exactly THREE points where you stop and wait for human input:
+The pipeline runs as a continuous, uninterrupted flow. Exactly
+THREE pause points exist where you stop and wait for human input:
 
-- (a) **Ambiguity resolution** (Rule 11) -- including the three-option
-  prompt when handoff is requested at an unsafe seam.
+- (a) **Ambiguity resolution** (Rule 11).
 - (b) **Production Validation Checkpoint** (Rule 10).
 - (c) **Retro commentary prompt**.
 
-Post-compact recovery outputs a verification turn for user
-transparency (see **Post-Compact Recovery Protocol** below) but MUST
-NOT pause the pipeline. The lead outputs the verification turn
-content and proceeds to the next pipeline action in the same
-response.
+If you are not at one of these three pause points, you are not done.
+Keep working. Do not ask if you should continue.
 
-**Handoff is not a fourth pause point.** When a Rule 2(a) handoff
-fires, the session ENDS rather than pauses. Reminders from Rule 2(b)
-and 2(c) are also NOT pauses -- the lead outputs each reminder line
-and continues immediately.
+**Show your work.** Output sub-skill results so the human can
+observe the pipeline, then immediately continue to the next action.
+Outputting and continuing = correct. Outputting and stopping = stalling.
 
-At ALL other times -- between sub-skills, within sub-skills, during
-long validation cycles, during large artifact generation, during
-multi-pass adversarial review -- keep working. Do not ask if you
-should continue. Do not treat a natural break point within a step as
-a stopping point. If you are not at one of the three pause points
-above, you are not done.
-
-**Show your work.** Output sub-skill results (party mode debates,
-adversarial findings, elicitation probes) so the human can observe
-the pipeline working. Output the work, then immediately continue to
-the next action. The distinction: outputting and continuing (correct)
-vs. outputting and waiting for a response (stalling).
-
-**Execute validation sub-skills inline via the Skill tool.**
-`/bmad-party-mode`, `/bmad-advanced-elicitation`,
-`/bmad-review-adversarial-general`, and `/bmad-validate-prd` MUST
-be invoked via the Skill tool in the lead's own conversation. Do
-NOT route them through the Agent or Task tool. The lead role-plays
-each perspective inline so the debate, probe, or review enters the
-lead's working context and is visible to the human. Subagent
-delegation is reserved for implementation-phase teammates spawned
-per `implementation.md`.
-
-**Provenance block is mandatory.** Every validation sub-skill
-invocation MUST emit a `SKILL_INVOCATION_PROVENANCE v1` block into
-the artifact it produces (retro doc, PRD after validation cycle,
-story after party-mode, etc.). Block schema:
-
-```
-<!-- SKILL_INVOCATION_PROVENANCE v1
-skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
-invoked_at: <ISO 8601 UTC timestamp>
-tool_use_id: <toolu_... from the Skill tool response>
-mode: <solo|subagent>
-lead_role: <step-file-that-invoked>
-transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
-SKILL_INVOCATION_PROVENANCE_END -->
-```
-
-`scripts/validate-provenance-block.sh` parses the block;
-`scripts/validate-retro-evidence.sh` additionally enforces the
-transcript artifact + byte-matched SHA citation for retro
-party-mode (see `gate-validation.md` Check 17). Both run on every
-retro PR via `.github/workflows/validate-retro-compliance.yml`.
-Absence of the block at gate-validation is a HARD_BLOCK.
-
-**Explicitly forbidden failure mode.** Writing skill-shaped output
-in a document (role-played personas, section headers, findings
-lists) WITHOUT having invoked the Skill tool and WITHOUT emitting
-the provenance block is the exact rule-avoidance pattern this rule
-exists to prevent. "The findings are real" is not a valid
-rationalization — the process IS the validation. A validation
-sub-skill whose output appears only as a summarized subagent
-return, or appears as skill-shaped text without the provenance
-block, is a rule violation.
-
-**Forgeability caveat.** The v1 provenance block is pattern-match,
-not cryptographic attestation. A motivated forger can paste a
-well-formed block without invoking the Skill. This mitigation
-raises the cost of accidental or rationalized skipping; it does
-not prevent deliberate spoofing. For retro party-mode, the
-transcript file + byte-matched SHA citation in
-`validate-retro-evidence.sh` narrows the forgery surface further
-by requiring the transcript content to exist and not be edited
-post-citation.
+**Tool call first, recap second.** When transitioning between
+pipeline steps, issue the next tool call (Read the next step file)
+IN THE SAME response as any status recap. A response that contains
+only text and no tool call is a natural turn end — the model will
+stop. A response that contains a tool call continues regardless of
+surrounding text. Always pair recap text with the next action's
+tool call. Never emit a recap without a tool call in the same response.
 
 ### Rule 4 -- Every step must be completed in full
 
@@ -525,6 +462,41 @@ role file's `/model` directive: `dev`, `qa`, `pm` -> `sonnet`;
 inherits from the parent conversation and bypasses the role's
 cost/capability contract. Violation fails gate-validation Check 15
 on detection at retro.
+
+### Rule 20 -- Validation sub-skills run inline with provenance
+
+Validation sub-skills (`/bmad-party-mode`, `/bmad-advanced-elicitation`,
+`/bmad-review-adversarial-general`, `/bmad-validate-prd`) MUST be
+invoked via the Skill tool in the lead's own conversation. Do NOT
+route them through Agent or Task. Subagent delegation is reserved
+for implementation-phase teammates per `implementation.md`.
+
+**Provenance block.** Every invocation MUST emit a
+`SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
+Block schema:
+
+```
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
+invoked_at: <ISO 8601 UTC timestamp>
+tool_use_id: <toolu_... from the Skill tool response>
+mode: <solo|subagent>
+lead_role: <step-file-that-invoked>
+transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
+SKILL_INVOCATION_PROVENANCE_END -->
+```
+
+`scripts/validate-provenance-block.sh` parses the block;
+`scripts/validate-retro-evidence.sh` enforces transcript artifact +
+byte-matched SHA citation for retro party-mode (see
+`gate-validation.md` Check 17). Both run on every retro PR via
+`.github/workflows/validate-retro-compliance.yml`. Absence of the
+block at gate-validation is a HARD_BLOCK.
+
+**Forbidden failure mode.** Skill-shaped output (role-played personas,
+findings lists) WITHOUT Skill tool invocation and WITHOUT provenance
+block is a rule violation. "The findings are real" is not a valid
+rationalization — the process IS the validation.
 
 ## INITIALIZATION
 

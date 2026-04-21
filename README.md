@@ -202,7 +202,7 @@ your-project/
     hooks/
       ai-dlc-protect.sh           # Context-mode path protection hook
     skills/ai-dlc/
-      SKILL.md                    # Entry point (Rules 1-19)
+      SKILL.md                    # Entry point (Rules 1-20)
       steps/                      # 18 pipeline step files
     skills/ai-dlc-setup/
       SKILL.md                    # Guided configuration wizard

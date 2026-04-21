@@ -11,51 +11,6 @@ deployment, and present the Production Validation Checkpoint to the human.
 
 ## EXECUTION SEQUENCE
 
-### 0. Pre-Flight Context Check (hard gate)
-
-Deploying from a degraded session is not permitted. Before running
-any subsequent step in this file, the lead MUST confirm the current
-conversation's context is below the yellow threshold defined in
-SKILL.md Handoff Protocol "Threshold defaults" (yellow 80K for 200K
-models, 120K for 1M models).
-
-The lead cannot self-measure reliably (SKILL.md Handoff Protocol
-"Reminder semantics"). Two acceptable confirmations:
-
-- **(a) User-shared `/context`.** The user shares `/context` output
-  within this deployment turn, and the reported context usage is
-  below the yellow threshold. The lead records the confirmation in
-  the gate log entry and proceeds.
-- **(b) Handoff to a fresh session.** The user performs a
-  Rule 2(a) handoff; the new session resumes from the snapshot,
-  performs the post-compact verification turn (SKILL.md
-  "Post-Compact Recovery Protocol"), then executes this step. In
-  the fresh session, context is well below the yellow threshold by
-  construction and the check is trivially satisfied.
-
-If neither confirmation is available, the lead MUST invoke
-auto-handoff evaluation (see `gate-validation.md` "Auto-handoff
-evaluation") at `Seam A` with the label
-`deploy-validate Step 0 pre-flight` BEFORE outputting the hard-gate
-STOP line. If `auto_handoff_mode` is `deploy-only` or `safe-seam`
-AND all preconditions hold — in particular, the red threshold has
-been confirmed crossed via user-shared `/context` and the snapshot
-is current — auto-handoff FIRES and the session ends. If
-auto-handoff evaluation returns CONTINUE (mode is `off`, red not
-confirmed under Mode 1, or any other precondition fails), the lead
-outputs this line and STOPS before Step 1:
-
-> *"Pre-Flight Context Check: cannot confirm context is below the
-> yellow threshold. Deploying from a degraded session is not
-> permitted. Options: (a) share `/context` showing tokens below
-> `{yellow_threshold}`; (b) request handoff to a fresh session
-> before deployment. Snapshot current at
-> `_bmad-output/pipeline-snapshot.md`."*
-
-This is a hard gate equivalent to a HARD_BLOCK. Do not bypass.
-Record the confirmation (option a), the handoff dispatch (option
-b), or the auto-handoff fire (mode + seam) in the gate log.
-
 ### 1. Pre-Deployment Check
 
 Verify all sprint stories have passed all three gates (code review, QA,

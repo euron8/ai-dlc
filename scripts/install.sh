@@ -160,6 +160,16 @@ cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
 chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
 echo "  ai-dlc-protect.sh installed"
 
+# Install settings.json (merge hooks if settings.json already exists)
+if [ ! -f "$PROJECT_ROOT/.claude/settings.json" ]; then
+  cp "$SCRIPT_DIR/../templates/settings.json.template" "$PROJECT_ROOT/.claude/settings.json"
+  echo "  settings.json installed"
+else
+  echo "  settings.json already exists — verify hooks manually:"
+  echo "    PreToolUse Skill matcher (Rule 3 continuation mandate)"
+  echo "    PreToolUse context-mode matcher (ai-dlc-protect.sh)"
+fi
+
 # Install validation scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
 mkdir -p "$PROJECT_ROOT/scripts"

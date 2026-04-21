@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'RULE 3 CONTINUATION MANDATE: After this skill completes, you MUST continue to the next pipeline action in the SAME response. Do not end your turn. Skill output is mid-step, not end-of-step. Outputting results and stopping is a Rule 3 violation.'"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__context-mode__ctx_execute_file|mcp__context-mode__ctx_batch_execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

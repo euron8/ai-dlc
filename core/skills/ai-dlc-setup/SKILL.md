@@ -181,8 +181,8 @@ section body up to the next same-or-higher-level header:
 
 | Pre-R22 section header | Moved to |
 |---|---|
-| Autonomy Rules | SKILL.md Rules 1 through 18 |
-| Autonomy Rule (any individual rule) | SKILL.md Rules 1 through 18 |
+| Autonomy Rules | SKILL.md Rules 1 through 20 |
+| Autonomy Rule (any individual rule) | SKILL.md Rules 1 through 20 |
 | Autonomous Gate Protocol | gate-validation.md |
 | Phase Reference / Phase Table | route.md Step 6 |
 | Session Model | SKILL.md Handoff Protocol |
