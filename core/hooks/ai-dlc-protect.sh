@@ -10,11 +10,18 @@
 # Consolidation risks pipeline integrity drift.
 #
 # INSTALL
-# Automated: scripts/install.sh copies this hook and installs
-# templates/settings.json.template with both PreToolUse matchers.
-# Manual: place at .claude/hooks/ai-dlc-protect.sh, chmod +x, and
-# ensure .claude/settings.json includes the context-mode matcher
-# from templates/settings.json.template.
+# 1. Place at .claude/hooks/ai-dlc-protect.sh
+# 2. chmod +x .claude/hooks/ai-dlc-protect.sh
+# 3. Ensure .claude/settings.json has:
+#      "hooks": {
+#        "PreToolUse": [{
+#          "matcher": "mcp__context-mode__ctx_execute_file|mcp__context-mode__ctx_batch_execute",
+#          "hooks": [{
+#            "type": "command",
+#            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
+#          }]
+#        }]
+#      }
 
 set -u
 
@@ -23,9 +30,8 @@ set -u
 # -----------------------------------------------------------------------------
 
 PROTECTED_PATTERNS=(
-  ".claude/skills/ai-dlc/SKILL.md"
+  ".claude/skills/ai-dlc/*"
   ".claude/skills/ai-dlc/steps/*"
-  ".claude/skills/ai-dlc/research-citations.md"
   ".claude/skills/ai-dlc-setup/SKILL.md"
   ".claude/team-roles/*.md"
   "CLAUDE.md"
