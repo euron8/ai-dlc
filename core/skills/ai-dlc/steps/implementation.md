@@ -104,6 +104,18 @@ Instruct all teammates:
   validation check #4 will reject templates with `{{...}}`.
 - Update sprint-status.yaml in the same commit as story Status: change.
   Gate validation check #5 will reject mismatches.
+- On story transition to `done`, close out any upstream source item the
+  story satisfies — do not defer to retro:
+  - If the story traces to a carry-over backlog item: update
+    `_bmad-output/planning-artifacts/carry-over-backlog.md`, change the
+    item's status from `IN SPRINT` to `CLOSED - delivered in sprint <N>
+    via <story-id>` in the same commit as the story Status: change.
+  - If the story resolves an entry in `docs/escalations/pending.md`:
+    append `RESOLVED - <sprint>/<story-id> - <one-line outcome>` to the
+    entry in the same commit.
+  - If neither applies, skip. Tracing is determined by reading the
+    story's LOCKED_REQUIREMENTS block and the `Source:` / provenance
+    fields written at story creation.
 
 **Day-1 Variant-Lock Evidence.** For any story whose plan calls for a
 runtime-variant lock (per `.claude/skills/ai-dlc/steps/architecture.md`

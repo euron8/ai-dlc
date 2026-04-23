@@ -196,6 +196,47 @@ backticks, preceded by the literal phrase "CI gate"). This is the only form
 the shallow detector harvests; gate names mentioned in free-form prose are
 intentionally out of scope.
 
+### 4a. Close-Out Sweep
+
+Implementation is supposed to close upstream items inline as stories
+transition to `done` (see `implementation.md` step 5). This sweep is
+the backstop: it catches items that slipped past inline closure and
+ensures no sprint ends with stale OPEN/IN_SPRINT state.
+
+**Sweep targets (run all three):**
+
+1. **`_bmad-output/planning-artifacts/carry-over-backlog.md`.** For
+   every item still marked `IN SPRINT` or `OPEN`, check whether any
+   story in this sprint satisfies it. Match on story `Source:`,
+   LOCKED_REQUIREMENTS references, or epic linkage. If satisfied and
+   the story is `done`: mark the item `CLOSED - delivered in sprint
+   <N> via <story-id>`. If the story shipped but only partially
+   satisfied the item: mark `PARTIAL - sprint <N>` and keep the
+   remainder open with a note on what remains. If no story touched
+   it: leave as-is (it's legitimate carry-over).
+
+2. **`docs/escalations/pending.md`.** For every entry without a
+   RESOLVED or DECIDED_AUTONOMOUSLY terminal marker, check whether
+   the sprint addressed it. If yes: append `RESOLVED - sprint <N> -
+   <one-line outcome>`. DEFERRAL_REQUEST entries that the human
+   accepted at the production validation checkpoint get `DEFERRED -
+   sprint <N>` and are moved to the next sprint's carry-over
+   backlog (append to `carry-over-backlog.md` as a new OPEN item
+   citing the original escalation).
+
+3. **`_bmad-output/implementation-artifacts/sprint-status.yaml`.**
+   Final consistency pass: every story with `Status: done` in its
+   file MUST have `status: done` in sprint-status.yaml, and vice
+   versa. Gate validation check #5 enforced this per-commit; this
+   sweep is the last guard against drift. Any mismatch found here is
+   a retro finding — record it and fix.
+
+**Record results in the retro doc** under a `## Close-Out Sweep`
+section: carry-over items closed/partial, escalations resolved or
+deferred, any status-yaml drift caught and corrected. If everything
+was already closed inline, note "Sweep: clean (all items closed
+inline during implementation)".
+
 ### 5. Human Commentary
 
 Present the retro summary and ask:
@@ -226,6 +267,12 @@ This typically includes:
 - Any files modified by process improvements (CLAUDE.md, team roles,
   coding-conventions.md, pipeline step files)
 - `docs/ai-dlc-feedback.md` (if updated)
+
+**Close-out sweep artifacts** (produced in step 4a above):
+- `_bmad-output/planning-artifacts/carry-over-backlog.md` (closures)
+- `docs/escalations/pending.md` (resolutions and deferrals)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+  (any drift corrections)
 
 Use a conventional commit message:
 `docs(retro): sprint N retrospective, reviews, and process improvements`
