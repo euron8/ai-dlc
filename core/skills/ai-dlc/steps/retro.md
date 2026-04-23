@@ -292,4 +292,115 @@ Present to the user:
 
 Announce: "Sprint [N] complete. Pipeline finished."
 
+### 7. Merge and Next-Sprint Handoff
+
+This step closes the loop on the sprint and produces a copy-pasteable
+`/ai-dlc` prompt for the next sprint. The prompt is authored here, not
+in the next sprint's discovery step, so that retro findings, unfinished
+epic scope, and residual risks are still in the lead's working context.
+
+**7a. Merge gate.**
+
+- **If a PR was created in 6d:**
+  Ask the user: "Merge PR [#N] now? (y/n)"
+  - **y:** Run `gh pr merge <N> --squash --delete-branch` (use the merge
+    strategy the repo's PRs normally use; check recent merges with
+    `gh pr list --state merged --limit 3 --json number,title,mergedAt`
+    if unsure). If merge fails (branch protection, failing checks,
+    conflicts), surface the error and stop — do not emit the next-sprint
+    prompt until the user resolves and confirms merge.
+  - **n:** Do not merge. Emit the next-sprint prompt immediately with a
+    one-line preamble noting the PR is still open and the user should
+    paste the prompt after it merges.
+- **If no PR was created (direct-to-main in 6c):** Skip the merge gate
+  and proceed directly to 7b.
+
+**7b. Assemble next-sprint inputs.**
+
+Gather the material the next-sprint prompt will draw from. Read, do not
+summarize prematurely:
+
+1. **Current epic state.** Read the active epic file under
+   `_bmad-output/planning-artifacts/` (epic files are created by
+   `/bmad-create-epics-and-stories` in `stories-test-strategy.md`).
+   Determine:
+   - Which stories in the epic are `done` vs remaining
+   - Whether the epic is complete (all stories done) or in-progress
+   - Any epic-level acceptance criteria not yet satisfied
+2. **Carry-over candidates.** From `_bmad-output/implementation-artifacts/sprint-status.yaml`,
+   list any stories with status `blocked`, `deferred`, or `skipped` that
+   have a rationale indicating they should return in a future sprint.
+3. **Open escalations.** From `docs/escalations/pending.md`, list any
+   entries not resolved during this sprint.
+4. **Unexercised gates.** Any CI gate declared in `docs/retro/sprint-N.md`
+   (this sprint's retro) that has not yet run green on a PR — these must
+   be exercised in the exercise window or the next retro fails (see
+   "Empirical gate validation" above).
+5. **Retro improvements with sprint-N+1 follow-ups.** Any action items
+   in `docs/retro/sprint-N.md` tagged for the next sprint (e.g.,
+   "Sprint N+1 task to add weekly schedule cron" from the path-filter
+   dormancy scan).
+6. **Related-epic scope candidates.** From the broader epics list in
+   `_bmad-output/planning-artifacts/`, identify epics that are directly
+   related to the current epic (shared components, adjacent user flows,
+   or explicit dependency links). These are potential scope for the
+   next sprint IF the current epic is complete or nearly so.
+
+**7c. Derive the next-sprint theme.**
+
+Priority order when choosing the theme:
+
+1. **Current epic not complete** → theme = continue/finish the current
+   epic. Scope = remaining epic stories + any carry-over or retro
+   follow-ups that block epic completion.
+2. **Current epic just completed this sprint** → theme = consolidate +
+   advance. Scope = retro follow-ups, unexercised gates, open
+   escalations, and the most directly-related next epic as stretch
+   scope.
+3. **Current epic was already complete before this sprint** (sprint was
+   pure carry-over or cross-cutting work) → theme = next epic in the
+   prioritized list. Scope = that epic's first stories + open
+   escalations.
+
+The theme is one sentence, stated as the sprint's objective (not a
+summary of inputs).
+
+**7d. Emit the handoff block.**
+
+Present the following verbatim to the user. The `----` lines are the
+copy-paste boundaries the user requested; do not add any other content
+between them.
+
+```
+Sprint [N] closed.
+
+Next sprint theme: [one-sentence theme derived in 7c]
+
+Scope outline (for context, not part of the prompt):
+- Current epic: [epic name] — [complete | N of M stories remaining]
+- Carry-over: [count] stories  ([list IDs or "none"])
+- Open escalations: [count]   ([list IDs or "none"])
+- Unexercised gates: [list or "none"]
+- Retro follow-ups: [list or "none"]
+- Related-epic stretch scope: [list or "none"]
+
+Copy the prompt below to start the next sprint.
+
+----
+/ai-dlc
+
+[Draft prompt body — written in the same voice the user would use.
+ Lead with the theme. Then name the epic explicitly and say whether
+ the goal is to continue it or close it out. Then enumerate the
+ in-scope items from 7b in priority order: epic-remaining stories
+ first, then carry-over, then retro follow-ups and gate exercises,
+ then related-epic stretch scope last (marked "stretch"). Keep it
+ under ~15 lines. Do not restate already-done work.]
+----
+```
+
+Replace the bracketed placeholders with actual content. The prompt body
+between the `----` markers must be directly pasteable — no meta
+commentary, no "here is your prompt", no surrounding quotes.
+
 **STOP.**
