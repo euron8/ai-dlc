@@ -211,7 +211,7 @@ else
         | .enabledPlugins = (($t.enabledPlugins // {}) + ($u.enabledPlugins // {}))
         | .hooks = (
             $events
-            | map({(.): (($uh[.] // []) | strip_ai_dlc) + ($th[.] // [])})
+            | map(. as $e | (($uh[$e] // []) | strip_ai_dlc) + ($th[$e] // []) | {($e): .})
             | add
           )
       ' "$USER_SETTINGS" > "$MERGE_TMP"; then
