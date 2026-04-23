@@ -26,6 +26,14 @@ if [ ! -d "$PROJECT_ROOT/_bmad" ]; then
   exit 1
 fi
 
+# Verify jq (required for settings.json merge and hook scripts)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is required but not found on PATH."
+  echo "Install jq from your package manager (e.g. apt, dnf, pacman,"
+  echo "apk, brew, choco) or https://jqlang.github.io/jq/download/"
+  exit 1
+fi
+
 # Create directories
 echo "Creating directories..."
 mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/steps"
@@ -113,6 +121,7 @@ archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/steps" "*.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
+archive_tree_file "$PROJECT_ROOT/.claude/settings.json"
 
 if [ "$ARCHIVED" = true ]; then
   echo ""
@@ -160,14 +169,60 @@ cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
 chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
 echo "  ai-dlc-protect.sh installed"
 
-# Install settings.json (merge hooks if settings.json already exists)
-if [ ! -f "$PROJECT_ROOT/.claude/settings.json" ]; then
-  cp "$SCRIPT_DIR/../templates/settings.json.template" "$PROJECT_ROOT/.claude/settings.json"
+# Install settings.json
+# Fresh project -> copy template. Existing settings.json -> merge in place:
+#   * Preserve user-owned permissions, env, mcpServers, etc.
+#   * Upsert ai-dlc hook blocks (stale ai-dlc entries from prior installs are
+#     stripped before template entries are appended, so reinstalls propagate).
+#   * Shallow-merge enabledPlugins; user values win on conflict.
+# A block counts as ai-dlc-owned when any inner command references
+# .claude/hooks/ai-dlc-*.sh OR the legacy "RULE 3 CONTINUATION MANDATE" echo
+# (left over from pre-hook-script versions of this installer).
+TEMPLATE_SETTINGS="$SCRIPT_DIR/../templates/settings.json.template"
+USER_SETTINGS="$PROJECT_ROOT/.claude/settings.json"
+
+if [ ! -f "$USER_SETTINGS" ]; then
+  cp "$TEMPLATE_SETTINGS" "$USER_SETTINGS"
   echo "  settings.json installed"
 else
-  echo "  settings.json already exists — verify hooks manually:"
-  echo "    PreToolUse Skill matcher (Rule 3 continuation mandate)"
-  echo "    PreToolUse context-mode matcher (ai-dlc-protect.sh)"
+  MERGE_TMP="$(mktemp)"
+  if jq -n \
+       --slurpfile user "$USER_SETTINGS" \
+       --slurpfile tmpl "$TEMPLATE_SETTINGS" '
+        ($user[0]) as $u |
+        ($tmpl[0]) as $t |
+
+        def is_ai_dlc_block:
+          (.hooks // [])
+          | any(
+              (.command // "") as $c |
+              ($c | test("/\\.claude/hooks/ai-dlc-[^/]+\\.sh")) or
+              ($c | test("RULE 3 CONTINUATION MANDATE"))
+            );
+
+        def strip_ai_dlc:
+          map(select(is_ai_dlc_block | not));
+
+        ($u.hooks // {}) as $uh |
+        ($t.hooks // {}) as $th |
+        (($uh | keys) + ($th | keys) | unique) as $events |
+
+        $u
+        | .enabledPlugins = (($t.enabledPlugins // {}) + ($u.enabledPlugins // {}))
+        | .hooks = (
+            $events
+            | map({(.): (($uh[.] // []) | strip_ai_dlc) + ($th[.] // [])})
+            | add
+          )
+      ' "$USER_SETTINGS" > "$MERGE_TMP"; then
+    mv "$MERGE_TMP" "$USER_SETTINGS"
+    echo "  settings.json merged (ai-dlc hooks upserted; user config preserved)"
+  else
+    rm -f "$MERGE_TMP"
+    echo "  Error: failed to merge settings.json. Existing file left untouched."
+    echo "  Archived copy at docs/pre-ai-dlc/$ARCHIVE_TS/_divergence/.claude/settings.json"
+    exit 1
+  fi
 fi
 
 # Install validation scripts (always overwrite with AI/DLC versions)
