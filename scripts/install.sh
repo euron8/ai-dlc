@@ -108,19 +108,23 @@ archive_tree_glob() {
   fi
 }
 
-# Flat archive (Step 0 absorption targets)
+# Flat archive — consumer-owned files that /ai-dlc-setup Step 0 absorbs.
 archive_if_exists "$PROJECT_ROOT/CLAUDE.md"
 archive_if_exists "$PROJECT_ROOT/QUICKSTART.md"
 archive_if_exists "$PROJECT_ROOT/docs/coding-conventions.md"
-for role in architect code-reviewer dev pm qa; do
-  archive_if_exists "$PROJECT_ROOT/.claude/team-roles/$role.md"
-done
 
-# Structured archive (export-tool diff targets)
+# Structured archive — ai-dlc-owned files (reference/diff only, NOT absorbed
+# by setup). Upstream is authoritative on reinstall; team roles, skills,
+# steps, patterns, and hooks are reset to the installed versions and any
+# consumer drift lives only under _divergence/ for historical reference.
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/steps" "*.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
+for role in architect code-reviewer dev pm qa; do
+  archive_tree_file "$PROJECT_ROOT/.claude/team-roles/$role.md"
+done
+archive_tree_glob "$PROJECT_ROOT/.claude/hooks" "ai-dlc-*.sh"
 archive_tree_file "$PROJECT_ROOT/.claude/settings.json"
 
 if [ "$ARCHIVED" = true ]; then

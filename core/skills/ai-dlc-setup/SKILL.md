@@ -129,6 +129,27 @@ If all exist, proceed to routing.
 
 **This step runs automatically before Step 1 if archived files exist.**
 
+**Source-of-truth directive (non-negotiable).** The AI/DLC core files
+listed below are authoritative on every install. Do NOT merge, absorb,
+or re-inject content from their archived copies, even when prior-install
+archives exist. On reinstall the upstream versions are meant to
+override — absorbing consumer drift back into them defeats the point of
+reinstalling. Archives of these files exist under `_divergence/` for
+reference and diff only.
+
+Ai-dlc-owned (never absorb back):
+- `.claude/skills/ai-dlc/**` (SKILL.md, steps/*)
+- `.claude/skills/ai-dlc-setup/SKILL.md`
+- `.claude/team-roles/*.md`
+- `.claude/hooks/ai-dlc-*.sh`
+- `docs/ai-dlc-patterns/*.md`
+
+Consumer-owned (absorb as described in this step):
+- `CLAUDE.md`
+- `docs/coding-conventions.md`
+- `.claude/settings.json` (merged at install time, not here)
+- `QUICKSTART.md` (identity/launch fields only; structure is upstream)
+
 Check if `docs/pre-ai-dlc/` exists. This directory is created by
 `install.sh` when the project had existing files (CLAUDE.md, team roles,
 coding-conventions.md) before AI/DLC was installed. The originals were
@@ -228,20 +249,20 @@ back to the new CLAUDE.md. Surface the detected value in the
 absorption summary so the user knows whether to edit SKILL.md to
 preserve a non-default mode.
 
-### 0b: Absorb Team Roles
+### 0b: Team Roles (skipped — ai-dlc-owned)
 
-For each archived role file in the most recent archive (architect.md,
-code-reviewer.md, dev.md, pm.md, qa.md), read and extract:
+Team role files are ai-dlc-owned (see Source-of-truth directive at the
+top of Step 0). Do NOT absorb content from archived
+`.claude/team-roles/*.md`. The installed upstream versions are
+authoritative.
 
-- **Ownership paths** — which directories/files the role owned
-- **Model preferences** — any model strings already configured
-- **Project-specific responsibilities** — domain-specific duties
-  beyond AI/DLC's defaults
-- **Custom constraints** — project-specific rules for the role
-
-Store the extracted content. You will use it in:
-- Step 2 (Models) — if model strings were already configured
-- Step 4 (Ownership) — if ownership paths were already defined
+Ownership paths and model strings — the two project-specific fields
+historically carried in role files — are now configured exclusively
+through Step 4 (Ownership) and Step 2 (Models) prompts. If the user
+had customized these in a prior install, they will re-enter them at
+those steps. This is the intended behavior: reinstall resets
+ai-dlc-owned files, and the wizard re-collects the consumer-specific
+inputs that feed into them.
 
 ### 0c: Absorb Coding Conventions
 
@@ -305,8 +326,13 @@ Archived files found in docs/pre-ai-dlc/:
 
 Prior AI/DLC install detected: [yes | no]
 
-Absorbed content:
-- [ownership paths / model strings / conventions / etc.]
+Absorbed content (consumer-owned files only):
+- [CLAUDE.md content / coding conventions / etc.]
+
+Not absorbed (ai-dlc-owned; upstream is authoritative on reinstall):
+- Team role files (ownership and model strings are re-collected
+  via Steps 2 and 4 prompts)
+- Skill files, step files, hooks, patterns
 
 Conflicts with AI/DLC defaults:
 - [list conflicts, or "none detected"]
@@ -470,12 +496,12 @@ This determines the **model strategy mode**:
   the less capable model. The pipeline still works but planning phases
   may be less thorough.
 
-If Step 0 absorbed model strings from archived team role files, present
-them as the detected defaults instead of the standard defaults below.
+Step 0 does NOT absorb model strings from archived team role files
+(they are ai-dlc-owned). Always present the standard defaults below
+and let the user override if they want different models.
 
 Based on the answer, determine the model strings. Use these defaults
-unless the user specifies different models or Step 0 absorbed existing
-model strings:
+unless the user specifies different models:
 
 **Full model strategy (default):**
 
@@ -638,10 +664,10 @@ Replace in these files:
 
 ## STEP 4: Ownership Paths
 
-Based on the directory scan from Step 1 — and any ownership paths
-absorbed from archived team role files in Step 0 — propose ownership
-assignments. If Step 0 found existing ownership paths, use those as the
-starting proposal instead of generating from scratch.
+Based on the directory scan from Step 1, propose ownership assignments.
+Do not read archived team-role files to seed the proposal — those files
+are ai-dlc-owned and archived for reference only (see Step 0
+Source-of-truth directive).
 
 **Dev ownership** should include application source directories, test
 directories, and dependency files. Example:
