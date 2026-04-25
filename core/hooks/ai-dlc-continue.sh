@@ -30,10 +30,21 @@
 # 30 seconds, while a tight stall-and-retry happens in seconds.
 #
 # PAUSE CONTRACT
-# The pause flag is created by ai-dlc-pause.sh on any user message
-# during an active pipeline. The lead interprets the user's intent
-# and deletes the flag when the user wants to resume. This hook
-# never creates or deletes the flag; it only reads it.
+# The pause flag is created by:
+#   1. ai-dlc-pause.sh on any user message during an active pipeline, OR
+#   2. The lead itself when it has a legitimate intentional pause
+#      (HARD_BLOCK awaiting operator decision per Rule 11(a), handoff
+#      per Rule 2, gate failure, Production Validation Checkpoint).
+# The lead interprets user intent and deletes the flag when the user
+# wants to resume autonomous execution. This hook never creates or
+# deletes the flag; it only reads it.
+#
+# DESIGN PRINCIPLE
+# This hook prevents UNINTENTIONAL stalls. It does not prevent
+# INTENTIONAL pauses. The lead has authority to pause when it knows
+# it should pause (per AI/DLC rules). The flag file is the lead's
+# mechanism to express that intent. The hook respects the flag
+# regardless of who created it.
 #
 # OUTPUT
 # - State: _bmad-output/pipeline-block-state.txt (2 lines:
@@ -188,7 +199,7 @@ fi
 CURRENT_STEP=$(grep -iE "(current_step_file|current[ _]step|current[ _]phase)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
 LAST_GATE=$(grep -iE "(last_gate_passed|last[ _]gate)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
 
-REASON="Pipeline is active and in autonomous mode. You just ended your turn without invoking the next action. Do not emit another text-only transition message. Your next response MUST include the tool call or skill invocation that performs the pending transition. If you just completed a bmad skill, invoke the next bmad skill in the sequence defined by the current step file. If you just finished a step's required actions, execute the step file's next instruction. Per SKILL.md Rule 3, the pipeline cannot stall."
+REASON="Pipeline is active and in autonomous mode. You just ended your turn without invoking the next action. If you have a legitimate reason to pause (HARD_BLOCK awaiting operator decision per Rule 11(a), handoff per Rule 2, gate failure, Production Validation Checkpoint, or other intentional pause), create the pause flag before ending your turn: touch _bmad-output/pipeline-paused.flag. The hook will respect the flag on your next Stop event. If you do not have a legitimate pause reason, do not emit another text-only transition message — your next response MUST include the tool call or skill invocation that performs the pending transition. If you just completed a bmad skill, invoke the next bmad skill in the sequence defined by the current step file. If you just finished a step's required actions, execute the step file's next instruction. Per SKILL.md Rule 3, the pipeline cannot stall unintentionally."
 
 if [ -n "$CURRENT_STEP" ]; then
   REASON="${REASON} Current step: ${CURRENT_STEP}."
@@ -196,8 +207,6 @@ fi
 if [ -n "$LAST_GATE" ]; then
   REASON="${REASON} Last gate: ${LAST_GATE}."
 fi
-
-REASON="${REASON} If you believe the pipeline should actually pause, the pause flag at _bmad-output/pipeline-paused.flag must be created by a user message; you cannot create it yourself."
 
 # -----------------------------------------------------------------------------
 # Write updated state and log the block
