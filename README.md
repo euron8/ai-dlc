@@ -257,6 +257,36 @@ When your project discovers a new failure mode:
 This ensures lessons learned in one project benefit all projects using
 AI/DLC, without project-specific details leaking into the core.
 
+## Versioning
+
+AI/DLC follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The current release is recorded in [`VERSION`](VERSION); release notes
+live in [`CHANGELOG.md`](CHANGELOG.md).
+
+**Bump rules:**
+
+- **MAJOR** — breaking change to the skill contract, hook protocol,
+  gate-validation schema, install layout, or any consumer-visible
+  interface that requires manual migration. Pre-1.0, breaking changes
+  may land in MINOR.
+- **MINOR** — additive: new steps, new patterns, new validation checks,
+  new hook capabilities, new templates. Existing consumers keep working
+  without migration.
+- **PATCH** — wording, doc fixes, internal cleanup, non-behavioral edits.
+
+**For consumers:** `scripts/install.sh` writes a stamp at
+`.claude/.ai-dlc-version` in your project, capturing the installed
+version, upstream commit sha, and install timestamp. To detect drift
+from upstream, run from your project root:
+
+```bash
+<path-to-ai-dlc>/scripts/check-version.sh
+```
+
+It compares your stamp against the upstream `VERSION` on `main` and
+prints either "Up to date" or the drift delta with a link to the
+changelog. Re-run `install.sh` to upgrade.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
