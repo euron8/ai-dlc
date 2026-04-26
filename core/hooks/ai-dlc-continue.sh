@@ -232,7 +232,8 @@ jq -n \
   --arg reason "$REASON" \
   '{
     decision: "block",
-    reason: $reason
+    reason: $reason,
+    suppressOutput: true
   }'
 
 exit 0
