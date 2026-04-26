@@ -259,4 +259,4 @@ AI/DLC, without project-specific details leaking into the core.
 
 ## License
 
-MIT
+Apache License 2.0 — see [LICENSE](LICENSE).
