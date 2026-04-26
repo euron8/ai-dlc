@@ -277,20 +277,37 @@ procedure:
    (template below).
 4. End the session. Do not continue the pipeline in this conversation.
 
-**Resume prompt template** (fill bracketed fields at handoff time):
+**Resume prompt template** (fill bracketed fields at handoff time).
+
+The first line MUST be `/ai-dlc resume` so the successor session
+invokes this skill on paste. The body MUST stay terse: pipeline
+state lives in `_bmad-output/pipeline-snapshot.md` (the source of
+truth), and re-narrating Recent Activity, branch heads, sprint
+context, locked decisions, or open items in the resume prompt is
+forbidden duplication that drifts from snapshot reality. Cite only
+what the successor needs to find the snapshot and confirm it is
+the right one. If a handoff-specific instruction is not derivable
+from the snapshot (e.g., a bg watcher PID the successor must
+re-arm; a pause flag whose deletion gates resume), include that
+single instruction line.
 
 ```
-Resuming an ai-dlc sprint from handoff checkpoint.
-Pipeline snapshot: _bmad-output/pipeline-snapshot.md
-Pipeline variant: [variant]
-Current step: [current step file]
-Branch: [git branch]
-Last commit: [short sha]
+/ai-dlc resume
 
-Run the /ai-dlc skill. Read the pipeline snapshot in full before
-taking any pipeline actions. Acknowledge the handoff in your first
-output line, naming the step you are resuming at.
+Sprint [N] [variant], [current step file] [GATED on X | active].
+Branch: [git branch] @ [short sha].
+Snapshot: _bmad-output/pipeline-snapshot.md (read in full first).
+[Optional single line: pause flag / bg process / resume-only instruction not derivable from snapshot.]
+
+Acknowledge handoff in first output line and name resume step.
 ```
+
+Forbidden in the resume prompt: state summaries, branch lists,
+ETA recaps, sprint-status excerpts, escalation summaries, "next
+pipeline actions in order" lists. All of those belong in the
+snapshot. Successor reads the snapshot — duplication in the
+prompt rots fast and contradicts the snapshot when the lead
+forgets to update both.
 
 ### Threshold defaults
 
