@@ -6,9 +6,30 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="${1:-.}"
+AI_DLC_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Read upstream version (semver source of truth)
+if [ -f "$AI_DLC_ROOT/VERSION" ]; then
+  AI_DLC_VERSION="$(tr -d '[:space:]' < "$AI_DLC_ROOT/VERSION")"
+else
+  AI_DLC_VERSION="unknown"
+fi
+
+# Capture upstream commit sha if installer is running from a git checkout
+if git -C "$AI_DLC_ROOT" rev-parse --short HEAD >/dev/null 2>&1; then
+  AI_DLC_COMMIT="$(git -C "$AI_DLC_ROOT" rev-parse --short HEAD)"
+  if ! git -C "$AI_DLC_ROOT" diff-index --quiet HEAD -- 2>/dev/null; then
+    AI_DLC_COMMIT="${AI_DLC_COMMIT}-dirty"
+  fi
+else
+  AI_DLC_COMMIT="unknown"
+fi
+
+INSTALL_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 echo "AI/DLC Installer"
 echo "================"
+echo "Version: $AI_DLC_VERSION ($AI_DLC_COMMIT)"
 echo "Target project: $PROJECT_ROOT"
 echo ""
 
@@ -288,6 +309,16 @@ contributed back to the upstream AI/DLC project.
 FEEDBACK
   echo "  ai-dlc-feedback.md created (feedback loop log)"
 fi
+
+# Write version stamp so consumers can detect drift from upstream
+VERSION_STAMP="$PROJECT_ROOT/.claude/.ai-dlc-version"
+cat > "$VERSION_STAMP" <<EOF
+version: $AI_DLC_VERSION
+commit: $AI_DLC_COMMIT
+installed_at: $INSTALL_TIMESTAMP
+upstream: https://github.com/euron8/ai-dlc
+EOF
+echo "  .claude/.ai-dlc-version stamped ($AI_DLC_VERSION @ $AI_DLC_COMMIT)"
 
 echo ""
 echo "Installation complete!"
