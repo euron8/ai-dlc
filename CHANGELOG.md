@@ -17,6 +17,26 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-26
+
+### Changed
+
+- Rule 2(a) human-requested handoff and the auto-handoff helper
+  (`gate-validation.md` "Auto-handoff evaluation") are now 5-step
+  procedures. New Step 1 stops all in-flight teammates (TaskStop on
+  every `in_progress` task plus halt of any Agent-spawned teammate
+  not bound to a task) BEFORE committing in-flight work, finalizing
+  the snapshot, or emitting the resume prompt. Closes a race where
+  teammates kept running after the lead output the resume prompt
+  and committed work the successor session could not see.
+- Resume prompt template in `core/skills/ai-dlc/SKILL.md` Handoff
+  Protocol is now wrapped in `----` delimiter lines (one before,
+  one after) so the user knows exactly which lines to copy/paste
+  into the new session. Auto-handoff procedure references the same
+  delimiter requirement.
+
+[0.2.0]: https://github.com/euron8/ai-dlc/releases/tag/v0.2.0
+
 ## [0.1.0] — 2026-04-25
 
 Initial versioned release. Establishes the public surface for change tracking.
@@ -49,5 +69,5 @@ The 0.1.0 line freezes the current shape of:
   api-field-verification, financial-plausibility, ...)
 - `templates/{CLAUDE.md,QUICKSTART.md,settings.json,coding-conventions.md}.template`
 
-[Unreleased]: https://github.com/euron8/ai-dlc/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/euron8/ai-dlc/compare/v0.2.0...HEAD
 [0.1.0]: https://github.com/euron8/ai-dlc/releases/tag/v0.1.0
