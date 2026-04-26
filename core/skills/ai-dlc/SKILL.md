@@ -267,32 +267,20 @@ conversation scrollback.
 **(a) Human-requested handoff** -- user explicitly asks to continue
 in a new session (directly, or in response to a Rule 2(b)/(c)
 reminder). Rule 11(b) preamble applies. Execute this 5-step
-procedure in order. Step 1 MUST run before Step 2 — committing
-while teammates are still executing risks racing teammate commits
-into the snapshot after finalization, and any teammate work that
-lands after the resume prompt is output is unreachable to the
-successor session:
+procedure in order:
 
-1. **Stop all in-flight teammates first.** Inspect the task list
-   for tasks in `in_progress` status and call `TaskStop` on every
-   one. For any teammate spawned via Agent that is not bound to a
-   task, address it directly with a halt instruction. Wait until
-   every teammate has returned (status `stopped` or `completed`)
-   before proceeding. A teammate that commits after Step 3 strands
-   work outside the snapshot. Record stopped teammates and any
-   in-flight artifacts they left behind in the snapshot's Open
-   Items section in Step 3.
-2. Commit any in-flight work (`git add` + `git commit` with a
-   descriptive message). This includes work teammates left in the
-   working tree before Step 1 stopped them.
-3. Finalize the pipeline snapshot -- one last update capturing
+1. **Stop all in-flight teammates first.** Call `TaskStop` on
+   every `in_progress` task. Halt any Agent-spawned teammate not
+   bound to a task. Wait until every teammate has returned before
+   proceeding. Record stopped teammates and in-flight artifacts
+   in the snapshot's Open Items in Step 3.
+2. Commit any in-flight work (`git add` + `git commit`), including
+   work teammates left in the working tree.
+3. Finalize the pipeline snapshot — one last update capturing
    anything not yet reflected, including the stopped-teammate
    record from Step 1.
-4. Output a pasteable resume prompt pointing at the snapshot
-   (template below). The prompt MUST be wrapped in `----`
-   delimiters on their own lines (one before, one after) so the
-   user can identify exactly what to copy/paste into the new
-   session.
+4. Output the resume prompt (template below), wrapped in `----`
+   delimiter lines (one before, one after).
 5. End the session. Do not continue the pipeline in this conversation.
 
 **Resume prompt template** (fill bracketed fields at handoff time).
@@ -309,12 +297,13 @@ from the snapshot (e.g., a bg watcher PID the successor must
 re-arm; a pause flag whose deletion gates resume), include that
 single instruction line.
 
-The output MUST be wrapped in `----` delimiter lines (Step 4
-above). The delimiters are NOT part of the prompt the user pastes
-— they bracket it so the user knows exactly which lines to copy.
-The first line inside the delimiters MUST be `/ai-dlc resume`.
+Format matches `retro.md` Step 7d: one-line call-to-action,
+`----`-delimited block, nothing else between the delimiters. First
+line inside MUST be `/ai-dlc resume`.
 
 ```
+Copy the prompt below to resume in a new session.
+
 ----
 /ai-dlc resume
 
@@ -326,6 +315,9 @@ Snapshot: _bmad-output/pipeline-snapshot.md (read in full first).
 Acknowledge handoff in first output line and name resume step.
 ----
 ```
+
+Body must be directly pasteable — no meta commentary, no
+surrounding quotes.
 
 Forbidden in the resume prompt: state summaries, branch lists,
 ETA recaps, sprint-status excerpts, escalation summaries, "next
