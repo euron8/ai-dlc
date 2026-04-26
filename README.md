@@ -24,10 +24,10 @@ deployment, and retrospective — autonomously in one conversation.
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) with Agent Teams enabled
-- [BMAD Method v6](https://github.com/bmad-method/bmad-method) installed
+- [Claude Code](https://github.com/anthropics/claude-code) with Agent Teams enabled
+- [BMAD Method v6](https://github.com/bmad-code-org/BMAD-METHOD) installed
   (`npx bmad-method install` with BMM, CIS, TEA modules)
-- [context-mode](https://github.com/context-mode/context-mode) plugin
+- [context-mode](https://github.com/kianwoon/context-mode) plugin
   installed (`claude mcp add-plugin context-mode`). Provides sandbox
   execution for large reads and batch operations. AI/DLC's protection
   hook (`ai-dlc-protect.sh`) prevents context-mode from consolidating
@@ -78,7 +78,7 @@ interruption to the autonomous flow.
 ## Install
 
 ```bash
-git clone https://github.com/your-org/ai-dlc.git
+git clone https://github.com/euron8/ai-dlc.git
 cd ai-dlc
 ./scripts/install.sh /path/to/your-project
 ```
