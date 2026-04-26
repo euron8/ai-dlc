@@ -652,26 +652,30 @@ effects, the step resumes.**
    CONTINUE.
 
 If all seven preconditions pass, FIRE auto-handoff. Execute the
-Rule 2(a) handoff 4-step procedure (defined in SKILL.md Handoff
+Rule 2(a) handoff 5-step procedure (defined in SKILL.md Handoff
 Protocol "Handoff triggers") with one addition — the distinguishing
-output line in step 3 identifies this handoff as automated:
+output line in step 4 identifies this handoff as automated:
 
-1. `git add` and `git commit` any in-flight work with a descriptive
-   message.
-2. Finalize the pipeline snapshot — one last update capturing
-   in-flight state, recent decisions, and current sub-step within
-   the active step file.
-3. Output the distinguishing auto-handoff line (substitute the
-   active mode, the seam label, and the confirmed token count from
-   the most recent user-shared `/context`), then output the
-   pasteable resume prompt (SKILL.md Handoff Protocol resume prompt
-   template) pointing at the snapshot:
+1. **Stop all in-flight teammates first.** Call `TaskStop` on
+   every `in_progress` task. Halt any Agent-spawned teammate not
+   bound to a task. Wait until every teammate has returned before
+   proceeding. Record stopped teammates and in-flight artifacts in
+   the snapshot's Open Items in Step 3.
+2. `git add` and `git commit` any in-flight work, including work
+   teammates left in the working tree.
+3. Finalize the pipeline snapshot — one last update capturing
+   in-flight state, current sub-step, and the stopped-teammate
+   record from Step 1.
+4. Output the distinguishing auto-handoff line (substitute mode,
+   seam label, confirmed token count from the most recent user-
+   shared `/context`), then output the resume prompt (SKILL.md
+   Handoff Protocol template) wrapped in `----` delimiter lines:
 
    > *"Auto-handoff triggered by auto_handoff_mode=<mode> at
    > <seam_name>. Context at <tokens> tokens, red threshold
    > confirmed via user-shared /context."*
 
-4. End the session. Do not continue the pipeline in this
+5. End the session. Do not continue the pipeline in this
    conversation. Reply to any further messages with a pointer to
    the snapshot and the resume prompt.
 
