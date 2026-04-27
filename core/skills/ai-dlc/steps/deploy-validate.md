@@ -17,6 +17,17 @@ Verify all sprint stories have passed all three gates (code review, QA,
 story validation). If any story has not passed, do not deploy — go back
 to implementation.
 
+**Sprint-overall PR pre-staging verification.** Per `sprint-review.md`
+"Sprint-Overall PR Incremental Pre-Staging" mandate, verify that the
+sprint-overall PR was assembled incrementally throughout the sprint,
+not post-hoc at sprint-close. Audit: carry-over candidates and
+partial-close accounting MUST appear in
+`_bmad-output/implementation-artifacts/sprint-<N>-*.md` files
+committed during the sprint, not added in the final sprint-overall
+commit. Final sprint-overall PR assembly MUST be merge + diff check
+only, not composition. This rule applies UNIVERSALLY to all
+sprint-overall PRs, not gated on anchor count or story count.
+
 ### 2. Deploy
 
 <!-- {deploy_command}: Your project's deployment command.

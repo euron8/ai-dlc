@@ -18,6 +18,56 @@ Invoke `/bmad-check-implementation-readiness` — validate PRD + architecture
 have everything needed for stories. Fix all gaps directly in the source
 artifacts.
 
+### Protected-Path Story Tag
+
+Stories that modify files in the protected-path catalog MUST be
+tagged for lead-only execution. Three story-frontmatter fields
+gate this behavior:
+
+- `protected_paths: [<path-glob-list>]` — list of paths the story
+  edits that are in the protected-path catalog.
+- `lead_only: true` — when set, lead MUST execute the story itself
+  (no Agent/Task delegation to dev teammate). Lead may invoke
+  validation sub-skills via Skill tool per Rule 20.
+- `single_dev_serialized: true` — when set, lead orchestration
+  MUST NOT spawn parallel dev teammates that touch the same
+  protected file.
+
+**Protected-path catalog** (default; consumers extend via
+`CLAUDE.md` or a project-local override):
+
+- `.claude/skills/ai-dlc/SKILL.md`
+- `.claude/skills/ai-dlc/steps/*.md`
+- `.claude/team-roles/*.md`
+- `CLAUDE.md`
+- `docs/coding-conventions.md`
+
+When a story file's `protected_paths` field intersects this
+catalog, both `lead_only: true` and `single_dev_serialized: true`
+are MANDATORY. `implementation.md` enforces these tags at
+parallel-dispatch time.
+
+### Layered AC Verification Accounting
+
+Story acceptance criteria MUST be verifiable at exactly one
+verification layer. Layer enum (story-frontmatter optional field
+`layered_ac_count` records counts per layer):
+
+- `unit` — function-scope test, no I/O, mocks for deps.
+- `integration` — multi-component test, real local deps, no
+  network beyond fixtures.
+- `e2e` — full-stack against deployed dev environment.
+- `live_ops` — verifies live production system state via
+  read-only API/SSM/dashboard observation; mutations require
+  operator approval per CLAUDE.md operations protocol.
+- `manual_operator` — requires human action (operator-executed
+  runbook step, deploy verification, visual inspection).
+
+For every story, sum `layered_ac_count` values MUST equal
+`acceptance_criteria` count. The `gate-validation.md` Check 11
+"Smoke test coverage" reads layer tags to verify test type
+matches change type — layered AC tags feed Check 11 evidence.
+
 ### 2. Epics and Stories
 
 Invoke `/bmad-create-epics-and-stories` — break work into prioritized
