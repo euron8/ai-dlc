@@ -1,0 +1,36 @@
+# Audit Anchors
+
+**Purpose:** Per-sprint retro-PR merge SHA chain. Producer:
+`core/skills/ai-dlc/steps/retro.md` Step 5b. Consumer:
+`core/skills/ai-dlc/steps/carry-over-evaluation.md` Step 1a +
+`core/skills/ai-dlc/steps/gate-validation.md` Check 18.
+
+**Schema.** One YAML document per sprint, separated by `---`. Each
+entry:
+
+```yaml
+sprint: <N>           # integer sprint number
+closed_at: <ISO-8601> # sprint-close timestamp
+sha: <git-sha>        # retro-PR merge SHA on main; placeholder "PENDING" if PR not yet merged
+notes: <optional>     # free-form one-liner
+```
+
+Entries are append-only. When the retro PR merges, lead edits the
+placeholder `sha: PENDING` to the actual merge SHA in a follow-on
+commit on `main`.
+
+**Audit gate behavior.** `gate-validation.md` Check 18 resolves
+`<prior_sprint_sha>` from the entry whose `sprint` field equals
+`<current_sprint> - 1`. Missing entry OR `sha: PENDING` for the prior
+sprint FAILS the gate CLOSED with explicit message. Silent skip is
+forbidden.
+
+## Entries
+
+<!-- Append new sprint entries below. Most recent last. -->
+
+---
+sprint: 0
+closed_at: 1970-01-01T00:00:00Z
+sha: PENDING
+notes: bootstrap placeholder — replace with first real sprint entry

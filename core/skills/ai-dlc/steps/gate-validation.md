@@ -160,6 +160,13 @@ in isolation; it requires comparing the story to its source. Check
 - Run: Read both files, compare status values programmatically.
 - **Gate FAILS** if any story has mismatched status between the two files.
   Fix the mismatch before proceeding.
+- **Duplicate parent-key drift check.** Every parent key in
+  `sprint-status.yaml` (e.g., `sprint-<N>-<name>:`) MUST be
+  uniquely-rooted. Multiple parent keys with the same name produced
+  by parallel worktree commits is a structural drift mode that this
+  check catches at the parent level (per-story drift is caught
+  above). Gate FAILS if duplicate parent keys are detected; lead
+  consolidates under a single parent before gate-pass.
 - **Evidence:** Log the comparison results in the gate log entry.
   List each story ID and its status in both files.
 
@@ -504,6 +511,65 @@ gate's primary artifact.
 script reports a missing block, malformed field, unknown skill,
 missing transcript file (retro only), or SHA byte-mismatch (retro
 only).
+
+### 18. Per-class test-debt audit.
+
+**Scope.** Runs at sprint-review gate. Reads
+`_bmad-output/audit-anchors.md` to determine the prior-sprint retro-PR
+merge SHA.
+
+**Check.** Resolve `<prior_sprint_sha>` from the most recent prior
+sprint entry (current sprint number minus one). If absent, gate FAILS
+CLOSED with explicit message — silent skip on missing audit-anchor is
+forbidden.
+
+For each per-class test category audit applicable to the current
+sprint (categories defined by the project), run
+`<audit-script> --since <prior_sprint_sha>` over the project's test
+directories. Capture PASS/FAIL per category in gate-log entry.
+
+**PASS:** every applicable category audit reports PASS or
+ACCEPT-WITH-RATIONALE. **FAIL:** any category reports
+REFACTOR-IN-SPRINT (must be addressed before gate close) OR no
+`audit-anchors.md` entry exists for prior sprint.
+
+**Producer mandate.** `retro.md` Step 5b at sprint close MUST append
+a new entry to `_bmad-output/audit-anchors.md` with the current
+sprint's retro-PR merge SHA. Schema in `audit-anchors.md` header
+(see `templates/audit-anchors.md.template`).
+
+### 19. Self-reflexive Gate 2 self-discrimination map application.
+
+**Scope.** Runs at every Gate 2 (code-review gate) for any PR
+carrying acceptance criteria flagged as discrimination-evidence ACs
+— specifically (a) PRs that flip a CI gate from advisory to
+enforce-fail-on-detect, (b) PRs that introduce or modify a CI
+detector regex/awk/script, and (c) PRs whose ACs explicitly require
+the reviewer to cite FAIL→PASS run-ID evidence. SKIPS at all other
+gates.
+
+**Check.** Reviewer's draft Gate 2 verdict MUST cite by-name
+application of the `code-reviewer.md` Self-Discrimination Map
+section to each discrimination-evidence AC under review. Citation
+format: a verdict line that names which of the three failure
+patterns (Pattern 1 reviewer-asserts-without-rerun, Pattern 2
+ancestor-check-fabrication, Pattern 3 rubber-stamp-without-REPL)
+were checked against the draft, with the disposition for each.
+
+A reviewer-PASS verdict on a discrimination-evidence AC without the
+self-discrimination map citation FAILS this check.
+
+**PASS:** every discrimination-evidence AC in the PR has an
+accompanying map-citation block in the Gate 2 verdict, and each
+named pattern is dispositioned (CLEAR, REVISED, or N/A with one-
+line rationale). **FAIL:** any discrimination-evidence AC carries a
+PASS verdict without map citation, OR the citation block omits one
+of the three named patterns.
+
+**Reference.** Map content + the three failure patterns are defined
+in `core/team-roles/code-reviewer.md` "Self-Discrimination Map"
+section. This check enforces application; the reviewer role file
+owns the pattern definitions. No content duplication.
 
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 

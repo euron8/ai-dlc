@@ -248,6 +248,17 @@ Wait for the human's response. If they have commentary:
 - Apply any additional process changes they request
 If they have nothing to add, proceed.
 
+### 5b. Append Audit-Anchor SHA
+
+After human commentary returns and before commit, append a new entry
+to `_bmad-output/audit-anchors.md` with the current sprint's
+retro-PR-merge SHA placeholder. The merge SHA is unknown until the
+retro PR merges; lead writes the entry with sprint + closed_at fields
+and updates the SHA in a follow-on commit on `main` after merge.
+Schema and producer mandate live in `audit-anchors.md` header. No
+SHA = audit-gate fails closed at next sprint's per-class test-debt
+audit (`gate-validation.md` Check 18).
+
 ### 6. Commit, Push, and PR
 
 **6a. Commit all remaining artifacts.**

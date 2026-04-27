@@ -14,6 +14,19 @@ deployment. Adversarial review + party mode on the complete sprint.
 Execute all sub-skills back-to-back without pausing for human input
 between them:
 
+### Sprint-Overall PR Incremental Pre-Staging
+
+Sprint-overall PR MUST be assembled incrementally throughout the sprint:
+carry-over candidates and partial-close accounting are drafted in
+`_bmad-output/implementation-artifacts/sprint-<N>-*.md` as anchors close,
+not post-hoc at sprint-close. Final sprint-overall PR assembly = merge +
+diff check only, not composition.
+
+This rule applies UNIVERSALLY to all sprint-overall PRs, not gated on
+anchor count or story count. Universality is the value — gating on
+story count would reintroduce the "surprise sprint-overall content"
+mode this rule prevents.
+
 ### 1. Sprint-Level Adversarial Review
 
 `/bmad-review-adversarial-general` — final adversarial pass on the

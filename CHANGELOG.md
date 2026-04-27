@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-27
+
+Absorbs seven generalized mechanisms from the `graph` consumer
+(sprint S169–S170 retro PIs). All additive; no consumer-visible
+interface breakage.
+
+### Added
+
+- **Audit-anchor SHA chain.** `core/skills/ai-dlc/steps/retro.md`
+  new Step 5b (producer) + `carry-over-evaluation.md` new Step 1a
+  (reader) + `gate-validation.md` new Check 18 (per-class test-debt
+  audit gated on prior-sprint retro-PR merge SHA). Silent skip
+  forbidden — missing anchor FAILS the gate CLOSED. New
+  `templates/audit-anchors.md.template` ships the file schema and
+  bootstrap entry.
+- **Self-reflexive Gate 2 self-discrimination map.** New
+  `gate-validation.md` Check 19 + full "Self-Discrimination Map"
+  section in `core/team-roles/code-reviewer.md` defining the three
+  failure patterns (reviewer-asserts-without-rerun,
+  ancestor-check-fabrication, rubber-stamp-without-REPL) that the
+  reviewer MUST cite by-name when approving discrimination-evidence
+  ACs. Applies to enforce-flip PRs, CI-detector PRs, and ACs
+  requiring FAIL→PASS run-ID evidence.
+- **Duplicate parent-key drift check.** `gate-validation.md` Check 5
+  (story status consistency) now also FAILS when multiple parent
+  keys in `sprint-status.yaml` share a name — a structural drift
+  mode from parallel-worktree commits that the per-story comparison
+  would miss.
+- **Sprint-overall PR incremental pre-staging.** New section in
+  `sprint-review.md` + verification step in `deploy-validate.md`
+  Step 1. Sprint-overall PR MUST be assembled incrementally via
+  `_bmad-output/implementation-artifacts/sprint-<N>-*.md` files as
+  anchors close; final assembly is merge + diff check only, not
+  composition. Applies universally, not gated on story count.
+- **Protected-path story tag.** `stories-test-strategy.md` new
+  subsection defines three story-frontmatter fields
+  (`protected_paths`, `lead_only`, `single_dev_serialized`) and
+  ships a default catalog (SKILL.md, step files, team-roles,
+  CLAUDE.md, coding-conventions). `implementation.md` enforces
+  `lead_only: true` at dev-dispatch time — lead executes the story
+  itself, no Agent delegation. Consumers extend the catalog locally.
+- **Layered AC verification accounting.** `stories-test-strategy.md`
+  new subsection defines the five-layer enum
+  (unit/integration/e2e/live_ops/manual_operator) and the
+  `layered_ac_count` frontmatter field. Sum MUST equal total AC
+  count. Feeds `gate-validation.md` Check 11 evidence.
+- **Bug-class audit mandate.** New section in
+  `core/team-roles/code-reviewer.md`. Stories declaring a
+  class-of-bug fix (semantic error, double-counting, off-by-one,
+  type confusion, scope mismatch) MUST include a grep-derived
+  enumeration of every call-site with the same code shape. Absence
+  is a **Critical** finding; non-deferrable.
+
+[0.3.0]: https://github.com/euron8/ai-dlc/releases/tag/v0.3.0
+
 ## [0.2.0] — 2026-04-26
 
 ### Changed
@@ -69,5 +124,5 @@ The 0.1.0 line freezes the current shape of:
   api-field-verification, financial-plausibility, ...)
 - `templates/{CLAUDE.md,QUICKSTART.md,settings.json,coding-conventions.md}.template`
 
-[Unreleased]: https://github.com/euron8/ai-dlc/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/euron8/ai-dlc/compare/v0.3.0...HEAD
 [0.1.0]: https://github.com/euron8/ai-dlc/releases/tag/v0.1.0

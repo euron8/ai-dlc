@@ -22,6 +22,15 @@ Read in full:
 - `_bmad-output/planning-artifacts/prd.md`
 - Project memory files for user preferences and prior decisions
 
+### 1a. Read Audit Anchor
+
+Read `_bmad-output/audit-anchors.md`. Locate the entry for the prior
+sprint (current sprint number minus one). Resolve the `sha` field as
+`<prior_sprint_sha>` for downstream per-class test-debt audit
+(`gate-validation.md` Check 18). If no entry exists for prior sprint,
+file HARD_BLOCK at carry-over-evaluation gate — silent skip is
+forbidden.
+
 ### 2. Item Evaluation
 
 For each OPEN item in the backlog, evaluate:

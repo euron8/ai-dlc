@@ -33,6 +33,17 @@ Agent tool invocation MUST include the `model` parameter. Map roles:
 and bypasses the role contract. Violation fails gate-validation
 Check 15 on detection at retro. Per SKILL.md Rule 19.
 
+**Protected-path lead-only enforcement.** Before dispatching dev for
+any story, the lead MUST inspect the story's frontmatter for
+`lead_only: true`. If set, lead MUST execute the story itself — no
+Agent/Task delegation to dev teammate roles. Lead MAY invoke
+validation sub-skills via the Skill tool per Rule 20. Stories with
+`single_dev_serialized: true` MUST NOT be dispatched to parallel
+teammates that touch the same protected file. Catalog and field
+semantics defined in `stories-test-strategy.md` "Protected-Path
+Story Tag" subsection. Violation fails gate-validation Check 15 on
+detection at retro.
+
 **Canonical-story-file pre-flight check before dev dispatch.** Before
 dispatching dev for any story, the lead MUST verify two conditions:
 (a) the canonical story file exists at
