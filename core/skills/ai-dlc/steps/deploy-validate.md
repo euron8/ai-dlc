@@ -12,6 +12,11 @@ deployment, and present the Production Validation Checkpoint to the human.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: deploy-validate at {current ISO timestamp}`
+
 ### 1. Pre-Deployment Check
 
 Verify all sprint stories have passed all three gates (code review, QA,
@@ -48,7 +53,18 @@ If your project requires pre-deployment configuration checks (e.g.,
 environment selection, resource scaling, migration status), run those
 before deploying.
 
-### 3. Smoke Tests (Evidence Required)
+### 3. Smoke Tests (Hard Gate — Non-Skippable)
+
+**Hard smoke enforcement.** The smoke test full profile MUST run at
+every deploy-validate regardless of which paths changed. "No service
+deploy" does NOT exempt the sprint from smoke verification — scripts
+modifying smoke-test infrastructure, thresholds, or operational
+behavior MUST be verified against live infrastructure. A deploy-validate
+gate log entry without `smoke_run_evidence` (the tee'd output path or
+CI run ID) FAILS the gate unconditionally.
+
+If live infrastructure is unreachable (VPN down, SSM broken, cloud
+outage), file HARD_BLOCK — do NOT present PVC without smoke evidence.
 
 <!-- {smoke_test_command}: Your project's live smoke test command.
      Examples:

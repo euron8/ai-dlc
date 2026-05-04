@@ -12,6 +12,11 @@ fix story, then route to implementation.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: bug-investigation at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read planning artifacts:

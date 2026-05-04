@@ -20,7 +20,12 @@ nextStepFile: dynamically determined by routing logic
 
 ## EXECUTION SEQUENCE
 
-### Step 0: Resume Check
+### Step 0a: Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: route at {current ISO timestamp}`
+
+### Step 0b: Resume Check
 
 Before running the full routing sequence, check for an existing
 pipeline snapshot that indicates a resume from a previous session.

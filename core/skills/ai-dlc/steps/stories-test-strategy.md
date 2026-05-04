@@ -13,6 +13,11 @@ and test strategy with full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: stories-test-strategy at {current ISO timestamp}`
+
 ### 1. Implementation Readiness
 
 Invoke `/bmad-check-implementation-readiness` — validate PRD + architecture

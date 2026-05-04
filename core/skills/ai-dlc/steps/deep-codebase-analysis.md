@@ -13,6 +13,11 @@ a comprehensive reverse-engineering analysis before planning new work.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: deep-codebase-analysis at {current ISO timestamp}`
+
 ### 1. Structure and Stack
 
 Walk every directory and file in the project:

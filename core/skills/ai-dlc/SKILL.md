@@ -82,13 +82,19 @@ stop. A response that contains a tool call continues regardless of
 surrounding text. Always pair recap text with the next action's
 tool call. Never emit a recap without a tool call in the same response.
 
-### Rule 4 -- Every step must be completed in full
+### Rule 4 -- No step may be skipped regardless of perceived simplicity
 
 When a step file is loaded via "READ AND FOLLOW", execute every
 numbered section sequentially. Do not skip sections. Do not jump to
 the next step file until the current step's execution sequence is
-complete and its gate validation has passed. Skipping validation to
-save time or tokens is a pipeline violation.
+complete and its gate validation has passed.
+
+"This is simple" is never a valid reason to bypass a step or
+sub-step. A step that has nothing to do completes quickly — but it
+MUST be loaded (Read tool call per Rule 21) and its execution
+sequence MUST run. Skipping validation, Skill invocations, or gate
+checks to save time or tokens is a pipeline violation. Violation
+fails the next gate unconditionally.
 
 ### Rule 5 -- Follow the routing, not your judgment
 

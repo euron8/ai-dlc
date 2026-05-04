@@ -17,6 +17,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-05-04
+
+Consumer absorption bundle from graph and ai-group-review projects.
+Strengthens step-skip prevention, hardens smoke gate, and adds
+reusable templates. All additive; no consumer migration required.
+
+### Added
+
+- **Step 0 Entry Assertions.** All 16 pipeline step files (plus route)
+  now output `STEP ENTERED: <name> at {timestamp}` verbatim as their
+  first action. Makes step-skip visible in transcript audit.
+  (Source: ai-group-review)
+- **Hard Smoke Gate.** deploy-validate.md §3 upgraded from "Evidence
+  Required" to "Hard Gate — Non-Skippable". Missing
+  `smoke_run_evidence` = unconditional gate FAIL. Infra outage →
+  HARD_BLOCK (no PVC without evidence). (Source: graph)
+- **Retro Step 6a Pre-commit Checklist.** 4-item artifact-existence
+  check before retro commit: gate-log, audit-anchors, next-sprint
+  prompt, provenance block. (Source: ai-group-review)
+- **Retro Step 5c Pre-Commit Validation Gate.** Full section
+  consolidating rule-file audit commit, provenance block verification,
+  and mandatory-rules validation into a single enforcement point
+  before Step 6. (Source: graph)
+- **Pipeline templates.** `templates/pipeline/pvc-presentation-template.md`
+  and `templates/pipeline/retro-finding-class-tracking.md` — standardized
+  formats for PVC presentation and retro finding classification.
+  (Source: graph)
+
+### Changed
+
+- **Rule 4 rewritten.** Renamed to "No step may be skipped regardless
+  of perceived simplicity". Added anti-rationalization clause: "'This
+  is simple' is never a valid reason to bypass a step." Violation now
+  explicitly fails the next gate unconditionally.
+  (Source: ai-group-review)
+- **Stop hook softened.** `ai-dlc-continue.sh` REASON message now
+  distinguishes false positives (mid-phase text before next action)
+  from real stalls. Warns against skipping steps to avoid hook firing.
+  Cites Rule 4 alongside Rule 3. (Source: graph)
+- **Retro Step 4 audit-commit contradiction resolved.** Removed stale
+  "Commit the audit as a separate commit" instruction that conflicted
+  with Step 5c delegation.
+
 ## [0.4.0] — 2026-05-04
 
 Pipeline integrity and observability improvements. All additive; no

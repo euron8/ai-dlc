@@ -199,7 +199,15 @@ fi
 CURRENT_STEP=$(grep -iE "(current_step_file|current[ _]step|current[ _]phase)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
 LAST_GATE=$(grep -iE "(last_gate_passed|last[ _]gate)" "$SNAPSHOT_FILE" 2>/dev/null | head -1 | sed 's/^[^:]*://;s/^[-* ]*//;s/[-* ]*$//' || echo "")
 
-REASON="Pipeline is active. You ended your turn without a tool call. This may be legitimate (presenting results mid-phase before the next action) or a stall. If you have a legitimate reason to pause (HARD_BLOCK awaiting operator decision per Rule 11(a), handoff per Rule 2, gate failure, Production Validation Checkpoint, or other intentional pause), create the pause flag before ending your turn: touch _bmad-output/pipeline-paused.flag. The hook will respect the flag on your next Stop event. If you do not have a legitimate pause reason, your next response MUST include the tool call or skill invocation that performs the pending transition. Per SKILL.md Rule 3, the pipeline cannot stall unintentionally."
+REASON="Pipeline is active. You ended your turn without a tool call. This may be legitimate (presenting results mid-phase before the next action) or a stall.
+
+CHECK BEFORE ACTING: Did you just complete a sub-skill and need to present its output before invoking the next one? If so, this is a FALSE POSITIVE — combine the presentation with the next tool call in your next response. Do NOT skip steps to avoid this hook.
+
+If you genuinely have no next action (HARD_BLOCK, PVC, handoff, retro commentary): create the pause flag (touch _bmad-output/pipeline-paused.flag).
+
+If you have a next action but emitted text first: pair the text with the tool call in your next response. Text + tool call = valid turn. Text alone = this hook fires.
+
+IMPORTANT: This hook exists to prevent 'should I continue?' stalls (Rule 3). It does NOT mean 'skip the current step to produce a tool call faster.' Every numbered section in the current step file must be completed in full (Rule 4). If a section produces text output (party-mode results, failure classification, gate announcements), emit that text WITH the next section's tool call in the same response."
 
 if [ -n "$CURRENT_STEP" ]; then
   REASON="${REASON} Current step: ${CURRENT_STEP}."
