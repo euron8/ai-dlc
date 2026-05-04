@@ -3,6 +3,7 @@ name: sprint-review
 description: Sprint-level adversarial review + party mode on complete sprint output
 nextStepFile: ./deploy-validate.md
 ---
+<!-- STEP_LOADED_TOKEN: sprint-review -->
 
 # Sprint Review (Phase 4)
 

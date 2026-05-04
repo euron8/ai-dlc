@@ -3,6 +3,7 @@ name: discovery
 description: Brainstorm + product brief + validation cycle
 nextStepFile: ./research-requirements.md
 ---
+<!-- STEP_LOADED_TOKEN: discovery -->
 
 # Discovery (Phase 1)
 

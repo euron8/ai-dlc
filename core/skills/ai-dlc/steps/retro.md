@@ -3,6 +3,7 @@ name: retro
 description: Sprint retrospective — agent runs autonomously, human comments before close
 nextStepFile: STOP
 ---
+<!-- STEP_LOADED_TOKEN: retro -->
 
 # Retrospective (Phase 5)
 
@@ -154,8 +155,11 @@ weaknesses found (list each), rules rewritten, rules marked for removal.
 above. Commit message:
 `docs(rules): rule file audit (retro) — strip narrative, harden weak rules`
 
-If zero violations found, skip the commit and note "Audit: clean" in
-the retro doc.
+If the audit produced file changes, do NOT commit them yet — Step 5c
+handles the audit commit as a separate commit before the main retro
+commit in Step 6.
+
+If zero violations found, note "Audit: clean" in the retro doc.
 
 **Path-filter dormancy scan (every retro):**
 
@@ -210,10 +214,11 @@ ensures no sprint ends with stale OPEN/IN_SPRINT state.
    story in this sprint satisfies it. Match on story `Source:`,
    LOCKED_REQUIREMENTS references, or epic linkage. If satisfied and
    the story is `done`: mark the item `CLOSED - delivered in sprint
-   <N> via <story-id>`. If the story shipped but only partially
-   satisfied the item: mark `PARTIAL - sprint <N>` and keep the
-   remainder open with a note on what remains. If no story touched
-   it: leave as-is (it's legitimate carry-over).
+   <N> via <story-id>` with `closed_at: <ISO date>`. If the story
+   shipped but only partially satisfied the item: mark `PARTIAL -
+   sprint <N>` and keep the remainder open with a note on what
+   remains. If no story touched it: leave as-is (it's legitimate
+   carry-over).
 
 2. **`docs/escalations/pending.md`.** For every entry without a
    RESOLVED or DECIDED_AUTONOMOUSLY terminal marker, check whether
@@ -236,6 +241,31 @@ section: carry-over items closed/partial, escalations resolved or
 deferred, any status-yaml drift caught and corrected. If everything
 was already closed inline, note "Sweep: clean (all items closed
 inline during implementation)".
+
+## Sprint-Ship Verification
+
+Sprint-ship counters track smoke-quality across deploy-validate runs.
+
+- **`consecutive-deploy-clean`** — increments on each deploy-validate run
+  with zero smoke FAILs. Resets to 0 on ANY smoke FAIL, regardless of
+  whether the FAIL is new or pre-existing. Strictest counter; reflects
+  ship-quality without grandfathering.
+- **`consecutive-no-regression`** — increments on each deploy-validate run
+  with zero NEW smoke FAILs (pre-existing FAILs may persist without
+  resetting this counter). Resets to 0 ONLY on a NEW smoke FAIL not
+  present in the prior deploy-validate run. Looser counter; reflects
+  whether THIS sprint introduced regressions versus carrying pre-existing
+  debt.
+
+Both counters MUST be reported in every retro under the standard template
+line:
+
+```
+dual-counter: consecutive-deploy-clean: <N>/5; consecutive-no-regression: <M>/5 (run-id: <CI-run-id>).
+```
+
+The 5/5 ship-quality target applies to BOTH counters independently. A
+sprint is ship-quality when EITHER counter reaches 5/5.
 
 ### 5. Human Commentary
 

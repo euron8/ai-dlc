@@ -3,6 +3,7 @@ name: ui-direction
 description: Generate UI mockups and present direction (non-blocking)
 nextStepFile: ./implementation.md
 ---
+<!-- STEP_LOADED_TOKEN: ui-direction -->
 
 # UI Direction (Phase 2g)
 

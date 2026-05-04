@@ -4,6 +4,7 @@ description: Readiness check + epics/stories + sprint planning + test strategy +
 nextStepFile_ui: ./ui-direction.md
 nextStepFile_no_ui: ./implementation.md
 ---
+<!-- STEP_LOADED_TOKEN: stories-test-strategy -->
 
 # Stories and Test Strategy (Phase 2d-f)
 

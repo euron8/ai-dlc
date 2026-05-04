@@ -3,6 +3,7 @@ name: carry-over-evaluation
 description: Evaluate carry-over backlog, scope items, handle deferrals, then feed into full planning pipeline
 nextStepFile: ./discovery.md
 ---
+<!-- STEP_LOADED_TOKEN: carry-over-evaluation -->
 
 # Carry-Over Evaluation
 

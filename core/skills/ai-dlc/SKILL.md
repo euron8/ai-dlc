@@ -297,14 +297,7 @@ from the snapshot (e.g., a bg watcher PID the successor must
 re-arm; a pause flag whose deletion gates resume), include that
 single instruction line.
 
-Format matches `retro.md` Step 7d: one-line call-to-action,
-`----`-delimited block, nothing else between the delimiters. First
-line inside MUST be `/ai-dlc resume`.
-
 ```
-Copy the prompt below to resume in a new session.
-
-----
 /ai-dlc resume
 
 Sprint [N] [variant], [current step file] [GATED on X | active].
@@ -313,11 +306,7 @@ Snapshot: _bmad-output/pipeline-snapshot.md (read in full first).
 [Optional single line: pause flag / bg process / resume-only instruction not derivable from snapshot.]
 
 Acknowledge handoff in first output line and name resume step.
-----
 ```
-
-Body must be directly pasteable — no meta commentary, no
-surrounding quotes.
 
 Forbidden in the resume prompt: state summaries, branch lists,
 ETA recaps, sprint-status excerpts, escalation summaries, "next
@@ -532,7 +521,36 @@ findings lists) WITHOUT Skill tool invocation and WITHOUT provenance
 block is a rule violation. "The findings are real" is not a valid
 rationalization — the process IS the validation.
 
+### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
+
+A `READ AND FOLLOW` directive MUST produce a `Read` tool call for the
+target step file as the FIRST tool call in the response. No other
+action (Bash, Edit, Write, Agent, Skill) before the Read. The lead
+MUST NOT substitute memory, prior-session knowledge, or accumulated
+context for the Read. The Read tool call is the mechanical
+verification that the step was loaded into the current conversation
+context.
+
+**Verification.** Each step file contains a `STEP_LOADED_TOKEN` HTML
+comment (format: `<!-- STEP_LOADED_TOKEN: <step-name> -->`). The
+gate log entry for that step MUST cite the token value. A gate log
+entry that names a step but cannot cite its token indicates the step
+was not read. Gate FAILS on missing token citation.
+
+**Failure mode this prevents.** In hot sessions with many completed
+gates, the lead pattern-matches on "I know what this step does" and
+skips the Read entirely, executing from memory. The Read tool call
+is the interrupt that forces re-engagement with the step's actual
+instructions. Memory of a step file is not equivalent to loading it.
+
 ## INITIALIZATION
+
+Clear the pipeline pause flag before any other action. The
+UserPromptSubmit hook creates `_bmad-output/pipeline-paused.flag` on
+every user message, including the `/ai-dlc` invocation itself. If the
+flag is not deleted here, the Stop hook will treat the next text-only
+response as an intentional pause and allow the pipeline to stall.
+Execute: `rm -f _bmad-output/pipeline-paused.flag`
 
 Load the router step to determine the pipeline variant and begin
 execution:

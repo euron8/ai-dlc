@@ -2,6 +2,7 @@
 name: gate-validation
 description: Autonomous gate validation protocol — referenced by all pipeline steps at phase transitions
 ---
+<!-- STEP_LOADED_TOKEN: gate-validation -->
 
 # Autonomous Gate Validation Protocol
 
@@ -91,6 +92,15 @@ Two arms, either satisfies (dual-arm OR):
   created by re-reading the original user input / carry-over item /
   escalation spec before proceeding.
 
+- **SUPERSEDED ADR LR disposition.** When an ADR is marked SUPERSEDED
+  mid-sprint (per operator decision authoring a successor ADR), every
+  LR in the artifact body that directly instantiates the superseded ADR
+  MUST carry an explicit disposition: SUPERSEDED (with pointer to
+  successor ADR section) OR AMENDED (with successor ADR's effective LR
+  text inline). Silent LR drop (LR text removed from artifact body
+  without SUPERSEDED/AMENDED marker) FAILS the gate. Remediation:
+  append disposition marker to each affected LR before proceeding.
+
 ### 3a. Story validation origin check (story gates only).
 
 **Scope.** This check fires only when the gate being validated is a
@@ -160,6 +170,12 @@ in isolation; it requires comparing the story to its source. Check
 - Run: Read both files, compare status values programmatically.
 - **Gate FAILS** if any story has mismatched status between the two files.
   Fix the mismatch before proceeding.
+- **Non-vacuous assertion (implementation gates only).** At Phase 4+
+  gates, `sprint-status.yaml` MUST contain ≥1 story entry for the
+  current sprint. If zero stories are found at an implementation gate,
+  Check 5 FAILS — a sprint with no stories cannot pass status
+  consistency. Planning-phase gates (where stories are not yet created)
+  are exempt from this sub-clause.
 - **Duplicate parent-key drift check.** Every parent key in
   `sprint-status.yaml` (e.g., `sprint-<N>-<name>:`) MUST be
   uniquely-rooted. Multiple parent keys with the same name produced

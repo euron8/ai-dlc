@@ -3,6 +3,7 @@ name: bug-investigation
 description: Bug path — investigate root cause, create fix story, route to implementation
 nextStepFile: conditional (see Step 6)
 ---
+<!-- STEP_LOADED_TOKEN: bug-investigation -->
 
 # Bug Investigation (Phase 1D-bug)
 

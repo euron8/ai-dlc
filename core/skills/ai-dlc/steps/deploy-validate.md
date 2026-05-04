@@ -3,6 +3,7 @@ name: deploy-validate
 description: Deploy to production, run smoke tests, present production validation checkpoint to human
 nextStepFile: STOP or next sprint
 ---
+<!-- STEP_LOADED_TOKEN: deploy-validate -->
 
 # Deploy and Validate (Phase 4+)
 

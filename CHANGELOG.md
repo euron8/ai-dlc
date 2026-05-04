@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-04
+
+Pipeline integrity and observability improvements. All additive; no
+consumer-visible interface breakage.
+
+### Added
+
+- **Rule 21 — STEP_LOADED_TOKEN verification.** New SKILL.md Rule 21
+  mandates that `READ AND FOLLOW` directives produce a Read tool call
+  as the first action (no substitution from memory). Each step file
+  now contains a `<!-- STEP_LOADED_TOKEN: <name> -->` comment; gate
+  log entries MUST cite the token. Prevents step-skip via recall in
+  hot sessions.
+- **STEP_LOADED_TOKEN comments.** Added to all 18 step files.
+- **Initialization pause-flag clear.** SKILL.md INITIALIZATION section
+  now clears `_bmad-output/pipeline-paused.flag` before loading the
+  router, preventing a race where the UserPromptSubmit hook's flag
+  creation on the `/ai-dlc` invocation itself stalls the pipeline.
+- **Dual-counter sprint-ship verification.** `retro.md` new section
+  defines `consecutive-deploy-clean` and `consecutive-no-regression`
+  counters with 5/5 target. Replaces ad-hoc smoke-quality tracking
+  with a structured dual-counter pattern.
+- **Non-vacuous assertion sub-clause.** `gate-validation.md` Check 5
+  now FAILS at Phase 4+ gates when `sprint-status.yaml` contains zero
+  story entries — empty-gate pass prevention.
+- **SUPERSEDED ADR LR disposition.** `gate-validation.md` Check 3 new
+  sub-clause requires explicit SUPERSEDED/AMENDED markers on LRs when
+  their parent ADR is superseded mid-sprint. Silent LR drop FAILS.
+
+### Changed
+
+- **Continue hook softened.** `ai-dlc-continue.sh` REASON wording now
+  distinguishes "may be legitimate" from hard stall, reducing
+  step-skipping pressure in mid-phase result presentation.
+- **Retro Step 4 audit commit separation.** Audit file changes are no
+  longer committed inline; Step 5c handles the audit commit separately
+  from the main retro commit.
+- **Resume prompt simplified.** Removed `----` delimiters and preamble
+  text from the resume-prompt template; body is now directly pasteable
+  without wrapper parsing.
+
 ## [0.3.0] — 2026-04-27
 
 Absorbs seven generalized mechanisms from the `graph` consumer
@@ -124,5 +165,6 @@ The 0.1.0 line freezes the current shape of:
   api-field-verification, financial-plausibility, ...)
 - `templates/{CLAUDE.md,QUICKSTART.md,settings.json,coding-conventions.md}.template`
 
-[Unreleased]: https://github.com/euron8/ai-dlc/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/euron8/ai-dlc/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/euron8/ai-dlc/releases/tag/v0.4.0
 [0.1.0]: https://github.com/euron8/ai-dlc/releases/tag/v0.1.0

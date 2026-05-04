@@ -3,6 +3,7 @@ name: route
 description: Detect pipeline variant from project state and user input, compose step sequence
 nextStepFile: dynamically determined by routing logic
 ---
+<!-- STEP_LOADED_TOKEN: route -->
 
 # AI/DLC Router
 

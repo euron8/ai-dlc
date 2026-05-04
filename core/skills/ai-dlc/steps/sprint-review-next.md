@@ -3,6 +3,7 @@ name: sprint-review-next
 description: Validate next sprint's stories before implementation begins — required between multi-sprint transitions
 nextStepFile: ./implementation.md
 ---
+<!-- STEP_LOADED_TOKEN: sprint-review-next -->
 
 # Next Sprint Validation
 

@@ -3,6 +3,7 @@ name: doc-reconciliation
 description: Brownfield C — reconcile existing documentation against actual codebase
 nextStepFile: ./doc-repair-backfill.md
 ---
+<!-- STEP_LOADED_TOKEN: doc-reconciliation -->
 
 # Documentation Reconciliation (Brownfield C)
 
