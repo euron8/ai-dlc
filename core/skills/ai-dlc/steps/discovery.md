@@ -13,6 +13,11 @@ rather than creating from scratch.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: discovery at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read existing artifacts if they exist:

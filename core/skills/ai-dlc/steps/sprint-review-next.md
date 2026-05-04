@@ -15,6 +15,11 @@ affect upcoming stories.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: sprint-review-next at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read:

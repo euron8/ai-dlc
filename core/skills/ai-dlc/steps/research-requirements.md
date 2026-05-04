@@ -12,6 +12,11 @@ creation with full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: research-requirements at {current ISO timestamp}`
+
 ### 1. Research
 
 Run all applicable research back-to-back (skip none unless clearly

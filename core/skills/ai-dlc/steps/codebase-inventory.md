@@ -12,6 +12,11 @@ planning artifacts are missing. Inventory what exists before backfilling.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: codebase-inventory at {current ISO timestamp}`
+
 ### 1. Codebase Scan
 
 Walk through every directory and file in the project:

@@ -12,6 +12,11 @@ full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: architecture at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read the PRD and product brief from `_bmad-output/planning-artifacts/`.

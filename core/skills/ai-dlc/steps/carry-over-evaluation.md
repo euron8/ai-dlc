@@ -14,6 +14,11 @@ items get the same planning rigor as new features.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: carry-over-evaluation at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read in full:

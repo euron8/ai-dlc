@@ -12,6 +12,11 @@ teammates, create tasks, orchestrate the build/review/QA cycle.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: implementation at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read sprint stories from `_bmad-output/planning-artifacts/stories/`.

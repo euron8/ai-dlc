@@ -12,6 +12,11 @@ deployment. Adversarial review + party mode on the complete sprint.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: sprint-review at {current ISO timestamp}`
+
 Execute all sub-skills back-to-back without pausing for human input
 between them:
 

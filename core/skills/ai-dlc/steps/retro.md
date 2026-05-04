@@ -13,6 +13,11 @@ a chance to comment or ask questions before it closes.
 
 ## EXECUTION SEQUENCE
 
+### 0. Step Entry Assertion
+
+Output this line verbatim before any other action:
+`STEP ENTERED: retro at {current ISO timestamp}`
+
 ### 1. Context Loading
 
 Read all artifacts from this sprint:
@@ -64,12 +69,9 @@ the discussion:
    `scripts/validate-retro-evidence.sh` enforces byte-match between
    the cited SHA and the file contents on HEAD.
 
-Local enforcement: `scripts/validate-mandatory-rules.sh <N>` (runs
-`validate-retro-evidence.sh`, `validate-cycle-commits.sh`, and
-`validate-provenance-block.sh`) MUST pass before Step 6 commits the
-retro. CI enforcement:
-`.github/workflows/validate-retro-compliance.yml` re-runs the same
-scripts on the retro PR.
+Local enforcement runs in Step 5c (pre-commit validation gate).
+CI enforcement: `.github/workflows/validate-retro-compliance.yml`
+re-runs the same scripts on the retro PR.
 
 ### 3. Write Retro Document
 
@@ -150,10 +152,6 @@ Per finding, judge case by case:
 Record audit results in the retro doc under a `## Rule File Audit`
 section: files scanned, narrative drifts found (list each), rule
 weaknesses found (list each), rules rewritten, rules marked for removal.
-
-**Commit the audit as a separate commit** from the process improvements
-above. Commit message:
-`docs(rules): rule file audit (retro) — strip narrative, harden weak rules`
 
 If the audit produced file changes, do NOT commit them yet — Step 5c
 handles the audit commit as a separate commit before the main retro
@@ -289,9 +287,45 @@ Schema and producer mandate live in `audit-anchors.md` header. No
 SHA = audit-gate fails closed at next sprint's per-class test-debt
 audit (`gate-validation.md` Check 18).
 
+### 5c. Pre-Commit Validation Gate
+
+Before committing retro artifacts, run all three checks in order.
+Failure on any check blocks the Step 6 commit.
+
+1. **Rule file audit commit.** If the rule file audit (Step 4)
+   produced file changes, commit them NOW as a separate commit:
+   `docs(rules): rule file audit (retro) — strip narrative, harden weak rules`.
+   If the audit was clean, skip.
+
+2. **Provenance block verification.** Open the retro doc and verify
+   the `SKILL_INVOCATION_PROVENANCE v1` block cites a valid
+   `tool_use_id`. If the tool_use_id is NOT_ACCESSIBLE (common after
+   compact), that is acceptable — note it in the provenance block.
+   If the provenance block is missing entirely, add it now before
+   proceeding.
+
+3. **Mandatory rules validation.** Run:
+   `scripts/validate-mandatory-rules.sh <N>` (where N is the sprint
+   number). This executes `validate-retro-evidence.sh`,
+   `validate-cycle-commits.sh`, and `validate-provenance-block.sh`.
+   MUST exit 0. If it fails, fix the issues before proceeding to
+   Step 6.
+
 ### 6. Commit, Push, and PR
 
 **6a. Commit all remaining artifacts.**
+
+**Pre-commit completeness check.** Before staging, verify these
+artifacts exist for this sprint. Missing items indicate a skipped
+step — go back and complete it before committing:
+
+- [ ] Gate-log entry exists in `_bmad-output/implementation-artifacts/gate-log.md` for this sprint
+- [ ] `_bmad-output/audit-anchors.md` updated (Step 5b)
+- [ ] Next-sprint prompt emitted (Step 7) OR "no next sprint" stated explicitly
+- [ ] Retro doc has provenance block citing party-mode transcript
+
+If any item is missing, complete the skipped step NOW before
+proceeding. Do not commit an incomplete retro.
 
 Run `git status` to identify any uncommitted files. Stage and commit
 everything produced during the sprint that hasn't been committed yet.
