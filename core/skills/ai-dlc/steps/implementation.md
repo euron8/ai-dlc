@@ -3,6 +3,7 @@ name: implementation
 description: Transition to Agent Teams lead, spawn teammates, create tasks, orchestrate build
 nextStepFile: ./sprint-review.md
 ---
+<!-- STEP_LOADED_TOKEN: implementation -->
 
 # Implementation (Phase 3)
 

@@ -3,6 +3,7 @@ name: architecture
 description: System design + ADRs + solutioning gate + validation cycle
 nextStepFile: ./stories-test-strategy.md
 ---
+<!-- STEP_LOADED_TOKEN: architecture -->
 
 # Architecture (Phase 2c)
 

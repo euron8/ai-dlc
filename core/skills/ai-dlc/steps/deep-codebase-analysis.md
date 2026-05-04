@@ -4,6 +4,7 @@ description: Brownfield B / Analysis-only — comprehensive reverse-engineering 
 nextStepFile_build: ./discovery.md
 nextStepFile_analysis_only: STOP
 ---
+<!-- STEP_LOADED_TOKEN: deep-codebase-analysis -->
 
 # Deep Codebase Analysis (Brownfield B / Analysis-Only)
 

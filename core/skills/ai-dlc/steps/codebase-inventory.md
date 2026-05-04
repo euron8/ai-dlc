@@ -3,6 +3,7 @@ name: codebase-inventory
 description: Brownfield A — inventory existing codebase to identify what exists and what planning artifacts are missing
 nextStepFile: ./discovery.md
 ---
+<!-- STEP_LOADED_TOKEN: codebase-inventory -->
 
 # Codebase Inventory (Brownfield A)
 

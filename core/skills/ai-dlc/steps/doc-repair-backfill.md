@@ -3,6 +3,7 @@ name: doc-repair-backfill
 description: Brownfield C — repair stale docs and backfill missing BMAD artifacts
 nextStepFile: ./discovery.md
 ---
+<!-- STEP_LOADED_TOKEN: doc-repair-backfill -->
 
 # Documentation Repair and Backfill (Brownfield C)
 

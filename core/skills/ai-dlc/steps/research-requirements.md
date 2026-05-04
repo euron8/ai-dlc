@@ -3,6 +3,7 @@ name: research-requirements
 description: Research + PRD creation + validation cycle
 nextStepFile: ./architecture.md
 ---
+<!-- STEP_LOADED_TOKEN: research-requirements -->
 
 # Research and Requirements (Phase 2a-b)
 
