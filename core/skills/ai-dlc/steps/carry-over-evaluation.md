@@ -14,11 +14,6 @@ items get the same planning rigor as new features.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: carry-over-evaluation at {current ISO timestamp}`
-
 ### 1. Context Loading
 
 Read in full:
@@ -37,6 +32,10 @@ sprint (current sprint number minus one). Resolve the `sha` field as
 file HARD_BLOCK at carry-over-evaluation gate — silent skip is
 forbidden.
 
+**Backlog health check.** Before per-item evaluation, count OPEN
+items and flag any older than 10 sprints. When OPEN count exceeds 15,
+prioritize triage as a sprint deliverable.
+
 ### 2. Item Evaluation
 
 For each OPEN item in the backlog, evaluate:
@@ -48,6 +47,13 @@ For each OPEN item in the backlog, evaluate:
    - Evaluate options using project context and user preferences
    - Select the best option
    - Document as `DECIDED_AUTONOMOUSLY` with rationale
+
+**Process-exercise scoping.** For any item classified as a
+process exercise, the evaluation MUST define a fail-condition trigger:
+the specific observable event that constitutes exercise failure. Items
+with no distinct fail condition MUST be reclassified as monitoring
+notes embedded in the sprint retro rather than carried as standalone
+exercise stories.
 
 ### 3. Party Mode Evaluation
 
@@ -97,6 +103,9 @@ The architecture step will:
 The stories-test-strategy step will:
 - Create stories from the updated planning artifacts
 - Run the full validation cycle on stories
+
+Every new item filed MUST include `**Status:** OPEN` at minimum.
+Item IDs MUST use `CO-S<sprint>-<descriptor>` format.
 
 Run gate validation (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

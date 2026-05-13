@@ -93,13 +93,14 @@ Two arms, either satisfies (dual-arm OR):
   escalation spec before proceeding.
 
 - **SUPERSEDED ADR LR disposition.** When an ADR is marked SUPERSEDED
-  mid-sprint (per operator decision authoring a successor ADR), every
-  LR in the artifact body that directly instantiates the superseded ADR
-  MUST carry an explicit disposition: SUPERSEDED (with pointer to
-  successor ADR section) OR AMENDED (with successor ADR's effective LR
-  text inline). Silent LR drop (LR text removed from artifact body
-  without SUPERSEDED/AMENDED marker) FAILS the gate. Remediation:
-  append disposition marker to each affected LR before proceeding.
+  mid-sprint (per HB-class operator decision authoring a successor
+  ADR-bis), every LR in the artifact body that directly instantiates
+  the superseded ADR MUST carry an explicit disposition: SUPERSEDED
+  (with pointer to successor ADR section) OR AMENDED (with successor
+  ADR's effective LR text inline). Silent LR drop (LR text removed
+  from artifact body without SUPERSEDED/AMENDED marker) FAILS the
+  gate. Remediation: append disposition marker to each affected LR
+  before proceeding.
 
 ### 3a. Story validation origin check (story gates only).
 
@@ -310,6 +311,12 @@ The gate log entry MUST include:
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
 
+**Post-write verification.** After appending the gate log entry,
+re-read `_bmad-output/gate-log.md` and verify the entry appears
+at the end of the file. A gate log write that silently fails (tool
+error, truncation, wrong path) means the gate passage is
+unrecorded. Verification catches this before the pipeline moves on.
+
 ### 13. Announce gate passage.
 
 Output a brief line to the conversation only AFTER Checks 14 and 15
@@ -321,6 +328,10 @@ count.)
 "Gate [name]: PASSED — all checks passed — proceeding to [next phase]"
 
 Include the check count so the human can verify completeness at a glance.
+
+When any check FAILs due to a HARD_BLOCK resolution, the gate
+log entry MUST include `hard_block_fail: true` and cite the
+HARD_BLOCK ID from `docs/escalations/pending.md`.
 
 ### 14. Update pipeline snapshot.
 
@@ -457,6 +468,14 @@ This check exists because Check 14 is an assertion ("update the
 snapshot"); Check 15 is a verification that the assertion took
 effect. A gate could otherwise claim Check 14 passed without the
 snapshot actually being updated.
+
+- **Direct-to-main commit audit.** At retro gate, scan `git log
+  main..<sprint-branch>` for merge commits or commits that bypass
+  the sprint branch workflow. Any commit pushed directly to main
+  during the sprint window that is not a retro PR merge is flagged
+  as a process violation. The retro MUST document the commit and
+  classify it (emergency hotfix, operator override, or unauthorized
+  bypass).
 
 **Gate FAILS** if any of the above do not match. Remediation: re-run
 Check 14 (re-write the snapshot) and then re-run Check 15. If Check

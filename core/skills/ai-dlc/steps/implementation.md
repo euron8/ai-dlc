@@ -12,11 +12,6 @@ teammates, create tasks, orchestrate the build/review/QA cycle.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: implementation at {current ISO timestamp}`
-
 ### 1. Context Loading
 
 Read sprint stories from `_bmad-output/planning-artifacts/stories/`.
@@ -49,6 +44,40 @@ teammates that touch the same protected file. Catalog and field
 semantics defined in `stories-test-strategy.md` "Protected-Path
 Story Tag" subsection. Violation fails gate-validation Check 15 on
 detection at retro.
+
+**Pre-dispatch auth check.** Before any dev dispatch, run:
+```
+gh auth status
+```
+MUST succeed. Failure = HARD_BLOCK (environment not authenticated).
+
+**Worktree-explicit dev dispatch.** The Agent tool's
+`isolation: worktree` parameter is NOT a reliable isolation mechanism
+when combined with `subagent_type: general-purpose` — multiple parallel
+devs collapse into shared CWD and branch-thrash each other. Lead MUST
+follow the worktree-explicit dispatch protocol:
+
+1. Lead pre-creates a physical worktree per dispatched story BEFORE
+   issuing the Agent call:
+   `git worktree add <repo>-s<N>-story-<X> -b dev/sprint-<N>/story-<X> <sprint-branch-HEAD>`
+2. Dev branches MUST branch off the current sprint-branch HEAD at
+   dispatch time. The lead MUST NOT branch dev worktrees off `main`
+   unless the sprint branch has not diverged from main.
+3. The Agent call MUST set `mode: "bypassPermissions"` and include
+   the worktree absolute path in the prompt. The dev prompt MUST
+   instruct the dev to `cd` into the worktree as its first action.
+4. On story completion, the lead merges the dev branch into the
+   sprint branch and removes the worktree:
+   `git merge dev/sprint-<N>/story-<X> && git worktree remove <path>`
+5. If merge conflicts arise, the lead resolves them — not the dev.
+
+**Dev-brief bug-class checklist.** When the dev-brief includes a
+bug-class finding from the code-reviewer (see `code-reviewer.md`
+bug-class audit mandate), the dev MUST grep for same-shape call-sites
+listed in the finding and verify each one in the fix commit. The
+dev record MUST cite the grep command and match count. Partial
+enumeration (fixing the reported instance but not grepping for
+siblings) fails gate-validation.
 
 **Canonical-story-file pre-flight check before dev dispatch.** Before
 dispatching dev for any story, the lead MUST verify two conditions:

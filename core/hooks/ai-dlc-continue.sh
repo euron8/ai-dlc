@@ -207,7 +207,9 @@ If you genuinely have no next action (HARD_BLOCK, PVC, handoff, retro commentary
 
 If you have a next action but emitted text first: pair the text with the tool call in your next response. Text + tool call = valid turn. Text alone = this hook fires.
 
-IMPORTANT: This hook exists to prevent 'should I continue?' stalls (Rule 3). It does NOT mean 'skip the current step to produce a tool call faster.' Every numbered section in the current step file must be completed in full (Rule 4). If a section produces text output (party-mode results, failure classification, gate announcements), emit that text WITH the next section's tool call in the same response."
+IMPORTANT: This hook exists to prevent 'should I continue?' stalls (Rule 3). It does NOT mean 'skip the current step to produce a tool call faster.' Every numbered section in the current step file must be completed in full (Rule 4). If a section produces text output (party-mode results, failure classification, gate announcements), emit that text WITH the next section's tool call in the same response.
+
+FIDELITY CHECK: Do NOT pattern-match on prior sprint execution. Re-read the current step file's numbered sections and execute each one literally. The pipeline is designed for fidelity, not throughput. Rushing through deploy-validate and retro — treating them as formalities because implementation feels 'done' — is the documented failure mode. Each section exists for a reason. Execute it."
 
 if [ -n "$CURRENT_STEP" ]; then
   REASON="${REASON} Current step: ${CURRENT_STEP}."

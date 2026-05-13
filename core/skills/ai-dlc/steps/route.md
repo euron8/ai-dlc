@@ -20,12 +20,7 @@ nextStepFile: dynamically determined by routing logic
 
 ## EXECUTION SEQUENCE
 
-### Step 0a: Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: route at {current ISO timestamp}`
-
-### Step 0b: Resume Check
+### Step 0: Resume Check
 
 Before running the full routing sequence, check for an existing
 pipeline snapshot that indicates a resume from a previous session.
@@ -249,6 +244,21 @@ sprint's stories before implementation begins. This loop is handled by
 
 **Note:** For `feature` variant, the discovery step is scoped — it updates
 existing artifacts rather than creating from scratch.
+
+**Determine validation intensity (Rule 8).** Before creating the
+snapshot, classify `validation_intensity` based on the stories in
+scope (or anticipated scope for carry-over/greenfield):
+
+- `full` — ≥3 stories touching service code paths
+- `standard` — 1-2 stories touching service code paths
+- `lightweight` — all stories touch only pipeline-infra paths
+  (scripts, config, docs, CI workflows)
+
+For carry-over and bug variants where story count is not yet known,
+estimate from the user's input. The intensity MAY be revised upward
+(never downward) at stories-test-strategy if the actual story scope
+differs from the estimate. Record the intensity in the snapshot's
+Sprint Context section.
 
 **Initialize the pipeline snapshot.** Before the READ AND FOLLOW, handle
 the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:

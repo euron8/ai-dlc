@@ -12,11 +12,6 @@ fix story, then route to implementation.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: bug-investigation at {current ISO timestamp}`
-
 ### 1. Context Loading
 
 Read planning artifacts:
@@ -39,6 +34,13 @@ If the bug reveals a **DESIGN FLAW** that requires architecture changes:
 - Route to `discovery.md` instead of creating a fix story here
 
 If the bug is an **IMPLEMENTATION ERROR**: proceed with fix planning.
+
+**Falsification ladder.** For each architectural layer that the bug
+could plausibly originate from, the investigation MUST document why
+that layer IS or IS NOT the root cause, with evidence (query result,
+code trace, or test output). "Likely cause at layer X" without
+evidence ruling out other layers is insufficient. Violation: gate
+fails on incomplete falsification.
 
 ### 3. Create Fix Story
 

@@ -12,11 +12,6 @@ deployment, and present the Production Validation Checkpoint to the human.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: deploy-validate at {current ISO timestamp}`
-
 ### 1. Pre-Deployment Check
 
 Verify all sprint stories have passed all three gates (code review, QA,

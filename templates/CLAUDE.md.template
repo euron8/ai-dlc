@@ -78,6 +78,8 @@ pipeline or a one-off change.
 
 ## Context-Mode Usage
 
+**Scope note:** This section is routing guidance for tool selection, not a Rule-18-governed mandate. "Prefer X" statements here are non-binding optimizations; strict-MUST interpretation would break skill semantics (sometimes the native tool IS correct). Rule 18's imperative-voice requirement applies to behavior-gating mandates (Rules 1-20, deploy protocol, gate checks), not tool-selection nudges.
+
 If the context-mode plugin is installed, its default routing is
 conservative. For medium-cost operations where native tools are
 technically allowed but sandbox would be more efficient, prefer the

@@ -115,12 +115,51 @@ When party mode, adversarial review, or advanced elicitation surface
 a finding, fix it directly in the artifact. Do not present a menu of
 options. Do not ask "should I fix this?" Just fix it.
 
-### Rule 8 -- Run the full validation cycle
+### Rule 8 -- Run the validation cycle per declared intensity
 
-Every planning artifact goes through Party Mode -> Advanced
-Elicitation -> Adversarial Review (2+ passes). After each adversarial
-pass, apply all real fixes, then run the next pass. Continue until a
-pass produces only nitpicks or false positives.
+Validation intensity is declared at route time (see route.md Step 6)
+and recorded in the pipeline snapshot as `validation_intensity`. The
+intensity determines the MINIMUM validation cycle at each planning
+phase. The lead MUST NOT run less than the declared minimum. Running
+more is always permitted.
+
+| Intensity | Trigger | Minimum cycle per planning artifact |
+|---|---|---|
+| `full` | ≥3 stories touching service code paths | Party Mode → Advanced Elicitation → Adversarial Review (2+ passes) |
+| `standard` | 1-2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
+| `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
+| `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review (1 pass) at discovery + stories-test-strategy only |
+
+Under `carry-over-single`, the following sub-skills are SKIPPED:
+- `/bmad-brainstorming` (discovery Step 3)
+- `/bmad-create-epics-and-stories` (stories-test-strategy Step 2)
+- `/bmad-sprint-planning` (stories-test-strategy Step 3)
+- `/bmad-agent-tea-tea` (stories-test-strategy Step 5.1)
+
+Carry-over items are already scoped; story count is trivially
+plannable; test strategy for ≤2 stories is covered by the story
+validation cycle. The stories-test-strategy step creates story
+files directly from carry-over items instead of invoking the
+epics/stories sub-skill. `carry-over-single` may only be assigned
+to carry-over variants. If actual story count exceeds 2 at
+stories-test-strategy, intensity MUST be revised upward to
+`standard`.
+
+Under `lightweight`, the architecture step validation cycle is
+skipped entirely when the assessment is NO CHANGES NEEDED (Rule 5
+fast-track still applies). Research-requirements and sprint-review
+validation cycles are replaced by a single adversarial pass each.
+
+The gate log MUST record the declared intensity and confirm the
+minimum was met. A gate that passes under `lightweight` with zero
+adversarial passes at discovery is a violation.
+
+Intensity does NOT reduce the following (always required regardless):
+- Carry-over eval party mode (evaluates slot/close/defer decisions)
+- Story validation party mode (real subagents)
+- Adversarial review (1+ pass on stories and sprint output)
+- Deploy-validate smoke test (hard gate, see deploy-validate.md)
+- Retro party mode (Rule 20 Skill invocation mandate)
 
 ### Rule 9 -- Autonomous gates
 
@@ -252,7 +291,8 @@ sections:
 - **Pipeline Position** -- variant, current step file, last completed
   step file, last gate passed with timestamp, current git branch.
 - **Sprint Context** -- sprint ID (or `none`), stories in scope with
-  statuses, `is_ui_epic` boolean.
+  statuses, `is_ui_epic` boolean, `validation_intensity` (full |
+  standard | lightweight).
 - **Recent Activity** -- last ~10 entries of gate passages,
   significant commits, key artifacts touched.
 - **Open Items** -- unresolved triage items, pending human decisions,
@@ -509,7 +549,7 @@ Block schema:
 skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
 invoked_at: <ISO 8601 UTC timestamp>
 tool_use_id: <toolu_... from the Skill tool response>
-mode: <solo|subagent>
+mode: subagent
 lead_role: <step-file-that-invoked>
 transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
 SKILL_INVOCATION_PROVENANCE_END -->
@@ -526,6 +566,12 @@ block at gate-validation is a HARD_BLOCK.
 findings lists) WITHOUT Skill tool invocation and WITHOUT provenance
 block is a rule violation. "The findings are real" is not a valid
 rationalization — the process IS the validation.
+
+**Solo mode is forbidden.** Party mode MUST always spawn real
+subagents. Roleplaying agent perspectives inline (solo mode) produces
+convergent opinions from a single LLM and defeats the purpose of
+independent evaluation. Any party mode invocation that generates
+agent responses without spawning subagents is a rule violation.
 
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
 
@@ -548,6 +594,19 @@ gates, the lead pattern-matches on "I know what this step does" and
 skips the Read entirely, executing from memory. The Read tool call
 is the interrupt that forces re-engagement with the step's actual
 instructions. Memory of a step file is not equivalent to loading it.
+
+### Rule 22 -- Pause-point resume MUST re-read the step file
+
+When a pipeline pause point (Rule 3(a)-(c)) receives human input and
+the lead resumes execution, the lead's FIRST action MUST be a `Read`
+tool call for the current step file. The lead MUST then enumerate the
+remaining numbered sections in output before executing any of them.
+
+This rule generalizes Rule 21's principle to mid-step resume. The
+step file is the authority for what remains, not the lead's memory.
+"Proceed" after human commentary means "continue the step sequence,"
+not "skip to completion." Violation: Rule 4 (every section must
+complete). Gate FAILS on detection at retro.
 
 ## INITIALIZATION
 

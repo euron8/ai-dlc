@@ -17,6 +17,92 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.2] — 2026-05-13
+
+Consumer absorption from graph project (Sprint 224–231 innovations).
+Validation intensity system, fidelity hardening, step-entry assertion
+removal, and 15+ generic mechanism absorptions. All additive; no
+consumer migration required.
+
+### Added
+
+- **Validation intensity system (Rule 8).** Four-tier intensity
+  (full/standard/carry-over-single/lightweight) replaces fixed "full
+  validation cycle" mandate. Declared at route time, recorded in
+  snapshot. Reduces overhead for small carry-over sprints without
+  weakening critical gates. (Source: graph S175+)
+- **Rule 22 — Pause-point resume must re-read step file.** Generalizes
+  Rule 21 to mid-step resume. Prevents "proceed = skip to completion"
+  failure mode after human commentary at pause points.
+- **Solo mode ban.** Party mode MUST spawn real subagents. Inline
+  role-playing (solo mode) produces convergent opinions from a single
+  LLM and is now explicitly forbidden.
+- **Fidelity check in continue hook.** Anti-pattern warning against
+  pattern-matching on prior sprints; forces re-read of current step
+  file sections.
+- **Resume re-read in pause hook.** Resume instruction changed from
+  "proceed" to "RE-READ step file per Rule 22."
+- **Canonical retro branch naming.** `ai-dlc/retro/sprint-<N>` format
+  required by validation script regex.
+- **HARD_BLOCK tracking in retro.** `hard_block_count` and
+  `hard_block_class[]` fields in retro document template.
+- **Finding-class per pass tracking.** Retro party-mode findings now
+  reference `retro-finding-class-tracking.md` template.
+- **Topology verification mandate.** Retro findings asserting infra
+  topology must cite IaC source file and line.
+- **Falsification ladder (bug-investigation).** Each architectural
+  layer must be ruled in or out with evidence.
+- **Worktree-explicit dev dispatch (implementation).** Pre-created
+  physical worktrees replace unreliable `isolation: worktree` Agent
+  parameter.
+- **Dev-brief bug-class checklist (implementation).** Dev must grep
+  for same-shape call-sites from code-reviewer findings.
+- **Pre-dispatch auth check (implementation).** `gh auth status` must
+  succeed before dev dispatch.
+- **Backlog health check (carry-over-evaluation).** Flag items >10
+  sprints old; triage when >15 open.
+- **Process-exercise scoping (carry-over-evaluation).** Items without
+  fail-condition triggers reclassified as monitoring notes.
+- **Carry-over item ID format.** `CO-S<sprint>-<descriptor>` with
+  mandatory `**Status:** OPEN`.
+- **Out-of-scope declaration rule (stories-test-strategy).** Stories
+  must name uncovered targets when Day-0 survey exceeds lane scope.
+- **AC precision for smoke checks.** "Check N MUST produce PASS"
+  replaces "zero SKIPs on Check N."
+- **Story-authoring pre-flight checklist.** Framework-import
+  inspection and role-file/step-file existence verification.
+- **Intensity gate for carry-over-single (discovery, stories).** Skip
+  brainstorming and epics sub-skills for ≤2-story carry-overs.
+- **SUPERSEDED ADR LR disposition (gate-validation Check 3).**
+  Silent LR drop without SUPERSEDED/AMENDED marker fails gate.
+- **Check 12 post-write verification.** Re-read gate log after write
+  to catch silent failures.
+- **HARD_BLOCK gate-fail tracking (gate-validation Check 13).**
+  `hard_block_fail: true` with escalation ID in gate log.
+- **Direct-to-main commit audit (gate-validation Check 15).** Retro
+  gate scans for commits bypassing sprint branch workflow.
+- **PVC template tables.** PVC-Deferred Items and Operator Decisions
+  Required sections now use structured tables instead of HTML comments.
+- **CLAUDE.md.template scope note.** Clarifies Context-Mode Usage
+  section is routing guidance, not a Rule-18 mandate.
+
+### Changed
+
+- **Rule 8 title.** "Run the full validation cycle" → "Run the
+  validation cycle per declared intensity."
+- **Provenance block `mode` field.** `<solo|subagent>` → `subagent`
+  (follows from solo mode ban).
+- **Sprint Context snapshot.** Added `validation_intensity` field.
+- **Carry-over satisfaction matching.** Partial satisfaction now
+  records `PARTIAL - sprint <N>` with explicit remainder.
+
+### Removed
+
+- **Step Entry Assertions.** Removed from all 18 step files (added in
+  v0.4.1). Hook-level enforcement via continue/pause hooks is
+  sufficient; per-step assertions added token overhead without
+  additional enforcement value.
+
 ## [0.4.1] — 2026-05-04
 
 Consumer absorption bundle from graph and ai-group-review projects.

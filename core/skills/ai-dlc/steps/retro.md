@@ -13,12 +13,19 @@ a chance to comment or ask questions before it closes.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: retro at {current ISO timestamp}`
-
 ### 1. Context Loading
+
+Create the retro branch using the canonical name that
+`scripts/validate-mandatory-rules.sh` expects:
+
+```bash
+git checkout -b ai-dlc/retro/sprint-<N>
+```
+
+The branch name MUST contain `sprint-<N>` (literal word "sprint"
+followed by the sprint number). Abbreviated forms (`s<N>`,
+`retro-<N>`) cause validation failures because the script's
+branch-detection regex requires the `sprint-<N>` substring.
 
 Read all artifacts from this sprint:
 - Sprint stories in `_bmad-output/planning-artifacts/stories/`
@@ -38,6 +45,7 @@ IS the satisfier for this step — role-playing PM/Architect/Dev/SM/
 TEA/QA perspectives inline in the retro doc without invoking the
 Skill is a Rule 3 violation per SKILL.md, regardless of how
 well-formed the output appears. This is non-negotiable.
+Each agent MUST be spawned as a real subagent for independent perspective. Solo mode (roleplaying agents inline) is forbidden.
 
 Bring all agent perspectives (PM, Architect, Dev, SM, TEA, QA) into
 the discussion:
@@ -77,9 +85,17 @@ re-runs the same scripts on the retro PR.
 
 Write the retro to `docs/retro/sprint-N.md` with:
 - Sprint summary (planned vs delivered, rework cycles, autonomous decisions)
+- `hard_block_count` (integer): total HARD_BLOCKs encountered this sprint
+- `hard_block_class[]`: list of HARD_BLOCK classifications (e.g., requirement-divergence, scope-conflict, infra-outage)
 - Agent findings (from party mode)
+  with finding-class per pass (see templates/pipeline/retro-finding-class-tracking.md)
 - Specific, actionable improvements
 - Which improvements should update CLAUDE.md, team roles, or pipeline steps
+
+Retro findings asserting infrastructure topology MUST cite the
+IaC source file and line (Terraform, CDK, CloudFormation, Docker
+Compose, or equivalent). Agent consensus is not evidence of
+topology shape.
 
 ### 4. Apply Process Improvements
 
@@ -217,6 +233,11 @@ ensures no sprint ends with stale OPEN/IN_SPRINT state.
    sprint <N>` and keep the remainder open with a note on what
    remains. If no story touched it: leave as-is (it's legitimate
    carry-over).
+
+   When a carry-over item is partially satisfied, record status as
+   `PARTIAL - sprint <N>` with explicit description of what was
+   completed and what remains. Keep the remainder open as a new
+   carry-over item.
 
 2. **`docs/escalations/pending.md`.** For every entry without a
    RESOLVED or DECIDED_AUTONOMOUSLY terminal marker, check whether

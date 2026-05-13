@@ -12,11 +12,6 @@ missing BMAD artifacts so planning can proceed from a verified foundation.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: doc-repair-backfill at {current ISO timestamp}`
-
 ### 1. Repair Existing Docs
 
 Read `_bmad-output/planning-artifacts/doc-reconciliation.md`.

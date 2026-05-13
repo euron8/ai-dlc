@@ -22,8 +22,10 @@
 
 ## PVC-Deferred Items
 
-<!-- Items that passed gate but operator should review -->
+| Item | Type | Evidence |
+|------|------|----------|
 
 ## Operator Decisions Required
 
-<!-- HARD_BLOCKs, escalations, or items needing human judgment -->
+| Item | Decision | Options |
+|------|----------|---------|
