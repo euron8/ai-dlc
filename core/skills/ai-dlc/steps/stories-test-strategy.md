@@ -13,11 +13,6 @@ and test strategy with full validation cycle.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: stories-test-strategy at {current ISO timestamp}`
-
 ### 1. Implementation Readiness
 
 Invoke `/bmad-check-implementation-readiness` — validate PRD + architecture
@@ -73,6 +68,44 @@ For every story, sum `layered_ac_count` values MUST equal
 `acceptance_criteria` count. The `gate-validation.md` Check 11
 "Smoke test coverage" reads layer tags to verify test type
 matches change type — layered AC tags feed Check 11 evidence.
+
+**Intensity gate for carry-over-single.** When
+`validation_intensity == carry-over-single`, skip `/bmad-create-epics-and-stories`
+and create stories directly from carry-over items. The carry-over-evaluation
+step already scoped and validated items; the epics/stories sub-skill adds
+overhead without value for ≤2 stories.
+
+### Story-Authoring Pre-Flight Checklist
+
+Before creating any story file, verify:
+
+**(a) Framework-import inspection.** For every test framework
+prescribed in story ACs (pytest, vitest, playwright, etc.), verify
+the framework is actually imported/configured in the codebase. Run
+a grep for the import statement. Missing framework = story AC is
+unimplementable as written → fix the AC or add a setup story.
+
+**(b) Role-file/step-file existence verification.** For every
+`.claude/team-roles/<role>.md` and `.claude/skills/ai-dlc/steps/<step>.md`
+referenced in story dispatch plans, verify the file exists on disk.
+Missing role/step file = dispatch will fail silently.
+
+### Story-AC Out-of-Scope Declaration Rule
+
+When a Day-0 survey enumerates more targets than the selected lane
+covers, the story MUST include an explicit out-of-scope-declaration
+AC naming uncovered targets verbatim. This prevents surprise gaps at
+gate review where the reviewer discovers that "all targets handled"
+was never an AC — it was an assumption. The out-of-scope AC is
+verified at gate by confirming the named targets were not modified.
+
+### AC Precision for Smoke Checks
+
+Smoke-test ACs MUST use the phrasing "Check N MUST produce PASS"
+rather than "zero SKIPs on Check N." SKIP is a legitimate status
+for checks that do not apply to the current gate phase. Conflating
+SKIP with FAIL produces false gate failures. The gate log records
+PASS/FAIL/SKIP per check; the AC must target PASS specifically.
 
 ### 2. Epics and Stories
 

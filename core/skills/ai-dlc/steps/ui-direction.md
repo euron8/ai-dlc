@@ -12,11 +12,6 @@ to the human but continue working — this is NOT a blocking gate.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: ui-direction at {current ISO timestamp}`
-
 ### 1. Generate Mockups
 
 For each new UI surface in the sprint stories:

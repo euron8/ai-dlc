@@ -12,11 +12,6 @@ in the docs against the actual codebase to determine accuracy.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: doc-reconciliation at {current ISO timestamp}`
-
 ### 1. Documentation Inventory
 
 List every existing documentation artifact and its location:

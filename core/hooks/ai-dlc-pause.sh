@@ -124,7 +124,7 @@ fi
 # concise -- the lead sees this as additionalContext before processing
 # the user's message.
 
-CONTEXT="[AI/DLC Pipeline Control] A user message was received while the pipeline is active. The pipeline has been paused via flag file at _bmad-output/pipeline-paused.flag. Before continuing pipeline work, interpret the user's intent: (a) Resume intent -- including /ai-dlc invocations, handoff resume prompts, or natural resume language -- delete the flag via Bash (rm _bmad-output/pipeline-paused.flag) then proceed with the next pipeline step. (b) Question, correction, clarification, or conversational message -- respond normally; leave the flag in place. (c) Handoff request -- follow Rule 2 handoff protocol; leave the flag in place. Do not execute pipeline steps while the flag exists."
+CONTEXT="[AI/DLC Pipeline Control] A user message was received while the pipeline is active. The pipeline has been paused via flag file at _bmad-output/pipeline-paused.flag. Before continuing pipeline work, interpret the user's intent: (a) Resume intent -- including /ai-dlc invocations, handoff resume prompts, or natural resume language -- delete the flag via Bash (rm _bmad-output/pipeline-paused.flag) then RE-READ the current step file (Rule 22: Read tool call for the step file named in pipeline-snapshot.md Pipeline Position, enumerate remaining numbered sections in output, THEN execute them). Do not act from memory of what remains. (b) Question, correction, clarification, or conversational message -- respond normally; leave the flag in place. (c) Handoff request -- follow Rule 2 handoff protocol; leave the flag in place. Do not execute pipeline steps while the flag exists."
 
 jq -n \
   --arg context "$CONTEXT" \

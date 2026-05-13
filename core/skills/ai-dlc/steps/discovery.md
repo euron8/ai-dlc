@@ -13,11 +13,6 @@ rather than creating from scratch.
 
 ## EXECUTION SEQUENCE
 
-### 0. Step Entry Assertion
-
-Output this line verbatim before any other action:
-`STEP ENTERED: discovery at {current ISO timestamp}`
-
 ### 1. Context Loading
 
 Read existing artifacts if they exist:
@@ -38,6 +33,10 @@ C: Z"). If any item presents options:
   `docs/escalations/pending.md`
 - If options represent fundamentally different features (not just
   implementation approaches), seek clarity from the user per Rule 11
+
+**Intensity gate.** If `validation_intensity == carry-over-single`:
+skip this step. Carry-over items are already scoped. Proceed to
+Step 4.
 
 ### 3. Brainstorm
 
