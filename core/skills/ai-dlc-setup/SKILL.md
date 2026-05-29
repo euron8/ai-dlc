@@ -485,12 +485,15 @@ Ask the user:
 **If the user selects Bedrock (option 2 or 3), ask a follow-up:**
 
 > **Which models do you have access to on Bedrock?**
-> 1. **Opus and Sonnet** — Full model strategy (opus for planning, sonnet for implementation)
+> 1. **Opus and Sonnet** — Balanced model strategy (opus for orchestration and design, sonnet for everything else)
 > 2. **Sonnet only** — All roles use Sonnet (effort levels compensate for planning depth)
 
 This determines the **model strategy mode**:
-- **Full** (Personal, or Bedrock with Opus+Sonnet): Planning roles use
-  opus, implementation roles use sonnet.
+- **Balanced** (Personal, or Bedrock with Opus+Sonnet): Lead and
+  Architect use opus; PM, Code Reviewer, Dev, and QA use sonnet.
+  PM and Code Reviewer run at `high` effort to preserve planning and
+  review depth on the sonnet tier; opus is reserved for the two roles
+  with the highest reasoning leverage (orchestration and system design).
 - **Sonnet-only** (Bedrock with Sonnet only): ALL roles use sonnet.
   Effort levels (`high` for planning roles) compensate partially for
   the less capable model. The pipeline still works but planning phases
@@ -503,14 +506,14 @@ and let the user override if they want different models.
 Based on the answer, determine the model strings. Use these defaults
 unless the user specifies different models:
 
-**Full model strategy (default):**
+**Balanced model strategy (default):**
 
 | Role           | Personal                    | Bedrock                                  | Effort |
 |----------------|-----------------------------|------------------------------------------|--------|
 | Lead           | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      | high   |
-| PM             | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      | high   |
 | Architect      | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      | high   |
-| Code Reviewer  | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      | high   |
+| PM             | claude-sonnet-4-6[1m]       | global.anthropic.claude-sonnet-4-6       | high   |
+| Code Reviewer  | claude-sonnet-4-6[1m]       | global.anthropic.claude-sonnet-4-6       | high   |
 | Dev            | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
 | QA             | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
 
@@ -530,44 +533,49 @@ on well-scoped stories? If yes, what model string?" (Default: skip)
 
 Present the applicable model assignment table and ask for confirmation.
 
-After confirmation, replace in these files. For Sonnet-only mode, ALL
-model variables (including opus roles) get the sonnet bedrock string:
+After confirmation, replace in these files. Two model strings drive
+the balanced default: the **opus-tier** string (Lead, Architect) and
+the **sonnet-tier** string (PM, Code Reviewer, Dev, QA). Effort —
+not model — separates PM/Code Reviewer (`high`) from Dev/QA
+(`medium`); effort lives in the role files. For Sonnet-only mode, ALL
+model variables (including opus-tier roles) get the sonnet bedrock
+string.
 
 **`.claude/team-roles/architect.md`:**
-- `{architect_model_personal}` -> planning model personal string
-- `{architect_model_bedrock}` -> planning model bedrock string
+- `{architect_model_personal}` -> opus-tier model personal string
+- `{architect_model_bedrock}` -> opus-tier model bedrock string
 
 **`.claude/team-roles/code-reviewer.md`:**
-- `{reviewer_model_personal}` -> planning model personal string
-- `{reviewer_model_bedrock}` -> planning model bedrock string
+- `{reviewer_model_personal}` -> sonnet-tier model personal string
+- `{reviewer_model_bedrock}` -> sonnet-tier model bedrock string
 
 **`.claude/team-roles/pm.md`:**
-- `{pm_model_personal}` -> planning model personal string
-- `{pm_model_bedrock}` -> planning model bedrock string
+- `{pm_model_personal}` -> sonnet-tier model personal string
+- `{pm_model_bedrock}` -> sonnet-tier model bedrock string
 
 **`.claude/team-roles/dev.md`:**
-- `{dev_model_personal}` -> implementation model personal string
-- `{dev_model_bedrock}` -> implementation model bedrock string
+- `{dev_model_personal}` -> sonnet-tier model personal string
+- `{dev_model_bedrock}` -> sonnet-tier model bedrock string
 - `{dev_model_local}` -> local model string (or remove the line if N/A)
 
 **`.claude/team-roles/qa.md`:**
-- `{qa_model_personal}` -> implementation model personal string
-- `{qa_model_bedrock}` -> implementation model bedrock string
+- `{qa_model_personal}` -> sonnet-tier model personal string
+- `{qa_model_bedrock}` -> sonnet-tier model bedrock string
 
 **`QUICKSTART.md`:**
-- `{lead_model}` -> planning model personal string
-- `{lead_model_bedrock}` -> planning model bedrock string
-- `{lead_model_string}` -> planning model string for the user's primary tier
-- `{pm_model}` -> planning model personal string
-- `{pm_model_bedrock}` -> planning model bedrock string
-- `{architect_model}` -> planning model personal string
-- `{architect_model_bedrock}` -> planning model bedrock string
-- `{reviewer_model}` -> planning model personal string
-- `{reviewer_model_bedrock}` -> planning model bedrock string
-- `{dev_model}` -> implementation model personal string
-- `{dev_model_bedrock}` -> implementation model bedrock string
-- `{qa_model}` -> implementation model personal string
-- `{qa_model_bedrock}` -> implementation model bedrock string
+- `{lead_model}` -> opus-tier model personal string
+- `{lead_model_bedrock}` -> opus-tier model bedrock string
+- `{lead_model_string}` -> opus-tier model string for the user's primary tier
+- `{pm_model}` -> sonnet-tier model personal string
+- `{pm_model_bedrock}` -> sonnet-tier model bedrock string
+- `{architect_model}` -> opus-tier model personal string
+- `{architect_model_bedrock}` -> opus-tier model bedrock string
+- `{reviewer_model}` -> sonnet-tier model personal string
+- `{reviewer_model_bedrock}` -> sonnet-tier model bedrock string
+- `{dev_model}` -> sonnet-tier model personal string
+- `{dev_model_bedrock}` -> sonnet-tier model bedrock string
+- `{qa_model}` -> sonnet-tier model personal string
+- `{qa_model_bedrock}` -> sonnet-tier model bedrock string
 
 **`CLAUDE.md` Model Strategy table:**
 
@@ -585,23 +593,21 @@ that all roles use sonnet:
 | Code Reviewer | sonnet | high   | Cross-cutting review needs architectural context       |
 ```
 
-If **full model strategy**, leave the default table (opus for planning
-roles, sonnet for implementation roles) unchanged.
+If **balanced model strategy**, leave the default table (opus for Lead
+and Architect, sonnet for PM, Code Reviewer, Dev, and QA) unchanged.
 
 **Sonnet-only mode — update CLAUDE.md prose references:**
 
-If Sonnet-only mode was selected, also update these hardcoded model
-tier references in `CLAUDE.md` to avoid misleading the agent:
+If Sonnet-only mode was selected, also update any hardcoded model tier
+references in `CLAUDE.md` to avoid misleading the agent. Under the
+balanced default only Lead and Architect run on opus, so Sonnet-only
+just flips those two:
 
-- `Code Review (opus), QA functional validation (sonnet)` →
-  `Code Review (sonnet, high effort), QA functional validation (sonnet)`
-- In the Workflow phase table, replace `opus` with `sonnet` in the
-  Model column for all phases, and `opus lead, sonnet dev` with
+- In the Workflow phase table, replace any remaining `opus` with
+  `sonnet` in the Model column, and `opus lead, sonnet dev` with
   `sonnet lead, sonnet dev`
-- `Code Review (code-reviewer, opus)` →
-  `Code Review (code-reviewer, sonnet)`
-- `Code Review (opus) -- exhaustive` →
-  `Code Review (sonnet, high effort) -- exhaustive`
+- Any prose naming the lead or architect tier as `opus`
+  (e.g. `Lead (opus)`, `Architect (opus)`) → `sonnet, high effort`
 
 These are prose references, not template variables. Use find-and-replace
 to update them. This ensures the agent's instructions match its actual

@@ -29,7 +29,7 @@ the authoritative model binding.
 
 **Agent spawn model parameter MUST be passed explicitly.** Every
 Agent tool invocation MUST include the `model` parameter. Map roles:
-`dev`, `qa`, `pm` -> `sonnet`; `code-reviewer`, `architect`, `tea`
+`dev`, `qa`, `pm`, `code-reviewer` -> `sonnet`; `architect`, `tea`
 -> `opus`. Omitted `model` inherits from the parent conversation
 and bypasses the role contract. Violation fails gate-validation
 Check 15 on detection at retro. Per SKILL.md Rule 19.

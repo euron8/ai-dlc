@@ -294,9 +294,9 @@ to the autonomous flow.
 | Role    | Model   | Personal (Anthropic)  | Bedrock                                  |
 |---------|---------|----------------------|------------------------------------------|
 | Lead    | opus    | {lead_model}         | {lead_model_bedrock}                     |
-| PM      | opus    | {pm_model}           | {pm_model_bedrock}                       |
 | Architect | opus  | {architect_model}    | {architect_model_bedrock}                |
-| Code Reviewer | opus | {reviewer_model}  | {reviewer_model_bedrock}                 |
+| PM      | sonnet  | {pm_model}           | {pm_model_bedrock}                       |
+| Code Reviewer | sonnet | {reviewer_model} | {reviewer_model_bedrock}                 |
 | Dev     | sonnet  | {dev_model}          | {dev_model_bedrock}                      |
 | QA      | sonnet  | {qa_model}           | {qa_model_bedrock}                       |
 
@@ -316,11 +316,11 @@ in the role file must match your environment.
 
 | Role          | Model  | Why                                           |
 |---------------|--------|-----------------------------------------------|
-| Lead          | opus   | Decomposition and coordination                |
-| PM            | opus   | Requirements depth                            |
-| Architect     | opus   | Design tradeoffs                              |
+| Lead          | opus   | Long-context orchestration and coordination   |
+| Architect     | opus   | System design tradeoffs and ADRs              |
+| PM (high)     | sonnet | Requirements depth at high effort             |
+| Code Reviewer (high) | sonnet | Cross-cutting review at high effort    |
 | Dev (default) | sonnet | High-volume, well-scoped implementation       |
-| Code Reviewer | opus   | Cross-cutting analysis needs deeper reasoning |
 | QA            | sonnet | Pattern-match against acceptance criteria     |
 
 ---
@@ -585,9 +585,9 @@ your-project/
           doc-repair-backfill.md        <-- brownfield-c continuation
     team-roles/
       architect.md                       <-- opus
-      code-reviewer.md                   <-- opus
+      code-reviewer.md                   <-- sonnet (high effort)
       dev.md                             <-- sonnet (default)
-      pm.md                              <-- opus
+      pm.md                              <-- sonnet (high effort)
       qa.md                              <-- sonnet
     settings.json                        <-- Agent Teams flag
   _bmad/                                 <-- BMAD v6 framework
