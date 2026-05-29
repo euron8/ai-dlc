@@ -17,6 +17,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-29
+
+Balanced model strategy becomes the new default. Opus is reserved for
+the two highest-leverage roles (Lead orchestration, Architect design);
+PM and Code Reviewer move to sonnet at `high` effort; Dev and QA stay
+sonnet at `medium`. Effort — not model tier — now separates the
+planning-grade roles from the implementation-grade roles on the sonnet
+side. Also fixes a long-standing contradiction where the spawn-map
+bound PM to sonnet while the role file, QUICKSTART, and setup tables
+bound it to opus.
+
+Existing consumers keep working without migration: already-filled
+role files and QUICKSTART tables are untouched by an upgrade. The
+change affects new installs (Step 0 setup defaults) and the
+gate-enforced spawn map only.
+
+### Changed
+
+- **Balanced default model strategy.** `ai-dlc-setup` Step 0 now
+  provisions Lead + Architect on the opus-tier string and PM, Code
+  Reviewer, Dev, QA on the sonnet-tier string. The setup variable
+  mapping is reframed around two tiers (opus-tier / sonnet-tier)
+  instead of planning/implementation, since PM and Code Reviewer are
+  planning-grade roles now running on sonnet at high effort.
+- **Rule 19 spawn map (SKILL.md + implementation.md).** Now
+  `dev, qa, pm, code-reviewer -> sonnet`; `architect, tea -> opus`.
+  Previously `code-reviewer` mapped to opus while `pm` was already
+  sonnet in the spawn map but opus everywhere else — both are now
+  internally consistent.
+- **Role files.** `pm.md` and `code-reviewer.md` model-string
+  examples updated to sonnet. `code-reviewer.md` rationale reworded:
+  the capability edge over dev now comes from `high` effort, not a
+  more capable model tier.
+- **QUICKSTART template.** Model Strings and Model Assignments tables
+  updated to the balanced default; PM and Code Reviewer annotated as
+  sonnet at high effort.
+
+### Fixed
+
+- **PM model contradiction.** Resolved toward sonnet across the spawn
+  map, role file, setup table, and QUICKSTART. Eliminates a potential
+  gate-validation Check 15 ambiguity where a spawned PM teammate's
+  `/model` directive disagreed with the required spawn parameter.
+
 ## [0.4.2] — 2026-05-13
 
 Consumer absorption from graph project (Sprint 224–231 innovations).

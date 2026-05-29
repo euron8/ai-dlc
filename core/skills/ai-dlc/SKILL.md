@@ -526,8 +526,8 @@ text became readable as optional). Both are cleanup targets.
 
 When the lead invokes the Agent tool to spawn a teammate, the `model`
 parameter MUST be set explicitly. Map each role to its model per the
-role file's `/model` directive: `dev`, `qa`, `pm` -> `sonnet`;
-`code-reviewer`, `architect`, `tea` -> `opus`. Omitted `model`
+role file's `/model` directive: `dev`, `qa`, `pm`, `code-reviewer`
+-> `sonnet`; `architect`, `tea` -> `opus`. Omitted `model`
 inherits from the parent conversation and bypasses the role's
 cost/capability contract. Violation fails gate-validation Check 15
 on detection at retro.
