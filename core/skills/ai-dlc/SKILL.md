@@ -608,6 +608,40 @@ step file is the authority for what remains, not the lead's memory.
 not "skip to completion." Violation: Rule 4 (every section must
 complete). Gate FAILS on detection at retro.
 
+### Rule 23 -- Resident-context discipline
+
+Cache-read cost scales with the size of the working context times the
+number of turns it stays resident. Every byte re-injected into context
+is re-read on every subsequent turn until compaction. Three controls
+keep the resident set lean without weakening step fidelity:
+
+**(a) No redundant re-loads.** Re-Read only the *current* step file
+(per Rules 21-22). The lead MUST NOT re-Read a completed step file or
+a planning artifact to "refresh" — that permanently duplicates it into
+the working context. The pipeline snapshot is the authoritative source
+for prior-step state (per the Handoff Protocol); query it instead of
+re-loading the producing artifact. State files the gate checks must
+re-verify (`gate-log.md`, `pipeline-snapshot.md`) are exempt — they
+are small and their re-read is the verification.
+
+**(b) Sliced re-read of large step files.** When a Rule 22 resume
+targets a large step file whose earlier numbered sections are already
+complete, the lead MAY issue the mandatory `Read` with an `offset` to
+the remaining sections rather than the whole file. The Read tool call
+— the attention interrupt that defeats run-from-memory — remains
+mandatory; only its span narrows. Never slice past a section the lead
+has not completed.
+
+**(c) Offload high-volume observational Bash.** Large *read-only*
+command output (test-suite runs, gate-validation script output,
+`git log`/`diff`/`status` inspection, log scans) SHOULD be run via
+context-mode `ctx_batch_execute` so its bytes stay out of the resident
+prefix. State-mutating commands (`git` commit/branch/merge/worktree,
+`gh`, `chmod`, file writes) MUST run via native Bash: context-mode
+subprocesses discard filesystem changes, so routing a mutation through
+ctx silently no-ops it. When in doubt whether a command mutates, use
+native Bash.
+
 ## INITIALIZATION
 
 Clear the pipeline pause flag before any other action. The

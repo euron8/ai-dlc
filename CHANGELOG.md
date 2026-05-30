@@ -17,6 +17,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-30
+
+Prompt-cache **read**-cost reduction. Real consumer telemetry (3–4
+sessions: 86.2M cache-read vs 3.3M cache-write tokens) showed cache
+read is the dominant cost bucket — ~57% cost-weighted vs ~27% for
+write — driven by a large working context read on every turn of long
+sprints. v0.6.0 addressed the write side; this release targets the
+reducible read waste without weakening the v0.4.x step-fidelity
+mechanisms. (Note: most cache-read volume is prompt caching working as
+intended — the alternative is ~10x the tokens uncached — so the goal
+is trimming redundant residence, not eliminating reads.)
+
+### Added
+
+- **Rule 23 — Resident-context discipline.** Three integrity-safe
+  controls on the working set:
+  - **(a) No redundant re-loads.** Re-Read only the current step file;
+    never re-Read a completed step file or planning artifact to
+    refresh — query the pipeline snapshot (already the authoritative
+    source). Each redundant re-read permanently duplicates content
+    into context and is re-read every subsequent turn. `gate-log.md`
+    and `pipeline-snapshot.md` re-reads are exempt (small; the
+    re-read is the verification).
+  - **(b) Sliced re-read.** Rule 22 resume MAY `Read` with an `offset`
+    to the remaining sections of a large step file. The mandatory Read
+    tool call (the run-from-memory interrupt) is preserved; only its
+    span narrows.
+  - **(c) Observational-Bash offload.** High-volume read-only command
+    output SHOULD route through context-mode `ctx_batch_execute` to
+    stay out of the resident prefix; state-mutating commands MUST stay
+    on native Bash (ctx subprocesses discard FS changes).
+
+### Notes
+
+- The largest read lever — lowering the handoff/compaction threshold
+  or enabling `auto_handoff_mode` at safe seams to cap how high context
+  grows (~200k on the 1M-model lead) — is left as an operator decision
+  because it trades against the handoff-fatigue constraint. Not changed
+  by default.
+
 ## [0.6.0] — 2026-05-29
 
 Prompt-cache write-cost reduction. The lead session is long-lived with
