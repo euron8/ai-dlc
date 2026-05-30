@@ -17,6 +17,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-05-29
+
+Prompt-cache write-cost reduction. The lead session is long-lived with
+a large resident prefix; on API-key / Bedrock / Vertex auth the cache
+defaults to a 5-minute TTL, so idle gaps during deploy/monitoring
+windows expire the cache and force a full prefix re-write at the 1.25x
+write rate — the dominant cache-write cost across a sprint. This
+release addresses the two causes that are skill-side and integrity-safe
+(extended TTL and cold subagent spawns) and deliberately does NOT touch
+the v0.4.x step-load / re-read integrity mechanisms, whose cache payoff
+is modest and whose weakening carries fidelity risk.
+
+### Added
+
+- **1-hour prompt cache TTL in the generated `settings.json`.**
+  `templates/settings.json.template` now sets
+  `ENABLE_PROMPT_CACHING_1H=1` under `env`. Collapses idle-gap cache
+  expiry (the main write driver) into a single cache entry. No-op on
+  Claude subscription auth (already 1h); corrective on Bedrock. Step 6
+  of `ai-dlc-setup` documents the rationale, the `FORCE_PROMPT_CACHING_5M`
+  override, and the tool-set-churn caveat (adding/removing an MCP
+  server mid-sprint invalidates the conversation cache).
+- **Dispatch-prompt cache discipline (`implementation.md`).** Teammate
+  dispatch prompts MUST lead with a byte-identical shared block and
+  place per-story content in the tail, so content-addressed cache
+  entries are reused across parallel spawns instead of cold-written
+  per dispatch.
+
+### Notes
+
+- Re-read gating (Rule 22 / handoff) and resident-footprint trimming
+  were evaluated and deferred: they collide with step-fidelity and
+  rule-availability hardening for modest gains, and read tokens are
+  ~10x cheaper than writes. Revisit only if cache telemetry shows
+  reads dominating after the TTL change.
+
 ## [0.5.0] — 2026-05-29
 
 Balanced model strategy becomes the new default. Opus is reserved for
