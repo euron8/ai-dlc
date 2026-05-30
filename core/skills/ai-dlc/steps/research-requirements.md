@@ -42,9 +42,14 @@ if research surfaces new constraints or opportunities.
 
 - For **greenfield/brownfield-b**: invoke `/bmad-create-prd` — full PRD
   with personas, metrics, risks
-- For **feature/brownfield-a/c**: UPDATE the existing PRD — add
-  requirements for the new scope. Do not rewrite existing requirements.
-  Reference existing components by name where the new work touches them.
+- For **feature/brownfield-a/c**: UPDATE the existing PRD per Rule 25(a)
+  — integrate the new scope's requirements into the current-state
+  sections, and **move** superseded requirement versions and prior
+  per-sprint scope narrative to `prd-history.md` (cut-and-paste,
+  verbatim). Never drop a requirement: the union of `prd.md` and
+  `prd-history.md` must preserve every prior requirement. Rule 13
+  locked requirements stay in the live PRD. Reference existing
+  components by name where the new work touches them.
   **For requirements from carry-over items or user instructions: quote
   the source requirement verbatim. Preserve specific details. Do not
   generalize.**

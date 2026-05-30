@@ -228,11 +228,14 @@ ensures no sprint ends with stale OPEN/IN_SPRINT state.
    story in this sprint satisfies it. Match on story `Source:`,
    LOCKED_REQUIREMENTS references, or epic linkage. If satisfied and
    the story is `done`: mark the item `CLOSED - delivered in sprint
-   <N> via <story-id>` with `closed_at: <ISO date>`. If the story
-   shipped but only partially satisfied the item: mark `PARTIAL -
-   sprint <N>` and keep the remainder open with a note on what
-   remains. If no story touched it: leave as-is (it's legitimate
-   carry-over).
+   <N> via <story-id>` with `closed_at: <ISO date>`, then **move** the
+   closed item out of the live backlog into
+   `carry-over-backlog-archive.md` (cut-and-paste, verbatim — Rule
+   25(a)). The live backlog holds only OPEN / IN-SPRINT / PARTIAL /
+   DEFERRED items. If the story shipped but only partially satisfied
+   the item: mark `PARTIAL - sprint <N>` and keep the remainder open in
+   the live backlog with a note on what remains. If no story touched
+   it: leave as-is (it's legitimate carry-over).
 
    When a carry-over item is partially satisfied, record status as
    `PARTIAL - sprint <N>` with explicit description of what was

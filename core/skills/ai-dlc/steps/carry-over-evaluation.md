@@ -29,7 +29,10 @@ SKILL.md Rule 24.
 
 ### 1. Context Loading
 
-Read in full:
+Read in full (the live current-state files only — this evaluation is
+cross-cutting, so per Rule 25(b) it reads whole and relies on those
+files staying bounded; do NOT read the `*-history.md` / `*-archive.md`
+files):
 - `_bmad-output/planning-artifacts/carry-over-backlog.md`
 - `docs/architecture.md`
 - `_bmad-output/planning-artifacts/product-brief.md`
