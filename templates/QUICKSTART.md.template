@@ -299,6 +299,7 @@ to the autonomous flow.
 | Code Reviewer | sonnet | {reviewer_model} | {reviewer_model_bedrock}                 |
 | Dev     | sonnet  | {dev_model}          | {dev_model_bedrock}                      |
 | QA      | sonnet  | {qa_model}           | {qa_model_bedrock}                       |
+| Analyst | sonnet  | {analyst_model}      | {analyst_model_bedrock}                  |
 
 ### How Teammates Switch Models
 
@@ -322,6 +323,7 @@ in the role file must match your environment.
 | Code Reviewer (high) | sonnet | Cross-cutting review at high effort    |
 | Dev (default) | sonnet | High-volume, well-scoped implementation       |
 | QA            | sonnet | Pattern-match against acceptance criteria     |
+| Analyst       | sonnet | Read-only planning exploration (offload)      |
 
 ---
 
@@ -589,6 +591,7 @@ your-project/
       dev.md                             <-- sonnet (default)
       pm.md                              <-- sonnet (high effort)
       qa.md                              <-- sonnet
+      analyst.md                         <-- sonnet (planning offload)
     settings.json                        <-- Agent Teams flag
   _bmad/                                 <-- BMAD v6 framework
     core/                                <-- adversarial review, party mode

@@ -12,6 +12,17 @@ planning artifacts are missing. Inventory what exists before backfilling.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run sections 1–3 inline.
+Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+sections 1–3 — it performs the codebase scan, artifact audit, and gap
+analysis and writes the inventory + gap report to
+`_bmad-output/planning-artifacts/brownfield-inventory.md`, returning
+only `{artifact_path, summary, gaps}`. Then resume at section 4 (Gate
+Validation). If `planning_offload: off`, run all sections inline. Per
+SKILL.md Rule 24.
+
 ### 1. Codebase Scan
 
 Walk through every directory and file in the project:

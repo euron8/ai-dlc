@@ -14,6 +14,19 @@ items get the same planning rigor as new features.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run sections 1–2 (and 1a)
+inline. Spawn an `analyst` subagent (Agent tool, `model: sonnet`)
+scoped to those reading sections — it loads the backlog/brief/PRD and
+audit anchor, evaluates each item, and writes a draft evaluation to
+`_bmad-output/planning-artifacts/carry-over-evaluation.md`, returning
+only `{artifact_path, summary, gaps}`. Then resume at section 3.
+**Sections 3 onward stay inline in the lead** — section 3 is party mode
+(Rule 20, never offloaded) and sections 4–6 mutate escalations and the
+backlog. If `planning_offload: off`, run all sections inline. Per
+SKILL.md Rule 24.
+
 ### 1. Context Loading
 
 Read in full:

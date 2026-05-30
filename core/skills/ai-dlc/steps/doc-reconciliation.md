@@ -12,6 +12,17 @@ in the docs against the actual codebase to determine accuracy.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run sections 1–5 inline.
+Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+sections 1–5 — it inventories docs, scans the codebase, reconciles
+claims against reality, and writes the reconciliation report + gap
+analysis to `_bmad-output/planning-artifacts/doc-reconciliation.md`,
+returning only `{artifact_path, summary, gaps}`. Then resume at section
+6 (Gate Validation and Proceed). If `planning_offload: off`, run all
+sections inline. Per SKILL.md Rule 24.
+
 ### 1. Documentation Inventory
 
 List every existing documentation artifact and its location:

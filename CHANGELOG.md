@@ -17,6 +17,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-05-30
+
+Planning-phase subagent offload — continues the cache-read arc (v0.7.0).
+The lead's largest avoidable read cost is read-heavy planning/analysis
+work it does inline: every file read accumulates in its context and is
+re-read every turn. This release moves the *exploration* portion of
+designated steps to an ephemeral read-only `analyst` subagent whose raw
+reading never enters the lead's context — the lead receives only a
+pointer + summary + gaps and reads the artifact from disk on demand
+(Rule 23(a)). Design record: `docs/v0.8.0-planning-subagent-offload-spec.md`.
+
+### Added
+
+- **`analyst` team role** (`core/team-roles/analyst.md`). Read-only
+  exploration subagent, model `sonnet`, effort `medium`. Explores in
+  its own context, writes a self-contained artifact to disk, returns
+  only `{artifact_path, summary, gaps}` — never raw content. No state
+  mutation, no re-spawn, no validation sub-skills.
+- **Rule 24 — Planning exploration is dispatched to analyst subagents.**
+  Centralizes the dispatch contract, the production-vs-validation
+  boundary (analyst drafts; lead validates, decides, owns; Rule 20
+  sub-skills stay inline), and the `planning_offload` config (default
+  `on`; set `off` for pre-0.8.0 fully-inline behavior).
+- **Per-step dispatch sections** in seven steps. Full offload —
+  `deep-codebase-analysis`, `codebase-inventory`, `doc-reconciliation`.
+  Partial offload (reading sections only; authoring / party-mode /
+  validation / mutations stay inline) — `bug-investigation`,
+  `carry-over-evaluation` (§3 party mode is Rule 20), `discovery`,
+  `research-requirements`.
+
+### Changed
+
+- **Rule 19 spawn map** adds `analyst -> sonnet`:
+  `dev, qa, pm, code-reviewer, analyst -> sonnet`; `architect, tea ->
+  opus` (SKILL.md + implementation.md).
+- **Setup + QUICKSTART** provision the analyst role: balanced and
+  sonnet-only model tables, variable mapping (`{analyst_model_*}` ->
+  sonnet-tier), and QUICKSTART model tables / role tree.
+
+### Notes
+
+- Expected to cut lead read tokens in planning phases proportional to
+  each step's read volume (codebase analysis is the largest). Magnitude
+  unproven without per-phase telemetry; most cache-read volume is
+  caching working as intended (~10x cheaper than uncached), so this
+  shaves the avoidable slice, not the inherent cost.
+- Existing installs are unaffected until they adopt the new default on a
+  fresh install or set `planning_offload: on`. MINOR — additive.
+
 ## [0.7.0] — 2026-05-30
 
 Prompt-cache **read**-cost reduction. Real consumer telemetry (3–4

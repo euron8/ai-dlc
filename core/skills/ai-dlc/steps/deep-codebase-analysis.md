@@ -13,6 +13,16 @@ a comprehensive reverse-engineering analysis before planning new work.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run sections 1–5 inline.
+Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+sections 1–5 — it performs the full codebase exploration and writes
+the complete analysis to
+`_bmad-output/planning-artifacts/codebase-analysis.md`, returning only
+`{artifact_path, summary, gaps}`. Then resume at section 6 (Route). If
+`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
+
 ### 1. Structure and Stack
 
 Walk every directory and file in the project:

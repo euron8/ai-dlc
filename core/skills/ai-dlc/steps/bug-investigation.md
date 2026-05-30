@@ -12,6 +12,18 @@ fix story, then route to implementation.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run sections 1–2 inline.
+Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+sections 1–2 — it loads context, investigates, reproduces, and traces
+root cause, then writes its findings (root cause, repro, affected
+files/call-sites) to `_bmad-output/planning-artifacts/bug-analysis.md`,
+returning only `{artifact_path, summary, gaps}`. Then resume at section
+3 (Create Fix Story) using the analysis. The lead authors the fix
+story, validates, and owns it. If `planning_offload: off`, run all
+sections inline. Per SKILL.md Rule 24.
+
 ### 1. Context Loading
 
 Read planning artifacts:

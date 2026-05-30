@@ -12,6 +12,19 @@ creation with full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
+an `analyst` subagent (Agent tool, `model: sonnet`) scoped to section 1
+— it performs the domain/market/technical research and writes the
+research notes to
+`_bmad-output/planning-artifacts/research-notes.md`, returning only
+`{artifact_path, summary, gaps}`. Then resume at section 2 (PRD
+Creation) using the notes. **Sections 2 onward stay inline in the
+lead** — PRD authoring and the Rule 8 / PRD validation cycles are never
+offloaded. If `planning_offload: off`, run all sections inline. Per
+SKILL.md Rule 24.
+
 ### 1. Research
 
 Run all applicable research back-to-back (skip none unless clearly
