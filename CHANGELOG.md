@@ -49,13 +49,29 @@ is trimming redundant residence, not eliminating reads.)
     stay out of the resident prefix; state-mutating commands MUST stay
     on native Bash (ctx subprocesses discard FS changes).
 
+### Changed
+
+- **`auto_handoff_mode` default `off` → `a`.** New mode `a` fires
+  auto-handoff at `Seam A` (pre-deploy preflight) **unconditionally** —
+  no user-shared `/context` required. Seam A is once per sprint, where
+  context is maximal and the user is already at the Production
+  Validation Checkpoint, so it sheds the whole build's accumulated
+  context right before the long monitoring window — the biggest
+  single read-cost cap, at zero added handoff fatigue. Existing modes
+  `deploy-only` and `safe-seam` are unchanged and still require Mode 1
+  red confirmation. All resume-safety preconditions (snapshot current,
+  not mid-gate, no teammate blocked, no pause point active) apply in
+  every mode.
+
 ### Notes
 
-- The largest read lever — lowering the handoff/compaction threshold
-  or enabling `auto_handoff_mode` at safe seams to cap how high context
-  grows (~200k on the 1M-model lead) — is left as an operator decision
-  because it trades against the handoff-fatigue constraint. Not changed
-  by default.
+- A between-stories auto-handoff (Seam C) was prototyped but dropped:
+  throttling it without `/context` required a story-count proxy whose
+  machinery (config knob, mode branch, `sprint-status.yaml` read) was
+  more complexity than the marginal read saving justified. Seam A
+  unconditional captures the dominant peak simply. Lowering the red
+  threshold (~200k on the 1M-model lead) remains an operator lever,
+  unchanged by default, as it trades against handoff fatigue.
 
 ## [0.6.0] — 2026-05-29
 

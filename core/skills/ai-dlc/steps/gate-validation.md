@@ -707,11 +707,14 @@ effects, the step resumes.**
 
 1. **Mode gate.** Read `auto_handoff_mode` from SKILL.md Handoff
    Protocol "Auto-handoff" section. If `off`, return CONTINUE. If
-   `deploy-only` and the seam
-   is not `Seam A`, return CONTINUE. If `safe-seam`, all four
-   seams are permitted — proceed to precondition 2.
+   `a` and the seam is not `Seam A`, return CONTINUE. If `deploy-only`
+   and the seam is not `Seam A`, return CONTINUE. If `safe-seam`, all
+   four seams are permitted. Proceed to precondition 2.
 
-2. **Red threshold confirmed under Mode 1.** Read
+2. **Trigger basis (mode-dependent).** Under `a`, `Seam A` fires
+   unconditionally — skip the red check and proceed to precondition 3.
+   Under `deploy-only` or `safe-seam`, require **red confirmed under
+   Mode 1**, as below. Read
    `context_reminders_sent` from the snapshot Context Reminders
    block. If it is not `red`, return CONTINUE. Check 14 advances
    this field to `red` ONLY when a user-shared `/context` confirmed
@@ -768,13 +771,18 @@ output line in step 4 identifies this handoff as automated:
    in-flight state, current sub-step, and the stopped-teammate
    record from Step 1.
 4. Output the distinguishing auto-handoff line (substitute mode,
-   seam label, confirmed token count from the most recent user-
-   shared `/context`), then output the resume prompt (SKILL.md
-   Handoff Protocol template) wrapped in `----` delimiter lines:
+   seam label, and trigger basis), then output the resume prompt
+   (SKILL.md Handoff Protocol template) wrapped in `----` delimiter
+   lines. The trigger basis depends on mode: under `a` it is
+   `unconditional`; under `deploy-only`/`safe-seam` it is the
+   confirmed token count from the most recent user-shared `/context`:
 
-   > *"Auto-handoff triggered by auto_handoff_mode=<mode> at
-   > <seam_name>. Context at <tokens> tokens, red threshold
-   > confirmed via user-shared /context."*
+   > *"Auto-handoff triggered by auto_handoff_mode=a at Seam A
+   > (unconditional, pre-deploy)."*
+
+   > *"Auto-handoff triggered by auto_handoff_mode=deploy-only at
+   > Seam A. Context at <tokens> tokens, red threshold confirmed via
+   > user-shared /context."*
 
 5. End the session. Do not continue the pipeline in this
    conversation. Reply to any further messages with a pointer to

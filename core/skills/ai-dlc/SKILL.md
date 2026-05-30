@@ -389,29 +389,45 @@ reminder. Any user reply to a reminder is a Rule 11 directive.
 The lead MAY automatically execute the path (a) procedure at defined
 safe seams when all preconditions hold. Mode values:
 
-- `off` (default) -- auto-handoff disabled; only human-requested
-  handoff fires.
-- `deploy-only` -- auto-handoff fires only at `Seam A` (the
-  pre-deploy preflight in `deploy-validate.md`).
-- `safe-seam` -- auto-handoff fires at any of the four defined
-  safe seams (`Seam A` through `Seam D`).
+- `off` -- auto-handoff disabled; only human-requested handoff fires.
+- `a` (default) -- auto-handoff fires at `Seam A` (pre-deploy
+  preflight in `deploy-validate.md`) **unconditionally**, with no
+  user-shared `/context` required. Seam A is once per sprint, context
+  is maximal there, and the user is already at the Production
+  Validation Checkpoint — so firing is always the right move. This
+  sheds the full build's accumulated context right before the
+  long monitoring window, capping cache-read cost without the Mode 1
+  dependency.
+- `deploy-only` -- auto-handoff fires only at `Seam A`, under the
+  Mode 1 red precondition.
+- `safe-seam` -- auto-handoff fires at any of the four defined safe
+  seams (`Seam A` through `Seam D`), under the Mode 1 red precondition.
 
 Projects override the default by setting `auto_handoff_mode` in this
-section directly. Seam definitions and the shared precondition
-helper live in `gate-validation.md` "Auto-handoff evaluation".
+section directly. Seam definitions and the shared precondition helper
+live in `gate-validation.md` "Auto-handoff evaluation".
 
 Binding constraints:
 
 - Auto-handoff MUST NOT fire under `auto_handoff_mode: off`.
-- Auto-handoff MUST NOT fire off a Mode 2 fallback estimate. Only
-  Mode 1 (user-shared `/context`) advances `context_reminders_sent`
-  to `red`, which is the precondition the helper reads.
+- **Trigger basis by mode.** Under `a`, Seam A fires unconditionally —
+  no Mode 1 `/context` required. Under `deploy-only` and `safe-seam`,
+  a seam fires ONLY when red is confirmed via Mode 1 (user-shared
+  `/context` advances `context_reminders_sent` to `red`); these two
+  modes MUST NOT fire off a Mode 2 fallback estimate.
+- **Resume-safety preconditions apply in every mode.** Regardless of
+  trigger basis, the helper MUST NOT fire unless the snapshot is
+  current, no gate validation is mid-sequence, no teammate is blocked
+  awaiting the lead, and no Rule 3 pause point is active. The trigger
+  basis only decides *whether to consider* firing; these preconditions
+  decide *whether firing is safe*. A handoff must never produce a
+  broken resume contract.
 - Auto-handoff is NOT a fourth pause point. It is a session-
   terminating action that executes the path (a) procedure unchanged.
 - Auto-handoff output MUST be distinguishable from a human-requested
   handoff: the lead outputs the auto-handoff line naming the mode,
-  seam, and confirmed token count immediately before the resume
-  prompt.
+  seam, and trigger basis (unconditional, or confirmed token count)
+  immediately before the resume prompt.
 - Resume itself is NOT automated. The user MUST open a new
   conversation and paste the resume prompt.
 
