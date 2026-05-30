@@ -17,6 +17,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-05-30
+
+Artifact-size discipline — the dominant read+turn lever. Real consumer
+telemetry (~/git/graph, ~224 sprints) showed living planning artifacts
+grown without bound — `prd.md` 393k tokens, `product-brief.md` 329k,
+`carry-over-backlog.md` 224k — and the skill *mandated* it ("do not
+rewrite existing requirements" → append forever). One step,
+`carry-over-evaluation`, instructed reading ~946k tokens "in full" — ~5x
+the lead's window, forcing compaction churn. This release bounds the
+living artifacts to current-state, moving history out of the read path,
+with a no-loss guarantee that preserves the fidelity the old "do not
+rewrite" rule protected. Design record:
+`docs/v0.9.0-artifact-size-discipline-spec.md`.
+
+### Added
+
+- **Rule 25 — Artifact-size discipline.** Living artifacts stay
+  current-state; superseded/historical content **moves** (cut-and-paste,
+  verbatim — never deleted) to `*-history.md` / `*-archive.md`. Read the
+  relevant section of a sectioned artifact, not the whole file (except
+  cross-cutting evaluations, which read whole and rely on bounding).
+  Rotate append-only logs at epoch boundaries; verify appends by tail,
+  not full re-read. Warn thresholds (prd/brief 60k, backlog 40k,
+  gate-log 25k tokens). Rule 13 locked requirements never relocated.
+- **`artifact-consolidation.md`** — operator-invoked one-shot migration
+  for already-bloated artifacts. An `analyst` (v0.8.0) emits a baseline
+  manifest and drafts the consolidated-live/history split; the lead runs
+  a no-loss verification (every manifest entry present in live ∪
+  history; locked reqs stay live) plus Rule 20 validation, then commits
+  the git-reversible swap.
+
+### Changed
+
+- **Supersede-to-history replaces append-forever.** `research-requirements`
+  and `discovery` now integrate new scope into current-state sections and
+  move superseded versions + per-sprint narrative to the history file,
+  verbatim, with no requirement loss.
+- **Retro close-out moves CLOSED carry-over items to the archive**
+  (live backlog = OPEN / IN-SPRINT / PARTIAL / DEFERRED only), and adds a
+  warn-only artifact-size audit that points the operator to consolidation.
+- **gate-log post-write verification reads the tail**, not the whole
+  file, and rotates per epoch.
+- **pm.md** reads scope-relevant PRD/brief sections, not the whole files.
+  `carry-over-evaluation` reads the live current-state files whole
+  (cross-cutting) — never the history/archive companions.
+
+### Notes
+
+- Decisions: single consolidated PRD + slicing (defer sharding until a
+  bounded PRD proves too large); operator-invoked migration (no auto
+  rewrite); carry-over reads whole-but-bounded (not sliced); warn-only
+  thresholds.
+- Existing installs: Phase-1 behavior (slice-reads, tail-verify) applies
+  next session; already-bloated artifacts need the one-shot
+  `artifact-consolidation` migration to actually shrink. No-loss is
+  preserved throughout — history/archive files hold every prior byte;
+  total disk is unchanged, the win is keeping them out of the read path.
+
 ## [0.8.0] — 2026-05-30
 
 Planning-phase subagent offload — continues the cache-read arc (v0.7.0).
