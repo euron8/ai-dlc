@@ -37,7 +37,9 @@ implementation delivers user value as defined in the PRD.
 
 ## Context Loading
 
-Before starting any work, read:
+Before starting any work, read the section(s) relevant to the current
+scope (per SKILL.md Rule 25(b) — slice, do not whole-read these living
+artifacts):
 
 1. `_bmad-output/planning-artifacts/product-brief.md`
 2. `_bmad-output/planning-artifacts/prd.md` (if it exists)

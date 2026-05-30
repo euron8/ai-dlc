@@ -698,6 +698,50 @@ decisions remain the lead's.
 build phase (already delegated), and anything requiring the lead's
 live accumulated state are never offloaded.
 
+### Rule 25 -- Artifact-size discipline
+
+Living planning artifacts that grow without bound are the single
+largest read cost in the pipeline: a PRD or backlog that accretes every
+sprint becomes larger than the context window, so reading it forces
+compaction and dominates cache-read. Living artifacts MUST stay
+current-state; historical and superseded content MUST move out of the
+read path.
+
+**(a) Current-state live, history archive — move, never delete.** The
+live artifact holds what is *currently true*, consolidated. Superseded
+requirement versions and prior per-sprint scope narrative are **moved**
+(cut-and-paste, verbatim) to the artifact's history/archive file
+(`prd.md` -> `prd-history.md`, `product-brief.md` ->
+`product-brief-history.md`, `carry-over-backlog.md` ->
+`carry-over-backlog-archive.md`). Nothing is ever dropped — the
+union of live and history must preserve every prior requirement and
+item. This supersedes the older "do not rewrite existing content"
+phrasing: the intent was *no requirement loss*, not *unbounded growth*.
+Rule 13 locked requirements are by definition current and are never
+relocated out of live. History/archive files are write-only — never
+read in the hot path — so their growth is free.
+
+**(b) Slice-read large sectioned artifacts.** Read the section(s)
+relevant to the current scope, not the whole file (Rule 23(b)).
+Exception: cross-cutting evaluations that must weigh every item against
+the whole requirement set (e.g. `carry-over-evaluation`) read the live
+file whole and rely on (a) keeping it bounded — slicing there would
+risk missing a cross-reference and mis-deciding.
+
+**(c) Rotate append-only logs.** `gate-log.md` and similar logs rotate
+at epoch/sprint boundaries into a dated archive; the live log holds
+only the current epoch. Verifying an appended entry reads the **tail**,
+not the whole file.
+
+**(d) Size thresholds (warn, configurable).** When a living artifact
+exceeds its threshold the retro artifact-size audit warns and points
+the operator to the one-shot consolidation step
+(`artifact-consolidation.md`). Defaults: `prd.md` 60k tokens,
+`product-brief.md` 60k, `carry-over-backlog.md` 40k, live `gate-log.md`
+25k. Warn-only — never blocks the pipeline. Consolidation is
+operator-invoked, not automatic: it is a fidelity-critical rewrite and
+must be supervised.
+
 ## INITIALIZATION
 
 Clear the pipeline pause flag before any other action. The

@@ -311,11 +311,18 @@ The gate log entry MUST include:
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
 
-**Post-write verification.** After appending the gate log entry,
-re-read `_bmad-output/gate-log.md` and verify the entry appears
-at the end of the file. A gate log write that silently fails (tool
-error, truncation, wrong path) means the gate passage is
+**Post-write verification.** After appending the gate log entry, read
+the **tail** of `_bmad-output/implementation-artifacts/gate-log.md`
+(e.g. `tail` the last entry, not the whole file — per Rule 25(c)) and
+verify the entry appears at the end. A gate log write that silently
+fails (tool error, truncation, wrong path) means the gate passage is
 unrecorded. Verification catches this before the pipeline moves on.
+
+**Rotation (Rule 25(c)).** When the live gate-log exceeds its size
+threshold (default 25k tokens) or at an epoch boundary, move the
+closed-epoch entries to `gate-log-archive-<epoch>.md` (cut-and-paste,
+verbatim) so the live log holds only the current epoch. The archive is
+write-only and never re-read in the hot path.
 
 ### 13. Announce gate passage.
 
