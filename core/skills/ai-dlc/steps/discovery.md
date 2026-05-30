@@ -13,6 +13,18 @@ rather than creating from scratch.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
+an `analyst` subagent (Agent tool, `model: sonnet`) scoped to section 1
+— it reads the input artifacts and any codebase context the brief
+needs and writes a context digest to
+`_bmad-output/planning-artifacts/discovery-context.md`, returning only
+`{artifact_path, summary, gaps}`. Then resume at section 2.
+**Sections 2 onward stay inline in the lead** — brainstorm, brief
+authoring, and the Rule 8 validation cycle are never offloaded. If
+`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
+
 ### 1. Context Loading
 
 Read existing artifacts if they exist:

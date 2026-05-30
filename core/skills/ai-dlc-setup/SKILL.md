@@ -516,6 +516,7 @@ unless the user specifies different models:
 | Code Reviewer  | claude-sonnet-4-6[1m]       | global.anthropic.claude-sonnet-4-6       | high   |
 | Dev            | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
 | QA             | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
+| Analyst        | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
 
 **Sonnet-only model strategy:**
 
@@ -527,6 +528,7 @@ unless the user specifies different models:
 | Code Reviewer  | global.anthropic.claude-sonnet-4-6       | high   |
 | Dev            | global.anthropic.claude-sonnet-4-6       | medium |
 | QA             | global.anthropic.claude-sonnet-4-6       | medium |
+| Analyst        | global.anthropic.claude-sonnet-4-6       | medium |
 
 Ask: "Do you want to use a local model (e.g., Ollama) for dev teammates
 on well-scoped stories? If yes, what model string?" (Default: skip)
@@ -562,6 +564,10 @@ string.
 - `{qa_model_personal}` -> sonnet-tier model personal string
 - `{qa_model_bedrock}` -> sonnet-tier model bedrock string
 
+**`.claude/team-roles/analyst.md`:**
+- `{analyst_model_personal}` -> sonnet-tier model personal string
+- `{analyst_model_bedrock}` -> sonnet-tier model bedrock string
+
 **`QUICKSTART.md`:**
 - `{lead_model}` -> opus-tier model personal string
 - `{lead_model_bedrock}` -> opus-tier model bedrock string
@@ -576,6 +582,8 @@ string.
 - `{dev_model_bedrock}` -> sonnet-tier model bedrock string
 - `{qa_model}` -> sonnet-tier model personal string
 - `{qa_model_bedrock}` -> sonnet-tier model bedrock string
+- `{analyst_model}` -> sonnet-tier model personal string
+- `{analyst_model_bedrock}` -> sonnet-tier model bedrock string
 
 **`CLAUDE.md` Model Strategy table:**
 
@@ -591,6 +599,7 @@ that all roles use sonnet:
 | Dev           | sonnet | medium | Implementation is high-volume, well-scoped by stories  |
 | QA            | sonnet | medium | Test validation is pattern-matching against criteria   |
 | Code Reviewer | sonnet | high   | Cross-cutting review needs architectural context       |
+| Analyst       | sonnet | medium | Read-only planning exploration; offloads lead reads    |
 ```
 
 If **balanced model strategy**, leave the default table (opus for Lead

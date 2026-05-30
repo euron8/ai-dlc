@@ -542,8 +542,8 @@ text became readable as optional). Both are cleanup targets.
 
 When the lead invokes the Agent tool to spawn a teammate, the `model`
 parameter MUST be set explicitly. Map each role to its model per the
-role file's `/model` directive: `dev`, `qa`, `pm`, `code-reviewer`
--> `sonnet`; `architect`, `tea` -> `opus`. Omitted `model`
+role file's `/model` directive: `dev`, `qa`, `pm`, `code-reviewer`,
+`analyst` -> `sonnet`; `architect`, `tea` -> `opus`. Omitted `model`
 inherits from the parent conversation and bypasses the role's
 cost/capability contract. Violation fails gate-validation Check 15
 on detection at retro.
@@ -657,6 +657,46 @@ prefix. State-mutating commands (`git` commit/branch/merge/worktree,
 subprocesses discard filesystem changes, so routing a mutation through
 ctx silently no-ops it. When in doubt whether a command mutates, use
 native Bash.
+
+### Rule 24 -- Planning exploration is dispatched to analyst subagents
+
+Read-heavy planning and analysis work is the lead's largest avoidable
+cache-read cost: every file the lead reads inline accumulates in its
+context and is re-read every subsequent turn. To keep the lead lean,
+the *exploration* portion of designated steps is dispatched to an
+`analyst` subagent (read-only, model `sonnet` per Rule 19) whose raw
+reading never enters the lead's context.
+
+**Config.** `planning_offload` (default `on`). When `on`, the steps
+listed below dispatch an analyst for their exploration. When `off`,
+those steps run fully inline (pre-0.8.0 behavior). Projects override
+by setting `planning_offload` in this section directly.
+
+**Offloaded steps.** Full offload — `deep-codebase-analysis`,
+`codebase-inventory`, `bug-investigation`, `doc-reconciliation`,
+`carry-over-evaluation`. Split offload (exploration only; authoring +
+validation stay inline) — `discovery`, `research-requirements`.
+
+**Dispatch contract.** The lead spawns the analyst via the Agent tool
+with `model: sonnet`, passing (a) the exploration scope, (b) the
+canonical output artifact path the step defines, and (c) a stable
+shared context block (order shared-block-first per the dispatch-prompt
+cache discipline in `implementation.md`). The analyst writes the
+artifact to disk and returns ONLY `{artifact_path, summary, gaps}` —
+never raw file content or its exploration trace. The lead then reads
+the artifact from disk only when a decision needs it (Rule 23(a)).
+
+**Production vs validation boundary.** The analyst *drafts* the
+artifact; the lead *validates, decides, and owns* it. Rule 20
+validation sub-skills MUST still run inline in the lead on the draft —
+they are never dispatched to the analyst, and the analyst never emits
+a `SKILL_INVOCATION_PROVENANCE` block. The analyst produces inputs,
+not validated outputs. Routing, gate, and requirement-tradeoff
+decisions remain the lead's.
+
+**Excluded.** Orchestration, routing, gate-validation decisions, the
+build phase (already delegated), and anything requiring the lead's
+live accumulated state are never offloaded.
 
 ## INITIALIZATION
 
