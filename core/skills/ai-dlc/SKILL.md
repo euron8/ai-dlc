@@ -389,29 +389,45 @@ reminder. Any user reply to a reminder is a Rule 11 directive.
 The lead MAY automatically execute the path (a) procedure at defined
 safe seams when all preconditions hold. Mode values:
 
-- `off` (default) -- auto-handoff disabled; only human-requested
-  handoff fires.
-- `deploy-only` -- auto-handoff fires only at `Seam A` (the
-  pre-deploy preflight in `deploy-validate.md`).
-- `safe-seam` -- auto-handoff fires at any of the four defined
-  safe seams (`Seam A` through `Seam D`).
+- `off` -- auto-handoff disabled; only human-requested handoff fires.
+- `a` (default) -- auto-handoff fires at `Seam A` (pre-deploy
+  preflight in `deploy-validate.md`) **unconditionally**, with no
+  user-shared `/context` required. Seam A is once per sprint, context
+  is maximal there, and the user is already at the Production
+  Validation Checkpoint — so firing is always the right move. This
+  sheds the full build's accumulated context right before the
+  long monitoring window, capping cache-read cost without the Mode 1
+  dependency.
+- `deploy-only` -- auto-handoff fires only at `Seam A`, under the
+  Mode 1 red precondition.
+- `safe-seam` -- auto-handoff fires at any of the four defined safe
+  seams (`Seam A` through `Seam D`), under the Mode 1 red precondition.
 
 Projects override the default by setting `auto_handoff_mode` in this
-section directly. Seam definitions and the shared precondition
-helper live in `gate-validation.md` "Auto-handoff evaluation".
+section directly. Seam definitions and the shared precondition helper
+live in `gate-validation.md` "Auto-handoff evaluation".
 
 Binding constraints:
 
 - Auto-handoff MUST NOT fire under `auto_handoff_mode: off`.
-- Auto-handoff MUST NOT fire off a Mode 2 fallback estimate. Only
-  Mode 1 (user-shared `/context`) advances `context_reminders_sent`
-  to `red`, which is the precondition the helper reads.
+- **Trigger basis by mode.** Under `a`, Seam A fires unconditionally —
+  no Mode 1 `/context` required. Under `deploy-only` and `safe-seam`,
+  a seam fires ONLY when red is confirmed via Mode 1 (user-shared
+  `/context` advances `context_reminders_sent` to `red`); these two
+  modes MUST NOT fire off a Mode 2 fallback estimate.
+- **Resume-safety preconditions apply in every mode.** Regardless of
+  trigger basis, the helper MUST NOT fire unless the snapshot is
+  current, no gate validation is mid-sequence, no teammate is blocked
+  awaiting the lead, and no Rule 3 pause point is active. The trigger
+  basis only decides *whether to consider* firing; these preconditions
+  decide *whether firing is safe*. A handoff must never produce a
+  broken resume contract.
 - Auto-handoff is NOT a fourth pause point. It is a session-
   terminating action that executes the path (a) procedure unchanged.
 - Auto-handoff output MUST be distinguishable from a human-requested
   handoff: the lead outputs the auto-handoff line naming the mode,
-  seam, and confirmed token count immediately before the resume
-  prompt.
+  seam, and trigger basis (unconditional, or confirmed token count)
+  immediately before the resume prompt.
 - Resume itself is NOT automated. The user MUST open a new
   conversation and paste the resume prompt.
 
@@ -607,6 +623,40 @@ step file is the authority for what remains, not the lead's memory.
 "Proceed" after human commentary means "continue the step sequence,"
 not "skip to completion." Violation: Rule 4 (every section must
 complete). Gate FAILS on detection at retro.
+
+### Rule 23 -- Resident-context discipline
+
+Cache-read cost scales with the size of the working context times the
+number of turns it stays resident. Every byte re-injected into context
+is re-read on every subsequent turn until compaction. Three controls
+keep the resident set lean without weakening step fidelity:
+
+**(a) No redundant re-loads.** Re-Read only the *current* step file
+(per Rules 21-22). The lead MUST NOT re-Read a completed step file or
+a planning artifact to "refresh" — that permanently duplicates it into
+the working context. The pipeline snapshot is the authoritative source
+for prior-step state (per the Handoff Protocol); query it instead of
+re-loading the producing artifact. State files the gate checks must
+re-verify (`gate-log.md`, `pipeline-snapshot.md`) are exempt — they
+are small and their re-read is the verification.
+
+**(b) Sliced re-read of large step files.** When a Rule 22 resume
+targets a large step file whose earlier numbered sections are already
+complete, the lead MAY issue the mandatory `Read` with an `offset` to
+the remaining sections rather than the whole file. The Read tool call
+— the attention interrupt that defeats run-from-memory — remains
+mandatory; only its span narrows. Never slice past a section the lead
+has not completed.
+
+**(c) Offload high-volume observational Bash.** Large *read-only*
+command output (test-suite runs, gate-validation script output,
+`git log`/`diff`/`status` inspection, log scans) SHOULD be run via
+context-mode `ctx_batch_execute` so its bytes stay out of the resident
+prefix. State-mutating commands (`git` commit/branch/merge/worktree,
+`gh`, `chmod`, file writes) MUST run via native Bash: context-mode
+subprocesses discard filesystem changes, so routing a mutation through
+ctx silently no-ops it. When in doubt whether a command mutates, use
+native Bash.
 
 ## INITIALIZATION
 
