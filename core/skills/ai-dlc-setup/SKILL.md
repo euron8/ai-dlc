@@ -825,6 +825,30 @@ Copy it to your shell profile if you'd like to use it."
 
 Replace `{launch_configuration}` in `QUICKSTART.md`.
 
+### Prompt cache TTL (write-cost control)
+
+`.claude/settings.json` ships `ENABLE_PROMPT_CACHING_1H=1` under `env`.
+This extends the prompt cache from the default 5-minute TTL to 1 hour.
+
+**Why it matters for AI/DLC specifically.** The lead session is
+long-lived and carries a large resident prefix (this skill plus the
+step files Read over a sprint). On API-key / Bedrock / Vertex auth the
+cache defaults to a 5-minute TTL. Any idle gap longer than that —
+routine during deploy/monitoring windows where the human dialogs in
+bursts — expires the cache, so the next turn re-writes the entire
+prefix at the 1.25x cache-write rate. Over a sprint with several idle
+gaps this is the dominant cache-write cost. The 1-hour TTL collapses
+those gaps into the same cache entry.
+
+Notes:
+- On a Claude subscription the 1-hour TTL is already the default;
+  the env var is a no-op there but harmless and correct for Bedrock.
+- To force the 5-minute TTL (e.g. to minimize per-write price on a
+  short, continuous session) set `FORCE_PROMPT_CACHING_5M=1` instead.
+- Tool-set churn also invalidates the conversation cache: adding or
+  removing an MCP server / plugin mid-sprint re-writes the whole
+  prefix. Keep the tool set stable for the duration of a sprint.
+
 ---
 
 ## STEP 7: Coding Conventions

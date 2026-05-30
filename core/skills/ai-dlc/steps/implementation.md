@@ -71,6 +71,19 @@ follow the worktree-explicit dispatch protocol:
    `git merge dev/sprint-<N>/story-<X> && git worktree remove <path>`
 5. If merge conflicts arise, the lead resolves them — not the dev.
 
+**Dispatch-prompt cache discipline.** When dispatching multiple
+teammates (parallel devs, or a dev plus QA on the same story), order
+each dispatch prompt as a **stable shared block first, variable tail
+last**. The shared block — sprint conventions, architecture pointer,
+role expectations, branch/merge protocol — MUST be byte-identical
+across every dispatch in the sprint. Put only the per-story content
+(worktree path, story id, acceptance criteria, dev-brief findings)
+after it. Prompt-cache entries are content-addressed: an identical
+leading block means the first dispatch writes it and every later
+dispatch reads it from cache instead of re-writing. Reordering or
+re-wording the shared block per dispatch defeats this and forces a
+cold write on each spawn.
+
 **Dev-brief bug-class checklist.** When the dev-brief includes a
 bug-class finding from the code-reviewer (see `code-reviewer.md`
 bug-class audit mandate), the dev MUST grep for same-shape call-sites
