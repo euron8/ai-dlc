@@ -264,6 +264,18 @@ deferred, any status-yaml drift caught and corrected. If everything
 was already closed inline, note "Sweep: clean (all items closed
 inline during implementation)".
 
+**Artifact-size audit (Rule 25(d), warn-only).** Measure the live
+planning artifacts and compare to their thresholds:
+`prd.md` 60k tokens, `product-brief.md` 60k,
+`carry-over-backlog.md` 40k, live `gate-log.md` 25k (≈ bytes/4). For
+any artifact over threshold, record a `## Artifact-Size Audit` warning
+in the retro doc naming the artifact, its size, and the threshold, and
+recommend the operator run the one-shot consolidation step
+(`artifact-consolidation.md`). This NEVER blocks the pipeline and the
+retro NEVER runs the consolidation itself — consolidation is a
+fidelity-critical rewrite and is operator-invoked. If all artifacts are
+under threshold, note "Artifact sizes: within thresholds".
+
 ## Sprint-Ship Verification
 
 Sprint-ship counters track smoke-quality across deploy-validate runs.
