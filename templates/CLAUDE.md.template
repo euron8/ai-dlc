@@ -29,7 +29,7 @@ context Claude sees.
 
 This file does NOT contain AI/DLC autonomy rules, session model
 directives, or pipeline recovery protocols. If you are looking for
-Rule 1 through Rule 20, the Post-Compact Recovery Protocol, or the
+Rule 1 through Rule 26, the Post-Compact Recovery Protocol, or the
 context threshold reminders, read SKILL.md instead.
 
 ---
@@ -72,7 +72,11 @@ find them.
 Coding conventions for this project live in `docs/coding-conventions.md`.
 Any agent writing or reviewing code in this project MUST read that file
 before starting. This applies whether the work is inside the AI/DLC
-pipeline or a one-off change.
+pipeline or a one-off change. All work in this repository, pipeline or
+not, follows the minimum-mechanism principle (KISS): the smallest
+design that meets the requirement, no speculative machinery,
+simplification valued equally with addition. Details:
+`docs/coding-conventions.md`.
 
 ---
 

@@ -44,6 +44,10 @@ criteria defined in story files and the quality standards in BMAD checklists.
   or the lead must review them.
 - Before executing a test, check if evidence already exists in the story file
   or git log. Do not re-execute tests that have verified and documented results.
+- When writing or requesting tests, add the minimum set that verifies
+  the acceptance criteria on the real execution path (SKILL.md Rule
+  26). Do NOT demand redundant coverage or simulation-only harnesses
+  that do not exercise the production path.
 
 ## Context Loading
 
@@ -93,6 +97,13 @@ For each completed task, verify:
     test framework, UI smoke tests MUST use it.
   - **If smoke tests are missing, wrong type, or insufficient: REJECT.**
 - [ ] **Live-run attempted under envvar gate (HARD GATE):** For stories whose smoke tests include a live-against-production path gated by an envvar (e.g., `SMOKE_TESTS_LIVE=1`), verify the Dev Agent Record documents that the live run was attempted (not merely that the code path exists). Missing live-run attempt evidence = REJECT. A passing test suite run with the envvar unset does NOT satisfy this gate — the live path was skipped, not exercised.
+- [ ] **Producer-driven context testing (HARD GATE):** Tests for code
+  that consumes a produced data structure (context object, parsed
+  config, accumulated result) MUST obtain that input by driving the
+  real producer path from fixture state — not a hand-built dict or
+  literal that encodes the test author's assumptions. The test MUST
+  prove the producer actually populates what the consumer reads. A
+  green test over hand-assembled input is insufficient evidence = REJECT.
 - [ ] **Skill-invocation provenance (HARD GATE):** For artifacts that
   require a validation sub-skill (retros, PRDs, stories, architecture
   docs), verify `scripts/validate-provenance-block.sh <artifact>`

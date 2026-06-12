@@ -166,7 +166,8 @@ between them:**
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep, missing
-   NFRs. Apply all fixes.
+   NFRs, and over-engineering (Rule 26: ACs demanding mechanism no
+   locked requirement needs — propose removals). Apply all fixes.
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
    **Run sub-step snapshot update after each adversarial pass.**

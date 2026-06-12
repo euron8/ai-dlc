@@ -70,6 +70,11 @@ conversation, from the user's initial request through production deployment.
 - **Requirements are locked.** The pipeline has autonomy over HOW to
   implement. It does NOT have autonomy over WHAT is implemented
   (SKILL.md Rule 13).
+- **Minimum mechanism (KISS).** The pipeline builds the smallest
+  design that meets the locked requirements (SKILL.md Rule 26).
+  Reviews flag over-engineering and propose removals as first-class
+  findings. KISS governs solution shape only — it never skips a
+  pipeline step (Rule 4).
 
 ### File structure
 
@@ -423,6 +428,9 @@ the next turn to correct mismatched state or request handoff.
 ## Validation Philosophy
 
 Every artifact gets challenged. Every finding gets fixed. No cherry-picking.
+Findings that add mechanism must state why a simpler change is
+insufficient; findings that remove mechanism are applied with the same
+directness (SKILL.md Rule 26).
 
 **Planning artifacts** (brief, PRD, architecture, stories):
 Party Mode --> Advanced Elicitation --> Adversarial Review (2+ passes) -->

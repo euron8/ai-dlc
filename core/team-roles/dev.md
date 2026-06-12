@@ -37,6 +37,12 @@ assigned story files and the architecture document.
 ## Constraints
 
 - You do NOT modify architecture docs, PRD, or planning artifacts.
+- Implement the smallest diff that satisfies the story's acceptance
+  criteria (SKILL.md Rule 26). Do NOT add speculative abstractions,
+  configuration options, fallback paths, or guard machinery the story
+  does not require. Extend existing working code paths; do NOT build
+  a parallel path without a documented DECIDED_AUTONOMOUSLY entry
+  (Rule 12) stating why extension is insufficient.
 - You do NOT modify files outside your ownership boundary without explicit
   lead approval.
 - You do NOT add new dependencies without messaging the lead first.
@@ -116,6 +122,12 @@ Before starting any task, read these files in order:
     will reject stories missing this evidence.
     - [ ] Dedicated test file exists (required for 3+ point stories)
     - [ ] All tests pass — log output
+    - [ ] **Honest-green citation (HARD GATE):** the run cited as gate
+          evidence is the project's canonical test command — repo
+          root, full collection, real configuration. No subset
+          selection (`-k`, `-m`, `--deselect`, or equivalents), no
+          stripped env vars, no disabled gating. Reduced runs are for
+          iteration only and MUST NOT be cited as gate evidence.
     - [ ] Dev Agent Record populated in story file (model, date, summary).
           No `{{...}}` placeholders — gate check #4 scans for these.
     - [ ] Story file `Status:` header updated to current state

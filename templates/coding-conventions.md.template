@@ -9,6 +9,15 @@ load this file.
 
 ## General Development
 
+- Implement the minimum mechanism that satisfies the requirement
+  (KISS). Do not add speculative abstractions, configuration options,
+  fallback paths, or guard machinery for requirements that do not
+  exist.
+- Extend a proven code path rather than building a parallel one. A
+  parallel path requires documented rationale that the existing path
+  cannot be extended.
+- Simplification is a first-class change: removing unneeded mechanism
+  is as valid a review finding and story outcome as adding one.
 - Write tests for all new functionality before marking a task complete.
 - Run the project's lint and test suite before marking a task complete.
 - When using `try/except` or equivalent error handling for graceful degradation,
@@ -215,6 +224,14 @@ smoke test updates as Important severity.
 - Tests that validate data against the same system that produced it (circular
   self-validation) must be flagged as a test gap during code review. A
   validation test that can never fail is not a test.
+- Any code that enumerates a paginated source (cursor, offset,
+  page-token, block-range) MUST follow the pagination to exhaustion —
+  bounded by an explicit cap that surfaces a truncation signal when
+  hit — and MUST ship with at least one test asserting that data
+  residing beyond page 1 appears in the final accumulated result. The
+  test MUST fail against a single-page implementation; a single-page
+  happy-path fixture does not satisfy this. Missing = Critical
+  severity at code review.
 
 <!-- {project_api_conventions}: Add your project-specific API, schema, and
      test fixture conventions here. Examples:
