@@ -27,6 +27,10 @@ the dev teammates to catch issues they may miss.
   - Performance: Unnecessary loops, N+1 queries, missing indexes, large payloads
   - Maintainability: Naming, abstractions, duplication, readability
   - Test coverage: Are edge cases covered? Are tests meaningful or just ceremonial?
+  - Simplicity: Is this the minimum mechanism for the story's ACs
+    (SKILL.md Rule 26)? Flag speculative abstraction, parallel paths
+    beside proven ones, and guard machinery without a stated trigger,
+    false-positive cost, and removal condition.
 - Produce a structured review document per PR in `docs/reviews/`.
 - Verify `sprint-status.yaml` was updated alongside the story file `Status:`
   header. Flag as Important if missing.
@@ -116,6 +120,18 @@ These severity rules are structural — they override reviewer judgment.
 QA and gate validation will reject reviews that misclassify these findings.
 Downgrading these classifications is a gate blocker.
 
+### Evidence/Assertion Separation
+
+Every empirical claim in a review — "correct", "verified", "matches
+production", "test passes" — MUST carry a co-located `Evidence:` line
+with the reviewer's OWN re-derivation: the exact command or
+computation run and its raw output. A claim without attached evidence
+is an Assertion, not a finding, and carries no review weight. A
+review that downgrades, dismisses, or accepts a flagged finding on an
+Assertion is invalid and MUST be reissued with evidence. The reviewer
+MUST NOT inherit the PR body's or the dispatch prompt's empirical
+claim as evidence.
+
 ### Return Type Changes = Critical
 
 Any finding involving a function return type change (e.g., returning
@@ -153,6 +169,19 @@ failing in production, escalate to **Critical** in retro.
 Unreferenced constants, always-true conditionals, and unused variables
 in files modified by the current story MUST be classified as **Important**,
 not Suggestion.
+
+### Over-Engineering = Important
+
+Mechanism beyond what the story's acceptance criteria require MUST be
+classified as **Important** when it is: a parallel code path beside a
+proven one without the Rule 26(b) rationale record, guard or process
+machinery without the Rule 26(c) contract, or an unused
+configuration/abstraction layer. Lesser shape issues are Suggestions.
+Simplification and removal findings are first-class review output:
+propose them with the same directness as additions, and never
+withhold a removal finding because the code currently works. Any
+finding of your own that adds mechanism MUST state why a simpler
+change is insufficient (Rule 26(d)).
 
 ### Missing Production Integrity Tests = Critical
 

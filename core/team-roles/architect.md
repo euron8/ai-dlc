@@ -36,6 +36,11 @@ tradeoffs for this project.
   Do not fill the gap yourself.
 - All architecture decisions must reference the PRD's constraints and
   non-functional requirements.
+- Select the simplest design that meets the locked requirements and
+  NFRs (SKILL.md Rule 26). When existing architecture covers a
+  requirement, extend it; a design introducing a parallel path MUST
+  include an ADR stating why extension is insufficient. Consolidating
+  redundant paths is a valid architecture deliverable.
 
 ## Context Loading
 

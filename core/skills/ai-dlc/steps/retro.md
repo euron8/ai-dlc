@@ -140,7 +140,7 @@ for violations of SKILL.md Rule 18:
 - `.claude/skills/ai-dlc/steps/*.md`
 - `.claude/team-roles/*.md`
 
-Two classes of violation to detect:
+Three classes of violation to detect:
 
 **1. Narrative drift.** Rule text contains sprint/story references,
 incident descriptions, "because we" justification, parenthetical origin
@@ -149,6 +149,14 @@ notes, embedded dates, or quoted retro findings.
 **2. Rule weakness.** Rule text uses "should", "try to", "consider",
 "prefer", "in most cases", or similar soft language where a mandate is
 intended. Missing enforcement consequence where one would apply.
+
+**3. Complexity accretion.** A gate, check, hook, guard, or rule
+added in a prior sprint that lacks the Rule 26(c) contract (concrete
+failure caught, false-positive cost, removal condition), or whose
+false positives since introduction exceed its true catches. For each
+such finding, record the catch/false-positive tally and propose
+removal or narrowing as a process improvement in this retro —
+machinery is removed through the same Step 4 mechanism that added it.
 
 Per finding, judge case by case:
 - Is the text part of a rule statement (prescriptive/directive), or
@@ -167,7 +175,9 @@ Per finding, judge case by case:
 
 Record audit results in the retro doc under a `## Rule File Audit`
 section: files scanned, narrative drifts found (list each), rule
-weaknesses found (list each), rules rewritten, rules marked for removal.
+weaknesses found (list each), complexity accretions found (list each
+with catch/false-positive tally), rules rewritten, rules marked for
+removal.
 
 If the audit produced file changes, do NOT commit them yet — Step 5c
 handles the audit commit as a separate commit before the main retro

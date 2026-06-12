@@ -30,6 +30,12 @@ Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 - For **brownfield-c**: Update architecture doc (or create if missing).
   Document TARGET state: what stays, what changes, what is new.
 
+**Design selection (Rule 26).** Select the simplest design that meets
+the PRD's locked requirements and NFRs. Extend existing architecture
+where it covers the requirement; a parallel path or new mechanism
+class requires an ADR stating why extension is insufficient.
+Consolidating redundant paths is a valid design outcome.
+
 ### 2a. Variant-Lock Evidence Requirement (when ADR offers multiple variants)
 
 When an ADR offers two or more implementation variants distinguished
@@ -85,8 +91,10 @@ between them:**
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes. Focus on security,
    scalability, coupling, single points of failure, backward
-   compatibility, migration risk, integration seams. Apply all fixes
-   between passes. Continue until only nitpicks remain.
+   compatibility, migration risk, integration seams, and
+   over-engineering (Rule 26: mechanism beyond requirements, parallel
+   paths, unjustified guards — propose removals as findings). Apply
+   all fixes between passes. Continue until only nitpicks remain.
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `gate-validation.md`
    "Auto-handoff evaluation") at `Seam D` with the label

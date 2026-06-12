@@ -21,6 +21,9 @@ deployment, and retrospective — autonomously in one conversation.
 - Evidence-producing mandatory checks (dev, code review, QA)
 - Production integrity tests as a hard gate
 - Retro improvements applied at all 5 enforcement layers
+- Minimum-mechanism mandate (KISS, Rule 26) — over-engineering is a
+  review finding class; retro audits remove guard machinery that
+  catches nothing
 
 ## Prerequisites
 

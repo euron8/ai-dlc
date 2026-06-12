@@ -58,6 +58,13 @@ when combined with `subagent_type: general-purpose` — multiple parallel
 devs collapse into shared CWD and branch-thrash each other. Lead MUST
 follow the worktree-explicit dispatch protocol:
 
+0. Lead MUST commit all planning artifacts the dev needs (story
+   files, analysis docs, sprint-status.yaml) to the sprint branch
+   BEFORE pre-creating any dev worktree. The worktree base MUST
+   contain the canonical story file by construction; a worktree cut
+   from a HEAD that predates the artifact commit strands the dev
+   without its story spec and forces teardown + recreate. Violation:
+   dispatch rework; surface at retro.
 1. Lead pre-creates a physical worktree per dispatched story BEFORE
    issuing the Agent call:
    `git worktree add <repo>-s<N>-story-<X> -b dev/sprint-<N>/story-<X> <sprint-branch-HEAD>`
@@ -105,6 +112,17 @@ that includes it. Dispatching dev without both conditions satisfied
 is a story-scope failure mode. Violation fails gate-validation
 Check 15 on detection at retro.
 
+**Dev-dispatch exploration budget.** Every dev brief MUST bound
+exploration and force an early write. The brief MUST state: (a) an
+explicit read ceiling (default: ≤15 file reads before the first code
+write); (b) a mandatory early-scaffold commit — commit function
+signatures and file structure before filling bodies, so a mid-work
+interruption loses body-fill, not the entire output; (c) if the dev
+nears its budget without committed code, it MUST priority-order the
+remaining acceptance criteria, implement top-down, and report
+DONE-vs-REMAINING per AC. A brief omitting (a)+(b)+(c) is
+dispatch-incomplete.
+
 - **dev** from `dev.md`. Assign ownership based on story scope per the
   ownership paths defined in the dev role file.
 - **code-reviewer** from `code-reviewer.md`. Read-only, produces reviews
@@ -141,6 +159,9 @@ Instruct all teammates:
 - Read `docs/coding-conventions.md` before writing or reviewing code
 - Read architecture doc and assigned story files before writing code
 - Use three-tier escalation model (Rule 12)
+- Implement the smallest diff that satisfies the ACs (SKILL.md Rule
+  26): no speculative abstraction, no parallel path beside a proven
+  one, no guard machinery the story does not require
 - Update sprint-status.yaml in same commit as story status changes
 
 **Dev teammates — mandatory evidence requirements:**
@@ -195,8 +216,16 @@ Monitor task progress:
 - Detect blocked teammates and resolve deadlocks
 - Mediate file conflicts between teammates
 - When code reviewer sends findings → ensure dev applies ALL fixes
+  (simplification/removal findings included, per Rule 7 and Rule 26(d))
 - When QA sends failures → ensure dev fixes and QA re-validates
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
+
+**Pre-gate commit-presence check.** Before dispatching code review
+(gate1) for any story, run `git -C <worktree> log --oneline
+<base>..HEAD` on the story branch and confirm at least one non-merge
+commit exists. Zero commits = the dev produced no deliverable; resume
+or re-dispatch the dev BEFORE gating. Gating a zero-commit story is a
+process violation; surface at retro.
 
 **Sub-step snapshot updates during implementation.** The lead MUST
 run a sub-step snapshot update (see `gate-validation.md` "Sub-step

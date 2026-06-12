@@ -115,6 +115,11 @@ When party mode, adversarial review, or advanced elicitation surface
 a finding, fix it directly in the artifact. Do not present a menu of
 options. Do not ask "should I fix this?" Just fix it.
 
+Fixing directly governs disposition, not shape. A finding that adds
+mechanism MUST state why a simpler change is insufficient (Rule
+26(d)); a finding that removes or simplifies mechanism is applied
+with the same directness as one that adds it.
+
 ### Rule 8 -- Run the validation cycle per declared intensity
 
 Validation intensity is declared at route time (see route.md Step 6)
@@ -497,7 +502,9 @@ noting what was improved and why.
 ### Rule 16 -- Err on the side of doing
 
 When in doubt, apply the improvement. The human reviews the final
-production deployment, not intermediate artifacts.
+production deployment, not intermediate artifacts. "Doing" means the
+smallest change that resolves the doubt (Rule 26); this rule is never
+license to add mechanism no requirement demands.
 
 ### Rule 17 -- Write large files in sections
 
@@ -534,9 +541,11 @@ artifacts (PRDs, stories, reviews, retros) and export bundles are
 different formats.
 
 **Cleanup.** The retro's rule file audit (`retro.md` Step 4) scans
-rule files each sprint for two classes of violation: **narrative
-drift** (rule text gained origin context) and **rule weakness** (rule
-text became readable as optional). Both are cleanup targets.
+rule files each sprint for three classes of violation: **narrative
+drift** (rule text gained origin context), **rule weakness** (rule
+text became readable as optional), and **complexity accretion**
+(machinery lacking the Rule 26(c) contract, or with false positives
+and no true catches). All are cleanup targets.
 
 ### Rule 19 -- Agent spawns MUST pass the `model` parameter
 
@@ -741,6 +750,43 @@ the operator to the one-shot consolidation step
 25k. Warn-only — never blocks the pipeline. Consolidation is
 operator-invoked, not automatic: it is a fidelity-critical rewrite and
 must be supervised.
+
+### Rule 26 -- Minimum mechanism (KISS)
+
+Every produced artifact -- design, code, test, guard, or process
+machinery -- MUST use the smallest mechanism that satisfies the
+locked requirements and acceptance criteria.
+
+**(a) No speculative mechanism.** MUST NOT add abstractions,
+configuration options, fallbacks, guards, or generality for
+requirements that do not exist. Unrequested capability is scope
+creep, not thoroughness.
+
+**(b) Extend proven paths.** When a working path covers the
+requirement, extend it. Introducing a parallel path beside a proven
+one requires documented rationale that extension is insufficient: an
+ADR at design time, a DECIDED_AUTONOMOUSLY entry (Rule 12) at
+implementation time.
+
+**(c) Guard machinery carries a contract.** New guard, gate, hook,
+or process machinery MUST state at introduction: the concrete failure
+it catches, the cost of a false positive, and the condition under
+which it is removed. Machinery that cannot state all three is not
+added.
+
+**(d) Simplification is first-class.** Review and validation passes
+MUST treat removal and simplification findings as equal in standing
+to additions. A finding that adds mechanism MUST state why a simpler
+change is insufficient.
+
+**(e) Scope fence.** This rule governs the shape of what is produced.
+It never authorizes skipping, thinning, or reordering pipeline steps,
+gates, or validation cycles -- Rule 4 is unaffected, and "simple" or
+"KISS" is never a reason to bypass a step.
+
+Violation is a code-review finding per `code-reviewer.md`
+(Over-Engineering classification); machinery lacking the (c) contract
+is flagged by the retro rule-file audit (`retro.md` Step 4).
 
 ## INITIALIZATION
 

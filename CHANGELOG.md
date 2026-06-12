@@ -17,6 +17,102 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-06-12
+
+KISS / minimum mechanism, plus a consumer-absorption batch. Real
+consumer telemetry (~/git/graph, ~250 sprints) showed the pipeline's
+ratchets only add: Rule 7 applies every finding, Rule 16 errs toward
+doing, multi-pass adversarial review keeps surfacing additions — and
+nothing mandates removal. The operator-observed failure mode: a
+working feature wrapped in an unnecessary parallel path plus guard
+machinery until it was non-functional, while every smoke test stayed
+green; separately, a merge-gate hook fired three false-positive
+HARD_BLOCKs in seven sprints with zero true catches. This release
+adds the directional counterweight (Rule 26) wired into existing
+structures — deliberately NO new gate check, validation script, or
+artifact, since enforcing simplicity with more guard machinery would
+contradict the principle — and absorbs the KISS-aligned subset of the
+consumer's proven mechanisms.
+
+### Added — KISS / minimum mechanism
+
+- **Rule 26 — Minimum mechanism (KISS).** Every produced artifact
+  uses the smallest mechanism satisfying locked requirements: (a) no
+  speculative mechanism; (b) extend proven paths — a parallel path
+  requires documented rationale (ADR / DECIDED_AUTONOMOUSLY); (c) new
+  guard machinery states the failure it catches, its false-positive
+  cost, and its removal condition, or is not added; (d) simplification
+  findings are first-class; (e) scope fence — governs solution shape
+  only, never step skipping (Rule 4 unaffected).
+- **Over-Engineering finding class** (`team-roles/code-reviewer.md`):
+  Important severity for parallel-path/contract-less-guard/unused-layer
+  shapes; simplicity added to the review responsibilities.
+- **Role clauses**: architect (simplest design, consolidation is a
+  deliverable), dev (smallest diff, no speculative abstraction), pm
+  (no ACs demanding unrequested capability), qa (minimum test set on
+  the real execution path).
+- **Adversarial-review over-engineering lens** in `architecture.md`,
+  `stories-test-strategy.md`, `sprint-review-next.md`; dev dispatch
+  brief carries the smallest-diff mandate (`implementation.md`).
+- **Retro audit class 3 — complexity accretion** (`retro.md` Step 4,
+  Rule 18 Cleanup): machinery lacking the 26(c) contract or with false
+  positives exceeding true catches gets a catch/false-positive tally
+  and a removal/narrowing proposal — removed through the same audit
+  that adds rules.
+- **Templates**: KISS bullets in `coding-conventions.md.template`
+  General Development; CLAUDE.md.template Coding Conventions sentence;
+  QUICKSTART design-principles bullet + validation-philosophy note.
+
+### Changed — KISS
+
+- **Rule 7** — fixing directly governs disposition, not shape:
+  additive findings state why a simpler change is insufficient;
+  removal findings are applied with the same directness.
+- **Rule 16** — "doing" means the smallest change that resolves the
+  doubt; never license to add unrequested mechanism.
+- **CLAUDE.md.template** — stale "Rule 1 through Rule 20" pointer
+  corrected to Rule 26.
+
+### Added — consumer absorption
+
+Generalized from mechanisms proven in the graph consumer:
+
+- **Function-verification deploy gate** (`steps/deploy-validate.md`
+  new §3b, hard gate). Smoke verifies availability; §3b verifies
+  FUNCTION via production work-execution telemetry — a dead-but-warm
+  service no longer passes. Includes post-activation live-log check
+  for flag-gated features and `function_verification_evidence` in the
+  gate log; PVC template gains a Function verification line.
+- **Dispatch discipline** (`steps/implementation.md`): protocol step 0
+  — commit planning artifacts before pre-creating dev worktrees;
+  dev-brief exploration budget (read ceiling, early-scaffold commit,
+  priority-order fallback); pre-gate commit-presence check before
+  gate1.
+- **Evidence/assertion separation** (`team-roles/code-reviewer.md`).
+  Empirical review claims carry a co-located `Evidence:` line with the
+  reviewer's own re-derivation; assertions carry no review weight.
+- **Honest-green citation** (`team-roles/dev.md` pre-submission
+  checklist, hard gate). Gate-cited runs use the canonical project
+  test command — no subset selection, stripped env, or disabled
+  gating.
+- **Producer-driven context testing** (`team-roles/qa.md` validation
+  checklist, hard gate). Consumer-code tests obtain inputs by driving
+  the real producer path, not hand-built fixtures.
+- **Pagination test convention**
+  (`templates/coding-conventions.md.template`). Paginated enumeration
+  reads to exhaustion and ships a test proving beyond-page-1 data
+  reaches the result.
+
+### Notes
+
+- Deliberately NOT absorbed, per the same KISS lens: the consumer's
+  merge-gate PreToolUse hook (three false-positive HARD_BLOCKs, zero
+  true catches to date — held until value is proven), the five-layer
+  discriminating-AC contract, and the fixture-guard suite. Re-evaluate
+  at the next drift review.
+- MINOR — all additive; existing consumers keep working without
+  migration.
+
 ## [0.9.0] — 2026-05-30
 
 Artifact-size discipline — the dominant read+turn lever. Real consumer

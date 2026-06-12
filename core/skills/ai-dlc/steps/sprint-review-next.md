@@ -61,7 +61,9 @@ between them:**
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep,
-   missing NFRs, and cross-sprint consistency. Apply all fixes.
+   missing NFRs, cross-sprint consistency, and over-engineering
+   (Rule 26: ACs demanding mechanism no locked requirement needs —
+   propose removals). Apply all fixes.
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `gate-validation.md`
    "Auto-handoff evaluation") at `Seam D` with the label

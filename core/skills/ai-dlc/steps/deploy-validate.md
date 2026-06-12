@@ -94,6 +94,40 @@ Verify the deployed build contains expected changes:
 **Log all command outputs.** Gate validation check #8 requires this
 evidence. Do not summarize — capture the actual output.
 
+### 3b. Function Verification (Hard Gate — Non-Skippable)
+
+Smoke tests verify availability; this gate verifies FUNCTION. A
+dead-but-warm service passes health checks and smoke tests while
+doing no work. Before presenting the PVC, probe the production
+work-execution telemetry (execution log, processed-work counters,
+job/queue completion records — whatever records the system doing
+its job) and verify the deployed feature has actually executed its
+function.
+
+<!-- {function_verification_command}: A read-only probe of your
+     production work-execution telemetry. Examples:
+     - count rows in an execution/audit log table since deploy
+     - query a processed-work or completion-event metric
+     - grep production logs for completion events on the changed path -->
+
+- Expected work appears in the telemetry → PASS.
+- Attempts present with zero successes, or expected activity
+  absent → FAIL. HARD_BLOCK: do NOT present the PVC; root-cause
+  first.
+- Zero expected activity in the window (quiet ≠ broken) → PASS;
+  record the reasoning.
+
+**Post-activation live-log check (gated features).** When a feature
+is activated during deploy-validate by writing a config flag, env
+var, or runtime parameter, read PRODUCTION logs after activation and
+confirm the newly-reachable code path actually fired. Test output is
+NOT evidence of production firing; the evidence MUST be production
+log lines anchored to a real post-activation event.
+
+Capture probe output verbatim in the gate log under
+`function_verification_evidence`. A deploy-validate gate log entry
+without it FAILS the gate.
+
 ### 4. Visual Verification (UI Sprints — Evidence Required)
 
 If `is_ui_epic == true`:
@@ -121,6 +155,7 @@ Present to the human:
 ### Deployment
 - Services deployed: [list]
 - Smoke tests: PASSED / FAILED
+- Function verification: PASSED / FAILED
 - Visual verification: PASSED / N/A
 
 ### Gate Log
