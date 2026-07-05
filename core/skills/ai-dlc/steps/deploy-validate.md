@@ -117,12 +117,34 @@ function.
 - Zero expected activity in the window (quiet ≠ broken) → PASS;
   record the reasoning.
 
+**Config-gated feature activation check.** For every requirement
+whose behavior depends on a configuration or feature-flag value, the
+pipeline MUST trace that flag to its actual PRODUCTION value and
+confirm it holds the state the requirement needs before reporting the
+requirement verified. "The feature exists in the code" is NOT evidence
+it is active in production — a config-gated requirement is unverified
+until its live value is read. Read the value from the running
+production system (the config, environment, or parameter store the
+deployed code actually consumes), never from a repo default or the
+intended value. Catches: a requirement that passed code review, QA,
+and smoke while its gating flag stays off, or set wrong, in
+production — the feature ships dark and its regression or absence
+passes every green gate undetected. False-positive cost: one
+read-only lookup of each gating flag's live value; no write, no deploy
+risk. Remove when: no deployed requirement's behavior depends on a
+configuration or feature-flag value.
+
 **Post-activation live-log check (gated features).** When a feature
 is activated during deploy-validate by writing a config flag, env
 var, or runtime parameter, read PRODUCTION logs after activation and
-confirm the newly-reachable code path actually fired. Test output is
-NOT evidence of production firing; the evidence MUST be production
-log lines anchored to a real post-activation event.
+confirm the newly-reachable code path actually fired. Silence is not
+proof of success, and test output is NOT evidence of production
+firing; the evidence MUST be production log lines anchored to a real
+post-activation event. Catches: an activation that silently no-ops —
+the deploy reports success while the newly-reachable path never runs.
+False-positive cost: one read-only production log or telemetry read
+after activation. Remove when: deploys no longer activate features by
+changing configuration at deploy time.
 
 Capture probe output verbatim in the gate log under
 `function_verification_evidence`. A deploy-validate gate log entry
