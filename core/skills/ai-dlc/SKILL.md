@@ -596,19 +596,19 @@ by setting `planning_offload` in this section directly.
 `carry-over-evaluation`. Split offload (exploration only; authoring +
 validation stay inline) — `discovery`, `research-requirements`.
 
-**Dispatch contract.** The lead spawns the analyst via the Agent tool
-with `model` from the analyst role file per Rule 19, passing (a) the exploration scope, (b) the
-canonical output artifact path the step defines, and (c) a stable
-shared context block (order shared-block-first per the dispatch-prompt
-cache discipline in `implementation.md`). The analyst writes the
-artifact to disk and returns ONLY `{artifact_path, summary, gaps}` —
-never raw file content or its exploration trace. The lead then reads
-the artifact from disk only when a decision needs it (Rule 23(a)). If the
-artifact file is absent at the returned path, the lead treats the
-dispatch as non-delivery and re-dispatches — a text-only summary without
-the on-disk artifact is not a delivered draft. Build no detector for
-this; the lead's read of the expected path is the check (Rule 26: audit
-before adding mechanism).
+**Dispatch contract.** Each offloaded step's Section 0 defines its own
+concrete dispatch — the analyst's exploration scope, the canonical output
+artifact path, and the resume point — and spawns the `analyst` via the
+Agent tool (`model` from the analyst role file per Rule 19). The
+cross-cutting rules the lead applies to every such dispatch: order the
+dispatch prompt shared-block-first (dispatch-prompt cache discipline,
+`implementation.md`); the analyst writes the artifact to disk and returns
+ONLY `{artifact_path, summary, gaps}`, never raw content or its
+exploration trace; the lead reads the artifact from disk only when a
+decision needs it (Rule 23(a)); an absent artifact at the returned path is
+non-delivery — the lead re-dispatches (a text-only summary is not a
+delivered draft). Build no detector for this; the lead's read of the
+expected path is the check (Rule 26: audit before adding mechanism).
 
 **Production vs validation boundary.** The analyst *drafts* the
 artifact; the lead *validates, decides, and owns* it. Rule 20
@@ -658,13 +658,13 @@ only the current epoch. Verifying an appended entry reads the **tail**,
 not the whole file.
 
 **(d) Size thresholds (warn, configurable).** When a living artifact
-exceeds its threshold the retro artifact-size audit warns and points
-the operator to the one-shot consolidation step
-(`artifact-consolidation.md`). Defaults: `prd.md` 60k tokens,
-`product-brief.md` 60k, `carry-over-backlog.md` 40k, live `gate-log.md`
-25k. Warn-only — never blocks the pipeline. Consolidation is
-operator-invoked, not automatic: it is a fidelity-critical rewrite and
-must be supervised.
+exceeds its threshold the retro artifact-size audit warns and points the
+operator to the one-shot consolidation step
+(`artifact-consolidation.md`). The per-artifact threshold defaults are
+owned (and configurable) in the retro artifact-size audit (`retro.md`
+Close-Out Sweep). Warn-only — never blocks the pipeline. Consolidation
+is operator-invoked, not automatic: it is a fidelity-critical rewrite
+and must be supervised.
 
 ### Rule 26 -- Minimum mechanism (KISS)
 

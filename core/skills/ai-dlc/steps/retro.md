@@ -377,7 +377,9 @@ was already closed inline, note "Sweep: clean (all items closed
 inline during implementation)".
 
 **Artifact-size audit (Rule 25(d), warn-only).** Measure the live
-planning artifacts and compare to their thresholds:
+planning artifacts and compare to their thresholds. These are the
+canonical, configurable Rule 25(d) threshold defaults (a project
+overrides them here):
 `prd.md` 60k tokens, `product-brief.md` 60k,
 `carry-over-backlog.md` 40k, live `gate-log.md` 25k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning
