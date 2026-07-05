@@ -60,6 +60,28 @@ If the sprint review surfaced findings that required code changes:
 - QA re-validates affected stories
 - Repeat until clean
 
+**Core-path seam non-deferral.** When any reviewer flags an untested
+integration seam (a wiring point where one component's output must reach
+another for the feature to function), the disposition MUST classify the
+seam as either **wiring-reachable pre-merge** — whether the real
+entrypoint actually invokes the seam is a pure-software fact knowable
+in-process before merge — or **environmental** — the seam is reachable
+only in the deployed environment. A wiring-reachable seam on the
+sprint's PRIMARY deliverable path (the path that realizes the sprint's
+headline deliverable) MUST NOT be deferred to deploy-validate;
+deferring it is a HARD_BLOCK (Rule 12 Tier 1). Such a seam requires an
+in-pipeline mutation-RED wiring test before merge — a test that drives
+the real entrypoint and FAILS if the seam is unwired (external legs MAY
+be mocked; the wiring itself MUST be exercised). Only a genuinely
+environmental seam MAY defer. Any override MUST name the risk verbatim:
+"this could merge with every gate green and ship functionally inert."
+Catches: a feature that passes code review, QA, and smoke yet ships
+functionally inert because its core wiring seam was never exercised and
+was deferred to a live-only check. False-positive cost: one in-pipeline
+wiring test per core-path seam, external legs mocked. Remove when: the
+sprint's primary deliverable path contains no cross-component wiring
+seam reachable in-process before merge.
+
 ### 4. Gate Validation and Proceed
 
 Run auto-handoff evaluation at `Seam B` with the label
