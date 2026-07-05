@@ -331,8 +331,14 @@ procedure in order:
    anything not yet reflected, including the stopped-teammate
    record from Step 1.
 4. Output the resume prompt (template below), wrapped in `----`
-   delimiter lines (one before, one after).
-5. End the session. Do not continue the pipeline in this conversation.
+   delimiter lines (one before, one after), AND write the same resume
+   prompt (the text between the markers, without the `----` lines) to
+   `_bmad-output/handoff-resume.txt` (overwrite any prior file). This
+   file is the auto-session-chaining driver's handoff signal; a
+   text-only resume prompt is an unreliable transport for it.
+5. Create the pause flag so the continuation hook allows this session to
+   end cleanly: `touch _bmad-output/pipeline-paused.flag`. Then end the
+   session — do not continue the pipeline in this conversation.
 
 **Resume prompt template** (fill bracketed fields at handoff time).
 

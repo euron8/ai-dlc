@@ -1,29 +1,41 @@
 #!/usr/bin/env bash
 # ai-dlc-driver-signal.sh — Stop hook for Architecture A (auto session chaining).
 #
-# Pushes turn-done detection OUT to files so the session driver
-# (core/session-driver/ai-dlc-session-driver.sh) never has to scrape the TUI.
-# Additive: runs alongside ai-dlc-continue.sh with no coupling (Stop hooks
-# stack). This hook makes NO stop/continue decision — it only records that the
-# agent went idle. exit 0 always, so it can never block or stall the pipeline.
+# Pushes handoff/pause detection OUT to a file so the session driver
+# (core/session-driver/ai-dlc-session-driver.sh) never scrapes the TUI.
+# Additive: runs alongside ai-dlc-continue.sh (Stop hooks stack). Makes NO
+# stop/continue decision; exits 0 always, so it can never block the pipeline.
 #
-# Register in .claude/settings.json:
-#   "hooks": { "Stop": [ { "hooks": [
-#     { "type": "command", "command": ".claude/hooks/ai-dlc-continue.sh" },
-#     { "type": "command", "command": ".claude/hooks/ai-dlc-driver-signal.sh" }
-#   ] } ] }
+# It writes the `.driver/idle` signal ONLY when the pause flag is present —
+# i.e. when the lead has genuinely paused or handed off (the same condition
+# under which ai-dlc-continue.sh ALLOWS the stop). On a blocked stall (no
+# flag; ai-dlc-continue.sh forces continue) it writes nothing, so the driver
+# never injects mid-pipeline. The driver then distinguishes a handoff (a
+# `handoff-resume.txt` sentinel is also present -> inject /clear + resume)
+# from an ordinary human pause point (no sentinel -> the attached operator
+# handles it; the driver keeps watching).
+#
+# Register in .claude/settings.json AFTER ai-dlc-continue.sh:
+#   "Stop": [ { "hooks": [
+#     { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-continue.sh" },
+#     { "type": "command", "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-driver-signal.sh" }
+#   ] } ]
 
-set -uo pipefail
+set -u
+cat >/dev/null 2>&1 || true   # drain stdin (unused)
 
-# Consume stdin JSON (unused, but drain it so the hook contract is clean).
-cat >/dev/null 2>&1 || true
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
+PAUSE_FLAG="${PROJECT_DIR}/_bmad-output/pipeline-paused.flag"
+DRV="${AI_DLC_DRIVER_DIR:-${PROJECT_DIR}/_bmad-output/.driver}"
 
-DRV="${AI_DLC_DRIVER_DIR:-_bmad-output/.driver}"
-mkdir -p "$DRV" 2>/dev/null || exit 0   # fail-open: never block the agent
+# Only signal on a genuine lead-intended pause/handoff (pause flag present).
+# A blocked stall has no flag -> write nothing -> driver stays idle.
+[ -f "$PAUSE_FLAG" ] || exit 0
 
+mkdir -p "$DRV" 2>/dev/null || exit 0     # fail-open: never block the agent
 n=$(cat "$DRV/turns" 2>/dev/null || echo 0)
 case "$n" in ''|*[!0-9]*) n=0 ;; esac
 echo $((n + 1)) > "$DRV/turns" 2>/dev/null || true
-: > "$DRV/idle" 2>/dev/null || true       # touch: "agent is idle -> safe to inject"
+: > "$DRV/idle" 2>/dev/null || true       # "agent idle at a pause/handoff -> safe to inject"
 
 exit 0

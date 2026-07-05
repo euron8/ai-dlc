@@ -194,6 +194,12 @@ cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
 chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
 echo "  ai-dlc-protect.sh installed"
 
+# Install the auto session-chaining driver (operator-run tmux launcher)
+mkdir -p "$PROJECT_ROOT/.claude/session-driver"
+cp "$SCRIPT_DIR/../core/session-driver/"*.sh "$PROJECT_ROOT/.claude/session-driver/"
+chmod +x "$PROJECT_ROOT/.claude/session-driver/"*.sh
+echo "  session-driver installed (.claude/session-driver/)"
+
 # Install settings.json
 # Fresh project -> copy template. Existing settings.json -> merge in place:
 #   * Preserve user-owned permissions, env, mcpServers, etc.
