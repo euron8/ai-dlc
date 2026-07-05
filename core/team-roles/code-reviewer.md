@@ -204,6 +204,23 @@ verification against the deployed schema MUST be classified as
 **Important**. If deployment has already shipped and the query is
 failing in production, escalate to **Critical** in retro.
 
+### Silent Validity-Guard on a Consumer-Facing Data Surface = Critical
+
+A PR that adds a validity guard — suppress, clamp, default-fill,
+null/sentinel emit, or exception-swallow — on a data surface a downstream
+consumer reads (an API field, a persisted record, an exported metric, a
+returned value another module trusts) MUST ship observability for every
+firing of that guard: a log line, a metric/counter, or a smoke-probe
+assertion that makes the guard's activation visible. A guard that
+silently substitutes a `None`, a sentinel, a zero, or a clamped value —
+with no signal that the real value was unavailable or out of range — is
+**Critical**: the consumer cannot distinguish a genuine value from a
+masked failure, so the fault propagates undetected. **Evidence
+required:** cite the guard site `file:line` and the co-located
+log/metric/probe; if none exists, the finding stands. Exempt: a guard on
+a purely internal value never read across a module or consumer boundary
+(name the boundary that contains it).
+
 ### Dead Code in Modified Files = Important
 
 Unreferenced constants, always-true conditionals, and unused variables

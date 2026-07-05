@@ -48,3 +48,34 @@ at the production validation checkpoint; status updated to RESOLVED with a
 decision. DECIDED_AUTONOMOUSLY reviewed by human at the checkpoint; no
 action unless the decision was wrong, in which case status updates to
 OVERRIDDEN with corrective direction.
+
+**AC verification-category-change disclosure.** When resolving a
+HARD_BLOCK changes how an acceptance criterion is verified — moving it
+between verification categories (e.g. discriminator → smoke-only,
+directly-tested → deferred/deploy-pending, hard-gate → advisory) — the
+resolution MUST state the change explicitly for operator acknowledgement:
+`AC <N> verification category <old> → <new>. Operator ack Y/N`. A
+category change lowers or relocates the evidence bar the operator
+originally signed off on; slipping it through inside a HARD_BLOCK fix
+without an explicit ack silently downgrades the acceptance contract. The
+operator's `Y` is required before the resolution closes; a `N` returns
+the AC to its prior category. Governed by SKILL.md Rule 12.
+
+**Terminal-entry archival (Rule 25(a)/(c) — move, never delete).** Once
+an entry reaches a terminal status — RESOLVED or OVERRIDDEN — it is
+MOVED (cut-and-paste, verbatim) out of the live `pending.md` into a dated
+escalation archive (`docs/escalations/pending-archive.md`) at retro
+close. The live `pending.md` holds only OPEN escalations (HARD_BLOCK
+awaiting sign-off, DEFERRAL_REQUEST awaiting disposition). Nothing is
+dropped — the union of live + archive preserves every entry — but the
+gate-read that scans `pending.md` for open blockers stays bounded to what
+is actually open, not the full resolved history. This is the escalation
+log's instance of the Rule 25 no-loss archival family.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: an unbounded
+`pending.md` where each gate re-reads the entire resolved history to find
+the few open blockers, and where a stale RESOLVED entry can be misread as
+still-open. False-positive cost: one cut-and-paste per terminal entry at
+retro close. Removal condition: retire once escalation status is tracked
+in a store that filters open-vs-terminal at query time rather than by
+file partition.

@@ -704,6 +704,38 @@ unskippable per intensity.
 (validation-intensity) absorbed as distribution **Check 20**; recorded
 so a future graph reconciliation does not re-flag it as new.
 
+### 21. Test-strategy deliverable presence (sprint-review gate).
+
+**Scope.** Runs at the sprint-review gate for any sprint that produced a
+test-strategy deliverable (`stories-test-strategy.md` Step 5). Skips
+sprints with no test-strategy artifact.
+
+**Check.** For EVERY test the test strategy names as a required
+deliverable, confirm BOTH: (a) a matching test exists on disk at the
+path/identifier the strategy names — resolved by grep/collection, not by
+the presence of the name in prose; AND (b) that test is cited from a Dev
+Agent Record (the DAR names the test and its PASS run). A test named in
+the strategy but absent on disk, or present on disk but never cited from
+a DAR, FAILS this check. Fail-closed: a test-strategy deliverable that
+cannot be resolved to a named-and-cited test is a gap, not a pass.
+
+**PASS:** every strategy-named test resolves to an on-disk test cited
+from a DAR. **FAIL:** any named test is missing on disk OR present but
+uncited, OR the strategy names tests but no DAR citation set exists.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a test the strategy
+promised that was never written (or was written but never run/cited), so
+the sprint closes claiming coverage it does not have. False-positive
+cost: one grep-resolve per named test plus a DAR citation scan — cheap,
+mechanical. Removal condition: retire once the test strategy is generated
+as executable references (each named test is a collectable node) so
+presence is structurally guaranteed.
+
+**Graph→distribution number mapping.** Absorbed from graph's Check 33
+(cross-story test-strategy §3 deliverable presence) as distribution
+**Check 21**; recorded so a future graph reconciliation does not re-flag
+it as new.
+
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 
 **Recursion guard.** H1 is NOT subject to H1. When H1 runs, it sets

@@ -234,6 +234,11 @@ statuses are closed at the production checkpoint) live in
 `escalations.md` alongside this file. READ AND FOLLOW it when writing or
 resolving an escalation.
 
+When resolving a HARD_BLOCK changes how an acceptance criterion is
+verified (moving it between verification categories), the resolution MUST
+disclose the change for explicit operator acknowledgement — mechanism in
+`escalations.md` "AC verification-category-change disclosure".
+
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 
 When carry-over items, brainstorming sessions, or direct user
@@ -254,6 +259,21 @@ approach, implementation patterns, UI layout choices (when not
 specified by user), option selection among presented alternatives,
 and scheduling. These are HOW decisions and use `DECIDED_AUTONOMOUSLY`
 (Rule 12, Tier 2) when non-obvious.
+
+**Live security-state mutation carve-out.** The autonomy grant above
+does NOT extend to mutating LIVE access-control or security state:
+permissions, roles, IAM/policy bindings, auth or network/firewall
+rules, secrets/keys/credentials, or any control that governs who can
+reach or change a running system. The agent MUST NOT autonomously apply
+such a mutation to a live environment. Instead it STAGES the change — as
+a reviewable diff, script, or PR the operator runs — and the operator
+FIRES it. Each such action requires explicit in-session operator
+authorization recorded per action (a standing "proceed" or a resume
+prompt is NOT authorization — see "Pending operator approvals do not
+transfer across handoff"); one ack does not cover a batch. This is a
+deliberate tightening of Rule 13 autonomy: security-state changes are
+high-blast-radius and often irreversible, so they are operator-fired
+even when the agent is otherwise fully autonomous.
 
 ## HANDOFF PROTOCOL AND PIPELINE SNAPSHOT
 
@@ -655,7 +675,10 @@ risk missing a cross-reference and mis-deciding.
 **(c) Rotate append-only logs.** `gate-log.md` and similar logs rotate
 at epoch/sprint boundaries into a dated archive; the live log holds
 only the current epoch. Verifying an appended entry reads the **tail**,
-not the whole file.
+not the whole file. The escalation log `pending.md` is bounded the same
+way: terminal (RESOLVED / OVERRIDDEN) entries move to
+`pending-archive.md` at retro close so the gate-read stays scoped to open
+escalations — mechanism in `escalations.md` "Terminal-entry archival".
 
 **(d) Size thresholds (warn, configurable).** When a living artifact
 exceeds its threshold the retro artifact-size audit warns and points the
