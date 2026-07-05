@@ -35,6 +35,11 @@ Read all artifacts from this sprint:
 - Sprint-status.yaml
 - Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
 
+Run auto-handoff evaluation at `Seam E` with the label
+`retro Step 1 pre-flight` (see `gate-validation.md` "Auto-handoff
+evaluation"). If evaluation returns FIRE, the session ends;
+otherwise continue to Step 2.
+
 ### 2. Party Mode Retro
 
 Execute all sub-skills back-to-back without pausing for human input
@@ -230,6 +235,57 @@ Implementation is supposed to close upstream items inline as stories
 transition to `done` (see `implementation.md` step 5). This sweep is
 the backstop: it catches items that slipped past inline closure and
 ensures no sprint ends with stale OPEN/IN_SPRINT state.
+
+**Deferral-freshness reconciliation (run BEFORE the three sweeps,
+MANDATORY).** For every carry-over deferral, re-affirmed deferral, or
+passive monitor whose blocking or monitored condition is a runnable
+test, anchor, query, or observable event, the lead MUST re-verify that
+condition LIVE at close-out — run the cited test, query the cited
+source, or read the monitored signal. If the condition is now satisfied
+(test green where it was held red, event observed, value in-band), the
+item is reclassified `CLOSED - delivered in sprint <N>` /
+`CLOSED - satisfied` with the verification evidence cited — NOT carried,
+NOT re-deferred. A deferral whose target is already delivered is a
+vacuous deferral, and the lead is its detector: surfacing it as "defer"
+at the production validation checkpoint (PVC), where the operator rather
+than the lead discovers it, is a close-out failure. Record each
+re-verification (item, condition, result) in the retro `## Close-Out
+Sweep` section. Rule 26(c): this catches a vacuous deferral reaching the
+operator at the PVC; its false-positive cost is one redundant re-run of
+an already-runnable check (a still-unmet condition simply confirms the
+carry); it is removed when successive retros record zero
+reclassifications. Violation: a stale or already-satisfied deferral
+surfaced at the PVC → retro finding.
+
+**Deferral-justification triple (MANDATORY — extends the freshness
+reconciliation above to the trigger and effort axes).** The freshness
+rule checks only the CONDITION axis (is the blocking condition still
+unmet?). That is necessary but insufficient: a deferral can be vacuous
+because its premise is false OR because it conceals trivially-doable
+work. So every carry-over deferral, re-affirmed deferral, and every
+sprint-cut deferral surfaced at close-out MUST fill all three slots, and
+any unfillable slot reclassifies the item BEFORE the PVC — close it, or
+do it now (the lead is the detector, not the operator):
+- **TRIGGER** — the specific in-sprint diff or path that creates the
+  need, cited `file:line`. No citable trigger → the item is INVALID;
+  delete it, do not carry it.
+- **EFFORT-BLOCKER** — what concretely prevents in-sprint delivery, with
+  an estimate. If the work is below an OBJECTIVE bright-line — a ≤~10-line
+  config edit, or the deletion of a single artifact — it is IN-SCOPE NOW,
+  not a deferral. The bright-line MUST be objective, never "lead
+  judgment".
+- **CONDITION** — the runnable test, query, or observable and its
+  current LIVE result (the freshness reconciliation above).
+  Already-satisfied → `CLOSED - delivered`.
+A deferral surviving all three slots is presented at the PVC with its
+triple as evidence — a stress-tested deferral the operator reviews, not
+one the operator must detect. Rule 26(c): this catches an untriggered or
+trivially-doable deferral before it reaches the operator; its
+false-positive cost is filling three short slots per surviving deferral;
+it is removed when successive retros record zero unfillable slots.
+Violation: any deferral or carry-over surfaced at the PVC without its
+triple, or the operator (not the lead) catching a vacuous deferral →
+retro finding.
 
 **Sweep targets (run all three):**
 

@@ -17,6 +17,117 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-07-05
+
+Consumer-absorption backport from the graph project (sprints S251–S281,
+installed on v0.10.0). Every change was validated by multiple sprints of
+real operation and re-generalized (graph specifics stripped, Rule 18
+voice, Rule 26(c) contracts inline). Selective by design: the consumer's
+gate bank grew large but most is domain-specific; only the tech-agnostic,
+multi-sprint-validated core is absorbed, consistent with the v0.10.0 KISS
+identity. Full rationale and the not-backported ledger:
+`docs/v0.11.0-consumer-absorption-spec.md`.
+
+### Added — test-discrimination discipline
+
+- **Discriminating-AC Authoring Standard** (`stories-test-strategy.md`):
+  UNIVERSAL/EXISTENTIAL AC tagging; every LOCKED_REQUIREMENT maps to ≥1 AC
+  that flips PASS→FAIL under a degenerate-but-type-valid implementation
+  (`LR→AC` lines); per-element ACs use N≥2 cardinality fixtures asserting
+  call counts, not source-string checks. Extends the existing
+  self-discrimination machinery as the broader test-fixture layer.
+- **Role test gates** (`code-reviewer.md`, `qa.md`, `dev.md`):
+  discriminating-test severities (UNIVERSAL missing fixture = Important; LR
+  with no discriminating AC = Critical; bound/limit wrong-direction =
+  Critical; naming-implies-behavior without an asserting test = Critical);
+  mutation self-check with a committed-RED artifact; honest-green canonical
+  profile; orphan-fixture check.
+
+### Added — integration completeness (wiring)
+
+- **Orphaned-function / core-path wiring**: a new public method needs a
+  traced non-test caller or a mutation-RED wiring test driving the real
+  entrypoint (`code-reviewer.md`, `qa.md`), with a gate-side meta-check.
+- **Core-path seam non-deferral** (`sprint-review.md`): a wiring-reachable
+  seam on the primary deliverable path MUST NOT be deferred to
+  deploy-validate (HARD_BLOCK); requires a mutation-RED wiring test before
+  merge.
+
+### Added — evidence-before-claim
+
+- **ADR hypothesis-pending-evidence severity** (`architecture.md`): an ADR
+  depending on unverified production data carries `disconfirmation_probe` +
+  `disconfirmation_threshold`, enforced at the architecture gate; plus the
+  spike terminal-operation mandate, mitigation-proportionality (§2c), and
+  the absolute-invariant executable-guard (§2d).
+- **Live-verify-before-claim** (`deploy-validate.md`): config-gated feature
+  activation check (code-exists ≠ active-in-prod) + post-activation live-log
+  verification.
+
+### Added — deferral & carry-over hygiene
+
+- **Deferral-freshness reconciliation + deferral-justification triple**
+  (`retro.md`): re-verify runnable deferrals live and close already-satisfied
+  ones; every deferral fills TRIGGER / EFFORT-BLOCKER / CONDITION; the lead is
+  the detector, not the operator at the checkpoint.
+- **Recurrence-Promotes-Priority** (`carry-over-evaluation.md`): an OPEN
+  carry-over whose defect reproduced in a later sprint auto-promotes;
+  recurrence, not age, is the trigger.
+- **Prior-Decision Search** (`discovery.md`): grep the settled-decision
+  corpus (archived escalations, ADRs, retros), not just open items; cite the
+  command, hit count, and per-hit disposition.
+
+### Added — orchestration & handoff safety
+
+- **File-write deliverable convention** (Rule 20, Rule 24): a subagent's
+  text-only final message is unreliable transport; a persona/analyst delivers
+  by writing to disk and returning the path; the lead treats an absent file
+  as non-delivery. No detector is built (audit before adding mechanism).
+- **Deliver-before-idle** (`dev.md`, `qa.md`, `code-reviewer.md`): a
+  teammate SendMessages its report/verdict before going idle.
+- **Pending operator approvals do not transfer across handoff** and **no
+  self-scheduling skill re-entry** (SKILL.md handoff protocol).
+
+### Changed — auto-handoff reversal (operator-directed)
+
+- Removed the unconditional Seam-A default (mode `a`, added v0.7.0);
+  `auto_handoff_mode` now defaults to **`off`**. `safe-seam` is redefined as
+  seam-is-trigger — the token threshold is advisory, not a firing gate —
+  across **Seam A–E** (new **Seam E** = retro entry). SKILL.md and
+  `gate-validation.md` "Auto-handoff evaluation" reconciled together.
+  Trade-off: this re-opens the v0.7.0 prompt-cache-read-cost consideration
+  that unconditional Seam A addressed; `safe-seam` remains the opt-in for
+  consumers who want automatic context shedding.
+
+### Changed — model derivation (SSOT)
+
+- **Rule 19**: the Agent `model` derives solely from each role file's
+  `/model` directive; the hardcoded role→model table is removed from SKILL.md
+  and the step files (mirrors the existing effort SSOT). Defaults unchanged.
+
+### Added — worktree & dispatch hygiene (S281)
+
+- `implementation.md`: worktree `git stash` ban (worktrees share one stash
+  stack) — use `git worktree add --detach`; DAR-fold preflight before gate-2
+  dispatch (fold the Dev Agent Record into the canonical story file and verify
+  it non-empty, so QA does not read a worktree-stale copy).
+- `code-reviewer.md` (S281): a gate-1 verdict is not APPROVED until the review
+  file exists on a git-tracked path; a diff that removes existing
+  error-handling is Important.
+
+### Held — rules absorbed, hooks not (platform lessons documented)
+
+- The consumer's merge-guard and handoff resume-guard **hooks** are NOT
+  backported (consistent with v0.10.0's held guarded-merge, and with Rule
+  26(c): the resume-guard fired repeatedly false with zero true catches).
+  Their validated SKILL rules ARE absorbed (resume ≠ approval). The two Claude
+  Code platform lessons behind them are recorded in
+  `docs/v0.11.0-consumer-absorption-spec.md`: a hook emitting
+  `permissionDecision: deny` on stdout with exit 0 is silently bypassed when
+  `Bash(*)` is allow-listed (must `exit 2`); reconstruct assistant transcript
+  text with `join("")` not `join(" ")` so streaming chunk boundaries don't
+  corrupt marker lines.
+
 ## [0.10.0] — 2026-06-12
 
 KISS / minimum mechanism, plus a consumer-absorption batch. Real
