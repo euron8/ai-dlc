@@ -17,6 +17,20 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.6] — 2026-07-05
+
+`ai-dlc-update` stamp now advances on a skill-only / empty reconcile. The
+`.ai-dlc-version` stamp is re-written only in the apply step, so a pull whose
+only delta was the skill's own files (handled by the autonomous self-update)
+left the rulebook reconcile empty → nothing to apply → the stamp never advanced,
+stranding it and making every later pull re-diff from a stale base. Now: the
+step-7 re-stamp fires whenever the consumer core equals `theirs`, INCLUDING an
+empty reconcile (a stamp-only bump). The dry-run report on an already-current
+pull states "consumer core already at `<theirs>`; stamp behind at `<base>` —
+re-invoke with `apply` to advance the stamp (bookkeeping, no rulebook change)."
+The bare (dry-run) invocation still writes nothing, stamp included — advancing
+the stamp requires `apply`, keeping the read-only guarantee intact.
+
 ## [0.16.5] — 2026-07-05
 
 `ai-dlc-update` now HARD STOPS after a self-update instead of continuing on stale

@@ -135,6 +135,16 @@ Every consumer block that differs from upstream is one of:
    contain `apply`, you MUST NOT apply — full stop. When unsure whether `apply`
    was given, treat it as ABSENT and stop. Never write "operator directed" into
    the report unless the operator's invocation literally contained `apply`.
+
+   **Already-current case (empty reconcile).** If the report shows NO
+   consumer-rulebook changes to apply — every bucket is noop/already-present, e.g.
+   a self-update-only pull whose sole delta was the skill's own files — then the
+   consumer core already equals `theirs` and only the `.ai-dlc-version` stamp
+   lags. State this in the report: `consumer core already at <theirs>; stamp
+   behind at <base> — re-invoke with 'apply' to advance the stamp (bookkeeping,
+   no rulebook change)`. Do NOT advance the stamp on this bare run — re-stamping
+   is a write, forbidden here like any other. The stamp advances under `apply`
+   (step 7), which for an empty reconcile is a stamp-only bump.
 6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
    MUST NOT mutate the consumer's live branch in place. Before the first write
    in step 7:
@@ -161,7 +171,13 @@ Every consumer block that differs from upstream is one of:
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
    - Re-stamp `.claude/.ai-dlc-version` = `<theirs-version> @ <theirs-sha>` and
-     write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`.
+     write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`. **The re-stamp
+     fires whenever the consumer core now equals `theirs` — INCLUDING an empty
+     reconcile (zero rulebook blocks applied, e.g. a self-update-only pull). In
+     that already-current case this step is a stamp-only bump: the point of the
+     `apply` run is to advance the stamp; the log records "already current, stamp
+     advanced <base> → <theirs>." Without this, a skill-only pull would leave the
+     stamp stuck forever and every later pull would re-diff from a stale base.**
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
    through the consumer's normal review flow, never force-written to the working
    branch:
