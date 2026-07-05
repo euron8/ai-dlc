@@ -65,28 +65,33 @@ Every consumer block that differs from upstream is one of:
    upstream HEAD). Confirm the distribution repo is reachable (a configured
    upstream path/remote — until the stamp carries a URL, ask the operator for
    the distribution checkout path).
-2. **Self-update check — detect stale skill, hand the operator the choice
-   (MANDATORY, before any classify or apply).** You run FROM a copy of this
-   skill inside the consumer; a pull can include a change to that copy, in which
-   case the logic you are currently executing is STALE relative to `theirs`.
-   Diff `base→theirs` restricted to this skill's own files
-   (`core/skills/ai-dlc-update/**` — SKILL.md + `reconcile/*`). If that delta is
-   EMPTY, say so in one line and continue. If it is NON-EMPTY, **STOP and report
-   to the operator before doing anything else**:
-   - the self-change: `<base-sha> → <theirs-sha>`, and a one-line summary of
-     what changed (does it touch `reconcile/` — the engine — or the
-     classify/apply/safety procedure, or only prose/docs?);
-   - the choice, and wait for it:
-     - **(a) continue on the current (stale) logic** — proceed with this run;
-       the new skill version is applied last (step 7 self-update) and takes
-       effect on the NEXT invocation. Fine when the self-change is docs-only or
-       does not alter reconcile behavior.
-     - **(b) abort and refresh** — stop now, land the updated skill first
-       (self-update copy / re-bootstrap of `core/skills/ai-dlc-update/`), then
-       re-invoke so THIS reconcile runs on the new logic.
-   Do NOT proceed past this gate until the operator chooses. **Recommend (b)**
-   when the self-delta touches `reconcile/` or the classify/apply/safety
-   procedure; **(a)** when it is prose/docs only.
+2. **Self-update — an AUTONOMOUS, self-contained commit→merge cycle (before any
+   rulebook classify/apply).** You run FROM a copy of this skill inside the
+   consumer; a pull can include a change to that copy, so the logic executing the
+   reconcile may be stale relative to `theirs`. The skill's own files
+   (`core/skills/ai-dlc-update/**` — SKILL.md + `reconcile/*`) are **upstream-owned
+   tooling, overwrite-safe** — the consumer never edits them (like `core`), so
+   refreshing them carries no consumer-divergence risk. Therefore the self-update
+   lands on its OWN cycle, **autonomously — no operator approval**, distinct from
+   the operator-gated rulebook reconcile (step 8).
+
+   Diff `base→theirs` restricted to `core/skills/ai-dlc-update/**`. If EMPTY, say
+   so in one line and continue to step 3. If NON-EMPTY:
+   - **Run the self-update cycle autonomously:** cut a dedicated branch
+     `ai-dlc-update/self-update-<theirs-version>-<ts>`, overwrite the consumer's
+     `.claude/skills/ai-dlc-update/**` with `theirs`, commit
+     (`chore(ai-dlc-update): self-update <base-ver> → <theirs-ver>`), push, open a
+     PR, and **auto-merge (squash, delete branch)** — no operator gate. If there
+     is no remote / push fails, commit locally and note it; do not block the run.
+   - **Then inform the operator** (report, do not gate): the self-update landed
+     (merged PR ref), a one-line summary of what changed (touches `reconcile/` —
+     the engine — vs prose/docs), and that the CURRENT invocation is still
+     executing the PRE-update logic. Offer the choice: **re-invoke now** so this
+     reconcile runs on the new logic (recommended when the change touched
+     `reconcile/` or the classify/apply/safety procedure), or **continue** this
+     run on the current logic (fine for docs-only changes). Proceeding on
+     "continue" is allowed — this is informational, not a blocking gate; the
+     self-update itself already landed autonomously.
 3. **Mechanical pre-classification** (cheap, deterministic — no agents):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
    It hashes base/theirs/ours per changed file and buckets each into:
@@ -126,8 +131,8 @@ Every consumer block that differs from upstream is one of:
      theirs' non-conflicting additions; for innovation, append to the
      push-candidate ledger.
    - conflicts → apply only operator-adjudicated resolutions.
-   - Self-update last: treat this skill's own files as apply-safe and apply any
-     new version of `ai-dlc-update` at the end (or re-exec).
+   - (The skill's OWN files are NOT touched here — they were already refreshed by
+     the autonomous self-update cycle in step 2.)
    - Re-stamp `.claude/.ai-dlc-version` = `<theirs-version> @ <theirs-sha>` and
      write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`.
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
@@ -187,6 +192,8 @@ free of pull-only assumptions so the other three jobs can reuse it.
 
 - **Upstream URL not in the stamp.** Until `.ai-dlc-version` carries the
   distribution ref, the operator supplies the distribution checkout path.
-- **Self-update** is handled in two places: step 2 (detect a stale skill up
-  front and let the operator choose continue-stale vs abort-and-refresh) and
-  step 7 (apply the skill's own files last).
+- **Self-update** is handled in step 2 as its own autonomous branch→commit→push
+  →PR→auto-merge cycle (the skill's files are overwrite-safe upstream tooling, no
+  operator gate), separate from the operator-gated rulebook reconcile (step 8).
+  The operator is informed after and may re-invoke to run the current reconcile
+  on the new logic.
