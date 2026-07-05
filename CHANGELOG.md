@@ -17,6 +17,22 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.3] — 2026-07-05
+
+`ai-dlc-update` self-update is now its own **autonomous** commit→merge cycle,
+not a blocking operator gate. v0.16.1 made the self-update check STOP and wait
+for the operator; but the skill's own files (`ai-dlc-update/**`) are
+upstream-owned, overwrite-safe tooling the consumer never edits (like `core`),
+so refreshing them carries no divergence risk and should not require approval —
+the update mechanism is autonomous, so its landing should be too. Step 2 now,
+when the pull changes the skill's own files, autonomously cuts a dedicated
+`ai-dlc-update/self-update-<ver>-<ts>` branch, commits, pushes, opens a PR, and
+**auto-merges** (squash, delete branch) — a cycle fully separate from the
+operator-gated rulebook reconcile (step 8). The operator is then *informed*
+(merged PR ref + what changed) and offered a re-invoke so the current reconcile
+runs on the new logic, but this is informational, not a gate. Removes the
+"self-update last" bullet from the apply step (step 7).
+
 ## [0.16.2] — 2026-07-05
 
 `ai-dlc-update` apply now completes through the full review flow. The apply path
