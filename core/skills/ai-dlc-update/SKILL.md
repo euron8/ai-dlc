@@ -65,14 +65,36 @@ Every consumer block that differs from upstream is one of:
    upstream HEAD). Confirm the distribution repo is reachable (a configured
    upstream path/remote — until the stamp carries a URL, ask the operator for
    the distribution checkout path).
-2. **Mechanical pre-classification** (cheap, deterministic — no agents):
+2. **Self-update check — detect stale skill, hand the operator the choice
+   (MANDATORY, before any classify or apply).** You run FROM a copy of this
+   skill inside the consumer; a pull can include a change to that copy, in which
+   case the logic you are currently executing is STALE relative to `theirs`.
+   Diff `base→theirs` restricted to this skill's own files
+   (`core/skills/ai-dlc-update/**` — SKILL.md + `reconcile/*`). If that delta is
+   EMPTY, say so in one line and continue. If it is NON-EMPTY, **STOP and report
+   to the operator before doing anything else**:
+   - the self-change: `<base-sha> → <theirs-sha>`, and a one-line summary of
+     what changed (does it touch `reconcile/` — the engine — or the
+     classify/apply/safety procedure, or only prose/docs?);
+   - the choice, and wait for it:
+     - **(a) continue on the current (stale) logic** — proceed with this run;
+       the new skill version is applied last (step 7 self-update) and takes
+       effect on the NEXT invocation. Fine when the self-change is docs-only or
+       does not alter reconcile behavior.
+     - **(b) abort and refresh** — stop now, land the updated skill first
+       (self-update copy / re-bootstrap of `core/skills/ai-dlc-update/`), then
+       re-invoke so THIS reconcile runs on the new logic.
+   Do NOT proceed past this gate until the operator chooses. **Recommend (b)**
+   when the self-delta touches `reconcile/` or the classify/apply/safety
+   procedure; **(a)** when it is prose/docs only.
+3. **Mechanical pre-classification** (cheap, deterministic — no agents):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
    It hashes base/theirs/ours per changed file and buckets each into:
    - `UPSTREAM-ONLY-ADD` (net-new upstream, consumer lacks it) → **apply (pure)**
    - `UPSTREAM-ONLY` (upstream changed, consumer untouched vs base) → **apply**
    - `ALREADY-AT-THEIRS` / `ALREADY-PRESENT` → **noop**
    - `BOTH-CHANGED` / `BOTH-ADDED` / `UPSTREAM-MOD+consumer-deleted` → **needs semantic classify**
-3. **Semantic per-block classify** — for every file the pre-pass marked
+4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
    diffs) using `reconcile/classify-block.md` as the prompt. Block granularity
    = per-file + per-numbered-item (rule / `###` section / check). Each agent
@@ -80,25 +102,25 @@ Every consumer block that differs from upstream is one of:
    structured per-block buckets. Agents return DATA (bucket tallies + only the
    conflict/flag details), never echoed file content — keeps the orchestrator
    context clean.
-4. **Emit the dry-run report FIRST** — `_bmad-output/ai-dlc-update/reconcile-report.md`:
+5. **Emit the dry-run report FIRST** — `_bmad-output/ai-dlc-update/reconcile-report.md`:
    per-file + per-block bucket, proposed action, the push-candidate list, and
    the conflict list for operator review. **Stop here unless invoked with `apply`.**
-5. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
+6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
    MUST NOT mutate the consumer's live branch in place. Before the first write
-   in step 6:
+   in step 7:
    - Shell to git in the consumer tree. If it is not a git repo, STOP and tell
      the operator (no safe isolation possible).
    - If the working tree has uncommitted changes that would tangle the reconcile
      diff, STOP and report — let the operator stash/commit first. (A dirty tree
      unrelated to the rulebook may be fine; when in doubt, stop.)
    - `git checkout -b ai-dlc-update/<theirs-version>-reconcile-<ts>` off the
-     current branch. ALL step-6 writes land here, so the operator reviews a
+     current branch. ALL step-7 writes land here, so the operator reviews a
      clean diff / opens a PR — never a silently-mutated working branch.
    This is a hard requirement, symmetric with the pipeline's own branch-per-unit
-   discipline; the `_divergence/` archive (step 7) is a backstop, not a
+   discipline; the `_divergence/` archive (step 8) is a backstop, not a
    substitute for the branch.
-6. **Apply (only on `apply` + operator confirm of the conflict list, on the
-   step-5 branch):**
+7. **Apply (only on `apply` + operator confirm of the conflict list, on the
+   step-6 branch):**
    - apply-bucket blocks → write theirs into ours (path-mapped).
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
@@ -110,7 +132,7 @@ Every consumer block that differs from upstream is one of:
      write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`.
    - Commit on the reconcile branch and hand the operator the diff/PR to review
      and merge — the skill does not merge to the working branch itself.
-7. **Safety.** Three independent recover layers: the step-5 reconcile **branch**
+8. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
    dry-run report. Nothing is destroyed without an operator confirm.
@@ -148,4 +170,6 @@ free of pull-only assumptions so the other three jobs can reuse it.
 
 - **Upstream URL not in the stamp.** Until `.ai-dlc-version` carries the
   distribution ref, the operator supplies the distribution checkout path.
-- **Self-update apply-order** is handled in step 5 (apply own files last).
+- **Self-update** is handled in two places: step 2 (detect a stale skill up
+  front and let the operator choose continue-stale vs abort-and-refresh) and
+  step 7 (apply the skill's own files last).
