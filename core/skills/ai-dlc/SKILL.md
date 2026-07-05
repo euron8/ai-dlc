@@ -538,30 +538,11 @@ supporting narrative. A rule that needs origin context to survive is
 not a rule -- it is a suggestion leaning on a story. Rewrite it hard
 or move it to a retro doc as a lesson.
 
-**Style:**
-- State mandates with imperative voice ("Do X", "Never Y") or MUST /
-  MUST NOT / SHALL. Forbidden: "should", "try to", "consider",
-  "prefer", "in most cases", and any other language that can be read
-  as optional when the intent is a mandate. "May" is allowed only
-  when granting permission or autonomy, not when stating a mandate.
-- State the enforcement consequence inline when one applies:
-  "Violation fails gate N" or "Missing = Critical severity".
-- No sprint or story references.
-- No incident descriptions or "because we got burned" narrative.
-- No parenthetical origin notes after a directive.
-- No embedded dates, retro quotes, or escalation quotes.
-
-**Scope.** Rule files only: this skill, CLAUDE.md,
-coding-conventions.md, step files, team role files. Planning
-artifacts (PRDs, stories, reviews, retros) and export bundles are
-different formats.
-
-**Cleanup.** The retro's rule file audit (`retro.md` Step 4) scans
-rule files each sprint for three classes of violation: **narrative
-drift** (rule text gained origin context), **rule weakness** (rule
-text became readable as optional), and **complexity accretion**
-(machinery lacking the Rule 26(c) contract, or with false positives
-and no true catches). All are cleanup targets.
+The rule-authoring style guide (imperative voice, forbidden hedges,
+enforcement-consequence-inline, scope) and the retro rule-file audit's
+three violation classes (narrative drift, rule weakness, complexity
+accretion) live in `rule-authoring.md` alongside this file. READ AND
+FOLLOW it when authoring or auditing a rule file (`retro.md` Step 4).
 
 ### Rule 19 -- Agent spawns MUST pass the `model` parameter
 
