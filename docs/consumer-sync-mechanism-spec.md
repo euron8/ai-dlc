@@ -219,6 +219,45 @@ Phase-2 untangle, and fan-in able to reuse the same engine.
   (overwrite-safe) and applies its own new version last (or re-execs). Not a
   blocker, but call it out so the apply order is deliberate.
 
+### 6.2 Bootstrap — landing `ai-dlc-update` without a full install
+
+Chicken-and-egg: the tool that lands upstream changes *safely* must itself first
+be landed by some *other* means, because it is not present yet — and the only
+existing landing mechanism, `install.sh`, is the blunt full-rulebook overwrite this
+whole design exists to avoid. So the first install of `ai-dlc-update` cannot go
+through `install.sh`.
+
+**Mechanism: a file-scoped additive copy.** `ai-dlc-update` is a **net-new
+directory** in the consumer (`.claude/skills/ai-dlc-update/`) — a diverged consumer
+does not have it. Copying *only that directory* (plus the shared reconcile-engine
+directory, if the classifier lives separately — also net-new) collides with nothing
+in the consumer's divergence: it is safe **because** it is purely additive, a new
+path with zero overwrite of the existing rulebook. This is the same file-scoped
+down-port pattern already used for the one other genuine distribution→graph
+cherry-pick (`ai-dlc-driver-signal.sh`), never a blanket install.
+
+```bash
+# bootstrap (one-time, additive — touches nothing else in the consumer):
+cp -r core/skills/ai-dlc-update  <consumer>/.claude/skills/
+# + the shared engine dir, if separate. Then run /ai-dlc-update from the consumer.
+```
+
+**Design constraint that makes the drop-in always safe:** `ai-dlc-update` and its
+engine **MUST be self-contained** — no dependency on the consumer's *pipeline*
+rulebook (`SKILL.md`, `steps/*.md`). It may read only its own logic, shell to git,
+and dispatch generic agents. If it reached into the consumer's pipeline files, the
+bootstrap copy would be version-fragile (it could land against a rulebook shape it
+does not expect). Self-contained → the additive copy is safe regardless of how far
+the consumer has diverged. This is a hard constraint on Phase 1's implementation,
+not an option.
+
+**Repeatable form (optional, for N consumers):** add an `install.sh --only
+<component>` flag — a single-named-component install that copies just that
+directory additively and skips the archive/overwrite of everything else. Turns the
+manual `cp` into a supported operation without reintroducing the full overwrite.
+After bootstrap, the skill self-updates (§6.1) — the `cp` is needed exactly once
+per consumer.
+
 ## 7. Phase 2 — layered core/extension architecture (the destination)
 
 Makes the pull near-mechanical forever by fencing divergence so it cannot re-tangle.
@@ -320,9 +359,10 @@ Phase-2 untangle, and N→1 fan-in dedupe. One engine, four directions.
   `0.10.0 @ 2271942`, confirmed present in distribution history. No reconstruction
   needed; validate the stamp and proceed.
 - **Phase 1** (bridge): build `ai-dlc update` (dry-run reconcile + apply + re-stamp)
-  reusing the arc classifier. First real deliverable: graph's first clean pull to
-  v0.14.0 core, on the tangled tree, with domain machinery preserved and un-pushed
-  innovations flagged.
+  reusing the arc classifier, self-contained per §6.2. **Bootstrap first** —
+  file-scoped additive copy of the skill into graph (§6.2), one-time, before it can
+  run. First real deliverable: graph's first clean pull to v0.14.0 core, on the
+  tangled tree, with domain machinery preserved and un-pushed innovations flagged.
 - **Phase 2** (structural): refactor to `core/` + `extensions/` + `overrides/`;
   untangle graph once using Phase 1's classifier; updates thereafter = overwrite
   core + merge the small overrides set.
