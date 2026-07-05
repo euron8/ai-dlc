@@ -17,6 +17,21 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.1] — 2026-07-05
+
+`ai-dlc-update` self-update notice. The skill runs from a copy of itself inside
+the consumer, so a pull can include a change to that very copy — meaning the
+logic executing the reconcile is stale. Previously the skill just applied its
+own new version last, silently; the operator was never told they were running
+stale logic or given a choice. Adds a **mandatory step-2 self-update check**:
+before any classify or apply, diff `base→theirs` restricted to
+`core/skills/ai-dlc-update/**`; if non-empty, STOP and report the self-change +
+whether it touches the reconcile engine or only docs, then let the operator
+choose **(a) continue on the current (stale) logic** (new version applies last,
+takes effect next invocation) or **(b) abort and refresh** (land the updated
+skill, re-invoke so this reconcile runs on the new logic). Recommends (b) when
+the self-delta touches `reconcile/` or the classify/apply/safety procedure.
+
 ## [0.16.0] — 2026-07-05
 
 Consumer-sync Phase 2A — the layered rulebook + authoring guard (spec §7/§7.1).
