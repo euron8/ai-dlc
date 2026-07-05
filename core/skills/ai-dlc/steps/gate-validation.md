@@ -820,9 +820,16 @@ output line in step 4 identifies this handoff as automated:
    > Seam A. Context at <tokens> tokens, red threshold confirmed via
    > user-shared /context."*
 
-5. End the session. Do not continue the pipeline in this
-   conversation. Reply to any further messages with a pointer to
-   the snapshot and the resume prompt.
+   Also write the resume prompt (without the `----` markers) to
+   `_bmad-output/handoff-resume.txt` (overwrite any prior file) — the
+   auto-session-chaining driver's handoff signal.
+
+5. Create the pause flag so the continuation hook allows this
+   auto-handoff to end the session (an autonomous handoff has no user
+   message to set it): `touch _bmad-output/pipeline-paused.flag`. Then
+   end the session — do not continue the pipeline in this conversation.
+   Reply to any further messages with a pointer to the snapshot and the
+   resume prompt.
 
 A FIRE outcome does not return control to the calling step. A
 CONTINUE outcome returns silently — the step proceeds with its
