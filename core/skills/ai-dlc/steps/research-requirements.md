@@ -15,7 +15,7 @@ creation with full validation cycle.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
-an `analyst` subagent (Agent tool, `model: sonnet`) scoped to section 1
+an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to section 1
 — it performs the domain/market/technical research and writes the
 research notes to
 `_bmad-output/planning-artifacts/research-notes.md`, returning only

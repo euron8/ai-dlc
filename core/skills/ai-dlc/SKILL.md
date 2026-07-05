@@ -550,12 +550,13 @@ and no true catches). All are cleanup targets.
 ### Rule 19 -- Agent spawns MUST pass the `model` parameter
 
 When the lead invokes the Agent tool to spawn a teammate, the `model`
-parameter MUST be set explicitly. Map each role to its model per the
-role file's `/model` directive: `dev`, `qa`, `pm`, `code-reviewer`,
-`analyst` -> `sonnet`; `architect`, `tea` -> `opus`. Omitted `model`
-inherits from the parent conversation and bypasses the role's
-cost/capability contract. Violation fails gate-validation Check 15
-on detection at retro.
+parameter MUST be set explicitly, derived from that role's `/model`
+directive in its role file (`.claude/team-roles/<role>.md`) -- the
+single source of truth. Do NOT restate a role-to-model mapping here or
+in step files; a second mapping drifts from the role file and is itself
+a violation. Omitted `model` inherits from the parent conversation and
+bypasses the role's cost/capability contract. Violation fails
+gate-validation Check 15 on detection at retro.
 
 ### Rule 20 -- Validation sub-skills run inline with provenance
 
@@ -673,7 +674,7 @@ Read-heavy planning and analysis work is the lead's largest avoidable
 cache-read cost: every file the lead reads inline accumulates in its
 context and is re-read every subsequent turn. To keep the lead lean,
 the *exploration* portion of designated steps is dispatched to an
-`analyst` subagent (read-only, model `sonnet` per Rule 19) whose raw
+`analyst` subagent (read-only, model from the analyst role file per Rule 19) whose raw
 reading never enters the lead's context.
 
 **Config.** `planning_offload` (default `on`). When `on`, the steps
@@ -687,7 +688,7 @@ by setting `planning_offload` in this section directly.
 validation stay inline) — `discovery`, `research-requirements`.
 
 **Dispatch contract.** The lead spawns the analyst via the Agent tool
-with `model: sonnet`, passing (a) the exploration scope, (b) the
+with `model` from the analyst role file per Rule 19, passing (a) the exploration scope, (b) the
 canonical output artifact path the step defines, and (c) a stable
 shared context block (order shared-block-first per the dispatch-prompt
 cache discipline in `implementation.md`). The analyst writes the

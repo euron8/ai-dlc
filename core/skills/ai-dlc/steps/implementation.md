@@ -28,9 +28,10 @@ Spawn using the model defined in the teammate's role file
 the authoritative model binding.
 
 **Agent spawn model parameter MUST be passed explicitly.** Every
-Agent tool invocation MUST include the `model` parameter. Map roles:
-`dev`, `qa`, `pm`, `code-reviewer`, `analyst` -> `sonnet`;
-`architect`, `tea` -> `opus`. Omitted `model` inherits from the
+Agent tool invocation MUST include the `model` parameter, derived from
+that role's `/model` directive in its role file
+(`.claude/team-roles/<role>.md`) — do NOT hardcode a role-to-model
+table here. Omitted `model` inherits from the
 parent conversation
 and bypasses the role contract. Violation fails gate-validation
 Check 15 on detection at retro. Per SKILL.md Rule 19.

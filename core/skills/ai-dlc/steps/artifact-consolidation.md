@@ -25,7 +25,7 @@ quiescent point (between sprints), not mid-pipeline.
 ### 1. Baseline manifest
 
 Before any change, enumerate what MUST be preserved. Dispatch an
-`analyst` subagent (Rule 24, `model: sonnet`) to read the target
+`analyst` subagent (Rule 24, `model` from the analyst role file per Rule 19) to read the target
 artifact and emit a **baseline manifest** to
 `_bmad-output/planning-artifacts/consolidation-manifest-<artifact>.md`:
 every requirement ID / numbered requirement / Rule 13 locked

@@ -15,7 +15,7 @@ in the docs against the actual codebase to determine accuracy.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–5 inline.
-Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to
 sections 1–5 — it inventories docs, scans the codebase, reconciles
 claims against reality, and writes the reconciliation report + gap
 analysis to `_bmad-output/planning-artifacts/doc-reconciliation.md`,

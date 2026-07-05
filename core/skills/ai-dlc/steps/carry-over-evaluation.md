@@ -17,7 +17,7 @@ items get the same planning rigor as new features.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–2 (and 1a)
-inline. Spawn an `analyst` subagent (Agent tool, `model: sonnet`)
+inline. Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19)
 scoped to those reading sections — it loads the backlog/brief/PRD and
 audit anchor, evaluates each item, and writes a draft evaluation to
 `_bmad-output/planning-artifacts/carry-over-evaluation.md`, returning

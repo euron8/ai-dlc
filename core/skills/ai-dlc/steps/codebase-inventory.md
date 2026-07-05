@@ -15,7 +15,7 @@ planning artifacts are missing. Inventory what exists before backfilling.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–3 inline.
-Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to
 sections 1–3 — it performs the codebase scan, artifact audit, and gap
 analysis and writes the inventory + gap report to
 `_bmad-output/planning-artifacts/brownfield-inventory.md`, returning

@@ -16,7 +16,7 @@ rather than creating from scratch.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
-an `analyst` subagent (Agent tool, `model: sonnet`) scoped to section 1
+an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to section 1
 — it reads the input artifacts and any codebase context the brief
 needs and writes a context digest to
 `_bmad-output/planning-artifacts/discovery-context.md`, returning only
