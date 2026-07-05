@@ -177,6 +177,11 @@ design coherence against PRD. Fix any misalignment found.
 
 ### 4. Validation Cycle (Rule 8)
 
+**Intensity gate for lightweight.** When `validation_intensity ==
+lightweight` AND the Step 2 assessment is NO CHANGES NEEDED, skip this
+validation cycle entirely (the Rule 5 fast-track still applies) and
+proceed to Step 5. Otherwise run the full cycle below.
+
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 

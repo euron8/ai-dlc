@@ -69,6 +69,12 @@ gaps found.
 
 ### 4. Validation Cycle (Rule 8)
 
+**Intensity gate for lightweight.** When `validation_intensity ==
+lightweight`, replace this full cycle with a single adversarial pass:
+skip steps 1–2 (party-mode + advanced-elicitation) and run step 3 as
+exactly one `/bmad-review-adversarial-general` pass, then proceed to
+step 4. Otherwise run the full cycle below.
+
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 

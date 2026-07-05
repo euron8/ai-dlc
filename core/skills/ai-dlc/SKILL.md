@@ -135,25 +135,20 @@ more is always permitted.
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
 | `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review (1 pass) at discovery + stories-test-strategy only |
 
-Under `carry-over-single`, the following sub-skills are SKIPPED:
-- `/bmad-brainstorming` (discovery Step 3)
-- `/bmad-create-epics-and-stories` (stories-test-strategy Step 2)
-- `/bmad-sprint-planning` (stories-test-strategy Step 3)
-- `/bmad-agent-tea-tea` (stories-test-strategy Step 5.1)
+The per-intensity skips are enforced by each planning step's own
+intensity gate, not tracked centrally. Under `carry-over-single`,
+`discovery.md` skips `/bmad-brainstorming` and `stories-test-strategy.md`
+skips `/bmad-create-epics-and-stories`, `/bmad-sprint-planning`, and
+`/bmad-agent-tea-tea` (creating stories directly from the already-scoped
+carry-over items). Under `lightweight`, `architecture.md` skips its
+validation cycle when the assessment is NO CHANGES NEEDED (Rule 5
+fast-track still applies), and `research-requirements.md` and
+`sprint-review.md` reduce their cycles to a single adversarial pass each.
+Follow each step's gate.
 
-Carry-over items are already scoped; story count is trivially
-plannable; test strategy for ≤2 stories is covered by the story
-validation cycle. The stories-test-strategy step creates story
-files directly from carry-over items instead of invoking the
-epics/stories sub-skill. `carry-over-single` may only be assigned
-to carry-over variants. If actual story count exceeds 2 at
-stories-test-strategy, intensity MUST be revised upward to
-`standard`.
-
-Under `lightweight`, the architecture step validation cycle is
-skipped entirely when the assessment is NO CHANGES NEEDED (Rule 5
-fast-track still applies). Research-requirements and sprint-review
-validation cycles are replaced by a single adversarial pass each.
+`carry-over-single` may only be assigned to carry-over variants. If
+actual story count exceeds 2 at `stories-test-strategy`, intensity MUST
+be revised upward to `standard`.
 
 The gate log MUST record the declared intensity and confirm the
 minimum was met. A gate that passes under `lightweight` with zero

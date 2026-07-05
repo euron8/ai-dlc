@@ -193,6 +193,12 @@ technical stories, migration stories) do not need the block.
 
 ### 3. Sprint Planning
 
+**Intensity gate for carry-over-single.** When
+`validation_intensity == carry-over-single`, skip `/bmad-sprint-planning`
+and place all carry-over stories in a single sprint. Carry-over items are
+already scoped and ≤2 stories are trivially plannable; the sprint-planning
+sub-skill adds overhead without value. Proceed to Story Validation Cycle.
+
 Invoke `/bmad-sprint-planning` — select stories for the sprint.
 
 **Multi-sprint phasing check (Rule 14):** If the total story count exceeds
@@ -237,6 +243,14 @@ between them:**
    **Then immediately proceed to Test Strategy:**
 
 ### 5. Test Strategy
+
+**Intensity gate for carry-over-single.** When
+`validation_intensity == carry-over-single`, skip `/bmad-agent-tea-tea`
+(step 1 below) and derive the test strategy directly from the story
+acceptance criteria. Test strategy for ≤2 already-scoped stories is
+covered by the story validation cycle; the TEA sub-skill adds overhead
+without value. Still run the step-3 adversarial review on the derived
+strategy. Steps 2–3 below otherwise proceed.
 
 **Execute back-to-back without pausing:**
 
