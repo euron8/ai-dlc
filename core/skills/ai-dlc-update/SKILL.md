@@ -107,9 +107,28 @@ Every consumer block that differs from upstream is one of:
    structured per-block buckets. Agents return DATA (bucket tallies + only the
    conflict/flag details), never echoed file content — keeps the orchestrator
    context clean.
-5. **Emit the dry-run report FIRST** — `_bmad-output/ai-dlc-update/reconcile-report.md`:
-   per-file + per-block bucket, proposed action, the push-candidate list, and
-   the conflict list for operator review. **Stop here unless invoked with `apply`.**
+5. **Emit the dry-run report, then HARD STOP (unconditional).** Write
+   `_bmad-output/ai-dlc-update/reconcile-report.md`: per-file + per-block bucket,
+   proposed action, the push-candidate list, and the conflict list.
+
+   **Producing this report is the TERMINAL action of the run unless the
+   invocation carried an explicit `apply` argument.** After writing it, STOP and
+   return it to the operator. Do NOT branch-for-apply, write, re-stamp, commit,
+   push, open a PR, or merge.
+
+   **The stop is unconditional — the following DO NOT authorize proceeding, and
+   inferring authorization from any of them is a defect:**
+   - zero conflicts, an "obviously clean" pull, or an all-`apply`-bucket report;
+   - the pull looking safe, small, or already-verified;
+   - inferred operator intent, urgency, or "they clearly want the update";
+   - the fact that applying would be convenient or save a round-trip.
+
+   The ONLY authorization to move past this stop is an explicit `apply` argument
+   on THIS invocation (e.g. `/ai-dlc-update apply`). A bare `/ai-dlc-update` is a
+   dry-run: report and stop, every time, no exceptions. If the invocation did not
+   contain `apply`, you MUST NOT apply — full stop. When unsure whether `apply`
+   was given, treat it as ABSENT and stop. Never write "operator directed" into
+   the report unless the operator's invocation literally contained `apply`.
 6. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
    MUST NOT mutate the consumer's live branch in place. Before the first write
    in step 7:
@@ -124,8 +143,10 @@ Every consumer block that differs from upstream is one of:
    This is a hard requirement, symmetric with the pipeline's own branch-per-unit
    discipline; the `_divergence/` archive (step 9) is a backstop, not a
    substitute for the branch.
-7. **Apply (only on `apply` + operator confirm of the conflict list, on the
-   step-6 branch):**
+7. **Apply — reached ONLY when the invocation carried `apply` (step 5), on the
+   step-6 branch.** If there are conflicts, apply only operator-adjudicated
+   resolutions; zero conflicts does not remove the `apply`-arg requirement — it
+   only removes the adjudication sub-step.
    - apply-bucket blocks → write theirs into ours (path-mapped).
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
@@ -147,11 +168,13 @@ Every consumer block that differs from upstream is one of:
      the work.
    - **Open a PR** into the working branch (`gh pr create`), body = the reconcile
      report summary (buckets, conflicts, push-candidates).
-   - **Merge on operator approval.** The PR is the final review gate — merge
-     (squash, delete branch) only after the operator approves it. The skill does
-     NOT auto-merge without that approval, even though conflicts were already
-     confirmed pre-apply. On merge, the re-stamp + log + changes reach the
-     working branch through the merge.
+   - **Merge ONLY on explicit operator approval of the PR.** This is a second,
+     independent gate — separate from the `apply` arg that authorized the write.
+     The skill does NOT auto-merge. None of the following authorize a merge: zero
+     conflicts, a clean diff, the `apply` arg already given, or inferred intent.
+     Present the PR and wait for the operator to approve it; only then merge
+     (squash, delete branch). On merge, the re-stamp + log + changes reach the
+     working branch.
    - Drain any `push_candidate`-flagged extensions into the push-candidate ledger
      for a later upstream push-mine (spec §8.1).
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
