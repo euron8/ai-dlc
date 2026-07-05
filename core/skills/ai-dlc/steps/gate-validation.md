@@ -758,6 +758,12 @@ lead executes the Rule 2(a) handoff and the session ENDS). This
 helper MUST NOT be invoked from inside the Check 1–15 sequence
 above; it is only called from step files at the defined seams.
 
+Every defined safe seam is a clean step/sub-step boundary. Auto-handoff
+MUST fire only at such a boundary; it MUST NOT fire mid-sub-step.
+Auto-handoff is NOT a fourth Rule 3 pause point — it is a
+session-terminating action that executes the path (a) procedure
+(`steps/handoff.md`) unchanged.
+
 **Inputs:** the seam name (`Seam A` through `Seam E`; `Seam E` is the
 retro-entry seam at `retro.md` Step 1 pre-flight, before party mode) and
 a short human-readable
@@ -860,7 +866,8 @@ carry the no-human-present additions:
    message to set it): `touch _bmad-output/pipeline-paused.flag`. Then
    end the session — do not continue the pipeline in this conversation.
    Reply to any further messages with a pointer to the snapshot and the
-   resume prompt.
+   resume prompt. Resume itself is NOT automated: the user MUST open a
+   new conversation and paste the resume prompt.
 
 A FIRE outcome does not return control to the calling step. A
 CONTINUE outcome returns silently — the step proceeds with its

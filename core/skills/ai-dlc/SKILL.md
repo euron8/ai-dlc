@@ -363,53 +363,27 @@ reminder. Any user reply to a reminder is a Rule 11 directive.
 
 ### Auto-handoff (configurable via `auto_handoff_mode`)
 
-The lead MAY automatically execute the path (a) procedure at defined
-safe seams when all preconditions hold. Mode values:
+The lead MAY automatically execute the path (a) procedure
+(`steps/handoff.md`) at a defined safe seam when all preconditions hold.
+Auto-handoff is NOT a fourth pause point -- it is a session-terminating
+action that runs the path (a) procedure unchanged, and resume itself is
+never automated.
 
-- `off` (default) -- auto-handoff disabled; only human-requested
-  handoff fires.
-- `deploy-only` -- auto-handoff fires only at `Seam A` (pre-deploy
-  preflight in `deploy-validate.md`), and only when the token threshold
-  is confirmed red via Mode 1 (user-shared `/context`).
-- `safe-seam` -- auto-handoff fires at any of the defined safe seams
-  (`Seam A` through `Seam E`). Under `safe-seam` the seam IS the
-  trigger: the lead fires the path (a) procedure when it reaches a safe
-  seam, once per session, at a clean step/sub-step boundary. The token
-  threshold is ADVISORY under this mode, not a firing precondition --
-  the intent is a handoff AT the seam, not a token-conditional
-  evaluation that usually continues.
+`auto_handoff_mode` values (projects override the default in this
+section directly):
 
-Projects override the default by setting `auto_handoff_mode` in this
-section directly. Seam definitions (including `Seam E`, retro entry) and
-the shared precondition helper live in `gate-validation.md`
-"Auto-handoff evaluation".
+- `off` (default) -- disabled; only human-requested handoff fires.
+- `deploy-only` -- fires only at `Seam A` (pre-deploy preflight in
+  `deploy-validate.md`), and only when red is confirmed via Mode 1
+  (user-shared `/context`).
+- `safe-seam` -- fires at any defined safe seam (`Seam A` through
+  `Seam E`); the seam is the trigger and the token threshold is advisory.
 
-Binding constraints:
-
-- Auto-handoff MUST NOT fire under `auto_handoff_mode: off`.
-- **Trigger basis by mode.** Under `safe-seam`, the seam is the trigger
-  and the token threshold (`context_reminders_sent`, Mode 1/Mode 2) is
-  advisory only -- never a firing gate. Under `deploy-only`, a seam
-  fires ONLY when red is confirmed via Mode 1 (user-shared `/context`
-  advances `context_reminders_sent` to `red`); `deploy-only` MUST NOT
-  fire off a Mode 2 fallback estimate.
-- **Clean-boundary only.** Auto-handoff MUST fire only at a defined safe
-  seam -- a clean step/sub-step boundary. It MUST NOT fire mid-sub-step.
-- **Resume-safety preconditions apply in every mode.** Regardless of
-  trigger basis, the helper MUST NOT fire unless the snapshot is
-  current, no gate validation is mid-sequence, no teammate is blocked
-  awaiting the lead, and no Rule 3 pause point is active. The trigger
-  basis only decides *whether to consider* firing; these preconditions
-  decide *whether firing is safe*. A handoff must never produce a
-  broken resume contract.
-- Auto-handoff is NOT a fourth pause point. It is a session-
-  terminating action that executes the path (a) procedure unchanged.
-- Auto-handoff output MUST be distinguishable from a human-requested
-  handoff: the lead outputs the auto-handoff line naming the mode,
-  seam, and trigger basis (unconditional, or confirmed token count)
-  immediately before the resume prompt.
-- Resume itself is NOT automated. The user MUST open a new
-  conversation and paste the resume prompt.
+The full firing rules -- the seven-precondition evaluation, the per-mode
+trigger basis, the resume-safety and clean-boundary constraints, the
+distinguishing output line, and the seam definitions (including `Seam E`,
+retro entry) -- live in `gate-validation.md` "Auto-handoff evaluation".
+Step files invoke that helper at each seam.
 
 Research citations backing the threshold choices live in
 `research-citations.md` alongside this file.
