@@ -48,6 +48,50 @@ If your project requires pre-deployment configuration checks (e.g.,
 environment selection, resource scaling, migration status), run those
 before deploying.
 
+### 2b. Deploy-freshness gate (Hard Gate — where deploy exposes a running-artifact digest)
+
+**Placement: AFTER deploy, BEFORE smoke tests.** For EVERY deployable
+unit with changed paths in the sprint diff, the lead MUST prove the
+just-built artifact is the one actually running before smoke tests run.
+
+<!-- {running_digest_command}: read the CONTENT DIGEST of the artifact
+     currently running in the target environment (e.g. the image digest
+     of a running container/task, a build hash from a version endpoint).
+     If your deploy model has NO queryable running artifact (static site,
+     serverless function, published library), you have no digest to read:
+     skip the digest equality check and assert freshness via the
+     fallback below (rollout/publish timestamp > merge timestamp). -->
+
+1. Read the CONTENT DIGEST of the artifact currently running in the
+   target environment ({running_digest_command}).
+2. It MUST equal the content digest of the artifact just built and
+   pushed for this sprint; also confirm the rollout/start timestamp is
+   newer than the merge.
+3. If the running digest does NOT match the built digest for any changed
+   unit, the deploy did NOT happen: the gate FAILS, smoke tests MUST NOT
+   run, and the lead returns to the deploy step.
+
+**Where the deploy model exposes no running-artifact digest**, this gate
+does not vacuously pass: assert freshness on the rollout/publish
+timestamp instead — it MUST be newer than the sprint merge — and record
+in the gate log that no digest was available.
+
+**Freshness MUST be asserted on the running-artifact CONTENT DIGEST (or,
+in the fallback, the rollout timestamp), never on a re-pointable
+pointer** (image tag, deployment/task revision id, release id or
+handle). A force-redeploy re-pulls the SAME revision, so such a pointer
+is EXPECTED to stay UNCHANGED after a successful redeploy — asserting
+freshness on an unchanged pointer is a FALSE-FAIL that masks a real
+deploy.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: merge succeeded but
+the new build never became the running artifact (stale deploy), so smoke
+would green-light the previous sprint's code. False-positive cost: a
+legitimate no-op redeploy where the built digest genuinely equals the
+prior running digest — resolve by confirming the rollout timestamp is
+post-merge, not by digest alone. Removal condition: retire only if
+deploy tooling is made to fail closed on a non-fresh rollout.
+
 ### 3. Smoke Tests (Hard Gate — Non-Skippable)
 
 **Hard smoke enforcement.** The smoke test full profile MUST run at

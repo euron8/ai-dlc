@@ -17,6 +17,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-07-05
+
+Consumer-absorption backport (Phase 1, Tier-1). Absorbs the tech-agnostic,
+multi-sprint-validated core innovations from the **graph** consumer fork
+(reconciled @ Sprint 281 against the v0.11.0 baseline) that the S251–S281
+window did not reach. Each item is generalized graph-name-free, in Rule 18
+imperative voice, with a Rule 26(c) minimum-mechanism contract where it is
+machinery. No graph domain machinery is carried (see spec §5). Full design
+record and reconciliation ledger: `docs/v0.13.0-consumer-absorption-spec.md`.
+
+### Added
+
+- **Foreground-dispatch mandate + story dependency-DAG / wave plan**
+  (`steps/implementation.md`): gated story-dev cycles MUST be dispatched in
+  the foreground (blocking Agent call the lead consumes); `run_in_background`
+  is permitted only for detached work with no near-term gate. Foreground ≠
+  serial — independent stories dispatch in parallel via per-story worktrees +
+  a join, serialized ONLY on a real shared-file or by-content dependency,
+  planned as a written wave-DAG before the first dispatch.
+- **Worktree gate-verification freeze** (`steps/implementation.md`): once a
+  gate reviewer is dispatched against a dev worktree, the worktree is frozen
+  until the verdict lands; the lead pins the `rev-parse HEAD` SHA at dispatch
+  and re-confirms it at verdict — a HEAD advance voids the verdict.
+- **Local-tree freshness precondition** (`steps/sprint-review.md`, new Step
+  0): before any sprint code is read, assert the local checkout is not behind
+  `origin/main` (`git rev-list --count HEAD..origin/main` MUST be 0), else
+  fast-forward and restart the review.
+- **Deploy-freshness gate** (`steps/deploy-validate.md`, new Step 2b, after
+  deploy / before smoke): prove the just-built artifact is the one actually
+  running via its running-artifact CONTENT DIGEST (never a re-pointable
+  pointer). Template-adapted: where the deploy model exposes no queryable
+  running-artifact digest, freshness falls back to a post-merge rollout
+  timestamp rather than passing vacuously.
+- **Named-field-vs-implementation divergence gate** (`steps/architecture.md`,
+  new Step 2e): every named field/entity/invariant an ADR introduces runs a
+  four-step name-vs-implementation diff plus a consumer-side usage example
+  before merge; a name the implementation does not honor is renamed, extended,
+  or documented with a `consumer-MUST-read` gap warning.
+- **HARD_BLOCK Evidence / Assertion epistemic-hygiene pair**
+  (`escalations.md`): two mandatory fields on every HARD_BLOCK separating
+  directly-observed evidence from inference/root-cause assertion, so a handoff
+  successor or checkpoint operator does not act on an unverified inference as
+  proven. Governed by Rule 12 (only HARD_BLOCK requires both populated).
+- **gate-validation Check 20 — validation-intensity compliance**
+  (`steps/gate-validation.md`): the gate-side teeth for Rule 8's declared
+  `validation_intensity`, confirming each planning gate met its intensity
+  minimum (`full`/`standard`/`lightweight`) and logged `minimum_met`; skips
+  implementation/deploy-validate/retro gates and does not reduce always-on
+  floors. Absorbed from graph Check 21 → distribution Check 20 (mapping
+  recorded in spec §7 to avoid future re-flagging).
+
 ## [0.12.0] — 2026-07-05
 
 Resident-context slimming (JIT rule relocation + de-duplication). Relocates

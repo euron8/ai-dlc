@@ -669,6 +669,41 @@ holds; a PR adding no public function on a deliverable path is N/A.
 build on any un-wired new public function, making the reviewer citation
 redundant.
 
+### 20. Validation-intensity compliance (all planning gates).
+
+**Scope.** Fires at every planning-phase gate. Skips for implementation,
+deploy-validate, and retro gates.
+
+**Check.** Read `validation_intensity` from the pipeline snapshot's
+Sprint Context. Confirm the validation cycle run at this gate met at
+least the declared intensity's minimum:
+- `full`: Party Mode + Advanced Elicitation + Adversarial Review (2+
+  passes) — all three MUST have been invoked.
+- `standard`: Party Mode + Adversarial Review (1+ pass) — both MUST have
+  been invoked.
+- `lightweight`: Adversarial Review (1 pass) MUST have been invoked.
+
+An architecture gate that reaches a NO-CHANGES-NEEDED assessment MAY
+skip the validation cycle (fast-track). The gate log entry MUST record
+`validation_intensity: <level>` and `minimum_met: true|false`. The check
+FAILS if the declared minimum was not met. Declared intensity MUST NOT
+reduce the always-required floors — carry-over-eval Party Mode, retro
+Party Mode, and deploy-validate smoke remain mandatory at every
+intensity.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate that
+under-ran its declared intensity (a `full` sprint that skipped Advanced
+Elicitation or ran a single adversarial pass), silently downgrading
+operator-selected rigor. False-positive cost: a sanctioned fast-track
+(architecture NO-CHANGES-NEEDED) counted as a miss — resolve by
+recording skip provenance in the gate log, not by failing. Removal
+condition: retire once validation-cycle invocation is made structurally
+unskippable per intensity.
+
+**Graph→distribution number mapping.** This is graph's Check 21
+(validation-intensity) absorbed as distribution **Check 20**; recorded
+so a future graph reconciliation does not re-flag it as new.
+
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 
 **Recursion guard.** H1 is NOT subject to H1. When H1 runs, it sets
