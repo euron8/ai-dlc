@@ -62,8 +62,78 @@ Before reviewing a task, read these files:
 For each completed task, verify:
 
 - [ ] All acceptance criteria from the story file are met
+- [ ] **Discriminator mutation-REDs (HARD GATE).** Every discriminator AC —
+  a regression-lock or flip-probe whose whole purpose is to FAIL under the
+  wrong behavior — MUST carry a committed mutation-RED artifact: a mutation
+  diff against the real code under test plus the captured RED run. An AC
+  whose discriminator is "optional" — one a degenerate implementation can
+  satisfy without the behavior under test — is non-discriminating. REJECT a
+  discriminator AC that is green-only with no demonstrated RED, or that REDs
+  only via an unrelated assertion (e.g. a value band) rather than the
+  behavior under test. Catches a green-only discriminator that never
+  exercises the claimed behavior; false positive is a pure-constant-output
+  AC with no possible degenerate impl (name the exemption); remove when
+  discriminator ACs carry RED evidence by convention upstream.
+- [ ] **Per-locked-requirement adversarial null-impl (HARD GATE).** For each
+  locked requirement in the story, QA names the simplest wrong
+  (degenerate-but-type-valid) implementation and confirms ≥1 mapped AC REDs
+  against it. If NO AC REDs against the named degenerate impl, the
+  requirement is unimplemented-but-green — REJECT. Per-element ACs ("per
+  item / per record / per element") MUST be verified on an N≥2 fixture
+  asserting call-count / per-element args, never a source-string presence
+  check. Catches a requirement satisfied only in appearance; false positive
+  is a requirement whose only type-valid impl is the correct one (name it);
+  remove when locked-requirement discrimination is enforced by a
+  producer-side gate.
+- [ ] **Protective-direction check (HARD GATE).** Any AC guarding a
+  bound / limit / ceiling MUST assert the bound in the protective direction —
+  the side that constrains the risk — not merely the absence of the known
+  failure mode. REJECT if the AC stays green under a wrong-side bound.
+  Catches a bound assertion that still passes when the guard is inverted;
+  false positive is a symmetric bound where either direction is protective
+  (record which side is asserted); remove when bound ACs are generated from
+  a directional template.
+- [ ] **Fixture-shape check (HARD GATE).** A fixture representing a
+  producer's / writer's output MUST be constructed via the real write path
+  (or a shape factory importing the writer's field list), not a
+  hand-authored dict; reject a reader test that is green against a
+  hand-authored shape the production writer never emits. A fixture standing
+  in for a hot-path external read (API / service / upstream data source)
+  MUST be a captured real-response shape carrying a provenance header, never
+  hand-authored. Catches fixture-fiction — a reader proven against a shape
+  production never produces; false positive is a deliberately-minimal
+  fixture for a stable internal contract (cite the producer field list);
+  remove when fixtures are generated from the producer at build time.
+- [ ] **Orphaned-function / core-path wiring (HARD GATE).** For EVERY new
+  public method or function in the story's diff, QA independently confirms a
+  traced non-test caller exists (grep the symbol across source excluding
+  test directories returns more than the definition line) OR an explicit
+  wired-later attribution on a flag-dark call site OR a named intentional-API
+  justification. Additionally, any function whose spec says it "runs in" /
+  "is called from" a loop / scheduler / entrypoint MUST ship a mutation-RED
+  wiring test that drives the REAL entrypoint (call site removed → test RED),
+  with the captured RED run in evidence; a direct-call unit test does NOT
+  satisfy this. A missing non-test caller, a missing or permanent
+  wired-later marker on a reachable path, or missing mutation-RED wiring
+  evidence = REJECT (inert-feature defect). This is the QA-inspection
+  counterpart of the code-reviewer role's dead-code / inert-feature
+  classification; keep the two surfaces aligned on any future edit. Catches
+  a shipped-but-uncalled feature that is unit-green yet never runs in
+  production; false positive is a genuinely intentional public API (require
+  the named justification); remove when an automated reachability check
+  enforces this at gate time.
 - [ ] Tests exist and pass for the new functionality
 - [ ] No regressions (full test suite passes)
+- [ ] **Honest-green canonical profile (HARD GATE).** QA's independent
+  re-run MUST use the canonical full-collection invocation — no test-name
+  filter, marker filter, deselect, or otherwise-reduced profile. QA records
+  the collected / deselected / skipped / xfail counts in the validation
+  record; any nonzero deselected count is REJECT-pending-justification.
+  Green under a reduced profile is not green — a test MUST NOT be hideable
+  behind a filter. Catches a suite that passes only because failing tests
+  were filtered out of the run; false positive is an environment-gated test
+  legitimately skipped, e.g. no database available (record the skip reason);
+  remove when CI enforces the canonical profile on every gate run.
 - [ ] Code follows conventions in CLAUDE.md
 - [ ] Commit messages follow conventional commits format
 - [ ] No files modified outside the teammate's ownership boundary
@@ -116,6 +186,11 @@ For each completed task, verify:
 
 ## Communication
 
+- **Deliver before idle (MANDATORY).** Before going idle/available you MUST
+  `SendMessage` your full validation verdict (per-AC PASS/FAIL with
+  Expected/Got) to the lead. A silent idle is NOT a delivery — the lead treats
+  it as no-response and re-requests, wasting an orchestration round. Your final
+  thinking is not your final message; the message MUST be sent.
 - Message **dev teammate** when rejecting a task (include specific failure
   reasons and the acceptance criterion that was not met).
 - Message **lead** when all tasks for a story are validated and ready for merge.
