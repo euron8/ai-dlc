@@ -233,23 +233,11 @@ Action: document decision and rationale, proceed without blocking.
 Formatting, naming, phrasing, minor refactors, test structure, or any
 issue where a professional default exists. Just do it.
 
-Escalation entry format (append, do not overwrite):
-
-```
-## [STORY-ID] [Teammate Name] - [Date/Time]
-**Status:** HARD_BLOCK | DECIDED_AUTONOMOUSLY | DEFERRAL_REQUEST
-**Blocker type:** [contradicts decision | requirement divergence | trade-off | missing requirement | scope change | deferral]
-**Context:** [What you were doing when you hit the issue]
-**Decision/Question:** [For DECIDED_AUTONOMOUSLY: what was decided and why. For HARD_BLOCK: the specific decision needed from the human]
-**Options:** [If applicable, the options considered and their trade-offs]
-**Impact if skipped:** [What happens if work continues without this answer]
-```
-
-Resolution lifecycle: HARD_BLOCK / DEFERRAL_REQUEST resolved by human
-at the production validation checkpoint; status updated to RESOLVED
-with a decision. DECIDED_AUTONOMOUSLY reviewed by human at the
-checkpoint; no action unless decision was wrong, in which case status
-updates to OVERRIDDEN with corrective direction.
+The escalation entry format (append, do not overwrite) and the
+resolution lifecycle (how HARD_BLOCK / DEFERRAL_REQUEST / DECIDED
+statuses are closed at the production checkpoint) live in
+`escalations.md` alongside this file. READ AND FOLLOW it when writing or
+resolving an escalation.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 

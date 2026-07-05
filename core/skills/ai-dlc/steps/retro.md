@@ -219,8 +219,8 @@ and `.claude/skills/ai-dlc/steps/*.md` for pointers to **skill-loadable
 content** — `READ AND FOLLOW \`<path>\``, and prose locators of the form
 "lives in / defined in / canonical … in / schema in / see \`<file>\`[
 Check N]" that name a step file (`steps/*.md`), a sibling skill reference
-file (`rule-authoring.md`, `research-citations.md`, `handoff.md`), or a
-team-role file (`.claude/team-roles/*.md`). For each, confirm the named
+file (`rule-authoring.md`, `research-citations.md`, `escalations.md`,
+`steps/handoff.md`), or a team-role file (`.claude/team-roles/*.md`). For each, confirm the named
 file exists on disk (and, when a specific anchor like `Check 14` is
 cited, that the anchor exists in the target). **Out of scope — do NOT
 flag:** runtime artifacts and project files that exist only in an
