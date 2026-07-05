@@ -31,9 +31,23 @@ STOP — you don't; you diff text and classify it.
 
 ## The three inputs (three-way merge)
 
-- **base**  = distribution `core/` at the sha recorded in the consumer's
-  stamp (`.claude/.ai-dlc-version`, format `X.Y.Z @ <sha>`). The last upstream
-  content this consumer received.
+- **base**  = distribution `core/` at the `commit` recorded in the consumer's
+  stamp. The last upstream rulebook content this consumer received.
+
+  **Stamp schema (`.claude/.ai-dlc-version`, v0.17.0+):** two independently
+  advancing versions —
+  ```
+  version: <rulebook ver>      # core/rulebook merge-base = the PULL BASE (this)
+  commit:  <sha>               # advanced only by a rulebook apply (step 7)
+  skill_version: <tool ver>    # the ai-dlc-update tool itself
+  skill_commit:  <sha>         # advanced by the autonomous self-update (step 2)
+  installed_at: <ts>
+  upstream: <git ref>          # distribution URL (preserve on every re-stamp)
+  ```
+  `base` = the `commit` field (rulebook merge-base). Legacy stamps are single-line
+  `X.Y.Z @ <sha>`: read `<sha>` as `commit`, `X.Y.Z` as `version`, treat
+  `skill_version` as unknown; the next re-stamp/self-update rewrites the stamp in
+  the schema above. Never drop `upstream`/`installed_at` when re-stamping.
 - **theirs** = distribution `core/` at the target ref (default upstream HEAD).
 - **ours**  = the consumer's live tree (`.claude/…`, plus `scripts/` for
   `core/scripts/…`).
@@ -61,10 +75,11 @@ Every consumer block that differs from upstream is one of:
 
 ## Procedure
 
-1. **Resolve inputs.** Read the stamp → `base` sha. Resolve `theirs` (arg or
-   upstream HEAD). Confirm the distribution repo is reachable (a configured
-   upstream path/remote — until the stamp carries a URL, ask the operator for
-   the distribution checkout path).
+1. **Resolve inputs.** Read the stamp: `base` = the `commit` field (rulebook
+   merge-base), per the schema above; fall back to legacy single-line parsing if
+   there is no `commit:` field. Resolve `theirs` (arg or upstream HEAD). Confirm
+   the distribution repo is reachable — read the `upstream` field if present;
+   otherwise ask the operator for the distribution checkout path.
 2. **Self-update — an AUTONOMOUS, self-contained commit→merge cycle (before any
    rulebook classify/apply).** You run FROM a copy of this skill inside the
    consumer; a pull can include a change to that copy, so the logic executing the
@@ -79,10 +94,16 @@ Every consumer block that differs from upstream is one of:
    so in one line and continue to step 3. If NON-EMPTY:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, overwrite the consumer's
-     `.claude/skills/ai-dlc-update/**` with `theirs`, commit
-     (`chore(ai-dlc-update): self-update <base-ver> → <theirs-ver>`), push, open a
-     PR, and **auto-merge (squash, delete branch)** — no operator gate. If there
-     is no remote / push fails, commit locally and note it; do not block the run.
+     `.claude/skills/ai-dlc-update/**` with `theirs`, **update the stamp's
+     `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
+     preserving `version`/`commit`/`installed_at`/`upstream`), commit
+     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), push,
+     open a PR, and **auto-merge (squash, delete branch)** — no operator gate. If
+     there is no remote / push fails, commit locally and note it; do not block the
+     run. Advancing `skill_version` here is what keeps the stamp an honest record
+     of the installed tool version — it is bookkeeping tied to the (already
+     autonomous) self-update, and never touches `version`/`commit` (the rulebook
+     base stays put until a gated apply).
    - **Then HARD STOP the run and hand the operator the re-invoke choice.** The
      self-update landed, but THIS invocation is still executing the PRE-update
      logic — its reconcile/classify/apply behavior is stale, and an in-flight
@@ -170,8 +191,11 @@ Every consumer block that differs from upstream is one of:
    - conflicts → apply only operator-adjudicated resolutions.
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
-   - Re-stamp `.claude/.ai-dlc-version` = `<theirs-version> @ <theirs-sha>` and
-     write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`. **The re-stamp
+   - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
+     `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
+     `upstream`** (rewrite the whole stamp in schema — never collapse it to the
+     legacy single line, which would drop the skill version and upstream URL).
+     Write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`. **The re-stamp
      fires whenever the consumer core now equals `theirs` — INCLUDING an empty
      reconcile (zero rulebook blocks applied, e.g. a self-update-only pull). In
      that already-current case this step is a stamp-only bump: the point of the
@@ -235,8 +259,9 @@ free of pull-only assumptions so the other three jobs can reuse it.
 
 ## Not yet wired (design §6.1 gaps — call out, don't silently skip)
 
-- **Upstream URL not in the stamp.** Until `.ai-dlc-version` carries the
-  distribution ref, the operator supplies the distribution checkout path.
+- **Upstream URL** is carried in the stamp's `upstream` field (written by
+  install, preserved on every re-stamp). Read it in step 1; only fall back to
+  asking the operator when the field is absent (a legacy stamp).
 - **Self-update** is handled in step 2 as its own autonomous branch→commit→push
   →PR→auto-merge cycle (the skill's files are overwrite-safe upstream tooling, no
   operator gate), separate from the operator-gated rulebook reconcile (step 8).
