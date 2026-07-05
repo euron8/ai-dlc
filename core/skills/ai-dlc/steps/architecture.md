@@ -36,6 +36,50 @@ where it covers the requirement; a parallel path or new mechanism
 class requires an ADR stating why extension is insufficient.
 Consolidating redundant paths is a valid design outcome.
 
+**ADR severity: hypothesis-pending-evidence (HPE).** When an ADR
+asserts a behavior or shape that depends on production-runtime data the
+architecture step has NOT verified directly (observed frequency of a
+condition, a keying or cardinality assumption, a hit/miss ratio, live
+system state), the ADR MUST carry `severity: hypothesis-pending-evidence`
+in its frontmatter or section header AND MUST include two REQUIRED
+fields:
+
+- `disconfirmation_probe:` a concrete query, API call, log-grep, or
+  equivalent observable that, if it returns a defined disconfirming
+  shape, invalidates the ADR.
+- `disconfirmation_threshold:` an objective numeric or boolean
+  criterion (`>5% of sampled records exhibit the condition`, `non-empty
+  result set for query X`). Subjective phrasing ("looks wrong", "feels
+  off") is not a threshold.
+
+The architecture-step gate FAILS for any HPE ADR missing either field.
+Each HPE ADR MUST be re-checked before dev dispatch: the lead executes
+the `disconfirmation_probe` against production, records the result
+against `disconfirmation_threshold`, and attaches the evidence to the
+story artifact. An HPE ADR that reaches dev dispatch WITHOUT attached
+probe-result evidence FAILS gate validation. Catches: an ADR whose
+design rests on an unverified runtime assumption that is false in
+production, shipping a design built on a guess. False-positive cost:
+one read-only probe per HPE ADR before dispatch. Remove when: no ADR
+in scope asserts a behavior depending on unverified runtime data.
+
+**Spike terminal-operation mandate.** A spike's GO/NO-GO decision MUST
+be rendered against the terminal operation the spike exists to
+de-risk — the last real action in the workflow under test — executed
+against the real surface (the real integration point, service, or
+system), not a prerequisite or primitive that precedes it. If the
+terminal operation cannot be executed in the spike environment, the
+spike result is NO-GO naming the structural blocker — never
+"CONDITIONAL GO on prerequisite-only evidence." A GO whose evidence
+stops at the primitive or prerequisite boundary is a process defect
+attributable to the spike. Catches: a spike that green-lights an
+approach on evidence from the steps that precede the risky operation,
+leaving the actual risk unproven at dispatch. False-positive cost: a
+spike blocked at the terminal op files NO-GO instead of a soft GO, so
+the blocker surfaces at design time rather than mid-implementation.
+Remove when: the workflow under test has no terminal operation distinct
+from its prerequisites.
+
 ### 2a. Variant-Lock Evidence Requirement (when ADR offers multiple variants)
 
 When an ADR offers two or more implementation variants distinguished
@@ -70,6 +114,61 @@ literal value and its security implications must be in the ADR
 body, not left implicit. Gate FAILS at architecture gate if any
 security-relevant property is accepted as "default" without the
 literal value + acceptability rationale in the ADR.
+
+### 2c. Mitigation Proportionality Surfacing
+
+When a story's chosen mitigation introduces STANDING infrastructure — a
+long-running service, a scheduled alarm or monitor, a daemon, a
+persistent queue, an operational runbook with on-call obligations — to
+guard a change, the architect MUST assess whether the mitigation's
+blast radius exceeds the change it guards. Blast radius is the surface
+the mitigation itself adds: new deployable units, new secrets or
+parameters, new failure modes, new operator duties. The change guarded
+is the actual operation at risk (a one-time flag flip on a bounded
+table, a single idempotent migration). When the mitigation's blast
+radius is larger than the guarded change, the architect MUST surface
+the asymmetry in the ADR body under a `## Proportionality` heading —
+quantifying both sides (what the mitigation adds vs. what the change
+risks) and naming the smaller-footprint alternative — BEFORE the
+Solutioning Gate and architecture gate validate the design. The
+Solutioning Gate FAILS for any ADR introducing standing infrastructure
+that lacks a `## Proportionality` assessment. Surfacing is not a veto:
+the operator MAY still accept the heavier mitigation, but the asymmetry
+MUST be visible before gates ratify it, not discovered at deploy.
+Catches: a heavyweight standing mitigation ratified to guard a trivial
+one-shot change, adding permanent operational cost the operator never
+weighed. False-positive cost: one `## Proportionality` paragraph per
+ADR that adds standing infrastructure. Remove when: no ADR in scope
+introduces standing infrastructure as a mitigation.
+
+### 2d. Absolute-Invariant Executable-Guard Mandate
+
+An architectural invariant stated as ABSOLUTE — "never", "MUST NOT
+ever", "cannot", "always" — on a safety or safeguard property MUST
+ship, in the same sprint it is asserted, the executable test or gate
+that fails when the invariant is violated. An absolute safety invariant
+with no executable guard is advisory prose, not a constraint: write it
+as "prefer" or "SHOULD" if it cannot be mechanized, never as an
+unenforced "never". The architecture-step gate FAILS for any ADR
+asserting a new absolute safety invariant without either the guard or
+the advisory downgrade.
+
+When an existing absolute invariant acquires a sanctioned exception,
+the invariant TEXT MUST be reworded to its true bounded form in place,
+with the prior absolute preserved — moved to the artifact's history
+file as a SUPERSEDED entry per Rule 25(a), never dropped — NOT
+annotated as an exception beside a now-false absolute. The sanctioned
+exception MUST ship WITH both its compensating control (the mechanism
+that bounds the exception) and its detective control (the mechanism
+that records each use); an exception lacking either control is not
+sanctioned and MUST NOT be merged. The architecture-step gate FAILS if
+an ADR softens an absolute by adding an exception without naming both
+controls. Catches: a "never" safety claim that any reader trusts as
+enforced while nothing blocks its violation, and a silent exception
+that erodes an absolute with no bounding or recording control.
+False-positive cost: one test or gate per new absolute invariant, or a
+one-word downgrade when mechanization is out of scope. Remove when: no
+ADR asserts an absolute safety invariant.
 
 ### 3. Solutioning Gate
 

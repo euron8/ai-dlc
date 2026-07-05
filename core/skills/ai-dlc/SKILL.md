@@ -366,6 +366,29 @@ snapshot. Successor reads the snapshot — duplication in the
 prompt rots fast and contradicts the snapshot when the lead
 forgets to update both.
 
+### Pending operator approvals do not transfer across handoff
+
+A resume prompt is never an operator approval for a pending gate. When a
+handoff crosses a gate that awaits human sign-off, the successor session
+MUST re-present that gate and obtain fresh in-session approval — even if
+the resume text says "execute ... on my approval" or "proceed once
+resumed." Approval is bound to the session that granted it; it does not
+survive into a new conversation. This applies to every human gate: the
+sprint-PR merge, the Production Validation Checkpoint, a
+`DEFERRAL_REQUEST`, a destructive one-time operation, and any HARD_BLOCK
+disposition. Treating resume text as standing approval is a rule
+violation.
+
+### No self-scheduling skill re-entry
+
+A self-scheduled wake-up (ScheduleWakeup, cron, or any deferred
+self-trigger) MUST NOT carry a payload that invokes this skill or
+re-enters the pipeline. Auto-handoff terminates the session for a human
+to resume (below); it never arms an automated re-entry with stale args
+and a stale snapshot. As defense-in-depth, a resume that appears to have
+been fired by the lead's own prior self-schedule rather than a human
+paste MUST be discarded.
+
 ### Threshold defaults
 
 | Model context window | Yellow (first reminder) | Red (urgent reminder) |
@@ -394,32 +417,35 @@ reminder. Any user reply to a reminder is a Rule 11 directive.
 The lead MAY automatically execute the path (a) procedure at defined
 safe seams when all preconditions hold. Mode values:
 
-- `off` -- auto-handoff disabled; only human-requested handoff fires.
-- `a` (default) -- auto-handoff fires at `Seam A` (pre-deploy
-  preflight in `deploy-validate.md`) **unconditionally**, with no
-  user-shared `/context` required. Seam A is once per sprint, context
-  is maximal there, and the user is already at the Production
-  Validation Checkpoint — so firing is always the right move. This
-  sheds the full build's accumulated context right before the
-  long monitoring window, capping cache-read cost without the Mode 1
-  dependency.
-- `deploy-only` -- auto-handoff fires only at `Seam A`, under the
-  Mode 1 red precondition.
-- `safe-seam` -- auto-handoff fires at any of the four defined safe
-  seams (`Seam A` through `Seam D`), under the Mode 1 red precondition.
+- `off` (default) -- auto-handoff disabled; only human-requested
+  handoff fires.
+- `deploy-only` -- auto-handoff fires only at `Seam A` (pre-deploy
+  preflight in `deploy-validate.md`), and only when the token threshold
+  is confirmed red via Mode 1 (user-shared `/context`).
+- `safe-seam` -- auto-handoff fires at any of the defined safe seams
+  (`Seam A` through `Seam E`). Under `safe-seam` the seam IS the
+  trigger: the lead fires the path (a) procedure when it reaches a safe
+  seam, once per session, at a clean step/sub-step boundary. The token
+  threshold is ADVISORY under this mode, not a firing precondition --
+  the intent is a handoff AT the seam, not a token-conditional
+  evaluation that usually continues.
 
 Projects override the default by setting `auto_handoff_mode` in this
-section directly. Seam definitions and the shared precondition helper
-live in `gate-validation.md` "Auto-handoff evaluation".
+section directly. Seam definitions (including `Seam E`, retro entry) and
+the shared precondition helper live in `gate-validation.md`
+"Auto-handoff evaluation".
 
 Binding constraints:
 
 - Auto-handoff MUST NOT fire under `auto_handoff_mode: off`.
-- **Trigger basis by mode.** Under `a`, Seam A fires unconditionally —
-  no Mode 1 `/context` required. Under `deploy-only` and `safe-seam`,
-  a seam fires ONLY when red is confirmed via Mode 1 (user-shared
-  `/context` advances `context_reminders_sent` to `red`); these two
-  modes MUST NOT fire off a Mode 2 fallback estimate.
+- **Trigger basis by mode.** Under `safe-seam`, the seam is the trigger
+  and the token threshold (`context_reminders_sent`, Mode 1/Mode 2) is
+  advisory only -- never a firing gate. Under `deploy-only`, a seam
+  fires ONLY when red is confirmed via Mode 1 (user-shared `/context`
+  advances `context_reminders_sent` to `red`); `deploy-only` MUST NOT
+  fire off a Mode 2 fallback estimate.
+- **Clean-boundary only.** Auto-handoff MUST fire only at a defined safe
+  seam -- a clean step/sub-step boundary. It MUST NOT fire mid-sub-step.
 - **Resume-safety preconditions apply in every mode.** Regardless of
   trigger basis, the helper MUST NOT fire unless the snapshot is
   current, no gate validation is mid-sequence, no teammate is blocked
@@ -550,12 +576,13 @@ and no true catches). All are cleanup targets.
 ### Rule 19 -- Agent spawns MUST pass the `model` parameter
 
 When the lead invokes the Agent tool to spawn a teammate, the `model`
-parameter MUST be set explicitly. Map each role to its model per the
-role file's `/model` directive: `dev`, `qa`, `pm`, `code-reviewer`,
-`analyst` -> `sonnet`; `architect`, `tea` -> `opus`. Omitted `model`
-inherits from the parent conversation and bypasses the role's
-cost/capability contract. Violation fails gate-validation Check 15
-on detection at retro.
+parameter MUST be set explicitly, derived from that role's `/model`
+directive in its role file (`.claude/team-roles/<role>.md`) -- the
+single source of truth. Do NOT restate a role-to-model mapping here or
+in step files; a second mapping drifts from the role file and is itself
+a violation. Omitted `model` inherits from the parent conversation and
+bypasses the role's cost/capability contract. Violation fails
+gate-validation Check 15 on detection at retro.
 
 ### Rule 20 -- Validation sub-skills run inline with provenance
 
@@ -591,6 +618,14 @@ block at gate-validation is a HARD_BLOCK.
 findings lists) WITHOUT Skill tool invocation and WITHOUT provenance
 block is a rule violation. "The findings are real" is not a valid
 rationalization — the process IS the validation.
+
+**File-write deliverable.** A party-mode persona delivers its verdict by
+writing it to the canonical output/transcript path the invocation
+defines and returning ONLY that path. A text-only final message from a
+subagent is an unreliable transport; the lead MUST treat an absent file
+as non-delivery and re-dispatch. Build no detector for this — the lead's
+own read of the expected path is the check (Rule 26: audit before adding
+mechanism).
 
 **Solo mode is forbidden.** Party mode MUST always spawn real
 subagents. Roleplaying agent perspectives inline (solo mode) produces
@@ -673,7 +708,7 @@ Read-heavy planning and analysis work is the lead's largest avoidable
 cache-read cost: every file the lead reads inline accumulates in its
 context and is re-read every subsequent turn. To keep the lead lean,
 the *exploration* portion of designated steps is dispatched to an
-`analyst` subagent (read-only, model `sonnet` per Rule 19) whose raw
+`analyst` subagent (read-only, model from the analyst role file per Rule 19) whose raw
 reading never enters the lead's context.
 
 **Config.** `planning_offload` (default `on`). When `on`, the steps
@@ -687,13 +722,18 @@ by setting `planning_offload` in this section directly.
 validation stay inline) — `discovery`, `research-requirements`.
 
 **Dispatch contract.** The lead spawns the analyst via the Agent tool
-with `model: sonnet`, passing (a) the exploration scope, (b) the
+with `model` from the analyst role file per Rule 19, passing (a) the exploration scope, (b) the
 canonical output artifact path the step defines, and (c) a stable
 shared context block (order shared-block-first per the dispatch-prompt
 cache discipline in `implementation.md`). The analyst writes the
 artifact to disk and returns ONLY `{artifact_path, summary, gaps}` —
 never raw file content or its exploration trace. The lead then reads
-the artifact from disk only when a decision needs it (Rule 23(a)).
+the artifact from disk only when a decision needs it (Rule 23(a)). If the
+artifact file is absent at the returned path, the lead treats the
+dispatch as non-delivery and re-dispatches — a text-only summary without
+the on-disk artifact is not a delivered draft. Build no detector for
+this; the lead's read of the expected path is the check (Rule 26: audit
+before adding mechanism).
 
 **Production vs validation boundary.** The analyst *drafts* the
 artifact; the lead *validates, decides, and owns* it. Rule 20

@@ -114,6 +114,46 @@ verification step:
 4. Any unverifiable field name is **Important** severity, not Suggestion.
    Synchronized fixture/schema bugs bypass all automated testing.
 
+## Bug-Site Anchoring
+
+Bug-site findings (locating the source of a production error for a
+fix-forward dispatch) MUST anchor on one of:
+
+(a) **Stack-trace line** citing the exact `file:line` from production
+logs (preferred);
+(b) **Explicit call-chain trace** from the observed error surface to the
+proposed fix site, with intermediate frames named;
+(c) **Explicit uncertainty flag** scoped to "needs stack trace before
+scoping dev work" — NO fix-site enumeration is permitted under (c).
+
+Pattern-match bug sites (variable-name proximity, symbol-similarity grep,
+"looks like the same pattern") MUST NOT be emitted as fix-site findings. A
+reviewer who issues a pattern-match site without trace evidence under (a)
+or (b) owns the blast radius of any resulting wrong-file fix-forward.
+
+## Bug-class Audit
+
+When a finding is a bug class (a pattern-based defect, not a one-off), the
+PR fixing it MUST record in its description:
+
+(a) The anchoring site (stack trace from production logs, or the traced
+call-chain per Bug-Site Anchoring);
+(b) A repo-wide grep for the same-shape call sites, with hit count;
+(c) A per-hit disposition: fix-in-this-PR / safe-because-X /
+deferred-with-rationale.
+
+Hits exceeding the fixes-in-this-PR without a per-hit disposition are an
+unclosed audit — the reviewer MUST NOT approve until each hit is
+dispositioned.
+
+## Async Error-Handler Coverage
+
+A PR that adds or modifies an async `try`/`except` (`try`/`catch`) block
+MUST include a test asserting that a `None`/error return from an awaited
+callee does NOT propagate as an unhandled TypeError-class failure in the
+handler chain. Coverage of the None/error-emission branch is a hard review
+checkpoint; absent = **Critical**.
+
 ## Mandatory Severity Classifications
 
 These severity rules are structural — they override reviewer judgment.
@@ -256,6 +296,109 @@ exhibiting the same code shape. Reviewer MUST verify the enumeration
 is in the story scope or carry-overs are filed with explicit AC.
 Absence is a **Critical** finding; non-deferrable.
 
+### UNIVERSAL AC Missing Discriminating-Failure Fixture = Important
+
+Any AC tagged UNIVERSAL that lacks a discriminating-failure fixture
+(a test that FAILS when the universal property is violated for a
+single instance) MUST be classified as **Important**. The fixture
+proves the test is load-bearing, not tautological.
+
+### LOCKED_REQUIREMENT With No Discriminating AC = Critical
+
+A `LOCKED_REQUIREMENT` whose mapped acceptance criteria are ALL
+satisfied by a null or degenerate-but-type-valid implementation (an
+implementation that violates the requirement while passing every
+safety invariant) MUST be classified as **Critical**, non-deferrable.
+The reviewer MUST name the degenerate implementation and confirm ≥1
+mapped AC reds against it; if none does, the requirement is
+unimplemented-but-green. Reviewer's only valid responses: (a) APPROVED
+if a mapped AC reds under the named degenerate impl; (b) NEEDS_REWORK
+naming the missing discriminating AC.
+
+### Bound/Limit AC Asserting Wrong Direction = Critical
+
+For any AC guarding a bound, limit, or ceiling, the reviewer MUST
+verify the AC asserts the bound in the protective direction (the side
+that constrains the risk for the operation's direction), not merely
+the absence of the known failure mode. An AC that stays green under a
+wrong-side bound MUST be classified **Critical**, non-deferrable.
+
+### Naming-Implies-Behavior Without Asserting Test = Critical
+
+When a function name implies a measurable behavior — `batched`,
+`bulk`, `multi`, `single_call`, `atomic`, `chunked`, `dedup`,
+`paged`, `pipelined`, `streamed`, `parallel`, `concurrent`,
+`buffered`, `coalesced`, `merged`, `joined`, `aggregated`,
+`grouped`, `partitioned`, `sharded`, `cached`, `memoized`,
+`debounced`, `throttled`, `synced`, `transactional` — or
+contract-implying tokens like `contract`, `interface`, `schema`,
+`API`, `endpoint`, `boundary`, `protocol` — the PR MUST include a
+test that asserts the implied invariant via `mock.call_count`,
+`mock.call_args_list`, or the equivalent call-count/call-args
+assertion against the contract. Naming-without-assertion is a
+**Critical** finding, non-deferrable. Reviewer's only valid
+responses: (a) APPROVED if the asserting test exists and its
+assertion partition-covers the contract input space; (b)
+NEEDS_REWORK naming the missing test or the missing assertion.
+
+The trigger MUST also fire when one of these behavior tokens appears
+in a `LOCKED_REQUIREMENT`, an acceptance criterion, or a story
+Functional-Behavior clause governing the PR — even when the
+implementing function's NAME does not carry the token. A requirement
+that says "chunked" work implemented by a single un-looped call is the
+canonical miss: the asserting test (a call-count assertion of `== N`
+on an N≥2 fixture) MUST exist or the finding is Critical.
+**Evidence required:** Cite the test file path + assertion line range
++ behavior token in the review doc.
+
+### Orphaned Function / Core-Path Wiring = Critical
+
+For every new public method or engine function in the diff, the
+reviewer MUST run a caller trace (`grep -rn "<name>" <source-root> |
+grep -v /tests/`) and confirm at least one non-test caller exists, OR
+an explicit intentional-API justification names the consumer. Zero
+non-test callers = orphaned function = **Critical** (implemented and
+unit-tested but never invoked in production — an inert-feature
+defect), non-deferrable.
+
+Any function whose spec or ADR says it "runs in" / "is called from" a
+loop, scheduler, or entrypoint MUST ship a mutation-RED wiring test
+that drives the REAL entrypoint (call-site removed → test RED,
+captured); a direct-call unit test does NOT satisfy this and is a
+**Critical** finding.
+
+For any regression-lock, flip-probe, or discriminator test, the
+reviewer MUST verify the RED-under-mutation evidence mutates the REAL
+SUT source that production imports (a non-test file), not a test-local
+reimplementation, AND that a committed RED-run artifact exists (the
+captured RED output, not a prose claim). A regression-lock test that
+REDs only under mutation of its own in-test copy of the logic, or a
+discriminator AC with no committed red-run artifact, is a **Critical**
+discriminating-fixture finding. A test green against current code that
+cannot demonstrate its RED proves nothing.
+
+### Gate-1 Review File Not Persisted To Disk = Gate-1 Not APPROVED
+
+A gate-1 verdict is NOT APPROVED until the review file (a) exists on a
+path Git tracks, and (b) is referenced by the story file's Gate-status
+line. A review written only inside a dev worktree is untracked there —
+if the worktree is pruned before the file is persisted, the review is
+lost. Write the review file to the canonical branch checkout (or hand
+it to the lead to persist) BEFORE reporting the gate-1 verdict, not
+after. A verdict reported without a resolvable review-file path is
+incomplete; treat it as gate-1 not yet APPROVED.
+
+### Diff Removes Existing Error-Handling = Important
+
+For every diff hunk that MODIFIES a function which already had
+error-handling (`try`/`except`/`finally`, `try`/`catch`/`finally`, a
+null/undefined guard, an `allSettled`/`Promise.all` rejection path),
+verify the modified version preserves the original guarantee (e.g., a
+`finally` that always clears a loading/pending state). Removing or
+narrowing existing error-handling in a same-file edit MUST be
+classified **Important**, even when the diff's stated purpose is
+unrelated to error-handling.
+
 ## Self-Discrimination Map
 
 Reviewer applies this map at Gate 2 for any PR carrying
@@ -339,6 +482,12 @@ without verbatim REPL trace.**
 
 ## Communication
 
+- **Deliver before idle (MANDATORY).** Before going idle/available you MUST
+  `SendMessage` your full verdict (APPROVED | APPROVED-WITH-FIXES |
+  CHANGES-REQUIRED, with per-finding severity + file:line) to the lead. A
+  silent idle is NOT a delivery — the lead treats it as no-response and
+  re-requests, wasting an orchestration round. Your final thinking is not your
+  final message.
 - Message **dev teammate** with review findings. Include the specific file,
   line context, and what needs to change.
 - Message **QA** when you approve so they can proceed with their validation.

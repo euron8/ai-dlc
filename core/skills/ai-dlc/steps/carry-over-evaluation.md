@@ -17,7 +17,7 @@ items get the same planning rigor as new features.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–2 (and 1a)
-inline. Spawn an `analyst` subagent (Agent tool, `model: sonnet`)
+inline. Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19)
 scoped to those reading sections — it loads the backlog/brief/PRD and
 audit anchor, evaluates each item, and writes a draft evaluation to
 `_bmad-output/planning-artifacts/carry-over-evaluation.md`, returning
@@ -86,6 +86,24 @@ this sprint, not closed):
 - Include: which item, why deferral is recommended, impact of deferral
 - **Proceed with all non-deferred items** — do not block the pipeline
 - The human will review deferrals at the production validation checkpoint
+
+### 4a. Recurrence-Promotes-Priority
+
+Any OPEN carry-over item whose underlying defect has **reproduced in a
+later sprint** MUST be auto-promoted: it MUST be scheduled into the NEXT
+sprint's plan and MUST NOT be silently re-deferred. Re-deferral of a
+recurring item is permitted only with an explicit operator override
+recorded in that sprint's retro. The trigger is **recurrence, not age** —
+each OPEN carry-over item MUST be cross-checked against the current
+sprint's incident/defect log, and any match (a prior incident's signature
+reproducing) promotes the item, flagged with the recurrence evidence
+(both occurrence dates and the shared signature). Catches: a known defect
+carried indefinitely because each sprint judged it in isolation and never
+noticed it had already recurred. False-positive cost: one cross-check of
+the OPEN items against the current sprint's incident/defect log, plus one
+override line at retro when promotion is genuinely not warranted. Remove
+when: the carry-over backlog and incident/defect log are unified so
+recurrence auto-links without a manual cross-check.
 
 ### 5. Close Invalid Items
 

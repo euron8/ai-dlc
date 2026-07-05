@@ -613,6 +613,33 @@ in `core/team-roles/code-reviewer.md` "Self-Discrimination Map"
 section. This check enforces application; the reviewer role file
 owns the pattern definitions. No content duplication.
 
+**Core-path wiring-citation extension.** Also at Gate 2: when the PR's
+diff adds or changes a public function on a primary deliverable path (a
+non-test source file on the sprint's deployed-product path), the
+reviewer's PASS verdict MUST cite, per such function, EITHER (i) a
+traced non-test caller — the `grep -rn "<name>" <source-root> | grep -v
+/tests/` result showing more than the definition line — OR (ii) a
+mutation-RED wiring test that drives the real entrypoint (call site
+removed → test RED, captured run) for any function whose spec or ADR
+says it runs in / is called from a loop, scheduler, or entrypoint. A
+reviewer-PASS on such a function citing NEITHER FAILS this check: an
+inert-feature defect (a function implemented and unit-tested but never
+invoked in production) slipped through Gate 2. This is the gate-side
+meta-check that the orphaned-function / core-path wiring enforcement was
+actually applied — the reviewer severity is owned by
+`core/team-roles/code-reviewer.md` "Orphaned Function / Core-Path Wiring
+= Critical", the QA-inspection counterpart by `core/team-roles/qa.md`
+"Orphaned-function / core-path wiring (HARD GATE)", and the seam
+non-deferral rule by `sprint-review.md` "Core-path seam non-deferral";
+this clause verifies the PASS verdict carries their evidence, exactly as
+the self-discrimination clause above verifies the map was applied.
+**False-positive cost:** low — the reviewer already runs the caller
+trace, so this requires only that the verdict cite evidence it already
+holds; a PR adding no public function on a deliverable path is N/A.
+**Removal condition:** when a CI orphaned-function detector fails the
+build on any un-wired new public function, making the reviewer citation
+redundant.
+
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 
 **Recursion guard.** H1 is NOT subject to H1. When H1 runs, it sets
@@ -702,8 +729,10 @@ lead executes the Rule 2(a) handoff and the session ENDS). This
 helper MUST NOT be invoked from inside the Check 1–15 sequence
 above; it is only called from step files at the defined seams.
 
-**Inputs:** the seam name (`Seam A`, `Seam B`, `Seam C`, or
-`Seam D`) and a short human-readable label for the distinguishing
+**Inputs:** the seam name (`Seam A` through `Seam E`; `Seam E` is the
+retro-entry seam at `retro.md` Step 1 pre-flight, before party mode) and
+a short human-readable
+label for the distinguishing
 output line (e.g., `deploy-validate Step 0 pre-flight`,
 `implementation story transition`,
 `architecture adversarial pass 2`).
@@ -714,14 +743,14 @@ effects, the step resumes.**
 
 1. **Mode gate.** Read `auto_handoff_mode` from SKILL.md Handoff
    Protocol "Auto-handoff" section. If `off`, return CONTINUE. If
-   `a` and the seam is not `Seam A`, return CONTINUE. If `deploy-only`
-   and the seam is not `Seam A`, return CONTINUE. If `safe-seam`, all
-   four seams are permitted. Proceed to precondition 2.
+   `deploy-only` and the seam is not `Seam A`, return CONTINUE. If
+   `safe-seam`, all defined seams (`Seam A` through `Seam E`) are
+   permitted. Proceed to precondition 2.
 
-2. **Trigger basis (mode-dependent).** Under `a`, `Seam A` fires
-   unconditionally — skip the red check and proceed to precondition 3.
-   Under `deploy-only` or `safe-seam`, require **red confirmed under
-   Mode 1**, as below. Read
+2. **Trigger basis (mode-dependent).** Under `safe-seam`, the seam is
+   the trigger: the token threshold is ADVISORY, not a firing gate —
+   skip the red check and proceed to precondition 3. Under
+   `deploy-only`, require **red confirmed under Mode 1**: read
    `context_reminders_sent` from the snapshot Context Reminders
    block. If it is not `red`, return CONTINUE. Check 14 advances
    this field to `red` ONLY when a user-shared `/context` confirmed
@@ -780,12 +809,12 @@ output line in step 4 identifies this handoff as automated:
 4. Output the distinguishing auto-handoff line (substitute mode,
    seam label, and trigger basis), then output the resume prompt
    (SKILL.md Handoff Protocol template) wrapped in `----` delimiter
-   lines. The trigger basis depends on mode: under `a` it is
-   `unconditional`; under `deploy-only`/`safe-seam` it is the
-   confirmed token count from the most recent user-shared `/context`:
+   lines. The trigger basis depends on mode: under `safe-seam` it is
+   `seam trigger (token threshold advisory)`; under `deploy-only` it is
+   the confirmed token count from the most recent user-shared `/context`:
 
-   > *"Auto-handoff triggered by auto_handoff_mode=a at Seam A
-   > (unconditional, pre-deploy)."*
+   > *"Auto-handoff triggered by auto_handoff_mode=safe-seam at Seam E
+   > (seam trigger, token threshold advisory)."*
 
    > *"Auto-handoff triggered by auto_handoff_mode=deploy-only at
    > Seam A. Context at <tokens> tokens, red threshold confirmed via

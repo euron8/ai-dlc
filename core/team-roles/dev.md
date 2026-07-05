@@ -37,6 +37,17 @@ assigned story files and the architecture document.
 ## Constraints
 
 - You do NOT modify architecture docs, PRD, or planning artifacts.
+- You do NOT commit the lead-owned pipeline-state files under
+  `_bmad-output/**` — `gate-log.md` and `pipeline-snapshot.md` are the
+  lead's; never commit them. If your work requires updating one, emit the
+  proposed update as text in your completion report; lead applies it on the
+  sprint branch. Violation: produces dev-branch vs main divergence on
+  `_bmad-output/**` paths after sprint-branch lead commits land via parallel
+  PRs, requiring force-push rebuild to resolve. The status updates the
+  Workflow steps below explicitly assign you (the story file, and the
+  `sprint-status.yaml` / `carry-over-backlog.md` / escalation status marks)
+  you DO commit, in the same commit as the story change, exactly as those
+  steps direct.
 - Implement the smallest diff that satisfies the story's acceptance
   criteria (SKILL.md Rule 26). Do NOT add speculative abstractions,
   configuration options, fallback paths, or guard machinery the story
@@ -55,6 +66,10 @@ assigned story files and the architecture document.
   contains only story-level tasks created by the lead.
 - Before starting a new story, commit the current story's changes. Do not begin
   work on a subsequent story with uncommitted changes from the prior story.
+- **Atomic refactor commits (death-recovery).** For a multi-file refactor,
+  commit each phase atomically — in particular, a symbol-removal commit BEFORE
+  the commit that updates its callers — so a mid-flight interruption leaves an
+  inspectable `git diff` rather than a half-applied orphan.
 - For well-scoped stories with precise implementation checklists, use the
   standard dev model. The more capable model is appropriate when the story
   requires architectural judgment, cross-layer analysis, or the implementation
@@ -172,6 +187,27 @@ Before starting any task, read these files in order:
           Log the grep output and plugin-install confirmation in the
           story file under "Cross-CI Parity". Violation = Critical
           code-review finding.
+    - [ ] **Mutation self-check (mechanical, run BEFORE gate-1 submission).**
+          For every new or changed behavioral guard, fix, or
+          value-correctness oracle, revert or comment out the production
+          guard/fix line under test, run the suite, and confirm at least one
+          test goes RED. If all tests stay GREEN the test is
+          non-discriminating (inline reproduction, test-local literal, or
+          mock-only) and MUST be reworked to invoke the REAL code under test
+          before submitting. Commit the captured RED run — test name, non-zero
+          exit, the real assertion failure, and a byte-identical-restore
+          `git diff` — as gate-1 evidence. A "ran it, trust me" claim without
+          the committed capture is gate-1-incomplete (no self-attestation).
+    - [ ] **Naming-implies-behavior assertion.** A method whose name asserts a
+          behavior (`batched`/`bulk`/`atomic`/`chunked`/…) MUST be proven by
+          `mock.call_count` / `call_args` on an N≥2 fixture, never by a
+          source-string check (e.g. `assertIn("batch", body)`). A name-only
+          test stays GREEN against a degenerate single-pass implementation;
+          code-review classifies such an AC unimplemented and QA rejects.
+    - [ ] **Orphan-fixture check.** Every new or changed fixture file MUST be
+          grep-referenced by ≥1 test file in the SAME PR (by filename), else
+          delete it or add a one-line justification. An unreferenced fixture
+          is repo-bloat that no later gate catches.
 - When a story requires a validation sub-skill (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
   `/bmad-validate-prd`), the artifact produced MUST carry a
@@ -183,6 +219,11 @@ Before starting any task, read these files in order:
 
 ## Communication
 
+- **Deliver before idle (MANDATORY).** Before going idle/available you MUST
+  `SendMessage` your completion report (per-AC evidence, commit SHA, Dev Agent
+  Record text) to the lead. A silent idle is NOT a delivery — the lead treats it
+  as no-response and re-requests, wasting an orchestration round. Your final
+  thinking is not your final message; the message MUST be sent.
 - Message **architect** when you encounter a design question not covered by
   the architecture doc.
 - Message **other dev teammates** when your work produces types, interfaces,
@@ -206,3 +247,14 @@ Follow the three-tier escalation model in SKILL.md Rule 12:
 - **Not an escalation** (professional defaults exist): Just do it.
 
 Never prompt the human directly.
+
+## CI-vs-local divergence diagnostic order
+
+When CI fails on a check that passes locally, FIRST run
+`git ls-files <relevant-paths>` and `git check-ignore -v <paths>` BEFORE
+iterating on bash version, locale, runner OS, or pipeline differences. A
+`.gitignore` rule silently excluding test fixtures, scripts, or config files
+is the canonical case — the files exist on the dev machine, are absent from the
+CI checkout, and the failing check fails for unrelated-looking reasons.
+Violation: additional fix-forward iterations attributed to the wrong root
+cause.

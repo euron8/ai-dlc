@@ -15,7 +15,7 @@ fix story, then route to implementation.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–2 inline.
-Spawn an `analyst` subagent (Agent tool, `model: sonnet`) scoped to
+Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to
 sections 1–2 — it loads context, investigates, reproduces, and traces
 root cause, then writes its findings (root cause, repro, affected
 files/call-sites) to `_bmad-output/planning-artifacts/bug-analysis.md`,

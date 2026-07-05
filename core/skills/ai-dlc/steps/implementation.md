@@ -28,9 +28,10 @@ Spawn using the model defined in the teammate's role file
 the authoritative model binding.
 
 **Agent spawn model parameter MUST be passed explicitly.** Every
-Agent tool invocation MUST include the `model` parameter. Map roles:
-`dev`, `qa`, `pm`, `code-reviewer`, `analyst` -> `sonnet`;
-`architect`, `tea` -> `opus`. Omitted `model` inherits from the
+Agent tool invocation MUST include the `model` parameter, derived from
+that role's `/model` directive in its role file
+(`.claude/team-roles/<role>.md`) — do NOT hardcode a role-to-model
+table here. Omitted `model` inherits from the
 parent conversation
 and bypasses the role contract. Violation fails gate-validation
 Check 15 on detection at retro. Per SKILL.md Rule 19.
@@ -78,6 +79,18 @@ follow the worktree-explicit dispatch protocol:
    sprint branch and removes the worktree:
    `git merge dev/sprint-<N>/story-<X> && git worktree remove <path>`
 5. If merge conflicts arise, the lead resolves them — not the dev.
+6. Every dispatch brief into a worktree (dev, code reviewer, or QA)
+   MUST include this standing line: "Never run `git stash` or `git
+   stash pop` inside this worktree. All worktrees under one repository
+   share a single stash stack, so a stash or pop here can surface or
+   consume an UNRELATED stash from another worktree. For a before/after
+   base compare, use `git worktree add --detach <base>` instead." Keep
+   it in the dispatch template, not per-sprint prose the lead must
+   remember to re-add. Failure caught: a cross-worktree stash collision
+   that silently mutates another dev's working tree. False-positive
+   cost: none — an isolated alternative (`--detach`) is provided.
+   Removal condition: only if worktrees under one repository stop
+   sharing a single stash stack (a git invariant today).
 
 **Dispatch-prompt cache discipline.** When dispatching multiple
 teammates (parallel devs, or a dev plus QA on the same story), order
@@ -226,6 +239,21 @@ Monitor task progress:
 commit exists. Zero commits = the dev produced no deliverable; resume
 or re-dispatch the dev BEFORE gating. Gating a zero-commit story is a
 process violation; surface at retro.
+
+**DAR-fold preflight before gate-2 dispatch.** After gate1 (code
+review) approves a story and BEFORE dispatching gate2 (QA), the lead
+MUST fold the Dev Agent Record from the dev's completion report into
+the canonical sprint-branch story file, then verify that file's Dev
+Agent Record section is non-empty — a mechanical section-presence
+check, the same class as gate-validation check #4's Dev Agent Record
+completeness check. Failure caught: a QA reviewer dispatched against a
+worktree-stale story copy reads an empty or old DAR and false-FAILs a
+story whose evidence is actually complete. False-positive cost: none —
+the check is a cheap section-presence test on a section the dev already
+authored. Removal condition: retire this preflight once the dev's DAR
+is guaranteed present in the canonical story file by the merge step
+itself, making the fold redundant. Dispatching gate2 with an empty DAR
+section is a retro finding.
 
 **Sub-step snapshot updates during implementation.** The lead MUST
 run a sub-step snapshot update (see `gate-validation.md` "Sub-step

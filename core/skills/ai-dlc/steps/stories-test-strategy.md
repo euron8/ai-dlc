@@ -48,6 +48,63 @@ catalog, both `lead_only: true` and `single_dev_serialized: true`
 are MANDATORY. `implementation.md` enforces these tags at
 parallel-dispatch time.
 
+### Discriminating-AC Authoring Standard
+
+The `code-reviewer.md` "Self-Discrimination Map" and gate-validation
+Check 19 enforce discrimination for PRs that flip a CI gate or add a
+detector. This standard extends the same discipline to every story's
+unit and integration fixtures at authoring time: an AC that stays
+green under an implementation which does not actually meet the
+requirement is non-discriminating and MUST NOT be accepted.
+
+**UNIVERSAL / EXISTENTIAL tagging.** Every acceptance criterion MUST
+be tagged UNIVERSAL or EXISTENTIAL in its parenthetical; an untagged
+AC defaults to EXISTENTIAL.
+
+- **UNIVERSAL** — the property MUST hold for ALL instances of a set
+  (every endpoint, every element, every call site). Verification
+  requires exhaustive enumeration or a for-each assertion, AND a
+  discriminating-failure fixture: a test that FAILS if the property is
+  violated for any single instance. The fixture proves the assertion
+  is load-bearing, not tautological.
+- **EXISTENTIAL** — verification requires at least ONE instance
+  exhibiting the behavior; a single witness suffices.
+
+**LR→AC discriminating coverage (MANDATORY).** Every
+`LOCKED_REQUIREMENT` (Rule 13) propagated into a story MUST map to ≥1
+acceptance criterion whose test transitions PASS→FAIL when the
+requirement's production code is replaced by its
+degenerate-but-type-valid implementation — the minimal lawful behavior
+that violates the LR while satisfying every type contract and safety
+invariant. Record the mapping inline as one `LR→AC` line per locked
+requirement, naming the degenerate implementation each mapped AC reds
+against. An LR whose only ACs assert invariants that the degenerate
+implementation also passes is NOT covered; an unmapped LR, or an LR
+covered only by degenerate-passing ACs, fails gate-validation Check 3a.
+For any AC guarding a bound, limit, or ceiling, the AC MUST assert the
+bound in the protective direction — the side that constrains the risk —
+NOT merely the absence of the known failure mode; an AC satisfied by a
+wrong-side bound is non-discriminating and fails Check 3a.
+
+**Cardinality-fixture sub-mandate.** Any AC asserting per-element
+behavior ("per element", "per item", "per call") MUST run on a fixture
+where the element count N≥2 and the elements differ in an observed
+value, and MUST assert `mock.call_count` / `call_args_list` /
+per-element arguments. A source-string presence check
+(e.g. `assertIn("method_name", body)`) MUST NOT satisfy a per-element
+AC — it passes on a single call and on a hardcoded string, so it
+discriminates neither element count nor per-element values.
+
+**Minimum-mechanism contract (Rule 26c).** This standard catches
+tautological ACs that assert type-shape or symbol presence instead of
+required behavior and so stay green under an implementation that does
+not meet the requirement. False-positive cost is bounded: a
+genuinely-covered LR flagged for a missing `LR→AC` line costs one
+authoring line; a genuinely-exhaustive assertion flagged as
+non-discriminating costs one fixture. Remove this standard if a static
+analyzer proves per-test discrimination automatically, or if Check 19
+is extended to cover every story's unit/integration fixtures.
+
 ### Layered AC Verification Accounting
 
 Story acceptance criteria MUST be verifiable at exactly one
