@@ -160,6 +160,26 @@ fi
 echo "Installing AI/DLC skill..."
 cp "$SCRIPT_DIR/../core/skills/ai-dlc/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/ai-dlc/steps/"
+# core skill docs that live at the skill root (not under steps/)
+for doc in escalations.md rule-authoring.md; do
+  [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
+    cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
+done
+
+# Layered rulebook (Rule 27 / spec §7): consumer-owned extensions/ + overrides/.
+# ADDITIVE — create if absent and seed the README contract; NEVER overwrite a
+# consumer's populated layer (that is the whole point of the split).
+echo "Installing rulebook layer scaffolds (extensions/, overrides/)..."
+for layer in extensions overrides; do
+  mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/$layer"
+  if [ ! -f "$PROJECT_ROOT/.claude/skills/ai-dlc/$layer/README.md" ]; then
+    cp "$SCRIPT_DIR/../core/skills/ai-dlc/$layer/README.md" \
+       "$PROJECT_ROOT/.claude/skills/ai-dlc/$layer/"
+    echo "  $layer/ scaffolded"
+  else
+    echo "  $layer/ preserved (consumer-owned)"
+  fi
+done
 
 # Copy setup skill (always overwrite with AI/DLC versions)
 echo "Installing setup skill..."

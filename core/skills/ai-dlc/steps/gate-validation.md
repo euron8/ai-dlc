@@ -941,6 +941,37 @@ CONTINUE outcome returns silently — the step proceeds with its
 next directive (typically the `gate-validation.md` call, the next
 adversarial pass, or the next story transition orchestration).
 
+### Core-layer immutability (§7.1 authoring guard — retro/close gate).
+
+**Scope.** Fires at the retro / sprint-close gate (where rule authoring lands).
+**Active only on a layered consumer** — the project has a `.claude/.ai-dlc-version`
+stamp AND the skill's `overrides/` + `extensions/` layer directories exist. The
+distribution source repo (no stamp) and a pre-Phase-2 consumer (no layer dirs)
+are exempt: the check reports PASS (dormant) there. This is the §10
+activation-ordering rule — the guard can only fire once a clean core/layer split
+exists.
+
+**Check.** Compute the sprint diff against the branch base:
+`git diff --name-only <sprint-base>..HEAD`. Intersect with the core manifest (the
+ai-dlc rulebook paths in `.claude/hooks/ai-dlc-protect.sh` `PROTECTED_PATTERNS`:
+`.claude/skills/ai-dlc/SKILL.md`, `steps/*.md`, `escalations.md`,
+`rule-authoring.md`, `handoff.md`, `.claude/team-roles/*.md`). For each core file
+in that intersection, a matching `overrides/` entry (frontmatter `shadows:` names
+that file) must exist. **PASS:** the intersection is empty, or every touched core
+file has a declared override. **FAIL:** any core file was edited in place with no
+override.
+
+**Remediation (not "fix later"):** move the change to the correct layer — a
+net-new rule to `extensions/`, a change to an existing core rule to an
+`overrides/` entry shadowing it (`rule-authoring.md` routing). Then revert the
+in-place core edit so core stays byte-reconcilable with upstream.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: in-place core authoring that
+makes the next `/ai-dlc-update` clobber or false-conflict — the catch-22 regrown.
+False-positive cost: one override declaration for a deliberate core-rule change.
+Removal condition: core ships as an immutable package the skill loads, never a
+writable tree.
+
 ## Gate Failure
 
 If any check fails:

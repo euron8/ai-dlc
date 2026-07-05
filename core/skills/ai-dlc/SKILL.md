@@ -726,6 +726,41 @@ Violation is a code-review finding per `code-reviewer.md`
 (Over-Engineering classification); machinery lacking the (c) contract
 is flagged by the retro rule-file audit (`retro.md` Step 4).
 
+### Rule 27 -- Layered rulebook: core, extensions, overrides
+
+The consumer rulebook is three layers. This rule is how a consumer
+self-improves *without* re-tangling core against upstream (spec §7).
+
+**core** -- the upstream-owned files: every path the protected manifest in
+`.claude/hooks/ai-dlc-protect.sh` lists for this skill (`SKILL.md`,
+`steps/*.md`, `escalations.md`, `rule-authoring.md`, `handoff.md`) plus
+`team-roles/*.md`. `/ai-dlc-update` overwrites these wholesale. You MUST NOT
+edit a core file in place (enforced by the gate-validation **Core-layer
+immutability** check + `rule-authoring.md` routing).
+
+**extensions** (`{skill}/extensions/`) -- consumer-owned, additive: net-new
+rules, gate-checks, and domain step logic upstream does not carry. Upstream
+never writes here.
+
+**overrides** (`{skill}/overrides/`) -- consumer-owned entries that SHADOW a
+specific core rule/check by id (the settings.json-upsert pattern). Upstream
+never writes here.
+
+**Loading (a Read tool call per Rule 21, at INITIALIZATION, after core is
+loaded):** if `extensions/` exists and is non-empty, Read its entries and treat
+them as additional active rules/checks/steps; if `overrides/` exists, Read each
+entry and let it shadow the named core rule/check for this run. **Precedence:
+overrides > extensions > core.** Absent or empty layers = pure core, identical
+to a fresh install. See `extensions/README.md` and `overrides/README.md` for the
+entry contracts.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
+silently mutating core, so the next upstream pull clobbers the new rule or
+false-conflicts against it -- the catch-22, regrown (graph proved it). False
+positive: one override declaration when a consumer genuinely must change a core
+rule. Removal condition: retire once core ships as an immutable package the skill
+loads rather than a writable tree.
+
 ## INITIALIZATION
 
 Clear the pipeline pause flag before any other action. The
@@ -734,6 +769,14 @@ every user message, including the `/ai-dlc` invocation itself. If the
 flag is not deleted here, the Stop hook will treat the next text-only
 response as an intentional pause and allow the pipeline to stall.
 Execute: `rm -f _bmad-output/pipeline-paused.flag`
+
+**Load consumer layers (Rule 27).** After this core file, check for the
+consumer's additive/shadow layers and load them if present:
+`{skill}/extensions/` (additive rules, checks, domain steps) and
+`{skill}/overrides/` (entries shadowing a specific core rule/check). Skip
+silently if the directories are absent or hold only their `README.md`
+scaffold (a fresh install) -- the pipeline then runs pure core. Precedence
+when applying: overrides > extensions > core.
 
 Load the router step to determine the pipeline variant and begin
 execution:

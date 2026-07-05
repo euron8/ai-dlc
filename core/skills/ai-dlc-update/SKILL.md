@@ -115,6 +115,27 @@ Every consumer block that differs from upstream is one of:
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
    dry-run report. Nothing is destroyed without an operator confirm.
 
+## Layered consumers (Rule 27 / spec §7) — the reconcile shrinks
+
+When the consumer has the Phase 2 layer split (a populated
+`{skill}/extensions/` and/or `{skill}/overrides/`), the reconcile surface
+collapses:
+
+- **core** (the protected-manifest files) → overwrite from theirs wholesale.
+  No per-block classify needed — the consumer never edited core in place (the
+  gate-validation Core-layer immutability check guarantees it), so
+  base→ours on core is empty and the three-way degenerates to a fast-forward.
+- **extensions/** → never touched by the pull. Drain entries flagged
+  `push_candidate: true` into the push-candidate ledger (spec §8.1).
+- **overrides/** → the ONLY genuine three-way surface. For each override, its
+  base is the core rule it shadows (`base_sha` in the entry). If theirs changed
+  that core rule between `base_sha` and HEAD, surface the override for operator
+  re-confirmation (override-drift, spec §10).
+
+On a pre-Phase-2 (tangled) consumer like graph's first pull, none of the above
+applies yet — run the full per-block classify. The Phase-2 untangle is what
+moves a consumer from the full reconcile to this cheap one.
+
 ## Shared engine, thin orchestrator
 
 The per-block classifier (`reconcile/classify-block.md`) is a SHARED engine

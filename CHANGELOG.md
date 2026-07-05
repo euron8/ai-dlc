@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-07-05
+
+Consumer-sync Phase 2A — the layered rulebook + authoring guard (spec §7/§7.1).
+The structural destination that keeps the pull near-mechanical forever by
+fencing consumer divergence so core cannot re-tangle against upstream. This is
+the distribution-side half; the one-time consumer untangle (Phase 2B) follows.
+
+**Manifest-core** (design decision, deviates from the spec §7 literal `core/`
+subdir diagram, honors its intent): "core" is the set of upstream-owned files
+the `ai-dlc-protect.sh` protected manifest already enumerates, left in place —
+not a physical subdirectory. This reuses existing enforcement machinery and
+avoids rewriting ~62 path references, and lets the Phase 2B untangle just add
+two directories instead of relocating every rulebook file.
+
+- **Rule 27 (SKILL.md)** — the three-layer rulebook: `core` (upstream-owned,
+  overwritten on update, never edited in place), `extensions/` (consumer-owned,
+  additive), `overrides/` (consumer-owned, shadow a core rule/check by id).
+  Loaded at INITIALIZATION as a Read call (Rule 21); precedence
+  overrides > extensions > core; absent/empty layers = pure core.
+- **`extensions/README.md` + `overrides/README.md`** — the entry contracts
+  (extension `kind`/`hooks`/`push_candidate`; override `shadows`/`base_sha` for
+  the §10 override-drift three-way). Installed additively, never overwritten.
+- **gate-validation Core-layer immutability check (§7.1 guard)** — fails any
+  retro/close gate whose sprint diff edits a core-manifest file without a
+  declared override. Active only on a layered consumer (has stamp + layer dirs);
+  the distribution source and pre-Phase-2 consumers are exempt (dormant). This
+  is what reconciles "self-improve in the consumer" with "receive upstream
+  updates" — without it, every consumer re-tangles like graph.
+- **`rule-authoring.md` layer routing** — new rule → extensions; core-rule
+  change → override; generalizable → extensions + `push_candidate: true`.
+- **`ai-dlc-update`** made layer-aware: on a layered consumer the reconcile
+  collapses to a core fast-forward + the small `overrides/` three-way, and
+  drains flagged extensions into the push queue.
+- **install.sh** — scaffolds `extensions/` + `overrides/` additively (never
+  overwrites a populated layer); also now copies the skill-root docs
+  `escalations.md` + `rule-authoring.md` (a pre-existing install gap surfaced by
+  the Phase 1 graph reconcile).
+
+Additive/backward-compatible: a consumer with no layer directories runs pure
+core exactly as before; the guard stays dormant until Phase 2B creates the split.
+
 ## [0.15.1] — 2026-07-05
 
 `ai-dlc-update` apply-path hardening. The apply path wrote reconciled changes
