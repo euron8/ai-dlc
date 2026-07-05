@@ -17,6 +17,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-07-05
+
+Resident-context slimming (JIT rule relocation + de-duplication). Relocates
+phase-specific procedure/template bodies out of the always-resident
+`SKILL.md` orchestrator into just-in-time files loaded at their seam, and
+de-duplicates content already owned by step files. Behavior-preserving: no
+rule text is trimmed or weakened — each verbose body moves verbatim while a
+trigger + one-line pointer stays resident (move/de-dup, never delete).
+`SKILL.md` drops from ~10,080 to ~8,700 resident tokens (−13%). Full
+rationale and measurements: `docs/v0.12.0-resident-context-slimming-spec.md`.
+
+### Added
+
+- **`rule-authoring.md`** — the Rule 18 rule-authoring style guide + the
+  retro rule-file-audit violation classes, loaded when authoring or auditing
+  a rule.
+- **`steps/handoff.md`** — the human-requested (path a) handoff procedure
+  (stop teammates → commit → finalize snapshot → emit the bare `/ai-dlc
+  resume` line → pause flag), loaded at a handoff seam.
+- **`escalations.md`** — the escalation entry-format template + resolution
+  lifecycle, loaded when writing or resolving an escalation.
+- **Retro Step 4 resident-slimming guardrails** (`retro.md`): a
+  relocation-pointer resolve check (every JIT pointer must name a live
+  skill-content file) and a first-5K ordering assertion (POST-COMPACT
+  RECOVERY + Rules 3/4/11 must begin inside Claude Code's post-compact
+  re-attach budget). Both HARD_BLOCK on failure, run every retro.
+
+### Changed
+
+- Relocated to their seam-owning files, with the mandate + a pointer left
+  resident in `SKILL.md`: Rule 18 style guide → `rule-authoring.md`; handoff
+  procedure → `steps/handoff.md`; pipeline-snapshot six-section schema →
+  `gate-validation.md` Check 14; Rule 20 provenance-block schema →
+  `gate-validation.md` Check 17; auto-handoff mode semantics + binding
+  constraints → `gate-validation.md` "Auto-handoff evaluation" (a de-dup of
+  the SKILL↔gate duplication); Rule 12 escalation format → `escalations.md`;
+  Rule 25(d) threshold values → the `retro.md` artifact-size audit; Rule 24
+  dispatch contract trimmed to defer concrete dispatch to each offloaded
+  step's Section 0.
+- **Rule 8 intensity skips are now enforced in their owning step files.**
+  The per-intensity skip enumerations moved from the resident Rule 8 into
+  explicit intensity gates in `stories-test-strategy.md` (Steps 3 + 5.1),
+  `architecture.md`, `research-requirements.md`, and `sprint-review.md`
+  (joining the existing `discovery.md` gate), so each skip is enforced at the
+  step that runs it. Rule 8 keeps the intensity→minimum-cycle trigger table,
+  the assignment constraint, the gate-log mandate, and the always-required
+  list.
+
+### Fixed
+
+- **POST-COMPACT RECOVERY PROTOCOL now sits inside the 5K re-attach budget.**
+  It had drifted to ~5,142 tokens — just past the first-5K window Claude Code
+  re-attaches after compaction, so the recovery path risked being dropped
+  exactly when it is needed. The relocations pulled it to ~4,349 tokens, and
+  the new first-5K guardrail keeps it there.
+
 ## [0.11.0] — 2026-07-05
 
 Consumer-absorption backport from the graph project (sprints S251–S281,
