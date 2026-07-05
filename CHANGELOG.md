@@ -17,6 +17,18 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.2] — 2026-07-05
+
+`ai-dlc-update` apply now completes through the full review flow. The apply path
+branched (step 6) and committed (step 7) but stopped at "hand the operator the
+diff/PR"; push, PR, and merge were left implicit. Makes the delivery explicit as
+a dedicated **step 8 — branch → commit → push → PR → merge**: commit the
+reconcile on the isolation branch, push to `origin` (STOP and hand off a local
+branch if there is no remote / push fails — never silently drop the work), open
+a PR into the working branch, and merge (squash, delete branch) only on operator
+approval — the PR is the final review gate; no auto-merge. On merge the re-stamp
++ log + changes reach the working branch. Safety renumbered to step 9.
+
 ## [0.16.1] — 2026-07-05
 
 `ai-dlc-update` self-update notice. The skill runs from a copy of itself inside
