@@ -264,6 +264,18 @@ Makes the pull near-mechanical forever by fencing divergence so it cannot re-tan
 Same shape as the BMAD `_bmad/` LAZY/JIT pattern v0.12.0 already borrowed, and as
 the settings.json upsert.
 
+> **Implemented (v0.16.0, Phase 2A) as MANIFEST-CORE, not a physical `core/`
+> subdir.** The diagram below is the ownership model; the shipped realization
+> keeps the upstream-owned files where they are and treats "core" as the set the
+> `ai-dlc-protect.sh` protected manifest already enumerates, adding `extensions/`
+> + `overrides/` as sibling directories. Rationale: a physical `core/` subdir
+> would rewrite ~62 path references + the protect hook + install + CI scripts,
+> and force the Phase 2B graph untangle to physically relocate every rulebook
+> file mid-migration. Manifest-core delivers the same payoff — overwrite core /
+> leave extensions+overrides / shrink the three-way to `overrides/` — with
+> near-zero churn, and both layouts rely on the same §7.1 gate for the actual
+> fence (neither physically prevents a core edit). Loader = SKILL.md Rule 27.
+
 ```
 consumer .claude/skills/ai-dlc/
   core/          <- upstream-owned; overwrite on update; consumer NEVER edits

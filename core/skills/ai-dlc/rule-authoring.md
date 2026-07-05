@@ -17,6 +17,20 @@ CLAUDE.md, `docs/coding-conventions.md`, step files, or team role files.
 - No parenthetical origin notes after a directive.
 - No embedded dates, retro quotes, or escalation quotes.
 
+**Layer routing (Rule 27 / §7.1 — MANDATORY on a layered consumer).** Before
+writing an authored rule, route it by kind — never edit a core-manifest file in
+place:
+- **New consumer-specific rule or check** → `{skill}/extensions/` (with the
+  `extensions/README.md` frontmatter contract). Never core.
+- **Change to an existing core rule** → an `{skill}/overrides/` entry that
+  shadows it by id (with `shadows:` + `base_sha:`). Never an in-place core edit.
+- **Generalizable improvement** → `{skill}/extensions/` AND set
+  `push_candidate: true`, which feeds the `ai-dlc-update` push-mine (spec §8.1).
+An in-place edit of a core file fails the gate-validation **Core-layer
+immutability** check. On a pre-Phase-2 consumer (no layer directories) or the
+distribution source itself, this routing is dormant and rules are authored in
+place as before.
+
 **Scope.** Rule files only: this skill, CLAUDE.md,
 coding-conventions.md, step files, team role files. Planning
 artifacts (PRDs, stories, reviews, retros) and export bundles are
