@@ -294,7 +294,10 @@ Structure -- lightweight markdown, no YAML frontmatter. Six required
 sections:
 
 - **Pipeline Position** -- variant, current step file, last completed
-  step file, last gate passed with timestamp, current git branch.
+  step file, last gate passed with timestamp, current git branch, and
+  any handoff-only resume instruction not derivable from the other fields
+  (e.g., a bg watcher PID the successor must re-arm) so that a bare
+  `/ai-dlc resume` is self-sufficient.
 - **Sprint Context** -- sprint ID (or `none`), stories in scope with
   statuses, `is_ui_epic` boolean, `validation_intensity` (full |
   standard | lightweight).
@@ -330,47 +333,28 @@ procedure in order:
 3. Finalize the pipeline snapshot — one last update capturing
    anything not yet reflected, including the stopped-teammate
    record from Step 1.
-4. Output the resume prompt (template below), wrapped in `----`
-   delimiter lines (one before, one after), AND write the same resume
-   prompt (the text between the markers, without the `----` lines) to
-   `_bmad-output/handoff-resume.txt` (overwrite any prior file). This
-   file is the auto-session-chaining driver's handoff signal; a
-   text-only resume prompt is an unreliable transport for it.
+4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
+   `----` delimiter lines (one before, one after) for copy-paste. Nothing
+   else: no narrated body. If auto-session-chaining is in use, also
+   `touch _bmad-output/.driver/handoff` (the driver's zero-content handoff
+   signal).
 5. Create the pause flag so the continuation hook allows this session to
    end cleanly: `touch _bmad-output/pipeline-paused.flag`. Then end the
    session — do not continue the pipeline in this conversation.
 
-**Resume prompt template** (fill bracketed fields at handoff time).
-
-The first line MUST be `/ai-dlc resume` so the successor session
-invokes this skill on paste. The body MUST stay terse: pipeline
-state lives in `_bmad-output/pipeline-snapshot.md` (the source of
-truth), and re-narrating Recent Activity, branch heads, sprint
-context, locked decisions, or open items in the resume prompt is
-forbidden duplication that drifts from snapshot reality. Cite only
-what the successor needs to find the snapshot and confirm it is
-the right one. If a handoff-specific instruction is not derivable
-from the snapshot (e.g., a bg watcher PID the successor must
-re-arm; a pause flag whose deletion gates resume), include that
-single instruction line.
+**Resume is snapshot-driven.** The entry line is the bare skill
+invocation; the resume path (`route.md` Step 0) reads
+`_bmad-output/pipeline-snapshot.md` for ALL state. Do NOT narrate
+pipeline state (sprint, branch, step, open items, decisions) into the
+resume line — the snapshot is the single source of truth, and any
+handoff-only instruction that is not derivable from other snapshot fields
+belongs in the snapshot (step 3), not the resume line.
 
 ```
+----
 /ai-dlc resume
-
-Sprint [N] [variant], [current step file] [GATED on X | active].
-Branch: [git branch] @ [short sha].
-Snapshot: _bmad-output/pipeline-snapshot.md (read in full first).
-[Optional single line: pause flag / bg process / resume-only instruction not derivable from snapshot.]
-
-Acknowledge handoff in first output line and name resume step.
+----
 ```
-
-Forbidden in the resume prompt: state summaries, branch lists,
-ETA recaps, sprint-status excerpts, escalation summaries, "next
-pipeline actions in order" lists. All of those belong in the
-snapshot. Successor reads the snapshot — duplication in the
-prompt rots fast and contradicts the snapshot when the lead
-forgets to update both.
 
 ### Pending operator approvals do not transfer across handoff
 
