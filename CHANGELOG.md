@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-07-05
+
+Consumer-sync Phase 1 — the distribution→consumer PULL path. Adds
+`ai-dlc-update`, a consumer-side skill (lifecycle triad: setup·operate·update)
+that reconciles upstream distribution changes into a diverged consumer via a
+base-aware semantic three-way merge, instead of the blunt full-rulebook
+overwrite `install.sh` performs. Design record:
+`docs/consumer-sync-mechanism-spec.md`.
+
+Additive/net-new — no change to existing steps, hooks, or gate schema; existing
+consumers keep working. The skill is not added to the `install.sh` copy set by
+design: it lands via the §6.2 file-scoped additive bootstrap
+(`cp -r core/skills/ai-dlc-update <consumer>/.claude/skills/`), then self-updates.
+
+- `core/skills/ai-dlc-update/SKILL.md` — pull orchestrator. Resolves
+  base/theirs/ours from the `.ai-dlc-version` stamp, runs a mechanical
+  pre-pass, dispatches the per-block classifier, emits a dry-run report first,
+  applies + re-stamps only on confirm. Self-contained (§6.2 hard constraint):
+  no dependency on the consumer's pipeline rulebook — shells to git, dispatches
+  generic agents — so the bootstrap copy is safe at any divergence.
+- `core/skills/ai-dlc-update/reconcile/preclassify.sh` — deterministic
+  base/theirs/ours hash bucketer (UPSTREAM-ONLY-ADD / UPSTREAM-ONLY /
+  ALREADY-AT-THEIRS / BOTH-CHANGED), narrowing the semantic surface to genuine
+  divergence.
+- `core/skills/ai-dlc-update/reconcile/classify-block.md` — the SHARED per-block
+  classifier engine (spec §8, four jobs: pull-reconcile, push-mine, Phase-2
+  untangle, N→1 fan-in dedupe). `ai-dlc-update` is the thin pull entry point.
+
+Validated against graph (max-divergence consumer, stamp `0.10.0 @ 2271942` →
+v0.14.0): mechanical pass = 5 pure-adds + 20 both-changed; the semantic pass
+confirmed no file is a safe wholesale take-theirs (every one would regress
+graph), most divergence is rewording/already-present (mined FROM graph), with
+the conflicts and un-pushed-innovation push-candidates surfaced for operator
+review. Dry-run only; no consumer rulebook was modified.
+
 ## [0.14.0] — 2026-07-05
 
 Consumer-absorption backport (Phase 2, Tier-2). Absorbs the Tier-2
