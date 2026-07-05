@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-07-05
+
+Unified two-version stamp — `.ai-dlc-version` now reports both the rulebook and
+the skill version, and the format is consistent across install / update / check.
+
+Two latent problems drove this: (1) the stamp tracked only the rulebook
+merge-base (advanced by a rulebook apply), while `ai-dlc-update` self-updates on
+its own cycle — so after a skill-only self-update the stamp lagged and there was
+NO field telling you the installed skill version; (2) `install.sh` wrote a
+multi-line stamp (`version:`/`commit:`/`installed_at:`/`upstream:`) that
+`check-version.sh` parses, but `ai-dlc-update` re-stamped in a different
+single-line form (`X.Y.Z @ <sha>`), so every apply clobbered `installed_at` +
+the `upstream` URL and broke `check-version.sh`'s parser.
+
+New schema:
+```
+version: <rulebook ver>       # core merge-base = the pull base; advanced by a gated apply
+commit:  <sha>
+skill_version: <tool ver>     # ai-dlc-update itself; advanced by its autonomous self-update
+skill_commit:  <sha>
+installed_at: <ts>
+upstream: <git ref>
+```
+
+- `install.sh` writes the schema (both pairs = install version).
+- `ai-dlc-update` step 2 self-update advances `skill_version`/`skill_commit`
+  (bookkeeping tied to the already-autonomous self-update); step 7 apply advances
+  `version`/`commit`, preserving the skill fields + `installed_at` + `upstream`.
+  Re-stamps never collapse to the legacy single line.
+- Step 1 reads `commit` as the base and the `upstream` field as the distribution
+  ref (closing the §6.1 "upstream URL not in the stamp" gap).
+- `check-version.sh` shows both versions and gained a legacy single-line
+  fallback so pre-0.17.0 stamps still parse until the next re-stamp migrates them.
+
+Backward compatible: legacy `X.Y.Z @ <sha>` stamps are read as
+`version`/`commit` with `skill_version` unknown, and rewritten in-schema on the
+next self-update or apply.
+
 ## [0.16.6] — 2026-07-05
 
 `ai-dlc-update` stamp now advances on a skill-only / empty reconcile. The

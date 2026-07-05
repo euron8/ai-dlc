@@ -338,13 +338,22 @@ fi
 
 # Write version stamp so consumers can detect drift from upstream
 VERSION_STAMP="$PROJECT_ROOT/.claude/.ai-dlc-version"
+# Unified stamp schema (v0.17.0+): two independently-advancing versions.
+#   version/commit       -> the rulebook (core) merge-base; advanced by an
+#                           ai-dlc-update rulebook apply. This is the pull base.
+#   skill_version/commit -> the ai-dlc-update tool itself; advanced by its own
+#                           autonomous self-update cycle. Read this to know the
+#                           installed skill version.
+# At install time both pairs equal the installed distribution version.
 cat > "$VERSION_STAMP" <<EOF
 version: $AI_DLC_VERSION
 commit: $AI_DLC_COMMIT
+skill_version: $AI_DLC_VERSION
+skill_commit: $AI_DLC_COMMIT
 installed_at: $INSTALL_TIMESTAMP
 upstream: https://github.com/euron8/ai-dlc
 EOF
-echo "  .claude/.ai-dlc-version stamped ($AI_DLC_VERSION @ $AI_DLC_COMMIT)"
+echo "  .claude/.ai-dlc-version stamped (rulebook $AI_DLC_VERSION @ $AI_DLC_COMMIT; skill $AI_DLC_VERSION)"
 
 echo ""
 echo "Installation complete!"

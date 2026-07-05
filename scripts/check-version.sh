@@ -28,12 +28,21 @@ fi
 
 LOCAL_VERSION="$(awk -F': ' '/^version:/ {print $2}' "$STAMP" | tr -d '[:space:]')"
 LOCAL_COMMIT="$(awk -F': ' '/^commit:/ {print $2}' "$STAMP" | tr -d '[:space:]')"
+LOCAL_SKILL_VERSION="$(awk -F': ' '/^skill_version:/ {print $2}' "$STAMP" | tr -d '[:space:]')"
 LOCAL_INSTALLED="$(awk -F': ' '/^installed_at:/ {print $2}' "$STAMP" | tr -d '[:space:]')"
+
+# Legacy single-line stamp fallback: "X.Y.Z @ <sha>" (pre-0.17.0 / early
+# ai-dlc-update re-stamps). Parse it so drift-check still works pre-migration.
+if [ -z "$LOCAL_VERSION" ] && grep -q ' @ ' "$STAMP" 2>/dev/null; then
+  LOCAL_VERSION="$(awk -F' @ ' 'NR==1 {print $1}' "$STAMP" | tr -d '[:space:]')"
+  LOCAL_COMMIT="$(awk -F' @ ' 'NR==1 {print $2}' "$STAMP" | tr -d '[:space:]')"
+fi
 
 if [ -z "$LOCAL_VERSION" ]; then
   echo "Stamp at $STAMP is malformed (no version field)."
   exit 2
 fi
+[ -z "$LOCAL_SKILL_VERSION" ] && LOCAL_SKILL_VERSION="(unknown — pre-0.17.0 stamp)"
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl required to fetch upstream VERSION."
@@ -45,8 +54,9 @@ UPSTREAM_VERSION="$(curl -fsSL "$UPSTREAM_RAW" 2>/dev/null | tr -d '[:space:]')"
   exit 3
 }
 
-echo "Local:    $LOCAL_VERSION ($LOCAL_COMMIT, installed $LOCAL_INSTALLED)"
-echo "Upstream: $UPSTREAM_VERSION (main)"
+echo "Local rulebook: $LOCAL_VERSION ($LOCAL_COMMIT, installed $LOCAL_INSTALLED)"
+echo "Local skill:    $LOCAL_SKILL_VERSION (ai-dlc-update)"
+echo "Upstream:       $UPSTREAM_VERSION (main)"
 echo ""
 
 if [ "$LOCAL_VERSION" = "$UPSTREAM_VERSION" ]; then
