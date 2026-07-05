@@ -820,9 +820,10 @@ output line in step 4 identifies this handoff as automated:
    > Seam A. Context at <tokens> tokens, red threshold confirmed via
    > user-shared /context."*
 
-   Also write the resume prompt (without the `----` markers) to
-   `_bmad-output/handoff-resume.txt` (overwrite any prior file) — the
-   auto-session-chaining driver's handoff signal.
+   The resume line is the bare `/ai-dlc resume` (the successor reads the
+   snapshot for all state). If auto-session-chaining is in use, also
+   `touch _bmad-output/.driver/handoff` — the driver's zero-content
+   handoff signal.
 
 5. Create the pause flag so the continuation hook allows this
    auto-handoff to end the session (an autonomous handoff has no user

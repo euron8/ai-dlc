@@ -11,8 +11,8 @@
 # under which ai-dlc-continue.sh ALLOWS the stop). On a blocked stall (no
 # flag; ai-dlc-continue.sh forces continue) it writes nothing, so the driver
 # never injects mid-pipeline. The driver then distinguishes a handoff (a
-# `handoff-resume.txt` sentinel is also present -> inject /clear + resume)
-# from an ordinary human pause point (no sentinel -> the attached operator
+# `.driver/handoff` marker is also present -> inject /clear + /ai-dlc resume)
+# from an ordinary human pause point (no marker -> the attached operator
 # handles it; the driver keeps watching).
 #
 # Register in .claude/settings.json AFTER ai-dlc-continue.sh:
