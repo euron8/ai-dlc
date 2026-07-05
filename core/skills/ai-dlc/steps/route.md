@@ -290,8 +290,9 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
   the archival in the output so the user knows the previous state
   was preserved.
 
-See SKILL.md Handoff Protocol and Pipeline Snapshot section for the
-full snapshot structure. The snapshot is
+The full per-section snapshot structure is defined in
+`gate-validation.md` Check 14; see the SKILL.md Handoff Protocol and
+Pipeline Snapshot section for its role and rationale. The snapshot is
 maintained throughout the pipeline and is the source of truth for state
 on handoff, post-`/compact` recovery, and lead self-orientation.
 

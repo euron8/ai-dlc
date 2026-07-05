@@ -45,6 +45,11 @@ the session ends; otherwise continue.
 
 ### 2. Sprint-Level Party Mode
 
+**Intensity gate for lightweight.** When `validation_intensity ==
+lightweight`, skip this sprint-level party mode — the single Step 1
+adversarial pass satisfies the lightweight minimum. Proceed to Step 3
+(Fix and Re-Validate) with any Step 1 findings.
+
 `/bmad-party-mode` — PM, Architect, Dev, TEA, QA walk through the
 entire sprint implementation:
 - Does the implementation match the requirements?

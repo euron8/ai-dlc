@@ -207,6 +207,52 @@ including for each dormant job: evidence
 (`gh run list --workflow=<wf> --branch=main --limit 30`), sprint
 window, and (a) or (b) remediation.
 
+**Relocation-pointer + resident-ordering scan (every retro):**
+
+Resident-context slimming relocates rule bodies out of `SKILL.md` into
+JIT files and leaves a pointer at the seam. Two invariants MUST hold each
+retro; both are HARD_BLOCK on failure and MUST be fixed before the Step
+5c audit commit.
+
+**1. Every relocation pointer resolves to a live file.** Scan `SKILL.md`
+and `.claude/skills/ai-dlc/steps/*.md` for pointers to **skill-loadable
+content** — `READ AND FOLLOW \`<path>\``, and prose locators of the form
+"lives in / defined in / canonical … in / schema in / see \`<file>\`[
+Check N]" that name a step file (`steps/*.md`), a sibling skill reference
+file (`rule-authoring.md`, `research-citations.md`, `escalations.md`,
+`steps/handoff.md`), or a team-role file (`.claude/team-roles/*.md`). For each, confirm the named
+file exists on disk (and, when a specific anchor like `Check 14` is
+cited, that the anchor exists in the target). **Out of scope — do NOT
+flag:** runtime artifacts and project files that exist only in an
+installed project, not in the skill source (`_bmad-output/**`, `docs/**`,
+`CLAUDE.md`, and the living/runtime artifacts `prd.md`,
+`product-brief.md`, `carry-over-backlog.md`, `gate-log.md`,
+`pipeline-snapshot.md`, `audit-anchors.md` and their `*-history` /
+`*-archive` variants). A skill-content pointer whose target is missing is
+a dangling reference — FAIL the audit and either restore the target or
+correct the pointer. Zero dangling skill-content pointers is the pass
+condition.
+
+**2. The critical set stays inside the first-5K re-attach window.**
+Claude Code re-attaches only the first ~5,000 tokens of `SKILL.md` after
+compact. Measure the cut point (chars/4 estimate: the first 20,000 chars)
+and assert the `## POST-COMPACT RECOVERY PROTOCOL` heading and Rules 3, 4,
+and 11 all begin inside it:
+
+```
+node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/SKILL.md','utf8');for(const t of ['## POST-COMPACT RECOVERY PROTOCOL','### Rule 3 ','### Rule 4 ','### Rule 11 ']){const i=s.indexOf(t);console.log((i>=0&&i<20000?'IN ':'OUT'),Math.round(i/4),t.trim());}"
+```
+
+Any target reported `OUT` means a relocation (or an addition ahead of it)
+pushed a critical rule past the re-attach boundary — FAIL and reorder so
+the critical set precedes the cut before committing. Rules 21–26 and
+INITIALIZATION are second-tier by the file's own design ("may sit past
+the 5K boundary") and are NOT required within 5K. Record both invariants'
+results in the retro doc under `## Rule File Audit` in a
+`Relocation-pointer + resident-ordering scan` sub-section: pointers
+checked (count + any dangling), and the measured token offset of
+POST-COMPACT + Rules 3/4/11 with IN/OUT verdicts.
+
 ## Empirical gate validation
 
 Every gate added via retro MUST be exercised on a green run within the next
@@ -331,7 +377,9 @@ was already closed inline, note "Sweep: clean (all items closed
 inline during implementation)".
 
 **Artifact-size audit (Rule 25(d), warn-only).** Measure the live
-planning artifacts and compare to their thresholds:
+planning artifacts and compare to their thresholds. These are the
+canonical, configurable Rule 25(d) threshold defaults (a project
+overrides them here):
 `prd.md` 60k tokens, `product-brief.md` 60k,
 `carry-over-backlog.md` 40k, live `gate-log.md` 25k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning

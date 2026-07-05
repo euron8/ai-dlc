@@ -135,25 +135,20 @@ more is always permitted.
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
 | `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review (1 pass) at discovery + stories-test-strategy only |
 
-Under `carry-over-single`, the following sub-skills are SKIPPED:
-- `/bmad-brainstorming` (discovery Step 3)
-- `/bmad-create-epics-and-stories` (stories-test-strategy Step 2)
-- `/bmad-sprint-planning` (stories-test-strategy Step 3)
-- `/bmad-agent-tea-tea` (stories-test-strategy Step 5.1)
+The per-intensity skips are enforced by each planning step's own
+intensity gate, not tracked centrally. Under `carry-over-single`,
+`discovery.md` skips `/bmad-brainstorming` and `stories-test-strategy.md`
+skips `/bmad-create-epics-and-stories`, `/bmad-sprint-planning`, and
+`/bmad-agent-tea-tea` (creating stories directly from the already-scoped
+carry-over items). Under `lightweight`, `architecture.md` skips its
+validation cycle when the assessment is NO CHANGES NEEDED (Rule 5
+fast-track still applies), and `research-requirements.md` and
+`sprint-review.md` reduce their cycles to a single adversarial pass each.
+Follow each step's gate.
 
-Carry-over items are already scoped; story count is trivially
-plannable; test strategy for ≤2 stories is covered by the story
-validation cycle. The stories-test-strategy step creates story
-files directly from carry-over items instead of invoking the
-epics/stories sub-skill. `carry-over-single` may only be assigned
-to carry-over variants. If actual story count exceeds 2 at
-stories-test-strategy, intensity MUST be revised upward to
-`standard`.
-
-Under `lightweight`, the architecture step validation cycle is
-skipped entirely when the assessment is NO CHANGES NEEDED (Rule 5
-fast-track still applies). Research-requirements and sprint-review
-validation cycles are replaced by a single adversarial pass each.
+`carry-over-single` may only be assigned to carry-over variants. If
+actual story count exceeds 2 at `stories-test-strategy`, intensity MUST
+be revised upward to `standard`.
 
 The gate log MUST record the declared intensity and confirm the
 minimum was met. A gate that passes under `lightweight` with zero
@@ -233,23 +228,11 @@ Action: document decision and rationale, proceed without blocking.
 Formatting, naming, phrasing, minor refactors, test structure, or any
 issue where a professional default exists. Just do it.
 
-Escalation entry format (append, do not overwrite):
-
-```
-## [STORY-ID] [Teammate Name] - [Date/Time]
-**Status:** HARD_BLOCK | DECIDED_AUTONOMOUSLY | DEFERRAL_REQUEST
-**Blocker type:** [contradicts decision | requirement divergence | trade-off | missing requirement | scope change | deferral]
-**Context:** [What you were doing when you hit the issue]
-**Decision/Question:** [For DECIDED_AUTONOMOUSLY: what was decided and why. For HARD_BLOCK: the specific decision needed from the human]
-**Options:** [If applicable, the options considered and their trade-offs]
-**Impact if skipped:** [What happens if work continues without this answer]
-```
-
-Resolution lifecycle: HARD_BLOCK / DEFERRAL_REQUEST resolved by human
-at the production validation checkpoint; status updated to RESOLVED
-with a decision. DECIDED_AUTONOMOUSLY reviewed by human at the
-checkpoint; no action unless decision was wrong, in which case status
-updates to OVERRIDDEN with corrective direction.
+The escalation entry format (append, do not overwrite) and the
+resolution lifecycle (how HARD_BLOCK / DEFERRAL_REQUEST / DECIDED
+statuses are closed at the production checkpoint) live in
+`escalations.md` alongside this file. READ AND FOLLOW it when writing or
+resolving an escalation.
 
 ### Rule 13 -- Requirements define WHAT; agents have autonomy over HOW
 
@@ -290,27 +273,11 @@ validation cycles and during implementation (lightweight refresh).
 Check 15, and on resume by `route.md` Step 0a.
 **Finalized** on handoff request.
 
-Structure -- lightweight markdown, no YAML frontmatter. Six required
-sections:
-
-- **Pipeline Position** -- variant, current step file, last completed
-  step file, last gate passed with timestamp, current git branch, and
-  any handoff-only resume instruction not derivable from the other fields
-  (e.g., a bg watcher PID the successor must re-arm) so that a bare
-  `/ai-dlc resume` is self-sufficient.
-- **Sprint Context** -- sprint ID (or `none`), stories in scope with
-  statuses, `is_ui_epic` boolean, `validation_intensity` (full |
-  standard | lightweight).
-- **Recent Activity** -- last ~10 entries of gate passages,
-  significant commits, key artifacts touched.
-- **Open Items** -- unresolved triage items, pending human decisions,
-  outstanding adversarial review findings.
-- **Locked Decisions** -- locked requirements, direction changes the
-  human flagged that the lead accepted.
-- **Context Reminders** -- `context_reminders_sent` (none | yellow |
-  red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
-  `last_red_fire_tokens`, `last_red_fire_turns`. Updated by
-  `gate-validation.md` Check 14.
+Structure -- lightweight markdown, no YAML frontmatter, six required
+sections (Pipeline Position, Sprint Context, Recent Activity, Open
+Items, Locked Decisions, Context Reminders). The canonical per-section
+field schema lives in `gate-validation.md` Check 14, which owns the
+snapshot refresh; `route.md` Step 0 reads it on resume.
 
 The snapshot is the source of truth for pipeline state. When
 uncertain about current state, read the snapshot, not the
@@ -320,41 +287,16 @@ conversation scrollback.
 
 **(a) Human-requested handoff** -- user explicitly asks to continue
 in a new session (directly, or in response to a Rule 2(b)/(c)
-reminder). Rule 11(b) preamble applies. Execute this 5-step
-procedure in order:
+reminder). Rule 11(b) preamble applies. Only path (a) initiates a
+handoff. When it fires, **READ AND FOLLOW** `steps/handoff.md` — the
+ordered 5-step procedure (stop teammates → commit → finalize snapshot →
+emit the bare `/ai-dlc resume` line → pause flag + end session) and the
+resume-line template. Resume is snapshot-driven: the entry line carries
+no state; `route.md` Step 0 reads `_bmad-output/pipeline-snapshot.md`
+for all of it. Never narrate pipeline state into the resume line.
 
-1. **Stop all in-flight teammates first.** Call `TaskStop` on
-   every `in_progress` task. Halt any Agent-spawned teammate not
-   bound to a task. Wait until every teammate has returned before
-   proceeding. Record stopped teammates and in-flight artifacts
-   in the snapshot's Open Items in Step 3.
-2. Commit any in-flight work (`git add` + `git commit`), including
-   work teammates left in the working tree.
-3. Finalize the pipeline snapshot — one last update capturing
-   anything not yet reflected, including the stopped-teammate
-   record from Step 1.
-4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
-   `----` delimiter lines (one before, one after) for copy-paste. Nothing
-   else: no narrated body. If auto-session-chaining is in use, also
-   `touch _bmad-output/.driver/handoff` (the driver's zero-content handoff
-   signal).
-5. Create the pause flag so the continuation hook allows this session to
-   end cleanly: `touch _bmad-output/pipeline-paused.flag`. Then end the
-   session — do not continue the pipeline in this conversation.
-
-**Resume is snapshot-driven.** The entry line is the bare skill
-invocation; the resume path (`route.md` Step 0) reads
-`_bmad-output/pipeline-snapshot.md` for ALL state. Do NOT narrate
-pipeline state (sprint, branch, step, open items, decisions) into the
-resume line — the snapshot is the single source of truth, and any
-handoff-only instruction that is not derivable from other snapshot fields
-belongs in the snapshot (step 3), not the resume line.
-
-```
-----
-/ai-dlc resume
-----
-```
+Auto-handoff (below) executes this same `steps/handoff.md` procedure
+unchanged at a safe seam.
 
 ### Pending operator approvals do not transfer across handoff
 
@@ -404,53 +346,27 @@ reminder. Any user reply to a reminder is a Rule 11 directive.
 
 ### Auto-handoff (configurable via `auto_handoff_mode`)
 
-The lead MAY automatically execute the path (a) procedure at defined
-safe seams when all preconditions hold. Mode values:
+The lead MAY automatically execute the path (a) procedure
+(`steps/handoff.md`) at a defined safe seam when all preconditions hold.
+Auto-handoff is NOT a fourth pause point -- it is a session-terminating
+action that runs the path (a) procedure unchanged, and resume itself is
+never automated.
 
-- `off` (default) -- auto-handoff disabled; only human-requested
-  handoff fires.
-- `deploy-only` -- auto-handoff fires only at `Seam A` (pre-deploy
-  preflight in `deploy-validate.md`), and only when the token threshold
-  is confirmed red via Mode 1 (user-shared `/context`).
-- `safe-seam` -- auto-handoff fires at any of the defined safe seams
-  (`Seam A` through `Seam E`). Under `safe-seam` the seam IS the
-  trigger: the lead fires the path (a) procedure when it reaches a safe
-  seam, once per session, at a clean step/sub-step boundary. The token
-  threshold is ADVISORY under this mode, not a firing precondition --
-  the intent is a handoff AT the seam, not a token-conditional
-  evaluation that usually continues.
+`auto_handoff_mode` values (projects override the default in this
+section directly):
 
-Projects override the default by setting `auto_handoff_mode` in this
-section directly. Seam definitions (including `Seam E`, retro entry) and
-the shared precondition helper live in `gate-validation.md`
-"Auto-handoff evaluation".
+- `off` (default) -- disabled; only human-requested handoff fires.
+- `deploy-only` -- fires only at `Seam A` (pre-deploy preflight in
+  `deploy-validate.md`), and only when red is confirmed via Mode 1
+  (user-shared `/context`).
+- `safe-seam` -- fires at any defined safe seam (`Seam A` through
+  `Seam E`); the seam is the trigger and the token threshold is advisory.
 
-Binding constraints:
-
-- Auto-handoff MUST NOT fire under `auto_handoff_mode: off`.
-- **Trigger basis by mode.** Under `safe-seam`, the seam is the trigger
-  and the token threshold (`context_reminders_sent`, Mode 1/Mode 2) is
-  advisory only -- never a firing gate. Under `deploy-only`, a seam
-  fires ONLY when red is confirmed via Mode 1 (user-shared `/context`
-  advances `context_reminders_sent` to `red`); `deploy-only` MUST NOT
-  fire off a Mode 2 fallback estimate.
-- **Clean-boundary only.** Auto-handoff MUST fire only at a defined safe
-  seam -- a clean step/sub-step boundary. It MUST NOT fire mid-sub-step.
-- **Resume-safety preconditions apply in every mode.** Regardless of
-  trigger basis, the helper MUST NOT fire unless the snapshot is
-  current, no gate validation is mid-sequence, no teammate is blocked
-  awaiting the lead, and no Rule 3 pause point is active. The trigger
-  basis only decides *whether to consider* firing; these preconditions
-  decide *whether firing is safe*. A handoff must never produce a
-  broken resume contract.
-- Auto-handoff is NOT a fourth pause point. It is a session-
-  terminating action that executes the path (a) procedure unchanged.
-- Auto-handoff output MUST be distinguishable from a human-requested
-  handoff: the lead outputs the auto-handoff line naming the mode,
-  seam, and trigger basis (unconditional, or confirmed token count)
-  immediately before the resume prompt.
-- Resume itself is NOT automated. The user MUST open a new
-  conversation and paste the resume prompt.
+The full firing rules -- the seven-precondition evaluation, the per-mode
+trigger basis, the resume-safety and clean-boundary constraints, the
+distinguishing output line, and the seam definitions (including `Seam E`,
+retro entry) -- live in `gate-validation.md` "Auto-handoff evaluation".
+Step files invoke that helper at each seam.
 
 Research citations backing the threshold choices live in
 `research-citations.md` alongside this file.
@@ -538,30 +454,11 @@ supporting narrative. A rule that needs origin context to survive is
 not a rule -- it is a suggestion leaning on a story. Rewrite it hard
 or move it to a retro doc as a lesson.
 
-**Style:**
-- State mandates with imperative voice ("Do X", "Never Y") or MUST /
-  MUST NOT / SHALL. Forbidden: "should", "try to", "consider",
-  "prefer", "in most cases", and any other language that can be read
-  as optional when the intent is a mandate. "May" is allowed only
-  when granting permission or autonomy, not when stating a mandate.
-- State the enforcement consequence inline when one applies:
-  "Violation fails gate N" or "Missing = Critical severity".
-- No sprint or story references.
-- No incident descriptions or "because we got burned" narrative.
-- No parenthetical origin notes after a directive.
-- No embedded dates, retro quotes, or escalation quotes.
-
-**Scope.** Rule files only: this skill, CLAUDE.md,
-coding-conventions.md, step files, team role files. Planning
-artifacts (PRDs, stories, reviews, retros) and export bundles are
-different formats.
-
-**Cleanup.** The retro's rule file audit (`retro.md` Step 4) scans
-rule files each sprint for three classes of violation: **narrative
-drift** (rule text gained origin context), **rule weakness** (rule
-text became readable as optional), and **complexity accretion**
-(machinery lacking the Rule 26(c) contract, or with false positives
-and no true catches). All are cleanup targets.
+The rule-authoring style guide (imperative voice, forbidden hedges,
+enforcement-consequence-inline, scope) and the retro rule-file audit's
+three violation classes (narrative drift, rule weakness, complexity
+accretion) live in `rule-authoring.md` alongside this file. READ AND
+FOLLOW it when authoring or auditing a rule file (`retro.md` Step 4).
 
 ### Rule 19 -- Agent spawns MUST pass the `model` parameter
 
@@ -584,20 +481,8 @@ for implementation-phase teammates per `implementation.md`.
 
 **Provenance block.** Every invocation MUST emit a
 `SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
-Block schema:
-
-```
-<!-- SKILL_INVOCATION_PROVENANCE v1
-skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
-invoked_at: <ISO 8601 UTC timestamp>
-tool_use_id: <toolu_... from the Skill tool response>
-mode: subagent
-lead_role: <step-file-that-invoked>
-transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
-SKILL_INVOCATION_PROVENANCE_END -->
-```
-
-`scripts/validate-provenance-block.sh` parses the block;
+The block's field schema lives in `gate-validation.md` Check 17, which
+parses it. `scripts/validate-provenance-block.sh` parses the block;
 `scripts/validate-retro-evidence.sh` enforces transcript artifact +
 byte-matched SHA citation for retro party-mode (see
 `gate-validation.md` Check 17). Both run on every retro PR via
@@ -711,19 +596,19 @@ by setting `planning_offload` in this section directly.
 `carry-over-evaluation`. Split offload (exploration only; authoring +
 validation stay inline) — `discovery`, `research-requirements`.
 
-**Dispatch contract.** The lead spawns the analyst via the Agent tool
-with `model` from the analyst role file per Rule 19, passing (a) the exploration scope, (b) the
-canonical output artifact path the step defines, and (c) a stable
-shared context block (order shared-block-first per the dispatch-prompt
-cache discipline in `implementation.md`). The analyst writes the
-artifact to disk and returns ONLY `{artifact_path, summary, gaps}` —
-never raw file content or its exploration trace. The lead then reads
-the artifact from disk only when a decision needs it (Rule 23(a)). If the
-artifact file is absent at the returned path, the lead treats the
-dispatch as non-delivery and re-dispatches — a text-only summary without
-the on-disk artifact is not a delivered draft. Build no detector for
-this; the lead's read of the expected path is the check (Rule 26: audit
-before adding mechanism).
+**Dispatch contract.** Each offloaded step's Section 0 defines its own
+concrete dispatch — the analyst's exploration scope, the canonical output
+artifact path, and the resume point — and spawns the `analyst` via the
+Agent tool (`model` from the analyst role file per Rule 19). The
+cross-cutting rules the lead applies to every such dispatch: order the
+dispatch prompt shared-block-first (dispatch-prompt cache discipline,
+`implementation.md`); the analyst writes the artifact to disk and returns
+ONLY `{artifact_path, summary, gaps}`, never raw content or its
+exploration trace; the lead reads the artifact from disk only when a
+decision needs it (Rule 23(a)); an absent artifact at the returned path is
+non-delivery — the lead re-dispatches (a text-only summary is not a
+delivered draft). Build no detector for this; the lead's read of the
+expected path is the check (Rule 26: audit before adding mechanism).
 
 **Production vs validation boundary.** The analyst *drafts* the
 artifact; the lead *validates, decides, and owns* it. Rule 20
@@ -773,13 +658,13 @@ only the current epoch. Verifying an appended entry reads the **tail**,
 not the whole file.
 
 **(d) Size thresholds (warn, configurable).** When a living artifact
-exceeds its threshold the retro artifact-size audit warns and points
-the operator to the one-shot consolidation step
-(`artifact-consolidation.md`). Defaults: `prd.md` 60k tokens,
-`product-brief.md` 60k, `carry-over-backlog.md` 40k, live `gate-log.md`
-25k. Warn-only — never blocks the pipeline. Consolidation is
-operator-invoked, not automatic: it is a fidelity-critical rewrite and
-must be supervised.
+exceeds its threshold the retro artifact-size audit warns and points the
+operator to the one-shot consolidation step
+(`artifact-consolidation.md`). The per-artifact threshold defaults are
+owned (and configurable) in the retro artifact-size audit (`retro.md`
+Close-Out Sweep). Warn-only — never blocks the pipeline. Consolidation
+is operator-invoked, not automatic: it is a fidelity-critical rewrite
+and must be supervised.
 
 ### Rule 26 -- Minimum mechanism (KISS)
 
