@@ -791,10 +791,11 @@ effects, the step resumes.**
    verification turn. If any pause point is active, return
    CONTINUE.
 
-If all seven preconditions pass, FIRE auto-handoff. Execute the
-Rule 2(a) handoff 5-step procedure (defined in SKILL.md Handoff
-Protocol "Handoff triggers") with one addition — the distinguishing
-output line in step 4 identifies this handoff as automated:
+If all seven preconditions pass, FIRE auto-handoff. This is the
+Rule 2(a) handoff procedure (canonical base in `steps/handoff.md`),
+repeated here as the auto-handoff variant — the distinguishing output
+line in step 4 identifies this handoff as automated, and steps 3/5
+carry the no-human-present additions:
 
 1. **Stop all in-flight teammates first.** Call `TaskStop` on
    every `in_progress` task. Halt any Agent-spawned teammate not
