@@ -333,6 +333,28 @@ Violation: any deferral or carry-over surfaced at the PVC without its
 triple, or the operator (not the lead) catching a vacuous deferral →
 retro finding.
 
+**Locked-requirement deferral needs recorded operator disposition.** The
+freshness rule above lets an ordinary deferral whose target was already
+delivered close as `CLOSED - delivered` — delivery cleanses it. This does
+NOT hold for a Rule 13 LOCKED_REQUIREMENT. Deferring a locked requirement
+is a requirement divergence: it requires a HARD_BLOCK with an explicit
+operator disposition on record (approved-deferral / do-now / descope),
+per Rule 13 + Rule 12 Tier 1. Same-sprint delivery does NOT retroactively
+cleanse that need — a locked requirement that was deferred and then
+delivered still surfaces at the PVC with its recorded disposition, so the
+governance fact that a locked requirement slipped its lock is visible and
+signed off, not erased by the eventual delivery. A locked-requirement
+deferral reaching close-out with no recorded operator disposition is a
+retro finding, whether or not the requirement ultimately shipped.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a locked requirement
+quietly deferred without operator sign-off, with the deferral later
+laundered clean by same-sprint delivery so the lock-slip never reaches
+the operator. False-positive cost: one recorded disposition line per
+deferred locked requirement. Removal condition: retire once locked
+requirements cannot be deferred without a structurally-enforced operator
+gate.
+
 **Sweep targets (run all three):**
 
 1. **`_bmad-output/planning-artifacts/carry-over-backlog.md`.** For
@@ -361,7 +383,13 @@ retro finding.
    accepted at the production validation checkpoint get `DEFERRED -
    sprint <N>` and are moved to the next sprint's carry-over
    backlog (append to `carry-over-backlog.md` as a new OPEN item
-   citing the original escalation).
+   citing the original escalation). Then **archive terminal entries
+   (Rule 25(a)/(c)):** move every RESOLVED and OVERRIDDEN entry
+   (cut-and-paste, verbatim) out of `pending.md` into
+   `docs/escalations/pending-archive.md`, leaving only OPEN escalations
+   in the live log so the next sprint's gate-read stays bounded — see
+   `escalations.md` "Terminal-entry archival". Nothing is dropped; the
+   union of live + archive preserves every entry.
 
 3. **`_bmad-output/implementation-artifacts/sprint-status.yaml`.**
    Final consistency pass: every story with `Status: done` in its

@@ -205,6 +205,25 @@ If `is_ui_epic == true`:
   the mockup, and any drift found/fixed. Gate validation check #9
   requires this evidence.
 
+### 4b. Deferred-AC discharge verification (Hard Gate — Non-Skippable)
+
+Every AC deferred at an earlier gate with a `deploy-pending` discharge
+predicate (see `qa.md` "Deferred-AC discharge predicate") comes due here.
+For EACH such AC, the lead MUST run its named discharge predicate against
+production and confirm the stated result — GREEN — before the sprint is
+done. Capture each predicate's command/query and its live output in the
+gate log under `deferred_ac_discharge`. A deferred AC whose predicate is
+not run, or runs non-green, BLOCKS done: it is either a HARD_BLOCK (the
+promised behavior is absent in production) or a re-deferral with a fresh
+recorded predicate — never a silent pass.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: an AC deferred to
+"verify after deploy" that no step ever re-checks, so the sprint closes
+with an unverified acceptance criterion. False-positive cost: one
+predicate run per deferred AC — the predicate the AC already named.
+Removal condition: retire once deferred-AC predicates are collected and
+run automatically at deploy time.
+
 ### 5. Production Validation Checkpoint
 
 Present to the human:

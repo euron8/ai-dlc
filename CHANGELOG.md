@@ -17,6 +17,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-07-05
+
+Consumer-absorption backport (Phase 2, Tier-2). Absorbs the Tier-2
+candidates from the graph S281 reconciliation (spec §3) after per-item
+confirm-absent triage against v0.13.0. Triage dropped one item as already
+upstream (merge-approval-does-not-survive-handoff — SKILL.md "Pending
+operator approvals do not transfer across handoff" already covers every
+human gate); the remaining eight are absorbed here, generalized
+graph-name-free with Rule 26(c) contracts where machinery. Design record:
+`docs/v0.13.0-consumer-absorption-spec.md` §3.
+
+### Added
+
+- **Perf-bound input-shape regime (HARD GATE)** (`qa.md`): any AC bounding
+  a performance metric MUST name the input-shape regime (size / cardinality
+  / depth) where the bound holds and test at the upper bound of expected
+  production load — a perf AC with no regime, or tested only at a small
+  fixture, is REJECT.
+- **Deferred-AC discharge predicate** (`qa.md` HARD GATE +
+  `steps/deploy-validate.md` Step 4b): any deferred / deploy-pending AC MUST
+  name the exact runnable predicate that discharges it and the step that
+  checks it; a bare "deferred" is REJECT, and deploy-validate now runs each
+  deploy-pending predicate against production before done.
+- **Silent Validity-Guard on a Consumer-Facing Data Surface = Critical**
+  (`code-reviewer.md`): a PR adding a suppress/clamp/default-fill/null-emit
+  guard on a consumer-read data surface MUST ship observability
+  (log/metric/smoke probe); silent None/sentinel substitution is Critical.
+- **gate-validation Check 21 — test-strategy deliverable presence**: every
+  test the test strategy names MUST exist on disk (grep/collection-resolved)
+  and be cited from a Dev Agent Record; fail-closed. Absorbed from graph
+  Check 33 → distribution Check 21 (mapping recorded).
+- **Live security-state mutation carve-out** (`SKILL.md` Rule 13): a
+  tightening of the autonomy grant — the agent MUST NOT autonomously mutate
+  live access-control / security state (permissions, IAM/policy, auth /
+  network rules, secrets); it stages the change and the operator fires it,
+  with per-action in-session authorization recorded.
+- **AC verification-category-change disclosure** (`escalations.md`, pointer
+  in `SKILL.md` Rule 12): when a HARD_BLOCK resolution moves an AC between
+  verification categories, the resolution MUST disclose `AC N category
+  old→new. Operator ack Y/N` before it closes.
+- **Escalation-log terminal-entry archival** (`escalations.md` +
+  `steps/retro.md` sweep + `SKILL.md` Rule 25(c) pointer): RESOLVED /
+  OVERRIDDEN entries move (verbatim, no loss) from `pending.md` to
+  `pending-archive.md` at retro close so the gate-read stays bounded to open
+  escalations. Extends the Rule 25 no-loss archival family.
+- **Locked-requirement deferral needs recorded operator disposition**
+  (`steps/retro.md`): deferring a Rule 13 locked requirement requires an
+  explicit recorded operator disposition; same-sprint delivery does NOT
+  retroactively cleanse it (distinct from the freshness rule's
+  `CLOSED - delivered` for ordinary deferrals).
+
+### Changed
+
+- `SKILL.md` Rule 12's AC-category-change disclosure kept resident as a
+  one-line pointer with its mechanism relocated to `escalations.md` (JIT
+  resolution-lifecycle owner), preserving the POST-COMPACT RECOVERY first-5K
+  re-attach budget (v0.12.0 guardrail).
+
 ## [0.13.0] — 2026-07-05
 
 Consumer-absorption backport (Phase 1, Tier-1). Absorbs the tech-agnostic,
