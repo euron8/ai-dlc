@@ -83,7 +83,22 @@ Every consumer block that differs from upstream is one of:
 4. **Emit the dry-run report FIRST** — `_bmad-output/ai-dlc-update/reconcile-report.md`:
    per-file + per-block bucket, proposed action, the push-candidate list, and
    the conflict list for operator review. **Stop here unless invoked with `apply`.**
-5. **Apply (only on `apply` + operator confirm of the conflict list):**
+5. **Isolate — branch before ANY write (apply only, MANDATORY).** The reconcile
+   MUST NOT mutate the consumer's live branch in place. Before the first write
+   in step 6:
+   - Shell to git in the consumer tree. If it is not a git repo, STOP and tell
+     the operator (no safe isolation possible).
+   - If the working tree has uncommitted changes that would tangle the reconcile
+     diff, STOP and report — let the operator stash/commit first. (A dirty tree
+     unrelated to the rulebook may be fine; when in doubt, stop.)
+   - `git checkout -b ai-dlc-update/<theirs-version>-reconcile-<ts>` off the
+     current branch. ALL step-6 writes land here, so the operator reviews a
+     clean diff / opens a PR — never a silently-mutated working branch.
+   This is a hard requirement, symmetric with the pipeline's own branch-per-unit
+   discipline; the `_divergence/` archive (step 7) is a backstop, not a
+   substitute for the branch.
+6. **Apply (only on `apply` + operator confirm of the conflict list, on the
+   step-5 branch):**
    - apply-bucket blocks → write theirs into ours (path-mapped).
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
@@ -93,9 +108,12 @@ Every consumer block that differs from upstream is one of:
      new version of `ai-dlc-update` at the end (or re-exec).
    - Re-stamp `.claude/.ai-dlc-version` = `<theirs-version> @ <theirs-sha>` and
      write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`.
-6. **Safety.** The consumer's `docs/pre-ai-dlc/<ts>/_divergence/` archive
-   (written by install) plus the dry-run report give a full recover path.
-   Nothing is destroyed without an operator confirm.
+   - Commit on the reconcile branch and hand the operator the diff/PR to review
+     and merge — the skill does not merge to the working branch itself.
+7. **Safety.** Three independent recover layers: the step-5 reconcile **branch**
+   (the working branch is never touched), the consumer's
+   `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
+   dry-run report. Nothing is destroyed without an operator confirm.
 
 ## Shared engine, thin orchestrator
 

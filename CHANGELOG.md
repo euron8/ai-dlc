@@ -17,6 +17,18 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.15.1] — 2026-07-05
+
+`ai-dlc-update` apply-path hardening. The apply path wrote reconciled changes
+into the consumer's live working branch in place, relying only on the
+`_divergence/` archive + dry-run report for recovery — no branch isolation.
+Adds a **mandatory branch-before-apply** step: before any write, the skill cuts
+`ai-dlc-update/<theirs-version>-reconcile-<ts>` off the current branch (stopping
+if the tree is dirty in a way that would tangle the reconcile), lands all writes
+there, and hands the operator a diff/PR to review and merge. The working branch
+is never mutated in place. Dry-run (bare invocation) was already write-free and
+is unaffected.
+
 ## [0.15.0] — 2026-07-05
 
 Consumer-sync Phase 1 — the distribution→consumer PULL path. Adds
