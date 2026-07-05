@@ -117,7 +117,7 @@ Every consumer block that differs from upstream is one of:
      current branch. ALL step-7 writes land here, so the operator reviews a
      clean diff / opens a PR — never a silently-mutated working branch.
    This is a hard requirement, symmetric with the pipeline's own branch-per-unit
-   discipline; the `_divergence/` archive (step 8) is a backstop, not a
+   discipline; the `_divergence/` archive (step 9) is a backstop, not a
    substitute for the branch.
 7. **Apply (only on `apply` + operator confirm of the conflict list, on the
    step-6 branch):**
@@ -130,9 +130,26 @@ Every consumer block that differs from upstream is one of:
      new version of `ai-dlc-update` at the end (or re-exec).
    - Re-stamp `.claude/.ai-dlc-version` = `<theirs-version> @ <theirs-sha>` and
      write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`.
-   - Commit on the reconcile branch and hand the operator the diff/PR to review
-     and merge — the skill does not merge to the working branch itself.
-8. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
+8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
+   through the consumer's normal review flow, never force-written to the working
+   branch:
+   - **Commit** all step-7 writes on the step-6 reconcile branch, with a subject
+     like `chore(ai-dlc-update): reconcile distribution <base-ver> → <theirs-ver>`
+     and a body summarizing buckets applied + conflicts adjudicated + the log path.
+   - **Push** the reconcile branch to the consumer's remote (`origin`). If there
+     is no remote or push fails (a local-only consumer), STOP here and hand the
+     operator the local branch + diff to merge manually — do not silently drop
+     the work.
+   - **Open a PR** into the working branch (`gh pr create`), body = the reconcile
+     report summary (buckets, conflicts, push-candidates).
+   - **Merge on operator approval.** The PR is the final review gate — merge
+     (squash, delete branch) only after the operator approves it. The skill does
+     NOT auto-merge without that approval, even though conflicts were already
+     confirmed pre-apply. On merge, the re-stamp + log + changes reach the
+     working branch through the merge.
+   - Drain any `push_candidate`-flagged extensions into the push-candidate ledger
+     for a later upstream push-mine (spec §8.1).
+9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
    dry-run report. Nothing is destroyed without an operator confirm.
