@@ -290,27 +290,11 @@ validation cycles and during implementation (lightweight refresh).
 Check 15, and on resume by `route.md` Step 0a.
 **Finalized** on handoff request.
 
-Structure -- lightweight markdown, no YAML frontmatter. Six required
-sections:
-
-- **Pipeline Position** -- variant, current step file, last completed
-  step file, last gate passed with timestamp, current git branch, and
-  any handoff-only resume instruction not derivable from the other fields
-  (e.g., a bg watcher PID the successor must re-arm) so that a bare
-  `/ai-dlc resume` is self-sufficient.
-- **Sprint Context** -- sprint ID (or `none`), stories in scope with
-  statuses, `is_ui_epic` boolean, `validation_intensity` (full |
-  standard | lightweight).
-- **Recent Activity** -- last ~10 entries of gate passages,
-  significant commits, key artifacts touched.
-- **Open Items** -- unresolved triage items, pending human decisions,
-  outstanding adversarial review findings.
-- **Locked Decisions** -- locked requirements, direction changes the
-  human flagged that the lead accepted.
-- **Context Reminders** -- `context_reminders_sent` (none | yellow |
-  red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
-  `last_red_fire_tokens`, `last_red_fire_turns`. Updated by
-  `gate-validation.md` Check 14.
+Structure -- lightweight markdown, no YAML frontmatter, six required
+sections (Pipeline Position, Sprint Context, Recent Activity, Open
+Items, Locked Decisions, Context Reminders). The canonical per-section
+field schema lives in `gate-validation.md` Check 14, which owns the
+snapshot refresh; `route.md` Step 0 reads it on resume.
 
 The snapshot is the source of truth for pipeline state. When
 uncertain about current state, read the snapshot, not the

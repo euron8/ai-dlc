@@ -347,28 +347,40 @@ and current pipeline state. The snapshot is a living document maintained
 throughout the pipeline and is the source of truth for state on handoff,
 post-`/compact` recovery, and lead self-orientation.
 
-Refresh these sections:
+**Canonical snapshot structure — six required sections.** Lightweight
+markdown, no YAML frontmatter. This is the authoritative definition of
+the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
+`route.md` Step 0 on resume). Refresh these sections at every gate:
 
-- **Pipeline Position** — update `current_step_file` (just completed),
-  `last_completed_step_file`, `last_gate_passed` (gate name +
+- **Pipeline Position** — variant; update `current_step_file` (just
+  completed), `last_completed_step_file`, `last_gate_passed` (gate name +
   timestamp), and `current_branch` (refresh from
-  `git branch --show-current`).
-- **Sprint Context** — sync story statuses with `sprint-status.yaml`
+  `git branch --show-current`); plus any handoff-only resume instruction
+  not derivable from the other fields (e.g., a bg watcher PID the
+  successor must re-arm) so that a bare `/ai-dlc resume` is
+  self-sufficient.
+- **Sprint Context** — sprint ID (or `none`); stories in scope with
+  statuses, synced with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,
-  stories_not_started). Update sprint_id if it changed. If
-  `is_ui_epic` was determined during this gate's step (set in
-  `stories-test-strategy.md` Step 7), record it here so
-  `deploy-validate.md` can read it from the snapshot after a
-  handoff or `/compact` rather than re-detecting.
-- **Recent Activity** — append a one-line entry for this gate passage
-  (gate name, timestamp, key artifacts touched). Keep the last ~10
-  entries; older entries can be pruned.
-- **Open Items** — refresh from current state of `docs/escalations/pending.md`
-  and any open triage items.
-- **Locked Decisions** — append any new locked requirements or
-  direction changes confirmed during this gate.
-- **Context Reminders** — evaluate context usage and update
-  `context_reminders_sent` per the threshold rules below.
+  stories_not_started); `validation_intensity` (full | standard |
+  lightweight). Update sprint_id if it changed. If `is_ui_epic` was
+  determined during this gate's step (set in `stories-test-strategy.md`
+  Step 7), record it here so `deploy-validate.md` can read it from the
+  snapshot after a handoff or `/compact` rather than re-detecting.
+- **Recent Activity** — last ~10 entries of gate passages, significant
+  commits, key artifacts touched. Append a one-line entry for this gate
+  passage (gate name, timestamp, key artifacts touched); older entries
+  can be pruned.
+- **Open Items** — unresolved triage items, pending human decisions,
+  outstanding adversarial review findings; refresh from current state of
+  `docs/escalations/pending.md` and any open triage items.
+- **Locked Decisions** — locked requirements and human-flagged direction
+  changes the lead accepted; append any new ones confirmed during this
+  gate.
+- **Context Reminders** — `context_reminders_sent` (none | yellow |
+  red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
+  `last_red_fire_tokens`, `last_red_fire_turns`. Evaluate context usage
+  and update per the threshold rules below.
 
 **Context reminder threshold check (required at every gate):**
 
@@ -449,8 +461,10 @@ pipeline. Output, update the snapshot fields under Mode 1, and
 continue. Any user reply to a reminder is a Rule 11 directive
 handled on the next turn.
 
-See SKILL.md Handoff Protocol and Pipeline Snapshot section for the
-snapshot's full structure and rationale.
+The canonical section structure is defined above in this check; see the
+SKILL.md Handoff Protocol and Pipeline Snapshot section for the
+snapshot's role and rationale (source of truth on handoff / recovery /
+self-orientation).
 
 A gate passage without a corresponding snapshot update leaves the
 snapshot stale, which undermines its role as the handoff / recovery /
