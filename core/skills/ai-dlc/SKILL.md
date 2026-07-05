@@ -524,20 +524,8 @@ for implementation-phase teammates per `implementation.md`.
 
 **Provenance block.** Every invocation MUST emit a
 `SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
-Block schema:
-
-```
-<!-- SKILL_INVOCATION_PROVENANCE v1
-skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
-invoked_at: <ISO 8601 UTC timestamp>
-tool_use_id: <toolu_... from the Skill tool response>
-mode: subagent
-lead_role: <step-file-that-invoked>
-transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
-SKILL_INVOCATION_PROVENANCE_END -->
-```
-
-`scripts/validate-provenance-block.sh` parses the block;
+The block's field schema lives in `gate-validation.md` Check 17, which
+parses it. `scripts/validate-provenance-block.sh` parses the block;
 `scripts/validate-retro-evidence.sh` enforces transcript artifact +
 byte-matched SHA citation for retro party-mode (see
 `gate-validation.md` Check 17). Both run on every retro PR via

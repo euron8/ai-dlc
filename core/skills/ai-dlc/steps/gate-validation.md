@@ -546,6 +546,21 @@ bmad-advanced-elicitation, bmad-review-adversarial-general,
 bmad-validate-prd) was required by the current phase. Skip on gates
 that do not produce a provenance-bearing artifact.
 
+**Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Every validation
+sub-skill invocation (Rule 20) MUST emit this block into the artifact it
+produces; `validate-provenance-block.sh` parses it:
+
+```
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
+invoked_at: <ISO 8601 UTC timestamp>
+tool_use_id: <toolu_... from the Skill tool response>
+mode: subagent
+lead_role: <step-file-that-invoked>
+transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
+SKILL_INVOCATION_PROVENANCE_END -->
+```
+
 **Check.** Invoke `scripts/validate-provenance-block.sh` against the
 gate's primary artifact.
 
