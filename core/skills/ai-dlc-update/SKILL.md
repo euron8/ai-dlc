@@ -83,15 +83,21 @@ Every consumer block that differs from upstream is one of:
      (`chore(ai-dlc-update): self-update <base-ver> → <theirs-ver>`), push, open a
      PR, and **auto-merge (squash, delete branch)** — no operator gate. If there
      is no remote / push fails, commit locally and note it; do not block the run.
-   - **Then inform the operator** (report, do not gate): the self-update landed
-     (merged PR ref), a one-line summary of what changed (touches `reconcile/` —
-     the engine — vs prose/docs), and that the CURRENT invocation is still
-     executing the PRE-update logic. Offer the choice: **re-invoke now** so this
-     reconcile runs on the new logic (recommended when the change touched
-     `reconcile/` or the classify/apply/safety procedure), or **continue** this
-     run on the current logic (fine for docs-only changes). Proceeding on
-     "continue" is allowed — this is informational, not a blocking gate; the
-     self-update itself already landed autonomously.
+   - **Then HARD STOP the run and hand the operator the re-invoke choice.** The
+     self-update landed, but THIS invocation is still executing the PRE-update
+     logic — its reconcile/classify/apply behavior is stale, and an in-flight
+     agent cannot hot-reload its own instructions. So after the self-update
+     merges you MUST STOP here; do NOT proceed to step 3 on stale logic. Report:
+     the self-update landed (merged PR ref) + a one-line summary of what changed
+     (touches `reconcile/` — the engine — vs prose/docs), and offer:
+     - **(a) re-invoke `/ai-dlc-update`** (default, recommended) — a fresh
+       invocation loads the updated logic and runs the reconcile on it;
+     - **(b) continue this run on the prior logic** — only if the operator
+       EXPLICITLY asks, and best reserved for a docs-only self-change.
+     Default to (a). Do NOT auto-continue — silently proceeding on stale logic is
+     the exact defect this stop prevents (a self-update to the reconcile/apply
+     logic is worthless if the same run ignores it). This stop applies even when
+     the following reconcile would be empty.
 3. **Mechanical pre-classification** (cheap, deterministic — no agents):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
    It hashes base/theirs/ours per changed file and buckets each into:
@@ -218,5 +224,6 @@ free of pull-only assumptions so the other three jobs can reuse it.
 - **Self-update** is handled in step 2 as its own autonomous branch→commit→push
   →PR→auto-merge cycle (the skill's files are overwrite-safe upstream tooling, no
   operator gate), separate from the operator-gated rulebook reconcile (step 8).
-  The operator is informed after and may re-invoke to run the current reconcile
-  on the new logic.
+  After it merges the run HARD STOPS and the operator re-invokes to run the
+  reconcile on the updated logic — the in-flight agent can't hot-reload its own
+  instructions, so continuing on stale logic is forbidden.

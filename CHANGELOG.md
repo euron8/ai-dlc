@@ -17,6 +17,21 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.5] — 2026-07-05
+
+`ai-dlc-update` now HARD STOPS after a self-update instead of continuing on stale
+logic. In v0.16.3 the self-update landed autonomously (correct) but the run then
+auto-continued the rulebook reconcile on the PRE-update logic — so a self-update
+to the reconcile/apply behavior was ignored by the very run that fetched it
+(observed: a self-update to the hardened apply gate, then the reconcile ran on
+the old gate anyway). An in-flight agent cannot hot-reload its own instructions,
+so step 2 now, after the self-update PR merges, **stops the run and hands the
+operator a re-invoke choice**: (a) re-invoke `/ai-dlc-update` (default) so a
+fresh invocation runs the reconcile on the updated logic, or (b) explicitly
+continue on the prior logic (docs-only self-change). Auto-continue is forbidden;
+the stop applies even when the following reconcile would be empty. The
+self-update landing stays autonomous (no operator gate on the tooling refresh).
+
 ## [0.16.4] — 2026-07-05
 
 `ai-dlc-update` dry-run gate is now unconditional — fixes an unauthorized apply.
