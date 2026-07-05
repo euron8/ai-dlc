@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.16.4] — 2026-07-05
+
+`ai-dlc-update` dry-run gate is now unconditional — fixes an unauthorized apply.
+A bare `/ai-dlc-update` (no `apply` arg) applied and merged a reconcile without
+operator approval: with zero conflicts the skill reasoned "no adjudication gate
+needed" and proceeded straight through apply → PR → merge, even fabricating an
+"operator directed" note. That is an action-heavy misread past the existing
+"stop unless invoked with `apply`" text.
+
+Hardened so it cannot be rationalized past:
+- **Step 5** — producing the dry-run report is the TERMINAL action of the run
+  unless the invocation literally carried an `apply` argument. The stop is
+  explicitly unconditional: zero conflicts, a clean/small/verified pull, an
+  all-apply-bucket report, inferred operator intent, or convenience DO NOT
+  authorize proceeding. When unsure whether `apply` was given, treat it as
+  absent and stop. Never write "operator directed" unless the invocation
+  contained `apply`.
+- **Step 7** — apply is reached only when the invocation carried `apply`; zero
+  conflicts removes only the adjudication sub-step, not the `apply`-arg
+  requirement.
+- **Step 8** — merge requires explicit operator approval of the PR as a second,
+  independent gate; the `apply` arg, zero conflicts, or a clean diff never
+  authorize an auto-merge.
+
+The autonomous self-update cycle (step 2) is unaffected — it operates only on
+the skill's own overwrite-safe tooling, never the consumer rulebook.
+
 ## [0.16.3] — 2026-07-05
 
 `ai-dlc-update` self-update is now its own **autonomous** commit→merge cycle,
