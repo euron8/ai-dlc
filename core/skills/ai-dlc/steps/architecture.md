@@ -170,6 +170,42 @@ False-positive cost: one test or gate per new absolute invariant, or a
 one-word downgrade when mechanization is out of scope. Remove when: no
 ADR asserts an absolute safety invariant.
 
+### 2e. Named-field-vs-implementation divergence gate
+
+For every named field, entity, or invariant an ADR introduces, the
+architect MUST execute this four-step gate before the ADR merges:
+
+1. Write the NAME as a plain-English sentence stating what it claims —
+   what a downstream consumer would assume it means from the name alone.
+2. Write the IMPLEMENTATION contract as a sentence stating what the code
+   actually computes or guarantees, including its start conditions,
+   boundaries, and accumulation/derivation rules.
+3. Diff (1) against (2). Any token in the name not faithfully
+   represented by the implementation is a divergence. Resolve by exactly
+   ONE of: (a) rename the field to match the implementation; (b) extend
+   the implementation to match the name; or (c) document the gap in the
+   ADR with an explicit `consumer-MUST-read` warning AND expose a sibling
+   field carrying the boundary/anchor the name omits.
+4. Include a mandatory consumer-side usage example in the ADR body,
+   written as the downstream consumer would write it. If the example
+   needs a corrective caveat ("note: this is actually X, not what the
+   name implies"), the field is mis-named — return to step 3.
+
+The gate is non-skippable. The architecture step FAILS if any newly
+named field/entity/invariant lacks BOTH (a) evidence of the four-step
+check in the commit log or ADR body AND (b) the consumer-side usage
+example.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a named field whose
+name over-claims what the implementation guarantees, so a downstream
+consumer trusts the name, assumes the fuller meaning, and computes
+against a boundary the code never established. False-positive cost: one
+or two authoring sentences plus one example for a genuinely faithful
+name. Removal condition: retire once every ADR field name is
+mechanically validated against its implementation contract (a naming
+linter over the schema), or the pipeline no longer admits named-field
+ADRs.
+
 ### 3. Solutioning Gate
 
 Invoke `/bmad-check-implementation-readiness` style check — validate

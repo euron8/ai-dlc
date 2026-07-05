@@ -28,6 +28,29 @@ anchor count or story count. Universality is the value — gating on
 story count would reintroduce the "surprise sprint-overall content"
 mode this rule prevents.
 
+### 0. Local-tree freshness precondition
+
+Before any sprint code is read for review, the reviewer MUST assert the
+local checkout is not behind the integration branch. Run:
+
+```bash
+git fetch origin main
+git rev-list --count HEAD..origin/main   # MUST be 0
+```
+
+A non-zero count means the local tree is STALE — it is missing commits
+already merged to `origin/main` (e.g. a squash-merged sprint PR), so the
+review (and any deploy built from this tree) would read code that does
+NOT match the release-bound branch. STOP: fast-forward or rebase onto
+`origin/main`, then restart the review on the fresh tree.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a review/deploy that
+reads a local tree missing commits already merged upstream (stale-tree
+drift-clobber). False-positive cost: effectively none — count 0 is the
+steady state; cost is one `git fetch` per review. Removal condition:
+retire only if read-time freshness becomes structurally guaranteed
+(reviews always run on a freshly-checked-out `origin/main`-current tree).
+
 ### 1. Sprint-Level Adversarial Review
 
 `/bmad-review-adversarial-general` — final adversarial pass on the

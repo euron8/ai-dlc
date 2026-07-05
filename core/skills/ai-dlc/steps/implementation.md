@@ -92,6 +92,45 @@ follow the worktree-explicit dispatch protocol:
    Removal condition: only if worktrees under one repository stop
    sharing a single stash stack (a git invariant today).
 
+**Foreground-dispatch mandate.** A gated story-dev cycle is
+synchronous: the lead's immediate next action reads the dev's result
+and routes it into gate-1. The lead MUST dispatch gated story-dev and
+fix-forward dev agents in the FOREGROUND — a blocking Agent call whose
+result the lead consumes. `run_in_background: true` is PERMITTED ONLY
+for detached work with no near-term gate the lead must consume
+(monitoring loops, polling a long-running job, observation windows
+during which the lead has other non-dependent work). Backgrounding a
+gated dev cycle detaches the producer from a consumer blocked on it and
+stalls the orchestration turn. Violation is a lead-conduct retro
+finding.
+
+**Foreground-dispatch ≠ serial execution.** "Foreground" governs HOW a
+dev is dispatched (a blocking Agent call the lead consumes), NOT how
+MANY run at once. Independent stories MUST be dispatched in parallel —
+in ONE message, each in its own worktree, joined on all results.
+Parallelism comes from per-story worktrees plus a join, NEVER from
+`run_in_background`. The lead SHALL serialize two stories ONLY on a
+real dependency: a shared source file both stories write, or a
+by-content gate dependency (story B's gate-1 reads story A's merged
+output). Before the first dispatch the lead MUST emit, as a written
+planning output, a **story dependency-DAG + wave plan**: for each
+story, the files it owns and the stories it genuinely depends on, with
+wave grouping derived from it (independent stories → same wave /
+parallel; shared-file or by-content chains → serialized land-order). A
+default-to-serial dispatch the operator must challenge to parallelize,
+or a missing / after-the-fact wave-DAG, is a lead-conduct retro
+finding.
+
+**Minimum mechanism (Rule 26(c)) — the wave-DAG planning output.**
+Failure caught: silent over-serialization — independent stories queued
+behind a chain they share no files with, wasting wall-clock and
+parallel capacity; and its inverse, parallel dispatch of two stories
+that write the same file, causing merge thrash. False-positive cost:
+one written dependency-DAG + wave grouping per sprint before dispatch.
+Removal condition: retire once dispatch parallelism is derived
+mechanically from a per-story file-ownership manifest rather than lead
+judgment.
+
 **Dispatch-prompt cache discipline.** When dispatching multiple
 teammates (parallel devs, or a dev plus QA on the same story), order
 each dispatch prompt as a **stable shared block first, variable tail
@@ -254,6 +293,25 @@ authored. Removal condition: retire this preflight once the dev's DAR
 is guaranteed present in the canonical story file by the merge step
 itself, making the fold redundant. Dispatching gate2 with an empty DAR
 section is a retro finding.
+
+**Worktree gate-verification freeze.** Once the lead dispatches a gate
+reviewer (gate-1 code review or gate-2 QA) against a dev worktree, that
+worktree is FROZEN: the dev MUST NOT push further commits to it until
+the verdict lands. At reviewer dispatch the lead MUST record the exact
+`git -C <worktree> rev-parse HEAD` SHA, and before recording any gate
+verdict MUST re-confirm `HEAD` still equals that SHA. A HEAD advance
+between dispatch and verdict VOIDS the verdict — the lead re-pins the
+SHA and re-dispatches / re-verifies. The freeze is the fix (it prevents
+the drift); the HEAD-confirm is the tripwire proving the freeze held.
+Violation: gate verdict void + retro finding. Failure caught: a
+reviewer's SHA-labeled verdict desyncing from the worktree file-state —
+a mid-review commit (even a benign dead-code removal) breaks the
+label→state binding, so the recorded verdict certifies a tree that no
+longer exists. False-positive cost: one `rev-parse HEAD` at dispatch
+plus one equality re-check at verdict — two cheap reads, no dev-side
+work when the freeze is honored. Removal condition: retire once the
+gate pipeline pins reviews to an immutable content ref (a tag or a PR
+merge-commit) instead of a live worktree HEAD.
 
 **Sub-step snapshot updates during implementation.** The lead MUST
 run a sub-step snapshot update (see `gate-validation.md` "Sub-step
