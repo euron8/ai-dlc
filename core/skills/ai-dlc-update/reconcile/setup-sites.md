@@ -38,8 +38,11 @@ string or ownership path is worse than a stalled run.
 
 ## Core-manifest file list
 
-Duplicated here (not read from `.claude/hooks/ai-dlc-protect.sh`) to keep
-`ai-dlc-update` self-contained:
+Duplicated here (a deliberate copy of the pipeline's
+`core/skills/ai-dlc/core-manifest.md`, not read from it) to keep
+`ai-dlc-update` self-contained per this skill's HARD CONSTRAINT — it never
+reads pipeline files. Keep this list in sync with `core-manifest.md` when
+the core file set changes:
 
 ```yaml
 core_manifest:

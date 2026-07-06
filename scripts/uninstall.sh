@@ -90,11 +90,6 @@ if [ -f "$PROJECT_ROOT/docs/escalations/pending.md" ]; then
   FILES_TO_REMOVE+=("docs/escalations/pending.md")
 fi
 
-# -- Hooks installed by AI/DLC --
-if [ -f "$PROJECT_ROOT/.claude/hooks/ai-dlc-protect.sh" ]; then
-  FILES_TO_REMOVE+=(".claude/hooks/ai-dlc-protect.sh")
-fi
-
 # -- Validation scripts installed by AI/DLC --
 for script in validate-provenance-block.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh; do
   if [ -f "$PROJECT_ROOT/scripts/$script" ]; then

@@ -52,6 +52,18 @@ un-pushed-innovation (a false push-candidate is cheap; a dropped innovation is
 not). When unsure between rewording and conflict, prefer conflict (operator
 review is cheaper than a silent clobber).
 
+## Whole-file case: upstream DELETED a file the consumer MODIFIED
+
+If `theirs = MISSING` (upstream removed this file at `THEIRS`) but the
+consumer changed it since base (`ours ≠ base`), do NOT classify per-block.
+Return a single block `id: <file>` with `bucket: conflict`,
+`action: adjudicate`, `needs_operator_confirmation: true`, and a note
+stating: upstream deleted the file, the consumer's edits since base, and
+whether those edits look like a generalizable innovation worth preserving
+as an `extensions/` entry rather than being deleted. Default posture:
+keep-ours (do not delete a file carrying unreviewed consumer work). The
+operator decides delete vs. preserve-as-extension.
+
 ## `needs_operator_confirmation` — orthogonal to bucket, do not skip it
 
 A block can have an obvious, mechanical bucket (domain-local, innovation —

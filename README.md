@@ -30,11 +30,6 @@ deployment, and retrospective — autonomously in one conversation.
 - [Claude Code](https://github.com/anthropics/claude-code) with Agent Teams enabled
 - [BMAD Method v6](https://github.com/bmad-code-org/BMAD-METHOD) installed
   (`npx bmad-method install` with BMM, CIS, TEA modules)
-- [context-mode](https://github.com/kianwoon/context-mode) plugin
-  installed (`claude mcp add-plugin context-mode`). Provides sandbox
-  execution for large reads and batch operations. AI/DLC's protection
-  hook (`ai-dlc-protect.sh`) prevents context-mode from consolidating
-  rule files that must load verbatim.
 
 ### Required environment for autonomous execution
 
@@ -88,7 +83,6 @@ cd ai-dlc
 
 The installer copies core files, creates directory structure, and
 generates templates. It also installs:
-- Protection hook (`.claude/hooks/ai-dlc-protect.sh`)
 - Validation scripts (`scripts/validate-*.sh`)
 - CI workflow templates (if `.github/workflows/` exists)
 - Test fixture scaffolding (`tests/fixtures/`)
@@ -115,23 +109,6 @@ before replacing. The `/ai-dlc-setup` wizard reads the archived
 files and absorbs your project-specific content (ownership paths,
 model strings, conventions, infrastructure rules) into AI/DLC's
 templates during configuration.
-
-After install, enable the context-mode plugin and verify the
-protection hook is wired in `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [{
-      "matcher": "mcp__context-mode__ctx_execute_file|mcp__context-mode__ctx_batch_execute",
-      "hooks": [{
-        "type": "command",
-        "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
-      }]
-    }]
-  }
-}
-```
 
 ## Uninstall
 
@@ -219,7 +196,9 @@ selection and configures everything automatically.
 your-project/
   .claude/
     hooks/
-      ai-dlc-protect.sh           # Context-mode path protection hook
+      ai-dlc-pause.sh             # Rule 3 pause-point enforcement
+      ai-dlc-continue.sh          # Rule 3 continuation mandate
+      ai-dlc-driver-signal.sh     # Auto session-chaining signal
     skills/ai-dlc/
       SKILL.md                    # Entry point (Rules 1-20)
       steps/                      # 18 pipeline step files
@@ -256,7 +235,7 @@ Three layers:
 **Core** — Universal pipeline logic. Gate validation (19+ checks
 including harness meta-checks), escalation model (3 tiers),
 requirement anchoring, autonomy rules (19, in SKILL.md), session
-model, team roles, validation scripts, protection hooks. Does not
+model, team roles, validation scripts, pipeline hooks. Does not
 change per project.
 
 **Patterns** — Reusable enforcement modules. Each pattern is a

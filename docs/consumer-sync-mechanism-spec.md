@@ -278,9 +278,9 @@ the settings.json upsert.
 > **Implemented (v0.16.0, Phase 2A) as MANIFEST-CORE, not a physical `core/`
 > subdir.** The diagram below is the ownership model; the shipped realization
 > keeps the upstream-owned files where they are and treats "core" as the set the
-> `ai-dlc-protect.sh` protected manifest already enumerates, adding `extensions/`
+> `core-manifest.md` file enumerates, adding `extensions/`
 > + `overrides/` as sibling directories. Rationale: a physical `core/` subdir
-> would rewrite ~62 path references + the protect hook + install + CI scripts,
+> would rewrite ~62 path references + install + CI scripts,
 > and force the Phase 2B graph untangle to physically relocate every rulebook
 > file mid-migration. Manifest-core delivers the same payoff — overwrite core /
 > leave extensions+overrides / shrink the three-way to `overrides/` — with

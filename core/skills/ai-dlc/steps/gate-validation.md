@@ -849,9 +849,14 @@ effects, the step resumes.**
    `safe-seam`, all defined seams (`Seam A` through `Seam E`) are
    permitted. Proceed to precondition 2.
 
-2. **Trigger basis (mode-dependent).** Under `safe-seam`, the seam is
-   the trigger: the token threshold is ADVISORY, not a firing gate —
-   skip the red check and proceed to precondition 3. Under
+2. **Trigger basis (mode-dependent).** Under `safe-seam`, the seam
+   itself is the trigger. Only the token *magnitude* is advisory — how
+   many tokens are in play does not gate the fire. The seam being
+   reached is the firing condition: skip the red check and proceed to
+   precondition 3. "Advisory magnitude" does NOT mean the handoff is
+   optional — once a defined seam is reached and preconditions 3–7
+   pass, the fire is mandatory, not a judgment call about whether the
+   context feels large enough. Under
    `deploy-only`, require **red confirmed under Mode 1**: read
    `context_reminders_sent` from the snapshot Context Reminders
    block. If it is not `red`, return CONTINUE. Check 14 advances
@@ -892,6 +897,23 @@ effects, the step resumes.**
    Checkpoint, the retro commentary prompt, or the post-compact
    verification turn. If any pause point is active, return
    CONTINUE.
+
+**These seven preconditions are EXHAUSTIVE — there is no eighth.**
+User activity, user presence, the recency of a user message, or the
+absence of an explicit stop request is NOT a precondition and MUST NOT
+be treated as permission to return CONTINUE. Specifically, "the user
+has been active this session but did not share `/context`, so I may
+continue unless they intervene" is a PROHIBITED rationalization: it
+invents a precondition that does not exist and inverts the contract
+(the fire is the default at a passed seam, not something the user must
+opt into). The token magnitude being advisory (precondition 2) governs
+only *how large* the context is — it never converts the fire itself
+into a discretionary call. If all seven preconditions pass, the outcome
+is FIRE; the lead does not get to weigh whether a handoff "feels"
+warranted. This applies identically under `safe-seam` and `deploy-only`
+(under `deploy-only`, precondition 2's Mode-1 red requirement is itself
+one of the seven — once it and the rest pass, the same
+no-rationalization rule holds).
 
 If all seven preconditions pass, FIRE auto-handoff. This is the
 Rule 2(a) handoff procedure (canonical base in `steps/handoff.md`),
@@ -952,10 +974,10 @@ activation-ordering rule — the guard can only fire once a clean core/layer spl
 exists.
 
 **Check.** Compute the sprint diff against the branch base:
-`git diff --name-only <sprint-base>..HEAD`. Intersect with the core manifest (the
-ai-dlc rulebook paths in `.claude/hooks/ai-dlc-protect.sh` `PROTECTED_PATTERNS`:
+`git diff --name-only <sprint-base>..HEAD`. Intersect with the core manifest
+(read `core-manifest.md` in the skill dir for the authoritative path list:
 `.claude/skills/ai-dlc/SKILL.md`, `steps/*.md`, `escalations.md`,
-`rule-authoring.md`, `handoff.md`, `.claude/team-roles/*.md`). For each core file
+`rule-authoring.md`, `.claude/team-roles/*.md`). For each core file
 in that intersection lacking a matching `overrides/` entry (frontmatter
 `shadows:` names that file):
 

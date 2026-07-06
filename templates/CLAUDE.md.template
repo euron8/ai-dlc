@@ -80,39 +80,6 @@ simplification valued equally with addition. Details:
 
 ---
 
-## Context-Mode Usage
-
-**Scope note:** This section is routing guidance for tool selection, not a Rule-18-governed mandate. "Prefer X" statements here are non-binding optimizations; strict-MUST interpretation would break skill semantics (sometimes the native tool IS correct). Rule 18's imperative-voice requirement applies to behavior-gating mandates (Rules 1-20, deploy protocol, gate checks), not tool-selection nudges.
-
-If the context-mode plugin is installed, its default routing is
-conservative. For medium-cost operations where native tools are
-technically allowed but sandbox would be more efficient, prefer the
-sandbox tool:
-
-- For reading planning artifacts, story files, or code files over
-  ~2K tokens that won't be directly edited, prefer ctx_execute_file
-  over Read.
-
-- For gathering context that requires multiple tool calls (reading
-  several files, running several greps, listing multiple directories),
-  prefer ctx_batch_execute over sequential Read/Grep/Bash calls.
-
-- For shell commands whose output is likely to exceed ~20 lines
-  (git log, grep across repo, large test output), prefer ctx_execute
-  over Bash.
-
-**Scope.** These nudges apply whether or not the AI/DLC pipeline is
-active. They do NOT apply to:
-
-- Rule files (SKILL.md, CLAUDE.md, coding-conventions.md, step files,
-  team role files). Must load verbatim — consolidation drops directives.
-- Pipeline snapshot at `_bmad-output/pipeline-snapshot.md`. Must be
-  read verbatim for recovery fidelity.
-- Gate log and escalations. Must be read verbatim.
-- Files being read for direct Edit operations.
-
----
-
 ## Key References
 
 <!-- Update these paths for your project structure -->
