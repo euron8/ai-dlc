@@ -145,8 +145,14 @@ Every consumer block that differs from upstream is one of:
    conflict/flag details), never echoed file content — keeps the orchestrator
    context clean.
 5. **Emit the dry-run report, then HARD STOP (unconditional).** Write
-   `_bmad-output/ai-dlc-update/reconcile-report.md`: per-file + per-block bucket,
-   proposed action, the push-candidate list, and the conflict list.
+   `_bmad-output/ai-dlc-update/reconcile-report.md`: a header stating
+   `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @ <sha>`
+   (read `skill_version`/`skill_commit` from the stamp), then per-file +
+   per-block bucket, proposed action, the push-candidate list, and the
+   conflict list. This is a fixed filename overwritten on every run (a
+   snapshot, not a log) — the header stamp is what lets anyone tell a fresh
+   report from a stale leftover of a prior invocation, since the filename
+   alone can't.
 
    **Producing this report is the TERMINAL action of the run unless the
    invocation carried an explicit `apply` argument.** After writing it, STOP and
@@ -350,7 +356,11 @@ into an `extensions/`/`overrides/` file.
 
 **5u. Migration-plan dry-run.** Write
 `_bmad-output/ai-dlc-update/untangle-plan.md` (own filename; coexists with the
-ordinary pull's `reconcile-report.md` in the same directory): per-file bucket
+ordinary pull's `reconcile-report.md` in the same directory) with a header
+stating `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @
+<sha>` — same reason as step 5's report: a fixed filename overwritten on
+every run, so the stamp is the only way to tell a fresh plan from a stale one
+left over from before a skill update. Then: per-file bucket
 tally, proposed `extensions/`/`overrides/` file list (`hooks:`/`shadows:`+`id`
 per the entry contracts in `extensions/README.md`/`overrides/README.md`),
 push-candidate list, conflict list, the masked-site list (so the operator can
