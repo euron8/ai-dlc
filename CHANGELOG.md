@@ -17,6 +17,23 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.21.1] — 2026-07-06
+
+Two `ai-dlc-update` reconcile fixes surfaced running the update in a consumer:
+
+- **`preclassify.sh` mis-hashed every consumer file when given a relative
+  consumer-root.** `file_hash()` fed `"$CONS/<path>"` to
+  `git -C "$DIST" hash-object` — a relative `CONS` (e.g. `.`) resolved against
+  `DIST`, not the consumer, so every existing file hashed as MISSING and read
+  as consumer-deleted. `DIST` and `CONS` are now resolved to absolute paths at
+  arg-parse, so hashing is independent of the `-C` working dir.
+- **gitleaks false positive blocked committing the self-update.** The
+  `generic-api-key` rule flagged `mask/reinject` on `preclassify.sh` line 26 —
+  the `token` keyword in the "token-prose" doc label promoted the adjacent
+  string. Reworded the comment (`mask + reinject`) to break the adjacency;
+  config-independent, so it no longer trips a consumer's gitleaks regardless of
+  inline-allow settings.
+
 ## [0.21.0] — 2026-07-06
 
 Honor team-role contracts on **every** subagent spawn, and flip the lead to

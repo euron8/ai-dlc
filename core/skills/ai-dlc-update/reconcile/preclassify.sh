@@ -23,7 +23,7 @@
 #                  the base->theirs TEMPLATE delta (a token-filled consumer
 #                  file never hash-matches the raw template). Buckets:
 #                    TEMPLATE-UNCHANGED-NOOP   template boilerplate identical -> noop
-#                    TEMPLATE-PROSE-MERGE      token-prose -> mask/reinject (step 7)
+#                    TEMPLATE-PROSE-MERGE      token-prose -> mask + reinject (step 7)
 #                    TEMPLATE-JSON-MERGE       settings.json -> jq strip/merge (step 7)
 #                    CONSUMER-MISSING-NOOP     consumer lacks the generated file -> skip
 #
@@ -36,6 +36,14 @@
 set -u
 DIST="${1:?dist-repo}"; BASE="${2:?base-sha}"; THEIRS="${3:?theirs-ref}"; CONS="${4:?consumer-root}"
 MODE="${5:-}"
+
+# Resolve DIST and CONS to absolute paths up front. file_hash() feeds
+# "$CONS/<path>" to `git -C "$DIST" hash-object` — a RELATIVE consumer root
+# (e.g. `.`) is otherwise resolved relative to DIST, not the consumer, so
+# every existing consumer file hashes as MISSING and reads as consumer-deleted.
+# Absolute paths make the hash independent of the -C working dir.
+DIST="$(cd "$DIST" 2>/dev/null && pwd)" || { echo "preclassify: dist-repo not a directory: ${1}" >&2; exit 2; }
+CONS="$(cd "$CONS" 2>/dev/null && pwd)" || { echo "preclassify: consumer-root not a directory: ${4}" >&2; exit 2; }
 
 map_consumer() { # core/... -> consumer-relative path
   case "$1" in
