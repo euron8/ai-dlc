@@ -17,6 +17,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-07-06
+
+Decommission the context-mode integration, consolidate the core manifest into a
+single source of truth, and close a safe-seam auto-handoff loophole. Extends
+`ai-dlc-update` so both a file deletion and a template-boilerplate change reach
+consumers — the two propagation gaps this decommission exposed.
+
+**Removed — context-mode integration.**
+
+- Deleted `core/hooks/ai-dlc-protect.sh` (the PreToolUse guard that denied
+  context-mode from consolidating verbatim-load rule files) and its matcher in
+  `templates/settings.json.template`.
+- Dropped the `enabledPlugins: context-mode` auto-enable from
+  `settings.json.template` — a consumer that wants context-mode enables it
+  itself; AI/DLC no longer manages its usage or routing.
+- Removed the Context-Mode Usage section from `templates/CLAUDE.md.template`, the
+  Rule 23(c) ctx offload nudge from the pipeline `SKILL.md`, the protection-log
+  read from `retro.md`, and all install/uninstall/README/spec references.
+
+**Changed — core manifest consolidation.**
+
+- New `core/skills/ai-dlc/core-manifest.md` is the single authoritative list of
+  the upstream-owned "core" file set (Rule 27 + the gate-validation Core-layer
+  immutability check now reference it instead of each inlining the paths, and
+  instead of pointing at the deleted hook's `PROTECTED_PATTERNS`).
+- Corrected a long-standing manifest error: the standalone `handoff.md` entry
+  was dead (no top-level `handoff.md` exists; `steps/handoff.md` is already
+  covered by `steps/*.md`). Dropped everywhere. `ai-dlc-update`'s
+  `setup-sites.md` keeps its mandated self-contained copy, now in sync.
+
+**Changed — safe-seam auto-handoff firing.**
+
+- `auto_handoff_mode: safe-seam` now fires as a mandatory action once a seam is
+  reached and the seven preconditions pass. The "token threshold is advisory"
+  language previously bled into "the handoff is optional," letting the lead
+  invent an eighth precondition ("user active but did not share `/context`, so
+  continue unless they intervene"). Reworded so magnitude-advisory ≠
+  fire-optional, and added an explicit exhaustiveness clause forbidding
+  user-activity/presence as a CONTINUE reason. Applies to both `safe-seam` and
+  `deploy-only`.
+
+**Fixed — `ai-dlc-update` propagation gaps.**
+
+- `preclassify.sh` emitted `UPSTREAM-DELETED->CLASSIFY` but nothing acted on it —
+  an upstream file deletion never reached consumers. Now branched on consumer
+  state (`UPSTREAM-DELETED` / `-NOOP` / `+consumer-modified`), with a gated,
+  per-path `git rm` at apply (destructive → operator-confirmed, on a new
+  deletions list) and a conflict path when the consumer modified the file.
+- The three generated files outside `core/` (`CLAUDE.md`,
+  `coding-conventions.md`, `QUICKSTART.md`, `settings.json`) were never
+  reconciled — a template-boilerplate change never reached consumers. New
+  step 3b `--templates` pass + `reconcile/template-sites.md` sync the upstream
+  boilerplate delta (marker-anchored mask/reinject for token-prose; jq
+  strip/merge for `settings.json`, including gated `enabledPlugins` removal)
+  while preserving the consumer's filled config.
+
+MINOR: pre-1.0 conventions. The context-mode removal changes the default consumer
+template, but existing consumers keep working (a dropped plugin/hook is inert);
+the `ai-dlc-update` additions are new capability; the safe-seam change tightens
+an existing mode's firing without altering its configured values.
+
 ## [0.19.0] — 2026-07-06
 
 Bootstrap path for `ai-dlc-update` — a diverged consumer that predates the skill

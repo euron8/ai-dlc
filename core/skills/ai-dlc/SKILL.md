@@ -380,7 +380,11 @@ section directly):
   `deploy-validate.md`), and only when red is confirmed via Mode 1
   (user-shared `/context`).
 - `safe-seam` -- fires at any defined safe seam (`Seam A` through
-  `Seam E`); the seam is the trigger and the token threshold is advisory.
+  `Seam E`); the seam is the trigger and the token *magnitude* is
+  advisory (the fire itself is mandatory once the seam is reached and
+  preconditions pass — never a discretionary "is the context large
+  enough" or "the user is still active" judgment; see gate-validation
+  "Auto-handoff evaluation").
 
 The full firing rules -- the seven-precondition evaluation, the per-mode
 trigger basis, the resume-safety and clean-boundary constraints, the
@@ -587,16 +591,6 @@ the remaining sections rather than the whole file. The Read tool call
 mandatory; only its span narrows. Never slice past a section the lead
 has not completed.
 
-**(c) Offload high-volume observational Bash.** Large *read-only*
-command output (test-suite runs, gate-validation script output,
-`git log`/`diff`/`status` inspection, log scans) SHOULD be run via
-context-mode `ctx_batch_execute` so its bytes stay out of the resident
-prefix. State-mutating commands (`git` commit/branch/merge/worktree,
-`gh`, `chmod`, file writes) MUST run via native Bash: context-mode
-subprocesses discard filesystem changes, so routing a mutation through
-ctx silently no-ops it. When in doubt whether a command mutates, use
-native Bash.
-
 ### Rule 24 -- Planning exploration is dispatched to analyst subagents
 
 Read-heavy planning and analysis work is the lead's largest avoidable
@@ -731,12 +725,12 @@ is flagged by the retro rule-file audit (`retro.md` Step 4).
 The consumer rulebook is three layers. This rule is how a consumer
 self-improves *without* re-tangling core against upstream (spec §7).
 
-**core** -- the upstream-owned files: every path the protected manifest in
-`.claude/hooks/ai-dlc-protect.sh` lists for this skill (`SKILL.md`,
-`steps/*.md`, `escalations.md`, `rule-authoring.md`, `handoff.md`) plus
-`team-roles/*.md`. `/ai-dlc-update` overwrites these wholesale. You MUST NOT
-edit a core file in place (enforced by the gate-validation **Core-layer
-immutability** check + `rule-authoring.md` routing).
+**core** -- the upstream-owned files enumerated in `core-manifest.md`
+(alongside this file): `SKILL.md`, `steps/*.md`, `escalations.md`,
+`rule-authoring.md`, plus `team-roles/*.md`.
+`/ai-dlc-update` overwrites these wholesale. You MUST NOT edit a core file
+in place (enforced by the gate-validation **Core-layer immutability**
+check + `rule-authoring.md` routing).
 
 **extensions** (`{skill}/extensions/`) -- consumer-owned, additive: net-new
 rules, gate-checks, and domain step logic upstream does not carry. Upstream

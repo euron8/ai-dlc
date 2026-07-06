@@ -135,7 +135,25 @@ Every consumer block that differs from upstream is one of:
    - `UPSTREAM-ONLY-ADD` (net-new upstream, consumer lacks it) → **apply (pure)**
    - `UPSTREAM-ONLY` (upstream changed, consumer untouched vs base) → **apply**
    - `ALREADY-AT-THEIRS` / `ALREADY-PRESENT` → **noop**
-   - `BOTH-CHANGED` / `BOTH-ADDED` / `UPSTREAM-MOD+consumer-deleted` → **needs semantic classify**
+   - `UPSTREAM-DELETED` (upstream removed it, consumer untouched vs base) →
+     **delete the consumer file (gated — destructive, see step 7)**
+   - `UPSTREAM-DELETED-NOOP` (upstream removed it, consumer already lacks it) → **noop**
+   - `BOTH-CHANGED` / `BOTH-ADDED` / `UPSTREAM-MOD+consumer-deleted` /
+     `UPSTREAM-DELETED+consumer-modified` → **needs semantic classify**
+3b. **Template pre-classification** (the generated files outside `core/`):
+   run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
+   <consumer-root> --templates`. The `core/` reconcile above never sees
+   `CLAUDE.md`, `docs/coding-conventions.md`, `QUICKSTART.md`, or
+   `.claude/settings.json` — they are generated from `templates/*.template`
+   and filled with consumer config, so an upstream edit to the template
+   boilerplate (a removed section, a reworded rule) would otherwise never
+   reach a consumer. This pass buckets each per `reconcile/template-sites.md`:
+   - `TEMPLATE-UNCHANGED-NOOP` (upstream template boilerplate identical vs base) → **noop**
+   - `CONSUMER-MISSING-NOOP` (consumer lacks the generated file) → **skip**
+   - `TEMPLATE-PROSE-MERGE` (token-prose file, boilerplate changed) → **marker-anchored mask/reinject (step 7)**
+   - `TEMPLATE-JSON-MERGE` (`settings.json`, changed) → **jq strip/merge (step 7)**
+   Reconciling these is per `template-sites.md`'s transforms; the consumer's
+   filled config is preserved, only upstream boilerplate is synced.
 4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
    diffs) using `reconcile/classify-block.md` as the prompt. Block granularity
@@ -149,11 +167,20 @@ Every consumer block that differs from upstream is one of:
    `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @ <sha>`
    (read `skill_version`/`skill_commit` from the stamp), then per-file +
    per-block bucket, proposed action, the push-candidate list, the conflict
-   list, and a **needs-confirmation list** — every block any classify agent
+   list, a **needs-confirmation list** — every block any classify agent
    returned with `needs_operator_confirmation: true` (per
    `reconcile/classify-block.md`), each with its specific question, listed
    separately from and in addition to the conflict list (a block can be in
-   neither, either, or both). This is a fixed filename overwritten on every
+   neither, either, or both) — a **deletions list**: every
+   `UPSTREAM-DELETED` path (upstream removed the file, consumer untouched),
+   each with its reason line, since applying one `git rm`s a consumer file
+   and is gated per-path at apply (step 7); plus any gated `enabledPlugins`
+   removal from the settings reconcile (step 3b) — and a **template-changes
+   list**: every `TEMPLATE-PROSE-MERGE` / `TEMPLATE-JSON-MERGE` file from step
+   3b with a one-line summary of the upstream boilerplate delta being synced
+   (e.g. "CLAUDE.md: remove Context-Mode Usage section") and, for any file
+   that hit anchor-drift, its flag for adjudication. This is a fixed filename
+   overwritten on every
    run (a snapshot, not a log) — the header stamp is what lets anyone tell a
    fresh report from a stale leftover of a prior invocation, since the
    filename alone can't.
@@ -252,6 +279,41 @@ Every consumer block that differs from upstream is one of:
      theirs' non-conflicting additions; for innovation, append to the
      push-candidate ledger.
    - conflicts → apply only operator-adjudicated resolutions.
+   - `UPSTREAM-DELETED` files (upstream removed the file, consumer untouched
+     vs base) → **`git rm` the consumer file, but ONLY after an explicit
+     operator confirmation for that path.** Deletion is destructive and
+     irreversible in a way an overwrite is not, so every `UPSTREAM-DELETED`
+     path is gated exactly like a flagged block: at the dry-run report (step
+     5) it appears in a dedicated **deletions list** with the reason
+     (`upstream removed <path> at <theirs>; consumer copy unmodified since
+     base`), and mid-apply you STOP at each such path and apply the removal
+     only on the operator's explicit yes for that path. Never batch-approve
+     deletions, and never infer approval from the `apply` argument — `apply`
+     authorizes writes, not this specific destroy. A `UPSTREAM-DELETED-NOOP`
+     path (consumer already lacks it) is a silent noop — nothing to remove,
+     no gate. A `UPSTREAM-DELETED+consumer-modified` path went through
+     semantic classify (the consumer changed a file upstream then deleted):
+     treat the classifier's finding as a **conflict** — the consumer's
+     modifications may be an un-pushed innovation worth preserving as an
+     extension rather than deleting; operator adjudicates, default keep-ours.
+   - `TEMPLATE-PROSE-MERGE` files (`CLAUDE.md`, `coding-conventions.md`,
+     `QUICKSTART.md` — from step 3b) → run the **marker-anchored mask/reinject
+     transform** in `reconcile/template-sites.md`: capture the consumer's
+     filled config at each `{token}` fill region, apply the upstream
+     base→theirs boilerplate delta, reinject the captured config. The
+     boilerplate-only shortcut applies when the delta touches no fill region
+     (the Context-Mode Usage removal is this case). On anchor-drift (a
+     base-template token/marker not locatable in the consumer file), STOP and
+     flag that file for operator adjudication — never best-effort-place a
+     preserved value.
+   - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run the
+     jq strip/merge in `reconcile/template-sites.md` "settings.json reconcile":
+     strip stale `ai-dlc-*.sh` hook blocks + append the template's, preserve
+     user permissions/env/mcpServers. An `enabledPlugins` key the template
+     dropped since base (e.g. `context-mode@context-mode`) is an upstream
+     removal → drop it from the consumer too, GATED per-key on the deletions
+     list like a file deletion (a plugin the consumer may rely on). Keys the
+     consumer added independently are preserved.
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
@@ -519,6 +581,12 @@ free of pull-only assumptions so the other three jobs can reuse it.
 
 ## Not yet wired (design §6.1 gaps — call out, don't silently skip)
 
+- **Generated files outside `core/`** (`CLAUDE.md`, `coding-conventions.md`,
+  `QUICKSTART.md`, `settings.json`) ARE now reconciled — step 3b's `--templates`
+  pass + `reconcile/template-sites.md` sync the upstream template boilerplate
+  while preserving consumer config. This closed the gap where a template-only
+  upstream change (e.g. a removed CLAUDE.md section, a dropped `enabledPlugins`
+  entry) never reached a consumer through the `core/`-only reconcile.
 - **Upstream URL** is carried in the stamp's `upstream` field (written by
   install, preserved on every re-stamp). Read it in step 1; only fall back to
   asking the operator when the field is absent (a legacy stamp).

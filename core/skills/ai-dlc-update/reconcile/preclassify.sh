@@ -17,8 +17,22 @@
 #                  this mode enumerates the core-manifest file list from
 #                  reconcile/setup-sites.md instead and buckets purely by
 #                  ours vs base (there is no theirs-side status to branch on).
+#   --templates    optional. Reconcile the generated files OUTSIDE core/
+#                  (CLAUDE.md, coding-conventions.md, QUICKSTART.md,
+#                  settings.json) from reconcile/template-sites.md. Buckets on
+#                  the base->theirs TEMPLATE delta (a token-filled consumer
+#                  file never hash-matches the raw template). Buckets:
+#                    TEMPLATE-UNCHANGED-NOOP   template boilerplate identical -> noop
+#                    TEMPLATE-PROSE-MERGE      token-prose -> mask/reinject (step 7)
+#                    TEMPLATE-JSON-MERGE       settings.json -> jq strip/merge (step 7)
+#                    CONSUMER-MISSING-NOOP     consumer lacks the generated file -> skip
 #
 # Output: TSV to stdout — STATUS<TAB>CORE_PATH<TAB>CONSUMER_PATH<TAB>BUCKET
+#
+# Deletion buckets (status D — upstream removed the file):
+#   UPSTREAM-DELETED                      consumer copy untouched vs base -> delete (gated in step 7)
+#   UPSTREAM-DELETED-NOOP                 consumer already lacks it -> noop
+#   UPSTREAM-DELETED+consumer-modified->CLASSIFY   consumer changed it -> semantic classify (treat as conflict)
 set -u
 DIST="${1:?dist-repo}"; BASE="${2:?base-sha}"; THEIRS="${3:?theirs-ref}"; CONS="${4:?consumer-root}"
 MODE="${5:-}"
@@ -32,6 +46,37 @@ map_consumer() { # core/... -> consumer-relative path
 }
 blob_hash() { git -C "$DIST" rev-parse "$1:$2" 2>/dev/null || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
+
+if [ "$MODE" = "--templates" ]; then
+  # Reconcile the generated files that live OUTSIDE core/ (CLAUDE.md,
+  # coding-conventions.md, QUICKSTART.md, settings.json). Bucket on the
+  # base->theirs TEMPLATE delta, NOT on ours-vs-base: a token-filled consumer
+  # file never hash-matches the raw template, so the meaningful question is
+  # "did upstream change the template boilerplate since base?". Reads the
+  # template_manifest from template-sites.md (co-located).
+  MANIFEST="$(dirname "$0")/template-sites.md"
+  # Parse the YAML block: each entry has template:/consumer:/kind: lines.
+  awk '
+    /^template_manifest:/{f=1; next}
+    f && /^  - template: /{t=$3; next}
+    f && /^    consumer: /{c=$2; next}
+    f && /^    kind: /{print t "\t" c "\t" $2; next}
+    f && /^[^ ]/{exit}
+  ' "$MANIFEST" |
+  while IFS=$'\t' read -r tmpl cons kind; do
+    [ -z "$tmpl" ] && continue
+    base_h="$(blob_hash "$BASE" "$tmpl")"
+    theirs_h="$(blob_hash "$THEIRS" "$tmpl")"
+    ours_present=MISSING; [ -f "$CONS/$cons" ] && ours_present=PRESENT
+
+    if   [ "$ours_present" = MISSING ];   then bucket="CONSUMER-MISSING-NOOP"      # not a generated consumer -> skip
+    elif [ "$base_h" = "$theirs_h" ];     then bucket="TEMPLATE-UNCHANGED-NOOP"    # upstream boilerplate identical -> nothing to sync
+    elif [ "$kind" = "json-merge" ];      then bucket="TEMPLATE-JSON-MERGE"        # settings.json -> jq strip/merge (step 7)
+    else                                       bucket="TEMPLATE-PROSE-MERGE"; fi   # token-prose -> marker-anchored mask/reinject
+    printf '%s\t%s\t%s\t%s\n' "T" "$tmpl" "$cons" "$bucket"
+  done
+  exit 0
+fi
 
 if [ "$MODE" = "--untangle" ]; then
   # Enumerate the core-manifest glob list from setup-sites.md (co-located
@@ -66,7 +111,11 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
       elif [ "$ours_h" = "$theirs_h" ];    then bucket="ALREADY-PRESENT"          # noop
       else                                      bucket="BOTH-ADDED->CLASSIFY"; fi
       ;;
-    D)  bucket="UPSTREAM-DELETED->CLASSIFY" ;;
+    D)  # upstream removed this file; branch on whether the consumer touched it
+      if   [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-DELETED-NOOP"        # already gone -> noop
+      elif [ "$ours_h" = "$base_h" ];      then bucket="UPSTREAM-DELETED"             # consumer untouched -> delete (gated)
+      else                                      bucket="UPSTREAM-DELETED+consumer-modified->CLASSIFY"; fi
+      ;;
     *)  # M and renames
       if   [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-MOD+consumer-deleted->CLASSIFY"
       elif [ "$ours_h" = "$base_h" ];      then bucket="UPSTREAM-ONLY"            # consumer untouched -> apply

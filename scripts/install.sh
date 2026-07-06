@@ -226,7 +226,7 @@ echo "Installing hooks..."
 mkdir -p "$PROJECT_ROOT/.claude/hooks"
 cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
 chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
-echo "  ai-dlc-protect.sh installed"
+echo "  hooks installed"
 
 # Install the auto session-chaining driver (operator-run tmux launcher)
 mkdir -p "$PROJECT_ROOT/.claude/session-driver"
