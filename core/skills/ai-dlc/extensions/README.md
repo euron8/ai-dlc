@@ -34,6 +34,20 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 <the additive rule / check / step body>
 ```
 
+**`hooks:` path convention.** The value is written `core/`-relative (the same
+convention `reconcile/setup-sites.md` and `preclassify.sh` use), NOT relative
+to this skill directory:
+
+- `SKILL.md` and `steps/<x>.md` resolve under the skill dir —
+  `.claude/skills/ai-dlc/SKILL.md`, `.claude/skills/ai-dlc/steps/<x>.md`.
+- `team-roles/<role>.md` (used by `kind: role` entries) resolves to
+  `.claude/team-roles/<role>.md` — **outside** this skill dir.
+
+The Rule 27 loader and `ai-dlc-update`'s §7v hooks-existence check both map
+the value the same way core files map to consumer files. A naive
+skill-relative join would look for `.claude/skills/ai-dlc/team-roles/<role>.md`
+and wrongly report every role hook missing.
+
 - **Additive only.** An extension ADDS behavior; it never edits a core rule. To
   *change* an existing core rule, use `overrides/` instead.
 - **`push_candidate: true`** marks a generalizable improvement. `ai-dlc-update`

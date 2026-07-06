@@ -281,14 +281,40 @@ untangle-specific.
 For each file listed in `setup-sites.md`, before overwriting with `theirs`:
 1. Locate each declared site in `ours` (its regex `match`, or its
    `heading`/`next_heading` span) and extract the captured value(s).
-2. Overwrite the file with `theirs`.
-3. Re-locate each site by the SAME locator in the freshly-written file and
-   reinject the extracted value into the captured span (single-line sites) or
-   replace the heading-block body (heading-block sites).
+2. Overwrite the file with `theirs` — **the complete `theirs` content,
+   verbatim**. This is a genuine whole-file replacement: theirs' surrounding
+   structure (HTML `<!-- ... -->` config comments, blank lines, adjacent
+   prose) is what the file now IS. Do NOT carry over `ours`'s structure around
+   the sites — the whole point is that core becomes byte-reconcilable with
+   theirs everywhere except the declared value spans.
+3. Re-locate each site by the SAME locator in the freshly-written `theirs`
+   content and reinject ONLY the extracted value into the captured span
+   (single-line sites) or the heading-block body (heading-block sites).
+   Touch nothing outside the captured span — a single-line site's
+   `<!-- {token} -->` doc comment two lines up is NOT part of the span and
+   MUST survive from `theirs` untouched. After reinject, the file must equal
+   `theirs` byte-for-byte EXCEPT inside the declared site spans; if it differs
+   anywhere else, the transform over-reached — redo it from a clean `theirs`
+   copy.
 4. **Anchor-drift:** if a site's locator cannot be found in the freshly-written
    `theirs` content (upstream restructured or reworded that section), STOP and
    flag the site for operator adjudication in the report/log — do not drop the
    value, and do not guess a new location for it.
+
+**Setup site inside an overridden section.** A setup site can sit inside a
+section that ALSO has a consumer `overrides/` entry shadowing it (e.g. a
+`#Identity` override on a team-role file whose model `/model` lines are
+declared sites within that same section). These are two independent layers and
+must not be conflated: **core** is still restored to `theirs` verbatim and the
+setup value reinjected into its span (per above) — core stays byte-reconcilable;
+the **override** shadows the section at load time per Rule 27 (`overrides >
+core`) using its own body, which describes only its deliberate change (e.g.
+"remove the Local (Ollama) bullet") and explicitly does NOT restate the setup
+`/model` lines (those live concrete in core and are reinjected there, not in
+the override). Do NOT let the override's presence cause core to keep `ours`'s
+structure at the site — that is the exact over-reach step 3 forbids, and it
+leaves a non-site core deviation from theirs that the §7v gate (criterion 5)
+must catch.
 
 This is why "Layered consumers" below is a fast-forward everywhere EXCEPT at
 declared sites, not everywhere unconditionally.
@@ -442,7 +468,15 @@ is exactly what the reverted attempt got wrong). Before delivery:
 1. For every `overrides/*` entry, resolve its `shadows: <file>#<id>` against
    the just-overwritten core file — FAIL on a dangling shadow (id not found).
 2. For every `extensions/*` entry, confirm its `hooks:` target file exists in
-   core.
+   core. **Resolve the `hooks:` path via the core→consumer path mapping (the
+   same one `preclassify.sh` uses), NOT skill-relative:** a `steps/<x>.md` or
+   bare `SKILL.md` hook lives under the skill dir
+   (`.claude/skills/ai-dlc/…`), but a `team-roles/<role>.md` hook (used by
+   `roles/*` extensions) lives at `.claude/team-roles/<role>.md` — OUTSIDE
+   the skill dir. A naive skill-relative join (`.claude/skills/ai-dlc/team-roles/…`)
+   would falsely report every role extension's target MISSING. `hooks:` values
+   mirror the `core/`-relative path convention (`team-roles/x`, `steps/x`,
+   `SKILL.md`); map each the same way core files map to consumer files.
 3. Render 2–3 sample overrides and extensions to show what Rule 27's
    precedence (`overrides > extensions > core`) would actually produce at
    load time — proof the shadow/addition takes effect, not just that the id
@@ -452,8 +486,18 @@ is exactly what the reverted attempt got wrong). Before delivery:
    `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max` — this is
    the concrete proof teammate dispatch will not break, the exact failure the
    reverted attempt caused.
-5. Diff every overwritten core file against `theirs` and confirm the only
-   remaining deltas are at sites declared in `reconcile/setup-sites.md`.
+5. Diff every overwritten core file against `theirs` **over the WHOLE file,
+   line by line**, and confirm every differing line falls INSIDE a span
+   declared for that file in `reconcile/setup-sites.md` (a single-line site's
+   matched line, or a heading-block site's span). A difference at ANY line
+   outside a declared span — a dropped `<!-- {token} -->` config comment, a
+   removed blank line, reordered prose — is a FAIL, even if the setup values
+   themselves reinjected correctly: it means the overwrite kept `ours`'s
+   structure instead of `theirs`'s and core is no longer byte-reconcilable.
+   Do NOT check only the value lines and declare pass (a real run did exactly
+   that: `dev.md` lost three of theirs' model-option HTML comment lines and
+   this criterion still reported PASS — the check must diff the whole file,
+   not just confirm the values look right).
 
 Any failure here STOPS the run before delivery — the branch holds the
 in-progress state for inspection/fix, nothing is delivered. This gate is not

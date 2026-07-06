@@ -752,7 +752,10 @@ them as additional active rules/checks/steps; if `overrides/` exists, Read each
 entry and let it shadow the named core rule/check for this run. **Precedence:
 overrides > extensions > core.** Absent or empty layers = pure core, identical
 to a fresh install. See `extensions/README.md` and `overrides/README.md` for the
-entry contracts.
+entry contracts. An entry's `hooks:`/`shadows:` path is `core/`-relative:
+`steps/<x>.md` and `SKILL.md` live under this skill dir, but `team-roles/<role>.md`
+resolves to `.claude/team-roles/<role>.md` (outside the skill dir) — map it the
+same way, not skill-relative.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or
