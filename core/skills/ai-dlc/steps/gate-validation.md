@@ -956,15 +956,44 @@ exists.
 ai-dlc rulebook paths in `.claude/hooks/ai-dlc-protect.sh` `PROTECTED_PATTERNS`:
 `.claude/skills/ai-dlc/SKILL.md`, `steps/*.md`, `escalations.md`,
 `rule-authoring.md`, `handoff.md`, `.claude/team-roles/*.md`). For each core file
-in that intersection, a matching `overrides/` entry (frontmatter `shadows:` names
-that file) must exist. **PASS:** the intersection is empty, or every touched core
-file has a declared override. **FAIL:** any core file was edited in place with no
-override.
+in that intersection lacking a matching `overrides/` entry (frontmatter
+`shadows:` names that file):
+
+- If `.claude/skills/ai-dlc-update/reconcile/setup-sites.md` is present, read
+  it (the one documented, one-directional exception to this file never
+  otherwise depending on `ai-dlc-update`'s internals — it owns that file,
+  this check only reads it) and compute the sprint's changed lines for this
+  file: `git diff <sprint-base>..HEAD -- <file>`. **PASS** if every changed
+  line falls entirely within a declared site's region (a `single-line` site's
+  matched line, or a `heading-block` site's full span) — these are
+  `ai-dlc-setup`-filled consumer config (model strings, ownership paths,
+  deploy/smoke commands), not rulebook divergence, and need no override.
+  **FAIL** if any changed line falls outside every declared site.
+- If `setup-sites.md` is absent (an older `ai-dlc-update`, or a consumer that
+  hasn't adopted it), fall back to the original file-level check: any edit at
+  all to this file with no override → **FAIL**. Never treat the manifest's
+  absence as a blanket pass.
+
+**PASS overall:** the core-manifest intersection is empty, every touched file
+has a declared override, or every touched file's changed lines resolve per the
+above. **FAIL:** any core file has changed lines outside both override
+coverage and (when applicable) declared setup-substitution sites.
+
+**Caveat — line-granular, not sub-line.** A sprint diff that touches only the
+fixed prose surrounding a masked site's captured value (leaving the value
+itself untouched) still PASSES, since the whole line coincides with a
+declared site. This is an accepted simplification, not an oversight: the
+residual risk — a sprint quietly reording a command's fixed text — is caught
+by `ai-dlc-update`'s own step-7v verification gate on the next run
+(untangle) or step-7 mask/reinject anchor-drift check (ordinary pull), not at
+sprint-close.
 
 **Remediation (not "fix later"):** move the change to the correct layer — a
 net-new rule to `extensions/`, a change to an existing core rule to an
 `overrides/` entry shadowing it (`rule-authoring.md` routing). Then revert the
-in-place core edit so core stays byte-reconcilable with upstream.
+in-place core edit so core stays byte-reconcilable with upstream. (Editing a
+declared setup-substitution site, e.g. re-running `/ai-dlc-setup` to change a
+model string, needs no remediation — it already passes.)
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place core authoring that
 makes the next `/ai-dlc-update` clobber or false-conflict — the catch-22 regrown.
