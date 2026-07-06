@@ -17,6 +17,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-07-06
+
+Bootstrap path for `ai-dlc-update` — a diverged consumer that predates the skill
+can now land it, and fresh installs ship it from day one.
+
+The `ai-dlc-update` skill (the distribution→consumer pull path) was net-new and
+reached consumers by no automated route: `install.sh` never copied it, and its
+first landing *cannot* go through `install.sh` anyway — that is the blunt
+full-rulebook overwrite `ai-dlc-update` exists to avoid (consumer-sync spec
+§6.2, the chicken-and-egg). Two additive fixes close the gap:
+
+- **`scripts/bootstrap-update-skill.sh`** — one-time, purely-additive landing of
+  `.claude/skills/ai-dlc-update/` (skill + reconcile engine) into an
+  already-diverged consumer. Copies only that net-new directory, so it collides
+  with nothing in the consumer's divergence. Deliberately does NOT touch the
+  consumer's rulebook or its `.claude/.ai-dlc-version` stamp — the stamp's
+  `commit`/`version` is the merge-base the skill pulls FROM; rewriting it would
+  erase the base and the first pull would diff from nothing. Guards: refuses a
+  non-consumer target, refuses re-bootstrap without `--force` (the skill
+  self-updates on its own cycle), reports the merge-base it leaves untouched,
+  warns on a missing stamp. This is the spec §6.2 "repeatable form," delivered as
+  a dedicated script rather than an `install.sh --only` flag so it stays fully
+  decoupled from the destructive installer.
+- **`install.sh`** now installs `ai-dlc-update` (skill + `reconcile/`) as part of
+  a full install, so brand-new projects get the pull path without a separate
+  bootstrap step. Overwrite-safe like the other upstream-owned skills (the
+  consumer never edits it); archived to `_divergence/` on reinstall for symmetry.
+- **`uninstall.sh`** now removes `.claude/skills/ai-dlc-update/`.
+
+MINOR: additive new capability; existing consumers keep working without
+migration (and gain a supported way to adopt the skill).
+
 ## [0.17.0] — 2026-07-05
 
 Unified two-version stamp — `.ai-dlc-version` now reports both the rulebook and

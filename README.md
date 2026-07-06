@@ -92,6 +92,22 @@ generates templates. It also installs:
 - Validation scripts (`scripts/validate-*.sh`)
 - CI workflow templates (if `.github/workflows/` exists)
 - Test fixture scaffolding (`tests/fixtures/`)
+- The `ai-dlc-update` skill (the distribution→consumer pull path)
+
+### Adopting `ai-dlc-update` on an older install
+
+Consumers installed before `ai-dlc-update` existed do not have the skill, and
+its first landing cannot go through `install.sh` — that overwrite is exactly
+what `ai-dlc-update` exists to avoid. Land it additively instead (touches
+nothing else in the consumer, leaves the version stamp intact):
+
+```bash
+./scripts/bootstrap-update-skill.sh /path/to/your-project
+```
+
+Then run `/ai-dlc-update` in the consumer (bare = dry-run report; add `apply`
+to land). The skill self-updates thereafter, so this is a one-time step. Fresh
+installs already include the skill and skip this.
 
 If your project already has `CLAUDE.md`, team roles, or coding
 conventions, the installer archives them to `docs/pre-ai-dlc/`
@@ -209,6 +225,9 @@ your-project/
       steps/                      # 18 pipeline step files
     skills/ai-dlc-setup/
       SKILL.md                    # Guided configuration wizard
+    skills/ai-dlc-update/         # distribution->consumer pull path (reconcile)
+      SKILL.md
+      reconcile/                  # per-block classifier + preclassify engine
     team-roles/                   # 5 role definitions
   CLAUDE.md                       # Project config (autonomy rules live in SKILL.md)
   QUICKSTART.md                   # Reference documentation

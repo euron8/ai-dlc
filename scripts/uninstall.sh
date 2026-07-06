@@ -49,6 +49,9 @@ fi
 if [ -d "$PROJECT_ROOT/.claude/skills/ai-dlc-setup" ]; then
   DIRS_TO_REMOVE+=(".claude/skills/ai-dlc-setup/")
 fi
+if [ -d "$PROJECT_ROOT/.claude/skills/ai-dlc-update" ]; then
+  DIRS_TO_REMOVE+=(".claude/skills/ai-dlc-update/")
+fi
 
 # -- Team roles (only the 5 AI/DLC roles) --
 for role in architect code-reviewer dev pm qa; do

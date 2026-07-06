@@ -59,6 +59,7 @@ fi
 echo "Creating directories..."
 mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/steps"
 mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc-setup"
+mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile"
 mkdir -p "$PROJECT_ROOT/.claude/team-roles"
 mkdir -p "$PROJECT_ROOT/docs"
 mkdir -p "$PROJECT_ROOT/docs/ai-dlc-patterns"
@@ -141,6 +142,8 @@ archive_if_exists "$PROJECT_ROOT/docs/coding-conventions.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc/steps" "*.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
+archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/SKILL.md"
+archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile" "*"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
 for role in architect code-reviewer dev pm qa; do
   archive_tree_file "$PROJECT_ROOT/.claude/team-roles/$role.md"
@@ -184,6 +187,17 @@ done
 # Copy setup skill (always overwrite with AI/DLC versions)
 echo "Installing setup skill..."
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/"
+
+# Copy update skill + reconcile engine (always overwrite — upstream-owned
+# tooling, overwrite-safe: the consumer never edits it. This is the SAME skill
+# scripts/bootstrap-update-skill.sh lands additively into an already-diverged
+# consumer that predates it; shipping it here means fresh installs get the
+# distribution->consumer pull path (ai-dlc-update) from day one.)
+echo "Installing update skill..."
+cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-update/"
+cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/reconcile/"* "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile/"
+chmod +x "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile/preclassify.sh"
+echo "  ai-dlc-update installed (skill + reconcile engine)"
 
 # Install team roles (always overwrite with AI/DLC versions)
 echo "Installing team roles..."

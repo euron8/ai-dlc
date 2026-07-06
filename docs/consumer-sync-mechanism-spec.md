@@ -251,12 +251,23 @@ does not expect). Self-contained → the additive copy is safe regardless of how
 the consumer has diverged. This is a hard constraint on Phase 1's implementation,
 not an option.
 
-**Repeatable form (optional, for N consumers):** add an `install.sh --only
-<component>` flag — a single-named-component install that copies just that
-directory additively and skips the archive/overwrite of everything else. Turns the
-manual `cp` into a supported operation without reintroducing the full overwrite.
-After bootstrap, the skill self-updates (§6.1) — the `cp` is needed exactly once
+**Repeatable form — DELIVERED as `scripts/bootstrap-update-skill.sh` (v0.19.0).**
+The manual `cp` is now a supported, guarded operation: a dedicated script that
+copies just `.claude/skills/ai-dlc-update/` additively and skips the
+archive/overwrite of everything else. It was built as its own script rather than
+the originally-sketched `install.sh --only <component>` flag specifically to stay
+decoupled from the destructive installer — the whole reason bootstrap cannot go
+through `install.sh`. The script refuses a non-consumer target, refuses
+re-bootstrap without `--force`, and — critically — never rewrites the consumer's
+`.ai-dlc-version` stamp (that stamp is the merge-base the first pull diffs FROM).
+After bootstrap, the skill self-updates (§6.1) — the copy is needed exactly once
 per consumer.
+
+**Fresh installs (v0.19.0).** `install.sh` now also ships `ai-dlc-update` as part
+of a full install, so a brand-new consumer gets the pull path from day one and
+only *pre-existing* diverged consumers need the bootstrap script. The two paths
+land the same net-new directory; the script is the additive-only route for
+consumers that predate the skill.
 
 ## 7. Phase 2 — layered core/extension architecture (the destination)
 
