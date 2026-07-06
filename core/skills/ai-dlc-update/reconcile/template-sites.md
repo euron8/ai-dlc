@@ -104,13 +104,18 @@ region untouched.
   `/\.claude/hooks/ai-dlc-[^/]+\.sh` (the `strip_ai_dlc` predicate), then
   append the template's hook blocks. This removes a stale
   `ai-dlc-protect.sh` PreToolUse matcher and re-adds the current hook set.
-- **enabledPlugins:** install.sh's merge is additive (`$t + $u`, user wins),
-  so it never REMOVES a plugin the template dropped. For the reconcile, when
-  the template no longer carries a plugin key that the base template DID carry
-  (e.g. `context-mode@context-mode`), treat that as an upstream removal:
-  drop it from the consumer's `enabledPlugins` too — GATED as an operator
-  confirmation (a plugin the consumer may rely on), listed in the report's
-  deletions list. Keys the consumer added independently are preserved.
+- **enabledPlugins:** additive-only, NEVER remove. install.sh's merge is
+  `$t + $u` (user wins); the reconcile follows the same rule — overlay the
+  template's plugin keys onto the consumer and never drop a plugin the template
+  no longer carries. `enabledPlugins` is consumer-owned state. A template
+  dropping a plugin (e.g. ai-dlc's own `context-mode@context-mode`
+  decommission) removes ai-dlc's *use* of it, not the consumer's right to keep
+  it enabled for their own reasons. A leftover entry is benign — inert if the
+  plugin is uninstalled, honored if the consumer relies on it — whereas
+  removing it silently disables a plugin the consumer may depend on. So the
+  consumer's `enabledPlugins` is preserved in full, exactly like
+  permissions/env/mcpServers. Disabling a plugin is the consumer's decision,
+  never the reconcile's; this is NOT a deletions-list case.
 - **permissions / env / mcpServers / other user keys:** preserved untouched.
 
 ## Ownership
