@@ -568,6 +568,15 @@ string.
 - `{analyst_model_personal}` -> sonnet-tier model personal string
 - `{analyst_model_bedrock}` -> sonnet-tier model bedrock string
 
+**`.claude/team-roles/protected-path-editor.md`:** (edits the rulebook —
+opus-tier, like the architect)
+- `{ppe_model_personal}` -> opus-tier model personal string
+- `{ppe_model_bedrock}` -> opus-tier model bedrock string
+
+The party-persona role files (`tea.md`, `ux.md`, `sm.md`, `cis.md`) carry
+NO model placeholder — they are spawned by `/bmad-party-mode`, which
+controls their model. Nothing to substitute in them.
+
 **`QUICKSTART.md`:**
 - `{lead_model}` -> opus-tier model personal string
 - `{lead_model_bedrock}` -> opus-tier model bedrock string

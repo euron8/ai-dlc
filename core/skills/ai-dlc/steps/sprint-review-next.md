@@ -48,7 +48,7 @@ rationale.
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 
-1. `/bmad-party-mode` — SM, Dev, Architect, TEA walk through EVERY
+1. `/bmad-party-mode` — SM, Dev, Architect, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through EVERY
    story in this sprint. Every acceptance criterion, every edge case,
    every dependency. Apply all improvements.
    **Cross-sprint check:** For each story, verify it accounts for

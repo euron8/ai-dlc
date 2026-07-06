@@ -17,6 +17,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-07-06
+
+Honor team-role contracts on **every** subagent spawn, and flip the lead to
+delegate-by-default.
+
+**Role files honored on every spawn.**
+- Rule 19 is now "Agent spawns MUST bind the full role contract" — not just the
+  `model` parameter. Every Agent-tool spawn (dev, code-reviewer, qa, analyst,
+  protected-path-editor) MUST also carry a standing dispatch line binding the
+  subagent to `.claude/team-roles/<role>.md` as its first action (the read is
+  the binding, per Rule 21; the contract loads in the subagent's context, not
+  the lead's, per Rule 23). Applied at the implementation dispatch and all seven
+  analyst planning dispatches.
+- Rule 20 gains a **role-manifest preamble**: every `/bmad-party-mode`
+  invocation MUST pass a persona→role-file map so party personas debate from
+  their ai-dlc role contract instead of the external BMAD default. Referenced
+  (not restated) by all eight party-mode call sites.
+- New party-persona role files: `tea.md`, `ux.md`, `sm.md`, `cis.md` (advisory,
+  read-only; no model placeholder — `/bmad-party-mode` controls their model).
+- New gate check **Check 22 — Teammate-spawn role binding** verifies, from the
+  gate log, that every spawn cited a role-matched model AND the role-contract
+  binding. Fixes the pre-existing stale "Check 15" citations in
+  `implementation.md` (Check 15 is snapshot-verification; the model check never
+  actually existed as a numbered check).
+
+**Delegate-by-default lead.**
+- New **Rule 28 — Delegation is the default; inline execution is the
+  exception**. The lead MUST delegate any subagent-serviceable action; inline
+  execution is permitted only for the non-delegable set (orchestration, routing,
+  gate-validation decisions) and the lead must name which exclusion applies.
+- Protected-path edits are now **delegated** to a new `protected-path-editor`
+  role (serialized, diff-reviewed by the lead) instead of executed inline by the
+  lead. Story tag `lead_only: true` → `protected_path_editor: true`. This
+  removes the former lead-edits-its-own-rulebook safety; mitigated by the
+  role's strict contract (Reads `rule-authoring.md` + `core-manifest.md` first,
+  smallest diff, lead reviews the diff before merge).
+
+**Install/setup.**
+- `install.sh` / `uninstall.sh` now glob `core/team-roles/*.md` instead of an
+  enumerated 5-role list — this also fixes a latent gap where `analyst.md` was
+  never copied by the fresh installer.
+- `ai-dlc-setup` STEP 2 and `ai-dlc-update/reconcile/setup-sites.md` gain
+  `{ppe_model_*}` substitution for `protected-path-editor.md` (opus-tier).
+
 ## [0.20.0] — 2026-07-06
 
 Decommission the context-mode integration, consolidate the core manifest into a

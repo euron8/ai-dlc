@@ -145,9 +145,7 @@ archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/SKILL.md"
 archive_tree_file "$PROJECT_ROOT/.claude/skills/ai-dlc-update/SKILL.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile" "*"
 archive_tree_glob "$PROJECT_ROOT/docs/ai-dlc-patterns" "*.md"
-for role in architect code-reviewer dev pm qa; do
-  archive_tree_file "$PROJECT_ROOT/.claude/team-roles/$role.md"
-done
+archive_tree_glob "$PROJECT_ROOT/.claude/team-roles" "*.md"
 archive_tree_glob "$PROJECT_ROOT/.claude/hooks" "ai-dlc-*.sh"
 archive_tree_file "$PROJECT_ROOT/.claude/settings.json"
 
@@ -201,9 +199,12 @@ echo "  ai-dlc-update installed (skill + reconcile engine)"
 
 # Install team roles (always overwrite with AI/DLC versions)
 echo "Installing team roles..."
-for role in architect code-reviewer dev pm qa; do
-  cp "$SCRIPT_DIR/../core/team-roles/$role.md" "$PROJECT_ROOT/.claude/team-roles/"
-  echo "  $role.md installed"
+# Glob over every core role file so new roles (analyst, tea, ux, sm, cis,
+# protected-path-editor, and any future additions) install automatically —
+# no enumerated list to drift from core/team-roles/.
+for role_file in "$SCRIPT_DIR/../core/team-roles/"*.md; do
+  cp "$role_file" "$PROJECT_ROOT/.claude/team-roles/"
+  echo "  $(basename "$role_file") installed"
 done
 
 # Install templates (always overwrite with AI/DLC versions)

@@ -221,7 +221,7 @@ proceed to Step 5. Otherwise run the full cycle below.
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 
-1. `/bmad-party-mode` — Architect, Dev, TEA, PM debate every design
+1. `/bmad-party-mode` — Architect, Dev, TEA, PM (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate every design
    decision, every component boundary, every data flow. Walk through
    exhaustively. Apply all improvements.
    **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step

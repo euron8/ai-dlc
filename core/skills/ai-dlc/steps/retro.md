@@ -50,6 +50,10 @@ TEA/QA perspectives inline in the retro doc without invoking the
 Skill is a Rule 3 violation per SKILL.md, regardless of how
 well-formed the output appears. This is non-negotiable.
 Each agent MUST be spawned as a real subagent for independent perspective. Solo mode (roleplaying agents inline) is forbidden.
+**Pass the Rule 20 role-manifest preamble** so each persona Reads and
+debates from its `.claude/team-roles/<role>.md` (PM→`pm.md`,
+Architect→`architect.md`, Dev→`dev.md`, SM→`sm.md`, TEA→`tea.md`,
+QA→`qa.md`).
 
 Bring all agent perspectives (PM, Architect, Dev, SM, TEA, QA) into
 the discussion:

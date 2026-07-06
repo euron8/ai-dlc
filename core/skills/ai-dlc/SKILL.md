@@ -484,16 +484,33 @@ three violation classes (narrative drift, rule weakness, complexity
 accretion) live in `rule-authoring.md` alongside this file. READ AND
 FOLLOW it when authoring or auditing a rule file (`retro.md` Step 4).
 
-### Rule 19 -- Agent spawns MUST pass the `model` parameter
+### Rule 19 -- Agent spawns MUST bind the full role contract
 
-When the lead invokes the Agent tool to spawn a teammate, the `model`
-parameter MUST be set explicitly, derived from that role's `/model`
-directive in its role file (`.claude/team-roles/<role>.md`) -- the
-single source of truth. Do NOT restate a role-to-model mapping here or
-in step files; a second mapping drifts from the role file and is itself
-a violation. Omitted `model` inherits from the parent conversation and
-bypasses the role's cost/capability contract. Violation fails
-gate-validation Check 15 on detection at retro.
+When the lead invokes the Agent tool to spawn a teammate, the spawn MUST
+bind that teammate to its role file (`.claude/team-roles/<role>.md`) --
+the whole contract, not just the model. Two bindings are mandatory:
+
+**(a) Model.** The `model` parameter MUST be set explicitly, derived from
+that role's `/model` directive in its role file -- the single source of
+truth. Do NOT restate a role-to-model mapping here or in step files; a
+second mapping drifts from the role file and is itself a violation.
+Omitted `model` inherits from the parent conversation and bypasses the
+role's cost/capability contract.
+
+**(b) Role contract.** The dispatch prompt MUST carry, as a standing
+line, the instruction: *"Your operating contract is
+`.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
+action before any other work."* This puts the role's identity,
+ownership, constraints, and escalation protocol into the *subagent's*
+context (not the lead's, per Rule 23), and mirrors Rule 21 -- the read
+IS the binding, not the lead's recall. Keep the line byte-identical
+across dispatches so it rides the shared-block cache
+(`implementation.md` dispatch-prompt cache discipline); vary only the
+`<role>` token. A spawn that names a role but omits this line binds
+model without contract and is a Rule 19 violation.
+
+Violation of (a) or (b) fails gate-validation Check 22 on detection at
+retro.
 
 ### Rule 20 -- Validation sub-skills run inline with provenance
 
@@ -531,6 +548,32 @@ subagents. Roleplaying agent perspectives inline (solo mode) produces
 convergent opinions from a single LLM and defeats the purpose of
 independent evaluation. Any party mode invocation that generates
 agent responses without spawning subagents is a rule violation.
+
+**Role-manifest preamble (persona-spawning sub-skills).** A validation
+sub-skill that spawns personas (`/bmad-party-mode`) spawns real
+subagents whose perspective must be governed by an ai-dlc role contract,
+not left to the sub-skill's generic persona. Every such invocation MUST
+carry this preamble, defined ONCE here and *referenced* (never restated)
+by the call sites -- same single-source-of-truth discipline as Rule 19:
+
+> Each participant persona MUST, as its FIRST action, Read and follow
+> its ai-dlc role contract file, then debate from that lens:
+> PM -> `.claude/team-roles/pm.md`,
+> Architect -> `.claude/team-roles/architect.md`,
+> Dev -> `.claude/team-roles/dev.md`,
+> QA -> `.claude/team-roles/qa.md`,
+> TEA -> `.claude/team-roles/tea.md`,
+> UX -> `.claude/team-roles/ux.md`,
+> SM -> `.claude/team-roles/sm.md`,
+> CIS -> `.claude/team-roles/cis.md`.
+> A persona not in this map debates as its BMAD default.
+
+Pass only the map rows for the personas that invocation actually
+convenes. Injection reaches the personas through the invocation context;
+ai-dlc does not own `/bmad-party-mode` internals, so the mandate is
+"MUST pass the preamble," not "MUST verify the sub-skill obeyed it."
+Absence of the preamble at a persona-spawning call site is a
+lead-conduct retro finding.
 
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
 
@@ -597,7 +640,7 @@ Read-heavy planning and analysis work is the lead's largest avoidable
 cache-read cost: every file the lead reads inline accumulates in its
 context and is re-read every subsequent turn. To keep the lead lean,
 the *exploration* portion of designated steps is dispatched to an
-`analyst` subagent (read-only, model from the analyst role file per Rule 19) whose raw
+`analyst` subagent (read-only, bound to the analyst role file per Rule 19 — model + role-contract line) whose raw
 reading never enters the lead's context.
 
 **Config.** `planning_offload` (default `on`). When `on`, the steps
@@ -613,7 +656,7 @@ validation stay inline) — `discovery`, `research-requirements`.
 **Dispatch contract.** Each offloaded step's Section 0 defines its own
 concrete dispatch — the analyst's exploration scope, the canonical output
 artifact path, and the resume point — and spawns the `analyst` via the
-Agent tool (`model` from the analyst role file per Rule 19). The
+Agent tool (bound to the analyst role file per Rule 19 — model + role-contract line). The
 cross-cutting rules the lead applies to every such dispatch: order the
 dispatch prompt shared-block-first (dispatch-prompt cache discipline,
 `implementation.md`); the analyst writes the artifact to disk and returns
@@ -632,9 +675,14 @@ a `SKILL_INVOCATION_PROVENANCE` block. The analyst produces inputs,
 not validated outputs. Routing, gate, and requirement-tradeoff
 decisions remain the lead's.
 
-**Excluded.** Orchestration, routing, gate-validation decisions, the
-build phase (already delegated), and anything requiring the lead's
-live accumulated state are never offloaded.
+**Excluded.** Orchestration, routing, and gate-validation decisions are
+never offloaded (the non-delegable set, Rule 28). Everything else is
+delegated by default: the build phase to implementation teammates,
+planning exploration to the analyst, protected-path edits to the
+`protected-path-editor` (Rule 28 / `implementation.md`). "Requiring the
+lead's live accumulated state" narrows to exactly the non-delegable set
+-- it is not a general license to keep read-heavy or mechanical work
+inline.
 
 ### Rule 25 -- Artifact-size discipline
 
@@ -757,6 +805,49 @@ false-conflicts against it -- the catch-22, regrown (graph proved it). False
 positive: one override declaration when a consumer genuinely must change a core
 rule. Removal condition: retire once core ships as an immutable package the skill
 loads rather than a writable tree.
+
+### Rule 28 -- Delegation is the default; inline execution is the exception
+
+The lead MUST delegate any action a subagent can service. Doing the
+work inline in the lead's own conversation is permitted ONLY when the
+action falls in the **non-delegable set**:
+
+- **(a) Orchestration** -- spawning/joining teammates, task creation and
+  dependency wiring, wave/DAG planning, branch and worktree management,
+  merge and land-order integration (including merge-conflict resolution,
+  `implementation.md` -- integration is orchestration), and discharge-
+  predicate execution at deploy gates.
+- **(b) Routing** -- pipeline-variant selection and step sequencing.
+- **(c) Gate-validation decisions** -- running the gate checks and
+  owning PASS/FAIL/remediation outcomes.
+
+Invoking a validation sub-skill (Rule 20) is itself delegation -- the
+Skill call spawns real subagents -- so it is permitted inline; the lead
+triggers it but does not roleplay it.
+
+**Everything else is delegated.** Implementation and fixes -> dev
+teammates. Read-heavy planning exploration -> analyst (Rule 24).
+Protected-path edits -> `protected-path-editor` (Rule 26 / this rule /
+`implementation.md`), which the lead formerly executed itself. Code
+review -> code-reviewer. Test validation -> qa.
+
+**Burden of justification is inverted.** The lead does NOT get to reason
+"this is small, I'll just do it." When the lead performs any action
+inline, it MUST name which exclusion (a/b/c) authorizes it. An inline
+action outside the non-delegable set -- editing source, reading a
+codebase to understand it, drafting an artifact, applying a fix -- is a
+lead-conduct retro finding, even when the lead could have done it
+faster alone. The point is not speed; it is keeping production work in
+subagent context and the lead in orchestration (Rule 23).
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: the lead absorbing
+delegable work inline, saturating its context and collapsing the
+production/orchestration boundary (the observed action-heavy-misread and
+token-saturation failure modes). False-positive cost: an occasional
+dispatch of work the lead could have done in one turn -- paid in one
+orchestration round, recovered in context headroom. Removal condition:
+retire once the harness structurally prevents the lead from taking
+non-orchestration actions.
 
 ## INITIALIZATION
 
