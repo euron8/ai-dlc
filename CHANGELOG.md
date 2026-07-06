@@ -17,6 +17,25 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.21.2] — 2026-07-06
+
+`ai-dlc-update` settings.json reconcile no longer strips consumer plugins.
+
+- The v0.20.0 context-mode decommission dropped `context-mode@context-mode`
+  from the template, and the settings.json reconcile treated "plugin the base
+  template carried but theirs no longer does" as an **upstream removal** — so
+  the update proposed deleting `enabledPlugins."context-mode:true"` from the
+  consumer (gated, but still wrong). `enabledPlugins` is consumer-owned: a
+  template dropping a plugin removes ai-dlc's *use* of it, not the consumer's
+  right to keep it enabled. A leftover entry is benign (inert if uninstalled,
+  honored if relied on); removing it silently disables a plugin the consumer
+  may depend on.
+- **Fix:** `enabledPlugins` reconcile is now **additive-only, never remove** —
+  preserved in full like permissions/env/mcpServers, matching install.sh's
+  additive `$t + $u` merge. Disabling a plugin is the consumer's decision, not
+  the reconcile's. Removed the gated-deletion path from `template-sites.md` and
+  `ai-dlc-update/SKILL.md`.
+
 ## [0.21.1] — 2026-07-06
 
 Two `ai-dlc-update` reconcile fixes surfaced running the update in a consumer:

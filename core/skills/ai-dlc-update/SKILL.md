@@ -174,8 +174,7 @@ Every consumer block that differs from upstream is one of:
    neither, either, or both) — a **deletions list**: every
    `UPSTREAM-DELETED` path (upstream removed the file, consumer untouched),
    each with its reason line, since applying one `git rm`s a consumer file
-   and is gated per-path at apply (step 7); plus any gated `enabledPlugins`
-   removal from the settings reconcile (step 3b) — and a **template-changes
+   and is gated per-path at apply (step 7) — and a **template-changes
    list**: every `TEMPLATE-PROSE-MERGE` / `TEMPLATE-JSON-MERGE` file from step
    3b with a one-line summary of the upstream boilerplate delta being synced
    (e.g. "CLAUDE.md: remove Context-Mode Usage section") and, for any file
@@ -309,11 +308,12 @@ Every consumer block that differs from upstream is one of:
    - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run the
      jq strip/merge in `reconcile/template-sites.md` "settings.json reconcile":
      strip stale `ai-dlc-*.sh` hook blocks + append the template's, preserve
-     user permissions/env/mcpServers. An `enabledPlugins` key the template
-     dropped since base (e.g. `context-mode@context-mode`) is an upstream
-     removal → drop it from the consumer too, GATED per-key on the deletions
-     list like a file deletion (a plugin the consumer may rely on). Keys the
-     consumer added independently are preserved.
+     user permissions/env/mcpServers. `enabledPlugins` is additive-only and
+     NEVER removed: a plugin the template dropped since base (e.g. ai-dlc's own
+     `context-mode@context-mode` decommission) removes ai-dlc's *use* of it,
+     not the consumer's right to keep it enabled — the consumer's
+     `enabledPlugins` is preserved in full. Disabling a plugin is the
+     consumer's decision, not the reconcile's.
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
@@ -585,8 +585,9 @@ free of pull-only assumptions so the other three jobs can reuse it.
   `QUICKSTART.md`, `settings.json`) ARE now reconciled — step 3b's `--templates`
   pass + `reconcile/template-sites.md` sync the upstream template boilerplate
   while preserving consumer config. This closed the gap where a template-only
-  upstream change (e.g. a removed CLAUDE.md section, a dropped `enabledPlugins`
-  entry) never reached a consumer through the `core/`-only reconcile.
+  upstream change (e.g. a removed CLAUDE.md section) never reached a consumer
+  through the `core/`-only reconcile. (Consumer `enabledPlugins` is the
+  exception — additive-only, never removed, per `template-sites.md`.)
 - **Upstream URL** is carried in the stamp's `upstream` field (written by
   install, preserved on every re-stamp). Read it in step 1; only fall back to
   asking the operator when the field is absent (a legacy stamp).
