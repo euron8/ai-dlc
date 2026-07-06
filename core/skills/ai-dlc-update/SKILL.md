@@ -1,6 +1,6 @@
 ---
 name: ai-dlc-update
-description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile after review. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", or \"reconcile with distribution\"."
+description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile after review. Run with `untangle` (or `untangle apply`) for the one-time Phase-2 core/extensions/overrides migration on a still-tangled consumer. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", \"reconcile with distribution\", or \"untangle\"."
 effort: high
 ---
 
@@ -184,7 +184,14 @@ Every consumer block that differs from upstream is one of:
    step-6 branch.** If there are conflicts, apply only operator-adjudicated
    resolutions; zero conflicts does not remove the `apply`-arg requirement — it
    only removes the adjudication sub-step.
-   - apply-bucket blocks → write theirs into ours (path-mapped).
+   - apply-bucket blocks → write theirs into ours (path-mapped). If the file
+     is listed in `reconcile/setup-sites.md`, run the **mask/reinject
+     transform** (below) instead of a blind overwrite — extract the
+     consumer's live values at each declared site before writing theirs, then
+     reinject them at the same sites afterward. A blind overwrite of a
+     manifest-listed file blanks the consumer's real model strings/ownership
+     paths/deploy commands back to `{placeholder}` tokens — this happened
+     once (the reverted Phase-2B spike) and must not happen again.
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
      push-candidate ledger.
@@ -202,6 +209,34 @@ Every consumer block that differs from upstream is one of:
      `apply` run is to advance the stamp; the log records "already current, stamp
      advanced <base> → <theirs>." Without this, a skill-only pull would leave the
      stamp stuck forever and every later pull would re-diff from a stale base.**
+
+### Mask/reinject transform (setup-substitution sites)
+
+Some core-manifest files carry consumer config `ai-dlc-setup` filled in at
+install time — model strings, ownership paths, deploy/smoke commands — living
+inside otherwise upstream-owned files (team-role files, `deploy-validate.md`,
+`implementation.md`). These are consumer config, not rulebook divergence, and
+a plain overwrite would destroy them. `reconcile/setup-sites.md` is the
+declared list of every such site (file, anchor, capture pattern). This
+transform is used by BOTH step 7 above (every ordinary pull, once any manifest
+site exists) and by `untangle` mode's core-overwrite below — it is not
+untangle-specific.
+
+For each file listed in `setup-sites.md`, before overwriting with `theirs`:
+1. Locate each declared site in `ours` (its regex `match`, or its
+   `heading`/`next_heading` span) and extract the captured value(s).
+2. Overwrite the file with `theirs`.
+3. Re-locate each site by the SAME locator in the freshly-written file and
+   reinject the extracted value into the captured span (single-line sites) or
+   replace the heading-block body (heading-block sites).
+4. **Anchor-drift:** if a site's locator cannot be found in the freshly-written
+   `theirs` content (upstream restructured or reworded that section), STOP and
+   flag the site for operator adjudication in the report/log — do not drop the
+   value, and do not guess a new location for it.
+
+This is why "Layered consumers" below is a fast-forward everywhere EXCEPT at
+declared sites, not everywhere unconditionally.
+
 8. **Deliver — branch → commit → push → PR → merge.** The reconcile is landed
    through the consumer's normal review flow, never force-written to the working
    branch:
@@ -234,10 +269,15 @@ When the consumer has the Phase 2 layer split (a populated
 `{skill}/extensions/` and/or `{skill}/overrides/`), the reconcile surface
 collapses:
 
-- **core** (the protected-manifest files) → overwrite from theirs wholesale.
-  No per-block classify needed — the consumer never edited core in place (the
-  gate-validation Core-layer immutability check guarantees it), so
-  base→ours on core is empty and the three-way degenerates to a fast-forward.
+- **core** (the protected-manifest files) → overwrite from theirs wholesale,
+  running the **mask/reinject transform** (above) first for any file listed in
+  `reconcile/setup-sites.md`. No per-block classify needed for rulebook prose
+  — the consumer never edited core in place there (the gate-validation
+  Core-layer immutability check guarantees it) — but base→ours is NOT empty
+  at declared setup-substitution sites (model strings, ownership paths,
+  deploy/smoke commands); those always differ from base by design, forever.
+  The three-way degenerates to a fast-forward everywhere EXCEPT those sites,
+  which mask/reinject handles without needing a classify pass.
 - **extensions/** → never touched by the pull. Drain entries flagged
   `push_candidate: true` into the push-candidate ledger (spec §8.1).
 - **overrides/** → the ONLY genuine three-way surface. For each override, its
@@ -248,6 +288,102 @@ collapses:
 On a pre-Phase-2 (tangled) consumer like graph's first pull, none of the above
 applies yet — run the full per-block classify. The Phase-2 untangle is what
 moves a consumer from the full reconcile to this cheap one.
+
+## Untangle mode — one-time Phase-2 migration (`untangle` = dry-run, `untangle apply` = execute)
+
+For a still-tangled consumer (core files mix upstream prose with in-place
+consumer divergence — domain-local machinery, rewordings, un-pushed
+innovations — because the Phase 2 layer split was never done), `untangle`
+performs that split as a one-time migration, invoked from the consumer exactly
+like the ordinary pull. It reuses the same self-contained, consumer-side
+posture and the same shared classifier — it is one of the four jobs
+`reconcile/classify-block.md` already serves (see "Shared engine" below).
+
+**Precondition check.** If `{skill}/extensions/` or `{skill}/overrides/`
+already hold more than their scaffold `README.md`, this consumer has already
+untangled — refuse and report that, rather than re-running blindly.
+
+**Steps 1–4: identical to the pull procedure above**, with one change: step 3
+runs `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root> --untangle`.
+This exists because untangle is typically invoked when the consumer's stamp
+already equals upstream HEAD (`base == theirs` — no upstream delta to pull,
+only accumulated in-place divergence to split out). A plain `base`→`theirs`
+diff is empty in that case, so `--untangle` mode enumerates the core-manifest
+file list from `reconcile/setup-sites.md` instead and buckets purely by
+`ours` vs `base`. `classify-block.md` itself needs no changes: a manifest file
+that lands in `BOTH-CHANGED->CLASSIFY` still gets diffed and classified
+exactly as it is for an ordinary pull, and any block the consumer touched
+while upstream (at `base`, standing in for `theirs`) did not is already
+handled by the classifier's existing `consumer-only-in-block` bucket.
+
+Before any block in a manifest-listed file reaches the classifier, mask
+declared `setup-sites.md` sites (per the mask/reinject transform above) so
+setup config is never misclassified as rulebook divergence and never routed
+into an `extensions/`/`overrides/` file.
+
+**5u. Migration-plan dry-run.** Write
+`_bmad-output/ai-dlc-update/untangle-plan.md` (own filename; coexists with the
+ordinary pull's `reconcile-report.md` in the same directory): per-file bucket
+tally, proposed `extensions/`/`overrides/` file list (`hooks:`/`shadows:`+`id`
+per the entry contracts in `extensions/README.md`/`overrides/README.md`),
+push-candidate list, conflict list, and the masked-site list (so the operator
+can catch a manifest miss before it's acted on). **Unconditional stop unless
+invoked with `apply`** — identical discipline to step 5: zero conflicts, an
+obviously-clean plan, inferred intent, or convenience do NOT authorize
+proceeding. A bare `untangle` is a dry-run, every time, no exceptions.
+
+**6. Isolate branch.** Reused as-is (`git checkout -b
+ai-dlc-update/untangle-<ts>` off the current branch).
+
+**7u. Extract + mask-aware overwrite — reached ONLY when the invocation
+carried `apply`.** Per classify bucket, act:
+- **rewording** → discard the consumer's version; core is restored to
+  `theirs` at that block (rewording is by definition already-upstream in
+  substance).
+- **domain-local** → extract the block to `extensions/`, then restore core to
+  `theirs` at that block.
+- **un-pushed-innovation** → extract to `extensions/` with `push_candidate:
+  true`, then restore core to `theirs`.
+- **conflict** → extract to `overrides/` with `shadows: <file>#<id>` and
+  `base_sha: <current stamp sha>`, then restore core to `theirs` (the override
+  now shadows the core rule for this consumer; core itself stays
+  byte-reconcilable with upstream).
+
+Then apply the **mask/reinject transform** to every manifest-listed file as
+part of its final overwrite. Files upstream has no equivalent for at all —
+e.g. a consumer-only team-role file, or a whole consumer-only subdirectory
+under the skill root — are left untouched entirely and queued to the
+push-candidate ledger; core-overwrite by construction only ever touches paths
+`theirs` actually has.
+
+**7v. Runtime-verification gate — hard, unconditional, blocks delivery on any
+failure.** Byte-equality is not sufficient evidence the migration worked (this
+is exactly what the reverted attempt got wrong). Before delivery:
+1. For every `overrides/*` entry, resolve its `shadows: <file>#<id>` against
+   the just-overwritten core file — FAIL on a dangling shadow (id not found).
+2. For every `extensions/*` entry, confirm its `hooks:` target file exists in
+   core.
+3. Render 2–3 sample overrides and extensions to show what Rule 27's
+   precedence (`overrides > extensions > core`) would actually produce at
+   load time — proof the shadow/addition takes effect, not just that the id
+   string matches somewhere.
+4. Confirm zero remaining `{...}` template tokens in any team-role file, and
+   that every `/model` line holds a real (non-placeholder) string and every
+   `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max` — this is
+   the concrete proof teammate dispatch will not break, the exact failure the
+   reverted attempt caused.
+5. Diff every overwritten core file against `theirs` and confirm the only
+   remaining deltas are at sites declared in `reconcile/setup-sites.md`.
+
+Any failure here STOPS the run before delivery — the branch holds the
+in-progress state for inspection/fix, nothing is delivered. This gate is not
+optional and not skippable by any of the same rationalizations forbidden at
+step 5 (clean-looking result, zero conflicts, etc.).
+
+**8, 9. Deliver, safety.** Reused as-is: branch → commit → push → PR →
+operator-approved merge (PR body = the migration plan summary + the 7v gate
+results); the same three recover layers (branch, `_divergence/` archive,
+dry-run report — here, `untangle-plan.md`).
 
 ## Shared engine, thin orchestrator
 
