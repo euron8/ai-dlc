@@ -52,6 +52,26 @@ un-pushed-innovation (a false push-candidate is cheap; a dropped innovation is
 not). When unsure between rewording and conflict, prefer conflict (operator
 review is cheaper than a silent clobber).
 
+## `needs_operator_confirmation` — orthogonal to bucket, do not skip it
+
+A block can have an obvious, mechanical bucket (domain-local, innovation —
+even rewording) and STILL require a human decision the bucket's default
+action doesn't cover: a genuine 3-way blend (part take-theirs, part
+keep-ours, within the same block — neither pure discard nor pure keep is
+correct); a naming/categorization judgment call (e.g. no defined layer
+`kind` fits cleanly); anything you'd otherwise bury in a free-text `note`
+hoping someone reads it. Set `needs_operator_confirmation: true` for these,
+regardless of bucket. This is NOT a substitute for the `conflict` bucket
+(conflict = upstream and consumer changed the same rule incompatibly, a
+narrower and more specific case) — it is a second, independent signal: "this
+block's mechanical action is not simply correct as-is." A block can be
+`bucket: domain-local` AND `needs_operator_confirmation: true` at once.
+Downstream, every `true` here is gated exactly like a conflict — the calling
+skill (`ai-dlc-update` step 7/7u) stops and gets an explicit operator answer
+before acting on this specific block, even mid-apply. Do not leave this false
+by default to avoid a longer report — an unset flag on a real judgment call
+is a silent auto-decision the operator never got to make.
+
 ## Return (structured — this is your entire output)
 
 ```
@@ -60,8 +80,9 @@ BLOCKS:
   - id: <rule/section/check id or short label>
     bucket: <rewording|domain-local|un-pushed-innovation|conflict|upstream-only-in-block|consumer-only-in-block>
     action: <take-theirs|keep-ours|keep+layer|keep+flag-push|apply-theirs|adjudicate>
-    note: <one terse line; for conflict, both sides; for push-flag, why generalizable>
-TALLY: rewording=<n> domain-local=<n> innovation=<n> conflict=<n> upstream-only=<n> consumer-only=<n>
+    needs_operator_confirmation: <true|false>
+    note: <one terse line; for conflict, both sides; for push-flag, why generalizable; for needs_operator_confirmation, the specific question>
+TALLY: rewording=<n> domain-local=<n> innovation=<n> conflict=<n> upstream-only=<n> consumer-only=<n> needs-confirmation=<n>
 FILE_ACTION: <mostly-take-theirs | mixed-layer | keep-with-flags | needs-adjudication>
 ```
 

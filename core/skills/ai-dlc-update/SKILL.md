@@ -148,11 +148,15 @@ Every consumer block that differs from upstream is one of:
    `_bmad-output/ai-dlc-update/reconcile-report.md`: a header stating
    `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @ <sha>`
    (read `skill_version`/`skill_commit` from the stamp), then per-file +
-   per-block bucket, proposed action, the push-candidate list, and the
-   conflict list. This is a fixed filename overwritten on every run (a
-   snapshot, not a log) — the header stamp is what lets anyone tell a fresh
-   report from a stale leftover of a prior invocation, since the filename
-   alone can't.
+   per-block bucket, proposed action, the push-candidate list, the conflict
+   list, and a **needs-confirmation list** — every block any classify agent
+   returned with `needs_operator_confirmation: true` (per
+   `reconcile/classify-block.md`), each with its specific question, listed
+   separately from and in addition to the conflict list (a block can be in
+   neither, either, or both). This is a fixed filename overwritten on every
+   run (a snapshot, not a log) — the header stamp is what lets anyone tell a
+   fresh report from a stale leftover of a prior invocation, since the
+   filename alone can't.
 
    **Producing this report is the TERMINAL action of the run unless the
    invocation carried an explicit `apply` argument.** After writing it, STOP and
@@ -217,6 +221,25 @@ Every consumer block that differs from upstream is one of:
    step-6 branch.** If there are conflicts, apply only operator-adjudicated
    resolutions; zero conflicts does not remove the `apply`-arg requirement — it
    only removes the adjudication sub-step.
+
+   **Flagged-block checkpoint (mid-apply, every block, not just conflicts).**
+   Before executing a block's mechanical bucket action, check whether it (or
+   its file, if flagged at file grain) carries `needs_operator_confirmation:
+   true` from `classify-block.md` — this is orthogonal to bucket; a
+   `domain-local` or `innovation` block can still need one. Being inside an
+   authorized `apply` run on the step-6 branch does NOT waive this: writing is
+   authorized here, but a specific judgment call the classifier flagged is
+   not resolved by that authorization. When you reach such a block: STOP
+   before acting on it, present its specific question to the operator (same
+   footing as a conflict), and apply only their explicit answer for that
+   block — never your own best guess, and never silently fall through to the
+   bucket's default action because the rest of the run is "obviously fine" to
+   continue. A real run hit this: two blocks a dry-run report explicitly
+   flagged for operator review (a naming/kind decision, a genuine 3-way
+   prose blend) reached `apply` with no formal gate forcing the question to
+   actually be asked — nothing stopped the bucket's default action from
+   silently deciding them. This checkpoint is that gate. Applies identically
+   in untangle's 7u below.
    - apply-bucket blocks → write theirs into ours (path-mapped). If the file
      is listed in `reconcile/setup-sites.md`, run the **mask/reinject
      transform** (below) instead of a blind overwrite — extract the
@@ -363,7 +386,10 @@ every run, so the stamp is the only way to tell a fresh plan from a stale one
 left over from before a skill update. Then: per-file bucket
 tally, proposed `extensions/`/`overrides/` file list (`hooks:`/`shadows:`+`id`
 per the entry contracts in `extensions/README.md`/`overrides/README.md`),
-push-candidate list, conflict list, the masked-site list (so the operator can
+push-candidate list, conflict list, a **needs-confirmation list** (every
+`needs_operator_confirmation: true` block per `classify-block.md`, each with
+its specific question — separate from the conflict list, same as step 5),
+the masked-site list (so the operator can
 catch a manifest miss before it's acted on), **and an explicit list of any
 consumer-only files with no upstream equivalent at all** (e.g. an extra
 team-role file, an extra subdirectory under the skill root) — name them, state
@@ -383,7 +409,14 @@ untangle).
 ai-dlc-update/untangle-<ts>` off the current branch).
 
 **7u. Extract + mask-aware overwrite — reached ONLY when the invocation
-carried `apply`.** Per classify bucket, act:
+carried `apply`.** The **flagged-block checkpoint** from step 7 applies here
+unchanged: before executing any block's bucket action below, check
+`needs_operator_confirmation` — if true, stop and get the operator's explicit
+answer for that specific block before authoring anything for it, regardless
+of bucket. This is not optional for untangle just because most blocks here
+are mechanical — the two most consequential open items in graph's first
+apply (a layer-`kind` naming decision, a genuine 3-way prose blend) were
+exactly this shape. Per classify bucket, act:
 - **rewording** → discard the consumer's version; core is restored to
   `theirs` at that block (rewording is by definition already-upstream in
   substance).
