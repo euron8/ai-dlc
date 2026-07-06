@@ -16,7 +16,7 @@ rather than creating from scratch.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
-an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to section 1
+an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to section 1
 — it reads the input artifacts and any codebase context the brief
 needs and writes a context digest to
 `_bmad-output/planning-artifacts/discovery-context.md`, returning only
@@ -130,7 +130,7 @@ verbatim or as close to verbatim as the source allows.
 Run the full validation cycle on the brief. **Execute all sub-skills
 back-to-back without pausing for human input between them:**
 
-1. `/bmad-party-mode` — PM, Architect, UX, CIS debate the brief. Walk
+1. `/bmad-party-mode` — PM, Architect, UX, CIS (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate the brief. Walk
    through every element. Apply all improvements directly.
    **Requirement fidelity check:** If features originate from carry-over
    items or user instructions with specific details, verify those details

@@ -16,7 +16,7 @@ a comprehensive reverse-engineering analysis before planning new work.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–5 inline.
-Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to
+Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to
 sections 1–5 — it performs the full codebase exploration and writes
 the complete analysis to
 `_bmad-output/planning-artifacts/codebase-analysis.md`, returning only

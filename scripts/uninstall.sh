@@ -53,12 +53,13 @@ if [ -d "$PROJECT_ROOT/.claude/skills/ai-dlc-update" ]; then
   DIRS_TO_REMOVE+=(".claude/skills/ai-dlc-update/")
 fi
 
-# -- Team roles (only the 5 AI/DLC roles) --
-for role in architect code-reviewer dev pm qa; do
-  if [ -f "$PROJECT_ROOT/.claude/team-roles/$role.md" ]; then
-    FILES_TO_REMOVE+=(".claude/team-roles/$role.md")
-  fi
-done
+# -- Team roles (all AI/DLC role files; team-roles/ is ai-dlc-owned) --
+if [ -d "$PROJECT_ROOT/.claude/team-roles" ]; then
+  for role_file in "$PROJECT_ROOT/.claude/team-roles/"*.md; do
+    [ -f "$role_file" ] || continue
+    FILES_TO_REMOVE+=(".claude/team-roles/$(basename "$role_file")")
+  done
+fi
 
 # -- Templates installed to root --
 for file in CLAUDE.md QUICKSTART.md; do

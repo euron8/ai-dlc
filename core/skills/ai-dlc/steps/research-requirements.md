@@ -15,7 +15,7 @@ creation with full validation cycle.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
-an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19) scoped to section 1
+an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to section 1
 — it performs the domain/market/technical research and writes the
 research notes to
 `_bmad-output/planning-artifacts/research-notes.md`, returning only
@@ -78,7 +78,7 @@ step 4. Otherwise run the full cycle below.
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 
-1. `/bmad-party-mode` — PM, Architect, UX, Dev, TEA debate every section
+1. `/bmad-party-mode` — PM, Architect, UX, Dev, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate every section
    of the PRD (personas, stories, NFRs, metrics, risks, constraints).
    Walk through exhaustively. Apply all improvements.
    **Requirement fidelity check:** Verify each new requirement preserves

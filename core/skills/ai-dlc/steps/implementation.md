@@ -23,28 +23,41 @@ Read the architecture document.
 Create an agent team.
 
 Spawn the following teammates using role files in `.claude/team-roles/`.
-Spawn using the model defined in the teammate's role file
-(`.claude/team-roles/<role>.md`). The role file's `/model` directive is
-the authoritative model binding.
+Each spawn MUST bind the FULL role contract, not just the model
+(SKILL.md Rule 19):
 
-**Agent spawn model parameter MUST be passed explicitly.** Every
-Agent tool invocation MUST include the `model` parameter, derived from
-that role's `/model` directive in its role file
-(`.claude/team-roles/<role>.md`) — do NOT hardcode a role-to-model
-table here. Omitted `model` inherits from the
-parent conversation
-and bypasses the role contract. Violation fails gate-validation
-Check 15 on detection at retro. Per SKILL.md Rule 19.
+**(a) Model.** Every Agent tool invocation MUST include the `model`
+parameter, derived from that role's `/model` directive in its role file
+(`.claude/team-roles/<role>.md`) — do NOT hardcode a role-to-model table
+here. Omitted `model` inherits from the parent conversation and bypasses
+the role contract.
 
-**Protected-path lead-only enforcement.** Before dispatching dev for
+**(b) Role contract.** Every dispatch prompt MUST carry the standing
+line — byte-identical across dispatches, in the shared block (see
+Dispatch-prompt cache discipline below): *"Your operating contract is
+`.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
+action before any other work."* The subagent reads its own
+identity/ownership/constraints/escalation from that file (Rule 19(b));
+the lead does not restate them per dispatch.
+
+Violation of (a) or (b) fails gate-validation Check 22 on detection at
+retro. Per SKILL.md Rule 19.
+
+**Protected-path editor delegation (Rule 28).** Before dispatching for
 any story, the lead MUST inspect the story's frontmatter for
-`lead_only: true`. If set, lead MUST execute the story itself — no
-Agent/Task delegation to dev teammate roles. Lead MAY invoke
-validation sub-skills via the Skill tool per Rule 20. Stories with
-`single_dev_serialized: true` MUST NOT be dispatched to parallel
-teammates that touch the same protected file. Catalog and field
-semantics defined in `stories-test-strategy.md` "Protected-Path
-Story Tag" subsection. Violation fails gate-validation Check 15 on
+`protected_path_editor: true`. If set, the lead MUST dispatch the story
+to a `protected-path-editor` teammate (from
+`.claude/team-roles/protected-path-editor.md`, bound per Rule 19(a)+(b))
+— NOT execute it inline (Rule 28: protected-path editing is delegable,
+not lead-only) and NOT delegate it to a dev teammate. The
+`protected-path-editor` returns a review-ready diff; the lead reviews
+the diff before merging it (the lead-owned safety that replaces the old
+lead-only execution). Stories with `single_dev_serialized: true` MUST
+NOT be dispatched to parallel teammates that touch the same protected
+file — protected-path stories are dispatched one at a time. Lead MAY
+invoke validation sub-skills via the Skill tool per Rule 20. Catalog and
+field semantics defined in `stories-test-strategy.md` "Protected-Path
+Story Tag" subsection. Violation fails gate-validation Check 22 on
 detection at retro.
 
 **Pre-dispatch auth check.** Before any dev dispatch, run:
@@ -135,8 +148,10 @@ judgment.
 teammates (parallel devs, or a dev plus QA on the same story), order
 each dispatch prompt as a **stable shared block first, variable tail
 last**. The shared block — sprint conventions, architecture pointer,
-role expectations, branch/merge protocol — MUST be byte-identical
-across every dispatch in the sprint. Put only the per-story content
+the Rule 19(b) role-contract line (*"Your operating contract is
+`.claude/team-roles/<role>.md`. Read it and follow it as your FIRST
+action…"*), branch/merge protocol — MUST be byte-identical across every
+dispatch of the same role in the sprint. Put only the per-story content
 (worktree path, story id, acceptance criteria, dev-brief findings)
 after it. Prompt-cache entries are content-addressed: an identical
 leading block means the first dispatch writes it and every later
@@ -162,7 +177,7 @@ because the canonical spec lives on an unmerged PR, the lead MUST
 either merge that PR first or pin the dev branch base to a commit
 that includes it. Dispatching dev without both conditions satisfied
 is a story-scope failure mode. Violation fails gate-validation
-Check 15 on detection at retro.
+Check 22 on detection at retro.
 
 **Dev-dispatch exploration budget.** Every dev brief MUST bound
 exploration and force an early write. The brief MUST state: (a) an
@@ -199,9 +214,17 @@ Verify:
 - Dependencies are correct (review blocked by dev, QA blocked by review)
 - Teammate assignments match story scope and ownership boundaries
 - No story is assigned to a teammate outside their ownership boundary
-- Every teammate spawn in Step 2 passed the Agent tool `model`
-  parameter per SKILL.md Rule 19. Record the spawned model per
-  teammate in the gate log.
+- Every teammate spawn in Step 2 bound the full role contract per
+  SKILL.md Rule 19: (a) the Agent tool `model` parameter was passed and
+  matches the role's `/model` directive, and (b) the dispatch carried
+  the standing role-contract line binding the subagent to
+  `.claude/team-roles/<role>.md`. Record BOTH per teammate in the gate
+  log (model value + role-file citation) — gate-validation Check 22
+  reads these records.
+- Every story tagged `protected_path_editor: true` was dispatched to a
+  `protected-path-editor` teammate (serialized), not executed inline by
+  the lead and not delegated to a dev. Record the dispatch in the gate
+  log.
 
 Log task list validation in gate log.
 

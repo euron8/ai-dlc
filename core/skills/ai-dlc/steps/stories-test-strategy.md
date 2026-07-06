@@ -22,17 +22,21 @@ artifacts.
 ### Protected-Path Story Tag
 
 Stories that modify files in the protected-path catalog MUST be
-tagged for lead-only execution. Three story-frontmatter fields
-gate this behavior:
+tagged for delegated protected-path editing. Three story-frontmatter
+fields gate this behavior:
 
 - `protected_paths: [<path-glob-list>]` — list of paths the story
   edits that are in the protected-path catalog.
-- `lead_only: true` — when set, lead MUST execute the story itself
-  (no Agent/Task delegation to dev teammate). Lead may invoke
+- `protected_path_editor: true` — when set, the lead MUST dispatch the
+  story to a `protected-path-editor` teammate
+  (`.claude/team-roles/protected-path-editor.md`), which returns a
+  review-ready diff the lead reviews before merge. The lead does NOT
+  execute the story inline (Rule 28: protected-path editing is
+  delegable) and does NOT delegate it to a dev teammate. Lead may invoke
   validation sub-skills via Skill tool per Rule 20.
 - `single_dev_serialized: true` — when set, lead orchestration
-  MUST NOT spawn parallel dev teammates that touch the same
-  protected file.
+  MUST NOT spawn parallel teammates that touch the same
+  protected file; protected-path stories are dispatched one at a time.
 
 **Protected-path catalog** (default; consumers extend via
 `CLAUDE.md` or a project-local override):
@@ -44,9 +48,10 @@ gate this behavior:
 - `docs/coding-conventions.md`
 
 When a story file's `protected_paths` field intersects this
-catalog, both `lead_only: true` and `single_dev_serialized: true`
-are MANDATORY. `implementation.md` enforces these tags at
-parallel-dispatch time.
+catalog, both `protected_path_editor: true` and
+`single_dev_serialized: true` are MANDATORY. `implementation.md`
+enforces these tags at dispatch time; gate-validation Check 22 verifies
+the story was serviced by a `protected-path-editor` spawn.
 
 ### Discriminating-AC Authoring Standard
 
@@ -215,7 +220,7 @@ risk assessment suggests phasing:
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 
-1. `/bmad-party-mode` — SM, Dev, Architect, TEA walk through EVERY story.
+1. `/bmad-party-mode` — SM, Dev, Architect, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through EVERY story.
    Every acceptance criterion, every edge case, every dependency.
    Apply all improvements.
    **Requirement fidelity check:** For each story derived from a carry-over

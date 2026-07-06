@@ -736,6 +736,45 @@ presence is structurally guaranteed.
 **Check 21**; recorded so a future graph reconciliation does not re-flag
 it as new.
 
+### 22. Teammate-spawn role binding (implementation gates only).
+
+**Scope.** Runs at implementation-phase gates for any gate whose sprint
+dispatched teammates via the Agent tool (dev, code-reviewer, qa, or a
+`protected-path-editor`). Skips gates with no Agent-tool spawn.
+
+**Check.** Read the gate log's per-teammate spawn records
+(`implementation.md` Step 4 self-validate writes them). For EVERY
+teammate spawn recorded this sprint, confirm BOTH bindings required by
+SKILL.md Rule 19: (a) the `model` parameter was passed explicitly, and
+the recorded model matches the spawned role's `/model` directive in
+`.claude/team-roles/<role>.md`; AND (b) the dispatch carried the
+standing role-contract line binding the subagent to
+`.claude/team-roles/<role>.md` as its first action (Rule 19(b)). A spawn
+record missing either the model value or the role-contract citation
+FAILS this check. Fail-closed: a teammate that ran without a resolvable
+role-file binding is a Rule 19 violation, not a pass.
+
+Additionally, for any story tagged `protected_path_editor: true`
+(`stories-test-strategy.md` Protected-Path Story Tag), confirm the story
+was serviced by a `protected-path-editor` spawn (serialized), NOT
+executed inline by the lead and NOT delegated to a dev teammate.
+
+**PASS:** every spawn record cites both a role-matched model and the
+role-contract binding, and every protected-path story routed to the
+`protected-path-editor`. **FAIL:** any spawn omits a binding, cites a
+model that does not match its role file, or any protected-path story was
+executed inline or by a dev.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a subagent run
+without its role contract — a dev without its ownership/constraint
+boundary, or the lead absorbing a protected-path edit it should have
+delegated (Rule 28). False-positive cost: one gate-log read of records
+the lead already writes at Step 4 — no new artifact. Removal condition:
+retire once the Agent-tool spawn API structurally attaches the role file
+(no lead-authored dispatch line to verify). This check supersedes the
+former stale "Check 15" citations in `implementation.md`, which pointed
+at the snapshot-verification check by mistake.
+
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 
 **Recursion guard.** H1 is NOT subject to H1. When H1 runs, it sets

@@ -121,6 +121,15 @@ sites:
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 
+  - id: ppe-model-personal
+    file: core/team-roles/protected-path-editor.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: ppe-model-bedrock
+    file: core/team-roles/protected-path-editor.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
   - id: deploy-command
     file: core/skills/ai-dlc/steps/deploy-validate.md
     shape: single-line
@@ -154,11 +163,17 @@ sites:
 
 Documented so a future author doesn't add them:
 
-- **`- \`/effort <level>\`` in all 6 team-role files.** Ships concrete since
+- **`- \`/effort <level>\`` in every team-role file.** Ships concrete since
   before v0.10 (`git log` confirms the effort-per-role commit predates the
   v0.10.0 tag) — there has never been an `{effort}` template token. A
   consumer changing this value is real, classifiable rulebook divergence
   (most likely `domain-local`), never a setup-fill restore target.
+- **`/model` in the party-persona role files (`tea.md`, `ux.md`, `sm.md`,
+  `cis.md`).** By design these carry NO model placeholder — they are spawned
+  by the external `/bmad-party-mode` sub-skill, which controls their model, so
+  an ai-dlc `{*_model_*}` token there would be inert. They have no `- Personal:
+  \`/model …\`` line to mask. Do not add sites for them. (`protected-path-editor.md`
+  IS directly Agent-spawned and DOES carry `{ppe_model_*}` sites, above.)
 - **`{running_digest_command}` / `{function_verification_command}`** in
   `steps/deploy-validate.md`. These look identical to `{deploy_command}` /
   `{smoke_test_command}` (same `<!-- {token}: ... -->` comment shape) but

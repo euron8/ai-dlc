@@ -17,7 +17,7 @@ items get the same planning rigor as new features.
 ### 0. Exploration dispatch (Rule 24)
 
 If `planning_offload: on` (default), do NOT run sections 1–2 (and 1a)
-inline. Spawn an `analyst` subagent (Agent tool, `model` from the analyst role file per Rule 19)
+inline. Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
 scoped to those reading sections — it loads the backlog/brief/PRD and
 audit anchor, evaluates each item, and writes a draft evaluation to
 `_bmad-output/planning-artifacts/carry-over-evaluation.md`, returning
@@ -73,7 +73,7 @@ exercise stories.
 
 ### 3. Party Mode Evaluation
 
-`/bmad-party-mode` — PM, Architect, Dev, TEA evaluate every item:
+`/bmad-party-mode` — PM, Architect, Dev, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) evaluate every item:
 - Valid or close? If valid, rough story shape?
 - Surface any items that have become higher/lower priority
 - Surface any that are clearly no longer worth doing
