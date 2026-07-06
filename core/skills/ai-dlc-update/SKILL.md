@@ -148,7 +148,10 @@ Every consumer block that differs from upstream is one of:
    - zero conflicts, an "obviously clean" pull, or an all-`apply`-bucket report;
    - the pull looking safe, small, or already-verified;
    - inferred operator intent, urgency, or "they clearly want the update";
-   - the fact that applying would be convenient or save a round-trip.
+   - the fact that applying would be convenient or save a round-trip;
+   - the operator answering a question about the report, adjudicating a
+     conflict, or asking for a specific fix ("restore X", "just fix the Y
+     bullet") in the conversation while reviewing it.
 
    The ONLY authorization to move past this stop is an explicit `apply` argument
    on THIS invocation (e.g. `/ai-dlc-update apply`). A bare `/ai-dlc-update` is a
@@ -156,6 +159,20 @@ Every consumer block that differs from upstream is one of:
    contain `apply`, you MUST NOT apply — full stop. When unsure whether `apply`
    was given, treat it as ABSENT and stop. Never write "operator directed" into
    the report unless the operator's invocation literally contained `apply`.
+
+   **Adjudication is not authorization to write (incident-confirmed failure
+   mode — do not repeat it).** An operator resolving a conflict, or asking for a
+   specific fix, while reviewing a dry-run report ("restore the dropped KISS
+   bullet") is giving an ANSWER — record it into the report/log for the
+   `apply` run to act on. It is NOT an instruction to edit any file right now.
+   A real run misread exactly this: the operator adjudicated a conflict in
+   conversation and the agent edited the live working tree immediately,
+   uncommitted, off-branch, before `apply` was ever invoked. Every write,
+   without exception, happens only inside step 6's isolated branch, reached
+   only via an explicit `apply` argument on a fresh invocation — a one-line,
+   obviously-correct fix is not a carve-out from that. If the operator gives
+   you a fix mid-review, say so explicitly: "recorded — will apply on
+   `untangle apply`/`apply`," and touch nothing.
 
    **Already-current case (empty reconcile).** If the report shows NO
    consumer-rulebook changes to apply — every bucket is noop/already-present, e.g.
@@ -326,11 +343,21 @@ into an `extensions/`/`overrides/` file.
 ordinary pull's `reconcile-report.md` in the same directory): per-file bucket
 tally, proposed `extensions/`/`overrides/` file list (`hooks:`/`shadows:`+`id`
 per the entry contracts in `extensions/README.md`/`overrides/README.md`),
-push-candidate list, conflict list, and the masked-site list (so the operator
-can catch a manifest miss before it's acted on). **Unconditional stop unless
-invoked with `apply`** — identical discipline to step 5: zero conflicts, an
-obviously-clean plan, inferred intent, or convenience do NOT authorize
-proceeding. A bare `untangle` is a dry-run, every time, no exceptions.
+push-candidate list, conflict list, the masked-site list (so the operator can
+catch a manifest miss before it's acted on), **and an explicit list of any
+consumer-only files with no upstream equivalent at all** (e.g. an extra
+team-role file, an extra subdirectory under the skill root) — name them, state
+they will be left untouched and queued to the push-candidate ledger. Silence
+on these reads as "not found," not "found and intentionally skipped" — say so
+explicitly. **Unconditional stop unless invoked with `apply`** — identical
+discipline to step 5: zero conflicts, an obviously-clean plan, inferred
+intent, or convenience do NOT authorize proceeding. A bare `untangle` is a
+dry-run, every time, no exceptions. **This includes conflict adjudication
+given in conversation** — if the operator resolves the one conflict, or asks
+for a specific fix, while reviewing this report, record their answer in the
+plan for the `apply` run to act on; do NOT edit any file now (see step 5's
+"Adjudication is not authorization to write" — the same rule, no exception for
+untangle).
 
 **6. Isolate branch.** Reused as-is (`git checkout -b
 ai-dlc-update/untangle-<ts>` off the current branch).
