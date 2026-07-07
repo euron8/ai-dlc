@@ -17,6 +17,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-07-07
+
+Retro inline-delegation (#60) — the third and final lever of the
+delegation-closeout arc ([[v0.8.0]] Rule 24 → Rule 28 → v0.25.0). Closes the
+one step v0.25.0 deferred: `retro.md`, the largest read-heavy step (740 lines)
+and the lead's single biggest inline-read site. Unlike the v0.25.0 targets,
+retro's delegable reads do NOT factor behind one prepended §0 — they interleave
+with lead-owned decisions, are causally ordered, and sit next to a live
+provenance/evidence chain. Design spec, not mechanical. No new rule, no new
+gate check, no new script, no detector — enforcement rides the existing retro
+audits (Rule 26(c)). Text-only; takes effect on the next `/ai-dlc` retro.
+
+- **Per-phase micro-dispatches, not one §0.** Six read-heavy retro sites each
+  open with a scoped `analyst` dispatch (Rule 19 binding byte-identical to
+  discovery / carry-over §0) that writes a structured table to a canonical
+  `_bmad-output/retro-artifacts/sprint-<N>-*.md` artifact and returns only
+  `{artifact_path, summary, gaps}`; the lead resumes in-place for disposition,
+  authoring, and mutation. Two dispatch clusters split by the merge seam —
+  **Dispatch A** (Step 1 context digest, Step 3 doc split, Step 4 rule-audit
+  candidates + dormancy/pointer scans, Step 4a close-out gather) and
+  **Dispatch B** (Step 7b next-sprint inputs, issued after the 7a human merge
+  gate).
+- **Causal ordering preserved.** Branch creation stays inline (git mutation,
+  Rule 28(a)/23(c)) with Dispatch A issued after the branch exists; the Step 4
+  rule-audit dispatch fires only after "apply process improvements" edits land
+  so the scan sees post-improvement state; Dispatch B fires only after the 7a
+  merge gate. Descriptive/analytical sections are analyst-drafted; prescriptive
+  sections (improvements, which-file-updates, 5-layer enforcement) stay
+  lead-authored inline.
+- **Evidence-chain invariants held (the acceptance contract).** Step 2
+  party-mode transport is byte-unchanged — no analyst produces or re-commits
+  the transcript; the analyst never emits `SKILL_INVOCATION_PROVENANCE`; the
+  Agent-findings summary cites the existing `transcript_path: path@<sha>`
+  verbatim and never re-derives (else solo-mode-by-proxy, Rule 20); topology +
+  TRIGGER `file:line` citations survive the hop and the lead validates before
+  disposition; deferral conditions are run LIVE against real source, never
+  inferred. Locked-requirement deferral disposition is never delegated
+  (Rule 13 / Rule 12 Tier-1 HARD_BLOCK, lead-only). Invariants 2 & 3 stay as
+  compact `node -e` one-liners run via `ctx_execute`, not wrapped in a dispatch.
+- **Config — reuse `planning_offload`, no new flag.** Rule 24's heading and
+  description widen from planning-only to "read-heavy exploration in planning
+  **and retro** steps"; `retro` joins the split-offload list. When `off`, retro
+  runs fully inline (pre-0.26.0 behavior).
+- **Self-audited, no new machinery.** The Step 4 rule-file audit scope note
+  gains one line asserting retro's own read-heavy sections (Steps 1, 3, 4, 4a,
+  7b) carry their analyst dispatch — a structural invariant checked by the audit
+  that already runs every retro (the retro audits itself), not a new detector.
+
+> **Live-retro acceptance is NOT yet exercised.** §7.3 requires one full live
+> retro to confirm the five §4 invariants hold, `validate-retro-evidence.sh` +
+> `validate-retro-compliance.yml` pass green, the `transcript@sha` byte-match is
+> intact, and resident context measurably drops. That runs on the next live
+> retro, not at merge.
+
 ## [0.25.0] — 2026-07-07
 
 Lead-inline delegation closeout (#59). Rule 28 already mandates that inline
