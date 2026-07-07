@@ -200,7 +200,9 @@ If `is_ui_epic == true`:
 - Fetch deployed application endpoints
 - Verify every new/modified UI surface renders correctly with production data
 - Compare against documented mockups (from ui-direction step)
-- For any drift: fix directly, redeploy, re-verify
+- For any drift: dispatch a `dev` teammate (role-bound per Rule 19) to correct
+  the UI source; the lead then redeploys and re-verifies. Redeploy and
+  re-verification are deploy-gate orchestration (Rule 28a) and stay on the lead.
 - **Document results:** List each surface verified, whether it matched
   the mockup, and any drift found/fixed. Gate validation check #9
   requires this evidence.
@@ -271,8 +273,11 @@ before proceeding to Sprint 2."]
 
 After human validates:
 
-- If **human requests fixes:** Apply fixes, redeploy, re-validate, and
-  present the checkpoint again.
+- If **human requests fixes:** dispatch `dev` for the fixes, `code-reviewer`
+  to re-review the changed files, and `qa` to re-validate affected stories;
+  the lead then redeploys, re-validates the deploy gate, and presents the
+  checkpoint again. Only the code edit is delegated — the redeploy and the
+  checkpoint re-presentation stay on the lead.
 
 - If **multi-sprint and more sprints remain:** Update sprint-status.yaml,
   then route the next sprint's stories through validation before

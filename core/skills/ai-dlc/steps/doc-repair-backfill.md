@@ -14,18 +14,15 @@ missing BMAD artifacts so planning can proceed from a verified foundation.
 
 ### 1. Repair Existing Docs
 
-Read `_bmad-output/planning-artifacts/doc-reconciliation.md`.
-
-For each document with STALE or WRONG findings:
-- Update the document to match the codebase
-- Preserve accurate content
-- Add a correction log at the bottom noting what changed and why
-
-For MISSING FROM DOCS findings:
-- Add documentation for undocumented code to the appropriate document
-
-For MISSING FROM CODE findings:
-- Flag with [NOT IMPLEMENTED] markers. Do not remove (may be planned work)
+Read `_bmad-output/planning-artifacts/doc-reconciliation.md` (the finding
+set only — small). For every STALE/WRONG/MISSING-FROM-DOCS finding, dispatch
+a `dev` teammate (Agent tool, role-bound per Rule 19) to apply the edits:
+update each document to match the codebase, preserve accurate content, add a
+correction log, add docs for undocumented code, and flag MISSING-FROM-CODE
+with `[NOT IMPLEMENTED]` (never remove). If any target document is a
+protected path, dispatch `protected-path-editor` for that file instead
+(Rule 28 / `implementation.md`). The lead validates the returned edits
+against the finding set; it does not apply them inline.
 
 ### 2. Backfill Missing BMAD Artifacts
 

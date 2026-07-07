@@ -39,9 +39,10 @@ For each story in the upcoming sprint, verify:
 - **ACs still accurate:** Do the acceptance criteria still reflect the
   desired behavior given the current state of the codebase?
 
-If any story needs modification, update it directly. If a story is no
-longer needed, mark it as `skipped` in sprint-status.yaml with a
-rationale.
+If any story needs modification, the modification is authored through the
+§3 validation cycle (SM/dev via the story sub-skills), not edited inline by
+the lead. Marking a story `skipped` in sprint-status.yaml with a rationale
+is orchestration bookkeeping and stays on the lead.
 
 ### 3. Story Validation Cycle (Rule 8)
 

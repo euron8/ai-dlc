@@ -684,7 +684,11 @@ by setting `planning_offload` in this section directly.
 **Offloaded steps.** Full offload — `deep-codebase-analysis`,
 `codebase-inventory`, `bug-investigation`, `doc-reconciliation`,
 `carry-over-evaluation`. Split offload (exploration only; authoring +
-validation stay inline) — `discovery`, `research-requirements`.
+validation stay inline) — `discovery`, `research-requirements`,
+`architecture`, `stories-test-strategy` (framework-import probe only).
+Special-cased — `doc-repair-backfill`: its §1 repair is a **dev /
+protected-path-editor** write-dispatch (not an analyst read-dispatch),
+since the read was already done upstream by `doc-reconciliation`.
 
 **Dispatch contract.** Each offloaded step's Section 0 defines its own
 concrete dispatch — the analyst's exploration scope, the canonical output
@@ -862,7 +866,9 @@ triggers it but does not roleplay it.
 teammates. Read-heavy planning exploration -> analyst (Rule 24).
 Protected-path edits -> `protected-path-editor` (Rule 26 / this rule /
 `implementation.md`), which the lead formerly executed itself. Code
-review -> code-reviewer. Test validation -> qa.
+review -> code-reviewer. Test validation -> qa. UI/design production
+(mockups, copy, CSS-class specs, accessibility review) -> ux
+(`ui-direction.md` §0).
 
 **Burden of justification is inverted.** The lead does NOT get to reason
 "this is small, I'll just do it." When the lead performs any action

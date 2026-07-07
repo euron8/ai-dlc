@@ -78,7 +78,8 @@ entire sprint implementation:
 - Does the implementation match the requirements?
 - Are there cross-cutting concerns?
 - Is the test coverage adequate across the sprint as a whole?
-- Apply all improvements.
+- Apply all improvements. **Code changes are applied by dev teammates, not
+  inline by the lead (Rule 28); the lead owns disposition, not the edit.**
 
 ### 3. Fix and Re-Validate
 

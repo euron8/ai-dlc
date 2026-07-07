@@ -141,11 +141,12 @@ overhead without value for ≤2 stories.
 
 Before creating any story file, verify:
 
-**(a) Framework-import inspection.** For every test framework
-prescribed in story ACs (pytest, vitest, playwright, etc.), verify
-the framework is actually imported/configured in the codebase. Run
-a grep for the import statement. Missing framework = story AC is
-unimplementable as written → fix the AC or add a setup story.
+**(a) Framework-import inspection.** For every test framework prescribed in
+story ACs, the framework's presence in the codebase MUST be verified before
+the AC is written. Dispatch an `analyst` (role-bound per Rule 19) to grep for
+each framework's import/config and return a `{framework: present|absent}`
+map; the lead consumes the map when authoring/fixing ACs. Absent framework =
+AC unimplementable as written → fix the AC or add a setup story.
 
 **(b) Role-file/step-file existence verification.** For every
 `.claude/team-roles/<role>.md` and `.claude/skills/ai-dlc/steps/<step>.md`
