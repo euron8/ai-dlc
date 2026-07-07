@@ -12,6 +12,22 @@ to the human but continue working — this is NOT a blocking gate.
 
 ## EXECUTION SEQUENCE
 
+### 0. Design dispatch (Rule 28)
+
+UI mockup generation, copy, CSS-class specification, and the accessibility /
+device review are design production, not orchestration/routing/gate — so per
+Rule 28 they are delegated. Spawn a `ux` subagent (Agent tool, bound to
+`.claude/team-roles/ux.md` per Rule 19 — `model` + role-contract Read line)
+scoped to sections 1, 2, and 4: it generates the ASCII wireframes and copy
+for each new UI surface, confirms each introduced CSS class against the
+stylesheet, runs the accessibility/device check, writes the result to
+`_bmad-output/planning-artifacts/ui-mockups-sprint-N.md`, and returns only
+`{artifact_path, summary, decisions}`. The lead resumes at section 3
+(present) and section 5 (proceed). **Sections 3 and 5 stay inline** — reading
+the artifact, presenting it non-blocking to the human, and routing to
+implementation are lead actions. An absent artifact at the returned path is
+non-delivery; the lead re-dispatches (Rule 24 delivery discipline).
+
 ### 1. Generate Mockups
 
 For each new UI surface in the sprint stories:

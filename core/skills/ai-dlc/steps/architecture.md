@@ -12,6 +12,22 @@ full validation cycle.
 
 ## EXECUTION SEQUENCE
 
+### 0. Exploration dispatch (Rule 24)
+
+If `planning_offload: on` (default) AND the variant reads existing code or
+architecture (feature, brownfield-a, brownfield-c — NOT greenfield /
+brownfield-b, which author from scratch via `/bmad-create-architecture`),
+do NOT read the codebase or existing architecture inline. Spawn an `analyst`
+subagent (Agent tool, bound to `.claude/team-roles/analyst.md` per SKILL.md
+Rule 19 — both bindings: `model` and the standing role-contract Read line)
+scoped to the AS-IS / existing-architecture read — it reads the code and the
+current architecture doc and writes a context digest to
+`_bmad-output/planning-artifacts/architecture-context.md`, returning only
+`{artifact_path, summary, gaps}`. Then resume at section 1. **Sections 1
+onward stay inline in the lead** — the PRD/brief read, all design decisions,
+ADR authoring, and the Rule 8 validation cycle are never offloaded. If
+`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
+
 ### 1. Context Loading
 
 Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
