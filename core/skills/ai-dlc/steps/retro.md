@@ -36,8 +36,8 @@ Read all artifacts from this sprint:
 - Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
 
 Run auto-handoff evaluation at `Seam E` with the label
-`retro Step 1 pre-flight` (see `gate-validation.md` "Auto-handoff
-evaluation"). If evaluation returns FIRE, the session ends;
+`retro Step 1 pre-flight` (see `_gate-procedures.md` \"Auto-handoff
+evaluation\"). If evaluation returns FIRE, the session ends;
 otherwise continue to Step 2.
 
 ### 2. Party Mode Retro

@@ -383,13 +383,13 @@ section directly):
   `Seam E`); the seam is the trigger and the token *magnitude* is
   advisory (the fire itself is mandatory once the seam is reached and
   preconditions pass — never a discretionary "is the context large
-  enough" or "the user is still active" judgment; see gate-validation
+  enough" or "the user is still active" judgment; see `_gate-procedures.md`
   "Auto-handoff evaluation").
 
 The full firing rules -- the seven-precondition evaluation, the per-mode
 trigger basis, the resume-safety and clean-boundary constraints, the
 distinguishing output line, and the seam definitions (including `Seam E`,
-retro entry) -- live in `gate-validation.md` "Auto-handoff evaluation".
+retro entry) -- live in `_gate-procedures.md` \"Auto-handoff evaluation\".
 Step files invoke that helper at each seam.
 
 Research citations backing the threshold choices live in

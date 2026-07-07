@@ -61,8 +61,8 @@ complete sprint output:
 - Apply all fixes autonomously. Dev teammates apply code fixes.
 
 **Run sub-step snapshot update after each adversarial pass.**
-**Then run auto-handoff evaluation** (see `gate-validation.md`
-"Auto-handoff evaluation") at `Seam D` with the label
+**Then run auto-handoff evaluation** (see `_gate-procedures.md`
+\"Auto-handoff evaluation\") at `Seam D` with the label
 `sprint-review adversarial pass <N>`. If evaluation returns FIRE,
 the session ends; otherwise continue.
 
@@ -113,7 +113,7 @@ seam reachable in-process before merge.
 ### 4. Gate Validation and Proceed
 
 Run auto-handoff evaluation at `Seam B` with the label
-`sprint-review end-of-step pre-gate` (see `gate-validation.md`
-"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
+`sprint-review end-of-step pre-gate` (see `_gate-procedures.md`
+\"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
 gate validation (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/deploy-validate.md`
