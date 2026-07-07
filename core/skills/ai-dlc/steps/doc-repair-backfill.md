@@ -63,5 +63,5 @@ backfilled artifacts:
 Run auto-handoff evaluation at `Seam B` with the label
 `doc-repair-backfill end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

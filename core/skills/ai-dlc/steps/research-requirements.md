@@ -106,6 +106,6 @@ between them:**
 Run auto-handoff evaluation at `Seam B` with the label
 `research-requirements end-of-step pre-gate` (see
 `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
-returns CONTINUE, run gate validation (`gate-validation.md`),
+returns CONTINUE, run gate validation [planning] (`gate-validation.md`),
 then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/architecture.md`

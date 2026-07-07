@@ -141,5 +141,5 @@ The stories-test-strategy step will:
 Every new item filed MUST include `**Status:** OPEN` at minimum.
 Item IDs MUST use `CO-S<sprint>-<descriptor>` format.
 
-Run gate validation (`gate-validation.md`), then:
+Run gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

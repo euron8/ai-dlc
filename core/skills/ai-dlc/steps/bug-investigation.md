@@ -82,7 +82,7 @@ Run `/bmad-sprint-planning` to set up a single-story sprint.
 
 ### 6. Gate Validation and Proceed
 
-Run gate validation (`gate-validation.md`), then:
+Run gate validation [implementation] (`gate-validation.md`), then:
 
 If design flaw detected:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

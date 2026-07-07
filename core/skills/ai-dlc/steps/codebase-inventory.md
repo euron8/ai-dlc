@@ -53,7 +53,7 @@ incomplete. Write the full inventory and gap report to:
 
 ### 4. Gate Validation
 
-Run gate validation (`gate-validation.md`). Check 1 (validation cycle complete) is waived for this analysis step — there is no planning artifact to validate. All other applicable checks run normally, including Check 14 (snapshot update) and Check 15 (snapshot verification).
+Run gate validation [planning] (`gate-validation.md`). Check 1 (validation cycle complete) is waived for this analysis step — there is no planning artifact to validate. All other applicable checks run normally, including Check 14 (snapshot update) and Check 15 (snapshot verification).
 
 ### 5. Proceed
 

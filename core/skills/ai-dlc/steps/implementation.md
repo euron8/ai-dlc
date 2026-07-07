@@ -295,6 +295,12 @@ Monitor task progress:
 - When QA sends failures → ensure dev fixes and QA re-validates
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
 
+**Gate type for validation loading (Rule 21 / Lever 2).** The gates run
+at this step are `implementation` gates — when running gate validation
+(`gate-validation.md`) at gate1/gate2/gate3, declare it `run gate
+validation [implementation]` so the loader loads the implementation
+slice (universal core + Checks 5, 6, 8, 9, 10, 11, 11a, 19, 22).
+
 **Pre-gate commit-presence check.** Before dispatching code review
 (gate1) for any story, run `git -C <worktree> log --oneline
 <base>..HEAD` on the story branch and confirm at least one non-merge

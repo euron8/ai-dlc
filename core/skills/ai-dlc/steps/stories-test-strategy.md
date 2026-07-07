@@ -291,7 +291,7 @@ layout changes):
   Run auto-handoff evaluation at `Seam B` with the label
   `stories-test-strategy end-of-step pre-gate (UI)` (see
   `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
-  returns CONTINUE, run gate validation (`gate-validation.md`),
+  returns CONTINUE, run gate validation [story] (`gate-validation.md`),
   then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/ui-direction.md`
 
@@ -299,6 +299,6 @@ layout changes):
   Run auto-handoff evaluation at `Seam B` with the label
   `stories-test-strategy end-of-step pre-gate (no-UI)` (see
   `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
-  returns CONTINUE, run gate validation (`gate-validation.md`),
+  returns CONTINUE, run gate validation [story] (`gate-validation.md`),
   then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`

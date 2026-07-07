@@ -214,9 +214,9 @@ window, and (a) or (b) remediation.
 **Relocation-pointer + resident-ordering scan (every retro):**
 
 Resident-context slimming relocates rule bodies out of `SKILL.md` into
-JIT files and leaves a pointer at the seam. Two invariants MUST hold each
-retro; both are HARD_BLOCK on failure and MUST be fixed before the Step
-5c audit commit.
+JIT files and leaves a pointer at the seam. Three invariants MUST hold
+each retro; all are HARD_BLOCK on failure and MUST be fixed before the
+Step 5c audit commit.
 
 **1. Every relocation pointer resolves to a live file.** Scan `SKILL.md`
 and `.claude/skills/ai-dlc/steps/*.md` for pointers to **skill-loadable
@@ -256,6 +256,30 @@ results in the retro doc under `## Rule File Audit` in a
 `Relocation-pointer + resident-ordering scan` sub-section: pointers
 checked (count + any dangling), and the measured token offset of
 POST-COMPACT + Rules 3/4/11 with IN/OUT verdicts.
+
+**3. Every `GATE_MANIFEST` check ID resolves to a live check anchor, and
+every check anchor is claimed by the manifest.** The v0.24.0 Lever-2
+slicing (`gate-validation.md` "Gate-type manifest") loads checks by gate
+type; a manifest ID with no matching check, or a check with no manifest
+claim, silently mis-slices a gate. Two-way resolve against
+`steps/gate-validation.md`:
+- **Manifest → anchor.** For every check ID listed in the `GATE_MANIFEST`
+  table rows AND in the universal-core set, confirm a matching
+  `<!-- CHECK_LOADED: <id> -->` anchor exists in the file. An ID with no
+  anchor is manifest drift (a row names a check that was renamed or
+  removed) — FAIL.
+- **Anchor → manifest.** For every `<!-- CHECK_LOADED: <id> -->` anchor
+  in the file, confirm the ID appears in the universal-core set or ≥1
+  manifest row. An orphan anchor (a check no gate type requires) is drift
+  in the other direction — FAIL.
+
+```
+node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/steps/gate-validation.md','utf8');const anchors=[...s.matchAll(/^<!-- CHECK_LOADED: (\S+) -->$/gm)].map(m=>m[1]);const uni=['1','2','3','4','7','12','13','14','15','16','H1','H2','failure'];const m=s.slice(s.indexOf('GATE_MANIFEST v1'),s.indexOf('GATE_MANIFEST_END'));const ids=new Set(uni);for(const r of m.matchAll(/\|\s*(?:planning|story|implementation|sprint-review|retro)\s*\|([^|]*)\|/g)){for(const t of r[1].split(',').map(x=>x.trim()).filter(Boolean))ids.add(t);}const missing=[...ids].filter(i=>!anchors.includes(i));const orphan=anchors.filter(a=>!ids.has(a));console.log('MISSING (manifest ID, no anchor):',missing.join(' ')||'none');console.log('ORPHAN (anchor, no manifest claim):',orphan.join(' ')||'none');"
+```
+
+Both lists MUST be empty. Record the result in the same
+`Relocation-pointer + resident-ordering scan` sub-section: manifest IDs
+resolved (count + any MISSING/ORPHAN).
 
 ## Empirical gate validation
 
@@ -473,6 +497,12 @@ audit (`gate-validation.md` Check 18).
 
 Before committing retro artifacts, run all three checks in order.
 Failure on any check blocks the Step 6 commit.
+
+**Gate type for validation loading (Rule 21 / Lever 2).** This is the
+`retro` gate. When running gate validation (`gate-validation.md`) at
+sprint close, declare it `run gate validation [retro]` so the loader
+loads the retro slice (universal core + Checks 8, 9, 17,
+core-layer-immutability).
 
 1. **Rule file audit commit.** If the rule file audit (Step 4)
    produced file changes, commit them NOW as a separate commit:

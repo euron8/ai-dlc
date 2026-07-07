@@ -58,5 +58,5 @@ Write the reconciliation report and gap analysis to:
 
 ### 6. Gate Validation and Proceed
 
-Run gate validation (`gate-validation.md`), then:
+Run gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/doc-repair-backfill.md`

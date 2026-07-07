@@ -591,6 +591,25 @@ gate log entry for that step MUST cite the token value. A gate log
 entry that names a step but cannot cite its token indicates the step
 was not read. Gate FAILS on missing token citation.
 
+**Sliced loading for `gate-validation.md` (v0.24.0 Lever 2).** For
+`gate-validation.md` alone, "loaded" does NOT mean the whole file. That
+file is sliced by gate type: "loaded" means the **universal core** (its
+Checks 1, 2, 3, 4, 7, 12, 13, 14, 15, 16, H1, H2, Gate Failure) **and**
+every check the file's `GATE_MANIFEST` marks required for the declared
+gate type — that exact set present in context, nothing less. The
+invoking step MUST declare the gate type when it says "run gate
+validation" (format: `run gate validation [<type>]`, where `<type>` is
+one of `planning`, `story`, `implementation`, `sprint-review`, `retro`);
+the type is the step's already-known phase, not a new computation. The
+file-level `STEP_LOADED_TOKEN` no longer proves completeness (the file
+is not read whole), so each check carries its own
+`<!-- CHECK_LOADED: <id> -->` anchor and H1 reads the manifest and FAILS
+the gate if any required check's anchor is absent — completeness is a
+checked invariant, not a trust-the-loader assumption. See
+`steps/gate-validation.md` "Gate-type manifest" and
+`docs/v0.24.0-gate-validation-slicing-spec.md` §5.2. All OTHER step
+files remain whole-file `READ AND FOLLOW` as above.
+
 **Failure mode this prevents.** In hot sessions with many completed
 gates, the lead pattern-matches on "I know what this step does" and
 skips the Read entirely, executing from memory. The Read tool call

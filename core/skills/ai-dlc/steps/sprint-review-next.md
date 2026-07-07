@@ -83,5 +83,5 @@ If any stories were modified, commit the changes:
 Run auto-handoff evaluation at `Seam B` with the label
 `sprint-review-next end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+gate validation [story] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`

@@ -115,5 +115,5 @@ seam reachable in-process before merge.
 Run auto-handoff evaluation at `Seam B` with the label
 `sprint-review end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+gate validation [sprint-review] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/deploy-validate.md`

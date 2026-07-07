@@ -10,9 +10,74 @@ This file is referenced (not loaded as a step) by every pipeline step at
 phase transition points. When a step says "run gate validation", execute
 this protocol. Every check must PASS. Any failure blocks the gate.
 
+## Gate-type manifest (v0.24.0 Lever 2 — conditional check loading)
+
+Checks in this file are **sliced by gate type**: a gate loads the
+universal core plus only the checks its declared type requires, per the
+`GATE_MANIFEST` below. This is a conditional-load, not a reduction — no
+check text is edited; a check merely stops occupying the window on gates
+where its own scope clause would make it a no-op anyway. See
+`docs/v0.24.0-gate-validation-slicing-spec.md` §5.
+
+**Gate-type enum (canonical, co-located per Rule 26).** The invoking step
+declares exactly one type when it says "run gate validation
+[`<type>`]" (§5.3). Valid types:
+
+`planning` · `story` · `implementation` · `sprint-review` · `retro`
+
+Deployment / schema / UI applicability is NOT a separate type: the
+schema (Check 10), visual (Check 9), and deployment-evidence (Checks 8,9)
+checks are folded into the `implementation` and `retro` slices and
+self-skip via their own scope clauses (`is_ui_epic == false`, "no stories
+modify schema", "deployment not claimed"). This avoids a combined
+UI-and-schema sprint being unable to declare two types at once.
+
+**Universal core (always loaded, every gate, every type).** Checks
+**1, 2, 3, 4, 7, 12, 13, 14, 15, 16, H1, H2, Gate Failure**. These run
+regardless of gate type and are never sliced out (§6). Check 16
+(stub-audit) is universal, not implementation-only: it is keyed on
+`changed_files` *content* (any gate whose diff touches a hot-path file),
+not on gate phase, so slicing it to one type would drop it on a planning
+gate that edits `scripts/*.sh`.
+
+```
+<!-- GATE_MANIFEST v1 -->
+| Gate type      | Required checks (beyond universal core)          |
+|----------------|--------------------------------------------------|
+| planning       | 1c, 17, 20                                       |
+| story          | 3a, 5, 17                                        |
+| implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                  |
+| sprint-review  | 18, 21                                           |
+| retro          | 8, 9, 17, core-layer-immutability                |
+<!-- GATE_MANIFEST_END -->
+```
+
+**Loader contract (Rule 21).** The step invoking gate validation reads
+this manifest, resolves the declared gate type, and loads (READ AND
+FOLLOW) the universal core **plus** every check ID in that type's row.
+"Loaded" for `gate-validation.md` means exactly this set present in
+context — not the whole file (§5.2). Each check carries a
+`<!-- CHECK_LOADED: <id> -->` anchor directly under its heading; H1
+reads the manifest and FAILS the gate if any required check's anchor is
+absent from loaded context. A check present in this file but absent from
+every manifest row (an orphan) is also an H1 FAIL — the manifest and the
+check set must stay in sync.
+
+**Correctness rule (do not over-slice).** Dropping a check a gate needs
+is a silent correctness bug the manifest itself must prevent — H1 only
+catches a check the manifest *marks required* but the loader failed to
+load; it cannot catch a manifest row that wrongly omits a check. When a
+check's firing gate is uncertain, its ID is included in every candidate
+type's row (over-inclusion is safe — the check self-skips; under-inclusion
+is the bug). Checks 8/9 sit in both `implementation` (pass vacuously
+pre-deploy) and `retro` (post-deploy evidence validation) for this
+reason; Check 17 sits in `planning`, `story`, and `retro` (it fires at
+the PRD gate, the story-readiness gate, and the retro gate).
+
 ## Validation Checklist
 
 ### 1. Validation cycle complete?
+<!-- CHECK_LOADED: 1 -->
 
 - For planning artifacts: Party Mode completed? Advanced Elicitation
   completed? Adversarial Review completed (2+ passes, only nitpicks
@@ -24,6 +89,7 @@ this protocol. Every check must PASS. Any failure blocks the gate.
   outcomes. "Completed" without evidence is not completed.
 
 ### 1c. Research-invocation enforcement (research-requirements gate only).
+<!-- CHECK_LOADED: 1c -->
 
 **Scope.** This check fires only at the research-requirements gate, and
 only when the pipeline variant (read from
@@ -53,6 +119,7 @@ Two arms, either satisfies (dual-arm OR):
 **PASS:** arm (a) OR arm (b) matches. **FAIL:** neither matches.
 
 ### 2. No unresolved HARD_BLOCKs?
+<!-- CHECK_LOADED: 2 -->
 
 - Read `docs/escalations/pending.md` (if it exists).
 - If any entry has status `HARD_BLOCK` and is not RESOLVED, do NOT
@@ -75,6 +142,7 @@ Two arms, either satisfies (dual-arm OR):
   deferral entry in scope for this gate lacks a valid reopen signal.
 
 ### 3. Requirement anchor integrity?
+<!-- CHECK_LOADED: 3 -->
 
 - For each planning artifact passing through this gate (brief, PRD,
   story files), locate the `LOCKED_REQUIREMENTS` block.
@@ -103,6 +171,7 @@ Two arms, either satisfies (dual-arm OR):
   before proceeding.
 
 ### 3a. Story validation origin check (story gates only).
+<!-- CHECK_LOADED: 3a -->
 
 **Scope.** This check fires only when the gate being validated is a
 story-level validation gate (invoked from `stories-test-strategy.md`
@@ -152,6 +221,7 @@ in isolation; it requires comparing the story to its source. Check
 3a enforces that comparison at the gate.
 
 ### 4. Template placeholder detection?
+<!-- CHECK_LOADED: 4 -->
 
 - Scan all story files in the current sprint for template placeholders:
   `{{...}}`, `[TODO]`, `[TBD]`, `<placeholder>`, empty Dev Agent Record
@@ -163,6 +233,7 @@ in isolation; it requires comparing the story to its source. Check
   the gate log entry.
 
 ### 5. Story status consistency?
+<!-- CHECK_LOADED: 5 -->
 
 - For every story in the current sprint, verify:
   - Story file `Status:` header value
@@ -188,6 +259,7 @@ in isolation; it requires comparing the story to its source. Check
   List each story ID and its status in both files.
 
 ### 6. Production integrity tests exist? (Implementation gates only)
+<!-- CHECK_LOADED: 6 -->
 
 Skip this check for planning phase gates. Required for Phase 4+ gates.
 
@@ -206,6 +278,7 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
   found, and pass/fail status.
 
 ### 7. Artifact consistency?
+<!-- CHECK_LOADED: 7 -->
 
 
 - All planning artifacts referenced by stories exist on disk.
@@ -213,6 +286,7 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 - Sprint-status.yaml exists and contains entries for all sprint stories.
 
 ### 8. Deployment evidence? (Implementation gates only)
+<!-- CHECK_LOADED: 8 -->
 
 Skip this check for planning phase gates. Required for Phase 4+ gates.
 
@@ -227,6 +301,7 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
   - Asset verification output
 
 ### 9. Visual verification? (UI sprint gates only)
+<!-- CHECK_LOADED: 9 -->
 
 Skip if `is_ui_epic == false`. Required when the sprint introduced new
 visual surfaces.
@@ -242,6 +317,7 @@ visual surfaces.
   - Confirmation that production rendering matches mockups
 
 ### 10. Schema/API field verification? (Schema-modifying stories only)
+<!-- CHECK_LOADED: 10 -->
 
 Skip if no stories modify API queries or schema definitions. Required
 when any story adds fields to API queries or schema.
@@ -259,6 +335,7 @@ when any story adds fields to API queries or schema.
   field-by-field verification result.
 
 ### 11. Smoke test coverage for user-facing changes? (Implementation gates only)
+<!-- CHECK_LOADED: 11 -->
 
 Skip this check for planning phase gates. Required for Phase 4+ gates.
 
@@ -286,6 +363,7 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
   and whether the test type matches the change type.
 
 ### 11a. Live-run attempted under envvar gate? (Implementation gates only)
+<!-- CHECK_LOADED: 11a -->
 
 Skip this check for planning phase gates. Required for Phase 4+ gates.
 
@@ -297,6 +375,7 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 - **Evidence:** Log which stories had envvar-gated live paths, the envvar names, the commands invoked, and the documented outcomes.
 
 ### 12. Append gate log entry.
+<!-- CHECK_LOADED: 12 -->
 
 Create or append to `_bmad-output/implementation-artifacts/gate-log.md`.
 Use the format defined in CLAUDE.md Autonomous Gate Protocol section.
@@ -325,6 +404,7 @@ verbatim) so the live log holds only the current epoch. The archive is
 write-only and never re-read in the hot path.
 
 ### 13. Announce gate passage.
+<!-- CHECK_LOADED: 13 -->
 
 Output a brief line to the conversation only AFTER Checks 14 and 15
 below have also passed. (This check is numbered 13 to preserve
@@ -341,6 +421,7 @@ log entry MUST include `hard_block_fail: true` and cite the
 HARD_BLOCK ID from `docs/escalations/pending.md`.
 
 ### 14. Update pipeline snapshot.
+<!-- CHECK_LOADED: 14 -->
 
 Update `_bmad-output/pipeline-snapshot.md` to reflect the gate passage
 and current pipeline state. The snapshot is a living document maintained
@@ -403,6 +484,7 @@ snapshot stale, which undermines its role as the handoff / recovery /
 self-orientation source of truth. Do not skip this check.
 
 ### 15. Verify snapshot reflects this gate.
+<!-- CHECK_LOADED: 15 -->
 
 After Check 14 writes the snapshot, re-read
 `_bmad-output/pipeline-snapshot.md` and confirm:
@@ -437,6 +519,7 @@ writer is broken and the gate should not pass with a stale
 recovery anchor.
 
 ### 16. Stub audit (hot-path files) — content verification.
+<!-- CHECK_LOADED: 16 -->
 
 **Scope.** Runs at every gate whose `changed_files` set includes any
 hot-path file. Hot-path extensions: `.py`, `.ts`, `.tsx`, `.js`,
@@ -471,6 +554,7 @@ any stub match missing any element. FAIL output names the
 offending `file:line` and the specific missing element(s).
 
 ### 17. Skill-invocation provenance (retro gate + sub-skill-gated gates).
+<!-- CHECK_LOADED: 17 -->
 
 **Scope.** Runs at the retro gate unconditionally. Also runs at any
 gate where a validation sub-skill (bmad-party-mode,
@@ -516,6 +600,7 @@ missing transcript file (retro only), or SHA byte-mismatch (retro
 only).
 
 ### 18. Per-class test-debt audit.
+<!-- CHECK_LOADED: 18 -->
 
 **Scope.** Runs at sprint-review gate. Reads
 `_bmad-output/audit-anchors.md` to determine the prior-sprint retro-PR
@@ -542,6 +627,7 @@ sprint's retro-PR merge SHA. Schema in `audit-anchors.md` header
 (see `templates/audit-anchors.md.template`).
 
 ### 19. Self-reflexive Gate 2 self-discrimination map application.
+<!-- CHECK_LOADED: 19 -->
 
 **Scope.** Runs at every Gate 2 (code-review gate) for any PR
 carrying acceptance criteria flagged as discrimination-evidence ACs
@@ -602,6 +688,7 @@ build on any un-wired new public function, making the reviewer citation
 redundant.
 
 ### 20. Validation-intensity compliance (all planning gates).
+<!-- CHECK_LOADED: 20 -->
 
 **Scope.** Fires at every planning-phase gate. Skips for implementation,
 deploy-validate, and retro gates.
@@ -637,6 +724,7 @@ unskippable per intensity.
 so a future graph reconciliation does not re-flag it as new.
 
 ### 21. Test-strategy deliverable presence (sprint-review gate).
+<!-- CHECK_LOADED: 21 -->
 
 **Scope.** Runs at the sprint-review gate for any sprint that produced a
 test-strategy deliverable (`stories-test-strategy.md` Step 5). Skips
@@ -669,6 +757,7 @@ presence is structurally guaranteed.
 it as new.
 
 ### 22. Teammate-spawn role binding (implementation gates only).
+<!-- CHECK_LOADED: 22 -->
 
 **Scope.** Runs at implementation-phase gates for any gate whose sprint
 dispatched teammates via the Agent tool (dev, code-reviewer, qa, or a
@@ -708,12 +797,15 @@ former stale "Check 15" citations in `implementation.md`, which pointed
 at the snapshot-verification check by mistake.
 
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
+<!-- CHECK_LOADED: H1 -->
 
 **Recursion guard.** H1 is NOT subject to H1. When H1 runs, it sets
 environment variable `H1_DEPTH=1`. If H1 observes `H1_DEPTH` already
 set in the environment at entry, it returns PASS immediately without
-re-enumeration to prevent infinite recursion. Check H2 (below)
-verifies the guard fires on a seeded recursive-invocation fixture.
+re-enumeration **or manifest resolution** (the Lever-2 completeness
+pass below is also short-circuited) to prevent infinite recursion.
+Check H2 (below) verifies the guard fires on a seeded
+recursive-invocation fixture.
 
 **Scope.** Meta-check. Runs at every gate. Verifies that each
 phase-specific check added to this file (currently: Check 1c, Check
@@ -735,13 +827,45 @@ Enumerated checks under H1:
 - **Check 17 (skill-invocation provenance)** — fixture at
   `tests/fixtures/check-17-bypass/`.
 
+**Manifest completeness (v0.24.0 Lever 2 — slicing fidelity prover).**
+After the fixture enumeration, and only when `H1_DEPTH` was not already
+set at entry (the recursion guard above short-circuits this resolution
+too), H1 proves the slice loaded enough:
+
+1. Read the `GATE_MANIFEST` block at the top of this file and the gate
+   type the invoking step declared (§5.3).
+2. Resolve the required set = universal core (1, 2, 3, 4, 7, 12, 13, 14,
+   15, 16, H1, H2, failure) ∪ the declared type's manifest row.
+3. For each required check ID, confirm its `<!-- CHECK_LOADED: <id> -->`
+   anchor is present in loaded context. A required ID whose anchor is
+   absent = **FAIL** — the slice dropped a required check, identical
+   severity to a skipped check.
+4. Orphan check: for each `CHECK_LOADED` anchor in this file (a
+   standalone-line comment directly under a check heading — not the
+   `<!-- CHECK_LOADED: <id> -->` format examples written inline in this
+   manifest / H1 prose), confirm the ID appears in the universal core or
+   ≥1 manifest row. An anchor matching no manifest entry = **FAIL**
+   (manifest drift — a check exists but no gate type requires it).
+5. Unknown declared gate type (not one of `planning`, `story`,
+   `implementation`, `sprint-review`, `retro`) = **FAIL**.
+
+Seeded self-test: `tests/fixtures/check-manifest-bypass/` seeds a gate
+that declares `implementation` but loads only the planning slice
+(omitting Check 6/8/11); this manifest-completeness assertion MUST FAIL
+it. H2 (below) re-drives that fixture.
+
 **PASS:** every enumerated check's fixture exists with README.md +
-seed.sh, and the check's body cites the fixture path. **FAIL:** any
-enumerated check is missing its fixture or check-body cross-reference.
+seed.sh, the check's body cites the fixture path, AND every
+manifest-required check for the declared gate type is loaded with no
+orphan anchors and a known gate type. **FAIL:** any enumerated check is
+missing its fixture or check-body cross-reference, OR any
+manifest-required check's `CHECK_LOADED` anchor is absent, OR an anchor
+matches no manifest row, OR the declared gate type is unknown.
 
 ### H2. Harness self-test — seeded forgery fixture + H1 recursion guard.
+<!-- CHECK_LOADED: H2 -->
 
-**Scope.** Meta-meta-check. Runs at every gate. H2 verifies two
+**Scope.** Meta-meta-check. Runs at every gate. H2 verifies three
 things:
 
 1. **H1 recursion guard fires.** Re-invoke the H1 check with
@@ -757,9 +881,19 @@ things:
    but the transcript_path SHA was hand-edited to a fabricated
    value. `validate-retro-evidence.sh` MUST flag this variant.
 
-**PASS:** both (1) and (2) hold on a fresh fixture seed. **FAIL:**
-either the recursion guard does not fire OR the seeded forgery
-passes validation.
+3. **Seeded slicing-bypass is caught by H1.** The fixture at
+   `tests/fixtures/check-manifest-bypass/` seeds a gate that declares
+   `implementation` but loads only the planning slice (universal core +
+   `1c, 17, 20`), omitting the implementation-required checks 6, 8, 11
+   (and 5, 9, 10, 11a, 19, 22). H1's manifest-completeness pass MUST
+   FAIL this seed by naming at least one missing required `CHECK_LOADED`
+   anchor. A seed that H1 passes means the fidelity re-expression
+   (§5.2) does not hold — the slice could silently drop a required
+   check.
+
+**PASS:** all of (1), (2), and (3) hold on a fresh fixture seed.
+**FAIL:** the recursion guard does not fire, OR the seeded forgery
+passes validation, OR H1 fails to catch the seeded slicing-bypass.
 
 ### Sub-step snapshot update (referenced by step files)
 
@@ -776,6 +910,7 @@ When a step says "run auto-handoff evaluation at Seam <X>", READ AND FOLLOW
 `_gate-procedures.md` "Auto-handoff evaluation".
 
 ### Core-layer immutability (§7.1 authoring guard — retro/close gate).
+<!-- CHECK_LOADED: core-layer-immutability -->
 
 **Scope.** Fires at the retro / sprint-close gate (where rule authoring lands).
 **Active only on a layered consumer** — the project has a `.claude/.ai-dlc-version`
@@ -836,6 +971,7 @@ Removal condition: core ships as an immutable package the skill loads, never a
 writable tree.
 
 ## Gate Failure
+<!-- CHECK_LOADED: failure -->
 
 If any check fails:
 1. Attempt to remediate (run missing validation, fix inconsistency,

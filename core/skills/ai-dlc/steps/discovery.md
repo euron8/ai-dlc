@@ -158,5 +158,5 @@ back-to-back without pausing for human input between them:**
 Run auto-handoff evaluation at `Seam B` with the label
 `discovery end-of-step pre-gate` (see `_gate-procedures.md`
 \"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/research-requirements.md`
