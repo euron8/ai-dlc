@@ -17,6 +17,55 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-07-07
+
+context-mode is now a **required AI/DLC prerequisite**. Full restore of the
+context-mode integration that v0.20.0 (#51) decommissioned — core owns the
+plugin: requires it, enables it, ships the guard hook, and carries the routing
+rule in the rulebook. Completes and hardens the arc v0.22.0 (#55) started with
+the (then-guarded, now-unhedged) `CLAUDE.md` prose.
+
+- **Prerequisite** — README lists context-mode as a required prerequisite
+  (install enables the plugin and wires the guard hook). The runtime files
+  (`CLAUDE.md` routing section, Rule 23(c)) drop the optional/"degrades if
+  absent" hedges and simply route through `ctx_*`; install-time facts
+  (prereq status, enablement, hook wiring) live in the README only, not in
+  the resident rulebook.
+- **Protection hook restored** — `core/hooks/ai-dlc-protect.sh` returns as a
+  `PreToolUse` matcher in `settings.json.template`. It hard-blocks
+  `ctx_execute_file`/`ctx_batch_execute` from consolidating verbatim-load files
+  (pipeline snapshot, gate log, escalations, rule/step/role files). `install.sh`'s
+  generic `core/hooks/*.sh` copy distributes it; `ai-dlc-update`'s wholesale
+  `strip_ai_dlc` + re-append lands it on existing consumers.
+- **Plugin enabled** — `settings.json.template` re-adds
+  `enabledPlugins."context-mode@context-mode": true`. The `ai-dlc-update`
+  settings reconcile is additive (`$t + $u`, user wins), so it enables the
+  plugin on consumers lacking the key and never overrides a consumer who set it
+  `false`.
+- **Rule 23(c) restored** (`SKILL.md`) — the pipeline-role nudge to offload
+  high-volume observational Bash through `ctx_*`, with the two hard limits back
+  in the rulebook where the lead reads mid-pipeline: mutations MUST use native
+  Bash (ctx subprocess discards its FS → silent no-op), and verbatim-load files
+  MUST NOT be consolidated. Also fixes the dangling "Three controls" intro that
+  had listed only two since v0.20.0.
+- **CLAUDE.md routing section condensed** — trimmed (~50 → ~9 lines) to only
+  the AI/DLC-specific rules the plugin's own injected guidance cannot supply:
+  routing-is-a-nudge (Rule 18) and gate-evidence reproducibility. Removed the
+  generic routing/process/mutation prose that duplicated context-mode's own
+  session injection, and the verbatim-load carve-out — the latter is
+  mechanically enforced by the `ai-dlc-protect.sh` guard hook (a `PreToolUse`
+  deny) and stated authoritatively in the rulebook (SKILL.md Rule 23(c)), so
+  a third resident copy in CLAUDE.md was redundant (Rule 26: no prose for what
+  a mechanism enforces).
+- **retro protection-log read restored** (`retro.md`) — retro again reads
+  `_bmad-output/context-mode-protection-log.md` when present.
+- **README** — context-mode listed as a required prerequisite, plus
+  protection-hook install line, tree entry, and architecture mention.
+- Note: `enabledPlugins` reaches existing consumers additively on the next
+  `ai-dlc-update`. context-mode being required means an existing consumer must
+  have the plugin installed; the reconcile enables it, and install docs call it
+  out as a prerequisite.
+
 ## [0.22.0] — 2026-07-06
 
 Re-add context-mode tool-output routing guidance to the `CLAUDE.md` template —
