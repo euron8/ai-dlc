@@ -27,13 +27,30 @@ followed by the sprint number). Abbreviated forms (`s<N>`,
 `retro-<N>`) cause validation failures because the script's
 branch-detection regex requires the `sprint-<N>` substring.
 
-Read all artifacts from this sprint:
+**Context digest (Dispatch A — Rule 24).** Branch creation above stays
+inline — it is a git mutation (Rule 28(a) / Rule 23(c): mutations run
+native, never through a subagent that discards the FS). Dispatch A is
+issued only AFTER the branch exists.
+
+If `planning_offload: on` (default), do NOT read the sprint artifacts
+inline. Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
+scoped to the sprint-artifact read — it reads:
 - Sprint stories in `_bmad-output/planning-artifacts/stories/`
 - Code reviews in `docs/reviews/`
 - Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
 - Escalation log at `docs/escalations/pending.md`
 - Sprint-status.yaml
 - Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
+
+and writes a structured digest to
+`_bmad-output/retro-artifacts/sprint-<N>-context.md` — planned-vs-delivered
+table, rework-cycle count, `DECIDED_AUTONOMOUSLY` list, `hard_block_count`
++ `hard_block_class[]` tally, per-escalation state, gate-log outcomes —
+returning only `{artifact_path, summary, gaps}`. The lead consumes the
+digest in Step 3 (reads it from disk only when a decision needs it, Rule
+23(a)); an absent artifact at the returned path is non-delivery → the
+lead re-dispatches. If `planning_offload: off`, read the artifacts
+inline. Per SKILL.md Rule 24.
 
 Run auto-handoff evaluation at `Seam E` with the label
 `retro Step 1 pre-flight` (see `_gate-procedures.md` \"Auto-handoff
@@ -92,6 +109,30 @@ re-runs the same scripts on the retro PR.
 
 ### 3. Write Retro Document
 
+**Doc split (Dispatch A, continued — Rule 24).** If `planning_offload:
+on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
+to draft the **descriptive/analytical** sections only — the sprint
+summary, `hard_block_count` + `hard_block_class[]`, and the **Agent-findings
+summary** — from (a) the Step-1 context digest and (b) the committed
+party-mode transcript. It writes the draft to
+`_bmad-output/retro-artifacts/sprint-<N>-retro-draft.md`, returning only
+`{artifact_path, summary, gaps}`. Two hard constraints on that draft:
+- The Agent-findings summary MUST cite the existing `transcript_path:
+  path@<sha>` verbatim and summarize that already-byte-cited transcript.
+  It NEVER re-derives party-mode findings from scratch (that path is
+  solo-mode-by-proxy, a Rule 20 violation).
+- The analyst NEVER writes a `SKILL_INVOCATION_PROVENANCE` block (Rule
+  24: the analyst produces inputs, not validated outputs; the provenance
+  block stays the lead's, written in Step 2 / verified in Step 5c).
+
+The **prescriptive** sections stay lead-authored inline — they are the
+retro's decision content (pipeline self-governance), as non-delegable as
+gate decisions: "specific, actionable improvements," "which improvements
+should update CLAUDE.md / team roles / pipeline steps," and the Step-4
+5-layer enforcement decisions. The lead assembles the analyst draft and
+its own prescriptive sections into the final retro doc. If
+`planning_offload: off`, write the whole doc inline. Per SKILL.md Rule 24.
+
 Write the retro to `docs/retro/sprint-N.md` with:
 - Sprint summary (planned vs delivered, rework cycles, autonomous decisions)
 - `hard_block_count` (integer): total HARD_BLOCKs encountered this sprint
@@ -104,7 +145,10 @@ Write the retro to `docs/retro/sprint-N.md` with:
 Retro findings asserting infrastructure topology MUST cite the
 IaC source file and line (Terraform, CDK, CloudFormation, Docker
 Compose, or equivalent). Agent consensus is not evidence of
-topology shape.
+topology shape. Any analyst-drafted finding asserting topology MUST
+carry the IaC `file:line` citation in the draft; the lead validates the
+citation before the finding lands. The analyst surfaces the citation —
+it never substitutes agent consensus for it.
 
 ### 4. Apply Process Improvements
 
@@ -141,8 +185,32 @@ rule file.
 
 **Rule file audit (every retro):**
 
-After applying the process improvements above, scan the following files
-for violations of SKILL.md Rule 18:
+**Ordering is load-bearing.** This scan MUST see post-improvement file
+state, so it is issued only after the "apply process improvements" edits
+above land (§2 blocker 1) and before the Step-5c audit commit.
+
+If `planning_offload: on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
+to produce the **candidate list** — scanning the files and violation
+classes below and, for each suspected violation, recording `file:line`,
+the violation class (narrative-drift / weakness / complexity-accretion),
+the bare-rule-survives-without-narrative judgment as a **recommendation**,
+and for accretion findings the catch/false-positive tally. Written to
+`_bmad-output/retro-artifacts/sprint-<N>-rule-audit-candidates.md`,
+returning only `{artifact_path, summary, gaps}`. Detection is the
+delegable read. The lead **dispositions each candidate and authors every
+rewrite inline** — rule rewriting is a governance judgment expressed as
+text, tightly coupled to disposition; routing the decided text-insertion
+to a dev is pure overhead (Rule 26: no dispatch hop for a decision the
+lead already made). If `planning_offload: off`, scan inline. Per SKILL.md
+Rule 24.
+
+**Structural invariant (retro audits itself).** The scan of
+`.claude/skills/ai-dlc/steps/*.md` MUST assert that every read-heavy
+section of `retro.md` (Steps 1, 3, 4, 4a, 7b) carries its analyst
+dispatch when `planning_offload: on`; a read-heavy retro section that
+reads inline instead is a Rule 28 lead-conduct finding.
+
+The analyst scans the following files for violations of SKILL.md Rule 18:
 
 - `CLAUDE.md`
 - `docs/coding-conventions.md`
@@ -193,6 +261,23 @@ handles the audit commit as a separate commit before the main retro
 commit in Step 6.
 
 If zero violations found, note "Audit: clean" in the retro doc.
+
+**Scan dispatch (Dispatch A, continued — Rule 24).** The path-filter
+dormancy scan and relocation-pointer invariant 1 below are read-heavy
+multi-file / multi-job scans. If `planning_offload: on`, dispatch an
+`analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
+to run both and return their tables to
+`_bmad-output/retro-artifacts/sprint-<N>-scan-tables.md` (returning only
+`{artifact_path, summary, gaps}`): the dormancy table (job, sprint-window,
+last non-SKIPPED SHA, `gh run list` evidence) and the pointer table
+(pointer, target, exists Y/N, anchor-resolves Y/N). `gh run list` is a
+state-read, safe for a subagent. The lead owns the remediation choice and
+every HARD_BLOCK verdict below; the analyst gathers evidence, it never
+dispositions. **Invariants 2 and 3 are NOT dispatched** — they are compact
+`node -e` one-liners; run them via `ctx_execute` (Rule 23(c)) so their
+output stays out of the resident prefix and the lead reads only the
+IN/OUT and MISSING/ORPHAN verdict lines. If `planning_offload: off`, run
+the scans inline. Per SKILL.md Rule 24.
 
 **Path-filter dormancy scan (every retro):**
 
@@ -309,6 +394,36 @@ Implementation is supposed to close upstream items inline as stories
 transition to `done` (see `implementation.md` step 5). This sweep is
 the backstop: it catches items that slipped past inline closure and
 ensures no sprint ends with stale OPEN/IN_SPRINT state.
+
+**Close-Out gather (Dispatch A, continued — Rule 24).** If
+`planning_offload: on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
+to RUN and MATCH — never to dispose. It writes its tables to
+`_bmad-output/retro-artifacts/sprint-<N>-closeout-tables.md`, returning
+only `{artifact_path, summary, gaps}`:
+- **Deferral reconciliation.** For each deferral / re-affirmed deferral /
+  passive monitor, the analyst RUNS the live condition (the cited test,
+  query, or observable) and returns the reconciliation table: item,
+  TRIGGER `file:line`, EFFORT-BLOCKER + estimate, CONDITION + its LIVE
+  result, recommended reclassification. Conditions are run LIVE against
+  real source — a table that ASSERTS a condition's state without running
+  it is non-delivery (§4 invariant 5). TRIGGER `file:line` citations MUST
+  survive the hop for the lead to validate (§4 invariant 4).
+- **Sweep match table.** Reads carry-over-backlog, escalations, and
+  sprint-status and returns item → satisfying story → recommended status.
+- **Artifact-size audit.** Measures the live artifacts and returns
+  sizes-vs-thresholds.
+
+The lead **dispositions** every row before the PVC — "the lead is the
+detector" is catch-before-PVC, satisfied when the lead decides the
+reclassification from the analyst's live evidence, not
+lead-hands-on-keyboard. **Locked-requirement deferral disposition is
+NEVER delegated** — it is a Rule 13 / Rule 12 Tier-1 HARD_BLOCK
+governance decision, lead-only (see below). The **mutations** (mark
+`CLOSED`, verbatim archive cut-paste per Rule 25(a), status-yaml drift
+correction) encode the lead's just-made decision — keep them inline with
+the disposition; dispatch the mechanical archive-moves to `dev` only if a
+batch is large. If `planning_offload: off`, run the sweep inline. Per
+SKILL.md Rule 24.
 
 **Deferral-freshness reconciliation (run BEFORE the three sweeps,
 MANDATORY).** For every carry-over deferral, re-affirmed deferral, or
@@ -650,6 +765,19 @@ epic scope, and residual risks are still in the lead's working context.
   and proceed directly to 7b.
 
 **7b. Assemble next-sprint inputs.**
+
+Issued AFTER the 7a merge gate (a human y/n seam — no dispatch before
+Step 5 can cover post-merge inputs, §2 blocker 2). If `planning_offload:
+on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
+— **Dispatch B** — to gather all six input classes below (including the
+relatedness analysis in input 6) and write the structured bundle to
+`_bmad-output/retro-artifacts/sprint-<N>-next-inputs.md`, returning only
+`{artifact_path, summary, gaps}`. The lead derives the theme (7c) and
+authors the paste-able prompt (7d) from that bundle **plus its own
+retained retro findings** — the Step-3 improvements and Step-4
+dispositions stay resident because the lead decided them; only the raw
+file reads move to the analyst. If `planning_offload: off`, gather
+inline. Per SKILL.md Rule 24.
 
 Gather the material the next-sprint prompt will draw from. Read, do not
 summarize prematurely:

@@ -667,10 +667,10 @@ through `ctx_execute_file`/`ctx_batch_execute` — consolidation drops
 directives and breaks load fidelity (the `ai-dlc-protect.sh` guard hook
 hard-blocks this; see the CLAUDE.md "Tool-Output Routing" carve-outs).
 
-### Rule 24 -- Planning exploration is dispatched to analyst subagents
+### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
 
-Read-heavy planning and analysis work is the lead's largest avoidable
-cache-read cost: every file the lead reads inline accumulates in its
+Read-heavy exploration in planning **and retro** steps is the lead's
+largest avoidable cache-read cost: every file the lead reads inline accumulates in its
 context and is re-read every subsequent turn. To keep the lead lean,
 the *exploration* portion of designated steps is dispatched to an
 `analyst` subagent (read-only, bound to the analyst role file per Rule 19 — model + role-contract line) whose raw
@@ -685,7 +685,10 @@ by setting `planning_offload` in this section directly.
 `codebase-inventory`, `bug-investigation`, `doc-reconciliation`,
 `carry-over-evaluation`. Split offload (exploration only; authoring +
 validation stay inline) — `discovery`, `research-requirements`,
-`architecture`, `stories-test-strategy` (framework-import probe only).
+`architecture`, `stories-test-strategy` (framework-import probe only),
+`retro` (per-phase micro-dispatches interleaved with lead decisions; the
+evidence chain and all governance authoring stay inline — see
+`steps/retro.md`).
 Special-cased — `doc-repair-backfill`: its §1 repair is a **dev /
 protected-path-editor** write-dispatch (not an analyst read-dispatch),
 since the read was already done upstream by `doc-reconciliation`.
