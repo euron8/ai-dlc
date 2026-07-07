@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-07-07
+
+Lead-inline delegation closeout (#59). Rule 28 already mandates that inline
+lead execution is the exception; this closes the gap between the rule and the
+step-file procedures that predate it. No new rule, no gate check, no detector —
+enforcement rides the existing retro audits (Rule 26(c)). Text-only edits to
+core step files + one SKILL.md reconciliation; takes effect on the next
+`/ai-dlc` invocation.
+
+- **Lever 2 — fix-directly purge.** Four procedures carried a bare
+  `fix directly` / `Apply fixes` / `Apply all improvements` / `update it
+  directly` imperative that put the lead's own hands on source or story files.
+  Requalified each to name the dispatch target while keeping the orchestration
+  verbs (redeploy, re-validate, re-present checkpoint, mark `skipped`) on the
+  lead: `deploy-validate.md` §4 drift (dev corrects, lead redeploys/re-verifies)
+  and §7 post-validation fixes (dev + code-reviewer + qa, lead redeploys/
+  re-presents); `sprint-review.md` §2 party mode (dev applies, lead owns
+  disposition); `sprint-review-next.md` §2 story modification (authored through
+  the §3 validation cycle; sprint-status `skipped` mark stays on the lead).
+- **Lever 1 Shape A — analyst/dev §0 backfill.** Three read/write-heavy steps
+  gained the exploration dispatch that discovery / carry-over already carry.
+  `architecture.md` §0 dispatches an `analyst` for the AS-IS / existing-arch
+  read (feature / brownfield-a / brownfield-c; greenfield / brownfield-b exempt);
+  `doc-repair-backfill.md` §1 dispatches `dev` (or `protected-path-editor` for
+  protected paths) to apply doc repairs, the lead validates against the finding
+  set; `stories-test-strategy.md` pre-flight (a) folds the framework-import grep
+  into a scoped `analyst` probe returning a `{framework: present|absent}` map.
+- **Lever 1 Shape B — ux dispatch.** `ui-direction.md` gained a §0 that
+  dispatches the `ux` role to produce §§1,2,4 (wireframes, copy, CSS-class
+  specs, accessibility review); the lead resumes at §3 (present) and §5
+  (proceed). First step to route to `core/team-roles/ux.md`, closing an
+  unused-role gap.
+- **SKILL.md reconciliation.** Rule 24's "Offloaded steps" list adds
+  `architecture` + `stories-test-strategy` (split) and special-cases
+  `doc-repair-backfill` (dev / protected-path-editor write-dispatch); Rule 28's
+  delegated-role enumeration names `ux` for UI/design production.
+
+Held: the HPE disconfirmation-probe companion fix (architecture §2) — the spec
+marked it low-confidence/optional because it touches the probe's
+evidence-attachment audit; deferred to avoid complicating that gate.
+
 ## [0.24.0] — 2026-07-07
 
 Gate-validation slicing (#57). `core/skills/ai-dlc/steps/gate-validation.md`
