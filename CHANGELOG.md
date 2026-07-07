@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-07-07
+
+Gate-validation slicing (#57). `core/skills/ai-dlc/steps/gate-validation.md`
+was referenced by every pipeline step at every phase transition, so its full
+body (13,544 tok, ~100% prose) sat resident on **every** gate of every sprint.
+Two levers, both **relocate / conditionally-load, never trim** — zero check
+text edited, byte-preserving. No consumer migration: takes effect on the next
+`/ai-dlc` invocation.
+
+- **Lever 1 — procedure extraction.** The three step-file-*invoked* procedures
+  (Auto-handoff evaluation, Sub-step snapshot update, Check-14 context-reminder
+  threshold check) are not gate checks; moved verbatim to a new
+  `steps/_gate-procedures.md` (own `STEP_LOADED_TOKEN`, loaded at the invocation
+  seam), leaving forwarding-pointer stubs. Call sites repointed; the snapshot
+  six-section schema stays resident (SKILL.md cites it as the field-schema
+  owner). Cross-file relative pointers the move created ("Check 14 **above**",
+  "rules **below**") rewritten to name the target file.
+  `gate-validation.md` **13,544 → 10,748 tok (−21% resident every gate).**
+- **Lever 2 — gate-type manifest.** A gate now loads the **universal core**
+  plus only the checks its declared type requires, instead of the whole file.
+  - `<!-- CHECK_LOADED: <id> -->` anchors on all 29 gate checks; `GATE_MANIFEST
+    v1` + a co-located 5-value gate-type enum
+    (`planning`/`story`/`implementation`/`sprint-review`/`retro`) at the top of
+    the file.
+  - **Rule 21 (SKILL.md) amended** — "loaded" for `gate-validation.md` means the
+    universal core + the declared type's manifest row, proven by `CHECK_LOADED`
+    anchors, not the file-level `STEP_LOADED_TOKEN`.
+  - **H1 harness meta-check extended** with a manifest-completeness pass: it
+    reads the manifest, resolves the declared type, and FAILs the gate on any
+    absent required anchor, orphan anchor, or unknown type; the `H1_DEPTH`
+    recursion guard short-circuits it too. **H2** gains a third assertion that
+    H1 catches a seeded slicing-bypass; fixture
+    `core/fixtures/check-manifest-bypass/` added and wired into
+    `install.sh`/`uninstall.sh`.
+  - **Gate-type declaration surfaced** at 13 invocation sites
+    (`run gate validation [<type>]`) plus explicit notes at the diffuse
+    `implementation.md` / `retro.md` gate seams. **retro.md Step-4 audit** gains
+    a third invariant resolving every manifest ID to a live anchor and every
+    anchor to a manifest claim.
+  - **Manifest validated against the real pipeline**, not the spec's parenthetical
+    classification, which corrected over-slices that would have silently dropped
+    needed checks (H1 cannot catch a manifest row that wrongly *omits* a check):
+    Check 19 → `implementation` (fires at the code-review gate inside
+    `implementation.md`, not planning); Check 17 → `planning`+`story`+`retro`
+    (PRD + story-readiness + retro gates); Check 16 → universal (keyed on
+    `changed_files` content, not phase); Check 5 → `story`+`implementation`;
+    Check 14 → universal; `schema-story`/`ui-sprint` folded into `implementation`
+    (Checks 9/10 self-skip).
+  - **Measured resident per gate type** (chars/4): planning 6,830 · story 6,975
+    · implementation 8,682 · sprint-review 6,246 · retro 7,253 — **−36% to −54%**
+    vs the 13,480-tok monolith, no check text altered. (Higher than the spec's
+    optimistic 3,076–5,103 estimate: the true universal floor is 4,550, not
+    2,649 — that estimate excluded Check 14's now-resident schema and Check 16 —
+    both correctness-mandated, not slack.)
+
 ## [0.23.0] — 2026-07-07
 
 context-mode is now a **required AI/DLC prerequisite**. Full restore of the
