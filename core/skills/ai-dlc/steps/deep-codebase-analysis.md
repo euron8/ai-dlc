@@ -71,5 +71,5 @@ Check `pipeline_variant` from the router:
 
 - If `analysis-only`: Present the analysis to the user. Announce
   "Analysis complete. No implementation pipeline was requested." **STOP.**
-- If `brownfield-b`: Run gate validation (`gate-validation.md`), then
+- If `brownfield-b`: Run gate validation [planning] (`gate-validation.md`), then
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

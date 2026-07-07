@@ -135,8 +135,8 @@ back-to-back without pausing for human input between them:**
    **Requirement fidelity check:** If features originate from carry-over
    items or user instructions with specific details, verify those details
    are preserved. Flag any generalization.
-   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
-   snapshot update"). **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
+   snapshot update\"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the brief with every answer.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
@@ -145,8 +145,8 @@ back-to-back without pausing for human input between them:**
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
    **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `gate-validation.md`
-   "Auto-handoff evaluation") at `Seam D` with the label
+   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
+   \"Auto-handoff evaluation\") at `Seam D` with the label
    `discovery adversarial pass <N>`. If evaluation returns FIRE, the
    session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
@@ -156,7 +156,7 @@ back-to-back without pausing for human input between them:**
 ### 6. Gate Validation and Proceed
 
 Run auto-handoff evaluation at `Seam B` with the label
-`discovery end-of-step pre-gate` (see `gate-validation.md`
-"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+`discovery end-of-step pre-gate` (see `_gate-procedures.md`
+\"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
+gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/research-requirements.md`

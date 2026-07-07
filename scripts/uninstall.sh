@@ -106,7 +106,7 @@ for wf in validate-retro-compliance.yml validate-ci-gates.yml; do
 done
 
 # -- Test fixture templates installed by AI/DLC --
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion check-manifest-bypass; do
   if [ -d "$PROJECT_ROOT/tests/fixtures/$fixture_dir" ]; then
     DIRS_TO_REMOVE+=("tests/fixtures/$fixture_dir/")
   fi

@@ -83,8 +83,8 @@ between them:**
    Walk through exhaustively. Apply all improvements.
    **Requirement fidelity check:** Verify each new requirement preserves
    specific details from its source.
-   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
-   snapshot update"). **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
+   snapshot update\"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the PRD with every clarification.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
@@ -93,8 +93,8 @@ between them:**
    **Source fidelity pass:** Verify requirements implement what was
    requested, not a generalized or lower-effort alternative.
    **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `gate-validation.md`
-   "Auto-handoff evaluation") at `Seam D` with the label
+   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
+   \"Auto-handoff evaluation\") at `Seam D` with the label
    `research-requirements adversarial pass <N>`. If evaluation
    returns FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
@@ -105,7 +105,7 @@ between them:**
 
 Run auto-handoff evaluation at `Seam B` with the label
 `research-requirements end-of-step pre-gate` (see
-`gate-validation.md` "Auto-handoff evaluation"). If evaluation
-returns CONTINUE, run gate validation (`gate-validation.md`),
+`_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
+returns CONTINUE, run gate validation [planning] (`gate-validation.md`),
 then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/architecture.md`

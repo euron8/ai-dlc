@@ -295,6 +295,12 @@ Monitor task progress:
 - When QA sends failures → ensure dev fixes and QA re-validates
 - Track gate approvals (gate1: code review, gate2: QA, gate3: story validation)
 
+**Gate type for validation loading (Rule 21 / Lever 2).** The gates run
+at this step are `implementation` gates — when running gate validation
+(`gate-validation.md`) at gate1/gate2/gate3, declare it `run gate
+validation [implementation]` so the loader loads the implementation
+slice (universal core + Checks 5, 6, 8, 9, 10, 11, 11a, 19, 22).
+
 **Pre-gate commit-presence check.** Before dispatching code review
 (gate1) for any story, run `git -C <worktree> log --oneline
 <base>..HEAD` on the story branch and confirm at least one non-merge
@@ -337,8 +343,8 @@ gate pipeline pins reviews to an immutable content ref (a tag or a PR
 merge-commit) instead of a live worktree HEAD.
 
 **Sub-step snapshot updates during implementation.** The lead MUST
-run a sub-step snapshot update (see `gate-validation.md` "Sub-step
-snapshot update") after every story transition: ready-for-dev →
+run a sub-step snapshot update (see `_gate-procedures.md` \"Sub-step
+snapshot update\") after every story transition: ready-for-dev →
 in-progress, in-progress → review, review → done. Each transition
 appends a Recent Activity line naming the story ID, new status,
 and teammate. This keeps the snapshot reflective of mid-sprint
@@ -347,8 +353,8 @@ visibility into which stories are in-flight.
 
 **Auto-handoff evaluation after each story transition (Seam C).**
 After each sub-step snapshot update in this step, the lead MUST
-invoke auto-handoff evaluation (see `gate-validation.md`
-"Auto-handoff evaluation") at `Seam C` with the label
+invoke auto-handoff evaluation (see `_gate-procedures.md`
+\"Auto-handoff evaluation\") at `Seam C` with the label
 `implementation story transition <story-id> <from-status>→<to-status>`.
 If all preconditions hold — including
 `auto_handoff_mode: safe-seam`, red threshold confirmed under Mode

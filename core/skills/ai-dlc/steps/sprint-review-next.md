@@ -53,8 +53,8 @@ between them:**
    every dependency. Apply all improvements.
    **Cross-sprint check:** For each story, verify it accounts for
    patterns, APIs, and components introduced in the previous sprint.
-   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
-   snapshot update"). **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
+   snapshot update\"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every story's requirements,
    acceptance criteria, and edge cases until zero ambiguity remains.
    Update story files with all findings.
@@ -65,8 +65,8 @@ between them:**
    (Rule 26: ACs demanding mechanism no locked requirement needs —
    propose removals). Apply all fixes.
    **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `gate-validation.md`
-   "Auto-handoff evaluation") at `Seam D` with the label
+   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
+   \"Auto-handoff evaluation\") at `Seam D` with the label
    `sprint-review-next adversarial pass <N>`. If evaluation returns
    FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
@@ -81,7 +81,7 @@ If any stories were modified, commit the changes:
 ### 5. Gate Validation and Proceed
 
 Run auto-handoff evaluation at `Seam B` with the label
-`sprint-review-next end-of-step pre-gate` (see `gate-validation.md`
-"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+`sprint-review-next end-of-step pre-gate` (see `_gate-procedures.md`
+\"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
+gate validation [story] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`

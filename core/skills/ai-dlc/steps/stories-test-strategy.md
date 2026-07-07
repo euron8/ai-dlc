@@ -226,8 +226,8 @@ between them:**
    **Requirement fidelity check:** For each story derived from a carry-over
    item or user instruction, verify: does every AC preserve the specific
    details from the source requirement?
-   **Run sub-step snapshot update** (see `gate-validation.md` "Sub-step
-   snapshot update"). **Then immediately proceed to step 2:**
+   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
+   snapshot update\"). **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe every story's requirements,
    acceptance criteria, and edge cases until zero ambiguity remains.
    Update story files with all findings.
@@ -239,8 +239,8 @@ between them:**
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
    **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `gate-validation.md`
-   "Auto-handoff evaluation") at `Seam D` with the label
+   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
+   \"Auto-handoff evaluation\") at `Seam D` with the label
    `stories-test-strategy adversarial pass <N>`. If evaluation
    returns FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
@@ -290,15 +290,15 @@ layout changes):
 - If **new visual surfaces found**: set `is_ui_epic = true`
   Run auto-handoff evaluation at `Seam B` with the label
   `stories-test-strategy end-of-step pre-gate (UI)` (see
-  `gate-validation.md` "Auto-handoff evaluation"). If evaluation
-  returns CONTINUE, run gate validation (`gate-validation.md`),
+  `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
+  returns CONTINUE, run gate validation [story] (`gate-validation.md`),
   then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/ui-direction.md`
 
 - If **no new visual surfaces**: set `is_ui_epic = false`
   Run auto-handoff evaluation at `Seam B` with the label
   `stories-test-strategy end-of-step pre-gate (no-UI)` (see
-  `gate-validation.md` "Auto-handoff evaluation"). If evaluation
-  returns CONTINUE, run gate validation (`gate-validation.md`),
+  `_gate-procedures.md` \"Auto-handoff evaluation\"). If evaluation
+  returns CONTINUE, run gate validation [story] (`gate-validation.md`),
   then:
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/implementation.md`

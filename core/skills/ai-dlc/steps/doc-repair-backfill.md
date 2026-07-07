@@ -50,8 +50,8 @@ backfilled artifacts:
    **Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes, apply all fixes.
    **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `gate-validation.md`
-   "Auto-handoff evaluation") at `Seam D` with the label
+   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
+   \"Auto-handoff evaluation\") at `Seam D` with the label
    `doc-repair-backfill adversarial pass <N>`. If evaluation returns
    FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
@@ -61,7 +61,7 @@ backfilled artifacts:
 ### 4. Gate Validation and Proceed
 
 Run auto-handoff evaluation at `Seam B` with the label
-`doc-repair-backfill end-of-step pre-gate` (see `gate-validation.md`
-"Auto-handoff evaluation"). If evaluation returns CONTINUE, run
-gate validation (`gate-validation.md`), then:
+`doc-repair-backfill end-of-step pre-gate` (see `_gate-procedures.md`
+\"Auto-handoff evaluation\"). If evaluation returns CONTINUE, run
+gate validation [planning] (`gate-validation.md`), then:
 **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`
