@@ -380,86 +380,18 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
 - **Context Reminders** — `context_reminders_sent` (none | yellow |
   red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
   `last_red_fire_tokens`, `last_red_fire_turns`. Evaluate context usage
-  and update per the threshold rules below.
+  and update per the threshold-check procedure in `_gate-procedures.md`
+  "Context reminder threshold check".
 
-**Context reminder threshold check (required at every gate):**
-
-Read the Context Reminders block from the snapshot. If any required
-field is absent (e.g., snapshot predates this rule), initialize
-missing fields before proceeding: `context_reminders_sent: none`
-and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
-
-Resolve the active thresholds from the SKILL.md Handoff Protocol
-"Threshold defaults" section. Defaults:
-- 200K model context → yellow 80K tokens, red 120K tokens
-- 1M model context  → yellow 120K tokens, red 200K tokens
-
-The lead cannot self-measure its context window reliably. Two modes
-apply (per SKILL.md Handoff Protocol "Reminder semantics"):
-
-**Mode 1 — user-shared `/context` (authoritative).** The most
-recent user-shared `/context` output this session drives both the
-threshold-crossing check AND the recurrence arithmetic. Under
-Mode 1, the evaluation rules below apply, and on any firing the
-lead emits the full Rule 2(b) / 2(c) reminder text and advances
-`last_yellow_fire_tokens` / `last_yellow_fire_turns` (or the red
-counterparts).
-
-**Mode 2 — fallback estimate (advisory only).** When no user-
-shared `/context` is available, compute:
-
-```
-estimate = 15,000  (baseline for CLAUDE.md + skill + system prompt)
-         + (turns_this_session * 2,000)  (approx per-exchange cost)
-         + sum(tool_output_sizes_in_bytes) * 0.25  (bytes-to-tokens conservative high)
-```
-
-If the estimate crosses a threshold, emit the lighter check-line
-(not the full Rule 2 reminder):
-
-> *"Context estimate suggests crossing the {yellow|red} threshold
-> (~{estimate}K tokens, fallback heuristic). Please share
-> `/context` output to confirm. I will continue with this estimate
-> as a working assumption until confirmed."*
-
-Under Mode 2, DO NOT advance the `last_*_fire_tokens` /
-`last_*_fire_turns` snapshot fields and DO NOT update
-`context_reminders_sent`. Mode 2 is a prompt for confirmation, not
-a reminder; advancing fire state on unverified estimates would
-cause noisy re-firing on long sessions. When the user responds
-with `/context` output, treat the shared value as Mode 1 input:
-evaluate the threshold, emit the full Rule 2 reminder if the
-shared value confirms the crossing, and advance fire state.
-
-Evaluation rules (Mode 1 only — in order):
-
-- **First crossing of yellow:** if `context_reminders_sent` is
-  `none` and shared tokens ≥ yellow_threshold, output the
-  Rule 2(b) yellow-threshold reminder substituting the actual
-  yellow_threshold value. Set `context_reminders_sent: yellow`,
-  `last_yellow_fire_tokens` to the shared value, and
-  `last_yellow_fire_turns` to the current turn count.
-- **First crossing of red:** if `context_reminders_sent` is
-  `none` or `yellow` and shared tokens ≥ red_threshold, output
-  the Rule 2(c) red-threshold reminder substituting the actual
-  red_threshold value. Set `context_reminders_sent: red`,
-  `last_red_fire_tokens`, and `last_red_fire_turns`.
-- **Recurring yellow (still below red):** if
-  `context_reminders_sent` is `yellow`, shared tokens still below
-  red_threshold, and EITHER (shared_tokens −
-  last_yellow_fire_tokens ≥ 50,000) OR (current_turn −
-  last_yellow_fire_turns ≥ 20), re-output the yellow reminder and
-  refresh `last_yellow_fire_*`.
-- **Recurring red:** if `context_reminders_sent` is `red` and
-  EITHER (shared_tokens − last_red_fire_tokens ≥ 50,000) OR
-  (current_turn − last_red_fire_turns ≥ 20), re-output the red
-  reminder and refresh `last_red_fire_*`.
-- **Below yellow threshold:** no reminder, no field change.
-
-Reminders are non-blocking one-line outputs; they do not pause the
-pipeline. Output, update the snapshot fields under Mode 1, and
-continue. Any user reply to a reminder is a Rule 11 directive
-handled on the next turn.
+**Context reminder threshold check (required at every gate).** The
+evaluation procedure — Mode 1 (user-shared `/context`, authoritative) vs
+Mode 2 (fallback estimate, advisory), the estimate formula, the
+crossing/recurrence rules, and the fire-state advancement — is in
+`_gate-procedures.md` "Context reminder threshold check". Run it at every
+gate; it reads and updates the Context Reminders fields defined in the
+six-section schema above. The fields, thresholds, and Mode-1/Mode-2
+distinction remain authoritative here; only the step-by-step evaluation
+moved.
 
 The canonical section structure is defined above in this check; see the
 SKILL.md Handoff Protocol and Pipeline Snapshot section for the
