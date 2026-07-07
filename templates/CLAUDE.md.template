@@ -80,6 +80,43 @@ simplification valued equally with addition. Details:
 
 ---
 
+## Tool-Output Routing (context-mode — optional plugin)
+
+**Applies ONLY if the context-mode plugin is installed and enabled** in
+this project's `enabledPlugins`. If it is not, ignore this section — plain
+Bash and Read are correct and the `ctx_*` tools referenced below do not
+exist. context-mode is a consumer-owned optional plugin; the AI/DLC core
+does not require it and never installs it.
+
+**Scope note (Rule 18):** this is routing guidance for tool selection, not
+a Rule-18-governed mandate. "Default X / prefer Y" statements here are
+non-binding efficiency nudges — a strict-MUST reading would break skill
+semantics (sometimes the native tool IS the correct one). It never gates
+or blocks work.
+
+**Keep raw bytes out of context.** When context-mode is available, default
+unbounded command output through the sandbox (`ctx_execute` /
+`ctx_execute_file` / `ctx_batch_execute`) whenever you intend to *process*
+it — filter, count, parse, aggregate, summarize: curl/psql/aws/gh, git
+log/diff, grep sweeps, test runs, log reads. Reserve plain Bash/Read for:
+mutations (git, mkdir, deploys), short fixed *observations* (status,
+`--version`, one-line checks), and **any file you intend to Edit** — Edit
+needs the exact bytes in context to match against, so Read it directly,
+do not route it through the sandbox.
+
+**Durable pipeline evidence stays command-reproducible.** When output must
+become gate evidence, the durable artifact is the raw output on disk plus
+the command that produced it — never a model summary. Redirect to a file
+(`… | tee test-results/<name>.txt`) and cite the command, a one-line
+summary, and the file path. context-mode only changes HOW you derive that
+summary (optionally `ctx_execute_file` the tee'd file rather than reading
+it inline); it does not replace the raw file or the cited command. The
+honest-green / metric-reproduction gates are unchanged — the reviewer
+re-runs the cited command and byte-matches its output, so a summarized
+verdict never substitutes for the reproducible run.
+
+---
+
 ## Key References
 
 <!-- Update these paths for your project structure -->

@@ -17,6 +17,28 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-07-06
+
+Re-add context-mode tool-output routing guidance to the `CLAUDE.md` template —
+**guarded**, so it degrades safely on the majority of consumers that do not run
+the plugin.
+
+- New "Tool-Output Routing (context-mode — optional plugin)" section routes
+  process-bound command output (grep sweeps, git log/diff, test runs, log
+  reads) through the `ctx_*` sandbox to keep raw bytes out of context, and
+  reserves plain Bash/Read for mutations, short observations, and files to Edit.
+- Unlike the v0.20.0-removed section, this one keeps the guards that make it
+  safe in core: an explicit **plugin-presence gate** ("applies ONLY if
+  context-mode is installed/enabled; otherwise ignore — the `ctx_*` tools do
+  not exist"), the **Rule-18 scope note** (non-binding routing nudge, never a
+  mandate, never gates work), a **Read-before-Edit carve-out**, and an
+  **evidence-path clarification** — the durable gate artifact is the tee'd raw
+  output + cited command, never a model summary; the honest-green /
+  metric-reproduction gates (reviewer re-runs and byte-matches) are unchanged.
+- context-mode stays a consumer-owned optional plugin; core neither requires
+  nor installs it. Reaches consumers as an additive `TEMPLATE-PROSE-MERGE`
+  section on the next `ai-dlc-update`.
+
 ## [0.21.2] — 2026-07-06
 
 `ai-dlc-update` settings.json reconcile no longer strips consumer plugins.
