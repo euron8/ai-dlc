@@ -98,19 +98,25 @@ region untouched.
 ## settings.json reconcile (json-merge)
 
 `settings.json` has no tokens. Reconcile it with the same jq contract
-`scripts/install.sh` uses, extended for context-mode decommission:
+`scripts/install.sh` uses:
 
 - **hooks:** strip any block whose inner command matches
   `/\.claude/hooks/ai-dlc-[^/]+\.sh` (the `strip_ai_dlc` predicate), then
-  append the template's hook blocks. This removes a stale
-  `ai-dlc-protect.sh` PreToolUse matcher and re-adds the current hook set.
+  append the template's hook blocks. Because the strip/re-append is
+  wholesale over all `ai-dlc-*` hooks, the current template's hook set —
+  including the `ai-dlc-protect.sh` PreToolUse matcher (re-added in
+  v0.23.0) — lands verbatim; a consumer that carried an older or absent
+  protect block converges to the template's.
 - **enabledPlugins:** additive-only, NEVER remove. install.sh's merge is
   `$t + $u` (user wins); the reconcile follows the same rule — overlay the
   template's plugin keys onto the consumer and never drop a plugin the template
-  no longer carries. `enabledPlugins` is consumer-owned state. A template
-  dropping a plugin (e.g. ai-dlc's own `context-mode@context-mode`
-  decommission) removes ai-dlc's *use* of it, not the consumer's right to keep
-  it enabled for their own reasons. A leftover entry is benign — inert if the
+  no longer carries. `enabledPlugins` is consumer-owned state. The template's
+  own `context-mode@context-mode: true` (re-added in v0.23.0) is overlaid
+  additively — it enables the plugin on consumers that lack the key and is a
+  no-op where the consumer already set it; it never overwrites a consumer who
+  explicitly set it `false`. A template dropping a plugin removes ai-dlc's
+  *use* of it, not the consumer's right to keep it enabled for their own
+  reasons. A leftover entry is benign — inert if the
   plugin is uninstalled, honored if the consumer relies on it — whereas
   removing it silently disables a plugin the consumer may depend on. So the
   consumer's `enabledPlugins` is preserved in full, exactly like

@@ -634,6 +634,20 @@ the remaining sections rather than the whole file. The Read tool call
 mandatory; only its span narrows. Never slice past a section the lead
 has not completed.
 
+**(c) Offload high-volume observational Bash (context-mode).** Large
+*read-only* command output (test-suite runs, gate-validation script output,
+`git log`/`diff`/`status` inspection, log scans) SHOULD be run via
+`ctx_batch_execute` / `ctx_execute` so its bytes stay out of the resident
+prefix. Two hard limits: (1) state-mutating commands (`git`
+commit/branch/merge/worktree, `gh`, `chmod`, file writes) MUST run via
+native Bash — a context-mode subprocess discards filesystem changes, so
+routing a mutation through ctx silently no-ops it; when in doubt whether a
+command mutates, use native Bash. (2) Verbatim-load files (snapshot,
+`gate-log.md`, escalations, rule/step/role files) MUST NOT be routed
+through `ctx_execute_file`/`ctx_batch_execute` — consolidation drops
+directives and breaks load fidelity (the `ai-dlc-protect.sh` guard hook
+hard-blocks this; see the CLAUDE.md "Tool-Output Routing" carve-outs).
+
 ### Rule 24 -- Planning exploration is dispatched to analyst subagents
 
 Read-heavy planning and analysis work is the lead's largest avoidable

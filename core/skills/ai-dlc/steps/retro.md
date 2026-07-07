@@ -33,6 +33,7 @@ Read all artifacts from this sprint:
 - Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
 - Escalation log at `docs/escalations/pending.md`
 - Sprint-status.yaml
+- Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
 
 Run auto-handoff evaluation at `Seam E` with the label
 `retro Step 1 pre-flight` (see `gate-validation.md` "Auto-handoff
