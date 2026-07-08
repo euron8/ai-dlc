@@ -17,6 +17,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.30.0] — 2026-07-08
+
+New `adversary` team-role — completes v0.29.0's validation-sub-skill spawn binding
+with a purpose-built role instead of the provisional (ill-fitting) mapping.
+
+- **New `core/team-roles/adversary.md`.** Independent critical evaluator of a
+  planning artifact: no ownership stake, the dispatched sub-skill drives the
+  method, the role supplies independence + model (**opus-tier**, high effort,
+  Agent-spawned per Rule 19 — architect-altitude: deep open-ended reasoning about
+  plan soundness, where a missed planning flaw compounds downstream). Writes
+  `mode: subagent` provenance + findings to a canonical path, returns only the path.
+- **SKILL.md Rule 20 shape (ii) rebound** — all three single-voice sub-skills
+  (`advanced-elicitation`, `review-adversarial-general`, `validate-prd`) dispatch
+  to `adversary` (one constant role; the sub-skill selects the method). Replaces
+  the v0.29.0 provisional `code-reviewer`/`analyst`/`pm` mapping, which fit
+  poorly: `code-reviewer` is diff-scoped, `analyst` is read-only non-adversarial,
+  `pm` reviewing the PRD is the owner reviewing its own domain.
+- **`ai-dlc-setup` model-tier guide** registers `{adversary_model_*}`
+  (opus-tier). Manifest/install/update wiring is glob-based (`team-roles/*.md`),
+  so the new role propagates with no enumerated-list edits.
+
 ## [0.29.0] — 2026-07-08
 
 Validation sub-skills must run in independent subagents — no solo. Closes a rule

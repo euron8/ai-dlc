@@ -533,12 +533,17 @@ satisfy independence.
 
 **(ii) Single-voice (`/bmad-advanced-elicitation`,
 `/bmad-review-adversarial-general`, `/bmad-validate-prd`).** These have no
-internal spawn, so the lead MUST dispatch the invocation to ONE spawned teammate
-(Rule 19 binding: adversarial-general -> `code-reviewer` for the adversarial
-lens or `analyst` for a planning artifact, validate-prd -> `pm`,
-advanced-elicitation -> `analyst`) that invokes the sub-skill in its OWN context
-and writes the provenance block with `mode: subagent`; the lead applies the
-returned findings. This reverses the former "invoke inline, do NOT route through
+internal spawn, so the lead MUST dispatch the invocation to ONE spawned
+`adversary` teammate (Rule 19 binding to `.claude/team-roles/adversary.md` --
+the role purpose-built for independent validation of a planning artifact: no
+ownership stake, the sub-skill drives the method, the role supplies the
+independence + model). The `adversary` invokes the named sub-skill in its OWN
+context and writes the provenance block with `mode: subagent`; the lead applies
+the returned findings. One role serves all three single-voice sub-skills -- the
+binding does not vary by sub-skill (the sub-skill selects the method; the role
+is constant). `code-reviewer` (diff-scoped) and `analyst` (read-only,
+non-adversarial) are the WRONG bind here -- neither is an independent critic of
+a planning artifact. This reverses the former "invoke inline, do NOT route through
 Agent" rule for these three -- inline invocation of a single-voice sub-skill is
 solo by construction (there is no internal spawn to make it independent), which
 is exactly the failure this rule now forbids. In ai-dlc's autonomous mode
