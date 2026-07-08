@@ -392,9 +392,6 @@ distinguishing output line, and the seam definitions (including `Seam E`,
 retro entry) -- live in `_gate-procedures.md` \"Auto-handoff evaluation\".
 Step files invoke that helper at each seam.
 
-Research citations backing the threshold choices live in
-`research-citations.md` alongside this file.
-
 ## POST-COMPACT RECOVERY PROTOCOL
 
 If the previous user turn was `/compact` or an auto-compact event, OR

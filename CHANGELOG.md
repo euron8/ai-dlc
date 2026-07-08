@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.32.0] — 2026-07-08
+
+Retro workflow optimization — four structural levers that cut the per-sprint
+retro's wall-clock and commit tail without removing any enforcement or trimming
+any rule prose. Rooted in an audit of the high-volume consumer, where a single
+retro ran ~1–2 h with a ~10-commit tail. Settled scar tissue was deliberately
+left untouched: party-mode's 6 real subagents + byte-matched transcript (v0.29),
+the per-phase-vs-one-batch analyst-dispatch decision (v0.26 §2), and live
+deferral re-verification. Spec: `docs/v0.32.0-retro-workflow-optimization-spec.md`.
+
+- **Shift-left the transcript/provenance contract (`steps/retro.md` Step 2).**
+  The Step-5c validators (`validate-retro-evidence.sh` shape floor +
+  `validate-provenance-block.sh` HTML-comment format) were discovered only at
+  the gate, so the transcript was patched afterward — and every transcript edit
+  re-invalidated the cited blob SHA, forcing a re-cite + reformat loop (observed
+  as 4 commits/sprint). Step 2 now states the floor (pointing at the script as
+  the single source of the thresholds, not restating them) and prescribes a
+  commit-once order: shape transcript → commit it alone → capture blob SHA →
+  write provenance once → never re-touch the transcript. The gate is unchanged;
+  only *when the requirements are known* moved earlier.
+- **Retired the `research-citations.md` phantom pointer** from `steps/retro.md`
+  (Invariant-1 example list) and `SKILL.md`. The file never existed, so the
+  every-retro relocation-pointer scan failed on a dangling reference, forcing
+  consumers to carry local overrides to mask it. Consumers drop those overrides
+  on next `/ai-dlc-update`.
+- **Consolidated Step 4's two co-temporal analyst dispatches into one spawn**
+  (`steps/retro.md`). The rule-file audit and the dormancy + pointer-invariant-1
+  scans fire at the identical post-improvement point; they now share a single
+  `analyst` dispatch instead of two serial round-trips. Not a reopening of
+  v0.26 §2 (which rejected one up-front gather for the *whole* retro) — these are
+  same-phase, same causal point.
+- **Corrected the Step-5c prose** (`steps/retro.md`): `validate-mandatory-rules.sh`
+  chains retro-evidence + cycle-commits + **retro-prereq** (+ inline Checks 3/5/6),
+  not `validate-provenance-block.sh` as previously documented. The local+CI
+  re-run of the validators is intentional defense-in-depth (CI catches a
+  locally-skipped gate), left in place.
+
 ## [0.31.0] — 2026-07-08
 
 Enforcement crosswalk — a validated machine index of the gate-validation check
