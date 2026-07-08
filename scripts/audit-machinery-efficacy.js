@@ -169,3 +169,33 @@ for (const [name, rel] of units) {
   console.log(`| ${name} | ${t.split('\n').length} | ${ntok(t)} | ${signal} |`);
 }
 console.log(`\nconsumer has .github/workflows: ${hasWorkflows}`);
+
+// ---------- structured metrics (GATE_METRIC v1) — decisive path, preferred when present ----------
+// v0.28.0: when the consumer emits gate-metrics.jsonl, efficacy is machine-countable
+// and catalog-namespaced (no prose parsing, no cross-catalog confound). Falls back
+// to the prose-derived table above for pre-v0.28.0 sprints that lack the file.
+const metricFiles = ls(`${GRAPH}/_bmad-output/implementation-artifacts/gate-metrics*.jsonl`);
+console.log('\n## structured metrics (GATE_METRIC v1)\n');
+if (!metricFiles.length) {
+  console.log('_No `gate-metrics.jsonl` in consumer yet — using prose-derived signals above (pre-v0.28.0). '
+    + 'Once the Check-12 emission clause ships, this section supersedes the prose estimates._');
+} else {
+  const agg = {}; // key `${catalog}\t${check}` -> {expo, fails, defects:{}, last}
+  let bad = 0;
+  for (const f of metricFiles) for (const ln of fs.readFileSync(f, 'utf8').split('\n')) {
+    if (!ln.trim()) continue;
+    let r; try { r = JSON.parse(ln); } catch (e) { bad++; continue; }
+    const k = `${r.catalog || '?'}\t${r.check}`;
+    const a = agg[k] || (agg[k] = { expo: 0, fails: 0, defects: {}, last: 0 });
+    a.expo++; if (r.sprint) a.last = Math.max(a.last, r.sprint);
+    if (r.verdict === 'FAIL') { a.fails++; if (r.defect_class) a.defects[r.defect_class] = (a.defects[r.defect_class] || 0) + 1; }
+  }
+  console.log(`records: ${Object.values(agg).reduce((s, a) => s + a.expo, 0)} across ${metricFiles.length} file(s)${bad ? `, ${bad} unparseable` : ''}\n`);
+  console.log('| catalog | check | exposures | real FAILs | defect classes | lastFire |');
+  console.log('|---------|-------|-----------|-----------|----------------|----------|');
+  for (const [k, a] of Object.entries(agg).sort((x, y) => y[1].fails - x[1].fails || y[1].expo - x[1].expo)) {
+    const [cat, chk] = k.split('\t');
+    const cls = Object.entries(a.defects).map(([d, n]) => `${d}:${n}`).join(', ') || '—';
+    console.log(`| ${cat} | ${chk} | ${a.expo} | ${a.fails} | ${cls} | ${a.last || '-'} |`);
+  }
+}
