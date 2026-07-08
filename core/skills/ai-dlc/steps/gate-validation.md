@@ -427,6 +427,37 @@ closed-epoch entries to `gate-log-archive-<epoch>.md` (cut-and-paste,
 verbatim) so the live log holds only the current epoch. The archive is
 write-only and never re-read in the hot path.
 
+**Structured metrics emission (`GATE_METRIC v1`).** After the prose entry
+is written and verified above, ALSO append — for every check evaluated at
+this gate — one JSON object per line to
+`_bmad-output/implementation-artifacts/gate-metrics.jsonl` (append-only,
+machine-read only, never loaded verbatim; rotates with the gate-log epoch
+to `gate-metrics-archive-<epoch>.jsonl`). This is the same per-check
+verdict data the prose entry already carries, emitted machine-readable so
+consumer history yields decisive efficacy/cost data (no prose parsing, no
+cross-catalog confound). Per-line schema:
+
+```
+{"v":1,"sprint":<N>,"gate":"<type>","phase":"<from→to>","ts":"<ISO8601Z>","sha":"<HEAD>","catalog":"core","check":"<id>","title":"<short>","verdict":"PASS|FAIL|NA|DEFERRED","defect_class":<"token"|null>,"evidence":"<path|run-id>","tok_slice":<int|null>}
+```
+
+- **`catalog`** namespaces the check id: distribution checks emit
+  `"core"`; a consumer domain check (Rule 27 `extensions/checks/*.md`)
+  emits `"extension:<that file's frontmatter id>"`. This is what makes a
+  consumer's `check` numbers un-conflatable with this catalog's (see the
+  "Consumer-catalog crosswalk" note above) — never attribute across
+  catalogs by number.
+- **`verdict`** is machine-countable; **`defect_class`** is a short
+  taxonomy token on a real catch/remediation (e.g. `missing-provenance`,
+  `orphaned-fn`, `stub-unbacked`, `intensity-under-run`), else `null`.
+- **`evidence`** is a pointer (path / run-id), never prose; **`tok_slice`**
+  (optional) is the loaded slice's token cost — the cost side of efficacy.
+
+The prose gate-log is unchanged and remains the human/audit trail; this
+record is additive. Absence of the file on a consumer simply means audit
+tooling falls back to the prose path. Consumed by
+`scripts/audit-machinery-efficacy.js` and any analytics dashboard.
+
 ### 13. Announce gate passage.
 <!-- CHECK_LOADED: 13 -->
 
