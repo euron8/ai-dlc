@@ -74,6 +74,30 @@ pre-deploy) and `retro` (post-deploy evidence validation) for this
 reason; Check 17 sits in `planning`, `story`, and `retro` (it fires at
 the PRD gate, the story-readiness gate, and the retro gate).
 
+## Consumer-catalog crosswalk (do not mis-attribute fire history)
+
+A consumer MAY layer its own domain checks via `extensions/checks/` (Rule 27).
+When it does, **the consumer's check numbers are its own namespace and DO NOT
+map to this file's numbers.** A domain consumer can redefine a shared number
+(e.g. reuse "Check 20"/"Check 22" for a different domain check) and add checks
+past this catalog's range. Consequence for any audit or absorption pass:
+
+- **`Check N` in a consumer's gate-log / retro / escalation refers to that
+  consumer's catalog, not this one.** Never attribute consumer fire-history to a
+  distribution check by number — align by check *title/intent*, and confirm
+  against the consumer's own `extensions/checks/*.md` before concluding anything.
+- **Distribution checks 1–18 are the shared core**; a consumer's extension file
+  marked `push_candidate: false` is deliberately consumer-local and MUST NOT be
+  backported into this catalog (doing so violates the layered-rulebook boundary).
+- A check absorbed FROM a consumer records its origin inline via a
+  `**Graph→distribution number mapping.**` note (see Checks 20, 21) so a future
+  reconciliation does not re-flag it as new.
+
+Repeatable evidence tool: `scripts/audit-machinery-efficacy.js` computes the
+title-aligned crosswalk + per-check token cost against a consumer's history; run
+it under `bun` for real tokenizer counts. See
+`docs/v0.27.0-machinery-efficacy-audit.md`.
+
 ## Validation Checklist
 
 ### 1. Validation cycle complete?

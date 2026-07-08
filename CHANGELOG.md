@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-07-07
+
+Machinery-efficacy audit — an end-to-end optimization review that applied the
+v0.10.0 "0 true catches → hold" methodology to the whole gate-check catalog +
+non-check machinery, against a real consumer's 285-sprint fire history. The
+review's honest finding: the structural token levers are largely exhausted
+(v0.12.0 resident-slimming, v0.24.0 gate-slicing, v0.25/0.26 delegation) and the
+gate catalog carries almost no dormant weight. Investigation overturned every
+naive pruning candidate — the two biggest "dormant" flags were live under drifted
+consumer names, and the strongest "backport" candidate is a consumer domain check
+explicitly marked `push_candidate: false`. Deliverable is the reusable audit tool
++ a crosswalk-hygiene note, not a pruning PR. Additive/doc only; no rule, gate
+check, or hook contract changed.
+
+- **New maintainer tool `scripts/audit-machinery-efficacy.js`.** Computes, per
+  gate check, a title-aligned distribution↔consumer crosswalk + per-check token
+  cost (real tiktoken under `bun`, chars/4 fallback) + fire-frequency signals
+  (escalation-archive + retro-corpus `Check N` refs; gate-log verdicts are
+  PASS-dominated and NOT a dormancy signal). Repeatable against any consumer via
+  `--graph <path>`.
+- **`gate-validation.md` — new "Consumer-catalog crosswalk" note.** Records that a
+  consumer's `extensions/checks/` catalog is its OWN number namespace (may
+  redefine shared numbers, adds checks past this range), so consumer `Check N`
+  fire-history MUST NOT be attributed to a distribution check by number, and a
+  `push_candidate: false` extension MUST NOT be backported. Prevents the
+  false-crosswalk that this very audit first fell into.
+- **`retro.md` — path-filter dormancy scan gains a script-based-consumer N/A
+  clause.** A consumer with no `.github/workflows/` (validators run via
+  `validate-*.sh` directly) records the scan N/A instead of scanning an empty
+  target — the workflow-CI layer is optional, not dormant, in such consumers.
+- **New `docs/v0.27.0-machinery-efficacy-audit.md`.** Full method, caveats, the
+  28-check efficacy table, and the decisive correction (the consumer runs a
+  separate opted-out domain catalog). Deferred (author-judgment, no sound consumer
+  evidence): a Check-19 clause split and a Check-11a scope review.
+
 ## [0.26.0] — 2026-07-07
 
 Retro inline-delegation (#60) — the third and final lever of the
