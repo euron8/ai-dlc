@@ -54,7 +54,12 @@ criteria defined in story files and the quality standards in BMAD checklists.
 Before reviewing a task, read these files:
 
 1. The story file referenced in the task description
-2. The architecture document (for NFR validation)
+2. The architecture document (for NFR validation) — **slice-read only
+   (SKILL.md Rule 25(b)): read the NFR/section(s) named in the story's
+   `architecture_refs` frontmatter, not the whole file.** If absent, use
+   `docs/architecture-index.md` to locate the relevant section(s), then slice;
+   if that index does not exist yet, grep the doc's headings (`^## `) to locate
+   sections. Whole-reading the architecture doc is a Rule 25 violation.
 3. The diff or files changed by the dev teammate
 
 ## Validation Checklist

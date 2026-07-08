@@ -97,7 +97,15 @@ assigned story files and the architecture document.
 Before starting any task, read these files in order:
 
 1. `docs/coding-conventions.md` (project coding standards)
-2. The architecture document (path defined in your project's CLAUDE.md)
+2. The architecture document (path defined in your project's CLAUDE.md) —
+   **slice-read only (SKILL.md Rule 25(b)): read its consolidated current-state
+   head plus only the section(s) named in your story's `architecture_refs`
+   frontmatter. NEVER read the whole file.** If the story has no
+   `architecture_refs`, consult `docs/architecture-index.md` (heading → anchor →
+   summary) to locate the relevant section(s), then slice-read those. If that
+   index does not exist yet, grep the doc's headings (`^## `) to locate sections
+   and slice by line range — still never whole-read. The architecture doc is a
+   large living artifact; whole-reading it is a Rule 25 violation.
 3. Your assigned story file (path will be in the task description)
 4. `_bmad-output/implementation-artifacts/sprint-status.yaml` (know the current
    sprint state before you start; you will update this file when your story is done)
@@ -105,7 +113,9 @@ Before starting any task, read these files in order:
 
 ## Workflow Per Task
 
-1. Read the story file completely.
+1. Read the story file completely. Its `architecture_refs` frontmatter names
+   the exact `architecture.md` section(s) to slice-read (Context Loading step 2)
+   — do not re-derive them by whole-reading the architecture doc.
 2. Identify all files you will create or modify.
 3. If any file is outside your ownership, message the lead before proceeding.
 4. Implement the story.

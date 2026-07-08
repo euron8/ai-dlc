@@ -8,11 +8,13 @@ nextStepFile: STOP
 # Artifact Consolidation (one-shot migration)
 
 **Purpose:** A living planning artifact (`prd.md`, `product-brief.md`,
-or `carry-over-backlog.md`) has grown past its Rule 25(d) threshold —
-typically a long-running project whose artifact accreted per-sprint
-narrative and superseded versions inline. This step rebuilds it as a
-bounded current-state file, moving everything historical to its
-`*-history.md` / `*-archive.md` companion **without losing anything**.
+`carry-over-backlog.md`, or `docs/architecture.md`) has grown past its
+Rule 25(d) threshold — typically a long-running project whose artifact
+accreted per-sprint narrative and superseded versions inline (for
+`architecture.md`: appended per-sprint "Architecture Addendum" sections).
+This step rebuilds it as a bounded current-state file, moving everything
+historical to its `*-history.md` / `*-archive.md` companion **without losing
+anything**.
 
 **Invocation.** Operator-invoked, not part of the automatic pipeline
 (per Rule 25(d): consolidation is a fidelity-critical rewrite and must
@@ -30,8 +32,10 @@ artifact and emit a **baseline manifest** to
 `_bmad-output/planning-artifacts/consolidation-manifest-<artifact>.md`:
 every requirement ID / numbered requirement / Rule 13 locked
 requirement (for PRD), every section heading, or every backlog item ID
-(for the backlog) present in the current file. The manifest is the
-no-loss checklist. The analyst returns `{artifact_path, summary, gaps}`.
+(for the backlog) present in the current file. For `architecture.md`: every
+section heading AND every ADR (by title/ID) — both the current-state design and
+every dated addendum. The manifest is the no-loss checklist. The analyst
+returns `{artifact_path, summary, gaps}`.
 
 ### 2. Draft the consolidated split
 
@@ -65,15 +69,18 @@ honors the no-loss guarantee (Rule 25(a)).
 
 For `prd.md`, invoke `/bmad-validate-prd` on the consolidated live draft
 (Rule 20 — inline, with a `SKILL_INVOCATION_PROVENANCE` block). For the
-brief/backlog, run the appropriate validation sub-skill. The
-consolidation must not weaken the artifact's validity, only its size.
+brief/backlog, run the appropriate validation sub-skill. For
+`architecture.md`, run the architecture validation sub-skill on the
+consolidated live draft and regenerate `docs/architecture-index.md` from it
+(`scripts/gen-architecture-index.js`). The consolidation must not weaken the
+artifact's validity, only its size.
 
 ### 5. Commit the swap
 
 Only after Steps 3–4 pass:
 - Append the history relocation draft to the companion file
   (`prd-history.md` / `product-brief-history.md` /
-  `carry-over-backlog-archive.md`) — verbatim.
+  `carry-over-backlog-archive.md` / `docs/architecture-history.md`) — verbatim.
 - Replace the live artifact with the consolidated live draft.
 - Commit both in one commit:
   `refactor(artifact): consolidate <artifact> to current-state, relocate history (no-loss)`.

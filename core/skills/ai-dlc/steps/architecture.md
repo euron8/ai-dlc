@@ -46,6 +46,23 @@ Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 - For **brownfield-c**: Update architecture doc (or create if missing).
   Document TARGET state: what stays, what changes, what is new.
 
+**History rotation — bounded live doc (Rule 25(a), MANDATORY).** The
+architecture doc is a living artifact and MUST stay current-state, exactly like
+`prd.md`/`product-brief.md`/`carry-over-backlog.md`. Do NOT append a per-sprint
+"Architecture Addendum" that accretes forever — that pattern grew one consumer's
+`architecture.md` past 500K tokens, making every dev/qa/architect read dominate
+pipeline cost. Instead, for every update:
+- **Fold the net change into the live current-state sections in place.** The
+  live `architecture.md` holds what is *currently true*, consolidated — current
+  components, data flows, and active ADRs.
+- **Move superseded content and the dated per-sprint narrative verbatim** (cut,
+  not copy — no-loss, Rule 25(a)) to `docs/architecture-history.md`. That
+  companion is write-only and never whole-read in the hot path, so its growth is
+  free.
+- Rule 13 current invariants and active ADRs stay live; only superseded/historical
+  content relocates. Nothing is ever dropped — `architecture.md` ∪
+  `architecture-history.md` preserves every prior decision.
+
 **Design selection (Rule 26).** Select the simplest design that meets
 the PRD's locked requirements and NFRs. Extend existing architecture
 where it covers the requirement; a parallel path or new mechanism
@@ -258,7 +275,23 @@ between them:**
    the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to the architecture doc.
-   **Then immediately proceed to gate validation:**
+   **Then immediately proceed to index regeneration:**
+
+### 4a. Regenerate the architecture index (Rule 25(b) slice enabler)
+
+After the architecture doc is updated and history rotated, regenerate
+`docs/architecture-index.md` — a compact map of the live doc: one line per H2/H3
+as `<heading title> — #<anchor> — <one-line summary>`. This is the discoverability
+backstop dev/qa consult (per their Context Loading contracts) to locate the
+section(s) to slice-read when a story's `architecture_refs` is absent or stale.
+
+Run the deterministic generator `scripts/gen-architecture-index.js` (headings +
+anchors are extracted mechanically; keep it cheap and always-current — do NOT
+author the index by hand or by LLM summary of the whole doc, which would
+re-incur the whole-read cost this index exists to avoid). Commit the regenerated
+index alongside the architecture-doc changes.
+
+**Then immediately proceed to gate validation:**
 
 ### 5. Gate Validation and Proceed
 

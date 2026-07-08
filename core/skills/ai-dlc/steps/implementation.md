@@ -16,7 +16,10 @@ teammates, create tasks, orchestrate the build/review/QA cycle.
 
 Read sprint stories from `_bmad-output/planning-artifacts/stories/`.
 Read `_bmad-output/implementation-artifacts/sprint-status.yaml`.
-Read the architecture document.
+Slice-read the architecture document (SKILL.md Rule 25(b)): its current-state
+head plus only the section(s) the sprint's stories name in `architecture_refs`
+— never the whole file. Use `docs/architecture-index.md` to locate sections when
+a story lacks refs.
 
 ### 2. Create Agent Team
 
@@ -232,7 +235,9 @@ Log task list validation in gate log.
 
 Instruct all teammates:
 - Read `docs/coding-conventions.md` before writing or reviewing code
-- Read architecture doc and assigned story files before writing code
+- Slice-read the architecture doc — only the section(s) named in the story's
+  `architecture_refs` (Rule 25(b)), never whole — and read assigned story files
+  before writing code
 - Use three-tier escalation model (Rule 12)
 - Implement the smallest diff that satisfies the ACs (SKILL.md Rule
   26): no speculative abstraction, no parallel path beside a proven

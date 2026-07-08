@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.33.0] — 2026-07-08
+
+Architecture-doc size discipline — close the one gap in Rule 25's living-artifact
+rails. In the high-volume consumer, `docs/architecture.md` reached
+21,018 lines / ~506K tokens (~2.5× a 200K window) because the architecture step
+appended a per-sprint "Architecture Addendum" every cycle and never rotated
+history — 124 dated addenda, ~99% of the file. Meanwhile the **dev** role
+contract directs every spawned dev agent, before every task, to read that doc;
+qa, architect, and the implementation lead whole-read it too. So one ~506K-token
+file was loaded uncached on nearly every dispatch — the single largest read cost
+in the pipeline. Root cause: `architecture.md` was the sole living artifact
+absent from all four Rule 25 rails (the 25(a) history mapping, the retro
+artifact-size audit, `artifact-consolidation.md`, and the 25(b) slice-read
+contracts) — every *other* big artifact (prd/brief/backlog/gate-log) already has
+them. No enforcement removed; this registers architecture into existing machinery
+(Rule 26(b) extend-proven-paths) and adds one deterministic script. Direct
+descendant of the v0.9.0 artifact-size arc. Spec:
+`docs/v0.33.0-architecture-size-discipline-spec.md`.
+
+- **Read-side — slice, never whole-read (`team-roles/dev.md`, `qa.md`,
+  `architect.md`; `steps/implementation.md`).** The four contracts that said
+  "read the architecture document" now invoke Rule 25(b): read the current-state
+  head plus only the section(s) named in the story's `architecture_refs`, never
+  the whole file. Fallbacks degrade gracefully: `docs/architecture-index.md`, then
+  `grep '^## '`. Ships immediately, zero consumer migration.
+- **Per-story `architecture_refs` (`steps/stories-test-strategy.md` §2b).** New
+  story-frontmatter field naming the architecture section anchors a story touches,
+  propagated at authoring time (next to Rule 13 `LOCKED_REQUIREMENTS`
+  propagation) where the design is fresh. This is the slice target dev/qa read
+  instead of whole-reading. `architecture_refs: []` is an explicit "no
+  architecture context needed" signal.
+- **Generated index (`scripts/gen-architecture-index.js`, `steps/architecture.md`
+  §4a).** Deterministic H2 index (heading → anchor → line → one-line summary),
+  regenerated on every architecture-step update — no LLM whole-read. Measured on
+  the consumer's 21K-line doc: 243 lines / ~13K tokens, ~38× cheaper than the
+  ~506K whole-read. `--h3` for finer navigation.
+- **History rotation (`SKILL.md` Rule 25(a); `steps/architecture.md` §2).**
+  `architecture.md` → `architecture-history.md` added to the 25(a) mapping; the
+  architecture step now folds net change into current-state and moves superseded
+  content + dated addenda verbatim to the history companion (no-loss) instead of
+  appending forever.
+- **Size audit + consolidation coverage (`steps/retro.md`;
+  `steps/artifact-consolidation.md`).** `docs/architecture.md` added to the retro
+  Rule 25(d) artifact-size audit (60k-token default, warn-only) and to the
+  one-shot consolidation step (manifest = every heading + ADR; validate +
+  regenerate index; relocate history verbatim). Consumers run consolidation once
+  to collapse the existing 124 addenda — ~506K → consolidated head, zero loss.
+
 ## [0.32.0] — 2026-07-08
 
 Retro workflow optimization — four structural levers that cut the per-sprint

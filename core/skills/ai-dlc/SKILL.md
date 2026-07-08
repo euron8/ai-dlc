@@ -770,7 +770,11 @@ requirement versions and prior per-sprint scope narrative are **moved**
 (cut-and-paste, verbatim) to the artifact's history/archive file
 (`prd.md` -> `prd-history.md`, `product-brief.md` ->
 `product-brief-history.md`, `carry-over-backlog.md` ->
-`carry-over-backlog-archive.md`). Nothing is ever dropped — the
+`carry-over-backlog-archive.md`, `architecture.md` ->
+`architecture-history.md`). The architecture doc is a living artifact under
+this rule like any other: per-sprint addenda and superseded ADRs relocate to
+`architecture-history.md` rather than accreting inline (the architecture step
+rotates on every update). Nothing is ever dropped — the
 union of live and history must preserve every prior requirement and
 item. This supersedes the older "do not rewrite existing content"
 phrasing: the intent was *no requirement loss*, not *unbounded growth*.

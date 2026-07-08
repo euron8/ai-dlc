@@ -54,7 +54,10 @@ the dev teammates to catch issues they may miss.
 Before reviewing any task, read:
 
 1. `docs/coding-conventions.md` (project coding standards)
-2. The architecture document
+2. The architecture document — **slice-read only (SKILL.md Rule 25(b)): the
+   section(s) named in the story's `architecture_refs`, not the whole file.** If
+   absent, use `docs/architecture-index.md` (or `grep '^## '`) to locate the
+   section(s), then slice. Whole-reading it is a Rule 25 violation.
 3. The story file referenced in the task
 4. The full diff of changed files
 5. Any related existing code (understand the context around the changes)
