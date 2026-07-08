@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-07-07
+
+Gate-metrics emission — the forward-looking half of the v0.27.0 audit. That audit
+found "which checks earn their token cost" un-answerable because fire-history is
+prose (gate-log verdicts are PASS-dominated; catches hide in `**Remediations:**`
+footers) and confounded across the consumer's separate `extensions/checks/`
+catalog. This makes every future gate emit a structured, machine-readable,
+**catalog-namespaced** outcome record so consumer history yields decisive
+efficacy/cost data. Additive (new gate output); existing consumers keep working —
+absence of the file just means audit tooling uses the prose fallback.
+
+- **`gate-validation.md` Check 12 — new `GATE_METRIC v1` emission clause.** After
+  the prose gate-log entry, append one JSONL line per check to
+  `_bmad-output/implementation-artifacts/gate-metrics.jsonl` (append-only,
+  machine-read only, rotates with the gate-log epoch). Same per-check verdict data
+  the prose entry already carries — near-free. Each record namespaces the check by
+  `catalog` (`core` vs `extension:<id>`), so a consumer's redefined/added check
+  numbers are never conflated with this catalog's (the exact confound the v0.27.0
+  crosswalk note warned about). Fields: verdict (machine-countable), defect_class
+  (catch taxonomy), evidence pointer, optional tok_slice (cost side of efficacy).
+- **`scripts/audit-machinery-efficacy.js` — prefers the JSONL when present.**
+  Emits a decisive per-`(catalog, check)` exposures / real-FAILs / defect-class
+  table from `gate-metrics*.jsonl`, falling back to the prose-derived signals for
+  pre-v0.28.0 sprints. Verified against both a no-file consumer (fallback) and a
+  sample record set (namespaced aggregation).
+- **New `docs/v0.28.0-gate-metrics-emission-spec.md`** — schema, emission point,
+  reader, and how it makes dormancy/efficacy decisive. Dashboard wiring
+  (context-mode `ctx_insight`) left as an optional follow-on (KISS).
+
 ## [0.27.0] — 2026-07-07
 
 Machinery-efficacy audit — an end-to-end optimization review that applied the
