@@ -1,0 +1,277 @@
+# ENFORCEMENT_MAP v1
+#
+# A DERIVED machine index of the gate-validation check catalog -> its
+# enforcement binding. This file is NOT a source of truth for check
+# semantics: `steps/gate-validation.md` owns every check's scope, procedure,
+# and PASS/FAIL rule (its prose is LLM-consumed verbatim, with the rationale
+# fused into the directive per rule-authoring.md). What lives ONLY here, in no
+# structured form anywhere else in the rulebook, is the answer to one question
+# per check: "what actually enforces this — a script, a CI workflow, an
+# adversarial fixture, or an in-context LLM judgment?"
+#
+# Why this exists (not a prose->schema migration of the rulebook):
+#   The bindings were scattered across SKILL.md rule bodies, gate-validation.md
+#   check bodies, core/scripts/validate-*.sh, and core/ci-templates/*.yml. No
+#   single artifact let you ask "which catalog checks have a live machine
+#   enforcer" or "is any bound enforcer dormant (file gone / never wired)".
+#   That query is what the v0.27.0 machinery-efficacy audit found missing
+#   (catalog UNMAPPED; drift defeats attribution). This map answers it.
+#
+# Self-policing: `scripts/validate-enforcement-map.sh` asserts this file
+#   stays in sync with the GATE_MANIFEST block and the CHECK_LOADED anchors in
+#   steps/gate-validation.md (so the id/gate_type columns cannot silently
+#   drift from the authoritative catalog), and that every enforcer/ci_workflow
+#   path below exists on disk (dormant-binding detection). The map has no
+#   independent authority — it is only ever a validated view of the catalog.
+#
+# adjudication values:
+#   script  — a shell validator decides PASS/FAIL mechanically (CI-enforceable)
+#   project — a project-supplied audit script decides (consumer-owned command)
+#   llm     — the lead evaluates the check in-context; no machine decider today
+#             (the honest majority: only Check 17 is script-adjudicated in core)
+# Paths are repo-relative (distribution layout). enforcer/ci_workflow are the
+#   files a validator stats for existence. fixtures name adversarial self-tests
+#   (H1/H2 drive these) under tests/fixtures/.
+
+catalog: core
+
+checks:
+  - id: "1"
+    title: Validation cycle complete?
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "1c"
+    title: Research-invocation enforcement
+    gate_types: [planning]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-1c-bypass]
+
+  - id: "2"
+    title: No unresolved HARD_BLOCKs?
+    gate_types: [universal]
+    adjudication: llm
+    hard_block: true
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "3"
+    title: Requirement anchor integrity?
+    gate_types: [universal]
+    adjudication: llm
+    hard_block: true
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "3a"
+    title: Story validation origin check
+    gate_types: [story]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "4"
+    title: Template placeholder detection?
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "5"
+    title: Story status consistency?
+    gate_types: [story, implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "6"
+    title: Production integrity tests exist?
+    gate_types: [implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "7"
+    title: Artifact consistency?
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "8"
+    title: Deployment evidence?
+    gate_types: [implementation, retro]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "9"
+    title: Visual verification?
+    gate_types: [implementation, retro]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "10"
+    title: Schema/API field verification?
+    gate_types: [implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "11"
+    title: Smoke test coverage for user-facing changes?
+    gate_types: [implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "11a"
+    title: Live-run attempted under envvar gate?
+    gate_types: [implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "12"
+    title: Append gate log entry
+    gate_types: [universal]
+    adjudication: llm
+    emits: gate-metrics.jsonl   # GATE_METRIC v1, consumed by audit-machinery-efficacy.js
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "13"
+    title: Announce gate passage
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "14"
+    title: Update pipeline snapshot
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "15"
+    title: Verify snapshot reflects this gate
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "16"
+    title: Stub audit (hot-path files) content verification
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-15-bypass]
+
+  - id: "17"
+    title: Skill-invocation provenance
+    gate_types: [planning, story, retro]
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-provenance-block.sh
+      - core/scripts/validate-retro-evidence.sh
+    ci_workflow: core/ci-templates/validate-retro-compliance.yml
+    fixtures: [tests/fixtures/check-17-bypass]
+
+  - id: "18"
+    title: Per-class test-debt audit
+    gate_types: [sprint-review]
+    adjudication: project   # runs project-supplied per-class audit scripts
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "19"
+    title: Self-reflexive Gate 2 self-discrimination map application
+    gate_types: [implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "20"
+    title: Validation-intensity compliance
+    gate_types: [planning]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "21"
+    title: Test-strategy deliverable presence
+    gate_types: [sprint-review]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "22"
+    title: Teammate-spawn role binding
+    gate_types: [implementation]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+  - id: "H1"
+    title: Harness meta-check — self-test fixtures + manifest completeness
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-manifest-bypass]
+
+  - id: "H2"
+    title: Harness self-test — recursion guard + forgery + slicing-bypass
+    gate_types: [universal]
+    adjudication: llm
+    enforcer:
+      - core/scripts/validate-retro-evidence.sh   # drives the seeded forgery fixture
+    ci_workflow: ~
+    fixtures:
+      - tests/fixtures/check-h1-recursion
+      - tests/fixtures/check-17-bypass
+      - tests/fixtures/check-manifest-bypass
+
+  - id: core-layer-immutability
+    title: Core-layer immutability (authoring guard)
+    gate_types: [retro]
+    adjudication: llm   # git-diff logic run by the lead; reads the manifests below
+    reads:
+      - core/skills/ai-dlc/core-manifest.md
+      - core/skills/ai-dlc-update/reconcile/setup-sites.md
+    enforcer: []
+    ci_workflow: ~
+
+  - id: failure
+    title: Gate Failure
+    gate_types: [universal]
+    adjudication: llm
+    enforcer: []
+    ci_workflow: ~
+
+# Enforcement units that are NOT gate-catalog checks — standalone machinery
+# whose dormancy the audit/validator also tracks. Their `id`s are local labels,
+# not gate-validation check numbers (validate-mandatory-rules.sh has its own
+# internal "Check 1-6" numbering for Rule 18 retro-compliance, distinct from
+# the gate catalog above — do not conflate).
+non_catalog_units:
+  - id: rule-18-retro-compliance
+    title: Retro-compliance suite (6 checks, Rule 18 enforcement)
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-mandatory-rules.sh
+    ci_workflow: core/ci-templates/validate-retro-compliance.yml
+
+  - id: ci-gate-dormancy
+    title: Dormant CI-gate detector (retro-declared gates vs workflows)
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-ci-gates.sh
+    ci_workflow: core/ci-templates/validate-ci-gates.yml

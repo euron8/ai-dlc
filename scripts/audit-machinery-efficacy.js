@@ -57,6 +57,32 @@ hdrs.forEach((h, i) => {
   dist[h.id] = { id: h.id, title: h.title, tok: ntok(glines.slice(h.line, end).join('\n')) };
 });
 
+// ---------- 1b. Enforcement map: catalog check -> enforcement binding ----------
+// Line-oriented parse (no yaml dep), same posture as validate-enforcement-map.sh.
+// Surfaces WHICH checks have a machine enforcer vs are LLM/project-adjudicated —
+// the binding the v0.27.0 audit found unmapped.
+const emPath = path.join(DIST, 'core/skills/ai-dlc/enforcement-map.yaml');
+const enfMap = {};
+if (fs.existsSync(emPath)) {
+  let inChecks = false, cur = null;
+  for (const raw of fs.readFileSync(emPath, 'utf8').split('\n')) {
+    if (/^checks:/.test(raw)) { inChecks = true; continue; }
+    if (/^non_catalog_units:/.test(raw)) { inChecks = false; cur = null; continue; }
+    if (!inChecks) continue;
+    let m;
+    if ((m = raw.match(/^  - id:\s*"?([^"\n]+?)"?\s*$/))) { cur = m[1]; enfMap[cur] = { adj: 'llm', enf: [] }; }
+    else if (cur && (m = raw.match(/^    adjudication:\s*(\w+)/))) enfMap[cur].adj = m[1];
+    else if (cur && (m = raw.match(/^      - (core\/\S+\.(?:sh|yml))/))) enfMap[cur].enf.push(m[1]);
+  }
+}
+const enfCell = id => {
+  // catalog-header ids differ in shape from map ids for the word-titled check
+  // ("Core-layer immutability" vs "core-layer-immutability") — normalize.
+  const e = enfMap[id] || enfMap[id.toLowerCase().replace(/\s+/g, '-')];
+  if (!e) return '—';
+  return e.adj === 'script' ? `script:${e.enf.length}` : e.adj;
+};
+
 // ---------- 2. Consumer fire evidence ----------
 function ls(glob) { try { return cp.execSync(`ls ${glob} 2>/dev/null || true`).toString().trim().split('\n').filter(Boolean); } catch (e) { return []; } }
 const glFiles = ls(`${GRAPH}/_bmad-output/implementation-artifacts/gate-log*.md`);
@@ -133,10 +159,12 @@ function classify(r) {
 // ---------- output ----------
 console.log(`# machinery-efficacy audit — token basis: ${tokBasis}, consumer sprint≈${SPRINT_NOW}\n`);
 console.log('## gate checks (distribution catalog)  [sorted by token cost desc]\n');
-console.log('| id | tok | align→ | score | expo | nonPASS | escRef | retroRef | lastFire | stale | class |');
-console.log('|----|-----|--------|-------|------|---------|--------|----------|----------|-------|-------|');
+console.log('| id | enf | tok | align→ | score | expo | nonPASS | escRef | retroRef | lastFire | stale | class |');
+console.log('|----|-----|-----|--------|-------|------|---------|--------|----------|----------|-------|-------|');
 rows.sort((a, b) => b.tok - a.tok).forEach(r =>
-  console.log(`| ${r.id} | ${r.tok} | ${r.align} | ${r.alignScore} | ${r.expo} | ${r.nonpass} | ${r.escR} | ${r.retroR} | ${r.lastFire || '-'} | ${r.stale ?? '-'} | ${classify(r)} |`));
+  console.log(`| ${r.id} | ${enfCell(r.id)} | ${r.tok} | ${r.align} | ${r.alignScore} | ${r.expo} | ${r.nonpass} | ${r.escR} | ${r.retroR} | ${r.lastFire || '-'} | ${r.stale ?? '-'} | ${classify(r)} |`));
+const _scriptEnf = Object.values(enfMap).filter(e => e.adj === 'script').length;
+console.log(`\n_enforcement (enf col): ${_scriptEnf}/${Object.keys(enfMap).length} catalog checks script-adjudicated, rest LLM/project. Source: core/skills/ai-dlc/enforcement-map.yaml (validated by scripts/validate-enforcement-map.sh)._`);
 
 // consumer-local checks the distribution never absorbed (drift, other direction)
 const distIds = new Set(Object.keys(dist));

@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.31.0] — 2026-07-08
+
+Enforcement crosswalk — a validated machine index of the gate-validation check
+catalog to its enforcement binding. Outcome of a prose-vs-schema evaluation: the
+rulebook prose stays prose (LLM-consumed verbatim, rationale fused into the
+directive per `rule-authoring.md`; schema would add token cost and strip the
+scar tissue without helping the reworded-prose merge path). Only the genuine
+machine-consumed data is extracted — the enforcer bindings that were scattered
+across `SKILL.md`, `gate-validation.md`, `core/scripts/`, and `core/ci-templates/`
+with no single queryable artifact (the gap the v0.27.0 machinery-efficacy audit
+flagged as UNMAPPED).
+
+- **New `core/skills/ai-dlc/enforcement-map.yaml`.** Per catalog check:
+  `gate_types`, `adjudication` (script | project | llm), `enforcer` scripts,
+  `ci_workflow`, and adversarial `fixtures`. Plus `non_catalog_units` (the Rule 18
+  retro-compliance suite, the CI-gate dormancy detector). It is a DERIVED view —
+  `gate-validation.md` remains the sole source of truth for check semantics — and
+  carries no independent authority. Surfaces the honest finding as data: **1 of 29
+  catalog checks (Check 17) is script-adjudicated; the rest are LLM/project-
+  adjudicated.** Upstream maintainer data, co-located with the catalog it indexes;
+  NOT shipped to consumers (like `audit-machinery-efficacy.js`).
+- **New `scripts/validate-enforcement-map.sh`.** Portable bash (no jq/yq), exit
+  0/1/2. Keeps the map honest against the catalog: catalog⊆map and map⊆catalog
+  (anchor set vs `checks:`), GATE_MANIFEST gate-type sync, no dormant binding
+  (every enforcer/ci_workflow path exists; every fixture exists), and — a
+  pre-existing hazard both files flag — the two hand-synced `core_manifest` copies
+  (`core-manifest.md` and `reconcile/setup-sites.md`) list the same logical set.
+  Each invariant has a demonstrated RED (perturb → fail → restore).
+- **`scripts/audit-machinery-efficacy.js`** reads the map and adds an `enf` column
+  + a script-vs-LLM adjudication summary to the distribution-catalog report.
+- **Deliberately NOT migrated** (evidence, not oversight): the `ai-dlc-update`
+  reconcile manifests (`setup-sites.md`, `template-sites.md`, `core-manifest.md`)
+  and the Rule 8 intensity table. On inspection these are already fenced YAML /
+  tables wrapped in load-bearing LLM contract prose (anchor-drift STOP semantics,
+  mask-only-the-captured-span) consumed by the reconcile agent, not by
+  `preclassify.sh`. Lifting them into standalone schema is a no-op that would
+  *create* the drift it claims to remove — the plan's own thesis one level deeper.
+
 ## [0.30.0] — 2026-07-08
 
 New `adversary` team-role — completes v0.29.0's validation-sub-skill spawn binding
