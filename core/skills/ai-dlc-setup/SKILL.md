@@ -568,6 +568,12 @@ string.
 - `{analyst_model_personal}` -> sonnet-tier model personal string
 - `{analyst_model_bedrock}` -> sonnet-tier model bedrock string
 
+**`.claude/team-roles/adversary.md`:** (independent adversarial validation of
+planning artifacts — opus-tier, high effort, like the architect: deep open-ended
+reasoning about plan soundness, and a missed planning flaw compounds downstream)
+- `{adversary_model_personal}` -> opus-tier model personal string
+- `{adversary_model_bedrock}` -> opus-tier model bedrock string
+
 **`.claude/team-roles/protected-path-editor.md`:** (edits the rulebook —
 opus-tier, like the architect)
 - `{ppe_model_personal}` -> opus-tier model personal string
