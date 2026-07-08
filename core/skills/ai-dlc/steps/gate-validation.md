@@ -644,6 +644,14 @@ transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>
 SKILL_INVOCATION_PROVENANCE_END -->
 ```
 
+**Mode enforcement (Rule 20 — all four sub-skills).** `mode` MUST be
+`subagent` for EVERY validation sub-skill, not only party-mode: the
+evaluation runs in real independent subagents (party-mode spawns personas
+internally; single-voice skills are dispatched to a Rule-19-bound teammate).
+`mode: solo` on any of the four tracked skills is a violation — the lead
+roleplayed the validation in its own context — and FAILS this check.
+`validate-provenance-block.sh` rejects `mode: solo` on any tracked-skill block.
+
 **Check.** Invoke `scripts/validate-provenance-block.sh` against the
 gate's primary artifact.
 
@@ -663,8 +671,8 @@ gate's primary artifact.
 
 **PASS:** all required provenance scripts exit 0. **FAIL:** any
 script reports a missing block, malformed field, unknown skill,
-missing transcript file (retro only), or SHA byte-mismatch (retro
-only).
+`mode: solo` on any tracked sub-skill, missing transcript file (retro
+only), or SHA byte-mismatch (retro only).
 
 ### 18. Per-class test-debt audit.
 <!-- CHECK_LOADED: 18 -->
