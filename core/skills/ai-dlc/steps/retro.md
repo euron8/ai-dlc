@@ -281,6 +281,12 @@ the scans inline. Per SKILL.md Rule 24.
 
 **Path-filter dormancy scan (every retro):**
 
+If the project has no `.github/workflows/` directory (a script-based
+consumer that runs validators via `validate-*.sh` / `ci-local.sh`
+directly rather than GitHub Actions), record this scan as **N/A** — an
+empty workflow set is the expected state, not a dormancy finding — and
+skip to the relocation-pointer scan below. Otherwise:
+
 After the rule-file audit, enumerate CI jobs in `.github/workflows/**`
 that use `paths:` or `paths-ignore:` filters. For each such job,
 determine the last main-branch SHA on which the job actually ran
