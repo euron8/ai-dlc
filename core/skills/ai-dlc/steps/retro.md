@@ -584,7 +584,8 @@ planning artifacts and compare to their thresholds. These are the
 canonical, configurable Rule 25(d) threshold defaults (a project
 overrides them here):
 `prd.md` 60k tokens, `product-brief.md` 60k,
-`carry-over-backlog.md` 40k, live `gate-log.md` 25k (≈ bytes/4). For
+`carry-over-backlog.md` 40k, live `gate-log.md` 25k,
+`docs/architecture.md` 60k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning
 in the retro doc naming the artifact, its size, and the threshold, and
 recommend the operator run the one-shot consolidation step

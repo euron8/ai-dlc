@@ -48,7 +48,12 @@ Before starting any work, read these files in order:
 
 1. `_bmad-output/planning-artifacts/product-brief.md`
 2. `_bmad-output/planning-artifacts/prd.md`
-3. `_bmad-output/planning-artifacts/architecture.md` (if it exists)
+3. `_bmad-output/planning-artifacts/architecture.md` (if it exists) —
+   **slice-read the section(s) under edit plus the consolidated current-state
+   head (SKILL.md Rule 25(b)); do NOT whole-read.** A full read is warranted
+   only during an operator-invoked `artifact-consolidation.md` pass. This is a
+   large living artifact you own — keep it bounded (Rule 25(a): rotate
+   superseded/per-sprint content to `architecture-history.md`).
 
 ## Communication
 

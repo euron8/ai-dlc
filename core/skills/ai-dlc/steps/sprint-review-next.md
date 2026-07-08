@@ -22,7 +22,9 @@ Read:
 - The previous sprint's retro (if it exists) or gate log
 - Code reviews from the previous sprint in `docs/reviews/`
 - Escalations from `docs/escalations/pending.md`
-- The architecture document (may have been updated during previous sprint)
+- The architecture document — slice-read the current-state head and any
+  sections changed in the previous sprint (Rule 25(b)); do NOT whole-read this
+  large living artifact. Use `docs/architecture-index.md` to spot changed sections.
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ### 2. Story Relevance Check

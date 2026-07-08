@@ -197,6 +197,28 @@ include:
 Stories that do not trace back to a locked requirement (e.g., pure
 technical stories, migration stories) do not need the block.
 
+### 2b. Propagate Architecture Refs to Stories (Rule 25(b))
+
+For each story created, add an `architecture_refs:` frontmatter field — the
+list of `docs/architecture.md` section anchors (or exact heading titles) that
+story's implementation and NFR validation need. Populate it here, at authoring
+time, where the architecture design is fresh and the touched sections are known
+(the party-mode SM+Architect walk in step 4 refines it). This field is the
+**slice target** the dev and qa role contracts read instead of whole-reading the
+architecture doc (`dev.md`/`qa.md` Context Loading): a large living artifact
+whole-read on every dispatch is the single largest read cost in the pipeline
+(Rule 25).
+
+- Each entry is a section anchor/title that exists in `architecture.md` (or its
+  regenerated `docs/architecture-index.md`). Verify each referenced section
+  exists — a dangling ref sends dev/qa to `architecture-index.md` to relocate,
+  or (worst case) back to a whole-read.
+- A story that genuinely needs no architecture context (e.g., a doc-only fix)
+  sets `architecture_refs: []` explicitly — an empty list is a positive signal,
+  not a missing field, and tells dev/qa to skip the architecture read entirely.
+- Stories touching cross-cutting NFRs may list the current-state head anchor
+  plus the specific NFR section(s).
+
 ### 3. Sprint Planning
 
 **Intensity gate for carry-over-single.** When
