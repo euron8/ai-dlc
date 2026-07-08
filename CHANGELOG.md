@@ -37,11 +37,12 @@ descendant of the v0.9.0 artifact-size arc. Spec:
 `docs/v0.33.0-architecture-size-discipline-spec.md`.
 
 - **Read-side — slice, never whole-read (`team-roles/dev.md`, `qa.md`,
-  `architect.md`; `steps/implementation.md`).** The four contracts that said
-  "read the architecture document" now invoke Rule 25(b): read the current-state
-  head plus only the section(s) named in the story's `architecture_refs`, never
-  the whole file. Fallbacks degrade gracefully: `docs/architecture-index.md`, then
-  `grep '^## '`. Ships immediately, zero consumer migration.
+  `architect.md`, `code-reviewer.md`; `steps/implementation.md`,
+  `sprint-review-next.md`).** The six contracts that said "read the architecture
+  document" now invoke Rule 25(b): read the current-state head plus only the
+  section(s) named in the story's `architecture_refs`, never the whole file.
+  Fallbacks degrade gracefully: `docs/architecture-index.md`, then `grep '^## '`.
+  Ships immediately, zero consumer migration.
 - **Per-story `architecture_refs` (`steps/stories-test-strategy.md` §2b).** New
   story-frontmatter field naming the architecture section anchors a story touches,
   propagated at authoring time (next to Rule 13 `LOCKED_REQUIREMENTS`
@@ -64,6 +65,28 @@ descendant of the v0.9.0 artifact-size arc. Spec:
   one-shot consolidation step (manifest = every heading + ADR; validate +
   regenerate index; relocate history verbatim). Consumers run consolidation once
   to collapse the existing 124 addenda — ~506K → consolidated head, zero loss.
+
+**CONSUMER MIGRATION (required on update).** The read-side slice contracts and
+history rotation ship active immediately and are non-breaking, but a consumer
+whose `docs/architecture.md` already accreted per-sprint addenda before this
+release still carries the whole-read cost until its live doc is consolidated.
+After updating to 0.33.0, run the one-shot consolidation **once**, at a quiescent
+point (between sprints):
+
+1. Invoke the operator-run `artifact-consolidation.md` step naming
+   `docs/architecture.md` as the target (it is fidelity-critical and supervised —
+   never automatic, per Rule 25(d)). It builds a no-loss manifest, splits
+   current-state (live) from history, verifies `live ∪ history ⊇ baseline`, and
+   commits the swap, relocating every dated addendum verbatim to
+   `docs/architecture-history.md`.
+2. Regenerate the index: `node scripts/gen-architecture-index.js`
+   (writes `docs/architecture-index.md`).
+3. Backfill `architecture_refs` on in-flight stories as they are next touched;
+   older stories fall back to the index/`grep` path until then.
+
+The retro artifact-size audit will warn (60k-token default) on every retro until
+this consolidation runs, pointing at the same step. Skipping migration is safe —
+slicing still works via the index/`grep` fallback — it just leaves the doc large.
 
 ## [0.32.0] — 2026-07-08
 
