@@ -178,6 +178,17 @@ for idx, raw_block in enumerate(blocks, start=1):
             f"block #{idx}: mode must be 'solo' or 'subagent' (got '{fields['mode']}')"
         )
 
+    # Rule 20: ALL validation sub-skills must run in real independent subagents.
+    # mode: solo (lead roleplayed the validation in its own context) is forbidden
+    # for every tracked skill, not only party-mode.
+    if fields.get("skill") in KNOWN_SKILLS and fields.get("mode") == "solo":
+        failures.append(
+            f"block #{idx}: skill '{fields['skill']}' emitted mode: solo — Rule 20 "
+            f"requires mode: subagent (dispatch the evaluation to a real subagent; "
+            f"single-voice sub-skills go to a Rule-19-bound teammate). Solo defeats "
+            f"independent evaluation."
+        )
+
     if fields.get("skill") == "bmad-party-mode":
         party_mode_blocks.append((idx, fields))
         if is_retro:

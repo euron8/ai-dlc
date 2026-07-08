@@ -17,6 +17,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.29.0] — 2026-07-08
+
+Validation sub-skills must run in independent subagents — no solo. Closes a rule
+inconsistency caught live in graph S286: the lead ran `bmad-review-adversarial-
+general` and `bmad-validate-prd` `mode: solo` (a single LLM reviewing an artifact
+its own conversation authored) and correctly cited Rule 20 to justify it — Rule 20
+only forbade solo for party-mode, while Rule 28 falsely assumed all validation
+sub-skills spawn. **Behavior change: a previously-passing solo run now FAILs
+Check 17.**
+
+- **SKILL.md Rule 20 reframed** from "run inline" to "run in independent
+  subagents." Two shapes, both `mode: subagent`: party-mode spawns personas
+  internally (unchanged); the three single-voice sub-skills (advanced-elicitation,
+  review-adversarial-general, validate-prd) are now **dispatched to a Rule-19-bound
+  teammate** (analyst / code-reviewer / pm) — reversing the old "do NOT route
+  through Agent" mandate, which made inline invocation solo by construction. Solo
+  is forbidden for all four.
+- **SKILL.md Rule 28** premise corrected — validation evaluation genuinely runs in
+  subagents; a solo run is both a Rule 20 and Rule 28 violation.
+- **`scripts/validate-provenance-block.sh`** rejects `mode: solo` on any tracked
+  sub-skill (core-owned, so the teeth reach consumers even where Check 17 is
+  overridden). Verified: solo → exit 1, subagent → exit 0.
+- **`gate-validation.md` Check 17** lists `mode: solo` as a FAIL condition for all
+  four.
+
+Migration (see `docs/v0.29.0-validation-subskill-spawn-spec.md`): reinstalling
+into a consumer with in-flight `mode: solo` artifacts (graph S286:
+`discovery-adversarial-s286.md`, `prd.md`) will FAIL them at the next gate —
+merge after the current sprint closes, or re-run those passes as subagent
+dispatches.
+
 ## [0.28.1] — 2026-07-08
 
 Gate-metrics emission tightened from its first live emission (graph consumer

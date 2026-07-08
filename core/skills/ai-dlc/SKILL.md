@@ -512,13 +512,38 @@ model without contract and is a Rule 19 violation.
 Violation of (a) or (b) fails gate-validation Check 22 on detection at
 retro.
 
-### Rule 20 -- Validation sub-skills run inline with provenance
+### Rule 20 -- Validation sub-skills run in independent subagents with provenance
 
 Validation sub-skills (`/bmad-party-mode`, `/bmad-advanced-elicitation`,
-`/bmad-review-adversarial-general`, `/bmad-validate-prd`) MUST be
-invoked via the Skill tool in the lead's own conversation. Do NOT
-route them through Agent or Task. Subagent delegation is reserved
-for implementation-phase teammates per `implementation.md`.
+`/bmad-review-adversarial-general`, `/bmad-validate-prd`) MUST be evaluated
+by **real, independent subagents** -- never roleplayed solo in the lead's own
+context. Independence is the point: a single LLM evaluating an artifact it (or
+its own conversation) authored produces convergent opinions and defeats the
+validation, and it absorbs delegable work into the lead's context (Rule 28).
+The `mode` field of the emitted provenance block MUST be `subagent` for ALL
+four sub-skills; `mode: solo` is forbidden for every one of them (not only
+party-mode) and FAILS gate-validation Check 17.
+
+Two execution shapes, both `mode: subagent`:
+
+**(i) Persona-spawning (`/bmad-party-mode`).** The lead invokes it via the Skill
+tool in its own conversation; the sub-skill spawns real persona subagents
+internally (bound by the role-manifest preamble below). The internal spawns
+satisfy independence.
+
+**(ii) Single-voice (`/bmad-advanced-elicitation`,
+`/bmad-review-adversarial-general`, `/bmad-validate-prd`).** These have no
+internal spawn, so the lead MUST dispatch the invocation to ONE spawned teammate
+(Rule 19 binding: adversarial-general -> `code-reviewer` for the adversarial
+lens or `analyst` for a planning artifact, validate-prd -> `pm`,
+advanced-elicitation -> `analyst`) that invokes the sub-skill in its OWN context
+and writes the provenance block with `mode: subagent`; the lead applies the
+returned findings. This reverses the former "invoke inline, do NOT route through
+Agent" rule for these three -- inline invocation of a single-voice sub-skill is
+solo by construction (there is no internal spawn to make it independent), which
+is exactly the failure this rule now forbids. In ai-dlc's autonomous mode
+(Rules 9/10: no mid-pipeline human dialogue) advanced-elicitation runs without
+operator back-and-forth, so subagent dispatch does not break an interactive loop.
 
 **Provenance block.** Every invocation MUST emit a
 `SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
@@ -543,11 +568,15 @@ as non-delivery and re-dispatch. Build no detector for this — the lead's
 own read of the expected path is the check (Rule 26: audit before adding
 mechanism).
 
-**Solo mode is forbidden.** Party mode MUST always spawn real
-subagents. Roleplaying agent perspectives inline (solo mode) produces
-convergent opinions from a single LLM and defeats the purpose of
-independent evaluation. Any party mode invocation that generates
-agent responses without spawning subagents is a rule violation.
+**Solo mode is forbidden -- for ALL four sub-skills.** Every validation
+sub-skill MUST run with real subagents (shape (i) or (ii) above), never
+roleplayed inline. Roleplaying perspectives / running a single-voice pass in
+the lead's own context (solo mode) produces convergent opinions from a single
+LLM and defeats independent evaluation. Any validation-sub-skill invocation
+that emits `mode: solo` -- or generates evaluation output without a real
+subagent -- is a rule violation and FAILS Check 17 (enforced by
+`scripts/validate-provenance-block.sh`, which rejects `mode: solo` on any of
+the four tracked skills).
 
 **Role-manifest preamble (persona-spawning sub-skills).** A validation
 sub-skill that spawns personas (`/bmad-party-mode`) spawns real
@@ -861,9 +890,12 @@ action falls in the **non-delegable set**:
 - **(c) Gate-validation decisions** -- running the gate checks and
   owning PASS/FAIL/remediation outcomes.
 
-Invoking a validation sub-skill (Rule 20) is itself delegation -- the
-Skill call spawns real subagents -- so it is permitted inline; the lead
-triggers it but does not roleplay it.
+Triggering a validation sub-skill (Rule 20) is orchestration -- the lead
+triggers it but does not roleplay it, and Rule 20 requires the evaluation
+itself to run in real, independent subagents (`mode: subagent`), never solo
+in the lead's context. A validation sub-skill executed solo is both a Rule 20
+violation and the Rule 28 failure this rule names (the lead absorbing
+delegable evaluation work into its own context).
 
 **Everything else is delegated.** Implementation and fixes -> dev
 teammates. Read-heavy planning exploration -> analyst (Rule 24).
