@@ -428,8 +428,8 @@ verbatim) so the live log holds only the current epoch. The archive is
 write-only and never re-read in the hot path.
 
 **Structured metrics emission (`GATE_METRIC v1`).** After the prose entry
-is written and verified above, ALSO append — for every check evaluated at
-this gate — one JSON object per line to
+is written and verified above, ALSO append — for every **validation** check
+evaluated at this gate — one JSON object per line to
 `_bmad-output/implementation-artifacts/gate-metrics.jsonl` (append-only,
 machine-read only, never loaded verbatim; rotates with the gate-log epoch
 to `gate-metrics-archive-<epoch>.jsonl`). This is the same per-check
@@ -438,9 +438,16 @@ consumer history yields decisive efficacy/cost data (no prose parsing, no
 cross-catalog confound). Per-line schema:
 
 ```
-{"v":1,"sprint":<N>,"gate":"<type>","phase":"<from→to>","ts":"<ISO8601Z>","sha":"<HEAD>","catalog":"core","check":"<id>","title":"<short>","verdict":"PASS|FAIL|NA|DEFERRED","defect_class":<"token"|null>,"evidence":"<path|run-id>","tok_slice":<int|null>}
+{"v":1,"sprint":<N>,"gate":"<type>","phase":"<from→to>","ts":"<ISO8601Z>","sha":"<HEAD>","catalog":"core","check":"<id>","title":"<short>","verdict":"PASS|FAIL|NA|DEFERRED","defect_class":<"token"|null>,"evidence":"<path|run-id>","tok_slice":<int>}
 ```
 
+- **Emit validation checks only — NOT the procedural gate-mechanics checks
+  12–15** (this log-append, 13 announce, 14 snapshot, 15 verify-snapshot).
+  Those are bookkeeping, never defect-catchers, so they carry no efficacy
+  signal; emitting a metric for the emitter (Check 12) is also circular.
+  Emit every other check the manifest loaded for this gate type (the
+  universal-core validators + the gate-type row), including those recorded
+  `NA` — an `NA` exposure is signal (the check ran and self-skipped).
 - **`catalog`** namespaces the check id: distribution checks emit
   `"core"`; a consumer domain check (Rule 27 `extensions/checks/*.md`)
   emits `"extension:<that file's frontmatter id>"`. This is what makes a
@@ -450,8 +457,13 @@ cross-catalog confound). Per-line schema:
 - **`verdict`** is machine-countable; **`defect_class`** is a short
   taxonomy token on a real catch/remediation (e.g. `missing-provenance`,
   `orphaned-fn`, `stub-unbacked`, `intensity-under-run`), else `null`.
-- **`evidence`** is a pointer (path / run-id), never prose; **`tok_slice`**
-  (optional) is the loaded slice's token cost — the cost side of efficacy.
+- **`evidence`** is a pointer (path / run-id), never prose.
+- **`tok_slice`** is **REQUIRED** (integer): the token cost of this check's
+  loaded slice — the cost side of efficacy, so cost-vs-catch is computable
+  without re-measuring. Emit the check's own token size as loaded this gate
+  (a stable per-check figure; `scripts/audit-machinery-efficacy.js` prints
+  the current per-check counts). Never `null` — a record without a real
+  `tok_slice` cannot answer "does this check earn its cost."
 
 The prose gate-log is unchanged and remains the human/audit trail; this
 record is additive. Absence of the file on a consumer simply means audit

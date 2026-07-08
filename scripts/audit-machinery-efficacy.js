@@ -180,22 +180,27 @@ if (!metricFiles.length) {
   console.log('_No `gate-metrics.jsonl` in consumer yet — using prose-derived signals above (pre-v0.28.0). '
     + 'Once the Check-12 emission clause ships, this section supersedes the prose estimates._');
 } else {
-  const agg = {}; // key `${catalog}\t${check}` -> {expo, fails, defects:{}, last}
-  let bad = 0;
+  const agg = {}; // key `${catalog}\t${check}` -> {expo, fails, defects:{}, last, tok}
+  let bad = 0, noTok = 0;
   for (const f of metricFiles) for (const ln of fs.readFileSync(f, 'utf8').split('\n')) {
     if (!ln.trim()) continue;
     let r; try { r = JSON.parse(ln); } catch (e) { bad++; continue; }
     const k = `${r.catalog || '?'}\t${r.check}`;
-    const a = agg[k] || (agg[k] = { expo: 0, fails: 0, defects: {}, last: 0 });
+    const a = agg[k] || (agg[k] = { expo: 0, fails: 0, defects: {}, last: 0, tok: null });
     a.expo++; if (r.sprint) a.last = Math.max(a.last, r.sprint);
+    if (typeof r.tok_slice === 'number') a.tok = r.tok_slice; else noTok++;  // required as of v0.28.1
     if (r.verdict === 'FAIL') { a.fails++; if (r.defect_class) a.defects[r.defect_class] = (a.defects[r.defect_class] || 0) + 1; }
   }
-  console.log(`records: ${Object.values(agg).reduce((s, a) => s + a.expo, 0)} across ${metricFiles.length} file(s)${bad ? `, ${bad} unparseable` : ''}\n`);
-  console.log('| catalog | check | exposures | real FAILs | defect classes | lastFire |');
-  console.log('|---------|-------|-----------|-----------|----------------|----------|');
+  const total = Object.values(agg).reduce((s, a) => s + a.expo, 0);
+  console.log(`records: ${total} across ${metricFiles.length} file(s)${bad ? `, ${bad} unparseable` : ''}`
+    + `${noTok ? ` — ⚠ ${noTok} record(s) missing required tok_slice (v0.28.1)` : ''}\n`);
+  // cost-vs-catch: tok_slice spent per real catch (∞ = cost with zero catches → dormancy signal)
+  console.log('| catalog | check | exposures | real FAILs | defect classes | tok/gate | tok÷catch | lastFire |');
+  console.log('|---------|-------|-----------|-----------|----------------|----------|-----------|----------|');
   for (const [k, a] of Object.entries(agg).sort((x, y) => y[1].fails - x[1].fails || y[1].expo - x[1].expo)) {
     const [cat, chk] = k.split('\t');
     const cls = Object.entries(a.defects).map(([d, n]) => `${d}:${n}`).join(', ') || '—';
-    console.log(`| ${cat} | ${chk} | ${a.expo} | ${a.fails} | ${cls} | ${a.last || '-'} |`);
+    const perCatch = a.tok == null ? '?' : (a.fails ? Math.round(a.tok * a.expo / a.fails) : '∞');
+    console.log(`| ${cat} | ${chk} | ${a.expo} | ${a.fails} | ${cls} | ${a.tok ?? '?'} | ${perCatch} | ${a.last || '-'} |`);
   }
 }

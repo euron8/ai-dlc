@@ -17,6 +17,23 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.28.1] — 2026-07-08
+
+Gate-metrics emission tightened from its first live emission (graph consumer
+Sprint S286 carry-over gate). Two fidelity fixes to the v0.28.0 `GATE_METRIC v1`
+clause; additive/refinement, no new capability.
+
+- **Emit validation checks only.** The procedural gate-mechanics checks 12–15
+  (log-append / announce / snapshot / verify-snapshot) are bookkeeping, never
+  defect-catchers, so they are explicitly excluded — codifying what the lead
+  already did at S286 and removing the "every check" ambiguity. All other
+  manifest-loaded checks are emitted, `NA` included (an `NA` exposure is signal).
+- **`tok_slice` is now required** (was optional; S286 emitted it `null`
+  throughout). Without the per-check token cost, cost-vs-catch — the point of the
+  metric — is not computable. `scripts/audit-machinery-efficacy.js` now prints a
+  `tok/gate` and `tok÷catch` column (`∞` at zero catches = the dormancy signal)
+  and warns on any record missing `tok_slice`.
+
 ## [0.28.0] — 2026-07-07
 
 Gate-metrics emission — the forward-looking half of the v0.27.0 audit. That audit
