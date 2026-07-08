@@ -103,6 +103,29 @@ the discussion:
    `scripts/validate-retro-evidence.sh` enforces byte-match between
    the cited SHA and the file contents on HEAD.
 
+**Author the transcript to pass on the first commit — do not backfill.**
+`validate-retro-evidence.sh` enforces a shape floor and
+`validate-provenance-block.sh` a provenance format, both at the Step-5c gate.
+Discovering those there and patching the transcript afterward re-invalidates
+the cited blob SHA (forcing a re-cite) and often triggers a provenance
+reformat — a multi-commit loop repeated every sprint. Prevent it by satisfying
+both at authoring time and committing in this order:
+
+1. **Shape the transcript to the floor before committing it.** It MUST clear
+   `validate-retro-evidence.sh`'s floor — that script is the single source of
+   the thresholds (do NOT restate the numbers here, where they can drift):
+   at least its required count of distinct persona markers, at least its
+   required count of distinct canonical `Phase N` labels (from its
+   `PHASE_LABELS` allow-list), and its minimum character count. Committing the
+   full agent responses verbatim (not summaries) clears all three.
+2. **Commit the transcript as its own commit first**, then read back its blob
+   SHA: `git rev-parse HEAD:_bmad-output/party-mode-transcripts/sprint-<N>-retro.md`.
+3. **Write the `SKILL_INVOCATION_PROVENANCE v1` block once**, in the
+   HTML-comment format `validate-provenance-block.sh` expects (`<!-- SKILL_INVOCATION_PROVENANCE v1 … SKILL_INVOCATION_PROVENANCE_END -->`; schema in SKILL.md Rule 3), citing that SHA. Get the format right the first time — a reformat pass is the same wasted loop as a re-cite.
+4. **Never edit the transcript after citing its SHA.** Any byte change makes the
+   cited SHA stale and forces steps 2–3 again. If the transcript is wrong, fix
+   it before step 2, not after step 3.
+
 Local enforcement runs in Step 5c (pre-commit validation gate).
 CI enforcement: `.github/workflows/validate-retro-compliance.yml`
 re-runs the same scripts on the retro PR.
@@ -189,8 +212,7 @@ rule file.
 state, so it is issued only after the "apply process improvements" edits
 above land (§2 blocker 1) and before the Step-5c audit commit.
 
-If `planning_offload: on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
-to produce the **candidate list** — scanning the files and violation
+If `planning_offload: on`, dispatch a **single** `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) for **all** of Step 4's post-improvement scans — this rule-file audit **and** the path-filter dormancy + relocation-pointer-invariant-1 scans below. All fire at the identical post-improvement point; the "Scan dispatch" below extends this one spawn rather than adding a second (a second round-trip at the same causal point buys nothing). This dispatch produces the **candidate list** — scanning the files and violation
 classes below and, for each suspected violation, recording `file:line`,
 the violation class (narrative-drift / weakness / complexity-accretion),
 the bare-rule-survives-without-narrative judgment as a **recommendation**,
@@ -207,7 +229,9 @@ Rule 24.
 **Structural invariant (retro audits itself).** The scan of
 `.claude/skills/ai-dlc/steps/*.md` MUST assert that every read-heavy
 section of `retro.md` (Steps 1, 3, 4, 4a, 7b) carries its analyst
-dispatch when `planning_offload: on`; a read-heavy retro section that
+dispatch when `planning_offload: on` (Step 4's rule-file audit and its
+dormancy/pointer scans share one post-improvement dispatch — that is one
+carried dispatch, not a missing one); a read-heavy retro section that
 reads inline instead is a Rule 28 lead-conduct finding.
 
 The analyst scans the following files for violations of SKILL.md Rule 18:
@@ -264,9 +288,11 @@ If zero violations found, note "Audit: clean" in the retro doc.
 
 **Scan dispatch (Dispatch A, continued — Rule 24).** The path-filter
 dormancy scan and relocation-pointer invariant 1 below are read-heavy
-multi-file / multi-job scans. If `planning_offload: on`, dispatch an
-`analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
-to run both and return their tables to
+multi-file / multi-job scans. They are covered by the **same single
+post-improvement analyst dispatch** already issued for the rule-file audit
+above — extend that spawn's scope to run both; do NOT spawn a second analyst
+(both scans fire at the identical post-improvement point). When
+`planning_offload: on`, that analyst returns their tables to
 `_bmad-output/retro-artifacts/sprint-<N>-scan-tables.md` (returning only
 `{artifact_path, summary, gaps}`): the dormancy table (job, sprint-window,
 last non-SKIPPED SHA, `gh run list` evidence) and the pointer table
@@ -314,7 +340,7 @@ and `.claude/skills/ai-dlc/steps/*.md` for pointers to **skill-loadable
 content** — `READ AND FOLLOW \`<path>\``, and prose locators of the form
 "lives in / defined in / canonical … in / schema in / see \`<file>\`[
 Check N]" that name a step file (`steps/*.md`), a sibling skill reference
-file (`rule-authoring.md`, `research-citations.md`, `escalations.md`,
+file (`rule-authoring.md`, `escalations.md`,
 `steps/handoff.md`), or a team-role file (`.claude/team-roles/*.md`). For each, confirm the named
 file exists on disk (and, when a specific anchor like `Check 14` is
 cited, that the anchor exists in the target). **Out of scope — do NOT
@@ -639,8 +665,10 @@ core-layer-immutability).
 
 3. **Mandatory rules validation.** Run:
    `scripts/validate-mandatory-rules.sh <N>` (where N is the sprint
-   number). This executes `validate-retro-evidence.sh`,
-   `validate-cycle-commits.sh`, and `validate-provenance-block.sh`.
+   number). This chains `validate-retro-evidence.sh` (Check 1),
+   `validate-cycle-commits.sh` (Check 2), and `validate-retro-prereq.sh`
+   (Check 4), plus inline Checks 3/5/6. (`validate-provenance-block.sh` is
+   run separately — at Step 5c check 2 above locally, and as its own CI step.)
    MUST exit 0. If it fails, fix the issues before proceeding to
    Step 6.
 
