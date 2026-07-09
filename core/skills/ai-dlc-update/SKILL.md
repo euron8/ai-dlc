@@ -154,6 +154,35 @@ Every consumer block that differs from upstream is one of:
    - `TEMPLATE-JSON-MERGE` (`settings.json`, changed) → **jq strip/merge (step 7)**
    Reconciling these is per `template-sites.md`'s transforms; the consumer's
    filled config is preserved, only upstream boilerplate is synced.
+3c. **Layer-drift detection** (cheap, deterministic — no agents):
+   run `reconcile/layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
+   This MECHANIZES what "Layered consumers" below used to state as prose. Do NOT
+   hand-verify overrides with ad-hoc `git diff` calls: nothing implemented that
+   check for its entire existence, and a real consumer accumulated five overrides
+   whose `base_sha` pointed at its OWN repo — every diff would have died on
+   `fatal: bad revision`, and two shipped upstream changes were discarded unseen.
+   Statuses:
+   - `HARD-OVERRIDE-BASE-CONSUMER-SHA` / `HARD-OVERRIDE-BASE-UNRESOLVABLE` →
+     **blocks `apply`** (see step 7). The `base_sha` is unusable, so drift for
+     that override is undecidable. Never skip it; never "assume unchanged."
+     Resolution: operator re-stamps `base_sha` to the correct distribution sha.
+   - `OVERRIDE-DRIFT-SECTION` → the shadowed section changed; surface for
+     re-confirmation (has upstream's change superseded the override's reason?).
+   - `OVERRIDE-DRIFT-FILE` → the anchor is not a locatable heading AND the file
+     changed, so the section cannot be *proven* safe. Surface for re-confirmation.
+     Conservative on purpose — an unprovable section is never reported as OK.
+   - `OVERRIDE-ANCHOR-UNRESOLVED` → upstream restructured the anchor away.
+   - `EXTENSION-RETIRE-CANDIDATE` → upstream now defines a section this extension
+     defines, and did not at `base` (titles agree, not merely the number — consumer
+     gate-check numbers are a sanctioned separate namespace). Upstream **absorbed**
+     it. Per Rule 27(b) the consumer MUST retire the entry; list it in the report's
+     retirement list. This is the only signal that closes the absorption loop —
+     without it every successful absorption leaves a duplicate behind.
+   - `EXTENSION-HOOK-DRIFT` → the hooked core file changed. Extensions have no
+     section anchor (`hooks:` is file-grain), so this is the strongest statement
+     available: re-read the entry against the new core text.
+   - `EXTENSION-HOOK-MISSING`, `OVERRIDE-OK`, `EXTENSION-OK` → as named.
+
 4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
    diffs) using `reconcile/classify-block.md` as the prompt. Block granularity
@@ -178,7 +207,13 @@ Every consumer block that differs from upstream is one of:
    list**: every `TEMPLATE-PROSE-MERGE` / `TEMPLATE-JSON-MERGE` file from step
    3b with a one-line summary of the upstream boilerplate delta being synced
    (e.g. "CLAUDE.md: remove Context-Mode Usage section") and, for any file
-   that hit anchor-drift, its flag for adjudication. This is a fixed filename
+   that hit anchor-drift, its flag for adjudication — and, from step 3c, a
+   **layer-drift list** (every `OVERRIDE-DRIFT-*` / `OVERRIDE-ANCHOR-UNRESOLVED` /
+   `EXTENSION-HOOK-DRIFT` entry with its target and reason), a **retirement list**
+   (every `EXTENSION-RETIRE-CANDIDATE`: the entry, the section upstream absorbed,
+   and the note that retirement is an operator-gated delete per Rule 27(b)), and a
+   **blocking-layer list** (every `HARD-*` status — these block `apply` outright).
+   This is a fixed filename
    overwritten on every
    run (a snapshot, not a log) — the header stamp is what lets anyone tell a
    fresh report from a stale leftover of a prior invocation, since the
@@ -247,6 +282,17 @@ Every consumer block that differs from upstream is one of:
    step-6 branch.** If there are conflicts, apply only operator-adjudicated
    resolutions; zero conflicts does not remove the `apply`-arg requirement — it
    only removes the adjudication sub-step.
+
+   **Blocking-layer gate (step 3c `HARD-*` statuses).** If layer-drift reported
+   any `HARD-OVERRIDE-BASE-CONSUMER-SHA` or `HARD-OVERRIDE-BASE-UNRESOLVABLE`,
+   STOP before any write. Those overrides have an unusable `base_sha`, so whether
+   upstream changed the rule they shadow is **undecidable** — applying the core
+   overwrite would let a stale override silently keep shadowing a rule that moved.
+   Present each to the operator with the correct distribution sha to re-stamp
+   (Rule 27(a)); apply only after they are fixed or the operator explicitly
+   accepts the risk per entry. `apply` authorizes writes; it does not authorize
+   proceeding on an undecidable override — the same distinction the deletion gate
+   below draws. Never infer that an unresolvable base means "unchanged."
 
    **Flagged-block checkpoint (mid-apply, every block, not just conflicts).**
    Before executing a block's mechanical bucket action, check whether it (or
@@ -422,12 +468,20 @@ collapses:
   deploy/smoke commands); those always differ from base by design, forever.
   The three-way degenerates to a fast-forward everywhere EXCEPT those sites,
   which mask/reinject handles without needing a classify pass.
-- **extensions/** → never touched by the pull. Drain entries flagged
+- **extensions/** → never **written** by the pull (consumer-owned), but no longer
+  invisible to it. Step 3c's `layer-drift.sh` reports `EXTENSION-HOOK-DRIFT` when
+  the hooked core file changed, and `EXTENSION-RETIRE-CANDIDATE` when upstream has
+  absorbed a section the extension defines (Rule 27(b) — the consumer retires it;
+  the pull never deletes a layer entry). Drain entries flagged
   `push_candidate: true` into the push-candidate ledger (spec §8.1).
 - **overrides/** → the ONLY genuine three-way surface. For each override, its
   base is the core rule it shadows (`base_sha` in the entry). If theirs changed
   that core rule between `base_sha` and HEAD, surface the override for operator
-  re-confirmation (override-drift, spec §10).
+  re-confirmation (override-drift, spec §10). **This is computed by step 3c's
+  `layer-drift.sh`, not by hand** — it was prose here for its whole existence and
+  consequently never ran. An override whose `base_sha` does not resolve in the
+  distribution is a HARD finding that blocks `apply` (Rule 27(a)); it is never
+  treated as "unchanged."
 
 On a pre-Phase-2 (tangled) consumer like graph's first pull, none of the above
 applies yet — run the full per-block classify. The Phase-2 untangle is what

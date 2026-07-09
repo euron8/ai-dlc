@@ -444,6 +444,9 @@ only `{artifact_path, summary, gaps}`:
   sprint-status and returns item → satisfying story → recommended status.
 - **Artifact-size audit.** Measures the live artifacts and returns
   sizes-vs-thresholds.
+- **Layer-entry audit (Rule 27, layered consumers only).** Runs
+  `scripts/validate-layer-entries.sh` and returns its errors/warnings. Skip on a
+  consumer with no `extensions/`/`overrides/` directories (it exits clean anyway).
 
 The lead **dispositions** every row before the PVC — "the lead is the
 detector" is catch-before-PVC, satisfied when the lead decides the
@@ -601,6 +604,17 @@ This NEVER blocks the pipeline and the
 retro NEVER runs the consolidation itself — consolidation is a
 fidelity-critical rewrite and is operator-invoked. If all artifacts are
 under threshold, note "Artifact sizes: within thresholds".
+
+**Layer-entry audit (Rule 27, warn-only).** On a layered consumer, run
+`scripts/validate-layer-entries.sh` and record a `## Layer-Entry Audit` section in
+the retro doc with its output. ERRORs are mechanized invariants — a poisoned
+`base_sha` (Rule 27(a)) silently disables override-drift detection for that entry,
+so the next pull cannot tell whether upstream changed the rule it shadows. WARNs
+are smells needing judgement: an extension restating a core section, a restriction
+filed in the additive layer, a dangling `Step <n>` pointer. Fix ERRORs before the
+next `/ai-dlc-update`; triage WARNs into the backlog. Warn-only — never blocks the
+pipeline. On a consumer with no layer directories the script exits clean; note
+"Layer entries: n/a (unlayered)".
 
 ## Sprint-Ship Verification
 

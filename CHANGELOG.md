@@ -17,6 +17,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.34.0] — 2026-07-09
+
+Rule 27 gets teeth. A full sweep of the high-volume consumer's 12 overrides and
+29 extensions found that the layered rulebook's **drift detection was never
+implemented** — it was prose in `ai-dlc-update/SKILL.md` instructing an agent to
+run `git diff` once per override. `reconcile/preclassify.sh` contained zero
+references to `extensions`, `overrides`, `base_sha`, `shadows`, or `hooks`.
+Consequences, all silent and all found live:
+
+- **5 of 12 overrides carried a `base_sha` pointing at the CONSUMER's own repo**
+  (three were literally its `chore(ai-dlc-update): reconcile …` merge commits).
+  `git diff <base_sha>..theirs` inside the distribution dies on
+  `fatal: bad revision`, and nothing defined what to do then.
+- A 29 KB override shadowing 8 retro sections silently **discarded two shipped
+  upstream changes** — v0.33.0's `docs/architecture.md` size threshold and
+  v0.33.2's gate-log rotation routing. That consumer will never warn on
+  architecture-doc size, and no mechanism could have said so.
+- **Absorption had no retirement step.** `discovery-domain.md` was absorbed
+  upstream at v0.11.0 (`e7ccffa`) and never deleted; 22 releases later it both
+  duplicates *and* contradicts the core §1a it became.
+- Extensions carry `hooks:` only — a file-grain anchor, no `base_sha`, no section
+  id — so nothing could detect core changing underneath one.
+
+Spec: `docs/v0.34.0-layer-drift-enforcement-spec.md`.
+
+- **`reconcile/layer-drift.sh` (new, pull-time).** Mechanizes the layered
+  reconcile. Emits `HARD-OVERRIDE-BASE-CONSUMER-SHA` /
+  `HARD-OVERRIDE-BASE-UNRESOLVABLE` (both **block `apply`** — an unusable base
+  makes drift *undecidable*, and is never read as "unchanged"),
+  `OVERRIDE-DRIFT-SECTION`, `OVERRIDE-DRIFT-FILE` (anchor not a locatable heading
+  and the file changed → cannot *prove* the section safe, so surface it),
+  `OVERRIDE-ANCHOR-UNRESOLVED`, `EXTENSION-HOOK-DRIFT`, and
+  `EXTENSION-RETIRE-CANDIDATE` — the absorption-retirement signal that closes the
+  loop. Retirement matching requires the section **titles** to agree, not merely
+  the number: consumer gate-check numbers are a sanctioned separate namespace per
+  core's Consumer-catalog crosswalk, so number-only matching false-positives.
+  Wired as step 3c; feeds three new dry-run report sections.
+- **`core/scripts/validate-layer-entries.sh` (new, authoring-time).** Runs entirely
+  consumer-side, no distribution checkout, on this property (verified 9/9 on real
+  data): **a correct `base_sha` never resolves in the consumer's own repo.**
+  Severity is tiered on purpose — ERROR only for mechanized invariants with no
+  false-positive path (poisoned `base_sha`, broken `hooks:`/`shadows:` target,
+  missing frontmatter); WARN for smells needing judgement (an extension restating a
+  core section, a restriction filed in the additive layer, a dangling `Step <n>`
+  pointer resolved globally so cross-file references don't false-positive). A
+  linter that errors 78 times on first contact gets disabled, and then catches
+  nothing. Wired into `rule-authoring.md` and the retro Close-Out Sweep.
+- **Rule 27 (a)/(b)/(c) (`SKILL.md`).** `base_sha` provenance is normative;
+  retirement on absorption is a consumer duty; additive means additive — a
+  restriction is an override wearing extension frontmatter. Both layer READMEs
+  carry the traps and the rule of thumb.
+- `install.sh` ships the new validator (`core/scripts/`, per the v0.33.1 trap).
+
+**CONSUMER ACTION (layered consumers).** Run
+`scripts/validate-layer-entries.sh` after updating. Every ERROR is an entry whose
+drift detection is currently dead — re-stamp its `base_sha` to the correct
+distribution sha before the next `/ai-dlc-update apply`, which will otherwise
+block on it.
+
 ## [0.33.2] — 2026-07-09
 
 Absorb a consumer push-candidate: gate-log is not a consolidation target, and the
