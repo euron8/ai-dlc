@@ -588,8 +588,16 @@ overrides them here):
 `docs/architecture.md` 60k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning
 in the retro doc naming the artifact, its size, and the threshold, and
-recommend the operator run the one-shot consolidation step
-(`artifact-consolidation.md`). This NEVER blocks the pipeline and the
+recommend the remedy matching that artifact's bounding mechanism:
+- **Living planning artifacts** (`prd.md`, `product-brief.md`,
+  `carry-over-backlog.md`, `docs/architecture.md`) → recommend the operator
+  run the one-shot consolidation step (`artifact-consolidation.md`).
+- **Append-only logs** (live `gate-log.md`) → recommend **rotation**, not
+  consolidation (Rule 25(c)). A live log over threshold means a rotation was
+  missed, not that it needs a fidelity-critical rewrite —
+  `artifact-consolidation.md` rejects logs as targets.
+
+This NEVER blocks the pipeline and the
 retro NEVER runs the consolidation itself — consolidation is a
 fidelity-critical rewrite and is operator-invoked. If all artifacts are
 under threshold, note "Artifact sizes: within thresholds".
