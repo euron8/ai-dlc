@@ -874,12 +874,40 @@ entry contracts. An entry's `hooks:`/`shadows:` path is `core/`-relative:
 resolves to `.claude/team-roles/<role>.md` (outside the skill dir) — map it the
 same way, not skill-relative.
 
+**(a) `base_sha` provenance (normative).** An override's `base_sha` MUST be the
+**distribution** sha of the core rule when the override was authored. A value that
+resolves in the *consumer's own* repo is invalid: `/ai-dlc-update` computes drift
+with `git diff <base_sha>..<theirs>` inside the distribution checkout, so a
+consumer sha makes that diff impossible and drift detection silently dies for
+that entry. `scripts/validate-layer-entries.sh` fails on it (a correct base_sha
+never resolves in the consumer repo); `reconcile/layer-drift.sh` reports it as
+HARD and blocks `apply` until the operator adjudicates. Re-stamp `base_sha`
+whenever you revise an override.
+
+**(b) Retirement duty on absorption.** When upstream lands a layer entry's content
+in core, the consumer MUST retire that entry. An absorbed extension left in place
+becomes a duplicate that silently forks from the core text it once matched, and
+then contradicts it (graph carried one for 22 releases). `/ai-dlc-update` emits
+`EXTENSION-RETIRE-CANDIDATE` as the signal; retirement is an operator-gated delete
+-- upstream never writes the layer, so it cannot remove the entry for you.
+
+**(c) Additive means additive.** An extension MUST NOT restate or restrict a core
+section. Restating forks the prose and rots (the copy cannot drift-check against
+the original). Restricting a core rule -- "only X and Y are valid", "Z is NOT
+subject to" -- is an **override wearing extension frontmatter**: file it in
+`overrides/` with a `base_sha` so drift is tracked. Extensions carry `hooks:` only,
+which is a file-grain anchor, so a restriction hidden in one is invisible to every
+check the pull performs.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or
-false-conflicts against it -- the catch-22, regrown (graph proved it). False
-positive: one override declaration when a consumer genuinely must change a core
-rule. Removal condition: retire once core ships as an immutable package the skill
-loads rather than a writable tree.
+false-conflicts against it -- the catch-22, regrown (graph proved it); and, per
+(a)-(c), a consumer layer silently shadowing, duplicating, or contradicting a core
+rule upstream has since changed. False positive: one override declaration when a
+consumer genuinely must change a core rule; one operator re-confirmation per
+still-valid override whose core section moved. Removal condition: retire once core
+ships as an immutable package the skill loads rather than a writable tree, with
+layer bindings resolved (and validated) at load time.
 
 ### Rule 28 -- Delegation is the default; inline execution is the exception
 

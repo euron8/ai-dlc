@@ -31,6 +31,23 @@ immutability** check. On a pre-Phase-2 consumer (no layer directories) or the
 distribution source itself, this routing is dormant and rules are authored in
 place as before.
 
+**Routing traps (Rule 27(a)-(c)) — check before you file:**
+- A rule that says "only X and Y are valid" or "Z is NOT subject to" **restricts**
+  core. That is an override, not an extension, no matter how it is worded. Filed as
+  an extension it carries no `base_sha`, so nothing ever notices when the core rule
+  it restricts moves underneath it.
+- An extension MUST NOT restate a core section (same heading, or same step number
+  with the same title). The copy forks at authoring time and rots silently; a
+  "Step 5c" reference then resolves to two different sections.
+- An override's `base_sha` is a **distribution** sha, not one from this repo. A sha
+  that resolves in *this* repo is always wrong and silently disables drift
+  detection for that entry — the pull diffs it inside the distribution checkout.
+
+**Validate after authoring or revising any layer entry:**
+`scripts/validate-layer-entries.sh` (errors on a poisoned `base_sha` or a broken
+`hooks:`/`shadows:` target; warns on restatement, restriction, and dangling step
+pointers). Run it before committing the entry.
+
 **Scope.** Rule files only: this skill, CLAUDE.md,
 coding-conventions.md, step files, team role files. Planning
 artifacts (PRDs, stories, reviews, retros) and export bundles are

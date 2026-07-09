@@ -37,7 +37,18 @@ A core rule you shadow can itself change upstream. `base_sha` is the anchor for
 the override's own three-way: on `/ai-dlc-update`, if the core target changed
 between `base_sha` and the new upstream sha, the reconcile surfaces the override
 for re-confirmation (has upstream's change to that rule superseded your reason?).
-Keep `base_sha` current whenever you revise an override. This residual three-way
+Keep `base_sha` current whenever you revise an override.
+
+> **`base_sha` is a DISTRIBUTION sha — not one from this repo (Rule 27(a)).**
+> The reconcile runs `git diff <base_sha>..<theirs>` inside the *distribution*
+> checkout. A sha copied from your own project's history (e.g. the
+> `chore(ai-dlc-update): reconcile …` commit that performed the last pull) does
+> not exist there, the diff dies on `fatal: bad revision`, and drift detection is
+> **silently dead** for that entry. A real consumer had this on 5 of 12 overrides
+> and lost two upstream changes to a stale shadow without any warning.
+> Rule of thumb: **a correct `base_sha` never resolves in your own repo.**
+> `scripts/validate-layer-entries.sh` errors on a poisoned one;
+> `/ai-dlc-update` reports it as HARD and refuses to `apply` until it is fixed. This residual three-way
 is small but not zero — it is the price of deliberately diverging from a core rule.
 
 ## Authoring routing (§7.1 — enforced)

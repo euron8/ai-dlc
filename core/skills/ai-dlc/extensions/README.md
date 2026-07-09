@@ -50,9 +50,27 @@ and wrongly report every role hook missing.
 
 - **Additive only.** An extension ADDS behavior; it never edits a core rule. To
   *change* an existing core rule, use `overrides/` instead.
+  - **A restriction is not an addition.** "Only X and Y are valid", "Z is NOT
+    subject to", any closed enumeration of what core accepts — these *narrow* a
+    core rule and belong in `overrides/` with a `base_sha`. Filed here they carry
+    no drift anchor, so when core grows a third valid value your entry silently
+    starts contradicting it. This happened: a consumer's
+    `artifact-consolidation-push.md` asserted three valid targets, upstream added a
+    fourth, and both statements loaded.
+  - **Never restate a core section.** Same heading, or the same step number with
+    the same title, means the rendered file defines it twice and a "Step 5c"
+    reference becomes ambiguous. An extension's body is *added* to core, not merged
+    with it.
 - **`push_candidate: true`** marks a generalizable improvement. `ai-dlc-update`
   drains flagged extensions as the push backlog (spec §8.1) — the pull tool
   produces the push queue as a side effect.
+- **Retire on absorption (Rule 27(b)).** When upstream lands your entry's content
+  in core, DELETE the entry. `/ai-dlc-update` flags it as
+  `EXTENSION-RETIRE-CANDIDATE`; upstream never writes this directory, so it cannot
+  remove it for you. An absorbed-but-kept extension is the single most common way a
+  layer rots: it starts as an exact duplicate and diverges from there.
+
+**Validate any entry you author or revise:** `scripts/validate-layer-entries.sh`.
 
 ## Authoring routing (§7.1 — enforced)
 
