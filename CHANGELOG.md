@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.33.2] — 2026-07-09
+
+Absorb a consumer push-candidate: gate-log is not a consolidation target, and the
+retro audit must stop routing it to one. Surfaced when v0.33.0 added
+`architecture.md` as a consolidation target and a consumer extension
+(`artifact-consolidation-push.md`, flagged `push_candidate: true`) contradicted
+core by asserting a **closed allowlist** of valid targets. Interrogating it found
+a real upstream incoherence the extension was patching locally.
+
+- **`steps/artifact-consolidation.md` — declare the gate-log exclusion.**
+  Append-only logs are bounded by *rotation* (Rule 25(c)), not consolidation: a
+  live log never accretes the per-sprint narrative and superseded versions this
+  step collapses. Stated deliberately as an **exclusion, not a closed allowlist**
+  — adding a fifth living artifact must not require editing that paragraph, which
+  is exactly the staleness that made the consumer extension contradict core.
+- **`steps/retro.md` — route the size-audit remedy by bounding mechanism.** The
+  Rule 25(d) audit measures live `gate-log.md` at 25k and, on breach, recommended
+  `artifact-consolidation.md` — a step that (since v0.33.0) enumerates targets not
+  including it. The audit now recommends **rotation** for append-only logs and
+  consolidation only for living planning artifacts. A live log over threshold
+  means a rotation was missed, not that it needs a fidelity-critical rewrite.
+- Cites Rule 25(c) only. The consumer extension's `retro.md` "Step 5e" anchor is
+  consumer-local and does not exist upstream — carrying it over would have shipped
+  a dangling pointer of exactly the kind the retro relocation-pointer scan hunts.
+
+Consumers carrying `extensions/steps-domain/artifact-consolidation-push.md` should
+**retire it** after pulling this release — its content is now upstream, and its
+closed-allowlist phrasing is the defect.
+
 ## [0.33.1] — 2026-07-09
 
 Fix v0.33.0's delivery gap: `gen-architecture-index.js` never reached consumers.
