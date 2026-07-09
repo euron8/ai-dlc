@@ -17,6 +17,23 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.33.1] — 2026-07-09
+
+Fix v0.33.0's delivery gap: `gen-architecture-index.js` never reached consumers.
+
+- **Ship `gen-architecture-index.js` (`core/scripts/`, `install.sh`).** v0.33.0
+  wrote the generator to the distribution's ROOT `scripts/` — maintainer-only
+  tooling (`install.sh`, `check-version.sh`, `audit-machinery-efficacy.js`), which
+  is never distributed. Only `core/scripts/<x>` maps to a consumer's
+  `scripts/<x>` (via `install.sh`'s copy loop and `ai-dlc-update`'s path mapping),
+  so a consumer following the v0.33.0 migration block hit "script doesn't exist"
+  at step 2. Moved to `core/scripts/gen-architecture-index.js`, marked executable,
+  and registered in `install.sh`'s copy list. Consumer-facing references in
+  `steps/architecture.md` §4a, `steps/artifact-consolidation.md`, and the
+  migration block were already correct (`scripts/gen-architecture-index.js`) and
+  are unchanged. Next `ai-dlc-update` pull delivers it as a pure
+  `UPSTREAM-ONLY-ADD`.
+
 ## [0.33.0] — 2026-07-08
 
 Architecture-doc size discipline — close the one gap in Rule 25's living-artifact
