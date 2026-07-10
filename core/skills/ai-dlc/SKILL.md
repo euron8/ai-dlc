@@ -735,8 +735,13 @@ a planning artifact to "refresh" — that permanently duplicates it into
 the working context. The pipeline snapshot is the authoritative source
 for prior-step state (per the Handoff Protocol); query it instead of
 re-loading the producing artifact. State files the gate checks must
-re-verify (`gate-log.md`, `pipeline-snapshot.md`) are exempt — they
-are small and their re-read is the verification.
+re-verify (`gate-log.md`, `pipeline-snapshot.md`) are exempt — their
+re-read IS the verification. That exemption is conditional on their
+staying small, which is not automatic. The snapshot is the most-read
+file in the pipeline (every gate, every resume, every compaction
+recovery) and carries the tightest Rule 25(d) threshold of any
+artifact. Enforce its schema at each gate rather than letting it
+accrete.
 
 **(b) Sliced re-read of large step files.** When a Rule 22 resume
 targets a large step file whose earlier numbered sections are already

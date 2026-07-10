@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.35.3] — 2026-07-10
+
+The recovery hook never worked. Found by reviewing three real auto-compactions on
+the live `graph` consumer — the first time the machinery ran outside a fixture.
+
+**Claude Code persists any hook `additionalContext` of >= 10,000 characters to a
+file and replaces it in context with a 2,000-character preview stub.** Measured
+across every transcript on the machine: 4,385 inline blocks, largest 9,983 chars;
+everything above was stubbed. `ai-dlc-recover.sh` emitted **31,881** characters,
+so on all three compactions the snapshot was NEVER injected. Only the leading
+2,000 characters survived, and only by luck of ordering — the directive happened
+to be at the top. The design's central claim ("the snapshot is placed back into
+context by the harness, unconditionally") was false as shipped.
+
+Worse, the log said otherwise. `ai-dlc-postcompact.sh` reported
+`recovery_injected: yes` on all three because it only checked for the marker file
+`ai-dlc-recover.sh` writes unconditionally. Actual behaviour: compaction #1 read
+the snapshot of its own accord and recovered fully; #2 skipped the snapshot; #3
+emitted no acknowledgement, no verification turn, and no snapshot read at all.
+
+- **`ai-dlc-recover.sh` inverted.** It no longer inlines the snapshot. It emits a
+  ~3.7 KB directive whose FIRST instruction is `Read _bmad-output/pipeline-snapshot.md`
+  in full, plus a bounded `Pipeline Position` excerpt for orientation. This is the
+  better design regardless of the cliff: the snapshot is a verbatim-load file
+  (`ai-dlc-protect.sh` exists to stop it being consolidated) and a `Read` is the
+  Rule 21 attention interrupt. Emitted size is now invariant to snapshot size —
+  3,679 chars against a 32 KB snapshot and against a 232 KB one. The block is
+  measured and trimmed (Position excerpt drops first) before emission, because an
+  over-limit block is not truncated by the harness, it is replaced wholesale.
+  Ceiling configurable via `AI_DLC_HOOK_CONTEXT_LIMIT` / `_MARGIN`.
+- **The log tells the truth.** `recover.sh` records `injected_bytes` and
+  `degraded` in its marker; `postcompact` reports `recovery_injected: yes |
+  degraded-persisted | no` plus `injected_bytes`. `degraded` tests against the
+  real 10,000 cliff, not the trim ceiling.
+- **`session_continuity` folded in.** context-mode's own SessionStart block is
+  ~11.5 KB on long sessions and hits the same cliff, so its `<session_continuity>`
+  section — "captured directives are a memory aid, not a standing order" — is
+  stripped from context at exactly the moment the lead reaches for auto-memory.
+  `ai-dlc-recover.sh` now states it beside the `ctx_search` call it mandates.
+- **`pipeline-snapshot.md` registered into the Rule 25 rails** — 6k-token
+  threshold, the tightest of any artifact, because it is the most-read file in the
+  pipeline (every gate, every resume, every compaction recovery). Its remedy is
+  schema trimming (Rule 25(a), `Recent Activity` <= ~10 entries, history to
+  `pipeline-snapshot-history.md`), never consolidation. Its unchecked growth to
+  32,765 bytes on `graph` is what pushed the injection over the cliff. Rule 23(a)'s
+  claim that these state files "are small" is corrected: the exemption is
+  conditional, not automatic.
+
 ## [0.35.2] — 2026-07-10
 
 Patch. `layer-drift.sh` (v0.34.0) reported only ONE anchor per override.

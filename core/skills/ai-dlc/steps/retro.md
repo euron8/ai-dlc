@@ -592,7 +592,7 @@ canonical, configurable Rule 25(d) threshold defaults (a project
 overrides them here):
 `prd.md` 60k tokens, `product-brief.md` 60k,
 `carry-over-backlog.md` 40k, live `gate-log.md` 25k,
-live `compaction-log.md` 10k,
+live `compaction-log.md` 10k, `pipeline-snapshot.md` 6k,
 `docs/architecture.md` 60k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning
 in the retro doc naming the artifact, its size, and the threshold, and
@@ -607,6 +607,15 @@ recommend the remedy matching that artifact's bounding mechanism:
   targets. A `compaction-log.md` large enough to breach its threshold is
   itself a finding: the sprint compacted repeatedly, and every entry with
   `recovery_injected: no` is a turn the lead resumed from the summary alone.
+- **`pipeline-snapshot.md`** → recommend **trimming to its schema** (Rule 25(a)),
+  never consolidation. Its threshold is the tightest of any artifact because it
+  is the most-read file in the pipeline: whole-read at every gate (Checks 14/15),
+  on every resume, and by `ai-dlc-recover.sh` after every compaction. The
+  `Recent Activity` section holds the last ~10 entries and nothing more
+  (`gate-validation.md` Check 14); superseded narrative and handoff appendices
+  move to `pipeline-snapshot-history.md`, which is write-only. A snapshot over
+  threshold means the schema stopped being enforced at gate passages, and the
+  gates that let it grow are the finding — not the file.
 
 This NEVER blocks the pipeline and the
 retro NEVER runs the consolidation itself — consolidation is a
