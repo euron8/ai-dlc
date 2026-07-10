@@ -370,13 +370,16 @@ pushed a critical rule past the re-attach boundary — FAIL and reorder so
 the critical set precedes the cut before committing. Rules 21–26,
 INITIALIZATION, and `## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT
 THRESHOLDS` are second-tier by the file's own design ("may sit past
-the 5K boundary") and are NOT required within 5K. Note the check tests the
-POST-COMPACT *heading*: also confirm the section's whole body precedes the
-cut, since a protocol truncated by the event it handles is worthless. Record both invariants'
-results in the retro doc under `## Rule File Audit` in a
-`Relocation-pointer + resident-ordering scan` sub-section: pointers
-checked (count + any dangling), and the measured token offset of
-POST-COMPACT + Rules 3/4/11 with IN/OUT verdicts.
+the 5K boundary") and are NOT required within 5K. The node check tests the
+POST-COMPACT *heading* start; the section's whole *body* must also precede
+the cut (a protocol truncated by the event it handles is worthless). That
+body invariant is mechanized — run `scripts/validate-reattach-budget.sh`,
+which FAILS if the protocol's END offset exceeds the re-attach window; a
+non-zero exit is a hard audit failure. Record all three results in the retro
+doc under `## Rule File Audit` in a `Relocation-pointer + resident-ordering
+scan` sub-section: pointers checked (count + any dangling), the measured
+token offset of POST-COMPACT + Rules 3/4/11 with IN/OUT verdicts, and the
+`validate-reattach-budget.sh` PASS/FAIL with its slack figure.
 
 **3. Every `GATE_MANIFEST` check ID resolves to a live check anchor, and
 every check anchor is claimed by the manifest.** The gate-type
