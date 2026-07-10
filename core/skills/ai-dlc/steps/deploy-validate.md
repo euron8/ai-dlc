@@ -262,6 +262,9 @@ before proceeding to Sprint 2."]
 
 ### 6. Wait for Human
 
+First, mark the pause so the Stop hook does not push you past this
+checkpoint (Rule 3): `touch _bmad-output/pipeline-paused.flag`.
+
 **STOP.** Wait for the human to:
 1. Review the deployed production instance
 2. Review any `DECIDED_AUTONOMOUSLY` entries

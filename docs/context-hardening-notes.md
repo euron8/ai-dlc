@@ -93,7 +93,7 @@ is a HARD_BLOCK (snapshot writer broken).
 ### R7 — Snapshot integrity validation on resume
 
 `route.md` Step 0a runs before dispatch on any resume. Four
-integrity checks: (1) all five required sections present, (2)
+integrity checks: (1) all six required sections present, (2)
 `current_step_file` exists on disk, (3) git branch matches the
 snapshot's recorded branch, (4) `last_gate_passed` is within 7
 days (warn otherwise). Failures surface with specific remediation

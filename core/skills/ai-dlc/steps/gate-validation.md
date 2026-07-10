@@ -147,7 +147,8 @@ Two arms, either satisfies (dual-arm OR):
 
 - Read `docs/escalations/pending.md` (if it exists).
 - If any entry has status `HARD_BLOCK` and is not RESOLVED, do NOT
-  proceed. Report the block and wait for human input.
+  proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
+  report the block and wait for human input.
 - `DECIDED_AUTONOMOUSLY` entries do not block. They are informational.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
   pipeline. Proceed with non-deferred work.

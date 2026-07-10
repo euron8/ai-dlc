@@ -105,8 +105,15 @@ region untouched.
   append the template's hook blocks. Because the strip/re-append is
   wholesale over all `ai-dlc-*` hooks, the current template's hook set —
   including the `ai-dlc-protect.sh` PreToolUse matcher (re-added in
-  v0.23.0) — lands verbatim; a consumer that carried an older or absent
-  protect block converges to the template's.
+  v0.23.0) and the `PreCompact` / `PostCompact` / `SessionStart` compaction
+  hooks (added in v0.35.0) — lands verbatim; a consumer that carried an older
+  or absent block converges to the template's. The event-key set is a union of
+  the consumer's and the template's, so a new event key needs no migration.
+  **`strip_ai_dlc` is per-block, never per-event, and this now matters.**
+  `SessionStart` is the first event key ai-dlc shares with tools outside it
+  (context-mode and caveman both register `SessionStart` hooks). Stripping the
+  whole event would silently delete a consumer's own hooks; stripping the
+  matching blocks leaves them in place beside ai-dlc's.
 - **enabledPlugins:** additive-only, NEVER remove. install.sh's merge is
   `$t + $u` (user wins); the reconcile follows the same rule — overlay the
   template's plugin keys onto the consumer and never drop a plugin the template

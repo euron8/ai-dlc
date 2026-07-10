@@ -55,8 +55,8 @@ operations may require continuing past both reminder thresholds,
 and the user's judgment is authoritative. Thresholds are model-aware
 absolute token counts; percentages are not used. Full snapshot
 structure, reminder text, recurrence arithmetic, and auto-handoff
-configuration live in the **Handoff Protocol and Pipeline Snapshot**
-section below and in `gate-validation.md` Check 14.
+configuration live in the two **Handoff Protocol** sections below and
+in `gate-validation.md` Check 14.
 
 ### Rule 3 -- Never stall the pipeline
 
@@ -66,6 +66,13 @@ THREE pause points exist where you stop and wait for human input:
 - (a) **Ambiguity resolution** (Rule 11).
 - (b) **Production Validation Checkpoint** (Rule 10).
 - (c) **Retro commentary prompt**.
+
+At a pause point -- and at any terminal STOP or integrity failure that
+awaits a human -- `touch _bmad-output/pipeline-paused.flag` before
+ending the turn. The Stop hook recognizes an intentional pause by that
+flag alone; without it your pause reads as a stall and the hook returns
+a forced-continuation reason urging you to pair the text with a tool
+call, pushing you past the very checkpoint you stopped at.
 
 If you are not at one of these three pause points, you are not done.
 Keep working. Do not ask if you should continue.
@@ -303,34 +310,6 @@ The snapshot is the source of truth for pipeline state. When
 uncertain about current state, read the snapshot, not the
 conversation scrollback.
 
-### Handoff triggers
-
-**(a) Human-requested handoff** -- user explicitly asks to continue
-in a new session (directly, or in response to a Rule 2(b)/(c)
-reminder). Rule 11(b) preamble applies. Only path (a) initiates a
-handoff. When it fires, **READ AND FOLLOW** `steps/handoff.md` — the
-ordered 5-step procedure (stop teammates → commit → finalize snapshot →
-emit the bare `/ai-dlc resume` line → pause flag + end session) and the
-resume-line template. Resume is snapshot-driven: the entry line carries
-no state; `route.md` Step 0 reads `_bmad-output/pipeline-snapshot.md`
-for all of it. Never narrate pipeline state into the resume line.
-
-Auto-handoff (below) executes this same `steps/handoff.md` procedure
-unchanged at a safe seam.
-
-### Pending operator approvals do not transfer across handoff
-
-A resume prompt is never an operator approval for a pending gate. When a
-handoff crosses a gate that awaits human sign-off, the successor session
-MUST re-present that gate and obtain fresh in-session approval — even if
-the resume text says "execute ... on my approval" or "proceed once
-resumed." Approval is bound to the session that granted it; it does not
-survive into a new conversation. This applies to every human gate: the
-sprint-PR merge, the Production Validation Checkpoint, a
-`DEFERRAL_REQUEST`, a destructive one-time operation, and any HARD_BLOCK
-disposition. Treating resume text as standing approval is a rule
-violation.
-
 ### No self-scheduling skill re-entry
 
 A self-scheduled wake-up (ScheduleWakeup, cron, or any deferred
@@ -341,58 +320,13 @@ and a stale snapshot. As defense-in-depth, a resume that appears to have
 been fired by the lead's own prior self-schedule rather than a human
 paste MUST be discarded.
 
-### Threshold defaults
-
-| Model context window | Yellow (first reminder) | Red (urgent reminder) |
-|---|---|---|
-| 200K | 80K tokens | 120K tokens |
-| 1M   | 120K tokens | 200K tokens |
-
-Projects override defaults by editing the table above directly.
-Absolute token counts, not percentages.
-
-### Reminder semantics
-
-The lead cannot reliably self-measure its own context window. The
-user is the source of truth; user-shared `/context` output is the
-authoritative trigger. The lead MAY invite the user to share
-`/context` at any point.
-
-Full reminder text, Mode 1 / Mode 2 distinction, recurrence
-arithmetic (50K-token / 20-turn delta), and fire-state snapshot
-fields are in `gate-validation.md` Check 14. Reminders are
-non-blocking one-line outputs; the pipeline continues after each
-reminder. Any user reply to a reminder is a Rule 11 directive.
-
-### Auto-handoff (configurable via `auto_handoff_mode`)
-
-The lead MAY automatically execute the path (a) procedure
-(`steps/handoff.md`) at a defined safe seam when all preconditions hold.
-Auto-handoff is NOT a fourth pause point -- it is a session-terminating
-action that runs the path (a) procedure unchanged, and resume itself is
-never automated.
-
-`auto_handoff_mode` values (projects override the default in this
-section directly):
-
-- `off` (default) -- disabled; only human-requested handoff fires.
-- `deploy-only` -- fires only at `Seam A` (pre-deploy preflight in
-  `deploy-validate.md`), and only when red is confirmed via Mode 1
-  (user-shared `/context`).
-- `safe-seam` -- fires at any defined safe seam (`Seam A` through
-  `Seam E`); the seam is the trigger and the token *magnitude* is
-  advisory (the fire itself is mandatory once the seam is reached and
-  preconditions pass — never a discretionary "is the context large
-  enough" or "the user is still active" judgment; see `_gate-procedures.md`
-  "Auto-handoff evaluation").
-
-The full firing rules -- the seven-precondition evaluation, the per-mode
-trigger basis, the resume-safety and clean-boundary constraints, the
-distinguishing output line, and the seam definitions (including `Seam E`,
-retro entry) -- live in `_gate-procedures.md` \"Auto-handoff evaluation\".
-Step files invoke that helper at each seam.
-
 ## POST-COMPACT RECOVERY PROTOCOL
+
+The `ai-dlc-recover.sh` hook re-injects the snapshot automatically on
+every compaction, as a block headed "AI/DLC POST-COMPACT RECOVERY".
+When that block is present, follow it -- it is authoritative and this
+section adds nothing. What follows is the fallback for when the hook
+is absent, disabled, or reports that its injection was truncated.
 
 If the previous user turn was `/compact` or an auto-compact event, OR
 if the agent observes signs the conversation history has been
@@ -430,6 +364,134 @@ the handoff protocol appear missing from its context, the fallback is
 to ask the user to re-invoke `/ai-dlc` to restore full skill content.
 Do not guess at rules the skill should contain; state clearly that
 content may be missing and request re-invocation.
+
+## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS
+
+Continues the Handoff Protocol above; step files cite these subsections
+as `SKILL.md` Handoff Protocol "<subsection>".
+
+Second-tier by design: these govern when to hand off and when to warn on
+context, both of which are re-encountered at the next gate via
+`gate-validation.md` Check 14 and `_gate-procedures.md`. They may sit past
+the 5,000-token post-compact re-attach boundary. The recovery protocol
+above may not -- it is the one section that must survive the event it
+handles, so nothing may be inserted ahead of it without re-measuring.
+
+### Handoff triggers
+
+**(a) Human-requested handoff** -- user explicitly asks to continue
+in a new session (directly, or in response to a Rule 2(b)/(c)
+reminder). Rule 11(b) preamble applies. Only path (a) initiates a
+handoff. When it fires, **READ AND FOLLOW** `steps/handoff.md` — the
+ordered 5-step procedure (stop teammates → commit → finalize snapshot →
+emit the bare `/ai-dlc resume` line → pause flag + end session) and the
+resume-line template. Resume is snapshot-driven: the entry line carries
+no state; `route.md` Step 0 reads `_bmad-output/pipeline-snapshot.md`
+for all of it. Never narrate pipeline state into the resume line.
+
+Auto-handoff (below) executes this same `steps/handoff.md` procedure
+unchanged at a safe seam.
+
+### Pending operator approvals do not transfer across handoff
+
+A resume prompt is never an operator approval for a pending gate. When a
+handoff crosses a gate that awaits human sign-off, the successor session
+MUST re-present that gate and obtain fresh in-session approval — even if
+the resume text says "execute ... on my approval" or "proceed once
+resumed." Approval is bound to the session that granted it; it does not
+survive into a new conversation. This applies to every human gate: the
+sprint-PR merge, the Production Validation Checkpoint, a
+`DEFERRAL_REQUEST`, a destructive one-time operation, and any HARD_BLOCK
+disposition. Treating resume text as standing approval is a rule
+violation.
+
+### Threshold defaults
+
+| Model context window | Yellow (first reminder) | Red (urgent reminder) |
+|---|---|---|
+| 200K | 80K tokens | 120K tokens |
+| 1M   | 120K tokens | 200K tokens |
+
+Projects override defaults by editing the table above directly.
+Absolute token counts, not percentages.
+
+Red MUST fire before Claude Code's auto-compact threshold -- see
+"Auto-compact ordering invariant" below. The check is mechanized in
+`scripts/validate-compact-window.sh`.
+
+### Reminder semantics
+
+The lead cannot reliably self-measure its own context window. The
+user is the source of truth; user-shared `/context` output is the
+authoritative trigger. The lead MAY invite the user to share
+`/context` at any point.
+
+Full reminder text, Mode 1 / Mode 2 distinction, recurrence
+arithmetic (50K-token / 20-turn delta), and fire-state snapshot
+fields are in `gate-validation.md` Check 14. Reminders are
+non-blocking one-line outputs; the pipeline continues after each
+reminder. Any user reply to a reminder is a Rule 11 directive.
+
+### Auto-compact ordering invariant
+
+Claude Code compacts when the context reaches `effectiveWindow - 13000`,
+where `effectiveWindow` is `min(autoCompactWindow, model max)` and
+`autoCompactWindow` is an integer in `[100000, 1000000]` set in
+`.claude/settings.json`, via `/config`, or by
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`. That threshold must satisfy:
+
+```
+red + MIN_SLACK  <  threshold  <  red + MAX_DRIFT
+```
+
+with `MIN_SLACK` 50,000 and `MAX_DRIFT` 100,000 by default.
+
+The lower bound exists because compaction is strictly lower-fidelity
+than the handoff: `/clear` + `/ai-dlc resume` rehydrates from a
+schema'd, gate-verified snapshot, while compaction keeps a lossy
+summary of unknown content. Red must fire first so the handoff gets
+first refusal. A threshold near the resident prefix is worse still --
+every post-compact turn refills immediately, and three such refills
+trip Claude Code's rapid-refill breaker, which terminates the session.
+
+The upper bound bounds the damage when red is ignored (an unattended
+run, or `auto_handoff_mode: off`). On a 1M model the default threshold
+is 987,000, some 787,000 tokens past red -- long enough to complete a
+sprint entirely inside a degraded context. Setting `autoCompactWindow`
+to 300,000 moves the net to 287,000.
+
+AI/DLC does not write this value: the safe floor also depends on the
+project's fixed prefix, which the skill cannot measure. Run
+`scripts/validate-compact-window.sh` to check the invariant, and pass
+`--row` to scope it to the context size the project actually runs.
+
+### Auto-handoff (configurable via `auto_handoff_mode`)
+
+The lead MAY automatically execute the path (a) procedure
+(`steps/handoff.md`) at a defined safe seam when all preconditions hold.
+Auto-handoff is NOT a fourth pause point -- it is a session-terminating
+action that runs the path (a) procedure unchanged, and resume itself is
+never automated.
+
+`auto_handoff_mode` values (projects override the default in this
+section directly):
+
+- `off` (default) -- disabled; only human-requested handoff fires.
+- `deploy-only` -- fires only at `Seam A` (pre-deploy preflight in
+  `deploy-validate.md`), and only when red is confirmed via Mode 1
+  (user-shared `/context`).
+- `safe-seam` -- fires at any defined safe seam (`Seam A` through
+  `Seam E`); the seam is the trigger and the token *magnitude* is
+  advisory (the fire itself is mandatory once the seam is reached and
+  preconditions pass — never a discretionary "is the context large
+  enough" or "the user is still active" judgment; see `_gate-procedures.md`
+  "Auto-handoff evaluation").
+
+The full firing rules -- the seven-precondition evaluation, the per-mode
+trigger basis, the resume-safety and clean-boundary constraints, the
+distinguishing output line, and the seam definitions (including `Seam E`,
+retro entry) -- live in `_gate-procedures.md` \"Auto-handoff evaluation\".
+Step files invoke that helper at each seam.
 
 ## ADDITIONAL OPERATING RULES
 

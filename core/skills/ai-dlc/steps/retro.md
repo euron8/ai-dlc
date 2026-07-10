@@ -348,7 +348,8 @@ flag:** runtime artifacts and project files that exist only in an
 installed project, not in the skill source (`_bmad-output/**`, `docs/**`,
 `CLAUDE.md`, and the living/runtime artifacts `prd.md`,
 `product-brief.md`, `carry-over-backlog.md`, `gate-log.md`,
-`pipeline-snapshot.md`, `audit-anchors.md` and their `*-history` /
+`pipeline-snapshot.md`, `pipeline-snapshot.precompact.md`,
+`compaction-log.md`, `audit-anchors.md` and their `*-history` /
 `*-archive` variants). A skill-content pointer whose target is missing is
 a dangling reference — FAIL the audit and either restore the target or
 correct the pointer. Zero dangling skill-content pointers is the pass
@@ -366,9 +367,12 @@ node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/SKILL.md','ut
 
 Any target reported `OUT` means a relocation (or an addition ahead of it)
 pushed a critical rule past the re-attach boundary — FAIL and reorder so
-the critical set precedes the cut before committing. Rules 21–26 and
-INITIALIZATION are second-tier by the file's own design ("may sit past
-the 5K boundary") and are NOT required within 5K. Record both invariants'
+the critical set precedes the cut before committing. Rules 21–26,
+INITIALIZATION, and `## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT
+THRESHOLDS` are second-tier by the file's own design ("may sit past
+the 5K boundary") and are NOT required within 5K. Note the check tests the
+POST-COMPACT *heading*: also confirm the section's whole body precedes the
+cut, since a protocol truncated by the event it handles is worthless. Record both invariants'
 results in the retro doc under `## Rule File Audit` in a
 `Relocation-pointer + resident-ordering scan` sub-section: pointers
 checked (count + any dangling), and the measured token offset of
@@ -588,6 +592,7 @@ canonical, configurable Rule 25(d) threshold defaults (a project
 overrides them here):
 `prd.md` 60k tokens, `product-brief.md` 60k,
 `carry-over-backlog.md` 40k, live `gate-log.md` 25k,
+live `compaction-log.md` 10k,
 `docs/architecture.md` 60k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning
 in the retro doc naming the artifact, its size, and the threshold, and
@@ -595,10 +600,13 @@ recommend the remedy matching that artifact's bounding mechanism:
 - **Living planning artifacts** (`prd.md`, `product-brief.md`,
   `carry-over-backlog.md`, `docs/architecture.md`) → recommend the operator
   run the one-shot consolidation step (`artifact-consolidation.md`).
-- **Append-only logs** (live `gate-log.md`) → recommend **rotation**, not
-  consolidation (Rule 25(c)). A live log over threshold means a rotation was
-  missed, not that it needs a fidelity-critical rewrite —
-  `artifact-consolidation.md` rejects logs as targets.
+- **Append-only logs** (live `gate-log.md`, live `compaction-log.md`) →
+  recommend **rotation**, not consolidation (Rule 25(c)). A live log over
+  threshold means a rotation was missed, not that it needs a
+  fidelity-critical rewrite — `artifact-consolidation.md` rejects logs as
+  targets. A `compaction-log.md` large enough to breach its threshold is
+  itself a finding: the sprint compacted repeatedly, and every entry with
+  `recovery_injected: no` is a turn the lead resumed from the summary alone.
 
 This NEVER blocks the pipeline and the
 retro NEVER runs the consolidation itself — consolidation is a
@@ -646,6 +654,9 @@ sprint is ship-quality when EITHER counter reaches 5/5.
 Present the retro summary and ask:
 
 "Retro complete. Any comments or questions before I close out the sprint?"
+
+Before ending the turn, mark the pause (Rule 3):
+`touch _bmad-output/pipeline-paused.flag`.
 
 Wait for the human's response. If they have commentary:
 - Incorporate it into the retro doc
@@ -921,5 +932,9 @@ Copy the prompt below to start the next sprint.
 Replace the bracketed placeholders with actual content. The prompt body
 between the `----` markers must be directly pasteable — no meta
 commentary, no "here is your prompt", no surrounding quotes.
+
+Mark the pause before ending the turn (Rule 3 — the snapshot outlives
+the sprint, so without the flag the Stop hook blocks this terminal
+turn): `touch _bmad-output/pipeline-paused.flag`.
 
 **STOP.**
