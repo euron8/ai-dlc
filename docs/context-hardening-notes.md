@@ -1142,3 +1142,43 @@ above; the rest is captured here by source.
   superseded stale "Check 15" citations in `implementation.md` that pointed at
   the snapshot-verification check by mistake — a one-time correction, not
   reusable design rationale.
+
+### From step files (Phase B)
+
+- **Protected-path delegation history (moved from `implementation.md` L57–58).**
+  The lead reviewing the `protected-path-editor`'s diff before merge is the
+  lead-owned safety that *replaced* the former lead-only execution of
+  protected-path edits — Rule 28 made the edit delegable, and the diff review is
+  what preserves the safety the inline execution used to provide.
+- **`architecture_refs` placement rationale (moved from
+  `stories-test-strategy.md` L208–210).** The field is populated at authoring
+  time, where the architecture design is fresh and the touched sections are
+  known, because it is the slice target dev/qa read instead of whole-reading the
+  architecture doc — a large living artifact whole-read on every dispatch is the
+  single largest read cost in the pipeline (Rule 25).
+- **History-rotation evidence (moved from `architecture.md` L52–54).** The
+  "no per-sprint Architecture Addendum" rule exists because that accretion
+  pattern grew one consumer's `architecture.md` past 500K tokens, making every
+  dev/qa/architect read dominate pipeline cost.
+- **Next-sprint validation purpose (reworded in `sprint-review-next.md`
+  L11–14).** The step validates next-sprint stories against the previous sprint
+  because a multi-sprint transition must not skip the validation cycle — the
+  prior sprint's implementation may have surfaced issues that affect upcoming
+  stories. Kept as a plain purpose statement, dropped the "this step exists
+  because" framing.
+
+### From layer READMEs (Phase B)
+
+- **`base_sha` poisoning evidence (moved from `overrides/README.md` L47–48).** A
+  real consumer had a project-repo sha (not a distribution sha) on 5 of 12
+  overrides and lost two upstream changes to a stale shadow without any warning —
+  the concrete case behind "a correct `base_sha` never resolves in your own repo."
+- **Extension-restriction evidence (moved from `extensions/README.md`
+  L57–59).** A consumer's `artifact-consolidation-push.md` asserted three valid
+  targets as an extension (no drift anchor); upstream added a fourth and both
+  statements loaded — the concrete case behind "a restriction belongs in
+  `overrides/`, not `extensions/`."
+- **Fencing rationale Phase-1 aside (deleted from `extensions/README.md` L10,
+  recoverable from git).** The clause "never the whole-rulebook tangle Phase 1
+  had to untangle" referenced the original layered-rulebook migration; the
+  operational point (fencing keeps `core` byte-reconcilable) stands without it.

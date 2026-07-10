@@ -54,8 +54,8 @@ to a `protected-path-editor` teammate (from
 — NOT execute it inline (Rule 28: protected-path editing is delegable,
 not lead-only) and NOT delegate it to a dev teammate. The
 `protected-path-editor` returns a review-ready diff; the lead reviews
-the diff before merging it (the lead-owned safety that replaces the old
-lead-only execution). Stories with `single_dev_serialized: true` MUST
+the diff before merging it (the lead-owned safety on a delegated edit).
+Stories with `single_dev_serialized: true` MUST
 NOT be dispatched to parallel teammates that touch the same protected
 file — protected-path stories are dispatched one at a time. Lead MAY
 invoke validation sub-skills via the Skill tool per Rule 20. Catalog and

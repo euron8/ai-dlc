@@ -379,7 +379,7 @@ checked (count + any dangling), and the measured token offset of
 POST-COMPACT + Rules 3/4/11 with IN/OUT verdicts.
 
 **3. Every `GATE_MANIFEST` check ID resolves to a live check anchor, and
-every check anchor is claimed by the manifest.** The v0.24.0 Lever-2
+every check anchor is claimed by the manifest.** The gate-type
 slicing (`gate-validation.md` "Gate-type manifest") loads checks by gate
 type; a manifest ID with no matching check, or a check with no manifest
 claim, silently mis-slices a gate. Two-way resolve against

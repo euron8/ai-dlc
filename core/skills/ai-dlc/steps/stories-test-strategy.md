@@ -205,9 +205,7 @@ story's implementation and NFR validation need. Populate it here, at authoring
 time, where the architecture design is fresh and the touched sections are known
 (the party-mode SM+Architect walk in step 4 refines it). This field is the
 **slice target** the dev and qa role contracts read instead of whole-reading the
-architecture doc (`dev.md`/`qa.md` Context Loading): a large living artifact
-whole-read on every dispatch is the single largest read cost in the pipeline
-(Rule 25).
+architecture doc (`dev.md`/`qa.md` Context Loading), per Rule 25.
 
 - Each entry is a section anchor/title that exists in `architecture.md` (or its
   regenerated `docs/architecture-index.md`). Verify each referenced section

@@ -7,7 +7,7 @@ This is where a consumer's *net-new* machinery lives — rules, gate-checks, and
 domain step logic that upstream intentionally does not carry. Fencing it here
 (instead of editing core in place) is what keeps `core` byte-reconcilable with
 upstream, so a pull is a clean overwrite of core plus a small `overrides/` merge
-— never the whole-rulebook tangle Phase 1 had to untangle.
+— never a whole-rulebook tangle.
 
 ## Layout
 
@@ -54,9 +54,7 @@ and wrongly report every role hook missing.
     subject to", any closed enumeration of what core accepts — these *narrow* a
     core rule and belong in `overrides/` with a `base_sha`. Filed here they carry
     no drift anchor, so when core grows a third valid value your entry silently
-    starts contradicting it. This happened: a consumer's
-    `artifact-consolidation-push.md` asserted three valid targets, upstream added a
-    fourth, and both statements loaded.
+    starts contradicting it.
   - **Never restate a core section.** Same heading, or the same step number with
     the same title, means the rendered file defines it twice and a "Step 5c"
     reference becomes ambiguous. An extension's body is *added* to core, not merged

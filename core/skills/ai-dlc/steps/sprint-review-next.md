@@ -8,10 +8,9 @@ nextStepFile: ./implementation.md
 # Next Sprint Validation
 
 **Purpose:** Before implementing the next sprint, validate its stories
-against what was learned during the previous sprint. This step exists
-because multi-sprint transitions must not skip the validation cycle —
-the previous sprint's implementation may have surfaced issues that
-affect upcoming stories.
+against what was learned during the previous sprint. A multi-sprint
+transition must not skip the validation cycle — the previous sprint's
+implementation may have surfaced issues that affect upcoming stories.
 
 ## EXECUTION SEQUENCE
 

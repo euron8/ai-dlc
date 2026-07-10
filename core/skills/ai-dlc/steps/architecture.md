@@ -49,9 +49,9 @@ Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 **History rotation — bounded live doc (Rule 25(a), MANDATORY).** The
 architecture doc is a living artifact and MUST stay current-state, exactly like
 `prd.md`/`product-brief.md`/`carry-over-backlog.md`. Do NOT append a per-sprint
-"Architecture Addendum" that accretes forever — that pattern grew one consumer's
-`architecture.md` past 500K tokens, making every dev/qa/architect read dominate
-pipeline cost. Instead, for every update:
+"Architecture Addendum" that accretes forever — an unbounded doc is whole-read on
+every dev/qa/architect dispatch and comes to dominate pipeline cost. Instead, for
+every update:
 - **Fold the net change into the live current-state sections in place.** The
   live `architecture.md` holds what is *currently true*, consolidated — current
   components, data flows, and active ADRs.
