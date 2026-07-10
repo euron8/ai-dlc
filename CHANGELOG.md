@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.1] — 2026-07-10
+
+The v0.36.0 sensor was a Stop hook, and Stop only fires when the model ends its
+turn. The first real compaction under v0.36.0 exposed the gap: session `bd13dc14`
+ran `/ai-dlc resume` → auto-compact across **169 consecutive `tool_use` messages
+with zero `end_turn` boundaries**, so the sensor never sampled and context climbed
+77K → 270K with no reminder. Recovery still landed cleanly (`injected_bytes: 3873`,
+no degradation), but the imminent early-warning could not fire. Across `graph`, 19
+of 185 red-crossing sessions have ≤2 Stop boundaries — the turn-less autonomous
+runs are exactly the highest-risk ones.
+
+### Changed
+
+- `ai-dlc-context-sensor.sh` is now wired to **`PostToolBatch` as well as `Stop`**.
+  PostToolBatch fires once per tool batch, before the next model request, so it
+  samples during turn-less runs. Verified with a live headless probe that its
+  `additionalContext` reaches the model mid-run. The hook echoes whichever event
+  invoked it in `hookSpecificOutput.hookEventName`.
+- The `PostToolBatch` tail-read is **throttled**: it runs only once the transcript
+  has grown ~512KB (`AI_DLC_SENSOR_THROTTLE_BYTES`) since the last read, tracked as
+  `last_read_size` in the sidecar. `Stop` is never throttled. Measured on a 2.7MB
+  transcript: full read 60ms, throttled skip 27ms. The shared sidecar dedups, so
+  the extra event samples often but injects only on a level change or recurrence.
+  The first sample of a session (no sidecar) is never throttled.
+- `templates/settings.json.template` gains a `PostToolBatch` block. It propagates to
+  existing consumers automatically — `settings-merge.sh` and `install.sh` union the
+  event keys, so a new event needs no migration, and the per-block strip means the
+  sensor lands once on each event without duplication.
+
 ## [0.36.0] — 2026-07-10
 
 Rule 2's yellow/red reminders had no sensor. They exist so the high-fidelity

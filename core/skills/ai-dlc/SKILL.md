@@ -425,12 +425,25 @@ Red MUST fire before Claude Code's auto-compact threshold -- see
 
 ### Reminder semantics
 
-The `ai-dlc-context-sensor.sh` Stop hook measures resident context on
-every turn and fires the reminder automatically. It reads the last
-main-thread assistant `usage` from the session transcript and sums
+The `ai-dlc-context-sensor.sh` hook measures resident context and fires
+the reminder automatically. It reads the last main-thread assistant
+`usage` from the session transcript and sums
 `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
 -- Claude Code's own figure, equal to `compactMetadata.preTokens`.
 The lead does not self-measure and does not estimate.
+
+The hook runs on two events. `Stop` fires when the model ends its turn;
+`PostToolBatch` fires once per tool batch, before the next model
+request. Both are needed: an autonomous pipeline run can go hundreds of
+tool calls deep without ending a turn (a real `graph` session climbed
+77K -> 270K across 169 `tool_use` messages with zero `Stop` boundaries,
+so a Stop-only sensor never sampled and compaction fired unwarned).
+`PostToolBatch` catches exactly those turn-less runs. To bound its
+hot-path cost, the tail-read on `PostToolBatch` is throttled -- it runs
+only once the transcript has grown ~512KB since the last read (`Stop`
+is never throttled). The shared sidecar dedups either way, so the extra
+event samples often but injects only on a level change or the recurrence
+delta.
 
 User-shared `/context` output remains valid as manual confirmation or
 override, but it is no longer the trigger. The lead MAY still invite
