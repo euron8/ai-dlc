@@ -340,7 +340,7 @@ fi
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
 mkdir -p "$PROJECT_ROOT/scripts"
-for script in validate-provenance-block.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh gen-architecture-index.js; do
+for script in validate-provenance-block.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh gen-architecture-index.js; do
   if [ -f "$SCRIPT_DIR/../core/scripts/$script" ]; then
     cp "$SCRIPT_DIR/../core/scripts/$script" "$PROJECT_ROOT/scripts/"
     chmod +x "$PROJECT_ROOT/scripts/$script"

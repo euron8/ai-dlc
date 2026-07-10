@@ -17,6 +17,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.39.0] — 2026-07-10
+
+Mechanized the post-compact re-attach budget as a commit-time validator.
+
+Claude Code re-attaches only the first ~5,000 tokens of `SKILL.md` after a
+compaction, and the POST-COMPACT RECOVERY PROTOCOL must sit entirely inside that
+window — or the instructions for recovering from a compaction are the ones a
+compaction drops (this happened in v0.35.0: ~400 tokens of the protocol were
+themselves discarded). The v0.35.0 reorder left ~561 tokens of slack, but nothing
+caught an overrun at commit time — only `retro.md`'s self-check, which runs per
+sprint and eyeballed the "whole body precedes the cut" invariant. A single edit
+ABOVE the protocol could silently push its tail past 5,000 between retros.
+
+### Added
+
+- **`core/scripts/validate-reattach-budget.sh`** — measures bytes from the start
+  of `SKILL.md` through the end of the `## POST-COMPACT RECOVERY PROTOCOL` section,
+  estimates tokens (bytes/token divisor calibrated to the v0.35.0 measurement:
+  17,990 bytes ≈ 4,439 Claude tokens), and FAILS if the protocol end exceeds the
+  re-attach window minus a safety margin (defaults: 5000 budget, 250 margin, so it
+  trips at ~4,750 tokens — before the real cliff). FAILS loudly if the protocol
+  heading or its end boundary is missing (structure moved → re-measure). Current
+  state: ~4,497 tokens, ~503 slack, PASS. Budget/margin/divisor are env-overridable.
+  Copied to consumers via `install.sh` alongside the other validators.
+- **`retro.md` Rule File Audit** now runs `validate-reattach-budget.sh` for the
+  whole-body invariant it previously only asked the auditor to confirm by eye, and
+  records its PASS/FAIL + slack in the resident-ordering scan.
+
 ## [0.38.0] — 2026-07-10
 
 `ai-dlc-update` re-invokes itself automatically after a self-update instead of
