@@ -17,6 +17,29 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.41.0] — 2026-07-10
+
+`ai-dlc-update` git preflight now auto-pushes a push-resolvable branch instead
+of stopping for the operator.
+
+The v0.37.0 preflight correctly blocks a reconcile when the consumer branch does
+not match `origin` (a branch cut off an un-synced branch and merged to `origin`
+strands local commits or reconciles against a stale base). But for the two states
+whose remedy is *literally a push* — **AHEAD of upstream** (unpushed commits) and
+**no upstream** (never pushed) — it stopped and asked the operator to run
+`git push` by hand, then re-invoke. That is a needless halt: the skill already
+performs autonomous push→PR→merge in steps 2 and 8, so publishing the operator's
+own commits on their own branch is within its authority and is the exact fix.
+
+### Changed
+
+- **`core/skills/ai-dlc-update/SKILL.md`** — step-1 preflight (and the step-7
+  re-confirm): **AHEAD** → `git push`; **no upstream** → `git push -u origin
+  <branch>`; then proceed. A rejected/failed push (auth, network, protected
+  branch, or the remote advanced mid-run making the branch truly diverged) still
+  STOPs with the exact error and remedy. **BEHIND** and **DIVERGED** remain STOP
+  — their remedy is a pull/rebase, which can conflict and is not a push.
+
 ## [0.40.0] — 2026-07-10
 
 Mechanized gate Check 3b: a story's `LOCKED_REQUIREMENTS` full-text citation

@@ -96,22 +96,35 @@ Every consumer block that differs from upstream is one of:
      its commit-locally path.
    - **Detached HEAD** → STOP; there is no branch to track or return to.
    - **Remote exists but the current branch has no upstream** (never pushed) →
-     STOP; the operator runs `git push -u origin <branch>` first. Its commits are
-     absent from `origin`, so a branch cut off it and merged to `origin` strands
-     them.
-   - **Branch AHEAD of its upstream** (unpushed commits) → STOP; the operator
-     pushes first.
+     **AUTO-PUSH**: run `git push -u origin <branch>` to publish it, then proceed.
+     Its commits are absent from `origin`, so a branch cut off it and merged to
+     `origin` would strand them; publishing first removes the hazard. If the push
+     fails (auth, network, protected branch, remote rejected) → STOP and report
+     the exact `git push` error and remedy; do not proceed on an un-synced branch.
+   - **Branch AHEAD of its upstream** (unpushed commits) → **AUTO-PUSH**: run
+     `git push` to bring `origin` in sync, then proceed. Ahead-only means the
+     remote has not moved, so this is a clean fast-forward on `origin` and the
+     exact remedy the operator would run by hand. If the push is rejected
+     (e.g. the remote advanced between check and push, making the branch actually
+     diverged) or otherwise fails → STOP and report the `git push` error; the
+     branch is then no longer ahead-only and needs a pull/rebase first.
    - **Branch BEHIND its upstream** → STOP; fast-forward/pull first, so the
-     reconcile runs against current `origin`, not a stale local base.
+     reconcile runs against current `origin`, not a stale local base. (Not
+     auto-resolved: a pull can conflict and is not a push.)
    - **Diverged** (both ahead and behind) → STOP; operator pulls/rebases first.
+     (Not auto-resolved: a rebase/merge can conflict; a bare push would be
+     rejected.)
 
    Detect with: `git remote` (empty → no remote); `git symbolic-ref -q HEAD`
    (fails → detached); `git rev-parse --abbrev-ref --symbolic-full-name @{u}`
    (non-zero exit → no upstream on this branch); and
    `git rev-list --left-right --count @{u}...HEAD` (prints `<behind>\t<ahead>`).
-   Put the exact ahead/behind counts and the remedy (`git push` / `git pull`) in
-   the STOP so the operator knows what to run, then re-invoke. A clean tree on a
-   branch in sync with its upstream is the only state that proceeds.
+   For the two push-resolvable states (no-upstream, ahead-only) auto-push and
+   report what was pushed in one line; for BEHIND/DIVERGED put the exact
+   ahead/behind counts and the `git pull`/rebase remedy in the STOP so the
+   operator knows what to run, then re-invoke. A clean tree on a branch in sync
+   with its upstream — reached directly or via the auto-push — is the only state
+   that proceeds.
 2. **Self-update — an AUTONOMOUS, self-contained commit→merge cycle (before any
    rulebook classify/apply).** You run FROM a copy of this skill inside the
    consumer; a pull can include a change to that copy, so the logic executing the
@@ -307,9 +320,10 @@ Every consumer block that differs from upstream is one of:
      unrelated to the rulebook may be fine; when in doubt, stop.)
    - Re-confirm the step-1 git preflight still holds: the branch is in sync with
      its upstream. Time may have passed since the dry-run, so if the branch has
-     since drifted ahead of / behind `origin`, STOP with the same push/pull
-     remedy — the reconcile branch cut here must sit on a base that matches
-     `origin`.
+     since drifted AHEAD of `origin` (or gained an upstream-less state),
+     **auto-push** to re-sync exactly as in step 1 and continue; if it drifted
+     BEHIND or diverged, STOP with the `git pull`/rebase remedy — the reconcile
+     branch cut here must sit on a base that matches `origin`.
    - `git checkout -b ai-dlc-update/<theirs-version>-reconcile-<ts>` off the
      current branch. ALL step-7 writes land here, so the operator reviews a
      clean diff / opens a PR — never a silently-mutated working branch.
