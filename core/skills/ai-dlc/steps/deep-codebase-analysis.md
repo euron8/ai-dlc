@@ -70,6 +70,9 @@ looking at the code.
 Check `pipeline_variant` from the router:
 
 - If `analysis-only`: Present the analysis to the user. Announce
-  "Analysis complete. No implementation pipeline was requested." **STOP.**
+  "Analysis complete. No implementation pipeline was requested."
+  `touch _bmad-output/pipeline-paused.flag` (Rule 3 -- the snapshot
+  outlives the run, so without the flag the Stop hook blocks this
+  terminal turn). **STOP.**
 - If `brownfield-b`: Run gate validation [planning] (`gate-validation.md`), then
   **READ AND FOLLOW:** `{project-root}/.claude/skills/ai-dlc/steps/discovery.md`

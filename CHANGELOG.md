@@ -17,6 +17,115 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.35.0] — 2026-07-10
+
+Compaction becomes a managed net. AI/DLC's dominant failure mode is token
+saturation, and the rulebook answers it with context reminders plus a
+high-fidelity reset (`/clear` + `/ai-dlc resume`, rehydrating from the pipeline
+snapshot). Claude Code answers it with auto-compaction. The two never spoke.
+Reading the installed binary (`2.1.206`) rather than the docs turned up why that
+mattered:
+
+- **The involuntary net is out of position.** Compaction fires at
+  `effectiveWindow − 13000`. On a 1M model that is **987,000** tokens, while
+  AI/DLC's red reminder fires at 200,000 — leaving **787,000 tokens** in which an
+  operator who ignored red keeps working inside a degraded context. On 200K models
+  the default (187,000 vs red 120,000) is already correct and needs no change.
+- **Recovery was prose, not mechanism.** `SKILL.md`'s POST-COMPACT protocol asked
+  the lead to read the snapshot first — an instruction living in the very context
+  the summary may have discarded, competing for the 5,000-token skill re-attach
+  budget. No `PreCompact`, `PostCompact`, or `SessionStart` hook existed anywhere.
+- **The knob is a window, not a percentage.** `autoCompactWindow` is an integer in
+  `[100000, 1000000]`. `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` is a test hook that can
+  only lower; `CLAUDE_CODE_MAX_CONTEXT_TOKENS` is read only when compaction is
+  disabled outright.
+- **Three breakers bound how low you may go.** `rapid_refill_breaker` is a
+  *terminal stop reason* whose own message names AI/DLC's failure mode ("a file
+  being read or a tool output is likely too large… use `/clear` to start fresh").
+
+Verified statically, and decisively: `SessionStart` fires with source `compact` on
+**every** compaction path (`compact_full`, `compact_partial`, `reactive_compact`)
+for both `auto` and `manual` triggers, and its `additionalContext` is injected.
+Spec: `docs/v0.35.0-compaction-net-spec.md`.
+
+- **`core/scripts/validate-compact-window.sh` (new).** Enforces the two-sided
+  ordering invariant `red + MIN_SLACK < threshold < red + MAX_DRIFT` (defaults
+  50,000 / 100,000) against each row of the `SKILL.md` threshold table. Scope it
+  with `--row` when a project only ever runs one context size. AI/DLC does not
+  write `autoCompactWindow` — the safe floor depends on the consumer's fixed
+  prefix, which the skill cannot measure — it enforces and reports. Recommended
+  value on 1M: `300000` (threshold 287,000; legal band 263,000–313,000).
+- **`core/hooks/ai-dlc-precompact.sh` (new).** Steers the summarizer to preserve
+  LOCKED_REQUIREMENTS, gate state, and open findings verbatim, and flushes a
+  mechanical sidecar (`pipeline-snapshot.precompact.md`) covering the delta since
+  the snapshot's last sub-step write. Echoes the incoming `custom_instructions`
+  back — hook stdout *replaces* that field, so a naive hook would silently discard
+  a user's `/compact <instructions>`. Never blocks: blocking a near-full context
+  leaves the next stop at the API hard block.
+- **`core/hooks/ai-dlc-recover.sh` (new).** `SessionStart` matcher `compact`.
+  Re-injects the snapshot verbatim plus the sidecar as `additionalContext`,
+  byte-capped with an explicit truncation notice. Directs a fresh `Read` of the
+  current step file (compaction calls `readFileState.clear()`), the reset of stale
+  context-reminder fire state, and exactly one `ctx_search(sort: "timeline")` for
+  the rationale the snapshot schema cannot hold. The `SKILL.md` prose protocol is
+  demoted to the fallback for when the hook is absent or truncated.
+- **`core/hooks/ai-dlc-postcompact.sh` (new).** Instrumentation only —
+  `PostCompact` output is display-only and cannot inject context. Writes
+  `compaction-log.md`; `recovery_injected: no` on an auto trigger is the design
+  failing in the field, and is now self-reporting.
+- **Three latent bugs fixed.** (1) `route.md` validated five of the snapshot
+  schema's six required sections (`Context Reminders` was omitted, so a snapshot
+  missing it resumed). (2) Compaction resets the token counter but not
+  `context_reminders_sent` / `last_*_fire_tokens`, so a recovered lead believed red
+  had already fired and the auto-handoff evaluation mis-decided. (3) **Every Rule 3
+  pause point was pressured across its own gate.** Rule 3 declares three pause
+  points where the lead stops for a human, and `ai-dlc-continue.sh` — the hook that
+  *enforces* Rule 3 — recognizes an intentional pause by exactly one signal,
+  `pipeline-paused.flag`. None of the three set it; only `handoff.md:36` and
+  `_gate-procedures.md:179` ever did. `SKILL.md` then guarantees the flag is absent
+  by requiring the lead to clear it before routing. So each pause ended text-only
+  with no flag, and the hook blocked the stop with a reason urging the lead to
+  "pair the text with the tool call." At `deploy-validate.md` §6 (Wait for Human)
+  the next tool call is §7 Post-Validation Routing — the hook was arguing the lead
+  past the human's **production sign-off**. At `route.md` Step 0a it argued for
+  dispatching to `current_step_file`, the exact action the integrity check forbids.
+  Terminal stops were blocked too: nothing removes the snapshot at pipeline end
+  (`route.md:301` archives only at a fresh start), so `continue.sh`'s "no snapshot"
+  escape never fires. Fixed by stating the contract in Rule 3 and setting the flag
+  at all seven turn-end sites. Predates this release.
+- Registered per existing rails: `validate-compact-window.sh` into
+  `install.sh`'s hardcoded script list and `enforcement-map.yaml`
+  (`non_catalog_units`); `compaction-log.md` into the Rule 25(c) rotation and
+  25(d) threshold lists in `retro.md`; the three hook events into
+  `templates/settings.json.template` and the `ai-dlc-update` reconcile contract.
+
+- **The recovery protocol did not survive its own event.** Claude Code re-attaches
+  only the first ~5,000 tokens of `SKILL.md` after a compact, and `retro.md`'s
+  self-check asserted the `POST-COMPACT RECOVERY PROTOCOL` *heading* fell inside
+  it. Measuring the section showed it began at ~4,834 tokens and ran 566 long — so
+  **~400 tokens of the protocol were discarded by compaction**, specifically the
+  verification-turn requirements and the re-attach-budget fallback. The heading
+  survived; the instructions did not. Fixed by a pure reorder (no content change):
+  the second-tier half of the Handoff Protocol — handoff triggers, pending
+  approvals, threshold defaults, reminder semantics, auto-handoff, and the new
+  ordering invariant — moved into `## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT
+  THRESHOLDS` below the protocol, while `Living pipeline snapshot` and `No
+  self-scheduling skill re-entry` stay above it. The protocol now spans
+  ~3,872–4,439 tokens, entirely inside the fold, with 561 tokens of slack (was
+  166). The section retains the `Handoff Protocol` name so the eight step-file
+  pointers of the form `SKILL.md` Handoff Protocol `"<subsection>"` keep resolving.
+  `retro.md`'s self-check now also checks the protocol's *body*, not just its
+  heading.
+
+**Migration.** Adding `Context Reminders` to the `route.md` integrity check FAILs
+a resume against snapshots written before that section became universal. The
+failure surfaces the existing `archive` / `edit` / `abort` prompt rather than
+proceeding silently. Land between sprints, not mid-sprint.
+
+**Note.** `strip_ai_dlc` is per-block, never per-event. `SessionStart` is the first
+event key AI/DLC shares with tools outside it (context-mode, caveman); stripping
+the whole event would delete a consumer's own hooks.
+
 ## [0.34.0] — 2026-07-09
 
 Rule 27 gets teeth. A full sweep of the high-volume consumer's 12 overrides and

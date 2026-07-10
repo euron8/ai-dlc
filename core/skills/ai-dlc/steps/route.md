@@ -57,15 +57,29 @@ NOT silently dispatch to `current_step_file` if any check below
 fails. Surface the specific failure to the user with a proposed
 remediation and wait for direction.
 
+**On any failure, create the pause flag before surfacing:**
+`touch _bmad-output/pipeline-paused.flag`. Waiting for direction is
+an intentional pause, and the Stop hook only recognizes one by that
+flag. The `/ai-dlc` invocation deleted it (see SKILL.md, "Clear the
+pipeline pause flag before any other action"), so without this the
+Stop hook treats the failure message as a Rule 3 stall and returns a
+forced-continuation reason that argues for pairing the text with a
+tool call -- pressuring the lead toward the very dispatch this
+sub-step exists to prevent. The flag also lets
+`ai-dlc-driver-signal.sh` emit `.driver/idle`, which parks an
+auto-chained session for the operator instead of leaving it blocked.
+The lead clears the flag when the user directs the resume.
+
 Run these integrity checks in order:
 
 1. **Required sections present.** Confirm the snapshot contains all
-   five required sections by heading:
+   six required sections by heading:
    - `Pipeline Position`
    - `Sprint Context`
    - `Recent Activity`
    - `Open Items`
    - `Locked Decisions`
+   - `Context Reminders`
 
    If any section is missing, FAIL with:
    > *"Snapshot at `_bmad-output/pipeline-snapshot.md` is missing

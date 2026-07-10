@@ -275,3 +275,9 @@ non_catalog_units:
     enforcer:
       - core/scripts/validate-ci-gates.sh
     ci_workflow: core/ci-templates/validate-ci-gates.yml
+
+  - id: compact-window-ordering
+    title: Auto-compact threshold must fire after red and bound degraded running
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-compact-window.sh
