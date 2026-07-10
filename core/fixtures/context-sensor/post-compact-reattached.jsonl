@@ -1,0 +1,5 @@
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":259998}}}
+{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"auto","preTokens":260000,"postTokens":24000}}
+{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"summary"}}
+{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":79998}}}
+{"type":"user","toolUseResult":"trailing non-assistant line after the post-compaction reading"}
