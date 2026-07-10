@@ -43,7 +43,7 @@ gate that edits `scripts/*.sh`.
 | Gate type      | Required checks (beyond universal core)          |
 |----------------|--------------------------------------------------|
 | planning       | 1c, 17, 20                                       |
-| story          | 3a, 5, 17                                        |
+| story          | 3a, 3b, 5, 17                                    |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                  |
 | sprint-review  | 18, 21                                           |
 | retro          | 8, 9, 17, core-layer-immutability                |
@@ -222,6 +222,44 @@ while the story still fails to address the thing it was created to
 address. This failure mode cannot be caught by validating the story
 in isolation; it requires comparing the story to its source. Check
 3a enforces that comparison at the gate.
+
+### 3b. Locked-requirement full-text anchor integrity (story gates).
+<!-- CHECK_LOADED: 3b -->
+
+**Scope.** Story-level gates only. Complements Check 3, which does
+INTRA-artifact drift detection (a LOCKED block vs. its own body) and
+never compares a story's block against the PARENT source of record.
+So a story whose block and body both carry the same lossy summary
+passes Check 3 while still being a mis-anchored, summarized
+propagation. Check 3b closes that hole with a script.
+
+**Schema (`stories-test-strategy.md` §2a).** A story `LOCKED_REQUIREMENTS`
+block distinguishes a full-text CLAIM from a load POINTER:
+- `full_text_source: <artifact>:<anchor>` — asserts the verbatim
+  requirement lives at this anchor. Byte-enforced.
+- `requires_context: <artifact>#<anchor>` — a dev-time load pointer,
+  NOT a full-text claim. Never byte-matched (honest cite-by-reference
+  stays legal).
+
+**Check.** For each story, invoke
+`scripts/validate-locked-anchor.sh <story-file>`; exit 0 required. For
+every `full_text_source:` citation it asserts (a) the artifact is the
+byte-verbatim source of record — default `product-brief.md`, where
+discovery.md §4a extracts the block — and NOT a condensed index
+(e.g. prd.md, which is only §2a-propagated); (b) the anchor exists in
+that artifact; (c) every requirement bullet in the block is byte-present
+there (whitespace-collapsed). A block with only `requires_context:` or
+no full-text claim is untouched (Check 3 covers it).
+
+**PASS:** the script exits 0. **FAIL:** a `full_text_source` cites a
+non-source-of-record / index artifact, a dangling anchor, or a bullet
+not byte-present at the source of record.
+
+**Category-error rider.** Context/tool thresholds (e.g. the ctx
+`INTENT_SEARCH_THRESHOLD`) gate what re-enters the conversation on an
+intent-bearing tool call; they never gate what is written to a file.
+Never shape durable artifact content — including which requirement text
+a story inlines — to satisfy a tooling constraint.
 
 ### 4. Template placeholder detection?
 <!-- CHECK_LOADED: 4 -->

@@ -197,6 +197,32 @@ include:
 Stories that do not trace back to a locked requirement (e.g., pure
 technical stories, migration stories) do not need the block.
 
+**Full-text claim vs. load pointer (Check 3b).** Inside the block,
+distinguish two citation forms — they are NOT interchangeable:
+- `full_text_source: <artifact>:<anchor>` — asserts the verbatim
+  requirement text lives at this anchor. The artifact MUST be the
+  byte-verbatim **source of record** (the product brief, where §4a
+  extracts the block), NOT a condensed index. `gate-validation.md`
+  Check 3b (`scripts/validate-locked-anchor.sh`) byte-verifies that
+  every bullet in the block is present verbatim at the cited anchor and
+  FAILS the gate on a mis-anchored or summarized claim.
+- `requires_context: <artifact>#<anchor>` — a dev-time load pointer.
+  Honest cite-by-reference; never byte-matched. Use this (not
+  `full_text_source:`) when the block text is an abridged restatement
+  and the full text is loaded from the brief at implementation time.
+
+Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
+"for full text" — the PRD's LR entries are §2a-propagated, and the
+brief remains the byte-verbatim source of record.
+
+**Category error to avoid.** Context/tool thresholds (e.g. the ctx
+`INTENT_SEARCH_THRESHOLD`, which auto-indexes tool output above ~5KB)
+gate what re-enters the **conversation** on an intent-bearing tool
+call. They NEVER gate what is written to a file. Never truncate,
+summarize, or otherwise shape a story's inlined requirement text to
+"stay under" a tooling threshold — the threshold does not apply to
+file writes, and the degraded artifact FAILS Check 3b.
+
 ### 2b. Propagate Architecture Refs to Stories (Rule 25(b))
 
 For each story created, add an `architecture_refs:` frontmatter field — the

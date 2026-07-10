@@ -74,6 +74,16 @@ checks:
     enforcer: []
     ci_workflow: ~
 
+  - id: "3b"
+    title: Locked-requirement full-text anchor integrity
+    gate_types: [story]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-locked-anchor.sh
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-3b-locked-anchor]
+
   - id: "4"
     title: Template placeholder detection?
     gate_types: [universal]
