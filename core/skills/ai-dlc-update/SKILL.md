@@ -80,6 +80,38 @@ Every consumer block that differs from upstream is one of:
    there is no `commit:` field. Resolve `theirs` (arg or upstream HEAD). Confirm
    the distribution repo is reachable — read the `upstream` field if present;
    otherwise ask the operator for the distribution checkout path.
+
+   **Git preflight — the consumer branch must be in a reconcilable state.**
+   Shell to git in the consumer tree and check the current branch BEFORE the
+   self-update (step 2) or any apply. This runs on EVERY invocation: step 2's
+   autonomous push→auto-merge writes to `origin` even on a bare dry-run, and
+   steps 6–7 cut the reconcile branch off the current branch. If the current
+   branch does not match `origin`, cutting a reconcile/self-update branch off it
+   and merging that to `origin` diverges local from `origin` the instant it
+   merges, and the NEXT update then reconciles against a base that no longer
+   matches `origin` — the repeated-reconciliation this check exists to prevent.
+   - **Not a git repo** → STOP; no safe isolation (same as step 6).
+   - **No remote configured** (`git remote` empty) → non-blocking note; the
+     origin-sync guarantees below do not apply. Proceed — step 2 falls back to
+     its commit-locally path.
+   - **Detached HEAD** → STOP; there is no branch to track or return to.
+   - **Remote exists but the current branch has no upstream** (never pushed) →
+     STOP; the operator runs `git push -u origin <branch>` first. Its commits are
+     absent from `origin`, so a branch cut off it and merged to `origin` strands
+     them.
+   - **Branch AHEAD of its upstream** (unpushed commits) → STOP; the operator
+     pushes first.
+   - **Branch BEHIND its upstream** → STOP; fast-forward/pull first, so the
+     reconcile runs against current `origin`, not a stale local base.
+   - **Diverged** (both ahead and behind) → STOP; operator pulls/rebases first.
+
+   Detect with: `git remote` (empty → no remote); `git symbolic-ref -q HEAD`
+   (fails → detached); `git rev-parse --abbrev-ref --symbolic-full-name @{u}`
+   (non-zero exit → no upstream on this branch); and
+   `git rev-list --left-right --count @{u}...HEAD` (prints `<behind>\t<ahead>`).
+   Put the exact ahead/behind counts and the remedy (`git push` / `git pull`) in
+   the STOP so the operator knows what to run, then re-invoke. A clean tree on a
+   branch in sync with its upstream is the only state that proceeds.
 2. **Self-update — an AUTONOMOUS, self-contained commit→merge cycle (before any
    rulebook classify/apply).** You run FROM a copy of this skill inside the
    consumer; a pull can include a change to that copy, so the logic executing the
@@ -98,9 +130,10 @@ Every consumer block that differs from upstream is one of:
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
      preserving `version`/`commit`/`installed_at`/`upstream`), commit
      (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), push,
-     open a PR, and **auto-merge (squash, delete branch)** — no operator gate. If
-     there is no remote / push fails, commit locally and note it; do not block the
-     run. Advancing `skill_version` here is what keeps the stamp an honest record
+     open a PR, and **auto-merge (squash, delete branch)** — no operator gate (the
+     step-1 git preflight confirmed the branch is in sync with `origin`, so this
+     merge cannot strand local commits). If there is no remote / push fails,
+     commit locally and note it; do not block the run. Advancing `skill_version` here is what keeps the stamp an honest record
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
@@ -277,6 +310,11 @@ Every consumer block that differs from upstream is one of:
    - If the working tree has uncommitted changes that would tangle the reconcile
      diff, STOP and report — let the operator stash/commit first. (A dirty tree
      unrelated to the rulebook may be fine; when in doubt, stop.)
+   - Re-confirm the step-1 git preflight still holds: the branch is in sync with
+     its upstream. Time may have passed since the dry-run, so if the branch has
+     since drifted ahead of / behind `origin`, STOP with the same push/pull
+     remedy — the reconcile branch cut here must sit on a base that matches
+     `origin`.
    - `git checkout -b ai-dlc-update/<theirs-version>-reconcile-<ts>` off the
      current branch. ALL step-7 writes land here, so the operator reviews a
      clean diff / opens a PR — never a silently-mutated working branch.
