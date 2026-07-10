@@ -56,6 +56,26 @@ Placed in CLAUDE.md (not only in the skill) so it survives
 then output an acknowledgment line naming current step file and
 last gate.
 
+**Auto-compact ordering invariant (moved from SKILL.md L506–523,
+2026-07-10).** The red reminder must fire before Claude Code's
+auto-compact threshold, bounded on both sides:
+`red + MIN_SLACK < threshold < red + MAX_DRIFT` (defaults 50,000 /
+100,000). The lower bound exists because compaction is strictly
+lower-fidelity than the handoff: `/clear` + `/ai-dlc resume` rehydrates
+from a schema'd, gate-verified snapshot, while compaction keeps a lossy
+summary of unknown content. Red must fire first so the handoff gets
+first refusal. A threshold near the resident prefix is worse still —
+every post-compact turn refills immediately, and three such refills trip
+Claude Code's rapid-refill breaker, which terminates the session. The
+upper bound bounds the damage when red is ignored (an unattended run, or
+`auto_handoff_mode: off`). On a 1M model the default threshold is
+987,000, some 787,000 tokens past red — long enough to complete a sprint
+entirely inside a degraded context; setting `autoCompactWindow` to
+300,000 moves the net to 287,000. AI/DLC does not write this value: the
+safe floor also depends on the project's fixed prefix, which the skill
+cannot measure. The same rationale is carried verbatim in
+`core/scripts/validate-compact-window.sh` (header) and enforced by it.
+
 ### R3 — Post-compact verification turn
 
 Immediately after the acknowledgment, the lead outputs current step
@@ -1044,3 +1064,81 @@ so a 512KB throttle is far tighter than the token thresholds it feeds.
 The `PostToolBatch` template block propagates to existing consumers with no
 migration: `settings-merge.sh` and `install.sh` union the event keys and strip
 per-block, so the sensor lands once on each event without duplication.
+
+## 2026-07-10 Follow-up (R30) — Resident-path rationale relocation
+
+Design history and origin context that had accreted into the resident
+LLM-consumed skill files, relocated here so a fresh lead never pays for it per
+dispatch. This is the "narrative drift" cleanup class `rule-authoring.md`
+defines. Rule 26(c) `Minimum mechanism` blocks were deliberately **left inline**
+at their machinery sites (26(c) requires the contract "at introduction", and the
+retro audit flags machinery lacking it), so only origin/change-history and
+worked-proof narrative moved. The compact-window ordering invariant moved into R2
+above; the rest is captured here by source.
+
+### From SKILL.md
+
+- **Single-voice sub-skill binding (moved from L662).** The subagent-dispatch
+  requirement for the three single-voice sub-skills *reverses* an earlier "invoke
+  inline, do NOT route through Agent" rule. The reversal is because inline
+  invocation is solo by construction — there is no internal spawn to make it an
+  independent critic — which is exactly the failure the current rule forbids.
+- **Rule 25(a) no-loss archival (moved from L903–904).** The "move to
+  history, never delete" instruction *supersedes* an older "do not rewrite
+  existing content" phrasing; the intent was always *no requirement loss*, not
+  *unbounded growth*.
+- **Rule 27(b) retirement duty evidence (moved from L1014).** A real consumer
+  (graph) carried an absorbed-but-not-retired extension for 22 releases, during
+  which it silently forked from and then contradicted the core text it once
+  matched — the concrete case behind the mandatory retirement.
+- **Rule 27 catch-22 evidence (moved from L1028).** The "in-place authoring
+  clobbered by the next upstream pull" failure was observed regrowing on graph;
+  the 26(c) `Failure caught:` line it annotated stays inline, minus the evidence
+  citation.
+- **Rule 28 delegation evidence (moved from L1077).** The context-saturation
+  failure the delegation contract catches is the observed action-heavy-misread
+  and token-saturation failure modes; the 26(c) line stays inline, minus the
+  citation.
+- **Handoff-protocol layout constraint (moved from L377–382).** The handoff and
+  context-warning rules are "second-tier by design" — re-encountered at the next
+  gate via `gate-validation.md` Check 14 and `_gate-procedures.md`, so they may
+  sit past the 5,000-token post-compact re-attach boundary. The recovery protocol
+  above them may not: it must survive the event it handles, so nothing may be
+  inserted ahead of it without re-measuring the re-attach budget. This is a
+  maintainer editing constraint, not a lead instruction.
+
+### From gate-validation.md
+
+- **Gate-type slicing framing (moved from L17–20).** The slice is a
+  conditional-load, not a reduction — no check text is edited; a check merely
+  stops occupying the window on gates where its own scope clause would make it a
+  no-op anyway. (Full spec: `docs/v0.24.0-gate-validation-slicing-spec.md` §5.)
+- **Over-slice mechanics (moved from L66–75).** H1 only catches a check the
+  manifest *marks required* but the loader failed to load; it cannot catch a
+  manifest row that wrongly omits a check — hence over-inclusion is safe and
+  under-inclusion is the silent bug. Checks 8/9 sit in both `implementation`
+  (vacuous pre-deploy) and `retro` (post-deploy evidence); Check 17 sits in
+  `planning`, `story`, and `retro` (PRD gate, story-readiness gate, retro gate).
+- **Check 12 emit-scope rationale (moved from L447–448).** Checks 12–15 are
+  bookkeeping, never defect-catchers, so they carry no efficacy signal; emitting
+  a metric for the emitter (Check 12) is also circular.
+- **Check 13 numbering artifact (moved from L478–481).** Check 13 is numbered 13
+  to preserve existing cross-references, but its execution is deferred until the
+  full 15-check cycle completes, so the announcement reflects the final count.
+- **Consumer-catalog crosswalk (moved from L83–99).** Consequence for any audit
+  or absorption pass: a consumer MAY redefine a shared check number or add checks
+  past this catalog's range, so `Check N` in a consumer's gate-log/retro/
+  escalation refers to *that* consumer's catalog. Never attribute consumer
+  fire-history to a distribution check by number — align by title/intent and
+  confirm against the consumer's own `extensions/checks/*.md`. Distribution
+  checks 1–18 are the shared core; a consumer extension marked
+  `push_candidate: false` is deliberately consumer-local and MUST NOT be
+  backported (violates the layered-rulebook boundary). A check absorbed FROM a
+  consumer records its origin inline via a `Graph→distribution number mapping.`
+  note (Checks 20, 21) so a future reconciliation does not re-flag it as new.
+  Repeatable evidence tool: `scripts/audit-machinery-efficacy.js` (run under
+  `bun` for real tokenizer counts); see `docs/v0.27.0-machinery-efficacy-audit.md`.
+- **Check 22 citation fix (deleted at L871–873, recoverable from git).** Check 22
+  superseded stale "Check 15" citations in `implementation.md` that pointed at
+  the snapshot-verification check by mistake — a one-time correction, not
+  reusable design rationale.

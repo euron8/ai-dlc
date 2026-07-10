@@ -374,13 +374,6 @@ content may be missing and request re-invocation.
 Continues the Handoff Protocol above; step files cite these subsections
 as `SKILL.md` Handoff Protocol "<subsection>".
 
-Second-tier by design: these govern when to hand off and when to warn on
-context, both of which are re-encountered at the next gate via
-`gate-validation.md` Check 14 and `_gate-procedures.md`. They may sit past
-the 5,000-token post-compact re-attach boundary. The recovery protocol
-above may not -- it is the one section that must survive the event it
-handles, so nothing may be inserted ahead of it without re-measuring.
-
 ### Handoff triggers
 
 **(a) Human-requested handoff** -- user explicitly asks to continue
@@ -503,22 +496,12 @@ red + MIN_SLACK  <  threshold  <  red + MAX_DRIFT
 
 with `MIN_SLACK` 50,000 and `MAX_DRIFT` 100,000 by default.
 
-The lower bound exists because compaction is strictly lower-fidelity
-than the handoff: `/clear` + `/ai-dlc resume` rehydrates from a
-schema'd, gate-verified snapshot, while compaction keeps a lossy
-summary of unknown content. Red must fire first so the handoff gets
-first refusal. A threshold near the resident prefix is worse still --
-every post-compact turn refills immediately, and three such refills
-trip Claude Code's rapid-refill breaker, which terminates the session.
+Red must fire before the auto-compact threshold so the handoff gets
+first refusal; the upper bound caps how far a run drifts past red when
+the reminder is ignored. Rationale and the worked 1M-model example:
+`docs/context-hardening-notes.md` R2.
 
-The upper bound bounds the damage when red is ignored (an unattended
-run, or `auto_handoff_mode: off`). On a 1M model the default threshold
-is 987,000, some 787,000 tokens past red -- long enough to complete a
-sprint entirely inside a degraded context. Setting `autoCompactWindow`
-to 300,000 moves the net to 287,000.
-
-AI/DLC does not write this value: the safe floor also depends on the
-project's fixed prefix, which the skill cannot measure. Run
+AI/DLC does not write `autoCompactWindow`. Run
 `scripts/validate-compact-window.sh` to check the invariant, and pass
 `--row` to scope it to the context size the project actually runs.
 
@@ -659,10 +642,9 @@ the returned findings. One role serves all three single-voice sub-skills -- the
 binding does not vary by sub-skill (the sub-skill selects the method; the role
 is constant). `code-reviewer` (diff-scoped) and `analyst` (read-only,
 non-adversarial) are the WRONG bind here -- neither is an independent critic of
-a planning artifact. This reverses the former "invoke inline, do NOT route through
-Agent" rule for these three -- inline invocation of a single-voice sub-skill is
+a planning artifact. Inline invocation of a single-voice sub-skill is
 solo by construction (there is no internal spawn to make it independent), which
-is exactly the failure this rule now forbids. In ai-dlc's autonomous mode
+is exactly the failure this rule forbids. In ai-dlc's autonomous mode
 (Rules 9/10: no mid-pipeline human dialogue) advanced-elicitation runs without
 operator back-and-forth, so subagent dispatch does not break an interactive loop.
 
@@ -741,7 +723,7 @@ gate log entry for that step MUST cite the token value. A gate log
 entry that names a step but cannot cite its token indicates the step
 was not read. Gate FAILS on missing token citation.
 
-**Sliced loading for `gate-validation.md` (v0.24.0 Lever 2).** For
+**Sliced loading for `gate-validation.md`.** For
 `gate-validation.md` alone, "loaded" does NOT mean the whole file. That
 file is sliced by gate type: "loaded" means the **universal core** (its
 Checks 1, 2, 3, 4, 7, 12, 13, 14, 15, 16, H1, H2, Gate Failure) **and**
@@ -833,7 +815,7 @@ reading never enters the lead's context.
 
 **Config.** `planning_offload` (default `on`). When `on`, the steps
 listed below dispatch an analyst for their exploration. When `off`,
-those steps run fully inline (pre-0.8.0 behavior). Projects override
+those steps run fully inline. Projects override
 by setting `planning_offload` in this section directly.
 
 **Offloaded steps.** Full offload — `deep-codebase-analysis`,
@@ -900,9 +882,7 @@ this rule like any other: per-sprint addenda and superseded ADRs relocate to
 `architecture-history.md` rather than accreting inline (the architecture step
 rotates on every update). Nothing is ever dropped — the
 union of live and history must preserve every prior requirement and
-item. This supersedes the older "do not rewrite existing content"
-phrasing: the intent was *no requirement loss*, not *unbounded growth*.
-Rule 13 locked requirements are by definition current and are never
+item. Rule 13 locked requirements are by definition current and are never
 relocated out of live. History/archive files are write-only — never
 read in the hot path — so their growth is free.
 
@@ -1011,7 +991,7 @@ whenever you revise an override.
 **(b) Retirement duty on absorption.** When upstream lands a layer entry's content
 in core, the consumer MUST retire that entry. An absorbed extension left in place
 becomes a duplicate that silently forks from the core text it once matched, and
-then contradicts it (graph carried one for 22 releases). `/ai-dlc-update` emits
+then contradicts it. `/ai-dlc-update` emits
 `EXTENSION-RETIRE-CANDIDATE` as the signal; retirement is an operator-gated delete
 -- upstream never writes the layer, so it cannot remove the entry for you.
 
@@ -1025,7 +1005,7 @@ check the pull performs.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or
-false-conflicts against it -- the catch-22, regrown (graph proved it); and, per
+false-conflicts against it; and, per
 (a)-(c), a consumer layer silently shadowing, duplicating, or contradicting a core
 rule upstream has since changed. False positive: one override declaration when a
 consumer genuinely must change a core rule; one operator re-confirmation per
@@ -1074,8 +1054,7 @@ subagent context and the lead in orchestration (Rule 23).
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: the lead absorbing
 delegable work inline, saturating its context and collapsing the
-production/orchestration boundary (the observed action-heavy-misread and
-token-saturation failure modes). False-positive cost: an occasional
+production/orchestration boundary. False-positive cost: an occasional
 dispatch of work the lead could have done in one turn -- paid in one
 orchestration round, recovered in context headroom. Removal condition:
 retire once the harness structurally prevents the lead from taking
