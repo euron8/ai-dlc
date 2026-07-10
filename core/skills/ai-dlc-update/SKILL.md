@@ -137,31 +137,26 @@ Every consumer block that differs from upstream is one of:
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
-   - **Then HARD STOP the run and hand the operator the choice below.** The
-     self-update landed, but THIS invocation is still executing the PRE-update
-     logic — its reconcile/classify/apply behavior is stale, and an in-flight
-     agent cannot hot-reload its own instructions. So after the self-update
-     merges you MUST STOP here; do NOT proceed to step 3 on stale logic. Report:
-     the self-update landed (merged PR ref) + a one-line summary of what changed
-     (touches `reconcile/` — the engine — vs prose/docs), and offer:
-     - **(a) re-invoke `/ai-dlc-update`** (recommended) — a fresh
-       invocation loads the updated logic and runs the reconcile on it;
-     - **(b) continue this run on the prior logic** — only if the operator
-       EXPLICITLY asks, and best reserved for a docs-only self-change;
-     - **(c) hold here — return control to the operator.** Do nothing
-       further: no re-invoke, no continue, no assumption the operator wants
-       either right now. This is the safe default in the absence of a
-       reply — the stop already returns control by itself; (a)/(b) are only
-       acted on if and when the operator explicitly picks one in a later
-       message. The operator may be about to go look at the merged
-       self-update PR, do something unrelated, or come back to this
-       tomorrow — do not read a stop-and-report as an implicit request to
-       keep going down either path.
-     Recommend (a); never auto-pick it. Do NOT auto-continue — silently
-     proceeding on stale logic is the exact defect this stop prevents (a
-     self-update to the reconcile/apply logic is worthless if the same run
-     ignores it). This stop applies even when
-     the following reconcile would be empty.
+   - **Then STOP this invocation and re-invoke `/ai-dlc-update` automatically —
+     do NOT ask whether to.** The self-update landed, but THIS invocation is
+     still executing the PRE-update logic — its reconcile/classify/apply behavior
+     is stale, and an in-flight agent cannot hot-reload its own instructions. So
+     do NOT proceed to step 3 on stale logic. Instead: report in one line that
+     the self-update landed (merged PR ref) + what changed (`reconcile/` — the
+     engine — vs prose/docs), then **immediately re-invoke the `ai-dlc-update`
+     skill (Skill tool), carrying the operator's original argument** — a bare run
+     re-invokes bare (fresh dry-run), an `apply` run re-invokes `apply`. The fresh
+     invocation loads the updated logic and runs the reconcile on it.
+
+     Re-invoking is the default and needs no confirmation: an operator who just
+     updated the tool wants to run its latest iteration, and the re-invocation is
+     the only way to execute the fresh logic — there is no reason to update the
+     tool but not re-run it. Do NOT continue this run on the stale logic (silently
+     proceeding on stale logic is the exact defect this stop prevents). The one
+     case that returns control to the operator: if the re-invocation cannot be
+     issued automatically in this harness, say so in one line and tell the
+     operator to run `/ai-dlc-update` themselves — never fall through to stale
+     logic. This applies even when the following reconcile would be empty.
 3. **Mechanical pre-classification** (cheap, deterministic — no agents):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
    It hashes base/theirs/ours per changed file and buckets each into:
@@ -698,8 +693,8 @@ free of pull-only assumptions so the other three jobs can reuse it.
 - **Self-update** is handled in step 2 as its own autonomous branch→commit→push
   →PR→auto-merge cycle (the skill's files are overwrite-safe upstream tooling, no
   operator gate), separate from the operator-gated rulebook reconcile (step 8).
-  After it merges the run HARD STOPS and hands the operator three choices:
-  re-invoke to run the reconcile on the updated logic (recommended), continue
-  on the prior logic (only if explicitly asked), or hold here with no further
-  action — the in-flight agent can't hot-reload its own instructions, so
-  continuing on stale logic without being asked is forbidden.
+  After it merges the run stops and **automatically re-invokes `/ai-dlc-update`**
+  (carrying the operator's original argument) to run the reconcile on the updated
+  logic — no operator prompt. The in-flight agent can't hot-reload its own
+  instructions, so the re-invocation is the only way to run the fresh logic;
+  continuing on stale logic is forbidden.
