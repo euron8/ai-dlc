@@ -53,10 +53,14 @@ Only path (a) initiates a handoff. Paths (b) and (c) are reminders
 only. The lead does NOT force handoff at any threshold; critical
 operations may require continuing past both reminder thresholds,
 and the user's judgment is authoritative. Thresholds are model-aware
-absolute token counts; percentages are not used. Full snapshot
-structure, reminder text, recurrence arithmetic, and auto-handoff
-configuration live in the two **Handoff Protocol** sections below and
-in `gate-validation.md` Check 14.
+absolute token counts; percentages are not used.
+
+Reminders (b) and (c) are fired by the `ai-dlc-context-sensor.sh` Stop
+hook, which measures resident context from the session transcript on
+every turn. The lead neither measures nor estimates its own context.
+Full snapshot structure, reminder text, recurrence arithmetic, and
+auto-handoff configuration live in the two **Handoff Protocol**
+sections below and in `gate-validation.md` Check 14.
 
 ### Rule 3 -- Never stall the pipeline
 
@@ -421,16 +425,77 @@ Red MUST fire before Claude Code's auto-compact threshold -- see
 
 ### Reminder semantics
 
-The lead cannot reliably self-measure its own context window. The
-user is the source of truth; user-shared `/context` output is the
-authoritative trigger. The lead MAY invite the user to share
-`/context` at any point.
+The `ai-dlc-context-sensor.sh` Stop hook measures resident context on
+every turn and fires the reminder automatically. It reads the last
+main-thread assistant `usage` from the session transcript and sums
+`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
+-- Claude Code's own figure, equal to `compactMetadata.preTokens`.
+The lead does not self-measure and does not estimate.
 
-Full reminder text, Mode 1 / Mode 2 distinction, recurrence
-arithmetic (50K-token / 20-turn delta), and fire-state snapshot
-fields are in `gate-validation.md` Check 14. Reminders are
-non-blocking one-line outputs; the pipeline continues after each
-reminder. Any user reply to a reminder is a Rule 11 directive.
+User-shared `/context` output remains valid as manual confirmation or
+override, but it is no longer the trigger. The lead MAY still invite
+the user to share it.
+
+The hook owns recurrence (50K-token / 20-turn delta) and dedupe, in
+`_bmad-output/.context-sensor-state`. The snapshot's Context Reminders
+fields are reconciled from that sidecar at each gate; they no longer
+drive firing. See `gate-validation.md` Check 14.
+
+Reminders are non-blocking; the pipeline continues after each one and
+the decision is the user's. Any user reply to a reminder is a Rule 11
+directive.
+
+The hook cannot read the model's context-window size -- the transcript
+records `claude-opus-4-8` for both the 200K and the 1M variant, and no
+window size appears anywhere in it. So it assumes the 200K row until
+the window is proven larger (a reading at or above 187,000 is
+impossible on a 200K model, which compacts at that point) or until
+`AI_DLC_MODEL_ROW` is set to `200K` or `1M` in the project's
+`.claude/settings.json` `env` block (Claude Code propagates that block
+into hook subprocesses). `scripts/install.sh` and the `ai-dlc-update`
+reconcile both ask for this value once, when it is absent; `auto`
+leaves it unset. No default is ever written silently -- pinning `200K`
+would disable the self-correction, and pinning `1M` on a 200K model
+would put red above the compact threshold. The proof is cached in
+`_bmad-output/.context-sensor-model`. Assuming 200K on a 1M model only
+fires the reminders early; assuming 1M on a 200K model would put red
+above the compact threshold, so red would never fire first -- which is
+the failure the ordering invariant exists to prevent. Projects on a 1M
+model should pin `AI_DLC_MODEL_ROW` to skip the one early-reminder
+session.
+
+### Reminder text
+
+The hook emits these. Reproduced here because the lead must recognize
+them, and because a gate may need to restate one.
+
+Yellow (Rule 2(b)):
+
+> `[AI/DLC context sensor] Resident context is ~{tokens} tokens
+> (~{pct}% of the {window}-token effective window), crossing the YELLOW
+> threshold ({threshold}). Rule 2(b): finish the current sub-step, then
+> continue. This reminder is non-blocking: the pipeline continues and
+> the decision is the user's. Reconcile the snapshot Context Reminders
+> fields to this reading at the next gate.`
+
+Red (Rule 2(c)):
+
+> `[AI/DLC context sensor] Resident context is ~{tokens} tokens
+> (~{pct}% of the {window}-token effective window), crossing the RED
+> threshold ({threshold}). Rule 2(c): finalize the pipeline snapshot
+> and hand off via /clear + /ai-dlc resume before auto-compact takes
+> the lossy path. If continuing, do so deliberately. This reminder is
+> non-blocking: the pipeline continues and the decision is the user's.
+> Reconcile the snapshot Context Reminders fields to this reading at
+> the next gate.`
+
+When auto-compact is one turn away -- resident context at or above
+`effectiveWindow - 31,000`, the ceiling visible to a transcript-derived
+reading -- the red variant substitutes: `auto-compact is imminent
+(ceiling ~{ceiling} tokens). Finalize the pipeline snapshot and hand
+off via /clear + /ai-dlc resume now. Compaction is strictly lower
+fidelity than the handoff.` This backstop fires only when the model row
+is known, never on an assumed row.
 
 ### Auto-compact ordering invariant
 
@@ -478,8 +543,8 @@ section directly):
 
 - `off` (default) -- disabled; only human-requested handoff fires.
 - `deploy-only` -- fires only at `Seam A` (pre-deploy preflight in
-  `deploy-validate.md`), and only when red is confirmed via Mode 1
-  (user-shared `/context`).
+  `deploy-validate.md`), and only when the context sensor has
+  measured red.
 - `safe-seam` -- fires at any defined safe seam (`Seam A` through
   `Seam E`); the seam is the trigger and the token *magnitude* is
   advisory (the fire itself is mandatory once the seam is reached and

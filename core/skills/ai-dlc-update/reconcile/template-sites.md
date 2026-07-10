@@ -97,8 +97,30 @@ region untouched.
 
 ## settings.json reconcile (json-merge)
 
-`settings.json` has no tokens. Reconcile it with the same jq contract
-`scripts/install.sh` uses:
+`settings.json` has no tokens. **Do not hand-write the jq.** Run the script —
+it is the contract, and prose that an agent retypes as jq drifts:
+
+```bash
+# step 5 (dry-run report): what would change, and must the operator be asked?
+.claude/skills/ai-dlc-update/reconcile/settings-merge.sh \
+  --consumer .claude/settings.json \
+  --template <theirs>/templates/settings.json.template \
+  --check
+
+# step 7 (apply): --model-row carries the operator's answer (1M | 200K | auto)
+.claude/skills/ai-dlc-update/reconcile/settings-merge.sh \
+  --consumer .claude/settings.json \
+  --template <theirs>/templates/settings.json.template \
+  --model-row <answer>
+```
+
+`--check` prints `model_row_needed=yes|no` plus the exact question to ask, and
+writes nothing. Omitting `--model-row` on apply is equivalent to `auto`. The
+script refuses to write when the consumer's settings.json is invalid JSON or
+when the merge would produce invalid JSON, leaving the file untouched.
+
+What the script guarantees (the same contract `scripts/install.sh` applies, so
+a consumer that reconciles and a consumer that reinstalls converge):
 
 - **hooks:** strip any block whose inner command matches
   `/\.claude/hooks/ai-dlc-[^/]+\.sh` (the `strip_ai_dlc` predicate), then
@@ -129,7 +151,35 @@ region untouched.
   consumer's `enabledPlugins` is preserved in full, exactly like
   permissions/env/mcpServers. Disabling a plugin is the consumer's decision,
   never the reconcile's; this is NOT a deletions-list case.
-- **permissions / env / mcpServers / other user keys:** preserved untouched.
+- **permissions / env / mcpServers / other user keys:** preserved untouched,
+  with exactly one provisioning exception (below).
+
+### `env.AI_DLC_MODEL_ROW` — first-run provisioning only
+
+The `ai-dlc-context-sensor.sh` Stop hook (v0.36.0) reads `AI_DLC_MODEL_ROW`
+from the settings `env` block, which Claude Code propagates into hook
+subprocesses. It selects which row of the SKILL.md threshold table applies.
+The sensor cannot infer it from the transcript: Claude Code records
+`claude-opus-4-8` for both the 200K and the 1M variant, and no window size
+appears anywhere in the transcript.
+
+**The reconcile NEVER writes this key when it is already present** — it is
+consumer-owned, like the rest of `env`. `settings-merge.sh` provisions it only
+when the key is **absent** AND the template being applied wires
+`ai-dlc-context-sensor.sh` (i.e. the consumer is crossing into v0.36.0+); that
+is precisely the `model_row_needed=yes` condition `--check` reports.
+
+When `--check` says yes, put the question in the step-5 dry-run report, ask the
+operator, and pass the answer to `--model-row` in step 7. `--check` prints the
+question text; do not improvise it. On `auto` the script writes **nothing** —
+an absent key is the inference path.
+
+Never default this silently. Pinning `200K` sets `row_known=1` and disables
+the sensor's self-correction, so a 1M project would fire early reminders
+forever; pinning `1M` on a 200K model puts red (200,000) above that model's
+compact threshold (187,000), so red would never fire before compaction — the
+exact failure the auto-compact ordering invariant exists to prevent. An unset
+key is always the safe state, which is why `auto` is the default answer.
 
 ## Ownership
 

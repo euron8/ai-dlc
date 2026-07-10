@@ -74,7 +74,8 @@ commit and in `docs/context-hardening-notes.md`:
 
 - Yellow or red token threshold values.
 - Reminder recurrence arithmetic (currently 50K tokens / 20 turns).
-- Mode 1 / Mode 2 semantics.
+- Context sensor measurement semantics (the `usage` summation, the
+  ~31,000-token sensor-visible reserve, the model-row inference).
 - The first-5K SKILL.md structural constraint.
 - The auto-handoff precondition-gated firing model.
 

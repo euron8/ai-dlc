@@ -200,7 +200,12 @@ Every consumer block that differs from upstream is one of:
    returned with `needs_operator_confirmation: true` (per
    `reconcile/classify-block.md`), each with its specific question, listed
    separately from and in addition to the conflict list (a block can be in
-   neither, either, or both) — a **deletions list**: every
+   neither, either, or both) — a **settings-provisioning question**, obtained by
+   running `reconcile/settings-merge.sh --check` (no writes): when it reports
+   `model_row_needed=yes`, reproduce its `ask:` lines verbatim as an operator
+   question (the model row: `1M` / `200K` / `auto`; default `auto`, which writes
+   nothing). The answer is passed to `--model-row` at apply (step 7) — a
+   **deletions list**: every
    `UPSTREAM-DELETED` path (upstream removed the file, consumer untouched),
    each with its reason line, since applying one `git rm`s a consumer file
    and is gated per-path at apply (step 7) — and a **template-changes
@@ -351,10 +356,17 @@ Every consumer block that differs from upstream is one of:
      base-template token/marker not locatable in the consumer file), STOP and
      flag that file for operator adjudication — never best-effort-place a
      preserved value.
-   - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run the
-     jq strip/merge in `reconcile/template-sites.md` "settings.json reconcile":
-     strip stale `ai-dlc-*.sh` hook blocks + append the template's, preserve
-     user permissions/env/mcpServers. `enabledPlugins` is additive-only and
+   - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run
+     `reconcile/settings-merge.sh --consumer .claude/settings.json --template
+     <theirs>/templates/settings.json.template --model-row <operator's answer>`.
+     **Do not hand-write the jq** — the script is the contract. It strips stale
+     `ai-dlc-*.sh` hook blocks + appends the template's, and preserves user
+     permissions/env/mcpServers/statusLine. It also provisions
+     `.env.AI_DLC_MODEL_ROW` when (and only when) that key is absent and the
+     template wires `ai-dlc-context-sensor.sh` — the question was raised in the
+     step-5 report; pass the answer here. Omit `--model-row` (or pass `auto`) to
+     write nothing. An existing value is never overwritten.
+     `enabledPlugins` is additive-only and
      NEVER removed: a plugin the template dropped since base (e.g. ai-dlc's own
      `context-mode@context-mode` decommission) removes ai-dlc's *use* of it,
      not the consumer's right to keep it enabled — the consumer's

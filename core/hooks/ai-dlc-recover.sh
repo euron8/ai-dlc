@@ -58,6 +58,13 @@ command -v jq >/dev/null 2>&1 || exit 0
 SOURCE="$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)"
 [ "$SOURCE" = "compact" ] || exit 0
 
+# Compaction reset the context-window token count, so the context sensor's fire
+# state now describes a window that no longer exists. The sensor self-heals on
+# the next turn (it resets when the reading drops), but clearing it here means
+# the very first post-compact turn starts from a clean slate. The proven model
+# row in `.context-sensor-model` is NOT cleared -- the window size did not change.
+rm -f "${STATE_DIR}/.context-sensor-state" 2>/dev/null || true
+
 # Snapshots in the wild spell this two ways: the schema's `current_step_file:`
 # and a prose `- **Current step file:** \`x.md\``. Match `ai-dlc-continue.sh`'s
 # pattern rather than the schema alone.

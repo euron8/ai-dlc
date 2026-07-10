@@ -17,6 +17,116 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.0] — 2026-07-10
+
+Rule 2's yellow/red reminders had no sensor. They exist so the high-fidelity
+handoff (`/clear` + `/ai-dlc resume`) gets first refusal before auto-compact
+takes the lossy path, but the only authoritative trigger was the user pasting
+`/context`. Across 243 real `graph` sessions that happened **twice**, while
+**184 of them crossed red**. The ordering invariant was decorative.
+
+`autoCompactWindow: 300000` reaching the consumer made this urgent: it drops the
+compact trigger from 987,000 to 287,000. Historically 148 of 243 sessions
+exceeded 287,000 but only one ever compacted, because the 1M default was out of
+reach. Compaction moved from a once-ever event onto the hot path.
+
+### Added
+
+- `core/hooks/ai-dlc-context-sensor.sh` — a decision-free Stop hook that measures
+  resident context every turn and fires the Rule 2(b)/(c) reminder itself. It
+  reads the last main-thread assistant `usage` from the transcript and sums
+  `input_tokens + cache_creation_input_tokens + cache_read_input_tokens`, which is
+  Claude Code's own figure (equal to `compactMetadata.preTokens`). Verified
+  against a real 6.5MB transcript: 248,721 measured vs 248,721 actual, in 59ms.
+  Hook stdin carries no token counts, but it carries `transcript_path`.
+- `compact_imminent` runtime backstop at `effectiveWindow - 31,000` — the ceiling
+  visible to a transcript-derived reading. Claude Code compacts at
+  `effectiveWindow - 13,000`, but the measured quantity sits a further ~18,000
+  below that at fire time (287,000−268,892 = 18,108; 987,000−969,084 = 17,916).
+  Suppressed while the model row is only assumed.
+- `core/fixtures/context-sensor/` — 9 synthetic transcripts and a 19-assertion
+  runner covering silence cases, idempotence, escalation, the self-healing reset
+  after compaction, sidechain filtering, the tail-read escalation ladder, model-row
+  inference, and recurrence.
+- SKILL.md now **defines** the Rule 2(b)/2(c) reminder text. It was referenced from
+  three files and defined in none.
+
+### Changed
+
+- The reminders are non-blocking, as before. What changed is that they fire.
+  The Stop result loop collects each hook's `additionalContext` independently of
+  whether a sibling sets `preventContinuation`, so the reminder reaches the model
+  even on turns `ai-dlc-continue.sh` blocks — nearly all of them, autonomously.
+- Fire state and recurrence (50K-token / 20-turn) move from the lead-written
+  snapshot to the hook-owned `_bmad-output/.context-sensor-state`. Gates ran a
+  handful of times against a p50 of 242 assistant turns — far too coarse to dedupe
+  a per-turn sensor. Check 14 now reconciles the snapshot from the sidecar.
+- `ai-dlc-recover.sh` clears the sidecar on `SessionStart(compact)`. The sensor also
+  self-heals: a >50,000-token drop means compaction or `/clear`, and resets to `none`.
+- Auto-handoff's `deploy-only` precondition reads `last_level` from the sidecar
+  instead of "red confirmed under Mode 1". The guarantee is strengthened — every
+  advance is now a direct measurement rather than a human paste.
+- `scripts/install.sh` fixture loop gained `context-sensor` and now chmods `run.sh`.
+  The hook itself needs no installer change (hooks are copied by glob), and the
+  `ai-dlc-[^/]+\.sh` regex upserts it into existing consumers.
+- `scripts/install.sh` no longer carries its own copy of the settings.json jq. It
+  delegates to `reconcile/settings-merge.sh`, so an installed consumer and a
+  reconciled consumer provably apply the same contract instead of drifting apart.
+- `install.sh` now chmods `reconcile/*.sh` as a glob. It named `preclassify.sh`
+  explicitly; `layer-drift.sh` was executable only because `cp` happens to preserve
+  the source mode.
+
+### Added (consumer pull path)
+
+- `core/skills/ai-dlc-update/reconcile/settings-merge.sh` — the settings.json
+  reconcile as a script rather than prose an agent retypes as jq. Strips ai-dlc hook
+  blocks per-block (never per-event: `SessionStart` is shared with context-mode and
+  caveman), re-appends the template's, preserves permissions/env/mcpServers/statusLine,
+  and provisions `env.AI_DLC_MODEL_ROW` when — and only when — that key is absent and
+  the template wires the sensor. `--check` reports `model_row_needed=yes|no` and the
+  exact question to ask, writing nothing; `--model-row` carries the operator's answer.
+  Refuses to write on invalid input or invalid output JSON, leaving the file untouched.
+  `ai-dlc-update` step 5 runs `--check` to build the dry-run question; step 7 applies.
+
+### Removed
+
+- **Mode 2, the fallback estimator** (`15,000 + turns*2,000 + tool_bytes*0.25`).
+  Measured against ground truth it was wrong in both terms — the real resident floor
+  is ~69,000, not 15,000, and real growth is ~1,200 tokens/turn, not 2,000. It
+  overestimated by 69% at the median (p90 +134%) yet was **silent at the true yellow
+  crossing in 108 of 219 sessions**. With a real sensor it had no caller, and a guess
+  beside an authoritative number only invites guessing. `/context` survives as
+  optional manual confirmation.
+
+### Notes
+
+- The transcript records `claude-opus-4-8` for both the 200K and 1M variants, and no
+  window size appears anywhere in it, so the model row cannot be read off the
+  transcript. The errors are asymmetric: assuming 200K on a 1M model fires reminders
+  early (noisy, non-blocking); assuming 1M on a 200K model puts red at 200,000 above
+  a compact threshold of 187,000, so red would never fire first. The sensor therefore
+  assumes 200K and upgrades only on proof (a reading ≥ 187,000 is impossible on a 200K
+  model), caching it in `_bmad-output/.context-sensor-model`.
+
+  `AI_DLC_MODEL_ROW` pins it, read from the `env` block of `.claude/settings.json`
+  (Claude Code propagates that block into hook subprocesses — verified against 2.1.206
+  with a live headless probe). Both `scripts/install.sh` and the `ai-dlc-update`
+  reconcile **ask the operator once**, only when the key is absent, and never overwrite
+  an existing value. `AI_DLC_MODEL_ROW=1M scripts/install.sh <path>` presets it for CI
+  and `curl | bash`. Answering `auto` writes nothing.
+
+  **No default value is shipped in the template, deliberately.** Pinning `200K` sets
+  `row_known=1` and disables the self-correction, so a 1M project would fire early
+  reminders forever — worse than unset. Pinning `1M` on a 200K model puts red (200,000)
+  above that model's compact threshold (187,000), so red would never fire before
+  compaction. An absent key is the only safe default. The jq merge also never carries a
+  template `env` into an existing consumer, so a shipped value would reach fresh
+  installs only — which is why the installer writes it explicitly instead.
+- No `statusLine` is shipped. Its stdin does carry official context numbers, but its
+  stdout is display-only and never reaches the model, it occupies a single global slot
+  users fill with their own tool, the installer's jq merge does not manage that key,
+  and it does not run headless where the session driver operates.
+
 ## [0.35.3] — 2026-07-10
 
 The recovery hook never worked. Found by reviewing three real auto-compactions on

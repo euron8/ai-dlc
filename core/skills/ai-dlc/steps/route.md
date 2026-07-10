@@ -287,7 +287,9 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
     Check 14 on each gate passage)
   - Open Items (empty)
   - Locked Decisions (empty)
-  - Context Reminders:
+  - Context Reminders (initialized here; the `ai-dlc-context-sensor.sh`
+    hook owns runtime firing and dedupe in its own sidecar, and Check 14
+    reconciles these fields from it at each gate):
     - `context_reminders_sent: none`
     - `last_yellow_fire_tokens: null`
     - `last_yellow_fire_turns: null`

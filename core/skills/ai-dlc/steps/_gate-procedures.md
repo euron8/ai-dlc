@@ -81,13 +81,15 @@ effects, the step resumes.**
    optional — once a defined seam is reached and preconditions 3–7
    pass, the fire is mandatory, not a judgment call about whether the
    context feels large enough. Under
-   `deploy-only`, require **red confirmed under Mode 1**: read
-   `context_reminders_sent` from the snapshot Context Reminders
-   block. If it is not `red`, return CONTINUE. Check 14 advances
-   this field to `red` ONLY when a user-shared `/context` confirmed
-   the crossing under Mode 1 — Mode 2 fallback estimates MUST NOT
-   advance the field. This precondition is therefore equivalent to
-   "red threshold confirmed via user-shared `/context`".
+   `deploy-only`, require **measured red**: read `last_level` from
+   `_bmad-output/.context-sensor-state` (authoritative and current
+   every turn; fall back to `context_reminders_sent` in the snapshot
+   Context Reminders block if the sidecar is absent). If it is not
+   `red`, return CONTINUE. The sensor sets `red` only from a real
+   measurement of resident context — Claude Code's own figure, read
+   off the transcript — so this precondition is equivalent to "red
+   threshold measured, not estimated". There is no estimate path: the
+   sensor is silent when it cannot measure.
 
 3. **Snapshot is current.** Read the most recent Recent Activity
    entry. If it does not reflect either (a) the gate passage that
@@ -201,74 +203,60 @@ field is absent (e.g., snapshot predates this rule), initialize
 missing fields before proceeding: `context_reminders_sent: none`
 and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
 
-Resolve the active thresholds from the SKILL.md Handoff Protocol
-"Threshold defaults" section. Defaults:
+The active thresholds live in the SKILL.md Handoff Protocol
+"Threshold defaults" table, which the sensor hook parses directly:
 - 200K model context → yellow 80K tokens, red 120K tokens
 - 1M model context  → yellow 120K tokens, red 200K tokens
 
-The lead cannot self-measure its context window reliably. Two modes
-apply (per SKILL.md Handoff Protocol "Reminder semantics"):
+The lead does not measure or estimate its own context window. The
+`ai-dlc-context-sensor.sh` Stop hook measures it every turn from the
+session transcript, fires the Rule 2(b)/(c) reminder, and owns both
+the dedupe and the recurrence arithmetic (50,000-token / 20-turn
+delta). This gate check therefore **reads** the result; it does not
+compute one.
 
-**Mode 1 — user-shared `/context` (authoritative).** The most
-recent user-shared `/context` output this session drives both the
-threshold-crossing check AND the recurrence arithmetic. Under
-Mode 1, the evaluation rules below apply, and on any firing the
-lead emits the full Rule 2(b) / 2(c) reminder text and advances
-`last_yellow_fire_tokens` / `last_yellow_fire_turns` (or the red
-counterparts).
-
-**Mode 2 — fallback estimate (advisory only).** When no user-
-shared `/context` is available, compute:
+Read `_bmad-output/.context-sensor-state`. It is a flat key=value
+file:
 
 ```
-estimate = 15,000  (baseline for CLAUDE.md + skill + system prompt)
-         + (turns_this_session * 2,000)  (approx per-exchange cost)
-         + sum(tool_output_sizes_in_bytes) * 0.25  (bytes-to-tokens conservative high)
+last_level=none|yellow|red
+last_fire_tokens=<int>
+last_fire_turn=<int>
+turn_counter=<int>
+last_measured=<int>
+model_row=200K|1M
+row_known=0|1
+effective_window=<int>
 ```
 
-If the estimate crosses a threshold, emit the lighter check-line
-(not the full Rule 2 reminder):
+Reconcile the snapshot's Context Reminders fields to it:
 
-> *"Context estimate suggests crossing the {yellow|red} threshold
-> (~{estimate}K tokens, fallback heuristic). Please share
-> `/context` output to confirm. I will continue with this estimate
-> as a working assumption until confirmed."*
+- `context_reminders_sent` := `last_level`
+- `last_yellow_fire_tokens` / `last_yellow_fire_turns` := the
+  sidecar's `last_fire_tokens` / `last_fire_turn` when `last_level`
+  is `yellow`
+- `last_red_fire_tokens` / `last_red_fire_turns` := likewise when
+  `last_level` is `red`
 
-Under Mode 2, DO NOT advance the `last_*_fire_tokens` /
-`last_*_fire_turns` snapshot fields and DO NOT update
-`context_reminders_sent`. Mode 2 is a prompt for confirmation, not
-a reminder; advancing fire state on unverified estimates would
-cause noisy re-firing on long sessions. When the user responds
-with `/context` output, treat the shared value as Mode 1 input:
-evaluate the threshold, emit the full Rule 2 reminder if the
-shared value confirms the crossing, and advance fire state.
+If the sidecar is absent, the sensor has not fired this pipeline (a
+fresh session, or context still below yellow). Leave the snapshot
+fields at `none` / `null`. Do **not** substitute an estimate: a guess
+beside an authoritative number is worse than silence.
 
-Evaluation rules (Mode 1 only — in order):
+If `row_known=0`, the sensor is assuming the 200K threshold row
+because the model's context-window size is not recorded anywhere in
+the transcript. Reminders may therefore fire early on a 1M model.
+Setting `AI_DLC_MODEL_ROW` to `200K` or `1M` in the project's
+`.claude/settings.json` `env` block removes the ambiguity; the sensor
+also self-corrects once it observes a reading no 200K model could
+reach.
 
-- **First crossing of yellow:** if `context_reminders_sent` is
-  `none` and shared tokens ≥ yellow_threshold, output the
-  Rule 2(b) yellow-threshold reminder substituting the actual
-  yellow_threshold value. Set `context_reminders_sent: yellow`,
-  `last_yellow_fire_tokens` to the shared value, and
-  `last_yellow_fire_turns` to the current turn count.
-- **First crossing of red:** if `context_reminders_sent` is
-  `none` or `yellow` and shared tokens ≥ red_threshold, output
-  the Rule 2(c) red-threshold reminder substituting the actual
-  red_threshold value. Set `context_reminders_sent: red`,
-  `last_red_fire_tokens`, and `last_red_fire_turns`.
-- **Recurring yellow (still below red):** if
-  `context_reminders_sent` is `yellow`, shared tokens still below
-  red_threshold, and EITHER (shared_tokens −
-  last_yellow_fire_tokens ≥ 50,000) OR (current_turn −
-  last_yellow_fire_turns ≥ 20), re-output the yellow reminder and
-  refresh `last_yellow_fire_*`.
-- **Recurring red:** if `context_reminders_sent` is `red` and
-  EITHER (shared_tokens − last_red_fire_tokens ≥ 50,000) OR
-  (current_turn − last_red_fire_turns ≥ 20), re-output the red
-  reminder and refresh `last_red_fire_*`.
-- **Below yellow threshold:** no reminder, no field change.
+Do **not** re-emit the reminder here. The hook already delivered it
+to the lead as `additionalContext` on the turn it fired. A user reply
+to a reminder is a Rule 11 directive handled on the next turn.
 
-Reminders are non-blocking one-line outputs; they do not pause the
-pipeline. Output, update the snapshot fields under Mode 1, and
-continue. Any user reply to a reminder is a Rule 11 directive
-handled on the next turn.
+User-shared `/context` output remains valid as manual confirmation. If
+the user shares it and it disagrees materially with `last_measured`,
+trust the user, say so, and note the discrepancy in the retro — the
+sensor reads Claude Code's own figure, so a real disagreement means
+the sensor is broken.
