@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.42.0] — 2026-07-10
+
+The context sensor (`ai-dlc-context-sensor.sh`) is now compaction-aware: it only
+reads a token count from an assistant turn that lands *after* the most recent
+`compact_boundary`.
+
+The sensor derives resident context from the last main-thread assistant
+`message.usage` in a bounded tail-read. That reading flips at a compaction: the
+last *pre*-compaction assistant line still carries the old, large usage, and on
+the first `PostToolBatch` after an auto-compact that line is the newest one on
+disk — the post-compaction turn has not been written yet. The unguarded
+tail-read selected it, reporting the *pre*-compaction window as resident and
+firing a false `IMMINENT` one request after compaction had just reclaimed the
+space. Observed live on the `graph` consumer: `~265,909 / 88% / IMMINENT`
+emitted immediately after a compact whose real resident context was `80,851`
+(27%). The false signal drove a premature snapshot-finalize and a spurious
+`/clear` handoff recommendation, and — because the sensor's "reconcile the
+snapshot Context Reminders fields to this reading" directive outranks
+`ai-dlc-recover.sh`'s "reset fire-state to none" — re-poisoned the fire-state
+the recover hook had just cleared.
+
+The fix locates the most recent boundary in the tail window and takes the last
+assistant-with-usage line that follows it; a boundary with no post-boundary
+reading yet stays silent, the same fail-open as a fresh transcript. It
+self-heals within one turn as the post-compaction usage lands. Two fixtures
+(`post-compact-stale`, `post-compact-reattached`) pin the guard.
+
 ## [0.41.0] — 2026-07-10
 
 `ai-dlc-update` git preflight now auto-pushes a push-resolvable branch instead

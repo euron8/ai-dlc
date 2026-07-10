@@ -15,8 +15,10 @@
 # effort). But it carries `transcript_path`, and every assistant message in the
 # transcript carries `message.usage`. Claude Code's own context figure is
 #     input_tokens + cache_creation_input_tokens + cache_read_input_tokens
-# taken from the last main-thread assistant message. This hook computes exactly
-# that, so its reading equals `compactMetadata.preTokens`.
+# taken from the last main-thread assistant message AFTER the most recent
+# compaction boundary -- a pre-boundary line still carries the old, larger
+# pre-compaction window. This hook computes exactly that, so its reading equals
+# `compactMetadata.preTokens`.
 #
 # DESIGN CONTRACT
 # - Decision-free. Never emits `decision`; always exits 0. Rule 2 reminders are
@@ -149,15 +151,38 @@ fi
 # preceding tool_result line can be megabytes, pushing the assistant line out of
 # a small window, so escalate. `fromjson?` discards the partial first line that
 # `tail -c` produces.
+#
+# Only a reading from AFTER the most recent compaction counts. The window the
+# transcript records flips at a `compact_boundary`: the last PRE-compaction
+# assistant line still carries the old (large) usage, and on the first
+# PostToolBatch after an auto-compact that line is the newest one on disk --
+# the post-compaction turn has not been written yet. Selecting it reports the
+# pre-compaction window (~preTokens) as resident and fires a false IMMINENT one
+# request after compaction just reclaimed the space (observed on the graph
+# consumer: 265,909 reported against a real 80,851). So: locate the most recent
+# boundary in the window and take the last assistant-with-usage line that
+# FOLLOWS it. A boundary with no post-boundary reading yet stays silent -- the
+# same fail-open as a fresh transcript.
 # -----------------------------------------------------------------------------
 LINE=""
 for N in ${AI_DLC_SENSOR_TAIL_BYTES:-262144} 1048576 4194304; do
-  # -R reads each line as a raw string so `fromjson?` can discard the partial
-  # first line `tail -c` produces. Without -R, jq parses the lines itself and
-  # `fromjson` then fails on every (already-parsed) object.
+  # -Rs slurps the tail as one string so a single jq pass can both locate the
+  # boundary and pick the post-boundary reading. `fromjson?` drops the partial
+  # first line `tail -c` produces and any non-JSON line.
   LINE="$(tail -c "$N" "$TRANSCRIPT" 2>/dev/null \
-    | jq -Rc 'fromjson? | select(.type == "assistant" and (.isSidechain | not) and (.message.usage != null))' 2>/dev/null \
-    | tail -1)"
+    | jq -Rsc '
+        (split("\n") | map(fromjson?)) as $a
+        | (reduce range(0; ($a | length)) as $i (-1;
+             if $a[$i].type == "system" and $a[$i].subtype == "compact_boundary"
+             then $i else . end)) as $b
+        | [ range(0; ($a | length)) as $i
+            | select($i > $b
+                     and $a[$i].type == "assistant"
+                     and ($a[$i].isSidechain | not)
+                     and ($a[$i].message.usage != null))
+            | $a[$i] ]
+        | if length > 0 then .[-1] else empty end
+      ' 2>/dev/null)"
   [ -n "$LINE" ] && break
 done
 

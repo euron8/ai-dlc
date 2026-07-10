@@ -87,6 +87,22 @@ OUT="$(fire post-compact-drop.jsonl | ctx)"
 check "post-compact drop is silent" "$OUT" ""
 check "  and resets fire state" "$(field last_level)" "none"
 
+# --- post-compaction boundary guard ------------------------------------------
+# The last PRE-compaction assistant line still carries the old, large usage. On
+# the first PostToolBatch after an auto-compact it is the newest line on disk --
+# the post-compaction turn has not flushed -- so an unguarded tail-read reports
+# the pre-compaction window (~preTokens) and fires a false IMMINENT one request
+# after compaction reclaimed the space (graph consumer: 265,909 vs a real
+# 80,851). The sensor must ignore any reading that precedes the most recent
+# compact_boundary. Row pinned to 1M so an unguarded 260000 would fire IMMINENT.
+reset; printf 'row=1M\n' > "$MODEL"
+check "pre-boundary-only transcript is silent" "$(fire post-compact-stale.jsonl | ctx)" ""
+check "  and records no stale reading" "$(field last_measured)" ""
+
+reset; printf 'row=1M\n' > "$MODEL"
+fire post-compact-reattached.jsonl >/dev/null
+check "reads the post-boundary turn, not the pre-boundary one" "$(field last_measured)" "80000"
+
 # --- transcript-shape robustness ---------------------------------------------
 reset
 fire sidechain-tail.jsonl >/dev/null
