@@ -528,19 +528,19 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   gate.
 - **Context Reminders** — `context_reminders_sent` (none | yellow |
   red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
-  `last_red_fire_tokens`, `last_red_fire_turns`. Evaluate context usage
-  and update per the threshold-check procedure in `_gate-procedures.md`
-  "Context reminder threshold check".
+  `last_red_fire_tokens`, `last_red_fire_turns`. Reconcile these from
+  the context sensor's sidecar per the procedure in
+  `_gate-procedures.md` "Context reminder threshold check". The sensor
+  measures and fires; this gate only records what it did.
 
 **Context reminder threshold check (required at every gate).** The
-evaluation procedure — Mode 1 (user-shared `/context`, authoritative) vs
-Mode 2 (fallback estimate, advisory), the estimate formula, the
-crossing/recurrence rules, and the fire-state advancement — is in
+`ai-dlc-context-sensor.sh` Stop hook measures resident context every turn,
+fires the Rule 2(b)/(c) reminder, and owns dedupe and recurrence. This gate
+check reconciles the snapshot's Context Reminders fields to the hook's
+sidecar `_bmad-output/.context-sensor-state`; it does not evaluate a
+threshold or produce an estimate. The reconciliation procedure is in
 `_gate-procedures.md` "Context reminder threshold check". Run it at every
-gate; it reads and updates the Context Reminders fields defined in the
-six-section schema above. The fields, thresholds, and Mode-1/Mode-2
-distinction remain authoritative here; only the step-by-step evaluation
-moved.
+gate. The fields and thresholds remain authoritative here.
 
 The canonical section structure is defined above in this check; see the
 SKILL.md Handoff Protocol and Pipeline Snapshot section for the

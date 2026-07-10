@@ -194,7 +194,9 @@ cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/ski
 echo "Installing update skill..."
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-update/"
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-update/reconcile/"* "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile/"
-chmod +x "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile/preclassify.sh"
+# chmod the whole glob, not named scripts: `cp` happens to preserve the source
+# mode, so a newly added reconcile script works by luck until it does not.
+chmod +x "$PROJECT_ROOT/.claude/skills/ai-dlc-update/reconcile/"*.sh 2>/dev/null || true
 echo "  ai-dlc-update installed (skill + reconcile engine)"
 
 # Install team roles (always overwrite with AI/DLC versions)
@@ -247,48 +249,92 @@ echo "  session-driver installed (.claude/session-driver/)"
 TEMPLATE_SETTINGS="$SCRIPT_DIR/../templates/settings.json.template"
 USER_SETTINGS="$PROJECT_ROOT/.claude/settings.json"
 
-if [ ! -f "$USER_SETTINGS" ]; then
-  cp "$TEMPLATE_SETTINGS" "$USER_SETTINGS"
-  echo "  settings.json installed"
+# The merge itself lives in ai-dlc-update's reconcile engine, so install and
+# `ai-dlc-update` provably apply the SAME contract. Two copies of this jq is how
+# an installed consumer and a reconciled consumer silently diverge.
+SETTINGS_MERGE="$SCRIPT_DIR/../core/skills/ai-dlc-update/reconcile/settings-merge.sh"
+if [ ! -r "$SETTINGS_MERGE" ]; then
+  echo "  Error: missing $SETTINGS_MERGE" >&2
+  exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# AI_DLC_MODEL_ROW -- the context sensor's model row.
+#
+# The transcript records `claude-opus-4-8` for BOTH the 200K and the 1M variant,
+# so ai-dlc-context-sensor.sh cannot read the window size off it. Unset, it
+# assumes 200K and self-corrects once it observes a reading no 200K model could
+# reach (>= 187,000). Pinning the row skips that one early-reminder session.
+#
+# We deliberately do NOT ship a default value in the template:
+#   * Pinning "200K" would set row_known=1 and DISABLE the self-correction, so a
+#     1M project would fire early reminders forever -- worse than unset.
+#   * Pinning "1M" on a 200K model would put red (200,000) above that model's
+#     compact threshold (187,000), so red would never fire before compaction --
+#     the exact failure the ordering invariant exists to prevent.
+# Silence is the safe state, so a non-interactive install leaves it unset.
+#
+# The settings `env` block propagates into hook subprocesses (verified against
+# Claude Code 2.1.206), which is how the hook reads this.
+# -----------------------------------------------------------------------------
+# Ask only when it matters: --check reports model_row_needed=yes exactly when the
+# key is absent AND the template wires the sensor.
+NEEDED="$(bash "$SETTINGS_MERGE" --consumer "$USER_SETTINGS" --template "$TEMPLATE_SETTINGS" --check 2>/dev/null \
+  | sed -n 's/^model_row_needed=//p' | head -1)"
+EXISTING_ROW="$(jq -r '.env.AI_DLC_MODEL_ROW // empty' "$USER_SETTINGS" 2>/dev/null || true)"
+
+# Non-interactive callers (CI, `curl | bash`) preset the answer:
+#   AI_DLC_MODEL_ROW=1M scripts/install.sh /path/to/project
+PRESET_ROW="${AI_DLC_MODEL_ROW:-}"
+case "$PRESET_ROW" in
+  200K|1M|auto|"") ;;
+  *) echo "  Warning: ignoring AI_DLC_MODEL_ROW='$PRESET_ROW' (expected 200K, 1M, or auto)"
+     PRESET_ROW="" ;;
+esac
+
+CHOSEN_ROW="auto"
+
+if [ -n "$EXISTING_ROW" ]; then
+  : # consumer-owned; settings-merge.sh will not touch it
+elif [ "$NEEDED" != "yes" ]; then
+  : # template does not wire the sensor
+elif [ -n "$PRESET_ROW" ]; then
+  CHOSEN_ROW="$PRESET_ROW"
+elif [ ! -t 0 ]; then
+  echo "  AI_DLC_MODEL_ROW unset (non-interactive install)."
+  echo "    The context sensor will assume the 200K thresholds and self-correct"
+  echo "    once it observes a reading only a larger window could produce."
+  echo "    To pin it: re-run with AI_DLC_MODEL_ROW=1M, or set"
+  echo "    .env.AI_DLC_MODEL_ROW in .claude/settings.json"
 else
-  MERGE_TMP="$(mktemp)"
-  if jq -n \
-       --slurpfile user "$USER_SETTINGS" \
-       --slurpfile tmpl "$TEMPLATE_SETTINGS" '
-        ($user[0]) as $u |
-        ($tmpl[0]) as $t |
+  echo ""
+  echo "  Context sensor: which context window does this project's model run?"
+  echo "    1) 1M    -- e.g. Opus/Sonnet with the 1M context beta enabled"
+  echo "    2) 200K  -- the standard context window"
+  echo "    3) auto  -- let the sensor infer it (safe; costs one session of"
+  echo "                early reminders on a 1M model)"
+  printf "  Choose [1/2/3] (default 3): "
+  read -r MODEL_ROW_CHOICE </dev/tty || MODEL_ROW_CHOICE=""
+  case "$MODEL_ROW_CHOICE" in
+    1) CHOSEN_ROW="1M" ;;
+    2) CHOSEN_ROW="200K" ;;
+    *) CHOSEN_ROW="auto" ;;
+  esac
+fi
 
-        def is_ai_dlc_block:
-          (.hooks // [])
-          | any(
-              (.command // "") as $c |
-              ($c | test("/\\.claude/hooks/ai-dlc-[^/]+\\.sh")) or
-              ($c | test("RULE 3 CONTINUATION MANDATE"))
-            );
-
-        def strip_ai_dlc:
-          map(select(is_ai_dlc_block | not));
-
-        ($u.hooks // {}) as $uh |
-        ($t.hooks // {}) as $th |
-        (($uh | keys) + ($th | keys) | unique) as $events |
-
-        $u
-        | .enabledPlugins = (($t.enabledPlugins // {}) + ($u.enabledPlugins // {}))
-        | .hooks = (
-            $events
-            | map(. as $e | (($uh[$e] // []) | strip_ai_dlc) + ($th[$e] // []) | {($e): .})
-            | add
-          )
-      ' "$USER_SETTINGS" > "$MERGE_TMP"; then
-    mv "$MERGE_TMP" "$USER_SETTINGS"
-    echo "  settings.json merged (ai-dlc hooks upserted; user config preserved)"
-  else
-    rm -f "$MERGE_TMP"
-    echo "  Error: failed to merge settings.json. Existing file left untouched."
-    echo "  Archived copy at docs/pre-ai-dlc/$ARCHIVE_TS/_divergence/.claude/settings.json"
-    exit 1
-  fi
+# One call, one contract: merge hooks + (maybe) provision the row, atomically.
+# Capture rather than pipe: `cmd | sed` reports sed's exit status, so a failed
+# merge would read as a success.
+if MERGE_OUT="$(bash "$SETTINGS_MERGE" \
+       --consumer "$USER_SETTINGS" \
+       --template "$TEMPLATE_SETTINGS" \
+       --model-row "$CHOSEN_ROW" 2>&1)"; then
+  printf '%s\n' "$MERGE_OUT" | sed 's/^/  /'
+else
+  printf '%s\n' "$MERGE_OUT" | sed 's/^/  /'
+  echo "  Error: failed to merge settings.json. Existing file left untouched."
+  echo "  Archived copy at docs/pre-ai-dlc/$ARCHIVE_TS/_divergence/.claude/settings.json"
+  exit 1
 fi
 
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
@@ -319,11 +365,12 @@ fi
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion check-manifest-bypass; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion check-manifest-bypass context-sensor; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"
     chmod +x "$PROJECT_ROOT/tests/fixtures/$fixture_dir/seed.sh" 2>/dev/null || true
+    chmod +x "$PROJECT_ROOT/tests/fixtures/$fixture_dir/run.sh" 2>/dev/null || true
     echo "  $fixture_dir/ installed"
   fi
 done

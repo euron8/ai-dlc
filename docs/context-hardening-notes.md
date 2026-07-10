@@ -168,10 +168,13 @@ against primary sources before changing them.
   is lossy. Specific facts the snapshot relies on might be dropped
   from conversation history. Mitigation: snapshot is source of
   truth, not scrollback; verification turn exposes drift.
-- **Self-introspection precision.** The lead cannot count its own
-  tokens. User-shared `/context` is the authoritative fallback.
-  Without it, the lead estimates conservatively and may over- or
-  under-fire reminders.
+- ~~**Self-introspection precision.**~~ *Resolved by R28 (v0.36.0).*
+  The lead still cannot count its own tokens, but it no longer needs
+  to: the `ai-dlc-context-sensor.sh` Stop hook reads the figure off
+  the transcript each turn. What remains outside the system's control
+  is the model's **context-window size**, which Claude Code records
+  nowhere in the transcript; the sensor infers it, and
+  `AI_DLC_MODEL_ROW` pins it.
 - **Claude Code behavior changes.** This design assumes CLAUDE.md
   is preserved through `/compact`. If Claude Code changes that
   behavior in a future release, the Post-Compact Recovery Protocol
@@ -269,6 +272,13 @@ does NOT advance `last_*_fire_tokens` / `last_*_fire_turns`, so
 unverified estimates cannot re-fire noisily. Two identical leads
 in the same state now produce the same Mode 2 estimate, which
 restores the stability R8's 50K-token recurrence needs.
+
+> **Superseded by R28 (v0.36.0).** Both modes are replaced by a
+> direct measurement. Mode 2 is deleted outright; its estimator was
+> wrong in both terms (baseline 15,000 against a measured resident
+> floor of ~69,000; rate 2,000/turn against a measured ~1,200/turn),
+> and it was silent at the true yellow crossing in 108 of 219 real
+> sessions while overestimating by 69% at the median.
 
 ### R18 — `implementation.md` model placeholders
 
@@ -460,6 +470,14 @@ auto-handoff to fire on the next seam evaluation. Firing
 auto-handoff on an unverified estimate would break the contract
 the reminders already carry: fire state advances only on confirmed
 crossings. R20 preserves that contract.
+
+> **Superseded by R28 (v0.36.0).** Mode 2 is deleted and Mode 1 is
+> demoted to optional confirmation. The precondition now reads
+> `last_level` from the context sensor's sidecar. The contract it
+> protected — fire state advances only on confirmed crossings — is
+> strengthened, not weakened: every advance is now a direct
+> measurement of resident context rather than a human paste. See
+> "R28" below.
 
 **Manual walkthrough — three modes, red-threshold crossing at an
 adversarial review pass boundary:**
@@ -876,3 +894,96 @@ unified numbering.
   customized and want to preserve elsewhere. The archive at
   docs/pre-ai-dlc/<timestamp>/ remains the source of truth for
   anything a user wants to salvage manually.
+
+## R28 — Context sensor: measure, don't estimate (v0.36.0)
+
+Rule 2(b)/(c) reminders exist so the high-fidelity handoff
+(`/clear` + `/ai-dlc resume`) gets first refusal before Claude Code's
+auto-compact takes the lossy path. Until R28 the only authoritative
+trigger was the user pasting `/context`. Measured across 243 real
+consumer sessions carrying `usage` data (the `graph` project):
+
+| Fact | Value |
+|---|---|
+| Sessions crossing yellow (120K) | 219 |
+| Sessions crossing red (200K) | 184 |
+| `/context` invocations by the user, ever | 2 |
+| Mode 2 silent at the true yellow crossing | 108 of 219 |
+| Mode 2 median relative error | +69% (p90 +134%) |
+
+The reminders almost never fired, so the ordering invariant was
+decorative. This is the gap R28 closes.
+
+**Mechanism.** Hook stdin carries no token counts — the shared schema
+is `session_id, transcript_path, cwd, prompt_id, permission_mode,
+agent_id, agent_type, effort` (extracted from the Claude Code 2.1.206
+binary). But it carries `transcript_path`, and every assistant message
+in the transcript carries `message.usage`. Claude Code's own context
+figure is `input_tokens + cache_creation_input_tokens +
+cache_read_input_tokens` from the last main-thread assistant message.
+`ai-dlc-context-sensor.sh` (a Stop hook) computes exactly that, so its
+reading equals `compactMetadata.preTokens`. Verified against a real
+6.5MB transcript: 248,721 measured, 248,721 actual, in 59ms.
+
+**Why not the statusLine.** Its stdin does carry an official
+`context_window` object (`total_input_tokens`, `context_window_size`,
+`used_percentage`) plus `exceeds_200k_tokens`. But its stdout is
+display-only and never reaches the model; it occupies a single global
+slot users typically fill with their own tool; `install.sh`'s jq merge
+does not manage the `statusLine` key; and it does not run in the
+headless session-driver environment where AI/DLC runs unattended. Its
+data is derivable from `transcript_path`, which every hook receives.
+
+**Why a Stop hook, and why it works alongside a blocking sibling.**
+Stop fires once per assistant turn (`PostToolBatch` fires per tool
+batch — many times per turn, for a number that only moves per turn).
+At Stop time the latest assistant `usage` line is always already in the
+transcript (verified 0–3 lines back across 2,472 real stop entries).
+Critically, the Stop result loop collects each hook's
+`additionalContexts` independently of whether a sibling hook sets
+`preventContinuation`, so the reminder reaches the model even on the
+turns `ai-dlc-continue.sh` blocks — which, in autonomous mode, is
+nearly all of them.
+
+**The ~31,000-token sensor reserve.** Claude Code compacts at
+`effectiveWindow - 13000` (`G_o(e,t) = e - 13000`). But the quantity
+this hook measures sits a further ~18,000 below that at fire time: the
+check adds an output allowance before comparing. Measured on two
+independent windows — 287,000−268,892 = 18,108 and 987,000−969,084 =
+17,916. So the ceiling visible to a transcript-derived reading is
+`effectiveWindow - 31,000`. The `-13000` invariant in
+`validate-compact-window.sh` is unchanged and remains correct; 31,000
+is used only by the runtime `compact_imminent` backstop.
+
+**Model-row inference.** The transcript records `claude-opus-4-8` for
+both the 200K and the 1M variant; the `[1m]` suffix is stripped and no
+window size appears anywhere in it. The two errors are asymmetric:
+assuming 200K on a 1M model fires reminders early (noisy, non-blocking),
+while assuming 1M on a 200K model puts red at 200,000 above a compact
+threshold of 187,000 — red would never fire before compaction, the exact
+failure the ordering invariant prevents. So the sensor assumes 200K and
+upgrades only on proof: a reading ≥ 187,000 is impossible on a 200K
+model. The proof is cached in `_bmad-output/.context-sensor-model`, so a
+project pays the early-reminder noise at most once. `AI_DLC_MODEL_ROW`
+pins it explicitly. The `compact_imminent` backstop is suppressed while
+the row is merely assumed, since `effectiveWindow` would be a guess.
+
+**Fire state moved off the snapshot.** The snapshot's Context Reminders
+fields are lead-written at gates — a handful per session against a p50
+of 242 assistant turns — far too coarse to dedupe a per-turn sensor.
+The hook owns `_bmad-output/.context-sensor-state` and the 50K-token /
+20-turn recurrence. Check 14 now reconciles the snapshot from it. The
+sidecar self-heals: a reading that drops by more than 50,000 tokens
+means compaction or `/clear`, and resets the level to `none`.
+`ai-dlc-recover.sh` also removes it on `SessionStart(compact)`.
+
+**Consequence for auto-handoff.** The `deploy-only` precondition
+formerly read "red confirmed under Mode 1", justified by the fact that
+Mode 2 never advanced the field. It now reads `last_level` from the
+sidecar. The guarantee is strengthened: every advance is a direct
+measurement of Claude Code's own figure rather than a human paste.
+
+**Measured lead time.** From yellow (120K) to compaction: p50 138
+turns. From red (200K): p50 79 turns. Context grows ~1,200 tokens/turn
+(p50) and the resident floor is ~69,215 (p50). There is ample room for
+a non-blocking reminder to change the outcome.
