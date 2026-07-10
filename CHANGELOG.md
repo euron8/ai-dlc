@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.36.2] — 2026-07-10
+
+Resident-path narrative strip. The LLM-consumed skill files under
+`core/skills/ai-dlc/` had accreted design history, incident evidence, and
+version-diff framing that a fresh lead never acts on but pays for on every
+dispatch. An audit of all 28 files separated that dead rationale from
+operational scar tissue and relocated it to the maintainer design record.
+
+Rule 26(c) `Minimum mechanism` contracts (`Failure caught` / `False-positive
+cost` / `Removal condition`) were deliberately **left inline** at their
+machinery sites: Rule 26(c) requires the contract "at introduction", and the
+retro rule-file audit flags machinery lacking it, so relocating would
+manufacture that violation. Only origin/change-history and worked-proof
+narrative moved. Non-behavioral (PATCH) — no gate, hook, or step contract
+changed; both validators (`validate-compact-window.sh`,
+`validate-enforcement-map.sh`) and every structural anchor pass unchanged.
+
+### Changed
+
+- **`SKILL.md`** (loads every dispatch): compact-window ordering-invariant prose
+  collapsed to the invariant + validator pointer (its rationale already lived in
+  `validate-compact-window.sh`'s header); removed superseded-phrasing clauses,
+  `v0.24.0 Lever 2` / `pre-0.8.0` version tags, and the `graph`-consumer war-story
+  citations trimmed off the Rule 27/28 26(c) lines (the contracts themselves stay).
+- **`steps/gate-validation.md`** (loads every gate): the 23-line consumer-catalog
+  crosswalk collapsed to a 3-line operational pointer; removed version tags, the
+  Check-13 numbering aside, and the Check-22 "supersedes stale Check 15" changelog.
+- **Phase B — per-phase step files and layer READMEs**: `retro.md`,
+  `implementation.md`, `stories-test-strategy.md`, `architecture.md`,
+  `overrides/README.md`, `extensions/README.md`, `steps/sprint-review-next.md` —
+  each stripped of its remaining version tag, war story, or placement rationale.
+- **`docs/context-hardening-notes.md`**: R2 extended with the compact-window
+  invariant + worked 1M example; new dated **R30** section captures every
+  relocated block with `moved from <file> L<n>` provenance so nothing is lost.
+
 ## [0.36.1] — 2026-07-10
 
 The v0.36.0 sensor was a Stop hook, and Stop only fires when the model ends its

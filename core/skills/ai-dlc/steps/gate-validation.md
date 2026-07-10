@@ -10,13 +10,11 @@ This file is referenced (not loaded as a step) by every pipeline step at
 phase transition points. When a step says "run gate validation", execute
 this protocol. Every check must PASS. Any failure blocks the gate.
 
-## Gate-type manifest (v0.24.0 Lever 2 — conditional check loading)
+## Gate-type manifest (conditional check loading)
 
 Checks in this file are **sliced by gate type**: a gate loads the
 universal core plus only the checks its declared type requires, per the
-`GATE_MANIFEST` below. This is a conditional-load, not a reduction — no
-check text is edited; a check merely stops occupying the window on gates
-where its own scope clause would make it a no-op anyway. See
+`GATE_MANIFEST` below. See
 `docs/v0.24.0-gate-validation-slicing-spec.md` §5.
 
 **Gate-type enum (canonical, co-located per Rule 26).** The invoking step
@@ -63,40 +61,20 @@ absent from loaded context. A check present in this file but absent from
 every manifest row (an orphan) is also an H1 FAIL — the manifest and the
 check set must stay in sync.
 
-**Correctness rule (do not over-slice).** Dropping a check a gate needs
-is a silent correctness bug the manifest itself must prevent — H1 only
-catches a check the manifest *marks required* but the loader failed to
-load; it cannot catch a manifest row that wrongly omits a check. When a
-check's firing gate is uncertain, its ID is included in every candidate
-type's row (over-inclusion is safe — the check self-skips; under-inclusion
-is the bug). Checks 8/9 sit in both `implementation` (pass vacuously
-pre-deploy) and `retro` (post-deploy evidence validation) for this
-reason; Check 17 sits in `planning`, `story`, and `retro` (it fires at
-the PRD gate, the story-readiness gate, and the retro gate).
+**Correctness rule (do not over-slice).** When a check's firing gate is
+uncertain, include its ID in every candidate type's row: over-inclusion
+is safe (the check self-skips), under-inclusion silently drops a check a
+gate needs. Mechanics and the multi-row cases (Checks 8/9, 17):
+`docs/context-hardening-notes.md` (R30).
 
 ## Consumer-catalog crosswalk (do not mis-attribute fire history)
 
-A consumer MAY layer its own domain checks via `extensions/checks/` (Rule 27).
-When it does, **the consumer's check numbers are its own namespace and DO NOT
-map to this file's numbers.** A domain consumer can redefine a shared number
-(e.g. reuse "Check 20"/"Check 22" for a different domain check) and add checks
-past this catalog's range. Consequence for any audit or absorption pass:
-
-- **`Check N` in a consumer's gate-log / retro / escalation refers to that
-  consumer's catalog, not this one.** Never attribute consumer fire-history to a
-  distribution check by number — align by check *title/intent*, and confirm
-  against the consumer's own `extensions/checks/*.md` before concluding anything.
-- **Distribution checks 1–18 are the shared core**; a consumer's extension file
-  marked `push_candidate: false` is deliberately consumer-local and MUST NOT be
-  backported into this catalog (doing so violates the layered-rulebook boundary).
-- A check absorbed FROM a consumer records its origin inline via a
-  `**Graph→distribution number mapping.**` note (see Checks 20, 21) so a future
-  reconciliation does not re-flag it as new.
-
-Repeatable evidence tool: `scripts/audit-machinery-efficacy.js` computes the
-title-aligned crosswalk + per-check token cost against a consumer's history; run
-it under `bun` for real tokenizer counts. See
-`docs/v0.27.0-machinery-efficacy-audit.md`.
+A consumer's extension check numbers (`extensions/checks/`, Rule 27) are its own
+namespace and DO NOT map to this file's numbers. Align consumer fire-history by
+check *title/intent*, never by number. Full crosswalk rules, the
+absorption-provenance convention, and the repeatable evidence tool
+`scripts/audit-machinery-efficacy.js`: `docs/context-hardening-notes.md` (R30)
+and `docs/v0.27.0-machinery-efficacy-audit.md`.
 
 ## Validation Checklist
 
@@ -444,8 +422,6 @@ cross-catalog confound). Per-line schema:
 
 - **Emit validation checks only — NOT the procedural gate-mechanics checks
   12–15** (this log-append, 13 announce, 14 snapshot, 15 verify-snapshot).
-  Those are bookkeeping, never defect-catchers, so they carry no efficacy
-  signal; emitting a metric for the emitter (Check 12) is also circular.
   Emit every other check the manifest loaded for this gate type (the
   universal-core validators + the gate-type row), including those recorded
   `NA` — an `NA` exposure is signal (the check ran and self-skipped).
@@ -475,10 +451,7 @@ tooling falls back to the prose path. Consumed by
 <!-- CHECK_LOADED: 13 -->
 
 Output a brief line to the conversation only AFTER Checks 14 and 15
-below have also passed. (This check is numbered 13 to preserve
-existing cross-references, but execution is deferred until the full
-15-check cycle is complete, so the announcement reflects the final
-count.)
+below have also passed.
 
 "Gate [name]: PASSED — all checks passed — proceeding to [next phase]"
 
@@ -868,9 +841,7 @@ boundary, or the lead absorbing a protected-path edit it should have
 delegated (Rule 28). False-positive cost: one gate-log read of records
 the lead already writes at Step 4 — no new artifact. Removal condition:
 retire once the Agent-tool spawn API structurally attaches the role file
-(no lead-authored dispatch line to verify). This check supersedes the
-former stale "Check 15" citations in `implementation.md`, which pointed
-at the snapshot-verification check by mistake.
+(no lead-authored dispatch line to verify).
 
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 <!-- CHECK_LOADED: H1 -->
@@ -973,14 +944,14 @@ passes validation, OR H1 fails to catch the seeded slicing-bypass.
 
 ### Sub-step snapshot update (referenced by step files)
 
-**Moved to `_gate-procedures.md` (v0.24.0 Phase 1).** This procedure is
+**Moved to `_gate-procedures.md`.** This procedure is
 invoked by name from step files, not run in the gate sequence. When a step
 says "run sub-step snapshot update", READ AND FOLLOW `_gate-procedures.md`
 "Sub-step snapshot update". The full Check 14 above still runs at every gate.
 
 ### Auto-handoff evaluation (referenced by step files)
 
-**Moved to `_gate-procedures.md` (v0.24.0 Phase 1).** This helper is invoked
+**Moved to `_gate-procedures.md`.** This helper is invoked
 by name from step files at defined seams, not run in the Check 1–H2 sequence.
 When a step says "run auto-handoff evaluation at Seam <X>", READ AND FOLLOW
 `_gate-procedures.md` "Auto-handoff evaluation".
