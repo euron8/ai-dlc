@@ -17,6 +17,29 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.35.2] — 2026-07-10
+
+Patch. `layer-drift.sh` (v0.34.0) reported only ONE anchor per override.
+
+Found while dry-running a v0.35.0 pull against the live `graph` consumer, whose
+retro override shadows eight `steps/retro.md` sections. Three of them changed
+upstream (`#4a. Close-Out Sweep`, `#5. Human Commentary`, `#7. Merge and
+Next-Sprint Handoff`); the report named only `#7`. The `worst` status was always
+correct — the file was flagged `OVERRIDE-DRIFT-SECTION` — but `detail` was
+reassigned on every loop iteration, so the last anchor examined overwrote the
+rest. An operator reconciling from that line fixes one section and silently drops
+two, which is the exact failure v0.34.0 was built to end.
+
+The mixed case was worse. When an override shadowed two changed sections *and*
+one anchor that no longer resolves, the unresolvable-anchor branch ran last and
+the emitted detail named **zero** drifted sections while still reporting status
+`OVERRIDE-DRIFT-SECTION`.
+
+- **`reconcile/layer-drift.sh`** now accumulates per category (drifted /
+  not-locatable / not-found) and composes one line naming every affected anchor
+  with a count: `3 shadowed section(s) changed <base>..<theirs>: #4a…, #5…, #7…`.
+  Status precedence is unchanged. Output stays one tab-separated line per entry.
+
 ## [0.35.1] — 2026-07-10
 
 Patch to v0.35.0, found by dry-running the new machinery against the live `graph`
