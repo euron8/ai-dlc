@@ -17,6 +17,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.40.0] — 2026-07-10
+
+Mechanized gate Check 3b: a story's `LOCKED_REQUIREMENTS` full-text citation
+must resolve verbatim to the byte-verbatim source of record, not a condensed
+index.
+
+A live consumer running the story-authoring step degraded requirement text to
+one-line ≤250-char summaries "to stay under the ctx index threshold," citing
+`prd.md:LR-<n>` as the "full text" source. Two defects stacked: (1) a **category
+error** — the ctx `INTENT_SEARCH_THRESHOLD` (5,000 bytes) gates only what
+re-enters the conversation on an intent-bearing tool call; it never gates what is
+written to a file, so degrading a durable artifact to satisfy it is degrading it
+for no reason; (2) **mis-anchored + lossy propagation** — the brief is the
+byte-verbatim source of record (where `discovery.md` §4a extracts the block),
+while `prd.md` carries only a §2a-propagated condensed index, so "full text"
+resolved to summarized text. Gate Check 3 does INTRA-artifact drift detection (a
+LOCKED block vs. its own body) and never compares a story's block against the
+parent source of record, so a story whose block and body carry the same summary
+passed Check 3 while still being lossy. That is the hole this closes.
+
+### Added
+
+- **`core/scripts/validate-locked-anchor.sh`** — Check 3b enforcer. For each
+  `full_text_source: <artifact>:<anchor>` in a story `LOCKED_REQUIREMENTS` block,
+  asserts (a) the artifact is the byte-verbatim source of record (default
+  basename `product-brief.md`, overridable via `--sor`) and not a self-declared
+  condensed index, (b) the anchor exists, (c) every requirement bullet is
+  byte-present at the anchor (whitespace-collapsed). Honest cite-by-reference
+  (`requires_context:`) and blocks with no full-text claim are untouched — no
+  false positives on legitimate pointers.
+- **Check 3b** in `enforcement-map.yaml` (script-adjudicated, `gate_types:
+  [story]`, hard-block) and in the `gate-validation.md` GATE_MANIFEST story row.
+- **`core/fixtures/check-3b-locked-anchor/`** — discriminating fixture: a story
+  citing an index as `full_text_source` (must FAIL) paired with a verbatim
+  citation plus honest `requires_context:` pointer (must PASS).
+
+### Changed
+
+- **`gate-validation.md`** — new Check 3b heading/anchor documenting the
+  `full_text_source:` vs `requires_context:` schema, the three checks, and a
+  category-error rider (tool thresholds never gate file writes).
+- **`stories-test-strategy.md` §2a** — documents the full-text-claim vs
+  load-pointer distinction and the ctx category error to avoid.
+- **`scripts/install.sh`** — ships `validate-locked-anchor.sh` and the
+  `check-3b-locked-anchor` fixture through the two hardcoded install loops.
+
 ## [0.39.0] — 2026-07-10
 
 Mechanized the post-compact re-attach budget as a commit-time validator.
