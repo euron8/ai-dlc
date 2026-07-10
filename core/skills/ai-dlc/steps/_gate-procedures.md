@@ -209,7 +209,7 @@ The active thresholds live in the SKILL.md Handoff Protocol
 - 1M model context  → yellow 120K tokens, red 200K tokens
 
 The lead does not measure or estimate its own context window. The
-`ai-dlc-context-sensor.sh` Stop hook measures it every turn from the
+`ai-dlc-context-sensor.sh` hook measures it every turn (Stop) and every tool batch (PostToolBatch) from the
 session transcript, fires the Rule 2(b)/(c) reminder, and owns both
 the dedupe and the recurrence arithmetic (50,000-token / 20-turn
 delta). This gate check therefore **reads** the result; it does not

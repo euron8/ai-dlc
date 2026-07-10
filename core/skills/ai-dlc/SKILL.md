@@ -425,49 +425,27 @@ Red MUST fire before Claude Code's auto-compact threshold -- see
 
 ### Reminder semantics
 
-The `ai-dlc-context-sensor.sh` Stop hook measures resident context on
-every turn and fires the reminder automatically. It reads the last
-main-thread assistant `usage` from the session transcript and sums
-`input_tokens + cache_creation_input_tokens + cache_read_input_tokens`
--- Claude Code's own figure, equal to `compactMetadata.preTokens`.
-The lead does not self-measure and does not estimate.
+The `ai-dlc-context-sensor.sh` hook measures resident context and emits
+the yellow / red / imminent reminder automatically. You neither measure
+nor estimate your own context window. If the user shares `/context`
+output, treat it as authoritative.
 
-User-shared `/context` output remains valid as manual confirmation or
-override, but it is no longer the trigger. The lead MAY still invite
-the user to share it.
-
-The hook owns recurrence (50K-token / 20-turn delta) and dedupe, in
-`_bmad-output/.context-sensor-state`. The snapshot's Context Reminders
-fields are reconciled from that sidecar at each gate; they no longer
-drive firing. See `gate-validation.md` Check 14.
-
-Reminders are non-blocking; the pipeline continues after each one and
+Reminders are non-blocking: the pipeline continues after each one and
 the decision is the user's. Any user reply to a reminder is a Rule 11
 directive.
 
-The hook cannot read the model's context-window size -- the transcript
-records `claude-opus-4-8` for both the 200K and the 1M variant, and no
-window size appears anywhere in it. So it assumes the 200K row until
-the window is proven larger (a reading at or above 187,000 is
-impossible on a 200K model, which compacts at that point) or until
-`AI_DLC_MODEL_ROW` is set to `200K` or `1M` in the project's
-`.claude/settings.json` `env` block (Claude Code propagates that block
-into hook subprocesses). `scripts/install.sh` and the `ai-dlc-update`
-reconcile both ask for this value once, when it is absent; `auto`
-leaves it unset. No default is ever written silently -- pinning `200K`
-would disable the self-correction, and pinning `1M` on a 200K model
-would put red above the compact threshold. The proof is cached in
-`_bmad-output/.context-sensor-model`. Assuming 200K on a 1M model only
-fires the reminders early; assuming 1M on a 200K model would put red
-above the compact threshold, so red would never fire first -- which is
-the failure the ordering invariant exists to prevent. Projects on a 1M
-model should pin `AI_DLC_MODEL_ROW` to skip the one early-reminder
-session.
+At each gate, reconcile the snapshot's Context Reminders fields from
+`_bmad-output/.context-sensor-state` (see `gate-validation.md`
+Check 14).
+
+(Sensor mechanics -- the measurement, the two hook events, the model-row
+inference, and `AI_DLC_MODEL_ROW` -- are operator concerns documented in
+`docs/context-hardening-notes.md` and QUICKSTART; nothing here requires
+the lead to act on them.)
 
 ### Reminder text
 
-The hook emits these. Reproduced here because the lead must recognize
-them, and because a gate may need to restate one.
+The hook emits these; a gate may restate one.
 
 Yellow (Rule 2(b)):
 
@@ -505,26 +483,11 @@ Imminent (critical band, ranked above red):
 > via /clear + /ai-dlc resume. Compaction is strictly lower fidelity
 > than the handoff.`
 
-The critical band opens at `effectiveWindow - 31,000 - 20,000`, i.e.
-20,000 tokens below the ceiling a transcript-derived reading can
-observe. It does **not** open at the ceiling itself, for two reasons.
-A warning delivered at the ceiling arrives too late to act on --
-compaction fires on the very next model request, destroying the
-directive along with the rest of the window. And the ceiling is usually
-never observed at all: the four real auto-compactions on the `graph`
-consumer last measured 268,892 / 267,719 / 267,445 / 267,023 against a
-269,000 ceiling, because compaction preempted the turn that would have
-crossed it. At the measured p50 growth of ~1,200 tokens/turn the
-20,000-token lead buys roughly 16 turns.
-
-`imminent` is a level of its own rather than a variant of red, so
-entering the band always fires on the first crossing. Reusing `red`
-would leave a lead that already saw red at 200,000 waiting on the
-50,000-token / 20-turn recurrence delta, and it could sail into
-compaction never having been told to refresh the snapshot.
-
-This band fires only when the model row is known, never on an assumed
-row, because `effectiveWindow` would otherwise be a guess.
+The critical band opens at `effectiveWindow - 31,000 - 20,000` and is
+its own level ranked above red, so entering it always fires on the first
+crossing. It fires only when the model row is known, never on an assumed
+row. (Rationale and the measurements behind the constants are in
+`docs/context-hardening-notes.md`.)
 
 ### Auto-compact ordering invariant
 

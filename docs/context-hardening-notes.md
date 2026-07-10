@@ -945,6 +945,12 @@ Critically, the Stop result loop collects each hook's
 turns `ai-dlc-continue.sh` blocks — which, in autonomous mode, is
 nearly all of them.
 
+> **Superseded by R29 (v0.36.1).** "Stop fires once per assistant turn"
+> assumed turns are frequent. They are not on a long autonomous run: a
+> real `graph` session went 169 `tool_use` messages deep with zero
+> `Stop` boundaries and the sensor never sampled. The hook now also runs
+> on `PostToolBatch`. See "R29" below.
+
 **The ~31,000-token sensor reserve.** Claude Code compacts at
 `effectiveWindow - 13000` (`G_o(e,t) = e - 13000`). But the quantity
 this hook measures sits a further ~18,000 below that at fire time: the
@@ -987,3 +993,54 @@ measurement of Claude Code's own figure rather than a human paste.
 turns. From red (200K): p50 79 turns. Context grows ~1,200 tokens/turn
 (p50) and the resident floor is ~69,215 (p50). There is ample room for
 a non-blocking reminder to change the outcome.
+
+## R29 — Imminent band opens early; sensor samples on PostToolBatch (v0.36.1)
+
+Two defects surfaced from real `graph` compactions after R28 shipped.
+
+**The imminent backstop could essentially never fire.** R28 set it at the
+sensor-visible ceiling `effectiveWindow - 31,000`. But compaction preempts the
+turn that would cross it. The four real auto-compactions on `graph` last measured
+268,892 / 267,719 / 267,445 / 267,023 against a 269,000 ceiling — every one below
+the trigger. And even the one case that did reach the ceiling (the 1M session at
+969,084 ≥ 969,000) fired on the very next model request, destroying the injected
+directive along with the window.
+
+Fix: open the critical band at `effectiveWindow - 31,000 - 20,000`. At the
+measured p50 growth of ~1,200 tokens/turn the 20,000-token lead buys ~16 turns —
+room to act. All four real compactions fall inside it. `imminent` is a level of
+its own ranked above red, so entering the band always fires on first crossing; as
+a red variant it would have waited on red's 50,000-token / 20-turn recurrence
+delta, and a lead that already saw red at 200,000 could reach compaction unwarned.
+In the band the hook directs the lead to refresh `pipeline-snapshot.md` before its
+next action — the snapshot is what `ai-dlc-recover.sh` re-reads, and on `graph` its
+write cadence has a p90 gap of 12.9h against compactions 1–4h apart, so a stale
+snapshot is recovered faithfully and is still wrong.
+
+**A Stop-only sensor is blind to turn-less runs.** The sensor was a `Stop` hook,
+and Stop fires only at `end_turn`. Session `bd13dc14` ran `/ai-dlc resume` →
+auto-compact across 169 consecutive `tool_use` messages with zero `end_turn`
+boundaries, so the sensor never sampled; context climbed 77K → 270K unwarned.
+Recovery still landed (`injected_bytes: 3873`, no degradation), and the prior
+session (13 Stops) had fired yellow+red correctly — the hook worked, it just never
+ran. Across `graph`, 19 of 185 red-crossing sessions have ≤2 Stop boundaries, and
+those turn-less autonomous runs are the highest-risk ones.
+
+Fix: wire the hook to `PostToolBatch` as well as `Stop`. PostToolBatch fires once
+per tool batch, before the next model request. Verified with a live headless probe
+that its `additionalContext` reaches the model mid-run (the model echoed an
+injected marker). The hook echoes whichever event invoked it as
+`hookSpecificOutput.hookEventName`.
+
+To bound hot-path cost, the `PostToolBatch` tail-read is throttled: it runs only
+once the transcript has grown ~512,000 bytes (`AI_DLC_SENSOR_THROTTLE_BYTES`)
+since the last read, tracked as `last_read_size` in the sidecar. `Stop` is never
+throttled. Measured on a 2.7MB transcript: full read 60ms, throttled skip 27ms.
+The shared sidecar dedups, so the second event samples often but injects only on a
+level change or the recurrence delta; the first sample of a session (no sidecar)
+is never throttled. Transcript bytes vastly outpace token growth (tool outputs),
+so a 512KB throttle is far tighter than the token thresholds it feeds.
+
+The `PostToolBatch` template block propagates to existing consumers with no
+migration: `settings-merge.sh` and `install.sh` union the event keys and strip
+per-block, so the sensor lands once on each event without duplication.

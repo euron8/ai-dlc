@@ -102,11 +102,44 @@ INPUT="$(cat 2>/dev/null || true)"
 AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
 [ -z "$AGENT_ID" ] || exit 0
 
+# This hook is wired to two events. Stop fires when the model ends its turn; but
+# an autonomous pipeline run can go hundreds of tool calls deep without ever
+# ending a turn (a real `graph` session climbed 77K->270K across 169 tool_use
+# messages with ZERO Stop boundaries, so the sensor never sampled and compaction
+# fired unwarned). PostToolBatch fires once per tool batch, before the next model
+# request, and catches exactly those turn-less runs. The emitted hookEventName
+# must echo whichever event invoked us.
+EVENT="$(printf '%s' "$INPUT" | jq -r '.hook_event_name // "Stop"' 2>/dev/null || echo Stop)"
+case "$EVENT" in Stop|PostToolBatch) ;; *) EVENT=Stop ;; esac
+
 # Not an AI/DLC session -> stay out of it entirely.
 [ -f "$SNAPSHOT_FILE" ] || exit 0
 
 TRANSCRIPT="$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null || true)"
 [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ] || exit 0
+
+# -----------------------------------------------------------------------------
+# Throttle (PostToolBatch only)
+#
+# Stop is infrequent and carries the snapshot-reconcile semantics, so it always
+# reads. PostToolBatch fires on every tool batch -- a full tail-read (up to a 4MB
+# jq scan) that often is real hot-path latency. Skip it unless the transcript has
+# grown by THROTTLE_BYTES since the last full read, tracked as `last_read_size`
+# in the sidecar. The first read of a session (no sidecar) is never throttled, so
+# sampling always starts. A crossing is at most THROTTLE_BYTES of transcript
+# late, and transcript bytes vastly outpace token growth (tool outputs), so this
+# is far tighter than the token thresholds it feeds.
+# -----------------------------------------------------------------------------
+THROTTLE_BYTES="${AI_DLC_SENSOR_THROTTLE_BYTES:-524288}"
+if [ "$EVENT" = PostToolBatch ] && [ -r "$STATE_FILE" ]; then
+  LAST_READ_SIZE="$(sed -n 's/^last_read_size=//p' "$STATE_FILE" 2>/dev/null | head -1)"
+  case "${LAST_READ_SIZE:-}" in ''|*[!0-9]*) LAST_READ_SIZE="" ;; esac
+  if [ -n "$LAST_READ_SIZE" ]; then
+    CUR_SIZE="$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"
+    case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
+    [ "$(( CUR_SIZE - LAST_READ_SIZE ))" -ge "$THROTTLE_BYTES" ] || exit 0
+  fi
+fi
 
 # -----------------------------------------------------------------------------
 # Bounded reverse tail-read
@@ -131,6 +164,10 @@ done
 # Fresh session, resume onto a new transcript, or a tail with no assistant turn.
 # Silence is correct: we have no reading, so we assert nothing.
 [ -n "$LINE" ] || exit 0
+
+# Record the size at which we actually read, for the PostToolBatch throttle.
+CUR_SIZE="$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"
+case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
 
 TOKENS="$(printf '%s' "$LINE" | jq '
   .message.usage
@@ -334,6 +371,7 @@ fi
   printf 'last_fire_turn=%s\n'   "$NEW_FIRE_TURN"
   printf 'turn_counter=%s\n'     "$TURN"
   printf 'last_measured=%s\n'    "$TOKENS"
+  printf 'last_read_size=%s\n'   "$CUR_SIZE"
   printf 'model_row=%s\n'        "$ROW"
   printf 'row_known=%s\n'        "$ROW_KNOWN"
   printf 'effective_window=%s\n' "$EFFECTIVE"
@@ -369,9 +407,9 @@ ROW_NOTE=""
 
 CONTEXT="[AI/DLC context sensor] Resident context is ~${TOKENS} tokens (~${PCT}% of the ${EFFECTIVE}-token effective window), crossing the $(printf '%s' "$LEVEL" | tr '[:lower:]' '[:upper:]') threshold (${THR}). ${ADVICE} This reminder is non-blocking: the pipeline continues and the decision is the user's. Reconcile the snapshot Context Reminders fields to this reading at the next gate.${ROW_NOTE}"
 
-jq -n --arg context "$CONTEXT" '{
+jq -n --arg context "$CONTEXT" --arg event "$EVENT" '{
   hookSpecificOutput: {
-    hookEventName: "Stop",
+    hookEventName: $event,
     additionalContext: $context
   }
 }'

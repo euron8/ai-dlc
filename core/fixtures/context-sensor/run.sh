@@ -172,6 +172,50 @@ while [ "$i" -lt 25 ]; do
 done
 check "flat context fires twice in 25 turns (initial + 20-turn recurrence)" "$FIRES" "2"
 
+# --- PostToolBatch event + throttle ------------------------------------------
+# The sensor is wired to Stop AND PostToolBatch so it samples during turn-less
+# autonomous runs (a real graph session climbed 77K->270K across 169 tool_use
+# messages with zero Stop boundaries). These pin the event echo and the throttle.
+
+evfire() { # $1 fixture, $2 hook_event_name -> run as that event
+  printf '{"transcript_path":"%s","session_id":"t","hook_event_name":"%s"}' "$FIXTURES/$1" "$2" \
+    | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null
+}
+evfield() { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
+
+reset
+OUT="$(evfire at-yellow.jsonl PostToolBatch)"
+check "PostToolBatch echoes its own hookEventName" \
+  "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)" "PostToolBatch"
+case "$(printf '%s' "$OUT" | ctx)" in *"YELLOW threshold"*) ok "  and fires the reminder" ;;
+  *) bad "  and fires the reminder" "silent" ;; esac
+
+reset
+OUT="$(evfire at-yellow.jsonl Stop)"
+check "Stop still echoes Stop" \
+  "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.hookEventName' 2>/dev/null)" "Stop"
+
+# Throttle: a small fixture (170 bytes) never advances 512KB, so a second
+# PostToolBatch within the window is skipped -- but Stop always reads.
+reset
+evfire at-yellow.jsonl PostToolBatch >/dev/null            # first read: not throttled, records last_read_size
+SIZE1="$(evfield last_read_size)"
+[ -n "$SIZE1" ] && ok "PostToolBatch records last_read_size" || bad "PostToolBatch records last_read_size" "absent"
+# second PostToolBatch on the SAME tiny fixture: below throttle delta -> skipped,
+# so last_measured must NOT change even if we point at a bigger reading.
+BEFORE="$(evfield last_measured)"
+evfire at-red.jsonl PostToolBatch >/dev/null                # different file, but same tiny size class
+AFTER="$(evfield last_measured)"
+check "  second PostToolBatch within throttle window is skipped" "$AFTER" "$BEFORE"
+# a Stop is never throttled: it reads even within the window.
+evfire at-red.jsonl Stop >/dev/null
+check "  Stop is never throttled (reads through the window)" "$(evfield last_measured)" "130000"
+
+# First PostToolBatch of a session (no sidecar) is never throttled.
+reset
+evfire below-yellow.jsonl PostToolBatch >/dev/null
+check "first PostToolBatch of a session always samples" "$(evfield last_measured)" "50000"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
