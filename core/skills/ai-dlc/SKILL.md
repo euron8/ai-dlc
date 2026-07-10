@@ -489,13 +489,42 @@ Red (Rule 2(c)):
 > Reconcile the snapshot Context Reminders fields to this reading at
 > the next gate.`
 
-When auto-compact is one turn away -- resident context at or above
-`effectiveWindow - 31,000`, the ceiling visible to a transcript-derived
-reading -- the red variant substitutes: `auto-compact is imminent
-(ceiling ~{ceiling} tokens). Finalize the pipeline snapshot and hand
-off via /clear + /ai-dlc resume now. Compaction is strictly lower
-fidelity than the handoff.` This backstop fires only when the model row
-is known, never on an assumed row.
+Imminent (critical band, ranked above red):
+
+> `[AI/DLC context sensor] Resident context is ~{tokens} tokens (~{pct}%
+> of the {window}-token effective window), crossing the IMMINENT
+> threshold ({threshold}). Auto-compact will fire at ~{ceiling} tokens
+> -- roughly {n} more turns at the observed growth rate. BEFORE your
+> next pipeline action, refresh `_bmad-output/pipeline-snapshot.md` so
+> it reflects the CURRENT state: Pipeline Position (current step file,
+> in-flight sub-step), Recent Activity, Open Items, and any Locked
+> Decisions taken since the last gate. A snapshot last written at a gate
+> may be hundreds of turns stale, and it is what `ai-dlc-recover.sh`
+> re-reads after compaction -- a stale snapshot is recovered faithfully
+> and is still wrong. Having refreshed it, prefer Rule 2(a): hand off
+> via /clear + /ai-dlc resume. Compaction is strictly lower fidelity
+> than the handoff.`
+
+The critical band opens at `effectiveWindow - 31,000 - 20,000`, i.e.
+20,000 tokens below the ceiling a transcript-derived reading can
+observe. It does **not** open at the ceiling itself, for two reasons.
+A warning delivered at the ceiling arrives too late to act on --
+compaction fires on the very next model request, destroying the
+directive along with the rest of the window. And the ceiling is usually
+never observed at all: the four real auto-compactions on the `graph`
+consumer last measured 268,892 / 267,719 / 267,445 / 267,023 against a
+269,000 ceiling, because compaction preempted the turn that would have
+crossed it. At the measured p50 growth of ~1,200 tokens/turn the
+20,000-token lead buys roughly 16 turns.
+
+`imminent` is a level of its own rather than a variant of red, so
+entering the band always fires on the first crossing. Reusing `red`
+would leave a lead that already saw red at 200,000 waiting on the
+50,000-token / 20-turn recurrence delta, and it could sail into
+compaction never having been told to refresh the snapshot.
+
+This band fires only when the model row is known, never on an assumed
+row, because `effectiveWindow` would otherwise be a guess.
 
 ### Auto-compact ordering invariant
 

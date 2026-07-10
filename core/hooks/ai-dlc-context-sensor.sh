@@ -64,6 +64,17 @@ SETTINGS_JSON="${PROJECT_DIR}/.claude/settings.json"
 COMPACT_RESERVE=13000
 SENSOR_RESERVE="${AI_DLC_SENSOR_RESERVE:-31000}"
 
+# A warning delivered AT the ceiling is worthless: compaction fires on the very
+# next model request, so the injected directive is destroyed by the event it
+# warns about. Worse, the ceiling is usually never observed at all -- the three
+# real compactions on the `graph` consumer last measured 268,892 / 267,719 /
+# 267,445 against a 269,000 ceiling, because compaction preempted the next turn.
+#
+# So the critical band opens IMMINENT_LEAD tokens below the ceiling. At the
+# measured p50 growth of ~1,200 tokens/turn, 20,000 buys roughly 16 turns -- room
+# to refresh the snapshot and hand off deliberately.
+IMMINENT_LEAD="${AI_DLC_SENSOR_IMMINENT_LEAD:-20000}"
+
 # Recurrence, matching _gate-procedures.md: re-fire the current level after a
 # 50,000-token or 20-turn delta.
 RECUR_TOKENS="${AI_DLC_SENSOR_RECUR_TOKENS:-50000}"
@@ -246,8 +257,9 @@ case "${RED:-}" in ''|*[!0-9]*) exit 0 ;; esac
 # actual ceiling, red would never fire before compaction. Only meaningful when
 # the row is KNOWN -- on an assumed row, EFFECTIVE is a guess and this would
 # raise a false alarm ~100 turns early.
+CEILING=$(( EFFECTIVE - SENSOR_RESERVE ))
 IMMINENT=0
-if [ "$ROW_KNOWN" -eq 1 ] && [ "$TOKENS" -ge $(( EFFECTIVE - SENSOR_RESERVE )) ]; then
+if [ "$ROW_KNOWN" -eq 1 ] && [ "$TOKENS" -ge $(( CEILING - IMMINENT_LEAD )) ]; then
   IMMINENT=1
 fi
 
@@ -265,7 +277,7 @@ if [ -r "$STATE_FILE" ]; then
   LAST_FIRE_TURN="$(sed -n 's/^last_fire_turn=//p'  "$STATE_FILE" 2>/dev/null | head -1)"
   TURN="$(sed -n 's/^turn_counter=//p'            "$STATE_FILE" 2>/dev/null | head -1)"
 fi
-case "$LAST_LEVEL" in none|yellow|red) ;; *) LAST_LEVEL=none ;; esac
+case "$LAST_LEVEL" in none|yellow|red|imminent) ;; *) LAST_LEVEL=none ;; esac
 case "${LAST_FIRE_TOKENS:-}" in ''|*[!0-9]*) LAST_FIRE_TOKENS=0 ;; esac
 case "${LAST_FIRE_TURN:-}" in ''|*[!0-9]*) LAST_FIRE_TURN=0 ;; esac
 case "${TURN:-}" in ''|*[!0-9]*) TURN=0 ;; esac
@@ -280,15 +292,21 @@ if [ "$LAST_FIRE_TOKENS" -gt 0 ] && [ "$TOKENS" -lt $(( LAST_FIRE_TOKENS - RESET
   LAST_FIRE_TURN=0
 fi
 
-# Desired level for this reading.
+# Desired level for this reading. `imminent` is a level of its own, ranked above
+# red, so that entering the critical band ALWAYS fires on the first crossing. If
+# it merely reused `red`, a lead that already saw red at 200,000 would be waiting
+# on the 50,000-token / 20-turn recurrence delta and could sail into compaction
+# without ever being told to refresh the snapshot.
 LEVEL=none
-if [ "$TOKENS" -ge "$RED" ] || [ "$IMMINENT" -eq 1 ]; then
+if [ "$IMMINENT" -eq 1 ]; then
+  LEVEL=imminent
+elif [ "$TOKENS" -ge "$RED" ]; then
   LEVEL=red
 elif [ "$TOKENS" -ge "$YELLOW" ]; then
   LEVEL=yellow
 fi
 
-rank() { case "$1" in red) echo 2 ;; yellow) echo 1 ;; *) echo 0 ;; esac; }
+rank() { case "$1" in imminent) echo 3 ;; red) echo 2 ;; yellow) echo 1 ;; *) echo 0 ;; esac; }
 
 FIRE=0
 if [ "$(rank "$LEVEL")" -gt "$(rank "$LAST_LEVEL")" ]; then
@@ -333,10 +351,14 @@ fi
 # -----------------------------------------------------------------------------
 PCT="$(awk -v t="$TOKENS" -v e="$EFFECTIVE" 'BEGIN{ printf "%d", (e > 0 ? t * 100 / e : 0) }')"
 
-if [ "$LEVEL" = red ]; then
+if [ "$LEVEL" = imminent ]; then
+  THR=$(( CEILING - IMMINENT_LEAD ))
+  # Turns of headroom at the measured p50 growth rate. Deliberately rounded down.
+  TURNS_LEFT="$(awk -v c="$CEILING" -v t="$TOKENS" 'BEGIN{ n=int((c-t)/1200); print (n<1?1:n) }')"
+  ADVICE="Auto-compact will fire at ~${CEILING} tokens -- roughly ${TURNS_LEFT} more turns at the observed growth rate. BEFORE your next pipeline action, refresh _bmad-output/pipeline-snapshot.md so it reflects the CURRENT state: Pipeline Position (current step file, in-flight sub-step), Recent Activity, Open Items, and any Locked Decisions taken since the last gate. A snapshot last written at a gate may be hundreds of turns stale, and it is what ai-dlc-recover.sh re-reads after compaction -- a stale snapshot is recovered faithfully and is still wrong. Having refreshed it, prefer Rule 2(a): hand off via /clear + /ai-dlc resume. Compaction is strictly lower fidelity than the handoff."
+elif [ "$LEVEL" = red ]; then
   THR="$RED"
   ADVICE="Rule 2(c): finalize the pipeline snapshot and hand off via /clear + /ai-dlc resume before auto-compact takes the lossy path. If continuing, do so deliberately."
-  [ "$IMMINENT" -eq 1 ] && ADVICE="Rule 2(c): auto-compact is imminent (ceiling ~$(( EFFECTIVE - SENSOR_RESERVE )) tokens). Finalize the pipeline snapshot and hand off via /clear + /ai-dlc resume now. Compaction is strictly lower fidelity than the handoff."
 else
   THR="$YELLOW"
   ADVICE="Rule 2(b): finish the current sub-step, then continue."

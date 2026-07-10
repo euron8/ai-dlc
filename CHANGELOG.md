@@ -39,11 +39,23 @@ reach. Compaction moved from a once-ever event onto the hot path.
   Claude Code's own figure (equal to `compactMetadata.preTokens`). Verified
   against a real 6.5MB transcript: 248,721 measured vs 248,721 actual, in 59ms.
   Hook stdin carries no token counts, but it carries `transcript_path`.
-- `compact_imminent` runtime backstop at `effectiveWindow - 31,000` — the ceiling
-  visible to a transcript-derived reading. Claude Code compacts at
-  `effectiveWindow - 13,000`, but the measured quantity sits a further ~18,000
-  below that at fire time (287,000−268,892 = 18,108; 987,000−969,084 = 17,916).
-  Suppressed while the model row is only assumed.
+- An `imminent` level, ranked above red, opening a critical band 20,000 tokens
+  below the sensor-visible ceiling (`effectiveWindow - 31,000`). Claude Code
+  compacts at `effectiveWindow - 13,000`, but the measured quantity sits a further
+  ~18,000 below that at fire time (287,000−268,892 = 18,108; 987,000−969,084 =
+  17,916). The band does **not** open at the ceiling: a warning there arrives too
+  late to act on, since compaction fires on the very next model request and takes
+  the directive with it. And the ceiling is usually never observed at all — the
+  four real auto-compactions on `graph` last measured 268,892 / 267,719 / 267,445 /
+  267,023 against a 269,000 ceiling. At ~1,200 tok/turn the lead buys ~16 turns.
+
+  In the band the hook directs the lead to **refresh `pipeline-snapshot.md` before
+  its next pipeline action**. The snapshot is what `ai-dlc-recover.sh` re-reads
+  after compaction, and on `graph` its write cadence has a p90 gap of 12.9h against
+  compactions ~1–4h apart — so a stale snapshot gets recovered faithfully and is
+  still wrong. `imminent` is its own level rather than a red variant so that
+  entering the band always fires on first crossing, instead of waiting on red's
+  50,000-token / 20-turn recurrence delta. Suppressed while the row is only assumed.
 - `core/fixtures/context-sensor/` — 9 synthetic transcripts and a 19-assertion
   runner covering silence cases, idempotence, escalation, the self-healing reset
   after compaction, sidechain filtering, the tail-read escalation ladder, model-row

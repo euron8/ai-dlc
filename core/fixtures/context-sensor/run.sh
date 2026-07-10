@@ -116,15 +116,50 @@ check "AI_DLC_MODEL_ROW pins the row" "$(field model_row)" "1M"
 check "  130000 is only yellow on the 1M row" \
   "$(printf '%s' "$OUT" | grep -c 'YELLOW' | tr -d ' ')" "1"
 
-# --- compact_imminent backstop ------------------------------------------------
-reset
-printf 'row=1M\n' > "$MODEL"
-printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":269998}}}\n' \
-  > "$WORK/imminent.jsonl"
-OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$WORK/imminent.jsonl" \
-        | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
-case "$OUT" in *"auto-compact is imminent"*) ok "imminent backstop fires at effectiveWindow-31000" ;;
-  *) bad "imminent backstop fires at effectiveWindow-31000" "got: ${OUT:-<silent>}" ;; esac
+# --- compact_imminent band ----------------------------------------------------
+# window 300000 -> ceiling 269000 -> critical band opens at 249000.
+# A warning AT the ceiling is useless: all three real graph compactions last
+# measured 268,892 / 267,719 / 267,445, i.e. BELOW 269000, because compaction
+# preempts the next turn. The band must open with turns to spare.
+at() { # $1 = tokens -> writes a one-line transcript, returns its path
+  printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
+    "$(( $1 - 2 ))" > "$WORK/at.jsonl"
+  printf '%s' "$WORK/at.jsonl"
+}
+raw() { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
+
+reset; printf 'row=1M\n' > "$MODEL"
+OUT="$(raw "$(at 249001)" | ctx)"
+case "$OUT" in *"Auto-compact will fire"*) ok "imminent opens at ceiling-20000 (249001)" ;;
+  *) bad "imminent opens at ceiling-20000 (249001)" "got: ${OUT:-<silent>}" ;; esac
+case "$OUT" in *"refresh _bmad-output/pipeline-snapshot.md"*) ok "  and directs a snapshot refresh" ;;
+  *) bad "  and directs a snapshot refresh" "no refresh directive" ;; esac
+check "  level recorded as imminent" "$(field last_level)" "imminent"
+
+reset; printf 'row=1M\n' > "$MODEL"
+OUT="$(raw "$(at 248999)" | ctx)"
+case "$OUT" in *"RED threshold"*) ok "just below the band is red, not imminent" ;;
+  *) bad "just below the band is red, not imminent" "got: ${OUT:-<silent>}" ;; esac
+
+# The real ordering hazard: red already fired, then the band opens well inside
+# red's 50K/20-turn recurrence window. imminent must escalate immediately.
+reset; printf 'row=1M\n' > "$MODEL"
+raw "$(at 210000)" >/dev/null                       # red fires
+check "  red fired first" "$(field last_level)" "red"
+OUT="$(raw "$(at 250000)" | ctx)"                   # +40K, only 1 turn later
+case "$OUT" in *"Auto-compact will fire"*) ok "imminent escalates from red inside the recurrence window" ;;
+  *) bad "imminent escalates from red inside the recurrence window" "got: ${OUT:-<silent>}" ;; esac
+
+# The band must still be reachable at the values real compactions were observed at.
+reset; printf 'row=1M\n' > "$MODEL"
+OUT="$(raw "$(at 267445)" | ctx)"                   # lowest real graph preTokens
+case "$OUT" in *"Auto-compact will fire"*) ok "band covers the lowest real observed compaction (267445)" ;;
+  *) bad "band covers the lowest real observed compaction (267445)" "got: ${OUT:-<silent>}" ;; esac
+
+reset; printf 'row=1M\n' > "$MODEL"
+OUT="$(raw "$(at 175000)" | ctx)"
+case "$OUT" in *"Auto-compact will fire"*) bad "assumed-safe reading must not claim imminence" "fired at 175000" ;;
+  *) ok "a mid-session reading does not claim imminence" ;; esac
 
 # --- recurrence ---------------------------------------------------------------
 reset
