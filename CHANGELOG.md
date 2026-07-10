@@ -17,6 +17,30 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.38.0] — 2026-07-10
+
+`ai-dlc-update` re-invokes itself automatically after a self-update instead of
+asking the operator.
+
+When a pull included a change to the update skill's own files, step 2 landed that
+self-update and then HARD-STOPPED to ask the operator to choose: re-invoke,
+continue on stale logic, or hold. The re-invoke is the only correct answer — an
+operator who just updated the tool wants to run its latest iteration, and the
+in-flight agent can't hot-reload its own instructions, so re-invoking is the only
+way to execute the fresh logic. The question added a round-trip with no real
+decision behind it.
+
+### Changed
+
+- **`ai-dlc-update` self-update (step 2)** (`core/skills/ai-dlc-update/SKILL.md`).
+  After the self-update merges, the run now reports what landed in one line and
+  **automatically re-invokes `/ai-dlc-update`**, carrying the operator's original
+  argument (bare → fresh dry-run; `apply` → `apply`). No operator prompt. The only
+  path that returns control is a harness that cannot self-invoke a skill — then it
+  says so and tells the operator to run `/ai-dlc-update` themselves. Continuing on
+  stale logic remains forbidden. The step-2 recap block at the end of the skill was
+  updated to match.
+
 ## [0.37.0] — 2026-07-10
 
 `ai-dlc-update` gains a git preflight so a diverged local branch no longer forces
