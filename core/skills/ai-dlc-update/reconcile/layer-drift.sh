@@ -165,32 +165,50 @@ while IFS= read -r f; do
   ids="$(printf '%s' "$shadows" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
   [ -n "$ids" ] || ids="__file__"
 
+  # A multi-anchor override must report EVERY affected anchor, not just the last
+  # one examined. Accumulate per category and compose the detail after the loop:
+  # a single-section message on an override shadowing eight sections invites the
+  # operator to reconcile that one and silently drop the rest.
   worst=OVERRIDE-OK
-  detail=""
+  drifted=""; unprovable=""; unresolved=""; whole_file=""
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     if [ "$id" = "__file__" ]; then
-      [ "$file_changed" = yes ] && { worst=OVERRIDE-DRIFT-FILE; detail="whole-file shadow; file changed"; }
+      [ "$file_changed" = yes ] && { worst=OVERRIDE-DRIFT-FILE; whole_file="yes"; }
       continue
     fi
     s_theirs="$(git_show "$THEIRS" "$cp" | section_of "$id")"
     if [ -z "$s_theirs" ]; then
       if [ "$file_changed" = yes ]; then
         [ "$worst" = OVERRIDE-DRIFT-SECTION ] || worst=OVERRIDE-DRIFT-FILE
-        detail="anchor '#$id' not a locatable heading in theirs; file changed -> cannot prove section safe"
+        unprovable="${unprovable:+$unprovable, }#$id"
       else
-        [ "$worst" = OVERRIDE-OK ] && { worst=OVERRIDE-ANCHOR-UNRESOLVED; detail="anchor '#$id' not found in theirs"; }
+        [ "$worst" = OVERRIDE-OK ] && worst=OVERRIDE-ANCHOR-UNRESOLVED
+        unresolved="${unresolved:+$unresolved, }#$id"
       fi
       continue
     fi
     s_base="$(git_show "$base_sha" "$cp" | section_of "$id")"
     if [ "$s_base" != "$s_theirs" ]; then
       worst=OVERRIDE-DRIFT-SECTION
-      detail="shadowed section '#$id' changed ${base_sha}..${THEIRS}"
+      drifted="${drifted:+$drifted, }#$id"
     fi
   done <<< "$ids"
 
-  [ "$worst" = OVERRIDE-OK ] && detail="shadowed section(s) unchanged"
+  # `emit` writes one tab-separated line, so the detail stays on one line.
+  n_of() { printf '%s' "$1" | awk -F', ' '{print NF}'; }
+  detail=""
+  [ -n "$whole_file" ] && detail="whole-file shadow; file changed"
+  if [ -n "$drifted" ]; then
+    detail="${detail:+$detail; }$(n_of "$drifted") shadowed section(s) changed ${base_sha}..${THEIRS}: ${drifted}"
+  fi
+  if [ -n "$unprovable" ]; then
+    detail="${detail:+$detail; }$(n_of "$unprovable") anchor(s) not a locatable heading in theirs; file changed -> cannot prove section safe: ${unprovable}"
+  fi
+  if [ -n "$unresolved" ]; then
+    detail="${detail:+$detail; }$(n_of "$unresolved") anchor(s) not found in theirs: ${unresolved}"
+  fi
+  [ -n "$detail" ] || detail="shadowed section(s) unchanged"
   emit "$worst" "$entry" "$tgt" "$detail"
 done < <(layer_files "$OVR_DIR")
 
