@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.37.0] — 2026-07-10
+
+`ai-dlc-update` gains a git preflight so a diverged local branch no longer forces
+extra reconciliation on the next run.
+
+The update skill cuts its reconcile branch off the consumer's current branch, and
+step 2's autonomous self-update pushes and auto-merges to `origin` on every
+invocation — including a bare dry-run. Neither checked whether the current branch
+matched `origin` first. When the branch had unpushed commits (or was behind, or
+had never been pushed), cutting/merging off that base diverged local from `origin`
+the moment a PR merged, so the next update reconciled against a base that no longer
+matched `origin` — an avoidable re-reconciliation loop.
+
+### Added
+
+- **`ai-dlc-update` step 1 git preflight** (`core/skills/ai-dlc-update/SKILL.md`).
+  Before the self-update or any apply, the skill checks the consumer's current
+  branch and STOPs with the exact remedy on: detached HEAD; remote exists but the
+  branch was never pushed (`git push -u` first); branch ahead of upstream (push
+  first); branch behind (fast-forward/pull first); diverged (pull/rebase first). No
+  remote configured → non-blocking note, consistent with the existing self-update
+  no-remote path. Step 2 notes the push→auto-merge is safe because the preflight
+  confirmed sync; step 6 re-confirms it at apply time in case the branch drifted
+  since the dry-run. Detection commands (`git remote`, `git symbolic-ref -q HEAD`,
+  `@{u}`, `git rev-list --left-right --count @{u}...HEAD`) verified against git
+  behavior.
+
 ## [0.36.2] — 2026-07-10
 
 Resident-path narrative strip. The LLM-consumed skill files under
