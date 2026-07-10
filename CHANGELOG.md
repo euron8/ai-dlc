@@ -17,6 +17,20 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.35.1] — 2026-07-10
+
+Patch to v0.35.0, found by dry-running the new machinery against the live `graph`
+consumer before updating it.
+
+- **`ai-dlc-recover.sh` failed to name the step file on real snapshots.** The
+  extractor matched only the schema spelling `current_step_file:`. `graph`'s
+  snapshot — and, in practice, snapshots generally — writes the prose form
+  `- **Current step file:** \`discovery.md\``. The grep missed it and the
+  injection degraded to the placeholder "(named in Pipeline Position below)",
+  losing the single most actionable line of the post-compact recovery block.
+  `ai-dlc-continue.sh` has always tolerated both spellings; `ai-dlc-recover.sh`
+  now matches its pattern, and strips the trailing prose an em-dash introduces.
+
 ## [0.35.0] — 2026-07-10
 
 Compaction becomes a managed net. AI/DLC's dominant failure mode is token

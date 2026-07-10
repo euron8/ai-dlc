@@ -73,7 +73,14 @@ if [ -f "$SIDECAR" ]; then
   SIDECAR_TEXT="$(read_capped "$SIDECAR" "$SIDECAR_MAX_BYTES")"
 fi
 
-STEP_FILE="$(grep -m1 -iE 'current_step_file' "$SNAPSHOT" 2>/dev/null | sed -E 's/.*current_step_file[^A-Za-z0-9_./-]*//I; s/[`*_ ]+$//')"
+# Snapshots in the wild spell this two ways: the schema's `current_step_file:`
+# and a prose `- **Current step file:** \`x.md\``. `ai-dlc-continue.sh` already
+# tolerates both; match its pattern rather than the schema alone, or the single
+# most useful line of this injection degrades to a placeholder.
+STEP_FILE="$(grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' "$SNAPSHOT" 2>/dev/null \
+  | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//')"
+# Keep only the first token-ish path/name; snapshots append prose after an em-dash.
+STEP_FILE="$(printf '%s' "$STEP_FILE" | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' | sed -E 's/^[`*]+//; s/[`*]+$//')"
 [ -n "$STEP_FILE" ] || STEP_FILE="(named in Pipeline Position below)"
 
 CONTEXT="$(cat <<EOF
