@@ -47,9 +47,22 @@ SUMMARY_BYTES="$(printf '%s' "$SUMMARY" | wc -c | tr -d ' ')"
 
 # ai-dlc-recover.sh drops the marker when it injects. Consume it so the next
 # compaction starts from a clean slate; a stale marker would over-report.
+#
+# The marker carries the size recover.sh actually emitted. Reporting "yes" on
+# mere marker presence is what made v0.35.0's log lie: the hook ran on all three
+# observed compactions and logged `recovery_injected: yes` every time, while
+# Claude Code was replacing its 31,881-character block with a file-path stub.
+# `degraded` means the block was too large to land in context at all.
 RECOVERED="no"
+INJECTED_BYTES=""
 if [ -f "$MARKER" ]; then
-  RECOVERED="yes"
+  INJECTED_BYTES="$(sed -n 's/^injected_bytes=//p' "$MARKER" 2>/dev/null | head -1)"
+  DEGRADED="$(sed -n 's/^degraded=//p' "$MARKER" 2>/dev/null | head -1)"
+  if [ "${DEGRADED:-no}" = "yes" ]; then
+    RECOVERED="degraded-persisted"
+  else
+    RECOVERED="yes"
+  fi
   rm -f "$MARKER" 2>/dev/null || true
 fi
 
@@ -76,14 +89,18 @@ fi
   printf '\n## %s\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf -- '- trigger: %s\n' "$TRIGGER"
   printf -- '- recovery_injected: %s\n' "$RECOVERED"
+  [ -n "$INJECTED_BYTES" ] && printf -- '- injected_bytes: %s\n' "$INJECTED_BYTES"
   printf -- '- summary_bytes: %s\n' "${SUMMARY_BYTES:-0}"
   printf -- '- branch: %s\n' "$(git -C "$PROJECT_DIR" branch --show-current 2>/dev/null || echo '(unknown)')"
 } >>"$LOG_FILE" 2>/dev/null
 
-if [ "$RECOVERED" = "yes" ]; then
-  printf 'AI/DLC: compaction (%s); pipeline snapshot re-injected.\n' "$TRIGGER"
-else
-  printf 'AI/DLC: compaction (%s); snapshot NOT re-injected -- verify state before continuing.\n' "$TRIGGER"
-fi
+case "$RECOVERED" in
+  yes)
+    printf 'AI/DLC: compaction (%s); recovery directive injected (%s bytes).\n' "$TRIGGER" "$INJECTED_BYTES" ;;
+  degraded-persisted)
+    printf 'AI/DLC: compaction (%s); recovery directive was %s bytes -- Claude Code stubbed it. Read _bmad-output/pipeline-snapshot.md before continuing.\n' "$TRIGGER" "$INJECTED_BYTES" ;;
+  *)
+    printf 'AI/DLC: compaction (%s); recovery hook did not fire -- verify state before continuing.\n' "$TRIGGER" ;;
+esac
 
 exit 0

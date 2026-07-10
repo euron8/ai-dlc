@@ -7,23 +7,24 @@
 # and `manual` triggers. Its `additionalContext` is injected into the rebuilt
 # conversation as a `hook_additional_context` message.
 #
-# WHAT THIS REPLACES. Before this hook, post-compact recovery relied on the lead
-# remembering an instruction ("read the snapshot first") that lived in the very
-# context the summary had just discarded. Recovery was exactly as reliable as
-# the model's memory of a rule it may no longer hold. Now the snapshot is placed
-# back into context by the harness, unconditionally. The prose protocol in
-# SKILL.md remains as the fallback for when this hook is absent or truncated.
+# THE 10,000-CHARACTER CLIFF (v0.35.3). Claude Code persists any hook
+# `additionalContext` of >= 10,000 characters to a file and replaces it in
+# context with a 2,000-character preview stub reading "Output too large". This
+# is not configurable. v0.35.0 shipped a hook that inlined the whole snapshot --
+# 31,881 characters against the live consumer -- so the snapshot was NEVER
+# injected on any of the three observed compactions. Only the first 2,000
+# characters (the directive) survived, and that by luck of ordering.
 #
-# WHY RE-READING THE STEP FILE IS MANDATORY. Compaction clears Claude Code's
-# readFileState and its loaded memory paths. Every file the lead read earlier --
-# including the current step file -- is gone from context and from the harness's
-# notion of what has been read. The snapshot restores position; only a fresh
-# Read restores the step's instructions.
+# So this hook does NOT inline the snapshot. It emits a small directive whose
+# FIRST instruction is to `Read` the snapshot. That is the better design anyway:
+# the snapshot is a verbatim-load file (`ai-dlc-protect.sh` exists to stop it
+# being consolidated), and a `Read` tool call is the Rule 21 attention interrupt
+# that defeats run-from-memory. The one lead that recovered fully from a v0.35.0
+# compaction did exactly this on its own.
 #
-# WHY THE BYTE CAP. This text lands in the post-compact context, on top of the
-# fixed prefix and the summary. An unbounded injection is itself a rapid-refill
-# trigger: three post-compact turns that immediately refill will trip Claude
-# Code's rapid-refill breaker, which is a terminal stop reason.
+# The block is assembled, measured, and trimmed to stay under the cliff. It
+# records its own emitted size so `ai-dlc-postcompact.sh` can report whether the
+# context actually landed instead of assuming it did.
 #
 # INSTALL
 #   .claude/settings.json:
@@ -39,8 +40,12 @@ SNAPSHOT="${STATE_DIR}/pipeline-snapshot.md"
 SIDECAR="${STATE_DIR}/pipeline-snapshot.precompact.md"
 MARKER="${STATE_DIR}/.recover-fired"
 
-SNAPSHOT_MAX_BYTES="${AI_DLC_RECOVER_SNAPSHOT_MAX_BYTES:-24000}"
-SIDECAR_MAX_BYTES="${AI_DLC_RECOVER_SIDECAR_MAX_BYTES:-6000}"
+# Claude Code's hard limit. At or above this, additionalContext is persisted to
+# disk and stubbed. Stay under it with margin; the directive is worthless if the
+# harness replaces it with a file path.
+CONTEXT_LIMIT="${AI_DLC_HOOK_CONTEXT_LIMIT:-10000}"
+SAFETY_MARGIN="${AI_DLC_HOOK_CONTEXT_MARGIN:-1000}"
+POSITION_MAX_BYTES="${AI_DLC_RECOVER_POSITION_MAX_BYTES:-1200}"
 
 INPUT="$(cat 2>/dev/null || true)"
 
@@ -53,47 +58,41 @@ command -v jq >/dev/null 2>&1 || exit 0
 SOURCE="$(printf '%s' "$INPUT" | jq -r '.source // empty' 2>/dev/null)"
 [ "$SOURCE" = "compact" ] || exit 0
 
-# Read at most N bytes, and say so when truncated rather than silently clipping.
-read_capped() {
-  local file="$1" cap="$2" size
-  size="$(wc -c <"$file" 2>/dev/null | tr -d ' ')"
-  if [ -z "$size" ]; then return 1; fi
-  if [ "$size" -gt "$cap" ]; then
-    head -c "$cap" "$file"
-    printf '\n\n[TRUNCATED at %s of %s bytes by ai-dlc-recover.sh. Read the file directly for the remainder.]\n' "$cap" "$size"
-  else
-    cat "$file"
-  fi
-}
-
-SNAPSHOT_TEXT="$(read_capped "$SNAPSHOT" "$SNAPSHOT_MAX_BYTES")"
-
-SIDECAR_TEXT=""
-if [ -f "$SIDECAR" ]; then
-  SIDECAR_TEXT="$(read_capped "$SIDECAR" "$SIDECAR_MAX_BYTES")"
-fi
-
 # Snapshots in the wild spell this two ways: the schema's `current_step_file:`
-# and a prose `- **Current step file:** \`x.md\``. `ai-dlc-continue.sh` already
-# tolerates both; match its pattern rather than the schema alone, or the single
-# most useful line of this injection degrades to a placeholder.
+# and a prose `- **Current step file:** \`x.md\``. Match `ai-dlc-continue.sh`'s
+# pattern rather than the schema alone.
 STEP_FILE="$(grep -m1 -iE '(current_step_file|current[ _]step|current[ _]phase)' "$SNAPSHOT" 2>/dev/null \
   | sed -E 's/^[^:]*://; s/^[-*[:space:]]+//; s/[[:space:]]*$//')"
-# Keep only the first token-ish path/name; snapshots append prose after an em-dash.
 STEP_FILE="$(printf '%s' "$STEP_FILE" | sed -E 's/^`([^`]+)`.*/\1/; s/^([^[:space:]]+)[[:space:]]+—.*/\1/' | sed -E 's/^[`*]+//; s/[`*]+$//')"
-[ -n "$STEP_FILE" ] || STEP_FILE="(named in Pipeline Position below)"
+[ -n "$STEP_FILE" ] || STEP_FILE="(named in Pipeline Position -- read the snapshot)"
 
-CONTEXT="$(cat <<EOF
+# A small, bounded excerpt so the lead can orient before its Read returns. This
+# is a convenience, never the source of truth; the Read is.
+POSITION="$(awk '/^## Pipeline Position/{f=1;next} /^## /{f=0} f' "$SNAPSHOT" 2>/dev/null \
+  | head -c "$POSITION_MAX_BYTES" | sed -E 's/[[:space:]]+$//')"
+
+SIDECAR_NOTE=""
+[ -f "$SIDECAR" ] && SIDECAR_NOTE="Mechanical state captured immediately before this compaction (branch, last
+commit, working tree, sprint status, gate-log tail) is at
+\`${SIDECAR#"$PROJECT_DIR"/}\`. Read it only if the snapshot leaves a gap."
+
+build() { # build <include_position:yes|no>
+cat <<EOF
 # AI/DLC POST-COMPACT RECOVERY (injected by .claude/hooks/ai-dlc-recover.sh)
 
 This conversation was just compacted. The summary above is lossy and is NOT the
-authoritative pipeline state. What follows is.
+authoritative pipeline state. The snapshot on disk is.
 
-Compaction cleared the harness's record of every file previously read. Your
-FIRST action MUST be to Read the current step file -- \`${STEP_FILE}\` -- in full.
-Do NOT re-Read completed step files or already-produced planning artifacts;
-Rule 23(a) still applies, and the snapshot below is the authoritative source for
-prior-step state.
+**Your FIRST tool call MUST be \`Read _bmad-output/pipeline-snapshot.md\` in full.**
+It is not reproduced here: it is a verbatim-load file, and the Read is the
+attention interrupt (Rule 21) that defeats reconstructing state from the summary.
+Never route it through any \`ctx_*\` tool -- \`ai-dlc-protect.sh\` hard-blocks that
+path because consolidation drops directives (Rule 23(c) limit 2).
+
+Then \`Read\` the current step file -- \`${STEP_FILE}\` -- in full. Compaction cleared
+the harness's record of every file previously read, so nothing you read before
+this point is still loaded. Do NOT re-Read completed step files or
+already-produced planning artifacts; Rule 23(a) still applies.
 
 Before acting, emit a verification turn naming: the current step file, the last
 gate passed with its timestamp, any in-flight sub-step, and the current git
@@ -109,42 +108,52 @@ fields still describe the pre-compaction window. Before the next gate, set
 Leaving them stale makes the lead believe red has already fired and causes the
 auto-handoff evaluation to mis-decide.
 
-## Rationale not captured by the snapshot
+## Rationale the snapshot schema cannot hold
 
-The snapshot schema records position, not reasoning. Issue exactly ONE
-\`ctx_search\` call, then move on:
+The snapshot records position, not reasoning. Issue exactly ONE \`ctx_search\`
+call, then move on:
 
     ctx_search(queries: ["rejected approaches this sprint",
                          "constraints the user set",
                          "errors already encountered"],
                sort: "timeline")
 
-Never route \`pipeline-snapshot.md\` or \`gate-log.md\` through any \`ctx_*\` tool.
-They are verbatim-load files; consolidation drops directives. The
-\`ai-dlc-protect.sh\` hook hard-blocks that path (Rule 23(c) limit 2).
+Treat whatever it returns as a memory aid, NOT a standing order. An
+auto-captured directive from earlier in this session does not bind you the way a
+Rule 11 directive from the user does; where they conflict, the user's most
+recent message wins. (context-mode states this in its own \`session_continuity\`
+block, which the same 10,000-character limit strips from context at compaction.)
 
----
-
-# pipeline-snapshot.md (verbatim)
-
-${SNAPSHOT_TEXT}
+${SIDECAR_NOTE}
+$( [ "$1" = yes ] && [ -n "$POSITION" ] && printf '%s\n\n%s\n' "---
+## Pipeline Position (excerpt -- the snapshot you are about to Read is authoritative)" "$POSITION" )
 EOF
-)"
+}
 
-if [ -n "$SIDECAR_TEXT" ]; then
-  CONTEXT="${CONTEXT}
+CONTEXT="$(build yes)"
+CEILING=$(( CONTEXT_LIMIT - SAFETY_MARGIN ))
 
----
-
-# pipeline-snapshot.precompact.md (mechanical state at compaction time)
-
-${SIDECAR_TEXT}"
+# Trim before emitting, never after. An over-limit block is not truncated by the
+# harness -- it is replaced wholesale by a file path, so a directive that does
+# not fit is a directive that never runs. The Pipeline Position excerpt is the
+# only droppable part; the directive itself is the payload.
+if [ "${#CONTEXT}" -ge "$CEILING" ]; then
+  CONTEXT="$(build no)"
 fi
 
-# Leave a marker so ai-dlc-postcompact.sh, which runs after us, can record that
-# recovery context was actually injected for this compaction.
+# `degraded` reports what the HARNESS will do, so it tests against the real
+# cliff -- not against the ceiling, which only governs when we trim. A block
+# between the ceiling and the limit still lands in context intact.
+DEGRADED=no
+[ "${#CONTEXT}" -ge "$CONTEXT_LIMIT" ] && DEGRADED=yes
+
 mkdir -p "$STATE_DIR" 2>/dev/null || true
-date -u +%Y-%m-%dT%H:%M:%SZ >"$MARKER" 2>/dev/null || true
+{
+  printf 'fired_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'injected_bytes=%s\n' "${#CONTEXT}"
+  printf 'context_limit=%s\n' "$CONTEXT_LIMIT"
+  printf 'degraded=%s\n' "$DEGRADED"
+} >"$MARKER" 2>/dev/null || true
 
 jq -n --arg ctx "$CONTEXT" \
   '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
