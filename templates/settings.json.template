@@ -15,6 +15,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
           }
         ]
+      },
+      {
+        "matcher": "Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-acknowledge.sh"
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [

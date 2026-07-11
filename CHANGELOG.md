@@ -17,6 +17,89 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.44.0] — 2026-07-11
+
+### Operator steerability — bound the blind window, give the pause flag teeth
+
+The operator could not reliably steer a running pipeline. Two independent
+defects, both now mechanized.
+
+**Defect A — the steering window was unbounded.** Claude Code delivers a queued
+operator message at a *tool-call boundary*; it rides in beside the next tool
+result. A long turn is therefore harmless. What silences the operator is a long
+*single tool call*: while one is in flight there is no boundary, so the message
+cannot land. The blind window equals the in-flight call's duration.
+
+`Agent` is the only unbounded foreground primitive — `Bash` and `TaskOutput` are
+harness-capped at 10 minutes, and `AskUserQuestion`'s duration is the operator's
+own think-time. And ai-dlc *mandated* it: `implementation.md`'s
+"Foreground-dispatch mandate" required gated dev dispatch to be a blocking
+`Agent` call and explicitly forbade `run_in_background`. Measured across 278
+consumer sessions: **355 foreground `Agent` calls blocked longer than 2 minutes,
+the worst for 36 minutes** — 36 minutes in which the human physically could not
+be heard.
+
+Replaced by **bounded-join dispatch** (new **Rule 29**): spawn with
+`run_in_background: true`, then join in bounded beats —
+`TaskOutput(task_id, block: true, timeout: 120000)`. Each beat returns within the
+steering budget carrying the teammate's full result, or `status: running`. The
+join is preserved (a gated cycle stays gated; nothing is detached), Rule 3 is
+preserved (every beat is a tool call, so the lead never emits a text-only
+response and never stalls), and parallel wave dispatch is preserved. The lead
+does **not** end its turn to let the operator in — that would trade a queued
+prompt for a dead pipeline.
+
+**Defect B — the pause flag had no teeth.** `ai-dlc-pause.sh` sets
+`_bmad-output/pipeline-paused.flag` on every operator message and instructs the
+lead not to advance while it exists. That flag was read by exactly two consumers
+— the Stop hook and the driver signal — and **nothing enforced it against a tool
+call**. So the contract was prose aimed at a lead simultaneously under Rule 3
+("Keep working. Do not ask if you should continue.") and the Stop hook's
+forced-continuation reason. The steer, arriving mid-turn beside a tool result,
+lost. **111 operator messages in the consumer corpus were followed by a
+pipeline-advancing call before the flag was ever released.**
+
+New `PreToolUse` hook `ai-dlc-acknowledge.sh` denies `Agent`, `Task`, `Skill`,
+`TaskCreate`, and `_bmad-output/` writes while the flag is set. `Read`, `Grep`,
+`Glob`, and `Bash` stay allowed — so the lead can investigate the operator's
+question, and so the `rm` that releases the flag is always available. Denying
+Bash would have wedged the pipeline permanently; the escape hatch is deliberate.
+
+### Added
+- **Rule 29 (steering budget)** in `SKILL.md` — the invariant, the bounded-join
+  mechanics, and the acknowledge contract. `run_in_background: true` is now the
+  default for every spawn, not an exception.
+- `core/hooks/ai-dlc-acknowledge.sh` — `PreToolUse` deny hook (Defect B). Logs
+  `ACK_DENIED` to the flow log.
+- `core/scripts/validate-steering-budget.sh` — audits a transcript for (A)
+  foreground calls exceeding the budget and (B) steamrolled operator messages.
+  `AskUserQuestion` is exempt from (A): its duration is human think-time, not
+  machine starvation.
+- `retro.md` §4b — operator-steerability audit. Also gives
+  `pipeline-continuation-log.md` its first live consumer; both hooks' headers had
+  claimed "Retro reviews this log" since inception, and nothing ever did.
+
+### Changed
+- `implementation.md` — "Foreground-dispatch mandate" → **"Bounded-join dispatch
+  mandate."** A blocking dev dispatch is now a lead-conduct retro finding. The
+  parallel-wave requirement is unchanged.
+- Rule 24 dispatch contract — analyst spawns inherit bounded-join.
+- `templates/settings.json.template` — registers the new `PreToolUse` hook.
+- `scripts/install.sh` — `validate-steering-budget.sh` added to the enumerated
+  script loop (the packaging trap: `core/scripts/` alone does not ship it).
+- `enforcement-map.yaml` — `steering-budget` enforcer entry.
+
+### Measurement note
+Aggregate operator-latency joins over these transcripts are lossy and were not
+used to size this work. Enqueue↔delivery matching drops ~50% of prompts, skewed
+toward the repeated control words (`handoff`, `approved`) that hang; and a first
+pass at "how long until the lead replies" silently excluded every message the
+lead never answered — i.e. it excluded Defect B from the statistic meant to
+measure Defect B. A "633-minute Bash" cited in early analysis was an artifact of
+that lossy pairing and is retracted; the true foreground ceiling is `Agent` at
+36.2 minutes. The mechanisms above are established by direct tool-duration
+measurement and by the 111 flag-lifecycle violations, not by those joins.
+
 ## [0.43.0] — 2026-07-11
 
 The four per-sprint analyst drafts are now written to sprint-stamped paths, so a

@@ -405,6 +405,36 @@ Both lists MUST be empty. Record the result in the same
 `Relocation-pointer + resident-ordering scan` sub-section: manifest IDs
 resolved (count + any MISSING/ORPHAN).
 
+### 4b. Operator-steerability audit (Rule 29)
+
+The operator must be able to reach the lead mid-section. Two failures make that
+impossible, and both are mechanically detectable — audit them every retro.
+
+Run the validator against this session's transcript:
+
+    scripts/validate-steering-budget.sh --transcript ~/.claude/projects/<project-slug>/<session-id>.jsonl
+
+- **Check A (starvation)** — any foreground tool call that outlasted the steering
+  budget. While it was in flight there was no tool boundary, so a queued operator
+  message could not be delivered. The near-universal cause is a dev or analyst
+  dispatched blocking instead of bounded-join (Rule 29). Each is a **lead-conduct
+  finding**.
+- **Check B (steamroll)** — any operator message followed by a pipeline-advancing
+  call before the pause flag was released. The lead received a steer and executed
+  through it. Each is a **lead-conduct finding**.
+
+Then read the flow log, `_bmad-output/pipeline-continuation-log.md`:
+
+- `ACK_DENIED` — the `PreToolUse` hook had to physically block the lead from
+  advancing past a waiting operator. A nonzero count means the lead tried; the
+  hook, not the lead's judgment, is what protected the human. Investigate why.
+- `USER_PAUSE` vs `BLOCKED` — pause frequency against Rule 3 enforcement volume.
+- `BACKOFF` — the Stop hook exhausted its retry budget; the pipeline genuinely
+  stuck. Find the upstream cause in the transcript.
+
+A retro that reports zero steerability findings on a sprint in which the operator
+visibly repeated themselves has run the audit wrong.
+
 ## Empirical gate validation
 
 Every gate added via retro MUST be exercised on a green run within the next

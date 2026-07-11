@@ -301,3 +301,11 @@ non_catalog_units:
     adjudication: script
     enforcer:
       - core/scripts/validate-compact-window.sh
+
+  - id: steering-budget
+    title: Operator steerability (Rule 29) — no foreground call may outlast the
+      steering budget; no operator message may be steamrolled
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-steering-budget.sh
+      - core/hooks/ai-dlc-acknowledge.sh
