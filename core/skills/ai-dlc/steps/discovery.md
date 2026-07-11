@@ -19,7 +19,9 @@ If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
 an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to section 1
 — it reads the input artifacts and any codebase context the brief
 needs and writes a context digest to
-`_bmad-output/planning-artifacts/discovery-context.md`, returning only
+`_bmad-output/planning-artifacts/s<N>-discovery-context.md` (Rule 24
+sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
+Context, resolved at `route.md` Step 6), returning only
 `{artifact_path, summary, gaps}`. Then resume at section 2.
 **Sections 2 onward stay inline in the lead** — brainstorm, brief
 authoring, and the Rule 8 validation cycle are never offloaded. If

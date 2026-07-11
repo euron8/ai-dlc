@@ -17,6 +17,114 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.43.0] — 2026-07-11
+
+The four per-sprint analyst drafts are now written to sprint-stamped paths, so a
+new sprint can no longer destroy the previous sprint's draft.
+
+This started as a request to *reset* `carry-over-evaluation.md` at every pipeline
+start. Investigation showed a reset is a no-op — the file never accumulates. All
+40 commits touching it in a real consumer are wholesale rewrites, and line counts
+sawtooth (101 → 810 → 101 → 800) rather than growing. The analyst already
+truncates it by overwriting.
+
+The real defect is the opposite one. These drafts have no reader in the pipeline,
+no template, no size threshold, and no history/archive pair, so the overwrite is
+not "an overwrite" — it is a total, unrecoverable-outside-git destruction of the
+prior sprint's draft. And downstream artifacts cite *into* the file. In the
+consumer, `story-262-1` carries `<!-- Source: … carry-over-evaluation.md §7 F6 …
+-->` and the file on disk, thirty sprints later, has no §7 at all. The pointer
+still resolves — against the wrong sprint's document. A silently-wrong answer,
+not an error. Resetting the file would have converted silent destruction into
+eager destruction and violated Rule 25(a) ("move, never delete").
+
+The model had already noticed: the consumer holds 111 hand-made sprint-prefixed
+files (`s166-carry-over-evaluation.md`, …) working around the missing lifecycle.
+The repo used that convention through S241, then drifted into the single
+overwritten file at S242.
+
+### Added
+
+- **Rule 24 sprint-stamped drafts.** The four per-sprint analyst drafts are
+  written to `s<N>-<base>.md`, where `<N>` is `sprint_id` from the pipeline
+  snapshot: `s<N>-carry-over-evaluation.md`, `s<N>-discovery-context.md`,
+  `s<N>-research-notes.md`, `s<N>-architecture-context.md`. Each is immutable
+  *across* sprints by construction — no rotation, no archive step, no reset, no
+  staleness window. (Not append-only *within* a sprint: re-drafting sprint N
+  correctly overwrites sprint N's own file.) The stamp lives in the filename; the
+  draft's H1 is prose and is never parsed.
+- **`route.md` Step 6 resolves `sprint_id`.** The sprint number previously had no
+  mechanical source: `sprint-status.yaml` still holds the *previous* sprint
+  (`status: done`) until `stories-test-strategy` writes the new one — which runs
+  *after* the steps that need the stamp — and nothing in `core/` creates or bumps
+  that file at all. Step 6 already runs at the "new pipeline starts" moment and
+  already initializes the snapshot, whose Sprint Context already carries a
+  `sprint_id` field. It now resolves it: absent file → 1; `status: done` → N+1;
+  in-flight → N; the two `sprint-status.yaml` copies disagreeing → HARD_BLOCK.
+  `none` is a hard stop, never an unstamped fallback. **This is what the original
+  "reset at pipeline start" instinct was reaching for — the thing to establish at
+  pipeline start is the sprint identity, not a truncated file.**
+- **Check 23 + `validate-draft-stamps.sh`** (planning gates, HARD_BLOCK). Two
+  halves, because the drift has two surfaces. *Disk:* no unstamped draft may
+  exist in `planning-artifacts/` — this fires on the rendered outcome, catching a
+  core regression and a consumer override equally. *Layer:* no
+  `extensions/`/`overrides/` entry may declare an unstamped write path — a
+  `kind: step-domain` extension restates its step's whole Section 0, including the
+  output path, so it can revert the stamp in the rendered pipeline while core
+  looks correct (the v0.34.0 lesson). Both halves anchor on the
+  `_bmad-output/planning-artifacts/` path prefix, never a bare basename: every
+  step file's own name collides with its artifact's, and `route.md`'s pipeline
+  table legitimately names the *step* `carry-over-evaluation.md`.
+- **Fixture `check-23-draft-stamps/`.** Four trees. `bad-disk` and `bad-layer`
+  must FAIL; `good` and `decoy` must PASS. `bad-layer` is not hypothetical — it is
+  the real consumer's `carry-over-evaluation-domain.md:15` shape verbatim.
+  `decoy` is the case that decides shippability: it seeds the step-file name
+  collision *and* every out-of-scope artifact.
+
+### Fixed
+
+- **Phantom pointer** (`gate-validation.md`, Check 3 origin-anchoring): cited
+  `_bmad-output/planning-artifacts/carry-over-items.md`, a path that exists
+  nowhere in the distribution or any consumer. Every other site says
+  `carry-over-backlog.md`.
+- **H1 fixture enumeration** was missing Check 3b, whose fixture has existed
+  since v0.40.0. H1 verifies "each phase-specific check ships a fixture" against
+  a hand-maintained list, so it cannot catch its own omissions.
+
+### Scope — deliberately not stamped
+
+Four other analyst drafts look similar and were cut after checking them, per Rule
+26(a):
+
+- `codebase-analysis.md`, `brownfield-inventory.md`, `doc-reconciliation.md` —
+  one-shot *onboarding* artifacts, not per-sprint drafts (the consumer's
+  `brownfield-inventory.md` has 2 commits and an H1 of `# Brownfield Inventory`,
+  no sprint at all). They also have real in-pipeline readers by path
+  (`discovery.md`, `doc-repair-backfill.md`). Stamping them would break four
+  working reads to fix a defect they do not have.
+- `bug-analysis.md` — bug-keyed, not sprint-keyed; two bugs in one sprint would
+  collide on the same stamp, and the bug pipeline runs an `implementation` gate,
+  never a `planning` one.
+
+Cutting these is what makes the change nearly free: **the remaining four have
+zero readers by path**, so no call sites needed updating.
+
+A **citation-grammar validator** was designed and then cut for vacuity. Current
+stories cite stable item IDs (`CO-S288-CHECK5-CANNOT-FIRE`), which are
+sprint-stamped by construction and do not rot; the rotted `§section` pointers are
+concentrated in an older era. A validator firing zero times on the current corpus
+would have reproduced the exact "check that cannot fire" defect the consumer's
+last sprint existed to fix.
+
+### Migration
+
+Stamped-at-write has no implicit grandfathering — the disk half fires immediately
+on any unstamped draft. At adoption, one-time in the consumer: `git mv` each of
+the four live unstamped drafts to its `s<N>-` name (read the sprint from git
+history, **not** by parsing the H1 — observed H1s include `Sprint S286` and
+`Sprint 285 (draft)`), and update any `extensions/`/`overrides/` layer that
+restates a draft write path. Check 23 names exactly what to fix.
+
 ## [0.42.0] — 2026-07-10
 
 The context sensor (`ai-dlc-context-sensor.sh`) is now compaction-aware: it only

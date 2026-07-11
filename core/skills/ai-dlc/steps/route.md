@@ -274,6 +274,32 @@ estimate from the user's input. The intensity MAY be revised upward
 differs from the estimate. Record the intensity in the snapshot's
 Sprint Context section.
 
+**Resolve `sprint_id` (MANDATORY — this is the pipeline's sprint
+identity).** A fresh pipeline start is the only place the sprint number
+is mechanically derived; every downstream consumer reads it from the
+snapshot, never re-derives it. Resolve it here, before creating the
+snapshot, by this rule:
+
+1. Read `sprint:` and `status:` from
+   `_bmad-output/planning-artifacts/sprint-status.yaml`.
+2. If the file does not exist (greenfield) → `sprint_id: 1`.
+3. If `status: done` → the prior sprint is closed and a new pipeline is
+   starting → **`sprint_id: <sprint> + 1`**.
+4. If `status:` is anything else → the sprint is still in flight and this
+   is a re-plan, not a new sprint → `sprint_id: <sprint>`.
+5. If a second `sprint-status.yaml` exists at
+   `_bmad-output/implementation-artifacts/sprint-status.yaml` and its
+   `sprint:` disagrees → **HARD_BLOCK** (Rule 11). Surface both values
+   and wait. Never guess which copy is authoritative.
+
+`sprint_id` MUST resolve to an integer. `none` is a hard stop, never a
+fallback — the analyst-draft write paths below are stamped with it
+(Rule 24), and an unstamped fallback silently destroys the prior
+sprint's draft, which is the exact defect the stamp exists to prevent.
+
+Getting rule 3 wrong stamps every draft of this sprint one number off,
+permanently, in the filename. Read `status:` — do not assume.
+
 **Initialize the pipeline snapshot.** Before the READ AND FOLLOW, handle
 the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 
@@ -281,8 +307,8 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
   - Pipeline Position (detected variant, first step file, no
     last-completed step yet, no gates passed yet, current git
     branch from `git branch --show-current`)
-  - Sprint Context (populate from `sprint-status.yaml` if it exists;
-    else `sprint_id: none`)
+  - Sprint Context (`sprint_id` as resolved above — an integer, never
+    `none`; remaining fields from `sprint-status.yaml` if it exists)
   - Recent Activity (empty — will be populated by `gate-validation.md`
     Check 14 on each gate passage)
   - Open Items (empty)
