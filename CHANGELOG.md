@@ -17,6 +17,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.1] — 2026-07-11
+
+### Check B scored attempts, not outcomes — a working hook manufactured its own violations
+
+Found by running v0.45.0 against the reference consumer's **first post-update sessions**.
+Two defects, both in `validate-steering-budget.sh` Check B, both the same shape: **the
+check read `tool_use` and never looked at what happened.**
+
+**A — a blocked attempt is not a steamroll.** When `ai-dlc-acknowledge.sh` *denies* an
+advancing call, the `tool_use` still appears in the transcript; the deny lands on the
+`tool_result` (`is_error: true`, carrying `AI/DLC Rule 29: the pipeline is PAUSED`).
+Check B counted the blocked attempt and reported *"the lead received the steer and
+executed straight through it"* about a call that **never executed** — scoring the hook
+*working* as the failure the hook prevents. Live evidence: the consumer's post-update
+sessions showed 2 "steamrolls" while the flow log showed **3 `ACK_DENIED` events at the
+same moments**. The hook had stopped every one. The old remedy text made it worse —
+*"if these violations are recent, the hook is not installed"* — which was exactly
+backwards. Removed.
+
+Check B now scores **outcomes**. This both removes phantoms and **unmasks real ones**: a
+denied attempt used to record a hit and halt the forward walk, hiding any genuine advance
+that followed it.
+
+**B — the updater is not the pipeline.** `_bmad-output/ai-dlc-update/**` is
+`/ai-dlc-update`'s own scratch space (reconcile report, push-candidate ledger). It is a
+*different skill* from `/ai-dlc`: it advances no sprint and runs precisely when the
+pipeline is **not** running. Both the hook and Check B treated a write there as pipeline
+advancement — so the updater was **denied mid-reconcile on its own ledger**, by a rule
+about a pipeline that wasn't running. Excluded from both.
+
+### Fixed
+- `validate-steering-budget.sh` Check B — scores outcomes, not attempts; excludes
+  hook-denied calls and `_bmad-output/ai-dlc-update/**`.
+- `core/hooks/ai-dlc-acknowledge.sh` — no longer denies the updater's own artifacts.
+
+### Notes
+- Corpus-wide Check B: **114 → 95 → 82**. Each correction removed a class of *machine*
+  event being read as a *human* one — the circular-acknowledgement draft, then the
+  compact-resume phantom, now the blocked attempt. Three instances of one mistake; the
+  pattern is now named in the script header so the next reader doesn't make it a fourth.
+- Consumer effect of the update landing: the reference consumer's resumed sprint went
+  from **8 foreground calls over budget (worst 10.0 min, returning `TIMEOUT`)** to **zero,
+  longest wait 111 s**, and from **6 auto-compactions in 3h16m** to **0 in 88 min**. The
+  Rule 29 bounded file-wait beat is being used as specified.
+
 ## [0.45.0] — 2026-07-11
 
 ### Planning latency — the ratchet, the missing join, and a meta-check that proved nothing
