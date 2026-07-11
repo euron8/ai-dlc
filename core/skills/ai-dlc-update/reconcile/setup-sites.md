@@ -121,6 +121,15 @@ sites:
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 
+  - id: adversary-model-personal
+    file: core/team-roles/adversary.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: adversary-model-bedrock
+    file: core/team-roles/adversary.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
   - id: ppe-model-personal
     file: core/team-roles/protected-path-editor.md
     shape: single-line

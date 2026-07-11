@@ -421,6 +421,40 @@ Every consumer block that differs from upstream is one of:
      consumer's decision, not the reconcile's.
    - (The skill's OWN files are NOT touched here — they were already refreshed by
      the autonomous self-update cycle in step 2.)
+
+   **Leftover-token gate — hard, runs after the last write, blocks delivery.**
+   After every overwrite above and BEFORE the re-stamp, grep the consumer's core
+   for a template token that survived on a LIVE line:
+
+   ```
+   grep -rn '{[a-z_]*}' <consumer>/.claude/team-roles/ | grep -v '<!--'
+   ```
+
+   A hit is a FAIL: some file carried a setup-substitution site that
+   `setup-sites.md` does not declare, so the overwrite blanked a live consumer
+   value back to its `{placeholder}` token. STOP before the re-stamp, name the
+   file and the token, add the missing site to `setup-sites.md`, and redo that
+   file's overwrite through mask/reinject. Do not deliver a tree that dispatches
+   a teammate with `/model {x_model_personal}`.
+
+   Exclude `<!-- ... -->` doc comments — those legitimately carry the token text
+   and MUST survive from `theirs` (per the mask/reinject transform, the doc
+   comment is not part of the captured span). The token only matters on a live
+   line. Match the same idea for non-role manifest files (`steps/*.md`), whose
+   sites are commands and paths rather than `/model` strings.
+
+   *Why this exists.* `untangle`'s §7v criterion 4 already asserts "zero remaining
+   `{...}` tokens in any team-role file" — but 7v is untangle-only, and the
+   ORDINARY pull had no equivalent, so a manifest miss landed silently on the one
+   path consumers actually run. It did: `core/team-roles/adversary.md` shipped in
+   v0.30.0 while `setup-sites.md` was last touched in v0.21.0, so for nine minor
+   versions the manifest did not declare the adversary model sites. The first
+   consumer pull to touch that file would have overwritten a live
+   `/model claude-opus-4-8[1m]` with `/model {adversary_model_personal}` and broken
+   every adversary dispatch — with nothing in the run to catch it. A manifest is a
+   hand-maintained list and WILL go stale again; this gate is what makes the next
+   staleness loud instead of silent.
+
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
      `upstream`** (rewrite the whole stamp in schema — never collapse it to the
