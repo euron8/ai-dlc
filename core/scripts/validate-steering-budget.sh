@@ -41,11 +41,27 @@
 #      narration, so the check passed on a corpus that provably contains the
 #      failure. Do not reintroduce it. The flag lifecycle is the invariant, not
 #      the presence of prose.
+#   C. UNBOUNDED WAIT. More than max_wait_beats consecutive FOREGROUND wait-shaped
+#      Bash calls with no intervening re-dispatch. This is the hole Check A cannot
+#      see: A bounds a single CALL, so a lead that polls the filesystem in
+#      110-second slices forever is compliant with A while advancing nothing.
+#      Rule 29's bounded file-wait beat bounds the SEQUENCE too -- on exhaustion
+#      the deliverable is absent, which Rule 20 already calls non-delivery, so the
+#      lead re-dispatches (an advancing call, which resets the run) or HARD_BLOCKs.
 #
 # EXEMPT FROM CHECK A
 #   AskUserQuestion -- its duration is the HUMAN's think-time, not machine
 #   starvation. The lead is waiting ON the operator, not blocking them. Counting
 #   it would flag every checkpoint as a violation.
+#
+# NOT AN OPERATOR MESSAGE (excluded from check B)
+#   The auto-compaction resume prompt ("This session is being continued from a
+#   previous conversation..."). It is a HARNESS injection, not a human steer, and
+#   the lead advancing straight after it is the POST-COMPACT RECOVERY PROTOCOL
+#   working as designed. Counting it inverted the check's meaning: 19 of 114
+#   "steamrolls" in the reference consumer corpus (16.7%) were this phantom. Same
+#   class of error as the circular-acknowledgement draft above -- a machine event
+#   read as a human one. Do not reintroduce it.
 #
 # USAGE
 #   core/scripts/validate-steering-budget.sh --transcript PATH [--quiet]
@@ -54,15 +70,18 @@
 # ENV OVERRIDES
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
 #   AI_DLC_STEERING_GRACE   jitter allowance, seconds       (default 30)
+#   AI_DLC_MAX_WAIT_BEATS   max consecutive wait beats      (default 10)
 #
 # EXIT
-#   0  no foreground call exceeded the budget; no steamrolled operator message
+#   0  no foreground call exceeded the budget; no steamrolled operator message;
+#      no unbounded wait sequence
 #   1  a violation was found, or input unreadable
 
 set -u
 
 BUDGET="${AI_DLC_STEERING_BUDGET:-120}"
 GRACE="${AI_DLC_STEERING_GRACE:-30}"
+MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-10}"
 TRANSCRIPT=""
 DIR=""
 QUIET=0
@@ -95,9 +114,10 @@ command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; 
 
 THRESHOLD=$(( BUDGET + GRACE ))
 
-AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_Q="$QUIET" node <<'NODE'
+AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
+const MAX_BEATS = +process.env.AI_DLC_MB;
 const QUIET = process.env.AI_DLC_Q === "1";
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
@@ -108,10 +128,41 @@ const isAdvancing = (b) => ADVANCING.has(b.name) ||
   (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(b.name) &&
    /(^|\/)_bmad-output\//.test(b.input?.file_path || ""));
 
+// A wait BEAT is a foreground Bash call that sleeps AND file-tests a
+// _bmad-output/ path. All three clauses are load-bearing, and each was added
+// because the looser version misfired on the reference corpus (405 foreground
+// wait calls):
+//
+//   sleeps                -- the signal that it is WAITING. We do not enumerate
+//                            spellings (until / while / for+seq); that would just
+//                            be a list of the ones we happened to have seen.
+//   names _bmad-output/   -- scopes this to PIPELINE deliverables. Rule 29's
+//                            file-wait beat exists because an absent deliverable
+//                            is Rule 20 NON-DELIVERY, whose remedy is re-dispatch.
+//                            A lead polling a deploy, a `gh pr` merge state, or an
+//                            ECS task is in no such situation -- there is nothing
+//                            to re-dispatch and 10 beats is the wrong ceiling for a
+//                            rollout. 323 of the 405 are these; bounding them would
+//                            be the validator inventing a rule ai-dlc never made.
+//   file-existence test   -- distinguishes waiting ON a deliverable from merely
+//                            TEE-ING a log into _bmad-output/ while polling
+//                            something else. Without it, 51 of 78 remaining hits
+//                            were `gh pr create`, flag removal, and log tails.
+const isWaitBeat = (b) => b.name === "Bash" &&
+  b.input?.run_in_background !== true &&
+  /\bsleep\s+\d/.test(b.input?.command || "") &&
+  /_bmad-output\//.test(b.input?.command || "") &&
+  /(\[\s*-[sfe]\s|test\s+-[sfe]\s)/.test(b.input?.command || "");
+
+// The auto-compact resume prompt is a harness injection, not an operator steer.
+// See "NOT AN OPERATOR MESSAGE" in the header before touching this.
+const isCompactResume = (t) =>
+  /^This session is being continued from a previous conversation/.test(t);
+
 const files = one ? [one]
   : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f));
 
-const starv = [], steam = [];
+const starv = [], steam = [], unbounded = [];
 
 for (const f of files) {
   let recs;
@@ -153,6 +204,9 @@ for (const f of files) {
     // teammate -- machine, not operator. Counting it would inflate check B.
     if (/^(<task-notification|<local-command|<command-|<agent-message|<teammate-message|Caveat:|\[Request interrupted|## Context Usage|Stop hook feedback|Base directory|Another Claude session sent a message)/.test(txt)) continue;
     if (/<teammate-message/.test(txt)) continue;
+    // Not a human steer: the harness's own auto-compaction resume prompt. The
+    // lead advancing right after it is the recovery protocol, not a steamroll.
+    if (isCompactResume(txt)) continue;
 
     // Walk forward: does the lead ADVANCE the pipeline before it clears the
     // pause flag? The flag -- not the presence of narration -- is the contract.
@@ -178,6 +232,29 @@ for (const f of files) {
       if (cleared) break; // flag released before advancing -- correct
     }
   }
+
+  // ---- Check C: an unbounded run of wait beats ------------------------------
+  // Rule 29 bounds the sequence, not only the call. A re-dispatch (any advancing
+  // call) is the sanctioned exit from a wait, so it resets the run.
+  let run = 0, firstCmd = "";
+  for (const r of recs) {
+    if (r.type !== "assistant") continue;
+    const c = r.message?.content;
+    if (!Array.isArray(c)) continue;
+    for (const b of c) {
+      if (b.type !== "tool_use") continue;
+      if (isWaitBeat(b)) {
+        if (run === 0) firstCmd = (b.input.command || "").replace(/\s+/g, " ").slice(0, 64);
+        run++;
+        if (run === MAX_BEATS + 1)
+          unbounded.push({ f: path.basename(f), beats: run, cmd: firstCmd });
+        else if (run > MAX_BEATS + 1)
+          unbounded[unbounded.length - 1].beats = run;   // same run, still growing
+      } else if (isAdvancing(b)) {
+        run = 0;  // re-dispatched (or moved on) -- the wait ended legitimately
+      }
+    }
+  }
 }
 
 const log = (...a) => { if (!QUIET) console.log(...a); };
@@ -199,8 +276,17 @@ if (starv.length) {
     arr.sort((a, b) => b - a);
     console.error(`        ${n}: ${arr.length} call(s), worst ${(arr[0] / 60).toFixed(1)} min`);
   }
-  console.error(`      Fix: dispatch with run_in_background:true, then join in bounded beats --`);
-  console.error(`      TaskOutput(task_id, block:true, timeout:${BUDGET * 1000}). Rule 29 / implementation.md.`);
+  // The remedy depends on the SHAPE of the thing being waited on. Telling a
+  // filesystem poll to "use TaskOutput(task_id)" is useless advice -- a Skill
+  // spawn has no task_id, which is precisely why the lead wrote the poll.
+  console.error(`      Fix (spawn you hold a task_id for -- Agent): dispatch with`);
+  console.error(`      run_in_background:true, then TaskOutput(task_id, block:true, timeout:${BUDGET * 1000}).`);
+  if (byTool.Bash) {
+    console.error(`      Fix (Bash waiting on a Skill-spawned deliverable -- no task_id exists):`);
+    console.error(`      Rule 29's bounded file-wait beat. Each beat is ONE Bash call that returns`);
+    console.error(`      within ${BUDGET}s and may poll inside itself; bound the SEQUENCE at`);
+    console.error(`      max_wait_beats, then re-dispatch. Never one open-ended poll.`);
+  }
 } else {
   log(`PASS  (A) no foreground call exceeded the budget.`);
 }
@@ -218,6 +304,20 @@ if (steam.length) {
   console.error(`      violations are recent, the hook is not installed.`);
 } else {
   log(`PASS  (B) every operator message was acknowledged before the pipeline advanced.`);
+}
+
+if (unbounded.length) {
+  bad = true;
+  console.error(`FAIL (C -- UNBOUNDED WAIT): ${unbounded.length} wait sequence(s) ran past the`);
+  console.error(`      ${MAX_BEATS}-beat ceiling with no re-dispatch. Each beat may be under the budget`);
+  console.error(`      (so check A is silent), but the lead is polling forever and advancing nothing.`);
+  for (const v of unbounded.sort((a, b) => b.beats - a.beats).slice(0, 8))
+    console.error(`        ${v.beats} beats  ${v.f}  "${v.cmd}"`);
+  if (unbounded.length > 8) console.error(`        ... and ${unbounded.length - 8} more`);
+  console.error(`      Fix: an exhausted wait means the deliverable is ABSENT, which Rule 20 already`);
+  console.error(`      calls non-delivery -- re-dispatch, then HARD_BLOCK. Rule 29 bounded file-wait beat.`);
+} else {
+  log(`PASS  (C) no wait sequence exceeded ${MAX_BEATS} beats without a re-dispatch.`);
 }
 
 process.exit(bad ? 1 : 0);

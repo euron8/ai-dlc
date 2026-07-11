@@ -131,6 +131,32 @@ Check for existing artifacts on disk:
 6. Read `_bmad-output/planning-artifacts/sprint-status.yaml` if it exists — current sprint state?
 7. Read CLAUDE.md for project rules and conventions.
 
+### Step 1a: Artifact-Size Budget Gate (Rule 25(d)) — HARD_BLOCK
+
+Run `scripts/validate-artifact-budget.sh`.
+
+**Exit 0** — every living artifact is within budget. Continue to Step 2.
+
+**Exit 1** — one or more artifacts are over budget. **HARD_BLOCK. Do not start the
+sprint.** Present the script's output to the operator, and apply the remedy the
+script names per artifact — they are not interchangeable:
+
+- `consolidate` → the operator runs `artifact-consolidation.md` (a
+  fidelity-critical rewrite; it is supervised, never automatic).
+- `rotate` → a rotation was **missed**. Move the epoch to a dated archive
+  (Rule 25(c)). Never rewrite a log.
+- `trim` → trim `pipeline-snapshot.md` to its six-section schema (Rule 25(a)).
+
+Then re-run the script. It must exit 0 before the sprint proceeds.
+
+**Why this blocks here and nowhere else.** Sprint start is the last moment at
+which an oversized artifact is cheap to fix — the sprint has not read it yet.
+One step later, `carry-over-evaluation` whole-reads the brief, the PRD, the
+architecture, and the backlog (Rule 25(b)), and every over-budget byte is
+context that planning does not get back. This gate is upstream of that read on
+purpose. Retro's audit of the same budgets stays warn-only; it reports on a
+sprint that already paid.
+
 ### Step 2: Analyze User Input
 
 Classify the user's request:

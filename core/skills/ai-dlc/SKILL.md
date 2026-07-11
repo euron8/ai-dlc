@@ -671,6 +671,11 @@ as non-delivery and re-dispatch. Build no detector for this — the lead's
 own read of the expected path is the check (Rule 26: audit before adding
 mechanism).
 
+*How long to wait for that file is not a judgment call.* The `Skill` tool
+returns no `task_id`, so Rule 29's `TaskOutput` join cannot reach a persona.
+Wait for it with Rule 29's **bounded file-wait beat** — never with a single
+open-ended poll.
+
 **Solo mode is forbidden -- for ALL four sub-skills.** Every validation
 sub-skill MUST run with real subagents (shape (i) or (ii) above), never
 roleplayed inline. Roleplaying perspectives / running a single-voice pass in
@@ -924,26 +929,59 @@ the whole requirement set (e.g. `carry-over-evaluation`) read the live
 file whole and rely on (a) keeping it bounded — slicing there would
 risk missing a cross-reference and mis-deciding.
 
+**That exception is conditional, and the condition is now checked.** "Rely on (a)
+keeping it bounded" was an assumption, not a mechanism: in the reference consumer
+`product-brief.md` reached 480 KB (~120k tokens, 2× its budget) and
+`carry-over-evaluation` whole-read it 11 times anyway, because nothing stood
+between the exemption and the file. A whole-read is licensed ONLY while the
+artifact is within its (d) budget. Over budget, the exemption is void — consolidate
+first (`artifact-consolidation.md`), then read whole. An exemption whose
+precondition is stated but never tested is not an exemption; it is a hole.
+
 **(c) Rotate append-only logs.** `gate-log.md`, the hook-written flow log
-`pipeline-continuation-log.md`, and similar logs rotate
+`pipeline-continuation-log.md`, the hook-written
+`context-mode-protection-log.md`, and similar logs rotate
 at epoch/sprint boundaries into a dated archive; the live log holds
 only the current epoch. Verifying an appended entry reads the **tail**,
 not the whole file. A log named by no rotation step is the failure mode
 this clause exists to prevent: the flow log carried every event of every
 sprint (1.3 MB in the reference consumer) because "and similar logs" bound
-it to nothing — rotation is `retro.md` §4b. The escalation log `pending.md` is bounded the same
-way: terminal (RESOLVED / OVERRIDDEN) entries move to
+it to nothing — rotation is `retro.md` §4b. Naming logs one at a time is how
+that keeps happening: `context-mode-protection-log.md` reached 210 KB in the
+same consumer while appearing in NEITHER this list nor the (d) threshold
+table — unbounded, hook-written, and read at retro. Both are named here now,
+and (d) is what catches the next one. The escalation log `pending.md` is
+bounded the same way: terminal (RESOLVED / OVERRIDDEN) entries move to
 `pending-archive.md` at retro close so the gate-read stays scoped to open
 escalations — mechanism in `escalations.md` "Terminal-entry archival".
 
-**(d) Size thresholds (warn, configurable).** When a living artifact
-exceeds its threshold the retro artifact-size audit warns and points the
-operator to the one-shot consolidation step
-(`artifact-consolidation.md`). The per-artifact threshold defaults are
-owned (and configurable) in the retro artifact-size audit (`retro.md`
-Close-Out Sweep). Warn-only — never blocks the pipeline. Consolidation
-is operator-invoked, not automatic: it is a fidelity-critical rewrite
-and must be supervised.
+**(d) Size budgets — blocking at sprint start, warn-only at retro.** The
+canonical per-artifact budgets and their remedies live in ONE place,
+`scripts/validate-artifact-budget.sh`, which every caller runs rather than
+restating (a threshold copied into prose is a threshold that drifts from the one
+that executes).
+
+Where it runs decides what it does:
+
+- **Sprint start** (`route.md` §1.1) — **HARD_BLOCK**. This is the only point at
+  which bounding an artifact is cheap, because the sprint has not yet read it.
+- **Gate Check 14** — **FAILS the gate** for `pipeline-snapshot.md` alone. The
+  snapshot is the one artifact that grows *within* a sprint, and it is re-read at
+  every gate, every resume, and every compaction.
+- **Retro** (`retro.md` Close-Out Sweep) — **warn-only**, unchanged. The sprint is
+  over; blocking it helps nobody. Retro reports, it does not gate.
+
+Consolidation itself stays operator-invoked (`artifact-consolidation.md`): it is a
+fidelity-critical rewrite and must be supervised. What changed is that the pipeline
+now refuses to *start* a sprint on top of an artifact it cannot afford to read.
+
+*Why this clause used to say "warn-only — never blocks the pipeline," and why that
+was the bug.* Every budget fired at retro — at the end of the sprint that had
+already paid for the overage. Artifacts ratcheted up, each sprint began slower than
+the last, and the only mechanism that would have noticed always arrived after the
+cost. A ratchet with no pawl. In the reference consumer this compounded until a
+single planning phase spent 3h16m, took six auto-compactions, and never reached the
+architecture step.
 
 ### Rule 26 -- Minimum mechanism (KISS)
 
@@ -1139,6 +1177,37 @@ What this does NOT change:
 A `Bash` call you expect to exceed the budget runs `run_in_background: true`
 and is polled the same way.
 
+**Joining a Skill-tool spawn: the bounded file-wait beat.** `TaskOutput` keys on
+a `task_id` and the `Skill` tool returns none -- `/bmad-party-mode` spawns its
+personas INSIDE the sub-skill (Rule 20(i)), so the lead holds no handle to beat
+against. Those personas deliver by file write (Rule 20, "File-write
+deliverable"), so the join is the file itself, waited on in beats:
+
+- A beat is ONE foreground `Bash` call that returns **within
+  `steering_budget`**. It MAY poll inside itself --
+  `for i in $(seq 1 11); do [ -s "$f" ] && exit 0; sleep 10; done` -- because
+  every beat is still a tool boundary and a queued operator lands within one
+  budget. What it may NOT do is outlast the budget.
+- Bound the **sequence**, not just the call: `max_wait_beats` (default **10**,
+  giving a 20-minute ceiling at the default budget). Exhaustion means the file
+  is absent, which Rule 20 already defines as non-delivery -- **re-dispatch**
+  once, then HARD_BLOCK. The wait never runs forever.
+
+**The call bound and the sequence bound protect different things.** Check A
+(duration) protects the operator's *voice*: an over-budget call is a window in
+which they cannot be heard. Check C (count) protects *liveness*: a lead polling
+in 110-second slices forever never starves the operator -- every beat is a tool
+boundary, so they can always get through -- but it advances nothing, forever.
+Both are Rule 29's because Rule 29 owns the dispatch-and-join contract, but do
+not conflate them: an unbounded wait is a hang, not a gag.
+
+*The failure this replaces.* With no join named for shape (i), the lead writes
+`until [ -s "$d/s289-pm.md" ]; do sleep 20; done` as one `Bash` call. It runs to
+the harness's 10-minute cap and returns `TIMEOUT` having produced nothing: ten
+minutes of blind window bought for zero information. Six such calls in a single
+S289 planning phase burned 52 minutes, 29 of them past the point of no return.
+**The loop goes in the beat count, never inside the call.**
+
 **When the operator does reach you, answer them.** An operator message sets
 `_bmad-output/pipeline-paused.flag` (UserPromptSubmit hook). While it exists
 you MUST NOT advance the pipeline -- the `PreToolUse` hook denies `Agent`,
@@ -1152,12 +1221,36 @@ is waiting on you. Here a human is.
 **Minimum mechanism (Rule 26(c)).** Failure caught: (a) the lead blocking on a
 36-minute foreground `Agent` call, during which the operator physically cannot
 be heard; (b) the lead receiving a steer and executing straight through it --
-111 such steamrolled messages in the consumer corpus, because the pause flag
-had teeth in no hook. False-positive cost: a few extra bounded-join beats per
-dispatch (p90 dispatch = ~3 beats), each a few hundred tokens. Removal
-condition: retire when the harness itself bounds foreground tool-call duration,
-or delivers queued input mid-call. Enforcement:
-`scripts/validate-steering-budget.sh` (both checks) and
+**95** such steamrolled messages in the consumer corpus, because the pause flag
+had teeth in no hook; (c) the lead waiting on a Skill-spawned deliverable with a
+single open-ended `until [ -s ... ]; do sleep; done`, which runs to the harness's
+10-minute `Bash` cap and returns `TIMEOUT` having learned nothing -- 6 such calls
+in one S289 planning phase, 29 of the 52 minutes they cost spent past the point
+of no return.
+
+*(b) was previously recorded as 111. It was 114 by the old count, of which 19
+were the harness's own auto-compaction resume prompt read as a human steer -- the
+lead advancing after one is the recovery protocol, not a steamroll. The filter now
+excludes them; the real figure is 95. A machine event miscounted as a human one is
+the same error class as the circular-acknowledgement draft this check already
+warns about.)*
+
+False-positive cost: a few extra bounded-join beats per dispatch (p90 dispatch =
+~3 beats), each a few hundred tokens.
+
+**Check C has caught nothing, and that is stated deliberately.** Across 278
+consumer sessions no lead has ever run even 3 consecutive bounded wait-beats --
+because until this rule there was no reason to slice a poll at all; the observed
+failure is one unbounded call, which Check A already catches. Check C bounds a
+shape *this rule introduces*: once beats are the sanctioned way to wait, beating
+forever becomes the natural way to hang. Shipping the ceiling unenforced was the
+alternative, and an unenforced threshold is exactly the ratchet Rule 25(d) had to
+be rewritten to escape. Removal condition: retire Check C if a season of retros
+shows leads re-dispatch on exhaustion without it -- or retire the whole rule when
+the harness bounds foreground tool-call duration itself, or delivers queued input
+mid-call.
+
+Enforcement: `scripts/validate-steering-budget.sh` (Checks A, B, C) and
 `.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).
 
 ## INITIALIZATION
