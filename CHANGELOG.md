@@ -17,6 +17,63 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.46.0] — 2026-07-11
+
+### The adversary could not converge — its contract made a clean review a failure
+
+Operator observation: adversarial review cycles churn endlessly, each pass returning more
+findings than the last. Measured on S289's research-requirements step, CRITICALs per pass ran
+**3 → 3 → 6 → 9** and never converged. Rule 8's exit condition is *"continue until only
+nitpicks remain."* **It was unreachable by construction.**
+
+`core/team-roles/adversary.md`, clause 4:
+
+> *"Be adversarial, not agreeable. … "Looks good" with no probed assumption is a **failed
+> review**."*
+
+A review that finds nothing had **failed by its own contract**. There was no state in which
+"this artifact is sound" was a successful outcome — so on pass 3 the adversary *must* produce
+findings, and the newest, least-defended text (the last pass's repairs) is where it looks.
+
+**And it is recent.** Before v0.30.0 (2026-07-08), adversarial review bound to
+`code-reviewer`: **zero** phrases demanding a finding, **34** severity terms, and an explicit
+*"approve, request changes, or block"* — approval was a valid outcome. v0.30.0 replaced a
+bounded, severity-disciplined reviewer **that could approve** with an unbounded adversary
+**that fails if it approves**. The *role* was right (a diff-scoped code-reviewer is the wrong
+critic for a planning artifact, which is why v0.30.0 happened); the **contract** was the bug.
+
+This is not merely a pickier reviewer. Pass 3's own summary: *"Pass-2's repair wave injected
+five new CRITICALs, three of them defects the repair itself created"* — a half-applied
+`S0`–`S7` rename leaving a mapping that says the opposite of the repair, and a corrected row
+contradicting the red-proof row thirteen lines above it. **The repair step manufactures
+defects faster than review removes them**, and an adversary that must find something
+guarantees the loop never ends.
+
+### Changed
+- `team-roles/adversary.md` — a **probed clean verdict is a valid, completed review**, and on
+  a later pass the *expected* one. Manufacturing a finding to justify the pass is now the
+  named failure mode, and is worse than a clean review: it sends the lead to edit a correct
+  artifact, and the edit is where new defects come from. An *unprobed* "looks good" is still a
+  failed review; a *probed* "this holds" is a completed one.
+- `team-roles/adversary.md` — **falsifiable severity bar.** CRITICAL requires naming the
+  concrete failure (ships wrong behaviour / an AC cannot pass / a LOCKED requirement
+  contradicted). *"If you cannot state it, it is not CRITICAL."*
+- `team-roles/adversary.md` — **pass 2+ reviews the REPAIR**, not the document again: each
+  prior finding marked repaired / partially / not / **repaired wrongly**. No re-litigating a
+  settled disposition without *new evidence*. Divergence reported in the first line.
+- `SKILL.md` Rule 8 — **divergence is a HARD_BLOCK, not a reason for another pass.** More
+  CRITICALs than the pass before means the repairs are injecting defects; another pass only
+  finds the next wave. Usual cause: an artifact over its Rule 25(d) budget, too
+  cross-referenced to edit safely (S289's PRD was at **194%**).
+
+### Notes
+- **The re-attach window is now saturated.** The recovery protocol ends at 4,743 tokens
+  against a 4,750 ceiling — **7 tokens of headroom**. Rule 2(d) (v0.45.3) and Rule 8's
+  convergence clause each fit alone but not together; both had to be tightened. The next rule
+  added *above* the POST-COMPACT RECOVERY PROTOCOL will fail
+  `validate-reattach-budget.sh`. Relocating narrative below the protocol is the standing
+  remedy (v0.36.2); a structural fix to the pre-protocol region is now owed.
+
 ## [0.45.3] — 2026-07-11
 
 ### The context sensor told the lead to hand off, citing the rule that forbids it
