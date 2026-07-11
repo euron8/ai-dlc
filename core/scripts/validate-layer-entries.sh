@@ -94,6 +94,42 @@ defined_anchors() {
   } | sed -E 's/\.$//' | sort -u
 }
 
+# What may satisfy a "Step N" reference. The rulebook spells step sections TWO ways:
+#
+#   route.md            `### Step 0a: Snapshot Integrity Validation`   (word + colon)
+#   every other step    `### 2a. Variant-lock evidence`                (number + dot)
+#
+# `defined_anchors` above only ever harvested the second form, so route.md contributed
+# ZERO definitions while its own headings were still scanned as REFERENCES. That made
+# "Step 0a" warn as dangling although route.md:53 defines it.
+#
+# The dangerous half was the other direction. Those references were resolved against a
+# global pool that also contained gate-validation.md's CHECK numbers (`### 9.`,
+# `### 12.`) -- a different namespace entirely. So a reference to a step that does not
+# exist was silently satisfied by a same-numbered gate check. Verified by injecting
+# "Step 9" and "Step 12" into route.md: neither step exists, and the check accepted
+# both. It could not detect the one thing it exists to detect.
+#
+# gate-validation.md's numbered sections are CHECKS, and the corpus cites them as
+# "Check N" -- never "Step N" (183 "Check" vs 190 "Step", zero cross-uses). So they
+# contribute NOTHING to the step namespace, which closes the false negative without
+# breaking the legitimate `### 2a.` step-section references.
+defined_step_anchors() {
+  [ -f "$1" ] || return 0
+  # Checks are not steps -- and this must cover the LAYERS too, not just core.
+  # gate-validation's extensions/overrides restate its numbered checks (e.g.
+  # extensions/checks/gate-validation-push.md defines `### 12.`), so matching only
+  # the core filename left the layer copies feeding the step namespace and still
+  # masking a dangling "Step 12".
+  case "$1" in
+    *gate-validation*) return 0 ;;
+  esac
+  { grep -Eho '^#{2,4}[[:space:]]+Step[ -][0-9]+[a-z-]*' "$1" 2>/dev/null \
+      | sed -E 's/^#+[[:space:]]+Step[ -]//'
+    defined_anchors "$1"
+  } | sort -u
+}
+
 layer_files() { [ -d "$1" ] || return 0; find "$1" -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort; }
 rel() { printf '%s' "${1#"$PROJECT_ROOT"/}"; }
 
@@ -167,14 +203,16 @@ all_files="$(
     find "$PROJECT_ROOT/.claude/team-roles" -name '*.md' 2>/dev/null;
     layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; } 2>/dev/null | sort -u
 )"
-GLOBAL_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"; done <<< "$all_files" | sort -u)"
+# A "Step N" reference resolves against STEP definitions only -- never against the
+# numbered gate-check anchors. See defined_step_anchors() for what conflating them did.
+GLOBAL_STEP_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_step_anchors "$f"; done <<< "$all_files" | sort -u)"
 
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
-    printf '%s\n' "$GLOBAL_ANCHORS" | grep -Fxq -- "$ref" && continue
-    warn "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines section $ref anywhere in the rendered rulebook — dangling step pointer"
+    printf '%s\n' "$GLOBAL_STEP_ANCHORS" | grep -Fxq -- "$ref" && continue
+    warn "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
   done < <(grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Step[ -]//' | sort -u)
 done <<< "$all_files"
 

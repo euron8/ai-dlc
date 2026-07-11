@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.2] — 2026-07-11
+
+### The layer-drift validator could not detect a dangling step pointer
+
+Found while reviewing the 0.45.1 reconcile on the reference consumer.
+`validate-layer-entries.sh` reported `Step 0a` as a dangling pointer — but `route.md:53`
+**defines it**. Pulling that thread found the check broken in both directions, because
+it collapsed two different namespaces into one.
+
+The rulebook spells step sections two ways: `route.md` uses `### Step 0a:` (word +
+colon); every other step file uses `### 2a.` (number + dot). The validator only ever
+harvested the second form, so **route.md contributed zero definitions** while its own
+headings were still scanned as *references*.
+
+Those references then resolved against a global pool that also held
+`gate-validation.md`'s **check** numbers (`### 9.`, `### 12.`) — a different namespace
+entirely. So a reference to a step that does not exist was **silently satisfied by a
+same-numbered gate check**. Verified by injecting `Step 9` and `Step 12` into route.md:
+neither step exists anywhere, and the validator accepted both. **It could not detect the
+one thing it exists to detect.**
+
+Gate checks are cited as "Check N" throughout the corpus, never "Step N" (183 vs 190
+occurrences, zero cross-uses), so they now contribute nothing to the step namespace —
+including their extension/override copies, which restate the same numbers and leaked
+through a first, narrower fix.
+
+### Fixed
+- `validate-layer-entries.sh` — step references resolve against step definitions only.
+  False positive cleared (`Step 0a`), false negative closed (`Step 9`/`Step 12` now
+  caught), legitimate `### 2a.` section references still resolve. Clean-tree warnings on
+  the reference consumer: 28 → 26, the delta being exactly the two bogus ones.
+
+### Notes
+- A false negative in a drift detector is worse than noise: it means the check reports
+  green on the failure it was built for. This one had been reporting green since Rule 27
+  was mechanized in v0.34.0.
+
 ## [0.45.1] — 2026-07-11
 
 ### Check B scored attempts, not outcomes — a working hook manufactured its own violations
