@@ -155,6 +155,18 @@ more is always permitted.
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
 | `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review (1 pass) at discovery + stories-test-strategy only |
 
+**"2+ passes" is a FLOOR, and the cycle must CONVERGE to leave it.** Each pass must
+be cheaper than the one before it. Pass 2+ reviews the REPAIR, not the document
+again, and verifies the prior pass's findings actually landed
+(`.claude/team-roles/adversary.md`).
+
+**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1 reports
+MORE CRITICALs than pass N, the repair step is injecting defects faster than review
+removes them, and another pass will only find the next wave. STOP and escalate to
+the operator. The usual cause is an artifact over its Rule 25(d) budget: too large
+or too cross-referenced to edit safely, so each repair wave half-applies. Rationale
+and the measured failure: `team-roles/adversary.md`.
+
 The per-intensity skips are enforced by each planning step's own
 intensity gate, not tracked centrally. Under `carry-over-single`,
 `discovery.md` skips `/bmad-brainstorming` and `stories-test-strategy.md`
