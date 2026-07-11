@@ -50,9 +50,8 @@ handoff exception applies. Handoff triggers:
   still non-blocking, still the user's call.
 - (d) **Imminent-threshold reminder** (auto-compact is a few turns away)
   -- the lead refreshes the pipeline snapshot so the coming compaction
-  recovers from a current record rather than a stale one, then outputs a
-  one-line reminder naming the trade-off (compaction is lower fidelity
-  than a handoff). **Still non-blocking. Still the user's call.**
+  recovers from a current record, then reminds in one line. **Still
+  non-blocking. Still the user's call.**
 
 Only path (a) initiates a handoff. Paths (b), (c) and (d) are reminders
 only. The lead does NOT force handoff at any threshold; critical
@@ -60,9 +59,9 @@ operations may require continuing past every reminder threshold,
 and the user's judgment is authoritative. Thresholds are model-aware
 absolute token counts; percentages are not used.
 
-**A threshold is not a request.** The lead may *name* a handoff as an option
-for the operator; it may never *take* one on its own. Rationale and the live
-failure that forced this wording: `ai-dlc-context-sensor.sh` header.
+**A threshold is not a request.** The lead may *name* a handoff as an option;
+it may never *take* one. Why this had to be said: the
+`ai-dlc-context-sensor.sh` header.
 
 Reminders (b) and (c) are fired by the `ai-dlc-context-sensor.sh` Stop
 hook, which measures resident context from the session transcript on
@@ -155,16 +154,13 @@ more is always permitted.
 | `carry-over-single` | carry-over variant with ≤2 stories touching service code paths | Party Mode → Adversarial Review (1+ passes) |
 | `lightweight` | All stories touch only pipeline-infra paths | Adversarial Review (1 pass) at discovery + stories-test-strategy only |
 
-**"2+ passes" is a FLOOR, and the cycle must CONVERGE to leave it.** Each pass must
-be cheaper than the one before it. Pass 2+ reviews the REPAIR, not the document
-again, and verifies the prior pass's findings actually landed
-(`.claude/team-roles/adversary.md`).
+**"2+ passes" is a FLOOR; the cycle must CONVERGE to leave it.** Pass 2+ reviews the
+REPAIR, not the document again, and verifies the prior pass's findings landed.
 
 **Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1 reports
-MORE CRITICALs than pass N, the repair step is injecting defects faster than review
-removes them, and another pass will only find the next wave. STOP and escalate to
-the operator. The usual cause is an artifact over its Rule 25(d) budget: too large
-or too cross-referenced to edit safely, so each repair wave half-applies. Rationale
+more CRITICALs than pass N, the repair step is injecting defects faster than review
+removes them; another pass only finds the next wave. STOP and escalate. Usual cause:
+an artifact over its Rule 25(d) budget, too cross-referenced to edit safely. Contract
 and the measured failure: `team-roles/adversary.md`.
 
 The per-intensity skips are enforced by each planning step's own
