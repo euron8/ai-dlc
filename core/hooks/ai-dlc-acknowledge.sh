@@ -85,6 +85,14 @@ case "$TOOL_NAME" in
     # legitimately need to write an escalation while paused.
     FP=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
     case "$FP" in
+      # _bmad-output/ai-dlc-update/** is the UPDATER's scratch space (reconcile
+      # report, push-candidate ledger) -- NOT pipeline output. /ai-dlc-update is a
+      # different skill from /ai-dlc: it advances no sprint, and it runs precisely
+      # when the pipeline is not running. Denying its report write because "the
+      # pipeline is paused" blocks a skill that has no pipeline to pause. Observed
+      # live: the updater was denied mid-reconcile on its own ledger.
+      # This case must precede the _bmad-output match below -- first match wins.
+      */_bmad-output/ai-dlc-update/*|_bmad-output/ai-dlc-update/*) ;;
       */_bmad-output/*|_bmad-output/*) ADVANCING=1 ;;
     esac
     ;;

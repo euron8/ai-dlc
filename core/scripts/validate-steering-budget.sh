@@ -63,6 +63,22 @@
 #   class of error as the circular-acknowledgement draft above -- a machine event
 #   read as a human one. Do not reintroduce it.
 #
+# A BLOCKED ATTEMPT IS NOT A STEAMROLL (excluded from check B)
+#   When ai-dlc-acknowledge.sh DENIES an advancing call, the tool_use still appears
+#   in the transcript -- the deny lands on the tool_result (is_error:true, carrying
+#   "AI/DLC Rule 29: the pipeline is PAUSED"). A check that reads tool_use and never
+#   looks at the result therefore counts the BLOCKED attempt and reports "the lead
+#   received the steer and executed straight through it" about a call that never
+#   executed. That is the hook WORKING, reported as the failure the hook prevents.
+#
+#   This was live: the reference consumer's first post-v0.45.0 sessions showed 2
+#   "steamrolls", and the flow log showed 3 ACK_DENIED events at the same moments.
+#   The hook had stopped every one. Check B now scores OUTCOMES, not attempts.
+#
+#   Note what this does to the old remedy text, which said "if these violations are
+#   recent, the hook is not installed." That advice was exactly backwards: a working
+#   hook MANUFACTURED the violations. Do not restore it.
+#
 # USAGE
 #   core/scripts/validate-steering-budget.sh --transcript PATH [--quiet]
 #   core/scripts/validate-steering-budget.sh --dir PATH [--quiet]   # scan a corpus
@@ -124,9 +140,19 @@ const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 // AskUserQuestion measures the human's think-time, not machine starvation.
 const EXEMPT = new Set(["AskUserQuestion"]);
 const ADVANCING = new Set(["Agent", "Task", "Skill", "TaskCreate"]);
+
+// `_bmad-output/ai-dlc-update/**` is the UPDATER's own scratch space (reconcile
+// report, push-candidate ledger), not pipeline output. /ai-dlc-update is a
+// different skill from /ai-dlc: it does not advance a sprint, and it runs precisely
+// when the pipeline is NOT running. Writing its reconcile report while an operator
+// message is outstanding is not steamrolling a pipeline -- there is no pipeline.
+// Observed live: the updater's own report write was scored as a Rule 29 steamroll.
+const isPipelineArtifact = (fp) =>
+  /(^|\/)_bmad-output\//.test(fp) && !/(^|\/)_bmad-output\/ai-dlc-update\//.test(fp);
+
 const isAdvancing = (b) => ADVANCING.has(b.name) ||
   (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(b.name) &&
-   /(^|\/)_bmad-output\//.test(b.input?.file_path || ""));
+   isPipelineArtifact(b.input?.file_path || ""));
 
 // A wait BEAT is a foreground Bash call that sleeps AND file-tests a
 // _bmad-output/ path. All three clauses are load-bearing, and each was added
@@ -159,6 +185,17 @@ const isWaitBeat = (b) => b.name === "Bash" &&
 const isCompactResume = (t) =>
   /^This session is being continued from a previous conversation/.test(t);
 
+// A call the ai-dlc-acknowledge.sh PreToolUse hook DENIED. It surfaces as a
+// tool_result with is_error:true carrying the hook's reason. The lead attempted to
+// advance and was STOPPED -- that is the mechanism working, not a steamroll. See
+// "A BLOCKED ATTEMPT IS NOT A STEAMROLL" in the header.
+const DENY_MARK = /AI\/DLC Rule 29: the pipeline is PAUSED/;
+const isDenied = (b) => {
+  if (!b || b.is_error !== true) return false;
+  const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content || "");
+  return DENY_MARK.test(raw);
+};
+
 const files = one ? [one]
   : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f));
 
@@ -173,14 +210,17 @@ for (const f of files) {
   } catch { continue; }
 
   // ---- Check A: foreground calls that exceed the budget -------------------
-  const use = {}, res = {};
+  const use = {}, res = {}, denied = new Set();
   for (const r of recs) {
     const c = r.message?.content;
     if (!Array.isArray(c)) continue;
     for (const b of c) {
       if (b.type === "tool_use")
         use[b.id] = { n: b.name, t: Date.parse(r.timestamp), bg: b.input?.run_in_background === true };
-      if (b.type === "tool_result") res[b.tool_use_id] = Date.parse(r.timestamp);
+      if (b.type === "tool_result") {
+        res[b.tool_use_id] = Date.parse(r.timestamp);
+        if (isDenied(b)) denied.add(b.tool_use_id);   // the hook stopped this one
+      }
     }
   }
   for (const [id, u] of Object.entries(use)) {
@@ -224,7 +264,10 @@ for (const f of files) {
       // The sanctioned resume: an explicit rm of the pause flag.
       const cleared = uses.some(b => b.name === "Bash" &&
         /rm\b[^\n]*pipeline-paused\.flag/.test(b.input?.command || ""));
-      const adv = uses.find(isAdvancing);
+      // A DENIED advancing call is not a steamroll -- the lead tried and the hook
+      // stopped it. Counting the attempt inverts the check's meaning: it reports
+      // "executed straight through it" about a call that never executed.
+      const adv = uses.filter(isAdvancing).find(b => !denied.has(b.id));
       if (adv && !cleared) {
         steam.push({ f: path.basename(f), tool: adv.name, msg: txt.slice(0, 60).replace(/\n/g, " ") });
         break;
@@ -299,9 +342,12 @@ if (steam.length) {
   for (const v of steam.slice(0, 8)) console.error(`        [${v.tool}] "${v.msg}"`);
   if (steam.length > 8) console.error(`        ... and ${steam.length - 8} more`);
   console.error(`      Fix: answer the operator, then release the pause flag`);
-  console.error(`      (rm -f _bmad-output/pipeline-paused.flag) before advancing. The`);
-  console.error(`      ai-dlc-acknowledge.sh PreToolUse hook denies this at runtime; if these`);
-  console.error(`      violations are recent, the hook is not installed.`);
+  console.error(`      (rm -f _bmad-output/pipeline-paused.flag) before advancing.`);
+  console.error(`      These are calls that SUCCEEDED. Attempts the ai-dlc-acknowledge.sh hook`);
+  console.error(`      denied are excluded -- a blocked attempt is the hook working, not a`);
+  console.error(`      steamroll. So if these are recent, the hook did NOT stop them: check it`);
+  console.error(`      is registered on PreToolUse with a matcher covering`);
+  console.error(`      Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit.`);
 } else {
   log(`PASS  (B) every operator message was acknowledged before the pipeline advanced.`);
 }
