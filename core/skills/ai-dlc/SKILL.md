@@ -1170,13 +1170,37 @@ longer than 2 minutes, the worst for **36 minutes**.
 budget (`steering_budget`, default **120 seconds**).
 
 **Bounded-join dispatch.** Spawn teammates with `run_in_background: true`, then
-JOIN them in bounded beats:
+JOIN them in bounded beats. Every beat is a tool boundary, so a waiting operator
+is heard within one budget.
 
-    TaskOutput(task_id, block: true, timeout: 120000)
+**Which join, and this is not a preference -- one of them does not work.**
 
-Each beat returns within the budget -- with the agent's full result if it
-finished, or `status: running` if it did not. Not finished? Beat again. Every
-beat is a tool boundary, so a waiting operator is heard within one budget.
+`Agent` returns an **`agent_id`** (`<name>@session-<id>`). `TaskOutput` joins a
+**`task_id`**, which only `TaskCreate` produces. **`TaskOutput` cannot join an
+`Agent` spawn.** Handed an `agent_id` it returns `No task found with ID: ...` and
+you have burned a call and learned nothing. Measured across 278 consumer sessions:
+137 `TaskOutput` calls succeeded -- every one of them on a real `TaskCreate` task --
+and all 18 failures were an agent's name passed to an API that does not take one.
+This rule used to prescribe exactly that failure.
+
+So:
+
+- **Teammates (`Agent`) -- join on the DELIVERABLE.** Every ai-dlc teammate delivers
+  by file (Rule 20, "File-write deliverable"), so the file *is* the handle. Wait for
+  it with the **bounded file-wait beat** below. This is the join for the overwhelming
+  majority of ai-dlc dispatches -- analyst, adversary, dev, qa, code-reviewer, and
+  every party-mode persona.
+- **Tasks (`TaskCreate`) -- join on the `task_id`.** Only here is `TaskOutput` right:
+
+      TaskOutput(task_id, block: true, timeout: 120000)
+
+  Each beat returns within the budget with the task's result, or `status: running`.
+  Not finished? Beat again.
+
+The bounded file-wait beat is therefore not a fallback or a special case for `Skill`
+spawns -- it is the primary join for teammates. In the reference consumer's first
+three post-fix sprint sessions: 14 `Agent` spawns, 2 `TaskOutput` attempts (both
+failed), **47 file-wait beats did all of the joining.**
 
 What this does NOT change:
 
@@ -1195,11 +1219,13 @@ What this does NOT change:
 A `Bash` call you expect to exceed the budget runs `run_in_background: true`
 and is polled the same way.
 
-**Joining a Skill-tool spawn: the bounded file-wait beat.** `TaskOutput` keys on
-a `task_id` and the `Skill` tool returns none -- `/bmad-party-mode` spawns its
-personas INSIDE the sub-skill (Rule 20(i)), so the lead holds no handle to beat
-against. Those personas deliver by file write (Rule 20, "File-write
-deliverable"), so the join is the file itself, waited on in beats:
+**The bounded file-wait beat.** The join for every file-delivering spawn -- which,
+under Rule 20, is every teammate ai-dlc has. Neither shape hands you a `task_id`:
+an `Agent` returns an `agent_id` that `TaskOutput` will not take, and a `Skill`
+returns nothing at all (`/bmad-party-mode` spawns its personas INSIDE the
+sub-skill, Rule 20(i), so the lead holds no handle whatsoever). Both deliver by
+file write (Rule 20, "File-write deliverable"), so the file IS the handle, waited
+on in beats:
 
 - A beat is ONE foreground `Bash` call that returns **within
   `steering_budget`**. It MAY poll inside itself --
@@ -1268,7 +1294,16 @@ shows leads re-dispatch on exhaustion without it -- or retire the whole rule whe
 the harness bounds foreground tool-call duration itself, or delivers queued input
 mid-call.
 
-Enforcement: `scripts/validate-steering-budget.sh` (Checks A, B, C) and
+*(d) the lead calling `TaskOutput` on an `Agent`.* v0.44.0 wrote this rule around a
+join that cannot join the thing ai-dlc actually spawns: `Agent` returns an
+`agent_id`, `TaskOutput` takes a `task_id`. Every such call fails with `No task
+found`, and the lead then falls back to a filesystem wait -- so the rule's headline
+mechanism was inert from the day it shipped, and the bounded file-wait beat (added
+in v0.45.0 as a supposed `Skill`-only special case) has been doing 100% of the real
+joining. Check D flags it, because a rule that names the wrong API is worse than one
+that names none: it looks like guidance.
+
+Enforcement: `scripts/validate-steering-budget.sh` (Checks A, B, C, D) and
 `.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).
 
 ## INITIALIZATION

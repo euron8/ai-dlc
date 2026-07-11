@@ -41,6 +41,13 @@
 #      narration, so the check passed on a corpus that provably contains the
 #      failure. Do not reintroduce it. The flag lifecycle is the invariant, not
 #      the presence of prose.
+#   D. WRONG JOIN API. A TaskOutput call that failed with "No task found with ID".
+#      `Agent` returns an `agent_id` (<name>@session-<id>); `TaskOutput` joins a
+#      `task_id`, which only `TaskCreate` produces. TaskOutput CANNOT join an Agent.
+#      Rule 29 used to prescribe exactly that, so the lead burned a call, learned
+#      nothing, and fell back to a filesystem wait. Corpus: 137 TaskOutput successes
+#      (all on real TaskCreate tasks), 18 failures (all agent names).
+#      The join for a teammate is the deliverable -- Rule 29's bounded file-wait beat.
 #   C. UNBOUNDED WAIT. More than max_wait_beats consecutive FOREGROUND wait-shaped
 #      Bash calls with no intervening re-dispatch. This is the hole Check A cannot
 #      see: A bounds a single CALL, so a lead that polls the filesystem in
@@ -199,7 +206,10 @@ const isDenied = (b) => {
 const files = one ? [one]
   : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f));
 
-const starv = [], steam = [], unbounded = [];
+const starv = [], steam = [], unbounded = [], wrongjoin = [];
+
+// A TaskOutput handed an agent_id. The harness says so in the error, verbatim.
+const NO_TASK = /No task found with ID:\s*([^<\n"]+)/;
 
 for (const f of files) {
   let recs;
@@ -220,6 +230,12 @@ for (const f of files) {
       if (b.type === "tool_result") {
         res[b.tool_use_id] = Date.parse(r.timestamp);
         if (isDenied(b)) denied.add(b.tool_use_id);   // the hook stopped this one
+        // ---- Check D: TaskOutput handed an agent_id ------------------------
+        if (use[b.tool_use_id]?.n === "TaskOutput") {
+          const raw = typeof b.content === "string" ? b.content : JSON.stringify(b.content || "");
+          const m = NO_TASK.exec(raw);
+          if (m) wrongjoin.push({ f: path.basename(f), id: m[1].trim().slice(0, 48) });
+        }
       }
     }
   }
@@ -364,6 +380,21 @@ if (unbounded.length) {
   console.error(`      calls non-delivery -- re-dispatch, then HARD_BLOCK. Rule 29 bounded file-wait beat.`);
 } else {
   log(`PASS  (C) no wait sequence exceeded ${MAX_BEATS} beats without a re-dispatch.`);
+}
+
+if (wrongjoin.length) {
+  bad = true;
+  console.error(`FAIL (D -- WRONG JOIN API): ${wrongjoin.length} TaskOutput call(s) failed with`);
+  console.error(`      "No task found with ID". TaskOutput joins a task_id, which only TaskCreate`);
+  console.error(`      produces. An Agent returns an agent_id (<name>@session-<id>) and TaskOutput`);
+  console.error(`      will NOT take it -- the call fails and the lead learns nothing.`);
+  for (const v of wrongjoin.slice(0, 8)) console.error(`        ${v.f}  ${v.id}`);
+  if (wrongjoin.length > 8) console.error(`        ... and ${wrongjoin.length - 8} more`);
+  console.error(`      Fix: join a TEAMMATE on its DELIVERABLE -- every ai-dlc teammate delivers by`);
+  console.error(`      file (Rule 20), so use Rule 29's bounded file-wait beat. TaskOutput is correct`);
+  console.error(`      only for a task you created with TaskCreate and hold a real task_id for.`);
+} else {
+  log(`PASS  (D) no TaskOutput call was handed an agent_id.`);
 }
 
 process.exit(bad ? 1 : 0);
