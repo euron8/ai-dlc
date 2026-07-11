@@ -924,10 +924,14 @@ the whole requirement set (e.g. `carry-over-evaluation`) read the live
 file whole and rely on (a) keeping it bounded — slicing there would
 risk missing a cross-reference and mis-deciding.
 
-**(c) Rotate append-only logs.** `gate-log.md` and similar logs rotate
+**(c) Rotate append-only logs.** `gate-log.md`, the hook-written flow log
+`pipeline-continuation-log.md`, and similar logs rotate
 at epoch/sprint boundaries into a dated archive; the live log holds
 only the current epoch. Verifying an appended entry reads the **tail**,
-not the whole file. The escalation log `pending.md` is bounded the same
+not the whole file. A log named by no rotation step is the failure mode
+this clause exists to prevent: the flow log carried every event of every
+sprint (1.3 MB in the reference consumer) because "and similar logs" bound
+it to nothing — rotation is `retro.md` §4b. The escalation log `pending.md` is bounded the same
 way: terminal (RESOLVED / OVERRIDDEN) entries move to
 `pending-archive.md` at retro close so the gate-read stays scoped to open
 escalations — mechanism in `escalations.md` "Terminal-entry archival".

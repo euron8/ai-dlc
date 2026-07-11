@@ -75,9 +75,25 @@ Bash would have wedged the pipeline permanently; the escape hatch is deliberate.
   foreground calls exceeding the budget and (B) steamrolled operator messages.
   `AskUserQuestion` is exempt from (A): its duration is human think-time, not
   machine starvation.
-- `retro.md` §4b — operator-steerability audit. Also gives
-  `pipeline-continuation-log.md` its first live consumer; both hooks' headers had
-  claimed "Retro reviews this log" since inception, and nothing ever did.
+- `retro.md` §4b — operator-steerability audit, **then flow-log rotation**. Also
+  gives `pipeline-continuation-log.md` its first live consumer; both hooks'
+  headers had claimed "Retro reviews this log" since inception, and nothing ever
+  did.
+- **Flow-log rotation (Rule 25(c)).** `pipeline-continuation-log.md` was
+  append-only with **no bounding mechanism at all** — 1.3 MB / 5,418 events
+  spanning every sprint ever run in the reference consumer. Rule 25(c) already
+  required rotation for "`gate-log.md` and similar logs," but "similar" bound the
+  flow log to nothing, so no step ever rotated it. Now: Rule 25(c) names the file
+  explicitly, and `retro.md` §4b rotates it per sprint to
+  `pipeline-continuation-log-archive-s<N>.md` (cut-and-paste, verbatim;
+  write-only). Rotation is unconditional and per-sprint, not threshold-triggered
+  — a threshold would let several sprints of unrelated events bleed into an audit
+  scoped to one. Ordering is load-bearing: **audit first, rotate second**, or
+  rotation destroys the evidence §4b reads. All three hooks re-seed the header on
+  their next write, so the live log reopens clean with no manual step. A
+  10k-token threshold is registered in the artifact-size audit to catch a *missed*
+  rotation.
+- `ACK_DENIED` documented in the event taxonomy all three hooks seed.
 
 ### Changed
 - `implementation.md` — "Foreground-dispatch mandate" → **"Bounded-join dispatch
