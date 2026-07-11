@@ -42,7 +42,7 @@ gate that edits `scripts/*.sh`.
 <!-- GATE_MANIFEST v1 -->
 | Gate type      | Required checks (beyond universal core)          |
 |----------------|--------------------------------------------------|
-| planning       | 1c, 17, 20                                       |
+| planning       | 1c, 17, 20, 23                                   |
 | story          | 3a, 3b, 5, 17                                    |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                  |
 | sprint-review  | 18, 21                                           |
@@ -187,7 +187,7 @@ sprint-level gates, deployment gates).
 1. A specific requirement in CLAUDE.md or `docs/coding-conventions.md`.
 2. User feedback captured in an escalation or planning artifact.
 3. A carry-over item from a previous sprint
-   (`_bmad-output/planning-artifacts/carry-over-items.md`).
+   (`_bmad-output/planning-artifacts/carry-over-backlog.md`).
 4. The locked requirements block from product brief or PRD.
 
 If the story has no identifiable origin in any of the above, the
@@ -881,6 +881,56 @@ the lead already writes at Step 4 — no new artifact. Removal condition:
 retire once the Agent-tool spawn API structurally attaches the role file
 (no lead-authored dispatch line to verify).
 
+### 23. Analyst-draft sprint stamps (all planning gates).
+<!-- CHECK_LOADED: 23 -->
+
+**Scope.** Fires at every planning-phase gate. Skips story,
+implementation, sprint-review, and retro gates.
+
+**Check.** Invoke `scripts/validate-draft-stamps.sh`; exit 0 required.
+It asserts the four per-sprint analyst drafts (Rule 24) are written to
+their sprint-stamped paths — `s<N>-carry-over-evaluation.md`,
+`s<N>-discovery-context.md`, `s<N>-research-notes.md`,
+`s<N>-architecture-context.md`, where `<N>` is `sprint_id` from the
+pipeline snapshot's Sprint Context (resolved at `route.md` Step 6).
+
+Two halves, because the drift has two surfaces:
+- **Disk.** No unstamped draft may exist in
+  `_bmad-output/planning-artifacts/`. This fires on the RENDERED
+  outcome, so it catches a core regression and a consumer override
+  equally.
+- **Layer.** No `extensions/`/`overrides/` entry may declare an
+  unstamped draft write path. A `kind: step-domain` extension restates
+  its step's whole Section 0 — including the output path — so it can
+  revert the stamp in the rendered pipeline while core looks correct
+  (Rule 27; the v0.34.0 lesson).
+
+The stamp lives in the **filename**. The draft's H1 is prose and is NOT
+parsed — observed H1s include `Sprint 288`, `Sprint S286`,
+`Sprint 285 (draft)`. Do not add an H1↔filename agreement check.
+
+**Out of scope by design** (the script will not flag these): the
+one-shot onboarding artifacts `codebase-analysis.md`,
+`brownfield-inventory.md`, `doc-reconciliation.md` (written once, read
+by path downstream, no sprint key), and `bug-analysis.md` (bug-keyed,
+not sprint-keyed).
+
+**PASS:** exit 0. **FAIL:** exit 1 — an unstamped draft on disk, or a
+layer declaring an unstamped write path.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a Section 0 write
+path — in core, or in a consumer layer restating it — landing an analyst
+draft unstamped. These drafts have no reader, no template, and no
+archive pair, so the overwrite silently destroys the prior sprint's
+draft, and every citation into the file then resolves against the wrong
+sprint's document — a silently-wrong answer, not an error. Observed: a
+story's provenance cites `carry-over-evaluation.md §7 F6` and the file
+on disk, thirty sprints on, has no §7. False-positive cost: one line per
+legitimately-unstamped file, named by the check; an exemption is a
+visible line a reviewer sees. Removal condition: retire once the write
+path is GENERATED from `sprint_id` rather than prose-specified in each
+Section 0, so it cannot drift.
+
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 <!-- CHECK_LOADED: H1 -->
 
@@ -893,10 +943,10 @@ Check H2 (below) verifies the guard fires on a seeded
 recursive-invocation fixture.
 
 **Scope.** Meta-check. Runs at every gate. Verifies that each
-phase-specific check added to this file (currently: Check 1c, Check
-16's content-verification strengthening, Check 17 provenance) ships
-with an adversarial self-test fixture under `tests/fixtures/` that
-the check catches.
+phase-specific check added to this file (currently: Check 1c, Check 3b
+locked-anchor, Check 16's content-verification strengthening, Check 17
+provenance, Check 23 draft-stamps) ships with an adversarial self-test
+fixture under `tests/fixtures/` that the check catches.
 
 **Check.** For each phase-specific check enumerated below, confirm
 both (i) the fixture directory exists with a README.md describing
@@ -907,10 +957,14 @@ future reader can trace from check → fixture.
 Enumerated checks under H1:
 
 - **Check 1c** — fixture at `tests/fixtures/check-1c-bypass/`.
+- **Check 3b (locked-requirement full-text anchor)** — fixture at
+  `tests/fixtures/check-3b-locked-anchor/`.
 - **Check 16 (stub-audit content-verification)** — fixture at
   `tests/fixtures/check-15-bypass/`.
 - **Check 17 (skill-invocation provenance)** — fixture at
   `tests/fixtures/check-17-bypass/`.
+- **Check 23 (analyst-draft sprint stamps)** — fixture at
+  `tests/fixtures/check-23-draft-stamps/`.
 
 **Manifest completeness (v0.24.0 Lever 2 — slicing fidelity prover).**
 After the fixture enumeration, and only when `H1_DEPTH` was not already

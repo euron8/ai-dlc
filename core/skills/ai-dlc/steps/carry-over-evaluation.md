@@ -20,7 +20,10 @@ If `planning_offload: on` (default), do NOT run sections 1–2 (and 1a)
 inline. Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
 scoped to those reading sections — it loads the backlog/brief/PRD and
 audit anchor, evaluates each item, and writes a draft evaluation to
-`_bmad-output/planning-artifacts/carry-over-evaluation.md`, returning
+`_bmad-output/planning-artifacts/s<N>-carry-over-evaluation.md` (Rule 24
+sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
+Context, resolved at `route.md` Step 6 — never the unstamped path, which
+would destroy the prior sprint's evaluation), returning
 only `{artifact_path, summary, gaps}`. Then resume at section 3.
 **Sections 3 onward stay inline in the lead** — section 3 is party mode
 (Rule 20, never offloaded) and sections 4–6 mutate escalations and the

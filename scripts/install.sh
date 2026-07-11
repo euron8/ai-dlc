@@ -340,7 +340,7 @@ fi
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
 mkdir -p "$PROJECT_ROOT/scripts"
-for script in validate-provenance-block.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh gen-architecture-index.js; do
+for script in validate-provenance-block.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh validate-draft-stamps.sh gen-architecture-index.js; do
   if [ -f "$SCRIPT_DIR/../core/scripts/$script" ]; then
     cp "$SCRIPT_DIR/../core/scripts/$script" "$PROJECT_ROOT/scripts/"
     chmod +x "$PROJECT_ROOT/scripts/$script"
@@ -365,7 +365,7 @@ fi
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-h1-recursion check-manifest-bypass context-sensor; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-h1-recursion check-manifest-bypass context-sensor; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"

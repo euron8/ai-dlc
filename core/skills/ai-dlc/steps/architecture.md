@@ -22,7 +22,9 @@ subagent (Agent tool, bound to `.claude/team-roles/analyst.md` per SKILL.md
 Rule 19 — both bindings: `model` and the standing role-contract Read line)
 scoped to the AS-IS / existing-architecture read — it reads the code and the
 current architecture doc and writes a context digest to
-`_bmad-output/planning-artifacts/architecture-context.md`, returning only
+`_bmad-output/planning-artifacts/s<N>-architecture-context.md` (Rule 24
+sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
+Context, resolved at `route.md` Step 6), returning only
 `{artifact_path, summary, gaps}`. Then resume at section 1. **Sections 1
 onward stay inline in the lead** — the PRD/brief read, all design decisions,
 ADR authoring, and the Rule 8 validation cycle are never offloaded. If

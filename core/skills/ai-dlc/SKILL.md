@@ -844,6 +844,35 @@ non-delivery — the lead re-dispatches (a text-only summary is not a
 delivered draft). Build no detector for this; the lead's read of the
 expected path is the check (Rule 26: audit before adding mechanism).
 
+**Sprint-stamped drafts.** A per-sprint analyst draft is written to a
+sprint-stamped path — `s<N>-<base>.md`, where `<N>` is `sprint_id` from
+the pipeline snapshot's Sprint Context (resolved at `route.md` Step 6).
+This applies to the four per-sprint drafts: `s<N>-carry-over-evaluation.md`,
+`s<N>-discovery-context.md`, `s<N>-research-notes.md`,
+`s<N>-architecture-context.md`. It does NOT apply to the one-shot
+onboarding artifacts (`codebase-analysis.md`, `brownfield-inventory.md`,
+`doc-reconciliation.md`) — those are written once, are read by path
+downstream, and have no sprint key — nor to `bug-analysis.md`, which is
+bug-keyed rather than sprint-keyed.
+
+An unstamped write silently destroys the prior sprint's draft: these
+drafts have no reader in the pipeline and no archive pair, so an
+overwrite is unrecoverable outside git, and any citation into the file
+(by section, by finding ID) then resolves against the *wrong sprint's*
+document — a silently-wrong answer, not an error. Stamping makes the
+draft immutable **across** sprints. It is not append-only *within* one:
+re-drafting sprint N (a re-dispatch after non-delivery, or a re-plan)
+correctly overwrites sprint N's own file.
+
+The stamp lives in the **filename**. The draft's H1 is prose and MUST NOT
+be parsed for the sprint number. The returned `artifact_path` is
+authoritative — never reconstruct the path from the basename.
+
+Mechanized by `scripts/validate-draft-stamps.sh` (gate-validation Check
+23, planning gates), which fails on an unstamped draft on disk or a
+consumer `extensions/`/`overrides/` layer that restates a §0 write path
+without the stamp.
+
 **Production vs validation boundary.** The analyst *drafts* the
 artifact; the lead *validates, decides, and owns* it. Rule 20
 validation sub-skills MUST still run inline in the lead on the draft —

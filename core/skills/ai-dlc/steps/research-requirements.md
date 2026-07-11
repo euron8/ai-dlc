@@ -18,7 +18,9 @@ If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
 an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to section 1
 — it performs the domain/market/technical research and writes the
 research notes to
-`_bmad-output/planning-artifacts/research-notes.md`, returning only
+`_bmad-output/planning-artifacts/s<N>-research-notes.md` (Rule 24 sprint
+stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint Context,
+resolved at `route.md` Step 6), returning only
 `{artifact_path, summary, gaps}`. Then resume at section 2 (PRD
 Creation) using the notes. **Sections 2 onward stay inline in the
 lead** — PRD authoring and the Rule 8 / PRD validation cycles are never
