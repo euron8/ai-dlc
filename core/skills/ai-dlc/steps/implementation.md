@@ -108,24 +108,37 @@ follow the worktree-explicit dispatch protocol:
    Removal condition: only if worktrees under one repository stop
    sharing a single stash stack (a git invariant today).
 
-**Foreground-dispatch mandate.** A gated story-dev cycle is
+**Bounded-join dispatch mandate (Rule 29).** A gated story-dev cycle is
 synchronous: the lead's immediate next action reads the dev's result
-and routes it into gate-1. The lead MUST dispatch gated story-dev and
-fix-forward dev agents in the FOREGROUND — a blocking Agent call whose
-result the lead consumes. `run_in_background: true` is PERMITTED ONLY
-for detached work with no near-term gate the lead must consume
-(monitoring loops, polling a long-running job, observation windows
-during which the lead has other non-dependent work). Backgrounding a
-gated dev cycle detaches the producer from a consumer blocked on it and
-stalls the orchestration turn. Violation is a lead-conduct retro
-finding.
+and routes it into gate-1. That JOIN is mandatory and unchanged. What
+is forbidden is *how the lead used to wait* for it — a single blocking
+Agent call, which in the consumer corpus ran as long as 36 minutes.
+While that call is in flight there is no tool boundary, so a queued
+operator message cannot be delivered: the human is locked out for the
+duration.
 
-**Foreground-dispatch ≠ serial execution.** "Foreground" governs HOW a
-dev is dispatched (a blocking Agent call the lead consumes), NOT how
-MANY run at once. Independent stories MUST be dispatched in parallel —
-in ONE message, each in its own worktree, joined on all results.
-Parallelism comes from per-story worktrees plus a join, NEVER from
-`run_in_background`. The lead SHALL serialize two stories ONLY on a
+The lead MUST therefore dispatch with `run_in_background: true` and
+JOIN in bounded beats:
+
+    TaskOutput(task_id, block: true, timeout: 120000)
+
+Each beat returns within the steering budget — carrying the dev's full
+result if it finished, or `status: running` if it did not. Still
+running? Beat again. The lead consumes the result and routes it into
+gate-1 exactly as before; nothing is detached and no gate is skipped.
+The only difference is that the operator now gets a tool boundary every
+120 seconds and can steer mid-wave.
+
+A blocking (`run_in_background: false` / omitted) dev dispatch is a
+lead-conduct retro finding: it reintroduces a window in which the
+operator cannot be heard. `scripts/validate-steering-budget.sh` fails
+the gate on it.
+
+**Bounded-join ≠ serial execution.** The beat governs HOW the lead
+waits on a dev, NOT how MANY run at once. Independent stories MUST be
+dispatched in parallel — in ONE message, each in its own worktree, then
+beat-joined on all results. Parallelism comes from per-story worktrees
+plus the join. The lead SHALL serialize two stories ONLY on a
 real dependency: a shared source file both stories write, or a
 by-content gate dependency (story B's gate-1 reads story A's merged
 output). Before the first dispatch the lead MUST emit, as a written

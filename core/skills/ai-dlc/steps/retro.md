@@ -595,7 +595,8 @@ canonical, configurable Rule 25(d) threshold defaults (a project
 overrides them here):
 `prd.md` 60k tokens, `product-brief.md` 60k,
 `carry-over-backlog.md` 40k, live `gate-log.md` 25k,
-live `compaction-log.md` 10k, `pipeline-snapshot.md` 6k,
+live `compaction-log.md` 10k, live `pipeline-continuation-log.md` 10k,
+`pipeline-snapshot.md` 6k,
 `docs/architecture.md` 60k (≈ bytes/4). For
 any artifact over threshold, record a `## Artifact-Size Audit` warning
 in the retro doc naming the artifact, its size, and the threshold, and
@@ -603,7 +604,8 @@ recommend the remedy matching that artifact's bounding mechanism:
 - **Living planning artifacts** (`prd.md`, `product-brief.md`,
   `carry-over-backlog.md`, `docs/architecture.md`) → recommend the operator
   run the one-shot consolidation step (`artifact-consolidation.md`).
-- **Append-only logs** (live `gate-log.md`, live `compaction-log.md`) →
+- **Append-only logs** (live `gate-log.md`, live `compaction-log.md`, live
+  `pipeline-continuation-log.md`) →
   recommend **rotation**, not consolidation (Rule 25(c)). A live log over
   threshold means a rotation was missed, not that it needs a
   fidelity-critical rewrite — `artifact-consolidation.md` rejects logs as
@@ -635,6 +637,58 @@ filed in the additive layer, a dangling `Step <n>` pointer. Fix ERRORs before th
 next `/ai-dlc-update`; triage WARNs into the backlog. Warn-only — never blocks the
 pipeline. On a consumer with no layer directories the script exits clean; note
 "Layer entries: n/a (unlayered)".
+
+### 4b. Operator-steerability audit, then flow-log rotation (Rule 29 / Rule 25(c))
+
+The operator must be able to reach the lead mid-section. Two failures make that
+impossible, and both are mechanically detectable. **Audit first, rotate second** —
+rotating before the audit destroys the evidence the audit reads.
+
+**Audit.** Run the validator against this session's transcript:
+
+    scripts/validate-steering-budget.sh --transcript ~/.claude/projects/<project-slug>/<session-id>.jsonl
+
+- **Check A (starvation)** — any foreground tool call that outlasted the steering
+  budget. While it was in flight there was no tool boundary, so a queued operator
+  message could not be delivered. The near-universal cause is a dev or analyst
+  dispatched blocking instead of bounded-join (Rule 29). Each is a **lead-conduct
+  finding**.
+- **Check B (steamroll)** — any operator message followed by a pipeline-advancing
+  call before the pause flag was released. The lead received a steer and executed
+  through it. Each is a **lead-conduct finding**.
+
+Then read the flow log, `_bmad-output/pipeline-continuation-log.md`:
+
+- `ACK_DENIED` — the `PreToolUse` hook had to physically block the lead from
+  advancing past a waiting operator. A nonzero count means the lead tried; the
+  hook, not the lead's judgment, is what protected the human. Investigate why.
+- `USER_PAUSE` vs `BLOCKED` — pause frequency against Rule 3 enforcement volume.
+- `BACKOFF` — the Stop hook exhausted its retry budget; the pipeline genuinely
+  stuck. Find the upstream cause in the transcript.
+
+A retro that reports zero steerability findings on a sprint in which the operator
+visibly repeated themselves has run the audit wrong.
+
+**Rotation.** The flow log is append-only and, until now, had no bounding
+mechanism at all — it is a Rule 25(c) log that no rotation step ever named. In the
+reference consumer it reached **1.3 MB / 5,418 events across every sprint ever
+run**, which is precisely the state Rule 25(c) forbids: a live log must hold only
+the current epoch, or the audit above reads all of history instead of this sprint.
+
+After the audit is recorded, rotate — the last write to the log before sprint
+close:
+
+    mv _bmad-output/pipeline-continuation-log.md \
+       _bmad-output/pipeline-continuation-log-archive-s<N>.md
+
+The live log is NOT recreated by hand. All three hooks (`ai-dlc-pause.sh`,
+`ai-dlc-continue.sh`, `ai-dlc-acknowledge.sh`) re-seed the header on their next
+write when the file is absent or empty, so the next sprint's first event opens a
+clean log. The archive is write-only and never re-read in the hot path.
+
+Rotation is unconditional and per-sprint — not threshold-triggered. A threshold
+would let the log carry several sprints of unrelated events into an audit that is
+scoped to one.
 
 ## Sprint-Ship Verification
 

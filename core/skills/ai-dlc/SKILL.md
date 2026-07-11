@@ -834,7 +834,9 @@ since the read was already done upstream by `doc-reconciliation`.
 concrete dispatch — the analyst's exploration scope, the canonical output
 artifact path, and the resume point — and spawns the `analyst` via the
 Agent tool (bound to the analyst role file per Rule 19 — model + role-contract line). The
-cross-cutting rules the lead applies to every such dispatch: order the
+cross-cutting rules the lead applies to every such dispatch: dispatch with
+`run_in_background: true` and bounded-join it (Rule 29 — a blocking analyst
+spawn locks the operator out for its full duration); order the
 dispatch prompt shared-block-first (dispatch-prompt cache discipline,
 `implementation.md`); the analyst writes the artifact to disk and returns
 ONLY `{artifact_path, summary, gaps}`, never raw content or its
@@ -922,10 +924,14 @@ the whole requirement set (e.g. `carry-over-evaluation`) read the live
 file whole and rely on (a) keeping it bounded — slicing there would
 risk missing a cross-reference and mis-deciding.
 
-**(c) Rotate append-only logs.** `gate-log.md` and similar logs rotate
+**(c) Rotate append-only logs.** `gate-log.md`, the hook-written flow log
+`pipeline-continuation-log.md`, and similar logs rotate
 at epoch/sprint boundaries into a dated archive; the live log holds
 only the current epoch. Verifying an appended entry reads the **tail**,
-not the whole file. The escalation log `pending.md` is bounded the same
+not the whole file. A log named by no rotation step is the failure mode
+this clause exists to prevent: the flow log carried every event of every
+sprint (1.3 MB in the reference consumer) because "and similar logs" bound
+it to nothing — rotation is `retro.md` §4b. The escalation log `pending.md` is bounded the same
 way: terminal (RESOLVED / OVERRIDDEN) entries move to
 `pending-archive.md` at retro close so the gate-read stays scoped to open
 escalations — mechanism in `escalations.md` "Terminal-entry archival".
@@ -1088,6 +1094,71 @@ dispatch of work the lead could have done in one turn -- paid in one
 orchestration round, recovered in context headroom. Removal condition:
 retire once the harness structurally prevents the lead from taking
 non-orchestration actions.
+
+### Rule 29 -- Steering budget: the operator must always be able to reach you
+
+Claude Code delivers a queued operator message at a **tool-call boundary** --
+it arrives alongside the next tool result. A long turn is therefore harmless.
+What silences the operator is a long **single tool call**: while one is in
+flight there is no boundary, so the message cannot land. The operator's blind
+window equals the duration of the in-flight foreground call.
+
+`Agent` is the only unbounded foreground primitive you control. `Bash` and
+`TaskOutput` are capped by the harness at 10 minutes; `AskUserQuestion` is the
+operator's own think-time. A blocking `Agent` call is therefore the one way you
+can hold a human's message hostage -- and before this rule, ai-dlc *mandated*
+it. Measured across 278 consumer sessions: 355 foreground `Agent` calls blocked
+longer than 2 minutes, the worst for **36 minutes**.
+
+**The invariant.** No foreground tool call may block longer than the steering
+budget (`steering_budget`, default **120 seconds**).
+
+**Bounded-join dispatch.** Spawn teammates with `run_in_background: true`, then
+JOIN them in bounded beats:
+
+    TaskOutput(task_id, block: true, timeout: 120000)
+
+Each beat returns within the budget -- with the agent's full result if it
+finished, or `status: running` if it did not. Not finished? Beat again. Every
+beat is a tool boundary, so a waiting operator is heard within one budget.
+
+What this does NOT change:
+
+- **The join is preserved.** You still consume the teammate's result before
+  routing it into the next gate. Nothing is detached; a gated cycle stays
+  gated. Only *how you wait* changes.
+- **Rule 3 is preserved.** Every beat is a tool call, so you never emit a
+  text-only response, the Stop hook never fires, and you never stall. You do
+  NOT end your turn to let the operator in -- that would trade a queued prompt
+  for a dead pipeline.
+- **Parallelism is preserved.** Dispatch the whole wave in ONE message, then
+  beat-join each teammate (`implementation.md`).
+
+`run_in_background: true` is now the DEFAULT for every spawn, not an exception.
+
+A `Bash` call you expect to exceed the budget runs `run_in_background: true`
+and is polled the same way.
+
+**When the operator does reach you, answer them.** An operator message sets
+`_bmad-output/pipeline-paused.flag` (UserPromptSubmit hook). While it exists
+you MUST NOT advance the pipeline -- the `PreToolUse` hook denies `Agent`,
+`Skill`, `TaskCreate`, and `_bmad-output/` writes until you deal with it. Read
+the message, respond in text, then classify: resume intent -> `rm -f
+_bmad-output/pipeline-paused.flag` and re-read the step file (Rule 22);
+question or correction -> answer it and leave the flag set; the operator is
+steering. Rule 3 does not override this. Rule 3 forbids stalling when no one
+is waiting on you. Here a human is.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: (a) the lead blocking on a
+36-minute foreground `Agent` call, during which the operator physically cannot
+be heard; (b) the lead receiving a steer and executing straight through it --
+111 such steamrolled messages in the consumer corpus, because the pause flag
+had teeth in no hook. False-positive cost: a few extra bounded-join beats per
+dispatch (p90 dispatch = ~3 beats), each a few hundred tokens. Removal
+condition: retire when the harness itself bounds foreground tool-call duration,
+or delivers queued input mid-call. Enforcement:
+`scripts/validate-steering-budget.sh` (both checks) and
+`.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).
 
 ## INITIALIZATION
 
