@@ -17,6 +17,130 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-07-11
+
+### Planning latency — the ratchet, the missing join, and a meta-check that proved nothing
+
+A consumer sprint spent **3h16m in planning without finishing it**, and reported that
+long planning cycles recur. Measured from the live transcripts: **99.7% machine time**
+(three human turns in the whole span), advancing exactly two planning steps of six,
+with six auto-compactions at ~33-minute intervals and a peak of 342K tokens against a
+380K window. Three structural defects, all mechanized here.
+
+**Defect A — the join was improvised, because none existed.** Rule 29's bounded-join
+keys on a `task_id`, and the `Skill` tool returns none: `/bmad-party-mode` spawns its
+personas *inside* the sub-skill (Rule 20(i)), so the lead holds no handle. Rule 20's
+"File-write deliverable" clause made the lead's read of the expected path the check —
+but attached no *wait semantics* to it. Handed an async spawn, a mandatory join, and
+no join primitive, the lead wrote `until [ -s "$d/s289-pm.md" ]; do sleep 20; done` as
+one `Bash` call. It runs to the harness's 10-minute cap and returns `TIMEOUT` having
+learned nothing. Six such calls in one planning phase cost 52 minutes, **29 of them
+past the point of no return**.
+
+Rule 29 gains the **bounded file-wait beat**: a beat is one foreground `Bash` call
+that returns within `steering_budget` (it may poll *inside* itself); the *sequence* is
+bounded by `max_wait_beats` (default 10); exhaustion means the deliverable is absent,
+which Rule 20 already calls non-delivery — re-dispatch, then HARD_BLOCK. **The loop
+goes in the beat count, never inside the call.**
+
+`validate-steering-budget.sh` gains **Check C** (sequence bound) and its Check A hint
+is now shape-aware — it used to tell a filesystem poll to "use `TaskOutput(task_id)`",
+which is precisely the primitive that does not exist for it.
+
+**Check B had a false-positive class.** It counted the harness's own auto-compaction
+resume prompt as an operator steer, so the lead advancing afterward — *the POST-COMPACT
+RECOVERY PROTOCOL working as designed* — was logged as a steamroll. **19 of 114 (16.7%)
+of the corpus's violations were this phantom; the real figure is 95.** Same error class
+as the circular-acknowledgement draft the script already warns about: a machine event
+read as a human one.
+
+**Defect B — every size threshold was warn-only and fired at retro.** A ratchet with no
+pawl: the only mechanism that would notice an oversized artifact ran at the end of the
+sprint that had already paid for it. Artifacts climbed every sprint; planning got
+slower every sprint. Rule 25(b)'s whole-read exemption was justified by *"rely on (a)
+keeping it bounded"* — an assumption, never a check. In the consumer, `product-brief.md`
+reached 480 KB (2× budget) and `carry-over-evaluation` whole-read it 11 times anyway.
+
+New `validate-artifact-budget.sh` owns the canonical budgets and remedies (they are no
+longer restated in `retro.md` prose — a threshold in prose is one that drifts from the
+one that executes). Enforcement moves to where it is still cheap:
+
+- **`route.md` Step 1a (sprint start) — HARD_BLOCK.** The last moment an oversized
+  artifact costs nothing to fix, and upstream of `carry-over-evaluation`'s whole-read.
+- **Gate Check 14 — FAILS the gate** for `pipeline-snapshot.md`, the only artifact that
+  grows *within* a sprint and the pipeline's single largest byte-injector (50 KB,
+  whole-read 8 times in one planning phase — at every gate, every resume, every
+  compaction). Rule 23's exemption permitting those re-reads was explicitly
+  *"conditional on their staying small, which is not automatic."* Now it is.
+- **`retro.md` — warn-only, unchanged.** The sprint already paid; retro reports.
+
+**Warn at 100%, block at 100% + grace** (default 10%). The grace band is aim, not
+softness: a ratchet announces itself in *multiples* — the consumer's real breaches were
+161%, 215%, 526% and **3311%** of budget. A gate that also failed at 104% would have the
+lead trim 300 tokens, watch the artifact grow back by the next gate, and fail again. That
+treadmill turns a real signal into noise. Over-budget is always reported; only a breach
+past the band blocks.
+
+Rule 25(b)'s exemption is now void when the artifact is over budget. Rule 25(c) names
+`context-mode-protection-log.md`, which had **no rotation and no threshold at all** (210
+KB in the consumer) and now has both.
+
+**Defect C — H2 was vacuous, not merely repetitive.** The meta-meta-check that guards
+the gate's own integrity ran at every gate (4–6× per planning phase). All three of its
+`seed.sh` files were `echo` statements describing, in English, fixtures that were never
+written to disk. **H2 read a description of a test and adjudicated that.** It could not
+fail, and it never did. Worse, `check-17-bypass`'s V5 — the forgery floor, the variant
+proving a well-formed-but-forged provenance block is caught only by the heavyweight
+byte-match — carried `mode: solo`, tripping `validate-provenance-block.sh`'s Rule 20
+assertion *before* the SHA branch was reached. The README asserted "V5 passes that
+script." It did not, and the floor was never tested.
+
+The fixtures now write real files. `check-17-bypass/run.sh` drives the real validators
+and asserts the full matrix, standing up a throwaway git repo so V5's fabricated SHA has
+something to fail against — and it fails loudly with `the forgery floor is UNTESTED` if
+V5 ever regresses to failing the first script. New `validate-h2-attestation.sh` makes H2
+attest **once per sprint**, pinned to a digest of the fixture set: change any byte and
+the digest moves, every attestation carrying the old one is void, and H2 re-drives in
+full. **Deduplication, not pruning — the check keeps every tooth.**
+
+### Added
+- `core/scripts/validate-artifact-budget.sh` — Rule 25(d) budgets; blocking at sprint
+  start and at gate Check 14, warn-only at retro.
+- `core/scripts/validate-h2-attestation.sh` — digest-pinned, once-per-sprint H2.
+- `core/fixtures/check-17-bypass/run.sh` — drives the real validators; asserts the
+  V1–V5 matrix including the forgery floor.
+- `validate-steering-budget.sh` Check C — bounds the wait *sequence*, not just the call.
+
+### Changed
+- Rule 29 — bounded file-wait beat for `Skill`-tool spawns (no `task_id` exists).
+- Rule 25(b) — whole-read exemption is void when the artifact is over budget.
+- Rule 25(c) — names `context-mode-protection-log.md`; `retro.md` §4b rotates it.
+- Rule 25(d) — no longer "warn-only, never blocks."
+- Rule 20 "File-write deliverable" — points at Rule 29 for *how long* to wait.
+- `gate-validation.md` H2 — once per sprint, digest-pinned.
+- `retro.md` Close-Out Sweep — calls the script instead of restating the thresholds.
+- `core/fixtures/{check-17-bypass,check-h1-recursion,check-manifest-bypass}/seed.sh` —
+  these now write files.
+
+### Fixed
+- `validate-steering-budget.sh` Check B counted auto-compaction resume prompts as
+  operator steers (19 of 114 violations were phantom; the real figure is 95).
+- `check-17-bypass` V5 `mode: solo` short-circuit — the forgery floor was untested while
+  its README asserted the opposite.
+
+### Notes
+- **Check C is dormant by construction.** Zero catches across 278 consumer sessions,
+  even at a ceiling of 2 — no lead has ever run 3 consecutive bounded wait-beats,
+  because until this release there was no reason to slice a poll at all. It bounds a
+  shape *this release introduces*. Stated here rather than implied; see the Rule 29
+  minimum-mechanism note for its removal condition.
+- **Not fixed here:** `sprint-status.yaml` was frozen at S288 `status: done` in both
+  paths while S289 ran. A correctness landmine, not a wall-clock cause — folding it in
+  would blur two unrelated changes.
+- A consumer must sync to consume any of this. The reference consumer runs skill 0.41.0
+  against a 0.44.0 distribution; the 0.41.0 → 0.44.0 hop alone already kills the
+  analyst/adversary/dev poll-loop class.
+
 ## [0.44.0] — 2026-07-11
 
 ### Operator steerability — bound the blind window, give the pause flag teeth

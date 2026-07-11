@@ -562,6 +562,36 @@ A gate passage without a corresponding snapshot update leaves the
 snapshot stale, which undermines its role as the handoff / recovery /
 self-orientation source of truth. Do not skip this check.
 
+**Snapshot budget (Rule 25(d)) — this check FAILS if the snapshot is over it.**
+After writing, run:
+
+    scripts/validate-artifact-budget.sh --only pipeline-snapshot.md
+
+Exit 1 → **Check 14 FAILS.** Trim the snapshot to the six-section schema defined
+above (the `Recent Activity` section holds the last ~10 entries and nothing more;
+superseded narrative and handoff appendices move to `pipeline-snapshot-history.md`,
+which is write-only), then re-run Check 14 and Check 15.
+
+A `warn` line (over budget, inside the grace band) does **not** fail the gate — trim
+at your next natural pause. The check blocks on a *ratchet*, not on the last token;
+failing a gate at 104% would have the lead trim 300 tokens, watch the snapshot grow
+back by the next gate, and fail again. See Rule 25(d), "Warn at 100%, block at
+100% + grace."
+
+The snapshot is the only artifact whose budget is enforced *at gates* rather than
+only at sprint start, because it is the only one that grows *within* a sprint —
+and it is the most expensive file in the pipeline to let grow. The protocol
+whole-reads it here (Checks 14/15), on every resume, and after every compaction
+(`ai-dlc-recover.sh`). Rule 23's exemption that permits those whole re-reads is
+explicitly *"conditional on their staying small, which is not automatic."* This is
+what makes it automatic. In the reference consumer the snapshot reached 50 KB
+(~15k tokens, 2.5× its 6k budget) and was whole-read 8 times in one planning
+phase — the single largest byte-injector of any file in the session, and a direct
+driver of the six auto-compactions that phase took.
+
+A snapshot over budget means the schema stopped being enforced at gate passages.
+**The gates that let it grow are the finding — not the file.**
+
 ### 15. Verify snapshot reflects this gate.
 <!-- CHECK_LOADED: 15 -->
 
@@ -1004,35 +1034,76 @@ matches no manifest row, OR the declared gate type is unknown.
 ### H2. Harness self-test — seeded forgery fixture + H1 recursion guard.
 <!-- CHECK_LOADED: H2 -->
 
-**Scope.** Meta-meta-check. Runs at every gate. H2 verifies three
-things:
+**Scope.** Meta-meta-check. Runs in full **once per sprint** — at the sprint's
+first gate. Later gates in the same sprint verify the attestation and cite it.
 
-1. **H1 recursion guard fires.** Re-invoke the H1 check with
-   `H1_DEPTH=1` pre-set in the environment; H1 MUST return PASS
-   immediately without re-enumerating fixtures. Fixture at
-   `tests/fixtures/check-h1-recursion/` seeds the recursive-
-   invocation scenario.
+**Start here, at every gate:**
 
-2. **Seeded provenance-block forgery is caught.** The fixture at
-   `tests/fixtures/check-17-bypass/` contains an adversarial
-   retro-shaped file with a well-formed-LOOKING provenance block
-   where the `tool_use_id` was copied from a prior real invocation
-   but the transcript_path SHA was hand-edited to a fabricated
-   value. `validate-retro-evidence.sh` MUST flag this variant.
+    scripts/validate-h2-attestation.sh --verify --sprint <N>
 
-3. **Seeded slicing-bypass is caught by H1.** The fixture at
-   `tests/fixtures/check-manifest-bypass/` seeds a gate that declares
-   `implementation` but loads only the planning slice (universal core +
-   `1c, 17, 20`), omitting the implementation-required checks 6, 8, 11
-   (and 5, 9, 10, 11a, 19, 22). H1's manifest-completeness pass MUST
-   FAIL this seed by naming at least one missing required `CHECK_LOADED`
-   anchor. A seed that H1 passes means the fidelity re-expression
-   (§5.2) does not hold — the slice could silently drop a required
-   check.
+**Exit 0** — this sprint already drove H2, and the fixture set is byte-identical
+to when it did. Cite the `H2_ATTESTED v1` line the script prints. H2 PASSES. Done.
 
-**PASS:** all of (1), (2), and (3) hold on a fresh fixture seed.
-**FAIL:** the recursion guard does not fire, OR the seeded forgery
-passes validation, OR H1 fails to catch the seeded slicing-bypass.
+**Exit 1** — either this is the sprint's first gate, or a fixture changed. Drive
+all three items below in full, then:
+
+    scripts/validate-h2-attestation.sh --attest --sprint <N>
+
+which re-drives the mechanical fixture itself and, on success, prints the
+`H2_ATTESTED v1` line to append to the gate log. If it exits 1, **the gate FAILS**.
+
+The three items:
+
+1. **H1 recursion guard fires.** Re-invoke the H1 check with `H1_DEPTH=1` pre-set
+   in the environment; H1 MUST return PASS immediately without re-enumerating
+   fixtures. `tests/fixtures/check-h1-recursion/seed.sh` sets the guard and writes
+   the state file. (LLM-adjudicated: the seed establishes the condition, you judge
+   the response.)
+
+2. **Seeded provenance-block forgery is caught.** `tests/fixtures/check-17-bypass/`
+   writes five variants; `run.sh` drives the real validators and asserts the matrix.
+   V1–V4 must FAIL `validate-provenance-block.sh`; V5 — a well-formed block citing a
+   fabricated transcript SHA — must **PASS** that script and be caught only by
+   `validate-retro-evidence.sh`'s byte-match against git. V5 is the forgery floor.
+   (Mechanical: `--attest` runs it and fails the gate if it does not hold.)
+
+3. **Seeded slicing-bypass is caught by H1.** `tests/fixtures/check-manifest-bypass/`
+   writes a real gate-context file declaring type `implementation` while carrying only
+   the planning slice's `CHECK_LOADED` anchors — checks 5, 6, 8, 9, 10, 11, 11a, 19,
+   22 are absent. H1's manifest-completeness pass MUST FAIL it, naming at least one
+   missing anchor. A seed H1 passes means the v0.24.0 slicing re-expression does not
+   hold and a real gate could silently drop a required check. (LLM-adjudicated.)
+
+**PASS:** a valid attestation for this sprint and this fixture digest, OR all of
+(1), (2) and (3) hold on a fresh drive.
+**FAIL:** the recursion guard does not fire, OR the seeded forgery survives, OR H1
+misses the seeded slicing-bypass, OR `--attest` reports the mechanical fixture broke.
+
+**Minimum mechanism (Rule 26(c)).** *Why once per sprint, and why that is not a
+weakening.* The three fixtures are static, checked-in files. Nothing about them
+changes between gate 1 and gate 5 of one sprint, so H2 was re-proving an identical
+fact 4–6 times per planning phase — and this check's own text used to *demand* it
+("a fresh fixture seed"). The attestation is pinned to a digest of the fixture set:
+change any byte in any of the three and the digest moves, every attestation carrying
+the old digest is void, and H2 re-drives in full. The check keeps every tooth. What
+was removed is the repetition, not the coverage.
+
+*Removal condition / what this does NOT fix.* Items (1) and (3) are LLM-adjudicated
+and their seeds can only establish the condition, not score the answer — only item
+(2) is mechanical. If a future release can drive H1 headlessly, (1) and (3) should
+join (2) inside `--attest` and H2 becomes fully mechanical.
+
+*The failure that prompted this.* H2 was not merely repetitive; it was **vacuous**.
+All three `seed.sh` files were `echo` statements describing, in English, fixtures that
+were never written to disk — so H2 read a *description of a test* and adjudicated
+that. It could not fail, and it never did. Worse, `check-17-bypass`'s V5 carried
+`mode: solo`, which trips the Rule 20 solo assertion in `validate-provenance-block.sh`
+*before* the SHA branch is reached: the forgery floor V5 exists to prove was never
+executed, while the fixture's README asserted it passed. Both are fixed — the seeds
+write real files, `run.sh` asserts the matrix, and it fails loudly with
+`the forgery floor is UNTESTED` if V5 ever regresses to failing the first script.
+Before trimming this check for cost, note that its cost was never the problem: a
+check that runs 6 times and proves nothing is not expensive, it is broken.
 
 ### Sub-step snapshot update (referenced by step files)
 

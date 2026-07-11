@@ -589,43 +589,33 @@ deferred, any status-yaml drift caught and corrected. If everything
 was already closed inline, note "Sweep: clean (all items closed
 inline during implementation)".
 
-**Artifact-size audit (Rule 25(d), warn-only).** Measure the live
-planning artifacts and compare to their thresholds. These are the
-canonical, configurable Rule 25(d) threshold defaults (a project
-overrides them here):
-`prd.md` 60k tokens, `product-brief.md` 60k,
-`carry-over-backlog.md` 40k, live `gate-log.md` 25k,
-live `compaction-log.md` 10k, live `pipeline-continuation-log.md` 10k,
-`pipeline-snapshot.md` 6k,
-`docs/architecture.md` 60k (≈ bytes/4). For
-any artifact over threshold, record a `## Artifact-Size Audit` warning
-in the retro doc naming the artifact, its size, and the threshold, and
-recommend the remedy matching that artifact's bounding mechanism:
-- **Living planning artifacts** (`prd.md`, `product-brief.md`,
-  `carry-over-backlog.md`, `docs/architecture.md`) → recommend the operator
-  run the one-shot consolidation step (`artifact-consolidation.md`).
-- **Append-only logs** (live `gate-log.md`, live `compaction-log.md`, live
-  `pipeline-continuation-log.md`) →
-  recommend **rotation**, not consolidation (Rule 25(c)). A live log over
-  threshold means a rotation was missed, not that it needs a
-  fidelity-critical rewrite — `artifact-consolidation.md` rejects logs as
-  targets. A `compaction-log.md` large enough to breach its threshold is
-  itself a finding: the sprint compacted repeatedly, and every entry with
-  `recovery_injected: no` is a turn the lead resumed from the summary alone.
-- **`pipeline-snapshot.md`** → recommend **trimming to its schema** (Rule 25(a)),
-  never consolidation. Its threshold is the tightest of any artifact because it
-  is the most-read file in the pipeline: whole-read at every gate (Checks 14/15),
-  on every resume, and by `ai-dlc-recover.sh` after every compaction. The
-  `Recent Activity` section holds the last ~10 entries and nothing more
-  (`gate-validation.md` Check 14); superseded narrative and handoff appendices
-  move to `pipeline-snapshot-history.md`, which is write-only. A snapshot over
-  threshold means the schema stopped being enforced at gate passages, and the
-  gates that let it grow are the finding — not the file.
+**Artifact-size audit (Rule 25(d), warn-only here).** Run:
 
-This NEVER blocks the pipeline and the
-retro NEVER runs the consolidation itself — consolidation is a
-fidelity-critical rewrite and is operator-invoked. If all artifacts are
-under threshold, note "Artifact sizes: within thresholds".
+    scripts/validate-artifact-budget.sh --warn-only
+
+Record its output verbatim in the retro doc under `## Artifact-Size Audit`. If it
+reports no breaches, note "Artifact sizes: within budgets".
+
+The script owns the canonical budgets and the per-artifact remedy — the numbers
+are NOT restated here. They used to be, and a threshold that lives in prose is a
+threshold that drifts from the one that executes; the script is the copy you can
+run. A project overrides a budget with `AI_DLC_BUDGET_<NAME>` (see the script
+header), not by editing this paragraph.
+
+`--warn-only` is deliberate and is the ONLY posture retro takes. Retro reports on
+a sprint that has already paid for every oversized read; blocking it now helps
+nobody. **The blocking copy of this check runs at sprint start** (`route.md`
+Step 1a), which is the last moment an oversized artifact is still cheap to fix,
+plus at gate Check 14 for `pipeline-snapshot.md` — the one artifact that grows
+within a sprint. Retro NEVER runs the consolidation itself: it is a
+fidelity-critical rewrite and is operator-invoked.
+
+Two breaches deserve a finding in their own right, not just a size warning:
+- A **`compaction-log.md`** over budget means the sprint compacted repeatedly, and
+  every entry with `recovery_injected: no` is a turn the lead resumed from the
+  summary alone.
+- A **`pipeline-snapshot.md`** over budget means the schema stopped being enforced
+  at gate passages. The gates that let it grow are the finding — not the file.
 
 **Layer-entry audit (Rule 27, warn-only).** On a layered consumer, run
 `scripts/validate-layer-entries.sh` and record a `## Layer-Entry Audit` section in
@@ -689,6 +679,20 @@ clean log. The archive is write-only and never re-read in the hot path.
 Rotation is unconditional and per-sprint — not threshold-triggered. A threshold
 would let the log carry several sprints of unrelated events into an audit that is
 scoped to one.
+
+**Rotate the context-mode protection log the same way, and for the same reason.**
+`_bmad-output/context-mode-protection-log.md` (written by `ai-dlc-protect.sh`, read
+at §1 of this step) was the *next* instance of the exact failure the paragraph above
+describes: an append-only, hook-written log that Rule 25(c) named nowhere and no
+rotation step ever touched. It reached **210 KB** in the reference consumer. Naming
+these one at a time is how the gap keeps recurring — so Rule 25(d)'s budget check now
+covers the class, and this rotates the instance:
+
+    mv _bmad-output/context-mode-protection-log.md \
+       _bmad-output/context-mode-protection-log-archive-s<N>.md
+
+Same contract: the hook re-seeds the header on its next write, the archive is
+write-only, rotation is unconditional and per-sprint.
 
 ## Sprint-Ship Verification
 

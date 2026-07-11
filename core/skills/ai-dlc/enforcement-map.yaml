@@ -302,10 +302,74 @@ non_catalog_units:
     enforcer:
       - core/scripts/validate-compact-window.sh
 
+  - id: h2-attestation
+    title: H2 harness self-test (gate-validation.md H2) — drives the real fixtures
+      once per sprint, pinned to a digest of the fixture set
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-h2-attestation.sh
+      - core/fixtures/check-17-bypass/run.sh
+    posture: FAILS the gate if the mechanical fixture does not hold, or if no valid
+      attestation exists for this sprint at the current fixture digest
+    cadence: once per sprint (was: every gate, 4–6× per planning phase). The fixtures
+      are static; a changed byte moves the digest, voids every attestation carrying
+      the old one, and forces a full re-drive. Deduplication, not pruning — the check
+      keeps every tooth.
+    note: H2 was previously VACUOUS, not merely repetitive. All three seed.sh files
+      were echo statements describing fixtures never written to disk, so H2
+      adjudicated prose. check-17-bypass's V5 additionally carried `mode: solo`,
+      short-circuiting validate-provenance-block.sh's Rule 20 assertion before the
+      fabricated-SHA byte-match it exists to reach. Both fixed; only item (2) is
+      mechanical — items (1) and (3) remain LLM-adjudicated.
+
+  - id: artifact-budget
+    title: Artifact-size budgets (Rule 25(d)) — a sprint may not start on top of a
+      living artifact it cannot afford to read
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-artifact-budget.sh
+    call_sites:
+      - site: route.md Step 1a (sprint start)
+        posture: HARD_BLOCK
+        why: the last moment an oversized artifact is cheap to fix — the sprint has
+          not read it yet, and carry-over-evaluation whole-reads brief/prd/
+          architecture/backlog one step later (Rule 25(b))
+      - site: gate-validation.md Check 14
+        posture: FAILS the gate (pipeline-snapshot.md only)
+        why: the snapshot is the only artifact that grows WITHIN a sprint, and it is
+          whole-read at every gate, every resume, and every compaction
+      - site: retro.md Close-Out Sweep
+        posture: warn-only
+        why: the sprint already paid; retro reports, it does not gate
+    supersedes: the retro.md prose threshold table, which was warn-only, fired only
+      at retro, and drifted from nothing because nothing else executed it
+
   - id: steering-budget
     title: Operator steerability (Rule 29) — no foreground call may outlast the
-      steering budget; no operator message may be steamrolled
+      steering budget; no operator message may be steamrolled; no wait sequence
+      may run past its beat ceiling without a re-dispatch
     adjudication: script
     enforcer:
       - core/scripts/validate-steering-budget.sh
       - core/hooks/ai-dlc-acknowledge.sh
+    checks:
+      - id: A
+        asserts: no foreground tool call blocks longer than steering_budget
+        protects: the operator's voice — an over-budget call is a window in which
+          a queued message cannot land
+      - id: B
+        asserts: no operator message is followed by a pipeline-advancing call
+          before the pause flag is cleared
+        protects: the operator's authority — a steer that is executed through was
+          not a steer
+        excludes: the auto-compaction resume prompt (a harness injection; the lead
+          advancing after one is the POST-COMPACT RECOVERY PROTOCOL, not a
+          steamroll)
+      - id: C
+        asserts: no run of foreground _bmad-output/ file-wait beats exceeds
+          max_wait_beats (default 10) without an intervening re-dispatch
+        protects: liveness, NOT steerability — every beat is a tool boundary, so
+          an unbounded wait is a hang, not a gag
+        status: dormant — zero catches across 278 consumer sessions. Bounds a shape
+          Rule 29 itself introduces (beats become the sanctioned way to wait, so
+          beating forever becomes the way to hang). See Rule 29 minimum-mechanism.
