@@ -9,6 +9,29 @@
 # happened twice, while 184 of them crossed the red threshold. The reminders
 # almost never fired, so the ordering invariant was decorative.
 #
+# THIS HOOK MUST NEVER TELL THE LEAD TO HAND OFF.
+# Rule 2 is explicit: "Only path (a) initiates a handoff. Paths (b) and (c) are
+# reminders only. The lead does NOT force handoff at any threshold." Path (a) is
+# the OPERATOR asking. A threshold is not a request.
+#
+# The ADVICE strings below used to close with "prefer Rule 2(a): hand off via
+# /clear + /ai-dlc resume" -- instructing the lead to take the one path only a
+# human can initiate, and citing the very rule that forbids it. The wrapper text
+# said "the decision is the user's" in the same breath, so a single injected
+# message carried both a permission and an imperative. The lead resolved that
+# contradiction in favour of the imperative and handed off mid-sprint, unasked.
+#
+# Observed live (S289): IMMINENT fired at 333k/380k, the lead refreshed the
+# snapshot, announced "the handoff is safe to take," stopped three delivered
+# teammates and ended the session. The operator had requested nothing. At RED the
+# same lead had correctly held the line -- because the RED string happened to
+# carry an "if continuing, do so deliberately" escape that IMMINENT lacked.
+#
+# So: SURFACE the trade-off, keep the snapshot fresh, and CONTINUE. Naming the
+# handoff as an option for the OPERATOR is right; telling the LEAD to take it is
+# not. If you are editing these strings, the test is whether a reader with no
+# other context would read them as an instruction to the lead. If yes, rewrite.
+#
 # HOW IT MEASURES
 # Hook stdin carries no token counts (the shared schema is session_id,
 # transcript_path, cwd, prompt_id, permission_mode, agent_id, agent_type,
@@ -418,10 +441,10 @@ if [ "$LEVEL" = imminent ]; then
   THR=$(( CEILING - IMMINENT_LEAD ))
   # Turns of headroom at the measured p50 growth rate. Deliberately rounded down.
   TURNS_LEFT="$(awk -v c="$CEILING" -v t="$TOKENS" 'BEGIN{ n=int((c-t)/1200); print (n<1?1:n) }')"
-  ADVICE="Auto-compact will fire at ~${CEILING} tokens -- roughly ${TURNS_LEFT} more turns at the observed growth rate. BEFORE your next pipeline action, refresh _bmad-output/pipeline-snapshot.md so it reflects the CURRENT state: Pipeline Position (current step file, in-flight sub-step), Recent Activity, Open Items, and any Locked Decisions taken since the last gate. A snapshot last written at a gate may be hundreds of turns stale, and it is what ai-dlc-recover.sh re-reads after compaction -- a stale snapshot is recovered faithfully and is still wrong. Having refreshed it, prefer Rule 2(a): hand off via /clear + /ai-dlc resume. Compaction is strictly lower fidelity than the handoff."
+  ADVICE="Auto-compact will fire at ~${CEILING} tokens -- roughly ${TURNS_LEFT} more turns at the observed growth rate. BEFORE your next pipeline action, refresh _bmad-output/pipeline-snapshot.md so it reflects the CURRENT state: Pipeline Position (current step file, in-flight sub-step), Recent Activity, Open Items, and any Locked Decisions taken since the last gate. A snapshot last written at a gate may be hundreds of turns stale, and it is what ai-dlc-recover.sh re-reads after compaction -- a stale snapshot is recovered faithfully and is still wrong. Having refreshed it, CONTINUE. Compaction is lower fidelity than a handoff, so SURFACE that trade-off to the operator in one line and let THEM call it -- do NOT hand off on your own. Rule 2: only path (a) initiates a handoff, and path (a) is the operator asking. A threshold is not a request."
 elif [ "$LEVEL" = red ]; then
   THR="$RED"
-  ADVICE="Rule 2(c): finalize the pipeline snapshot and hand off via /clear + /ai-dlc resume before auto-compact takes the lossy path. If continuing, do so deliberately."
+  ADVICE="Rule 2(c) is a REMINDER, not an instruction to hand off. Finalize the pipeline snapshot so it is not stale, then CONTINUE. If you judge a handoff would be higher fidelity than the coming auto-compact, say so in one line and let the operator decide -- do NOT initiate one yourself."
 else
   THR="$YELLOW"
   ADVICE="Rule 2(b): finish the current sub-step, then continue."
