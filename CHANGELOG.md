@@ -74,6 +74,13 @@ one that executes). Enforcement moves to where it is still cheap:
   *"conditional on their staying small, which is not automatic."* Now it is.
 - **`retro.md` — warn-only, unchanged.** The sprint already paid; retro reports.
 
+**Warn at 100%, block at 100% + grace** (default 10%). The grace band is aim, not
+softness: a ratchet announces itself in *multiples* — the consumer's real breaches were
+161%, 215%, 526% and **3311%** of budget. A gate that also failed at 104% would have the
+lead trim 300 tokens, watch the artifact grow back by the next gate, and fail again. That
+treadmill turns a real signal into noise. Over-budget is always reported; only a breach
+past the band blocks.
+
 Rule 25(b)'s exemption is now void when the artifact is over budget. Rule 25(c) names
 `context-mode-protection-log.md`, which had **no rotation and no threshold at all** (210
 KB in the consumer) and now has both.

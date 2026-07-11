@@ -572,6 +572,12 @@ above (the `Recent Activity` section holds the last ~10 entries and nothing more
 superseded narrative and handoff appendices move to `pipeline-snapshot-history.md`,
 which is write-only), then re-run Check 14 and Check 15.
 
+A `warn` line (over budget, inside the grace band) does **not** fail the gate — trim
+at your next natural pause. The check blocks on a *ratchet*, not on the last token;
+failing a gate at 104% would have the lead trim 300 tokens, watch the snapshot grow
+back by the next gate, and fail again. See Rule 25(d), "Warn at 100%, block at
+100% + grace."
+
 The snapshot is the only artifact whose budget is enforced *at gates* rather than
 only at sprint start, because it is the only one that grows *within* a sprint —
 and it is the most expensive file in the pipeline to let grow. The protocol

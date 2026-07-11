@@ -52,18 +52,31 @@
 #   --warn-only    report breaches but exit 0 (retro's Rule 25(d) posture: the
 #                  sprint is over, blocking it helps nobody)
 #
+# WARN AT 100%, BLOCK AT 100% + GRACE.
+# The grace band is not softness, it is aim. This check exists to stop a RATCHET,
+# and a ratchet announces itself in multiples, not percentages: in the reference
+# consumer the real breaches were 161%, 215%, 526% and 3311% of budget. A gate that
+# also FAILS at 104% buys nothing and costs a lot -- the lead trims 300 tokens, the
+# snapshot grows back by the next gate, and it fails again. That treadmill turns a
+# real signal into noise, and noisy gates get ignored. So: anything over budget is
+# REPORTED (the number is the truth and you should see it), but only a breach past
+# the grace band BLOCKS.
+#
 # ENV OVERRIDES
-#   AI_DLC_BYTES_PER_TOKEN   bytes-per-token divisor   (default 4)
+#   AI_DLC_BYTES_PER_TOKEN   bytes-per-token divisor          (default 4)
+#   AI_DLC_BUDGET_GRACE_PCT  block above budget + this %      (default 10)
 #   AI_DLC_BUDGET_<NAME>     per-artifact override in tokens, NAME upper-snaked
 #                            from the basename: AI_DLC_BUDGET_PRD_MD=90000
 #
 # EXIT
-#   0  every measured artifact is within budget (or --warn-only)
-#   1  an artifact is over budget, or input unreadable
+#   0  nothing past the grace band (over-budget-but-within-grace is reported, not
+#      fatal), or --warn-only
+#   1  an artifact is past budget + grace, or input unreadable
 
 set -u
 
 BPT="${AI_DLC_BYTES_PER_TOKEN:-4}"
+GRACE_PCT="${AI_DLC_BUDGET_GRACE_PCT:-10}"
 ROOT="${CLAUDE_PROJECT_DIR:-.}"
 ONLY=""
 WARN_ONLY=0
@@ -165,10 +178,17 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
     bytes="$(wc -c < "$f" | tr -d ' ')"
     tokens=$(( bytes / BPT ))
     rel="${f#"$ROOT"/}"
-    if [ "$tokens" -gt "$budget" ]; then
+    ceiling=$(( budget + (budget * GRACE_PCT / 100) ))
+    if [ "$tokens" -gt "$ceiling" ]; then
       over=$(( tokens * 100 / budget ))
       printf 'OVER  %-32s %7s tok  (budget %6s, %s%% of it)  -> %s\n' \
         "$rel" "$tokens" "$budget" "$over" "$remedy" >> "$ROOT/.ai-dlc-budget-breach.tmp"
+    elif [ "$tokens" -gt "$budget" ]; then
+      # Over budget but inside the grace band. Say so -- the number is the truth --
+      # but do not block: see "WARN AT 100%, BLOCK AT 100% + GRACE" in the header.
+      over=$(( tokens * 100 / budget ))
+      printf 'warn  %-32s %7s tok  (budget %6s, %s%% — within %s%% grace)  -> %s soon\n' \
+        "$rel" "$tokens" "$budget" "$over" "$GRACE_PCT" "$remedy"
     else
       [ "$QUIET" -eq 1 ] || printf '  ok  %-32s %7s tok  (budget %6s)\n' "$rel" "$tokens" "$budget"
     fi

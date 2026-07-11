@@ -971,6 +971,15 @@ Where it runs decides what it does:
 - **Retro** (`retro.md` Close-Out Sweep) — **warn-only**, unchanged. The sprint is
   over; blocking it helps nobody. Retro reports, it does not gate.
 
+**Warn at 100%, block at 100% + grace** (`AI_DLC_BUDGET_GRACE_PCT`, default 10).
+The grace band is aim, not softness. A ratchet announces itself in *multiples* —
+the reference consumer's real breaches were 161%, 215%, 526% and 3311% of budget.
+A gate that also fails at 104% buys nothing and costs a lot: the lead trims 300
+tokens, the artifact grows back by the next gate, and it fails again. That
+treadmill turns a real signal into noise, and a noisy gate gets ignored. So an
+over-budget artifact is always *reported* — the number is the truth — but only a
+breach past the band *blocks*.
+
 Consolidation itself stays operator-invoked (`artifact-consolidation.md`): it is a
 fidelity-critical rewrite and must be supervised. What changed is that the pipeline
 now refuses to *start* a sprint on top of an artifact it cannot afford to read.
