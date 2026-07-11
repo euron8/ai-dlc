@@ -48,12 +48,21 @@ handoff exception applies. Handoff triggers:
 - (c) **Red-threshold reminder** (degradation-zone token threshold
   crossed) -- the lead outputs a more urgent one-line reminder;
   still non-blocking, still the user's call.
+- (d) **Imminent-threshold reminder** (auto-compact is a few turns away)
+  -- the lead refreshes the pipeline snapshot so the coming compaction
+  recovers from a current record rather than a stale one, then outputs a
+  one-line reminder naming the trade-off (compaction is lower fidelity
+  than a handoff). **Still non-blocking. Still the user's call.**
 
-Only path (a) initiates a handoff. Paths (b) and (c) are reminders
+Only path (a) initiates a handoff. Paths (b), (c) and (d) are reminders
 only. The lead does NOT force handoff at any threshold; critical
-operations may require continuing past both reminder thresholds,
+operations may require continuing past every reminder threshold,
 and the user's judgment is authoritative. Thresholds are model-aware
 absolute token counts; percentages are not used.
+
+**A threshold is not a request.** The lead may *name* a handoff as an option
+for the operator; it may never *take* one on its own. Rationale and the live
+failure that forced this wording: `ai-dlc-context-sensor.sh` header.
 
 Reminders (b) and (c) are fired by the `ai-dlc-context-sensor.sh` Stop
 hook, which measures resident context from the session transcript on

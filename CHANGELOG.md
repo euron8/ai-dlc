@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.45.3] — 2026-07-11
+
+### The context sensor told the lead to hand off, citing the rule that forbids it
+
+Reported by the operator: the S289 sprint **stopped itself for a handoff nobody asked
+for**, mid-step, with three teammates that had already delivered.
+
+`ai-dlc-context-sensor.sh`'s IMMINENT advice closed with:
+
+> *"…prefer **Rule 2(a): hand off** via /clear + /ai-dlc resume. Compaction is strictly
+> lower fidelity than the handoff."*
+
+Rule 2(a) **is** human-requested handoff. Rule 2 says: *"Only path (a) initiates a
+handoff. Paths (b) and (c) are reminders only. **The lead does NOT force handoff at any
+threshold.**"* The hook was instructing the lead to take the one path only a human can
+initiate — and citing the rule that forbids it to do so. Worse, the wrapper text around
+the same injected message said *"the decision is the user's"*, so a single reminder
+carried both a permission and an imperative. **The lead resolved that contradiction in
+favour of the imperative.**
+
+Observed live: IMMINENT fired at 333k/380k; the lead refreshed the snapshot, announced
+*"the handoff is safe to take"*, stopped three delivered teammates, and ended the
+session. At RED the same lead had correctly held the line — because the RED string
+happened to carry an *"if continuing, do so deliberately"* escape that IMMINENT lacked.
+
+**Not caused by v0.45.x** — the advice is unchanged since v0.36.0. It was *exposed* by
+v0.45.0: with the poll-loops gone the session stopped compacting every ~33 minutes and,
+for the first time, ran long and clean enough to reach a legitimate IMMINENT.
+
+Rule 2 also had a gap that let the lead improvise: it defined (b) yellow and (c) red,
+while the sensor has emitted a **fourth** level, `imminent`, since v0.36.0 — a level the
+rule never named. Now named as **(d)**, explicitly non-blocking.
+
+### Fixed
+- `ai-dlc-context-sensor.sh` — no ADVICE string issues a handoff imperative. All three
+  now tell the lead to refresh the snapshot, **CONTINUE**, and surface the trade-off for
+  the *operator* to call. The invariant, the live failure, and an editing test ("would a
+  reader with no other context read this as an instruction to the lead?") are in the
+  hook header.
+- `SKILL.md` Rule 2 — adds threshold **(d) imminent**; states plainly that **a threshold
+  is not a request**: the lead may *name* a handoff as an option, never *take* one.
+
+### Notes
+- Re-attach budget held: the recovery protocol ends at ~4,643 tokens (357 of slack).
+  The first draft of the Rule 2 wording left only **15 tokens** under the ceiling, so the
+  rationale was relocated to the hook header — narrative moves, mechanism stays
+  (v0.36.2's rule).
+
 ## [0.45.2] — 2026-07-11
 
 ### The layer-drift validator could not detect a dangling step pointer
