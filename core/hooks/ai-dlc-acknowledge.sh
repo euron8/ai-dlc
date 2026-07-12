@@ -59,7 +59,42 @@ PAUSE_FLAG="${LOG_DIR}/pipeline-paused.flag"
 INPUT=$(cat)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# -----------------------------------------------------------------------------
+# Which skill is this session running?
+#
+# `/ai-dlc-update` is NOT `/ai-dlc`. It advances no sprint, passes no gate, and
+# runs precisely when the pipeline is parked -- which is exactly when the pause
+# flag is set. Denying its dispatches because "the pipeline is PAUSED" blocks a
+# skill that has no pipeline to pause, and the flag it trips over is usually the
+# one a HANDOFF left behind.
+#
+# This was already understood for the updater's file WRITES (see the
+# _bmad-output/ai-dlc-update/ carve-out below) and never extended to its
+# DISPATCHES -- while the updater's whole design is a fan-out ("dispatch ONE
+# generic agent per file", ai-dlc-update/SKILL.md). So it was denied, and the
+# model routed around the denial by doing the work INLINE in the lead, which
+# defeats the offload the dispatch existed for and inflates the very context the
+# updater is meant to protect. A guardrail that is trivially routed around is not
+# a guardrail; it is a tax on the honest path.
+#
+# Detected from the transcript rather than a marker file. A marker would need a
+# lifecycle -- create, delete, and a story for the crash in between -- and a
+# stale-flag-with-a-lifecycle is the bug being fixed here, not a tool to fix it
+# with. The transcript is self-healing: whichever skill was invoked LAST is the
+# one in play. A session that runs /ai-dlc-update and then /ai-dlc resume is a
+# pipeline session again, and the pause gate applies to it in full.
+# -----------------------------------------------------------------------------
+UPDATER_SESSION=0
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  LAST_UPDATE=$(grep -n '<command-name>/ai-dlc-update</command-name>' "$TRANSCRIPT" 2>/dev/null | tail -1 | cut -d: -f1)
+  LAST_PIPELINE=$(grep -n '<command-name>/ai-dlc</command-name>' "$TRANSCRIPT" 2>/dev/null | tail -1 | cut -d: -f1)
+  if [ -n "$LAST_UPDATE" ] && [ "$LAST_UPDATE" -gt "${LAST_PIPELINE:-0}" ] 2>/dev/null; then
+    UPDATER_SESSION=1
+  fi
+fi
 
 # -----------------------------------------------------------------------------
 # Check 1: no active pipeline -> allow
@@ -77,7 +112,11 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 ADVANCING=0
 case "$TOOL_NAME" in
   Agent|Task|Skill|TaskCreate)
-    ADVANCING=1
+    # In an /ai-dlc-update session these advance nothing: the updater fans out
+    # over its own reconcile, it does not run a sprint. Denying here is what
+    # pushed the work inline. In a pipeline session they advance the pipeline
+    # and the deny stands.
+    [ "$UPDATER_SESSION" -eq 1 ] || ADVANCING=1
     ;;
   Write|Edit|MultiEdit|NotebookEdit)
     # Only artifact production under _bmad-output/ counts. Escalations
