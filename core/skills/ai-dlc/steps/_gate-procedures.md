@@ -53,24 +53,18 @@ When a step file says "run sub-step snapshot update", execute:
    Call it through `verdict.sh`, which prints one line and **exits with
    the validator's own status**. Do NOT hand-roll
    `validate-… | grep -E 'OVER|PASS'`: a pipe hands the exit status to
-   `grep`, so a validator that prints FAIL and exits 1 is read as a
-   pass. That is not hypothetical — S289 shipped a fix for exactly this
-   ("the harness could print FAIL and exit 0"), and the lead still wrote
-   71 such wrappers in one phase.
+   `grep`, so a validator that prints FAIL and exits 1 reads as a pass.
 
 This keeps mid-step compaction survivable: the snapshot's Recent
 Activity reflects the in-flight sub-step rather than only the last
 gate, and In-Flight Teammates carries the deliverable paths that let
 the lead re-join its teammates instead of re-dispatching them.
 
-**Why the budget is checked here and not only at gates.** Check 14
-enforces the 6k budget at gate passages, which is frequent enough in
-planning — but implementation passes only three gates in a phase that
-can run four hours. In S289 the snapshot grew past **200% of budget**
-between gates and was whole-read at each of seven compactions; the lead
-spent turns policing it by hand. A budget enforced only at gates is a
-budget unenforced for the longest, most dispatch-heavy step in the
-pipeline. The full Check 14 still runs at the next gate.
+The budget is checked here, not only at gates, because implementation
+passes only three gates in a phase that can run four hours — a budget
+enforced only at gates is unenforced for the longest, most
+dispatch-heavy step in the pipeline (`docs/context-hardening-notes.md`
+R31). The full Check 14 still runs at the next gate.
 
 ## Auto-handoff evaluation (referenced by step files)
 

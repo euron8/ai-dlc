@@ -120,27 +120,28 @@ duration.
 The lead MUST therefore dispatch with `run_in_background: true` and
 JOIN in bounded beats — on the **deliverable file**, not on a `task_id`.
 
-A dev, code-reviewer, and qa are all `Agent` spawns. `Agent` returns an
-`agent_id`; `TaskOutput` joins a `task_id`, which only `TaskCreate`
-produces. **`TaskOutput` cannot join an `Agent` spawn** (Rule 29, "Which
-join, and this is not a preference"): handed an `agent_id` it returns
-`No task found with ID: ...` and the lead has burned a call and learned
-nothing. Every ai-dlc teammate delivers by file (Rule 20), so the file
-IS the handle. Join it with Rule 29's **bounded file-wait beat**, which
-is a script — do not retype the loop:
+A dev, code-reviewer, and qa are all `Agent` spawns. **`TaskOutput`
+cannot join an `Agent` spawn** (Rule 29, "Which join, and this is not a
+preference") — it takes a `task_id`, which only `TaskCreate` produces.
+Every ai-dlc teammate delivers by file (Rule 20), so the file IS the
+handle. Join it with Rule 29's **bounded file-wait beat**, which is a
+script — do not retype the loop:
 
-    scripts/wait-for-deliverable.sh <deliverable-path>
+    scripts/wait-for-deliverable.sh <path> [<path>...]
 
-    exit 0 — DELIVERED. Consume it, route it into gate-1.
+    exit 0 — DELIVERED. Consume them, route into gate-1.
     exit 2 — WAITING. Beat again (this call WAS the beat).
     exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK.
 
+**A wave dispatched in one message is joined in ONE call.** Pass every
+teammate's deliverable to a single invocation — they poll inside the
+same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash`
+call: two beats is two budgets and the call overruns.
+
 Each beat is a tool boundary, so a queued operator lands within one
 budget, and the script bounds the sequence for you (`max_wait_beats`,
-default 10). The lead consumes the deliverable and routes it into gate-1
-exactly as before; nothing is detached and no gate is skipped. The only
-difference is that the operator now gets a tool boundary every 120
-seconds and can steer mid-wave.
+default 10). The lead consumes the deliverables and routes them into
+gate-1 exactly as before; nothing is detached and no gate is skipped.
 
 The deliverable path for each teammate is the one recorded in the
 snapshot's **In-Flight Teammates** row at dispatch — the same path, and
@@ -391,32 +392,19 @@ visibility into which stories are in-flight.
 message writes one update covering every teammate in it: a row per
 teammate in **In-Flight Teammates**, carrying its deliverable path.
 
-The dispatch-time write is the whole point, and the transition-time
-write cannot substitute for it. A teammate is at risk from the moment
-it is dispatched until the moment it is joined — which is precisely the
-window in which no transition has happened yet. If no row was written
-and the lead then loses its in-memory handle, it has no record the
-teammate ever existed. Write the row when you dispatch, and the
-deliverable path outlives everything (Rule 29 — the file IS the
-handle).
+A transition-time write cannot substitute: a teammate is at risk from
+dispatch until join, which is exactly the window in which no transition
+has happened yet.
 
 **Minimum mechanism (Rule 26(c)) — the dispatch-time In-Flight
 Teammates row.** Failure caught: the lead cannot address a dispatched
-teammate, reads that as teammate *death*, and re-dispatches work that
-is still running or already delivered — 13 of 39 dispatches in S289's
-implementation phase, plus the improvised forensics (worktree
-emptiness, transcript-staleness probes) it invented to guess who was
-alive. Two causes, and the second is the one that actually fired:
-compaction can summarize away an `agent_id`, but **the wrong join API
-fails with no compaction at all** — all 8 of S289's failed `TaskOutput`
-calls passed an agent name where a `task_id` was required, and the lead
-misread the first as "the compaction killed the in-flight QA agent."
-The deliverable path defeats both. False-positive cost: one table row
-per dispatch, written in a snapshot update the lead already runs; the
-row is struck at join. Removal condition: retire once the harness gives
-the lead a handle that both survives compaction and is valid for the
-spawn shape it actually used — at that point the deliverable path stops
-being the only handle that outlives the boundary.
+teammate, reads that as teammate *death*, and re-dispatches work still
+running or already delivered (13 of 39 dispatches in the reference
+consumer; see `docs/context-hardening-notes.md` R31). False-positive
+cost: one table row per dispatch, written in a snapshot update the lead
+already runs; struck at join. Removal condition: retire once the harness
+gives the lead a handle that both survives compaction and is valid for
+the spawn shape it used.
 
 **Auto-handoff evaluation after each story transition (Seam C).**
 After each sub-step snapshot update in this step, the lead MUST
