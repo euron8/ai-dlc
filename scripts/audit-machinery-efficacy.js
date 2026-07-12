@@ -48,7 +48,13 @@ function jaccard(a, b) {
 const gvPath = path.join(DIST, 'core/skills/ai-dlc/steps/gate-validation.md');
 const gv = fs.readFileSync(gvPath, 'utf8');
 const glines = gv.split('\n');
-const hdrRe = /^### ([0-9]+[a-z]?|H[0-9]+|Core-layer[\w\s]*)\.?\s*(.*)$/;
+// The `Check ` prefix is optional on purpose. Core briefly wrote one heading as
+// `### Check 24.` while every other check is `### 24.`, and a prefix-intolerant
+// regex does not merely SKIP that check — a check's token span runs to the next
+// MATCHED header, so check 23 silently absorbed check 24's whole body and 24 got
+// no cost row at all. The tool that decides whether a check earns its cost was
+// reporting inflated cost for one check and none for the next.
+const hdrRe = /^### (?:Check\s+)?([0-9]+[a-z]?|H[0-9]+|Core-layer[\w\s]*)\.?\s*(.*)$/;
 const hdrs = [];
 glines.forEach((l, i) => { const m = l.match(hdrRe); if (m) hdrs.push({ id: m[1].trim(), title: (m[2] || '').replace(/[—(].*$/, '').replace(/[.?]/g, '').trim(), line: i }); });
 const dist = {};
@@ -136,13 +142,25 @@ for (const id of Object.keys(dist)) {
   // suppress sub-threshold auto-alignments — a <0.3 word-Jaccard is noise, not a mapping
   const shown = aligned.score >= 0.30 ? aligned : { id: null, score: aligned.score };
   const cc = shown.id ? cons[shown.id] : null;
-  const catch_ = (escRefs[id] || 0) + (retroRefs[id] || 0);   // per-number narrative catches
-  const lastFire = Math.max(cc ? cc.last : 0, lastRetro[id] || 0);
+  // Narrative "Check N" references in the consumer's retros and escalations are in
+  // the CONSUMER's namespace, so they must be counted against the TITLE-ALIGNED
+  // consumer number — never against this distribution check's own number. Keying
+  // them by `id` is the exact mis-attribution the Consumer-catalog crosswalk rule
+  // forbids, and it was live: distribution Check 24 (adversarial convergence,
+  // shipped in v0.48.0) inherited 15 escalation + 35 retro references belonging to
+  // the consumer's Check 24 (financial-display live-verify) and was classified
+  // EARNED — a check born this release, credited with a fire history that is
+  // someone else's. With no aligned counterpart, a check has NO consumer trace,
+  // and that is the honest answer.
+  const cid = shown.id;
+  const escR = cid ? (escRefs[cid] || 0) : 0;
+  const retroR = cid ? (retroRefs[cid] || 0) : 0;
+  const lastFire = Math.max(cc ? cc.last : 0, cid ? (lastRetro[cid] || 0) : 0);
   rows.push({
     id, tok: d.tok, title: d.title,
     align: shown.id ? `C${shown.id}` : '—', alignScore: shown.score,
     expo: cc ? cc.count : 0, nonpass: cc ? cc.nonpass : 0,
-    escR: escRefs[id] || 0, retroR: retroRefs[id] || 0,
+    escR, retroR,
     lastFire: lastFire || null,
     stale: lastFire ? SPRINT_NOW - lastFire : null,
   });

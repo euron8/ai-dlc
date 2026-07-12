@@ -106,7 +106,11 @@ for wf in validate-retro-compliance.yml validate-ci-gates.yml; do
 done
 
 # -- Test fixture templates installed by AI/DLC --
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-h1-recursion check-manifest-bypass; do
+# MUST stay identical to install.sh's fixture loop, or uninstall silently orphans the
+# fixtures it does not name. It had already drifted: install shipped nine, this listed
+# five. `scripts/validate-enforcement-map.sh` (I8) now asserts the two lists and
+# core/fixtures/ agree, so the next fixture cannot be added to one loop only.
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision; do
   if [ -d "$PROJECT_ROOT/tests/fixtures/$fixture_dir" ]; then
     DIRS_TO_REMOVE+=("tests/fixtures/$fixture_dir/")
   fi

@@ -59,14 +59,60 @@ and wrongly report every role hook missing.
     the same title, means the rendered file defines it twice and a "Step 5c"
     reference becomes ambiguous. An extension's body is *added* to core, not merged
     with it.
+- **Label your catalog (Rule 27(d)) — `kind: check` entries.** Your check numbers are
+  your own namespace, but they render into the SAME merged list as core's, under the
+  SAME integers. So say which catalog a check belongs to, in the heading and in the
+  gate-log row:
+
+  ```markdown
+  ### 24. [ext:gate-validation-domain] Financial-display ground-truth live-verify.
+  ```
+  ```
+  | [ext:gate-validation-domain] 24 — Financial-display ground-truth | PASS | … |
+  | [core] 24 — The adversarial cycle CONVERGED                      | PASS | … |
+  ```
+
+  `<id>` is this file's `id:` frontmatter — the same key `GATE_METRIC v1` emits in its
+  `catalog` field, so the human render and the machine record agree. **The integer never
+  changes**; the label is *added*. So `Check 24` in your existing history maps to
+  `[ext:…] 24` by identity, you renumber nothing, and an upstream release that adds a
+  check can never force you to.
+
+  Without the label, a bare `Check 24: PASSED` in your gate log — the durable audit
+  record — has no referent once core also defines a check 24. That is not a
+  hypothetical: it has already happened, and the lead had to disambiguate by hand in
+  prose. `scripts/validate-layer-entries.sh` fails (E6) on a check that redefines a
+  core check number with a different title, and `/ai-dlc-update` reports
+  `EXTENSION-CHECK-NUMBER-COLLISION` at pull time when an incoming release creates one.
 - **`push_candidate: true`** marks a generalizable improvement. `ai-dlc-update`
   drains flagged extensions as the push backlog (spec §8.1) — the pull tool
   produces the push queue as a side effect.
 - **Retire on absorption (Rule 27(b)).** When upstream lands your entry's content
   in core, DELETE the entry. `/ai-dlc-update` flags it as
-  `EXTENSION-RETIRE-CANDIDATE`; upstream never writes this directory, so it cannot
-  remove it for you. An absorbed-but-kept extension is the single most common way a
-  layer rots: it starts as an exact duplicate and diverges from there.
+  `EXTENSION-RETIRE-CANDIDATE` (absorbed by this pull) or `EXTENSION-RESTATES-CORE`
+  (core already had it at your base — you have been carrying a duplicate for some
+  number of releases). Both are title-matched, so they fire **even when upstream
+  absorbed your check under a different number** — the case a number-keyed signal
+  could never see, and the way two duplicates survived ~35 minor versions unreported.
+  Upstream never writes this directory, so it cannot remove the entry for you. An
+  absorbed-but-kept extension is the single most common way a layer rots: it starts as
+  an exact duplicate and diverges from there.
+
+## Catalog crosswalk table (`kind: check` consumers)
+
+Keep one table here, in this file, mapping every check you have ever numbered to its
+label and title. It is the resolver for any `Check N` written in your gate logs,
+retros, and escalations **before** you adopted the label — and it is the only sound
+one. Do NOT try to resolve those by date: `steps/gate-validation.md` Check 12 mandates
+that gate logs are rotated cut-and-paste into archives, so a git date on a rotated line
+is the rotation date, not the authorship date.
+
+Seed it from the `EXTENSION-CHECK-NUMBER-COLLISION` and `EXTENSION-RESTATES-CORE` rows
+of your next `/ai-dlc-update` report, then freeze it:
+
+| your number | label | title | resolves a bare `Check N` written before | notes |
+|---|---|---|---|---|
+| 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24 (adversarial convergence), added upstream in v0.48.0 |
 
 **Validate any entry you author or revise:** `scripts/validate-layer-entries.sh`.
 

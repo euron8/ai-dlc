@@ -45,14 +45,59 @@ MODE="${5:-}"
 DIST="$(cd "$DIST" 2>/dev/null && pwd)" || { echo "preclassify: dist-repo not a directory: ${1}" >&2; exit 2; }
 CONS="$(cd "$CONS" 2>/dev/null && pwd)" || { echo "preclassify: consumer-root not a directory: ${4}" >&2; exit 2; }
 
+# core/... -> consumer-relative path.
+#
+# EVERY exception here must match install.sh, because install.sh and this function are
+# two writers of the same files and the consumer keeps whichever ran last. They HAD
+# diverged: `core/fixtures/` had no case, so the `core/*` catch-all filed fixtures
+# under `.claude/fixtures/` while install.sh writes `tests/fixtures/` — the only path
+# gate-validation and H1 ever reference. So every pull wrote a shadow copy of every
+# fixture into a directory nothing reads, and an upstream fixture fix never reached
+# the path its own self-test looks in.
+#
+# Observed live: v0.48.0 delivered the check-24 fixture to `.claude/fixtures/`, H1
+# failed because it was not under `tests/fixtures/`, and the consumer's lead hand-moved
+# the directory and committed "H1 fixture remediated" — a consumer manually patching
+# around this mapping. An adversarial fixture shipped to a path no check reads is worse
+# than no fixture: the catalog claims the check is self-tested, and it is not.
+#
+# `scripts/validate-enforcement-map.sh` (I8) now evaluates this function and fails if
+# it disagrees with install.sh.
 map_consumer() { # core/... -> consumer-relative path
   case "$1" in
-    core/scripts/*) echo "scripts/${1#core/scripts/}" ;;
-    core/*)         echo ".claude/${1#core/}" ;;
-    *)              echo "$1" ;;
+    core/scripts/*)      echo "scripts/${1#core/scripts/}" ;;
+    core/fixtures/*)     echo "tests/fixtures/${1#core/fixtures/}" ;;
+    core/ci-templates/*) echo ".github/workflows/${1#core/ci-templates/}" ;;
+    core/*)              echo ".claude/${1#core/}" ;;
+    *)                   echo "$1" ;;
   esac
 }
-blob_hash() { git -C "$DIST" rev-parse "$1:$2" 2>/dev/null || echo MISSING; }
+
+# CI workflows are OPT-IN, and must stay that way. install.sh has always copied
+# ci-templates only `if [ -d "$PROJECT_ROOT/.github/workflows" ]` — a consumer with no
+# CI never gets any. Without the same guard here, mapping ci-templates to their real
+# destination would make a PULL create `.github/workflows/` on a consumer that never
+# opted in, and start running workflows on their repo. Updating a workflow a consumer
+# HAS is a fix; conjuring CI on a consumer that has none is a behavioral change nobody
+# asked the pull to make.
+#
+# (Before this release ci-templates fell through the `core/*` catch-all to
+# `.claude/ci-templates/`, which nothing reads and install.sh never creates — so
+# upstream CI updates reached no one. That is why validate-retro-compliance.yml sat
+# dormant on a real consumer.)
+opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
+  case "$1" in
+    .github/workflows/*) [ ! -d "$CONS/.github/workflows" ] ;;
+    *)                   return 1 ;;
+  esac
+}
+# `-q --verify` is load-bearing, not style. A bare `git rev-parse <rev>:<path>` on a path
+# that does not exist in <rev> ECHOES ITS OWN ARGUMENT to stdout and *then* exits 128, so
+# `|| echo MISSING` yields the two-line string "<rev>:<path>\nMISSING" — which never
+# equals "MISSING", and every `[ "$h" = MISSING ]` test silently reads false. The existing
+# buckets escaped this only by accident (the A branch never reads base_h, the D branch
+# never reads theirs_h). `-q --verify` prints nothing and exits 1, so MISSING means MISSING.
+blob_hash() { git -C "$DIST" rev-parse -q --verify "$1:$2" 2>/dev/null || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
 
 if [ "$MODE" = "--templates" ]; then
@@ -109,6 +154,12 @@ fi
 
 git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' read -r status path; do
   cons="$(map_consumer "$path")"
+
+  if opted_out "$cons"; then
+    printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "CONSUMER-MISSING-NOOP"
+    continue
+  fi
+
   base_h="$(blob_hash "$BASE" "$path")"
   theirs_h="$(blob_hash "$THEIRS" "$path")"
   ours_h="$(file_hash "$cons")"
@@ -133,3 +184,58 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
   esac
   printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "$bucket"
 done
+
+# ---------------------------------------------------------------------------
+# Orphan pass — files this distribution used to write to a consumer path it no
+# longer targets.
+#
+# When a core subtree's DESTINATION changes (as `core/fixtures/` and
+# `core/ci-templates/` did in v0.49.0), the files the pull previously wrote to the
+# old path do not move and do not vanish. They sit there, stale, shadowing nothing,
+# and every later pull refreshes only the new path — so the orphan silently diverges
+# from the file it is a copy of. That is precisely the rot the pull exists to prevent,
+# and leaving it to a hand-written migration note in a CHANGELOG is how it never gets
+# done.
+#
+# LEVEL-TRIGGERED, deliberately. This does not key on the base..theirs diff: an orphan
+# is a STATE of the consumer tree, not an event in the upstream history. A pull that
+# happens to touch no fixture would otherwise skip the check and the orphan would
+# survive forever — the same edge-vs-level mistake the absorption detector made.
+#
+# SAFE BY CONSTRUCTION. It never proposes deleting a file it cannot prove it wrote:
+# the orphan's content must hash-match the distribution's own blob (at base or theirs)
+# for the core file it came from. A consumer-modified orphan, or a file at the old path
+# that upstream never shipped, is surfaced for adjudication and NEVER auto-deleted —
+# the same posture as UPSTREAM-DELETED, whose deletions are also gated per-path at
+# apply (step 7).
+while IFS='|' read -r old_prefix core_dir; do
+  [ -n "$old_prefix" ] || continue
+  [ -d "$CONS/$old_prefix" ] || continue
+
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    rest="${f#"$CONS/$old_prefix/"}"
+    cons_rel="$old_prefix/$rest"
+    core_path="core/$core_dir/$rest"
+    new_path="$(map_consumer "$core_path")"
+
+    ours_h="$(file_hash "$cons_rel")"
+    base_h="$(blob_hash "$BASE" "$core_path")"
+    theirs_h="$(blob_hash "$THEIRS" "$core_path")"
+
+    if [ "$base_h" = MISSING ] && [ "$theirs_h" = MISSING ]; then
+      # Upstream never shipped this file. Not ours to delete.
+      bucket="ORPHANED-UNKNOWN->CLASSIFY"
+    elif [ "$ours_h" = "$theirs_h" ] || [ "$ours_h" = "$base_h" ]; then
+      # Byte-identical to what we put there -> provably our copy, safe to remove.
+      bucket="ORPHANED-RELOCATED"
+    else
+      # The consumer edited the orphan. Deleting it would destroy their work.
+      bucket="ORPHANED-RELOCATED+consumer-modified->CLASSIFY"
+    fi
+    printf '%s\t%s\t%s\t%s\n' "O" "$core_path" "$cons_rel" "$bucket -> now at $new_path"
+  done < <(find "$CONS/$old_prefix" -type f 2>/dev/null | sort)
+done <<'RELOCATIONS'
+.claude/fixtures|fixtures
+.claude/ci-templates|ci-templates
+RELOCATIONS

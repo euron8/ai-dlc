@@ -1125,19 +1125,68 @@ above; the rest is captured here by source.
 - **Check 13 numbering artifact (moved from L478–481).** Check 13 is numbered 13
   to preserve existing cross-references, but its execution is deferred until the
   full 15-check cycle completes, so the announcement reflects the final count.
-- **Consumer-catalog crosswalk (moved from L83–99).** Consequence for any audit
-  or absorption pass: a consumer MAY redefine a shared check number or add checks
-  past this catalog's range, so `Check N` in a consumer's gate-log/retro/
+- **Consumer-catalog crosswalk (moved from L83–99; mechanized v0.49.0).** Consequence
+  for any audit or absorption pass: a consumer MAY redefine a shared check number or
+  add checks past this catalog's range, so `Check N` in a consumer's gate-log/retro/
   escalation refers to *that* consumer's catalog. Never attribute consumer
   fire-history to a distribution check by number — align by title/intent and
-  confirm against the consumer's own `extensions/checks/*.md`. Distribution
-  checks 1–18 are the shared core; a consumer extension marked
-  `push_candidate: false` is deliberately consumer-local and MUST NOT be
+  confirm against the consumer's own `extensions/checks/*.md`. A consumer extension
+  marked `push_candidate: false` is deliberately consumer-local and MUST NOT be
   backported (violates the layered-rulebook boundary). A check absorbed FROM a
   consumer records its origin inline via a `Graph→distribution number mapping.`
-  note (Checks 20, 21) so a future reconciliation does not re-flag it as new.
-  Repeatable evidence tool: `scripts/audit-machinery-efficacy.js` (run under
-  `bun` for real tokenizer counts); see `docs/v0.27.0-machinery-efficacy-audit.md`.
+  note (Checks 20, 21). Repeatable evidence tool:
+  `scripts/audit-machinery-efficacy.js` (run under `bun` for real tokenizer counts);
+  see `docs/v0.27.0-machinery-efficacy-audit.md`.
+
+  **Why this was a declaration, not a mechanism (the v0.49.0 finding).** The rule
+  above told the reader not to conflate the catalogs. The reader is a lead who then
+  writes a bare `Check 24: PASSED` into the gate log — so the rule placed the whole
+  burden on recall at exactly the moment the number became permanent evidence, and
+  prescribed no rendering that distinguished the catalogs where they are actually
+  used. Three things followed, all found live on a real consumer:
+
+  - **The number was never a referent.** Four number-shared/title-different pairs
+    (20, 22, 23, 24). The "different gate types disambiguate them" luck had already
+    run out: at a sprint-review gate the consumer's check 21 and core's check 21 both
+    fire, and the lead had improvised `(consumer Check 21)` by hand in
+    `gate-log-archive-s287.md` to tell them apart. The claim "nothing has broken yet"
+    was false; it had broken and been papered over in prose.
+  - **The absorption detector was edge-triggered.** `layer-drift.sh` reported an
+    absorbed extension only on the single pull that landed it (`present at theirs,
+    absent at base`) and joined on the NUMBER. So a check upstream absorbed under a
+    *different* number was invisible forever. Two such duplicates had been carried
+    silently for ~35 minor versions — and core's own prose documented both
+    ("graph's Check 21 absorbed as distribution Check 20"; "absorbed from graph's
+    Check 33"). Absorption is a STATE, not an EVENT: test it every pull, use `base`
+    only to tag NEW-THIS-PULL vs PRE-EXISTING.
+  - **One heading typo disabled four tools at once.** v0.48.0 shipped
+    `### Check 24.` where every other check is `### 24.`. Every anchor extractor in
+    the distribution AND the consumer-shipped layer linter keys on `^### <n>.`, so
+    check 24 vanished from all of them — including the linter that would have caught
+    the collision v0.48.0 itself created, and `audit-machinery-efficacy.js`, whose
+    per-check token span runs to the next MATCHED header and therefore folded check
+    24's entire cost into check 23. Nothing tied a heading to its `CHECK_LOADED`
+    anchor; I6 in `validate-enforcement-map.sh` now does.
+
+  **Resolve history by title, never by date.** The tempting rule — "a bare `Check N`
+  written before core gained check N means the consumer's" — is sound in that one
+  direction and unsound in the other: after the epoch both catalogs are live and the
+  consumer keeps writing about *its own* check N indefinitely. Worse, the date oracle
+  does not exist. Check 12 mandates cut-and-paste rotation of gate logs into archives,
+  so `git blame` on a rotated line returns the ROTATION date, not the authorship date
+  (`prd-history.md`: first commit 2026-04-10, content dated back to 2025-02-14) —
+  biasing old references *newer*, i.e. toward core. The pipeline's own rotation rule
+  destroys the evidence a date rule would need. Use the consumer's frozen title
+  crosswalk (`extensions/README.md`) instead; a lookup has no unsound region.
+
+  **A loose title match is worse than no title match.** When the title became a join
+  key, `same_section()`'s old rule (≥2 shared tokens of the first 4) matched consumer
+  check 22 "Smoke test evidence" to core check 11 "Smoke test coverage for user-facing
+  changes" on `{smoke, test}` — which would have proposed *deleting* a live
+  deploy-validate check on a financial system. The bar is now Jaccard ≥0.6 over
+  significant tokens, OR ≥0.75 containment of the shorter title (which forgives an
+  appended provenance tag like `[PI-S259-1 addendum]` without forgiving a different
+  check).
 - **Check 22 citation fix (deleted at L871–873, recoverable from git).** Check 22
   superseded stale "Check 15" citations in `implementation.md` that pointed at
   the snapshot-verification check by mistake — a one-time correction, not

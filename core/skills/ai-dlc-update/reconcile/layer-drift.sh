@@ -35,10 +35,28 @@
 #   OVERRIDE-ANCHOR-UNRESOLVED       anchor not found in theirs (upstream restructured)
 #   OVERRIDE-OK                      shadowed section unchanged
 #   EXTENSION-HOOK-MISSING           hooks: target absent in theirs
-#   EXTENSION-RETIRE-CANDIDATE       a section this extension defines is NEWLY
-#                                    defined by theirs' core file (absent at base)
-#                                    -> upstream absorbed it; the consumer copy is
-#                                    now a duplicate. THE absorption-retirement signal.
+#   EXTENSION-RETIRE-CANDIDATE       theirs' core file NEWLY defines a section this
+#                                    extension also defines, matched by TITLE (at the
+#                                    same number or a different one) -> upstream
+#                                    absorbed it this pull; the consumer copy is now
+#                                    a duplicate. THE absorption-retirement signal.
+#   EXTENSION-RESTATES-CORE          same, but core already had it AT BASE. The
+#                                    consumer has been carrying a duplicate of a core
+#                                    section for some number of releases and was never
+#                                    told, because the old detector only fired on the
+#                                    single pull that landed the absorption. Rule 27(c)
+#                                    forbids restating core: retire it, or refile as an
+#                                    override with a base_sha if it hardens core.
+#   EXTENSION-CHECK-NUMBER-COLLISION theirs' core file defines this extension's check
+#                                    NUMBER with a DIFFERENT title -> one integer now
+#                                    names two unrelated checks in the merged document,
+#                                    so the bare "Check N" the lead commits to the gate
+#                                    log has no referent. The exact complement of the
+#                                    absorption signal. Report-only: a collision is
+#                                    decidable and consumer-fixable, so it must not
+#                                    block a pull (a consumer must never be unable to
+#                                    take a security fix because its own catalog needs
+#                                    relabelling). Tagged NEW-THIS-PULL / PRE-EXISTING.
 #   EXTENSION-HOOK-DRIFT             hooked core file changed base..theirs
 #                                    (file-grain: extensions carry no finer anchor)
 #   EXTENSION-OK                     hooked core file unchanged
@@ -78,40 +96,76 @@ have()     { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; }
 
 # Section anchors a markdown STREAM defines: `### 5c. T` headings + `**7a-post. T**`
 # bold anchors (an override defines 7a-post the bold way).
+#
+# Three tolerances, each paid for by a real miss:
+#   `Check `  core wrote one check as `### Check 24.` while every other is
+#             `### 24.`; a digit-anchored regex skipped it, so the v0.48.0 number
+#             collision was invisible to the tool built to surface layer drift.
+#   letter    two consumer extensions head their checks `## Check AP — …` /
+#             `## Check VH — …`, which yielded ZERO anchors. Both are
+#             `push_candidate: true` — they ARE the push queue, the entries most
+#             likely to be absorbed — so absorption of either could never fire.
+#   `—`       those same headings separate id from title with an em-dash, not a dot.
+#
+# The id shape stays deliberately narrow -- `24`, `3b`, `11a`, `H1`, `AP` -- and is
+# NOT a general word. A permissive `[A-Z]*[a-z-]*` would read `### Scope.` as an
+# anchor named "Scope" and start diffing prose sections against each other.
+ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
+strip_anchor() { sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
 anchors_of_stream() {
-  { grep -Eho '^#{2,4}[[:space:]]+[0-9]+[a-z-]*\.' | sed -E 's/^#+[[:space:]]+//'
-  } 2>/dev/null | sed -E 's/\.$//' | sort -u
+  { grep -Eho "$ANCHOR_RE" | strip_anchor
+  } 2>/dev/null | grep -E '.' | sort -u
 }
 anchors_of_file() {
-  { grep -Eho '^#{2,4}[[:space:]]+[0-9]+[a-z-]*\.' "$1" 2>/dev/null | sed -E 's/^#+[[:space:]]+//'
-    grep -Eho '^\*\*[0-9]+[a-z-]*\.'               "$1" 2>/dev/null | sed -E 's/^\*\*//'
-  } | sed -E 's/\.$//' | sort -u
+  { grep -Eho "$ANCHOR_RE" "$1" 2>/dev/null | strip_anchor
+    grep -Eho '^\*\*(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
+      | sed -E 's/^\*\*(Check[[:space:]]+)?//; s/\.$//'
+  } | grep -E '.' | sort -u
 }
 
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ /g; s/^ +| +$//g'; }
 
-# Normalized heading TEXT for a given anchor number, from a stream on stdin.
+# Normalized heading TEXT for a given anchor, from a stream on stdin.
 # e.g. anchor "1a" in "### 1a. Prior-Decision Search (settled corpus)" -> "prior decision search settled corpus"
 heading_text_for() { # heading_text_for <anchor>  < stream
   awk -v a="$1" '
     function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-    $0 ~ ("^#{2,4}[ \t]+" a "\\.") || $0 ~ ("^\\*\\*" a "\\.") {
-      h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub("^" a "\\.[ \t]*","",h)
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[.—]") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+      h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
+      sub("^" a "[.—][ \t]*","",h)
       print nrm(h); exit
     }' 2>/dev/null
 }
 
-# Do two normalized headings describe the same section? Require >=2 shared tokens
-# among the first 4 significant words. Consumer gate-validation check NUMBERS are
-# a sanctioned separate namespace (core's "Consumer-catalog crosswalk"), so a bare
-# number match is NOT evidence of absorption — the titles must agree too.
+# Do two normalized headings describe the same section? Jaccard over significant
+# tokens (>=0.6), OR near-total containment of the shorter title in the longer
+# (>=0.75, which forgives an appended provenance tag like "[PI-S259-1 addendum]").
+#
+# The old rule -- >=2 shared tokens among the first 4 significant words -- was far
+# too loose to carry the weight now placed on it. Verified: consumer check 22
+# "Smoke test evidence (deploy-validate gate only)" and core check 11 "Smoke test
+# coverage for user-facing changes?" share {smoke, test} and were judged the SAME
+# section. Since a title match now drives EXTENSION-RETIRE-CANDIDATE, that pair
+# would have told a consumer to delete a live deploy-validate check. A loose title
+# match is worse than no title match: it turns a reporting tool into a data-loss bug.
+#
+# Consumer gate-validation check NUMBERS remain a sanctioned separate namespace
+# (core's "Consumer-catalog crosswalk"), so a bare number match is never evidence
+# of absorption on its own — the titles must agree too.
 same_section() { # same_section <textA> <textB>
   [ -n "$1" ] && [ -n "$2" ] || return 1
-  local shared=0 w
-  for w in $(printf '%s' "$1" | tr ' ' '\n' | grep -vE '^(the|a|an|of|and|for|to|in|on)$' | head -4); do
-    printf '%s\n' $2 | grep -Fxq -- "$w" && shared=$((shared+1))
-  done
-  [ "$shared" -ge 2 ]
+  awk -v A="$1" -v B="$2" '
+    BEGIN {
+      split("the a an of and for to in on this its only gate gates", s, " ")
+      for (i in s) stop[s[i]] = 1
+      n = split(A, x, " "); for (i = 1; i <= n; i++) if (!(x[i] in stop)) a[x[i]] = 1
+      n = split(B, y, " "); for (i = 1; i <= n; i++) if (!(y[i] in stop)) b[y[i]] = 1
+      for (k in a) { na++; u++; if (k in b) inter++ }
+      for (k in b) { nb++; if (!(k in a)) u++ }
+      if (u == 0 || na == 0 || nb == 0) exit 1
+      smaller = (na < nb) ? na : nb
+      exit (inter / u >= 0.6 || inter / smaller >= 0.75) ? 0 : 1
+    }'
 }
 
 # Extract the section named by <id> from a markdown stream on stdin.
@@ -230,28 +284,82 @@ while IFS= read -r f; do
 
   have "$THEIRS" "$cp" || { emit EXTENSION-HOOK-MISSING "$entry" "$hooks" "hooks target absent at $THEIRS"; continue; }
 
-  # Retirement signal: a section this extension defines is NEWLY defined upstream
-  # (present at theirs, absent at base) -> upstream absorbed it.
+  # Catalog reconciliation between this extension and the core file it hooks.
+  #
+  # The old rule tested ONE thing -- "is a section this extension defines NEWLY
+  # defined upstream (present at theirs, absent at base)?" -- and reported nothing
+  # otherwise. That is edge-triggered: it can only fire on the single pull that
+  # lands an absorption, and never again. Miss that one report and the duplicate
+  # rots forever, which is exactly what happened. A real consumer has carried the
+  # SAME check as core since v0.13.0 (core says so in its own prose: "This is
+  # graph's Check 21 absorbed as distribution Check 20") across ~35 minor versions
+  # of pulls, and this tool said nothing on any of them, because by the time anyone
+  # looked the section was no longer "new".
+  #
+  # Absorption is a STATE ("upstream now defines this section"), not an EVENT. So
+  # test the state on every pull and use $BASE only to TAG the finding. And join on
+  # BOTH axes, because the old number-keyed join was blind in both directions:
+  #
+  #   same number, same title   -> RESTATES-CORE / RETIRE-CANDIDATE (a duplicate)
+  #   same number, diff  title  -> CHECK-NUMBER-COLLISION  (one integer, two checks)
+  #   diff number, same title   -> absorbed-but-RENUMBERED (invisible to a number
+  #                                join -- this is how the v0.13.0 duplicate hid)
+  #   diff number, diff title   -> nothing; the catalogs are simply disjoint here
   ext_anchors="$(anchors_of_file "$f")"
   if [ -n "$ext_anchors" ]; then
     base_anchors="$(git_show "$BASE" "$cp" | anchors_of_stream)"
-    theirs_anchors="$(git_show "$THEIRS" "$cp" | anchors_of_stream)"
     theirs_blob="$(git_show "$THEIRS" "$cp")"
-    absorbed=""
+    theirs_anchors="$(printf '%s' "$theirs_blob" | anchors_of_stream)"
+
     while IFS= read -r a; do
       [ -n "$a" ] || continue
-      printf '%s\n' "$theirs_anchors" | grep -Fxq -- "$a" || continue
-      printf '%s\n' "$base_anchors"   | grep -Fxq -- "$a" && continue
-      # Number match alone is not absorption: consumer gate-check numbers are a
-      # sanctioned separate namespace. Require the titles to agree too.
       t_ext="$(heading_text_for "$a" < "$f")"
-      t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$a")"
-      same_section "$t_ext" "$t_up" && absorbed="$absorbed $a"
+      [ -n "$t_ext" ] || continue
+
+      if printf '%s\n' "$theirs_anchors" | grep -Fxq -- "$a"; then
+        # -- same NUMBER upstream. Title decides which defect this is.
+        t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$a")"
+        if printf '%s\n' "$base_anchors" | grep -Fxq -- "$a"; then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi
+
+        if same_section "$t_ext" "$t_up"; then
+          if [ "$tag" = NEW-THIS-PULL ]; then
+            emit EXTENSION-RETIRE-CANDIDATE "$entry" "$hooks" \
+              "NEW-THIS-PULL: upstream ${BASE}..${THEIRS} now defines '$a. $t_up', which this entry also defines — absorbed; retire the consumer copy"
+          else
+            emit EXTENSION-RESTATES-CORE "$entry" "$hooks" \
+              "PRE-EXISTING: defines '$a. $t_ext', which core already defines at the SAME number and title — and did so at base, so the absorption signal never fired. Rule 27(c): an extension MUST NOT restate a core section; the copy cannot drift-check against the original, so it forks silently. If it only duplicates core, retire it; if it hardens or restricts core, refile it in overrides/ with a base_sha so drift is tracked."
+          fi
+          continue
+        fi
+
+        emit EXTENSION-CHECK-NUMBER-COLLISION "$entry" "$hooks" \
+          "${tag}: '$a' names TWO different checks — here \"$t_ext\", in core \"$t_up\". Extensions are ADDITIVE, so both render into ONE merged list under ONE integer: the bare \"Check $a\" the lead writes into the gate log has no referent. Label the catalogs at the point of use (core \"### $a. [core] …\" vs this entry \"### $a. [ext:<id>] …\") and never attribute fire history across catalogs by number."
+        # NO `continue` here. A number collision does NOT mean upstream lacks this
+        # CHECK -- it may carry it under a DIFFERENT number, and then the entry is
+        # both a collision and a duplicate. That is not hypothetical: a consumer's
+        # push check 21 collides with core's 21 (test-strategy presence) AND *is*
+        # core's 20 (validation-intensity), which core's own prose records as
+        # "graph's Check 21 absorbed as distribution Check 20". Returning early here
+        # would report the collision and silently drop the absorption -- the single
+        # most important fact about that entry. Fall through to the title search.
+      fi
+
+      # -- is the same CHECK upstream under a DIFFERENT number?
+      while IFS= read -r b; do
+        [ "$b" = "$a" ] && continue
+        [ -n "$b" ] || continue
+        t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$b")"
+        same_section "$t_ext" "$t_up" || continue
+        if printf '%s\n' "$base_anchors" | grep -Fxq -- "$b"; then
+          emit EXTENSION-RESTATES-CORE "$entry" "$hooks" \
+            "PRE-EXISTING (renumbered): this entry's '$a. $t_ext' IS core's '$b. $t_up'. Upstream absorbed it under a DIFFERENT number, so a number-keyed retirement signal could never fire and the duplicate has been carried silently ever since. Retire it, or refile as an override if it hardens core."
+        else
+          emit EXTENSION-RETIRE-CANDIDATE "$entry" "$hooks" \
+            "NEW-THIS-PULL (renumbered): upstream now defines this entry's '$a. $t_ext' as core '$b' — absorbed under a different number; retire the consumer copy"
+        fi
+        break
+      done <<< "$theirs_anchors"
     done <<< "$ext_anchors"
-    if [ -n "$absorbed" ]; then
-      emit EXTENSION-RETIRE-CANDIDATE "$entry" "$hooks" "upstream newly defines section(s)${absorbed} that this extension also defines — absorbed; retire the consumer copy"
-      continue
-    fi
   fi
 
   if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
