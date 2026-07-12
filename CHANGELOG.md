@@ -17,6 +17,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.2] — 2026-07-12
+
+### The pause gate denied `/ai-dlc-update`'s dispatches, so the model did the work inline
+
+`ai-dlc-acknowledge.sh` denies pipeline-advancing tools while `pipeline-paused.flag`
+exists. `/ai-dlc-update` is not `/ai-dlc`: it advances no sprint, passes no gate, and
+runs precisely when the pipeline is parked — which is exactly when the flag is set,
+usually by the handoff that parked it.
+
+The hook already knew this for the updater's **writes** — there is a carve-out for
+`_bmad-output/ai-dlc-update/**` with a comment reading *"Denying its report write because
+'the pipeline is paused' blocks a skill that has no pipeline to pause. Observed live."*
+That reasoning was never extended to its **dispatches**, while the updater's whole design
+is a fan-out (*"dispatch ONE generic agent per file"*, `ai-dlc-update/SKILL.md`).
+
+So the dispatch was denied, and the model routed around the denial by doing the work
+**inline in the lead** — which defeats the offload the dispatch existed for and inflates
+the very context the updater is meant to protect. A guardrail that is trivially routed
+around is not a guardrail; it is a tax on the honest path.
+
+- `Agent` / `Task` / `Skill` / `TaskCreate` are exempt from the pause gate **in an
+  `/ai-dlc-update` session**. In a pipeline session they still advance the pipeline and
+  the deny stands, unchanged.
+- The active skill is read from the **transcript**, not a marker file. A marker needs a
+  lifecycle — create, delete, and a story for the crash in between — and a
+  stale-flag-with-a-lifecycle is the bug being fixed here, not a tool to fix it with. The
+  transcript is self-healing: whichever skill was invoked last is the one in play.
+- **Fails closed.** No transcript, or an unreadable one, denies. A session that runs
+  `/ai-dlc-update` and then `/ai-dlc resume` is a pipeline session again, and the pause
+  gate applies to it in full.
+
 ## [0.50.1] — 2026-07-12
 
 ### v0.50.0's wait-beat gave the lead no way to join a wave, so it chained them
