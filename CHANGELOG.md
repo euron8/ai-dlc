@@ -17,6 +17,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.1] — 2026-07-12
+
+### v0.50.0's wait-beat gave the lead no way to join a wave, so it chained them
+
+Shipped v0.50.0, updated the reference consumer, and watched. The join fix held:
+**0 `TaskOutput` calls, 5 of 5 dispatches joined through `wait-for-deliverable.sh`, 0
+hand-rolled poll loops** (was 98 in one phase), and after an auto-compaction the lead's
+first output named its in-flight teammates from the snapshot — `s289-cr-sd{3,4,5}` — and
+re-dispatched **none** of them.
+
+Then it did this, within the hour:
+
+    scripts/wait-for-deliverable.sh docs/reviews/s289-3-selfdiscrimination.md; echo "WAIT3_RC=$?"; \
+    scripts/wait-for-deliverable.sh docs/reviews/s289-4-selfdiscrimination.md; echo "WAIT4_RC=$?"
+
+Two beats in one `Bash` call: 2 × 110s against a 120s steering budget. The harness
+backgrounded it at the cap and both verdicts went to a file the lead never read. That is
+Check A starvation — committed by the *caller* rather than by the loop, which is the
+failure v0.50.0's script was supposed to make impossible.
+
+**The lead was not being careless. It had a wave of three reviewers to join and the
+script took exactly one path**, so serial beats would have cost 3 × 110s. Chaining was
+the only option the tool left it. A primitive that makes the correct thing expensive
+will be worked around.
+
+- `wait-for-deliverable.sh` now takes **many paths and polls them inside ONE beat**, so a
+  three-teammate wave joins in ~110s instead of 330s. This is the shape a wave dispatch
+  always needed.
+- It also **refuses to sleep twice in one `Bash` call**. Chained invocations share a
+  parent shell, so they share `$PPID`; a sibling beat that already slept means this one
+  does an instantaneous check and returns, naming the right call shape. The call cannot
+  overrun the budget even when the lead composes it wrong.
+- Rule 29 and `implementation.md` now prescribe the wave join and forbid chaining.
+
 ## [0.50.0] — 2026-07-12
 
 ### The lead re-dispatched 13 of 39 teammates, and the skill had told it to

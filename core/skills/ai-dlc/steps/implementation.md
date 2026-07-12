@@ -129,18 +129,25 @@ nothing. Every ai-dlc teammate delivers by file (Rule 20), so the file
 IS the handle. Join it with Rule 29's **bounded file-wait beat**, which
 is a script — do not retype the loop:
 
-    scripts/wait-for-deliverable.sh <deliverable-path>
+    scripts/wait-for-deliverable.sh <path> [<path>...]
 
-    exit 0 — DELIVERED. Consume it, route it into gate-1.
+    exit 0 — DELIVERED. Consume them, route into gate-1.
     exit 2 — WAITING. Beat again (this call WAS the beat).
     exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK.
 
+**A wave dispatched in one message is joined in one call.** Pass every
+teammate's deliverable to a single invocation — they are polled inside
+the SAME beat, so three teammates join in ~110 seconds rather than 330.
+Never chain beats (`wait a.md; wait b.md`) into one `Bash` call: two
+beats is two budgets, the call overruns, the harness backgrounds it, and
+the verdicts land in a file the lead never reads.
+
 Each beat is a tool boundary, so a queued operator lands within one
 budget, and the script bounds the sequence for you (`max_wait_beats`,
-default 10). The lead consumes the deliverable and routes it into gate-1
-exactly as before; nothing is detached and no gate is skipped. The only
-difference is that the operator now gets a tool boundary every 120
-seconds and can steer mid-wave.
+default 10). The lead consumes the deliverables and routes them into
+gate-1 exactly as before; nothing is detached and no gate is skipped.
+The only difference is that the operator now gets a tool boundary every
+120 seconds and can steer mid-wave.
 
 The deliverable path for each teammate is the one recorded in the
 snapshot's **In-Flight Teammates** row at dispatch — the same path, and

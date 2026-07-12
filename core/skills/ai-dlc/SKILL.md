@@ -1250,14 +1250,25 @@ sub-skill, Rule 20(i), so the lead holds no handle whatsoever). Both deliver by
 file write (Rule 20, "File-write deliverable"), so the file IS the handle, waited
 on in beats:
 
-**Do not retype the loop. Call the script:**
+**Do not retype the loop. Call the script -- and pass the WHOLE WAVE to ONE call:**
 
-    scripts/wait-for-deliverable.sh <deliverable-path>
+    scripts/wait-for-deliverable.sh <path> [<path>...]
 
-    exit 0 -- DELIVERED. Consume the file.
-    exit 2 -- WAITING. Beats remain; call again. This IS the beat.
+    exit 0 -- DELIVERED. Every path is on disk. Consume them.
+    exit 2 -- WAITING. At least one is absent; beats remain. Call again.
+              This call WAS the beat.
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
               re-run with --reset), and if it fails again, HARD_BLOCK.
+
+**One Bash call, one beat -- however many deliverables.** All paths are polled
+inside the same beat, so a three-teammate wave joins in ~110 seconds, not 330.
+Never chain beats (`wait a.md; wait b.md`) into one `Bash` call: two beats is
+two budgets, the call overruns, and the harness backgrounds it -- the verdicts
+land in a file you never read, and the operator is gagged for the duration. That
+is Check A starvation committed by the caller instead of by the loop, and it is
+what the reference consumer did within an hour of v0.50.0. The script now
+refuses to sleep twice in one call, but the right shape is one call with every
+path on it.
 
 It enforces both bounds so you do not have to hold them:
 
