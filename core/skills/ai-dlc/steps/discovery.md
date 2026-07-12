@@ -143,7 +143,11 @@ back-to-back without pausing for human input between them:**
    Update the brief with every answer.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — cynical review. Apply all real
-   fixes. Run a second pass. Continue until only nitpicks remain.
+   fixes. Run a second pass. Continue until only nitpicks remain — where
+   "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
+   ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
+   terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
+   that field; rising CRITICALs are a `DIVERGENT_HARD_BLOCK`, not another pass).
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
    **Run sub-step snapshot update after each adversarial pass.**
