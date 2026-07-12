@@ -321,11 +321,12 @@ validation cycles and during implementation (lightweight refresh).
 Check 15, and on resume by `route.md` Step 0a.
 **Finalized** on handoff request.
 
-Structure -- lightweight markdown, no YAML frontmatter, six required
+Structure -- lightweight markdown, no YAML frontmatter, seven required
 sections (Pipeline Position, Sprint Context, Recent Activity, Open
-Items, Locked Decisions, Context Reminders). The canonical per-section
-field schema lives in `gate-validation.md` Check 14, which owns the
-snapshot refresh; `route.md` Step 0 reads it on resume.
+Items, Locked Decisions, In-Flight Teammates, Context Reminders). The
+canonical per-section field schema lives in `gate-validation.md` Check
+14, which owns the snapshot refresh; `route.md` Step 0 reads it on
+resume.
 
 The snapshot is the source of truth for pipeline state. When
 uncertain about current state, read the snapshot, not the
@@ -367,16 +368,16 @@ agent MUST output:
 - Current step file (from snapshot `Pipeline Position`)
 - Last completed gate with timestamp (from snapshot `Pipeline
   Position`)
-- Any in-flight sub-step from `Recent Activity`
+- Any in-flight sub-step from `Recent Activity`, and every
+  `In-Flight Teammates` row with whether its deliverable exists.
+  Exists = DELIVERED: consume it, never re-dispatch. Absent = not
+  dead: resume the wait beat. Unreachable never means dead.
 - Current git branch and last commit (`git branch --show-current` and
   `git log -1 --oneline`)
 
 The agent then proceeds immediately to the next pipeline action in
 the same response. The agent MUST NOT pause for user confirmation.
-The user retains the ability to interrupt on the next turn by sending
-a correction or requesting handoff. The verification turn output
-exists for transparency -- the user sees what the lead believes about
-current state before the lead acts on it.
+(Rationale: `docs/context-hardening-notes.md` R31.)
 
 **Content dropped by re-attachment budget.** Claude Code re-attaches
 the first 5,000 tokens of each invoked skill after compact. If after
@@ -1249,15 +1250,49 @@ sub-skill, Rule 20(i), so the lead holds no handle whatsoever). Both deliver by
 file write (Rule 20, "File-write deliverable"), so the file IS the handle, waited
 on in beats:
 
+**Do not retype the loop. Call the script:**
+
+    scripts/wait-for-deliverable.sh <deliverable-path>
+
+    exit 0 -- DELIVERED. Consume the file.
+    exit 2 -- WAITING. Beats remain; call again. This IS the beat.
+    exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
+              re-run with --reset), and if it fails again, HARD_BLOCK.
+
+It enforces both bounds so you do not have to hold them:
+
 - A beat is ONE foreground `Bash` call that returns **within
   `steering_budget`**. It MAY poll inside itself --
-  `for i in $(seq 1 11); do [ -s "$f" ] && exit 0; sleep 10; done` -- because
-  every beat is still a tool boundary and a queued operator lands within one
-  budget. What it may NOT do is outlast the budget.
+  `for i in $(seq 1 11); do [ -s "$f" ] && exit 0; sleep 10; done` is the shape
+  the script implements -- because every beat is still a tool boundary and a
+  queued operator lands within one budget. What it may NOT do is outlast the
+  budget.
 - Bound the **sequence**, not just the call: `max_wait_beats` (default **10**,
   giving a 20-minute ceiling at the default budget). Exhaustion means the file
   is absent, which Rule 20 already defines as non-delivery -- **re-dispatch**
-  once, then HARD_BLOCK. The wait never runs forever.
+  once, then HARD_BLOCK. The wait never runs forever. The script counts the
+  beats in a sidecar keyed by the deliverable, so the sequence terminates
+  whether or not you remember it.
+
+*Why a script and not a snippet.* A snippet is retyped, and a retyped loop is a
+loop that can be typed wrong -- Check C exists to police exactly that. In the
+reference consumer's S289 implementation phase the lead re-authored this loop
+**75 times**, ~13k resident tokens spent on a fixed procedure it could have
+called in one line.
+
+**Minimum mechanism (Rule 26(c)) -- `wait-for-deliverable.sh`.** Failure caught:
+(i) a hand-typed wait that outlasts the steering budget, gagging the operator --
+the failure Check A counts, worst case 36 minutes in the consumer corpus; and
+(ii) a hand-typed wait with no sequence bound, which never starves the operator
+but advances nothing forever -- the failure Check C counts. The script cannot
+commit either: the beat is clamped inside the budget (reserving a full poll
+interval, so a large poll cannot push it over), and the beats are counted in a
+sidecar so exhaustion declares Rule 20 non-delivery instead of looping.
+False-positive cost: a deliverable that lands in the same second the sequence
+exhausts is reported as non-delivery and re-dispatched once -- one wasted
+dispatch, and the `--reset` re-arm is a single flag. Removal condition: retire
+when the harness offers a join primitive that takes the handle an `Agent`
+actually returns, at which point the file stops being the only handle.
 
 **The call bound and the sequence bound protect different things.** Check A
 (duration) protects the operator's *voice*: an over-budget call is a window in

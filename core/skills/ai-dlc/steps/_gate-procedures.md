@@ -29,14 +29,48 @@ When a step file says "run sub-step snapshot update", execute:
    completed on PRD — _bmad-output/planning-artifacts/prd.md`).
 2. Refresh **Open Items** from current state of
    `docs/escalations/pending.md` and any open triage items.
-3. Do NOT refresh other sections (Pipeline Position, Sprint Context,
+3. Reconcile **In-Flight Teammates**: add a row for every teammate
+   dispatched since the last update (`agent name | role | deliverable
+   path | dispatched-at`), and strike every row whose deliverable has
+   been consumed. This section must be written **at dispatch**, not
+   only at the transition that follows it — a teammate dispatched and
+   compacted-over before its row is written is exactly the teammate
+   the lead will re-dispatch blind.
+4. Do NOT refresh other sections (Pipeline Position, Sprint Context,
    Locked Decisions remain gate-scope). Do NOT re-evaluate context
    reminder thresholds here — reminder evaluation stays at gate
    boundaries per `gate-validation.md` Check 14.
+5. Run the snapshot budget check — **warn-only here, never blocking:**
+
+       scripts/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
+
+   Exit 1 → report the overage in one line and trim at your next
+   natural pause (move superseded narrative verbatim to
+   `pipeline-snapshot-history.md`, which is write-only). The gate
+   remains the blocking point (Check 14); this is an early-warning
+   read so the lead never *discovers* a 2×-budget snapshot at a gate.
+
+   Call it through `verdict.sh`, which prints one line and **exits with
+   the validator's own status**. Do NOT hand-roll
+   `validate-… | grep -E 'OVER|PASS'`: a pipe hands the exit status to
+   `grep`, so a validator that prints FAIL and exits 1 is read as a
+   pass. That is not hypothetical — S289 shipped a fix for exactly this
+   ("the harness could print FAIL and exit 0"), and the lead still wrote
+   71 such wrappers in one phase.
 
 This keeps mid-step compaction survivable: the snapshot's Recent
 Activity reflects the in-flight sub-step rather than only the last
-gate. The full Check 14 still runs at the next gate.
+gate, and In-Flight Teammates carries the deliverable paths that let
+the lead re-join its teammates instead of re-dispatching them.
+
+**Why the budget is checked here and not only at gates.** Check 14
+enforces the 6k budget at gate passages, which is frequent enough in
+planning — but implementation passes only three gates in a phase that
+can run four hours. In S289 the snapshot grew past **200% of budget**
+between gates and was whole-read at each of seven compactions; the lead
+spent turns policing it by hand. A budget enforced only at gates is a
+budget unenforced for the longest, most dispatch-heavy step in the
+pipeline. The full Check 14 still runs at the next gate.
 
 ## Auto-handoff evaluation (referenced by step files)
 
@@ -192,7 +226,7 @@ adversarial pass, or the next story transition orchestration).
 ## Context reminder threshold check (referenced by Check 14)
 
 Invoked by `gate-validation.md` Check 14 at every gate. It reads and
-updates the Context Reminders fields defined in Check 14's six-section
+updates the Context Reminders fields defined in Check 14's seven-section
 snapshot schema (which stays resident); the evaluation mechanics below do
 not.
 

@@ -558,7 +558,7 @@ and current pipeline state. The snapshot is a living document maintained
 throughout the pipeline and is the source of truth for state on handoff,
 post-`/compact` recovery, and lead self-orientation.
 
-**Canonical snapshot structure — six required sections.** Lightweight
+**Canonical snapshot structure — seven required sections.** Lightweight
 markdown, no YAML frontmatter. This is the authoritative definition of
 the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
 `route.md` Step 0 on resume). Refresh these sections at every gate:
@@ -588,12 +588,46 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
 - **Locked Decisions** — locked requirements and human-flagged direction
   changes the lead accepted; append any new ones confirmed during this
   gate.
+- **In-Flight Teammates** — one row per dispatched teammate not yet
+  joined: `agent name | role | deliverable path | dispatched-at`. A row
+  is added at dispatch and struck at join (see `_gate-procedures.md`
+  "Sub-step snapshot update"). At a gate, strike any row whose
+  deliverable now exists and has been consumed. An empty table is
+  normal and means nothing is in flight.
 - **Context Reminders** — `context_reminders_sent` (none | yellow |
   red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
   `last_red_fire_tokens`, `last_red_fire_turns`. Reconcile these from
   the context sensor's sidecar per the procedure in
   `_gate-procedures.md` "Context reminder threshold check". The sensor
   measures and fires; this gate only records what it did.
+
+**Why In-Flight Teammates is a section and not scrollback.** A lead that
+cannot address a teammate reads the failure as teammate *death* and
+re-dispatches work that is still running or already delivered. In S289's
+implementation phase this produced **13 re-dispatches across 39
+dispatches**, plus improvised forensics (worktree emptiness,
+transcript-staleness probes) invented on the spot to guess who was alive.
+
+Two distinct things destroy a teammate handle, and S289 proved the
+second is the one that actually bites:
+
+1. **Compaction** summarizes away the tool result carrying the
+   `agent_id`, so `SendMessage` to it can be lost.
+2. **The wrong join API** — and this needs no compaction at all.
+   `TaskOutput` joins a `task_id`, which only `TaskCreate` produces; an
+   `Agent` returns an `agent_id`. `TaskOutput("s289-qa-1")` returns
+   `No task found with ID` *always*. In S289 all 8 failed `TaskOutput`
+   calls passed an agent name; all 10 that passed a real `task_id`
+   succeeded. The lead read the first failure as "the compaction killed
+   the in-flight QA agent" — it had not. The agent was almost certainly
+   still running, and it got re-dispatched anyway.
+
+The handle that defeats both already exists. Rule 29 establishes that
+every teammate delivers by file and **the file IS the handle** — a path
+on disk needs no `agent_id`, takes no `task_id`, and survives
+compaction. This section carries that path. Recording it costs one table
+row per dispatch; not recording it costs a re-dispatched teammate and a
+confident, wrong story about why.
 
 **Context reminder threshold check (required at every gate).** The
 `ai-dlc-context-sensor.sh` Stop hook measures resident context every turn,
@@ -616,9 +650,14 @@ self-orientation source of truth. Do not skip this check.
 **Snapshot budget (Rule 25(d)) — this check FAILS if the snapshot is over it.**
 After writing, run:
 
-    scripts/validate-artifact-budget.sh --only pipeline-snapshot.md
+    scripts/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
 
-Exit 1 → **Check 14 FAILS.** Trim the snapshot to the six-section schema defined
+`verdict.sh` prints one line and exits with the validator's own status. Never
+pipe a validator into `grep` to read its verdict — the pipe hands the exit
+status to `grep`, and a validator that prints FAIL and exits 1 then reads as a
+pass.
+
+Exit 1 → **Check 14 FAILS.** Trim the snapshot to the seven-section schema defined
 above (the `Recent Activity` section holds the last ~10 entries and nothing more;
 superseded narrative and handoff appendices move to `pipeline-snapshot-history.md`,
 which is write-only), then re-run Check 14 and Check 15.
