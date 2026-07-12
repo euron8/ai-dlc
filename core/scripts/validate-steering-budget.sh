@@ -336,12 +336,18 @@ if (starv.length) {
     console.error(`        ${n}: ${arr.length} call(s), worst ${(arr[0] / 60).toFixed(1)} min`);
   }
   // The remedy depends on the SHAPE of the thing being waited on. Telling a
-  // filesystem poll to "use TaskOutput(task_id)" is useless advice -- a Skill
-  // spawn has no task_id, which is precisely why the lead wrote the poll.
-  console.error(`      Fix (spawn you hold a task_id for -- Agent): dispatch with`);
-  console.error(`      run_in_background:true, then TaskOutput(task_id, block:true, timeout:${BUDGET * 1000}).`);
+  // filesystem poll to "use TaskOutput(task_id)" is useless advice -- neither a
+  // Skill spawn nor an Agent spawn has a task_id, which is precisely why the
+  // lead wrote the poll. Only TaskCreate produces one.
+  console.error(`      Fix (Agent spawn -- teammates: dev, qa, code-reviewer, adversary, analyst):`);
+  console.error(`      Agent returns an agent_id, NOT a task_id, and TaskOutput cannot join it.`);
+  console.error(`      Dispatch run_in_background:true, then join on the DELIVERABLE with Rule 29's`);
+  console.error(`      bounded file-wait beat. Every teammate delivers by file (Rule 20), so the`);
+  console.error(`      file is the handle.`);
+  console.error(`      Fix (TaskCreate -- the only shape that yields a task_id):`);
+  console.error(`      TaskOutput(task_id, block:true, timeout:${BUDGET * 1000}).`);
   if (byTool.Bash) {
-    console.error(`      Fix (Bash waiting on a Skill-spawned deliverable -- no task_id exists):`);
+    console.error(`      Fix (Bash waiting on any file-delivered deliverable -- no task_id exists):`);
     console.error(`      Rule 29's bounded file-wait beat. Each beat is ONE Bash call that returns`);
     console.error(`      within ${BUDGET}s and may poll inside itself; bound the SEQUENCE at`);
     console.error(`      max_wait_beats, then re-dispatch. Never one open-ended poll.`);

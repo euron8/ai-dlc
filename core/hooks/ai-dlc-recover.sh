@@ -102,9 +102,39 @@ this point is still loaded. Do NOT re-Read completed step files or
 already-produced planning artifacts; Rule 23(a) still applies.
 
 Before acting, emit a verification turn naming: the current step file, the last
-gate passed with its timestamp, any in-flight sub-step, and the current git
-branch and last commit. Then proceed to the next pipeline action in the same
-response. Do not pause for user confirmation.
+gate passed with its timestamp, any in-flight sub-step, the In-Flight Teammates
+state below, and the current git branch and last commit. Then proceed to the next
+pipeline action in the same response. Do not pause for user confirmation.
+
+## Your teammates did NOT die -- you lost their handles
+
+Compaction summarized away the tool results carrying your \`agent_id\` handles, so
+you may be unable to address a teammate you dispatched. **That is handle-loss, not
+death.** Do NOT conclude a teammate is dead because you cannot reach it, and do NOT
+re-dispatch on that basis -- you will duplicate work that is still running or
+already delivered.
+
+Be especially careful with one failure that LOOKS like death and is not:
+\`TaskOutput\` joins a \`task_id\`, which only \`TaskCreate\` produces. An \`Agent\`
+returns an \`agent_id\`. **\`TaskOutput(<agent name>)\` returns \`No task found with
+ID\` every time, compaction or no compaction** -- it is a wrong-API error, not a
+dead teammate. Reading it as death is how the reference consumer re-dispatched 13
+of 39 teammates in one phase.
+
+The handle that defeats both already exists, on disk. Rule 29: every teammate
+delivers by file (Rule 20), so **the deliverable file IS the handle** -- it needs
+no \`agent_id\`, takes no \`task_id\`, and outlives a compaction. For each row of the
+snapshot's \`In-Flight Teammates\` section:
+
+- **Deliverable exists and is non-empty** -> the teammate DELIVERED. Consume the
+  file and strike the row. Never re-dispatch it.
+- **Deliverable absent** -> not yet delivered, which is not the same as dead.
+  Resume Rule 29's bounded file-wait beat. Re-dispatch ONLY on Rule 20
+  non-delivery, after \`max_wait_beats\` is exhausted.
+
+Re-dispatching a live or already-delivered teammate is a lead-conduct retro
+finding. If the snapshot has no \`In-Flight Teammates\` section, treat it as empty
+(it predates the section) -- and add the section at your next snapshot write.
 
 ## Context-reminder fire state MUST be reset
 

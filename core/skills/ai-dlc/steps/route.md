@@ -73,7 +73,7 @@ The lead clears the flag when the user directs the resume.
 Run these integrity checks in order:
 
 1. **Required sections present.** Confirm the snapshot contains all
-   six required sections by heading:
+   six load-bearing sections by heading:
    - `Pipeline Position`
    - `Sprint Context`
    - `Recent Activity`
@@ -86,6 +86,17 @@ Run these integrity checks in order:
    > section(s): [list]. Resume is unsafe. Reply `archive` to move
    > this snapshot aside and start fresh, `edit` to have me fill in
    > the missing sections from git history, or `abort` to stop."*
+
+   **`In-Flight Teammates` is the seventh section and AUTO-HEALS — it
+   does NOT fail this check.** If it is absent, create it empty and
+   continue the resume; say so in one line. Its absence is not
+   ambiguous: a snapshot written before this section existed has no
+   in-flight teammates it could have recorded, and an empty table is
+   exactly the right default. Failing a resume on it would strand every
+   snapshot written by a prior version — a migration break for a
+   section whose empty state is already correct. Every other section
+   carries state that cannot be reconstructed by assuming a default,
+   which is why they still FAIL.
 
 2. **`current_step_file` exists on disk.** Read the Pipeline Position
    section and resolve `current_step_file` to
@@ -145,7 +156,7 @@ script names per artifact — they are not interchangeable:
   fidelity-critical rewrite; it is supervised, never automatic).
 - `rotate` → a rotation was **missed**. Move the epoch to a dated archive
   (Rule 25(c)). Never rewrite a log.
-- `trim` → trim `pipeline-snapshot.md` to its six-section schema (Rule 25(a)).
+- `trim` → trim `pipeline-snapshot.md` to its seven-section schema (Rule 25(a)).
 
 Then re-run the script. It must exit 0 before the sprint proceeds.
 
@@ -339,6 +350,9 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
     Check 14 on each gate passage)
   - Open Items (empty)
   - Locked Decisions (empty)
+  - In-Flight Teammates (empty table, header row only:
+    `agent | role | deliverable | dispatched-at`; rows are added at
+    dispatch and struck at join)
   - Context Reminders (initialized here; the `ai-dlc-context-sensor.sh`
     hook owns runtime firing and dedupe in its own sidecar, and Check 14
     reconciles these fields from it at each gate):

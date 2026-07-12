@@ -1231,3 +1231,51 @@ above; the rest is captured here by source.
   recoverable from git).** The clause "never the whole-rulebook tangle Phase 1
   had to untangle" referenced the original layered-rulebook migration; the
   operational point (fencing keeps `core` byte-reconcilable) stands without it.
+
+## 2026-07-12 Follow-up (R31) — Post-compact teammate re-join (v0.50.0)
+
+### R31 -- Verification-turn rationale relocated; In-Flight Teammates added
+
+Two changes to the POST-COMPACT RECOVERY PROTOCOL's verification turn, both
+forced by the same constraint: at HEAD the protocol ended at ~4,743 tokens with
+**7 tokens of slack** under `validate-reattach-budget.sh`'s 4,750 ceiling. The
+resident region is full. Anything added there must be paid for.
+
+**Added (mechanism, stays resident).** The verification turn now names every
+`In-Flight Teammates` row and whether its deliverable exists. This is the
+post-compact re-join: a teammate whose deliverable file exists has DELIVERED and
+must be consumed, never re-dispatched; one whose file is absent is not thereby
+dead. The authoritative long form lives in `ai-dlc-recover.sh` (which has ~4.6 KB
+of headroom under its own 10,000-char cap) and the rationale in
+`gate-validation.md` Check 14. SKILL.md carries only the imperative, because
+SKILL.md's protocol is explicitly the *fallback* for when the hook is absent.
+
+**Relocated here (rationale, was resident).** The two sentences that explained
+*why* the verification turn exists:
+
+> The user retains the ability to interrupt on the next turn by sending a
+> correction or requesting handoff. The verification turn output exists for
+> transparency -- the user sees what the lead believes about current state before
+> the lead acts on it.
+
+Still true, still the reason the turn is printed. It is narrative, not mechanism:
+no lead action changes if it is absent, and Rule 26(c) minimum-mechanism blocks
+are the thing that may *not* relocate — this is not one. Same weighting principle
+as R30: strip by load frequency, and the resident path is the most frequently
+loaded text in the system.
+
+**What this bought.** Protocol end went 19,198 → under the 19,000-byte ceiling,
+restoring slack while *adding* the teammate re-join instruction.
+
+**The failure that prompted it (S289).** The lead re-dispatched **13 of 39**
+teammates in one implementation phase. It could not address a teammate, concluded
+the teammate had died, and dispatched a replacement over work that was still
+running or already delivered. Two causes, and the second is the one that fired:
+compaction can summarize away an `agent_id`, but the *wrong join API* fails with
+no compaction at all — `TaskOutput` takes a `task_id`, which only `TaskCreate`
+produces, so `TaskOutput("s289-qa-1")` returns `No task found with ID` every
+time. All 8 of S289's failed `TaskOutput` calls passed an agent name; all 10 that
+passed a real `task_id` succeeded. The lead read the first failure as *"the
+compaction killed the in-flight QA agent"* — it had not, and `implementation.md`
+had told it to make that call. The deliverable path defeats both causes: it needs
+no `agent_id`, takes no `task_id`, and outlives a compaction.

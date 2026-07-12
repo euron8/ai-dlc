@@ -17,6 +17,103 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.0] — 2026-07-12
+
+### The lead re-dispatched 13 of 39 teammates, and the skill had told it to
+
+`steps/implementation.md` prescribed the join for a dev, code-reviewer, and qa as:
+
+    TaskOutput(task_id, block: true, timeout: 120000)
+
+Those are all `Agent` spawns. `TaskOutput` joins a `task_id`, which only `TaskCreate`
+produces; an `Agent` returns an `agent_id`. **`TaskOutput` cannot join an `Agent`
+spawn** — Rule 29 has said so since v0.44.0, in the same skill, and `implementation.md`
+was never brought onto it. The step file named an API that cannot work, and the lead
+obeyed it.
+
+Measured on the reference consumer's S289 implementation phase (4h25m, 8 stories, one
+lead session):
+
+- **8 `TaskOutput` calls failed** with `No task found with ID`. Every one passed a
+  human-readable agent name (`s289-qa-1`, `s289-cr-8b`). Every one of the 10 calls that
+  passed a real `task_id` succeeded. The split is total.
+- **13 of 39 dispatches were re-dispatches.** The lead could not reach a teammate, read
+  that as the teammate having *died*, and dispatched a replacement over work that was
+  still running or already delivered.
+- It misattributed the cause on the record — *"`s289-qa-1` no longer resolves — the
+  compaction killed the in-flight QA agent"* — and then invented forensics (worktree
+  emptiness, transcript-staleness probes) at each of **7 auto-compactions** to guess who
+  was still alive. The agent had not died. The call had never been capable of working,
+  compaction or no compaction.
+
+The handle that defeats this already existed. Rule 29 establishes that every teammate
+delivers by file (Rule 20), so **the deliverable file IS the handle** — it needs no
+`agent_id`, takes no `task_id`, and outlives a compaction. Nothing carried that path
+across the boundary, so it may as well not have existed.
+
+**Changed**
+
+- `steps/implementation.md` — the dev/reviewer/qa join is now Rule 29's **bounded
+  file-wait beat** on the deliverable, not `TaskOutput`. The old text is replaced, and
+  the reason `TaskOutput` cannot be used is stated inline so it is not re-introduced.
+- **`In-Flight Teammates` is now the seventh snapshot section** (`gate-validation.md`
+  Check 14 owns the schema): one row per dispatched-but-unjoined teammate —
+  `agent name | role | deliverable path | dispatched-at`. Written **at dispatch**, in the
+  same turn as the `Agent` call — a teammate is at risk from dispatch until join, which
+  is exactly the window in which no story transition has happened yet.
+- `hooks/ai-dlc-recover.sh` — the post-compact block now tells the lead its teammates did
+  not die, it lost their handles; that a wrong-API error looks identical to death and is
+  not; and to re-join each row on its deliverable file, re-dispatching only on Rule 20
+  non-delivery.
+- `scripts/validate-steering-budget.sh` — the Check A remediation string said the fix for
+  an `Agent` spawn was `TaskOutput(task_id, ...)`, repeating the same category error the
+  validator's own Check D exists to catch. Corrected.
+- `_gate-procedures.md` — the sub-step snapshot update now reconciles `In-Flight
+  Teammates` and runs `validate-artifact-budget.sh` **warn-only**. Check 14 enforces the
+  6k snapshot budget at gates, which is frequent enough in planning — but implementation
+  passes only three gates in a phase that can run four hours. In S289 the snapshot grew
+  past **200% of budget** between gates and was whole-read at each of seven compactions,
+  the largest single byte-injector in the session.
+
+### The lead's own tool calls were 224k resident tokens; ~26k of that was retyping
+
+Same phase, second measurement. The lead's tool-call *parameters* — not what it read,
+what it wrote — cost **224k resident tokens**: Bash 101k (45%), Agent briefs 61k (27%),
+Edits 26k (12%). Most of the Bash is genuinely one-off investigation and is not
+recoverable. Two slices are pure re-authoring, and both are now commands:
+
+- **`scripts/wait-for-deliverable.sh`** — Rule 29 handed the lead a shell *snippet* to
+  retype for every join. It retyped it **75 times** (~13k tokens). Now one call:
+  `exit 0` delivered, `exit 2` beat again, `exit 1` Rule 20 non-delivery. It enforces
+  **both** of Rule 29's bounds rather than trusting the caller to hold them — the beat
+  is clamped inside the steering budget (reserving a full poll interval, so a large
+  `AI_DLC_WAIT_POLL_SECS` cannot silently push it over), and beats are counted in a
+  sidecar so the sequence terminates whether or not the lead remembers. Checks A and C
+  were policing a handwritten loop after the fact; now the loop cannot be written wrong.
+
+- **`scripts/verdict.sh`** — the validators print their working, so the lead wrapped
+  them: `validate-… 2>&1 | grep -E 'OVER|PASS' | head -2`, **71 times** (~26k tokens),
+  a fresh filter each time. `verdict.sh <validator> [args]` prints one line and **exits
+  with the validator's own status**. That last part is the point: `cmd | grep` takes
+  *grep's* exit status, so a validator that prints `FAIL` and exits 1 reads as a pass —
+  which is not hypothetical, S289 shipped a fix titled *"the harness could print FAIL
+  and exit 0"* and then kept hand-rolling the same pipe. `gate-validation.md` Check 14
+  and the sub-step budget check now call through it.
+
+Both are wired into `scripts/install.sh`'s copy loop, which is hardcoded and has been
+silently missed before.
+
+**Migration: none.** `In-Flight Teammates` **auto-heals** — `route.md` Step 0 creates it
+empty rather than failing the resume. Its absence is unambiguous (a snapshot written
+before the section existed recorded no teammates, and empty is the correct default), so
+failing a resume on it would strand every snapshot written by a prior version for a
+section whose empty state is already right. The other six sections still FAIL on absence,
+because their state cannot be reconstructed by assuming a default.
+
+Rationale relocated to `docs/context-hardening-notes.md` R31: the resident region had
+**7 tokens of slack** under `validate-reattach-budget.sh`'s ceiling, so the verification
+turn's "why" moved out to pay for the teammate re-join instruction moving in.
+
 ## [0.49.0] — 2026-07-12
 
 ### The consumer-catalog namespace was a declaration; nothing enforced it
