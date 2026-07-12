@@ -601,33 +601,12 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   `_gate-procedures.md` "Context reminder threshold check". The sensor
   measures and fires; this gate only records what it did.
 
-**Why In-Flight Teammates is a section and not scrollback.** A lead that
-cannot address a teammate reads the failure as teammate *death* and
-re-dispatches work that is still running or already delivered. In S289's
-implementation phase this produced **13 re-dispatches across 39
-dispatches**, plus improvised forensics (worktree emptiness,
-transcript-staleness probes) invented on the spot to guess who was alive.
-
-Two distinct things destroy a teammate handle, and S289 proved the
-second is the one that actually bites:
-
-1. **Compaction** summarizes away the tool result carrying the
-   `agent_id`, so `SendMessage` to it can be lost.
-2. **The wrong join API** — and this needs no compaction at all.
-   `TaskOutput` joins a `task_id`, which only `TaskCreate` produces; an
-   `Agent` returns an `agent_id`. `TaskOutput("s289-qa-1")` returns
-   `No task found with ID` *always*. In S289 all 8 failed `TaskOutput`
-   calls passed an agent name; all 10 that passed a real `task_id`
-   succeeded. The lead read the first failure as "the compaction killed
-   the in-flight QA agent" — it had not. The agent was almost certainly
-   still running, and it got re-dispatched anyway.
-
-The handle that defeats both already exists. Rule 29 establishes that
-every teammate delivers by file and **the file IS the handle** — a path
-on disk needs no `agent_id`, takes no `task_id`, and survives
-compaction. This section carries that path. Recording it costs one table
-row per dispatch; not recording it costs a re-dispatched teammate and a
-confident, wrong story about why.
+A lead that cannot address a teammate must not conclude the teammate
+died. Being unreachable is not evidence of death — neither a lost
+`agent_id` nor a wrong-API error is. Re-join on the deliverable path
+recorded here; it needs no handle and survives compaction (Rule 29 —
+the file IS the handle). Rationale and the measured failure:
+`docs/context-hardening-notes.md` R31.
 
 **Context reminder threshold check (required at every gate).** The
 `ai-dlc-context-sensor.sh` Stop hook measures resident context every turn,

@@ -1260,15 +1260,12 @@ on in beats:
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
               re-run with --reset), and if it fails again, HARD_BLOCK.
 
-**One Bash call, one beat -- however many deliverables.** All paths are polled
-inside the same beat, so a three-teammate wave joins in ~110 seconds, not 330.
-Never chain beats (`wait a.md; wait b.md`) into one `Bash` call: two beats is
-two budgets, the call overruns, and the harness backgrounds it -- the verdicts
-land in a file you never read, and the operator is gagged for the duration. That
-is Check A starvation committed by the caller instead of by the loop, and it is
-what the reference consumer did within an hour of v0.50.0. The script now
-refuses to sleep twice in one call, but the right shape is one call with every
-path on it.
+**One Bash call, one beat -- however many deliverables.** All paths poll inside
+the same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash` call:
+two beats is two budgets, the call overruns, and the harness backgrounds it --
+Check A starvation committed by the caller instead of by the loop. The script
+refuses to sleep twice in one call; the right shape is one call carrying every
+path.
 
 It enforces both bounds so you do not have to hold them:
 
@@ -1285,25 +1282,16 @@ It enforces both bounds so you do not have to hold them:
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.
 
-*Why a script and not a snippet.* A snippet is retyped, and a retyped loop is a
-loop that can be typed wrong -- Check C exists to police exactly that. In the
-reference consumer's S289 implementation phase the lead re-authored this loop
-**75 times**, ~13k resident tokens spent on a fixed procedure it could have
-called in one line.
-
 **Minimum mechanism (Rule 26(c)) -- `wait-for-deliverable.sh`.** Failure caught:
-(i) a hand-typed wait that outlasts the steering budget, gagging the operator --
-the failure Check A counts, worst case 36 minutes in the consumer corpus; and
-(ii) a hand-typed wait with no sequence bound, which never starves the operator
-but advances nothing forever -- the failure Check C counts. The script cannot
-commit either: the beat is clamped inside the budget (reserving a full poll
-interval, so a large poll cannot push it over), and the beats are counted in a
-sidecar so exhaustion declares Rule 20 non-delivery instead of looping.
-False-positive cost: a deliverable that lands in the same second the sequence
-exhausts is reported as non-delivery and re-dispatched once -- one wasted
-dispatch, and the `--reset` re-arm is a single flag. Removal condition: retire
-when the harness offers a join primitive that takes the handle an `Agent`
-actually returns, at which point the file stops being the only handle.
+(i) a hand-typed wait that outlasts the steering budget, gagging the operator
+(Check A); and (ii) a hand-typed wait with no sequence bound, which advances
+nothing forever (Check C). The script can commit neither -- the beat is clamped
+inside the budget, and beats are counted in a sidecar so exhaustion declares
+Rule 20 non-delivery. False-positive cost: a deliverable landing in the same
+second the sequence exhausts is re-dispatched once; `--reset` re-arms it.
+Removal condition: retire when the harness offers a join primitive that takes
+the handle an `Agent` actually returns. Rationale:
+`docs/context-hardening-notes.md` R31.
 
 **The call bound and the sequence bound protect different things.** Check A
 (duration) protects the operator's *voice*: an over-budget call is a window in

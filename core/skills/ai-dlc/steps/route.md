@@ -88,15 +88,12 @@ Run these integrity checks in order:
    > the missing sections from git history, or `abort` to stop."*
 
    **`In-Flight Teammates` is the seventh section and AUTO-HEALS — it
-   does NOT fail this check.** If it is absent, create it empty and
-   continue the resume; say so in one line. Its absence is not
-   ambiguous: a snapshot written before this section existed has no
-   in-flight teammates it could have recorded, and an empty table is
-   exactly the right default. Failing a resume on it would strand every
-   snapshot written by a prior version — a migration break for a
-   section whose empty state is already correct. Every other section
-   carries state that cannot be reconstructed by assuming a default,
-   which is why they still FAIL.
+   does NOT fail this check.** If absent, create it empty, say so in one
+   line, and continue. Its absence is unambiguous (a snapshot predating
+   the section recorded no teammates, and empty is the correct default),
+   so failing on it would strand every snapshot written by a prior
+   version. The other six carry state no default can reconstruct, which
+   is why they still FAIL.
 
 2. **`current_step_file` exists on disk.** Read the Pipeline Position
    section and resolve `current_step_file` to

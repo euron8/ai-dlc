@@ -1279,3 +1279,57 @@ passed a real `task_id` succeeded. The lead read the first failure as *"the
 compaction killed the in-flight QA agent"* — it had not, and `implementation.md`
 had told it to make that call. The deliverable path defeats both causes: it needs
 no `agent_id`, takes no `task_id`, and outlives a compaction.
+
+### R31 (cont.) — the measured failures, kept out of the resident path
+
+The step files and SKILL.md carry the *mechanism* and the Rule 26(c)
+minimum-mechanism blocks. Everything below is the narrative behind them, and it
+lives here because `implementation.md` is whole-re-read after every compaction
+(8 times in the S289 phase) and `gate-validation.md` 7 times — narrative in
+those files is narrative paid for on every compaction, which is the very loop
+v0.50.0 exists to shorten. Weight strips by load frequency (R30).
+
+**The join-API defect.** `implementation.md` prescribed
+`TaskOutput(task_id, block: true, timeout: 120000)` as the join for dev,
+code-reviewer, and qa. All three are `Agent` spawns; `TaskOutput` takes a
+`task_id`, which only `TaskCreate` produces. It cannot join an `Agent`. In S289:
+8 `TaskOutput` calls failed with `No task found with ID`, every one having passed
+a human-readable agent name; all 10 that passed a real `task_id` succeeded. The
+lead read the first failure as *"s289-qa-1 no longer resolves — the compaction
+killed the in-flight QA agent."* It had not. The call had never been capable of
+working, with or without a compaction, and the skill had told it to make that
+call. It then re-dispatched **13 of 39** teammates over work that was still
+running or already delivered, and invented forensics (worktree emptiness,
+transcript-staleness probes) at each of 7 compactions to guess who was alive.
+
+Two things destroy a teammate handle, and the second is the one that bites:
+compaction can summarize away an `agent_id`; the wrong join API fails with no
+compaction at all. The deliverable path defeats both — it needs no `agent_id`,
+takes no `task_id`, and outlives a compaction.
+
+**The snapshot budget.** Check 14 enforces the 6k budget at gate passages, which
+is frequent enough in planning. Implementation passes three gates in four hours.
+The S289 snapshot grew past **200% of budget** between them and was whole-read at
+each compaction — the single largest byte-injector in the session — while the
+lead spent turns policing it by hand (19 validator runs, repeated trims).
+
+**The retyped beat.** Rule 29 gave the lead a shell snippet to retype for every
+join. It retyped it **75 times** (~13k resident tokens), and a retyped loop is a
+loop that can be typed wrong — which is all Check C was ever policing.
+
+**The grep-wrapped validator.** The validators print their working, so the lead
+wrapped them: `validate-… | grep -E 'OVER|PASS'`, **71 times** (~26k tokens), a
+fresh filter each time. A pipe hands the exit status to `grep`, so a validator
+that prints FAIL and exits 1 reads as a pass. S289 had already shipped a fix
+titled *"the harness could print FAIL and exit 0"* and then hand-rolled the same
+pipe 71 more times. `verdict.sh` exits with the validator's own status.
+
+**What v0.50.0 got wrong (fixed in v0.50.1).** The wait script took exactly one
+path, so a wave of three teammates would have cost 3 × 110s of serialized wall
+clock. The consumer chained beats into one `Bash` call instead —
+`wait a.md; wait b.md` — which is 2 × 110s against a 120s budget: the harness
+backgrounded it at the cap and both verdicts went to a file the lead never read.
+Check A starvation, committed by the caller rather than by the loop. The lead was
+not careless; a primitive that makes the correct thing expensive gets worked
+around. The script now polls many paths inside ONE beat, and refuses to sleep
+twice in one call (chained invocations share a parent shell, hence `$PPID`).
