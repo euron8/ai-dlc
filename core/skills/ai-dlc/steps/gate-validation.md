@@ -42,7 +42,7 @@ gate that edits `scripts/*.sh`.
 <!-- GATE_MANIFEST v1 -->
 | Gate type      | Required checks (beyond universal core)          |
 |----------------|--------------------------------------------------|
-| planning       | 1c, 17, 20, 23                                   |
+| planning       | 1c, 17, 20, 23, 24                               |
 | story          | 3a, 3b, 5, 17                                    |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                  |
 | sprint-review  | 18, 21                                           |
@@ -683,8 +683,22 @@ tool_use_id: <toolu_... from the Skill tool response>
 mode: subagent
 lead_role: <step-file-that-invoked>
 transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
+findings_critical: <int>                     # required for adversarial-review passes
+findings_major: <int>                        # required for adversarial-review passes
+findings_minor: <int>                        # required for adversarial-review passes
+verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>   # required for adversarial-review passes
 SKILL_INVOCATION_PROVENANCE_END -->
 ```
+
+**The four adversarial fields (v0.48.0).** `findings_*` and `verdict` are REQUIRED
+on every `bmad-review-adversarial-general` / `bmad-validate-prd` pass and are
+absent elsewhere (party-mode and elicitation produce no severity residue). They
+exist because a verdict the machinery cannot read is a verdict the lead adjudicates
+in prose: on S289 the terminal pass reported 0 CRITICAL / 0 MAJOR, wrote "the repair
+wave converged," and stamped `EXIT CONDITION NOT MET` — free text, in a key no
+script parsed, and the key itself drifted mid-series (`exit_condition_met:` on pass
+2, `verdict:` on passes 3–4). The residue decides the verdict; see the mapping in
+`team-roles/adversary.md` ("The verdict"). Check 24 enforces it.
 
 **Mode enforcement (Rule 20 — all four sub-skills).** `mode` MUST be
 `subagent` for EVERY validation sub-skill, not only party-mode: the
@@ -961,6 +975,59 @@ visible line a reviewer sees. Removal condition: retire once the write
 path is GENERATED from `sprint_id` rather than prose-specified in each
 Section 0, so it cannot drift.
 
+### Check 24. The adversarial cycle CONVERGED (Rule 8).
+<!-- CHECK_LOADED: 24 -->
+
+**Scope.** Fires at every planning-phase gate whose step ran an adversarial
+review cycle (`research-requirements`, `architecture`, `discovery`,
+`stories-test-strategy`). Skips story, implementation, sprint-review, and
+retro gates.
+
+**Check.** Invoke `scripts/validate-adversarial-convergence.sh --series
+<path-prefix-of-this-step's-pass-series>`; exit 0 required. It reads the
+`findings_critical` / `findings_major` / `verdict` fields of every pass in the
+series (schema above, mapping in `team-roles/adversary.md`) and enforces four
+things:
+
+- **A — VOCABULARY.** Every pass declares a `verdict:` from the enumerated set.
+  A pass with no verdict, or a free-text one, is un-adjudicable.
+- **B — CONSISTENCY.** The verdict agrees with the residue. `0 CRITICAL + 0
+  MAJOR` means the exit condition IS met — the ladder puts MINOR/NIT in the
+  nitpick bucket and the exit condition is *"until only nitpicks remain."* A
+  clean residue stamped `EXIT_CONDITION_NOT_MET` is a review refusing to
+  converge; a dirty residue stamped `EXIT_CONDITION_MET` is one claiming a
+  convergence it does not have.
+- **C — DIVERGENCE.** CRITICALs rising pass-over-pass must stamp
+  `DIVERGENT_HARD_BLOCK`. Rule 8: divergence is a HARD_BLOCK, not a reason for
+  another pass.
+- **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`.
+
+It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
+that to each planning step's own intensity gate; duplicating it here would fail
+every legitimate `standard` / `lightweight` single-pass cycle.
+
+Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Its decoy case
+(`nitpicks-remain`) is the one that decides shippability — a terminal pass with
+0 CRITICAL / 0 MAJOR and five open MINORs must PASS.
+
+**PASS:** exit 0. **FAIL:** exit 1 — a pass with no verdict, a verdict
+contradicting its residue, an unescalated divergent pass, or a series whose last
+pass is not `EXIT_CONDITION_MET`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate passing over
+an adversarial cycle that never converged. Observed on S289 — pass 4 reported 0
+CRITICAL, 0 MAJOR, wrote *"the repair wave converged"* in prose, stamped
+`verdict: EXIT CONDITION NOT MET` in the field, and the §5 planning gate passed
+anyway; the CRITICALs had run 3 → 4 → 7 across the three passes before it with no
+escalation. Rule 8 already required convergence and already called divergence a
+HARD_BLOCK — but nothing counted a CRITICAL and nothing read a verdict, so the
+requirement was unfalsifiable and termination came from the lead overriding the
+adversary's own field. False-positive cost: one line per pass, naming the field to
+fix; the residue is already in the report, so stamping it costs the adversary
+nothing it has not already computed. Removal condition: retire once the provenance
+block is GENERATED from the findings table rather than hand-stamped, so the verdict
+cannot disagree with the residue beside it.
+
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 <!-- CHECK_LOADED: H1 -->
 
@@ -975,8 +1042,9 @@ recursive-invocation fixture.
 **Scope.** Meta-check. Runs at every gate. Verifies that each
 phase-specific check added to this file (currently: Check 1c, Check 3b
 locked-anchor, Check 16's content-verification strengthening, Check 17
-provenance, Check 23 draft-stamps) ships with an adversarial self-test
-fixture under `tests/fixtures/` that the check catches.
+provenance, Check 23 draft-stamps, Check 24 adversarial-convergence) ships
+with an adversarial self-test fixture under `tests/fixtures/` that the check
+catches.
 
 **Check.** For each phase-specific check enumerated below, confirm
 both (i) the fixture directory exists with a README.md describing
@@ -995,6 +1063,8 @@ Enumerated checks under H1:
   `tests/fixtures/check-17-bypass/`.
 - **Check 23 (analyst-draft sprint stamps)** — fixture at
   `tests/fixtures/check-23-draft-stamps/`.
+- **Check 24 (adversarial cycle convergence)** — fixture at
+  `tests/fixtures/check-24-adversarial-convergence/`.
 
 **Manifest completeness (v0.24.0 Lever 2 — slicing fidelity prover).**
 After the fixture enumeration, and only when `H1_DEPTH` was not already

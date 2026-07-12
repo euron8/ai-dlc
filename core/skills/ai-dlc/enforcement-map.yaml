@@ -239,6 +239,16 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/check-23-draft-stamps]
 
+  - id: "24"
+    title: Adversarial cycle convergence (Rule 8)
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-adversarial-convergence.sh
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-24-adversarial-convergence]
+
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
     gate_types: [universal]

@@ -91,7 +91,13 @@ between them:**
    Update the PRD with every clarification.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
 3. `/bmad-review-adversarial-general` — 2+ passes. Apply all fixes
-   between passes. Continue until only nitpicks remain.
+   between passes. Continue until only nitpicks remain — and **"nitpick" is
+   the MINOR/NIT rung of the `team-roles/adversary.md` severity ladder, not a
+   feeling.** Zero CRITICAL and zero MAJOR IS the exit condition met, with
+   MINORs still open; the terminating pass stamps `verdict: EXIT_CONDITION_MET`
+   and gate Check 24 reads that field. A pass reporting MORE CRITICALs than the
+   one before it is a `DIVERGENT_HARD_BLOCK` — stop and change approach, do not
+   run another pass (Rule 8).
    **Source fidelity pass:** Verify requirements implement what was
    requested, not a generalized or lower-effort alternative.
    **Run sub-step snapshot update after each adversarial pass.**

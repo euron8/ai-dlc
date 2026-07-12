@@ -63,6 +63,41 @@ Severity inflation destroys the signal it borrows. When every finding is CRITICA
 the lead cannot triage, repairs the wrong things first, and the cycle stops
 converging.
 
+## The verdict — say the outcome in the field the gate reads
+
+Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted
+residue and exactly one verdict from this set. There is no free-text verdict.
+
+```
+findings_critical: <int>
+findings_major: <int>
+findings_minor: <int>
+verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
+```
+
+**The residue decides the verdict. You do not.**
+
+- `findings_critical == 0` and `findings_major == 0` → **`EXIT_CONDITION_MET`**.
+  The step's exit condition is *"continue until only nitpicks remain,"* and by the
+  ladder above MINOR/NIT **is** the nitpick bucket. A clean-of-CRITICAL-and-MAJOR
+  residue with open MINORs is a MET exit condition, not a nearly-met one. Say MET.
+- any CRITICAL or MAJOR open → `EXIT_CONDITION_NOT_MET`.
+- more CRITICALs than the pass before you → `DIVERGENT_HARD_BLOCK`, and say why in
+  your first line. This is not "not met, run another pass." Rule 8: divergence is a
+  HARD_BLOCK. The lead must stop and change approach, not review the next wave.
+
+`scripts/validate-adversarial-convergence.sh` (gate Check 24) reads exactly these
+four fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`.
+
+*Why this exists.* v0.46.0 told you a clean verdict was a valid outcome and gave
+you nowhere to write one. On S289 pass 4 the residue was 0 CRITICAL, 0 MAJOR, 2
+MINOR; the report's prose said *"the repair wave converged … I probed the repair
+hard and it holds"* — and its field said `verdict: EXIT CONDITION NOT MET`, the
+same string pass 3 emitted. The lead read the prose, applied the two one-line
+deletions, and passed the gate anyway. **A review that converges in prose and
+refuses to converge in its field has not converged: it has handed the decision
+back to the context whose independence you exist to supply.**
+
 ## Later passes review the REPAIR, not the document again
 
 Pass 1 reviews the artifact. **Pass 2 and beyond review what the previous pass
@@ -81,12 +116,15 @@ changed** — the repair is the artifact under review. You MUST:
    stop and change approach, not run another pass. Silence there turns a broken
    cycle into an endless one.
 
-*Why this exists.* On S289 the passes went 3 → 3 → 6 → 9 CRITICALs and never
-converged. Pass 3's own summary: "Pass-2's repair wave injected five new CRITICALs,
-three of them defects the repair itself created." The reviews were not getting
-sharper; the repairs were manufacturing work. A role that must find something will
-always find something, and the newest, least-defended text — the last pass's
-repairs — is where it will look.
+*Why this exists.* On S289's `research-requirements` cycle the CRITICALs per pass
+ran **3 → 4 → 7 → 0** — rising every pass until the repair step finally *cut* text
+instead of adding it. Derivation, so the next reader can re-check it rather than
+inherit it: `s289-rr-adversarial-pass1.md:180` (3), `pass2.md:252` (4),
+`pass3.md:517` (7), `pass4-verification.md:492` (0). Pass 3's own summary:
+"Pass-2's repair wave injected five new CRITICALs, three of them defects the repair
+itself created." The reviews were not getting sharper; the repairs were
+manufacturing work. A role that must find something will always find something, and
+the newest, least-defended text — the last pass's repairs — is where it will look.
 
 ## Ownership
 

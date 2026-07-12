@@ -17,6 +17,84 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.48.0] — 2026-07-12
+
+### The adversary converged in its prose and refused to converge in its field
+
+v0.46.0 told the adversary that *"a clean verdict is a valid outcome, and on a later
+pass it is the expected one."* It gave the role no field to write one in.
+`SKILL_INVOCATION_PROVENANCE v1` had **no verdict key at all**, so each pass invented
+its own — and the invented vocabulary had no success value.
+
+Measured on the S289 `research-requirements` cycle, the first cycle to run under the
+v0.46.0 contract:
+
+| Pass | CRITICAL | What it stamped | Cite |
+|---|---|---|---|
+| 1 | 3 | *(no verdict field at all)* | `s289-rr-adversarial-pass1.md:180` |
+| 2 | 4 | `exit_condition_met: NO` — a *different key* than pass 3 used | `pass2.md:252-254` |
+| 3 | 7 | `verdict: EXIT CONDITION NOT MET` | `pass3.md:517-518` |
+| 4 | **0** | `verdict: EXIT CONDITION NOT MET` — **the identical string** | `pass4-verification.md:492-493` |
+
+Pass 4's residue was 0 CRITICAL, 0 MAJOR, 2 MINOR, and its prose said *"The repair wave
+converged… I probed the repair hard — every site of every finding — and it holds."*
+Under the severity ladder v0.46.0 itself shipped, where **MINOR / NIT is the nitpick
+bucket**, and the step's exit condition of *"continue until only nitpicks remain,"* the
+exit condition **was met**. The adversary would not say so in the field, because the
+field had no word for it. The lead read the prose instead, applied the two one-line
+deletions, and passed the §5 planning gate.
+
+**So the gate passed while the last adversarial artifact of record said the exit
+condition was not met.** Termination came from the lead overriding the adversary's own
+verdict — the exact dependency on the authoring context that the adversary's
+independence exists to remove. Rule 8 had required convergence since v0.46.0 and had
+called divergence a HARD_BLOCK. Nothing counted a CRITICAL. Nothing read a verdict. The
+requirement was unfalsifiable, so it was decorative.
+
+**The fix is a vocabulary and a script that reads it.**
+
+`core/team-roles/adversary.md` gains a **The verdict** section: four required provenance
+fields (`findings_critical`, `findings_major`, `findings_minor`, `verdict`) and the rule
+that **the residue decides the verdict, not the reviewer** — `0 CRITICAL + 0 MAJOR` ⇒
+`EXIT_CONDITION_MET`; any CRITICAL or MAJOR ⇒ `EXIT_CONDITION_NOT_MET`; more CRITICALs
+than the pass before ⇒ `DIVERGENT_HARD_BLOCK`.
+
+`core/scripts/validate-adversarial-convergence.sh` (new) + **gate Check 24** enforce it
+across a step's whole pass series: **A** every pass declares an enumerated verdict, **B**
+the verdict agrees with the residue it reports, **C** a divergent pass stamps
+`DIVERGENT_HARD_BLOCK`, **D** the last pass is `EXIT_CONDITION_MET`. Run against the real
+S289 series it returns exit 1 on five violations — both un-verdicted passes, both
+divergent steps (3→4, 4→7), and the terminal `NOT_MET` the §5 gate passed over.
+
+The three steps that run the cycle (`research-requirements`, `architecture`, `discovery`)
+now say what "nitpick" means instead of leaving it to the reader: it is the ladder's
+MINOR/NIT rung, not a feeling.
+
+**The decoy that decides the check.** `tests/fixtures/check-24-adversarial-convergence/`
+seeds five series, and the load-bearing one is `nitpicks-remain`: a terminal pass with 0
+CRITICAL, 0 MAJOR and **five open MINORs**, which must **PASS**. A validator that reads
+"the cycle must converge" as "the last pass must have zero findings" fails it — and in
+doing so makes *"continue until only nitpicks remain"* unreachable all over again, one
+layer down. That is the v0.46.0 bug reintroduced by its own fix, and the fixture is what
+stops it shipping.
+
+`SKILL.md` is deliberately **untouched**: Rule 8 already said the cycle must converge and
+that divergence is a HARD_BLOCK. The defect was never the rule — it was that no artifact
+could express compliance and no script could measure it. The re-attach window stays at
+4,743 tokens (7 under the ceiling), which is also why the edit had to land outside it.
+
+### Fixed — the number that motivated v0.46.0 was wrong
+
+v0.46.0's changelog and `adversary.md` both asserted *"CRITICALs per pass ran 3 → 3 → 6 →
+9 and never converged."* The artifacts it cites give **3 → 4 → 7 → 0**. The qualitative
+defect was real — findings rose 9 → 14 → 18 and CRITICALs rose every pass — but the
+series was miscounted, in a release whose whole subject is a count nobody could check.
+
+Both sites are corrected, and each figure now carries the `file:line` it derives from, so
+the next reader re-checks it instead of inheriting it. This is the fifth instance of the
+same class: **a number read off a stale label and repeated as fact.** The derivation trail
+is the cheap durable guard, and it is the only part of this that generalizes.
+
 ## [0.47.0] — 2026-07-11
 
 ### The reconcile blanked the config it exists to preserve — and had no gate to notice
@@ -75,8 +153,14 @@ only wired into the mode nobody runs twice.
 
 Operator observation: adversarial review cycles churn endlessly, each pass returning more
 findings than the last. Measured on S289's research-requirements step, CRITICALs per pass ran
-**3 → 3 → 6 → 9** and never converged. Rule 8's exit condition is *"continue until only
-nitpicks remain."* **It was unreachable by construction.**
+**3 → 4 → 7** across the three passes that ran under the old contract, rising every time
+(`s289-rr-adversarial-pass1.md:180`, `pass2.md:252`, `pass3.md:517`; total findings 9 → 14 →
+18). Rule 8's exit condition is *"continue until only nitpicks remain."* **It was unreachable
+by construction.**
+
+> **Corrected in v0.48.0.** This entry originally read `3 → 3 → 6 → 9`, a miscount against
+> the artifacts it cites. The defect it describes was real; the series was not. See v0.48.0,
+> "the number that motivated v0.46.0 was wrong."
 
 `core/team-roles/adversary.md`, clause 4:
 

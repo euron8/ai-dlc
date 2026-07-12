@@ -269,7 +269,11 @@ between them:**
    compatibility, migration risk, integration seams, and
    over-engineering (Rule 26: mechanism beyond requirements, parallel
    paths, unjustified guards — propose removals as findings). Apply
-   all fixes between passes. Continue until only nitpicks remain.
+   all fixes between passes. Continue until only nitpicks remain — where
+   "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
+   ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
+   terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
+   that field; rising CRITICALs are a `DIVERGENT_HARD_BLOCK`, not another pass).
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `_gate-procedures.md`
    \"Auto-handoff evaluation\") at `Seam D` with the label
