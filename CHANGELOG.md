@@ -17,6 +17,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-07-11
+
+### The reconcile blanked the config it exists to preserve — and had no gate to notice
+
+Found by a real consumer pull, `0.45.2 → 0.46.0`, on the one file that release touched:
+`core/team-roles/adversary.md`.
+
+`setup-sites.md` is the manifest of every location `ai-dlc-setup` fills with consumer
+config. Step 7 runs the mask/reinject transform **only for files the manifest lists**;
+everything else is a blind overwrite. The manifest did not list `adversary.md`.
+
+It qualified. `ai-dlc-setup/SKILL.md` STEP 2 declares `{adversary_model_personal}` and
+`{adversary_model_bedrock}`, and the manifest's own authoring rule is *"every entry MUST
+trace to an explicit 'Files to replace in' directive in STEP 2."* It was simply missed:
+**`adversary.md` shipped in v0.30.0 (`3727f68`); `setup-sites.md` was last touched in
+v0.21.0 (`43bffa0`).** For nine minor versions the manifest was stale and nothing said so.
+
+The consequence, had the pull been applied as written:
+
+```
+- Personal: `/model claude-opus-4-8[1m]`          ← consumer's live config
++ Personal: `/model {adversary_model_personal}`   ← what the overwrite would have written
+```
+
+Every adversary dispatch then fails on an invalid `/model`. This is the exact failure class
+the mask/reinject transform was built to prevent, arriving through the one door it wasn't
+watching.
+
+**And nothing in the run would have caught it.** `untangle`'s §7v criterion 4 already
+asserts *"zero remaining `{...}` template tokens in any team-role file"* — but **7v is
+untangle-only**. The ordinary pull, the path every consumer actually runs, had no
+equivalent. A one-line grep stood between a silent config wipe and a loud stop, and it was
+only wired into the mode nobody runs twice.
+
+### Fixed
+
+- **`reconcile/setup-sites.md`** — declares `adversary-model-personal` and
+  `adversary-model-bedrock`, so mask/reinject fires on `core/team-roles/adversary.md`.
+
+### Added
+
+- **Leftover-token gate in `ai-dlc-update` step 7** (`core/skills/ai-dlc-update/SKILL.md`).
+  After the last write and before the re-stamp, the ordinary pull now greps consumer core
+  for a template token surviving on a live line (`<!-- ... -->` doc comments excluded —
+  those legitimately carry the token text and must survive from `theirs`). A hit means some
+  file has an undeclared setup site; the run STOPS before the re-stamp, names the file and
+  token, and the missing site is added to the manifest.
+
+  The data fix above closes *this* miss. The gate closes the *class*: a hand-maintained
+  manifest will go stale again, and the next time it does the run says so instead of
+  quietly overwriting a live value.
+
 ## [0.46.0] — 2026-07-11
 
 ### The adversary could not converge — its contract made a clean review a failure
