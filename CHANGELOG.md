@@ -17,6 +17,142 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.49.0] — 2026-07-12
+
+### The consumer-catalog namespace was a declaration; nothing enforced it
+
+`steps/gate-validation.md` has always said that a consumer's `extensions/checks/`
+numbers are their own namespace, that they do not map to core's, and that fire history
+must be aligned by title and **never** by number. The rule was right. Nothing
+implemented it.
+
+Extensions are **additive**, so at load time core's checks and a consumer's extension
+checks render into ONE merged list under the SAME integers. The rule told the reader not
+to conflate them — but the reader is a lead who then writes a bare `Check 24: PASSED`
+into the gate log, the durable audit artifact. The whole burden sat on recall, at
+exactly the moment the number became permanent evidence, and no rendering anywhere
+distinguished the catalogs at the point they are actually used.
+
+Measured on a real consumer at v0.48.0:
+
+- **Four number-shared / title-different pairs**: 20, 22, 23 and — created by v0.48.0
+  itself — 24 (core "The adversarial cycle CONVERGED" vs consumer "Financial-display
+  ground-truth live-verify").
+- **It had already broken.** The "different gate types disambiguate them" luck ran out
+  at the sprint-review gate, where the consumer's check 21 and core's check 21 both
+  fire. The lead hit two check-21s in one gate entry and improvised `(consumer Check
+  21)` by hand into the audit record. Nobody noticed because it was papered over in
+  prose.
+- **Two absorbed duplicates, carried ~35 minor versions, never once reported.** Core's
+  own text records both ("This is graph's Check 21 absorbed as distribution Check 20";
+  "Absorbed from graph's Check 33"). The retirement signal could not see either,
+  because it joined on the *number* and upstream had absorbed them under different ones.
+- **One heading typo disabled four tools at once.** v0.48.0 shipped `### Check 24.`
+  where every other check is `### 24.`. Every anchor extractor keys on `^### <n>.`, so
+  check 24 vanished from all of them — including the linter that would have caught the
+  collision v0.48.0 created, and `audit-machinery-efficacy.js`, whose per-check token
+  span runs to the next *matched* header and therefore folded check 24's entire cost
+  into check 23.
+
+### Added
+
+- **Catalog labels at the point of use** (Rule 27(d), gate-validation "Consumer-catalog
+  crosswalk"). Check headings and gate-log row ids carry their catalog — `[core] 24 — …`
+  vs `[ext:<id>] 24 — …`, reusing the `catalog` key `GATE_METRIC v1` already emits. **The
+  integer never moves**: the label is *added*, so history maps by identity, nothing is
+  renumbered, and an upstream release can never force a consumer to renumber.
+- `EXTENSION-CHECK-NUMBER-COLLISION` and `EXTENSION-RESTATES-CORE` in
+  `reconcile/layer-drift.sh`, so a consumer learns of a collision from the pull that
+  creates it (tagged `NEW-THIS-PULL`) rather than from a confused gate log months later.
+  Report-only: a collision is decidable and consumer-fixable, and a consumer must never
+  be unable to take a security fix because its own catalog needs relabelling.
+- `layer-catalog-collision` adversarial fixture pinning all four catalog states.
+- `validate-enforcement-map.sh` I6 (heading ⇔ `CHECK_LOADED` anchor), I7 (the
+  manifest-bypass fixture actually seeds the slice it claims), I8 (fixture packaging:
+  `core/fixtures/` == install loop == uninstall loop).
+
+### Changed
+
+- **Absorption detection is level-triggered, not edge-triggered.** It used to fire only
+  on the single pull that landed an absorption ("present at theirs, absent at base") and
+  never again — so a missed report meant the duplicate rotted forever, which is exactly
+  what happened twice. Absorption is a *state*; `base` now only tags the finding.
+- **The absorption join is number-agnostic**, matching on title, so a check upstream
+  absorbed under a *different* number is finally visible.
+- **`validate-layer-entries.sh` W1 split by title and given teeth.** Same number +
+  different title is now an **ERROR** (E6) for check extensions; same number + same title
+  stays a warning (the Rule 27(c) retirement worklist). The linter was already correct
+  and already firing on every real consumer — into nothing: it was WARN-only and wired
+  into **no CI anywhere**. Now wired into `validate-ci-gates.yml`.
+- **The title matcher is tight enough to be a join key.** The old rule (≥2 shared tokens
+  of the first 4) matched consumer check 22 "Smoke test evidence" to core check 11 "Smoke
+  test coverage for user-facing changes" on `{smoke, test}` — as a join key that proposes
+  *deleting* a live deploy-validate check on a financial system. Now Jaccard ≥0.6, or
+  ≥0.75 containment of the shorter title (which forgives an appended provenance tag
+  without forgiving a different check).
+- **`HARD-` is a prefix contract again.** `layer-drift.sh` documents it as one and the
+  report builds its blocking list from `HARD-*`, but `SKILL.md`'s apply gate enumerated
+  two names literally — so the next `HARD-` status added would have appeared in the
+  report under "blocks apply" and then not blocked it.
+
+### Fixed
+
+- `audit-machinery-efficacy.js` attributed consumer narrative "catches" to distribution
+  checks **by number** — the exact mis-attribution the crosswalk rule forbids. Core's
+  check 24, shipped in v0.48.0, was credited with 15 escalation + 35 retro references
+  belonging to the *consumer's* check 24 and classified `EARNED`: a check born that
+  release, wearing someone else's fire history. Narrative references are now counted
+  against the title-aligned consumer number, and a check with no aligned counterpart
+  honestly reports `NO-CONSUMER-TRACE`.
+- `### Check 24.` normalized to `### 24.`; anchor extractors additionally tolerate the
+  `Check ` prefix, letter ids (`Check AP`, `Check VH` — two `push_candidate: true`
+  extensions that yielded *zero* anchors, so absorption of either could never fire), and
+  an em-dash separator.
+- `uninstall.sh` named 5 of the 9 shipped fixtures, silently orphaning four.
+- **The pull filed every fixture where nothing reads it.** `reconcile/preclassify.sh`'s
+  `map_consumer()` had no `core/fixtures/` case, so the `core/*` catch-all sent fixtures
+  to `.claude/fixtures/` — while `install.sh` writes `tests/fixtures/`, the only path
+  `gate-validation.md` and H1 ever reference. Every pull wrote a shadow copy into a dead
+  directory, and an upstream fixture never reached the path its own self-test looks in.
+  Caught live: v0.48.0 delivered the check-24 fixture to `.claude/fixtures/`, H1 failed,
+  and the consumer's lead hand-moved the directory and committed *"H1 fixture
+  remediated"* — manually patching around this mapping. An adversarial fixture shipped
+  to a path no check reads is worse than no fixture: the catalog claims the check is
+  self-tested and it is not.
+- **The pull filed every CI template where nothing runs it** — the same defect, same
+  catch-all. `core/ci-templates/` went to `.claude/ci-templates/`, while workflows run
+  from `.github/workflows/`, which is where `install.sh` copies them. Upstream CI
+  updates therefore reached no one, and a real consumer's `validate-retro-compliance.yml`
+  has been dormant for that reason rather than any of the ones previously assumed.
+  Now mapped to `.github/workflows/` — **and CI stays opt-in**: `install.sh` has always
+  copied workflows only `if [ -d .github/workflows ]`, so `preclassify.sh` mirrors that
+  guard exactly (`CONSUMER-MISSING-NOOP`). Updating a workflow a consumer *has* is a
+  fix; conjuring CI on a consumer that has none is a behavioral change nobody asked the
+  pull to make.
+- I8 now **evaluates** `map_consumer()` and fails if any `core/` subtree the installer
+  also places disagrees with it. The catch-all had silently invented a second home for
+  two of them.
+
+- **The pull now retires its own orphans.** New `ORPHANED-RELOCATED` bucket (status `O`):
+  when a core subtree's destination changes, the copies already written to the old
+  consumer path do not move and do not vanish — every later pull refreshes only the new
+  path, so the orphan silently diverges from the file it is a copy of. That is the rot
+  the pull exists to prevent, and leaving it to a migration note in a changelog is how it
+  never gets done. Emitted **level-triggered** (an orphan is a *state* of the consumer
+  tree, not an event in the upstream diff), gated per-path at apply exactly like
+  `UPSTREAM-DELETED`, and **safe by construction**: it proposes deleting a file only when
+  the bytes still hash-match the blob we shipped. A consumer-edited orphan
+  (`ORPHANED-RELOCATED+consumer-modified`) or a file upstream never shipped
+  (`ORPHANED-UNKNOWN`) is surfaced for adjudication and never auto-deleted. On a real
+  consumer this retires all 29 stale `.claude/fixtures/` files on the next pull, with no
+  hand-migration.
+- `blob_hash()` in `preclassify.sh` could never report `MISSING`. A bare
+  `git rev-parse <rev>:<path>` on a path absent from `<rev>` **echoes its own argument to
+  stdout** and *then* exits 128, so `|| echo MISSING` produced the two-line string
+  `"<rev>:<path>\nMISSING"` — and every `[ "$h" = MISSING ]` test silently read false. The
+  existing buckets escaped it only by accident (the `A` branch never reads `base_h`, the
+  `D` branch never reads `theirs_h`). Now `-q --verify`, which prints nothing and exits 1.
+
 ## [0.48.0] — 2026-07-12
 
 ### The adversary converged in its prose and refused to converge in its field

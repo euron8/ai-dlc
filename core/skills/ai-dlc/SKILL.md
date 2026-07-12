@@ -1102,6 +1102,20 @@ subject to" -- is an **override wearing extension frontmatter**: file it in
 which is a file-grain anchor, so a restriction hidden in one is invisible to every
 check the pull performs.
 
+**(d) An extension's numbered sections are ITS OWN catalog -- label them.** Because
+extensions are additive, an extension's `### 24.` and core's `### 24.` render into ONE
+merged list under ONE integer. The number stops being a referent, and the lead then
+writes that number into the gate log, where the ambiguity becomes permanent. So a
+check defined in `extensions/checks/` belongs to **that file's** catalog, keyed by its
+`id:` frontmatter, and its heading carries the label: `### 24. [ext:<id>] <title>`
+(core's carries `[core]`). The integer is never changed -- the label is *added* -- so
+history maps by identity and no consumer renumbers on an upstream release. Loading is
+what binds the catalog: a check read from `extensions/checks/` is that file's check
+**however its heading is written**, so an un-migrated consumer is correct, just not yet
+legible. Enforced by `scripts/validate-layer-entries.sh` (E6) and, at pull time, by
+`EXTENSION-CHECK-NUMBER-COLLISION` in the reconcile report. Full convention:
+`steps/gate-validation.md`, "Consumer-catalog crosswalk".
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or
 false-conflicts against it; and, per

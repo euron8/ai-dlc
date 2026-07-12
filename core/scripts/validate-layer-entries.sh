@@ -31,10 +31,22 @@
 #     E3 override: `shadows:` target file does not exist
 #     E4 extension: missing `kind:`/`hooks:`/`id:`
 #     E5 extension: `hooks:` target file does not exist
+#     E6 check extension defines a check NUMBER its hooked core file also defines,
+#        with a DIFFERENT title -> a number collision. Both catalogs render into
+#        one merged list under one integer, so the bare "Check N" the lead writes
+#        into the gate log has no referent. The consumer-catalog namespace was a
+#        DECLARATION (gate-validation.md, "Consumer-catalog crosswalk") with no
+#        mechanism behind it; this is the mechanism. Scoped to `kind: check`
+#        because a check number is committed to the durable audit record.
 #
 #   WARN (smells — judgement required)
-#     W1 extension defines a step number its hooked core file also defines
-#        (restatement / collision: a "Step N" reference becomes ambiguous)
+#     W1 extension defines a section number its hooked core file also defines with
+#        the SAME title -> a restatement, which Rule 27(c) forbids: the copy cannot
+#        drift-check against the original, so it forks silently. WARN, not ERROR,
+#        only because a real consumer already carries ten and a linter that errors
+#        ten times on first contact gets switched off. They are a retirement
+#        worklist. Same-number/different-title in a NON-check extension also lands
+#        here (a step number never reaches the audit trail).
 #     W2 extension contains restricting language -> an additive entry that
 #        RESTRICTS core is an override wearing extension frontmatter
 #     W3 a `Step <n>` reference whose anchor is defined NOWHERE in the rendered
@@ -87,11 +99,67 @@ fm() { # fm <file> <key> -- first frontmatter scalar, trimmed
 # Section anchors a file DEFINES. Both `### 5c. Title` headings and
 # `**7a-post. Title**` bold anchors (an override defines 7a-post that way; a
 # heading-only scan would report every reference to it as dangling).
+#
+# The optional `Check ` prefix is NOT cosmetic tolerance. Core wrote one check as
+# `### Check 24.` while every other is `### 24.`; a digit-anchored regex skipped
+# it, so W1 -- the one check that would have caught the v0.48.0 number collision
+# -- was blind to precisely the check that caused it. Match the prefix, strip it,
+# and the anchor set is the catalog again.
 defined_anchors() {
   [ -f "$1" ] || return 0
-  { grep -Eho '^#{2,4}[[:space:]]+[0-9]+[a-z-]*\.' "$1" 2>/dev/null | sed -E 's/^#+[[:space:]]+//'
-    grep -Eho '^\*\*[0-9]+[a-z-]*\.'               "$1" 2>/dev/null | sed -E 's/^\*\*//'
+  { grep -Eho '^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
+      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//'
+    grep -Eho '^\*\*(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
+      | sed -E 's/^\*\*(Check[[:space:]]+)?//'
   } | sed -E 's/\.$//' | sort -u
+}
+
+# Normalized heading TEXT for one anchor. A shared NUMBER is not a shared check:
+# core's 24 is "The adversarial cycle CONVERGED", a consumer's 24 is
+# "Financial-display ground-truth live-verify". The number cannot tell those apart
+# and the title can, which is exactly what the Consumer-catalog crosswalk rule has
+# always said (align by title/intent, never by number).
+heading_title() { # heading_title <file> <anchor>
+  awk -v a="$2" '
+    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s);
+                     gsub(/^ +| +$/,"",s); return s }
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+      h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
+      sub("^" a "\\.[ \t]*","",h)
+      print nrm(h); exit
+    }' "$1" 2>/dev/null
+}
+
+# Do two normalized titles name the SAME check? Jaccard over significant tokens,
+# OR near-total containment of the shorter title in the longer.
+#
+# Jaccard alone is set at 0.6, with a stop-list that drops scope suffixes ("gate",
+# "only"), because the obvious cheap rule -- share 2 of the first 4 words -- is not
+# safe here: consumer "Smoke test evidence (deploy-validate gate only)" and core
+# "Smoke test coverage for user-facing changes?" share {smoke, test} and would be
+# judged the same check. Acting on that would propose a live deploy-validate check
+# for deletion. A loose title match is worse than no title match.
+#
+# Containment covers the other direction, which jaccard gets wrong: a layer that
+# restates a core section and appends a provenance tag ("Local tree freshness
+# precondition" vs "... [PI-S259-1 addendum]") is ONE section, but the extra tokens
+# drag jaccard under the bar and it reads as a collision. Score the shorter title's
+# coverage instead, and the suffix stops mattering. The bar stays at 0.75 so the
+# smoke-test pair above (0.4 contained) is still correctly two different checks.
+same_title() { # same_title <normA> <normB>
+  [ -n "$1" ] && [ -n "$2" ] || return 1
+  awk -v A="$1" -v B="$2" '
+    BEGIN {
+      split("the a an of and for to in on this its only gate gates", s, " ")
+      for (i in s) stop[s[i]] = 1
+      n = split(A, x, " "); for (i = 1; i <= n; i++) if (!(x[i] in stop)) a[x[i]] = 1
+      n = split(B, y, " "); for (i = 1; i <= n; i++) if (!(y[i] in stop)) b[y[i]] = 1
+      for (k in a) { na++; u++; if (k in b) inter++ }
+      for (k in b) { nb++; if (!(k in a)) u++ }
+      if (u == 0 || na == 0 || nb == 0) exit 1
+      smaller = (na < nb) ? na : nb
+      exit (inter / u >= 0.6 || inter / smaller >= 0.75) ? 0 : 1
+    }'
 }
 
 # What may satisfy a "Step N" reference. The rulebook spells step sections TWO ways:
@@ -178,12 +246,42 @@ while IFS= read -r f; do
     err "$(rel "$f"): hooks target '$hooks' does not exist at $core_path"; continue
   fi
 
-  # W1 — extension defines a step number core also defines, for the same target.
+  # E6 / W1 — extension defines a section number its hooked core file also defines.
+  #
+  # The number alone cannot say WHICH defect this is, and the two need opposite
+  # remedies. Split on the title:
+  #
+  #   different title -> COLLISION. Two unrelated checks now carry one integer in
+  #     the merged document, and the lead writes that integer into the gate log.
+  #     `Check 24: PASSED` stops having a referent. ERROR for a check extension:
+  #     it is a mechanized invariant with no false-positive path, and the number
+  #     lands in the durable audit record, which is what makes it dangerous.
+  #   same title      -> RESTATEMENT. Rule 27(c) forbids it outright ("An extension
+  #     MUST NOT restate ... a core section"): the copy cannot drift-check against
+  #     the original, so it silently forks. Still WARN -- a real consumer carries
+  #     ten of these, and a linter that errors ten times on first contact is a
+  #     linter that gets switched off (see SEVERITY note at the top of this file).
+  #     They are the retirement worklist, not a build break.
+  #
+  # ERROR is scoped to `kind: check`. The same collision exists in steps-domain
+  # extensions, but a step number is never committed to evidence -- it is a
+  # legibility problem in the rendered pipeline, not a corrupted audit trail.
   core_anchors="$(defined_anchors "$core_path")"
   while IFS= read -r a; do
     [ -n "$a" ] || continue
-    if printf '%s\n' "$core_anchors" | grep -Fxq -- "$a"; then
-      warn "$(rel "$f"): defines section '$a.' which core '$hooks' also defines — an extension is ADDITIVE; restating or renumbering a core section makes \"Step $a\" ambiguous in the rendered pipeline"
+    printf '%s\n' "$core_anchors" | grep -Fxq -- "$a" || continue
+
+    t_ext="$(heading_title "$f" "$a")"
+    t_core="$(heading_title "$core_path" "$a")"
+
+    if [ -n "$t_ext" ] && [ -n "$t_core" ] && ! same_title "$t_ext" "$t_core"; then
+      msg="$(rel "$f"): NUMBER COLLISION on '$a.' — this defines \"$t_ext\" while core '$hooks' defines \"$t_core\" at the same number. Extensions are ADDITIVE, so both render into one merged list under one integer: a bare \"Check $a\" in a gate log, retro, or escalation has no referent. Give this check a catalog-labelled heading (\"### $a. [ext:$id] …\") per the Consumer-catalog crosswalk."
+      case "$kind" in
+        check) err "$msg" ;;
+        *)     warn "$msg" ;;
+      esac
+    else
+      warn "$(rel "$f"): RESTATES core section '$a.' (\"${t_core:-$a}\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core section — the copy cannot drift-check against the original, so it forks silently and then contradicts it. If this entry only ADDS to the core check, hook it without redefining the number; if it RESTRICTS core, it is an override wearing extension frontmatter and belongs in overrides/ with a base_sha."
     fi
   done < <(defined_anchors "$f")
 

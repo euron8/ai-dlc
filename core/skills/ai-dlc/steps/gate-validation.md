@@ -67,14 +67,55 @@ is safe (the check self-skips), under-inclusion silently drops a check a
 gate needs. Mechanics and the multi-row cases (Checks 8/9, 17):
 `docs/context-hardening-notes.md` (R30).
 
-## Consumer-catalog crosswalk (do not mis-attribute fire history)
+## Consumer-catalog crosswalk (label the catalog; never join by number)
 
 A consumer's extension check numbers (`extensions/checks/`, Rule 27) are its own
-namespace and DO NOT map to this file's numbers. Align consumer fire-history by
-check *title/intent*, never by number. Full crosswalk rules, the
-absorption-provenance convention, and the repeatable evidence tool
-`scripts/audit-machinery-efficacy.js`: `docs/context-hardening-notes.md` (R30)
-and `docs/v0.27.0-machinery-efficacy-audit.md`.
+namespace and DO NOT map to this file's numbers. Extensions are **additive**, so at
+load time both catalogs render into ONE merged list under the SAME integers: `24` is
+this file's adversarial-convergence check *and*, in a consumer, whatever that
+consumer numbered 24. **A bare number is not a referent**, and the moment it is
+written into a gate log it becomes a permanent one.
+
+**So label the catalog at the point of use** — in the heading the lead reads, and in
+the gate-log row the lead writes. The distinction must survive into the durable
+record; it cannot rest on the reader recalling this rule at the instant the number is
+committed to evidence.
+
+- Core check heading: `### 24. [core] The adversarial cycle CONVERGED (Rule 8).`
+- Extension check heading: `### 24. [ext:<id>] Financial-display ground-truth live-verify.`
+- Gate-log row id: `[core] 24 — <title>` / `[ext:<id>] 24 — <title>`
+
+`<id>` is the extension file's `id:` frontmatter — the same key `GATE_METRIC v1`
+already emits in its `catalog` field (Check 12), so the human render and the machine
+record name the catalog identically. **The integer never moves**: `Check 24` ≡
+`[ext:x] 24`. The label is added, nothing is renumbered, so existing history maps by
+identity and no consumer must renumber on an upstream release.
+
+A check read from `extensions/checks/` belongs to that file's catalog **however its
+heading is written** — a consumer that has not yet added the label is still correct,
+merely not yet legible. Adding the label is hardening, not a prerequisite.
+
+**Align fire history by title/intent, never by number** — including "catches" counted
+from retros and escalations. Resolve a bare `Check N` written before a consumer
+adopted the label through that consumer's crosswalk table (`extensions/README.md`),
+**not by date**: Check 12 mandates that gate logs are rotated cut-and-paste into
+archives, so a git date on a rotated line is the *rotation* date, not the authorship
+date. Dating a reference is unsound here; titling it is not.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: two unrelated checks sharing one
+integer in the merged document, so `Check 24: PASSED` in the audit trail has no
+referent — and, in the other direction, a consumer check upstream already absorbed
+under a *different* number, duplicated forever because the retirement signal joined on
+the number. Enforced by `scripts/validate-layer-entries.sh` (E6: a check extension
+that redefines a core check number with a different title is an ERROR) and
+`ai-dlc-update`'s `reconcile/layer-drift.sh`
+(`EXTENSION-CHECK-NUMBER-COLLISION` / `EXTENSION-RESTATES-CORE`, both title-joined and
+level-triggered, so a duplicate absorbed releases ago still reports). Remove when core
+and consumer catalogs no longer share a rendered namespace.
+
+Full crosswalk rules, the absorption-provenance convention, and the repeatable
+evidence tool `scripts/audit-machinery-efficacy.js`: `docs/context-hardening-notes.md`
+(R30) and `docs/v0.27.0-machinery-efficacy-audit.md`.
 
 ## Validation Checklist
 
@@ -430,6 +471,16 @@ The gate log entry MUST include:
 
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
+
+**Every per-check row id carries its CATALOG** — `[core] 24 — <title>` for a check
+from this file, `[ext:<id>] 24 — <title>` for one from a consumer
+`extensions/checks/` file (`<id>` = that file's `id:` frontmatter). A bare `24` is
+NOT acceptable: extensions are additive, so both catalogs render into one merged list
+under one integer, and the number you write here is the durable audit record. This
+row is the exact point at which the ambiguity becomes permanent, which is why the
+label belongs here and not only in a rule upstream of it (see "Consumer-catalog
+crosswalk" above). Include the title in the row as well — it is the key that resolves
+any historical entry written before the label existed.
 
 **Post-write verification.** After appending the gate log entry, read
 the **tail** of `_bmad-output/implementation-artifacts/gate-log.md`
@@ -975,7 +1026,7 @@ visible line a reviewer sees. Removal condition: retire once the write
 path is GENERATED from `sprint_id` rather than prose-specified in each
 Section 0, so it cannot drift.
 
-### Check 24. The adversarial cycle CONVERGED (Rule 8).
+### 24. The adversarial cycle CONVERGED (Rule 8).
 <!-- CHECK_LOADED: 24 -->
 
 **Scope.** Fires at every planning-phase gate whose step ran an adversarial

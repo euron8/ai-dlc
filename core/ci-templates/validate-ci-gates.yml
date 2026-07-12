@@ -35,3 +35,28 @@ jobs:
 
       - name: validate-ci-gates
         run: bash scripts/validate-ci-gates.sh
+
+  validate-layer-entries:
+    name: validate-layer-entries
+    runs-on: ubuntu-latest
+    # Rule 27 layer hygiene. This linter existed, was correct, and fired on every
+    # real consumer — into nothing. It was wired to no workflow anywhere, so its
+    # findings (including live gate-check NUMBER COLLISIONS, where a core check and
+    # a consumer extension check share one integer in the merged document and the
+    # bare "Check N" written into the gate log stops having a referent) were printed
+    # to a terminal nobody ran. A detector with no caller is not a detector.
+    #
+    # Needs full history: E2 asks whether an override's base_sha resolves in the
+    # CONSUMER repo, which is how a poisoned (wrong-repo) sha is caught. A shallow
+    # clone makes every sha unresolvable and the check silently vacuous.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: bash -n syntax check
+        run: bash -n scripts/validate-layer-entries.sh
+
+      - name: validate-layer-entries
+        run: bash scripts/validate-layer-entries.sh

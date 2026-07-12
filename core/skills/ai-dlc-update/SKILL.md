@@ -179,6 +179,24 @@ Every consumer block that differs from upstream is one of:
    - `UPSTREAM-DELETED` (upstream removed it, consumer untouched vs base) →
      **delete the consumer file (gated — destructive, see step 7)**
    - `UPSTREAM-DELETED-NOOP` (upstream removed it, consumer already lacks it) → **noop**
+   - `CONSUMER-MISSING-NOOP` (the consumer opted out of this destination — today only
+     `.github/workflows/`, which `install.sh` has always written *only* if the directory
+     already exists) → **noop**. Updating a workflow a consumer HAS is a fix; creating
+     CI on a consumer that has none is a change nobody asked the pull to make.
+   - `ORPHANED-RELOCATED` (status `O`) — a file at a consumer path this distribution
+     **used to** write and no longer targets, whose content still hash-matches the blob
+     we shipped, so it is provably our copy → **delete the consumer file (gated —
+     destructive, see step 7)**. When a core subtree's destination changes, the copies
+     already written to the old path do not move and do not vanish; every later pull
+     refreshes only the new path, so the orphan silently diverges from the file it is a
+     copy of. Retiring it is the pull's job — a migration note in a CHANGELOG is how it
+     never gets done. Emitted **level-triggered**: an orphan is a *state* of the consumer
+     tree, not an event in the upstream diff, so a pull that touches no file in the moved
+     subtree must still report it.
+   - `ORPHANED-UNKNOWN` / `ORPHANED-RELOCATED+consumer-modified` → **needs semantic
+     classify, never auto-deleted.** The orphan is either something upstream never
+     shipped or something the consumer edited. The pull only ever proposes destroying a
+     file whose bytes it can prove it wrote.
    - `BOTH-CHANGED` / `BOTH-ADDED` / `UPSTREAM-MOD+consumer-deleted` /
      `UPSTREAM-DELETED+consumer-modified` → **needs semantic classify**
 3b. **Template pre-classification** (the generated files outside `core/`):
@@ -213,12 +231,31 @@ Every consumer block that differs from upstream is one of:
      changed, so the section cannot be *proven* safe. Surface for re-confirmation.
      Conservative on purpose — an unprovable section is never reported as OK.
    - `OVERRIDE-ANCHOR-UNRESOLVED` → upstream restructured the anchor away.
-   - `EXTENSION-RETIRE-CANDIDATE` → upstream now defines a section this extension
-     defines, and did not at `base` (titles agree, not merely the number — consumer
-     gate-check numbers are a sanctioned separate namespace). Upstream **absorbed**
-     it. Per Rule 27(b) the consumer MUST retire the entry; list it in the report's
-     retirement list. This is the only signal that closes the absorption loop —
-     without it every successful absorption leaves a duplicate behind.
+   - `EXTENSION-RETIRE-CANDIDATE` → upstream **absorbed** a section this extension
+     defines: the titles agree (never merely the number — consumer gate-check numbers
+     are a sanctioned separate namespace) and core did not carry it at `base`. The
+     match is number-agnostic, so it fires even when upstream absorbed the check under
+     a *different* number. Per Rule 27(b) the consumer MUST retire the entry; list it
+     in the report's retirement list. Without this signal every successful absorption
+     leaves a duplicate behind.
+   - `EXTENSION-RESTATES-CORE` → the same title agreement, but core already carried
+     the section **at `base`**. The consumer has been duplicating a core section for
+     some number of releases and was never told, because the retirement signal used to
+     be edge-triggered — it could only fire on the one pull that landed the absorption,
+     and said nothing on every pull after. Rule 27(c) forbids restating core (the copy
+     cannot drift-check against the original, so it forks silently and then contradicts
+     it). List it in the retirement list too, but the remedy is a judgement: retire it
+     if it merely duplicates core; refile it in `overrides/` with a `base_sha` if it
+     hardens or restricts core.
+   - `EXTENSION-CHECK-NUMBER-COLLISION` → core defines this extension's check *number*
+     with a **different title**. Extensions are additive, so the two catalogs render
+     into one merged list under one integer and the bare `Check N` the lead commits to
+     the gate log stops having a referent. The exact complement of the absorption
+     signal. Tagged `NEW-THIS-PULL` (this pull created it — route to the
+     needs-confirmation list so the operator acknowledges it) or `PRE-EXISTING` (the
+     migration worklist). **Report-only: it never blocks `apply`.** A collision is
+     decidable and consumer-fixable, and a consumer must never be unable to take a
+     security fix because its own catalog needs relabelling.
    - `EXTENSION-HOOK-DRIFT` → the hooked core file changed. Extensions have no
      section anchor (`hooks:` is file-grain), so this is the strongest statement
      available: re-read the entry against the new core text.
@@ -241,13 +278,22 @@ Every consumer block that differs from upstream is one of:
    returned with `needs_operator_confirmation: true` (per
    `reconcile/classify-block.md`), each with its specific question, listed
    separately from and in addition to the conflict list (a block can be in
-   neither, either, or both) — a **settings-provisioning question**, obtained by
+   neither, either, or both), **plus every step-3c
+   `EXTENSION-CHECK-NUMBER-COLLISION` tagged `NEW-THIS-PULL`** — that collision did
+   not exist before this pull and this pull is what created it, so the operator
+   learns of it here, at the moment it is introduced, rather than from a confused
+   gate log months later. The question is: which catalog does a bare `Check <n>` in
+   your gate log now mean, and when will this entry be relabelled `[ext:<id>]`? —
+   a **settings-provisioning question**, obtained by
    running `reconcile/settings-merge.sh --check` (no writes): when it reports
    `model_row_needed=yes`, reproduce its `ask:` lines verbatim as an operator
    question (the model row: `1M` / `200K` / `auto`; default `auto`, which writes
    nothing). The answer is passed to `--model-row` at apply (step 7) — a
    **deletions list**: every
-   `UPSTREAM-DELETED` path (upstream removed the file, consumer untouched),
+   `UPSTREAM-DELETED` **and `ORPHANED-RELOCATED`** path (upstream removed the file, or
+   moved where it ships it and the stale copy at the old path is provably ours — for an
+   orphan, name the path it now lives at, so the operator can see the file is being
+   retired, not lost), consumer untouched,
    each with its reason line, since applying one `git rm`s a consumer file
    and is gated per-path at apply (step 7) — and a **template-changes
    list**: every `TEMPLATE-PROSE-MERGE` / `TEMPLATE-JSON-MERGE` file from step
@@ -255,9 +301,14 @@ Every consumer block that differs from upstream is one of:
    (e.g. "CLAUDE.md: remove Context-Mode Usage section") and, for any file
    that hit anchor-drift, its flag for adjudication — and, from step 3c, a
    **layer-drift list** (every `OVERRIDE-DRIFT-*` / `OVERRIDE-ANCHOR-UNRESOLVED` /
-   `EXTENSION-HOOK-DRIFT` entry with its target and reason), a **retirement list**
-   (every `EXTENSION-RETIRE-CANDIDATE`: the entry, the section upstream absorbed,
-   and the note that retirement is an operator-gated delete per Rule 27(b)), and a
+   `EXTENSION-HOOK-DRIFT` / `EXTENSION-CHECK-NUMBER-COLLISION` entry with its target
+   and reason — a collision tagged `NEW-THIS-PULL` ALSO goes in the
+   needs-confirmation list below, because this pull is what created it), a
+   **retirement list**
+   (every `EXTENSION-RETIRE-CANDIDATE` and `EXTENSION-RESTATES-CORE`: the entry, the
+   core section it duplicates, and the note that retirement is an operator-gated
+   delete per Rule 27(b) — upstream never writes the layer, so it cannot remove the
+   entry for you), and a
    **blocking-layer list** (every `HARD-*` status — these block `apply` outright).
    This is a fixed filename
    overwritten on every
@@ -336,10 +387,21 @@ Every consumer block that differs from upstream is one of:
    only removes the adjudication sub-step.
 
    **Blocking-layer gate (step 3c `HARD-*` statuses).** If layer-drift reported
-   any `HARD-OVERRIDE-BASE-CONSUMER-SHA` or `HARD-OVERRIDE-BASE-UNRESOLVABLE`,
-   STOP before any write. Those overrides have an unusable `base_sha`, so whether
+   **any status whose name begins `HARD-`** — match on the PREFIX, not on a list of
+   names you remember; today that is `HARD-OVERRIDE-BASE-CONSUMER-SHA` and
+   `HARD-OVERRIDE-BASE-UNRESOLVABLE`, and the set is meant to grow —
+   STOP before any write. `layer-drift.sh` documents the prefix as the contract
+   ("statuses prefixed HARD- must block `apply`") and the report above builds its
+   blocking list from `HARD-*`, so enumerating the two names here instead would mean
+   the next `HARD-` status anyone adds is silently non-blocking: it would appear in
+   the report under "blocks apply" and then not block it.
+   Those overrides have an unusable `base_sha`, so whether
    upstream changed the rule they shadow is **undecidable** — applying the core
    overwrite would let a stale override silently keep shadowing a rule that moved.
+   `HARD-` is reserved for exactly that: a condition the tool cannot DECIDE. A
+   decidable, consumer-fixable finding (e.g. `EXTENSION-CHECK-NUMBER-COLLISION`)
+   must never be `HARD-`, or a consumer becomes unable to take a security fix until
+   it has relabelled its own catalog — and someone will comment out the gate.
    Present each to the operator with the correct distribution sha to re-stamp
    (Rule 27(a)); apply only after they are fixed or the operator explicitly
    accepts the risk per entry. `apply` authorizes writes; it does not authorize
@@ -393,6 +455,17 @@ Every consumer block that differs from upstream is one of:
      treat the classifier's finding as a **conflict** — the consumer's
      modifications may be an un-pushed innovation worth preserving as an
      extension rather than deleting; operator adjudicates, default keep-ours.
+   - `ORPHANED-RELOCATED` files (this distribution moved where it ships a subtree;
+     the copy left at the old consumer path still hash-matches the blob we wrote
+     there) → **`git rm` the stale copy, under the exact same per-path operator
+     gate as `UPSTREAM-DELETED`.** Same destructiveness, same rule: never
+     batch-approve, never infer approval from the `apply` argument. State the new
+     path in the prompt — the file is being *retired*, not lost, and an operator who
+     cannot see that will refuse a safe deletion. `ORPHANED-UNKNOWN` and
+     `ORPHANED-RELOCATED+consumer-modified` are **never deleted**: the first is a
+     file upstream never shipped, the second the consumer edited, and the pull only
+     ever proposes destroying bytes it can prove it wrote. Both go to the operator
+     as conflicts, default keep-ours.
    - `TEMPLATE-PROSE-MERGE` files (`CLAUDE.md`, `coding-conventions.md`,
      `QUICKSTART.md` — from step 3b) → run the **marker-anchored mask/reinject
      transform** in `reconcile/template-sites.md`: capture the consumer's
