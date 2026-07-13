@@ -97,6 +97,13 @@ key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
 # the loop. If a sibling beat ran in this same shell moments ago, we do a single
 # instantaneous check and return: we never sleep twice inside one Bash call.
 # ---------------------------------------------------------------------------
+# Prune stale shell markers before trusting one. They are keyed by PID, and PIDs
+# recycle -- a marker left by a long-dead shell whose PID is reissued to ours
+# would suppress a legitimate beat. Anything older than the budget cannot be a
+# sibling of THIS call by definition, so it is safe to drop, and this also stops
+# the markers accumulating forever.
+find "$COUNTER_DIR" -maxdepth 1 -name '.shell-*' -mmin +"$(( (BUDGET / 60) + 1 ))" -delete 2>/dev/null || true
+
 SIBLING="${COUNTER_DIR}/.shell-${PPID}"
 MAY_SLEEP=1
 if [ -f "$SIBLING" ]; then
@@ -134,7 +141,17 @@ for t in $TARGETS; do
     continue
   fi
 
-  printf '%s' "$(( b + 1 ))" > "$c" 2>/dev/null || true
+  # The counter is bumped ONLY if this invocation actually sleeps -- see below.
+  # The sequence bound caps WAITING TIME (max_wait_beats x steering_budget); a
+  # beat that did not wait is not a beat, and charging one for it burns the
+  # budget without buying any wait. That is not academic: the reference consumer
+  # wrapped beats in `for i in 3 4 5; do wait-for-deliverable.sh ...; done`, so
+  # two of every three invocations were non-sleeping siblings -- and each still
+  # took a beat. The counter hit the bound while the teammate was alive, the
+  # script declared NON-DELIVERY, and Rule 20 tells the lead to re-dispatch on
+  # that. The deliverable landed 4 minutes later. A false NON-DELIVERY re-
+  # dispatches a live teammate, which is the exact failure this whole mechanism
+  # exists to prevent.
   PENDING="${PENDING}${PENDING:+|}$t"
 done
 IFS="$OLDIFS"
@@ -154,11 +171,23 @@ fi
 if [ "$MAY_SLEEP" -eq 0 ]; then
   IFS='|'; for t in $PENDING; do echo "WAITING   $t -- not yet delivered."; done; IFS="$OLDIFS"
   echo "  NOTE: a sibling beat already ran in this same Bash call, so this one did"
-  echo "  not sleep -- two beats in one call would push it past the ${BUDGET}s steering"
-  echo "  budget (Rule 29, Check A). Pass every deliverable to ONE call instead:"
+  echo "  NOT sleep and did NOT consume a beat -- two beats in one call would push"
+  echo "  it past the ${BUDGET}s steering budget (Rule 29, Check A). Do not loop or chain"
+  echo "  beats; pass every deliverable to ONE call, and beat again on the NEXT call:"
   echo "    scripts/wait-for-deliverable.sh path-a path-b path-c"
   exit 2
 fi
+
+# This invocation is going to wait, so it costs a beat. Charge it here and
+# nowhere else.
+IFS='|'
+for t in $PENDING; do
+  c="${COUNTER_DIR}/$(key_of "$t")"
+  b=0; [ -f "$c" ] && b="$(cat "$c" 2>/dev/null || echo 0)"
+  case "$b" in ''|*[!0-9]*) b=0 ;; esac
+  printf '%s' "$(( b + 1 ))" > "$c" 2>/dev/null || true
+done
+IFS="$OLDIFS"
 
 # ---------------------------------------------------------------------------
 # ONE beat, polling every pending path. The loop sleeps AFTER its check, so the

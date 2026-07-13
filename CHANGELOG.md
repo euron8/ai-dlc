@@ -17,6 +17,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.50.3] — 2026-07-12
+
+### A beat that never waited was still charged, so the script cried NON-DELIVERY on a live teammate
+
+v0.50.1's chained-beat guard stops a second invocation in the same `Bash` call from
+sleeping — two sleeps in one call would blow the steering budget. But it charged the beat
+anyway: the counter was incremented *before* the guard ran.
+
+The sequence bound exists to cap **waiting time** (`max_wait_beats × steering_budget`). A
+beat that did not wait is not a beat, and charging one for it burns the budget without
+buying any wait.
+
+Observed live within the hour, again. The consumer wrapped beats in a loop:
+
+    for i in 3 4 5; do scripts/wait-for-deliverable.sh docs/reviews/…-p1.md; RC=$?; …; done
+
+Two of every three invocations were non-sleeping siblings — and each still took a beat.
+The counter hit `max_wait_beats` while the teammate was **alive**, the script returned
+`exit 1` = NON-DELIVERY, and Rule 20 tells the lead to re-dispatch on that. The
+deliverable landed four minutes later. **A false NON-DELIVERY re-dispatches a live
+teammate — the exact failure this entire mechanism exists to prevent, reintroduced by the
+mechanism itself.**
+
+- A beat is charged **only if it actually sleeps**. The guard now returns without
+  consuming one, and says so.
+- Stale `.shell-<PID>` markers are pruned. PIDs recycle, so a marker from a long-dead
+  shell could suppress a legitimate beat; anything older than the budget cannot be a
+  sibling of the current call by definition. This also stops the markers accumulating.
+- Together these make a false sibling match **benign**: it can cause an early return, but
+  it can no longer consume a beat or trigger a false non-delivery.
+
 ## [0.50.2] — 2026-07-12
 
 ### The pause gate denied `/ai-dlc-update`'s dispatches, so the model did the work inline
