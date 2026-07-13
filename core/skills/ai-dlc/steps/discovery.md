@@ -23,6 +23,9 @@ needs and writes a context digest to
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6), returning only
 `{artifact_path, summary, gaps}`. Then resume at section 2.
+**Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
+`scripts/wait-for-deliverable.sh <artifact_path>`. A hand-rolled `until`/`sleep` wait
+is a Rule 29 Check A violation and gate Check 25 counts it.
 **Sections 2 onward stay inline in the lead** — brainstorm, brief
 authoring, and the Rule 8 validation cycle are never offloaded. If
 `planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
@@ -132,6 +135,11 @@ verbatim or as close to verbatim as the source allows.
 Run the full validation cycle on the brief. **Execute all sub-skills
 back-to-back without pausing for human input between them:**
 
+**Join every spawn on its DELIVERABLE** — party seats and adversarial passes
+alike. One `scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
+(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
+wait is a Rule 29 Check A violation; gate Check 25 counts it.
+
 1. `/bmad-party-mode` — PM, Architect, UX, CIS (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate the brief. Walk
    through every element. Apply all improvements directly.
    **Requirement fidelity check:** If features originate from carry-over
@@ -147,7 +155,9 @@ back-to-back without pausing for human input between them:**
    "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
    ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
    terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
-   that field; rising CRITICALs are a `DIVERGENT_HARD_BLOCK`, not another pass).
+   that field; CRITICALs rising **in the scope the prior pass reviewed** are a
+   `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
+   added scope and freeze the artifact).
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
    **Run sub-step snapshot update after each adversarial pass.**

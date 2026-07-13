@@ -225,8 +225,18 @@ Every consumer block that differs from upstream is one of:
      **blocks `apply`** (see step 7). The `base_sha` is unusable, so drift for
      that override is undecidable. Never skip it; never "assume unchanged."
      Resolution: operator re-stamps `base_sha` to the correct distribution sha.
-   - `OVERRIDE-DRIFT-SECTION` → the shadowed section changed; surface for
-     re-confirmation (has upstream's change superseded the override's reason?).
+   - `HARD-OVERRIDE-DRIFT-SECTION` → the shadowed section changed upstream, so the
+     override is now shadowing **a rule that no longer exists**. **Blocks `apply`**
+     (see step 7). Resolution: re-adopt the new clause into the override and re-stamp
+     `base_sha`, or confirm the old text still applies and re-stamp anyway — but
+     *look*.
+     **Why this blocks, when a check-number collision does not.** A collision is
+     cosmetic and consumer-fixable. This changes **the rules the lead obeys**: the
+     lead reads the override, not core, so an un-adjudicated drift means the core fix
+     landed on disk and the pipeline went on running the rule it replaced. That is
+     not hypothetical — v0.52.0's Rule 8 fix targets a section the reference consumer
+     shadows verbatim, and under the old advisory status the fix would have been inert
+     on the one pipeline it was written for.
    - `OVERRIDE-DRIFT-FILE` → the anchor is not a locatable heading AND the file
      changed, so the section cannot be *proven* safe. Surface for re-confirmation.
      Conservative on purpose — an unprovable section is never reported as OK.

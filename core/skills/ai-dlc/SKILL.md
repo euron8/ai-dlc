@@ -157,11 +157,11 @@ more is always permitted.
 **"2+ passes" is a FLOOR; the cycle must CONVERGE to leave it.** Pass 2+ reviews the
 REPAIR, not the document again, and verifies the prior pass's findings landed.
 
-**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1 reports
-more CRITICALs than pass N, the repair step is injecting defects faster than review
-removes them; another pass only finds the next wave. STOP and escalate. Usual cause:
-an artifact over its Rule 25(d) budget, too cross-referenced to edit safely. Contract
-and the measured failure: `team-roles/adversary.md`.
+**Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
+`findings_critical_prior_scope` above pass N's `findings_critical` means the repair
+is injecting defects. STOP and escalate. CRITICALs in scope ADDED mid-cycle are
+NOT divergence: no cycle converges on a growing artifact -- freeze scope, shrink
+the sprint, restart. Contract: `team-roles/adversary.md`.
 
 The per-intensity skips are enforced by each planning step's own
 intensity gate, not tracked centrally. Under `carry-over-single`,

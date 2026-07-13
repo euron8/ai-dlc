@@ -114,6 +114,7 @@ residue and exactly one verdict from this set. There is no free-text verdict.
 
 ```
 findings_critical: <int>
+findings_critical_prior_scope: <int>   # of the above, those in text the PRIOR pass also reviewed
 findings_major: <int>
 findings_minor: <int>
 verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
@@ -126,12 +127,30 @@ verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
   ladder above MINOR/NIT **is** the nitpick bucket. A clean-of-CRITICAL-and-MAJOR
   residue with open MINORs is a MET exit condition, not a nearly-met one. Say MET.
 - any CRITICAL or MAJOR open → `EXIT_CONDITION_NOT_MET`.
-- more CRITICALs than the pass before you → `DIVERGENT_HARD_BLOCK`, and say why in
-  your first line. This is not "not met, run another pass." Rule 8: divergence is a
-  HARD_BLOCK. The lead must stop and change approach, not review the next wave.
+- **`findings_critical_prior_scope` above the previous pass's `findings_critical`**
+  → `DIVERGENT_HARD_BLOCK`, and say why in your first line. These are defects the
+  repair injected into text that had **already been cleared**. This is not "not met,
+  run another pass." Rule 8: divergence is a HARD_BLOCK. The lead must stop and
+  change approach.
+- **CRITICALs in scope the sprint ADDED after the previous pass closed are NOT
+  divergence.** They count in `findings_critical` and **not** in
+  `findings_critical_prior_scope`. Stamp `EXIT_CONDITION_NOT_MET`. The counts are
+  not comparable because **the document is not the same document** — and the remedy
+  is not yours to name: the lead reads the gap between the two fields and shrinks
+  the sprint.
+
+**The bar for excluding a CRITICAL from `findings_critical_prior_scope`.** Name the
+artifact `file:line` and assert that text did not exist at the previous pass. If you
+cannot, **it counts as prior scope.** An unfalsifiable exclusion is not an exclusion
+— the same three-part discipline the CRITICAL rung already demands. And
+`findings_critical_prior_scope` may never exceed `findings_critical`: it is a subset
+of your own count, not a second opinion about it.
 
 `scripts/validate-adversarial-convergence.sh` (gate Check 24) reads exactly these
-four fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`.
+fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`. Omitting
+`findings_critical_prior_scope` is safe but **hostile to you**: the validator then
+assumes ALL your CRITICALs are prior-scope — the strictest reading, and the one most
+likely to hard-block your cycle.
 
 *Why this exists.* v0.46.0 told you a clean verdict was a valid outcome and gave
 you nowhere to write one. On S289 pass 4 the residue was 0 CRITICAL, 0 MAJOR, 2
@@ -154,11 +173,14 @@ changed** — the repair is the artifact under review. You MUST:
 2. **Not re-litigate a settled disposition without NEW evidence.** The lead recorded
    a decision; re-opening it because you would have chosen differently is churn, not
    review. New evidence means new evidence, not a new opinion.
-3. **Report divergence explicitly.** If you are finding MORE criticals than the pass
-   before you, say so in your first line and say why. That is a signal the repair
-   step is injecting defects faster than review removes them — the lead needs to
-   stop and change approach, not run another pass. Silence there turns a broken
-   cycle into an endless one.
+3. **Report divergence explicitly.** If you are finding more criticals **in scope the
+   pass before you already reviewed**, say so in your first line and say why. That is
+   a signal the repair step is injecting defects faster than review removes them —
+   the lead needs to stop and change approach, not run another pass. Silence there
+   turns a broken cycle into an endless one.
+
+   Your first line **restates** `findings_critical_prior_scope`; it does not
+   substitute for it. Prose the gate cannot read is how S290 ran eight passes.
 
 *Why this exists.* On S289's `research-requirements` cycle the CRITICALs per pass
 ran **3 → 4 → 7 → 0** — rising every pass until the repair step finally *cut* text

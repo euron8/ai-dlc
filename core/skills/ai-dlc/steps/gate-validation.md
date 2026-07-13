@@ -468,6 +468,10 @@ The gate log entry MUST include:
 - Result for EACH numbered check above (PASSED/FAILED/SKIPPED with reason)
 - Evidence artifacts collected during checks
 - Any remediations performed
+- `steering_violations: <N>` — the count Check 25 read (or `SKIP` if no transcript
+  resolved). This is the **baseline the next gate compares against**, so it is
+  written on every gate, PASS or FAIL. Omitting it silently resets the baseline to
+  0 and forgives every violation committed since the last gate.
 
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
@@ -590,10 +594,13 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   gate.
 - **In-Flight Teammates** — one row per dispatched teammate not yet
   joined: `agent name | role | deliverable path | dispatched-at`. A row
-  is added at dispatch and struck at join (see `_gate-procedures.md`
-  "Sub-step snapshot update"). At a gate, strike any row whose
-  deliverable now exists and has been consumed. An empty table is
-  normal and means nothing is in flight.
+  is added at dispatch and **DELETED at join** (see `_gate-procedures.md`
+  "Sub-step snapshot update"). An empty table is normal and means nothing
+  is in flight.
+  **Rows only. No prose, no struck-through history.** A consumed teammate
+  is not in flight; Recent Activity and the gate log already record that
+  it delivered. The section is bounded by the teammates actually
+  outstanding.
 - **Context Reminders** — `context_reminders_sent` (none | yellow |
   red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
   `last_red_fire_tokens`, `last_red_fire_turns`. Reconcile these from
@@ -753,6 +760,8 @@ mode: subagent
 lead_role: <step-file-that-invoked>
 transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
 findings_critical: <int>                     # required for adversarial-review passes
+findings_critical_prior_scope: <int>         # of the above, those in text the PRIOR pass also reviewed.
+                                             # Absent => the validator assumes ALL of them (fail-closed).
 findings_major: <int>                        # required for adversarial-review passes
 findings_minor: <int>                        # required for adversarial-review passes
 verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>   # required for adversarial-review passes
@@ -1066,18 +1075,25 @@ things:
   clean residue stamped `EXIT_CONDITION_NOT_MET` is a review refusing to
   converge; a dirty residue stamped `EXIT_CONDITION_MET` is one claiming a
   convergence it does not have.
-- **C — DIVERGENCE.** CRITICALs rising pass-over-pass must stamp
-  `DIVERGENT_HARD_BLOCK`. Rule 8: divergence is a HARD_BLOCK, not a reason for
-  another pass.
-- **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`.
+- **C — DIVERGENCE (scope-relative).** A pass whose
+  `findings_critical_prior_scope` exceeds the previous pass's `findings_critical`
+  must stamp `DIVERGENT_HARD_BLOCK`. Rule 8: divergence is a HARD_BLOCK, not a
+  reason for another pass.
+  CRITICALs in scope the sprint ADDED mid-cycle are **not** divergence: they count
+  in `findings_critical` and not in `findings_critical_prior_scope`. Absent field ⇒
+  the validator assumes ALL CRITICALs are prior-scope.
+- **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`. If the series ends
+  unconverged **and** any pass found CRITICALs in newly-added scope, the remedy is
+  **freeze the artifact and cut the added scope** — not another pass.
 
 It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
 that to each planning step's own intensity gate; duplicating it here would fail
 every legitimate `standard` / `lightweight` single-pass cycle.
 
-Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Its decoy case
-(`nitpicks-remain`) is the one that decides shippability — a terminal pass with
-0 CRITICAL / 0 MAJOR and five open MINORs must PASS.
+Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Two cases decide
+shippability: `nitpicks-remain` (terminal 0 CRITICAL / 0 MAJOR with five open
+MINORs must PASS) and `scope-grew-converges` (a CRITICAL rise of 2→3 with only 1 in
+prior scope must PASS).
 
 **PASS:** exit 0. **FAIL:** exit 1 — a pass with no verdict, a verdict
 contradicting its residue, an unescalated divergent pass, or a series whose last
@@ -1096,6 +1112,34 @@ fix; the residue is already in the report, so stamping it costs the adversary
 nothing it has not already computed. Removal condition: retire once the provenance
 block is GENERATED from the findings table rather than hand-stamped, so the verdict
 cannot disagree with the residue beside it.
+
+### 25. Rule 29 bounded-join conduct — the operator was reachable.
+<!-- CHECK_LOADED: 25 -->
+
+**Scope.** Every gate. Rule 29 binds any phase that dispatches, and planning
+dispatches most: S290 ran 28 of its 28 spawns there.
+
+**Check.** Resolve this session's transcript, then compare the violation count
+against the one the previous gate recorded:
+
+    T=$(ls -t ~/.claude/projects/"$(pwd | sed 's|/|-|g')"/*.jsonl 2>/dev/null | head -1)
+    scripts/validate-steering-budget.sh --transcript "$T" --count
+
+- **No transcript** (CI, a non-Claude-Code runner) → **SKIP**, recorded as SKIP.
+- Read `steering_violations:` from the **previous gate-log entry of this session**
+  (Check 12 owns the field). No previous entry → baseline `0`.
+- **Count INCREASED → the gate FAILS.** Unchanged → PASS.
+- Record the new count as `steering_violations:` in this gate's log entry either way.
+
+**On FAIL.** The validator names the offending calls. Re-issue any still-pending wait
+through `scripts/wait-for-deliverable.sh` — one call, every path in the wave — and
+record the count.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a hand-rolled `until`/`while`/
+`sleep` wait on a deliverable blocks a foreground call past the steering budget, and
+a queued operator message cannot be delivered for its duration. False-positive cost:
+one line, recording a count the validator already computed. Removal condition: retire
+once a `PreToolUse` deny makes the unbounded wait unwritable.
 
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 <!-- CHECK_LOADED: H1 -->

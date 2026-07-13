@@ -89,6 +89,10 @@
 # USAGE
 #   core/scripts/validate-steering-budget.sh --transcript PATH [--quiet]
 #   core/scripts/validate-steering-budget.sh --dir PATH [--quiet]   # scan a corpus
+#   core/scripts/validate-steering-budget.sh --transcript PATH --count
+#       Print ONLY the total violation count (A+B+C+D) as a bare integer, exit 0.
+#       gate-validation.md Check 25 needs an integer to compare against the count
+#       the previous gate recorded; it must not have to grep one out of prose.
 #
 # ENV OVERRIDES
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
@@ -108,12 +112,14 @@ MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-10}"
 TRANSCRIPT=""
 DIR=""
 QUIET=0
+COUNT=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --transcript) TRANSCRIPT="${2:-}"; shift 2 ;;
     --dir)        DIR="${2:-}"; shift 2 ;;
     --quiet)      QUIET=1; shift ;;
+    --count)      COUNT=1; shift ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -137,11 +143,12 @@ command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; 
 
 THRESHOLD=$(( BUDGET + GRACE ))
 
-AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" node <<'NODE'
+AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
 const QUIET = process.env.AI_DLC_Q === "1";
+const COUNT = process.env.AI_DLC_C === "1";
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
 // AskUserQuestion measures the human's think-time, not machine starvation.
@@ -314,6 +321,19 @@ for (const f of files) {
       }
     }
   }
+}
+
+// --count: emit ONLY the total violation count, as a bare integer, and exit 0.
+// gate-validation.md Check 25 compares this number against the one the previous
+// gate recorded. It needs an INTEGER, and the alternative -- having a markdown
+// step file grep a count out of an English sentence on stderr -- is the
+// hand-rolled pipe that verdict.sh exists to kill (`cmd | grep` takes grep's exit
+// status, so a validator that prints FAIL and exits 1 reads as a pass). The gate
+// asks a different question from the validator's own PASS/FAIL ("how many?" vs
+// "any?"), so it needs its own answer, not a parse of someone else's.
+if (COUNT) {
+  console.log(starv.length + steam.length + unbounded.length + wrongjoin.length);
+  process.exit(0);
 }
 
 const log = (...a) => { if (!QUIET) console.log(...a); };

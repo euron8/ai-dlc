@@ -109,7 +109,10 @@ say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 #   rotate       append-only log -> move the epoch to a dated archive (Rule 25(c)).
 #                A live log over threshold means a rotation was MISSED, not that it
 #                needs a rewrite. artifact-consolidation.md rejects logs as targets.
-#   trim         pipeline-snapshot.md -> trim to its 6-section schema (Rule 25(a)).
+#   trim         pipeline-snapshot.md -> trim to its 7-section schema (Rule 25(a)).
+#                Check 14 owns the schema. It is SEVEN sections since v0.50.0 --
+#                In-Flight Teammates is one of them, and it is the ledger that
+#                stops the lead re-dispatching live teammates. Do not delete it.
 #                Never consolidation. A snapshot over threshold means the schema
 #                stopped being enforced at gate passages, and the gates that let it
 #                grow are the finding -- not the file.
@@ -219,8 +222,11 @@ if [ -s "$BREACH_FILE" ]; then
         consolidate -> artifact-consolidation.md. Operator-invoked, fidelity-critical.
         rotate      -> a rotation was MISSED. Move the epoch to a dated archive
                        (Rule 25(c)); never rewrite a log.
-        trim        -> trim pipeline-snapshot.md to its 6-section schema. The gates
-                       that let it grow past 6k are the finding, not the file.
+        trim        -> trim pipeline-snapshot.md to its 7-section schema (gate-validation
+                       Check 14 owns it). The gates that let it grow past 6k are the
+                       finding, not the file. NOTE: In-Flight Teammates is one of the
+                       seven -- it is the dispatch ledger, and deleting it is how a lead
+                       re-dispatches a teammate that is still alive.
 EOF
   rm -f "$BREACH_FILE"
   [ "$WARN_ONLY" -eq 1 ] && exit 0

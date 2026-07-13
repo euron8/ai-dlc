@@ -1,0 +1,59 @@
+name: validate
+
+# The ai-dlc distribution shipped fifteen validators, a CI TEMPLATE for its
+# consumers, and -- until v0.52.0 -- no CI of its own. `git log --all -- .github`
+# was empty for the project's entire history. Every check in this repo ran only
+# when a human remembered to type it, which is the same defect the release itself
+# is about: a check that cannot fire, read as a check that passed.
+#
+# This workflow runs the distribution's checks against the distribution.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The enforcement map is the index of which rule is enforced by what, and
+      # WHERE it is invoked. I9/W1 is the invariant that would have caught
+      # v0.50.0's half-wiring at authoring time: a script enforcer with no
+      # declared call site is a rule guarded by nobody.
+      - name: enforcement-map integrity (I1-I9)
+        run: bash scripts/validate-enforcement-map.sh
+
+      # SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The
+      # region currently ends within ~250 tokens of the ceiling, so any edit above
+      # the fold can silently push the post-compact recovery protocol below it.
+      - name: re-attach budget (SKILL.md resident region)
+        run: bash core/scripts/validate-reattach-budget.sh --skill core/skills/ai-dlc/SKILL.md
+
+      # Every fixture is an adversarial self-test for one gate check. A fixture
+      # that is never driven is a green light nobody earned -- H2 exists because
+      # three of them were once pure echo statements describing files that were
+      # never written to disk.
+      - name: fixture suite
+        run: |
+          set -e
+          failed=0
+          for d in core/fixtures/*/; do
+            name="$(basename "$d")"
+            [ -f "$d/run.sh" ] || { echo "SKIP  $name (no run.sh)"; continue; }
+            echo "::group::$name"
+            if bash "$d/run.sh"; then echo "PASS  $name"; else echo "FAIL  $name"; failed=1; fi
+            echo "::endgroup::"
+          done
+          exit $failed
+
+      - name: shell syntax (every shipped script and hook)
+        run: |
+          set -e
+          for f in scripts/*.sh core/scripts/*.sh core/hooks/*.sh \
+                   core/skills/ai-dlc-update/reconcile/*.sh; do
+            [ -e "$f" ] || continue
+            bash -n "$f" || { echo "syntax error: $f"; exit 1; }
+          done

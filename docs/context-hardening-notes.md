@@ -1333,3 +1333,132 @@ Check A starvation, committed by the caller rather than by the loop. The lead wa
 not careless; a primitive that makes the correct thing expensive gets worked
 around. The script now polls many paths inside ONE beat, and refuses to sleep
 twice in one call (chained invocations share a parent shell, hence `$PPID`).
+
+---
+
+## R32 — the enforcers were named, not wired (v0.52.0)
+
+Rationale relocated from `steps/gate-validation.md` (Check 25),
+`core/scripts/validate-adversarial-convergence.sh`, and
+`scripts/validate-enforcement-map.sh` (I9). Step files are re-read at every gate and
+the SKILL.md resident region at every compaction; stories are paid per read, so they
+live here.
+
+### The measurement
+
+The reference consumer was reviewed live at `0.51.0@b333c86`, mid-sprint (S290,
+planning, paused at an operator handoff). Three validators were run against the
+running pipeline:
+
+| validator | findings on the live consumer | invoked at a gate? |
+|---|---|---|
+| `validate-steering-budget.sh` | **FAIL(A): 11 starvation violations, worst 10.0 min** | **no gate call site at all** |
+| `validate-layer-entries.sh` | 5 ERRORs, 21 warnings | named in gate *prose*; the gate passed |
+| `validate-enforcement-map.sh` | — | distribution-only, and the distribution **had no CI** |
+
+`git log --all -- .github` was **empty for the project's entire history**. ai-dlc
+shipped a CI *template to its consumers* while gating none of its own fifteen
+validators. Every check ran only when a human remembered to type it.
+
+### The mechanism behind three half-wired releases
+
+`enforcement-map.yaml` recorded `enforcer:` — *who* enforces a rule — on all 38
+entries, and `call_sites:` — *where the enforcer is actually invoked* — on **one**.
+So "Enforced by `validate-X.sh`" was a **claim**, and nothing in the repo could tell
+a claim from a wiring.
+
+That is how `implementation.md:152` could say *"`scripts/validate-steering-budget.sh`
+fails the gate on it"* while that sentence was **false at every gate, in every
+phase** — the script ran only at retro, after the sprint had already paid. v0.50.0
+authored the join fix against the phase where the failure was *observed*
+(implementation) rather than against the invariant (Rule 29 binds anything that
+dispatches). Planning dispatches most: S290 ran 28 of its 28 spawns there, and the
+lead — having no prescription — hand-rolled 17 `sleep` commands, ~8 of them unbounded
+`until` loops that ran to the 10-minute harness cap.
+
+**I9/W1** makes the difference representable and then required: an
+`adjudication: script` entry with no `call_sites:` is an ERROR. Run against the map
+as it stood, it fails on nine entries. It would have caught v0.50.0 at authoring
+time.
+
+**What W2 deliberately does not do.** It checks that a declared call site's file at
+least *names* the enforcer, which catches a fictional site. It **cannot** tell an
+invocation from a prose mention — `retro.md:639` is a real indented command,
+`implementation.md:152` is a sentence, and a basename grep passes both. Telling them
+apart means parsing English, and a heuristic that fails closed on a legitimate new
+phrasing is an unpassable gate, which gets turned off. The teeth are W1 plus the
+reviewable `posture:` field, and that limit is stated in the script rather than
+implied by its error message — a check whose message claims more than it verifies is
+the very defect this release is about.
+
+### Rule 8: the counts were never commensurable
+
+S290 ran **eight** adversarial passes on one artifact. CRITICALs went
+`3 → 1 → 1 → 2 → 2 → 2 → 3 → 2`, and not one pass ever stamped
+`EXIT_CONDITION_MET`. The consumer's own snapshot: *"THE ARTIFACT-LEVEL CYCLE IS NOW
+CLOSED BY A CRITERION, NOT BY A PASS."*
+
+The divergence predicate was a bare count comparison — `criticals(N+1) > criticals(N)`
+— with a single cause welded onto it: *"the repair step is injecting defects."* It
+hard-blocked twice (p4: 2>1, p7: 3>2). **Both times the cause was false.** Pass 7,
+first line, verbatim:
+
+> *"The rise is NOT pass 6's repairs injecting defects — I probed those and they
+> hold; I did not re-open them. Every new CRITICAL is in the scope the sprint ADDED
+> after pass 6 closed."*
+
+The adversary wrote **prose to override the field it had just stamped**. That is
+v0.48.0's defect exactly inverted: there a cycle converged in the prose while the
+field said otherwise; here the field cries divergence while the prose says the
+repairs held. Both cost the operator an adjudication, and the two conditions have
+**opposite remedies** — *"your repairs are bad"* versus *"the sprint grew; cut it."*
+
+`findings_critical_prior_scope` partitions a number the adversary already produced:
+of your CRITICALs, how many sit in text the previous pass also reviewed. Only those
+are comparable.
+
+- **An int, not a `scope_delta: GREW|SAME` enum.** An enum is a cheat code — an
+  adversary facing a hard block stamps `GREW` and the block evaporates, with nothing
+  to check it against. An integer is cross-checkable (`prior_scope ≤
+  findings_critical`) and survives the mixed case (scope grew *and* the repairs
+  regressed) that an enum erases.
+- **No fourth verdict.** The condition is derivable from the field. Rule 26(b): the
+  simpler path does not fail, so a new enum token would be unrequested mechanism —
+  a MAJOR under the rung v0.51.0 itself just shipped.
+- **Fail-closed default.** Absent field ⇒ `prior := crit` ⇒ the predicate degrades to
+  *exactly* the pre-v0.52.0 comparison. It can only make Check C stricter, never
+  laxer, so a missing field cannot be used to dodge a hard block. This is what makes
+  the field safe to adopt **mid-cycle**, against S290's eight already-stamped passes,
+  with no back-fill.
+
+**The exit condition was never broken.** S289's `research-requirements` cycle ran
+`3 → 4 → 7 → 0` and converged the moment the repair wave finally *cut* text. It is
+reachable as soon as the reviewed scope holds still. S290's eight-pass
+non-convergence is a **symptom of the ratchet**, not an independent defect — which is
+why nothing here touches the exit condition, Check B, or the pass floor. Check D now
+names the real remedy (*freeze the artifact, cut the added scope*) instead of "run
+another pass," which is the advice that produced passes 2 through 8.
+
+### What v0.51.0's rung actually did on this sprint: nothing yet
+
+The over-engineering MAJOR rung is installed verbatim in the consumer and produced
+**zero findings across all eight passes**. The tempting confirmation — *"every repair
+subtracted, seven for seven"* — is confounded twice: S290's operator-set sprint theme
+was literally **SUBTRACTION**, and v0.51.0's own changelog records that S289's
+adversaries already removed by instinct *without* the rung. Reading the subtraction
+result as the rung working would be a check that never fired, recorded as a check
+that passed — the exact error class this release exists to end. **The rung is
+therefore untouched in v0.52.0.** It needs another sprint of evidence, not another
+edit.
+
+### The stale remedy that would have deleted the ledger
+
+`validate-artifact-budget.sh` told the lead to trim `pipeline-snapshot.md` to its
+**6-section schema**. v0.50.0 had added `In-Flight Teammates` as the **seventh**
+section and never swept the remedy text. A lead obeying it literally would have
+deleted **the dispatch ledger that is the one thing demonstrably preventing
+re-dispatch** — 0 of 28 on S290, against 13 of 39 on S289. The snapshot itself had
+reached 66,782 bytes (**278% of budget**), whole-read at each of ten compactions in a
+single day, while the sub-step budget check sat there reporting it: the check already
+exited 1 past the grace band, and the step file said *"trim at your next natural
+pause."* An obligation with no deadline is not an obligation.

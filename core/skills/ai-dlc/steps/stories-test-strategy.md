@@ -264,6 +264,12 @@ risk assessment suggests phasing:
 
 ### 4. Story Validation Cycle (Rule 8)
 
+**Join every spawn on its DELIVERABLE** — one
+`scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
+(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
+wait is a Rule 29 Check A violation; gate Check 25 counts it.
+
+
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
 

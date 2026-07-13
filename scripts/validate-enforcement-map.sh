@@ -39,6 +39,18 @@
 #                         had already rotted (the manifest gained check 24, the
 #                         fixture did not), so H1's self-test was seeding a slice
 #                         that no longer existed.
+#   I9  enforcer ⇒ call site — every `adjudication: script` entry declares
+#                         `call_sites:` with a posture (W1), and no declared site
+#                         is fictional — the file it names must at least know the
+#                         enforcer exists (W2). W2 canNOT tell an invocation from a
+#                         prose mention; see its inline note. The teeth are W1 plus
+#                         the reviewable `posture:`. The map recorded WHO enforces each
+#                         rule (38/38) and WHERE it runs (1/38), so "Enforced by
+#                         validate-X.sh" was a claim nothing could falsify. That
+#                         is how validate-steering-budget.sh came to sit on 11
+#                         real starvation violations while invoked from zero
+#                         gates, and why implementation.md could say it "fails
+#                         the gate" when it ran at no gate at all.
 #   I8  fixture packaging — core/fixtures/, install.sh's fixture loop, and
 #                         uninstall.sh's fixture loop name the same set. All three
 #                         are hardcoded and had drifted (9 on disk, 9 installed, 5
@@ -261,6 +273,106 @@ fixtures="$(grep -oE 'tests/fixtures/[A-Za-z0-9._-]+' "$MAP" | sed -E 's#tests/f
 for d in $fixtures; do
   [ -d "$REPO_ROOT/core/fixtures/$d" ] || err "fixture '$d' named in map but missing under core/fixtures/"
 done
+
+# --- I9: every script enforcer declares WHERE it is invoked -------------------
+# The map recorded `enforcer:` (WHO enforces a rule) on every entry and
+# `call_sites:` (WHERE the enforcer is actually invoked) on ONE of them. So
+# "Enforced by validate-X.sh" was a CLAIM, and nothing could tell a claim from a
+# wiring. Measured on the reference consumer at v0.51.0:
+#
+#   validate-steering-budget.sh   11 real starvation violations, worst 10.0 min
+#                                 -- invoked from NO gate. implementation.md:152
+#                                 says "fails the gate on it"; that sentence was
+#                                 false at every gate, in every phase.
+#
+# That is the mechanism behind three consecutive half-wired releases. A rule whose
+# enforcer is called from nowhere is indistinguishable, in this file, from one
+# called everywhere. I9 makes the difference representable and then required.
+#
+# Scope: `adjudication: script` only. An `llm` check is adjudicated by the lead
+# READING gate-validation.md, so that file is inherently its call site; demanding
+# a call_sites list there would be ceremony.
+sites_of() { # sites_of <block> -> the file token of each site:, one per line
+  printf '%s' "$1" | awk '
+    /^    call_sites:/ {f=1; next}
+    f && /^    [a-z_]+:/ {f=0}
+    f && /^      - site:/ { v=$0; sub(/^      - site:[ ]*/,"",v); print v }
+  '
+}
+enforcers_of() {
+  printf '%s' "$1" | grep -oE '^      - core/(scripts|hooks)/[A-Za-z0-9._-]+' | sed -E 's#^      - ##'
+}
+
+# Resolve a site's leading file token to a real path under the skill.
+resolve_site_file() {
+  case "$1" in
+    SKILL.md*)            echo "$REPO_ROOT/core/skills/ai-dlc/SKILL.md" ;;
+    enforcement-map.yaml*) echo "" ;;
+    *.md*)                echo "$REPO_ROOT/core/skills/ai-dlc/steps/${1%%[ ]*}" ;;
+    *)                    echo "" ;;
+  esac
+}
+
+while IFS= read -r blk_id; do
+  [ -n "$blk_id" ] || continue
+  block="$(awk -v want="$blk_id" '
+    $0 ~ "^  - id: \"?" want "\"?$" {f=1; print; next}
+    f && /^  - id: / {f=0}
+    f {print}
+  ' "$MAP")"
+  adj="$(printf '%s' "$block" | sed -nE 's/^    adjudication: ([a-z]+).*/\1/p' | head -1)"
+  [ "$adj" = "script" ] || continue
+
+  sites="$(sites_of "$block")"
+
+  # W1 -- a script enforcer with no declared call site.
+  if [ -z "$sites" ]; then
+    err "enforcement-map entry '$blk_id' is adjudication:script but declares NO call_sites. Its enforcer may be invoked from nowhere and nothing would notice — this is exactly how validate-steering-budget.sh came to guard 11 live violations from zero gates. Declare where it runs, with a posture."
+    continue
+  fi
+
+  # W2 -- a declared call site must at least NAME the enforcer in the file it
+  # points at. This catches a fictional site: an entry claiming to run at a step
+  # whose file has never heard of the script.
+  #
+  # What W2 deliberately does NOT do, stated so nobody reads it as covered: it
+  # cannot distinguish an INVOCATION from a PROSE MENTION. `retro.md:639` is a real
+  # indented command; `implementation.md:152` ("validate-steering-budget.sh fails
+  # the gate") is a sentence that was false for every gate that ever ran -- and a
+  # basename grep passes both. Telling them apart means parsing English, and a
+  # heuristic that fails closed on a legitimate new phrasing is an unpassable gate,
+  # which gets turned off.
+  #
+  # The teeth are therefore in W1 + the `posture:` field, not here: an author must
+  # WRITE DOWN where the enforcer runs and what happens when it fails, and that
+  # declaration is reviewable. W2 only stops the declaration from naming a file
+  # that does not know the script exists.
+  #
+  # Accept the bare form (`scripts/validate-X.sh`) and the verdict.sh wrapper
+  # (`verdict.sh validate-X`), which is how gate-validation.md legitimately invokes
+  # artifact-budget -- a basename-only grep misses the wrapped call entirely.
+  for enf in $(enforcers_of "$block"); do
+    base="$(basename "$enf")"
+    stem="${base%.sh}"
+    case "$enf" in core/hooks/*) continue ;; esac   # hooks are wired in settings, not step files
+    while IFS= read -r site; do
+      [ -n "$site" ] || continue
+      f="$(resolve_site_file "$site")"
+      [ -n "$f" ] || continue
+      if [ ! -f "$f" ]; then
+        err "entry '$blk_id' names call site '$site', but $f does not exist"
+        continue
+      fi
+      if ! grep -qE "(${base}|verdict\.sh ${stem}\b)" "$f"; then
+        err "entry '$blk_id' declares call site '$site', but $(basename "$f") never mentions ${base} (nor 'verdict.sh ${stem}'). The site is fictional: the file it names has never heard of the enforcer."
+      fi
+    done <<SITES
+$sites
+SITES
+  done
+done <<IDS
+$(awk '/^checks:/{c=1} c && /^  - id:/ { v=$0; sub(/^  - id:[ ]*/,"",v); gsub(/"/,"",v); print v }' "$MAP")
+IDS
 
 # --- I5: core_manifest copies in sync (prefix-normalized) --------------------
 norm_core_manifest() {
