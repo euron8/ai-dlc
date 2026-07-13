@@ -212,11 +212,29 @@ already paid.
   gate, which gets turned off. The teeth are W1 plus the reviewable `posture:`.
 - **All nine entries backfilled** — and the backfill *is* the audit. It is what put
   `steering-budget`'s single real call site (retro, after the fact) on the record.
-- **`.github/workflows/validate.yml`** — the distribution now runs its own checks:
-  enforcement-map integrity, the SKILL.md re-attach budget, the full fixture suite,
-  and `bash -n` over every shipped script. It immediately caught a fixture
+- **`.githooks/pre-push`** — the distribution now runs its own checks: enforcement-map
+  integrity (I1–I9), the SKILL.md re-attach budget, the full fixture suite, and
+  `bash -n` over every shipped script. It blocks the push on a failure. Enable once per
+  clone with `git config core.hooksPath .githooks`. It caught a fixture
   (`context-sensor`, 36 assertions) that resolved its hook only at a **consumer** path
   and had therefore never once run upstream.
+
+  **This shipped as a GitHub Actions workflow first, and that was wrong.** Operator
+  policy is no CI in GitHub — not in the distribution, not in the reference consumer,
+  which removed its own Actions scaffolding on purpose (`fcce033ee`). A gate hosted in
+  a service we do not run is a gate we do not control. The workflow was removed and the
+  same four checks moved to a local pre-push hook: no runner, no network, no third
+  party, and it fires on the machine doing the pushing.
+
+  **The correction is on the record because the original claim was wrong.** This entry
+  previously credited the Actions workflow with catching v0.52.0's own packaging bug (a
+  fixture added to `install.sh`'s hardcoded loop but not `uninstall.sh`'s). It did not.
+  `validate-enforcement-map.sh` caught that on a **local** run, before the push; the
+  two Actions runs that ever existed both saw an already-fixed tree and caught nothing.
+  Crediting a check with a catch it did not make is the same defect as a check that
+  cannot fire, recorded as a check that passed — and this release is named for it.
+  The pre-push hook was mutation-tested against that exact packaging bug, the resident
+  budget, and a syntax error: it blocks on all three.
 
 ### Rule 8 — the divergence predicate compared counts across two documents that are not the same document
 

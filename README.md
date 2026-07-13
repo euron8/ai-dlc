@@ -267,6 +267,28 @@ When your project discovers a new failure mode:
 This ensures lessons learned in one project benefit all projects using
 AI/DLC, without project-specific details leaking into the core.
 
+## Working on the distribution
+
+Enable the gate, once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-push` runs the distribution's validators against the distribution:
+enforcement-map integrity (I1–I9), the `SKILL.md` re-attach budget, the full fixture
+suite, and `bash -n` over every shipped script. It blocks the push on a failure.
+
+**There is no GitHub Actions CI, deliberately** — not here and not in the reference
+consumer. The gate runs on the machine doing the pushing: no runner, no network, no
+third party. `git push --no-verify` bypasses it, and that is a decision made on the
+record rather than a default fallen into.
+
+This exists because ai-dlc shipped fifteen validators and a CI template *to its
+consumers* while gating none of its own. Every check ran only when a human remembered
+to type it, and that is how three releases shipped half-wired: the enforcer named, and
+never invoked.
+
 ## Versioning
 
 AI/DLC follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).

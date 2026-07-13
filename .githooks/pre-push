@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# pre-push — the distribution's own gate. Runs its validators against itself.
+#
+# THE DEFECT THIS REPLACES. ai-dlc shipped fifteen validators and a CI template *to
+# its consumers* while gating none of its own. Every check ran only when a human
+# remembered to type it, which is how three releases shipped half-wired: the enforcer
+# was named, never invoked. `git log --all -- .github` was empty for the project's
+# entire history.
+#
+# WHY NOT GITHUB ACTIONS. Operator policy: no CI in GitHub, for this repo or the
+# reference consumer (which removed its own Actions scaffolding deliberately). A gate
+# that lives in a service we do not run is a gate we do not control. This runs on the
+# machine doing the pushing, needs no network, no runner, and no third party.
+#
+# The evidence that local is sufficient: v0.52.0's own packaging bug -- a fixture added
+# to install.sh's hardcoded loop but not uninstall.sh's -- was caught by
+# `validate-enforcement-map.sh` on a local run, BEFORE the push. The Actions run only
+# ever saw the fixed tree and caught nothing.
+#
+# ENABLE (once per clone):
+#     git config core.hooksPath .githooks
+#
+# Bypass for a genuine emergency is `git push --no-verify`, and it is a decision you
+# are making on the record, not a default you fall into.
+
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+fail=0
+step() {
+  printf '\n── %s\n' "$1"; shift
+  if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+}
+
+# 1. The enforcement map is the index of which rule is enforced by what, and WHERE it
+#    is invoked. I9/W1: a script enforcer with no declared call site is a rule guarded
+#    by nobody. It also asserts install.sh and uninstall.sh agree on the fixture list.
+step "enforcement-map integrity (I1-I9)" \
+  bash scripts/validate-enforcement-map.sh
+
+# 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident
+#    region sits within a few hundred tokens of the ceiling, so an edit above the fold
+#    can silently push the post-compact recovery protocol below it.
+step "re-attach budget (SKILL.md resident region)" \
+  bash core/scripts/validate-reattach-budget.sh --skill core/skills/ai-dlc/SKILL.md
+
+# 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
+#    never driven is a green light nobody earned.
+run_fixtures() {
+  local rc=0 d
+  for d in core/fixtures/*/; do
+    [ -f "$d/run.sh" ] || continue
+    if bash "$d/run.sh" >/dev/null 2>&1; then
+      printf '   ok    %s\n' "$(basename "$d")"
+    else
+      printf '   FAIL  %s\n' "$(basename "$d")"; rc=1
+    fi
+  done
+  return $rc
+}
+step "fixture suite" run_fixtures
+
+# 4. A shipped script with a syntax error is a gate that cannot run at all.
+syntax_all() {
+  local rc=0 f
+  for f in scripts/*.sh core/scripts/*.sh core/hooks/*.sh \
+           core/skills/ai-dlc-update/reconcile/*.sh .githooks/*; do
+    [ -f "$f" ] || continue
+    bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }
+  done
+  return $rc
+}
+step "shell syntax (every shipped script and hook)" syntax_all
+
+if [ "$fail" -ne 0 ]; then
+  printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'
+  exit 1
+fi
+printf '\npre-push: all gates green.\n\n'
