@@ -17,6 +17,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.54.2] — 2026-07-13
+
+### `register-drift.sh` authored overrides with anchors that resolve to nothing
+
+Two bugs, both found by running it on the reference consumer's `tea.md`. Both produce a
+**silently dead** entry, which is the failure class this project keeps re-learning.
+
+**1. It anchored `shadows:` at headings core does not have.** It took its heading list
+from the *consumer's* file. `tea.md` has `## Context Loading` and `## Communication`;
+core has neither. An override anchors to a **core** heading — one that resolves to
+nothing means `layer-drift` reports `OVERRIDE-ANCHOR-UNRESOLVED` and **drift detection is
+dead for that section, forever.** This project has already had to repoint four overrides
+for exactly that, and this script wrote two more. Consumer-only sections are **additive**
+and now go to `extensions/` (file-hooked, no anchor to break), with the override keeping
+only the headings core actually defines.
+
+**2. Its section resolver was stricter than `layer-drift`'s, so it MISFILED a rename.**
+The consumer's `## Escalation Protocol` is core's `## Escalation`, renamed —
+`layer-drift`'s bidirectional substring match resolves it; an exact match does not. The
+strict matcher concluded core had no such heading and routed it to `extensions/` as an
+*addition*. Extensions are additive, so core's `Escalation` and the consumer's
+`Escalation Protocol` would **both have rendered** — duplicate, conflicting guidance in
+one document. The resolver is now `layer-drift`'s, byte for byte.
+
+This is the same lesson `readopt-override.sh` learned in v0.52.0: **two resolvers that
+disagree means the tool and the gate disagree, and the tool wins.** There is one
+resolver.
+
 ## [0.54.1] — 2026-07-13
 
 ### `--stamp reaffirm` corrupted a live override's `reason:` — the record the whole workflow turns on

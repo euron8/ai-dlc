@@ -51,15 +51,29 @@ mkdir -p "$OVR_DIR"
 # Top-level heading names in the consumer's file.
 headings_of() { grep -nE '^#{2,3} ' "$1" | sed 's/:.*#\{2,3\} /:/'; }
 
-# Extract one heading's section (same grammar layer-drift resolves with).
+# Extract one heading's section — the resolver from layer-drift.sh, BYTE FOR BYTE.
+#
+# A stricter matcher here does not merely miss a section; it MISFILES it. `layer-drift`
+# matches bidirectionally on substrings, so the consumer's `## Escalation Protocol`
+# resolves against core's `## Escalation` — a RENAMED section, which is an override. An
+# exact matcher finds nothing, concludes core has no such heading, and routes it to
+# `extensions/` as an ADDITION. Extensions are additive: core's `Escalation` and the
+# consumer's `Escalation Protocol` would then BOTH render, as duplicate and conflicting
+# guidance in one document.
+#
+# Same lesson as readopt-override.sh: two resolvers that disagree means the tool and the
+# gate disagree, and the tool wins. There is one resolver.
 section_of() {
   awk -v want="$1" '
     function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
+    BEGIN { w = nrm(want) }
     /^#{2,6}[ \t]/ {
       match($0, /^#+/); lvl = RLENGTH
       h = $0; sub(/^#+[ \t]+/, "", h); h = nrm(h)
       if (inside) { if (lvl <= mylvl) exit }
-      else if (nrm(want) == h) { inside = 1; mylvl = lvl; print; next }
+      else if (w != "" && (index(h, w) > 0 || (length(h) > 3 && index(w, h) > 0))) {
+        inside = 1; mylvl = lvl; print; next
+      }
     }
     inside { print }
   '
@@ -83,11 +97,27 @@ substitution_only() { # <consumer-section-text> <dist-section-text>
 
 changed=""
 skipped=""
+added=""
 while IFS= read -r line; do
   h="${line#*:}"
   [ -n "$h" ] || continue
   a="$(section_of "$h" < "$CONS_FILE")"
   b="$(git -C "$DIST" show "${BASE}:${CORE}" | section_of "$h")"
+
+  # A section the CONSUMER has but CORE does not is an ADDITION, not an override.
+  #
+  # An override shadows an existing core heading; the resolver locates it by heading.
+  # Anchor `shadows:` at a heading core never had and the anchor resolves to NOTHING —
+  # layer-drift reports OVERRIDE-ANCHOR-UNRESOLVED and drift detection is DEAD for that
+  # section, forever, silently. This project has had to repoint four overrides for
+  # exactly that, and an earlier cut of THIS script wrote two more (tea.md's
+  # `Context Loading` and `Communication`, which core does not define). Additive content
+  # belongs in `extensions/`, which is file-hooked and needs no anchor.
+  if [ -z "$b" ]; then
+    added="${added}${added:+$'\n'}${h}"
+    continue
+  fi
+
   [ "$a" = "$b" ] && continue
   if [ "$(substitution_only "$a" "$b")" = yes ]; then
     skipped="${skipped}${skipped:+, }${h}"
@@ -97,6 +127,7 @@ while IFS= read -r line; do
 done < <(headings_of "$CONS_FILE")
 
 [ -n "$skipped" ] && echo "── skipped (template substitution only, not a consumer change): ${skipped}"
+[ -n "$added" ] && echo "── consumer-ONLY sections (core has no such heading) -> extensions/, not overrides/: $(printf '%s' "$added" | tr '\n' ';')"
 
 if [ -z "$changed" ]; then
   echo "register-drift: $REL differs from ${BASE}, but no ## / ### section differs."
@@ -142,6 +173,30 @@ if [ "$APPLY" != "--apply" ]; then
 fi
 
 render > "$OUT"
+
+# Consumer-only sections go to extensions/ — additive, file-hooked, no anchor to break.
+# Dropping them would DELETE consumer content when core is overwritten; putting them in
+# `shadows:` would create an anchor that resolves to nothing.
+if [ -n "$added" ]; then
+  case "$REL" in
+    team-roles/*) EXT_SUB="roles"; EXT_KIND="role" ;;
+    *)            EXT_SUB="steps-domain"; EXT_KIND="step" ;;
+  esac
+  EXT_DIR="$CONSUMER/.claude/skills/ai-dlc/extensions/$EXT_SUB"
+  mkdir -p "$EXT_DIR"
+  ext_id="$(printf '%s' "$REL" | sed 's|.*/||; s|\.md$||')-consumer"
+  EXT_OUT="$EXT_DIR/${ext_id}.md"
+  {
+    printf -- '---\nkind: %s\nhooks: %s\nid: %s\n' "$EXT_KIND" "$SHADOW_TGT" "$ext_id"
+    printf 'reason: TODO — one line: why this consumer ADDS these sections. Written by register-drift.sh; core defines no heading for them, so they are additive and cannot be an override (an override anchors to a core heading; one that resolves to nothing is drift detection that is silently dead).\n---\n\n'
+    printf '%s\n' "$added" | while IFS= read -r h; do
+      [ -n "$h" ] || continue
+      section_of "$h" < "$CONS_FILE"; echo
+    done
+  } > "$EXT_OUT"
+  echo "EXTENSION   ${EXT_OUT#$CONSUMER/}  ($(printf '%s' "$added" | tr '\n' ';'))"
+fi
+
 git -C "$DIST" show "${BASE}:${CORE}" > "$CONS_FILE"
 
 echo "REGISTERED  ${OUT#$CONSUMER/}"
