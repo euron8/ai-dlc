@@ -145,7 +145,32 @@ heading_text_for() { # heading_text_for <anchor>  < stream
     $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[.—]") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
       sub("^" a "[.—][ \t]*","",h)
+      # Strip the catalog label before normalizing, or "[ext:foo]" becomes part of the
+      # title and a correctly-labelled heading can never match the core title.
+      gsub(/\[ext:[A-Za-z0-9_.-]+\][ \t]*/, "", h); gsub(/\[core\][ \t]*/, "", h)
       print nrm(h); exit
+    }' 2>/dev/null
+}
+
+# Does the heading at <anchor> carry an explicit catalog label?
+#
+# A labelled heading is the RESOLVED state of a number collision, not a violation:
+# `### 25. [ext:foo] …` and core's `### 25.` name their catalogs at the point of use,
+# which is exactly what the v0.49.0 crosswalk asks for.
+#
+# `validate-layer-entries.sh` learned this in v0.53.0. THIS script did not, so after a
+# consumer correctly relabelled all 16 of its colliding headings, layer-drift went on
+# reporting 11 collisions — on every pull, forever, for entries that are FIXED. It is
+# report-only, so it corrupts nothing; it just trains the operator to stop reading the
+# reconcile report. A report that is always wrong is a report nobody reads.
+#
+# Third instance in this project of the same defect: TWO implementations of one
+# predicate, drifting apart. (readopt-override's resolver vs layer-drift's;
+# register-drift's resolver vs layer-drift's; now this.)
+heading_labelled_for() { # heading_labelled_for <anchor>  < stream
+  awk -v a="$1" '
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[.—]") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+      print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
     }' 2>/dev/null
 }
 
@@ -341,6 +366,12 @@ while IFS= read -r f; do
             emit EXTENSION-RESTATES-CORE "$entry" "$hooks" \
               "PRE-EXISTING: defines '$a. $t_ext', which core already defines at the SAME number and title — and did so at base, so the absorption signal never fired. Rule 27(c): an extension MUST NOT restate a core section; the copy cannot drift-check against the original, so it forks silently. If it only duplicates core, retire it; if it hardens or restricts core, refile it in overrides/ with a base_sha so drift is tracked."
           fi
+          continue
+        fi
+
+        # A labelled heading is the RESOLVED state. Reporting it anyway means the
+        # remedy this very message prescribes can never silence the message.
+        if [ "$(heading_labelled_for "$a" < "$f")" = yes ]; then
           continue
         fi
 
