@@ -127,6 +127,45 @@ else
   bad "re-adoption destroyed the consumer's delta"
 fi
 
+echo "== B3. reaffirm must not CORRUPT a multi-line reason: block =="
+
+# A `reason:` is routinely a multi-line YAML block — six of the reference consumer's
+# overrides have one, the longest running 99 lines. Appending the note to the `reason:`
+# LINE splices it into the middle of a sentence. That shipped, and it corrupted a live
+# override. The reason is what the NEXT pull reads to decide "does upstream supersede
+# this?"; corrupting it corrupts the record the whole workflow turns on.
+ML="$CONS/.claude/skills/ai-dlc/overrides/SKILL__Multiline.md"
+cat > "$ML" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: The core paragraph claims a thing that is
+  not true in this consumer, and the second line
+  finishes the sentence.
+---
+Body.
+EOF
+bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$ML" --stamp reaffirm --note "still stands" >/dev/null 2>&1
+
+if grep -q 'reason: The core paragraph claims a thing that is$' "$ML"; then
+  ok "the reason's first line is INTACT (note not spliced mid-sentence)"
+else
+  bad "reaffirm mangled the multi-line reason — spliced the note into line 1"
+  grep -n '^reason:' "$ML" | sed 's/^/        /'
+fi
+if grep -q 'finishes the sentence.$' "$ML"; then
+  ok "the reason's continuation lines survived"
+else
+  bad "reaffirm destroyed the reason's continuation lines"
+fi
+if [ "$(grep -c 'RE-AFFIRMED against' "$ML")" = "1" ] && \
+   tail -n +2 "$ML" | awk '/^---$/{exit} {last=$0} END{exit !(last ~ /RE-AFFIRMED/)}'; then
+  ok "the note is appended at the END of the reason block"
+else
+  bad "the note is not at the end of the reason block"
+fi
+rm -f "$ML"
+
 echo "== C0. --merge re-adopts MECHANICALLY (no hand edit) =="
 
 # The operator must never be told to "merge the new core text in, preserving your

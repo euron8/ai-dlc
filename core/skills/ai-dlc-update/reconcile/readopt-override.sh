@@ -278,10 +278,31 @@ case "$MODE" in
 
     tmp="$(mktemp)"
     if [ "$OUTCOME" = reaffirm ]; then
+      # Append the note at the END of the `reason:` block, as a continuation line.
+      #
+      # NEVER append to the `reason:` LINE. A reason is routinely a multi-line YAML
+      # block (six of the reference consumer's overrides have one; the longest runs 99
+      # lines), so appending to line 1 splices the note INTO THE MIDDLE OF A SENTENCE
+      # and mangles the text. That shipped, and it corrupted a live override: the reason
+      # read `... "runs on RE-AFFIRMED against 6c5e55e: ... still stands. every pull
+      # request via ...`. The reason is what the NEXT pull reads to decide "does upstream
+      # supersede this?" — corrupting it is corrupting the record the whole re-adoption
+      # workflow turns on.
       awk -v s="$THEIRS_SHA" -v n="RE-AFFIRMED against ${THEIRS_SHA}: ${NOTE}" '
-        BEGIN{done_sha=0}
-        /^base_sha:/ && !done_sha { print "base_sha: " s; done_sha=1; next }
-        /^reason:/ && !done_r { print $0 " " n; done_r=1; next }
+        BEGIN{ fm=0; inreason=0; done_sha=0 }
+        NR==1 && /^---$/ { fm=1; print; next }
+        fm && /^---$/ {
+          if (inreason) { print "  " n; inreason=0 }
+          fm=0; print; next
+        }
+        fm && /^base_sha:/ && !done_sha {
+          if (inreason) { print "  " n; inreason=0 }
+          print "base_sha: " s; done_sha=1; next
+        }
+        fm && /^reason:/ { inreason=1; print; next }
+        fm && inreason && /^[A-Za-z_][A-Za-z0-9_]*:/ {
+          print "  " n; inreason=0; print; next
+        }
         { print }
       ' "$OVR" > "$tmp"
     else

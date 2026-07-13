@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.54.1] — 2026-07-13
+
+### `--stamp reaffirm` corrupted a live override's `reason:` — the record the whole workflow turns on
+
+`--stamp reaffirm` appended its note to the **`reason:` line**. A `reason:` is routinely
+a **multi-line YAML block** — six of the reference consumer's overrides have one, and the
+longest runs **99 lines** — so the note was spliced **into the middle of the first
+sentence**:
+
+```
+reason: The core paragraph states that `validate-ci-gates.sh` "runs on RE-AFFIRMED
+  against 6c5e55e: ... still stands. every pull request via `.github/workflows/...`
+```
+
+This shipped in v0.52.0 and **damaged a real override on the reference consumer.** The
+`reason:` is what the *next* pull reads to answer the one question the re-adoption
+workflow exists to ask — *does upstream's change supersede the reason this override
+exists?* Corrupting it corrupts the record that question is asked against.
+
+The note is now appended as a **continuation line at the end of the `reason:` block**.
+`core/fixtures/layer-readopt-gate/` asserts the first line stays intact, the continuation
+lines survive, and the note lands at the end — mutation-tested against the old splice,
+which it catches.
+
+**Repairing an override already corrupted:** `git checkout` the file to restore the
+original `reason:`, then re-run `--stamp reaffirm` with a 0.54.1 or later updater.
+
 ## [0.54.0] — 2026-07-13
 
 ### The updater handed the operator a blocker list. A blocker list is a to-do list with extra steps.
