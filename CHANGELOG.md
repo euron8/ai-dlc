@@ -19,6 +19,159 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.52.0] — 2026-07-13
 
+### A rule that explains itself invites negotiation
+
+*"Putting those things in the core skill are how we get agents 'reasoning' around the
+rules and gates."* — operator.
+
+A gate that justifies its own design hands the agent an argument for why the design
+does not apply *here*, and a pointer from a gate file to the rationale doc is a door:
+the agent walks through it and comes back with a story instead of a verdict.
+
+Every rationale header, cross-doc pointer, measured anecdote, and piece of version
+archaeology is **removed from the 38 agent-read files** (`SKILL.md`, `steps/*.md`,
+`core/team-roles/*.md`) and relocated to `docs/context-hardening-notes.md` **R33**,
+where humans read it and the pipeline does not. **No forwarding pointer is left
+behind — the pointer is the door.**
+
+| file | delta |
+|---|---|
+| `SKILL.md` | **−4,995 B** |
+| `steps/gate-validation.md` | **−3,110 B** |
+| `core/team-roles/adversary.md` | −1,749 B |
+| `steps/retro.md` | −511 B |
+| `steps/route.md` | −490 B |
+| `steps/_gate-procedures.md` | −231 B |
+| `steps/implementation.md` | −91 B |
+| **total** | **−11,177 B (~−2,794 tokens)** |
+
+The handed list of 5 headers + 9 pointers was a *starting* set. A shape-sweep found
+**3 more headers and 6 more anecdote sites**. Resident slack: **253 → 266 tokens**.
+
+**What was kept, and the test that decided it** — *can the agent use this sentence to
+argue the rule does not apply to it?* If yes, rationale, cut. If it is an invariant of
+the world, keep.
+
+- **All 21 Rule 26(c) contracts** (verified by count). Rule 26(c) *requires* machinery
+  to state failure-caught / false-positive-cost / removal-condition, and a retro audit
+  flags machinery lacking one — deleting them breaks a different gate. Compressed to
+  terse form; the sprint-numbered measurements *inside* the "failure caught" clauses
+  were stripped, the contracts were not.
+- **Factual API statements.** *"`Agent` returns an `agent_id`, `TaskOutput` takes a
+  `task_id`"* is a fact an agent cannot argue with.
+- **`gate-validation.md`'s H1 format examples** (`Sprint 288`, `Sprint S286`) — those
+  are accepted-input strings for a parser, not anecdotes.
+
+No `##`/`###` heading was deleted or renamed, so **no consumer override was orphaned**
+(checked against graph's `shadows:` entries before cutting; every site cut was a
+bold/italic paragraph lead *inside* a section).
+
+### Stopping is not landing — `/ai-dlc-update` can now carry a fix through re-adoption
+
+v0.52.0 promoted `OVERRIDE-DRIFT-SECTION` to `HARD-`, so a stale override blocks
+`apply`. That is necessary and **not sufficient**: graph's
+`overrides/SKILL__Rule-8.md` copies the divergence clause **verbatim**, the lead reads
+the *override* and not core, and blocking merely stops the pull. Three new reconcile
+tools end the block instead of parking on it.
+
+**`reconcile/readopt-override.sh`** — the re-adoption workflow. Prints a dossier (the
+core section's `base_sha..theirs` diff, the override's body, its stated `reason:`, and
+the superseded core lines still sitting in that body) and forces one question: *does
+upstream's change supersede the reason this override exists?* Outcomes: `retire`,
+`readopt`, `reaffirm --note`. All three end in a re-stamped `base_sha`.
+
+> **The trap it closes.** Drift is computed `core@base_sha[section] != core@theirs[section]`,
+> so re-stamping `base_sha := theirs` makes the HARD status **evaporate with nothing
+> migrated** — "proceed by doing nothing" wearing a stamp. So **`--stamp readopt` is
+> refused** while the body still contains a line core carried at `base_sha` and no
+> longer carries at `theirs`. Doing nothing is not an available outcome.
+
+**`reconcile/unregistered-drift.sh`** — the layer system's blind spot. `layer-drift.sh`
+walks `overrides/` and `extensions/`; a core file edited **in place** appears in
+neither, so no entry describes it, no `base_sha` tracks it, and `apply` — which
+overwrites upstream-owned core — **deletes it without a word.** On graph it finds
+exactly three (`team-roles/tea.md`, `steps/retro.md`, `hooks/ai-dlc-continue.sh`) and
+correctly exempts the ten files that differ only at `{token}` template sites.
+
+**`reconcile/relabel-extension-checks.sh`** — mechanizes the v0.49.0 catalog label.
+v0.49.0 defined the fix and shipped a detector; it shipped nothing that *did* the
+relabelling, so graph adopted the label on **zero** of its extension checks across
+three releases. Rewrites `### <n>. <title>` → `### <n>. [ext:<id>] <title>`. The
+integer never moves.
+
+### `validate-layer-entries.sh` told you the remedy, then rejected it
+
+Applying the linter's own advice — add the `[ext:<id>]` label it tells you to add —
+left the ERROR in place. `heading_title()` folded the label into the title text, so a
+correctly-labelled heading could never match core's title and the collision persisted.
+**5 errors became 6.** A remedy that does not remedy is a check that cannot pass, and
+a check that cannot pass gets commented out. The label is now stripped before the title
+comparison and a labelled heading **clears** the collision. A restatement (same title)
+still warns: the label fixes *ambiguity*, not *duplication*.
+
+### Verified end-to-end against the reference consumer, not against a green script
+
+Rehearsed on an `rsync` copy of graph (paused mid-sprint at S290; **its live tree was
+never written to, and its `_bmad-output/` audit record was never touched**):
+
+1. The dry-run **blocks** on 5 `HARD-*` rows — `SKILL__Rule-8`,
+   `steps__retro__ci-gates-enforcement-surface`, and the three unregistered-drift
+   files — each carrying its resolution command, and reports the Check-25 collision
+   this pull creates.
+2. **The Rule 8 fix is live in the RENDERED pipeline.** After `--stamp readopt`,
+   graph's *effective* Rule 8 — the override, not core — carries
+   `findings_critical_prior_scope`, and the consumer's validation-intensity table,
+   floor list, and revise-upward guarantee all survived.
+3. `validate-layer-entries.sh` in the migrated copy: **5 errors → 0** (21 warnings
+   remain: `RESTATES`, judgement-required, untouched).
+4. `validate-adversarial-convergence.sh --series s290-brief-adversarial-p` returns
+   **the same result as before the update** — one `FAIL (D — TERMINAL)`, p8 still
+   `EXIT_CONDITION_NOT_MET`. **Zero new failures on adoption, zero writes to p1–p8.**
+   The fail-closed default is what makes the field safe to adopt mid-cycle.
+
+### The three defects the rehearsal caught in the new code
+
+All three are the *check-that-cannot-fail* class, and none is visible without driving
+the real consumer state:
+
+- **`readopt-override.sh` used a weaker section resolver than `layer-drift.sh`.**
+  `layer-drift` blocked on the retro override; the remedy could not resolve the same
+  anchor, found zero stale lines, and **would have cleared the block.** The two now
+  share one resolver, byte for byte.
+- **An unresolvable anchor made the stale-text test vacuous** — two empty sections
+  compare equal, so *any* body read as clean. It now fails **closed**: `UNDECIDABLE`,
+  and `readopt` is refused (`reaffirm --note` is the recorded way past).
+- **The dossier's "what upstream changed" panel rendered empty.** `printf '%s'` emits
+  no trailing newline, so `while read` skipped its only line — "nothing changed" on a
+  section that changed.
+
+`core/fixtures/layer-readopt-gate/` asserts all of it, and **every gate was
+mutation-tested going red** before it went green. Its `seed.sh` writes a real git
+repository to disk — v0.48.0 shipped three seeds that were `echo` statements
+describing files they never created.
+
+### Reported honestly: what did NOT land
+
+- **`validate-layer-entries.sh` did not need a WARN→ERROR change for check-number
+  collisions — it has been an ERROR since v0.49.0** (E6, `kind: check`). The premise
+  was wrong. The WARNs are *step-section* numbers, tiered deliberately. No mechanism
+  was added where one already existed (Rule 26(b)).
+- **The enforcer still cannot run in graph's CI, because graph has no CI** — it was
+  removed on purpose (`fcce033ee chore: permanently remove GitHub Actions CI
+  scaffolding`). Wiring a job there would be a check that cannot fire. Its only call
+  sites remain retro and, now, `/ai-dlc-update`. **Rule 27 has no gate check and no
+  `enforcement-map.yaml` row at all** — the same half-wired shape this release is
+  named for, one layer up, and it is *not* fixed here.
+- **The layer system has no override grain for hooks.** `ai-dlc-continue.sh` carries a
+  legitimate +80-line consumer hardening (a handoff-resume guard with its own Rule
+  26(c) contract) that can be registered nowhere, so it stays `HARD-` on every pull.
+  The detector makes it *visible* and *blocking* — previously it was invisible and
+  would have been silently overwritten — but the durable fix is a separate release.
+  No hook-override subsystem was invented for it (Rule 26(a)).
+- **The packaging trap bit a fourth time** and was caught by
+  `validate-enforcement-map.sh`: the new fixture reached `install.sh`'s hardcoded loop
+  but not `uninstall.sh`'s. Both loops now agree.
+
 ### Three validators found real defects on the live consumer. Not one of them was wired to anything that stops the pipeline.
 
 The reference consumer was reviewed live at `0.51.0@b333c86`, mid-sprint, paused at an

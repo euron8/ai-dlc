@@ -227,9 +227,23 @@ Every consumer block that differs from upstream is one of:
      Resolution: operator re-stamps `base_sha` to the correct distribution sha.
    - `HARD-OVERRIDE-DRIFT-SECTION` → the shadowed section changed upstream, so the
      override is now shadowing **a rule that no longer exists**. **Blocks `apply`**
-     (see step 7). Resolution: re-adopt the new clause into the override and re-stamp
-     `base_sha`, or confirm the old text still applies and re-stamp anyway — but
-     *look*.
+     (see step 7). Resolution is not freehand — run the re-adoption workflow:
+
+         reconcile/readopt-override.sh <dist> <theirs> <consumer> <override>
+
+     It prints the dossier (the core section's `base_sha..theirs` diff, the override's
+     body, its stated `reason:`, and the superseded core lines still sitting in that
+     body) and asks the one question that decides the outcome: **does upstream's change
+     supersede the reason this override exists?** Three outcomes, all ending in a
+     re-stamped `base_sha`: `--stamp retire` (upstream absorbed it), `--stamp readopt`
+     (merge the new core text into the override, preserving the consumer's delta),
+     `--stamp reaffirm --note "<why>"` (the override still stands).
+
+     **`--stamp readopt` is REFUSED while the body still carries core text `theirs`
+     superseded.** Drift is computed `base_sha..theirs`, so a bare re-stamp makes the
+     HARD status evaporate with nothing migrated — the lead reads the OVERRIDE, not
+     core, and would go on obeying the rule the fix replaced. Doing nothing is not an
+     available outcome.
      **Why this blocks, when a check-number collision does not.** A collision is
      cosmetic and consumer-fixable. This changes **the rules the lead obeys**: the
      lead reads the override, not core, so an un-adjudicated drift means the core fix
@@ -270,6 +284,29 @@ Every consumer block that differs from upstream is one of:
      section anchor (`hooks:` is file-grain), so this is the strongest statement
      available: re-read the entry against the new core text.
    - `EXTENSION-HOOK-MISSING`, `OVERRIDE-OK`, `EXTENSION-OK` → as named.
+
+3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
+   walks `overrides/` and `extensions/`. A core file edited **in place** appears in
+   neither, so no entry describes it, no `base_sha` tracks it, and `apply` — which
+   overwrites upstream-owned core — **deletes it without a word.** Run:
+
+       reconcile/unregistered-drift.sh <dist-repo> <base-sha> <consumer-root>
+
+   - `HARD-UNREGISTERED-CORE-DRIFT` → **blocks `apply`** (step 7). Undecidable by the
+     tool (deliberate hardening → refile as an `overrides/` entry with a `base_sha`;
+     accident → revert) and lossy if ignored. Same bar as the other `HARD-` statuses.
+   - `CORE-TEMPLATE-SUBSTITUTED` → differs only where the distribution carries a
+     `{token}` site. That is what `install.sh` does; it is not drift, and it must
+     never be reported as such.
+   - `CORE-OK` → byte-identical to the distribution at base.
+
+3e. **Consumer-catalog collisions.** Run `reconcile/relabel-extension-checks.sh
+   <consumer-root>` (dry-run). Every extension check whose number core also defines
+   needs the v0.49.0 label `### <n>. [ext:<id>] <title>`. **Report-only here; it never
+   blocks `apply`** — a collision is decidable and consumer-fixable, and a consumer
+   must never be unable to take a fix because its own catalog needs relabelling. The
+   updater OFFERS the rewrite at step 7. The integer never moves; only the label is
+   added, so existing gate history maps by identity.
 
 4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
@@ -319,7 +356,11 @@ Every consumer block that differs from upstream is one of:
    core section it duplicates, and the note that retirement is an operator-gated
    delete per Rule 27(b) — upstream never writes the layer, so it cannot remove the
    entry for you), and a
-   **blocking-layer list** (every `HARD-*` status — these block `apply` outright).
+   **blocking-layer list** (every `HARD-*` status from step 3c AND step 3d — these
+   block `apply` outright; each one carries its resolution command, because a block
+   with no path out is a block someone routes around), and a
+   **catalog-relabel list** (step 3e: every extension check heading that needs the
+   `[ext:<id>]` label, report-only).
    This is a fixed filename
    overwritten on every
    run (a snapshot, not a log) — the header stamp is what lets anyone tell a
@@ -417,6 +458,27 @@ Every consumer block that differs from upstream is one of:
    accepts the risk per entry. `apply` authorizes writes; it does not authorize
    proceeding on an undecidable override — the same distinction the deletion gate
    below draws. Never infer that an unresolvable base means "unchanged."
+
+   **Clearing the gate is a WORKFLOW, not an assertion.** For each
+   `HARD-OVERRIDE-DRIFT-SECTION`, run `reconcile/readopt-override.sh` (step 3c) to
+   an outcome. For each `HARD-UNREGISTERED-CORE-DRIFT` (step 3d), the operator either
+   refiles the delta as an `overrides/` entry or reverts the file. Then **re-run
+   `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*` rows.** Do
+   not carry forward your memory of having discussed them: the re-run is the evidence,
+   and re-stamping is what makes it pass. A `HARD-` status that clears because you
+   decided it was fine is the check-that-cannot-fail defect, in the tool built to
+   prevent it.
+
+   **Post-apply, verify against the RENDERED pipeline, never against core alone.** A
+   core fix is effective only if it survives `overrides > extensions > core`
+   resolution. After the core overwrite, for every override you re-adopted, grep the
+   OVERRIDE for the new clause — that is the text the lead actually obeys. Core
+   containing the fix proves nothing about a section the consumer shadows.
+
+   **Offer the catalog relabel (step 3e).** Run `reconcile/relabel-extension-checks.sh
+   <consumer-root> --apply` once core is in place, since the collision set is defined
+   against the NEW core. Then run `scripts/validate-layer-entries.sh` and report its
+   errors/warnings in the apply summary. This never blocks the apply.
 
    **Flagged-block checkpoint (mid-apply, every block, not just conflicts).**
    Before executing a block's mechanical bucket action, check whether it (or
