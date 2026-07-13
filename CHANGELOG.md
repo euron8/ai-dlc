@@ -17,6 +17,74 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.54.0] — 2026-07-13
+
+### The updater handed the operator a blocker list. A blocker list is a to-do list with extra steps.
+
+v0.52.0 made a stale override **block** `apply`, and v0.53.0 gave the consumer a gate.
+Both were right, and both stopped one step short: run against the reference consumer,
+`/ai-dlc-update` reported *"5 blockers that need disposition"* and asked the operator
+how to respond. Answering meant **hand-merging prose** into an override body,
+**hand-authoring YAML frontmatter**, and **hand-picking a `shadows:` anchor** — the
+three things this project has most often gotten wrong. Four overrides have had to be
+anchor-repointed after naming a heading that did not exist, and drift detection was
+**dead for each of them** until someone noticed.
+
+Detecting a blocker and then handing the surgery to the operator is not a resolution
+path. **The updater has the tools; it must use them, and ask for approval — not
+instructions.**
+
+- **`readopt-override.sh --merge`** — re-adoption is a **three-way merge**, not a hand
+  edit: base = core@`base_sha`, ours = the override body, theirs = core@`theirs`.
+  Upstream's change lands, the consumer's delta survives, mechanically. Telling an
+  operator to "merge the new core text in, preserving your delta" is asking them to run
+  this algorithm in their head, on prose — and a hand-merge is where half an upstream
+  clause gets silently dropped. A real conflict leaves standard markers and is the one
+  place a human is genuinely required.
+
+- **`reconcile/register-drift.sh`** — pulls an unregistered in-place core edit **into**
+  the layer system: authors the `overrides/` entry from the consumer's own changed
+  sections, anchors it to **real headings**, stamps `base_sha` at **base**, and reverts
+  core. It skips sections differing only at `{token}` template sites (that is
+  `install.sh` doing its job, not a consumer change), and it **refuses hooks by
+  design** — the layer system has no override grain for them, and papering over that
+  would be worse than saying so.
+
+  `base_sha` is stamped at **base, not theirs**, deliberately: theirs would claim the
+  consumer had already read an upstream change it has not. If upstream also touched
+  that section, the new entry is immediately reported as `HARD-OVERRIDE-DRIFT-SECTION`
+  and goes through `--merge` like any other. The mechanisms chain.
+
+- **The adjudication loop (`ai-dlc-update` SKILL.md step 7).** Work `HARD-*` rows **one
+  at a time**: build the dossier, decide against it, **do the work**, then ask **one
+  closed question with a recommendation and its evidence**. The operator's answer is
+  *yes* or *no, do X instead* — never "here are five blockers, how do you want to
+  handle them."
+
+### Proven on the reference consumer: 5 blockers → 1, mechanically, with zero hand edits
+
+| blocker | disposition | how |
+|---|---|---|
+| `SKILL__Rule-8` | **readopt** | `--merge` + `--stamp` — new predicate in, old clause out, intensity table intact |
+| `steps__retro__ci-gates-enforcement-surface` | **reaffirm** | v0.52.0 changed only prose there |
+| `team-roles/tea.md` | **register** | `register-drift.sh --apply` authored the override, reverted core |
+| `steps/retro.md` | **revert** | duplicates an override that already carries it |
+| `hooks/ai-dlc-continue.sh` | **stays** | no override grain for hooks — the known gap, reported every pull |
+
+Graph's **effective** Rule 8 — the override, the text the lead actually obeys — now
+carries `findings_critical_prior_scope`, with the consumer's delta preserved.
+
+### The bug the fixture caught in the merge itself
+
+`--merge` reported **CONFLICT on a paragraph byte-identical to its own merge base.** The
+body extractor emitted a leading blank line (the one after the frontmatter fence) while
+`section_of` starts flush at the heading; that one-line offset mis-aligned `ours`
+against `base`. A clean, mechanical re-adoption was being handed back to the operator as
+prose to merge by hand — **the exact failure `--merge` exists to remove.** All three
+inputs are now aligned. `core/fixtures/layer-readopt-gate/` asserts a clean merge, that
+the superseded clause is *gone*, that the delta *survives*, that `--check` goes green
+after, and that a stamp **cannot outrun an unresolved conflict**.
+
 ## [0.53.0] — 2026-07-13
 
 ### A gate hosted in a service we do not run is a gate we do not control

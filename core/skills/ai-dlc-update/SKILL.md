@@ -239,11 +239,19 @@ Every consumer block that differs from upstream is one of:
      (merge the new core text into the override, preserving the consumer's delta),
      `--stamp reaffirm --note "<why>"` (the override still stands).
 
+     **`--merge` performs the re-adoption; you do not hand-edit the body.** It is a
+     three-way merge (base = core@`base_sha`, ours = the override body, theirs =
+     core@`theirs`), so upstream's change lands and the consumer's delta survives. A
+     conflict leaves markers and is the only case needing a human.
+
      **`--stamp readopt` is REFUSED while the body still carries core text `theirs`
-     superseded.** Drift is computed `base_sha..theirs`, so a bare re-stamp makes the
-     HARD status evaporate with nothing migrated — the lead reads the OVERRIDE, not
-     core, and would go on obeying the rule the fix replaced. Doing nothing is not an
-     available outcome.
+     superseded, or while conflict markers remain.** Drift is computed
+     `base_sha..theirs`, so a bare re-stamp makes the HARD status evaporate with nothing
+     migrated — the lead reads the OVERRIDE, not core, and would go on obeying the rule
+     the fix replaced. Doing nothing is not an available outcome.
+
+     The full procedure — **you do the surgery, the operator approves it** — is the
+     adjudication loop in step 7. Do not hand the operator a blocker list.
      **Why this blocks, when a check-number collision does not.** A collision is
      cosmetic and consumer-fixable. This changes **the rules the lead obeys**: the
      lead reads the override, not core, so an un-adjudicated drift means the core fix
@@ -295,6 +303,11 @@ Every consumer block that differs from upstream is one of:
    - `HARD-UNREGISTERED-CORE-DRIFT` → **blocks `apply`** (step 7). Undecidable by the
      tool (deliberate hardening → refile as an `overrides/` entry with a `base_sha`;
      accident → revert) and lossy if ignored. Same bar as the other `HARD-` statuses.
+     **`reconcile/register-drift.sh <dist> <base> <consumer> <core-rel-path> --apply`
+     does the refiling**: it authors the override from the consumer's own changed
+     sections, anchors it to real headings, stamps `base_sha` at **base**, and reverts
+     core. It leaves `reason:` as `TODO` — propose one, have the operator confirm it.
+     Hooks are refused by design (no override grain exists for them); say so plainly.
    - `CORE-TEMPLATE-SUBSTITUTED` → differs only where the distribution carries a
      `{token}` site. That is what `install.sh` does; it is not drift, and it must
      never be reported as such.
@@ -459,14 +472,64 @@ Every consumer block that differs from upstream is one of:
    proceeding on an undecidable override — the same distinction the deletion gate
    below draws. Never infer that an unresolvable base means "unchanged."
 
-   **Clearing the gate is a WORKFLOW, not an assertion.** For each
-   `HARD-OVERRIDE-DRIFT-SECTION`, run `reconcile/readopt-override.sh` (step 3c) to
-   an outcome. For each `HARD-UNREGISTERED-CORE-DRIFT` (step 3d), the operator either
-   refiles the delta as an `overrides/` entry or reverts the file. Then **re-run
-   `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*` rows.** Do
-   not carry forward your memory of having discussed them: the re-run is the evidence,
-   and re-stamping is what makes it pass. A `HARD-` status that clears because you
-   decided it was fine is the check-that-cannot-fail defect, in the tool built to
+   **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
+
+   Do NOT hand the operator a list of blockers and ask them how to respond. A blocker
+   list is a to-do list with extra steps: it makes them hand-merge prose, hand-author
+   YAML frontmatter, and hand-pick a `shadows:` anchor — the three things this repo has
+   most often gotten wrong (four overrides have had to be anchor-repointed after
+   naming a heading that did not exist, and drift detection was dead for each of them
+   until it was). You have the tools. Use them, then ask ONE closed question per
+   blocker.
+
+   Work the `HARD-*` rows **one at a time**. For each:
+
+   **(1) Build the evidence.** Run `reconcile/readopt-override.sh <dist> <theirs>
+   <consumer> <override>` with no flag. It prints the dossier: the core section's
+   `base_sha..theirs` diff, the override's body, its stated `reason:`, and the
+   superseded core lines still sitting in that body.
+
+   **(2) Decide, against the dossier, and say which and why in ONE sentence:**
+   - upstream's change makes the override redundant → **retire**
+   - the override's `reason:` still holds AND upstream changed the shadowed text →
+     **readopt**
+   - the override's `reason:` still holds AND upstream changed only text this override
+     does not depend on (e.g. a prose/rationale edit elsewhere in the section) →
+     **reaffirm**
+
+   **(3) DO IT.**
+   - **readopt** → `readopt-override.sh … --merge`. This is a three-way merge (base =
+     core@`base_sha`, ours = the override body, theirs = core@`theirs`): it applies
+     upstream's change and keeps the consumer's delta. **Never hand-edit the body when
+     `--merge` can do it** — a hand-merge is where half an upstream clause gets
+     silently dropped. On CONFLICT, markers are left in the body and that is the one
+     place a human is genuinely required; present the conflict hunk, nothing else.
+   - **`HARD-UNREGISTERED-CORE-DRIFT`** → `reconcile/register-drift.sh <dist> <base>
+     <consumer> <core-rel-path> --apply`. It authors the `overrides/` entry from the
+     consumer's own sections, anchors it to real headings, stamps `base_sha` at **base**
+     (where the delta forked from — NOT the sha being pulled; stamping `theirs` would
+     claim the consumer had already read a change it has not), and reverts core.
+     **Then write the `reason:` line, which it leaves as `TODO`** — propose one from the
+     diff and have the operator confirm it. An override whose reason nobody stated is
+     one nobody can ever retire.
+     If the delta merely **duplicates an existing override**, do not register a second
+     one: revert core and say which override already carries it.
+     If it is a **hook**, `register-drift.sh` refuses by design — the layer system has
+     no override grain for hooks. Say so, and let the operator keep it (it will report
+     every pull) or upstream it. Do not paper over it.
+
+   **(4) Ask the operator to approve THAT ONE disposition** — a closed question with
+   your recommendation and its one-line reason, and the evidence you used. Not "how do
+   you want to handle five blockers." Their answer is *yes* / *no, do X instead*.
+
+   **(5) Stamp**: `--stamp readopt` / `--stamp reaffirm --note "<their words>"` /
+   `--stamp retire`. `--stamp readopt` is refused while superseded core text or
+   conflict markers remain, so a stamp cannot outrun the merge.
+
+   Then **re-run `layer-drift.sh` and `unregistered-drift.sh` and require ZERO `HARD-*`
+   rows.** Do not carry forward your memory of having discussed them: the re-run is the
+   evidence, and re-stamping is what makes it pass. A `HARD-` status that clears because
+   you decided it was fine is the check-that-cannot-fail defect, in the tool built to
    prevent it.
 
    **Post-apply, verify against the RENDERED pipeline, never against core alone.** A
