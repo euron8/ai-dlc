@@ -28,7 +28,19 @@
 #   HARD-OVERRIDE-BASE-CONSUMER-SHA  base_sha resolves in the CONSUMER repo, so it
 #                                    is the wrong repo's sha; drift undecidable
 #   HARD-OVERRIDE-BASE-UNRESOLVABLE  base_sha resolves in neither repo
-#   OVERRIDE-DRIFT-SECTION           shadowed section's text changed base..theirs
+#   HARD-OVERRIDE-DRIFT-SECTION      shadowed section's text changed base..theirs, so
+#                                    the override is now shadowing a rule that NO LONGER
+#                                    EXISTS upstream. BLOCKS `apply` until adjudicated:
+#                                    re-adopt the new clause into the override and
+#                                    re-stamp base_sha, or confirm the old text still
+#                                    applies and re-stamp anyway. Either way, LOOK.
+#                                    Was advisory until v0.52.0, and that is precisely
+#                                    how a core fix could land while the consumer went
+#                                    on running the rule it replaced -- the lead reads
+#                                    the OVERRIDE, not core. Distinct from
+#                                    EXTENSION-CHECK-NUMBER-COLLISION below, which is
+#                                    cosmetic, consumer-fixable, and must NOT block:
+#                                    this one changes the RULES THE LEAD OBEYS.
 #   OVERRIDE-DRIFT-FILE              anchor is not a locatable heading AND the file
 #                                    changed -> cannot prove the section is safe;
 #                                    surface for re-confirmation (never skip)
@@ -234,7 +246,7 @@ while IFS= read -r f; do
     s_theirs="$(git_show "$THEIRS" "$cp" | section_of "$id")"
     if [ -z "$s_theirs" ]; then
       if [ "$file_changed" = yes ]; then
-        [ "$worst" = OVERRIDE-DRIFT-SECTION ] || worst=OVERRIDE-DRIFT-FILE
+        [ "$worst" = HARD-OVERRIDE-DRIFT-SECTION ] || worst=OVERRIDE-DRIFT-FILE
         unprovable="${unprovable:+$unprovable, }#$id"
       else
         [ "$worst" = OVERRIDE-OK ] && worst=OVERRIDE-ANCHOR-UNRESOLVED
@@ -244,7 +256,7 @@ while IFS= read -r f; do
     fi
     s_base="$(git_show "$base_sha" "$cp" | section_of "$id")"
     if [ "$s_base" != "$s_theirs" ]; then
-      worst=OVERRIDE-DRIFT-SECTION
+      worst=HARD-OVERRIDE-DRIFT-SECTION
       drifted="${drifted:+$drifted, }#$id"
     fi
   done <<< "$ids"

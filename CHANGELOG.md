@@ -17,6 +17,309 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.52.0] — 2026-07-13
+
+### A rule that explains itself invites negotiation
+
+*"Putting those things in the core skill are how we get agents 'reasoning' around the
+rules and gates."* — operator.
+
+A gate that justifies its own design hands the agent an argument for why the design
+does not apply *here*, and a pointer from a gate file to the rationale doc is a door:
+the agent walks through it and comes back with a story instead of a verdict.
+
+Every rationale header, cross-doc pointer, measured anecdote, and piece of version
+archaeology is **removed from the 38 agent-read files** (`SKILL.md`, `steps/*.md`,
+`core/team-roles/*.md`) and relocated to `docs/context-hardening-notes.md` **R33**,
+where humans read it and the pipeline does not. **No forwarding pointer is left
+behind — the pointer is the door.**
+
+| file | delta |
+|---|---|
+| `SKILL.md` | **−4,995 B** |
+| `steps/gate-validation.md` | **−3,110 B** |
+| `core/team-roles/adversary.md` | −1,749 B |
+| `steps/retro.md` | −511 B |
+| `steps/route.md` | −490 B |
+| `steps/_gate-procedures.md` | −231 B |
+| `steps/implementation.md` | −91 B |
+| **total** | **−11,177 B (~−2,794 tokens)** |
+
+The handed list of 5 headers + 9 pointers was a *starting* set. A shape-sweep found
+**3 more headers and 6 more anecdote sites**. Resident slack: **253 → 266 tokens**.
+
+**What was kept, and the test that decided it** — *can the agent use this sentence to
+argue the rule does not apply to it?* If yes, rationale, cut. If it is an invariant of
+the world, keep.
+
+- **All 21 Rule 26(c) contracts** (verified by count). Rule 26(c) *requires* machinery
+  to state failure-caught / false-positive-cost / removal-condition, and a retro audit
+  flags machinery lacking one — deleting them breaks a different gate. Compressed to
+  terse form; the sprint-numbered measurements *inside* the "failure caught" clauses
+  were stripped, the contracts were not.
+- **Factual API statements.** *"`Agent` returns an `agent_id`, `TaskOutput` takes a
+  `task_id`"* is a fact an agent cannot argue with.
+- **`gate-validation.md`'s H1 format examples** (`Sprint 288`, `Sprint S286`) — those
+  are accepted-input strings for a parser, not anecdotes.
+
+No `##`/`###` heading was deleted or renamed, so **no consumer override was orphaned**
+(checked against graph's `shadows:` entries before cutting; every site cut was a
+bold/italic paragraph lead *inside* a section).
+
+### Stopping is not landing — `/ai-dlc-update` can now carry a fix through re-adoption
+
+v0.52.0 promoted `OVERRIDE-DRIFT-SECTION` to `HARD-`, so a stale override blocks
+`apply`. That is necessary and **not sufficient**: graph's
+`overrides/SKILL__Rule-8.md` copies the divergence clause **verbatim**, the lead reads
+the *override* and not core, and blocking merely stops the pull. Three new reconcile
+tools end the block instead of parking on it.
+
+**`reconcile/readopt-override.sh`** — the re-adoption workflow. Prints a dossier (the
+core section's `base_sha..theirs` diff, the override's body, its stated `reason:`, and
+the superseded core lines still sitting in that body) and forces one question: *does
+upstream's change supersede the reason this override exists?* Outcomes: `retire`,
+`readopt`, `reaffirm --note`. All three end in a re-stamped `base_sha`.
+
+> **The trap it closes.** Drift is computed `core@base_sha[section] != core@theirs[section]`,
+> so re-stamping `base_sha := theirs` makes the HARD status **evaporate with nothing
+> migrated** — "proceed by doing nothing" wearing a stamp. So **`--stamp readopt` is
+> refused** while the body still contains a line core carried at `base_sha` and no
+> longer carries at `theirs`. Doing nothing is not an available outcome.
+
+**`reconcile/unregistered-drift.sh`** — the layer system's blind spot. `layer-drift.sh`
+walks `overrides/` and `extensions/`; a core file edited **in place** appears in
+neither, so no entry describes it, no `base_sha` tracks it, and `apply` — which
+overwrites upstream-owned core — **deletes it without a word.** On graph it finds
+exactly three (`team-roles/tea.md`, `steps/retro.md`, `hooks/ai-dlc-continue.sh`) and
+correctly exempts the ten files that differ only at `{token}` template sites.
+
+**`reconcile/relabel-extension-checks.sh`** — mechanizes the v0.49.0 catalog label.
+v0.49.0 defined the fix and shipped a detector; it shipped nothing that *did* the
+relabelling, so graph adopted the label on **zero** of its extension checks across
+three releases. Rewrites `### <n>. <title>` → `### <n>. [ext:<id>] <title>`. The
+integer never moves.
+
+### `validate-layer-entries.sh` told you the remedy, then rejected it
+
+Applying the linter's own advice — add the `[ext:<id>]` label it tells you to add —
+left the ERROR in place. `heading_title()` folded the label into the title text, so a
+correctly-labelled heading could never match core's title and the collision persisted.
+**5 errors became 6.** A remedy that does not remedy is a check that cannot pass, and
+a check that cannot pass gets commented out. The label is now stripped before the title
+comparison and a labelled heading **clears** the collision. A restatement (same title)
+still warns: the label fixes *ambiguity*, not *duplication*.
+
+### Verified end-to-end against the reference consumer, not against a green script
+
+Rehearsed on an `rsync` copy of graph (paused mid-sprint at S290; **its live tree was
+never written to, and its `_bmad-output/` audit record was never touched**):
+
+1. The dry-run **blocks** on 5 `HARD-*` rows — `SKILL__Rule-8`,
+   `steps__retro__ci-gates-enforcement-surface`, and the three unregistered-drift
+   files — each carrying its resolution command, and reports the Check-25 collision
+   this pull creates.
+2. **The Rule 8 fix is live in the RENDERED pipeline.** After `--stamp readopt`,
+   graph's *effective* Rule 8 — the override, not core — carries
+   `findings_critical_prior_scope`, and the consumer's validation-intensity table,
+   floor list, and revise-upward guarantee all survived.
+3. `validate-layer-entries.sh` in the migrated copy: **5 errors → 0** (21 warnings
+   remain: `RESTATES`, judgement-required, untouched).
+4. `validate-adversarial-convergence.sh --series s290-brief-adversarial-p` returns
+   **the same result as before the update** — one `FAIL (D — TERMINAL)`, p8 still
+   `EXIT_CONDITION_NOT_MET`. **Zero new failures on adoption, zero writes to p1–p8.**
+   The fail-closed default is what makes the field safe to adopt mid-cycle.
+
+### The three defects the rehearsal caught in the new code
+
+All three are the *check-that-cannot-fail* class, and none is visible without driving
+the real consumer state:
+
+- **`readopt-override.sh` used a weaker section resolver than `layer-drift.sh`.**
+  `layer-drift` blocked on the retro override; the remedy could not resolve the same
+  anchor, found zero stale lines, and **would have cleared the block.** The two now
+  share one resolver, byte for byte.
+- **An unresolvable anchor made the stale-text test vacuous** — two empty sections
+  compare equal, so *any* body read as clean. It now fails **closed**: `UNDECIDABLE`,
+  and `readopt` is refused (`reaffirm --note` is the recorded way past).
+- **The dossier's "what upstream changed" panel rendered empty.** `printf '%s'` emits
+  no trailing newline, so `while read` skipped its only line — "nothing changed" on a
+  section that changed.
+
+`core/fixtures/layer-readopt-gate/` asserts all of it, and **every gate was
+mutation-tested going red** before it went green. Its `seed.sh` writes a real git
+repository to disk — v0.48.0 shipped three seeds that were `echo` statements
+describing files they never created.
+
+### Reported honestly: what did NOT land
+
+- **`validate-layer-entries.sh` did not need a WARN→ERROR change for check-number
+  collisions — it has been an ERROR since v0.49.0** (E6, `kind: check`). The premise
+  was wrong. The WARNs are *step-section* numbers, tiered deliberately. No mechanism
+  was added where one already existed (Rule 26(b)).
+- **The enforcer still cannot run in graph's CI, because graph has no CI** — it was
+  removed on purpose (`fcce033ee chore: permanently remove GitHub Actions CI
+  scaffolding`). Wiring a job there would be a check that cannot fire. Its only call
+  sites remain retro and, now, `/ai-dlc-update`. **Rule 27 has no gate check and no
+  `enforcement-map.yaml` row at all** — the same half-wired shape this release is
+  named for, one layer up, and it is *not* fixed here.
+- **The layer system has no override grain for hooks.** `ai-dlc-continue.sh` carries a
+  legitimate +80-line consumer hardening (a handoff-resume guard with its own Rule
+  26(c) contract) that can be registered nowhere, so it stays `HARD-` on every pull.
+  The detector makes it *visible* and *blocking* — previously it was invisible and
+  would have been silently overwritten — but the durable fix is a separate release.
+  No hook-override subsystem was invented for it (Rule 26(a)).
+- **The packaging trap bit a fourth time** and was caught by
+  `validate-enforcement-map.sh`: the new fixture reached `install.sh`'s hardcoded loop
+  but not `uninstall.sh`'s. Both loops now agree.
+
+### Three validators found real defects on the live consumer. Not one of them was wired to anything that stops the pipeline.
+
+The reference consumer was reviewed live at `0.51.0@b333c86`, mid-sprint, paused at an
+operator handoff. The question was whether v0.48.0–v0.51.0 were effective. The answer
+turned out to be about **delivery**, not design.
+
+| validator | findings on the live consumer, right now | invoked at a gate? |
+|---|---|---|
+| `validate-steering-budget.sh` | **FAIL(A): 11 starvation violations, worst 10.0 min** | **no gate call site at all** |
+| `validate-layer-entries.sh` | 5 ERRORs, 21 warnings | named in gate *prose*; the gate passed |
+| `validate-enforcement-map.sh` | — | distribution-only — and **the distribution had no CI** |
+
+`git log --all -- .github` was **empty for the project's entire history.** ai-dlc
+shipped a CI template *to its consumers* while gating none of its own fifteen
+validators.
+
+**The previous releases were not half-*applied* by the consumer. They were
+half-*wired* in the distribution.** `wait-for-deliverable.sh` is physically present in
+graph; the sync worked. What never existed, in core, was a call site.
+
+### The machine that made it possible
+
+`enforcement-map.yaml` recorded `enforcer:` — *who* enforces a rule — on all 38
+entries. It recorded `call_sites:` — *where the enforcer is actually invoked* — on
+**one**. So *"Enforced by `validate-X.sh`"* was a **claim**, and nothing could tell a
+claim from a wiring. That is how `implementation.md:152` came to say
+*"`validate-steering-budget.sh` fails the gate on it"* while that sentence was **false
+at every gate, in every phase** — the script ran only at retro, after the sprint had
+already paid.
+
+- **`scripts/validate-enforcement-map.sh` gains I9.** **W1:** an
+  `adjudication: script` entry with no `call_sites:` is an ERROR. Run against the map
+  as it stood, it fails on **nine** entries. **It would have caught v0.50.0's
+  half-wiring at authoring time.** **W2:** no declared site may be fictional — the
+  file it names must at least know the enforcer exists. W2 *cannot* tell an invocation
+  from a prose mention, and **says so in the script**: telling them apart means parsing
+  English, and a heuristic that fails closed on a legitimate phrasing is an unpassable
+  gate, which gets turned off. The teeth are W1 plus the reviewable `posture:`.
+- **All nine entries backfilled** — and the backfill *is* the audit. It is what put
+  `steering-budget`'s single real call site (retro, after the fact) on the record.
+- **`.github/workflows/validate.yml`** — the distribution now runs its own checks:
+  enforcement-map integrity, the SKILL.md re-attach budget, the full fixture suite,
+  and `bash -n` over every shipped script. It immediately caught a fixture
+  (`context-sensor`, 36 assertions) that resolved its hook only at a **consumer** path
+  and had therefore never once run upstream.
+
+### Rule 8 — the divergence predicate compared counts across two documents that are not the same document
+
+S290 ran **eight** adversarial passes on one artifact. CRITICALs went
+`3 → 1 → 1 → 2 → 2 → 2 → 3 → 2` and **not one pass ever stamped
+`EXIT_CONDITION_MET`**. The predicate — `criticals(N+1) > criticals(N)` — hard-blocked
+twice, and **both times its stated cause was false.** Pass 7, first line:
+
+> *"The rise is NOT pass 6's repairs injecting defects — I probed those and they hold.
+> Every new CRITICAL is in the scope the sprint ADDED after pass 6 closed."*
+
+The adversary wrote **prose to override the field it had just stamped** — v0.48.0's
+defect exactly inverted, and the two conditions have **opposite remedies**.
+
+- **New field: `findings_critical_prior_scope: <int>`** — of your CRITICALs, how many
+  sit in text the *previous pass also reviewed*. Only those are comparable. An **int,
+  not an enum**: an enum is a cheat code (stamp `GREW`, the block evaporates), while an
+  integer is a cross-checkable partition of a number the adversary already produced.
+  **No fourth verdict** — the condition is derivable, and inventing one would be
+  unrequested mechanism under the rung v0.51.0 itself just shipped.
+- **Check C is now scope-relative; Check D names the real remedy** — *freeze the
+  artifact, cut the added scope* — instead of "run another pass," which is the advice
+  that produced passes 2 through 8.
+- **The exit condition was never broken.** S289's cycle ran `3 → 4 → 7 → 0` and
+  converged the moment the repairs finally *cut* text. It is reachable as soon as the
+  scope holds still, so nothing here touches it, Check B, or the pass floor.
+- `SKILL.md` Rule 8 is a **byte-NEGATIVE swap** (391 → 377). The resident region had
+  **zero** headroom — it ended at exactly the 4,750-token ceiling — and it fits because
+  the sentence deleted is the false one (*"Usual cause: an artifact over its Rule 25(d)
+  budget"*), which survives, correctly re-scoped, as the scope-growth remedy.
+
+### Rule 29 — the join fix was installed in half the pipeline
+
+v0.50.0 works **where it was wired**: 0 `TaskOutput` calls (S289: 8 failures) and **0
+re-dispatches across 28 spawns** (S289: 13 of 39). But it was authored against the
+phase where the failure was *observed*, not against the invariant. Five planning steps
+dispatch teammates; `wait-for-deliverable.sh` was prescribed in `implementation.md`
+**alone**, and `discovery.md` had **no join guidance at all** — while **all 28 of
+S290's dispatches were in planning.** The lead found the script anyway (34 calls) and
+*also* hand-rolled 17 `sleep` commands, ~8 of them unbounded loops that ran to the
+10-minute harness cap.
+
+- **`_gate-procedures.md` gains a "Bounded-join beat"** procedure, invoked by name from
+  every dispatch site in the five planning steps plus `sprint-review.md`. **Zero bytes
+  added to SKILL.md.**
+- **New gate Check 25** runs the enforcer at **every gate**, making
+  `implementation.md:152`'s claim true for the first time. The **delta rule is
+  load-bearing**: the scan is whole-session and a starvation window is conduct already
+  committed, so a raw FAIL would re-report it forever and an unpassable gate gets turned
+  off. Only an *increase* since the previous gate fails.
+- `validate-steering-budget.sh --count` emits the integer the gate compares. A markdown
+  step grepping a count out of an English sentence is the hand-rolled pipe `verdict.sh`
+  exists to kill.
+- **The turn-cost asymmetry is real but is NOT the cause.** In implementation, where the
+  beat *is* prescribed, the same lead paid ~3.4 beats per spawn and hand-rolled **zero**
+  loops. The variable is prescription, not price. A `PreToolUse` deny is **pre-registered,
+  not built** — it ships only if violations remain above zero.
+
+### A stale remedy would have told the lead to delete its own dispatch ledger
+
+`validate-artifact-budget.sh` said to trim `pipeline-snapshot.md` to its **6-section**
+schema. v0.50.0 made it **seven** and never swept the text. A lead obeying it literally
+would have deleted `In-Flight Teammates` — **the ledger that is the one thing
+demonstrably preventing re-dispatch.** Fixed to 7, pointing at Check 14 as schema owner.
+
+The snapshot had reached **66,782 bytes — 278% of budget** — whole-read at each of *ten*
+compactions in one day, while the sub-step check sat there reporting it. The check
+already exited 1 past the grace band; the step file said *"trim at your next natural
+pause."* **An obligation with no deadline is not an obligation.** Now: past grace →
+**trim before the next sub-step.** `In-Flight Teammates` is rows-only, **deleted at
+join** (it was *struck*, so rows accumulated, and the consumer wrote narrative instead
+— the section that saves the pipeline from re-dispatch had grown to ~35 lines).
+
+### v0.51.0 is installed, unexercised, and deliberately untouched
+
+The over-engineering MAJOR rung is present verbatim in the consumer and produced **zero
+findings across all eight passes**. The tempting confirmation — *"every repair
+subtracted"* — is confounded: S290's operator-set theme was literally **SUBTRACTION**,
+and v0.51.0's own changelog records S289's adversaries already removing by instinct
+without it. Reading that as the rung working would be a check that never fired, recorded
+as a check that passed. **It needs another sprint of evidence, not another edit.**
+
+### Migration — required, and it is not optional this time
+
+- **`OVERRIDE-DRIFT-SECTION` → `HARD-OVERRIDE-DRIFT-SECTION`, and it now BLOCKS
+  `apply`.** A consumer overriding a core section whose text has changed is shadowing
+  **a rule that no longer exists** — and the lead reads the override, not core. Left
+  advisory, v0.52.0's Rule 8 fix would have landed on disk and been **inert on the one
+  pipeline it was written for**, because the reference consumer shadows `SKILL.md#Rule 8`
+  verbatim. This is distinct from a check-number collision, which is cosmetic and
+  correctly does *not* block. `ai-dlc-update` already matches on the `HARD-` **prefix**,
+  so no new mechanism.
+- **Consumers overriding `SKILL.md#Rule 8` must re-adopt the new divergence clause and
+  re-stamp `base_sha`.** The update will now stop until they do.
+- **Consumers whose `extensions/checks/` squat integers ≥ 25 must adopt catalog labels**
+  (`### 25. [ext:<id>] …`, per v0.49.0). Core now defines Check 25.
+- **Adversarial passes stamped before v0.52.0 need NO back-fill.** The absent field
+  defaults to `prior := crit` — the *hostile* reading — so it reproduces the old
+  predicate exactly and cannot be used to dodge a hard block. The field is
+  **forward-adopting**: it is only ever needed on the *left* side of the comparison, so
+  the next pass can stamp it while every prior pass lacks it. **Do not retro-stamp a
+  review artifact**; it falsifies an audit record.
+
 ## [0.51.0] — 2026-07-13
 
 ### The adversary found the over-engineering, then filed it in the one bucket the gate forgives

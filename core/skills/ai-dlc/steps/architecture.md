@@ -248,6 +248,12 @@ design coherence against PRD. Fix any misalignment found.
 
 ### 4. Validation Cycle (Rule 8)
 
+**Join every spawn on its DELIVERABLE** — one
+`scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
+(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
+wait is a Rule 29 Check A violation; gate Check 25 counts it.
+
+
 **Intensity gate for lightweight.** When `validation_intensity ==
 lightweight` AND the Step 2 assessment is NO CHANGES NEEDED, skip this
 validation cycle entirely (the Rule 5 fast-track still applies) and
@@ -273,7 +279,9 @@ between them:**
    "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
    ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
    terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
-   that field; rising CRITICALs are a `DIVERGENT_HARD_BLOCK`, not another pass).
+   that field; CRITICALs rising **in the scope the prior pass reviewed** are a
+   `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
+   added scope and freeze the artifact).
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `_gate-procedures.md`
    \"Auto-handoff evaluation\") at `Seam D` with the label

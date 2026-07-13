@@ -94,16 +94,10 @@ misclassified the finding.
 
 **Minimum mechanism (Rule 26(c)).** *Catches:* the ladder had no rung for a
 correct-but-over-built artifact, so a removal finding had nowhere to live and drifted
-out of the graded set entirely. On S289 an adversary filed a "Rule 26 removal sweep" of
-three deletions (`s289-arch-adversarial-pass1.md:261-278`) that its own `VERDICT: 2
-CRITICAL, 1 MAJOR, 2 MINOR` counted **zero** of — findings with no severity, invisible
-to Check 24, which landed only because the lead read the prose. That is v0.48.0's
-failure one rung down: converged in the prose, absent from the field. *False-positive
-cost:* a MAJOR filed on taste forces another pass, and the extra pass is where S289's
-new CRITICALs came from — the three-part bar is the guard. Backtested against all 21
-S289 removal findings: the 8 filed MINOR are stale words and stale counts, none names a
-mechanism, all 8 fail test 1, and the converged pass 4 (0 CRITICAL / 0 MAJOR / 2 MINOR)
-is unchanged. *Removed when:* two consecutive sprints file zero over-engineering MAJORs
+out of the graded set entirely — ungraded, invisible to Check 24, landing only if the
+lead happened to read the prose. *False-positive cost:* a MAJOR filed on taste forces
+another pass, and an extra pass is where new CRITICALs come from — the three-part bar
+is the guard. *Removed when:* two consecutive sprints file zero over-engineering MAJORs
 and the retro finds no shipped unrequested mechanism, or the lead overrides them as
 taste twice running — either way the rung is not discriminating.
 
@@ -114,6 +108,7 @@ residue and exactly one verdict from this set. There is no free-text verdict.
 
 ```
 findings_critical: <int>
+findings_critical_prior_scope: <int>   # of the above, those in text the PRIOR pass also reviewed
 findings_major: <int>
 findings_minor: <int>
 verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
@@ -126,21 +121,33 @@ verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
   ladder above MINOR/NIT **is** the nitpick bucket. A clean-of-CRITICAL-and-MAJOR
   residue with open MINORs is a MET exit condition, not a nearly-met one. Say MET.
 - any CRITICAL or MAJOR open → `EXIT_CONDITION_NOT_MET`.
-- more CRITICALs than the pass before you → `DIVERGENT_HARD_BLOCK`, and say why in
-  your first line. This is not "not met, run another pass." Rule 8: divergence is a
-  HARD_BLOCK. The lead must stop and change approach, not review the next wave.
+- **`findings_critical_prior_scope` above the previous pass's `findings_critical`**
+  → `DIVERGENT_HARD_BLOCK`, and say why in your first line. These are defects the
+  repair injected into text that had **already been cleared**. This is not "not met,
+  run another pass." Rule 8: divergence is a HARD_BLOCK. The lead must stop and
+  change approach.
+- **CRITICALs in scope the sprint ADDED after the previous pass closed are NOT
+  divergence.** They count in `findings_critical` and **not** in
+  `findings_critical_prior_scope`. Stamp `EXIT_CONDITION_NOT_MET`. The counts are
+  not comparable because **the document is not the same document** — and the remedy
+  is not yours to name: the lead reads the gap between the two fields and shrinks
+  the sprint.
+
+**The bar for excluding a CRITICAL from `findings_critical_prior_scope`.** Name the
+artifact `file:line` and assert that text did not exist at the previous pass. If you
+cannot, **it counts as prior scope.** An unfalsifiable exclusion is not an exclusion
+— the same three-part discipline the CRITICAL rung already demands. And
+`findings_critical_prior_scope` may never exceed `findings_critical`: it is a subset
+of your own count, not a second opinion about it.
 
 `scripts/validate-adversarial-convergence.sh` (gate Check 24) reads exactly these
-four fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`.
+fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`. Omitting
+`findings_critical_prior_scope` is safe but **hostile to you**: the validator then
+assumes ALL your CRITICALs are prior-scope — the strictest reading, and the one most
+likely to hard-block your cycle.
 
-*Why this exists.* v0.46.0 told you a clean verdict was a valid outcome and gave
-you nowhere to write one. On S289 pass 4 the residue was 0 CRITICAL, 0 MAJOR, 2
-MINOR; the report's prose said *"the repair wave converged … I probed the repair
-hard and it holds"* — and its field said `verdict: EXIT CONDITION NOT MET`, the
-same string pass 3 emitted. The lead read the prose, applied the two one-line
-deletions, and passed the gate anyway. **A review that converges in prose and
-refuses to converge in its field has not converged: it has handed the decision
-back to the context whose independence you exist to supply.**
+**A review that converges in prose and refuses to converge in its field has not
+converged.** Say the outcome in the field.
 
 ## Later passes review the REPAIR, not the document again
 
@@ -154,21 +161,14 @@ changed** — the repair is the artifact under review. You MUST:
 2. **Not re-litigate a settled disposition without NEW evidence.** The lead recorded
    a decision; re-opening it because you would have chosen differently is churn, not
    review. New evidence means new evidence, not a new opinion.
-3. **Report divergence explicitly.** If you are finding MORE criticals than the pass
-   before you, say so in your first line and say why. That is a signal the repair
-   step is injecting defects faster than review removes them — the lead needs to
-   stop and change approach, not run another pass. Silence there turns a broken
-   cycle into an endless one.
+3. **Report divergence explicitly.** If you are finding more criticals **in scope the
+   pass before you already reviewed**, say so in your first line and say why. That is
+   a signal the repair step is injecting defects faster than review removes them —
+   the lead needs to stop and change approach, not run another pass. Silence there
+   turns a broken cycle into an endless one.
 
-*Why this exists.* On S289's `research-requirements` cycle the CRITICALs per pass
-ran **3 → 4 → 7 → 0** — rising every pass until the repair step finally *cut* text
-instead of adding it. Derivation, so the next reader can re-check it rather than
-inherit it: `s289-rr-adversarial-pass1.md:180` (3), `pass2.md:252` (4),
-`pass3.md:517` (7), `pass4-verification.md:492` (0). Pass 3's own summary:
-"Pass-2's repair wave injected five new CRITICALs, three of them defects the repair
-itself created." The reviews were not getting sharper; the repairs were
-manufacturing work. A role that must find something will always find something, and
-the newest, least-defended text — the last pass's repairs — is where it will look.
+   Your first line **restates** `findings_critical_prior_scope`; it does not
+   substitute for it. Prose the gate cannot read does not close the cycle.
 
 ## Ownership
 

@@ -81,6 +81,14 @@ checks:
     hard_block: true
     enforcer:
       - core/scripts/validate-locked-anchor.sh
+    call_sites:
+      - site: gate-validation.md Check 3b
+        posture: FAILS the gate (exit 0 required)
+        why: a LOCKED requirement that does not byte-anchor to the source of record
+          is a requirement the sprint invented
+      - site: stories-test-strategy.md (story authoring)
+        posture: advisory — names the check the story must survive
+        why: cheaper to anchor at authoring than to fail the story gate
     ci_workflow: ~
     fixtures: [tests/fixtures/check-3b-locked-anchor]
 
@@ -191,6 +199,15 @@ checks:
     enforcer:
       - core/scripts/validate-provenance-block.sh
       - core/scripts/validate-retro-evidence.sh
+    call_sites:
+      - site: gate-validation.md Check 17
+        posture: FAILS the gate (both must exit 0)
+        why: an unprovenanced deliverable cannot be told from one the lead wrote
+          itself, which is the whole basis of Rule 20 delivery
+      - site: retro.md (party-mode + evidence)
+        posture: FAILS the retro
+        why: the retro's transcript-artifact claims are the one place forgery is
+          cheapest and least visible
     ci_workflow: core/ci-templates/validate-retro-compliance.yml
     fixtures: [tests/fixtures/check-17-bypass]
 
@@ -236,6 +253,11 @@ checks:
     hard_block: true
     enforcer:
       - core/scripts/validate-draft-stamps.sh
+    call_sites:
+      - site: gate-validation.md Check 23
+        posture: FAILS the gate (exit 0 required)
+        why: a draft carrying the wrong sprint stamp is indistinguishable from a
+          current one once the sprint reads it
     ci_workflow: ~
     fixtures: [tests/fixtures/check-23-draft-stamps]
 
@@ -246,8 +268,29 @@ checks:
     hard_block: true
     enforcer:
       - core/scripts/validate-adversarial-convergence.sh
+    call_sites:
+      - site: gate-validation.md Check 24
+        posture: FAILS the gate (exit 0 required)
+        why: the residue-to-verdict adjudication is the only thing standing between
+          an unconverged cycle and a passed planning gate
     ci_workflow: ~
     fixtures: [tests/fixtures/check-24-adversarial-convergence]
+
+  - id: "25"
+    title: Rule 29 bounded-join conduct — the operator was reachable
+    gate_types: [universal]
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-steering-budget.sh
+    call_sites:
+      - site: gate-validation.md Check 25
+        posture: FAILS the gate on a NEW violation since the previous gate
+        why: the delta is the only question that is both answerable and actionable —
+          a starvation window is conduct already committed and cannot be repaired, so
+          a raw count would make the gate unpassable, and an unpassable gate gets
+          turned off
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-25-steering-conduct]
 
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
@@ -297,6 +340,11 @@ non_catalog_units:
     adjudication: script
     enforcer:
       - core/scripts/validate-mandatory-rules.sh
+    call_sites:
+      - site: retro.md (pre-commit validation gate)
+        posture: BLOCKS the retro commit
+        why: retro is the only step that can record a rule as satisfied, so it is
+          the only place the claim can be checked against the artifact
     ci_workflow: core/ci-templates/validate-retro-compliance.yml
 
   - id: ci-gate-dormancy
@@ -304,6 +352,11 @@ non_catalog_units:
     adjudication: script
     enforcer:
       - core/scripts/validate-ci-gates.sh
+    call_sites:
+      - site: retro.md (empirical gate validation)
+        posture: reports; the retro adjudicates
+        why: a gate declared in a retro and armed in no workflow is a gate that
+          never fires — and it reads, in every later retro, as a gate that passed
     ci_workflow: core/ci-templates/validate-ci-gates.yml
 
   - id: compact-window-ordering
@@ -311,6 +364,12 @@ non_catalog_units:
     adjudication: script
     enforcer:
       - core/scripts/validate-compact-window.sh
+    call_sites:
+      - site: SKILL.md Rule 2 (context-budget setup)
+        posture: advisory — the operator sets autoCompactWindow, the lead verifies
+        why: the window is settings.json state, not pipeline state; no gate can
+          repair it and no step writes it, so the only honest posture is "check and
+          tell the operator"
 
   - id: h2-attestation
     title: H2 harness self-test (gate-validation.md H2) — drives the real fixtures
@@ -319,6 +378,12 @@ non_catalog_units:
     enforcer:
       - core/scripts/validate-h2-attestation.sh
       - core/fixtures/check-17-bypass/run.sh
+    call_sites:
+      - site: gate-validation.md H2
+        posture: FAILS the gate if the mechanical fixture does not hold, or if no
+          valid attestation exists for this sprint at the current fixture digest
+        why: the harness self-test is the only check that checks the checkers; if it
+          runs nowhere, every fixture below it is decoration
     posture: FAILS the gate if the mechanical fixture does not hold, or if no valid
       attestation exists for this sprint at the current fixture digest
     cadence: once per sprint (was: every gate, 4–6× per planning phase). The fixtures
@@ -362,6 +427,23 @@ non_catalog_units:
     enforcer:
       - core/scripts/validate-steering-budget.sh
       - core/hooks/ai-dlc-acknowledge.sh
+    call_sites:
+      - site: gate-validation.md Check 25
+        posture: FAILS the gate on a NEW violation since the previous gate
+        why: Rule 29 binds every phase that dispatches, and planning dispatches most
+          — S290 ran 28 of its 28 spawns there. The delta bound is load-bearing: the
+          scan is whole-session, so a raw FAIL would re-report a violation from three
+          gates ago forever, could never be remediated, and an unpassable gate gets
+          turned off. Compare against the previous gate-log entry's
+          steering_violations; only an INCREASE fails.
+      - site: retro.md (close-out sweep)
+        posture: reports; the retro adjudicates
+        why: the sprint has already paid — retro records the conduct, it cannot
+          prevent it
+      - site: ai-dlc-acknowledge.sh (PreToolUse)
+        posture: runtime DENY (Check B only — the pause-flag steamroll)
+        why: B is the only one of the four that can be adjudicated before the harm,
+          because the flag's state is knowable at call time
     checks:
       - id: A
         asserts: no foreground tool call blocks longer than steering_budget

@@ -146,6 +146,11 @@ normalize_verdict() {
 
 VALID_VERDICTS="EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"
 
+# Passes that found CRITICALs in scope the previous pass never saw. Derived from
+# findings_critical vs findings_critical_prior_scope; Check D turns it into the
+# remedy. Stays 0 for a pre-v0.52.0 series (absent field => prior == crit).
+SCOPE_GREW=0
+
 ERRORS=0
 err() { ERRORS=$((ERRORS + 1)); printf 'FAIL (%s): %s\n' "$1" "$2"; }
 
@@ -197,16 +202,56 @@ for f in "${SORTED[@]}"; do
     fi
   fi
 
-  # --- C. DIVERGENCE --------------------------------------------------------
-  if [ -n "$crit" ] && [ -n "$PREV_CRIT" ] && [ "$crit" -gt "$PREV_CRIT" ]; then
+  # --- C. DIVERGENCE (scope-relative) ---------------------------------------
+  # findings_critical counts a POPULATION. Comparing two of them across passes
+  # assumes both counted the same document -- and between pass N and N+1 the sprint
+  # can ADD SCOPE, at which point the comparison is not a comparison.
+  #
+  # Measured on the reference consumer, S290: CRITICALs ran 3,1,1,2,2,2,3,2 and the
+  # bare predicate hard-blocked twice (p4: 2>1, p7: 3>2). BOTH times its stated cause
+  # was false. Pass 7, first line: "The rise is NOT pass 6's repairs injecting
+  # defects -- I probed those and they hold. Every new CRITICAL is in the scope the
+  # sprint ADDED after pass 6 closed." The adversary wrote PROSE to override the field
+  # it had just stamped -- v0.48.0's defect inverted, and it cost two operator
+  # adjudications. The two conditions have OPPOSITE remedies: "your repairs are bad"
+  # vs "the sprint grew; cut it".
+  #
+  # findings_critical_prior_scope partitions the count: of your CRITICALs, how many
+  # sit in text the PREVIOUS pass also reviewed. Only THOSE are comparable.
+  #
+  # FAIL-CLOSED DEFAULT: absent field => prior := crit => this degrades to EXACTLY
+  # the pre-v0.52.0 predicate. It can only make C stricter, never laxer, so the
+  # missing field cannot be used to dodge a hard block -- which is what makes it safe
+  # to adopt mid-cycle against passes stamped under the old schema.
+  prior="$(block_field "$f" 'findings_critical_prior_scope' | tr -cd '0-9')"
+  [ -z "$prior" ] && prior="$crit"
+
+  # Sanity: the partition cannot exceed the whole. Catches a typo and a dishonest
+  # field in the same assertion.
+  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$prior" -gt "$crit" ]; then
+    err "C -- DIVERGENCE" "$f declares findings_critical_prior_scope=$prior but only
+      $crit CRITICAL. The prior-scope count is a SUBSET of your CRITICALs -- it cannot
+      exceed them."
+  fi
+
+  if [ -n "$prior" ] && [ -n "$PREV_CRIT" ] && [ "$prior" -gt "$PREV_CRIT" ]; then
     if [ "$verdict" != "DIVERGENT_HARD_BLOCK" ]; then
-      err "C -- DIVERGENCE" "$f reports $crit CRITICAL, up from $PREV_CRIT in
-      $PREV_FILE, and does not stamp DIVERGENT_HARD_BLOCK.
-      Rule 8: divergence is a HARD_BLOCK, not a reason for another pass. Rising
-      CRITICALs mean the REPAIR step is injecting defects faster than review removes
-      them; pass N+1 only finds the next wave. STOP and escalate. Usual cause: an
-      artifact over its Rule 25(d) budget, too cross-referenced to edit safely."
+      err "C -- DIVERGENCE" "$f reports $prior CRITICAL in scope the previous pass had
+      already reviewed, up from $PREV_CRIT in $PREV_FILE, and does not stamp
+      DIVERGENT_HARD_BLOCK.
+      Rule 8: divergence is a HARD_BLOCK, not a reason for another pass. These are
+      defects the REPAIR injected into text that had already been cleared; pass N+1
+      only finds the next wave. STOP and escalate.
+      (CRITICALs in scope the sprint ADDED since the previous pass are NOT divergence
+      and do not count here -- if that is what you found, declare
+      findings_critical_prior_scope and stamp EXIT_CONDITION_NOT_MET instead.)"
     fi
+  fi
+
+  # Did this pass find CRITICALs in scope that did not exist at the previous pass?
+  # Derived from the one field; no second field. Check D reads it.
+  if [ -n "$crit" ] && [ -n "$prior" ] && [ "$crit" -gt "$prior" ]; then
+    SCOPE_GREW=$((SCOPE_GREW + 1))
   fi
 
   if [ -n "$crit" ]; then PREV_CRIT="$crit"; PREV_FILE="$f"; fi
@@ -228,11 +273,27 @@ case "$LAST_VERDICT" in
     err "D -- TERMINAL" "the series ends at $LAST_FILE with no verdict at all.
       The gate has nothing to read." ;;
   *)
-    err "D -- TERMINAL" "the series ends at $LAST_FILE with $LAST_VERDICT.
+    if [ "$SCOPE_GREW" -gt 0 ]; then
+      # The cycle is not failing to converge. It is being asked to converge on a
+      # MOVING ARTIFACT, and it cannot. S290 ran EIGHT passes this way: every repair
+      # subtracted, and the sprint grew underneath them faster than the passes could
+      # cut. "Run another pass" is the advice that produced passes 2 through 8.
+      err "D -- TERMINAL" "the series ends at $LAST_FILE with $LAST_VERDICT after
+      $SCOPE_GREW pass(es) that found CRITICALs in scope ADDED since the pass before
+      them.
+      The cycle is not failing to converge -- it is being asked to converge on a
+      MOVING ARTIFACT. Another pass is NOT the remedy: the next one will review
+      whatever was added since this one, and the series will not terminate.
+      FREEZE the artifact under review, CUT the added scope (Rule 25(d)), and run the
+      cycle to a clean pass on the frozen scope. The exit condition is reachable --
+      it is reachable the moment the document stops moving."
+    else
+      err "D -- TERMINAL" "the series ends at $LAST_FILE with $LAST_VERDICT.
       The gate is being asked to pass over an adversarial cycle whose own last
       artifact says the exit condition is not met. Either run another pass to a
       clean verdict, or -- if the residue is already clean -- stamp the verdict the
-      residue supports. Do not pass the gate by overriding the field in prose." ;;
+      residue supports. Do not pass the gate by overriding the field in prose."
+    fi ;;
 esac
 
 if [ "$ERRORS" -gt 0 ]; then

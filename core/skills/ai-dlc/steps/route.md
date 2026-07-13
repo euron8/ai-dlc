@@ -157,14 +157,6 @@ script names per artifact — they are not interchangeable:
 
 Then re-run the script. It must exit 0 before the sprint proceeds.
 
-**Why this blocks here and nowhere else.** Sprint start is the last moment at
-which an oversized artifact is cheap to fix — the sprint has not read it yet.
-One step later, `carry-over-evaluation` whole-reads the brief, the PRD, the
-architecture, and the backlog (Rule 25(b)), and every over-budget byte is
-context that planning does not get back. This gate is upstream of that read on
-purpose. Retro's audit of the same budgets stays warn-only; it reports on a
-sprint that already paid.
-
 ### Step 2: Analyze User Input
 
 Classify the user's request:

@@ -10,13 +10,28 @@
 
 set -u
 
-HOOK="${1:-${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/ai-dlc-context-sensor.sh}"
 FIXTURES="$(cd "$(dirname "$0")" && pwd)"
 
-if [ ! -x "$HOOK" ]; then
-  echo "FAIL: hook not executable: $HOOK" >&2
+# Resolve the hook from an explicit argument, then the CONSUMER layout, then the
+# DISTRIBUTION layout. The third candidate is why this exists: the fixture only ever
+# looked for `.claude/hooks/`, which does not exist upstream, so it could not run in
+# the distribution at all -- and the distribution had no CI to notice. A self-test
+# that cannot execute where it lives is the same defect this release is about.
+HOOK="${1:-}"
+if [ -z "$HOOK" ]; then
+  for cand in \
+    "${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/ai-dlc-context-sensor.sh" \
+    "$FIXTURES/../../hooks/ai-dlc-context-sensor.sh" \
+    "$FIXTURES/../../core/hooks/ai-dlc-context-sensor.sh"; do
+    [ -f "$cand" ] && HOOK="$cand" && break
+  done
+fi
+
+if [ ! -f "$HOOK" ]; then
+  echo "FAIL: cannot locate ai-dlc-context-sensor.sh (tried consumer and distribution layouts)" >&2
   exit 1
 fi
+[ -x "$HOOK" ] || HOOK="bash $HOOK"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT

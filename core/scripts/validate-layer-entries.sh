@@ -126,7 +126,24 @@ heading_title() { # heading_title <file> <anchor>
     $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
       sub("^" a "\\.[ \t]*","",h)
+      # Strip the catalog label before normalizing. Left in, "[ext:foo]" becomes part
+      # of the title, so a correctly-labelled heading never matches the core title
+      # and the RESTATES/collision split misreads.
+      gsub(/\[ext:[A-Za-z0-9_.-]+\][ \t]*/, "", h); gsub(/\[core\][ \t]*/, "", h)
       print nrm(h); exit
+    }' "$1" 2>/dev/null
+}
+
+# Does the heading at <anchor> carry an explicit catalog label?
+#
+# The label IS the sanctioned fix for a number collision (v0.49.0 crosswalk), so a
+# labelled heading must CLEAR the error. It did not: the message told the operator to
+# add `[ext:<id>]`, they added it, and the ERROR persisted — a remedy that does not
+# remedy. Found by applying this linter's own advice and re-running it.
+heading_labelled() { # heading_labelled <file> <anchor>
+  awk -v a="$2" '
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+      print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
     }' "$1" 2>/dev/null
 }
 
@@ -275,6 +292,14 @@ while IFS= read -r f; do
     t_core="$(heading_title "$core_path" "$a")"
 
     if [ -n "$t_ext" ] && [ -n "$t_core" ] && ! same_title "$t_ext" "$t_core"; then
+      # A labelled heading is the RESOLVED state, not a violation. The integer is
+      # still shared, but it is no longer a bare number: `### 25. [ext:foo] …` and
+      # `### 25.` in core name their catalogs at the point of use, which is exactly
+      # what the crosswalk asks for. Erroring here anyway would mean the linter's own
+      # prescribed remedy could never clear the linter.
+      if [ "$(heading_labelled "$f" "$a")" = yes ]; then
+        continue
+      fi
       msg="$(rel "$f"): NUMBER COLLISION on '$a.' — this defines \"$t_ext\" while core '$hooks' defines \"$t_core\" at the same number. Extensions are ADDITIVE, so both render into one merged list under one integer: a bare \"Check $a\" in a gate log, retro, or escalation has no referent. Give this check a catalog-labelled heading (\"### $a. [ext:$id] …\") per the Consumer-catalog crosswalk."
       case "$kind" in
         check) err "$msg" ;;

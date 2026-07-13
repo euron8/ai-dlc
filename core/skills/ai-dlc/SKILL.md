@@ -157,11 +157,11 @@ more is always permitted.
 **"2+ passes" is a FLOOR; the cycle must CONVERGE to leave it.** Pass 2+ reviews the
 REPAIR, not the document again, and verifies the prior pass's findings landed.
 
-**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1 reports
-more CRITICALs than pass N, the repair step is injecting defects faster than review
-removes them; another pass only finds the next wave. STOP and escalate. Usual cause:
-an artifact over its Rule 25(d) budget, too cross-referenced to edit safely. Contract
-and the measured failure: `team-roles/adversary.md`.
+**Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
+`findings_critical_prior_scope` above pass N's `findings_critical` means the repair
+is injecting defects. STOP and escalate. CRITICALs in scope ADDED mid-cycle are
+NOT divergence: no cycle converges on a growing artifact -- freeze scope, shrink
+the sprint, restart. Contract: `team-roles/adversary.md`.
 
 The per-intensity skips are enforced by each planning step's own
 intensity gate, not tracked centrally. Under `carry-over-single`,
@@ -377,7 +377,6 @@ agent MUST output:
 
 The agent then proceeds immediately to the next pipeline action in
 the same response. The agent MUST NOT pause for user confirmation.
-(Rationale: `docs/context-hardening-notes.md` R31.)
 
 **Content dropped by re-attachment budget.** Claude Code re-attaches
 the first 5,000 tokens of each invoked skill after compact. If after
@@ -449,11 +448,6 @@ At each gate, reconcile the snapshot's Context Reminders fields from
 `_bmad-output/.context-sensor-state` (see `gate-validation.md`
 Check 14).
 
-(Sensor mechanics -- the measurement, the two hook events, the model-row
-inference, and `AI_DLC_MODEL_ROW` -- are operator concerns documented in
-`docs/context-hardening-notes.md` and QUICKSTART; nothing here requires
-the lead to act on them.)
-
 ### Reminder text
 
 The hook emits these; a gate may restate one.
@@ -497,8 +491,7 @@ Imminent (critical band, ranked above red):
 The critical band opens at `effectiveWindow - 31,000 - 20,000` and is
 its own level ranked above red, so entering it always fires on the first
 crossing. It fires only when the model row is known, never on an assumed
-row. (Rationale and the measurements behind the constants are in
-`docs/context-hardening-notes.md`.)
+row.
 
 ### Auto-compact ordering invariant
 
@@ -516,8 +509,7 @@ with `MIN_SLACK` 50,000 and `MAX_DRIFT` 100,000 by default.
 
 Red must fire before the auto-compact threshold so the handoff gets
 first refusal; the upper bound caps how far a run drifts past red when
-the reminder is ignored. Rationale and the worked 1M-model example:
-`docs/context-hardening-notes.md` R2.
+the reminder is ignored.
 
 AI/DLC does not write `autoCompactWindow`. Run
 `scripts/validate-compact-window.sh` to check the invariant, and pass
@@ -947,28 +939,18 @@ the whole requirement set (e.g. `carry-over-evaluation`) read the live
 file whole and rely on (a) keeping it bounded — slicing there would
 risk missing a cross-reference and mis-deciding.
 
-**That exception is conditional, and the condition is now checked.** "Rely on (a)
-keeping it bounded" was an assumption, not a mechanism: in the reference consumer
-`product-brief.md` reached 480 KB (~120k tokens, 2× its budget) and
-`carry-over-evaluation` whole-read it 11 times anyway, because nothing stood
-between the exemption and the file. A whole-read is licensed ONLY while the
-artifact is within its (d) budget. Over budget, the exemption is void — consolidate
-first (`artifact-consolidation.md`), then read whole. An exemption whose
-precondition is stated but never tested is not an exemption; it is a hole.
+**That exception is conditional.** A whole-read is licensed ONLY while the
+artifact is within its (d) budget. Over budget, the exemption is void —
+consolidate first (`artifact-consolidation.md`), then read whole.
 
 **(c) Rotate append-only logs.** `gate-log.md`, the hook-written flow log
 `pipeline-continuation-log.md`, the hook-written
 `context-mode-protection-log.md`, and similar logs rotate
 at epoch/sprint boundaries into a dated archive; the live log holds
 only the current epoch. Verifying an appended entry reads the **tail**,
-not the whole file. A log named by no rotation step is the failure mode
-this clause exists to prevent: the flow log carried every event of every
-sprint (1.3 MB in the reference consumer) because "and similar logs" bound
-it to nothing — rotation is `retro.md` §4b. Naming logs one at a time is how
-that keeps happening: `context-mode-protection-log.md` reached 210 KB in the
-same consumer while appearing in NEITHER this list nor the (d) threshold
-table — unbounded, hook-written, and read at retro. Both are named here now,
-and (d) is what catches the next one. The escalation log `pending.md` is
+not the whole file. Rotation is `retro.md` §4b. A log bound by no rotation
+step is unbounded: every log is named here explicitly, and (d) is what
+catches one this list omits. The escalation log `pending.md` is
 bounded the same way: terminal (RESOLVED / OVERRIDDEN) entries move to
 `pending-archive.md` at retro close so the gate-read stays scoped to open
 escalations — mechanism in `escalations.md` "Terminal-entry archival".
@@ -981,34 +963,18 @@ that executes).
 
 Where it runs decides what it does:
 
-- **Sprint start** (`route.md` §1.1) — **HARD_BLOCK**. This is the only point at
-  which bounding an artifact is cheap, because the sprint has not yet read it.
+- **Sprint start** (`route.md` §1.1) — **HARD_BLOCK**.
 - **Gate Check 14** — **FAILS the gate** for `pipeline-snapshot.md` alone. The
   snapshot is the one artifact that grows *within* a sprint, and it is re-read at
   every gate, every resume, and every compaction.
-- **Retro** (`retro.md` Close-Out Sweep) — **warn-only**, unchanged. The sprint is
-  over; blocking it helps nobody. Retro reports, it does not gate.
+- **Retro** (`retro.md` Close-Out Sweep) — **warn-only**. Retro reports, it does
+  not gate.
 
 **Warn at 100%, block at 100% + grace** (`AI_DLC_BUDGET_GRACE_PCT`, default 10).
-The grace band is aim, not softness. A ratchet announces itself in *multiples* —
-the reference consumer's real breaches were 161%, 215%, 526% and 3311% of budget.
-A gate that also fails at 104% buys nothing and costs a lot: the lead trims 300
-tokens, the artifact grows back by the next gate, and it fails again. That
-treadmill turns a real signal into noise, and a noisy gate gets ignored. So an
-over-budget artifact is always *reported* — the number is the truth — but only a
-breach past the band *blocks*.
+An over-budget artifact is always *reported*; only a breach past the band *blocks*.
 
 Consolidation itself stays operator-invoked (`artifact-consolidation.md`): it is a
-fidelity-critical rewrite and must be supervised. What changed is that the pipeline
-now refuses to *start* a sprint on top of an artifact it cannot afford to read.
-
-*Why this clause used to say "warn-only — never blocks the pipeline," and why that
-was the bug.* Every budget fired at retro — at the end of the sprint that had
-already paid for the overage. Artifacts ratcheted up, each sprint began slower than
-the last, and the only mechanism that would have noticed always arrived after the
-cost. A ratchet with no pawl. In the reference consumer this compounded until a
-single planning phase spent 3h16m, took six auto-compactions, and never reached the
-architecture step.
+fidelity-critical rewrite and must be supervised.
 
 ### Rule 26 -- Minimum mechanism (KISS)
 
@@ -1221,9 +1187,7 @@ So:
   Not finished? Beat again.
 
 The bounded file-wait beat is therefore not a fallback or a special case for `Skill`
-spawns -- it is the primary join for teammates. In the reference consumer's first
-three post-fix sprint sessions: 14 `Agent` spawns, 2 `TaskOutput` attempts (both
-failed), **47 file-wait beats did all of the joining.**
+spawns -- it is the primary join for teammates.
 
 What this does NOT change:
 
@@ -1290,22 +1254,11 @@ inside the budget, and beats are counted in a sidecar so exhaustion declares
 Rule 20 non-delivery. False-positive cost: a deliverable landing in the same
 second the sequence exhausts is re-dispatched once; `--reset` re-arms it.
 Removal condition: retire when the harness offers a join primitive that takes
-the handle an `Agent` actually returns. Rationale:
-`docs/context-hardening-notes.md` R31.
+the handle an `Agent` actually returns.
 
-**The call bound and the sequence bound protect different things.** Check A
-(duration) protects the operator's *voice*: an over-budget call is a window in
-which they cannot be heard. Check C (count) protects *liveness*: a lead polling
-in 110-second slices forever never starves the operator -- every beat is a tool
-boundary, so they can always get through -- but it advances nothing, forever.
-Both are Rule 29's because Rule 29 owns the dispatch-and-join contract, but do
-not conflate them: an unbounded wait is a hang, not a gag.
-
-*The failure this replaces.* With no join named for shape (i), the lead writes
-`until [ -s "$d/s289-pm.md" ]; do sleep 20; done` as one `Bash` call. It runs to
-the harness's 10-minute cap and returns `TIMEOUT` having produced nothing: ten
-minutes of blind window bought for zero information. Six such calls in a single
-S289 planning phase burned 52 minutes, 29 of them past the point of no return.
+Check A (duration) and Check C (count) bind different things: an over-budget
+call is a window in which the operator cannot be heard; an unbounded beat
+sequence advances nothing forever. An unbounded wait is a hang, not a gag.
 **The loop goes in the beat count, never inside the call.**
 
 **When the operator does reach you, answer them.** An operator message sets
@@ -1319,45 +1272,19 @@ steering. Rule 3 does not override this. Rule 3 forbids stalling when no one
 is waiting on you. Here a human is.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: (a) the lead blocking on a
-36-minute foreground `Agent` call, during which the operator physically cannot
-be heard; (b) the lead receiving a steer and executing straight through it --
-**95** such steamrolled messages in the consumer corpus, because the pause flag
-had teeth in no hook; (c) the lead waiting on a Skill-spawned deliverable with a
-single open-ended `until [ -s ... ]; do sleep; done`, which runs to the harness's
-10-minute `Bash` cap and returns `TIMEOUT` having learned nothing -- 6 such calls
-in one S289 planning phase, 29 of the 52 minutes they cost spent past the point
-of no return.
-
-*(b) was previously recorded as 111. It was 114 by the old count, of which 19
-were the harness's own auto-compaction resume prompt read as a human steer -- the
-lead advancing after one is the recovery protocol, not a steamroll. The filter now
-excludes them; the real figure is 95. A machine event miscounted as a human one is
-the same error class as the circular-acknowledgement draft this check already
-warns about.)*
-
+long foreground `Agent` call, during which the operator physically cannot be
+heard; (b) the lead receiving a steer and executing straight through it, the
+pause flag having had teeth in no hook; (c) the lead waiting on a Skill-spawned
+deliverable with a single open-ended `until [ -s ... ]; do sleep; done`, which
+runs to the harness's 10-minute `Bash` cap and returns `TIMEOUT` having learned
+nothing; (d) the lead calling `TaskOutput` on an `Agent` -- `Agent` returns an
+`agent_id`, `TaskOutput` takes a `task_id`, so every such call fails with `No
+task found` and the lead falls back to a filesystem wait. Check D flags it.
 False-positive cost: a few extra bounded-join beats per dispatch (p90 dispatch =
-~3 beats), each a few hundred tokens.
-
-**Check C has caught nothing, and that is stated deliberately.** Across 278
-consumer sessions no lead has ever run even 3 consecutive bounded wait-beats --
-because until this rule there was no reason to slice a poll at all; the observed
-failure is one unbounded call, which Check A already catches. Check C bounds a
-shape *this rule introduces*: once beats are the sanctioned way to wait, beating
-forever becomes the natural way to hang. Shipping the ceiling unenforced was the
-alternative, and an unenforced threshold is exactly the ratchet Rule 25(d) had to
-be rewritten to escape. Removal condition: retire Check C if a season of retros
-shows leads re-dispatch on exhaustion without it -- or retire the whole rule when
-the harness bounds foreground tool-call duration itself, or delivers queued input
-mid-call.
-
-*(d) the lead calling `TaskOutput` on an `Agent`.* v0.44.0 wrote this rule around a
-join that cannot join the thing ai-dlc actually spawns: `Agent` returns an
-`agent_id`, `TaskOutput` takes a `task_id`. Every such call fails with `No task
-found`, and the lead then falls back to a filesystem wait -- so the rule's headline
-mechanism was inert from the day it shipped, and the bounded file-wait beat (added
-in v0.45.0 as a supposed `Skill`-only special case) has been doing 100% of the real
-joining. Check D flags it, because a rule that names the wrong API is worse than one
-that names none: it looks like guidance.
+~3 beats), each a few hundred tokens. Removal condition: retire Check C if a
+season of retros shows leads re-dispatch on exhaustion without it; retire the
+whole rule when the harness bounds foreground tool-call duration itself, or
+delivers queued input mid-call.
 
 Enforcement: `scripts/validate-steering-budget.sh` (Checks A, B, C, D) and
 `.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).

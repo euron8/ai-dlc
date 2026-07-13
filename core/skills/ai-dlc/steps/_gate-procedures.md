@@ -1,6 +1,6 @@
 ---
 name: _gate-procedures
-description: Procedures invoked by reference from pipeline step files (sub-step snapshot update, auto-handoff evaluation) — extracted from gate-validation.md so their bodies stay out of the resident gate path and load only at their invocation seam
+description: Procedures invoked by reference from pipeline step files (sub-step snapshot update, bounded-join beat, auto-handoff evaluation) — extracted from gate-validation.md so their bodies stay out of the resident gate path and load only at their invocation seam
 ---
 <!-- STEP_LOADED_TOKEN: gate-procedures -->
 
@@ -31,24 +31,30 @@ When a step file says "run sub-step snapshot update", execute:
    `docs/escalations/pending.md` and any open triage items.
 3. Reconcile **In-Flight Teammates**: add a row for every teammate
    dispatched since the last update (`agent name | role | deliverable
-   path | dispatched-at`), and strike every row whose deliverable has
-   been consumed. This section must be written **at dispatch**, not
-   only at the transition that follows it — a teammate dispatched and
-   compacted-over before its row is written is exactly the teammate
-   the lead will re-dispatch blind.
+   path | dispatched-at`), and **DELETE** every row whose deliverable has
+   been consumed. Rows only — no prose, no struck-through history. A
+   consumed teammate is not in flight. This section must be written **at
+   dispatch**, not only at the transition that follows it — a teammate
+   dispatched and compacted-over before its row is written is exactly the
+   teammate the lead will re-dispatch blind.
 4. Do NOT refresh other sections (Pipeline Position, Sprint Context,
    Locked Decisions remain gate-scope). Do NOT re-evaluate context
    reminder thresholds here — reminder evaluation stays at gate
    boundaries per `gate-validation.md` Check 14.
-5. Run the snapshot budget check — **warn-only here, never blocking:**
+5. Run the snapshot budget check:
 
        scripts/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
 
-   Exit 1 → report the overage in one line and trim at your next
-   natural pause (move superseded narrative verbatim to
-   `pipeline-snapshot-history.md`, which is write-only). The gate
-   remains the blocking point (Check 14); this is an early-warning
-   read so the lead never *discovers* a 2×-budget snapshot at a gate.
+   The script reports an overage inside the grace band (a `warn` line,
+   exit 0) and breaches only past it.
+
+   - `warn` (over budget, within grace) → note it and continue.
+   - **Exit 1 (past the grace band) → TRIM NOW, before the next
+     sub-step.** Move superseded narrative verbatim to
+     `pipeline-snapshot-history.md` (write-only), re-run, then continue.
+
+   Do NOT defer the trim to a later pause. The gate (Check 14) remains
+   the blocking point.
 
    Call it through `verdict.sh`, which prints one line and **exits with
    the validator's own status**. Do NOT hand-roll
@@ -60,11 +66,34 @@ Activity reflects the in-flight sub-step rather than only the last
 gate, and In-Flight Teammates carries the deliverable paths that let
 the lead re-join its teammates instead of re-dispatching them.
 
-The budget is checked here, not only at gates, because implementation
-passes only three gates in a phase that can run four hours — a budget
-enforced only at gates is unenforced for the longest, most
-dispatch-heavy step in the pipeline (`docs/context-hardening-notes.md`
-R31). The full Check 14 still runs at the next gate.
+The budget is checked here, not only at gates. The full Check 14 still
+runs at the next gate.
+
+## Bounded-join beat (referenced by step files)
+
+When a step file says "join the deliverable", execute this. It is Rule 29's
+bounded file-wait beat, and it is the ONLY sanctioned way to wait for a teammate.
+
+**The handle.** An `Agent` spawn returns an `agent_id`. `TaskOutput` joins a
+`task_id`, which only `TaskCreate` produces — **`TaskOutput` cannot join an `Agent`**,
+and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by file
+(Rule 20): **the deliverable file IS the handle.**
+
+**The call.** One `Bash` call, every path in the wave:
+
+    scripts/wait-for-deliverable.sh <path> [<path> ...]
+
+- `exit 0` — all delivered. Consume them.
+- `exit 2` — not yet. Beat again (the script bounds the sequence).
+- `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK.
+
+**Pass the whole wave to ONE call.** Never chain beats in a single `Bash` call.
+
+**Never hand-roll the wait.** `until [ -s <path> ]; do sleep 15; done`,
+`while [ ! -s <path> ]; ...`, and any bare `sleep` on a deliverable are **Rule 29
+Check A violations**; gate Check 25 counts them. Do not poll a subagent's raw output
+file under `/private/tmp/.../tasks/<agent-id>` — the deliverable path in the
+snapshot's In-Flight Teammates row is the handle.
 
 ## Auto-handoff evaluation (referenced by step files)
 

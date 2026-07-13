@@ -64,8 +64,7 @@ check set must stay in sync.
 **Correctness rule (do not over-slice).** When a check's firing gate is
 uncertain, include its ID in every candidate type's row: over-inclusion
 is safe (the check self-skips), under-inclusion silently drops a check a
-gate needs. Mechanics and the multi-row cases (Checks 8/9, 17):
-`docs/context-hardening-notes.md` (R30).
+gate needs.
 
 ## Consumer-catalog crosswalk (label the catalog; never join by number)
 
@@ -112,10 +111,6 @@ that redefines a core check number with a different title is an ERROR) and
 (`EXTENSION-CHECK-NUMBER-COLLISION` / `EXTENSION-RESTATES-CORE`, both title-joined and
 level-triggered, so a duplicate absorbed releases ago still reports). Remove when core
 and consumer catalogs no longer share a rendered namespace.
-
-Full crosswalk rules, the absorption-provenance convention, and the repeatable
-evidence tool `scripts/audit-machinery-efficacy.js`: `docs/context-hardening-notes.md`
-(R30) and `docs/v0.27.0-machinery-efficacy-audit.md`.
 
 ## Validation Checklist
 
@@ -256,13 +251,6 @@ the story cannot reasonably be expanded to cover the requirement
 (because the requirement is larger than one story's scope), escalate
 as Rule 12 HARD_BLOCK with `requirement divergence` as the blocker
 type and the original requirement quoted verbatim.
-
-**Why this is a gate-level check.** The story's own validation cycle
-may pass (the story is internally coherent and its ACs are testable)
-while the story still fails to address the thing it was created to
-address. This failure mode cannot be caught by validating the story
-in isolation; it requires comparing the story to its source. Check
-3a enforces that comparison at the gate.
 
 ### 3b. Locked-requirement full-text anchor integrity (story gates).
 <!-- CHECK_LOADED: 3b -->
@@ -468,6 +456,10 @@ The gate log entry MUST include:
 - Result for EACH numbered check above (PASSED/FAILED/SKIPPED with reason)
 - Evidence artifacts collected during checks
 - Any remediations performed
+- `steering_violations: <N>` — the count Check 25 read (or `SKIP` if no transcript
+  resolved). This is the **baseline the next gate compares against**, so it is
+  written on every gate, PASS or FAIL. Omitting it silently resets the baseline to
+  0 and forgives every violation committed since the last gate.
 
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
@@ -590,10 +582,13 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   gate.
 - **In-Flight Teammates** — one row per dispatched teammate not yet
   joined: `agent name | role | deliverable path | dispatched-at`. A row
-  is added at dispatch and struck at join (see `_gate-procedures.md`
-  "Sub-step snapshot update"). At a gate, strike any row whose
-  deliverable now exists and has been consumed. An empty table is
-  normal and means nothing is in flight.
+  is added at dispatch and **DELETED at join** (see `_gate-procedures.md`
+  "Sub-step snapshot update"). An empty table is normal and means nothing
+  is in flight.
+  **Rows only. No prose, no struck-through history.** A consumed teammate
+  is not in flight; Recent Activity and the gate log already record that
+  it delivered. The section is bounded by the teammates actually
+  outstanding.
 - **Context Reminders** — `context_reminders_sent` (none | yellow |
   red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
   `last_red_fire_tokens`, `last_red_fire_turns`. Reconcile these from
@@ -605,8 +600,7 @@ A lead that cannot address a teammate must not conclude the teammate
 died. Being unreachable is not evidence of death — neither a lost
 `agent_id` nor a wrong-API error is. Re-join on the deliverable path
 recorded here; it needs no handle and survives compaction (Rule 29 —
-the file IS the handle). Rationale and the measured failure:
-`docs/context-hardening-notes.md` R31.
+the file IS the handle).
 
 **Context reminder threshold check (required at every gate).** The
 `ai-dlc-context-sensor.sh` Stop hook measures resident context every turn,
@@ -642,21 +636,12 @@ superseded narrative and handoff appendices move to `pipeline-snapshot-history.m
 which is write-only), then re-run Check 14 and Check 15.
 
 A `warn` line (over budget, inside the grace band) does **not** fail the gate — trim
-at your next natural pause. The check blocks on a *ratchet*, not on the last token;
-failing a gate at 104% would have the lead trim 300 tokens, watch the snapshot grow
-back by the next gate, and fail again. See Rule 25(d), "Warn at 100%, block at
-100% + grace."
+at your next natural pause. See Rule 25(d), "Warn at 100%, block at 100% + grace."
 
 The snapshot is the only artifact whose budget is enforced *at gates* rather than
-only at sprint start, because it is the only one that grows *within* a sprint —
-and it is the most expensive file in the pipeline to let grow. The protocol
+only at sprint start: it is the only one that grows *within* a sprint. The protocol
 whole-reads it here (Checks 14/15), on every resume, and after every compaction
-(`ai-dlc-recover.sh`). Rule 23's exemption that permits those whole re-reads is
-explicitly *"conditional on their staying small, which is not automatic."* This is
-what makes it automatic. In the reference consumer the snapshot reached 50 KB
-(~15k tokens, 2.5× its 6k budget) and was whole-read 8 times in one planning
-phase — the single largest byte-injector of any file in the session, and a direct
-driver of the six auto-compactions that phase took.
+(`ai-dlc-recover.sh`).
 
 A snapshot over budget means the schema stopped being enforced at gate passages.
 **The gates that let it grow are the finding — not the file.**
@@ -753,21 +738,19 @@ mode: subagent
 lead_role: <step-file-that-invoked>
 transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
 findings_critical: <int>                     # required for adversarial-review passes
+findings_critical_prior_scope: <int>         # of the above, those in text the PRIOR pass also reviewed.
+                                             # Absent => the validator assumes ALL of them (fail-closed).
 findings_major: <int>                        # required for adversarial-review passes
 findings_minor: <int>                        # required for adversarial-review passes
 verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>   # required for adversarial-review passes
 SKILL_INVOCATION_PROVENANCE_END -->
 ```
 
-**The four adversarial fields (v0.48.0).** `findings_*` and `verdict` are REQUIRED
+**The four adversarial fields.** `findings_*` and `verdict` are REQUIRED
 on every `bmad-review-adversarial-general` / `bmad-validate-prd` pass and are
-absent elsewhere (party-mode and elicitation produce no severity residue). They
-exist because a verdict the machinery cannot read is a verdict the lead adjudicates
-in prose: on S289 the terminal pass reported 0 CRITICAL / 0 MAJOR, wrote "the repair
-wave converged," and stamped `EXIT CONDITION NOT MET` — free text, in a key no
-script parsed, and the key itself drifted mid-series (`exit_condition_met:` on pass
-2, `verdict:` on passes 3–4). The residue decides the verdict; see the mapping in
-`team-roles/adversary.md` ("The verdict"). Check 24 enforces it.
+absent elsewhere (party-mode and elicitation produce no severity residue). The
+residue decides the verdict; see the mapping in `team-roles/adversary.md`
+("The verdict"). Check 24 enforces it.
 
 **Mode enforcement (Rule 20 — all four sub-skills).** `mode` MUST be
 `subagent` for EVERY validation sub-skill, not only party-mode: the
@@ -1066,36 +1049,66 @@ things:
   clean residue stamped `EXIT_CONDITION_NOT_MET` is a review refusing to
   converge; a dirty residue stamped `EXIT_CONDITION_MET` is one claiming a
   convergence it does not have.
-- **C — DIVERGENCE.** CRITICALs rising pass-over-pass must stamp
-  `DIVERGENT_HARD_BLOCK`. Rule 8: divergence is a HARD_BLOCK, not a reason for
-  another pass.
-- **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`.
+- **C — DIVERGENCE (scope-relative).** A pass whose
+  `findings_critical_prior_scope` exceeds the previous pass's `findings_critical`
+  must stamp `DIVERGENT_HARD_BLOCK`. Rule 8: divergence is a HARD_BLOCK, not a
+  reason for another pass.
+  CRITICALs in scope the sprint ADDED mid-cycle are **not** divergence: they count
+  in `findings_critical` and not in `findings_critical_prior_scope`. Absent field ⇒
+  the validator assumes ALL CRITICALs are prior-scope.
+- **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`. If the series ends
+  unconverged **and** any pass found CRITICALs in newly-added scope, the remedy is
+  **freeze the artifact and cut the added scope** — not another pass.
 
 It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
 that to each planning step's own intensity gate; duplicating it here would fail
 every legitimate `standard` / `lightweight` single-pass cycle.
 
-Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Its decoy case
-(`nitpicks-remain`) is the one that decides shippability — a terminal pass with
-0 CRITICAL / 0 MAJOR and five open MINORs must PASS.
+Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Two cases decide
+shippability: `nitpicks-remain` (terminal 0 CRITICAL / 0 MAJOR with five open
+MINORs must PASS) and `scope-grew-converges` (a CRITICAL rise of 2→3 with only 1 in
+prior scope must PASS).
 
 **PASS:** exit 0. **FAIL:** exit 1 — a pass with no verdict, a verdict
 contradicting its residue, an unescalated divergent pass, or a series whose last
 pass is not `EXIT_CONDITION_MET`.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate passing over
-an adversarial cycle that never converged. Observed on S289 — pass 4 reported 0
-CRITICAL, 0 MAJOR, wrote *"the repair wave converged"* in prose, stamped
-`verdict: EXIT CONDITION NOT MET` in the field, and the §5 planning gate passed
-anyway; the CRITICALs had run 3 → 4 → 7 across the three passes before it with no
-escalation. Rule 8 already required convergence and already called divergence a
-HARD_BLOCK — but nothing counted a CRITICAL and nothing read a verdict, so the
-requirement was unfalsifiable and termination came from the lead overriding the
-adversary's own field. False-positive cost: one line per pass, naming the field to
+an adversarial cycle that never converged. Rule 8 requires convergence and calls
+divergence a HARD_BLOCK, but with nothing counting a CRITICAL and nothing reading
+a verdict, that requirement is unfalsifiable and termination comes from the lead
+overriding the adversary's own field. False-positive cost: one line per pass, naming the field to
 fix; the residue is already in the report, so stamping it costs the adversary
 nothing it has not already computed. Removal condition: retire once the provenance
 block is GENERATED from the findings table rather than hand-stamped, so the verdict
 cannot disagree with the residue beside it.
+
+### 25. Rule 29 bounded-join conduct — the operator was reachable.
+<!-- CHECK_LOADED: 25 -->
+
+**Scope.** Every gate. Rule 29 binds any phase that dispatches.
+
+**Check.** Resolve this session's transcript, then compare the violation count
+against the one the previous gate recorded:
+
+    T=$(ls -t ~/.claude/projects/"$(pwd | sed 's|/|-|g')"/*.jsonl 2>/dev/null | head -1)
+    scripts/validate-steering-budget.sh --transcript "$T" --count
+
+- **No transcript** (CI, a non-Claude-Code runner) → **SKIP**, recorded as SKIP.
+- Read `steering_violations:` from the **previous gate-log entry of this session**
+  (Check 12 owns the field). No previous entry → baseline `0`.
+- **Count INCREASED → the gate FAILS.** Unchanged → PASS.
+- Record the new count as `steering_violations:` in this gate's log entry either way.
+
+**On FAIL.** The validator names the offending calls. Re-issue any still-pending wait
+through `scripts/wait-for-deliverable.sh` — one call, every path in the wave — and
+record the count.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a hand-rolled `until`/`while`/
+`sleep` wait on a deliverable blocks a foreground call past the steering budget, and
+a queued operator message cannot be delivered for its duration. False-positive cost:
+one line, recording a count the validator already computed. Removal condition: retire
+once a `PreToolUse` deny makes the unbounded wait unwritable.
 
 ### H1. Harness meta-check — each phase-specific check has a self-test fixture.
 <!-- CHECK_LOADED: H1 -->
@@ -1231,18 +1244,6 @@ was removed is the repetition, not the coverage.
 and their seeds can only establish the condition, not score the answer — only item
 (2) is mechanical. If a future release can drive H1 headlessly, (1) and (3) should
 join (2) inside `--attest` and H2 becomes fully mechanical.
-
-*The failure that prompted this.* H2 was not merely repetitive; it was **vacuous**.
-All three `seed.sh` files were `echo` statements describing, in English, fixtures that
-were never written to disk — so H2 read a *description of a test* and adjudicated
-that. It could not fail, and it never did. Worse, `check-17-bypass`'s V5 carried
-`mode: solo`, which trips the Rule 20 solo assertion in `validate-provenance-block.sh`
-*before* the SHA branch is reached: the forgery floor V5 exists to prove was never
-executed, while the fixture's README asserted it passed. Both are fixed — the seeds
-write real files, `run.sh` asserts the matrix, and it fails loudly with
-`the forgery floor is UNTESTED` if V5 ever regresses to failing the first script.
-Before trimming this check for cost, note that its cost was never the problem: a
-check that runs 6 times and proves nothing is not expensive, it is broken.
 
 ### Sub-step snapshot update (referenced by step files)
 

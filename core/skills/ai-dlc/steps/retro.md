@@ -659,11 +659,9 @@ Then read the flow log, `_bmad-output/pipeline-continuation-log.md`:
 A retro that reports zero steerability findings on a sprint in which the operator
 visibly repeated themselves has run the audit wrong.
 
-**Rotation.** The flow log is append-only and, until now, had no bounding
-mechanism at all — it is a Rule 25(c) log that no rotation step ever named. In the
-reference consumer it reached **1.3 MB / 5,418 events across every sprint ever
-run**, which is precisely the state Rule 25(c) forbids: a live log must hold only
-the current epoch, or the audit above reads all of history instead of this sprint.
+**Rotation.** The flow log is append-only and is a Rule 25(c) log: a live log must
+hold only the current epoch, or the audit above reads all of history instead of
+this sprint.
 
 After the audit is recorded, rotate — the last write to the log before sprint
 close:
@@ -680,13 +678,10 @@ Rotation is unconditional and per-sprint — not threshold-triggered. A threshol
 would let the log carry several sprints of unrelated events into an audit that is
 scoped to one.
 
-**Rotate the context-mode protection log the same way, and for the same reason.**
+**Rotate the context-mode protection log the same way.**
 `_bmad-output/context-mode-protection-log.md` (written by `ai-dlc-protect.sh`, read
-at §1 of this step) was the *next* instance of the exact failure the paragraph above
-describes: an append-only, hook-written log that Rule 25(c) named nowhere and no
-rotation step ever touched. It reached **210 KB** in the reference consumer. Naming
-these one at a time is how the gap keeps recurring — so Rule 25(d)'s budget check now
-covers the class, and this rotates the instance:
+at §1 of this step) is append-only and hook-written; Rule 25(d)'s budget check covers
+the class, and this rotates the instance:
 
     mv _bmad-output/context-mode-protection-log.md \
        _bmad-output/context-mode-protection-log-archive-s<N>.md
