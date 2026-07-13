@@ -17,6 +17,124 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.51.0] — 2026-07-13
+
+### The adversary found the over-engineering, then filed it in the one bucket the gate forgives
+
+The adversary is already a strong KISS reviewer. It hunts unrequested mechanism unprompted
+and argues for removal well — S289's own artifacts say so out loud:
+
+- *"Posture: REMOVAL-BIASED. Every finding below is either a DELETION or the re-scoping of
+  a…"* (`s289-teststrategy-adversarial-pass1.md:5`)
+- *"Of the thirteen findings above, five are removals… Zero net new mutation events are
+  required to fix everything in this report."* (`s289-rr-adversarial-pass3.md:500`)
+- *"Both fixes are subtractions: delete a duplicated map, delete a stamp."*
+  (`s289-sprint-review-adversarial-p1.md:133`)
+
+So there was never a hunting gap. There was a **classification** gap, and it was
+load-bearing.
+
+The severity ladder had three rungs. CRITICAL demands a concrete failure — *"behaviour that
+ships wrong, an AC that cannot pass, a LOCKED requirement contradicted."* Over-built mechanism
+**ships right**: nothing fails, no AC breaks, nothing is contradicted. So it cannot be
+CRITICAL — and MINOR/NIT was defined as *"everything else. Style, phrasing, preference."*
+An artifact that works but carries mechanism nothing asked for fits neither rung.
+
+MINOR is the **explicitly forgiven** bucket: a residue of 0 CRITICAL / 0 MAJOR with open
+MINORs *"is a MET exit condition, not a nearly-met one. Say MET."* Check 24 then passes the
+gate. This contradicted Rule 26(d) — *"removal and simplification findings are equal in
+standing to additions"* — because the verdict contract made them structurally **unequal**:
+an additive defect reaches the residue that gates; a removal finding could not.
+
+**What the ladder's silence actually produced.** Given no rung for a removal, an adversary
+built its own channel *outside the graded set*. `s289-arch-adversarial-pass1.md:261-278`
+carries a *"Rule 26 removal sweep"* — three deletions, ~18 lines of proposed cuts — that the
+same file's `VERDICT: 2 CRITICAL, 1 MAJOR, 2 MINOR` counts **zero** of. Findings with no
+severity, absent from the residue, invisible to Check 24. They landed only because the lead
+read the prose. That is v0.48.0's failure exactly one rung down: **converged in the prose,
+absent from the field.** The role file already said *"Every finding carries exactly one
+severity"* — and the ladder gave this class of finding no severity to carry.
+
+### The change
+
+`core/team-roles/adversary.md`:
+
+- **New rung.** Unrequested mechanism (Rule 26(a) — a speculative abstraction, a parallel
+  path without the 26(b) rationale record, a guard without the 26(c) contract, a fallback
+  for a case that cannot occur, an AC demanding capability nothing asked for) is a **MAJOR**,
+  not a nitpick. It then counts in `findings_major`, forces `EXIT_CONDITION_NOT_MET`, and
+  gate Check 24 holds — **using machinery that already shipped in v0.48.0.**
+- **A three-part bar**, symmetric with CRITICAL's *"if you cannot state it, it is not
+  CRITICAL."* Name the mechanism at `file:line`, the requirement it does **not** serve, and
+  the simpler change — or it stays MINOR. *"This feels over-built"* names none of the three.
+  Rule 26(b)'s escape hatch sits inside test 2: if the artifact already records why the
+  mechanism is there, test 2 fails and there is no finding.
+- **The repair is a deletion.** A repair that adds text means the finding is misclassified.
+  This is the anti-manufacturing guard: on S289's `research-requirements` cycle CRITICALs ran
+  **3 → 4 → 7 → 0**, converging only once the repair wave finally *cut* text.
+- **Contract item 5.** Rule 26(d)'s reflexive half — *a finding whose repair ADDS mechanism
+  must say why the simpler path fails* — was a parenthetical buried in a Constraints bullet
+  about something else. It is now a numbered must.
+
+`core/skills/ai-dlc/SKILL.md` — Rule 26's enforcement pointer said violations are *"a
+code-review finding per `code-reviewer.md`"*, i.e. **post-implementation only**. Planning-phase
+over-engineering — where scope creep enters, and where it is cheapest to kill — had no gated
+home at all. The pointer now names both enforcers. Token-neutral swap (+15 bytes, in a region
+1000 lines below the re-attach window; `validate-reattach-budget.sh` still PASSes with 250
+tokens of slack).
+
+### Backtested before shipping — it does not break convergence
+
+Run against all 21 removal findings across S289's 14 adversarial artifacts:
+
+- **13 were already filed CRITICAL/MAJOR.** The adversaries were doing this by instinct,
+  inconsistently, pass to pass. The rung makes a habit into a contract.
+- **8 were filed MINOR — and all 8 are correctly MINOR.** Every one is a stale word, stale
+  count, or stale reference. None names a *mechanism*, so all 8 fail bar test 1 and stay put.
+- **3 had no severity at all** — the ungraded arch sweep above. These are what the rung fixes.
+- **The converged `rr` pass 4 (0 CRITICAL / 0 MAJOR / 2 MINOR) is unchanged.** Both its MINORs
+  (`prd.md:1923` a stale word; `prd.md:2014` a false premise about `grep`) are stale-fact
+  defects, not mechanism. It still stamps MET. **No S289 cycle would have been forced to run
+  again.**
+
+### What this does NOT fix — stated so nobody reads it as covered
+
+Graph's retro found `SAFEGUARD_DISPOSITION_TABLE` — *33 lines, zero consumers, eight tests,
+one green code review* (`docs/retro/sprint-289.md:136`). **This rung would not have caught
+it.** Zero S289 adversarial passes mention it: it was introduced in sprint 245-5, green-reviewed
+there, and sat outside S289's diff. Nobody forgave it — **nobody looked at it.** That is a
+*scope* miss (what the adversary is handed to review), not a *severity* miss, and it needs a
+different change. Claiming this rung as its fix would be a check that cannot fire, recorded as
+a check that passed.
+
+### Deliberately not added
+
+- **No new provenance field.** `findings_major` already carries it.
+- **No new script, no new gate.** `validate-adversarial-convergence.sh` Checks A–D and gate
+  Check 24 already adjudicate residue → verdict. The finding simply was never allowed to reach
+  them.
+- **No new fixture.** There is no new script assertion to fixture; one that exercised nothing
+  new would be a vacuous green — the trap this repo shipped in v0.48.0 and caught in v0.49.0.
+  The existing 5-case suite still passes, including the `nitpicks-remain` decoy (0C/0M with 5
+  MINOR open must PASS) — proof we did not make *all* MINORs block.
+
+### Honest limitation
+
+**Nothing mechanically verifies that the adversary classified an over-engineering finding as
+MAJOR rather than MINOR.** No script can know that a finding filed MINOR should have been
+MAJOR — that is precisely the judgement the role exists to make. This is a contract change
+riding an existing enforcer, and its efficacy is observable only in the artifacts. The Rule
+26(c) removal condition is stated inline in the role file: two consecutive sprints with zero
+over-engineering MAJORs and no shipped unrequested mechanism, or two consecutive sprints of
+the lead overriding them as taste — either way the rung is not discriminating, and it goes.
+
+### Consumer migration
+
+Consumers overriding `team-roles/adversary.md` must re-stamp `base_sha` and re-verify. Graph's
+`team-roles__adversary__no-worktree-isolation.md` shadows **Contract item 3**; the new item 5
+appends after item 4 and does not move item 3, so the anchor survives — but the pinned
+`base_sha` is now stale and the Rule 27 drift detector should flag it.
+
 ## [0.50.3] — 2026-07-12
 
 ### A beat that never waited was still charged, so the script cried NON-DELIVERY on a live teammate

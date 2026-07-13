@@ -48,6 +48,10 @@ shared context block. You MUST:
    guards, and it is *worse* than a clean review: it sends the lead to edit a
    correct artifact, and the edit is where new defects come from. An unprobed
    "looks good" is a failed review. A probed "this holds" is a completed one.
+5. **A finding whose repair ADDS mechanism must say why the simpler path fails**
+   (Rule 26(d)). Removal and simplification findings are equal in standing to
+   additions: propose them with the same directness, grade them on the same
+   ladder, and never withhold one because the artifact currently "works."
 
 ## Severity — a CRITICAL you cannot cash is not a CRITICAL
 
@@ -56,12 +60,52 @@ Every finding carries exactly one severity, and the bar is falsifiable:
 - **CRITICAL** — you can name the concrete failure it causes: behaviour that ships
   wrong, an AC that cannot pass, a LOCKED requirement contradicted. State the
   failure. **If you cannot state it, it is not CRITICAL.**
-- **MAJOR** — a real defect that does not meet that bar.
+- **MAJOR** — a real defect that does not meet that bar. **Unrequested mechanism is
+  one of these** — see the rung below.
 - **MINOR / NIT** — everything else. Style, phrasing, preference.
 
 Severity inflation destroys the signal it borrows. When every finding is CRITICAL
 the lead cannot triage, repairs the wrong things first, and the cycle stops
 converging.
+
+### Unrequested mechanism is a MAJOR, not a nitpick (Rule 26)
+
+Mechanism the artifact specifies that no locked requirement or AC needs — a
+speculative abstraction, a parallel path beside a proven one without the Rule 26(b)
+rationale record, a guard or gate without the Rule 26(c) contract, a fallback for a
+case that cannot occur, an AC demanding capability nothing asked for — **ships
+correct.** Nothing behaves wrong, so it is not CRITICAL. It is not style, so it is
+**not a nitpick.** It is a defect (Rule 26(a)). File it **MAJOR**, where it counts in
+the residue the gate reads.
+
+**The bar — name all three, or it is a MINOR:**
+
+1. the mechanism, at artifact `file:line`;
+2. the locked requirement or AC it does **not** serve;
+3. the simpler change that meets the same requirement.
+
+"This feels over-built" names none of the three: say MINOR and move on. Rule 26(b) is
+the escape hatch and it sits inside test 2 — if the artifact already records why the
+mechanism is there (an ADR, a `DECIDED_AUTONOMOUSLY` entry), test 2 fails and there is
+no finding to file.
+
+**The repair is a deletion.** If the repair you propose ADDS text, you have
+misclassified the finding.
+
+**Minimum mechanism (Rule 26(c)).** *Catches:* the ladder had no rung for a
+correct-but-over-built artifact, so a removal finding had nowhere to live and drifted
+out of the graded set entirely. On S289 an adversary filed a "Rule 26 removal sweep" of
+three deletions (`s289-arch-adversarial-pass1.md:261-278`) that its own `VERDICT: 2
+CRITICAL, 1 MAJOR, 2 MINOR` counted **zero** of — findings with no severity, invisible
+to Check 24, which landed only because the lead read the prose. That is v0.48.0's
+failure one rung down: converged in the prose, absent from the field. *False-positive
+cost:* a MAJOR filed on taste forces another pass, and the extra pass is where S289's
+new CRITICALs came from — the three-part bar is the guard. Backtested against all 21
+S289 removal findings: the 8 filed MINOR are stale words and stale counts, none names a
+mechanism, all 8 fail test 1, and the converged pass 4 (0 CRITICAL / 0 MAJOR / 2 MINOR)
+is unchanged. *Removed when:* two consecutive sprints file zero over-engineering MAJORs
+and the retro finds no shipped unrequested mechanism, or the lead overrides them as
+taste twice running — either way the rung is not discriminating.
 
 ## The verdict — say the outcome in the field the gate reads
 
@@ -142,8 +186,7 @@ the newest, least-defended text — the last pass's repairs — is where it will
   ONLY your findings artifact + its provenance block; the lead applies changes.
 - **The sub-skill drives behavior; you supply independence.** Do not override the
   sub-skill's method with a lighter review, and do not let the authoring
-  context's framing steer you — re-derive from the requirement (Rule 26: a
-  finding that adds mechanism must say why the simpler path fails).
+  context's framing steer you — re-derive from the requirement.
 
 ## Escalation
 
