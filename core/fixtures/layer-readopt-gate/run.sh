@@ -127,6 +127,64 @@ else
   bad "re-adoption destroyed the consumer's delta"
 fi
 
+echo "== C0. --merge re-adopts MECHANICALLY (no hand edit) =="
+
+# The operator must never be told to "merge the new core text in, preserving your
+# delta" by hand: that is asking them to run a three-way merge in their head, on prose,
+# and a hand-merge is where half an upstream clause gets silently dropped. Re-seed the
+# stale override and let --merge do it.
+cat > "$OVR" <<EOF
+---
+shadows: SKILL.md#Rule 8
+base_sha: ${BASE}
+reason: consumer-specific validation-intensity table keyed to this repo's service paths.
+---
+
+## Rule 8 -- Validation Depth
+
+Validation intensity by path: service/ and infra/ are FULL; scripts/ and docs/ are LIGHT.
+
+**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1
+reports more CRITICALs than pass N, the repair step is injecting defects faster
+than review removes them; another pass only finds the next wave. STOP.
+EOF
+
+out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'MERGED'; then
+  ok "--merge applied upstream's change with no hand edit"
+else
+  bad "--merge failed (rc=$rc): $out"
+fi
+if grep -q 'IN THE SCOPE THE PRIOR PASS ALSO REVIEWED' "$OVR"; then
+  ok "upstream's new clause is IN the override body"
+else
+  bad "--merge did not bring upstream's clause into the body"
+fi
+if grep -q 'Validation intensity by path' "$OVR"; then
+  ok "the consumer's delta survived the merge"
+else
+  bad "--merge destroyed the consumer's delta -- the whole reason the override exists"
+fi
+if grep -q 'more CRITICALs than pass N' "$OVR"; then
+  bad "the superseded clause is STILL in the body after --merge"
+else
+  ok "the superseded clause is gone"
+fi
+# And the merged body must now pass the gate it previously failed.
+bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
+  && ok "--check green after --merge (stamp is now permitted)" \
+  || bad "--check still red after --merge -- the merge did not actually clear the block"
+
+echo "== C1. a stamp cannot outrun an unresolved CONFLICT =="
+
+printf '\n<<<<<<< override (yours)\nfoo\n=======\nbar\n>>>>>>> core\n' >> "$OVR"
+out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
+if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'conflict markers'; then
+  ok "--stamp readopt REFUSED while conflict markers remain"
+else
+  bad "--stamp readopt shipped <<<<<<< into the rulebook the lead reads (rc=$rc)"
+fi
+
 echo "== C2. an UNRESOLVABLE anchor fails CLOSED (the vacuous-check hole) =="
 
 # If `shadows:` names an anchor that resolves to no heading, the stale-text test
@@ -188,6 +246,55 @@ if [ "$(st skills/ai-dlc/SKILL.md)" = "CORE-OK" ]; then
   ok "untouched core file -> CORE-OK"
 else
   bad "untouched core file reported '$(st skills/ai-dlc/SKILL.md)' -- trailing-newline regression is back"
+fi
+
+echo "== E. register-drift pulls an in-place edit INTO the layer system =="
+
+# Detecting unregistered drift is half the job. Telling the operator to "refile the
+# delta as an override with a base_sha" and leaving them to hand-author the YAML, pick
+# the anchor, and copy the right section out is the other half, undone -- and a
+# hand-picked anchor that resolves to no heading is how drift detection dies silently.
+REG="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/register-drift.sh" \
+            "$HERE/../../../core/skills/ai-dlc-update/reconcile/register-drift.sh" \
+            "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/register-drift.sh")"
+if [ -z "$REG" ]; then
+  bad "cannot locate register-drift.sh"
+else
+  out="$(bash "$REG" "$DIST" "$BASE" "$CONS" team-roles/tea.md --apply 2>&1)"; rc=$?
+  NEW="$CONS/.claude/skills/ai-dlc/overrides/team-roles__tea__consumer-drift.md"
+
+  if [ "$rc" -eq 0 ] && [ -f "$NEW" ]; then ok "authored the overrides/ entry"
+  else bad "register-drift did not author an override (rc=$rc)"; fi
+
+  # The anchor MUST resolve to a real heading in core, or drift detection is dead
+  # for this entry from the day it is written.
+  anchor="$(sed -n 's/^shadows:[[:space:]]*//p' "$NEW" 2>/dev/null | sed 's/.*#//; s/,.*//')"
+  if [ -n "$anchor" ] && git -C "$DIST" show "${BASE}:core/team-roles/tea.md" | grep -qiF "$anchor"; then
+    ok "shadows: anchors to a heading that EXISTS in core (#$anchor)"
+  else
+    bad "shadows: anchor '#$anchor' resolves to no heading -- drift detection is dead for this entry"
+  fi
+
+  # base_sha at BASE, not THEIRS. Stamping theirs would claim the consumer had already
+  # read an upstream change it has not.
+  b="$(sed -n 's/^base_sha:[[:space:]]*//p' "$NEW" 2>/dev/null)"
+  if [ "$b" = "$BASE" ]; then ok "base_sha stamped at BASE (where the delta forked), not THEIRS"
+  else bad "base_sha is '$b', want '$BASE' -- stamping theirs claims a read that never happened"; fi
+
+  if grep -q 'Test Architect' "$NEW" 2>/dev/null; then ok "the consumer's text was carried into the override"
+  else bad "the consumer's text was not carried into the override -- it is now LOST"; fi
+
+  # core reverted, so the drift is gone
+  if [ "$(bash "$UNREG" "$DIST" "$BASE" "$CONS" | awk -F'\t' '$2=="team-roles/tea.md"{print $1}')" = "CORE-OK" ]; then
+    ok "core reverted; tea.md is no longer unregistered drift"
+  else
+    bad "tea.md still reports drift after register-drift --apply"
+  fi
+
+  # A hook has no override grain. It must REFUSE, not invent one.
+  bash "$REG" "$DIST" "$BASE" "$CONS" hooks/ai-dlc-continue.sh --apply >/dev/null 2>&1
+  if [ $? -eq 2 ]; then ok "refuses a HOOK (no override grain exists for hooks)"
+  else bad "register-drift invented an override for a hook -- overrides shadow headings, hooks have none"; fi
 fi
 
 rm -rf "$ROOT"

@@ -168,6 +168,79 @@ case "$MODE" in
     exit 0
     ;;
 
+  --merge)
+    # Re-adoption is a THREE-WAY MERGE, not a hand edit.
+    #
+    #   base   = the core section at the override's base_sha  (what it forked from)
+    #   ours   = the override body                            (base + the consumer delta)
+    #   theirs = the core section at theirs                   (base + the upstream change)
+    #
+    # git merge-file applies the upstream change to the consumer's copy and keeps the
+    # delta. Telling the operator to "merge the new core text in, preserving your
+    # delta" by hand is asking them to run this algorithm in their head, on prose, and
+    # a hand-merge is where a consumer silently drops half an upstream clause.
+    #
+    # A real conflict leaves standard <<<<<<< markers and exits 1 — the ONE spot that
+    # genuinely needs a human. Everything else lands clean.
+    if [ "$RESOLVE" != yes ]; then
+      echo "REFUSED  $(basename "$OVR"): a shadowed anchor resolves to no heading; cannot merge what cannot be located." >&2
+      anchors_resolve >/dev/null
+      exit 1
+    fi
+
+    ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
+    if [ "$(printf '%s\n' "$ids" | grep -c .)" -ne 1 ]; then
+      echo "REFUSED  $(basename "$OVR") shadows more than one anchor; merge them one at a time by hand." >&2
+      echo "  anchors: $(printf '%s' "$ids" | tr '\n' ' ')" >&2
+      exit 2
+    fi
+    id="$ids"
+
+    fmf="$(mktemp)"; ours="$(mktemp)"; base="$(mktemp)"; theirs="$(mktemp)"
+    awk 'NR==1 && /^---$/ {infm=1; print; next}
+         infm && /^---$/ {print; infm=0; done=1; next}
+         infm {print}' "$OVR" > "$fmf"
+    awk 'BEGIN{fm=0; started=0}
+         NR==1 && /^---$/ {fm=1; next}
+         fm && /^---$/ {fm=0; started=1; next}
+         fm {next}
+         started {print}' "$OVR" > "$ours"
+
+    git -C "$DIST" show "${BASE_SHA}:${CORE}" | section_of "$id" > "$base"
+    git -C "$DIST" show "${THEIRS}:${CORE}"   | section_of "$id" > "$theirs"
+
+    # Align the three inputs before merging. The body extractor emits a leading blank
+    # line (the one after the frontmatter fence) while `section_of` starts flush at the
+    # heading. That one-line offset makes `git merge-file` mis-align ours against base
+    # and report a CONFLICT on a paragraph that is BYTE-IDENTICAL to base -- so a clean,
+    # mechanical re-adoption gets handed back to the operator as prose to merge by hand,
+    # which is the exact failure this mode exists to remove. Strip leading/trailing
+    # blank lines from all three.
+    for f in "$ours" "$base" "$theirs"; do
+      awk 'NF {p=1} p' "$f" | awk '{a[NR]=$0} END {n=NR; while (n>0 && a[n]=="") n--; for(i=1;i<=n;i++) print a[i]}' > "$f.n"
+      mv "$f.n" "$f"
+    done
+
+    merged="$(mktemp)"
+    cp "$ours" "$merged"
+    if git merge-file -L "override (yours)" -L "core@${BASE_SHA}" -L "core@${THEIRS_SHA}" \
+         "$merged" "$base" "$theirs"; then
+      { cat "$fmf"; echo; cat "$merged"; } > "$OVR"
+      rm -f "$fmf" "$ours" "$base" "$theirs" "$merged"
+      echo "MERGED   $(basename "$OVR"): upstream's change applied, the consumer delta preserved."
+      echo "  Review the body, then: --stamp readopt"
+      exit 0
+    else
+      { cat "$fmf"; echo; cat "$merged"; } > "$OVR"
+      rm -f "$fmf" "$ours" "$base" "$theirs" "$merged"
+      echo "CONFLICT $(basename "$OVR"): upstream and the consumer changed the same lines." >&2
+      echo "  Conflict markers are in the body. Resolve them, then: --stamp readopt" >&2
+      echo "  (--stamp readopt is refused while superseded core text remains, so an" >&2
+      echo "   unresolved conflict cannot be stamped away.)" >&2
+      exit 1
+    fi
+    ;;
+
   --stamp)
     case "$OUTCOME" in
       retire)
@@ -176,6 +249,12 @@ case "$MODE" in
         exit 0
         ;;
       readopt)
+        if grep -qE '^(<{7}|={7}|>{7})' "$OVR"; then
+          echo "REFUSED  $(basename "$OVR"): unresolved merge conflict markers in the body." >&2
+          grep -nE '^(<{7}|={7}|>{7})' "$OVR" | sed 's/^/    /' >&2
+          echo "  Stamping now would ship <<<<<<< into the rulebook the lead reads." >&2
+          exit 1
+        fi
         if [ "$RESOLVE" != yes ]; then
           echo "REFUSED  $(basename "$OVR"): a shadowed anchor resolves to no heading, so the stale-text test is VACUOUS." >&2
           anchors_resolve >/dev/null
