@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.54.3] — 2026-07-13
+
+### `layer-drift.sh` cried collision on the headings the operator had just correctly fixed
+
+`validate-layer-entries.sh` learned in v0.53.0 that a `[ext:<id>]`-labelled heading is
+the **resolved** state of a check-number collision, not a violation. `layer-drift.sh` —
+which reports the same predicate in the reconcile report — **did not.**
+
+So on the reference consumer, after `relabel-extension-checks.sh` correctly labelled all
+16 colliding headings and `validate-layer-entries.sh` went to **0 errors**, `layer-drift`
+went on reporting **11 collisions** — for entries that are *fixed*, on **every pull,
+forever.**
+
+It is report-only, so it corrupted nothing. It just trains the operator to stop reading
+the reconcile report, and **a report that is always wrong is a report nobody reads.** The
+remedy the message itself prescribes could never silence the message.
+
+The label is now stripped before the title comparison, and a labelled heading clears the
+collision. Verified against the consumer: **11 → 5**, and the 5 that remain are
+*step-section* collisions (warn-tier by design, not the check catalog) — **the same 5
+`validate-layer-entries.sh` reports.** The two tools finally agree. Un-labelling `Check
+25` brings the collision straight back, so the check still fires.
+
+### Third instance of one defect: two implementations of one predicate, drifting apart
+
+- v0.52.0 — `readopt-override.sh`'s section resolver was weaker than `layer-drift`'s, so
+  it could not resolve the anchor `layer-drift` had just **blocked** on, found no stale
+  lines, and **would have cleared the block.**
+- v0.54.2 — `register-drift.sh`'s resolver was stricter than `layer-drift`'s, so it
+  **misfiled a renamed section as an addition**, which would have rendered core's heading
+  *and* the consumer's, side by side.
+- v0.54.3 — `layer-drift`'s collision check did not know the label that
+  `validate-layer-entries` accepts, so the fix could not silence the finding.
+
+Each time: **the gate and the tool disagreed, and the tool won.** The resolvers are now
+shared byte-for-byte; this one is the label predicate, and it is now identical in both.
+
 ## [0.54.2] — 2026-07-13
 
 ### `register-drift.sh` authored overrides with anchors that resolve to nothing
