@@ -399,8 +399,7 @@ has happened yet.
 **Minimum mechanism (Rule 26(c)) — the dispatch-time In-Flight
 Teammates row.** Failure caught: the lead cannot address a dispatched
 teammate, reads that as teammate *death*, and re-dispatches work still
-running or already delivered (13 of 39 dispatches in the reference
-consumer; see `docs/context-hardening-notes.md` R31). False-positive
+running or already delivered. False-positive
 cost: one table row per dispatch, written in a snapshot update the lead
 already runs; struck at join. Removal condition: retire once the harness
 gives the lead a handle that both survives compaction and is valid for

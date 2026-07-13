@@ -66,11 +66,8 @@ Activity reflects the in-flight sub-step rather than only the last
 gate, and In-Flight Teammates carries the deliverable paths that let
 the lead re-join its teammates instead of re-dispatching them.
 
-The budget is checked here, not only at gates, because implementation
-passes only three gates in a phase that can run four hours — a budget
-enforced only at gates is unenforced for the longest, most
-dispatch-heavy step in the pipeline (`docs/context-hardening-notes.md`
-R31). The full Check 14 still runs at the next gate.
+The budget is checked here, not only at gates. The full Check 14 still
+runs at the next gate.
 
 ## Bounded-join beat (referenced by step files)
 

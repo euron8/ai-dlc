@@ -1462,3 +1462,168 @@ reached 66,782 bytes (**278% of budget**), whole-read at each of ten compactions
 single day, while the sub-step budget check sat there reporting it: the check already
 exited 1 past the grace band, and the step file said *"trim at your next natural
 pause."* An obligation with no deadline is not an obligation.
+
+## R33 — rationale purged from the agent-read path (v0.52.0)
+
+*"Putting those things in the core skill are how we get agents 'reasoning' around the
+rules and gates."* — operator, 2026-07-13.
+
+A rule that explains itself invites negotiation. A gate that justifies its own design
+hands the agent an argument for why the design does not apply *here*. And a pointer
+from a gate file to this document is a **door**: the agent walks through it and comes
+back with a story instead of a verdict.
+
+v0.52.0 removed every rationale header, cross-doc pointer, measured anecdote, and
+piece of version archaeology from the 38 agent-read files (`SKILL.md`, `steps/*.md`,
+`core/team-roles/*.md`). Nothing was destroyed; it is all below. Shell scripts are out
+of scope — their comments are read by maintainers, never by the pipeline.
+
+### What was kept, and the test that decided it
+
+**The test:** *can the agent use this sentence to argue the rule does not apply to
+it?* If yes it is rationale — cut. If it is an invariant of the world — keep.
+
+1. **Rule 26(c) contracts stay** (21 of them, verified intact). Rule 26(c) *requires*
+   machinery to state the failure it catches, the false-positive cost, and its removal
+   condition. That is a three-fact contract, not a rationale, and a retro audit flags
+   machinery that lacks one — deleting them would break a different gate. They were
+   compressed to the terse form, with the sprint-numbered measurements stripped out of
+   the "failure caught" clause.
+2. **Factual API/mechanism statements stay.** *"`Agent` returns an `agent_id`,
+   `TaskOutput` takes a `task_id`"* is a fact an agent cannot argue with. v0.50.0 put
+   it inline precisely so it would not be re-introduced.
+3. **`gate-validation.md` H1 format examples stay** (`Sprint 288`, `Sprint S286`).
+   Those are accepted-input strings for a parser, not anecdotes.
+
+No `##`/`###` heading was deleted or renamed anywhere, so no consumer override was
+orphaned (every graph `shadows:` entry anchors to a heading; all sites cut here were
+bold/italic paragraph leads *inside* sections).
+
+### The stories, relocated
+
+**SKILL.md Rule 25(b) — the conditional whole-read exemption.** "Rely on (a) keeping
+it bounded" was an assumption, not a mechanism: in the reference consumer
+`product-brief.md` reached 480 KB (~120k tokens, 2× its budget) and
+`carry-over-evaluation` whole-read it 11 times anyway, because nothing stood between
+the exemption and the file. An exemption whose precondition is stated but never tested
+is not an exemption; it is a hole.
+
+**SKILL.md Rule 25(c) — logs named one at a time.** The flow log carried every event
+of every sprint (1.3 MB / 5,418 events in the reference consumer) because "and similar
+logs" bound it to nothing. `context-mode-protection-log.md` reached 210 KB in the same
+consumer while appearing in NEITHER the (c) list nor the (d) threshold table —
+unbounded, hook-written, and read at retro. Naming logs one at a time is how the gap
+keeps recurring; (d) is what catches the next one.
+
+**SKILL.md Rule 25(d) — why the clause used to say "warn-only, never blocks."** Every
+budget fired at retro — at the end of the sprint that had already paid for the overage.
+Artifacts ratcheted up, each sprint began slower than the last, and the only mechanism
+that would have noticed always arrived after the cost. A ratchet with no pawl. In the
+reference consumer this compounded until a single planning phase spent 3h16m, took six
+auto-compactions, and never reached the architecture step.
+
+**The grace band is aim, not softness.** A ratchet announces itself in *multiples* —
+the reference consumer's real breaches were 161%, 215%, 526% and 3311% of budget. A
+gate that also fails at 104% buys nothing and costs a lot: the lead trims 300 tokens,
+the artifact grows back by the next gate, and it fails again. That treadmill turns a
+real signal into noise, and a noisy gate gets ignored.
+
+**Rule 29 — the bounded file-wait beat is the primary join.** In the reference
+consumer's first three post-fix sprint sessions: 14 `Agent` spawns, 2 `TaskOutput`
+attempts (both failed), **47 file-wait beats did all of the joining.**
+
+**Rule 29 — the failure the beat replaces.** With no join named, the lead writes
+`until [ -s "$d/s289-pm.md" ]; do sleep 20; done` as one `Bash` call. It runs to the
+harness's 10-minute cap and returns `TIMEOUT` having produced nothing: ten minutes of
+blind window bought for zero information. Six such calls in a single S289 planning
+phase burned 52 minutes, 29 of them past the point of no return. The loop goes in the
+beat count, never inside the call.
+
+**Rule 29 — the steamroll count, and the miscount.** (b) was previously recorded as
+111. It was 114 by the old count, of which 19 were the harness's own auto-compaction
+resume prompt read as a human steer — the lead advancing after one is the recovery
+protocol, not a steamroll. The filter now excludes them; the real figure is **95**. A
+machine event miscounted as a human one is the recurring error class of this project.
+
+**Rule 29 — Check C has caught nothing, and that is deliberate.** Across 278 consumer
+sessions no lead has ever run even 3 consecutive bounded wait-beats — because until
+this rule there was no reason to slice a poll at all; the observed failure is one
+unbounded call, which Check A already catches. Check C bounds a shape *this rule
+introduces*: once beats are the sanctioned way to wait, beating forever becomes the
+natural way to hang. Shipping the ceiling unenforced was the alternative, and an
+unenforced threshold is exactly the ratchet Rule 25(d) had to be rewritten to escape.
+
+**Rule 29 — why Check D exists.** v0.44.0 wrote the rule around a join that cannot
+join the thing ai-dlc actually spawns. The rule's headline mechanism was inert from the
+day it shipped, and the bounded file-wait beat (added in v0.45.0 as a supposed
+`Skill`-only special case) has been doing 100% of the real joining. A rule that names
+the wrong API is worse than one that names none: it looks like guidance.
+
+**`route.md` — why the artifact budget blocks at sprint start and nowhere else.**
+Sprint start is the last moment at which an oversized artifact is cheap to fix — the
+sprint has not read it yet. One step later, `carry-over-evaluation` whole-reads the
+brief, the PRD, the architecture, and the backlog (Rule 25(b)), and every over-budget
+byte is context that planning does not get back. Retro's audit of the same budgets
+stays warn-only; it reports on a sprint that already paid.
+
+**`_gate-procedures.md` — why the sub-step budget check is not gate-only.**
+Implementation passes only three gates in a phase that can run four hours. A budget
+enforced only at gates is unenforced for the longest, most dispatch-heavy step in the
+pipeline.
+
+**`gate-validation.md` Check 3a — why it is a gate-level check.** The story's own
+validation cycle may pass (the story is internally coherent and its ACs are testable)
+while the story still fails to address the thing it was created to address. That cannot
+be caught by validating the story in isolation; it requires comparing the story to its
+source.
+
+**`gate-validation.md` Check 14 — the snapshot's cost.** In the reference consumer the
+snapshot reached 50 KB (~15k tokens, 2.5× its 6k budget) and was whole-read 8 times in
+one planning phase — the single largest byte-injector of any file in the session, and a
+direct driver of the six auto-compactions that phase took.
+
+**`gate-validation.md` Check 24 — why the four adversarial fields exist.** A verdict
+the machinery cannot read is a verdict the lead adjudicates in prose: on S289 the
+terminal pass reported 0 CRITICAL / 0 MAJOR, wrote "the repair wave converged," and
+stamped `EXIT CONDITION NOT MET` — free text, in a key no script parsed, and the key
+itself drifted mid-series (`exit_condition_met:` on pass 2, `verdict:` on passes 3–4).
+The CRITICALs had run 3 → 4 → 7 across the three passes before it with no escalation,
+and the §5 planning gate passed anyway.
+
+**`gate-validation.md` H2 — the vacuous fixture.** H2 was not merely repetitive; it was
+**vacuous**. All three `seed.sh` files were `echo` statements describing, in English,
+fixtures that were never written to disk — so H2 read a *description of a test* and
+adjudicated that. It could not fail, and it never did. Worse, `check-17-bypass`'s V5
+carried `mode: solo`, which trips the Rule 20 solo assertion in
+`validate-provenance-block.sh` *before* the SHA branch is reached: the forgery floor V5
+exists to prove was never executed, while the fixture's README asserted it passed. Both
+were fixed in v0.49.0 — the seeds write real files, `run.sh` asserts the matrix, and it
+fails loudly with `the forgery floor is UNTESTED` if V5 regresses. Its cost was never
+the problem: a check that runs 6 times and proves nothing is not expensive, it is
+broken.
+
+**`adversary.md` — why the verdict field exists.** v0.46.0 told the adversary a clean
+verdict was a valid outcome and gave it nowhere to write one. On S289 pass 4 the
+residue was 0 CRITICAL, 0 MAJOR, 2 MINOR; the prose said *"the repair wave converged …
+I probed the repair hard and it holds"* — and the field said `verdict: EXIT CONDITION
+NOT MET`, the same string pass 3 emitted. The lead read the prose, applied the two
+one-line deletions, and passed the gate anyway. A review that converges in prose and
+refuses to converge in its field has handed the decision back to the context whose
+independence it exists to supply.
+
+**`adversary.md` — why later passes review the repair.** On S289's
+`research-requirements` cycle the CRITICALs per pass ran **3 → 4 → 7 → 0**, rising
+every pass until the repair step finally *cut* text instead of adding it. Derivation:
+`s289-rr-adversarial-pass1.md:180` (3), `pass2.md:252` (4), `pass3.md:517` (7),
+`pass4-verification.md:492` (0). Pass 3's own summary: "Pass-2's repair wave injected
+five new CRITICALs, three of them defects the repair itself created." The reviews were
+not getting sharper; the repairs were manufacturing work. A role that must find
+something will always find something, and the newest, least-defended text — the last
+pass's repairs — is where it will look.
+
+**`adversary.md` — the over-engineering rung, backtested.** On S289 an adversary filed
+a "Rule 26 removal sweep" of three deletions (`s289-arch-adversarial-pass1.md:261-278`)
+that its own `VERDICT: 2 CRITICAL, 1 MAJOR, 2 MINOR` counted **zero** of. Backtested
+against all 21 S289 removal findings: the 8 filed MINOR are stale words and stale
+counts, none names a mechanism, all 8 fail test 1, and the converged pass 4 (0 CRITICAL
+/ 0 MAJOR / 2 MINOR) is unchanged.
