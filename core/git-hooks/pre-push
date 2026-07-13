@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# pre-push — the CONSUMER's local gate. Shipped by AI/DLC, run by the consumer.
+#
+# THE GAP THIS CLOSES. `validate-layer-entries.sh` is correct, fires on real
+# consumers, and — until now — was bound to nothing but `retro.md`, which runs AFTER
+# the sprint has already paid for the drift. Rule 27 has no gate check and no
+# `enforcement-map.yaml` row, so layer hygiene was enforced by a human remembering to
+# type a command. That is the same half-wired shape v0.52.0 is named for, one layer up.
+#
+# WHY NOT GITHUB ACTIONS. Operator policy: no CI in GitHub, here or in the
+# distribution. A gate hosted in a service we do not run is a gate we do not control.
+# This runs on the machine doing the pushing: no runner, no network, no third party.
+#
+# WHAT IT DOES NOT DO. It runs only TREE-LEVEL checks — ones decidable from the files
+# on disk. Gate-time validators (provenance, retro evidence, adversarial convergence,
+# steering budget) need live pipeline state and belong at their gates, not here.
+# Putting them in a push hook would make them fire on every unrelated service commit,
+# and a gate that fires on everything gets turned off.
+#
+# ENABLE (once per clone, and NOT before your layer entries are clean — see below):
+#     git config core.hooksPath .githooks
+#
+# ORDERING HAZARD, STATED PLAINLY. If `validate-layer-entries.sh` currently exits 1 on
+# your repo, enabling this hook blocks your next push. Installing the FILE is
+# therefore harmless and automatic; ENABLING it is an explicit operator action you take
+# once the tree is clean. Run the checks by hand first:
+#
+#     bash scripts/validate-layer-entries.sh
+#
+# `git push --no-verify` bypasses the hook. That is a decision made on the record,
+# not a default fallen into.
+
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+fail=0
+step() {
+  printf '\n── %s\n' "$1"; shift
+  if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
+}
+
+# 1. Rule 27 layer hygiene. Overrides carry a resolvable `base_sha`; extension checks
+#    do not collide with a core check NUMBER (a bare "Check N" in a gate log has no
+#    referent when two catalogs share one integer). THE check this hook exists for.
+if [ -f scripts/validate-layer-entries.sh ]; then
+  step "layer entries (Rule 27: override base_sha, catalog collisions)" \
+    bash scripts/validate-layer-entries.sh
+fi
+
+# 2. The auto-compact ordering invariant: red must fire before the harness compacts,
+#    or the handoff never gets first refusal. A config check, decidable from disk.
+if [ -f scripts/validate-compact-window.sh ]; then
+  step "compact-window invariant" \
+    bash scripts/validate-compact-window.sh
+fi
+
+# 3. A shipped script with a syntax error is a gate that cannot run at all.
+syntax_all() {
+  local rc=0 f
+  for f in scripts/*.sh .claude/hooks/*.sh .githooks/*; do
+    [ -f "$f" ] || continue
+    bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }
+  done
+  return $rc
+}
+step "shell syntax (scripts and hooks)" syntax_all
+
+# 4. Fixtures are adversarial self-tests for the gate checks. A fixture never driven is
+#    a green light nobody earned.
+run_fixtures() {
+  local rc=0 d
+  for d in tests/fixtures/*/; do
+    [ -f "$d/run.sh" ] || continue
+    if bash "$d/run.sh" >/dev/null 2>&1; then
+      printf '   ok    %s\n' "$(basename "$d")"
+    else
+      printf '   FAIL  %s\n' "$(basename "$d")"; rc=1
+    fi
+  done
+  return $rc
+}
+if [ -d tests/fixtures ]; then
+  step "fixture suite" run_fixtures
+fi
+
+if [ "$fail" -ne 0 ]; then
+  printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'
+  exit 1
+fi
+printf '\npre-push: all gates green.\n\n'

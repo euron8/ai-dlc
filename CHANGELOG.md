@@ -17,6 +17,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.53.0] — 2026-07-13
+
+### A gate hosted in a service we do not run is a gate we do not control
+
+Operator policy: **no CI in GitHub** — not in the distribution, and not in the
+reference consumer, which removed its own Actions scaffolding on purpose
+(`fcce033ee`). v0.52.0 shipped `.github/workflows/validate.yml` against that policy.
+It is removed. The checks are unchanged; only **where they run** changes.
+
+- **`.githooks/pre-push` (the distribution's own gate).** enforcement-map integrity
+  (I1–I9), the `SKILL.md` re-attach budget, the full fixture suite, and `bash -n` over
+  every shipped script. Blocks the push on failure. No runner, no network, no third
+  party. Nothing depended on the removed workflow: only 3 of 39 enforcement-map entries
+  carry a `ci_workflow:`, all three pointing at the **consumer** templates, and none of
+  the `call_sites:` backfilled by I9/W1 reference `.github`. `core/ci-templates/` is
+  **retained** and still installed for consumers that do run Actions.
+
+- **`core/git-hooks/pre-push` (shipped to consumers) — this closes the gap v0.52.0
+  left open and said so.** `validate-layer-entries.sh` is correct, fires on real
+  consumers, and was bound to nothing but `retro.md` — which runs *after* the sprint
+  has already paid for the drift. Rule 27 has **no gate check and no
+  `enforcement-map.yaml` row**, so layer hygiene was enforced by a human remembering to
+  type a command: the same half-wired shape v0.52.0 is named for, one layer up. The
+  consumer now has a call site that fires on its own.
+
+  It runs **tree-level** checks only — layer entries, the compact-window invariant,
+  `bash -n`, and the fixture suite. Gate-time validators (provenance, retro evidence,
+  adversarial convergence, steering budget) need live pipeline state and stay at their
+  gates. A push hook that fired them on every unrelated service commit would be a gate
+  that fires on everything, and a gate that fires on everything gets turned off.
+
+### Installed automatically, enabled deliberately
+
+**The file installs; the hook does not self-enable.** Enabling is
+`git config core.hooksPath .githooks`, left to the operator on purpose.
+
+`validate-layer-entries.sh` exits 1 on the reference consumer **today** (5 errors).
+Auto-enabling a blocking hook would have failed its very next push, mid-sprint — and a
+linter that errors on first contact is a linter that gets commented out. Install now,
+enable once the tree is clean. `install.sh` prints which state it is in.
+
+Verified both directions: the consumer hook is **RED against graph as it stands today**
+(the 5 real errors) and **GREEN only against the migrated tree**. It can fire, and it
+clears only when the v0.52.0 migration actually lands.
+
+### The claim this corrects
+
+v0.52.0's changelog credited the Actions workflow with catching its own packaging bug —
+the `layer-readopt-gate` fixture reaching `install.sh`'s hardcoded loop but not
+`uninstall.sh`'s. **It did not.** `validate-enforcement-map.sh` caught that on a
+**local** run, before the push; both of the two Actions runs that ever existed saw an
+already-fixed tree and caught nothing.
+
+Crediting a check with a catch it did not make is the same defect as a check that
+cannot fire being recorded as a check that passed — the error class v0.52.0 is named
+for, committed in v0.52.0's own release notes. The entry is corrected in place.
+
+Both hooks were **mutation-tested going red**: the exact packaging bug (fixture in
+`install.sh`, absent from `uninstall.sh`), `SKILL.md` pushed over the resident fold,
+and a syntax error in a shipped script. Each blocks the push.
+
 ## [0.52.0] — 2026-07-13
 
 ### A rule that explains itself invites negotiation
@@ -219,12 +280,8 @@ already paid.
   (`context-sensor`, 36 assertions) that resolved its hook only at a **consumer** path
   and had therefore never once run upstream.
 
-  **This shipped as a GitHub Actions workflow first, and that was wrong.** Operator
-  policy is no CI in GitHub — not in the distribution, not in the reference consumer,
-  which removed its own Actions scaffolding on purpose (`fcce033ee`). A gate hosted in
-  a service we do not run is a gate we do not control. The workflow was removed and the
-  same four checks moved to a local pre-push hook: no runner, no network, no third
-  party, and it fires on the machine doing the pushing.
+  **This shipped as a GitHub Actions workflow first, and that was wrong.** It was
+  removed in **0.53.0** and the same four checks moved to a local pre-push hook.
 
   **The correction is on the record because the original claim was wrong.** This entry
   previously credited the Actions workflow with catching v0.52.0's own packaging bug (a

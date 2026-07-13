@@ -362,6 +362,25 @@ else
   echo "  Copy from ai-dlc/core/ci-templates/ when ready"
 fi
 
+# Install the local pre-push gate (always overwrite — upstream-owned).
+#
+# The FILE is installed automatically; the hook is NOT ENABLED here. Enabling is
+# `git config core.hooksPath .githooks`, and it is deliberately left to the operator:
+# if the project's layer entries are currently dirty, enabling a blocking hook would
+# fail the very next push. A linter that errors on first contact is a linter that gets
+# turned off. Install now, enable when clean.
+echo "Installing local pre-push gate..."
+mkdir -p "$PROJECT_ROOT/.githooks"
+cp "$SCRIPT_DIR/../core/git-hooks/pre-push" "$PROJECT_ROOT/.githooks/pre-push"
+chmod +x "$PROJECT_ROOT/.githooks/pre-push"
+if [ "$(git -C "$PROJECT_ROOT" config core.hooksPath 2>/dev/null)" = ".githooks" ]; then
+  echo "  .githooks/pre-push installed (ENABLED)"
+else
+  echo "  .githooks/pre-push installed (not enabled)"
+  echo "  Enable with: git config core.hooksPath .githooks"
+  echo "  Check first: bash scripts/validate-layer-entries.sh"
+fi
+
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"

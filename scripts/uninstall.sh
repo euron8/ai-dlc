@@ -105,6 +105,14 @@ for wf in validate-retro-compliance.yml validate-ci-gates.yml; do
   fi
 done
 
+# -- Local pre-push gate installed by AI/DLC --
+# Paired with install.sh's copy. Note we remove the FILE but never touch
+# `core.hooksPath`: the operator set that, not us, and they may point it at hooks of
+# their own.
+if [ -f "$PROJECT_ROOT/.githooks/pre-push" ]; then
+  FILES_TO_REMOVE+=(".githooks/pre-push")
+fi
+
 # -- Test fixture templates installed by AI/DLC --
 # MUST stay identical to install.sh's fixture loop, or uninstall silently orphans the
 # fixtures it does not name. It had already drifted: install shipped nine, this listed
