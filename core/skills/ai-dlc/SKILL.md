@@ -1043,9 +1043,9 @@ It never authorizes skipping, thinning, or reordering pipeline steps,
 gates, or validation cycles -- Rule 4 is unaffected, and "simple" or
 "KISS" is never a reason to bypass a step.
 
-Violation is a code-review finding per `code-reviewer.md`
-(Over-Engineering classification); machinery lacking the (c) contract
-is flagged by the retro rule-file audit (`retro.md` Step 4).
+Violation is a MAJOR in adversarial review (`adversary.md`) and a
+code-review finding (`code-reviewer.md`); machinery lacking the (c)
+contract is flagged by the retro rule-file audit (`retro.md` Step 4).
 
 ### Rule 27 -- Layered rulebook: core, extensions, overrides
 
