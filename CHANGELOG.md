@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.56.2] — 2026-07-14
+
+### v0.56.0 put a story where a contract belonged
+
+The operator asked whether `remediator.md` was poisoning context. It was, and in a way that
+is worse than token cost.
+
+**A role file carries what changes the agent's BEHAVIOUR, not what justifies the role's
+existence to a human reader.** v0.56.0's role file broke that three ways:
+
+- **Operator-facing advice in an agent-facing file.** A paragraph told the reader to pin the
+  model at the adversary's tier and "not economise" — but the remediator's model is already
+  set before it reads a word. It cannot act on it. The decision is made at reconcile, and
+  v0.56.1's step 7 already proposes the tier there, which is the only place it is answerable.
+- **Consumer-specific domain in a core file.** Every consumer's remediator — and adversary —
+  would have read about another project's "DECIDES sites", "TEL compares", and decision
+  entries A57/A65/A67/A70/A72.
+- **Priming.** That is the real cost. An agent whose entire value is deriving facts from
+  *this* artifact's source, opened with a story about wrong counts and false universals, goes
+  hunting for wrong counts and false universals. Narrative in a role file is not inert
+  context; it is a thumb on the scale.
+
+Trimmed, by load path:
+
+| file | path | cut |
+|---|---|---|
+| `remediator.md` | per dispatch | **−452 tok** (−23%) |
+| `_gate-procedures.md` | per reference, re-read after compaction | **−231 tok** (a pure "Why" narrative, already in notes R35) |
+| `discovery.md` | **whole-re-read on EVERY compaction** | **−53 tok** (a four-shape enumeration duplicated in four files; the lead needs the rule, not the list) |
+| `adversary.md` | per dispatch | −27 tok (domain specifics → notes) |
+
+The mechanism is unchanged and every gate still passes. The measurements that justify a
+Rule 26(c) block stay inline — those cannot relocate. Somebody else's pool IDs can.
+
+
 ## [0.56.1] — 2026-07-14
 
 ### v0.56.0 shipped the first new role file in the mechanism's lifetime, and the pull had no way to fill its tokens
