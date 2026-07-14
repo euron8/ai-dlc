@@ -14,13 +14,19 @@
 #
 # Schema (see SKILL.md Rule 3):
 #   <!-- SKILL_INVOCATION_PROVENANCE v1
-#   skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
+#   skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review>
 #   invoked_at: <ISO 8601 UTC timestamp>
-#   tool_use_id: <toolu_... from Skill tool response>
+#   tool_use_id: <toolu_... from the Skill tool response -- or, for ai-dlc-adversary-review,
+#                 from the Agent dispatch that spawned the adversary. Both tools return one.>
 #   mode: <solo|subagent>
 #   lead_role: <step-file-name>
 #   transcript_path: <path@sha>   # required when artifact is docs/retro/sprint-*.md
 #   SKILL_INVOCATION_PROVENANCE_END -->
+#
+# `ai-dlc-adversary-review` is the Rule 8 CONVERGENCE review: no Skill runs, the
+# `adversary` role runs the native method in team-roles/adversary.md. It is tracked
+# here for exactly the reason the four sub-skills are -- the block is the only evidence
+# the evaluation was independent of the context that authored the artifact.
 #
 # Retro docs at docs/retro/sprint-*.md MUST contain at least one block
 # with skill=bmad-party-mode. Other artifacts: --require-skill flag
@@ -82,6 +88,12 @@ KNOWN_SKILLS = {
     "bmad-advanced-elicitation",
     "bmad-review-adversarial-general",
     "bmad-validate-prd",
+    # v0.58.0. The Rule 8 CONVERGENCE cycle no longer invokes a Skill: it dispatches the
+    # `adversary` role, which runs the native method in team-roles/adversary.md. The block
+    # it emits still IS a provenance block -- the tool_use_id is the Agent dispatch's -- so
+    # it names the evaluation that ran, not a Skill that did not. bmad stays in the enum:
+    # the ONE-SHOT reviews still invoke it.
+    "ai-dlc-adversary-review",
 }
 
 BLOCK_RE = re.compile(
@@ -178,15 +190,27 @@ for idx, raw_block in enumerate(blocks, start=1):
             f"block #{idx}: mode must be 'solo' or 'subagent' (got '{fields['mode']}')"
         )
 
-    # Rule 20: ALL validation sub-skills must run in real independent subagents.
+    # Rule 20: ALL validation evaluations must run in real independent subagents.
     # mode: solo (lead roleplayed the validation in its own context) is forbidden
-    # for every tracked skill, not only party-mode.
-    if fields.get("skill") in KNOWN_SKILLS and fields.get("mode") == "solo":
+    # for every tracked evaluation, not only party-mode.
+    #
+    # THIS ASSERTION USED TO BE GATED ON `fields.get("skill") in KNOWN_SKILLS`, AND THAT
+    # GATE WAS A LOADED GUN. It was vacuous -- an unknown skill already fails the enum
+    # above -- so it changed no outcome and looked harmless. What it actually did was
+    # couple the ONLY teeth Check 17 has to the enum's membership: the moment anyone
+    # added a provenance-emitting evaluation without adding its name, or made `skill:`
+    # optional, `fields.get("skill")` fell out of the set and the solo rejection SILENTLY
+    # STOPPED FIRING -- an adversary roleplayed inline in the lead would emit `mode: solo`
+    # and pass. v0.58.0 nearly shipped exactly that: the tempting way to express a role
+    # dispatch is "skill: names no skill here, drop the field."
+    # Unconditional now. mode: solo is forbidden, full stop, on any block that exists.
+    # Fixture: check-17-bypass V8 (solo with NO skill field) is its only witness.
+    if fields.get("mode") == "solo":
         failures.append(
-            f"block #{idx}: skill '{fields['skill']}' emitted mode: solo — Rule 20 "
-            f"requires mode: subagent (dispatch the evaluation to a real subagent; "
-            f"single-voice sub-skills go to a Rule-19-bound teammate). Solo defeats "
-            f"independent evaluation."
+            f"block #{idx}: skill '{fields.get('skill', '<absent>')}' emitted mode: solo — "
+            f"Rule 20 requires mode: subagent (dispatch the evaluation to a real subagent; "
+            f"single-voice sub-skills go to a Rule-19-bound teammate; the convergence review "
+            f"goes to the `adversary` role). Solo defeats independent evaluation."
         )
 
     if fields.get("skill") == "bmad-party-mode":
@@ -205,16 +229,39 @@ for idx, raw_block in enumerate(blocks, start=1):
                 )
 
 if require_skill:
-    match = any(
-        fields.get("skill") == require_skill
+    cited = {
+        fields.get("skill")
         for raw in blocks
         for fields, _ in [parse_block(raw)]
         if fields is not None
-    )
-    if not match:
-        failures.append(
-            f"--require-skill {require_skill} specified but no block cites that skill"
-        )
+    }
+    if require_skill not in cited:
+        # THE RETIRED PIN (v0.58.0). The convergence cycle used to invoke
+        # bmad-review-adversarial-general and now dispatches the `adversary` role, so the
+        # artifacts it produces -- stories, above all -- cite ai-dlc-adversary-review. A
+        # consumer that pinned the old name in a pre-submission override (dev / qa /
+        # code-reviewer are the usual sites) breaks HERE, mid-sprint, on the first story.
+        #
+        # A CHANGELOG note is not a mechanism -- ai-dlc-update/SKILL.md says so in as many
+        # words: "a migration note in a CHANGELOG is how it never gets done." Nothing else
+        # can catch this: the reconcile sees unbroken anchors, and a consumer check that
+        # asserts only "the --require-skill flag is present" is blind to WHICH skill it
+        # names. So the one place that CAN see it -- the failure itself -- says what to do.
+        if (require_skill == "bmad-review-adversarial-general"
+                and "ai-dlc-adversary-review" in cited):
+            failures.append(
+                f"--require-skill bmad-review-adversarial-general is a RETIRED PIN. This "
+                f"artifact was reviewed by the ai-dlc-native convergence cycle and cites "
+                f"'ai-dlc-adversary-review'. As of v0.58.0 the Rule 8 cycle dispatches the "
+                f"`adversary` role and invokes no skill; bmad is kept for ONE-SHOT reviews "
+                f"only. FIX: repoint this call site to "
+                f"`--require-skill ai-dlc-adversary-review`. (If you are a consumer, the "
+                f"site is most likely a dev/qa/code-reviewer pre-submission override.)"
+            )
+        else:
+            failures.append(
+                f"--require-skill {require_skill} specified but no block cites that skill"
+            )
 
 if is_retro and not party_mode_blocks:
     failures.append(

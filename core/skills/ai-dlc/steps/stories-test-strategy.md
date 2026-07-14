@@ -285,7 +285,8 @@ between them:**
    acceptance criteria, and edge cases until zero ambiguity remains.
    Update story files with all findings.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
+3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review
+   dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep, missing
    NFRs, and over-engineering (Rule 26: ACs demanding mechanism no
    locked requirement needs — propose removals).
@@ -317,6 +318,13 @@ strategy. Steps 2–3 below otherwise proceed.
    strategy for the sprint
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
+   **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
+   verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
+   HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert
+   this to the native review; the native review exists for cycles that must reach
+   zero. Write its findings under a path that does NOT share the stories series'
+   `s<N>-stories-adversarial-p` prefix — Check 24 globs that prefix, and a
+   verdict-less one-shot swept into the series fails rung A.
    **When done, immediately proceed to Commit Planning Artifacts:**
 
 ### 6. Commit Planning Artifacts

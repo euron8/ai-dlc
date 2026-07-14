@@ -60,7 +60,10 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
 
 
 `/bmad-review-adversarial-general` — final adversarial pass on the
-complete sprint output:
+complete sprint output.
+**ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
+counted exit condition; Check 24 skips this gate). The native `adversary` review
+is for CONVERGENCE cycles only. Review:
 - Walk through every change across all stories
 - Check for cross-cutting issues (inconsistent patterns, missing
   integration points, duplicated logic across stories)

@@ -61,7 +61,8 @@ between them:**
    acceptance criteria, and edge cases until zero ambiguity remains.
    Update story files with all findings.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
+3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review
+   dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep,
    missing NFRs, cross-sprint consistency, and over-engineering
    (Rule 26: ACs demanding mechanism no locked requirement needs —
@@ -72,7 +73,16 @@ between them:**
    \"Auto-handoff evaluation\") at `Seam D` with the label
    `sprint-review-next adversarial pass <N>`. If evaluation returns
    FIRE, the session ends; otherwise continue.
-   **When the final pass produces only nitpicks, immediately proceed to step 4:**
+   Continue until only nitpicks remain — "nitpick" is the MINOR/NIT rung of the
+   `team-roles/adversary.md` severity ladder: **zero CRITICAL and zero MAJOR IS the
+   exit condition met**, and the terminating pass stamps `verdict: EXIT_CONDITION_MET`.
+   **Gate Check 24 reads that field** (v0.58.0: this loop is now gated; before, it ran
+   unbounded and no gate ever read its verdict). CRITICALs rising **in the scope the
+   prior pass reviewed** are a `DIVERGENT_HARD_BLOCK` — **it STOPS THE CYCLE**; do not
+   run another pass. A MAJOR that will not fall for two consecutive passes at zero
+   CRITICAL is a STALL, not progress: derive the disputed fact or cut the claim, then
+   escalate (Check 24 §E).
+   **When the final pass stamps `EXIT_CONDITION_MET`, immediately proceed to step 4:**
 4. Append a changelog to each modified story file.
    **Then immediately proceed to Commit Updated Stories:**
 

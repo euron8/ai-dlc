@@ -10,7 +10,7 @@ cat > "$WORK/_bmad-output/planning-artifacts/s1-brief-adversarial-p${N}.md" <<EO
 # Adversarial pass ${N}
 
 <!-- SKILL_INVOCATION_PROVENANCE v1
-skill: bmad-review-adversarial-general
+skill: ai-dlc-adversary-review
 mode: subagent
 findings_critical: 1
 findings_critical_prior_scope: 1

@@ -25,7 +25,7 @@ pass() {
     printf '# Adversarial review — pass %s\n\n' "$n"
     printf 'Findings are recorded above; this fixture carries only the provenance block.\n\n'
     printf '<!-- SKILL_INVOCATION_PROVENANCE v1\n'
-    printf 'skill: bmad-review-adversarial-general\n'
+    printf 'skill: ai-dlc-adversary-review\n'
     printf 'mode: subagent\n'
     printf 'lead_role: research-requirements\n'
     printf 'invoked_at: 2026-07-12T0%s:00:00Z\n' "$n"

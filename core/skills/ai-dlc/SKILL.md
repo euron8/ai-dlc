@@ -621,19 +621,20 @@ model without contract and is a Rule 19 violation.
 Violation of (a) or (b) fails gate-validation Check 22 on detection at
 retro.
 
-### Rule 20 -- Validation sub-skills run in independent subagents with provenance
+### Rule 20 -- Validation evaluations run in independent subagents with provenance
 
-Validation sub-skills (`/bmad-party-mode`, `/bmad-advanced-elicitation`,
-`/bmad-review-adversarial-general`, `/bmad-validate-prd`) MUST be evaluated
-by **real, independent subagents** -- never roleplayed solo in the lead's own
-context. Independence is the point: a single LLM evaluating an artifact it (or
-its own conversation) authored produces convergent opinions and defeats the
-validation, and it absorbs delegable work into the lead's context (Rule 28).
-The `mode` field of the emitted provenance block MUST be `subagent` for ALL
-four sub-skills; `mode: solo` is forbidden for every one of them (not only
+Validation evaluations -- the four sub-skills (`/bmad-party-mode`,
+`/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
+`/bmad-validate-prd`) **and the native `ai-dlc-adversary-review` convergence
+review** -- MUST be evaluated by **real, independent subagents** -- never
+roleplayed solo in the lead's own context. Independence is the point: a single LLM
+evaluating an artifact it (or its own conversation) authored produces convergent
+opinions and defeats the validation, and it absorbs delegable work into the lead's
+context (Rule 28). The `mode` field of the emitted provenance block MUST be
+`subagent` for ALL FIVE; `mode: solo` is forbidden for every one of them (not only
 party-mode) and FAILS gate-validation Check 17.
 
-Two execution shapes, both `mode: subagent`:
+Three execution shapes, all `mode: subagent`:
 
 **(i) Persona-spawning (`/bmad-party-mode`).** The lead invokes it via the Skill
 tool in its own conversation; the sub-skill spawns real persona subagents
@@ -657,6 +658,18 @@ solo by construction (there is no internal spawn to make it independent), which
 is exactly the failure this rule forbids. In ai-dlc's autonomous mode
 (Rules 9/10: no mid-pipeline human dialogue) advanced-elicitation runs without
 operator back-and-forth, so subagent dispatch does not break an interactive loop.
+
+**(iii) Native convergence review (`ai-dlc-adversary-review`).** The Rule 8 cycle
+invokes **no Skill at all**. The lead dispatches ONE `adversary` per pass (same
+Rule 19 binding as (ii)); the METHOD is `team-roles/adversary.md` itself.
+Procedure: `_gate-procedures.md`, "Adversarial review dispatch".
+**Why it is not a sub-skill:** the bmad review skill demands *at least ten
+findings*, *HALTs on zero*, and emits *no severity or ranking* -- so a loop whose
+exit condition is zero CRITICAL and zero MAJOR has no fixed point under it, and the
+skill forbids the very severity fields Check 24 adjudicates. The counts the gate
+reads had no source of truth. bmad remains correct, and still runs, for the
+ONE-SHOT reviews (`bug-investigation`, `sprint-review`, the test-strategy sweep),
+where nothing loops and no verdict is counted.
 
 **Provenance block.** Every invocation MUST emit a
 `SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
@@ -686,15 +699,17 @@ returns no `task_id`, so Rule 29's `TaskOutput` join cannot reach a persona.
 Wait for it with Rule 29's **bounded file-wait beat** — never with a single
 open-ended poll.
 
-**Solo mode is forbidden -- for ALL four sub-skills.** Every validation
-sub-skill MUST run with real subagents (shape (i) or (ii) above), never
-roleplayed inline. Roleplaying perspectives / running a single-voice pass in
-the lead's own context (solo mode) produces convergent opinions from a single
-LLM and defeats independent evaluation. Any validation-sub-skill invocation
+**Solo mode is forbidden -- for ALL FIVE evaluations.** Every validation
+evaluation MUST run with real subagents (shape (i), (ii) or (iii) above), never
+roleplayed inline. Roleplaying perspectives / running a single-voice pass or a
+convergence review in the lead's own context (solo mode) produces convergent
+opinions from a single LLM and defeats independent evaluation. Any evaluation
 that emits `mode: solo` -- or generates evaluation output without a real
 subagent -- is a rule violation and FAILS Check 17 (enforced by
-`scripts/validate-provenance-block.sh`, which rejects `mode: solo` on any of
-the four tracked skills).
+`scripts/validate-provenance-block.sh`, which rejects `mode: solo` on **any**
+provenance block, unconditionally -- that rejection used to be gated on the
+tracked-skill enum, so adding a new evaluation without adding its name silently
+disarmed the only teeth this rule has).
 
 **Role-manifest preamble (persona-spawning sub-skills).** A validation
 sub-skill that spawns personas (`/bmad-party-mode`) spawns real

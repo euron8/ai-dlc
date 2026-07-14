@@ -68,7 +68,10 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/stories/`:
 
 ### 4. Validation
 
-`/bmad-review-adversarial-general` — review the fix approach:
+`/bmad-review-adversarial-general` — review the fix approach.
+**ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
+counted exit condition; the skill's ≥10 floor buys a cynical sweep and costs
+nothing). The native `adversary` review is for CONVERGENCE cycles only.
 - Is it the right fix or just a patch?
 - Will it introduce regressions?
 - Is test coverage sufficient?
