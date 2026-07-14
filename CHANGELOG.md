@@ -17,6 +17,71 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.57.0] — 2026-07-14
+
+### Rule 8's hard block had no teeth, so the cycle ran two more passes and got worse
+
+The reference consumer's cycle reached **pass 17** still diverging. The machinery was not
+broken — it was **ignored**.
+
+The adversary stamped `verdict: DIVERGENT_HARD_BLOCK` at **pass 15**. Rule 8 is explicit:
+divergence is a HARD_BLOCK — stop, escalate, change approach, *never* another pass. The lead
+ran pass 16. The adversary stamped `DIVERGENT_HARD_BLOCK` again at **pass 17**. Between them
+MAJORs went **1 → 4** and CRITICALs began appearing in **prior scope** — the divergence
+compounding, exactly as Rule 8 predicts, for two passes after the machinery had said stop.
+
+**Nothing enforced it.** No hook knew the verdict existed. Check 24 reads it — but Check 24
+runs at the **gate**, after the cycle is over. The single strongest signal in the whole cycle
+had no teeth at the only moment it mattered.
+
+**Check 0b, in `ai-dlc-continue.sh`.** A pass stamping `DIVERGENT_HARD_BLOCK` now **raises the
+existing pause flag** — no new mechanism (Rule 26). That flag already has teeth:
+`ai-dlc-continue.sh` then lets the pipeline stop, and `ai-dlc-acknowledge.sh` **denies every
+pipeline-advancing tool call** (`Agent`/`Task`/`Skill`/`Write`/`Edit`), so **the lead cannot
+dispatch the next pass.** It blocks the stop once to force the escalation into the open, then
+waits for the operator. Idempotent **per artifact**: the operator's clear wins, but a *new*
+divergent pass raises again — because two of them being ignored is the entire failure.
+
+### The repair was deleting the spec — and v0.56.0's own contract invited it
+
+Pass 17's CRITICAL: *"The dust-guard AC **cannot fail** against the predicate pass 16 forbade,
+and `LR-S290-1`'s PAIR mandate is unmet."* `LR-S290-1` is **OPERATOR-LOCKED**.
+
+The repair removed a predicate, leaving an AC with nothing to fail against — **a check that
+cannot fire, which reads exactly like a check that passes.** That is the defect class this
+distribution has now shipped four fixes for, and the repair step was *manufacturing* it.
+
+v0.56.0's remediator contract said:
+
+> *"When in doubt, DELETE the claim. An unverifiable assertion is not load-bearing."*
+
+Written for unverified *factual claims* — counts, universals. But a deletion imperative in a
+role file **primes deletion** (v0.56.2's own lesson, violated in the same file), and the
+boundary was one quiet line in a later section. The loud line won.
+
+The licence is now scoped and the boundary is hard:
+
+- **Deletion applies ONLY to an unverified factual claim about the code.** That is the entire
+  scope, and it stops dead at the boundary.
+- **An AC, a predicate an AC tests against, a guard, or a `LOCKED_REQUIREMENTS` entry is NOT a
+  claim — it is the specification.** Never deleted, never weakened, never stripped of the
+  predicate that gives it teeth. Always `escalated`.
+- **The test that decides it: after your edit, can the check still FAIL?** If not, the repair
+  manufactured a check that cannot fire — a worse defect than the one it was sent to fix.
+
+`core/fixtures/divergence-hard-block/` asserts the guard fires on `DIVERGENT_HARD_BLOCK`, stays
+silent on a healthy verdict (the decoy — a guard that pauses every pass gets ripped out),
+respects the operator's clear, and **re-raises on a NEW divergent pass**. Verified to fail on
+the mutant that removes the guard.
+
+### For the reference consumer
+
+**Do not run pass 18.** Pass 17 is a standing hard block. Pull this, and the pipeline pauses
+itself at the next divergent verdict instead of grinding on. Then ask what pass 16's repair
+deleted: an operator-LOCKED requirement lost the predicate its AC tested against, and
+reverting that repair — not another pass — is the remedy.
+
+
 ## [0.56.3] — 2026-07-14
 
 ### The fixture tested the operator's config, not the code — and armed, it blocked every push
