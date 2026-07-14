@@ -246,6 +246,27 @@ ghost_install="$(comm -13 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_insta
 drift_uninstall="$(comm -3 <(printf '%s\n' "$in_install") <(printf '%s\n' "$in_uninstall") | tr -d '\t')"
 [ -n "$drift_uninstall" ] && err "install.sh and uninstall.sh fixture loops disagree (uninstall would orphan or over-remove): $(echo $drift_uninstall)"
 
+# --- I10: fixture hermeticity -------------------------------------------------
+# A fixture that invokes a hook and INHERITS the operator's ambient config tests the
+# CONFIG, not the code. The hooks honour thirteen AI_DLC_* tunables; a consumer that sets
+# any one of them in settings.json exports it into every session, `git push` inherits it,
+# and the pre-push gate then runs the fixture against a hook configured differently from
+# what its assertions assume.
+#
+# Observed live: a consumer pinned AI_DLC_MODEL_ROW=1M — the documented way to declare the
+# model row — and SEVEN context-sensor assertions failed against a sensor behaving exactly
+# as specified. The gate blocked every push on that repo. The distribution never caught it
+# because the distribution sets none of these: THE CHECK COULD NOT FIRE WHERE IT WAS
+# AUTHORED, which is the same defect this file has now shipped three fixes for.
+#
+# So: any fixture that drives a hook must scrub AI_DLC_* first. Asserted, not trusted.
+for d in "$REPO_ROOT"/core/fixtures/*/; do
+  [ -f "$d/run.sh" ] || continue
+  grep -qE 'hooks/ai-dlc|\$HOOK' "$d/run.sh" || continue          # not a hook fixture
+  grep -qE 'unset "\$_v"|env -u AI_DLC' "$d/run.sh" \
+    || err "fixture '$(basename "$d")' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
+done
+
 # The THIRD writer. install.sh is not the only thing that puts core/ files into a
 # consumer — `reconcile/preclassify.sh`'s map_consumer() does too, on every pull, and
 # the two must agree on the destination or the consumer gets two copies at two paths

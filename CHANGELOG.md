@@ -17,6 +17,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.56.3] — 2026-07-14
+
+### The fixture tested the operator's config, not the code — and armed, it blocked every push
+
+Reported by the reference consumer the moment it armed the pre-push gate: the `context-sensor`
+fixture failed **7 of 36** assertions, so the gate rejected every `git push` on the repo.
+
+**The sensor was fine.** The fixture was not.
+
+`run.sh` isolates `CLAUDE_PROJECT_DIR` on every hook call — but it never neutralises
+`AI_DLC_MODEL_ROW`. It only *sets* that variable for the one assertion that tests the pin;
+all thirty-five others silently assume it is unset.
+
+The consumer pins `AI_DLC_MODEL_ROW: "1M"` in `settings.json` — **the documented, sanctioned
+way to declare the model row.** That exports it into every session; `git push` inherits it;
+the hook honours it. Effective window becomes 300000 instead of 200000, every threshold
+shifts, `row_known` is 1 by fiat, and seven assertions fail **against a sensor behaving
+exactly as specified**. A consumer doing precisely what the framework tells it to do could
+not pass its own gate.
+
+```
+AI_DLC_MODEL_ROW=1M  ->  29 passed, 7 failed
+clean env            ->  36 passed, 0 failed
+```
+
+**The distribution never caught it because the distribution sets none of these.** The check
+could not fire where it was authored — the third fix this file has shipped for that same
+shape, after `core/git-hooks/` (v0.55.2) and `order_key()` at ten passes (v0.55.3).
+
+**Three fixtures, not one.** `context-sensor`, `handoff-resume-guard` and `layer-readopt-gate`
+all drive a hook and all inherited ambient config, and the hooks honour **thirteen** `AI_DLC_*`
+tunables. Any consumer tuning any one of them could break its own gate. All three now scrub
+`AI_DLC_*` **by pattern**, so a new tunable cannot reintroduce it; per-command assignments
+(`AI_DLC_MODEL_ROW=1M "$HOOK"`) still work, because those are the deliberate tests.
+
+**I10 — fixture hermeticity.** A fixture that invokes a hook and does not scrub the env is now
+an ERROR in `validate-enforcement-map.sh`. Asserted, not trusted: verified to FAIL when the
+scrub is removed and PASS when restored.
+
+### For the reference consumer
+
+Pull this and the gate goes green — no `--no-verify` needed, and no reason to disarm the hook.
+The seven failures were false. The sensor firing your YELLOW/RED warnings is correct.
+
+
 ## [0.56.2] — 2026-07-14
 
 ### v0.56.0 put a story where a contract belonged
