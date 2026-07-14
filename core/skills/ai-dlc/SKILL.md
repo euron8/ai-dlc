@@ -159,20 +159,19 @@ REPAIR, not the document again, and verifies the prior pass's findings landed.
 
 **Divergence is a HARD_BLOCK, not a reason for another pass.** Pass N+1's
 `findings_critical_prior_scope` above pass N's `findings_critical` means the repair
-is injecting defects. STOP and escalate. CRITICALs in scope ADDED mid-cycle are
-NOT divergence: no cycle converges on a growing artifact -- freeze scope, shrink
-the sprint, restart. Contract: `team-roles/adversary.md`.
+is injecting defects. STOP and escalate. A nonzero MAJOR held at zero CRITICAL across
+2+ passes is a STALL, and stops the cycle the same way. CRITICALs in scope ADDED
+mid-cycle are NOT divergence: no cycle converges on a growing artifact -- freeze
+scope, shrink the sprint, restart. Contract: `team-roles/adversary.md`.
+
+**A stop is not the end of the cycle: STOP -> ADJUDICATE -> RESOLVE -> VERIFY.** A repair
+edits the artifact on UNCHANGED scope -- that is what diverged. A RESOLUTION changes what
+is under review, is written to a record the gate reads, and is followed by ONE verification
+pass in the SAME series. Until that record exists the hooks deny every dispatch. FREEZE is
+NOT a resolution. Kinds + procedure: `steps/_gate-procedures.md`.
 
 The per-intensity skips are enforced by each planning step's own
-intensity gate, not tracked centrally. Under `carry-over-single`,
-`discovery.md` skips `/bmad-brainstorming` and `stories-test-strategy.md`
-skips `/bmad-create-epics-and-stories`, `/bmad-sprint-planning`, and
-`/bmad-agent-tea-tea` (creating stories directly from the already-scoped
-carry-over items). Under `lightweight`, `architecture.md` skips its
-validation cycle when the assessment is NO CHANGES NEEDED (Rule 5
-fast-track still applies), and `research-requirements.md` and
-`sprint-review.md` reduce their cycles to a single adversarial pass each.
-Follow each step's gate.
+intensity gate, not tracked centrally. Follow each step's gate.
 
 `carry-over-single` may only be assigned to carry-over variants. If
 actual story count exceeds 2 at `stories-test-strategy`, intensity MUST

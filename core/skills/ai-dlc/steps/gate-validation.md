@@ -1069,12 +1069,14 @@ manifest row.)*
 
 **Check.** Invoke `scripts/validate-adversarial-convergence.sh --series
 <path-prefix-of-this-step's-pass-series>`; exit 0 required. It reads the
-`findings_critical` / `findings_major` / `verdict` fields of every pass in the
-series (schema above, mapping in `team-roles/adversary.md`) and enforces four
-things:
+`findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
+pass in the series (schema above, mapping in `team-roles/adversary.md`) and enforces
+seven things:
 
-- **A — VOCABULARY.** Every pass declares a `verdict:` from the enumerated set.
-  A pass with no verdict, or a free-text one, is un-adjudicable.
+- **A — VOCABULARY.** Every pass declares a `verdict:` from the enumerated set, **and
+  the CRITICAL/MAJOR counts that verdict is adjudicated against.** A pass with no
+  verdict, or a free-text one, is un-adjudicable. A pass with a verdict and no counts
+  turns arm E off for the whole series.
 - **B — CONSISTENCY.** The verdict agrees with the residue. `0 CRITICAL + 0
   MAJOR` means the exit condition IS met — the ladder puts MINOR/NIT in the
   nitpick bucket and the exit condition is *"until only nitpicks remain."* A
@@ -1091,15 +1093,42 @@ things:
 - **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`. If the series ends
   unconverged **and** any pass found CRITICALs in newly-added scope, the remedy is
   **freeze the artifact and cut the added scope** — not another pass.
+- **E — STALL.** A nonzero MAJOR held at zero CRITICAL across two or more consecutive
+  passes is a cycle that is neither converging nor diverging. Another pass is not the
+  remedy: verify the disputed fact mechanically, cut the claim, or escalate.
+- **F — RESOLUTION.** A pass that runs *after* a `DIVERGENT_HARD_BLOCK` must declare
+  `resolves_divergence:` naming a resolution record, and that record must hold up —
+  see the resume contract below.
+- **G — CHRONOLOGY.** The series must be monotone in `invoked_at`. A pass that claims
+  to follow another but was written before it is the tail of a **dead cycle**, left on
+  disk by a restart and chained onto the live series by the glob.
 
 It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
 that to each planning step's own intensity gate; duplicating it here would fail
 every legitimate `standard` / `lightweight` single-pass cycle.
 
-Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Two cases decide
-shippability: `nitpicks-remain` (terminal 0 CRITICAL / 0 MAJOR with five open
-MINORs must PASS) and `scope-grew-converges` (a CRITICAL rise of 2→3 with only 1 in
-prior scope must PASS).
+**The resume contract — STOP → ADJUDICATE → RESOLVE → VERIFY.** A hard block does not
+end the cycle; it stops it until the operator adjudicates. The exit is a **resolution
+record**, `planning-artifacts/s<N>-<artifact>-resolution-p<M>.md`, and arm F reads it.
+*A repair edits the artifact to close findings on UNCHANGED scope — that is what
+diverged. A resolution changes WHAT IS UNDER REVIEW:* `REVERT_REPAIR` |
+`CHANGE_APPROACH` | `CUT_SCOPE` | `RESTART_CYCLE`. The verification pass is the next
+number **in the same series**. Procedure and record schema:
+`steps/_gate-procedures.md` § *Divergence resolution dispatch*.
+
+**FREEZE is not a resolution and is rejected by name.** A hard block means CRITICALs
+rose in text a previous pass had already reviewed — text that is *already frozen*.
+Freezing it again removes nothing, so the verification pass finds the same CRITICALs
+and the gate can never pass. (Freezing IS the remedy for a **moving artifact** — arm
+D's scope-grew branch. Different failure, opposite remedy; conflating them is what
+parked a live pipeline for a day.)
+
+Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Three cases decide
+shippability: `nitpicks-remain` (terminal 0 CRITICAL / 0 MAJOR with five open MINORs
+must PASS), `scope-grew-converges` (a CRITICAL rise of 2→3 with only 1 in prior scope
+must PASS), and **`divergent-resolved`** (hard block → resolution record →
+verification pass → MET must PASS: it is the sanctioned exit, and if it goes red the
+cycle has no way out of a hard block).
 
 **PASS:** exit 0. **FAIL:** exit 1 — a pass with no verdict, a verdict
 contradicting its residue, an unescalated divergent pass, or a series whose last

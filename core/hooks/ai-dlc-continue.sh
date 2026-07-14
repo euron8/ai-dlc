@@ -218,51 +218,134 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
 fi
 
 # -----------------------------------------------------------------------------
-# Check 0b: Adversarial divergence hard block (Rule 8)
+# Check 0b: the adversarial cycle STOPPED (Rule 8)
 # -----------------------------------------------------------------------------
 # Minimum mechanism (Rule 26(c)).
-#   Failure caught: an adversarial pass stamps `verdict: DIVERGENT_HARD_BLOCK` -- the
-#     repair is injecting defects into text a previous pass had already cleared -- and the
-#     lead runs ANOTHER PASS anyway. Rule 8 says divergence is a HARD_BLOCK: stop, escalate,
-#     change approach. Nothing enforced it. Check 24 reads the verdict, but Check 24 runs at
-#     the GATE, after the cycle is over, so the one signal that means STOP had no teeth at
-#     the only moment it mattered.
+#   Failure caught: an adversarial cycle reaches a state where another pass cannot help --
+#     it DIVERGED (the repair is injecting defects into text a previous pass had already
+#     cleared) or it STALLED (a nonzero MAJOR held at zero CRITICAL, pass after pass) --
+#     and the lead runs another pass anyway. Rule 8 says stop and escalate. Check 24 reads
+#     the state, but Check 24 runs at the GATE, after the cycle is over, so the one signal
+#     that means STOP had no teeth at the only moment it mattered.
 #   Measured: a live cycle stamped DIVERGENT_HARD_BLOCK at pass 15 and the lead ran pass 16;
 #     it stamped DIVERGENT_HARD_BLOCK again at pass 17. Between them MAJORs went 1 -> 4 and
-#     CRITICALs began appearing in PRIOR scope -- the divergence compounding, exactly as
-#     Rule 8 predicts, for two passes after the machinery said stop.
+#     CRITICALs began appearing in PRIOR scope. Earlier in the SAME cycle it had held
+#     0 CRITICAL / 1 MAJOR across passes 11-14 -- a stall, four passes long, and nothing
+#     spoke.
 #   False-positive cost: one operator adjudication on a cycle that was going to need one.
-#   Removal condition: retire when two consecutive sprints record zero ignored divergence
-#     verdicts.
+#   Removal condition: retire when two consecutive sprints record zero STOP states.
 #
-# NO NEW MECHANISM (Rule 26). This raises the EXISTING pause flag, which already has teeth:
-# `ai-dlc-continue.sh` (Check 1, below) then ALLOWS the pipeline to stop, and
-# `ai-dlc-acknowledge.sh` DENIES every pipeline-advancing tool call (Agent/Task/Skill/
-# Write/Edit) until the operator adjudicates and clears it. So the lead CANNOT dispatch the
-# next adversarial pass. That is Rule 8's "stop and escalate", enforced.
+# THIS HOOK IS NOT THE ENFORCER, AND v0.57.0's MISTAKE WAS THINKING IT WAS.
+# `Stop` fires only when the lead YIELDS -- and Rule 3, plus this very hook's Check 2, exist
+# to make the lead never yield. A lead that dispatches pass N+1 in the same turn as pass N's
+# join never triggers a Stop event, so this check never runs. It fired on the reference
+# consumer by LUCK: the lead happened to present its results and stop. An enforcer that
+# depends on the failure pausing to let itself be caught is not an enforcer.
+# The teeth are in `ai-dlc-acknowledge.sh` (PreToolUse), which can deny the dispatch itself.
+# This check's job is narrower and still worth doing: SURFACE the escalation to the operator
+# -- raise the pause flag, block the stop once, and write the flow-log entry -- so a human
+# learns about it in the same turn it happens.
 #
-# Idempotent by artifact: once raised for a given pass file, never re-raised for that file.
-# The operator clearing the flag IS the adjudication, and this must not fight it.
-DIVERGENCE_STATE="${LOG_DIR}/.divergence-raised"
-NEWEST_PASS="$(ls -t "${LOG_DIR}"/planning-artifacts/*adversarial*p*.md 2>/dev/null | head -1)"
-if [ -n "$NEWEST_PASS" ] && [ -f "$NEWEST_PASS" ]; then
-  V="$(awk '/SKILL_INVOCATION_PROVENANCE v1/{i=1;next} /SKILL_INVOCATION_PROVENANCE_END/{i=0} i && /^verdict:/{sub(/^verdict:[ \t]*/,"");print;exit}' "$NEWEST_PASS" 2>/dev/null | tr -d '\r')"
-  if [ "$V" = "DIVERGENT_HARD_BLOCK" ] && [ "$(cat "$DIVERGENCE_STATE" 2>/dev/null)" != "$NEWEST_PASS" ]; then
-    printf '%s\n' "$NEWEST_PASS" > "$DIVERGENCE_STATE"
-    printf 'DIVERGENT_HARD_BLOCK: %s\n' "$(basename "$NEWEST_PASS")" > "$PAUSE_FLAG"
+# NO ADJUDICATION HERE (Rule 26, and v0.54.3's "one predicate, two implementations, and the
+# tool wins"). This hook used to scrape `verdict:` out of the newest file with awk, and it
+# picked that file with `ls -t` -- by MTIME, not by pass number, which is `order_key()`'s
+# original bug reintroduced in a different file nine releases later. It now asks the
+# validator, which owns ordering, and reads an exit code.
+#   mtime picks the SERIES  -- "which cycle is live" is a RECENCY question. Correct.
+#   the VALIDATOR picks the PASS -- "which pass is last" is an ORDERING question. Not mtime.
+ADVERSARIAL_STOP="${LOG_DIR}/.adversarial-stop"
+ART_DIR="${LOG_DIR}/planning-artifacts"
+CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/validate-adversarial-convergence.sh"
+
+CYCLE_STATE=""; CYCLE_RC=0; CYCLE_PASS=""
+NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"
+if [ -n "$NEWEST_PASS" ]; then
+  if [ ! -f "$CONVERGENCE_VALIDATOR" ]; then
+    # A partial install must not SILENTLY disable the hard block. That is the
+    # `core/git-hooks/`-at-a-dead-path failure -- an enforcer at a path nothing reads, and
+    # nothing saying so for two minor releases. Leave a trace retro's Rule 25(c) audit reads.
     {
-      echo "## ${TIMESTAMP} -- DIVERGENCE_HARD_BLOCK"
+      echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
       echo "- Session: ${SESSION_ID}"
-      echo "- $(basename "$NEWEST_PASS") stamps DIVERGENT_HARD_BLOCK; pipeline paused (Rule 8)"
+      echo "- scripts/validate-adversarial-convergence.sh is MISSING; the Rule 8 stop state"
+      echo "  cannot be adjudicated and the divergence/stall hard block is NOT armed."
       echo ""
     } >> "$LOG_FILE"
-    jq -n --arg r "RULE 8 -- ADVERSARIAL DIVERGENCE. $(basename "$NEWEST_PASS") stamps \`verdict: DIVERGENT_HARD_BLOCK\`: it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected, and the next pass only finds the next wave.
-
-ANOTHER PASS IS NOT THE REMEDY. The pipeline is PAUSED and the operator must adjudicate. Do NOT dispatch another adversarial pass, and do NOT clear the pause flag to get past this.
-
-Present to the operator: (1) the divergent finding and the repair that caused it; (2) whether the repair deleted or weakened something LOAD-BEARING (an AC, a predicate, a LOCKED_REQUIREMENTS entry) -- a repair that makes a check unfalsifiable is the defect, not the fix; (3) your recommended change of approach -- shrink the artifact, revert the repair, or cut the contested claim." '{decision:"block",reason:$r,suppressOutput:true}'
-    exit 0
+  else
+    SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
+    OUT="$(bash "$CONVERGENCE_VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"
+    CYCLE_RC=$?
+    CYCLE_STATE="$(printf '%s' "$OUT" | cut -f1)"
+    CYCLE_PASS="$(printf '%s' "$OUT" | cut -f2)"
   fi
+fi
+
+# Self-healing GC. `.divergence-raised` was written and never removed by anything -- it
+# survived the cycle, the sprint, and the retro rotation. State that only ever accumulates
+# is a stale-flag bug waiting for its turn. Any turn the cycle is NOT stopped, the record
+# of the stop goes away.
+if [ "$CYCLE_RC" -eq 0 ] && [ -f "$ADVERSARIAL_STOP" ]; then
+  rm -f "$ADVERSARIAL_STOP"
+fi
+
+# Idempotent by (state, pass). The operator clearing the flag IS the adjudication, and this
+# must not fight it -- but a NEW stop, on a NEW pass, is a new escalation and raises again.
+if [ "$CYCLE_RC" -eq 3 ] && [ "$(cat "$ADVERSARIAL_STOP" 2>/dev/null)" != "${CYCLE_STATE}	${CYCLE_PASS}" ]; then
+  printf '%s\t%s\n' "$CYCLE_STATE" "$CYCLE_PASS" > "$ADVERSARIAL_STOP"
+  printf '%s: %s\n' "$CYCLE_STATE" "$(basename "$CYCLE_PASS")" > "$PAUSE_FLAG"
+  {
+    echo "## ${TIMESTAMP} -- ADVERSARIAL_STOP"
+    echo "- Session: ${SESSION_ID}"
+    echo "- ${CYCLE_STATE} at $(basename "$CYCLE_PASS"); pipeline paused (Rule 8)"
+    echo ""
+  } >> "$LOG_FILE"
+
+  if [ "$CYCLE_STATE" = "DIVERGENT" ]; then
+    WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\`: it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected, and the next pass only finds the next wave."
+  else
+    WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass. It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified, and the next pass falsifies the rewrite with one more counterexample. Passes are buying counterexamples, not convergence."
+  fi
+
+  # THE SENTENCE THAT USED TO STAND HERE READ: "Do NOT dispatch another adversarial pass,
+  # and do NOT clear the pause flag to get past this."
+  #
+  # It was false, and it was the deadlock. The flag CANNOT be made un-clearable -- Bash is
+  # the deliberate escape hatch (see ai-dlc-acknowledge.sh: "Allowing Bash is what makes
+  # deadlock impossible") -- so this prose was trying to enforce something the mechanism
+  # deliberately cannot, while arm D of Check 24 was simultaneously REQUIRING the terminal
+  # clean pass that this text FORBADE. The lead, correctly reading both, concluded that no
+  # legal move existed and parked the pipeline on an escalation.
+  #
+  # The exit is real. It is a RESOLUTION, and it is now a file the validator reads.
+  jq -n --arg r "RULE 8 -- THE ADVERSARIAL CYCLE HAS STOPPED (${CYCLE_STATE}). ${WHAT}
+
+ANOTHER PASS IS NOT THE REMEDY, and the pipeline is PAUSED until the operator adjudicates.
+
+THE EXIT:  STOP -> ADJUDICATE -> RESOLVE -> VERIFY
+
+1. STOP. No further pass on the artifact as it stands. (You cannot dispatch one: the
+   PreToolUse hook will deny it, and it will keep denying it until step 3 is done.)
+2. ADJUDICATE. Put this to the operator now. Present: (a) the finding and the repair that
+   caused it; (b) whether that repair deleted or weakened something LOAD-BEARING -- an AC,
+   a predicate, a guard, a LOCKED_REQUIREMENTS entry. A repair that makes a check
+   unfalsifiable is the defect, not the fix; (c) your recommended resolution KIND.
+3. RESOLVE. A repair edits the artifact to close findings on UNCHANGED scope -- that is
+   what diverged, and doing it again is not a resolution. A resolution changes WHAT IS
+   UNDER REVIEW:
+     REVERT_REPAIR   put the artifact back to a state an earlier pass actually reviewed
+     CUT_SCOPE       remove the contested scope; the artifact must get SMALLER
+     CHANGE_APPROACH a different approach entirely, on the operator's authority
+     RESTART_CYCLE   abandon the series, archive it, and start over
+   Write the resolution record -- planning-artifacts/<sprint>-<artifact>-resolution-p<N>.md
+   -- and then clear the pause flag. Writing that record is ALLOWED while paused; it is the
+   one write the pause is waiting for.
+   (FREEZE is NOT on this list. A hard block means CRITICALs rose in text that is ALREADY
+   frozen, so freezing it again removes nothing and the gate can never pass over it.)
+4. VERIFY. Run ONE pass on the resolved artifact, as the NEXT PASS NUMBER IN THIS SAME
+   SERIES, declaring \`resolves_divergence:\`. That is the terminal clean pass Check 24
+   requires. Do not start a new series -- the glob spans both and the pass numbers collide." \
+    '{decision:"block",reason:$r,suppressOutput:true}'
+  exit 0
 fi
 
 # -----------------------------------------------------------------------------

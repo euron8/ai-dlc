@@ -1711,3 +1711,60 @@ only one of the two that survives a compaction.
 parallel editors produce a document that contradicts itself). The prohibition was SPLIT, not
 deleted: authoring still needs whole-document intent and stays inline; the lead keeps dispatch,
 the join, and the Rule 11/13 scope calls, which are decisions rather than edits.
+
+## R36 — the hard block that had no exit (v0.59.0)
+
+**Why this is a notes entry and not inline prose.** Rule 8's resident text carries the four
+verbs and nothing else; SKILL.md's re-attach budget had **12 tokens of slack** after this
+release, and the payment for adding the resume contract was deleting Rule 8's enumeration of
+the per-intensity skips — a list that restated what each step file already enforces and that
+the lead never acted on. Resident text that changes no behaviour is the first thing to cut.
+
+**The shape of the bug, because it will recur in a different costume.** Two mechanisms
+adjudicated the same event and gave opposite orders: the Stop hook's deny reason said *"do NOT
+dispatch another adversarial pass, and do NOT clear the pause flag"*, while Check 24 arm D
+said *"resolve the divergence … then re-run the cycle to a clean pass."* The gate required the
+pass the hook forbade. Neither named the state between them.
+
+The generalisation: **an enforcer with no sanctioned release is a deadlock.** v0.57.0 was
+built on the true observation that *a verdict with no enforcer is a suggestion*, and it fixed
+that — and then shipped the dual of the same mistake in one sentence of prose. When you give a
+signal teeth, write down what makes the teeth let go, in the same change. If you cannot name
+the release condition, you have not finished designing the block.
+
+Its tell was visible in the code and nobody looked: the hook's own comment said *"The operator
+clearing the flag IS the adjudication, and this must not fight it"* — three lines above the
+message forbidding exactly that. **The agent reads the message, not the comment.**
+
+**`FREEZE_SCOPE` could never have worked, and that is a class of bug, not an incident.**
+`DIVERGENT_HARD_BLOCK` fires only when prior-scope CRITICALs rise — CRITICALs in text that is
+*already frozen*. Freezing it again removes nothing. The lead offered freeze as its starred
+recommendation, the operator authorized it in those words, and it was void the moment it was
+uttered. Nobody noticed for a day, because **an option that cannot succeed looks exactly like
+an option that has not been tried yet** — the same shape as *a check that cannot fire reads
+exactly like a check that passed*, moved from the validator into the decision space. When you
+enumerate choices for an operator, ask of each one: *what would make this fail?* An answer of
+"nothing, by construction" means it is not a choice.
+
+**Where the teeth go.** `Stop` fires only when the lead YIELDS, and Rule 3 plus the continue
+hook exist to make it never yield. v0.57.0's enforcer therefore fired **by luck**. Any check
+that must prevent an action belongs in `PreToolUse`, where the action can be denied; `Stop` is
+for surfacing to a human, not for enforcement. This is worth a standing rule: *if the failure
+mode is "the lead does X", the guard must run before X, not after the turn in which X happened.*
+
+**On the honest ceiling of a gate.** Two of the four resolution kinds close mechanically
+(`REVERT_REPAIR` against notarized shas; `CUT_SCOPE` against bytes). Two do not, and cannot:
+"I changed the approach" is a claim about intent with no byte-level predicate. The design says
+so out loud, demands the operator's words verbatim, and **counts** them, with a tightening
+condition stated in advance. Pretending otherwise would have produced a check that cannot fire.
+A global *"the artifact must SHRINK"* rule was rejected for the opposite reason: it is a
+**deletion incentive**, and a gate that rewards deleting load-bearing spec to pass is worse
+than the bug it polices (v0.56.x, exactly).
+
+**And the one that indicts the process.** v0.57.0's CHANGELOG told the reference consumer to
+revert pass 16's repair. Pass 16's repair was **correct** — pass 17 says so in terms — and the
+revert would have restored the zero-as-sentinel defect the sprint existed to kill. That
+paragraph was written from a confident reading of a transcript, in a release whose whole
+subject is a repair step that authors false claims, and it was never run against the artifacts.
+It is retracted in place in the changelog rather than quietly edited. **A detailed, confident
+account of what went wrong is a hypothesis. The control test is cheap. Run it.**
