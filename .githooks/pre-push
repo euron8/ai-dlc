@@ -35,7 +35,10 @@ step() {
 # 1. The enforcement map is the index of which rule is enforced by what, and WHERE it
 #    is invoked. I9/W1: a script enforcer with no declared call site is a rule guarded
 #    by nobody. It also asserts install.sh and uninstall.sh agree on the fixture list.
-step "enforcement-map integrity (I1-I9)" \
+step "taught schema == read schema (provenance examples derive from schemas/)" \
+  bash core/scripts/sync-taught-schema.sh --check
+
+step "enforcement-map integrity (I1-I11)" \
   bash scripts/validate-enforcement-map.sh
 
 # 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident

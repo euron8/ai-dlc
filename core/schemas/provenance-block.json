@@ -1,0 +1,239 @@
+{
+  "$comment": [
+    "THE SINGLE DEFINITION OF SKILL_INVOCATION_PROVENANCE v1. There is no other.",
+    "",
+    "This block used to be described in three places at once: a regex in",
+    "validate-provenance-block.sh (the READER), an example in gate-validation.md Check 17",
+    "(the SPEC), and an example in team-roles/adversary.md (the INSTRUCTION the agent reads).",
+    "Three hand-synchronised copies of one schema, in three languages, with nothing comparing",
+    "them. They diverged: adversary.md taught a bare ``` fence with no terminator, the",
+    "adversary emitted exactly what it was shown, the reader's regex matched nothing, and",
+    "validate-provenance-block.sh reported 'no provenance block required or present' and exited",
+    "0. Two full adversarial passes of the reference consumer's sprint 290 went unadjudicated",
+    "and the gate called them clean. An unparseable block scores exactly like a clean artifact.",
+    "",
+    "So: the reader LOADS this file. The example every agent is taught is RENDERED from this",
+    "file. scripts/sync-taught-schema.sh --check fails the build if any rendered example has",
+    "drifted, or if any provenance example exists in an agent-read file that was NOT rendered",
+    "from here. Add a field here and it appears in the parser and in every doc at once.",
+    "",
+    "Do not hand-write a provenance example anywhere. Render it."
+  ],
+  "schema_id": "SKILL_INVOCATION_PROVENANCE v1",
+  "envelope": {
+    "$comment": "The delimiters are load-bearing. A ``` code fence is not a provenance block: nothing parses it.",
+    "open": "<!-- SKILL_INVOCATION_PROVENANCE v1",
+    "close": "SKILL_INVOCATION_PROVENANCE_END -->",
+    "marker": "SKILL_INVOCATION_PROVENANCE v1"
+  },
+  "patterns": {
+    "iso8601_utc": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2})?(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})$",
+    "tool_use_id": "^toolu_[A-Za-z0-9_-]{6,}$",
+    "transcript_citation": "^[^\\s@]+@[a-f0-9]{7,40}$",
+    "sha256": "^[a-f0-9]{64}$",
+    "integer": "^\\d+$"
+  },
+  "known_skills": [
+    "bmad-party-mode",
+    "bmad-advanced-elicitation",
+    "bmad-review-adversarial-general",
+    "bmad-validate-prd",
+    "ai-dlc-adversary-review"
+  ],
+  "fields": [
+    {
+      "name": "skill",
+      "required": true,
+      "enum_ref": "known_skills",
+      "placeholder": "<bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review>",
+      "doc": "the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block."
+    },
+    {
+      "name": "invoked_at",
+      "required": true,
+      "pattern_ref": "iso8601_utc",
+      "placeholder": "<ISO 8601 UTC, to the second>",
+      "doc": "Check 24 orders the pass series on this. Ambiguity here reorders the cycle."
+    },
+    {
+      "name": "tool_use_id",
+      "required": true,
+      "pattern_ref": "tool_use_id",
+      "placeholder": "<toolu_... — from the Skill tool response, or the Agent dispatch that spawned you>",
+      "doc": "the only non-forgeable evidence the evaluation ran in a real independent context."
+    },
+    {
+      "name": "mode",
+      "required": true,
+      "enum": [
+        "solo",
+        "subagent"
+      ],
+      "forbidden": [
+        "solo"
+      ],
+      "forbidden_reason": "Rule 20 requires mode: subagent. Dispatch the evaluation to a real subagent; single-voice sub-skills go to a Rule-19-bound teammate; the convergence review goes to the `adversary` role. Solo defeats independent evaluation.",
+      "placeholder": "subagent",
+      "doc": "never solo."
+    },
+    {
+      "name": "lead_role",
+      "required": true,
+      "placeholder": "<the step file that invoked or dispatched the evaluation>",
+      "doc": "which step owns this pass."
+    },
+    {
+      "name": "transcript_path",
+      "required": false,
+      "required_when": {
+        "skill": "bmad-party-mode",
+        "artifact_is_retro": true
+      },
+      "pattern_ref": "transcript_citation",
+      "placeholder": "<_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>",
+      "doc": "required for retro party-mode; byte-matched by validate-retro-evidence.sh."
+    },
+    {
+      "name": "artifact",
+      "required": false,
+      "required_for_verdict": false,
+      "placeholder": "<path of the artifact you reviewed>",
+      "doc": "what this pass reviewed.",
+      "enforced_by": "Check 24 arm A (validate-adversarial-convergence.sh), not Check 17. Named here so the taught example carries it; asserted there, where the series is in scope."
+    },
+    {
+      "name": "artifact_sha",
+      "required": false,
+      "required_for_verdict": false,
+      "pattern_ref": "sha256",
+      "placeholder": "<sha256 of that file, as you read it>",
+      "doc": "`shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw.",
+      "enforced_by": "Check 24 arm A (validate-adversarial-convergence.sh), not Check 17. Named here so the taught example carries it; asserted there, where the series is in scope."
+    },
+    {
+      "name": "findings_critical",
+      "required": false,
+      "required_for_verdict": true,
+      "pattern_ref": "integer",
+      "placeholder": "<int>",
+      "doc": "the residue the verdict is adjudicated against."
+    },
+    {
+      "name": "findings_critical_prior_scope",
+      "required": false,
+      "required_for_verdict": false,
+      "pattern_ref": "integer",
+      "placeholder": "<int>",
+      "doc": "of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'."
+    },
+    {
+      "name": "findings_major",
+      "required": false,
+      "required_for_verdict": true,
+      "pattern_ref": "integer",
+      "placeholder": "<int>",
+      "doc": "omit it and the stall rung goes silent for the ENTIRE series."
+    },
+    {
+      "name": "findings_minor",
+      "required": false,
+      "required_for_verdict": true,
+      "pattern_ref": "integer",
+      "placeholder": "<int>",
+      "doc": "the nitpick bucket. Does not block the exit condition."
+    },
+    {
+      "name": "resolves_divergence",
+      "required": false,
+      "placeholder": "<path to the resolution record>",
+      "doc": "ONLY on the verification pass, and only if the pass before you STOPPED."
+    },
+    {
+      "name": "verdict",
+      "required": false,
+      "required_for_verdict": true,
+      "enum": [
+        "EXIT_CONDITION_MET",
+        "EXIT_CONDITION_NOT_MET",
+        "DIVERGENT_HARD_BLOCK"
+      ],
+      "placeholder": "<EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>",
+      "doc": "required on every adversarial-review pass. There is no free-text verdict."
+    }
+  ],
+  "profiles": {
+    "$comment": [
+      "A profile is a VIEW of the one field list — never a second copy of it. Docs differ in",
+      "which fields they show and which values are pinned; they must not differ in the envelope,",
+      "the field names, or the semantics. sync-taught-schema.sh renders every taught example",
+      "from a profile, so adding a field here reaches every doc that shows it, at once."
+    ],
+    "full": {
+      "title": "every field",
+      "fields": "*"
+    },
+    "adversary-pass": {
+      "title": "a Rule 8 convergence pass",
+      "pin": {
+        "skill": "ai-dlc-adversary-review",
+        "mode": "subagent"
+      },
+      "fields": [
+        "skill",
+        "invoked_at",
+        "tool_use_id",
+        "mode",
+        "lead_role",
+        "artifact",
+        "artifact_sha",
+        "findings_critical",
+        "findings_critical_prior_scope",
+        "findings_major",
+        "findings_minor",
+        "resolves_divergence",
+        "verdict"
+      ]
+    },
+    "retro-party-mode": {
+      "title": "a retro party-mode invocation",
+      "pin": {
+        "skill": "bmad-party-mode",
+        "mode": "subagent"
+      },
+      "fields": [
+        "skill",
+        "invoked_at",
+        "tool_use_id",
+        "mode",
+        "lead_role",
+        "transcript_path"
+      ]
+    }
+  },
+  "rules": {
+    "$comment": "Cross-field invariants the reader enforces. Named so a failure can cite the rule.",
+    "verdict_requires_counts": {
+      "when": "verdict is present",
+      "assert": "when `verdict` is present, findings_critical / findings_major / findings_minor are present and non-empty",
+      "why": "A verdict is adjudicated AGAINST a residue. A pass with a verdict and no counts turns the stall rung off for the whole series.",
+      "scope": "Check 17 asserts the COUNTS a verdict is adjudicated against. It does NOT assert artifact/artifact_sha — those are Check 24 arm A's, and duplicating them here made Check 17 reject blocks arm A accepts."
+    },
+    "no_solo": {
+      "when": "always",
+      "assert": "mode != solo",
+      "why": "Rule 20. This assertion was once gated on `skill in known_skills`, which was vacuous and coupled the only teeth Check 17 has to the enum's membership — drop the skill field and the solo rejection silently stopped firing. It is unconditional now."
+    },
+    "required_non_empty": {
+      "when": "always",
+      "assert": "a required field present with an empty value is a failure",
+      "why": "The parser accepts `key:` with the value on indented lines below, so presence and answeredness are different questions. A blank required field must not read like a supplied one."
+    }
+  },
+  "parser": {
+    "$comment": "How the reader tokenises the block body. Stated here so the docs and the reader cannot disagree about it either.",
+    "shape": "flat `key: value` lines",
+    "continuation": "an INDENTED line continues the key above it — a folded value, or a YAML list. The gate adjudicates the flat fields it names; a structured value is folded to one line and left to the reader.",
+    "comments": "a whole line beginning # is ignored, AND a trailing ' #' comment is stripped from a value — as YAML does. This is not a nicety: the taught examples carry their teaching in inline comments, so a parser that did NOT strip them made every faithfully-copied example unparseable. It did exactly that, silently, for as long as the examples have existed.",
+    "unknown_fields": "permitted and recorded. A gate that rejects an author for adding an honest extra field is a gate that punishes candour."
+  }
+}

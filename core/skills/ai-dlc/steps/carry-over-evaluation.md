@@ -85,6 +85,29 @@ exercise stories.
 - Surface any items that have become higher/lower priority
 - Surface any that are clearly no longer worth doing
 
+### 3a. Validation cycle (Rule 8)
+
+**This step produces a planning artifact, so Rule 8 binds it like any other.** Run the
+minimum cycle for the declared `validation_intensity` — at `full` that is Party Mode (§3)
+→ Advanced Elicitation → **Adversarial Review, 2+ passes, and it must CONVERGE.**
+
+- **Review passes:** `_gate-procedures.md`, "Adversarial review dispatch" — ONE `adversary`
+  per pass, ai-dlc-native, no Skill.
+- **Repair passes:** `_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator`
+  per pass. **The lead does not repair the artifact itself.**
+- The series is `_bmad-output/planning-artifacts/s<N>-coe-adversarial-p<M>.md`; the
+  terminating pass stamps `verdict: EXIT_CONDITION_MET`. **Gate Check 24 reads it.**
+
+*Catches:* Rule 8 has always bound this step — it says "per planning artifact," and the
+carry-over evaluation is one — but this file never said so, no step here referenced the
+repair dispatch, and Check 24's scope list omitted the step. So the cycle ran with the LEAD
+repairing its own artifact (the most context-saturated agent, which is the exact failure the
+remediator role was created to end), and no gate ever read the verdict. An unbounded
+convergence loop adjudicated by nobody reads exactly like a loop that converged. v0.58.0
+found this in `doc-repair-backfill` and `sprint-review-next` and fixed those two; the sweep
+missed this one because the scope list was hand-maintained. It is derived now — see I11.
+*Removed when:* Rule 8 stops binding this step.
+
 ### 4. Deferral Handling
 
 If the agent determines any item should be DEFERRED (not implemented

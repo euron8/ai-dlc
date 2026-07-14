@@ -172,8 +172,30 @@ if [ "$MODE" = "--untangle" ]; then
   exit 0
 fi
 
+# A fixture directory carrying a `.dist-only` marker is NOT a consumer file. THE PULL WAS
+# THE WRITER THAT SHIPPED IT. install.sh enumerates the 14 fixtures a consumer gets and
+# correctly omits the dist-only ones; map_consumer() maps EVERY core/fixtures/* to
+# tests/fixtures/, so the pull shipped them anyway, on every update. Two writers disagreeing
+# about MEMBERSHIP, where I8 only ever compared them on DESTINATION. Observed live: the
+# reference consumer has tests/fixtures/enforcement-map-sites/ with no subject script beside
+# it — a fixture that can never run, in a suite whose green means "these checks are tested."
+dist_only() { # core/fixtures/<name>/... -> is it marked dist-only?
+  case "$1" in
+    core/fixtures/*)
+      _f="${1#core/fixtures/}"; _f="${_f%%/*}"
+      [ -f "$DIST/core/fixtures/$_f/.dist-only" ]
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' read -r status path; do
   cons="$(map_consumer "$path")"
+
+  if dist_only "$path"; then
+    printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "DIST-ONLY-SKIP"
+    continue
+  fi
 
   if opted_out "$cons"; then
     printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "CONSUMER-MISSING-NOOP"

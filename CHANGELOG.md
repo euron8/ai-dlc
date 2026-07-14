@@ -17,6 +17,93 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.60.0] — 2026-07-14
+
+### One schema to rule them all: the block an agent is TAUGHT is now the block the gate READS
+
+Found by reviewing the reference consumer's sprint-290 re-run — the first live exercise of the
+0.51.0→0.59.0 jump. Two full adversarial passes of that sprint ran, converged monotonically
+(3 CRITICAL/6 MAJOR → 1/3), and the gate called them **clean without reading a word of them.**
+
+`SKILL_INVOCATION_PROVENANCE v1` was described in **four** places: a regex in
+`validate-provenance-block.sh` (the reader), a schema comment in that script's own header, an
+example in `gate-validation.md` Check 17 (the spec), and an example in `team-roles/adversary.md`
+— the only one the adversary actually reads. Four hand-synchronised copies, three languages,
+nothing comparing them. They diverged: `adversary.md` taught a bare ` ``` ` fence with no
+`SKILL_INVOCATION_PROVENANCE_END` terminator. The adversary emitted exactly what it was shown.
+`BLOCK_RE` matched nothing. The reader printed *"no provenance block required or present"* and
+exited **0** — because **MALFORMED and ABSENT shared an exit code.** Every rung Check 17 owns
+(the `mode: solo` rejection, `KNOWN_SKILLS`, the retired pin) sat downstream of a parse that
+never happened.
+
+The fixtures could not catch it: `check-17-bypass` **hand-authors its own well-formed blocks**,
+so the fixture and the reader agreed with each other and both disagreed with the role file. The
+one artifact the LLM actually reads was the one artifact nothing validated.
+
+**The cure is not a drift detector. It is having nothing to detect.**
+
+- **NEW `core/schemas/provenance-block.json`** — the single definition. Envelope, field list,
+  enums, patterns, and cross-field rules all live here. Installed to `.claude/schemas/`.
+- **`validate-provenance-block.sh` LOADS it.** No built-in copy; **fails closed, loudly** if the
+  schema is absent (a reader that falls back to a stale built-in is the drift this removes). The
+  parser also now: (a) fails a marker it can see but cannot parse as **MALFORMED, not absent**;
+  (b) accepts folded values and indented YAML lists (a `key:` whose value is a list no longer
+  reads as a "malformed line"); (c) strips trailing `# comments` as YAML does — the taught
+  examples carry their teaching in inline comments, and a parser that did not strip them made
+  every faithfully-copied example unparseable, silently, for as long as the examples existed;
+  (d) rejects a present-but-empty required field.
+- **NEW `core/scripts/sync-taught-schema.sh`** — renders every taught example from the schema
+  into a generated region, and `--check` fails the build if any region is stale **or if any
+  hand-written provenance example exists in an agent-read file at all.** The second invariant is
+  the load-bearing one: a generated region beside a hand-written one is four copies again.
+- **`adversary.md`, `gate-validation.md` Check 17, `retro.md`** now carry generated regions, not
+  hand-written examples. `retro.md` and the sub-skill role files had *no* example — only a
+  three-hop pointer chain (`dev.md` → "SKILL.md Rule 3" → "gate-validation.md Check 17") that no
+  agent follows.
+- **NEW fixture `taught-schema/`** — its load-bearing assertion V1 lifts the example
+  `adversary.md` teaches and runs it through the reader the gate runs. That round trip is the one
+  nobody had ever made.
+
+### carry-over-evaluation ran an unadjudicated convergence cycle — v0.58.0's own bug, one step over
+
+Rule 8 binds the validation cycle *"per planning artifact,"* and the carry-over evaluation is one
+— so the reference consumer correctly ran a 2-pass adversarial cycle there. But
+`carry-over-evaluation.md` never said so, referenced no repair dispatch, and was **absent from
+Check 24's scope.** Consequences, both live on S290: the **lead repaired its own artifact** twice
+(the exact failure the v0.56.0 remediator role exists to end), and **no gate ever read the
+verdict.** v0.58.0 found this identical shape in `doc-repair-backfill` and `sprint-review-next`
+and fixed those two; the sweep missed this third because its scope list was hand-maintained.
+
+- `carry-over-evaluation.md` gains a **§3a validation cycle** with the review + repair dispatch.
+- Check 24's scope adds `carry-over-evaluation`.
+- **NEW integrity check I11** (`validate-enforcement-map.sh`) DERIVES the three sets that must be
+  one — steps that dispatch a review, steps that reference the repair dispatch, and Check 24's
+  scope — and fails on any difference. It fires on exactly the v0.58.0 state that shipped green.
+
+### The dist-only fixture that shipped to a consumer with no subject
+
+`enforcement-map-sites` is distribution-only (its subject `validate-enforcement-map.sh` is not
+shipped), yet the reference consumer had it on disk: `map_consumer()` maps **every**
+`core/fixtures/*` to the consumer on every pull, while `install.sh` ships an enumerated 14 and
+correctly omits it. Two writers disagreeing on **membership**, where I8 only compared them on
+**destination.** The `DIST_ONLY` exemption was itself a hand-maintained string.
+
+- **NEW `core/fixtures/enforcement-map-sites/.dist-only`** marker — the source of truth.
+  `validate-enforcement-map.sh` (I8) and `reconcile/preclassify.sh` both **derive** dist-only
+  status from the marker; the pull now emits `DIST-ONLY-SKIP` instead of shipping it.
+- **NEW `core/schemas/` subtree** is registered in I8's site table and `install.sh` — I8 caught
+  its absence on the first run (v0.55.2's derived-site-list fix earning its keep).
+
+### Migration for a consumer already past 0.51.0
+
+- **A cycle in flight under the fenced-block format fails its next Check 17** as MALFORMED (it
+  was silently passing as absent). Re-wrap the block in `<!-- … SKILL_INVOCATION_PROVENANCE_END
+  -->`; do not delete or restate the fields. The reference consumer's two live S290 passes need
+  this.
+- **Arm the pre-push gate.** `git config core.hooksPath .githooks` after confirming
+  `tests/fixtures/enforcement-map-sites/` is gone (this pull removes it). Both pre-push gates now
+  run the taught-schema check.
+
 ## [0.59.0] — 2026-07-14
 
 ### The hard block had no exit, so the two mechanisms that adjudicate it gave opposite orders
