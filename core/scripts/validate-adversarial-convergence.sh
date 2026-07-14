@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# validate-adversarial-convergence.sh -- the adversarial review cycle must CONVERGE.
+# validate-adversarial-convergence.sh -- the adversarial review cycle must CONVERGE,
+# and when it STOPS it must have a sanctioned way to start again.
 #
 # WHY THIS EXISTS (v0.48.0). v0.46.0 gave the adversary permission to converge --
 # "a clean verdict is a valid outcome" -- but gave it no VOCABULARY to declare one.
@@ -14,25 +15,51 @@
 #   met. Termination came from the lead overriding the adversary's own field, not
 #   from the machinery converging.
 #
-# That is the failure this script makes impossible to commit. Rule 8 already says
-# the cycle "must CONVERGE to leave it" and that "divergence is a HARD_BLOCK";
-# until now nothing counted a CRITICAL or read a verdict.
+# WHY IT GREW A RESUME CONTRACT (v0.59.0). Rule 8 named two events (a repair pass,
+# a divergent pass) and one instruction (STOP). It never named the state that ENDS
+# the stop. So each downstream mechanism invented its own, and they contradicted:
+#
+#   this script, arm D:      "resolve the divergence ... then re-run the cycle to a
+#                             clean pass."                    <- REQUIRES the pass
+#   ai-dlc-continue.sh:261:  "Do NOT dispatch another adversarial pass, and do NOT
+#                             clear the pause flag to get past this."
+#                                                             <- FORBIDS the pass
+#
+# The gate required the terminal pass the hook forbade. Measured on the reference
+# consumer: seventeen passes, four divergent, and a lead that -- correctly reading
+# both -- concluded no legal move existed and parked the pipeline on an escalation.
+#
+# The missing noun is RESOLUTION, and arm F is where it becomes real:
+#
+#   STOP -> ADJUDICATE -> RESOLVE -> VERIFY
+#
+#   A repair edits the artifact to close findings on UNCHANGED scope.
+#   A resolution changes WHAT IS UNDER REVIEW.
+#   Rule 8 forbids the repair pass. Arm D requires the verification pass.
+#   The RESOLUTION is what separates them, and it is a file.
 #
 # WHAT IT CHECKS. Given a pass series (pass1..passN artifacts for ONE step's
 # adversarial cycle), each carrying a SKILL_INVOCATION_PROVENANCE block:
 #
-#   A  VOCABULARY   every pass declares `verdict:` from the enumerated set.
+#   A  VOCABULARY   every pass declares `verdict:` from the enumerated set, and --
+#                   since v0.59.0 -- the severity counts that verdict is adjudicated
+#                   against. See the note on arm A; an omitted count used to turn
+#                   arm E off for free.
 #   B  CONSISTENCY  the verdict agrees with the severity residue it reports.
-#                   0 CRITICAL + 0 MAJOR means the exit condition IS met -- the
-#                   ladder in team-roles/adversary.md puts MINOR/NIT in the
-#                   nitpick bucket, and the step's exit condition is "continue
-#                   until only nitpicks remain". A pass that reports a clean
-#                   residue and still stamps NOT_MET is refusing to converge.
-#   C  DIVERGENCE   CRITICALs rising pass-over-pass is a HARD_BLOCK, not a reason
-#                   for another pass (Rule 8). A rising pass MUST stamp
-#                   DIVERGENT_HARD_BLOCK; anything else is the endless cycle.
+#   C  DIVERGENCE   CRITICALs rising IN PRIOR SCOPE is a HARD_BLOCK, not a reason
+#                   for another pass (Rule 8).
 #   D  TERMINAL     the LAST pass in the series must be EXIT_CONDITION_MET. This
 #                   is the gate-passed-over-an-unmet-verdict catch.
+#   E  STALL        a nonzero MAJOR held at zero CRITICAL across K passes is a
+#                   cycle that is neither converging nor diverging. Another pass is
+#                   not the remedy.
+#   F  RESOLUTION   a pass that FOLLOWS a hard block must declare the RESOLUTION
+#                   record that authorized it. This is the sanctioned exit, and
+#                   the thing that makes a repair pass distinguishable from a
+#                   verification pass.
+#   G  CHRONOLOGY   the series must be monotone in time. A pass that claims to
+#                   follow another but was written BEFORE it is not part of this
+#                   cycle -- it is the tail of a dead one.
 #
 # It does NOT enforce the per-intensity pass FLOOR ("2+ passes"). Rule 8 delegates
 # that to each planning step's own intensity gate, and duplicating it here would
@@ -44,32 +71,86 @@
 #       e.g. --series _bmad-output/planning-artifacts/s289-rr-adversarial-pass
 #   validate-adversarial-convergence.sh <file> [<file>...]
 #       Explicit series, in pass order.
+#   validate-adversarial-convergence.sh --series <prefix> --cycle-state
+#       Adjudicates an IN-PROGRESS cycle for the hooks. See below.
 #
-# EXIT
+# EXIT (gate mode)
 #   0  the cycle converged: every pass is adjudicable, consistent, non-divergent,
-#      and the last pass stamps EXIT_CONDITION_MET.
+#      chronological, every hard block was resolved on the record, and the last
+#      pass stamps EXIT_CONDITION_MET.
 #   1  any check above failed (offenders named), or no series was resolved.
 set -u
 
 SERIES_PREFIX=""
+CYCLE_STATE=0
 FILES=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --series) SERIES_PREFIX="$2"; shift 2 ;;
-    -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
+    --cycle-state) CYCLE_STATE=1; shift ;;
+    -h|--help) sed -n '2,80p' "$0"; exit 0 ;;
     -*) echo "unknown argument: $1" >&2; exit 1 ;;
     *) FILES+=("$1"); shift ;;
   esac
 done
 
+# -----------------------------------------------------------------------------
+# --cycle-state: adjudicate a RUNNING cycle, for the hooks.
+# -----------------------------------------------------------------------------
+# Runs ORDERING + A + B + C + E + F + G. Runs *NOT* D.
+#
+# ARM D MUST NOT RUN HERE, and that is not an ergonomic choice -- it is what makes
+# the shell-out safe. A healthy in-progress cycle legitimately sits at
+# EXIT_CONDITION_NOT_MET; that is what "not finished yet" looks like. A hook calling
+# this script in gate mode would get exit 1 on every healthy cycle and pause the
+# pipeline continuously -- a guard that fires on COMPLIANCE, which is the failure
+# ai-dlc-continue.sh's own Check 0 comment names as worse than having no guard at all.
+#
+# stdout: exactly one line, "<STATE>\t<terminal-pass-file>"
+#
+#   CONTINUE   the cycle is running and healthy. Another pass is permitted.
+#   CONVERGED  the terminal pass stamps EXIT_CONDITION_MET. Nothing left to do.
+#   RESOLVED   the terminal pass STOPPED (divergent or stalled) AND a valid
+#              resolution record for it exists. The VERIFICATION pass is permitted.
+#   DIVERGENT  the terminal pass stamps DIVERGENT_HARD_BLOCK, unresolved.
+#   STALLED    arm E fires, unresolved.
+#
+# exit 0  CONTINUE | CONVERGED | RESOLVED  -- another pass is permitted
+# exit 3  DIVERGENT | STALLED              -- another pass is NOT the remedy
+# exit 1  no series, or the series is un-adjudicable (ordering/vocabulary broken)
+#
+# THE HOOKS HOLD NO LOGIC. They shell out, read the exit code, and deny on 3. They
+# do not know what a resolution record is, they do not parse a verdict, and they do
+# not order a series. One predicate, ONE implementation -- v0.54.3 shipped the other
+# way round ("one predicate, two implementations, and the tool wins") and it cost a
+# release. RESOLVED is precisely the state that lets the hooks stay this dumb: the
+# question "may I dispatch?" is answered here, not there.
+
+# -----------------------------------------------------------------------------
+# Series resolution.
+# -----------------------------------------------------------------------------
+# EXCLUSIONS. A resolution record and a repair record live in the same directory as
+# the passes and, named carelessly, carry a `p<N>` token. Swept into the series they
+# get an order_key and then either collide with the real pass N (the DUPES arm fires
+# and the gate fails on a HEALTHY cycle) or are adjudicated as a verdict-less pass
+# (arm A fails). Either way the failure is undiagnosable and lands on a cycle that
+# did nothing wrong. Exclude them by name, here, once.
 if [ -n "$SERIES_PREFIX" ]; then
   for f in "$SERIES_PREFIX"*; do
-    [ -f "$f" ] && FILES+=("$f")
+    [ -f "$f" ] || continue
+    case "$(basename "$f")" in
+      *-resolution-p*|*-repair-p*|*-repair-*) continue ;;
+    esac
+    FILES+=("$f")
   done
 fi
 
 if [ "${#FILES[@]}" -eq 0 ]; then
+  if [ "$CYCLE_STATE" -eq 1 ]; then
+    # No cycle is running. Nothing to stop. The hooks must not block on this.
+    exit 1
+  fi
   echo "FAIL: no adversarial pass artifacts resolved."
   if [ -n "$SERIES_PREFIX" ]; then
     echo "      --series '$SERIES_PREFIX' matched nothing."
@@ -97,8 +178,9 @@ fi
 # It is dormant below ten passes and activates at ten — i.e. it breaks in the long-cycle
 # case it exists to police, and nowhere else. That is why nobody saw it.
 #
-# The old comment claimed un-orderable files "are reported ... rather than silently folded
-# into the chain." No such report existed. They were folded in. It does now.
+# ORDERING IS THIS FILE'S JOB AND ONLY THIS FILE'S JOB. v0.57.0's hook picked the
+# "newest" pass with `ls -t` -- mtime, not pass number -- which is the same mistake,
+# reintroduced nine releases later in a different file. The hooks now ask this script.
 order_key() { # -> zero-padded pass number, or empty if the name carries none
   local b tok
   b="$(basename "$1")"; b="${b%.md}"
@@ -138,6 +220,23 @@ block_field() {
   ' "$1"
 }
 
+# ---- resolution-record field extraction ------------------------------------
+# The resolution record is the RESUME CONTRACT made into a file. Separate block
+# name, separate schema, separate producer: the LEAD writes it under the operator's
+# adjudication, not the adversary. (An adversary that restated the lead's chosen
+# resolution kind would be echoing the claim it is supposed to be independent of.)
+record_field() {
+  # $1 file, $2 key
+  [ -f "$1" ] || return 0
+  awk -v key="$2" '
+    /ADVERSARIAL_RESOLUTION v1/ { inblk=1; next }
+    /ADVERSARIAL_RESOLUTION_END/ { inblk=0 }
+    inblk {
+      if ($0 ~ "^" key ":") { sub("^" key ":[ \t]*", ""); print; exit }
+    }
+  ' "$1"
+}
+
 # Severity count for one class. Prefers the structured field the v0.48.0 schema
 # mandates (findings_critical:); falls back to parsing the free-text `findings:`
 # summary line so a pre-v0.48.0 artifact is still adjudicable where it can be.
@@ -167,37 +266,73 @@ normalize_verdict() {
 
 VALID_VERDICTS="EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"
 
+# THE RESOLUTION ENUM -- and the member that is NOT in it is the point.
+#
+# FREEZE_SCOPE IS DELIBERATELY ABSENT. DIVERGENT_HARD_BLOCK is stamped only when
+# `findings_critical_prior_scope` RISES -- CRITICALs found in text a previous pass
+# had ALREADY reviewed, which is text that is ALREADY FROZEN. Freezing it again
+# removes nothing: the verification pass reads the same bytes, finds the same
+# CRITICALs, and stamps NOT_MET. Freezing can never clear a prior-scope hard block,
+# BY CONSTRUCTION.
+#
+# This is not hypothetical. On the reference consumer the lead offered "freeze the
+# brief and ship it" as its starred recommendation, the operator authorized it, and
+# it could not pass this gate -- because no wording of it ever could. An enum member
+# that cannot fire reads exactly like one that passes.
+#
+# (FREEZE is the right remedy for a MOVING ARTIFACT -- arm D's SCOPE_GREW branch --
+# which is a different failure with a different shape. The two got conflated because
+# they look alike from the outside. They have opposite remedies.)
+VALID_RESOLUTIONS="REVERT_REPAIR CHANGE_APPROACH CUT_SCOPE RESTART_CYCLE"
+
 # Passes that found CRITICALs in scope the previous pass never saw. Derived from
 # findings_critical vs findings_critical_prior_scope; Check D turns it into the
 # remedy. Stays 0 for a pre-v0.52.0 series (absent field => prior == crit).
 SCOPE_GREW=0
 
 ERRORS=0
-err() { ERRORS=$((ERRORS + 1)); printf 'FAIL (%s): %s\n' "$1" "$2"; }
+UNADJUDICABLE=0   # ordering/vocabulary broken: we cannot say anything about this cycle
+err() {
+  ERRORS=$((ERRORS + 1))
+  [ "$CYCLE_STATE" -eq 1 ] && { printf 'FAIL (%s): %s\n' "$1" "$2" >&2; return; }
+  printf 'FAIL (%s): %s\n' "$1" "$2"
+}
 
-echo "adversarial convergence -- ${#SORTED[@]} pass artifact(s)"
-echo
+if [ "$CYCLE_STATE" -eq 0 ]; then
+  echo "adversarial convergence -- ${#SORTED[@]} pass artifact(s)"
+  echo
+fi
 
 # --- ORDERING ---------------------------------------------------------------
 # Report what could not be chained, rather than folding it in and adjudicating the fold.
 for f in "${UNORDERABLE[@]:-}"; do
   [ -n "$f" ] || continue
+  UNADJUDICABLE=1
   err "ORDER" "$f carries no pass number in its filename (expected \`pass<N>\` or \`p<N>\`).
       It cannot be placed in the series, and C/D are order-dependent: chaining it on a
       guess is how a 13-pass cycle got adjudicated in the order 1,10,11,12,13,2,3..."
 done
 if [ -n "$DUPES" ]; then
-  err "ORDER" "two or more artifacts claim the same pass number ($(printf '%s' "$DUPES" | tr -d '0' | tr '\n' ' ')$(printf '%s' "$DUPES" | sed 's/^0*//' | tr '\n' ' ')).
+  UNADJUDICABLE=1
+  err "ORDER" "two or more artifacts claim the same pass number ($(printf '%s' "$DUPES" | sed 's/^0*//' | tr '\n' ' ')).
       Any chaining is a guess. Give each pass a distinct number."
 fi
 
 PREV_CRIT=""
 PREV_FILE=""
 PREV_MAJOR=""
+PREV_AT=""
 LAST_VERDICT=""
 LAST_FILE=""
 LAST_CRIT=""
 LAST_MAJOR=""
+
+# Per-pass arrays. Arm F chains a divergent pass to its successor, so it needs the
+# series as a whole, not a rolling window.
+P_FILE=()
+P_VERDICT=()
+P_SHA=()
+P_RESOLVES=()
 
 # --- E. STALL (the plateau rung) --------------------------------------------
 # Rule 8 had exactly two terminal states: CONVERGED (0 CRITICAL, 0 MAJOR) and DIVERGENT
@@ -210,47 +345,116 @@ LAST_MAJOR=""
 # advice for that shape was *"run another pass to a clean verdict"* -- which is the
 # instruction that produced passes 11, 12 and 13.
 #
-# The shape is REPAIR-INDUCED, and that is what makes another pass futile:
-#   p11  three of seven "DECIDES" sites are on the wrong pool  (brief claimed all seven correct)
-#   p12  the repair's stated REASON is false                   ("the edit is right; the reason is wrong")
-#   p13  a FOURTH wrong-pool site -- which falsifies the sentence p12 just wrote
-# The artifact keeps asserting a universally-quantified claim nobody verified mechanically;
-# each pass falsifies it with one more counterexample and the repair rewrites the prose.
-# Another pass buys another counterexample. The remedy is not another pass.
+# The shape is REPAIR-INDUCED, and that is what makes another pass futile: the artifact
+# keeps asserting a universally-quantified claim nobody verified mechanically; each pass
+# falsifies it with one more counterexample and the repair rewrites the prose. Another
+# pass buys another counterexample. The remedy is not another pass.
 #
 # THRESHOLD, BACKTESTED (not chosen for elegance). Against every adversarial series the
-# reference consumer has with severity data -- s289-rr, s289-teststrategy, s290-brief;
-# six older series predate the v0.48.0 schema and carry no counts, so they can neither
-# confirm nor deny:
+# reference consumer has with severity data -- s289-rr, s289-teststrategy, s290-brief:
 #   K=2  fires on s290-brief at pass 13. No false fire: it never blocks a cycle that had
 #        already stamped EXIT_CONDITION_MET.
 #   K=3  fires NOWHERE in the entire corpus -- including the 13-pass loop it exists to
 #        catch. A rung that has never fired is indistinguishable from no rung.
-# So K=2: two consecutive passes that fail to REDUCE a nonzero MAJOR, at zero CRITICAL.
 STALL_THRESHOLD=2
 STALL_RUN=0
 STALL_FROM=""
+# v0.59.0 -- THE PEAK. Hoisting E out of the terminal `case` is NOT sufficient on its
+# own, and believing it was is how this nearly shipped still-broken. On the live series
+# STALL_RUN reaches 3 at p13/p14 and then RESETS at p15 (a CRITICAL appears, which is
+# arm C's business). At the terminal pass the RUN is 0 -- so a hoisted E keyed on the
+# run is still false, and still silent, on the exact series it was written for.
+# The stall is a property of the SERIES, so remember its peak.
+STALL_PEAK=0
+STALL_PEAK_FROM=""
+STALL_PEAK_AT=""
 
 for f in "${SORTED[@]}"; do
   raw_verdict="$(block_field "$f" 'verdict')"
   verdict="$(normalize_verdict "$raw_verdict")"
   crit="$(severity_count "$f" CRITICAL)"
   major="$(severity_count "$f" MAJOR)"
+  invoked_at="$(block_field "$f" 'invoked_at')"
 
-  printf '  %s\n' "$f"
-  printf '    verdict=%s critical=%s major=%s\n' \
-    "${verdict:-<none>}" "${crit:-<unparseable>}" "${major:-<unparseable>}"
+  P_FILE+=("$f")
+  P_VERDICT+=("$verdict")
+  P_SHA+=("$(block_field "$f" 'artifact_sha' | tr -cd '0-9a-fA-F')")
+  P_RESOLVES+=("$(block_field "$f" 'resolves_divergence')")
+
+  if [ "$CYCLE_STATE" -eq 0 ]; then
+    printf '  %s\n' "$f"
+    printf '    verdict=%s critical=%s major=%s\n' \
+      "${verdict:-<none>}" "${crit:-<unparseable>}" "${major:-<unparseable>}"
+  fi
 
   # --- A. VOCABULARY --------------------------------------------------------
   if [ -z "$verdict" ]; then
+    UNADJUDICABLE=1
     err "A -- VOCABULARY" "$f declares no 'verdict:' in its SKILL_INVOCATION_PROVENANCE block.
       A pass with no verdict is un-adjudicable: the cycle cannot be shown to have
       converged, and the gate downstream has nothing to read. Emit one of:
       $VALID_VERDICTS"
   elif ! printf '%s' "$VALID_VERDICTS" | tr ' ' '\n' | grep -qx "$verdict"; then
+    UNADJUDICABLE=1
     err "A -- VOCABULARY" "$f declares verdict '$raw_verdict', which is not in the
       enumerated set. Free-text verdicts are why v0.46.0 half-landed. Emit one of:
       $VALID_VERDICTS"
+  else
+    # v0.59.0 -- THE COUNTS ARE PART OF THE VOCABULARY, and omitting one was a free
+    # bypass of arm E. severity_count returns EMPTY on an unparseable pass, and an
+    # empty count RESETS the stall run (an un-adjudicable pass proves nothing, so it
+    # cannot be counted toward a plateau). Arm A required only `verdict:`. Net effect:
+    # drop `findings_major:` from ONE pass and arm E goes dark for the whole series,
+    # silently, with the gate still green. A check you can switch off by omission is
+    # not a check.
+    # Zero migration cost: a pass that declares no verdict already fails A above, and
+    # a pass that declares one is required by adversary.md to declare the counts.
+    if [ -z "$crit" ] || [ -z "$major" ]; then
+      UNADJUDICABLE=1
+      err "A -- VOCABULARY" "$f stamps '$verdict' but its severity counts are not derivable
+      (findings_critical=${crit:-<missing>}, findings_major=${major:-<missing>}).
+      A verdict is adjudicated AGAINST the residue it reports -- arms B, C and E all
+      read these. Without them the verdict is an assertion with nothing behind it, and
+      arm E in particular goes SILENT for the entire series. Declare both."
+    fi
+  fi
+
+  # --- G. CHRONOLOGY --------------------------------------------------------
+  # A series is a CHAIN: pass N+1 reviews the repair of pass N. That claim is a claim
+  # about TIME, and until v0.59.0 nothing checked it.
+  #
+  # Failure caught: a cycle is RESTARTED (Rule 8's own remedy for a moving artifact --
+  # "freeze scope, shrink the sprint, RESTART") and the new cycle writes pass1, pass2,
+  # pass3 over the dead cycle's files. The dead cycle ran to p17. Passes p4..p17 are
+  # STILL ON DISK. The glob chains them onto the new passes, arm D reads dead-p17 as the
+  # terminal artifact, and the gate fails with "the series ends at p17 with
+  # DIVERGENT_HARD_BLOCK" -- over a cycle that converged cleanly at new-p3. The lead
+  # cannot diagnose it, because every artifact named in the failure is real.
+  # Measured: the reference consumer was about to do exactly this.
+  # False-positive cost: a backdated or hand-edited `invoked_at`. Both are forgery of
+  #   the record the gate reads, and neither should pass.
+  # Removal condition: retire when the restart path has run clean for two sprints AND
+  #   the archive step is enforced somewhere earlier than here.
+  if [ -n "$invoked_at" ] && [ -n "$PREV_AT" ] && [ -n "$PREV_FILE" ]; then
+    if [[ "$invoked_at" < "$PREV_AT" ]]; then
+      err "G -- CHRONOLOGY" "$f claims to follow $PREV_FILE, but it was written FIRST
+      ($invoked_at, against $PREV_AT). A pass reviews the repair of the pass before it;
+      one that predates its own predecessor reviewed something else.
+      TWO THINGS PRODUCE THIS, and they have different remedies. Check which before you act:
+        (a) A DEAD CYCLE'S TAIL. A restarted cycle overwrites pass 1..N and leaves N+1..M of
+            the ABANDONED series on disk, where the glob chains them onto the new passes and
+            the gate adjudicates the corpse. Tell: the out-of-order passes are OLDER than the
+            whole live cycle and their content answers a different artifact.
+            FIX: archive the abandoned series (the RESTART_CYCLE resolution). Do not delete
+            it -- retro reads it.
+        (b) A MIS-STAMPED \`invoked_at\`. The pass is genuinely part of this cycle and someone
+            typed the wrong date, or stamped a date where a timestamp belongs. Tell: the
+            neighbours are contiguous and the content follows on.
+            FIX: correct the field to when the pass ACTUALLY ran. Do not back-fit it to make
+            this check pass -- the ordering it protects is real.
+      Stamp \`invoked_at\` to the second (ISO 8601). A date alone cannot order two passes that
+      ran on the same day, which is most of them."
+    fi
   fi
 
   # --- B. CONSISTENCY -------------------------------------------------------
@@ -290,8 +494,7 @@ for f in "${SORTED[@]}"; do
   #
   # FAIL-CLOSED DEFAULT: absent field => prior := crit => this degrades to EXACTLY
   # the pre-v0.52.0 predicate. It can only make C stricter, never laxer, so the
-  # missing field cannot be used to dodge a hard block -- which is what makes it safe
-  # to adopt mid-cycle against passes stamped under the old schema.
+  # missing field cannot be used to dodge a hard block.
   prior="$(block_field "$f" 'findings_critical_prior_scope' | tr -cd '0-9')"
   [ -z "$prior" ] && prior="$crit"
 
@@ -303,8 +506,10 @@ for f in "${SORTED[@]}"; do
       exceed them."
   fi
 
+  DIVERGENCE_LIED=0
   if [ -n "$prior" ] && [ -n "$PREV_CRIT" ] && [ "$prior" -gt "$PREV_CRIT" ]; then
     if [ "$verdict" != "DIVERGENT_HARD_BLOCK" ]; then
+      DIVERGENCE_LIED=1
       err "C -- DIVERGENCE" "$f reports $prior CRITICAL in scope the previous pass had
       already reviewed, up from $PREV_CRIT in $PREV_FILE, and does not stamp
       DIVERGENT_HARD_BLOCK.
@@ -316,9 +521,11 @@ for f in "${SORTED[@]}"; do
       findings_critical_prior_scope and stamp EXIT_CONDITION_NOT_MET instead.)"
     fi
   fi
+  # A cycle that is diverging but stamped something else is still DIVERGING. --cycle-state
+  # must STOP on the condition, not on the honesty of the label.
+  [ "$DIVERGENCE_LIED" -eq 1 ] && C_DIVERGED=1
 
   # Did this pass find CRITICALs in scope that did not exist at the previous pass?
-  # Derived from the one field; no second field. Check D reads it.
   if [ -n "$crit" ] && [ -n "$prior" ] && [ "$crit" -gt "$prior" ]; then
     SCOPE_GREW=$((SCOPE_GREW + 1))
   fi
@@ -326,11 +533,16 @@ for f in "${SORTED[@]}"; do
   # --- E. STALL accumulator -------------------------------------------------
   # A pass that holds a nonzero MAJOR at zero CRITICAL, and did not REDUCE it, is a pass
   # that bought nothing. Count the run; a decrease (or any CRITICAL, which is C's business)
-  # resets it. Reset on unparseable counts too: an un-adjudicable pass proves nothing.
+  # resets it. Reset on unparseable counts too -- though arm A now makes that unreachable.
   if [ -n "$crit" ] && [ -n "$major" ] && [ "$crit" -eq 0 ] && [ "$major" -gt 0 ] \
      && [ -n "$PREV_MAJOR" ] && [ "$major" -ge "$PREV_MAJOR" ]; then
     STALL_RUN=$((STALL_RUN + 1))
     [ -n "$STALL_FROM" ] || STALL_FROM="$f"
+    if [ "$STALL_RUN" -gt "$STALL_PEAK" ]; then
+      STALL_PEAK="$STALL_RUN"
+      STALL_PEAK_FROM="$STALL_FROM"
+      STALL_PEAK_AT="$f"
+    fi
   else
     STALL_RUN=0
     STALL_FROM=""
@@ -338,41 +550,250 @@ for f in "${SORTED[@]}"; do
 
   if [ -n "$crit" ]; then PREV_CRIT="$crit"; PREV_FILE="$f"; fi
   if [ -n "$major" ]; then PREV_MAJOR="$major"; fi
+  [ -n "$invoked_at" ] && PREV_AT="$invoked_at"
   LAST_VERDICT="$verdict"
   LAST_FILE="$f"
   LAST_CRIT="$crit"
   LAST_MAJOR="$major"
 done
 
-echo
+C_DIVERGED="${C_DIVERGED:-0}"
 
-# --- D. TERMINAL ------------------------------------------------------------
-case "$LAST_VERDICT" in
-  EXIT_CONDITION_MET) ;;
-  DIVERGENT_HARD_BLOCK)
-    err "D -- TERMINAL" "the series ends at $LAST_FILE with DIVERGENT_HARD_BLOCK.
-      The cycle diverged and was never brought back. A gate cannot pass over an
-      escalated hard block -- resolve the divergence (shrink the artifact, change
-      approach), then re-run the cycle to a clean pass." ;;
-  "")
-    err "D -- TERMINAL" "the series ends at $LAST_FILE with no verdict at all.
-      The gate has nothing to read." ;;
-  *)
-    # E takes precedence over D's generic branch. D's advice for this shape is "run
-    # another pass to a clean verdict" -- and on a repair-induced plateau that advice IS
-    # the defect. Diagnose the stall and give the remedy that actually terminates.
-    if [ -n "$LAST_CRIT" ] && [ -n "$LAST_MAJOR" ] && [ "$LAST_CRIT" -eq 0 ] \
-       && [ "$LAST_MAJOR" -gt 0 ] && [ "$STALL_RUN" -ge "$STALL_THRESHOLD" ]; then
-      err "E -- STALL" "the series ends at $LAST_FILE having held MAJOR at $LAST_MAJOR
-      with ZERO CRITICAL across $((STALL_RUN + 1)) consecutive passes (from $STALL_FROM).
-      The cycle is neither converging nor diverging -- it is STALLED, and no existing rung
-      catches that: MAJOR>0 means not converged, CRITICAL=0 means not divergent, so the
-      cycle falls through to 'run another pass' forever.
-      ANOTHER PASS IS NOT THE REMEDY. A plateau at zero CRITICAL is repair-induced: each
-      repair rewrites the prose around a claim nobody verified, and the next pass falsifies
-      the rewrite with one more counterexample. Passes are buying counterexamples, not
-      convergence.
-      Do ONE of these, then re-run the cycle:
+[ "$CYCLE_STATE" -eq 0 ] && echo
+
+# =============================================================================
+# F. RESOLUTION -- the sanctioned exit from a hard block.
+# =============================================================================
+# Every DIVERGENT_HARD_BLOCK pass that is NOT the terminal one was, by definition,
+# walked past: a pass came after it. Rule 8 permits exactly one thing to come after a
+# hard block, and it is not another repair pass. It is a VERIFICATION pass on a
+# RESOLVED artifact. Arm F is where "resolved" stops being a word.
+#
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: the lead adjudicates a divergence with the operator, applies
+#     another REPAIR, and dispatches the next pass as though the repair were the
+#     resolution. The cycle oscillates: p14 clean, p15 divergent, p16 clean, p17
+#     divergent. Measured on the reference consumer -- every repair closed what it
+#     was given and opened one new defect in scope it had already signed off.
+#   Measurement: four divergent passes in one 17-pass cycle, none of them resolved
+#     on the record, and the gate could not tell the difference.
+#   False-positive cost: one file per hard block. A hard block already costs an
+#     operator adjudication; the record is what that adjudication writes down.
+#   Removal condition: retire when two consecutive sprints record zero hard blocks.
+#
+# STRICT -- every divergence, not just the last. There is no history to grandfather:
+# the only live consumer is resetting its series, so an arm scoped to "the last
+# divergence only" would buy laxity for nothing.
+validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -> 0 ok, 1 bad
+  local rec="$1" div="$2" idx="$3"
+  local resolves kind sha_b sha_a b_b b_a delta auth arch i
+
+  if [ ! -f "$rec" ]; then
+    F_WHY="the record it names does not exist: $rec"
+    return 1
+  fi
+  if ! grep -q 'ADVERSARIAL_RESOLUTION v1' "$rec" 2>/dev/null; then
+    F_WHY="$rec carries no 'ADVERSARIAL_RESOLUTION v1' block. It is not a resolution record."
+    return 1
+  fi
+
+  # F2 -- POINTS BACK. A record that resolves some OTHER pass is not this pass's exit.
+  resolves="$(record_field "$rec" 'resolves')"
+  if [ "$(basename "${resolves:-}")" != "$(basename "$div")" ]; then
+    F_WHY="$rec resolves '${resolves:-<none>}', not $(basename "$div"). A record is bound to
+      the ONE hard block it adjudicates."
+    return 1
+  fi
+
+  # F3 -- KIND.
+  kind="$(record_field "$rec" 'resolution')"
+  if [ "$kind" = "FREEZE_SCOPE" ]; then
+    F_WHY="$rec declares 'resolution: FREEZE_SCOPE', which CANNOT resolve a hard block.
+      DIVERGENT_HARD_BLOCK means CRITICALs rose IN PRIOR SCOPE -- in text that was already
+      reviewed, and is therefore ALREADY FROZEN.
+      Freezing does not remove a CRITICAL that is already inside the frozen text.
+      The verification pass will read the same bytes, find the same CRITICALs, and stamp
+      NOT_MET. There is no wording of a freeze that passes this gate.
+      (FREEZE is the remedy for a MOVING ARTIFACT -- a cycle that cannot converge because the
+      sprint keeps growing under it. That is a different failure with the opposite remedy, and
+      confusing the two is what parked the reference consumer's pipeline.)
+      Resolve it for real: $VALID_RESOLUTIONS"
+    return 1
+  fi
+  if ! printf '%s' "$VALID_RESOLUTIONS" | tr ' ' '\n' | grep -qx "${kind:-}"; then
+    F_WHY="$rec declares 'resolution: ${kind:-<none>}', which is not in the enumerated set.
+      Emit one of: $VALID_RESOLUTIONS"
+    return 1
+  fi
+
+  sha_b="$(record_field "$rec" 'artifact_sha_before' | tr -cd '0-9a-fA-F')"
+  sha_a="$(record_field "$rec" 'artifact_sha_after'  | tr -cd '0-9a-fA-F')"
+  b_b="$(record_field "$rec" 'artifact_bytes_before' | tr -cd '0-9')"
+  b_a="$(record_field "$rec" 'artifact_bytes_after'  | tr -cd '0-9')"
+  delta="$(record_field "$rec" 'scope_delta')"
+  auth="$(record_field "$rec" 'operator_authorization')"
+
+  # F4 -- ANCHORED. The record cannot claim to resolve a state it did not start from.
+  # This is what makes the whole thing more than an honour system: `artifact_sha` on
+  # each pass is a COMPUTED value about a file the adversary already read -- not a
+  # judgment it can shade.
+  if [ -n "${P_SHA[$idx]}" ]; then
+    if [ "$sha_b" != "${P_SHA[$idx]}" ]; then
+      F_WHY="$rec declares artifact_sha_before=${sha_b:-<none>}, but $(basename "$div") notarized
+      ${P_SHA[$idx]} as the bytes it reviewed. The record is resolving a state that pass never saw."
+      return 1
+    fi
+  fi
+
+  # F5 -- THE KIND MUST AGREE WITH ITS OWN DELTA.
+  #
+  # This is where the launder question gets its honest answer. Two of the four kinds
+  # close by ARITHMETIC and cannot be faked by declaring the field:
+  case "$kind" in
+    CUT_SCOPE)
+      # You said you cut. Bytes must fall. A repair that rewrites prose cannot pass this.
+      if [ -z "$b_b" ] || [ -z "$b_a" ] || [ "$b_a" -ge "$b_b" ]; then
+        F_WHY="$rec declares CUT_SCOPE but the artifact did not shrink
+      (before=${b_b:-<none>} bytes, after=${b_a:-<none>}). A cut removes scope. If you rewrote
+      the artifact to close the findings, that is a REPAIR, and a repair is what diverged."
+        return 1
+      fi
+      if [ -z "$delta" ]; then
+        F_WHY="$rec declares CUT_SCOPE with no 'scope_delta:'. Name what was removed."
+        return 1
+      fi
+      ;;
+    REVERT_REPAIR)
+      # You said you reverted. Then the artifact must be back at a state some EARLIER
+      # PASS ACTUALLY NOTARIZED. A repair does not land on a previously-reviewed sha.
+      # Closed by construction.
+      local matched=0
+      for ((i = 0; i < idx; i++)); do
+        [ -n "${P_SHA[$i]}" ] && [ "${P_SHA[$i]}" = "$sha_a" ] && matched=1 && break
+      done
+      if [ "$matched" -ne 1 ]; then
+        F_WHY="$rec declares REVERT_REPAIR, but artifact_sha_after=${sha_a:-<none>} matches no
+      earlier pass in this series. A revert restores a state that was ACTUALLY REVIEWED --
+      every pass notarizes the bytes it read, so a genuine revert lands on one of those shas.
+      This one lands somewhere new, which makes it an edit, not a revert."
+        return 1
+      fi
+      ;;
+    CHANGE_APPROACH|RESTART_CYCLE)
+      # These two CANNOT be anchored arithmetically, and the design says so out loud
+      # rather than pretending. "I changed the approach" is a claim about intent; a
+      # rewrite can grow, shrink, or hold its size. No byte-level predicate exists.
+      #
+      # So: make the dishonest path require an EXPLICIT FALSE STATEMENT (the operator's
+      # own words, quoted), and COUNT it. Retro reports these per sprint.
+      # TIGHTENING CONDITION, stated now so it is not re-litigated later: if
+      # CHANGE_APPROACH + RESTART_CYCLE exceed CUT_SCOPE + REVERT_REPAIR across two
+      # consecutive sprints, they are being used as an escape hatch and need an anchor.
+      #
+      # This is the same standard `findings_critical_prior_scope` already runs on, and
+      # it is the honest ceiling for what a gate can buy here.
+      if [ -z "$sha_a" ] || [ "$sha_a" = "$sha_b" ]; then
+        F_WHY="$rec declares $kind but the artifact did not change
+      (sha_before=${sha_b:-<none>}, sha_after=${sha_a:-<none>}). A resolution changes WHAT IS
+      UNDER REVIEW. An unchanged artifact is not a resolution -- it is the divergence, restated."
+        return 1
+      fi
+      if [ -z "$delta" ] || [ -z "$auth" ]; then
+        F_WHY="$rec declares $kind, which cannot be verified arithmetically, so it carries the
+      burden the anchored kinds do not: 'scope_delta:' (what changed) and
+      'operator_authorization:' (the operator's own words, verbatim). Both are required
+      and one is ${delta:+present}${delta:-missing}/${auth:+present}${auth:-missing}."
+        return 1
+      fi
+      if [ "$kind" = "RESTART_CYCLE" ]; then
+        arch="$(record_field "$rec" 'archive')"
+        if [ -z "$arch" ] || [ ! -d "$arch" ]; then
+          F_WHY="$rec declares RESTART_CYCLE but names no existing 'archive:' directory
+      (${arch:-<none>}). A restart ABANDONS the series -- and a series left in place is
+      chained onto the new one by the glob, so the gate adjudicates the dead cycle's last
+      pass. Move the abandoned passes to the archive; do not delete them (retro reads them)."
+          return 1
+        fi
+      fi
+      ;;
+  esac
+  return 0
+}
+
+F_WHY=""
+RESOLVED_TERMINAL=0
+N="${#P_FILE[@]}"
+for ((i = 0; i < N; i++)); do
+  [ "${P_VERDICT[$i]}" = "DIVERGENT_HARD_BLOCK" ] || continue
+
+  if [ "$((i + 1))" -lt "$N" ]; then
+    # A pass came AFTER this hard block. It had better say why it was allowed to.
+    ver_file="${P_FILE[$((i + 1))]}"
+    rec="${P_RESOLVES[$((i + 1))]}"
+    if [ -z "$rec" ]; then
+      err "F -- RESOLUTION" "$(basename "${P_FILE[$i]}") stamps DIVERGENT_HARD_BLOCK, and
+      $(basename "$ver_file") ran anyway without declaring 'resolves_divergence:'.
+      A hard block means the REPAIR is injecting defects. The next pass is permitted ONLY as
+      a VERIFICATION pass on a RESOLVED artifact -- never as another repair pass.
+        STOP -> ADJUDICATE -> RESOLVE -> VERIFY
+      A repair edits the artifact to close findings on UNCHANGED scope.
+      A resolution changes WHAT IS UNDER REVIEW: $VALID_RESOLUTIONS
+      FIX: write the resolution record the operator's adjudication authorized --
+      $(dirname "$ver_file")/<sprint>-<artifact>-resolution-p$((i + 1)).md -- and have the
+      verification pass declare it in 'resolves_divergence:'."
+      continue
+    fi
+    # Resolve the record path relative to the artifact directory when it is bare.
+    [ -f "$rec" ] || [ -z "${rec##/*}" ] || rec="$(dirname "$ver_file")/$(basename "$rec")"
+    if ! validate_record "$rec" "${P_FILE[$i]}" "$i"; then
+      err "F -- RESOLUTION" "$(basename "$ver_file") claims to resolve
+      $(basename "${P_FILE[$i]}"), but $F_WHY"
+    fi
+  else
+    # The hard block IS the terminal pass. Arm D owns that failure at the gate -- but
+    # --cycle-state needs to know whether the operator has already adjudicated it, because
+    # that is exactly the moment the verification pass becomes legal.
+    for rec in $(ls "$(dirname "${P_FILE[$i]}")"/*-resolution-p*.md 2>/dev/null); do
+      if validate_record "$rec" "${P_FILE[$i]}" "$i"; then RESOLVED_TERMINAL=1; break; fi
+    done
+  fi
+done
+
+# =============================================================================
+# E. STALL -- hoisted (v0.59.0).
+# =============================================================================
+# WHY IT WAS INSIDE THE `case`, AND WHY THAT WAS THE BUG. Arm E used to live in the
+# `*)` branch of the terminal-verdict switch. A series ending DIVERGENT_HARD_BLOCK
+# takes arm D's branch and E was NEVER EVALUATED.
+#
+# Measured on the reference consumer's live series: it held 0 CRITICAL / 1 MAJOR
+# across passes 11, 12, 13 and 14, so the stall run reached 3 against K=2. E was TRUE
+# at p13 and TRUE at p14 -- and nothing ran the validator mid-cycle, so it never
+# spoke. Then p15 diverged and E went STRUCTURALLY DARK for the rest of the series.
+# Had it fired at p13 the cycle would have stopped four passes before the first of the
+# two divergences that produced the escalation.
+#
+# A rung that goes dark exactly when the cycle it polices goes wrong reads exactly like
+# a rung that passed. That is this repo's recurring defect class, and this is an
+# instance of it sitting one rung away from v0.57.0's fix for the same thing.
+#
+# E is a property of the SERIES. Only its SUPPRESSION is a property of the terminal
+# verdict: a cycle that stalled and then CONVERGED did terminate, and E exists to stop
+# cycles that do not terminate, not to punish slow ones.
+STALL_LIVE=0
+if [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ] && [ "$STALL_PEAK" -ge "$STALL_THRESHOLD" ]; then
+  STALL_LIVE=1
+  if [ "$RESOLVED_TERMINAL" -eq 0 ]; then
+    err "E -- STALL" "the cycle held a nonzero MAJOR at ZERO CRITICAL across $((STALL_PEAK + 1))
+      consecutive passes (from $STALL_PEAK_FROM through $STALL_PEAK_AT).
+      It is neither converging nor diverging -- it is STALLED, and no other rung catches that:
+      MAJOR>0 means not converged, CRITICAL=0 means not divergent, so the cycle falls through
+      to 'run another pass' forever.
+      ANOTHER PASS IS NOT THE REMEDY. A plateau at zero CRITICAL is repair-induced: each repair
+      rewrites the prose around a claim nobody verified, and the next pass falsifies the rewrite
+      with one more counterexample. Passes are buying counterexamples, not convergence.
+      The cycle should have STOPPED at $STALL_PEAK_AT.
+      Do ONE of these, then resolve on the record and run ONE verification pass:
         (a) VERIFY THE DISPUTED FACT MECHANICALLY. If the artifact asserts a universal
             ('all seven sites are correct'), stop arguing it in prose -- enumerate it in
             code and paste the enumeration. A universal nobody checked is what the
@@ -381,6 +802,62 @@ case "$LAST_VERDICT" in
             assertion is not load-bearing; it is the thing generating the MAJORs.
         (c) ESCALATE to the operator with the standing MAJOR and its cost. A HARD_BLOCK
             the operator adjudicates in one turn beats a cycle that never terminates."
+  fi
+fi
+
+# =============================================================================
+# --cycle-state: emit and exit. Arm D does NOT run.
+# =============================================================================
+if [ "$CYCLE_STATE" -eq 1 ]; then
+  if [ "$UNADJUDICABLE" -eq 1 ]; then
+    exit 1
+  fi
+  STATE="CONTINUE"
+  RC=0
+  if [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
+    STATE="CONVERGED"
+  elif [ "$LAST_VERDICT" = "DIVERGENT_HARD_BLOCK" ] || [ "$C_DIVERGED" -eq 1 ]; then
+    if [ "$RESOLVED_TERMINAL" -eq 1 ]; then
+      STATE="RESOLVED"
+    else
+      STATE="DIVERGENT"; RC=3
+    fi
+  elif [ "$STALL_LIVE" -eq 1 ]; then
+    if [ "$RESOLVED_TERMINAL" -eq 1 ]; then
+      STATE="RESOLVED"
+    else
+      STATE="STALLED"; RC=3
+    fi
+  fi
+  printf '%s\t%s\n' "$STATE" "$LAST_FILE"
+  exit "$RC"
+fi
+
+# --- D. TERMINAL ------------------------------------------------------------
+case "$LAST_VERDICT" in
+  EXIT_CONDITION_MET) ;;
+  DIVERGENT_HARD_BLOCK)
+    err "D -- TERMINAL" "the series ends at $LAST_FILE with DIVERGENT_HARD_BLOCK.
+      The cycle diverged and was never brought back. A gate cannot pass over an escalated
+      hard block. The exit exists, and it is not another repair pass:
+        STOP -> ADJUDICATE -> RESOLVE -> VERIFY
+      1. STOP. No further pass on the artifact as it stands.
+      2. ADJUDICATE. Put the divergence to the operator. The operator picks the KIND.
+      3. RESOLVE. Change WHAT IS UNDER REVIEW -- $VALID_RESOLUTIONS -- and write the
+         resolution record. (A repair edits the artifact to close findings on unchanged
+         scope. That is what diverged. It is not a resolution.)
+      4. VERIFY. Run ONE pass on the resolved artifact, as the NEXT PASS NUMBER IN THIS
+         SAME SERIES, declaring 'resolves_divergence:'. Do not start a new series --
+         the glob spans both, the pass numbers collide, and the gate fails on a cycle
+         that did nothing wrong." ;;
+  "")
+    err "D -- TERMINAL" "the series ends at $LAST_FILE with no verdict at all.
+      The gate has nothing to read." ;;
+  *)
+    # E has already fired above if it applies; do not also hand this shape D's generic
+    # "run another pass" advice, which on a repair-induced plateau IS the defect.
+    if [ "$STALL_LIVE" -eq 1 ]; then
+      :
     elif [ "$SCOPE_GREW" -gt 0 ]; then
       # The cycle is not failing to converge. It is being asked to converge on a
       # MOVING ARTIFACT, and it cannot. S290 ran EIGHT passes this way: every repair
@@ -409,5 +886,6 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
-echo "PASS: the cycle converged -- last pass stamps EXIT_CONDITION_MET, no divergent pass, every verdict adjudicable."
+echo "PASS: the cycle converged -- last pass stamps EXIT_CONDITION_MET, no divergent pass"
+echo "      left unresolved, every verdict adjudicable, the series in chronological order."
 exit 0

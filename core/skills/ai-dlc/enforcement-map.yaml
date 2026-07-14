@@ -262,19 +262,50 @@ checks:
     fixtures: [tests/fixtures/check-23-draft-stamps]
 
   - id: "24"
-    title: Adversarial cycle convergence (Rule 8)
+    title: Adversarial cycle convergence (Rule 8) — and the sanctioned exit from a
+      hard block
     gate_types: [planning, story]
     adjudication: script
     hard_block: true
     enforcer:
       - core/scripts/validate-adversarial-convergence.sh
+      - core/hooks/ai-dlc-acknowledge.sh
+      - core/hooks/ai-dlc-continue.sh
     call_sites:
       - site: gate-validation.md Check 24
         posture: FAILS the gate (exit 0 required)
         why: the residue-to-verdict adjudication is the only thing standing between
           an unconverged cycle and a passed planning gate
+      - site: ai-dlc-acknowledge.sh (PreToolUse) — THE TEETH
+        posture: runtime DENY of Agent/Task/Skill/TaskCreate on --cycle-state exit 3
+        why: the gate runs AFTER the cycle is over, so the one signal that means STOP
+          had no teeth at the only moment it mattered. v0.57.0 put the guard on Stop,
+          which fires only when the lead YIELDS — and Rule 3 plus the continue hook
+          exist to make it never yield, so the guard fired on the reference consumer
+          by luck. PreToolUse is the only place a dispatch can be denied. Fails OPEN
+          on anything but an explicit exit 3; the gate stays the fail-closed backstop.
+      - site: ai-dlc-continue.sh (Stop)
+        posture: raises the pause flag, blocks the stop once, writes the flow-log entry
+        why: surfacing, not enforcement — a human must learn about the stop in the turn
+          it happens. It adjudicates nothing: it shells out to the validator, which owns
+          ordering (mtime picks the SERIES; the validator picks the PASS)
+    resume_contract:
+      states: [CONTINUE, CONVERGED, RESOLVED, DIVERGENT, STALLED]
+      record: planning-artifacts/s<N>-<artifact>-resolution-p<M>.md
+      kinds: [REVERT_REPAIR, CHANGE_APPROACH, CUT_SCOPE, RESTART_CYCLE]
+      why_no_freeze: a hard block means CRITICALs rose in text a previous pass had
+        already reviewed — text that is ALREADY frozen. Freezing it again removes
+        nothing, so the verification pass finds the same CRITICALs and the gate can
+        never pass. An enum member that cannot fire reads exactly like one that passes.
+        (FREEZE is the remedy for a MOVING ARTIFACT — arm D's scope-grew branch.
+        Opposite failure, opposite remedy; conflating them parked a live pipeline.)
+      carve_out: the resolution record is WRITEABLE while paused. Check 2a denies every
+        dispatch until it exists; if the pause flag also denied the record, the two
+        checks would lock the pipeline against itself.
     ci_workflow: ~
-    fixtures: [tests/fixtures/check-24-adversarial-convergence]
+    fixtures:
+      - tests/fixtures/check-24-adversarial-convergence
+      - tests/fixtures/divergence-hard-block
 
   - id: "25"
     title: Rule 29 bounded-join conduct — the operator was reachable

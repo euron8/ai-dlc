@@ -17,6 +17,136 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.59.0] — 2026-07-14
+
+### The hard block had no exit, so the two mechanisms that adjudicate it gave opposite orders
+
+v0.57.0 gave `DIVERGENT_HARD_BLOCK` teeth. It did not give it a way out. The result, measured on
+the reference consumer, is a pipeline parked on an escalation with **no legal move**:
+
+> `ai-dlc-continue.sh:261` — the deny reason the lead actually reads:
+> *"Do NOT dispatch another adversarial pass, and **do NOT clear the pause flag** to get past this."*
+>
+> `validate-adversarial-convergence.sh:353` — Check 24, arm D:
+> *"resolve the divergence … **then re-run the cycle to a clean pass**."*
+
+**The gate REQUIRES the terminal pass the hook FORBIDS.** Neither names the state that separates
+them. The hook's own code comment at `:245` says *"The operator clearing the flag IS the
+adjudication, and this must not fight it"* — so the code's design sanctioned exactly what the
+code's message forbade, and the lead obeyed the message. It offered the operator two options,
+one of which was void, and stopped.
+
+Rule 8 has always had a hole where a **noun** should be. It names two events (a repair pass, a
+divergent pass) and one instruction (STOP). It never named the state that ENDS the stop, so every
+downstream mechanism invented its own. The noun is **RESOLUTION**, and this release makes it a file.
+
+#### STOP → ADJUDICATE → RESOLVE → VERIFY
+
+*A repair edits the artifact to close findings on **unchanged scope** — that is what diverged. A
+**resolution** changes **what is under review**.* The verification pass is the next number in the
+**same series**, declaring `resolves_divergence:`. New Check 24 **arm F** adjudicates the record;
+arm D is untouched, and there is **no operator-override arm** — a gate that yields to a decision
+is the precise thing v0.57.0 was installed to stop.
+
+`resolution:` is `REVERT_REPAIR` | `CHANGE_APPROACH` | `CUT_SCOPE` | `RESTART_CYCLE`.
+
+**`FREEZE_SCOPE` is deliberately absent, and its absence is the point.** `DIVERGENT_HARD_BLOCK`
+fires only when `findings_critical_prior_scope` RISES — CRITICALs in text a previous pass had
+already reviewed, which is text that is **already frozen**. Freezing it again removes nothing: the
+verification pass reads the same bytes, finds the same CRITICALs, and stamps NOT_MET. **Freezing
+can never clear a prior-scope hard block, by construction** — and *"freeze the brief and ship it"*
+was the lead's starred recommendation, which the operator authorized, in those words. It could not
+pass, and no wording of it ever could. An enum member that cannot fire reads exactly like one that
+passes. (FREEZE *is* the remedy for a MOVING ARTIFACT — arm D's scope-grew branch. Opposite
+failure, opposite remedy. Conflating them cost a day.)
+
+**On laundering a repair as a resolution, honestly.** `REVERT_REPAIR` is closed by construction
+(`artifact_sha_after` must match a sha some earlier pass notarized, and a repair does not land on
+a previously-reviewed state). `CUT_SCOPE` is closed by arithmetic (bytes must fall). `CHANGE_APPROACH`
+and `RESTART_CYCLE` are **not closeable** — "I changed the approach" is a claim about intent and no
+byte-level predicate exists. So they carry the operator's words verbatim, and retro **counts** them:
+if they exceed the anchored kinds across two sprints they are an escape hatch and need an anchor.
+A global *"the artifact must SHRINK"* assertion was rejected: it is a **deletion incentive**, and
+instructing the pipeline to delete load-bearing spec to pass a gate is the v0.56.x failure, rewarded.
+
+#### The teeth were in the wrong hook
+
+v0.57.0's guard lives on `Stop` — which fires only when the lead **yields**, and Rule 3 plus the
+continue hook exist to make it never yield. A lead that dispatches pass N+1 in the same turn as
+pass N's join never emits a Stop event. **It fired on the reference consumer by luck.** The teeth
+move to `ai-dlc-acknowledge.sh` (PreToolUse), the only place a dispatch can be denied. It runs
+*before* the pause-flag early exit, so a STOP survives the flag being cleared — otherwise the
+deliberate `rm -f` escape hatch doubles as a bypass.
+
+**The hooks now hold zero adjudication logic.** They shell out to `--cycle-state`, a new validator
+mode that runs every arm *except* D and returns `CONTINUE | CONVERGED | RESOLVED | DIVERGENT |
+STALLED`; **exit 3 means stop**. Arm D must not run there: a healthy in-progress cycle legitimately
+sits at NOT_MET, so a hook calling the validator in gate mode would pause the pipeline on every
+turn — *a guard that fires on compliance*, which gets switched off, after which nothing is watching.
+
+`RESOLVED` is what lets the hooks stay dumb: the question *"may I dispatch?"* is answered in the
+one file that owns ordering. **The resolution record is writeable while paused** — Check 2a denies
+every dispatch until it exists, so a pause that also denied the record would lock the pipeline
+against itself.
+
+#### Three more, all found by writing the fixtures
+
+- **Arm E (STALL) was structurally unreachable exactly when it mattered.** It lived *inside* the
+  `*)` branch of the terminal-verdict `case`, so a series ending `DIVERGENT_HARD_BLOCK` took arm
+  D's branch and E was never evaluated. On the live series it was **TRUE and unfired at p13 and
+  again at p14** (0 CRITICAL / 1 MAJOR held across p11–p14, against K=2) — and then p15 diverged
+  and it went dark. Had it fired at p13 the cycle would have stopped **four passes before** the
+  first of the two divergences that produced the escalation. Hoisting it is not enough: the run
+  RESETS at p15, so E keyed on the run is *still* false at the terminal. It now tracks the **peak**
+  and names the pass the cycle should have stopped at. Same defect class as v0.57.0, one rung over,
+  in the same file.
+- **Arm E had a free bypass, and it survived the hoist.** `severity_count` returns empty on an
+  unparseable pass, an empty count RESETS the stall run, and arm A required only `verdict:`. Drop
+  `findings_major:` from ONE pass and arm E goes silent for the whole series, with the gate still
+  green. Arm A now requires derivable CRITICAL/MAJOR counts from any pass that stamps a verdict.
+- **Walking past a hard block was invisible to the gate.** Arm D only ever read the *terminal*
+  verdict, so a cycle that hard-blocked at p4, ran p5 anyway, and eventually converged **passed
+  Check 24 silently**. The reference consumer did this three times (p4, p7, p15) and the gate said
+  nothing about any of them. Arm F closes it, and it is **strict — every divergence, not just the
+  last**.
+
+#### `RESTART_CYCLE`, and the deadlock waiting behind this one
+
+Rule 8's own text has always said *"freeze scope, shrink the sprint, **restart**"* — and nothing
+implemented restart. A lead that restarts writes `…-p1.md` over the dead cycle's `…-p1.md`. If the
+dead cycle ran to p17, then **p4…p17 are still on disk**, the `--series` glob chains them onto the
+new passes, and arm D reads dead-p17 as terminal — failing with *"the series ends at p17 with
+DIVERGENT_HARD_BLOCK"* over a cycle that converged cleanly at new-p3. Every artifact named in that
+failure is real, so it cannot be diagnosed.
+
+New **arm G — CHRONOLOGY** catches it without needing any record: the series must be monotone in
+`invoked_at`, and a pass cannot follow one that was written after it. `RESTART_CYCLE` requires the
+abandoned passes to be **moved** to an `archive:` directory (not deleted — retro reads them).
+
+Arm G found its first bug immediately, in the fixture that had carried it for four releases: the
+seed emitted `invoked_at: 2026-07-12T010:00:00Z` at pass 10 — malformed, and lexicographically
+*before* `T09`. Nothing had ever read the field, so nothing had ever complained.
+
+#### Also — v0.57.0's own forensic claim was false, and it shipped as operator guidance
+
+The v0.57.0 entry below tells the reference consumer: *"ask what pass 16's repair **deleted**: an
+operator-LOCKED requirement lost the predicate its AC tested against, and **reverting that
+repair** — not another pass — is the remedy."* **All three limbs are wrong.** Pass 16's repair
+deleted nothing (it substituted `if x and y:` → `if x is not None and y is not None:`), the AC's
+predicate was never touched, and **pass 17 explicitly certifies that predicate CORRECT**. Reverting
+it restores truthiness — which is the zero-as-sentinel defect the sprint exists to kill, since
+`Decimal("0")` is falsy — and does not close the finding. The *principle* was right (a repair that
+leaves behind a check that cannot fail is the defect; test: *after your edit, can the check still
+FAIL?*). The diagnosis, the object, and the prescribed remedy were all wrong. Corrected in place below.
+
+#### Consumer migration
+
+Passes now carry `artifact:` and `artifact_sha:`; both are required of any pass that stamps a
+verdict, along with the CRITICAL/MAJOR counts. A cycle **already in flight** under the old schema
+will fail arm A at its next gate — finish it, or restart it with `RESTART_CYCLE`. Fixture bytes
+changed, so the **H2 attestation digest moves**: existing attestations are void and the fixture set
+must be re-driven once per sprint, as designed.
+
 ## [0.58.0] — 2026-07-14
 
 ### The gate counted a severity the skill it invoked was forbidden to produce
@@ -190,6 +320,29 @@ the mutant that removes the guard.
 itself at the next divergent verdict instead of grinding on. Then ask what pass 16's repair
 deleted: an operator-LOCKED requirement lost the predicate its AC tested against, and
 reverting that repair — not another pass — is the remedy.
+
+> ⛔ **RETRACTED IN v0.59.0 — THE PARAGRAPH ABOVE IS FALSE, AND ACTING ON IT REINSTATES THE
+> DEFECT THE SPRINT EXISTS TO KILL.** It is left standing, struck, because a changelog that
+> quietly edits its own errors teaches nothing.
+>
+> All three limbs are wrong. Pass 16's repair **deleted nothing** — it substituted
+> `if _dust_p0_usd and _dust_p1_usd:` → `if _dust_p0_usd is not None and _dust_p1_usd is not
+> None:` in the brief's *prescribed target shape*. The AC's predicate was **never touched**.
+> And pass 17 explicitly **certifies that predicate CORRECT**: *"Pass 16's headline repair is
+> right. Only its claim about the AC is wrong."* Reverting it restores truthiness — and
+> `Decimal("0")` is falsy, so that IS the zero-as-sentinel bug the sprint was called to fix.
+> The revert reinstates a live defect and does not close the finding.
+>
+> What was true is the **principle**: pass 16 moved the specification and left behind an AC
+> that **cannot fail** against the newly-forbidden shape. The test named here — *after your
+> edit, can the check still FAIL?* — is exactly right. It was pointed at the wrong edit, the
+> wrong object, and the wrong remedy.
+>
+> **This is the lesson, not a footnote.** This paragraph was written from a confident reading
+> of a transcript and shipped to a consumer as operator guidance, in a release whose entire
+> subject is a repair step that authors false claims. It was never run against the artifacts.
+> A detailed, confident account of what went wrong is a **hypothesis**, not evidence — and the
+> control test is cheap. Run it.
 
 
 ## [0.56.3] — 2026-07-14

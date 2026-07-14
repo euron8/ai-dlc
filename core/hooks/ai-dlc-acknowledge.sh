@@ -102,7 +102,134 @@ fi
 [ -f "$SNAPSHOT_FILE" ] || exit 0
 
 # -----------------------------------------------------------------------------
-# Check 2: not paused -> allow (the common path; keep it cheap)
+# Check 2a: the adversarial cycle has STOPPED (Rule 8) -- THE TEETH
+# -----------------------------------------------------------------------------
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: an adversarial cycle DIVERGES (the repair is injecting defects into text
+#     already cleared) or STALLS (a nonzero MAJOR held at zero CRITICAL, pass after pass),
+#     and the lead dispatches another pass. Rule 8 says stop. Nothing could deny the dispatch.
+#   Measured: a live cycle hard-blocked at p15, ran p16, hard-blocked again at p17 -- and
+#     earlier held 0C/1M across p11-p14 with nothing firing. Seventeen passes, ~14 hours.
+#   False-positive cost: one operator adjudication on a cycle that was going to need one.
+#   Removal condition: retire when two consecutive sprints record zero STOP states.
+#
+# WHY HERE AND NOT IN THE Stop HOOK. v0.57.0 put this in `ai-dlc-continue.sh`, which fires on
+# `Stop` -- and `Stop` fires only when the lead YIELDS. Rule 3 and the continue hook exist
+# precisely to make the lead never yield. A lead that dispatches pass N+1 in the same turn as
+# pass N's join never emits a Stop event, and the check never runs. It fired on the reference
+# consumer because the lead happened to stop and present results, not because anything
+# enforced it. PreToolUse is the only place a dispatch can actually be denied, so this is the
+# only place the hard block can have teeth.
+#
+# THIS RUNS BEFORE THE PAUSE-FLAG EARLY EXIT, ON PURPOSE. A STOP must survive the flag being
+# cleared. Otherwise the resume path (`rm -f pipeline-paused.flag`, which Bash allows and must
+# keep allowing) doubles as a way to walk straight past the hard block -- and then the flag is
+# not an escape hatch, it is a bypass.
+#
+# NO ADJUDICATION HERE (Rule 26; v0.54.3's "one predicate, two implementations, and the tool
+# wins"). This hook picks the SERIES by mtime -- "which cycle is live" is a RECENCY question,
+# and mtime is the right signal for it. It does NOT pick the pass: "which pass is last" is an
+# ORDERING question, mtime is the WRONG signal for that, and using it there was order_key()'s
+# original bug. The validator owns ordering, and it answers the only question this hook asks:
+# may I dispatch? Exit 3 means no.
+ADVANCING_TOOL=0
+case "$TOOL_NAME" in Agent|Task|Skill|TaskCreate) ADVANCING_TOOL=1 ;; esac
+
+if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
+  ART_DIR="${LOG_DIR}/planning-artifacts"
+  CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/validate-adversarial-convergence.sh"
+  NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"
+
+  if [ -n "$NEWEST_PASS" ] && [ -f "$CONVERGENCE_VALIDATOR" ]; then
+    SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
+    CYCLE_OUT="$(bash "$CONVERGENCE_VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"
+    CYCLE_RC=$?
+    CYCLE_STATE="$(printf '%s' "$CYCLE_OUT" | cut -f1)"
+    CYCLE_PASS="$(printf '%s' "$CYCLE_OUT" | cut -f2)"
+
+    # FAIL OPEN on anything but an explicit STOP. A hook that fails CLOSED on its own bug
+    # wedges the pipeline, and a wedged pipeline gets the hook switched off -- after which
+    # nothing is watching at all. Exit 3 is the only code that denies; the gate (Check 24,
+    # fail-closed) remains the backstop for everything else.
+    #
+    # Exit 0 covers CONTINUE, CONVERGED and RESOLVED. RESOLVED is the whole point: it means
+    # a valid resolution record exists for the stopped pass, so the VERIFICATION pass is
+    # exactly what should be dispatched now. The validator decides that; this hook does not
+    # know what a resolution record is.
+    if [ "$CYCLE_RC" -eq 3 ]; then
+      if [ "$CYCLE_STATE" = "DIVERGENT" ]; then
+        STOP_WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\` -- it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected. The next pass finds the next wave."
+      else
+        STOP_WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass (through \`$(basename "$CYCLE_PASS")\`). It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified; the next pass falsifies the rewrite with one more counterexample."
+      fi
+
+      STOP_REASON="AI/DLC Rule 8: THE ADVERSARIAL CYCLE HAS STOPPED (${CYCLE_STATE}). \`${TOOL_NAME}\` would dispatch another pass, so it is DENIED.
+
+${STOP_WHAT}
+
+ANOTHER PASS IS NOT THE REMEDY. Running one is what produced this state.
+
+THE EXIT:  STOP -> ADJUDICATE -> RESOLVE -> VERIFY
+
+1. STOP. You are here. Nothing further runs on the artifact as it stands.
+2. ADJUDICATE. Put this to the operator. Present the finding, the repair that caused it,
+   whether that repair weakened something LOAD-BEARING (an AC, a predicate, a guard, a
+   LOCKED_REQUIREMENTS entry -- test: after the edit, can the check still FAIL?), and your
+   recommended resolution KIND.
+3. RESOLVE. A repair edits the artifact to close findings on UNCHANGED scope. That is what
+   diverged; doing it again is not a resolution. A resolution changes WHAT IS UNDER REVIEW:
+     REVERT_REPAIR    put the artifact back to a state an earlier pass actually reviewed
+     CUT_SCOPE        remove the contested scope; the artifact must get SMALLER
+     CHANGE_APPROACH  a different approach entirely, on the operator's authority
+     RESTART_CYCLE    abandon the series, archive it, start over
+   Write the record: ${ART_DIR}/<sprint>-<artifact>-resolution-p<N>.md
+   That write is ALLOWED right now, paused or not. It is the one write this pause is
+   waiting for, and it is what lifts this denial.
+   (FREEZE is deliberately NOT on the list. A hard block means CRITICALs rose in text that
+   is ALREADY frozen -- freezing it again removes nothing, and no gate can pass over it.)
+4. VERIFY. Dispatch ONE pass on the resolved artifact, as the NEXT PASS NUMBER IN THIS SAME
+   SERIES, declaring \`resolves_divergence: <the record>\`. That is the terminal clean pass
+   Check 24 requires. Do not open a new series: the glob spans both, the pass numbers
+   collide, and the gate then fails on a cycle that did nothing wrong.
+
+Clearing the pause flag does NOT lift this. It is not a stall and Rule 3 does not override it."
+
+      mkdir -p "$LOG_DIR"
+      {
+        echo "## ${TIMESTAMP} -- ADVERSARIAL_STOP_DENIED"
+        echo "- Session: ${SESSION_ID}"
+        echo "- Tool denied: ${TOOL_NAME}"
+        echo "- ${CYCLE_STATE} at $(basename "$CYCLE_PASS"); no resolution record present"
+        echo ""
+      } >> "$LOG_FILE"
+
+      jq -n --arg reason "$STOP_REASON" \
+        '{
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: $reason
+          }
+        }'
+      exit 0
+    fi
+  elif [ -n "$NEWEST_PASS" ]; then
+    # A partial install must not SILENTLY disable the hard block -- that is the
+    # `core/git-hooks/`-at-a-dead-path failure, an enforcer at a path nothing reads with
+    # nothing saying so. Leave a trace retro's Rule 25(c) audit reads, and fail open.
+    mkdir -p "$LOG_DIR"
+    {
+      echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
+      echo "- Session: ${SESSION_ID}"
+      echo "- scripts/validate-adversarial-convergence.sh is MISSING; the Rule 8 stop state"
+      echo "  cannot be adjudicated and the divergence/stall hard block is NOT armed."
+      echo ""
+    } >> "$LOG_FILE"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# Check 2b: not paused -> allow (the common path; keep it cheap)
 # -----------------------------------------------------------------------------
 [ -f "$PAUSE_FLAG" ] || exit 0
 
@@ -132,6 +259,20 @@ case "$TOOL_NAME" in
       # live: the updater was denied mid-reconcile on its own ledger.
       # This case must precede the _bmad-output match below -- first match wins.
       */_bmad-output/ai-dlc-update/*|_bmad-output/ai-dlc-update/*) ;;
+
+      # THE RESOLUTION RECORD IS THE ADJUDICATION ARTIFACT, NOT PIPELINE OUTPUT.
+      # It is written when the pipeline is STOPPED, by definition -- a divergence or a
+      # stall raised the pause flag, and this file is what the operator's adjudication
+      # writes down. It advances nothing: it does not pass a gate, does not add scope,
+      # and cannot be produced by any other tool (Bash cannot author it; Write can).
+      #
+      # DENYING IT WOULD DENY THE EXIT. Check 2a above refuses every dispatch until this
+      # record exists; if the pause flag then refuses the record, the two checks lock the
+      # pipeline against itself and the only way out is to disable a hook. That is the
+      # deadlock this release exists to remove, rebuilt out of its own parts.
+      # Same shape and same reasoning as the ai-dlc-update carve-out directly above.
+      */_bmad-output/planning-artifacts/*-resolution-p*.md|_bmad-output/planning-artifacts/*-resolution-p*.md) ;;
+
       */_bmad-output/*|_bmad-output/*) ADVANCING=1 ;;
     esac
     ;;

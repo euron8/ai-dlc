@@ -1,12 +1,26 @@
 #!/usr/bin/env bash
 # Exercise validate-adversarial-convergence.sh against the check-24 fixture.
 #
-# Exit 0 iff the validator returns the correct verdict on all five seeded series.
-# The one that decides shippability is `nitpicks-remain`: it must PASS. A naive
-# "the last pass must have zero findings" implementation fails it, and in doing so
-# makes the exit condition "continue until only nitpicks remain" unreachable --
-# which is the v0.46.0 defect this check exists to close, reintroduced one layer
-# down.
+# Exit 0 iff the validator returns the correct verdict on every seeded series.
+#
+# TWO CASES DECIDE SHIPPABILITY, and they pull in opposite directions:
+#
+#   nitpicks-remain    must PASS. A naive "the last pass must have zero findings"
+#                      implementation fails it, and in doing so makes the exit condition
+#                      "continue until only nitpicks remain" unreachable -- the v0.46.0
+#                      defect, reintroduced one layer down.
+#   divergent-resolved must PASS. It is the SANCTIONED EXIT from a hard block, and before
+#                      v0.59.0 it did not exist: arm D demanded a terminal clean pass while
+#                      the Stop hook's deny reason said "do NOT dispatch another adversarial
+#                      pass, and do NOT clear the pause flag to get past this." If this case
+#                      goes red, the deadlock is back.
+#
+# AND A RULE ABOUT HOW THIS FILE ASSERTS. Several v0.59.0 cases exit 1 BOTH before and after
+# the fix -- `stalled-then-diverges` exits 1 today via arm D alone and exits 1 after via arms
+# D and E. A fixture that checked only the exit code would score a FALSE PASS against the
+# broken validator. That is this repo's own defect class (a check that cannot fire reads
+# exactly like one that passed) reproduced inside the test written to catch it. So: every
+# v0.59.0 case asserts on the MESSAGE.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -26,21 +40,55 @@ ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
 
 FAILURES=0
+ASSERTIONS=0
 
-# $1 case-dir  $2 expected exit (0|1)  $3 why
-# $4 (optional) overrides the series prefix. The v0.55.3 cases name their artifacts
-# `-p<N>` on purpose -- that IS the regression under test -- so they cannot share the
-# legacy `-pass<N>` prefix.
+# $1 case-dir  $2 expected exit (0|1)  $3 why  $4 (optional) series prefix
 expect() {
   local case_dir="$1" want="$2" why="$3" prefix="${4:-s1-adversarial-pass}" got out
+  ASSERTIONS=$((ASSERTIONS + 1))
   out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" 2>&1)"
   got=$?
   if [ "$got" -eq "$want" ]; then
-    printf '  ok    %-22s exit=%s  (%s)\n' "$case_dir" "$got" "$why"
+    printf '  ok    %-28s exit=%s  (%s)\n' "$case_dir" "$got" "$why"
   else
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-22s exit=%s want=%s  (%s)\n' "$case_dir" "$got" "$want" "$why"
+    printf '  FAIL  %-28s exit=%s want=%s  (%s)\n' "$case_dir" "$got" "$want" "$why"
     printf '%s\n' "$out" | sed 's/^/          | /'
+  fi
+}
+
+# $1 case-dir  $2 series prefix  $3 label  $4... required substrings (ALL must appear)
+# The exit code is NOT the assertion here -- the message is. See the header.
+expect_says() {
+  local case_dir="$1" prefix="$2" label="$3"; shift 3
+  local out missing=""
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" 2>&1)"
+  for want in "$@"; do
+    printf '%s' "$out" | grep -qF -- "$want" || missing="$missing
+            missing: \"$want\""
+  done
+  if [ -z "$missing" ]; then
+    printf '  ok    %-28s %s\n' "$label" "says what it must"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s\n' "$label" "the right exit code for the WRONG reason:$missing"
+  fi
+}
+
+# $1 case-dir  $2 series prefix  $3 expected STATE  $4 expected exit  $5 why
+expect_state() {
+  local case_dir="$1" prefix="$2" want_state="$3" want_rc="$4" why="$5" out state rc
+  ASSERTIONS=$((ASSERTIONS + 1))
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state 2>/dev/null)"
+  rc=$?
+  state="$(printf '%s' "$out" | cut -f1)"
+  if [ "$state" = "$want_state" ] && [ "$rc" -eq "$want_rc" ]; then
+    printf '  ok    %-28s %s/%s  (%s)\n' "$case_dir" "$state" "$rc" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s %s/%s want=%s/%s  (%s)\n' \
+      "$case_dir" "${state:-<none>}" "$rc" "$want_state" "$want_rc" "$why"
   fi
 }
 
@@ -48,10 +96,6 @@ echo "check-24 adversarial-convergence fixture"
 echo
 
 # --- backward compatibility (pre-v0.52.0 artifacts: no prior_scope field) -----
-# These five seed NO findings_critical_prior_scope. Their verdicts are unchanged by
-# v0.52.0, and that is the point: absent field => prior := crit => the old predicate,
-# exactly. `divergent` is the one that proves the default is FAIL-CLOSED -- a missing
-# field must not become a way to dodge a hard block.
 expect converged           0 "clean terminal pass -- the cycle the machinery should produce"
 expect nitpicks-remain     0 "THE DECOY: 0C/0M with 5 MINOR open is 'only nitpicks remain' -- MET"
 expect refused-to-converge 1 "S289 pass-4 shape: clean residue, still stamps NOT_MET"
@@ -60,64 +104,91 @@ expect no-verdict          1 "a pass with no verdict: key is un-adjudicable"
 
 echo
 # --- v0.52.0: the scope-relative predicate ------------------------------------
-# scope-grew-converges is THE RELEASE. Against the pre-v0.52.0 validator it FAILS (C)
-# -- that is the false hard block, and it is S290's p6 -> p7 shape, which cost the
-# operator a real adjudication. If this case ever goes red, the fix is gone.
 expect scope-grew-converges   0 "RELEASE: CRIT rise 2->3 but only 1 in prior scope -- NOT divergence"
-expect repair-injected        1 "3 of 3 CRIT in PRIOR scope: real divergence still caught (S289 3->4->7)"
-expect scope-grew-unconverged 1 "S290's shape: never converges on a moving artifact -- FAIL (D)"
-
-# Check D must fail for the RIGHT REASON. A FAIL with the old "run another pass"
-# advice is the bug being fixed -- it is what produced S290's passes 2 through 8 --
-# so assert the remedy string, not merely the exit code.
-out="$(bash "$VALIDATOR" --series "$ROOT/scope-grew-unconverged/s1-adversarial-pass" 2>&1)"
-if printf '%s' "$out" | grep -q "MOVING ARTIFACT" && printf '%s' "$out" | grep -q "CUT the added scope"; then
-  printf '  ok    %-22s Check D names the real remedy (freeze + cut the added scope)\n' "remedy-text"
-else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s Check D failed, but did NOT name the moving artifact or the cut.\n' "remedy-text"
-  printf '        A FAIL for the wrong reason is the defect this release exists to fix.\n'
-fi
+expect repair-injected        1 "3 of 3 CRIT in PRIOR scope: real divergence still caught"
+expect scope-grew-unconverged 1 "never converges on a MOVING artifact -- FAIL (D)"
+expect_says scope-grew-unconverged s1-adversarial-pass "D-remedy" \
+  "MOVING ARTIFACT" "CUT the added scope"
 
 echo
 # --- v0.55.3: numeric ordering + the STALL rung -------------------------------
-# long-series-p-naming is decided by ORDERING ALONE: its true last pass (p11) stamps
-# EXIT_CONDITION_MET, its lexicographic last pass (p9) stamps NOT_MET. Under the old
-# order_key -- which matched `pass<N>` and so recognized NONE of these `-p<N>` files --
-# every one keyed 999, the stable sort preserved glob order, and Check D read p9. If this
-# case ever goes red, the sort regressed and every >=10-pass series is adjudicated on the
-# wrong artifact.
-expect long-series-p-naming 0 "11 passes, -p<N> names: ordered NUMERICALLY, so p11 (MET) is terminal, not p9" s1-adversarial-p
-expect stalled              1 "S290: 0 CRITICAL, MAJOR pinned at 1 for 3 passes -- STALLED, FAIL (E)" s1-adversarial-p
+expect long-series-p-naming 0 "11 passes, -p<N>: ordered NUMERICALLY, so p11 (MET) is terminal, not p9" s1-adversarial-p
+expect stalled              1 "0 CRITICAL, MAJOR pinned at 1 for 3 passes -- STALLED, FAIL (E)" s1-adversarial-p
 expect stall-then-converges 0 "DECOY: holds MAJOR one pass short of K, then clears it -- E must NOT fire" s1-adversarial-p
+expect_says stalled s1-adversarial-p "E-remedy" \
+  "E -- STALL" "ANOTHER PASS IS NOT THE REMEDY" "VERIFY THE DISPUTED FACT MECHANICALLY"
 
-# E must fail for the RIGHT REASON, and the reason IS the remedy. Check D's advice for
-# this shape was "run another pass to a clean verdict" -- the instruction that produced
-# S290's passes 11, 12 and 13. If E fires but still says that, nothing was fixed.
-out="$(bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" 2>&1)"
-if printf '%s' "$out" | grep -q "STALLED" \
-   && printf '%s' "$out" | grep -q "ANOTHER PASS IS NOT THE REMEDY" \
-   && printf '%s' "$out" | grep -qi "VERIFY THE DISPUTED FACT MECHANICALLY"; then
-  printf '  ok    %-22s Check E names the stall AND the remedy (verify mechanically / cut / escalate)\n' "stall-remedy"
-else
+# E must PRE-EMPT D. A stalled series that merely inherits D's generic "run another pass to
+# a clean verdict" is the bug wearing a new error code.
+ASSERTIONS=$((ASSERTIONS + 1))
+if bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" 2>&1 \
+   | grep -q "Either run another pass to a clean verdict"; then
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s E fired but did not name the stall or the remedy.\n' "stall-remedy"
-  printf '        "Run another pass" is the advice that produced S290 p11, p12 and p13.\n'
-fi
-
-# And E must PRE-EMPT D. A stalled series that merely inherits D's generic "run another
-# pass to a clean verdict" is the bug wearing a new error code.
-if printf '%s' "$out" | grep -q "Either run another pass to a clean verdict"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s a STALLED series still got Check D generic advice. E must pre-empt D.\n' "stall-preempts-d"
+  printf '  FAIL  %-28s a STALLED series still got Check D generic advice. E must pre-empt D.\n' "stall-preempts-d"
 else
-  printf '  ok    %-22s E pre-empts D: the stalled series is not told to run another pass\n' "stall-preempts-d"
+  printf '  ok    %-28s E pre-empts D: the stalled series is not told to run another pass\n' "stall-preempts-d"
 fi
 
 echo
+# --- v0.59.0: THE RESUME CONTRACT ---------------------------------------------
+
+# THE RELEASE. If this goes red, the sanctioned exit is gone and the deadlock is back.
+expect divergent-resolved 0 "THE RELEASE: hard block -> REVERT_REPAIR record -> verification pass -> MET" s1-adversarial-p
+
+# D2: arm E must be REACHABLE when the series ends DIVERGENT, and must name the PEAK.
+# Exits 1 before and after -- only the message distinguishes a fixed validator from a broken one.
+expect stalled-then-diverges 1 "plateau at p2-p4, then divergent p5: BOTH D and E must fire" s1-adversarial-p
+expect_says stalled-then-diverges s1-adversarial-p "E-reachable-past-D" \
+  "E -- STALL" "should have STOPPED at" "s1-adversarial-p4.md"
+
+# F1: a pass ran after a hard block and declared nothing.
+expect divergent-unresolved 1 "p3 ran after p2's hard block, declaring no resolution -- FAIL (F)" s1-adversarial-p
+expect_says divergent-unresolved s1-adversarial-p "F1-declared" \
+  "F -- RESOLUTION" "STOP -> ADJUDICATE -> RESOLVE -> VERIFY" "resolves_divergence"
+
+# F3: THE LIVE DEADLOCK. Freezing cannot clear a hard block, and the message must say why.
+expect divergent-frozen 1 "FREEZE_SCOPE cannot resolve a prior-scope hard block -- FAIL (F)" s1-adversarial-p
+expect_says divergent-frozen s1-adversarial-p "F3-freeze-is-void" \
+  "does not remove a CRITICAL that is already inside the frozen text" \
+  "ALREADY FROZEN"
+
+# F5: the two launder paths that close by arithmetic and by construction.
+expect divergent-laundered-cut 1 "CUT_SCOPE that GREW: a repair wearing a resolution's name" s1-adversarial-p
+expect_says divergent-laundered-cut s1-adversarial-p "F5-cut-arithmetic" \
+  "declares CUT_SCOPE but the artifact did not shrink"
+expect divergent-laundered-revert 1 "REVERT_REPAIR landing on a sha no pass ever notarized" s1-adversarial-p
+expect_says divergent-laundered-revert s1-adversarial-p "F5-revert-construction" \
+  "matches no" "earlier pass in this series"
+
+# D4/G: the dead cycle's tail.
+expect restart-cycle 1 "restart left p4-p6 of the dead cycle on disk -- FAIL (G)" s1-adversarial-p
+# The message must name BOTH causes. Driving this against the reference consumer's live series
+# fired G on a pass whose `invoked_at` was simply MIS-TYPED — and the first draft of the message
+# confidently diagnosed a dead-cycle tail. An error message that asserts the wrong cause with
+# confidence is the exact defect v0.57.0's changelog shipped, in the release that retracts it.
+expect_says restart-cycle s1-adversarial-p "G-chronology" \
+  "G -- CHRONOLOGY" "DEAD CYCLE'S TAIL" "archive the abandoned series" \
+  "A MIS-STAMPED" "Do not back-fit it to make"
+
+# Arm A: the free bypass. Omit findings_major on one pass and arm E used to go dark.
+expect counts-omitted 1 "a verdict with no derivable MAJOR count turns arm E OFF -- FAIL (A)" s1-adversarial-p
+expect_says counts-omitted s1-adversarial-p "A-counts-required" \
+  "severity counts are not derivable" "arm E in particular goes SILENT"
+
+echo
+# --- v0.59.0: --cycle-state, the mode the hooks call --------------------------
+# The hooks hold NO logic. They shell out, read the exit code, and deny on 3. These five
+# assertions are the entire contract between the validator and both hooks.
+expect_state in-progress               s1-adversarial-p CONTINUE  0 "DECOY: healthy NOT_MET cycle -- arm D must NOT run here"
+expect_state converged                 s1-adversarial-pass CONVERGED 0 "terminal MET: nothing to stop"
+expect_state stalled                   s1-adversarial-p STALLED   3 "the STOP code: another pass is not the remedy"
+expect_state divergent-terminal        s1-adversarial-p DIVERGENT 3 "the reference consumer's parked state, exactly"
+expect_state divergent-terminal-resolved s1-adversarial-p RESOLVED 0 "THE RESUME: the record exists, so the verification pass is permitted"
+
+echo
 if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of 14 assertions wrong."
+  echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
   exit 1
 fi
-echo "PASS: all 11 cases + the Check D and Check E remedy text correct."
+echo "PASS: all $ASSERTIONS assertions correct."
 exit 0

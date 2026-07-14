@@ -162,12 +162,25 @@ Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted
 residue and exactly one verdict from this set. There is no free-text verdict.
 
 ```
+artifact: <path of the artifact you reviewed>
+artifact_sha: <sha256 of that file, as you read it>
 findings_critical: <int>
 findings_critical_prior_scope: <int>   # of the above, those in text the PRIOR pass also reviewed
 findings_major: <int>
 findings_minor: <int>
+resolves_divergence: <path>            # ONLY if the pass before you STOPPED. See below.
 verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
 ```
+
+`artifact_sha` is `shasum -a 256 <artifact> | cut -d' ' -f1` (or `sha256sum`). It is not a
+judgment and you cannot shade it: it is a computed fact about a file you already read. It
+makes every pass a **notarization of the bytes it reviewed**, which is what lets the gate
+later prove that a claimed revert really did land on a state some pass actually saw.
+
+**The counts are part of the vocabulary, not an optional garnish.** A verdict is adjudicated
+*against* the residue it reports. Omit `findings_major` and the stall rung goes silent for
+the entire series — so the gate now rejects any pass that stamps a verdict without derivable
+CRITICAL and MAJOR counts.
 
 **The residue decides the verdict. You do not.**
 
@@ -203,6 +216,28 @@ likely to hard-block your cycle.
 
 **A review that converges in prose and refuses to converge in its field has not
 converged.** Say the outcome in the field.
+
+## `resolves_divergence` — you are the VERIFICATION pass
+
+If the pass before you stamped `DIVERGENT_HARD_BLOCK`, or the cycle had stalled, then you
+are not an ordinary next pass. The cycle **stopped**, the operator adjudicated it, and
+someone changed *what is under review*. You are here to check that it worked.
+
+Declare `resolves_divergence: <path to the resolution record>`. Without it the gate fails:
+a pass that follows a hard block and declares nothing is indistinguishable from the lead
+running another repair pass, which is the thing that diverged.
+
+Then read the record before you review anything, and **hold it to its own claim**:
+
+- `REVERT_REPAIR` — the artifact should be back at a state an earlier pass reviewed.
+- `CUT_SCOPE` — the contested scope should be **gone**, not rewritten.
+- `CHANGE_APPROACH` / `RESTART_CYCLE` — the operator authorized a different approach.
+
+A record that says `CUT_SCOPE` over an artifact that grew is a repair wearing a
+resolution's name. Say so, as a CRITICAL. The gate checks the arithmetic; you check whether
+the claim is honest. Neither of you is redundant.
+
+You review the RESOLVED artifact. You do not re-adjudicate the operator's decision.
 
 ## Later passes review the REPAIR, not the document again
 

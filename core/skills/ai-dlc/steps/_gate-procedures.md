@@ -115,14 +115,76 @@ again.
 
 It writes findings to `_bmad-output/planning-artifacts/s<N>-<artifact>-adversarial-p<M>.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-review`,
-`mode: subagent`, the `tool_use_id` of THIS Agent dispatch, the four `findings_*` counts, and the
-`verdict:`. Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` token.
+`mode: subagent`, the `tool_use_id` of THIS Agent dispatch, `artifact` + `artifact_sha`, the four
+`findings_*` counts, and the `verdict:`. Filename numbering is load-bearing: Check 24 orders the
+series by the `p<M>` token.
 
 **Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <findings_path>`.
 
 **Zero findings on a later pass is the EXPECTED outcome, not a suspicious one.** The cycle exists
 to reach it. An adversary that manufactures a finding to justify its pass sends the remediator to
 edit a correct artifact, and the edit is where new defects come from.
+
+## Divergence resolution dispatch (referenced by step files)
+
+When the cycle **STOPS** — a pass stamps `DIVERGENT_HARD_BLOCK`, or Check E fires a STALL — the
+Rule 8 cycle does not end. It waits. Execute this, in this order. You cannot skip a step: the
+PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 has produced a file.
+
+**STOP → ADJUDICATE → RESOLVE → VERIFY**
+
+1. **STOP.** No further pass on the artifact as it stands. Do not dispatch a remediator: a repair
+   on unchanged scope is what diverged, and running one now is the failure repeating.
+2. **ADJUDICATE.** Escalate to the operator (Rule 11(a)). Present the finding, the repair that
+   caused it, whether that repair weakened something LOAD-BEARING (an AC, a predicate, a guard, a
+   `LOCKED_REQUIREMENTS` entry — test: *after the edit, can the check still FAIL?*), and your
+   recommended resolution KIND. **The operator picks the kind.**
+3. **RESOLVE.** *A repair edits the artifact to close findings on UNCHANGED scope. A resolution
+   changes WHAT IS UNDER REVIEW.* The LEAD writes the record — not the adversary (it would only be
+   echoing the lead's claim) and not the remediator (it authors repairs, which is the thing being
+   stopped). Write it to `_bmad-output/planning-artifacts/s<N>-<artifact>-resolution-p<M>.md`
+   (`<M>` = the pass being resolved). **This write is permitted while paused**; it is the one write
+   the pause is waiting for.
+
+   ```
+   <!-- ADVERSARIAL_RESOLUTION v1
+   resolves: <path of the DIVERGENT_HARD_BLOCK pass>
+   resolution: REVERT_REPAIR | CHANGE_APPROACH | CUT_SCOPE | RESTART_CYCLE
+   adjudicated_by: operator
+   artifact: <path of the artifact under review>
+   artifact_sha_before: <MUST equal the resolved pass's artifact_sha>
+   artifact_sha_after:  <sha256 after the resolution>
+   artifact_bytes_before / artifact_bytes_after: <int>
+   scope_delta: <what changed, concretely>
+   locked_requirements_touched: <none | entries + the operator's authorization>
+   operator_authorization: <the operator's own words, verbatim>
+   archive: <dir>            # RESTART_CYCLE only
+   ADVERSARIAL_RESOLUTION_END -->
+   ```
+
+   | kind | what it means | what the gate checks |
+   |---|---|---|
+   | `REVERT_REPAIR` | put the artifact back to a state an earlier pass reviewed | `artifact_sha_after` must equal some earlier pass's `artifact_sha` |
+   | `CUT_SCOPE` | remove the contested scope | `artifact_bytes_after` **<** `artifact_bytes_before` |
+   | `CHANGE_APPROACH` | a different approach, on the operator's authority | sha changed; `scope_delta` + `operator_authorization` present |
+   | `RESTART_CYCLE` | abandon the series and start over | as above, **plus** the passes MOVED to an existing `archive:` dir |
+
+   **FREEZE is not on this list and is rejected by name.** A hard block means CRITICALs rose in
+   text a previous pass had already reviewed — text that is *already frozen*. Freezing it again
+   removes nothing: the verification pass reads the same bytes and finds the same CRITICALs. There
+   is no wording of a freeze that passes Check 24. (Freezing IS the remedy for a *moving artifact*
+   — a cycle that cannot converge because the sprint grows under it. Opposite failure, opposite
+   remedy. Conflating the two parked a live pipeline for a day.)
+
+   **`RESTART_CYCLE` must MOVE the abandoned passes**, not leave them. A restart writes p1, p2, p3
+   over the dead cycle's files — and if the dead cycle ran to p17, then p4…p17 are still on disk,
+   the glob chains them onto the new series, and the gate adjudicates the corpse. `git mv` them to
+   `planning-artifacts/archive/<series>-cycle-<n>/`. Do not delete them; retro reads them.
+
+4. **VERIFY.** Dispatch **ONE** adversary (procedure above) against the RESOLVED artifact, as the
+   **next pass number in the SAME series**, declaring `resolves_divergence: <the record>`. Do not
+   open a new series: `--series` spans both, the pass numbers collide, and the gate then fails on
+   a cycle that did nothing wrong. That pass is the terminal clean pass Check 24 requires.
 
 ## Adversarial repair dispatch (referenced by step files)
 
