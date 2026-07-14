@@ -45,7 +45,7 @@ backfilled artifacts:
    **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity
    **Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes, apply all fixes.
+3. `/bmad-review-adversarial-general` — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `_gate-procedures.md`
    \"Auto-handoff evaluation\") at `Seam D` with the label

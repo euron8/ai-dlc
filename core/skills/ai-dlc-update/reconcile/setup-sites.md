@@ -130,6 +130,15 @@ sites:
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 
+  - id: remediator-model-personal
+    file: core/team-roles/remediator.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: remediator-model-bedrock
+    file: core/team-roles/remediator.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
   - id: ppe-model-personal
     file: core/team-roles/protected-path-editor.md
     shape: single-line
