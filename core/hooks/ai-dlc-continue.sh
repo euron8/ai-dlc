@@ -218,6 +218,54 @@ The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more h
 fi
 
 # -----------------------------------------------------------------------------
+# Check 0b: Adversarial divergence hard block (Rule 8)
+# -----------------------------------------------------------------------------
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: an adversarial pass stamps `verdict: DIVERGENT_HARD_BLOCK` -- the
+#     repair is injecting defects into text a previous pass had already cleared -- and the
+#     lead runs ANOTHER PASS anyway. Rule 8 says divergence is a HARD_BLOCK: stop, escalate,
+#     change approach. Nothing enforced it. Check 24 reads the verdict, but Check 24 runs at
+#     the GATE, after the cycle is over, so the one signal that means STOP had no teeth at
+#     the only moment it mattered.
+#   Measured: a live cycle stamped DIVERGENT_HARD_BLOCK at pass 15 and the lead ran pass 16;
+#     it stamped DIVERGENT_HARD_BLOCK again at pass 17. Between them MAJORs went 1 -> 4 and
+#     CRITICALs began appearing in PRIOR scope -- the divergence compounding, exactly as
+#     Rule 8 predicts, for two passes after the machinery said stop.
+#   False-positive cost: one operator adjudication on a cycle that was going to need one.
+#   Removal condition: retire when two consecutive sprints record zero ignored divergence
+#     verdicts.
+#
+# NO NEW MECHANISM (Rule 26). This raises the EXISTING pause flag, which already has teeth:
+# `ai-dlc-continue.sh` (Check 1, below) then ALLOWS the pipeline to stop, and
+# `ai-dlc-acknowledge.sh` DENIES every pipeline-advancing tool call (Agent/Task/Skill/
+# Write/Edit) until the operator adjudicates and clears it. So the lead CANNOT dispatch the
+# next adversarial pass. That is Rule 8's "stop and escalate", enforced.
+#
+# Idempotent by artifact: once raised for a given pass file, never re-raised for that file.
+# The operator clearing the flag IS the adjudication, and this must not fight it.
+DIVERGENCE_STATE="${LOG_DIR}/.divergence-raised"
+NEWEST_PASS="$(ls -t "${LOG_DIR}"/planning-artifacts/*adversarial*p*.md 2>/dev/null | head -1)"
+if [ -n "$NEWEST_PASS" ] && [ -f "$NEWEST_PASS" ]; then
+  V="$(awk '/SKILL_INVOCATION_PROVENANCE v1/{i=1;next} /SKILL_INVOCATION_PROVENANCE_END/{i=0} i && /^verdict:/{sub(/^verdict:[ \t]*/,"");print;exit}' "$NEWEST_PASS" 2>/dev/null | tr -d '\r')"
+  if [ "$V" = "DIVERGENT_HARD_BLOCK" ] && [ "$(cat "$DIVERGENCE_STATE" 2>/dev/null)" != "$NEWEST_PASS" ]; then
+    printf '%s\n' "$NEWEST_PASS" > "$DIVERGENCE_STATE"
+    printf 'DIVERGENT_HARD_BLOCK: %s\n' "$(basename "$NEWEST_PASS")" > "$PAUSE_FLAG"
+    {
+      echo "## ${TIMESTAMP} -- DIVERGENCE_HARD_BLOCK"
+      echo "- Session: ${SESSION_ID}"
+      echo "- $(basename "$NEWEST_PASS") stamps DIVERGENT_HARD_BLOCK; pipeline paused (Rule 8)"
+      echo ""
+    } >> "$LOG_FILE"
+    jq -n --arg r "RULE 8 -- ADVERSARIAL DIVERGENCE. $(basename "$NEWEST_PASS") stamps \`verdict: DIVERGENT_HARD_BLOCK\`: it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected, and the next pass only finds the next wave.
+
+ANOTHER PASS IS NOT THE REMEDY. The pipeline is PAUSED and the operator must adjudicate. Do NOT dispatch another adversarial pass, and do NOT clear the pause flag to get past this.
+
+Present to the operator: (1) the divergent finding and the repair that caused it; (2) whether the repair deleted or weakened something LOAD-BEARING (an AC, a predicate, a LOCKED_REQUIREMENTS entry) -- a repair that makes a check unfalsifiable is the defect, not the fix; (3) your recommended change of approach -- shrink the artifact, revert the repair, or cut the contested claim." '{decision:"block",reason:$r,suppressOutput:true}'
+    exit 0
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # Check 1: Pause flag (user-initiated pause)
 # -----------------------------------------------------------------------------
 if [ -f "$PAUSE_FLAG" ]; then

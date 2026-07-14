@@ -169,6 +169,11 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
    **A MAJOR that will not fall for two consecutive passes at zero CRITICAL is a
    STALL, not progress.** Another pass buys another counterexample. Derive the
    disputed fact, or cut the claim, then escalate (gate Check 24 §E).
+   **A `DIVERGENT_HARD_BLOCK` STOPS THE CYCLE.** Do not run another pass, and do
+   not clear the pause flag to get past it — `ai-dlc-continue.sh` raises it and
+   the operator adjudicates. First ask what the last repair DELETED: an AC, a
+   predicate, or a `LOCKED_REQUIREMENTS` entry that no longer has anything to
+   fail against is the divergence, and reverting that repair is the remedy.
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
    **Run sub-step snapshot update after each adversarial pass.**

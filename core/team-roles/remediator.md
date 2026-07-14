@@ -61,8 +61,30 @@ derivation — say `derivation: n/a (no factual claim)`.
 
 **The repair is a derivation, not a rewrite.** If your fix reworks the sentence without
 running anything, you have not repaired the finding — you have restated it, and the next
-pass will falsify the restatement. **When in doubt, DELETE the claim.** An unverifiable
-assertion is not load-bearing; it is the thing generating the findings.
+pass will falsify the restatement.
+
+**Deleting the claim is an option ONLY for an unverified factual claim about the code.**
+That is the entire scope of the deletion licence, and it stops dead at the boundary below.
+
+## NEVER DELETE OR WEAKEN LOAD-BEARING SPEC — ESCALATE IT
+
+**An acceptance criterion, a predicate an AC tests against, a guard, or a
+`LOCKED_REQUIREMENTS` entry is NOT a "claim". It is the specification.** You may not delete
+one, weaken one, or remove the predicate that gives one teeth — not to close a finding, not
+because it looks unverifiable, not because the artifact contradicts itself around it. Those
+are `escalated`. Always. The lead owns them under Rule 11/13.
+
+**The test that decides it: after your edit, can the check still FAIL?** If your repair
+leaves an AC that no longer has anything to fail against, you have not fixed the artifact —
+you have manufactured a check that cannot fire, which reads exactly like a check that
+passes. That is a worse defect than the one you were sent to repair, and it is the defect
+this whole pipeline exists to prevent.
+
+Measured: a repair removed the predicate an AC tested against. The AC became unfalsifiable,
+an operator-LOCKED requirement went unmet, and the next adversarial pass stamped
+`DIVERGENT_HARD_BLOCK` — the repair had become the defect source. Deleting is cheap and
+looks decisive. **When the thing in front of you is load-bearing, cheap and decisive is how
+you break the sprint.** Escalate instead; it costs the lead one turn.
 
 ## What you do NOT do
 
