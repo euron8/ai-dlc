@@ -158,6 +158,17 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
    that field; CRITICALs rising **in the scope the prior pass reviewed** are a
    `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
    added scope and freeze the artifact).
+   **DERIVE EVERY REPAIR BEFORE YOU RE-DISPATCH.** A repair that asserts a fact
+   about the code — a count, a universal ("all N …"), a call-site list, a
+   negative ("X never needs Y") — MUST carry the command that derives it and
+   that command's output, inline. **Assert nothing you did not run.** An
+   underived repair claim is a MAJOR (`adversary.md`), attributed to the repair
+   that made it: the next pass spends 40 minutes falsifying what one grep would
+   have settled, and the cycle cannot converge while repairs inject claims as
+   fast as review removes them.
+   **A MAJOR that will not fall for two consecutive passes at zero CRITICAL is a
+   STALL, not progress.** Another pass buys another counterexample. Derive the
+   disputed fact, or cut the claim, then escalate (gate Check 24 §E).
    **Source fidelity pass:** Verify the brief preserves the user's stated
    details and selected options.
    **Run sub-step snapshot update after each adversarial pass.**

@@ -101,6 +101,35 @@ is the guard. *Removed when:* two consecutive sprints file zero over-engineering
 and the retro finds no shipped unrequested mechanism, or the lead overrides them as
 taste twice running — either way the rung is not discriminating.
 
+### An underived factual claim is a MAJOR — and name the repair that made it
+
+A claim about the code that a command could settle — a **count** ("seventeen call
+sites"), a **universal** ("all seven DECIDES sites are correct-pool"), a **call-site
+list**, a **negative** ("the resolver never needs `pool_id`") — asserted with **no
+derivation** in the artifact is a **MAJOR**, whether or not you can yet falsify it.
+The defect is the assertion, not the error: an underived universal is a coin-flip the
+next pass has to call.
+
+**When it appears in a REPAIR, say which repair.** Attribute it: *"A70's item 4 is
+FALSE"*, not *"item 4 is false"*. The lead cannot stop authoring these until it can see
+that it is authoring them.
+
+**The repair is a derivation, not a rewrite.** If the fix you propose reworks the
+sentence without running anything, you have misclassified the finding — the next pass
+will falsify the rewrite.
+
+**Minimum mechanism (Rule 26(c)).** *Catches:* the repair step is unverified
+authorship. Fixing a finding means writing a NEW claim about the code into the
+artifact, and nothing checked it until the next pass, one cycle later — so repairs
+injected defects at roughly the rate review removed them and the MAJOR count could not
+reach zero. Measured on the reference consumer, S290: **every** prior-scope finding from
+pass 9 to pass 13 was a false claim introduced by a repair (A57, A65, A67, A70, A72),
+and the cycle ran thirteen passes without converging. *False-positive cost:* a MAJOR on
+a claim that happens to be true but is written without its derivation — which is the
+point: the cost of deriving it is one command, and the cost of not deriving it is a
+40-minute pass. *Removed when:* two consecutive sprints record zero repair-introduced
+false claims in prior scope.
+
 ## The verdict — say the outcome in the field the gate reads
 
 Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted

@@ -17,6 +17,94 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.55.3] — 2026-07-14
+
+### Thirteen passes, zero convergence, and nothing fired
+
+S290's brief cycle ran **thirteen adversarial passes over ~12 hours** and did not
+converge. Passes 11, 12 and 13 each reported **0 CRITICAL and exactly 1 MAJOR**.
+
+Nothing fired, because nothing *could*. The ladder had two terminal states — CONVERGED
+(0 CRITICAL, 0 MAJOR) and DIVERGENT (CRITICALs **rising**) — and a flat nonzero MAJOR at
+zero CRITICAL is neither. There was no cap and no plateau detector anywhere in core, so
+the cycle fell through to "run another pass", unbounded. Worse: Check D's advice for
+exactly that shape was *"run another pass to a clean verdict"* — the instruction that
+produced passes 11, 12 and 13.
+
+**Check E — STALL.** Two consecutive passes that fail to REDUCE a nonzero MAJOR at zero
+CRITICAL is a stall, and it pre-empts D's advice with the remedy that actually
+terminates: derive the disputed fact mechanically, cut the claim, or escalate.
+
+**The threshold is backtested, not chosen.** Against every series the reference consumer
+has with severity data — s289-rr, s289-teststrategy, s290-brief (six older series predate
+the v0.48.0 schema and carry no counts, so they can neither confirm nor deny): **K=2**
+fires on s290-brief at pass 13, and never blocks a cycle that had already stamped
+`EXIT_CONDITION_MET`. **K=3 fires nowhere in the corpus — including the 13-pass loop it
+exists to catch.** A rung that has never fired is indistinguishable from no rung.
+
+### The root cause: the repair step was unverified authorship
+
+A circuit breaker that stops the loop at pass 13 instead of pass 30 is not a fix. The
+**generator** was the repair.
+
+Fixing a finding means writing a **NEW factual claim about the code** into the artifact —
+and nothing checked it until the next adversarial pass, one cycle later. So repairs
+injected defects at roughly the rate review removed them, and MAJOR could not reach zero.
+Every prior-scope finding from pass 9 to 13 was a false claim **introduced by a repair**:
+*"A65's repair does NOT land at `:2530`"*, *"A67's 'the resolver never needs `pool_id`'
+is FALSE"*, *"A70's item 4 is FALSE"*, *"A72's stated premise is FALSE"*. The brief
+asserted *"all SEVEN DECIDES sites are correct-pool"* and *"SEVENTEEN `"TEL"` compares"*.
+Both false — there is a fourth site, and the true count is 16. **Nobody ran the
+enumeration.** The adversary ran it, one counterexample per 40-minute pass.
+
+Core already knew this failure mode. Rule 8's divergence text says, verbatim, *"These are
+defects the REPAIR injected into text that had already been cleared."* But the predicate
+counts only CRITICALs, and only when rising — blind on both axes to what was happening.
+
+Two changes, at the point the defect is **authored**:
+
+- **`steps/discovery.md` step 3** — *derive every repair before you re-dispatch.* A repair
+  that asserts a fact about the code (a count, a universal, a call-site list, a negative)
+  must carry the command that derives it and that command's output, inline. **Assert
+  nothing you did not run.**
+- **`team-roles/adversary.md`** — a new severity rung: **an underived factual claim is a
+  MAJOR**, whether or not it can yet be falsified. The defect is the assertion, not the
+  error — an underived universal is a coin-flip the next pass has to call. And when it
+  appears in a repair, **name the repair**: *"A70's item 4 is FALSE"*, not *"item 4 is
+  false"*. The lead cannot stop authoring these until it can see that it is authoring
+  them. **The repair is a derivation, not a rewrite.**
+
+### The ordering bug underneath all of it
+
+`validate-adversarial-convergence.sh`'s `order_key()` matched only `pass<N>` — but the
+reference consumer names its artifacts `-p<N>`. **Every file in the 13-pass series keyed
+999**, the stable sort preserved the shell's glob order — `1 10 11 12 13 2 3 …` — and both
+order-dependent checks read garbage:
+
+- **Check D** read the LAST pass as **p9**, not p13. D exists to make *"the gate passed
+  while the last artifact said NOT met"* impossible, and at ≥10 passes it could do exactly
+  that, in either direction.
+- **Check C** compared p13 against p2 as if adjacent, inventing rises and missing real ones.
+
+It is dormant below ten passes and activates at ten — it breaks in the long-cycle case it
+exists to police, and nowhere else. That is why nobody saw it. The old comment claimed
+un-orderable files "are reported ... rather than silently folded into the chain." **No
+such report existed.** It does now, along with a duplicate-pass-number check: any chaining
+of two artifacts claiming the same pass is a guess, and C/D would adjudicate the guess.
+
+`core/fixtures/check-24-adversarial-convergence/` gains three cases. `long-series-p-naming`
+is decided by ordering **alone**: its true last pass (p11) stamps `EXIT_CONDITION_MET`, its
+lexicographic last pass (p9) stamps `NOT_MET`. It passes only under numeric ordering.
+`stalled` is S290's shape and must FAIL (E). `stall-then-converges` holds MAJOR one pass
+short of K and then clears it — E must NOT fire; it is the case that decides the threshold.
+
+### For the reference consumer
+
+The S290 brief cycle is STALLED, and the next pass will not fix it. Run
+`validate-adversarial-convergence.sh --series _bmad-output/planning-artifacts/s290-brief-adversarial-p`:
+it now orders p1…p13 correctly and reports the stall. The standing MAJOR is a wrong-pool
+claim the brief asserts and has never enumerated — derive it or cut it. Do not run pass 15.
+
 ## [0.55.2] — 2026-07-14
 
 ### v0.53.0 shipped the CI replacement to a path nothing reads
