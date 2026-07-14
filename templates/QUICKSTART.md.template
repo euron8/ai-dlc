@@ -698,10 +698,17 @@ planning artifacts. Do not implement."
 ### Quality and Validation
 ```
 /bmad-party-mode                   -- multi-agent debate
-/bmad-review-adversarial-general   -- cynical review (2+ passes)
+/bmad-review-adversarial-general   -- cynical review, ONE-SHOT only
 /bmad-advanced-elicitation         -- probe until zero ambiguity
 /bmad-agent-tea-tea                -- TEA test strategy
 ```
+
+The Rule 8 **convergence cycle** (2+ passes to zero CRITICAL/MAJOR) is NOT a skill:
+the lead dispatches the `adversary` role, which runs the native method in
+`team-roles/adversary.md` and stamps `skill: ai-dlc-adversary-review`. The bmad
+review skill above is for ONE-SHOT sweeps (`bug-investigation`, `sprint-review`,
+test strategy) — its "find ≥10, HALT on zero, no severity" contract has no fixed
+point in a loop that must reach zero.
 
 ### Implementation
 ```

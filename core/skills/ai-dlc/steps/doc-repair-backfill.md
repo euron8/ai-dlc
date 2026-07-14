@@ -45,13 +45,22 @@ backfilled artifacts:
    **Then immediately proceed to step 2:**
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity
    **Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
+3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `_gate-procedures.md`
    \"Auto-handoff evaluation\") at `Seam D` with the label
    `doc-repair-backfill adversarial pass <N>`. If evaluation returns
    FIRE, the session ends; otherwise continue.
-   **When the final pass produces only nitpicks, immediately proceed to step 4:**
+   Continue until only nitpicks remain — "nitpick" is the MINOR/NIT rung of the
+   `team-roles/adversary.md` severity ladder: **zero CRITICAL and zero MAJOR IS the
+   exit condition met**, and the terminating pass stamps `verdict: EXIT_CONDITION_MET`.
+   **Gate Check 24 reads that field** (v0.58.0: this loop is now gated; before, it ran
+   unbounded and no gate ever read its verdict). CRITICALs rising **in the scope the
+   prior pass reviewed** are a `DIVERGENT_HARD_BLOCK` — **it STOPS THE CYCLE**; do not
+   run another pass. A MAJOR that will not fall for two consecutive passes at zero
+   CRITICAL is a STALL, not progress: derive the disputed fact or cut the claim, then
+   escalate (Check 24 §E).
+   **When the final pass stamps `EXIT_CONDITION_MET`, immediately proceed to step 4:**
 4. Append changelogs to all modified artifacts.
    **Then immediately proceed to gate validation:**
 

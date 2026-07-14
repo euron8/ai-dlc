@@ -43,7 +43,7 @@ gate that edits `scripts/*.sh`.
 | Gate type      | Required checks (beyond universal core)          |
 |----------------|--------------------------------------------------|
 | planning       | 1c, 17, 20, 23, 24                               |
-| story          | 3a, 3b, 5, 17                                    |
+| story          | 3a, 3b, 5, 17, 24                                |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                  |
 | sprint-review  | 18, 21                                           |
 | retro          | 8, 9, 17, core-layer-immutability                |
@@ -720,20 +720,20 @@ offending `file:line` and the specific missing element(s).
 <!-- CHECK_LOADED: 17 -->
 
 **Scope.** Runs at the retro gate unconditionally. Also runs at any
-gate where a validation sub-skill (bmad-party-mode,
+gate where a validation evaluation (bmad-party-mode,
 bmad-advanced-elicitation, bmad-review-adversarial-general,
-bmad-validate-prd) was required by the current phase. Skip on gates
-that do not produce a provenance-bearing artifact.
+bmad-validate-prd, ai-dlc-adversary-review) was required by the current
+phase. Skip on gates that do not produce a provenance-bearing artifact.
 
 **Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Every validation
-sub-skill invocation (Rule 20) MUST emit this block into the artifact it
+evaluation (Rule 20) MUST emit this block into the artifact it
 produces; `validate-provenance-block.sh` parses it:
 
 ```
 <!-- SKILL_INVOCATION_PROVENANCE v1
-skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd>
+skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review>
 invoked_at: <ISO 8601 UTC timestamp>
-tool_use_id: <toolu_... from the Skill tool response>
+tool_use_id: <toolu_... from the Skill tool response — or, for ai-dlc-adversary-review, from the Agent dispatch>
 mode: subagent
 lead_role: <step-file-that-invoked>
 transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
@@ -747,18 +747,29 @@ SKILL_INVOCATION_PROVENANCE_END -->
 ```
 
 **The four adversarial fields.** `findings_*` and `verdict` are REQUIRED
-on every `bmad-review-adversarial-general` / `bmad-validate-prd` pass and are
-absent elsewhere (party-mode and elicitation produce no severity residue). The
-residue decides the verdict; see the mapping in `team-roles/adversary.md`
-("The verdict"). Check 24 enforces it.
+on every `ai-dlc-adversary-review` / `bmad-review-adversarial-general` /
+`bmad-validate-prd` pass and are absent elsewhere (party-mode and elicitation
+produce no severity residue). The residue decides the verdict; see the mapping
+in `team-roles/adversary.md` ("The verdict"). Check 24 enforces it.
 
-**Mode enforcement (Rule 20 — all four sub-skills).** `mode` MUST be
-`subagent` for EVERY validation sub-skill, not only party-mode: the
-evaluation runs in real independent subagents (party-mode spawns personas
-internally; single-voice skills are dispatched to a Rule-19-bound teammate).
-`mode: solo` on any of the four tracked skills is a violation — the lead
-roleplayed the validation in its own context — and FAILS this check.
-`validate-provenance-block.sh` rejects `mode: solo` on any tracked-skill block.
+**`ai-dlc-adversary-review` — the CONVERGENCE review (v0.58.0).** The Rule 8
+cycle invokes NO skill: the lead dispatches the `adversary` role, which runs the
+native method in `team-roles/adversary.md`. The bmad skill is kept for the
+ONE-SHOT reviews only (`bug-investigation`, `sprint-review`, the test-strategy
+sweep), because its contract — *find ≥10, HALT on zero, emit no severity* — has
+no fixed point in a loop whose exit condition is zero CRITICAL and zero MAJOR,
+and it forbids the very fields this gate reads. `tool_use_id` is the Agent
+dispatch's; the block is emitted by the adversary, as before.
+
+**Mode enforcement (Rule 20 — every tracked evaluation).** `mode` MUST be
+`subagent` for EVERY validation evaluation, not only party-mode: it runs in a
+real independent subagent (party-mode spawns personas internally; single-voice
+skills and the convergence review are dispatched to a Rule-19-bound teammate).
+`mode: solo` is a violation — the lead roleplayed the validation in its own
+context — and FAILS this check. `validate-provenance-block.sh` rejects
+`mode: solo` on ANY provenance block, unconditionally: that assertion used to be
+gated on the skill enum, which meant a new evaluation name could silently disarm
+it. It is no longer gated on anything.
 
 **Check.** Invoke `scripts/validate-provenance-block.sh` against the
 gate's primary artifact.
@@ -775,11 +786,16 @@ gate's primary artifact.
   bmad-validate-prd`.
 - **Story readiness gate (stories-test-strategy):** run
   `scripts/validate-provenance-block.sh <story-file>
-  --require-skill bmad-review-adversarial-general` for each story.
+  --require-skill ai-dlc-adversary-review` for each story.
+  *(v0.58.0: was `bmad-review-adversarial-general`. The stories cycle is a
+  CONVERGENCE cycle, so it now stamps the native identifier. A consumer that
+  pins the old name in an override — dev/qa/code-reviewer pre-submission
+  checks are the usual site — MUST update it in the same pull, or the pinned
+  check fails at runtime on the first story of the next sprint.)*
 
 **PASS:** all required provenance scripts exit 0. **FAIL:** any
 script reports a missing block, malformed field, unknown skill,
-`mode: solo` on any tracked sub-skill, missing transcript file (retro
+`mode: solo` on any block, missing transcript file (retro
 only), or SHA byte-mismatch (retro only).
 
 ### 18. Per-class test-debt audit.
@@ -1030,10 +1046,26 @@ Section 0, so it cannot drift.
 ### 24. The adversarial cycle CONVERGED (Rule 8).
 <!-- CHECK_LOADED: 24 -->
 
-**Scope.** Fires at every planning-phase gate whose step ran an adversarial
-review cycle (`research-requirements`, `architecture`, `discovery`,
-`stories-test-strategy`). Skips story, implementation, sprint-review, and
-retro gates.
+**Scope.** Fires at every gate whose step ran an adversarial CONVERGENCE cycle —
+a loop that must reach zero CRITICAL and zero MAJOR to leave. Those steps are:
+`discovery`, `architecture`, `research-requirements` (**including its
+`lightweight` single-pass path** — one pass is still a convergence pass and still
+stamps a verdict), `stories-test-strategy`, `doc-repair-backfill`, and
+`sprint-review-next`.
+
+**Self-skips** on any gate whose step ran no convergence cycle — including gates
+whose step ran only a ONE-SHOT adversarial review (`bug-investigation`,
+`sprint-review`, the test-strategy sweep in `stories-test-strategy` §5). A
+one-shot stamps no verdict and this check has nothing to read; do not drag its
+artifact into the series.
+
+*(v0.58.0 added `doc-repair-backfill` and `sprint-review-next`. Both have run
+`2+ passes … until only nitpicks remain` since they were written, and **no gate
+had ever read their verdicts** — an unbounded convergence loop adjudicated by
+nobody, which reads exactly like a loop that converged. `doc-repair-backfill`
+gates `planning`, so Check 24 already loaded there and only this scope clause
+excluded it; `sprint-review-next` gates `story`, which is why 24 joins the story
+manifest row.)*
 
 **Check.** Invoke `scripts/validate-adversarial-convergence.sh --series
 <path-prefix-of-this-step's-pass-series>`; exit 0 required. It reads the

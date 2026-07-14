@@ -95,6 +95,35 @@ Check A violations**; gate Check 25 counts them. Do not poll a subagent's raw ou
 file under `/private/tmp/.../tasks/<agent-id>` — the deliverable path in the
 snapshot's In-Flight Teammates row is the handle.
 
+## Adversarial review dispatch (referenced by step files)
+
+When a step file says "run an adversarial review pass", execute this. It is the REVIEW half of
+the Rule 8 cycle; the repair half is below.
+
+**No Skill runs.** The convergence review is ai-dlc-native: the method is `team-roles/adversary.md`,
+in full. The bmad skill `/bmad-review-adversarial-general` is NOT invoked here — its contract
+(*find at least ten issues; HALT if zero findings; emit no severity, priority, or ranking*) has
+no fixed point in a loop whose exit condition is zero CRITICAL and zero MAJOR, and it forbids the
+severity fields Check 24 reads. It remains correct for a ONE-SHOT cynical sweep, and the step
+files that run one still invoke it.
+
+**Dispatch** ONE `adversary` per pass. Agent tool, bound to `.claude/team-roles/adversary.md` per
+SKILL.md Rule 19 (both bindings: `model` and the standing role-contract Read line). Give it: the
+artifact path under review, the canonical output path, the pass number, and — on pass 2+ — the
+PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
+again.
+
+It writes findings to `_bmad-output/planning-artifacts/s<N>-<artifact>-adversarial-p<M>.md`
+carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-review`,
+`mode: subagent`, the `tool_use_id` of THIS Agent dispatch, the four `findings_*` counts, and the
+`verdict:`. Filename numbering is load-bearing: Check 24 orders the series by the `p<M>` token.
+
+**Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <findings_path>`.
+
+**Zero findings on a later pass is the EXPECTED outcome, not a suspicious one.** The cycle exists
+to reach it. An adversary that manufactures a finding to justify its pass sends the remediator to
+edit a correct artifact, and the edit is where new defects come from.
+
 ## Adversarial repair dispatch (referenced by step files)
 
 When a step file says "repair the findings", execute this. **The lead does not repair the

@@ -154,7 +154,8 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the brief with every answer.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — cynical review. **Repair the findings**
+3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review dispatch"
+   — ONE `adversary` per pass, ai-dlc-native, no Skill). **Repair the findings**
    (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per
    pass; **the lead does not repair the artifact itself**). Run a second pass.
    Continue until only nitpicks remain — where

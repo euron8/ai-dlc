@@ -57,6 +57,19 @@ terminal pass, and the only thing separating it from `refused-to-converge` is th
 verdict the adversary stamped. That is the whole point: **the residue decides
 whether the verdict is honest; the verdict decides whether the gate opens.**
 
+## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
+
+v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is
+what a real convergence pass now stamps. **This fixture does not test that, and cannot.**
+`validate-adversarial-convergence.sh` never reads `skill:` — it reads `verdict`,
+`findings_*`, and the pass number in the *filename*, and nothing else. Change the value to
+anything at all and this fixture stays green.
+
+That is a property worth stating rather than leaving to be rediscovered: Check 24 is
+name-blind, so the v0.58.0 identifier change could not break it, and no assertion here
+would have caught it if it could. The enum and the solo rung are `check-17-bypass`'s job
+(V6/V7/V8). Keeping the value current keeps the corpus honest; it does not make it a test.
+
 ## Removal condition
 
 Retire when the adversary's report template is GENERATED from the severity ladder

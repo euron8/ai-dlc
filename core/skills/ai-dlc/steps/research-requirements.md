@@ -80,8 +80,11 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
 **Intensity gate for lightweight.** When `validation_intensity ==
 lightweight`, replace this full cycle with a single adversarial pass:
 skip steps 1–2 (party-mode + advanced-elicitation) and run step 3 as
-exactly one `/bmad-review-adversarial-general` pass, then proceed to
-step 4. Otherwise run the full cycle below.
+exactly one **adversarial review pass** (`_gate-procedures.md`, "Adversarial
+review dispatch" — ai-dlc-native, no Skill), then proceed to step 4. Otherwise
+run the full cycle below. **This lone pass is still a CONVERGENCE pass:** Check
+24's scope includes `research-requirements`, so it must stamp a `verdict:` and
+its residue must support it. A single pass is not a one-shot review.
 
 **Execute all sub-skills back-to-back without pausing for human input
 between them:**
@@ -96,7 +99,7 @@ between them:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the PRD with every clarification.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
+3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
    between passes. Continue until only nitpicks remain — and **"nitpick" is
    the MINOR/NIT rung of the `team-roles/adversary.md` severity ladder, not a
    feeling.** Zero CRITICAL and zero MAJOR IS the exit condition met, with

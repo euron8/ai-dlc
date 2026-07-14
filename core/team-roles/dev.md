@@ -218,12 +218,13 @@ Before starting any task, read these files in order:
           grep-referenced by ≥1 test file in the SAME PR (by filename), else
           delete it or add a one-line justification. An unreferenced fixture
           is repo-bloat that no later gate catches.
-- When a story requires a validation sub-skill (`/bmad-party-mode`,
+- When a story requires a validation evaluation (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
-  `/bmad-validate-prd`), the artifact produced MUST carry a
+  `/bmad-validate-prd`, or the native `ai-dlc-adversary-review` convergence
+  review), the artifact produced MUST carry a
   `SKILL_INVOCATION_PROVENANCE v1` block (schema in SKILL.md Rule 3).
-  Writing skill-shaped output without invoking the Skill tool is a
-  Rule 3 violation. Pre-submission: run
+  Producing validation-shaped output without the real independent subagent
+  behind it is a Rule 3 violation. Pre-submission: run
   `scripts/validate-provenance-block.sh <artifact>` and confirm exit 0.
 16. Mark the task complete (QA will then validate).
 

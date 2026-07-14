@@ -270,7 +270,8 @@ between them:**
 2. `/bmad-advanced-elicitation` — probe every design assumption until
    zero ambiguity remains. Update the architecture doc with all findings.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes. Focus on security,
+3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review
+   dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes. Focus on security,
    scalability, coupling, single points of failure, backward
    compatibility, migration risk, integration seams, and
    over-engineering (Rule 26: mechanism beyond requirements, parallel

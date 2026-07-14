@@ -80,6 +80,96 @@ else
   fails=$((fails + 1))
 fi
 
+# ---- V6: solo native review must be rejected BY THE SOLO RUNG -----------------
+#
+# THE EXIT CODE IS NOT THE ASSERTION. A solo `ai-dlc-adversary-review` block exits
+# non-zero under BOTH the correct build and the broken one:
+#   name IS in KNOWN_SKILLS  -> rejected by the Rule 20 solo rung   (correct)
+#   name is NOT in the enum  -> rejected by "not in the known set"  (broken: the solo
+#                               rung never even evaluated, and if `skill:` were made
+#                               optional instead, NOTHING would reject it)
+# Asserting only `exit != 0` therefore passes on the bug. Assert the MESSAGE.
+V6="$WORK/_bmad-output/planning-artifacts/s999-brief-adversarial-p2.md"
+V6_ERR="$(bash "$PROV" "$V6" 2>&1)"
+V6_RC=$?
+if [ "$V6_RC" -eq 0 ]; then
+  note "BAD" "s999...-p2.md (V6 solo)" "PASSED — a solo convergence review is unpoliced"
+  fails=$((fails + 1))
+elif printf '%s' "$V6_ERR" | grep -q 'not in the known set'; then
+  note "BAD" "s999...-p2.md (V6 solo)" "rejected as an UNKNOWN SKILL, not as solo"
+  echo
+  echo "      'ai-dlc-adversary-review' is missing from KNOWN_SKILLS. The block failed," >&2
+  echo "      but on the WRONG RUNG: the Rule 20 solo assertion never evaluated it. Check" >&2
+  echo "      17's only teeth are disarmed for every convergence pass, and the exit code" >&2
+  echo "      looks identical to a healthy reject." >&2
+  fails=$((fails + 1))
+elif printf '%s' "$V6_ERR" | grep -qi 'mode: solo'; then
+  note "ok" "s999...-p2.md (V6 solo)" "rejected by the Rule 20 solo rung (the right one)"
+else
+  note "BAD" "s999...-p2.md (V6 solo)" "rejected for an unexpected reason"
+  printf '%s\n' "$V6_ERR" | sed 's/^/        /' >&2
+  fails=$((fails + 1))
+fi
+
+# ---- V7: the honest native review must be ACCEPTED ----------------------------
+# This is the enum's mutant-detector: drop ai-dlc-adversary-review from KNOWN_SKILLS
+# and V7 goes red, because every real convergence pass would fail Check 17.
+V7="$WORK/_bmad-output/planning-artifacts/s999-brief-adversarial-p3.md"
+if bash "$PROV" "$V7" >/dev/null 2>&1; then
+  note "ok" "s999...-p3.md (V7 native)" "accepted (mode: subagent, no Skill claimed)"
+else
+  note "BAD" "s999...-p3.md (V7 native)" "REJECTED — the native convergence review is un-gateable"
+  bash "$PROV" "$V7" 2>&1 | sed 's/^/        /' >&2
+  fails=$((fails + 1))
+fi
+
+# ---- V8: mode: solo with NO skill field must still be rejected AS SOLO --------
+# The decoupling's only witness. Restore the `skill in KNOWN_SKILLS and` guard on the
+# solo rung and this block still exits 1 (missing required field) -- but the solo rung
+# never fires, and a schema that drops `skill:` would walk straight through Check 17.
+V8="$WORK/_bmad-output/planning-artifacts/s999-brief-adversarial-p4.md"
+V8_ERR="$(bash "$PROV" "$V8" 2>&1)"
+if [ $? -eq 0 ]; then
+  note "BAD" "s999...-p4.md (V8 solo)" "PASSED — solo is unpoliced without a skill field"
+  fails=$((fails + 1))
+elif printf '%s' "$V8_ERR" | grep -qi 'mode: solo'; then
+  note "ok" "s999...-p4.md (V8 solo)" "rejected AS SOLO even with no skill: field"
+else
+  note "BAD" "s999...-p4.md (V8 solo)" "rejected, but NOT on the solo rung"
+  echo
+  echo "      The Rule 20 solo assertion is gated on enum membership again. A block with" >&2
+  echo "      no 'skill:' field can carry mode: solo and never be seen by it. That is the" >&2
+  echo "      check-cannot-fire shape: it exits 1 today only because a DIFFERENT rung" >&2
+  echo "      caught the missing field." >&2
+  printf '%s\n' "$V8_ERR" | sed 's/^/        /' >&2
+  fails=$((fails + 1))
+fi
+
+# ---- V9: a retired --require-skill pin must SAY SO, not just fail -------------
+# The consumer migration mechanism. Without the retired-pin branch this still exits 1 --
+# on the generic "no block cites that skill" -- which is true, useless, and fires
+# mid-sprint on a consumer's first story. Assert the message carries the repair.
+V9="$WORK/_bmad-output/planning-artifacts/s999-story-1.md"
+V9_ERR="$(bash "$PROV" "$V9" --require-skill bmad-review-adversarial-general 2>&1)"
+if [ $? -eq 0 ]; then
+  note "BAD" "s999-story-1.md (V9 pin)" "PASSED — a retired pin certified a story it never checked"
+  fails=$((fails + 1))
+elif printf '%s' "$V9_ERR" | grep -q 'RETIRED PIN'; then
+  note "ok" "s999-story-1.md (V9 pin)" "names the retired pin and the repair"
+else
+  note "BAD" "s999-story-1.md (V9 pin)" "fails, but does not name the retired pin"
+  echo "      A consumer hits this mid-sprint. 'no block cites that skill' does not tell" >&2
+  echo "      them the cycle went native in v0.58.0 or which flag to change." >&2
+  fails=$((fails + 1))
+fi
+# ...and the correct pin must PASS, or the migration has no destination.
+if bash "$PROV" "$V9" --require-skill ai-dlc-adversary-review >/dev/null 2>&1; then
+  note "ok" "s999-story-1.md (V9 pin)" "the repointed pin passes"
+else
+  note "BAD" "s999-story-1.md (V9 pin)" "the repointed pin FAILS — there is nowhere to migrate to"
+  fails=$((fails + 1))
+fi
+
 # ---- V5 must then FAIL the heavyweight validator on the SHA -------------------
 # validate-retro-evidence.sh resolves the cited SHA against git, so the fixture
 # needs a real repo with a real retro branch and a real committed transcript.
@@ -126,7 +216,8 @@ fi
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  check-17-bypass: V1-V4 rejected, V5 passes the lightweight script and is"
-  echo "      caught by the SHA byte-match. The forgery floor holds."
+  echo "      caught by the SHA byte-match, V6 is rejected ON THE SOLO RUNG and V7 (the"
+  echo "      honest native review) is accepted. The forgery floor holds."
   exit 0
 fi
 echo "FAIL  check-17-bypass: $fails assertion(s) violated." >&2

@@ -17,6 +17,116 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.58.0] — 2026-07-14
+
+### The gate counted a severity the skill it invoked was forbidden to produce
+
+Rule 8's convergence cycle exits at **zero CRITICAL and zero MAJOR**. Check 24 adjudicates
+that by reading `findings_critical:` / `findings_major:` / `verdict:` off each pass. The cycle
+reached that state by invoking `/bmad-review-adversarial-general` — a **consumer-vendored**
+skill, 37 lines, which ai-dlc does not ship, does not version, and cannot see. Three of its
+lines:
+
+> Step 2. *"Find **at least ten issues** to fix or improve in the provided content."*
+> Step 3. *"Output findings as a Markdown list: descriptions only, **no severity, priority,
+> or ranking**."*
+> HALT. *"**HALT if zero findings** — this is suspicious, re-analyze or ask for guidance."*
+
+**The two contracts have no fixed point.** A ten-finding floor has no zero. Halting on zero
+forbids the terminal state. And the severity the gate counts is the severity the skill is
+explicitly instructed **not** to emit — so every `findings_major:` the gate has ever
+adjudicated was invented by a fresh context in defiance of its own method, with no source of
+truth. ai-dlc never named the conflict anywhere: `adversary.md` pushed back on halt-if-zero
+("a clean verdict is a valid outcome") and never mentioned the other two.
+
+**The convergence cycle no longer invokes a skill.** It dispatches the `adversary` role, which
+runs the method already in `team-roles/adversary.md` — the severity ladder, the verdict schema,
+the prior-scope discipline, the review-the-REPAIR contract; a strict superset of what the skill
+supplied. The skill contributed only the floor.
+
+**bmad stays where it is right.** `bug-investigation`, `sprint-review`, and the test-strategy
+sweep run **one-shot** reviews: nothing loops, no verdict is stamped, no gate counts the
+residue. "Find ≥10, be cynical, halt on zero" is exactly the right contract for a single
+cynical sweep — there, the floor is a feature. Six loops go native; three one-shots keep the
+skill, each now marked with why, so the asymmetry does not read as an oversight.
+
+### What the evidence actually shows — and what it does not
+
+The change is justified by the **contract contradiction above**, which is provable from the two
+documents alone. The tempting causal story — *"the ≥10 floor drove S290's brief cycle to 17
+passes"* — was tested against the reference consumer and **does not hold**:
+
+- The floor **demonstrably binds**: across p1–p15 the totals never exceed 8; **p16 and p17 land
+  on exactly 10, twice in a row.** That is real and it is the strongest evidence in the set.
+- It **did not cause the divergence.** `DIVERGENT_HARD_BLOCK` was stamped at **p4, p7, p15 and
+  p17** — at totals of 4, 8, 3 and 10 — and **p16, the first pass to hit exactly ten, did not
+  diverge at all.** Divergence keys off `findings_critical_prior_scope`, which is unrelated to
+  the total count.
+- S288 cleared the floor routinely (passes self-reporting **20, 17, 17** findings) and
+  converged at pass 7 without diverging once. A floor of ten is a floor, not a cap.
+- S290 was **not** the first cycle under the counted gate: `s289-teststrategy` ran the full
+  v0.48.0 schema on 07-12 and converged in **two** passes.
+
+So: this restores a **reachable, anchored** fixed point — a cycle that can terminate, graded on
+a ladder with a source of truth. It would **not** have prevented p4/p7/p15, and it is not sold
+as having done so. This is a **substitution, not a subtraction**: one procedure section, one
+enum member, three fixture variants added; three clauses removed.
+
+### Check 17's teeth were wired to the enum, and the obvious fix would have cut them
+
+`validate-provenance-block.sh` rejects `mode: solo` — the lead roleplaying the review in its own
+context — and that rejection is the **only** thing standing between Check 17 and an adversary
+that never ran. It read:
+
+```python
+if fields.get("skill") in KNOWN_SKILLS and fields.get("mode") == "solo":
+```
+
+The guard was **vacuous** — an unknown skill already fails the enum one rung above — so it
+changed no outcome and looked free. What it actually did was couple those teeth to enum
+membership: **any** provenance-emitting evaluation whose name was absent from `KNOWN_SKILLS`,
+or any block with no `skill:` field at all, would sail past the solo check. And "this dispatch
+names no skill, so drop the field" is the *obvious* way to model a role dispatch. That fix would
+have silently disarmed Check 17 for every convergence pass — a check that cannot fire, reading
+exactly like a check that passed, for the fifth time in six releases.
+
+Instead: `ai-dlc-adversary-review` joins `KNOWN_SKILLS`, and **the solo rung is decoupled from
+it** — `mode: solo` is now rejected unconditionally, on any block that exists. Check 17 still
+fails on an inline adversary three ways, none weakened. **Check 24 is untouched**: it never read
+`skill:`, only `verdict`/`findings_*` and the pass number in the filename — verified by replaying
+the real 17-pass S290 series, which it still adjudicates identically.
+
+### Two convergence loops had been running unbounded with no gate reading them
+
+`doc-repair-backfill` and `sprint-review-next` have said *"2+ passes … until only nitpicks
+remain"* since they were written, and **Check 24's scope excluded both.** An unbounded
+convergence loop adjudicated by nobody — which reads, from the outside, exactly like a loop that
+converged. Both now stamp a verdict and both are in scope (Check 24 joins the `story` manifest
+row for `sprint-review-next`; `doc-repair-backfill` already gated `planning` and only the scope
+clause excluded it). The `lightweight` single-pass path at `research-requirements` is also
+called out as what it is: one pass is still a **convergence** pass and still stamps a verdict.
+
+### Removed
+
+- `adversary.md`'s *"Do not substitute your own review for the sub-skill's — running it IS the
+  mandate"* — the clause that handed a 223-line role contract's method back to a 37-line prompt.
+- The `skill in KNOWN_SKILLS` coupling on the Rule 20 solo assertion.
+- `analyst.md`'s *"Those run inline in the lead per SKILL.md Rule 20"* — **stale, and the exact
+  opposite of Rule 20**, which forbids inline single-voice invocation as solo by construction.
+  A role file that contradicts the rule it cites primes the wrong behaviour.
+
+### Consumer migration — REQUIRED, and it will not announce itself
+
+A consumer that pins `--require-skill bmad-review-adversarial-general` anywhere the
+**convergence** cycle produces the artifact (the story-readiness gate; typically dev / qa /
+code-reviewer pre-submission overrides) MUST repoint it to `ai-dlc-adversary-review` in this
+pull. Stories now cite the native identifier, so a stale pin fails at the next story gate — and
+neither the reconcile (the anchors it watches are unbroken) nor a "does the flag exist" check
+will see it coming. The reference consumer has **three** such overrides.
+
+Fixture bytes changed, so the **H2 attestation digest moves**: existing attestations are void
+and the fixture set must be re-driven once per sprint, as designed.
+
 ## [0.57.0] — 2026-07-14
 
 ### Rule 8's hard block had no teeth, so the cycle ran two more passes and got worse

@@ -263,7 +263,7 @@ checks:
 
   - id: "24"
     title: Adversarial cycle convergence (Rule 8)
-    gate_types: [planning]
+    gate_types: [planning, story]
     adjudication: script
     hard_block: true
     enforcer:

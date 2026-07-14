@@ -46,10 +46,12 @@ output artifact path, and (c) a shared context block. You MUST:
   decides, and owns the result. If the scope demands a decision (routing,
   gate outcome, requirement tradeoff), record it under `gaps` and let the
   lead resolve it.
-- **Do NOT run validation sub-skills** (`/bmad-party-mode`,
+- **Do NOT run validation evaluations** (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
-  `/bmad-validate-prd`). Those run inline in the lead per SKILL.md Rule 20.
-  Your draft is the input they validate, not a validated output.
+  `/bmad-validate-prd`, or the native `ai-dlc-adversary-review`). Rule 20 routes
+  every one of them to an independent subagent — the single-voice skills and the
+  convergence review to the `adversary` role. Your draft is the input they
+  validate, not a validated output.
 
 ## Escalation
 
