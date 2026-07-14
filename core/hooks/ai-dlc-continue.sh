@@ -129,6 +129,95 @@ EOF
 fi
 
 # -----------------------------------------------------------------------------
+# Check 0: Handoff resume-prompt guard
+# -----------------------------------------------------------------------------
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: the operator asks for a handoff and the turn ENDS without a
+#     copy-pasteable `/ai-dlc resume` block. The successor session then has no
+#     entry line and the operator hand-writes one. A prose mandate
+#     (`steps/handoff.md` step 4) did not hold on its own; this moves emission to
+#     the harness. Presence alone is insufficient — a `/ai-dlc resume` mentioned in
+#     prose, or in a blockquote with no delimiter lines, is not copy-pasteable — so
+#     the guard checks FORMAT: the command line must sit BETWEEN two delimiter
+#     lines.
+#   False-positive cost: one extra turn when the operator's message merely mentions
+#     handoff without requesting one. It self-clears through the rapid-fire backoff
+#     below (MAX_RAPID_BLOCKS), so it can never wedge the pipeline.
+#   Removal condition: retire when two consecutive sprints record zero
+#     handoff-emission misses, or when the resume block is generated rather than
+#     hand-authored.
+#
+# THE DELIMITER IS `-{4,}`, NOT AN EXACT COUNT, AND THAT IS THE WHOLE LESSON.
+# The reference consumer carried this guard for months matching EXACTLY six hyphens
+# (`^------$`) while `steps/handoff.md` step 4 has ALWAYS mandated four (`----`).
+# Six-hyphen appears nowhere in core, at any sha. So the guard fired on handoffs
+# that were CORRECT per the rulebook: the lead emitted `----` as instructed, got
+# blocked, read a block message telling it to use `------`, and complied with the
+# HOOK instead of the RULE. The enforcer quietly overruled the rule it was written
+# to enforce — a check that fires on compliance, which is worse than no check.
+# The invariant that matters is "the command line is delimited for copy-paste",
+# never the hyphen count. Accept four or more; quote the rulebook's own template.
+#
+# Fail-open: any transcript parse failure skips this check entirely.
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+HANDOFF_STATE="${LOG_DIR}/handoff-guard-state.txt"
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  LAST_USER=$(jq -rs '[.[]|select(.message.role=="user")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join(" ")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
+  # LAST_ASST is reconstructed with join("") (NOT " "): the format check below is
+  # line-anchored, and a streaming split of one text block into chunks can land a
+  # boundary mid-line — join(" ") then corrupts a `----` marker into `-- --` and the
+  # lead's own well-formed block false-blocks. join("") rejoins contiguous text so
+  # marker lines survive. LAST_USER keeps join(" ") (substring regex, spacing-tolerant).
+  LAST_ASST=$(jq -rs '[.[]|select(.message.role=="assistant")|.message.content|(if type=="string" then . else (map(select(.type=="text")|.text)|join("")) end)]|map(select(length>0))|last // ""' "$TRANSCRIPT" 2>/dev/null || echo "")
+
+  # Match REQUEST-shaped phrasings only — "handoff"/"hand off" as a VERB, a terse
+  # standalone "handoff", or "continue in a new session". Do NOT match incidental
+  # NOUN mentions ("the handoff prompt", "handoff guard", the injected pipeline-control
+  # context): those are discussion, not a request, and a bare-substring regex fires on
+  # every one of them and spams the operator with a spurious resume prompt. The second
+  # grep excludes any message that IS a resume prompt or talks ABOUT the mechanism.
+  if echo "$LAST_USER" | grep -qiE 'hand[ -]off (this|it|to|the (sprint|pipeline|work|session))|hand(ing)? (this|it) off|\b(do|create|prepare|need|want|start|begin|let'\''s|please) (a |an |the )?hand[ -]?off\b|^[[:space:]]*hand[ -]?off[[:space:]]*$|continue in a (new|fresh) session|pick (this|it) up in a (new|fresh) session' \
+     && ! echo "$LAST_USER" | grep -qiE '/ai-dlc|acknowledge handoff|handoff (resume|guard|prompt|protocol)|resume prompt|pipeline control'; then
+
+    RESUME_OK=$(printf '%s' "$LAST_ASST" | awk '
+      /^[[:space:]]*-{4,}[[:space:]]*$/ { marks++; if (marks==1){opened=1;sawcmd=0} else if (marks>=2 && sawcmd){ok=1}; next }
+      opened && /^[[:space:]]*\/ai-dlc[[:space:]]+resume[[:space:]]*$/ { sawcmd=1 }
+      END { print (ok?"1":"0") }')
+
+    if [ "$RESUME_OK" != "1" ]; then
+      H_LAST=0; H_CNT=0
+      if [ -f "$HANDOFF_STATE" ]; then
+        H_LAST=$(sed -n '1p' "$HANDOFF_STATE" 2>/dev/null); H_CNT=$(sed -n '2p' "$HANDOFF_STATE" 2>/dev/null)
+        [[ "$H_LAST" =~ ^[0-9]+$ ]] || H_LAST=0; [[ "$H_CNT" =~ ^[0-9]+$ ]] || H_CNT=0
+      fi
+      if [ $((NOW - H_LAST)) -lt "$RAPID_WINDOW_SECONDS" ]; then H_CNT=$((H_CNT + 1)); else H_CNT=1; fi
+      if [ "$H_CNT" -le "$MAX_RAPID_BLOCKS" ]; then
+        echo "$NOW" > "$HANDOFF_STATE"; echo "$H_CNT" >> "$HANDOFF_STATE"
+        {
+          echo "## ${TIMESTAMP} -- HANDOFF_GUARD_BLOCK (${H_CNT}/${MAX_RAPID_BLOCKS})"
+          echo "- Session: ${SESSION_ID}"
+          echo "- Handoff requested but the turn ends with no delimited /ai-dlc resume block"
+          echo ""
+        } >> "$LOG_FILE"
+        jq -n --arg r "HANDOFF GUARD: the operator requested a handoff, but this turn ends WITHOUT a copy-pasteable resume prompt. Per steps/handoff.md step 4, emit exactly this, and nothing else -- no narrated body:
+
+\`\`\`
+----
+/ai-dlc resume
+----
+\`\`\`
+
+The \`/ai-dlc resume\` line MUST sit BETWEEN two delimiter lines (four or more hyphens, each on its own line). A blockquote is not a delimiter, and a bare mention in prose is not copy-pasteable. Finalize the pipeline snapshot first (step 3) if you have not -- state lives in the snapshot, not the resume line." '{decision:"block",reason:$r,suppressOutput:true}'
+        exit 0
+      fi
+      rm -f "$HANDOFF_STATE"   # backoff exhausted: allow stop (possible false positive)
+    else
+      rm -f "$HANDOFF_STATE"   # well-formed resume block present: handoff satisfied
+    fi
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # Check 1: Pause flag (user-initiated pause)
 # -----------------------------------------------------------------------------
 if [ -f "$PAUSE_FLAG" ]; then

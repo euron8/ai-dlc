@@ -17,6 +17,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.55.0] — 2026-07-13
+
+### The handoff resume-prompt guard, upstreamed — and the rule it had been quietly overruling
+
+The reference consumer carried an **80-line, unregisterable** hardening in
+`.claude/hooks/ai-dlc-continue.sh`: a Stop-hook guard that blocks a handoff turn ending
+without a copy-pasteable `/ai-dlc resume` block. The layer system has **no override
+grain for hooks**, so it could be registered nowhere, and it reported
+`HARD-UNREGISTERED-CORE-DRIFT` on every pull. It is now **core**.
+
+`steps/handoff.md` step 4 says the lead MUST emit `/ai-dlc resume` wrapped in delimiter
+lines. It was a **prose mandate with no enforcer**, and it did not hold — which is the
+whole shape this release series is about. Now the harness enforces it.
+
+**Check 0** fires only when the operator's last message is a handoff **request** (verb
+forms and terse commands — never an incidental noun mention like *"the handoff guard"*,
+which a bare substring regex fires on and which spammed a real operator). It checks
+**format, not presence**: the `/ai-dlc resume` line must sit **between two delimiter
+lines**. A blockquoted mention in prose is not copy-pasteable, and a substring grep
+green-lights it. Fail-open on any transcript parse error; self-clearing via the existing
+rapid-fire backoff, so it can never wedge the pipeline.
+
+### The enforcer had been overruling the rule for months
+
+**The consumer's guard matched EXACTLY six hyphens (`^------$`). `steps/handoff.md` has
+ALWAYS mandated four (`----`). Six-hyphen appears nowhere in core, at any sha.**
+
+So the guard fired on handoffs that were **correct per the rulebook**: the lead emitted
+`----` as instructed, was blocked, read a block message telling it to use `------`, and
+complied with the **hook** instead of the **rule**. A check that fires on *compliance* is
+worse than no check — and the rulebook lost, silently, every time.
+
+**The delimiter is now `-{4,}`, not an exact count.** The invariant that matters is *"the
+command line is delimited for copy-paste"*, never the hyphen count. The block message
+quotes the rulebook's own template instead of inventing a competing one.
+
+This is the **fourth instance** in this arc of one predicate with two implementations that
+drifted apart — after `readopt-override`'s resolver (v0.52.0), `register-drift`'s resolver
+(v0.54.2), and `layer-drift`'s label check (v0.54.3). Each time the tool and the rule
+disagreed, **and the tool won.**
+
+### Proven able to fire
+
+`core/fixtures/handoff-resume-guard/` drives the hook end-to-end with real JSONL
+transcripts, and **mutation-testing catches the production bug**:
+
+| mutant | caught by |
+|---|---|
+| the guard as the consumer actually ran it (exactly six hyphens) | *"BLOCKED a handoff that follows `steps/handoff.md` step 4 verbatim — the check fires on COMPLIANCE"* |
+| substring presence instead of format (the pre-S258 guard) | *"an undelimited, non-copy-pasteable mention passed — presence is not format"* |
+
+Five assertions: missed block → **BLOCK**; core's `----` → **ALLOW**; six hyphens →
+**ALLOW**; undelimited mention → **BLOCK**; incidental noun mention → **no fire**.
+
+### For the reference consumer
+
+Once on 0.55.0, delete the local hook delta — core now carries it, correctly. That
+retires the last `HARD-UNREGISTERED-CORE-DRIFT` row and the pull goes fully clean.
+
 ## [0.54.3] — 2026-07-13
 
 ### `layer-drift.sh` cried collision on the headings the operator had just correctly fixed
