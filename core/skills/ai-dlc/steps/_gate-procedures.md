@@ -98,39 +98,24 @@ snapshot's In-Flight Teammates row is the handle.
 ## Adversarial repair dispatch (referenced by step files)
 
 When a step file says "repair the findings", execute this. **The lead does not repair the
-artifact itself.**
+artifact itself** — it is the most context-saturated agent in the pipeline and repairs from a
+compacted summary, not the document. (Rationale + the measurement: notes R35.)
 
-**Why.** The lead is the most context-saturated agent in the pipeline: it has been
-orchestrating, dispatching and compacting for the whole sprint, so it repairs from a lossy
-summary of a document it last read many passes ago — and then writes that memory into the
-artifact as fact. Measured: the lead compacted **13 times** in one sprint while authoring
-precise claims about call sites, and **7 of 7** repair-authored claims across five
-consecutive passes were false. The adversary — fresh context, role-bound, reading source —
-was right every time. Repair is a bounded, evidence-driven, code-reading task, which is
-exactly the shape that dispatches well.
-
-**The dispatch.** ONE `remediator` per adversarial pass (Agent tool, bound to
-`.claude/team-roles/remediator.md` per SKILL.md Rule 19 — both bindings: `model` and the
-standing role-contract Read line). It takes that pass's WHOLE finding set, not one finding:
-the artifact is one document, and N agents editing it in parallel produce a document that
-contradicts itself.
+**Dispatch** ONE `remediator` per adversarial pass — never per finding; the artifact is one
+document and parallel editors contradict each other. Agent tool, bound to
+`.claude/team-roles/remediator.md` per SKILL.md Rule 19 (both bindings: `model` and the
+standing role-contract Read line). It takes that pass's WHOLE finding set.
 
 It writes the repaired artifact in place plus a **repair record** at
-`_bmad-output/planning-artifacts/s<N>-<artifact>-repair-p<M>.md` (`<M>` = the pass repaired),
-carrying, per finding, the disposition, the edit site, and **the command that derives every
-factual claim the repair asserts, with its output**. Assert nothing you did not run.
+`_bmad-output/planning-artifacts/s<N>-<artifact>-repair-p<M>.md` (`<M>` = the pass repaired):
+per finding, the disposition, the edit site, and the command that derives every factual claim
+the repair asserts, with its output. The next adversarial pass verifies against that record.
 
-**Join it with the bounded-join beat** (above): `scripts/wait-for-deliverable.sh <repair_record_path>`.
+**Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <repair_record_path>`.
 
-**What stays with the lead.** Dispatch, the join, and the **Rule 11/13 scope calls** the
-remediator escalates (cut-versus-fix, anything touching `LOCKED_REQUIREMENTS`, anything that
-changes what the sprint delivers). Those are decisions, not edits — they are orchestration,
-and they are the lead's.
-
-**The next pass verifies against the record.** The adversary already checks "did the prior
-pass's findings land"; the derivations are what it checks them against, instead of
-re-deriving from scratch. An underived claim in a repair is a MAJOR (`adversary.md`),
-attributed to the repair that made it.
+**The lead keeps** dispatch, the join, and the **Rule 11/13 scope calls** the remediator
+escalates (cut-versus-fix, `LOCKED_REQUIREMENTS`, anything changing what the sprint delivers).
+Those are decisions, not edits.
 
 ## Auto-handoff evaluation (referenced by step files)
 

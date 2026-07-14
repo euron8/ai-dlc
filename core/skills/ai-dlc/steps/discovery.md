@@ -164,11 +164,8 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
    that field; CRITICALs rising **in the scope the prior pass reviewed** are a
    `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
    added scope and freeze the artifact).
-   **Assert nothing you did not run.** Every factual claim about the code a repair
-   asserts — a count, a universal ("all N …"), a call-site list, a negative ("X
-   never needs Y") — carries the command that derives it and that command's
-   output. An underived repair claim is a MAJOR (`adversary.md`), attributed to
-   the repair that made it.
+   An underived factual claim in a repair is a MAJOR (`adversary.md`) — the
+   remediator's evidence contract is where the bar is stated.
    **A MAJOR that will not fall for two consecutive passes at zero CRITICAL is a
    STALL, not progress.** Another pass buys another counterexample. Derive the
    disputed fact, or cut the claim, then escalate (gate Check 24 §E).
