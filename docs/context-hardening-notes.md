@@ -1627,3 +1627,52 @@ that its own `VERDICT: 2 CRITICAL, 1 MAJOR, 2 MINOR` counted **zero** of. Backte
 against all 21 S289 removal findings: the 8 filed MINOR are stale words and stale
 counts, none names a mechanism, all 8 fail test 1, and the converged pass 4 (0 CRITICAL
 / 0 MAJOR / 2 MINOR) is unchanged.
+
+## R34 — the adversarial cycle had no rung for "stuck" (v0.55.3)
+
+S290's brief cycle ran **thirteen passes over ~12 hours** and did not converge. Passes
+11, 12 and 13 each reported **0 CRITICAL and exactly 1 MAJOR**. Nothing fired, because
+nothing could: the ladder had exactly two terminal states — CONVERGED (0/0) and
+DIVERGENT (CRITICALs *rising*) — and a flat nonzero MAJOR at zero CRITICAL is neither.
+It fell through to "run another pass", forever. Check D's own advice for that shape was
+literally *"run another pass to a clean verdict"*, which is the instruction that
+produced passes 11, 12 and 13.
+
+**The generator was the repair step, and core already knew the failure mode.** Rule 8's
+divergence text says, verbatim, *"These are defects the REPAIR injected into text that
+had already been cleared."* But the predicate counts only CRITICALs, and only when
+rising — so it was blind on both axes to what was actually happening. Every prior-scope
+finding from pass 9 to pass 13 was a **false factual claim introduced by a repair**:
+
+| pass | finding |
+|---|---|
+| p9  | A57 retracts pass 8's C2 on a FALSE absence claim |
+| p9  | Story 3's seven cited "call sites" are not `get_symbol` call sites |
+| p10 | A65's repair does NOT land at `:2530` |
+| p10 | A67's *"the resolver never needs `pool_id`"* is FALSE |
+| p11 | A70's item 4 is FALSE — three of seven DECIDES sites are wrong-pool |
+| p12 | A72's stated premise is FALSE and contradicts A68 |
+| p13 | a FOURTH wrong-pool site — falsifying the sentence p12 just wrote |
+
+Fixing a finding meant writing a **new** claim about the code into the brief, and
+nothing checked it until the next pass. Repairs injected defects at roughly the rate
+review removed them, so MAJOR could not reach zero. The brief asserted *"all SEVEN
+DECIDES sites are correct-pool"* and *"SEVENTEEN `"TEL"` compares"* — both false (a
+fourth site; the true count is 16). Nobody ran the enumeration. The adversary ran it,
+one counterexample per 40-minute pass, and was used as the verification oracle.
+
+**Threshold, backtested.** Against every series the reference consumer has with severity
+data (s289-rr, s289-teststrategy, s290-brief; six older series predate the v0.48.0
+schema and carry no counts, so they can neither confirm nor deny): **K=2** fires on
+s290-brief at pass 13 and false-fires nowhere — it never blocks a cycle that had already
+stamped `EXIT_CONDITION_MET`. **K=3 fires nowhere in the entire corpus, including the
+13-pass loop it exists to catch.** A rung that has never fired is indistinguishable from
+no rung, so K=2.
+
+**The ordering bug underneath it.** `order_key()` matched only `pass<N>`, but the
+consumer names artifacts `-p<N>`. Every file in the 13-pass series keyed 999, the stable
+sort preserved glob order — `1 10 11 12 13 2 3 …` — and Check D therefore read **p9** as
+the terminal pass, not p13. It is dormant below ten passes and activates at ten: it
+breaks in the long-cycle case it exists to police, and nowhere else. The old comment
+claimed un-orderable files "are reported rather than silently folded into the chain."
+No such report existed.

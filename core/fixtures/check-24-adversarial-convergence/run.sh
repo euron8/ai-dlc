@@ -28,9 +28,12 @@ trap 'rm -rf "$ROOT"' EXIT
 FAILURES=0
 
 # $1 case-dir  $2 expected exit (0|1)  $3 why
+# $4 (optional) overrides the series prefix. The v0.55.3 cases name their artifacts
+# `-p<N>` on purpose -- that IS the regression under test -- so they cannot share the
+# legacy `-pass<N>` prefix.
 expect() {
-  local case_dir="$1" want="$2" why="$3" got out
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/s1-adversarial-pass" 2>&1)"
+  local case_dir="$1" want="$2" why="$3" prefix="${4:-s1-adversarial-pass}" got out
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" 2>&1)"
   got=$?
   if [ "$got" -eq "$want" ]; then
     printf '  ok    %-22s exit=%s  (%s)\n' "$case_dir" "$got" "$why"
@@ -77,9 +80,44 @@ else
 fi
 
 echo
+# --- v0.55.3: numeric ordering + the STALL rung -------------------------------
+# long-series-p-naming is decided by ORDERING ALONE: its true last pass (p11) stamps
+# EXIT_CONDITION_MET, its lexicographic last pass (p9) stamps NOT_MET. Under the old
+# order_key -- which matched `pass<N>` and so recognized NONE of these `-p<N>` files --
+# every one keyed 999, the stable sort preserved glob order, and Check D read p9. If this
+# case ever goes red, the sort regressed and every >=10-pass series is adjudicated on the
+# wrong artifact.
+expect long-series-p-naming 0 "11 passes, -p<N> names: ordered NUMERICALLY, so p11 (MET) is terminal, not p9" s1-adversarial-p
+expect stalled              1 "S290: 0 CRITICAL, MAJOR pinned at 1 for 3 passes -- STALLED, FAIL (E)" s1-adversarial-p
+expect stall-then-converges 0 "DECOY: holds MAJOR one pass short of K, then clears it -- E must NOT fire" s1-adversarial-p
+
+# E must fail for the RIGHT REASON, and the reason IS the remedy. Check D's advice for
+# this shape was "run another pass to a clean verdict" -- the instruction that produced
+# S290's passes 11, 12 and 13. If E fires but still says that, nothing was fixed.
+out="$(bash "$VALIDATOR" --series "$ROOT/stalled/s1-adversarial-p" 2>&1)"
+if printf '%s' "$out" | grep -q "STALLED" \
+   && printf '%s' "$out" | grep -q "ANOTHER PASS IS NOT THE REMEDY" \
+   && printf '%s' "$out" | grep -qi "VERIFY THE DISPUTED FACT MECHANICALLY"; then
+  printf '  ok    %-22s Check E names the stall AND the remedy (verify mechanically / cut / escalate)\n' "stall-remedy"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s E fired but did not name the stall or the remedy.\n' "stall-remedy"
+  printf '        "Run another pass" is the advice that produced S290 p11, p12 and p13.\n'
+fi
+
+# And E must PRE-EMPT D. A stalled series that merely inherits D's generic "run another
+# pass to a clean verdict" is the bug wearing a new error code.
+if printf '%s' "$out" | grep -q "Either run another pass to a clean verdict"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a STALLED series still got Check D generic advice. E must pre-empt D.\n' "stall-preempts-d"
+else
+  printf '  ok    %-22s E pre-empts D: the stalled series is not told to run another pass\n' "stall-preempts-d"
+fi
+
+echo
 if [ "$FAILURES" -gt 0 ]; then
-  echo "FAIL: $FAILURES of 9 assertions wrong."
+  echo "FAIL: $FAILURES of 14 assertions wrong."
   exit 1
 fi
-echo "PASS: all 8 cases + the Check D remedy text correct."
+echo "PASS: all 11 cases + the Check D and Check E remedy text correct."
 exit 0
