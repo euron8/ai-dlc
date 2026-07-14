@@ -223,7 +223,23 @@ on_disk="$(find "$REPO_ROOT/core/fixtures" -mindepth 1 -maxdepth 1 -type d -exec
 in_install="$(fixture_list "$REPO_ROOT/scripts/install.sh")"
 in_uninstall="$(fixture_list "$REPO_ROOT/scripts/uninstall.sh")"
 
-miss_install="$(comm -23 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_install"))"
+# DIST-ONLY fixtures. A fixture is shipped so it can RUN on the consumer. One whose
+# subject is not shipped cannot run there, and shipping it anyway plants a fixture that
+# is permanently dormant on every consumer — the same "the catalog claims it is covered
+# and it is not" failure this block exists to prevent, just pointed the other way. Such a
+# fixture is named here and is NOT expected in install.sh's loop.
+#
+# The exemption is not self-certifying: each name below must ALSO be absent from
+# install.sh's loop (a stale exemption for a now-shipped fixture would silently excuse it
+# from the sync check above).
+DIST_ONLY="$(printf '%s\n' enforcement-map-sites | sort -u)"
+for f in $DIST_ONLY; do
+  printf '%s\n' "$in_install" | grep -qx "$f" && err "fixture '$f' is listed DIST-ONLY in validate-enforcement-map.sh but install.sh ships it. Either drop the exemption or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
+  [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' is listed DIST-ONLY but does not exist in core/fixtures/ — stale exemption."
+done
+
+shippable="$(comm -23 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$DIST_ONLY"))"
+miss_install="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$in_install"))"
 [ -n "$miss_install" ] && err "fixture(s) in core/fixtures/ that install.sh never ships (so no consumer has them): $(echo $miss_install)"
 ghost_install="$(comm -13 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_install"))"
 [ -n "$ghost_install" ] && err "install.sh ships fixture(s) that do not exist in core/fixtures/: $(echo $ghost_install)"
@@ -242,18 +258,51 @@ if [ -f "$PRECLASS" ]; then
   maps_to() { bash -c "CONS=/nonexistent; $(awk '/^map_consumer\(\) \{/,/^\}/' "$PRECLASS"); map_consumer '$1'" 2>/dev/null; }
   # <core dir>|<the destination install.sh writes>. Every core/ subtree the installer
   # ALSO places must be listed, or the catch-all silently invents a second home for it.
-  # Both entries here were live bugs: fixtures landed in .claude/fixtures/ (dead, while
-  # H1 reads tests/fixtures/) and ci-templates in .claude/ci-templates/ (dead, while
+  # Three entries here were live bugs: fixtures landed in .claude/fixtures/ (dead, while
+  # H1 reads tests/fixtures/), ci-templates in .claude/ci-templates/ (dead, while
   # workflows run from .github/workflows/ — which is why a real consumer's CI gates sat
-  # dormant and never once fired).
+  # dormant and never once fired), and git-hooks in .claude/git-hooks/ (dead, while
+  # install.sh writes .githooks/ — so v0.53.0's pre-push gate, the CI replacement, reached
+  # the reference consumer at a path no runner, no git config, and no script reads).
+  #
+  # THE TABLE IS NOW BOUND AT BOTH ENDS, AND THAT IS THE POINT. Listing sites by hand is
+  # what let git-hooks through: the check passed because the row was simply absent, and a
+  # check that cannot fire reads exactly like a check that passed. So:
+  #   (a) COMPLETENESS — every core/<dir>/ on disk must have a row here. A new subtree with
+  #       no row is an ERROR, not a silent fall-through to the `core/*` catch-all.
+  #   (b) AGREEMENT    — map_consumer() must send each subtree to its stated destination.
+  #   (c) INSTALLER    — the stated destination must actually appear in install.sh, so a
+  #       row cannot be satisfied by writing a destination the installer never uses.
+  SITES_TABLE="$(cat <<'SITES'
+ci-templates|.github/workflows
+fixtures|tests/fixtures
+git-hooks|.githooks
+hooks|.claude/hooks
+scripts|scripts
+session-driver|.claude/session-driver
+skills|.claude/skills
+team-roles|.claude/team-roles
+SITES
+)"
+  # (a) Completeness: every core/<dir>/ on disk is accounted for.
+  for d in "$REPO_ROOT"/core/*/; do
+    [ -d "$d" ] || continue
+    cdir="$(basename "$d")"
+    printf '%s\n' "$SITES_TABLE" | grep -q "^${cdir}|" || err "core/${cdir}/ has no destination row in I8's site table. map_consumer()'s \`core/*\` catch-all will file it under '.claude/${cdir}/' — add a row stating where install.sh actually writes it (or '.claude/${cdir}' if the catch-all is right). This is the check core/git-hooks/ slipped past by being absent."
+  done
+  # (b) Agreement + (c) installer binding.
   while IFS='|' read -r cdir dest; do
     [ -n "$cdir" ] || continue
+    [ -d "$REPO_ROOT/core/$cdir" ] || continue
     got="$(maps_to "core/$cdir/PROBE")"
     [ "$got" = "$dest/PROBE" ] || err "the pull and the installer disagree on where core/$cdir/ goes: map_consumer() sends it to '$got', install.sh writes '$dest/'. The consumer gets two copies at two paths, and the one the pull keeps fresh is not the one anything reads."
-  done <<'SITES'
-fixtures|tests/fixtures
-ci-templates|.github/workflows
-SITES
+    # Anchored at a path boundary, deliberately. A bare substring match is satisfied by
+    # any destination that merely STARTS with this one (`.githooks-REMOVED` contains
+    # `.githooks`), so the row would stay green against an installer that no longer
+    # writes it — the check would be as hand-wavy as the list it replaced.
+    dest_re="$(printf '%s' "$dest" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+    grep -qE '\$PROJECT_ROOT/'"$dest_re"'([/"]|$)' "$REPO_ROOT/scripts/install.sh" || err "I8's site table says core/$cdir/ goes to '$dest/', but install.sh never writes \$PROJECT_ROOT/$dest. Either the row is wrong or the installer stopped shipping it."
+  done <<< "$SITES_TABLE"
 fi
 
 # --- I4: no dormant binding ---------------------------------------------------

@@ -68,10 +68,23 @@ map_consumer() { # core/... -> consumer-relative path
     core/scripts/*)      echo "scripts/${1#core/scripts/}" ;;
     core/fixtures/*)     echo "tests/fixtures/${1#core/fixtures/}" ;;
     core/ci-templates/*) echo ".github/workflows/${1#core/ci-templates/}" ;;
+    core/git-hooks/*)    echo ".githooks/${1#core/git-hooks/}" ;;
     core/*)              echo ".claude/${1#core/}" ;;
     *)                   echo "$1" ;;
   esac
 }
+# `core/git-hooks/` is the third subtree the catch-all swallowed. v0.53.0 deleted the CI
+# workflow and shipped core/git-hooks/pre-push as the replacement enforcement surface;
+# install.sh writes it to `.githooks/pre-push`, but with no case here the pull filed it
+# under `.claude/git-hooks/pre-push` — a path no runner, no `core.hooksPath`, and no script
+# reads. Observed live on the reference consumer: the only references to `.claude/git-hooks/`
+# in its entire tree were `.gitignore` and the file itself, so the repo's ONLY automated gate
+# (Actions being disabled there) could not fire, and the documented arming command
+# `git config core.hooksPath .githooks` would have found an empty directory.
+#
+# NOT opted_out(): unlike ci-templates, install.sh writes `.githooks/pre-push`
+# unconditionally and leaves only ARMING to the operator (core.hooksPath). Writing the file
+# is not the behavioral change; enabling it is. So the pull must write it too.
 
 # CI workflows are OPT-IN, and must stay that way. install.sh has always copied
 # ci-templates only `if [ -d "$PROJECT_ROOT/.github/workflows" ]` — a consumer with no
@@ -238,4 +251,5 @@ while IFS='|' read -r old_prefix core_dir; do
 done <<'RELOCATIONS'
 .claude/fixtures|fixtures
 .claude/ci-templates|ci-templates
+.claude/git-hooks|git-hooks
 RELOCATIONS

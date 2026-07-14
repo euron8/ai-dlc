@@ -17,6 +17,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.55.2] — 2026-07-14
+
+### v0.53.0 shipped the CI replacement to a path nothing reads
+
+v0.53.0 deleted `.github/workflows/validate.yml` and shipped `core/git-hooks/pre-push` as
+the replacement enforcement surface — the argument being that a local gate the operator
+controls beats a service we do not run. The gate was real. **It just never arrived.**
+
+`install.sh` writes it to `.githooks/pre-push`. `reconcile/preclassify.sh`'s
+`map_consumer()` had **no case for `core/git-hooks/`**, so every pull filed it through the
+`core/*` catch-all to `.claude/git-hooks/pre-push` — a path no runner, no `core.hooksPath`,
+and no script reads. A consumer that absorbed v0.53.0 via `/ai-dlc-update` rather than
+`install.sh` got the file and none of the gate.
+
+Found on the reference consumer, which has Actions disabled by policy: the only references
+to `.claude/git-hooks/` in its entire tree were `.gitignore` and the file itself. So its
+**only** automated enforcement surface could not fire, and the documented arming command
+`git config core.hooksPath .githooks` would have found an empty directory. Two independent
+reasons it was dead; the operator knew about one.
+
+This is the **third** subtree the catch-all has swallowed — `fixtures` landed in
+`.claude/fixtures/` while H1 reads `tests/fixtures/`; `ci-templates` landed in
+`.claude/ci-templates/` while workflows run from `.github/workflows/`. Same defect, third
+time.
+
+### The reason it was the third time, and not the last
+
+I8 exists **precisely** to catch this. Its error text is *"the consumer gets two copies at
+two paths, and the one the pull keeps fresh is not the one anything reads."* It did not
+fire on `core/git-hooks/`.
+
+It did not fire because its site list was **hand-maintained**, and nobody added the row.
+The check did not fail — it had nothing to say. **A check that cannot fire reads exactly
+like a check that passed**, which is why two minor versions went by with the gate face-down
+on the reference consumer and every pull reporting green.
+
+So the fix is not the missing row. The fix is that the row can no longer go missing:
+
+- **Completeness** — I8 now derives the subtree list from `core/*/` **on disk**. A new
+  `core/<dir>/` with no destination row is an **error**, not a silent fall-through to the
+  catch-all.
+- **Agreement** — `map_consumer()` must send each subtree where install.sh writes it
+  (unchanged, but now applied to all eight subtrees rather than the two someone listed —
+  `scripts` was also unlisted, and merely happened to be right).
+- **Installer binding** — the stated destination must actually appear in `install.sh`, at a
+  **path boundary**. A bare substring match is satisfied by `.githooks-REMOVED`, so a row
+  could have stayed green against an installer that no longer wrote it.
+
+`core/fixtures/enforcement-map-sites/` asserts all three, each against the mutant that
+defeats it. It is **distribution-only** — its subject, `validate-enforcement-map.sh`, is not
+shipped to consumers, and shipping a fixture whose subject is absent would plant one that is
+permanently dormant on every consumer. I8 now carries an explicit `DIST_ONLY` exemption for
+exactly that, and the exemption is not self-certifying: an exempted fixture that install.sh
+*does* ship is an error.
+
+### The updater's own advice still dead-ended
+
+v0.55.1 added `HARD-CORE-DRIFT-ABSORBED` and taught **step 3c** about it — but **step 7, the
+adjudication loop where `HARD-*` rows are actually worked**, still read: *"If it is a hook,
+`register-drift.sh` refuses by design … let the operator keep it (it will report every pull)
+or upstream it."* An agent resolving the blocking row reads step 7, and step 7 routed it
+straight back into the dead end v0.55.1 exists to remove. Step 7 now carries the disposition
+and the one-command revert remedy, and states the one precondition that gates it: prove no
+consumer-only guard, path, flag, or exit code exists in ours that theirs lacks.
+
+### Known gap (not fixed here)
+
+Fixtures ship to consumers, but **nothing on a consumer drives them**. The distribution runs
+`core/fixtures/*/run.sh` from its own `.githooks/pre-push`; a consumer has no equivalent
+loop, so `handoff-resume-guard` and its twelve siblings run there only when a human types
+them. Arming a consumer-side fixture runner is a consumer decision and is not made for them
+here — but the catalog should stop implying those self-tests are running when they are not.
+
+### For the reference consumer
+
+The next pull relocates the gate with no hand-editing: `preclassify.sh`'s orphan pass now
+carries `.claude/git-hooks|git-hooks`, so the stale copy reports **`ORPHANED-RELOCATED`**
+(it is byte-identical to the distribution blob, hence provably safe to remove) and
+`.githooks/pre-push` is written in its place. Arming it is still one command, still
+deliberate: `git config core.hooksPath .githooks`. Note the gate exits 1 on that tree today —
+that is the gate working, not the gate broken.
+
 ## [0.55.1] — 2026-07-13
 
 ### v0.55.0 upstreamed the consumer's hook — and the updater had no way to say so
