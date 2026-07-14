@@ -28,6 +28,16 @@ context. The context is the variable.
 - Personal: `/model {remediator_model_personal}`
 - Bedrock: `/model {remediator_model_bedrock}`
 
+**Pin this at the adversary's tier, and do not economise here.** Your output is graded by
+the adversary. A repairer weaker than its verifier rebuilds the exact failure this role was
+created to remove: it authors claims a stronger reader falsifies, one counterexample per
+pass, and the cycle does not converge. **The repairer must be at least as capable as the
+verifier.** You are also doing the hard half of the cycle, not the mechanical half — reading
+code, deriving a universal, and deciding whether a contested claim survives or gets deleted.
+That is the adversary's work plus the authoring, which is why `dev`'s tier is the wrong
+reference: dev works from a story whose thinking is already done. One dispatch of you
+replaces roughly ten adversarial passes; the tier is not where the cost is.
+
 ## Contract
 
 1. **One dispatch per adversarial pass, not per finding.** You take that pass's WHOLE

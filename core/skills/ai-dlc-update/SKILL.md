@@ -596,6 +596,19 @@ Every consumer block that differs from upstream is one of:
      manifest-listed file blanks the consumer's real model strings/ownership
      paths/deploy commands back to `{placeholder}` tokens — this happened
      once (the reverted Phase-2B spike) and must not happen again.
+   - `UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE` → **a NEW core file carrying
+     setup-substitution sites. mask/reinject CANNOT do this one**: that transform
+     reinjects the CONSUMER's live values, and a file the consumer does not have yet
+     has none to extract. A blind copy leaves `{token}` on a live line, and the
+     leftover-token gate below then blocks delivery after every other write has
+     landed. Substitute BEFORE the write: for each site `setup-sites.md` declares on
+     that path, **ask the operator one closed question**, proposing the value the
+     consumer already uses for its nearest-equivalent role as the default (for a new
+     team-role's `/model`, that is the role with the same effort tier — `adversary`
+     for a high-effort reviewer). Then write theirs with the answers substituted in.
+     Every role file predates the consumer's install, so `ai-dlc-setup` filled these
+     tokens once and the pull never had to; `team-roles/remediator.md` (v0.56.0) is the
+     first new template-bearing core file since, and it is why this bucket exists.
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
      push-candidate ledger.
@@ -665,12 +678,19 @@ Every consumer block that differs from upstream is one of:
    grep -rn '{[a-z_]*}' <consumer>/.claude/team-roles/ | grep -v '<!--'
    ```
 
-   A hit is a FAIL: some file carried a setup-substitution site that
-   `setup-sites.md` does not declare, so the overwrite blanked a live consumer
-   value back to its `{placeholder}` token. STOP before the re-stamp, name the
-   file and the token, add the missing site to `setup-sites.md`, and redo that
-   file's overwrite through mask/reinject. Do not deliver a tree that dispatches
-   a teammate with `/model {x_model_personal}`.
+   A hit is a FAIL. STOP before the re-stamp and name the file and the token — then
+   tell the two causes APART, because they have opposite remedies:
+
+   - **The site is NOT declared in `setup-sites.md`.** The overwrite blanked a live
+     consumer value back to its `{placeholder}`. Add the missing site to
+     `setup-sites.md` and redo that file's overwrite through **mask/reinject**.
+   - **The site IS declared, and the file is NEW to this consumer** (bucket
+     `UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE`). Nothing was blanked — the file has
+     simply never been through `ai-dlc-setup`, so there was no consumer value to
+     reinject and mask/reinject is the WRONG tool. Substitute the declared sites from
+     the operator's answer (step 7), then rewrite the file.
+
+   Do not deliver a tree that dispatches a teammate with `/model {x_model_personal}`.
 
    Exclude `<!-- ... -->` doc comments — those legitimately carry the token text
    and MUST survive from `theirs` (per the mask/reinject transform, the doc

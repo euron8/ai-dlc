@@ -110,6 +110,13 @@ opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
 # equals "MISSING", and every `[ "$h" = MISSING ]` test silently reads false. The existing
 # buckets escaped this only by accident (the A branch never reads base_h, the D branch
 # never reads theirs_h). `-q --verify` prints nothing and exits 1, so MISSING means MISSING.
+# Paths that setup-sites.md declares a substitution site for. Read once: these are the
+# core files whose `{token}` placeholders `ai-dlc-setup` fills with the consumer's real
+# model strings / ownership paths / deploy commands.
+SETUP_SITED_PATHS="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' \
+  "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
+setup_sited() { printf '%s\n' "$SETUP_SITED_PATHS" | grep -qxF "$1"; }
+
 blob_hash() { git -C "$DIST" rev-parse -q --verify "$1:$2" 2>/dev/null || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }
 
@@ -179,7 +186,20 @@ git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' r
 
   case "$status" in
     A)
-      if   [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-ONLY-ADD"        # pure apply
+      # A NEW file that carries setup-substitution sites is NOT a pure copy. mask/reinject
+      # cannot help it: that transform extracts the CONSUMER's live values before writing
+      # theirs, and a file the consumer does not have yet has no live values to extract. So
+      # the tokens survive the write, the leftover-token gate fires AFTER every write and
+      # before the re-stamp, and its remedy ("add the missing site to setup-sites.md") is
+      # wrong -- the site IS declared. The file has simply never been through setup.
+      #
+      # Every role file predates the consumer's install, so `ai-dlc-setup` filled its tokens
+      # once and the pull never had to. team-roles/remediator.md (v0.56.0) is the first NEW
+      # template-bearing core file since, and it walked straight into that hole. Surface it
+      # in the DRY-RUN, where the operator can answer it, instead of at a gate after writes.
+      if   [ "$ours_h" = MISSING ] && setup_sited "$path"; then
+                                                bucket="UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE"
+      elif [ "$ours_h" = MISSING ];        then bucket="UPSTREAM-ONLY-ADD"        # pure apply
       elif [ "$ours_h" = "$theirs_h" ];    then bucket="ALREADY-PRESENT"          # noop
       else                                      bucket="BOTH-ADDED->CLASSIFY"; fi
       ;;

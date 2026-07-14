@@ -17,6 +17,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.56.1] — 2026-07-14
+
+### v0.56.0 shipped the first new role file in the mechanism's lifetime, and the pull had no way to fill its tokens
+
+Caught before the reference consumer ran the update, by dry-running the pull it was about
+to run.
+
+`team-roles/remediator.md` carries setup-substitution sites — `/model
+{remediator_model_personal}` and `/model {remediator_model_bedrock}` — and
+`setup-sites.md` duly declares both. The pull still could not handle it, and the reason is
+structural: **`UPSTREAM-ONLY-ADD` is a pure copy, and mask/reinject cannot rescue it.**
+That transform extracts the CONSUMER's live values before writing theirs and reinjects them
+afterward — and a file the consumer does not have yet **has no live values to extract**. So
+the copy lands with `{token}` on a live line, and the **leftover-token gate fires after every
+other write and before the re-stamp**, blocking delivery.
+
+Its remedy text would then have misdiagnosed it: *"add the missing site to
+`setup-sites.md`"* — but the site **is** declared. The file had simply never been through
+`ai-dlc-setup`.
+
+**Why it had never happened.** Every role file predates the consumer's install, so
+`ai-dlc-setup` filled its tokens once and the pull never had to. `remediator.md` is the
+**first new template-bearing core file since the setup-sites mechanism existed**, and it
+walked straight into the hole.
+
+- **New bucket `UPSTREAM-ONLY-ADD+SETUP-TOKENS->SUBSTITUTE`** (`preclassify.sh`) — surfaced
+  in the **dry-run**, where the operator can answer it, instead of at a gate after the
+  writes have landed. It fires only on an added file that `setup-sites.md` declares a site
+  for; a modified one still takes mask/reinject.
+- **Step 7** substitutes BEFORE the write, asking one closed question per declared site and
+  proposing the consumer's nearest-equivalent role as the default (for a new team-role's
+  `/model`, the role at the same effort tier).
+- **The leftover-token gate now tells the two causes apart** — site not declared (blanked a
+  live value → mask/reinject) versus site declared but the file is new (never substituted →
+  substitute). They have opposite remedies, and the gate was only ever written for one.
+
 ## [0.56.0] — 2026-07-14
 
 ### The lead was the worst agent in the system to repair an artifact, and core made it the only one
