@@ -336,6 +336,45 @@ else
   else bad "register-drift invented an override for a hook -- overrides shadow headings, hooks have none"; fi
 fi
 
+echo "== F. upstream ABSORBED the consumer's in-place delta =="
+
+# Extensions have had this signal since v0.34.0 (EXTENSION-RETIRE-CANDIDATE). Core drift
+# had NO equivalent, so a consumer whose hardening was upstreamed went on being told to
+# "refile it as an override, or revert" — with nothing saying the revert was now the
+# RIGHT answer. It would have blocked forever on a delta core already carried.
+# (Live case: the reference consumer's handoff resume-prompt guard, v0.55.0.)
+st_theirs="$(bash "$UNREG" "$DIST" "$BASE" "$CONS" "$THEIRS" | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
+st_base="$(bash "$UNREG" "$DIST" "$BASE" "$CONS" "$BASE"   | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
+st_none="$(bash "$UNREG" "$DIST" "$BASE" "$CONS"           | awk -F'\t' '$2=="hooks/guard.sh"{print $1}')"
+
+if [ "$st_theirs" = "HARD-CORE-DRIFT-ABSORBED" ]; then
+  ok "upstream absorbed the delta -> HARD-CORE-DRIFT-ABSORBED (remedy: revert, not override)"
+else
+  bad "absorption NOT detected (got '$st_theirs') — the consumer would be told to refile a delta core already carries, forever"
+fi
+
+# The control: at BASE, upstream does NOT have the lines, so it must NOT claim absorption.
+# A detector that says 'absorbed' when nothing was absorbed invites the operator to
+# DELETE consumer text upstream never took.
+if [ "$st_base" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+  ok "not-yet-absorbed -> plain HARD-UNREGISTERED-CORE-DRIFT (no false 'absorbed')"
+else
+  bad "claimed absorption against a core that does NOT carry the delta (got '$st_base') — this would delete consumer text"
+fi
+
+if [ "$st_none" = "HARD-UNREGISTERED-CORE-DRIFT" ]; then
+  ok "no theirs-ref -> old behaviour preserved"
+else
+  bad "behaviour changed when no theirs-ref is passed (got '$st_none')"
+fi
+
+# It must still BLOCK. Absorption changes the recommendation, not who decides: a revert
+# deletes consumer content, and only the operator can confirm nothing was lost.
+case "$st_theirs" in
+  HARD-*) ok "absorption still BLOCKS apply (a revert deletes text; the operator confirms)" ;;
+  *)      bad "absorption downgraded out of HARD- — apply would silently delete the consumer's hook" ;;
+esac
+
 rm -rf "$ROOT"
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-readopt-gate: PASS"; exit 0; fi

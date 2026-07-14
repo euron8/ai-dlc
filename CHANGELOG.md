@@ -17,6 +17,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.55.1] — 2026-07-13
+
+### v0.55.0 upstreamed the consumer's hook — and the updater had no way to say so
+
+Extensions have had an absorption signal since v0.34.0: `EXTENSION-RETIRE-CANDIDATE`,
+*"upstream absorbed this — retire the consumer copy."* **Unregistered core drift had no
+equivalent.**
+
+So the moment v0.55.0 took the reference consumer's handoff guard into core, the next
+pull would have reported `HARD-UNREGISTERED-CORE-DRIFT` on that hook and advised
+*"refile the delta as an overrides/ entry, or revert"* — with **nothing telling the
+operator that the revert was now the right answer, and that core already carried it.**
+`register-drift.sh` refuses hooks by design, so the block had **no resolution at all**.
+It would have blocked **forever**, on a delta upstream had already adopted. Detect and
+don't resolve, again.
+
+**`HARD-CORE-DRIFT-ABSORBED`** closes it. `unregistered-drift.sh` now takes a
+`<theirs-ref>` and asks a purely mechanical question — **no English parsed**: of the
+substantive lines this consumer added (present in its copy, absent from core at `base`),
+how many are present in core at `theirs`? Overlap at `base` is 0 by construction, so
+material overlap at `theirs` means upstream newly gained lines the consumer had been
+carrying alone. On the live consumer: **21 of 63 (33%)**, against a **0%** control before
+upstreaming.
+
+It requires **both** an absolute floor (≥3 lines) and a share (≥10%), so one coincidental
+match cannot declare absorption and invite the operator to delete text upstream never
+took.
+
+**It still blocks.** Absorption changes *what the updater recommends*, not *who decides* —
+a revert **deletes consumer content**, and only the operator can confirm nothing was lost.
+The status carries the exact `git show <theirs>:<core-path> > <consumer-path>` command.
+
+`core/fixtures/layer-readopt-gate/` asserts all four properties, and the mutant that drops
+the absorption branch is caught: *"the consumer would be told to refile a delta core
+already carries, forever."*
+
+### For the reference consumer
+
+The next pull now reports `HARD-CORE-DRIFT-ABSORBED` on `hooks/ai-dlc-continue.sh` with a
+one-command remedy — instead of an unresolvable block. Take it, and the pull goes fully
+clean for the first time.
+
 ## [0.55.0] — 2026-07-13
 
 ### The handoff resume-prompt guard, upstreamed — and the rule it had been quietly overruling

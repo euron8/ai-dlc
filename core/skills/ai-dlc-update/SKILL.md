@@ -298,7 +298,19 @@ Every consumer block that differs from upstream is one of:
    neither, so no entry describes it, no `base_sha` tracks it, and `apply` — which
    overwrites upstream-owned core — **deletes it without a word.** Run:
 
-       reconcile/unregistered-drift.sh <dist-repo> <base-sha> <consumer-root>
+       reconcile/unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref>
+
+   **Pass `<theirs-ref>`.** Without it the absorption check cannot run, and a consumer
+   whose hardening upstream just adopted keeps being told to refile a delta core already
+   carries — forever.
+
+   - `HARD-CORE-DRIFT-ABSORBED` → **upstream took this change.** Lines the consumer added
+     (absent from core at `base`) are present in core at `theirs`. The remedy is a
+     **revert**, not an override, and telling the operator to refile it would be actively
+     wrong advice. It still **blocks**: a revert DELETES consumer text, so the operator
+     confirms the upstream version covers their delta first. Show them the diff, then run
+     the `git show <theirs>:<core-path> > <consumer-path>` command the status carries.
+     This is the core-drift twin of `EXTENSION-RETIRE-CANDIDATE`.
 
    - `HARD-UNREGISTERED-CORE-DRIFT` → **blocks `apply`** (step 7). Undecidable by the
      tool (deliberate hardening → refile as an `overrides/` entry with a `base_sha`;

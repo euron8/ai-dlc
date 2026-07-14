@@ -12,11 +12,27 @@
 # describes it, no base_sha tracks it, and `apply` — which overwrites
 # upstream-owned core — DESTROYS it without a word.
 #
-# Usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root>
+# Usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> [theirs-ref]
 # Output: TSV — STATUS<TAB>FILE<TAB>DETAIL
 # Exit:   0 always (a classifier, not a gate). The CALLER decides; HARD- blocks.
 #
 # Statuses
+#   HARD-CORE-DRIFT-ABSORBED      the consumer's in-place delta is NOW PRESENT UPSTREAM:
+#                                 lines it added, which core did NOT have at base, appear
+#                                 in core at `theirs`. Upstream took the change. The
+#                                 remedy is a REVERT, not an override — but a revert
+#                                 DELETES consumer text, so it still blocks and the
+#                                 operator confirms.
+#
+#                                 Extensions have had this signal since v0.34.0
+#                                 (EXTENSION-RETIRE-CANDIDATE: "upstream absorbed it").
+#                                 Unregistered core drift had NO equivalent, so a
+#                                 consumer whose hardening was upstreamed went on being
+#                                 told to "refile it as an override, or revert" — with
+#                                 nothing telling it the revert was now the RIGHT answer.
+#                                 It would have blocked forever on a delta core already
+#                                 carried. (Live case: the reference consumer's handoff
+#                                 resume-prompt guard, upstreamed in v0.55.0.)
 #   HARD-UNREGISTERED-CORE-DRIFT  core file edited in place with no layer entry.
 #                                 HARD- because the tool cannot DECIDE whether the
 #                                 edit is a deliberate hardening (-> refile as an
@@ -30,9 +46,36 @@
 #   CORE-OK                       byte-identical to the distribution at base.
 set -uo pipefail
 
-DIST="${1:?usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root>}"
+DIST="${1:?usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> [theirs-ref]}"
 BASE="${2:?}"
 CONSUMER="${3:?}"
+THEIRS="${4:-}"
+
+# Did upstream ABSORB the consumer's in-place delta between base and theirs?
+#
+# Mechanical, no English parsed: take the SUBSTANTIVE lines the consumer has and
+# core@base does not (its delta), then count how many of them core@theirs now has.
+# Base overlap is 0 by construction, so any material overlap at theirs means upstream
+# newly gained lines the consumer had been carrying alone.
+#
+# Trivial lines are excluded (<25 chars: braces, `fi`, blanks) — they collide by
+# coincidence, not by absorption. Requiring BOTH an absolute floor (>=3 lines) and a
+# share (>=10%) keeps a stray coincidental match from declaring absorption and inviting
+# the operator to delete text upstream never took.
+#
+# This never auto-reverts. Reverting DELETES consumer content, so it stays HARD- and the
+# operator confirms. The signal changes WHAT the updater recommends, not who decides.
+absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <total>"
+  local cp="$1" cons="$2" only hits total
+  only="$(comm -23 \
+    <(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$cons" | grep -vE '^.{0,24}$' | sort -u) \
+    <(git -C "$DIST" show "${BASE}:${cp}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^.{0,24}$' | sort -u))"
+  total="$(printf '%s' "$only" | grep -c . || true)"
+  [ "${total:-0}" -eq 0 ] && { printf '0 0'; return; }
+  hits="$(comm -12 <(printf '%s\n' "$only" | sort -u) \
+    <(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u) | grep -c . || true)"
+  printf '%s %s' "${hits:-0}" "$total"
+}
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
@@ -90,6 +133,19 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
 
       nl_c="$(wc -l < "$cons" | tr -d ' ')"
       nl_b="$(git -C "$DIST" show "${BASE}:${cp}" | wc -l | tr -d ' ')"
+
+      # Absorption beats plain drift: if upstream took the change, the remedy is a
+      # revert, and saying "refile it as an override" would be actively wrong advice.
+      if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null; then
+        read -r hits total <<<"$(absorbed_pct "$cp" "$cons")"
+        if [ "${total:-0}" -gt 0 ] && [ "${hits:-0}" -ge 3 ] \
+           && [ $(( hits * 100 / total )) -ge 10 ]; then
+          emit HARD-CORE-DRIFT-ABSORBED "$rel" \
+            "UPSTREAM ABSORBED THIS. ${hits} of ${total} lines this consumer added (absent from core at ${BASE}) are PRESENT in core at ${THEIRS}. The remedy is a REVERT, not an override — core now carries it. Confirm the upstream version covers your delta, then: git -C ${DIST} show ${THEIRS}:${cp} > <consumer>/${cons#$CONSUMER/}. This still blocks because a revert DELETES text and only you can confirm nothing was lost."
+          continue
+        fi
+      fi
+
       emit HARD-UNREGISTERED-CORE-DRIFT "$rel" \
         "core file edited IN PLACE ($(( nl_c - nl_b )) lines vs ${BASE}) with no overrides/ entry. Rule 27: core is upstream-owned and \`apply\` OVERWRITES it — this text is deleted on the next pull. Refile the delta as an overrides/ entry with base_sha ${BASE}, or revert the file."
     done
