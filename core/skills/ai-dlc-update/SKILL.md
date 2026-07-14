@@ -527,8 +527,23 @@ Every consumer block that differs from upstream is one of:
      If the delta merely **duplicates an existing override**, do not register a second
      one: revert core and say which override already carries it.
      If it is a **hook**, `register-drift.sh` refuses by design — the layer system has
-     no override grain for hooks. Say so, and let the operator keep it (it will report
-     every pull) or upstream it. Do not paper over it.
+     no override grain for hooks. Check the row's status before you conclude anything:
+     if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
+     so, and let the operator keep it (it will report every pull) or upstream it. Do not
+     paper over it.
+   - **`HARD-CORE-DRIFT-ABSORBED`** → **upstream took this change; the remedy is a REVERT,
+     not an override.** `unregistered-drift.sh` proves the consumer's added lines are
+     already present in core at `theirs` (it reports the hit count and percentage). So the
+     delta is not consumer-specific behavior to preserve — it is a duplicate of core, and
+     keeping it means carrying a fork of a file upstream now maintains. Revert with the
+     command the detail string hands you:
+     `git -C <dist> show <theirs>:<core-path> > <consumer-path>`.
+     **Before you propose it, prove nothing is destroyed**: diff ours against theirs and
+     confirm no consumer-only guard, path, flag, or exit code exists in ours that theirs
+     lacks. If something does, it is a genuine consumer delta wearing an absorbed file's
+     clothes — escalate it as such and do not revert. This is the one `HARD-*` row whose
+     resolution DELETES consumer text, so it is gated on an explicit operator yes like any
+     other, with the diff shown.
 
    **(4) Ask the operator to approve THAT ONE disposition** — a closed question with
    your recommendation and its one-line reason, and the evidence you used. Not "how do
