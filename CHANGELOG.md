@@ -17,6 +17,73 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.56.0] — 2026-07-14
+
+### The lead was the worst agent in the system to repair an artifact, and core made it the only one
+
+v0.55.3 found that the adversarial cycle could not converge because **repair was unverified
+authorship**: fixing a finding means writing a NEW claim about the code into the artifact,
+and nothing checked it. Its fix told the lead to *derive every repair before re-dispatching*.
+
+That fix was aimed at the wrong agent.
+
+**The lead is the most context-saturated agent in the pipeline.** It orchestrates, dispatches
+and compacts for the whole sprint. Measured on the reference consumer: the lead **compacted 13
+times** during the sprint in which it was authoring precise claims about specific call sites
+and line numbers. It was not repairing from the document. It was repairing from a lossy summary
+of a document it had last read many passes ago — and writing that memory into the artifact as
+fact.
+
+The scoreboard is not close. Across five consecutive passes, **7 of 7** prior-scope findings
+were false claims introduced by a lead repair (A57, A65, A67, A70, A72). Over the same passes
+the **adversary** — a fresh subagent, bound to a role file, reading actual source — re-derived
+those same facts by AST and was **right every time**. Same task, same codebase, different
+context. **The context is the variable.**
+
+So telling the lead to be more rigorous is an exhortation to the weakest agent in the system.
+It reads well and it does not hold. Repair is a bounded, evidence-driven, code-reading task —
+exactly the shape that dispatches well. We already had the proof, because the adversary IS that
+shape, pointed the other way.
+
+And core mandated the failure. `steps/discovery.md` read: *"brainstorm, brief authoring, **and
+the Rule 8 validation cycle** are never offloaded."* No role owned repair, so it fell to the
+orchestrator by default.
+
+**`team-roles/remediator.md`** (new). One dispatch per adversarial pass — never per finding,
+because the artifact is one document and N agents editing it in parallel produce a document that
+contradicts itself. It takes the pass's whole finding set, repairs in place, and writes a
+**repair record** carrying, per finding, the disposition, the edit site, and **the command that
+derives every factual claim the repair asserts, with its output**.
+
+> **The repair is a derivation, not a rewrite.** If the fix reworks the sentence without running
+> anything, the finding was restated, not repaired — and the next pass will falsify the
+> restatement. **When in doubt, DELETE the claim.** An unverifiable assertion is not
+> load-bearing; it is the thing generating the findings.
+
+**The prohibition is split, not deleted.** Brief *authoring* still stays inline — it needs
+whole-document intent. But the Rule 8 cycle is not one thing: its REVIEW passes already
+dispatched (adversary), and now its REPAIR passes dispatch too. The lead keeps what is genuinely
+orchestration — dispatch, the bounded join, and the **Rule 11/13 scope calls** the remediator
+escalates (cut-versus-fix, anything touching `LOCKED_REQUIREMENTS`, anything that changes what
+the sprint delivers). Those are decisions, not edits.
+
+`_gate-procedures.md` gains **"Adversarial repair dispatch"**, referenced by the six steps that
+run a Rule 8 repair cycle (`discovery`, `architecture`, `research-requirements`,
+`stories-test-strategy`, `doc-repair-backfill`, `sprint-review-next`) rather than duplicated into
+each. `sprint-review.md` already dispatched code fixes to dev teammates — planning artifacts were
+the anomaly.
+
+**The next pass verifies against the record.** The adversary already checks *"did the prior pass's
+findings land?"*; the derivations are now what it checks them against, instead of re-deriving from
+scratch. An underived claim in a repair remains a MAJOR (v0.55.3), attributed to the repair that
+made it.
+
+### For the reference consumer
+
+S290's brief cycle is STALLED with a standing wrong-pool MAJOR the brief asserts and has never
+enumerated. Do not run pass 15 with the lead repairing. Dispatch a `remediator`: it derives the
+claim or cuts it, and the finding closes.
+
 ## [0.55.3] — 2026-07-14
 
 ### Thirteen passes, zero convergence, and nothing fired

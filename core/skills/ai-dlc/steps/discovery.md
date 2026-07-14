@@ -26,9 +26,13 @@ Context, resolved at `route.md` Step 6), returning only
 **Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
 `scripts/wait-for-deliverable.sh <artifact_path>`. A hand-rolled `until`/`sleep` wait
 is a Rule 29 Check A violation and gate Check 25 counts it.
-**Sections 2 onward stay inline in the lead** — brainstorm, brief
-authoring, and the Rule 8 validation cycle are never offloaded. If
-`planning_offload: off`, run all sections inline. Per SKILL.md Rule 24.
+**Brainstorm and brief AUTHORING stay inline in the lead** — they need
+whole-document intent. **The Rule 8 validation cycle is not one thing:**
+its REVIEW passes dispatch (adversary, Rule 20) and its REPAIR passes
+dispatch (remediator, `_gate-procedures.md` "Adversarial repair
+dispatch"). The lead keeps orchestration — dispatch, the join, and the
+Rule 11/13 scope calls. If `planning_offload: off`, run all sections
+inline. Per SKILL.md Rule 24.
 
 ### 1. Context Loading
 
@@ -150,22 +154,21 @@ wait is a Rule 29 Check A violation; gate Check 25 counts it.
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the brief with every answer.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — cynical review. Apply all real
-   fixes. Run a second pass. Continue until only nitpicks remain — where
+3. `/bmad-review-adversarial-general` — cynical review. **Repair the findings**
+   (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per
+   pass; **the lead does not repair the artifact itself**). Run a second pass.
+   Continue until only nitpicks remain — where
    "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
    ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
    terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
    that field; CRITICALs rising **in the scope the prior pass reviewed** are a
    `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
    added scope and freeze the artifact).
-   **DERIVE EVERY REPAIR BEFORE YOU RE-DISPATCH.** A repair that asserts a fact
-   about the code — a count, a universal ("all N …"), a call-site list, a
-   negative ("X never needs Y") — MUST carry the command that derives it and
-   that command's output, inline. **Assert nothing you did not run.** An
-   underived repair claim is a MAJOR (`adversary.md`), attributed to the repair
-   that made it: the next pass spends 40 minutes falsifying what one grep would
-   have settled, and the cycle cannot converge while repairs inject claims as
-   fast as review removes them.
+   **Assert nothing you did not run.** Every factual claim about the code a repair
+   asserts — a count, a universal ("all N …"), a call-site list, a negative ("X
+   never needs Y") — carries the command that derives it and that command's
+   output. An underived repair claim is a MAJOR (`adversary.md`), attributed to
+   the repair that made it.
    **A MAJOR that will not fall for two consecutive passes at zero CRITICAL is a
    STALL, not progress.** Another pass buys another counterexample. Derive the
    disputed fact, or cut the claim, then escalate (gate Check 24 §E).

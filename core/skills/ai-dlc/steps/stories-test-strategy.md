@@ -288,7 +288,8 @@ between them:**
 3. `/bmad-review-adversarial-general` — 2+ passes on stories. Focus on
    missing acceptance criteria, untestable criteria, scope creep, missing
    NFRs, and over-engineering (Rule 26: ACs demanding mechanism no
-   locked requirement needs — propose removals). Apply all fixes.
+   locked requirement needs — propose removals).
+   **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
    **Source fidelity pass:** Verify stories implement what was requested,
    not a different or lower-effort alternative.
    **Run sub-step snapshot update after each adversarial pass.**

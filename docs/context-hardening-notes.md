@@ -1676,3 +1676,38 @@ the terminal pass, not p13. It is dormant below ten passes and activates at ten:
 breaks in the long-cycle case it exists to police, and nowhere else. The old comment
 claimed un-orderable files "are reported rather than silently folded into the chain."
 No such report existed.
+
+## R35 — repair was assigned to the one agent that could not do it (v0.56.0)
+
+R34 diagnosed the endless adversarial cycle as **unverified repair authorship** and told the
+lead to derive its repairs. That was the right constraint pointed at the wrong agent.
+
+**The lead is the most context-saturated agent in the pipeline.** It orchestrates, dispatches
+and compacts across the whole sprint. On S290 it **compacted 13 times** while authoring precise
+claims about specific call sites and line numbers. It was not repairing from the document; it
+was repairing from a lossy summary of a document it had last read many passes ago, and writing
+that memory into the artifact as fact.
+
+The asymmetry is total, and it is the whole argument:
+
+| agent | context | record on the same facts |
+|---|---|---|
+| **lead** (repairs) | saturated, 13 compactions, orchestrating | **7 of 7 claims FALSE** (A57, A65, A67, A70, A72) |
+| **adversary** (reviews) | fresh subagent, role-bound, reads source | **right every time** (re-derived by AST) |
+
+Same task, same codebase, different context. **The context is the variable.** So "tell the lead
+to be more careful" is an exhortation to the weakest agent in the system — the kind of fix that
+reads well and does not hold. Repair is bounded, evidence-driven and code-reading: exactly the
+shape that dispatches well. The adversary was already the proof, pointed the other way.
+
+Core mandated the failure: `discovery.md` said the Rule 8 validation cycle is *"never
+offloaded"*, and **no role owned repair**, so it fell to the orchestrator by default.
+
+**The generalisable rule: when a task keeps going wrong, check WHICH AGENT owns it before adding
+discipline to the agent that has it.** A role file is cheaper than an exhortation, and it is the
+only one of the two that survives a compaction.
+
+`remediator.md` is one dispatch per PASS (never per finding — the artifact is one document, and
+parallel editors produce a document that contradicts itself). The prohibition was SPLIT, not
+deleted: authoring still needs whole-document intent and stays inline; the lead keeps dispatch,
+the join, and the Rule 11/13 scope calls, which are decisions rather than edits.

@@ -96,7 +96,7 @@ between them:**
 2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
    Update the PRD with every clarification.
    **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. `/bmad-review-adversarial-general` — 2+ passes. Apply all fixes
+3. `/bmad-review-adversarial-general` — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
    between passes. Continue until only nitpicks remain — and **"nitpick" is
    the MINOR/NIT rung of the `team-roles/adversary.md` severity ladder, not a
    feeling.** Zero CRITICAL and zero MAJOR IS the exit condition met, with

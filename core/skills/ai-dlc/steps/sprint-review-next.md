@@ -65,7 +65,8 @@ between them:**
    missing acceptance criteria, untestable criteria, scope creep,
    missing NFRs, cross-sprint consistency, and over-engineering
    (Rule 26: ACs demanding mechanism no locked requirement needs —
-   propose removals). Apply all fixes.
+   propose removals).
+   **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
    **Run sub-step snapshot update after each adversarial pass.**
    **Then run auto-handoff evaluation** (see `_gate-procedures.md`
    \"Auto-handoff evaluation\") at `Seam D` with the label

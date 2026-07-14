@@ -274,8 +274,10 @@ between them:**
    scalability, coupling, single points of failure, backward
    compatibility, migration risk, integration seams, and
    over-engineering (Rule 26: mechanism beyond requirements, parallel
-   paths, unjustified guards — propose removals as findings). Apply
-   all fixes between passes. Continue until only nitpicks remain — where
+   paths, unjustified guards — propose removals as findings).
+   **Repair the findings** between passes (`_gate-procedures.md`,
+   "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not
+   repair the artifact itself). Continue until only nitpicks remain — where
    "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
    ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
    terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
