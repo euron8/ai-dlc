@@ -36,7 +36,9 @@ case "$REL" in
   hooks/*)
     echo "register-drift: $REL is a HOOK. The layer system has no override grain for hooks —" >&2
     echo "  overrides shadow rulebook headings. Keep the consumer hook (accept per-entry) or" >&2
-    echo "  upstream the change. This is a known gap, not something to paper over here." >&2
+    echo "  upstream the change." >&2
+    echo "  If upstream has ALREADY absorbed it, unregistered-drift.sh reports" >&2
+    echo "  HARD-CORE-DRIFT-ABSORBED and the remedy is a REVERT, not an override." >&2
     exit 2 ;;
   *) echo "register-drift: unrecognized core path: $REL" >&2; exit 2 ;;
 esac

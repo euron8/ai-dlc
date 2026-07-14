@@ -72,6 +72,14 @@ You are the TEA teammate -- the Test Architect. You carry the
 quality-and-testability lens.
 EOF
 
+mkdir -p "$DIST/core/hooks"
+cat > "$DIST/core/hooks/guard.sh" <<'EOF'
+#!/usr/bin/env bash
+# A core hook the consumer will harden in place.
+set -uo pipefail
+echo "core baseline behaviour, unchanged across the range"
+EOF
+
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm base
 BASE="$(git -C "$DIST" rev-parse --short HEAD)"
@@ -99,6 +107,19 @@ is injecting defects. CRITICALs in scope the sprint ADDED are NOT divergence.
 ## Rule 9 -- Trailing
 
 Tail section.
+EOF
+
+# THEIRS absorbs the consumer's hardening (the v0.55.0 handoff-guard case).
+cat > "$DIST/core/hooks/guard.sh" <<'EOF'
+#!/usr/bin/env bash
+# A core hook the consumer will harden in place.
+set -uo pipefail
+echo "core baseline behaviour, unchanged across the range"
+# ---- upstreamed from the reference consumer ----
+CONSUMER_GUARD_ANCHOR_ONE="a substantive line the consumer added first"
+CONSUMER_GUARD_ANCHOR_TWO="a second substantive line the consumer added"
+CONSUMER_GUARD_ANCHOR_THREE="a third substantive line the consumer added"
+CONSUMER_GUARD_ANCHOR_FOUR="a fourth substantive line the consumer added"
 EOF
 
 git -C "$DIST" add -A
@@ -152,6 +173,19 @@ Validation intensity by path: service/ and infra/ are FULL; scripts/ and docs/ a
 **Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1
 reports more CRITICALs than pass N, the repair step is injecting defects faster
 than review removes them; another pass only finds the next wave. STOP.
+EOF
+
+# The consumer's IN-PLACE hook hardening — no override entry (hooks have no grain).
+mkdir -p "$CONS/.claude/hooks"
+cat > "$CONS/.claude/hooks/guard.sh" <<'EOF'
+#!/usr/bin/env bash
+# A core hook the consumer will harden in place.
+set -uo pipefail
+echo "core baseline behaviour, unchanged across the range"
+CONSUMER_GUARD_ANCHOR_ONE="a substantive line the consumer added first"
+CONSUMER_GUARD_ANCHOR_TWO="a second substantive line the consumer added"
+CONSUMER_GUARD_ANCHOR_THREE="a third substantive line the consumer added"
+CONSUMER_GUARD_ANCHOR_FOUR="a fourth substantive line the consumer added"
 EOF
 
 git -C "$CONS" add -A
