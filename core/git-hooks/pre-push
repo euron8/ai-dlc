@@ -54,7 +54,18 @@ if [ -f scripts/validate-compact-window.sh ]; then
     bash scripts/validate-compact-window.sh
 fi
 
-# 3. A shipped script with a syntax error is a gate that cannot run at all.
+# 3. The schema an agent is TAUGHT and the schema the gate READS must be the same schema.
+#    When they diverged, the role file taught a provenance block in a ``` fence, the adversary
+#    emitted exactly that, the parser matched nothing, and validate-provenance-block.sh said
+#    "no provenance block required or present" and exited 0 — so two full adversarial passes
+#    of a real sprint went unadjudicated and the gate called them clean. An unparseable block
+#    scores exactly like a clean artifact.
+if [ -f scripts/sync-taught-schema.sh ]; then
+  step "taught schema == read schema (provenance examples derive from schemas/)" \
+    bash scripts/sync-taught-schema.sh --check
+fi
+
+# 4. A shipped script with a syntax error is a gate that cannot run at all.
 syntax_all() {
   local rc=0 f
   for f in scripts/*.sh .claude/hooks/*.sh .githooks/*; do
@@ -65,7 +76,7 @@ syntax_all() {
 }
 step "shell syntax (scripts and hooks)" syntax_all
 
-# 4. Fixtures are adversarial self-tests for the gate checks. A fixture never driven is
+# 5. Fixtures are adversarial self-tests for the gate checks. A fixture never driven is
 #    a green light nobody earned.
 run_fixtures() {
   local rc=0 d

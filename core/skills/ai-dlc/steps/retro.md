@@ -120,8 +120,24 @@ both at authoring time and committing in this order:
    full agent responses verbatim (not summaries) clears all three.
 2. **Commit the transcript as its own commit first**, then read back its blob
    SHA: `git rev-parse HEAD:_bmad-output/party-mode-transcripts/sprint-<N>-retro.md`.
-3. **Write the `SKILL_INVOCATION_PROVENANCE v1` block once**, in the
-   HTML-comment format `validate-provenance-block.sh` expects (`<!-- SKILL_INVOCATION_PROVENANCE v1 … SKILL_INVOCATION_PROVENANCE_END -->`; schema in SKILL.md Rule 3), citing that SHA. Get the format right the first time — a reformat pass is the same wasted loop as a re-cite.
+3. **Write the `SKILL_INVOCATION_PROVENANCE v1` block once**, citing that SHA. Copy the
+   envelope below exactly — the delimiters are what the parser reads, and a block in a ```
+   fence is scored as no block at all. Get it right the first time; a reformat pass is the
+   same wasted loop as a re-cite.
+
+<!-- BEGIN GENERATED: provenance-block/retro-party-mode — source: schemas/provenance-block.json; do not edit by hand -->
+```
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: bmad-party-mode                      # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
+invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
+tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the only non-forgeable evidence the evaluation ran in a real independent context.
+mode: subagent                              # never solo.
+lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
+transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.
+SKILL_INVOCATION_PROVENANCE_END -->
+```
+<!-- END GENERATED: provenance-block -->
+
 4. **Never edit the transcript after citing its SHA.** Any byte change makes the
    cited SHA stale and forces steps 2–3 again. If the transcript is wrong, fix
    it before step 2, not after step 3.

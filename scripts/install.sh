@@ -340,7 +340,7 @@ fi
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
 mkdir -p "$PROJECT_ROOT/scripts"
-for script in validate-provenance-block.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh validate-draft-stamps.sh validate-steering-budget.sh validate-artifact-budget.sh validate-h2-attestation.sh validate-adversarial-convergence.sh wait-for-deliverable.sh verdict.sh gen-architecture-index.js; do
+for script in validate-provenance-block.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh validate-draft-stamps.sh validate-steering-budget.sh validate-artifact-budget.sh validate-h2-attestation.sh validate-adversarial-convergence.sh sync-taught-schema.sh wait-for-deliverable.sh verdict.sh gen-architecture-index.js; do
   if [ -f "$SCRIPT_DIR/../core/scripts/$script" ]; then
     cp "$SCRIPT_DIR/../core/scripts/$script" "$PROJECT_ROOT/scripts/"
     chmod +x "$PROJECT_ROOT/scripts/$script"
@@ -381,10 +381,24 @@ else
   echo "  Check first: bash scripts/validate-layer-entries.sh"
 fi
 
+# Install schemas (always overwrite with AI/DLC versions)
+# SKILL_INVOCATION_PROVENANCE v1 lives here and NOWHERE ELSE: validate-provenance-block.sh
+# LOADS this file at runtime, and every provenance example an agent is taught is RENDERED
+# from it by sync-taught-schema.sh. The reader has no built-in copy and fails closed without
+# it -- deliberately, because a reader that falls back to a stale built-in schema is exactly
+# the drift this design removed.
+echo "Installing schemas..."
+mkdir -p "$PROJECT_ROOT/.claude/schemas"
+for schema_file in "$SCRIPT_DIR/../core/schemas/"*.json; do
+  [ -f "$schema_file" ] || continue
+  cp "$schema_file" "$PROJECT_ROOT/.claude/schemas/"
+  echo "  $(basename "$schema_file") installed"
+done
+
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"

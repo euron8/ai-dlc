@@ -1,51 +1,31 @@
 #!/usr/bin/env bash
-# validate-provenance-block.sh
+# validate-provenance-block.sh — the READER of SKILL_INVOCATION_PROVENANCE v1.
 #
 # Usage: ./scripts/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
-# Example: ./scripts/validate-provenance-block.sh docs/retro/sprint-156.md
-#          ./scripts/validate-provenance-block.sh _bmad-output/planning-artifacts/prd.md --require-skill bmad-validate-prd
 #
-# Parses SKILL_INVOCATION_PROVENANCE v1 blocks in the given artifact and
-# asserts required fields are present and well-formed. Complementary to
-# validate-retro-evidence.sh (heavyweight, retro-specific transcript +
-# SHA enforcement). This script is lightweight and artifact-agnostic —
-# it enforces the provenance block exists regardless of whether a
-# transcript file exists.
+# THE SCHEMA IS NOT IN THIS FILE. It is in schemas/provenance-block.json, which this script
+# LOADS: the envelope, the field list, the enums, the patterns, and the cross-field rules all
+# come from there, and so does every example any agent is taught (rendered by
+# sync-taught-schema.sh). Adding a field there reaches this parser and every doc at once.
 #
-# Schema (see SKILL.md Rule 3):
-#   <!-- SKILL_INVOCATION_PROVENANCE v1
-#   skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review>
-#   invoked_at: <ISO 8601 UTC timestamp>
-#   tool_use_id: <toolu_... from the Skill tool response -- or, for ai-dlc-adversary-review,
-#                 from the Agent dispatch that spawned the adversary. Both tools return one.>
-#   mode: <solo|subagent>
-#   lead_role: <step-file-name>
-#   transcript_path: <path@sha>   # required when artifact is docs/retro/sprint-*.md
-#   SKILL_INVOCATION_PROVENANCE_END -->
-#
-# `ai-dlc-adversary-review` is the Rule 8 CONVERGENCE review: no Skill runs, the
-# `adversary` role runs the native method in team-roles/adversary.md. It is tracked
-# here for exactly the reason the four sub-skills are -- the block is the only evidence
-# the evaluation was independent of the context that authored the artifact.
-#
-# Retro docs at docs/retro/sprint-*.md MUST contain at least one block
-# with skill=bmad-party-mode. Other artifacts: --require-skill flag
-# specifies which skill must be cited (for PRDs, architecture docs,
-# stories).
+# It used to be otherwise, and that is the whole reason this file looks like this. The block
+# was described in FOUR places -- a regex here, a schema comment in this very header, an
+# example in gate-validation.md, an example in team-roles/adversary.md -- with nothing
+# comparing them. They diverged. The role file taught a bare ``` fence with no terminator;
+# the adversary emitted exactly what it was shown; the regex here matched nothing; and this
+# script printed "no provenance block required or present" and exited 0. Two full adversarial
+# passes of the reference consumer's sprint 290 went unadjudicated and the gate called them
+# clean, because an unparseable block scores exactly like a clean artifact.
 #
 # Exit codes:
-#   0  -- all required blocks present and well-formed
-#   1  -- missing block, malformed field, or unknown skill
+#   0  -- every block present is well-formed, and any required block is present
+#   1  -- missing block, MALFORMED block, malformed field, unknown skill, or a rule violation
 #   2  -- usage error
 #
-# Forgeability: this is pattern-match validation, not cryptographic
-# attestation. A motivated forger can paste a well-formed block
-# without invoking the Skill. validate-retro-evidence.sh adds a
-# transcript-file + byte-matched SHA citation for retro party-mode
-# to narrow that surface.
-#
-# Part of the skill-invocation hardening PR (post-Sprint-155 close).
-# Compatible with bash 3.2+ and Python 3 (standard on macOS).
+# Forgeability: this is pattern-match validation, not cryptographic attestation. A motivated
+# forger can paste a well-formed block without invoking anything. validate-retro-evidence.sh
+# adds a transcript-file + byte-matched SHA citation for retro party-mode to narrow that
+# surface. Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — hence JSON).
 
 set -u
 
@@ -76,61 +56,89 @@ if [[ ! -f "$ARTIFACT_PATH" ]]; then
     exit 1
 fi
 
-python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" <<'PYEOF'
+PB_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PB_ROOT="$(cd "$PB_SCRIPT_DIR/.." && pwd)"
+
+SCHEMA=""
+for cand in \
+    "$PB_ROOT/core/schemas/provenance-block.json" \
+    "$PB_ROOT/.claude/schemas/provenance-block.json" \
+    "$PB_SCRIPT_DIR/../schemas/provenance-block.json"; do
+    [ -f "$cand" ] && { SCHEMA="$cand"; break; }
+done
+
+if [ -z "$SCHEMA" ]; then
+    # FAIL CLOSED, LOUDLY. A reader that cannot find its schema must never fall back to a
+    # built-in copy — a built-in copy is exactly the drift this design removed, and a check
+    # that silently degrades to a stale schema reads exactly like a check that passed.
+    echo "FAIL: schemas/provenance-block.json not found. The schema is the source of truth;" >&2
+    echo "      this validator has no built-in copy and will not guess. Reinstall ai-dlc." >&2
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+[ -r "${PB_SCRIPT_DIR}/lib/meta-gate.sh" ] && . "${PB_SCRIPT_DIR}/lib/meta-gate.sh"
+
+python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" "$SCHEMA" <<'PYEOF'
+import json
 import re
 import sys
 
 artifact_path = sys.argv[1]
 require_skill = sys.argv[2] or None
+schema_path = sys.argv[3]
 
-KNOWN_SKILLS = {
-    "bmad-party-mode",
-    "bmad-advanced-elicitation",
-    "bmad-review-adversarial-general",
-    "bmad-validate-prd",
-    # v0.58.0. The Rule 8 CONVERGENCE cycle no longer invokes a Skill: it dispatches the
-    # `adversary` role, which runs the native method in team-roles/adversary.md. The block
-    # it emits still IS a provenance block -- the tool_use_id is the Agent dispatch's -- so
-    # it names the evaluation that ran, not a Skill that did not. bmad stays in the enum:
-    # the ONE-SHOT reviews still invoke it.
-    "ai-dlc-adversary-review",
-}
+with open(schema_path, "r", encoding="utf-8") as fh:
+    S = json.load(fh)
+
+ENV = S["envelope"]
+PATTERNS = S["patterns"]
+FIELDS = {f["name"]: f for f in S["fields"]}
+KNOWN_SKILLS = set(S["known_skills"])
 
 BLOCK_RE = re.compile(
-    r"<!--\s*SKILL_INVOCATION_PROVENANCE\s+v1\s*\n(.*?)\n\s*SKILL_INVOCATION_PROVENANCE_END\s*-->",
+    re.escape(ENV["open"]) + r"\s*\n(.*?)\n\s*" + re.escape(ENV["close"]),
     re.DOTALL,
 )
-
-ISO_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})$"
-)
-
-TOOL_USE_ID_RE = re.compile(r"^toolu_[A-Za-z0-9_-]{6,}$")
-
-TRANSCRIPT_CITATION_RE = re.compile(
-    r"^[^\s@]+@[a-f0-9]{7,40}$"
-)
+MARKER_RE = re.compile(re.escape(ENV["marker"]))
 
 with open(artifact_path, "r", encoding="utf-8") as fh:
     content = fh.read()
 
 blocks = BLOCK_RE.findall(content)
-
-# For retro docs, a block is mandatory; for other artifacts it's only
-# mandatory when --require-skill is set.
 is_retro = bool(re.search(r"docs/retro/sprint-\d+\.md$", artifact_path))
+
+# MALFORMED != ABSENT, and they must never share an exit code.
+#
+# This is the check that was not here. A marker the grep SEES and the parser CANNOT READ is
+# a malformed block, not an absent one. Without this, a block in a ``` fence fell through to
+# "no provenance block required or present", exit 0 — and every rung below (the enum, the
+# solo rejection, the verdict rules) sat downstream of a parse that never happened.
+if not blocks and MARKER_RE.search(content):
+    print(
+        f"FAIL: {artifact_path} carries a {ENV['marker']} marker that this validator CANNOT "
+        f"PARSE. The block is MALFORMED, not absent.\n"
+        f"      A provenance block MUST open with the literal '{ENV['open']}' and close with "
+        f"the literal '{ENV['close']}'. A ``` code fence is not a provenance block: nothing "
+        f"parses it, so every field inside it goes unadjudicated and the gate reports the "
+        f"artifact as clean because it never read a word of it.\n"
+        f"      FIX: re-wrap the existing block in those delimiters. Do not delete it and do "
+        f"not restate its fields — the content is fine; the envelope is not.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 if not blocks:
     if is_retro:
         print(
-            f"FAIL: {artifact_path} has no SKILL_INVOCATION_PROVENANCE v1 block. "
+            f"FAIL: {artifact_path} has no {ENV['marker']} block. "
             f"Retro docs MUST cite at least one bmad-party-mode invocation.",
             file=sys.stderr,
         )
         sys.exit(1)
     if require_skill:
         print(
-            f"FAIL: {artifact_path} has no SKILL_INVOCATION_PROVENANCE v1 block. "
+            f"FAIL: {artifact_path} has no {ENV['marker']} block. "
             f"--require-skill {require_skill} was specified.",
             file=sys.stderr,
         )
@@ -140,17 +148,56 @@ if not blocks:
 
 
 def parse_block(block_text):
+    """Tokenise per schema['parser']: flat `key: value`; an INDENTED line continues the key
+    above it (a folded value, or a YAML list). Unknown fields are recorded, not rejected."""
     fields = {}
-    for line in block_text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
+    last_key = None
+    for raw in block_text.splitlines():
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
             continue
-        m = re.match(r"^([a-z_]+):\s*(.+?)\s*$", line)
+        if re.match(r"^\s+", raw) and last_key is not None:
+            fields[last_key] = f"{fields[last_key]} {stripped}".strip()
+            continue
+        m = re.match(r"^([a-z_]+):\s*(.*?)\s*$", raw)
         if not m:
-            return None, f"malformed line: {line!r}"
+            return None, (
+                f"malformed line: {stripped!r} — a provenance block is flat `key: value` "
+                f"lines. A continuation or a list item must be INDENTED under the key it "
+                f"belongs to."
+            )
         key, val = m.group(1), m.group(2)
+        # Strip a trailing ' # comment', as YAML does (schema.parser.comments). The taught
+        # examples carry their teaching in inline comments; a parser that did not strip them
+        # made every faithfully-copied example unparseable — the enum saw the comment text as
+        # part of the value. That was true for as long as the examples have existed, and
+        # nothing noticed, because nothing had ever run a taught example through this parser.
+        val = re.sub(r"\s+#.*$", "", val).strip()
         fields[key] = val
+        last_key = key
     return fields, None
+
+
+def check_value(idx, name, value, failures):
+    """Enum and pattern checks, both taken from the schema."""
+    spec = FIELDS.get(name)
+    if spec is None:
+        return  # unknown field: permitted and recorded (schema['parser']['unknown_fields'])
+
+    enum = spec.get("enum")
+    if enum is None and spec.get("enum_ref"):
+        enum = S[spec["enum_ref"]]
+    if enum and value not in enum:
+        failures.append(
+            f"block #{idx}: {name} '{value}' is not one of {sorted(enum)}"
+        )
+        return
+
+    pat_ref = spec.get("pattern_ref")
+    if pat_ref and not re.match(PATTERNS[pat_ref], value):
+        failures.append(
+            f"block #{idx}: {name} '{value}' does not match the schema's {pat_ref} pattern"
+        )
 
 
 failures = []
@@ -162,111 +209,69 @@ for idx, raw_block in enumerate(blocks, start=1):
         failures.append(f"block #{idx}: {err}")
         continue
 
-    required = ["skill", "invoked_at", "tool_use_id", "mode", "lead_role"]
-    for r in required:
-        if r not in fields:
-            failures.append(f"block #{idx}: missing required field '{r}'")
+    # --- required fields, straight from the schema ---
+    for name, spec in FIELDS.items():
+        if not spec.get("required"):
+            continue
+        if name not in fields:
+            failures.append(f"block #{idx}: missing required field '{name}'")
+        elif not fields[name]:
+            # rules.required_non_empty — the parser accepts `key:` with the value on the
+            # lines below, so "present" and "answered" are different questions.
+            failures.append(f"block #{idx}: required field '{name}' is present but EMPTY")
 
-    if "skill" in fields and fields["skill"] not in KNOWN_SKILLS:
-        failures.append(
-            f"block #{idx}: skill '{fields['skill']}' is not in the known set "
-            f"{sorted(KNOWN_SKILLS)}"
-        )
+    for name, value in fields.items():
+        if value:
+            check_value(idx, name, value, failures)
 
-    if "invoked_at" in fields and not ISO_RE.match(fields["invoked_at"]):
-        failures.append(
-            f"block #{idx}: invoked_at '{fields['invoked_at']}' is not a valid "
-            f"ISO 8601 UTC timestamp"
-        )
+    # --- rules.no_solo: unconditional, per schema ---
+    mode_spec = FIELDS["mode"]
+    for bad in mode_spec.get("forbidden", []):
+        if fields.get("mode") == bad:
+            failures.append(
+                f"block #{idx}: skill '{fields.get('skill', '<absent>')}' emitted mode: {bad} — "
+                f"{mode_spec['forbidden_reason']}"
+            )
 
-    if "tool_use_id" in fields and not TOOL_USE_ID_RE.match(fields["tool_use_id"]):
-        failures.append(
-            f"block #{idx}: tool_use_id '{fields['tool_use_id']}' does not match "
-            f"the toolu_<id> format emitted by the Skill tool"
-        )
-
-    if "mode" in fields and fields["mode"] not in ("solo", "subagent"):
-        failures.append(
-            f"block #{idx}: mode must be 'solo' or 'subagent' (got '{fields['mode']}')"
-        )
-
-    # Rule 20: ALL validation evaluations must run in real independent subagents.
-    # mode: solo (lead roleplayed the validation in its own context) is forbidden
-    # for every tracked evaluation, not only party-mode.
-    #
-    # THIS ASSERTION USED TO BE GATED ON `fields.get("skill") in KNOWN_SKILLS`, AND THAT
-    # GATE WAS A LOADED GUN. It was vacuous -- an unknown skill already fails the enum
-    # above -- so it changed no outcome and looked harmless. What it actually did was
-    # couple the ONLY teeth Check 17 has to the enum's membership: the moment anyone
-    # added a provenance-emitting evaluation without adding its name, or made `skill:`
-    # optional, `fields.get("skill")` fell out of the set and the solo rejection SILENTLY
-    # STOPPED FIRING -- an adversary roleplayed inline in the lead would emit `mode: solo`
-    # and pass. v0.58.0 nearly shipped exactly that: the tempting way to express a role
-    # dispatch is "skill: names no skill here, drop the field."
-    # Unconditional now. mode: solo is forbidden, full stop, on any block that exists.
-    # Fixture: check-17-bypass V8 (solo with NO skill field) is its only witness.
-    if fields.get("mode") == "solo":
-        failures.append(
-            f"block #{idx}: skill '{fields.get('skill', '<absent>')}' emitted mode: solo — "
-            f"Rule 20 requires mode: subagent (dispatch the evaluation to a real subagent; "
-            f"single-voice sub-skills go to a Rule-19-bound teammate; the convergence review "
-            f"goes to the `adversary` role). Solo defeats independent evaluation."
-        )
+    # --- rules.verdict_requires_counts ---
+    if fields.get("verdict"):
+        for name, spec in FIELDS.items():
+            if not spec.get("required_for_verdict"):
+                continue
+            if not fields.get(name):
+                failures.append(
+                    f"block #{idx}: verdict '{fields['verdict']}' is stamped without '{name}'. "
+                    f"{S['rules']['verdict_requires_counts']['why']}"
+                )
 
     if fields.get("skill") == "bmad-party-mode":
         party_mode_blocks.append((idx, fields))
-        if is_retro:
-            tp = fields.get("transcript_path", "")
-            if not tp:
-                failures.append(
-                    f"block #{idx}: retro party-mode requires transcript_path "
-                    f"(expected _bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>)"
-                )
-            elif not TRANSCRIPT_CITATION_RE.match(tp):
-                failures.append(
-                    f"block #{idx}: transcript_path '{tp}' must be in path@<sha> format "
-                    f"(7-40 hex chars after @)"
-                )
+        if is_retro and not fields.get("transcript_path"):
+            failures.append(
+                f"block #{idx}: retro party-mode requires transcript_path "
+                f"({FIELDS['transcript_path']['placeholder']})"
+            )
 
 if require_skill:
-    cited = {
-        fields.get("skill")
-        for raw in blocks
-        for fields, _ in [parse_block(raw)]
-        if fields is not None
-    }
+    cited = {f.get("skill") for _, f in [(i, parse_block(b)[0] or {}) for i, b in enumerate(blocks, 1)]}
     if require_skill not in cited:
-        # THE RETIRED PIN (v0.58.0). The convergence cycle used to invoke
-        # bmad-review-adversarial-general and now dispatches the `adversary` role, so the
-        # artifacts it produces -- stories, above all -- cite ai-dlc-adversary-review. A
-        # consumer that pinned the old name in a pre-submission override (dev / qa /
-        # code-reviewer are the usual sites) breaks HERE, mid-sprint, on the first story.
-        #
-        # A CHANGELOG note is not a mechanism -- ai-dlc-update/SKILL.md says so in as many
-        # words: "a migration note in a CHANGELOG is how it never gets done." Nothing else
-        # can catch this: the reconcile sees unbroken anchors, and a consumer check that
-        # asserts only "the --require-skill flag is present" is blind to WHICH skill it
-        # names. So the one place that CAN see it -- the failure itself -- says what to do.
-        if (require_skill == "bmad-review-adversarial-general"
-                and "ai-dlc-adversary-review" in cited):
-            failures.append(
-                f"--require-skill bmad-review-adversarial-general is a RETIRED PIN. This "
-                f"artifact was reviewed by the ai-dlc-native convergence cycle and cites "
-                f"'ai-dlc-adversary-review'. As of v0.58.0 the Rule 8 cycle dispatches the "
-                f"`adversary` role and invokes no skill; bmad is kept for ONE-SHOT reviews "
-                f"only. FIX: repoint this call site to "
-                f"`--require-skill ai-dlc-adversary-review`. (If you are a consumer, the "
-                f"site is most likely a dev/qa/code-reviewer pre-submission override.)"
-            )
-        else:
-            failures.append(
-                f"--require-skill {require_skill} specified but no block cites that skill"
-            )
+        failures.append(
+            f"--require-skill {require_skill} was specified, but no block cites it "
+            f"(blocks cite: {sorted(s for s in cited if s)})"
+        )
+    # v0.58.0: the Rule 8 convergence cycle is ai-dlc-native. A pin on the retired bmad skill
+    # can never be satisfied by a compliant pass, so it fails as a RETIRED PIN, not as a
+    # missing block — the remedy is to repoint the pin, not to forge the provenance.
+    if require_skill == "bmad-review-adversarial-general" and "ai-dlc-adversary-review" in cited:
+        failures.append(
+            f"--require-skill bmad-review-adversarial-general is a RETIRED PIN. This artifact "
+            f"correctly cites ai-dlc-adversary-review (the native convergence review). Repoint "
+            f"the pin — an override or a step file still names the retired skill."
+        )
 
 if is_retro and not party_mode_blocks:
     failures.append(
-        f"{artifact_path} has SKILL_INVOCATION_PROVENANCE block(s) but none "
-        f"cite bmad-party-mode (required for retro docs)"
+        f"{artifact_path} is a retro doc but cites no bmad-party-mode invocation."
     )
 
 if failures:
@@ -276,8 +281,8 @@ if failures:
     sys.exit(1)
 
 print(
-    f"VALIDATE-PROVENANCE-BLOCK: PASS ({artifact_path}, "
-    f"{len(blocks)} block(s), {len(party_mode_blocks)} party-mode)"
+    f"VALIDATE-PROVENANCE-BLOCK: PASS ({artifact_path}, {len(blocks)} block(s), "
+    f"{len(party_mode_blocks)} party-mode)"
 )
 sys.exit(0)
 PYEOF

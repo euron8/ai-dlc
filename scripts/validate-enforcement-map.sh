@@ -56,7 +56,19 @@
 #                         are hardcoded and had drifted (9 on disk, 9 installed, 5
 #                         uninstalled). A fixture missing from install.sh reaches no
 #                         consumer at all — an adversarial self-test that silently
-#                         does not exist, while the catalog claims coverage.
+#                         does not exist, while the catalog claims coverage. Dist-only
+#                         fixtures are DERIVED from a `.dist-only` marker beside the
+#                         fixture, not a hand-maintained exemption string.
+#   I10 fixture hermeticity — a fixture that drives a hook must scrub ambient AI_DLC_*
+#                         first, or a consumer's sanctioned tunable makes it fail against
+#                         a hook behaving correctly, and the pre-push gate blocks every push.
+#   I11 convergence-cycle scope — the three sets that must be one set (steps that dispatch
+#                         an adversarial REVIEW, steps that reference the REPAIR dispatch,
+#                         and Check 24's Scope sentence) are DERIVED and asserted equal. A
+#                         step in the first but not the third runs a convergence loop no
+#                         gate reads — which reads exactly like a loop that converged. The
+#                         list was hand-maintained and rotted twice (v0.58.0 caught two of
+#                         three; carry-over-evaluation was the third).
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -232,7 +244,16 @@ in_uninstall="$(fixture_list "$REPO_ROOT/scripts/uninstall.sh")"
 # The exemption is not self-certifying: each name below must ALSO be absent from
 # install.sh's loop (a stale exemption for a now-shipped fixture would silently excuse it
 # from the sync check above).
-DIST_ONLY="$(printf '%s\n' enforcement-map-sites | sort -u)"
+# DERIVED, not listed. A fixture is dist-only iff it carries a `.dist-only` marker file.
+# It was a hand-maintained string here, and three readers had to agree about it: install.sh
+# (which omitted it, correctly), map_consumer() (which shipped every core/fixtures/* on every
+# pull, and therefore shipped it anyway), and this check. They did not agree, and the
+# reference consumer ended up with tests/fixtures/enforcement-map-sites/ and no subject script
+# beside it. A list two writers must remember to update is the bug. The marker sits next to
+# the fixture it exempts, and every reader derives the same answer from the same file.
+DIST_ONLY="$(cd "$REPO_ROOT/core/fixtures" 2>/dev/null && for d in */; do
+  [ -f "${d}.dist-only" ] && printf '%s\n' "${d%/}"
+done | sort -u)"
 for f in $DIST_ONLY; do
   printf '%s\n' "$in_install" | grep -qx "$f" && err "fixture '$f' is listed DIST-ONLY in validate-enforcement-map.sh but install.sh ships it. Either drop the exemption or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
   [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' is listed DIST-ONLY but does not exist in core/fixtures/ — stale exemption."
@@ -267,6 +288,85 @@ for d in "$REPO_ROOT"/core/fixtures/*/; do
     || err "fixture '$(basename "$d")' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
 done
 
+# --- I11: the convergence-cycle scope list is DERIVED, not remembered ---------
+# THREE SETS MUST BE ONE SET:
+#   (a) steps whose file dispatches an adversarial REVIEW  (they run a convergence cycle)
+#   (b) steps whose file references the adversarial REPAIR dispatch (a remediator repairs;
+#       the LEAD must not — it is the most context-saturated agent in the pipeline, which is
+#       the whole reason the remediator role exists)
+#   (c) steps named in Check 24's Scope sentence            (a gate reads the verdict)
+#
+# A step in (a) but not (c) runs an unbounded convergence loop that NO GATE ADJUDICATES —
+# and a loop nobody adjudicates reads exactly like a loop that converged. A step in (a) but
+# not (b) has its own author repairing its own artifact, which is the failure the remediator
+# was created to end.
+#
+# This list was hand-maintained and it rotted TWICE. v0.58.0 caught doc-repair-backfill and
+# sprint-review-next running unadjudicated cycles and added them to Check 24's scope. The
+# same sweep walked straight past carry-over-evaluation, which was running one too — Rule 8
+# binds it ("per planning artifact"), its step file never said so, and the reference consumer
+# ran a 2-pass cycle there with the lead repairing and no gate reading the verdict. The sweep
+# missed it for exactly the reason I8's site table missed core/git-hooks/: the list was
+# hand-maintained, so the check had no row for it, and a check that cannot fire reads exactly
+# like a check that passed. Derive the list. Never hand-maintain it.
+STEPS_DIR="$REPO_ROOT/core/skills/ai-dlc/steps"
+if [ -d "$STEPS_DIR" ]; then
+  # The python goes to a temp FILE, not a heredoc inside $( ). On bash 3.2 (macOS, the
+  # floor this repo targets) a heredoc nested in a command substitution has its body
+  # scanned for shell quotes BEFORE the heredoc is processed -- so a lone apostrophe in a
+  # python comment ("Check 24's scope") is read as an opening quote and the whole script
+  # fails to parse. Top-level heredocs are fine; nested ones are not.
+  I11_PY="$(mktemp)"
+  cat > "$I11_PY" <<'I11EOF'
+import os, re, sys
+steps_dir, gv = sys.argv[1], sys.argv[2]
+
+def collapse(p):
+    # The procedure names WRAP across lines in the step files (Adversarial review /
+    # dispatch). A line-oriented grep misses them, and a check that cannot see the thing
+    # it checks reads exactly like a check that passed. Collapse whitespace first.
+    return re.sub(r"\s+", " ", open(p, encoding="utf-8").read())
+
+steps = {}
+for fn in sorted(os.listdir(steps_dir)):
+    if not fn.endswith(".md") or fn.startswith("_"):
+        continue
+    steps[fn[:-3]] = collapse(os.path.join(steps_dir, fn))
+
+review = set(n for n, t in steps.items() if "Adversarial review dispatch" in t)
+repair = set(n for n, t in steps.items() if "Adversarial repair dispatch" in t)
+
+# Check 24 Scope sentence. Only names that are REAL step files count -- the sentence also
+# backticks `lightweight`, which is an intensity, not a step.
+gvt = open(gv, encoding="utf-8").read()
+m = re.search(r"^### 24\.(.*?)^### ", gvt, re.S | re.M)
+scope = set()
+if m:
+    sm = re.search(r"Those steps are:(.*?)\n\n", m.group(1), re.S)
+    if sm:
+        scope = set(t for t in re.findall(r"`([a-z-]+)`", sm.group(1)) if t in steps)
+
+def emit(names, msg):
+    if names:
+        sys.stdout.write("ERR\t" + " ".join(sorted(names)) + "\t" + msg + "\n")
+
+emit(review - scope,
+     "step(s) run an adversarial convergence cycle but are ABSENT from Check 24 scope -- the loop is adjudicated by nobody, which reads exactly like a loop that converged")
+emit(scope - review,
+     "Check 24 scope names step(s) that dispatch no adversarial review -- a stale scope entry makes the check self-skip on a gate it claims to cover")
+emit(review - repair,
+     "step(s) dispatch an adversarial REVIEW but never reference the adversarial REPAIR dispatch -- the lead will repair its own artifact, which is the failure the remediator role exists to end")
+I11EOF
+  I11_OUT="$(python3 "$I11_PY" "$STEPS_DIR" "$GV")"
+  rm -f "$I11_PY"
+  while IFS="$(printf '\t')" read -r tag names msg; do
+    [ "$tag" = "ERR" ] || continue
+    err "$msg: $names"
+  done <<EOF
+$I11_OUT
+EOF
+fi
+
 # The THIRD writer. install.sh is not the only thing that puts core/ files into a
 # consumer — `reconcile/preclassify.sh`'s map_consumer() does too, on every pull, and
 # the two must agree on the destination or the consumer gets two copies at two paths
@@ -298,6 +398,7 @@ if [ -f "$PRECLASS" ]; then
 ci-templates|.github/workflows
 fixtures|tests/fixtures
 git-hooks|.githooks
+schemas|.claude/schemas
 hooks|.claude/hooks
 scripts|scripts
 session-driver|.claude/session-driver

@@ -729,22 +729,32 @@ phase. Skip on gates that do not produce a provenance-bearing artifact.
 evaluation (Rule 20) MUST emit this block into the artifact it
 produces; `validate-provenance-block.sh` parses it:
 
+<!-- BEGIN GENERATED: provenance-block/full — source: schemas/provenance-block.json; do not edit by hand -->
 ```
 <!-- SKILL_INVOCATION_PROVENANCE v1
-skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review>
-invoked_at: <ISO 8601 UTC timestamp>
-tool_use_id: <toolu_... from the Skill tool response — or, for ai-dlc-adversary-review, from the Agent dispatch>
-mode: subagent
-lead_role: <step-file-that-invoked>
-transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>   # required for retro party-mode
-findings_critical: <int>                     # required for adversarial-review passes
-findings_critical_prior_scope: <int>         # of the above, those in text the PRIOR pass also reviewed.
-                                             # Absent => the validator assumes ALL of them (fail-closed).
-findings_major: <int>                        # required for adversarial-review passes
-findings_minor: <int>                        # required for adversarial-review passes
-verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK>   # required for adversarial-review passes
+skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review> # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
+invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
+tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the only non-forgeable evidence the evaluation ran in a real independent context.
+mode: subagent                              # never solo.
+lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
+transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.
+artifact: <path of the artifact you reviewed> # what this pass reviewed.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw.
+findings_critical: <int>                    # the residue the verdict is adjudicated against.
+findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
+findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
+findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
+resolves_divergence: <path to the resolution record> # ONLY on the verification pass, and only if the pass before you STOPPED.
+verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK> # required on every adversarial-review pass. There is no free-text verdict.
 SKILL_INVOCATION_PROVENANCE_END -->
 ```
+<!-- END GENERATED: provenance-block -->
+
+The block above, the parser in `validate-provenance-block.sh`, and the example every role
+file shows its agent are all rendered from / loaded from `schemas/provenance-block.json`.
+**Do not hand-write a provenance example anywhere** — `scripts/sync-taught-schema.sh --check`
+fails the build on one, because a hand-written copy is a copy that can drift, and when this
+one drifted the reader parsed nothing and the gate called two unadjudicated passes clean.
 
 **The four adversarial fields.** `findings_*` and `verdict` are REQUIRED
 on every `ai-dlc-adversary-review` / `bmad-review-adversarial-general` /
@@ -1048,10 +1058,16 @@ Section 0, so it cannot drift.
 
 **Scope.** Fires at every gate whose step ran an adversarial CONVERGENCE cycle —
 a loop that must reach zero CRITICAL and zero MAJOR to leave. Those steps are:
-`discovery`, `architecture`, `research-requirements` (**including its
-`lightweight` single-pass path** — one pass is still a convergence pass and still
-stamps a verdict), `stories-test-strategy`, `doc-repair-backfill`, and
+`carry-over-evaluation`, `discovery`, `architecture`, `research-requirements`
+(**including its `lightweight` single-pass path** — one pass is still a convergence
+pass and still stamps a verdict), `stories-test-strategy`, `doc-repair-backfill`, and
 `sprint-review-next`.
+
+**This list is DERIVED, and I11 fails the build if it drifts.** It was hand-maintained,
+and it rotted twice: v0.58.0 found `doc-repair-backfill` and `sprint-review-next` running
+unadjudicated convergence loops and added them — and missed `carry-over-evaluation`, which
+was running one too. A step whose file dispatches an adversarial review MUST appear here
+and MUST also reference the repair dispatch; I11 asserts all three sets are the same set.
 
 **Self-skips** on any gate whose step ran no convergence cycle — including gates
 whose step ran only a ONE-SHOT adversarial review (`bug-investigation`,

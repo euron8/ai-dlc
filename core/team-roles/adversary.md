@@ -52,7 +52,9 @@ for your findings, and (d) a shared context block. You MUST:
      severity ladder below, review the REPAIR on pass 2+, and stamp the verdict. You
      are not running a sub-skill and MUST NOT claim one in the provenance block.
 2. **Emit the `SKILL_INVOCATION_PROVENANCE v1` block with `mode: subagent`**
-   into the artifact you produce (schema in `gate-validation.md` Check 17). You
+   into the artifact you produce — **copy the exact envelope from "The verdict"
+   below, HTML-comment delimiters included.** A block in a ``` fence is unparseable
+   and the gate scores your pass as if it carried no provenance at all. You
    are the real subagent that makes the run non-solo; a block you write claiming
    `mode: subagent` is truthful by construction. Never write `mode: solo`.
    `skill:` names the evaluation that ACTUALLY RAN — `ai-dlc-adversary-review` for
@@ -161,16 +163,34 @@ sprints record zero repair-introduced false claims in prior scope.
 Every pass MUST close its `SKILL_INVOCATION_PROVENANCE v1` block with a counted
 residue and exactly one verdict from this set. There is no free-text verdict.
 
+**Emit it EXACTLY like this — the HTML-comment delimiters are load-bearing.** The gate
+parses one form and one form only. A ``` code fence is **not** a provenance block: nothing
+parses it, so every field in it goes unadjudicated and the gate reports your pass as clean
+*because it never read a word of it*. Copy the envelope, not just the fields.
+
+<!-- BEGIN GENERATED: provenance-block/adversary-pass — source: schemas/provenance-block.json; do not edit by hand -->
 ```
-artifact: <path of the artifact you reviewed>
-artifact_sha: <sha256 of that file, as you read it>
-findings_critical: <int>
-findings_critical_prior_scope: <int>   # of the above, those in text the PRIOR pass also reviewed
-findings_major: <int>
-findings_minor: <int>
-resolves_divergence: <path>            # ONLY if the pass before you STOPPED. See below.
-verdict: <EXIT_CONDITION_MET | EXIT_CONDITION_NOT_MET | DIVERGENT_HARD_BLOCK>
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: ai-dlc-adversary-review              # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
+invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
+tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the only non-forgeable evidence the evaluation ran in a real independent context.
+mode: subagent                              # never solo.
+lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
+artifact: <path of the artifact you reviewed> # what this pass reviewed.
+artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw.
+findings_critical: <int>                    # the residue the verdict is adjudicated against.
+findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
+findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
+findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
+resolves_divergence: <path to the resolution record> # ONLY on the verification pass, and only if the pass before you STOPPED.
+verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK> # required on every adversarial-review pass. There is no free-text verdict.
+SKILL_INVOCATION_PROVENANCE_END -->
 ```
+<!-- END GENERATED: provenance-block -->
+
+The block above is rendered from `schemas/provenance-block.json`, which is also the file the
+gate's parser loads. There is no second copy of this schema to disagree with — there used to
+be, and the disagreement cost sprint 290 two unadjudicated passes.
 
 `artifact_sha` is `shasum -a 256 <artifact> | cut -d' ' -f1` (or `sha256sum`). It is not a
 judgment and you cannot shade it: it is a computed fact about a file you already read. It
