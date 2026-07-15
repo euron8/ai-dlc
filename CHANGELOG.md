@@ -17,6 +17,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.62.0] — 2026-07-15
+
+### Hybrid gate escalation — let the lead run on a cheaper model without weakening the gate
+
+Found by a runtime analysis of the reference consumer's transcripts (S256–S290, 1.4 GB). The
+cost is dominated by the Opus lead **re-reading a ~169K-token resident context every turn**:
+57% of lead turns are pure reasoning re-reading that prefix, and context-movement is ~60–80% of
+spend (`cache_read` + `cache_write`), not generation. Poll-beats and delegation are **not** the
+driver — they are ~2–3%. Moving the lead to Sonnet 5 saves ~23–34% (Opus 4.8 $5/$25 vs Sonnet 5
+$3/$15 — only 1.67× apart, not 5×). The blocker: of the gate's checks, ~20 are read-and-compare
+**judgment** checks that want Opus-grade reasoning, and a weaker lead could pass a bad gate.
+
+This release builds the mechanism that lets the lead run on Sonnet by escalating **only** those
+judgment checks to a fresh Opus `gate-adjudicator` subagent (fresh context beats a saturated
+one, and is Opus-grade where it matters), while the lead still OWNS PASS/FAIL through a
+fail-closed script check. It is the **enabler** for the Sonnet-lead A/B; the A/B itself
+(gate-catch parity, convergence, cost) is the follow-up.
+
+- **Linchpin — `adjudication == "llm"` becomes an exact escalation predicate.** The
+  `enforcement-map.yaml` `adjudication` field gains a fourth value **`lead`** (mechanical /
+  state-mutating; not adjudicable, not scriptable). Checks `12,13,14,15,failure,H1` reclassify to
+  `lead`; `H2` reclassifies to `script` (its `validate-h2-attestation.sh` already gates it). The
+  runtime predicate is then one filter, no second list:
+  `escalate(check, gt) := adjudication=="llm" AND (gt ∈ gate_types OR "universal" ∈ gate_types)`.
+  H1/H2 stay OUT of the delegated path deliberately — escalating the recursion/forgery self-tests
+  into the mechanism they police is a trust circularity.
+- **New verdict schema `core/schemas/gate-adjudication-verdict.json`** (`GATE_ADJUDICATION_VERDICT
+  v1`), modeled on `provenance-block.json`: the reader LOADS it, the taught example is RENDERED
+  from it. `verdict` enum is `PASS`/`FAIL` only (no empty, no third value); `evidence`
+  required-non-empty; `verdicts` unique on `check_id`; `gate_type`/`gate_nonce`/`generated_at`
+  required-non-empty.
+- **New validator `core/scripts/validate-gate-adjudication.sh`** (structured like
+  `validate-provenance-block.sh`; bash + `python3`, no PyYAML). `--expected <gate_type>` prints the
+  DERIVED escalated set (the adjudicator's worklist AND Check 26's expected set, from one
+  derivation). `<gate_type> <verdict_path>` adjudicates. Fail-closed: an unknown map adjudication
+  value (a typo like `lmm`) → exit 2 at the derivation layer; absent/unparseable verdict → exit 2;
+  envelope / nonce mismatch → exit 1; any escalated id missing / unexpected / duplicated / empty
+  evidence, or any `FAIL` → exit 1; exit 0 IFF the set is exactly covered, well-formed, all PASS.
+  An empty set prints an affirmative `0 escalated checks` — a mis-derivation that empties it is
+  visible, never a silent vacuous pass. Run by the lead through `verdict.sh`.
+- **New role `core/team-roles/gate-adjudicator.md`** — a conservative, fail-closed evaluator (the
+  opposite posture to the `adversary` critic), read-only, off the Rule 20 provenance / Check 17
+  path (native schema, no provenance block). Templated `/model {gate_adjudicator_model_*}` →
+  `claude-opus-4-8` (Rule 19 binds the spawn). It derives its worklist with
+  `validate-gate-adjudication.sh --expected` (same derivation Check 26 uses), reads each escalated
+  check's body in `gate-validation.md` as the spec, and a check it cannot evaluate is
+  `FAIL`-with-reason (never omitted, never PASS-by-default). Its verdict example is a generated
+  region rendered by `sync-taught-schema.sh` (extended to a second schema), so the taught shape
+  cannot drift.
+- **New terminal Check 26** (`script`, `validate-gate-adjudication.sh`, `gate_types:[universal]`,
+  added to H1's universal-core tuple): the lead joins the verdict at
+  `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json` and runs
+  `verdict.sh validate-gate-adjudication`. The nonce (`<gate_type>-<UTC>`) makes a stale verdict
+  live at a different path — the bounded-join can't find it → HARD_BLOCK, closing the
+  "absent verdict reads as pass" hole. New dispatch procedure in `_gate-procedures.md`
+  (`Agent`, `run_in_background`, Rule 29 bounded-join); terse escalation preamble in
+  `gate-validation.md`.
+- **Rule amendments.** Rule 20 gains shape **(iv) Gate-check adjudication** (dispatch ONE
+  `gate-adjudicator` per gate; native path, no provenance block; adopted via Check 26; roleplaying
+  an `llm` check inline is the solo failure the rule forbids). Rule 28(c) narrows the lead's
+  non-delegable gate set to the `script`/`project`/`lead` checks plus adopting the adjudicator's
+  verdicts via Check 26 — evaluating an individual `llm` check inline is NOT in it.
+- **New fixture `core/fixtures/gate-adjudication/`** — the 3-step proof (complete all-PASS → exit
+  0; delete an entry / blank evidence / `verdict:MAYBE` / map typo `lmm` / absent / stale nonce →
+  exit 1/2 each; restore → exit 0) plus the `--expected`-matches-the-derived-set assertion. Ships
+  to consumers (registered in `install.sh`/`uninstall.sh`); the validator + schema + role ship too.
+- **Graph dry-run** confirmed the plumbing in a real consumer tree: `--expected implementation`
+  matched an independent grep of graph's real map byte-for-byte, and a `verdict.sh` round-trip
+  passed all-PASS (exit 0) and blocked on a corrupted entry (exit 1). The live-model verdict
+  against graph's real artifacts is the Sonnet-lead A/B follow-up (it needs graph on the
+  reclassified map — a real pull — to be representative).
+
 ## [0.61.0] — 2026-07-15
 
 ### An operator-gated block must not be released by a citation the operator never spoke

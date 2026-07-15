@@ -24,11 +24,22 @@
 #   path below exists on disk (dormant-binding detection). The map has no
 #   independent authority — it is only ever a validated view of the catalog.
 #
-# adjudication values:
+# adjudication values (a CLOSED set — a value outside it is a hole in the escalation
+# derivation, not a fourth class; validate-gate-adjudication.sh fails at exit 2 on one):
 #   script  — a shell validator decides PASS/FAIL mechanically (CI-enforceable)
 #   project — a project-supplied audit script decides (consumer-owned command)
-#   llm     — the lead evaluates the check in-context; no machine decider today
-#             (the honest majority: only Check 17 is script-adjudicated in core)
+#   lead    — mechanical / state-mutating; the lead performs it inline. NOT adjudicable
+#             (a read-only subagent cannot mutate state) and NOT scriptable today. The
+#             gate-log append, the announce, the snapshot write/verify, the failure
+#             protocol, and the H1 self-test live here.
+#   llm     — a read-and-compare judgment check. ESCALATED, once per gate, to a fresh
+#             gate-adjudicator subagent (Rule 20 (iv)); the lead adopts its per-check
+#             verdicts through fail-closed Check 26 and never evaluates one inline. The
+#             escalation predicate is exactly `adjudication == "llm"` intersected with the
+#             gate type — one filter, no second list (validate-gate-adjudication.sh
+#             --expected derives it). H1/H2 are deliberately NOT llm: escalating the
+#             recursion/forgery self-tests into the mechanism they police is a trust
+#             circularity.
 # Paths are repo-relative (distribution layout). enforcer/ci_workflow are the
 #   files a validator stats for existence. fixtures name adversarial self-tests
 #   (H1/H2 drive these) under tests/fixtures/.
@@ -174,7 +185,7 @@ checks:
   - id: "12"
     title: Append gate log entry
     gate_types: [universal]
-    adjudication: llm
+    adjudication: lead   # mutates the gate log; a read-only adjudicator cannot do it
     emits: gate-metrics.jsonl   # GATE_METRIC v1, consumed by audit-machinery-efficacy.js
     enforcer: []
     ci_workflow: ~
@@ -182,21 +193,21 @@ checks:
   - id: "13"
     title: Announce gate passage
     gate_types: [universal]
-    adjudication: llm
+    adjudication: lead   # emits the announcement; not a read-and-compare judgment
     enforcer: []
     ci_workflow: ~
 
   - id: "14"
     title: Update pipeline snapshot
     gate_types: [universal]
-    adjudication: llm
+    adjudication: lead   # writes the snapshot; a read-only adjudicator cannot do it
     enforcer: []
     ci_workflow: ~
 
   - id: "15"
     title: Verify snapshot reflects this gate
     gate_types: [universal]
-    adjudication: llm
+    adjudication: lead   # verifies the write it just made; state-coupled to Check 14
     enforcer: []
     ci_workflow: ~
 
@@ -339,10 +350,31 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/check-25-steering-conduct]
 
+  - id: "26"
+    title: Gate-check adjudication — every escalated llm check evaluated by the adjudicator and PASS
+    gate_types: [universal]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-gate-adjudication.sh
+    call_sites:
+      - site: gate-validation.md Check 26
+        posture: FAILS the gate (verdict.sh validate-gate-adjudication <gate_type> <verdict_path>; exit 0 required)
+        why: the lead runs on a cheaper model and escalates every adjudication:llm check for the
+          gate type to ONE fresh Opus gate-adjudicator subagent. This is the SINGLE fail-closed
+          check through which the lead adopts those per-check verdicts — a missing / malformed /
+          stale verdict, an uncovered escalated check, a duplicate, or any FAIL blocks. The lead
+          never evaluates an llm check inline (that is a Rule 20 solo violation), so if this check
+          is not wired the escalated checks are adjudicated by no one, which reads as clean.
+    fixtures: [tests/fixtures/gate-adjudication]
+    ci_workflow: ~
+
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
     gate_types: [universal]
-    adjudication: llm
+    adjudication: lead   # deliberately NOT escalated: routing the self-test that polices the
+                         # gate machinery THROUGH that machinery is a trust circularity. The
+                         # lead runs H1 inline; H1 verifies Check 26's own anchor is loaded.
     enforcer: []
     ci_workflow: ~
     fixtures: [tests/fixtures/check-manifest-bypass]
@@ -350,9 +382,17 @@ checks:
   - id: "H2"
     title: Harness self-test — recursion guard + forgery + slicing-bypass
     gate_types: [universal]
-    adjudication: llm
+    adjudication: script   # deliberately NOT escalated (same trust-circularity reason as H1);
+                           # the once-per-sprint attestation is script-gated by
+                           # validate-h2-attestation.sh, which fails the gate on --attest exit 1
     enforcer:
+      - core/scripts/validate-h2-attestation.sh   # --verify/--attest; fails the gate
       - core/scripts/validate-retro-evidence.sh   # drives the seeded forgery fixture
+    call_sites:
+      - site: gate-validation.md H2
+        posture: FAILS the gate (exit 0 required from --verify or --attest)
+        why: the harness self-test is the only check that checks the checkers; escalating it
+          to the gate-adjudicator would let the delegated mechanism vouch for its own police
     ci_workflow: ~
     fixtures:
       - tests/fixtures/check-h1-recursion
@@ -372,7 +412,7 @@ checks:
   - id: failure
     title: Gate Failure
     gate_types: [universal]
-    adjudication: llm
+    adjudication: lead   # a remediation protocol the lead executes, not a judgment to escalate
     enforcer: []
     ci_workflow: ~
 

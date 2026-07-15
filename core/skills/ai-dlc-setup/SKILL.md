@@ -574,6 +574,13 @@ reasoning about plan soundness, and a missed planning flaw compounds downstream)
 - `{adversary_model_personal}` -> opus-tier model personal string
 - `{adversary_model_bedrock}` -> opus-tier model bedrock string
 
+**`.claude/team-roles/gate-adjudicator.md`:** (evaluates the escalated
+read-and-compare gate checks in a fresh context so the lead can run on a
+cheaper model — opus-tier, high effort: this is the judgment the lead is
+offloading, and a fresh Opus beats a saturated one)
+- `{gate_adjudicator_model_personal}` -> opus-tier model personal string
+- `{gate_adjudicator_model_bedrock}` -> opus-tier model bedrock string
+
 **`.claude/team-roles/protected-path-editor.md`:** (edits the rulebook —
 opus-tier, like the architect)
 - `{ppe_model_personal}` -> opus-tier model personal string
