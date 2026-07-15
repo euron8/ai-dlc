@@ -17,6 +17,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.62.1] — 2026-07-15
+
+### The new role's model tokens were taught to the operator but not to the reconciler
+
+Follow-up to 0.62.0, found by a real `ai-dlc-update` dry-run on the reference consumer. The new
+`gate-adjudicator.md` role carries live `/model {gate_adjudicator_model_personal}` and
+`{gate_adjudicator_model_bedrock}` tokens, and 0.62.0 registered them in `ai-dlc-setup/SKILL.md`
+(the operator-facing guidance) — but NOT in `reconcile/setup-sites.md`, the mechanical manifest
+`ai-dlc-update` uses to mask/reinject a consumer's filled-in values across a pull. Consequence:
+mask/reinject could not preserve the two model strings on pull, and the `core-layer-immutability`
+check could later flag the role's model line as undeclared core drift. Same "hand-maintained
+manifest rots" class the repo keeps hitting — every other opus role (adversary, remediator,
+protected-path-editor) was declared there; the newest one was missed.
+
+- Added `gate-adjudicator-model-personal` / `gate-adjudicator-model-bedrock` sites to
+  `reconcile/setup-sites.md`, mirroring the `adversary` block (`single-line`,
+  `^- Personal|Bedrock: \`/model (.+)\`$`). `validate-enforcement-map.sh` (I5) still passes.
+- **Known residual (deferred):** nothing forces `setup-sites.md` to cover every `{*_model_*}`
+  token in `team-roles/*.md` — the omission was invisible because no validator derives the site
+  set from the tokens. A derive-the-sites check is the durable fix.
+
 ## [0.62.0] — 2026-07-15
 
 ### Hybrid gate escalation — let the lead run on a cheaper model without weakening the gate
