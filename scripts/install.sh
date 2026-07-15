@@ -340,7 +340,7 @@ fi
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
 mkdir -p "$PROJECT_ROOT/scripts"
-for script in validate-provenance-block.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh validate-draft-stamps.sh validate-steering-budget.sh validate-artifact-budget.sh validate-h2-attestation.sh validate-adversarial-convergence.sh validate-escalation-resolution.sh sync-taught-schema.sh wait-for-deliverable.sh verdict.sh gen-architecture-index.js; do
+for script in validate-provenance-block.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh validate-draft-stamps.sh validate-steering-budget.sh validate-artifact-budget.sh validate-h2-attestation.sh validate-adversarial-convergence.sh validate-escalation-resolution.sh validate-gate-adjudication.sh sync-taught-schema.sh wait-for-deliverable.sh verdict.sh gen-architecture-index.js; do
   if [ -f "$SCRIPT_DIR/../core/scripts/$script" ]; then
     cp "$SCRIPT_DIR/../core/scripts/$script" "$PROJECT_ROOT/scripts/"
     chmod +x "$PROJECT_ROOT/scripts/$script"
@@ -398,7 +398,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"

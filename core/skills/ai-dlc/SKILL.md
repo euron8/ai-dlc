@@ -633,7 +633,8 @@ context (Rule 28). The `mode` field of the emitted provenance block MUST be
 `subagent` for ALL FIVE; `mode: solo` is forbidden for every one of them (not only
 party-mode) and FAILS gate-validation Check 17.
 
-Three execution shapes, all `mode: subagent`:
+Three provenance-bearing execution shapes, all `mode: subagent` (plus a fourth native shape
+(iv) below, which carries its own schema instead of a provenance block):
 
 **(i) Persona-spawning (`/bmad-party-mode`).** The lead invokes it via the Skill
 tool in its own conversation; the sub-skill spawns real persona subagents
@@ -669,6 +670,18 @@ skill forbids the very severity fields Check 24 adjudicates. The counts the gate
 reads had no source of truth. bmad remains correct, and still runs, for the
 ONE-SHOT reviews (`bug-investigation`, `sprint-review`, the test-strategy sweep),
 where nothing loops and no verdict is counted.
+
+**(iv) Gate-check adjudication (`gate-adjudicator`, native — no provenance block).** At
+every gate the lead dispatches ONE `gate-adjudicator` (Rule 19 binding to
+`.claude/team-roles/gate-adjudicator.md`) that evaluates every `adjudication: llm` check for
+the gate type in a fresh Opus context and delivers a `GATE_ADJUDICATION_VERDICT v1` file (its
+own schema, `schemas/gate-adjudication-verdict.json`). This is NOT one of the five validation
+sub-skills: no Skill runs, and it emits no `SKILL_INVOCATION_PROVENANCE` block — it is off the
+Check 17 path. The lead adopts its per-check verdicts ONLY through fail-closed Check 26 and
+never evaluates an `llm` check inline; roleplaying those judgments in the lead's own context
+is exactly the solo failure this rule forbids, and escalating them to a fresh Opus context is
+what lets a cheaper-model lead run the gate without weakening it. Procedure:
+`_gate-procedures.md`, "Gate-adjudication dispatch".
 
 **Provenance block.** Every invocation MUST emit a
 `SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
@@ -1119,8 +1132,14 @@ action falls in the **non-delegable set**:
   `implementation.md` -- integration is orchestration), and discharge-
   predicate execution at deploy gates.
 - **(b) Routing** -- pipeline-variant selection and step sequencing.
-- **(c) Gate-validation decisions** -- running the gate checks and
-  owning PASS/FAIL/remediation outcomes.
+- **(c) Gate-validation decisions** -- resolving the manifest, running the
+  `script` / `project` / `lead` checks, owning PASS/FAIL/remediation, and
+  adopting the `gate-adjudicator`'s per-check verdicts via Check 26. Evaluating
+  an individual `adjudication: llm` check is NOT in this set: like a Rule 20
+  validation evaluation it is escalated to a fresh `gate-adjudicator` and never
+  rendered solo in the lead's context. The lead still owns the outcome -- but it
+  adopts an `llm` verdict only through fail-closed Check 26, never by judging the
+  check inline.
 
 Triggering a validation sub-skill (Rule 20) is orchestration -- the lead
 triggers it but does not roleplay it, and Rule 20 requires the evaluation

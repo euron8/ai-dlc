@@ -31,7 +31,7 @@ modify schema", "deployment not claimed"). This avoids a combined
 UI-and-schema sprint being unable to declare two types at once.
 
 **Universal core (always loaded, every gate, every type).** Checks
-**1, 2, 3, 4, 7, 12, 13, 14, 15, 16, H1, H2, Gate Failure**. These run
+**1, 2, 3, 4, 7, 12, 13, 14, 15, 16, 26, H1, H2, Gate Failure**. These run
 regardless of gate type and are never sliced out (§6). Check 16
 (stub-audit) is universal, not implementation-only: it is keyed on
 `changed_files` *content* (any gate whose diff touches a hot-path file),
@@ -113,6 +113,15 @@ level-triggered, so a duplicate absorbed releases ago still reports). Remove whe
 and consumer catalogs no longer share a rendered namespace.
 
 ## Validation Checklist
+
+**Gate-adjudication escalation (before the checklist).** The lead may run on a cheaper model;
+the `adjudication: llm` checks (read-and-compare judgment) are escalated, once per gate, to a
+fresh Opus `gate-adjudicator`. At gate entry: generate `gate_nonce` (`<gate_type>-<UTC>`),
+then READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch" — dispatch the
+adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the `script` /
+`project` / `lead` checks below; inline-evaluating an `llm` check is a Rule 20 solo violation.
+Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
+H1/H2 stay with the lead — a self-test is never escalated into the mechanism it polices.
 
 ### 1. Validation cycle complete?
 <!-- CHECK_LOADED: 1 -->
@@ -1266,7 +1275,7 @@ too), H1 proves the slice loaded enough:
 1. Read the `GATE_MANIFEST` block at the top of this file and the gate
    type the invoking step declared (§5.3).
 2. Resolve the required set = universal core (1, 2, 3, 4, 7, 12, 13, 14,
-   15, 16, H1, H2, failure) ∪ the declared type's manifest row.
+   15, 16, 26, H1, H2, failure) ∪ the declared type's manifest row.
 3. For each required check ID, confirm its `<!-- CHECK_LOADED: <id> -->`
    anchor is present in loaded context. A required ID whose anchor is
    absent = **FAIL** — the slice dropped a required check, identical
@@ -1429,6 +1438,35 @@ makes the next `/ai-dlc-update` clobber or false-conflict — the catch-22 regro
 False-positive cost: one override declaration for a deliberate core-rule change.
 Removal condition: core ships as an immutable package the skill loads, never a
 writable tree.
+
+### 26. Gate-check adjudication verdict (escalated llm checks).
+<!-- CHECK_LOADED: 26 -->
+
+**Scope.** Every gate (universal). The ONE check through which the lead adopts the
+`gate-adjudicator`'s per-check verdicts for the `adjudication: llm` checks it escalated at gate
+entry (the escalation preamble at the top of this file; `_gate-procedures.md`
+"Gate-adjudication dispatch").
+
+**Check.** Join the verdict at
+`${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json`, then:
+
+    scripts/verdict.sh validate-gate-adjudication <gate_type> <verdict_path>
+
+Exit 0 required. The validator DERIVES the escalated set from `enforcement-map.yaml`
+(`--expected <gate_type>` — the same derivation the adjudicator used) and fails closed: a
+missing / malformed / stale verdict (exit 2), an uncovered / unexpected / duplicated escalated
+id, an empty evidence, an envelope or `gate_nonce` mismatch, or any per-check `FAIL` (exit 1)
+blocks. The lead adopts an `llm` verdict ONLY through this check — evaluating one inline is a
+Rule 20 solo violation.
+
+**PASS:** exit 0 — every escalated check covered, well-formed, all PASS. **FAIL:** any nonzero
+exit. Fixture: `tests/fixtures/gate-adjudication/`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: the lead on a cheaper model silently
+mis-judging or skipping a judgment check — a check that cannot fire reads exactly like one that
+passed, and an absent verdict reads exactly like a clean one. False-positive cost: one
+adjudicator dispatch and one script call per gate. Removal condition: retire if the lead
+returns to Opus for all gates, or the escalated checks become script-adjudicated.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

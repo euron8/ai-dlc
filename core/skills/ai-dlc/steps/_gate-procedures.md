@@ -95,6 +95,37 @@ Check A violations**; gate Check 25 counts them. Do not poll a subagent's raw ou
 file under `/private/tmp/.../tasks/<agent-id>` — the deliverable path in the
 snapshot's In-Flight Teammates row is the handle.
 
+## Gate-adjudication dispatch (referenced by the gate)
+
+When `gate-validation.md` says "dispatch the gate-adjudicator", execute this. It escalates
+the read-and-compare (`adjudication: llm`) checks of ONE gate to a fresh Opus subagent so the
+lead can run on a cheaper model without weakening the gate. The lead still owns PASS/FAIL: it
+adopts the verdict only through Check 26.
+
+**At gate entry, generate the nonce** — `<gate_type>-<UTC timestamp>`, e.g.
+`implementation-20260715T140322Z` — and derive the verdict path:
+
+    ${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json
+
+The nonce makes a stale verdict live at a different path: the bounded-join cannot find a prior
+gate's verdict, and Check 26 refuses one whose `gate_nonce` field is not this path's stem. That
+closes the "absent verdict reads as pass" hole.
+
+**Dispatch** ONE `gate-adjudicator`, `Agent` tool, `run_in_background: true` (Rule 29 — it must
+not block the operator), bound to `.claude/team-roles/gate-adjudicator.md` per SKILL.md Rule 19
+(both bindings: `model` and the standing role-contract Read line). Give it: the `gate_type`, the
+`gate_nonce`, the verdict output path, and the artifact roots it may read. It derives its own
+worklist with `scripts/validate-gate-adjudication.sh --expected <gate_type>` (the SAME derivation
+Check 26 uses), reads each escalated check's body in `gate-validation.md` as the spec, and writes
+one `GATE_ADJUDICATION_VERDICT v1` JSON to the verdict path. No Skill, no provenance block — it is
+the native path with its own schema.
+
+**Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <verdict_path>`.
+
+**While it runs, the lead evaluates ONLY the `script` / `project` / `lead` checks.**
+Inline-evaluating an `adjudication: llm` check is a Rule 20 solo violation — that judgment is the
+adjudicator's, adopted at Check 26.
+
 ## Adversarial review dispatch (referenced by step files)
 
 When a step file says "run an adversarial review pass", execute this. It is the REVIEW half of

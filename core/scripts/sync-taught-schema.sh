@@ -68,30 +68,38 @@ if [ ${#EXISTING_DIRS[@]} -eq 0 ]; then
     exit 0
 fi
 
-python3 - "$MODE" "$SCHEMA" "$ROOT" "${EXISTING_DIRS[@]}" <<'PYEOF'
+# The verdict schema ships beside the provenance schema and is taught the same way (rendered,
+# never hand-written). Resolve it from the same directory; fail closed if it is missing —
+# they install as a set, and a reader that guesses one of them is the drift this design removed.
+SCHEMA_DIR="$(cd "$(dirname "$SCHEMA")" && pwd)"
+VERDICT_SCHEMA="$SCHEMA_DIR/gate-adjudication-verdict.json"
+if [ ! -f "$VERDICT_SCHEMA" ]; then
+    echo "sync-taught-schema: FAIL — gate-adjudication-verdict.json not found beside" >&2
+    echo "  provenance-block.json in $SCHEMA_DIR. The two taught schemas ship as a set." >&2
+    exit 1
+fi
+
+python3 - "$MODE" "$SCHEMA" "$VERDICT_SCHEMA" "$ROOT" "${EXISTING_DIRS[@]}" <<'PYEOF'
 import json
 import os
 import re
 import sys
 
-mode, schema_path, root = sys.argv[1], sys.argv[2], sys.argv[3]
-doc_dirs = sys.argv[4:]
+mode, prov_path, verdict_path, root = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+doc_dirs = sys.argv[5:]
 
-with open(schema_path, "r", encoding="utf-8") as fh:
-    S = json.load(fh)
-
-ENV = S["envelope"]
-FIELDS = {f["name"]: f for f in S["fields"]}
-ORDER = [f["name"] for f in S["fields"]]
-
-BEGIN_RE = re.compile(
-    r"<!-- BEGIN GENERATED: provenance-block/(?P<profile>[a-z0-9-]+) — source: schemas/provenance-block\.json; do not edit by hand -->",
-)
-END_MARK = "<!-- END GENERATED: provenance-block -->"
+with open(prov_path, "r", encoding="utf-8") as fh:
+    P = json.load(fh)
+with open(verdict_path, "r", encoding="utf-8") as fh:
+    G = json.load(fh)
 
 
-def render(profile_name):
-    """Render one taught example from the schema. This is the ONLY place an example is made."""
+def render_provenance(S, profile_name):
+    """Render one provenance taught example from the schema. Byte-identical to the original
+    renderer — the ONLY place a provenance example is made."""
+    ENV = S["envelope"]
+    FIELDS = {f["name"]: f for f in S["fields"]}
+    ORDER = [f["name"] for f in S["fields"]]
     prof = S["profiles"][profile_name]
     names = ORDER if prof.get("fields") == "*" else prof["fields"]
     pin = prof.get("pin", {})
@@ -110,7 +118,40 @@ def render(profile_name):
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------- invariant 1: regions current
+def render_verdict(S, profile_name):
+    """Render the verdict taught example — the schema's taught_example, as pretty JSON in a
+    fence. One profile only ('example'); the shape lives in the schema, not here."""
+    body = json.dumps(S["taught_example"], indent=2)
+    return "```json\n" + body + "\n```"
+
+
+# Each taught-schema KIND: its region slug, source filename, marker, loaded schema, render fn,
+# and the set of legal profile names. The two invariants below run over every kind.
+KINDS = [
+    {
+        "slug": "provenance-block",
+        "source": "provenance-block.json",
+        "marker": P["envelope"]["marker"],
+        "schema": P,
+        "render": render_provenance,
+        "profiles": set(P["profiles"]),
+    },
+    {
+        "slug": "gate-adjudication-verdict",
+        "source": "gate-adjudication-verdict.json",
+        "marker": G["envelope"]["marker"],
+        "schema": G,
+        "render": render_verdict,
+        "profiles": {"example"},
+    },
+]
+for k in KINDS:
+    k["begin_re"] = re.compile(
+        r"<!-- BEGIN GENERATED: " + re.escape(k["slug"]) + r"/(?P<profile>[a-z0-9-]+) — source: schemas/"
+        + re.escape(k["source"]) + r"; do not edit by hand -->"
+    )
+    k["end_mark"] = f"<!-- END GENERATED: {k['slug']} -->"
+
 md_files = []
 for d in doc_dirs:
     for dirpath, _, names in os.walk(d):
@@ -121,45 +162,51 @@ md_files.sort()
 
 stale, rendered, written = [], 0, 0
 
+# ---------------------------------------------------------------- invariant 1: regions current
 for path in md_files:
     with open(path, "r", encoding="utf-8") as fh:
         content = fh.read()
-    if "BEGIN GENERATED: provenance-block/" not in content:
+    if "BEGIN GENERATED: " not in content:
         continue
 
-    out, cursor, changed = [], 0, False
-    for m in BEGIN_RE.finditer(content):
-        profile = m.group("profile")
-        if profile not in S["profiles"]:
-            print(
-                f"FAIL  {os.path.relpath(path, root)}: unknown profile "
-                f"'{profile}'. Known: {sorted(S['profiles'])}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        end = content.find(END_MARK, m.end())
-        if end == -1:
-            print(
-                f"FAIL  {os.path.relpath(path, root)}: a BEGIN GENERATED region for "
-                f"'{profile}' is never closed with '{END_MARK}'.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+    changed = False
+    for k in KINDS:
+        if f"BEGIN GENERATED: {k['slug']}/" not in content:
+            continue
+        out, cursor = [], 0
+        for m in k["begin_re"].finditer(content):
+            profile = m.group("profile")
+            if profile not in k["profiles"]:
+                print(
+                    f"FAIL  {os.path.relpath(path, root)}: unknown {k['slug']} profile "
+                    f"'{profile}'. Known: {sorted(k['profiles'])}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            end = content.find(k["end_mark"], m.end())
+            if end == -1:
+                print(
+                    f"FAIL  {os.path.relpath(path, root)}: a BEGIN GENERATED region for "
+                    f"'{k['slug']}/{profile}' is never closed with '{k['end_mark']}'.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
-        current = content[m.end():end].strip("\n")
-        want = render(profile)
-        rendered += 1
-        if current != want:
-            changed = True
-            stale.append((os.path.relpath(path, root), profile))
-        out.append(content[cursor:m.end()])
-        out.append("\n" + want + "\n")
-        cursor = end
-    out.append(content[cursor:])
+            current = content[m.end():end].strip("\n")
+            want = k["render"](k["schema"], profile)
+            rendered += 1
+            if current != want:
+                changed = True
+                stale.append((os.path.relpath(path, root), f"{k['slug']}/{profile}", k["source"]))
+            out.append(content[cursor:m.end()])
+            out.append("\n" + want + "\n")
+            cursor = end
+        out.append(content[cursor:])
+        content = "".join(out)
 
     if changed and mode == "sync":
         with open(path, "w", encoding="utf-8") as fh:
-            fh.write("".join(out))
+            fh.write(content)
         written += 1
 
 # ------------------------------------------- invariant 2: no hand-written example survives
@@ -170,52 +217,54 @@ handwritten = []
 for path in md_files:
     with open(path, "r", encoding="utf-8") as fh:
         content = fh.read()
-    if ENV["marker"] not in content:
-        continue
 
-    # Byte spans covered by a generated region are exempt: those ARE the schema.
+    # All generated-region spans, of every kind, are exempt: those ARE the schema.
     spans = []
-    for m in BEGIN_RE.finditer(content):
-        end = content.find(END_MARK, m.end())
-        if end != -1:
-            spans.append((m.start(), end + len(END_MARK)))
+    for k in KINDS:
+        for m in k["begin_re"].finditer(content):
+            end = content.find(k["end_mark"], m.end())
+            if end != -1:
+                spans.append((m.start(), end + len(k["end_mark"])))
 
     def inside_generated(pos):
         return any(a <= pos < b for a, b in spans)
 
-    for m in FENCE_RE.finditer(content):
-        if ENV["marker"] not in m.group(1):
+    for k in KINDS:
+        if k["marker"] not in content:
             continue
-        if inside_generated(m.start()):
-            continue
-        line_no = content[: m.start()].count("\n") + 1
-        handwritten.append((os.path.relpath(path, root), line_no))
+        for m in FENCE_RE.finditer(content):
+            if k["marker"] not in m.group(1):
+                continue
+            if inside_generated(m.start()):
+                continue
+            line_no = content[: m.start()].count("\n") + 1
+            handwritten.append((os.path.relpath(path, root), line_no, k["slug"], k["source"], sorted(k["profiles"])))
 
 # ---------------------------------------------------------------------------- report
 rc = 0
 
 if mode == "check":
-    for rel, profile in stale:
+    for rel, profile, source in stale:
         print(
             f"FAIL  {rel}: the generated '{profile}' example is STALE — it does not match "
-            f"what schemas/provenance-block.json renders today.\n"
+            f"what schemas/{source} renders today.\n"
             f"      FIX: run scripts/sync-taught-schema.sh (no arguments). Do not hand-edit "
             f"the region; the schema is the source.",
             file=sys.stderr,
         )
         rc = 1
 
-for rel, line_no in handwritten:
+for rel, line_no, slug, source, profiles in handwritten:
     print(
-        f"FAIL  {rel}:{line_no}: a HAND-WRITTEN {ENV['marker']} example.\n"
-        f"      Every taught example must be RENDERED from schemas/provenance-block.json into "
+        f"FAIL  {rel}:{line_no}: a HAND-WRITTEN {slug} example.\n"
+        f"      Every taught example must be RENDERED from schemas/{source} into "
         f"a generated region, because a hand-written copy is a copy that can drift — and when "
-        f"this one drifted, the reader silently parsed nothing and the gate called two "
+        f"this pattern first drifted, the reader silently parsed nothing and the gate called two "
         f"unadjudicated passes clean.\n"
         f"      FIX: replace it with\n"
-        f"        <!-- BEGIN GENERATED: provenance-block/<profile> — source: schemas/provenance-block.json; do not edit by hand -->\n"
-        f"        <!-- END GENERATED: provenance-block -->\n"
-        f"      and run scripts/sync-taught-schema.sh. Profiles: {sorted(S['profiles'])}",
+        f"        <!-- BEGIN GENERATED: {slug}/<profile> — source: schemas/{source}; do not edit by hand -->\n"
+        f"        <!-- END GENERATED: {slug} -->\n"
+        f"      and run scripts/sync-taught-schema.sh. Profiles: {profiles}",
         file=sys.stderr,
     )
     rc = 1
@@ -227,12 +276,12 @@ if rc != 0:
 
 if mode == "sync":
     print(
-        f"sync-taught-schema: rendered {rendered} example(s) from schemas/provenance-block.json; "
+        f"sync-taught-schema: rendered {rendered} example(s) from the taught schemas; "
         f"{written} file(s) updated."
     )
 else:
     print(
         f"sync-taught-schema: PASS — {rendered} taught example(s), all rendered from "
-        f"schemas/provenance-block.json; 0 hand-written."
+        f"their schemas; 0 hand-written."
     )
 PYEOF

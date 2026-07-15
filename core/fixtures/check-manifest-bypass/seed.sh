@@ -51,6 +51,7 @@ actually present in context:
 <!-- CHECK_LOADED: 14 -->
 <!-- CHECK_LOADED: 15 -->
 <!-- CHECK_LOADED: 16 -->
+<!-- CHECK_LOADED: 26 -->
 <!-- CHECK_LOADED: H1 -->
 <!-- CHECK_LOADED: H2 -->
 <!-- CHECK_LOADED: failure -->
