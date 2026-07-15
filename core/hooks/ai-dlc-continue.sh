@@ -273,7 +273,12 @@ if [ -n "$NEWEST_PASS" ]; then
     } >> "$LOG_FILE"
   else
     SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
-    OUT="$(bash "$CONVERGENCE_VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"
+    # Pass the transcript so RESOLVED requires a VERIFIED operator citation (arm F6): the stop
+    # state must not self-heal on a resolution the operator never authorized. Fails open when
+    # no transcript is readable (acknowledge.sh, PreToolUse, is where the dispatch is denied).
+    CYCLE_ARGS=(--series "$SERIES" --cycle-state)
+    [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ] && CYCLE_ARGS+=(--transcript "$TRANSCRIPT")
+    OUT="$(bash "$CONVERGENCE_VALIDATOR" "${CYCLE_ARGS[@]}" 2>/dev/null)"
     CYCLE_RC=$?
     CYCLE_STATE="$(printf '%s' "$OUT" | cut -f1)"
     CYCLE_PASS="$(printf '%s' "$OUT" | cut -f2)"

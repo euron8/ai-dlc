@@ -166,6 +166,8 @@ Two arms, either satisfies (dual-arm OR):
 - `DECIDED_AUTONOMOUSLY` entries do not block. They are informational.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
   pipeline. Proceed with non-deferred work.
+- A HARD_BLOCK marked `RESOLVED`/`OVERRIDDEN` must cite the operator — enforced by
+  Check 2a below.
 - **AC deferral requires a named observable reopen signal.** When an
   AC is deferred with classification "platform limitation", "external
   dependency", "awaiting third-party fix", or any similar phrasing,
@@ -179,6 +181,30 @@ Two arms, either satisfies (dual-arm OR):
   missing a valid signal MUST be escalated as `HARD_BLOCK` for
   root-cause investigation rather than accepted. Gate FAILS if a
   deferral entry in scope for this gate lacks a valid reopen signal.
+
+### 2a. Escalation resolution operator-citation?
+<!-- CHECK_LOADED: 2a -->
+
+A HARD_BLOCK exists because the decision is the operator's. Marking one
+`RESOLVED` (or a `DECIDED_AUTONOMOUSLY` entry `OVERRIDDEN`) asserts the
+operator adjudicated it — so the entry MUST carry
+`**Operator authorization:** <ISO ts> | "<verbatim operator quote, ≥12 chars>"`
+(see `escalations.md`).
+
+**Check.** Invoke `scripts/validate-escalation-resolution.sh --escalations
+docs/escalations/pending.md --sprint <N> --transcript <this session's
+transcript_path>`; exit 0 required. It reads **this sprint's**
+RESOLVED/OVERRIDDEN entries (entries carry the sprint in their header;
+legacy sprints are out of scope, so the gate does not wedge on old data)
+and verifies each citation against the session transcript with the same
+genuine-operator predicate Rule 29 uses (`validate-steering-budget.sh
+--cite`). A lead-authored "operator disposition" whose quote appears in no
+genuine operator message **FAILS** — the S290 failure, where six
+`S290-* Lead (…)` escalations were flipped to RESOLVED in a window with
+zero operator messages. If you made the call yourself, its status is
+`DECIDED_AUTONOMOUSLY` (informational, non-blocking, no citation). Fails
+**closed** if `--transcript` is omitted — a forgotten flag cannot silently
+disarm the check.
 
 ### 3. Requirement anchor integrity?
 <!-- CHECK_LOADED: 3 -->
@@ -1084,8 +1110,12 @@ excluded it; `sprint-review-next` gates `story`, which is why 24 joins the story
 manifest row.)*
 
 **Check.** Invoke `scripts/validate-adversarial-convergence.sh --series
-<path-prefix-of-this-step's-pass-series>`; exit 0 required. It reads the
-`findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
+<path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path>`;
+exit 0 required. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
+resolution record's `operator_authorization` against ground truth; the gate **fails closed**
+if a resolution cites an operator message the transcript does not contain — and fails closed
+too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
+reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
 pass in the series (schema above, mapping in `team-roles/adversary.md`) and enforces
 seven things:
 
@@ -1114,7 +1144,10 @@ seven things:
   remedy: verify the disputed fact mechanically, cut the claim, or escalate.
 - **F — RESOLUTION.** A pass that runs *after* a `DIVERGENT_HARD_BLOCK` must declare
   `resolves_divergence:` naming a resolution record, and that record must hold up —
-  see the resume contract below.
+  see the resume contract below. The record's `operator_authorization` must **cite** a
+  genuine operator message (timestamp + verbatim substring), verified against the
+  transcript: a resolution clears an operator-gated hard block, so a lead-authored one
+  that quotes an operator who never spoke is rejected. (The S290 fix.)
 - **G — CHRONOLOGY.** The series must be monotone in `invoked_at`. A pass that claims
   to follow another but was written before it is the tail of a **dead cycle**, left on
   disk by a restart and chained onto the live series by the glob.

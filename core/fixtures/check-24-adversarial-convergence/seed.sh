@@ -224,7 +224,8 @@ pass "$TARGET/divergent-resolved/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BL
 # artifact_sha_after=aaa1 is the F5 ANCHOR for REVERT_REPAIR: p1 notarized aaa1, so the
 # artifact really is back at a state that was actually reviewed.
 record "$TARGET/divergent-resolved/s1-resolution-p2.md" \
-  s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale"
+  s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale" \
+  '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"'
 pass "$TARGET/divergent-resolved/s1-adversarial-p3.md" 3 0 0 2 EXIT_CONDITION_MET 0 aaa1 s1-resolution-p2.md
 
 # --- divergent-unresolved: F1 --------------------------------------------------
@@ -339,6 +340,17 @@ mkdir -p "$TARGET/divergent-terminal-resolved"
 pass "$TARGET/divergent-terminal-resolved/s1-adversarial-p1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2 aaa1
 pass "$TARGET/divergent-terminal-resolved/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 bbb2
 record "$TARGET/divergent-terminal-resolved/s1-resolution-p2.md" \
-  s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale"
+  s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale" \
+  '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"'
+
+# The harness-owned transcript the RESOLUTION citations verify against (v0.61.0). A resolution
+# clears an operator-gated HARD_BLOCK, so its operator_authorization must quote a GENUINE
+# operator message at or after the divergent pass (p2 invoked_at 2026-07-12T02:00:00Z). One
+# real operator turn here backs both REVERT_REPAIR records above.
+cat > "$TARGET/operator-transcript.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-12T01:00:00Z","message":{"content":"/ai-dlc Sprint 1. Kick off the cycle."}}
+{"type":"assistant","timestamp":"2026-07-12T02:00:00Z","message":{"content":[{"type":"text","text":"p2 stamped DIVERGENT_HARD_BLOCK; pausing for your adjudication."}]}}
+{"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Revert the p1 to p2 repair wholesale — it made the check unfalsifiable."}}
+JSONL
 
 printf '%s\n' "$TARGET"

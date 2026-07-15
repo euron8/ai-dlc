@@ -225,6 +225,7 @@ artifact_sha_after: aaa1
 artifact_bytes_before: 4200
 artifact_bytes_after: 4000
 scope_delta: reverted the p1->p2 repair wholesale
+operator_authorization: 2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"
 ADVERSARIAL_RESOLUTION_END -->
 EOF
 drive_stop "$W" >/dev/null

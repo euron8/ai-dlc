@@ -39,6 +39,11 @@ fi
 ROOT="$(bash "$DIR/seed.sh" | tail -1)"
 trap 'rm -rf "$ROOT"' EXIT
 
+# The transcript the RESOLUTION citations (arm F6) verify against. Every invocation passes
+# it, exactly as the real Check 24 gate and the acknowledge hook do -- a resolution clears an
+# operator-gated HARD_BLOCK, so the gate must be handed the ground truth to check the citation.
+TRANSCRIPT="$ROOT/operator-transcript.jsonl"
+
 FAILURES=0
 ASSERTIONS=0
 
@@ -46,7 +51,7 @@ ASSERTIONS=0
 expect() {
   local case_dir="$1" want="$2" why="$3" prefix="${4:-s1-adversarial-pass}" got out
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" 2>&1)"
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" 2>&1)"
   got=$?
   if [ "$got" -eq "$want" ]; then
     printf '  ok    %-28s exit=%s  (%s)\n' "$case_dir" "$got" "$why"
@@ -63,7 +68,7 @@ expect_says() {
   local case_dir="$1" prefix="$2" label="$3"; shift 3
   local out missing=""
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" 2>&1)"
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" 2>&1)"
   for want in "$@"; do
     printf '%s' "$out" | grep -qF -- "$want" || missing="$missing
             missing: \"$want\""
@@ -80,7 +85,7 @@ expect_says() {
 expect_state() {
   local case_dir="$1" prefix="$2" want_state="$3" want_rc="$4" why="$5" out state rc
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state 2>/dev/null)"
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null)"
   rc=$?
   state="$(printf '%s' "$out" | cut -f1)"
   if [ "$state" = "$want_state" ] && [ "$rc" -eq "$want_rc" ]; then
