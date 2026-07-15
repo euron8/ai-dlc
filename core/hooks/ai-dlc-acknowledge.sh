@@ -142,10 +142,32 @@ if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
 
   if [ -n "$NEWEST_PASS" ] && [ -f "$CONVERGENCE_VALIDATOR" ]; then
     SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
-    CYCLE_OUT="$(bash "$CONVERGENCE_VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"
+    # Feed the validator the harness-owned transcript so arm F6 (operator-citation) can verify
+    # a resolution record's operator_authorization against ground truth -- the S290 fix: a lead
+    # cannot release an operator-gated HARD_BLOCK by quoting an operator who never spoke. If the
+    # transcript is unreadable the validator fails OPEN here (Check 24, the gate, is the
+    # fail-closed backstop) and says so on stderr, which we surface to the flow log below.
+    CYCLE_ARGS=(--series "$SERIES" --cycle-state)
+    [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ] && CYCLE_ARGS+=(--transcript "$TRANSCRIPT")
+    CYCLE_ERRF="$(mktemp 2>/dev/null || echo "${LOG_DIR}/.cycle-err.$$")"
+    CYCLE_OUT="$(bash "$CONVERGENCE_VALIDATOR" "${CYCLE_ARGS[@]}" 2>"$CYCLE_ERRF")"
     CYCLE_RC=$?
     CYCLE_STATE="$(printf '%s' "$CYCLE_OUT" | cut -f1)"
     CYCLE_PASS="$(printf '%s' "$CYCLE_OUT" | cut -f2)"
+    # Fail-open trace: a resolution cited an operator but it could not be verified (no
+    # transcript). A silent fail-open is indistinguishable from a verified pass -- the exact
+    # defect class this change is about -- so leave a mark retro's Rule 25(c) audit reads.
+    if grep -q 'ADVERSARIAL_CITATION_UNVERIFIABLE' "$CYCLE_ERRF" 2>/dev/null; then
+      mkdir -p "$LOG_DIR"
+      {
+        echo "## ${TIMESTAMP} -- ADVERSARIAL_CITATION_UNVERIFIABLE"
+        echo "- Session: ${SESSION_ID}"
+        echo "- a resolution record cites operator_authorization, but no readable transcript was"
+        echo "  available to verify it. Failed OPEN; Check 24 (gate) is the fail-closed backstop."
+        echo ""
+      } >> "$LOG_FILE"
+    fi
+    rm -f "$CYCLE_ERRF" 2>/dev/null
 
     # FAIL OPEN on anything but an explicit STOP. A hook that fails CLOSED on its own bug
     # wedges the pipeline, and a wedged pipeline gets the hook switched off -- after which

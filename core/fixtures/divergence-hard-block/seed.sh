@@ -66,6 +66,7 @@ record() {
     printf 'artifact_bytes_before: %s\n' "$5"
     printf 'artifact_bytes_after: %s\n' "$6"
     printf 'scope_delta: reverted the p1->p2 repair wholesale\n'
+    printf 'operator_authorization: 2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"\n'
     printf 'ADVERSARIAL_RESOLUTION_END -->\n'
   } > "$ART/s1-brief-resolution-p2.md"
 }

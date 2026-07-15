@@ -93,6 +93,16 @@
 #       Print ONLY the total violation count (A+B+C+D) as a bare integer, exit 0.
 #       gate-validation.md Check 25 needs an integer to compare against the count
 #       the previous gate recorded; it must not have to grep one out of prose.
+#   core/scripts/validate-steering-budget.sh --transcript PATH --cite "SUBSTR" [--since ISO]
+#       PROVENANCE-CITATION query mode. Asks a different question from the checks
+#       above: not "did the lead mishandle operator messages?" but "did a GENUINE
+#       operator message actually contain these words?" Prints MATCH <ts> or NOMATCH
+#       and exits 0 (found) / 2 (not found). --since bounds the search to messages at
+#       or after an ISO-8601 timestamp (the pause window). This exists so a record
+#       that CLAIMS operator authorization (an ADVERSARIAL_RESOLUTION operator_
+#       authorization citation) can be checked against the harness-owned transcript
+#       using the SAME genuine-operator predicate Check B uses -- one definition of
+#       "a real human said this", never two that can drift.
 #
 # ENV OVERRIDES
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
@@ -113,6 +123,8 @@ TRANSCRIPT=""
 DIR=""
 QUIET=0
 COUNT=0
+CITE=""
+SINCE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -120,11 +132,19 @@ while [ $# -gt 0 ]; do
     --dir)        DIR="${2:-}"; shift 2 ;;
     --quiet)      QUIET=1; shift ;;
     --count)      COUNT=1; shift ;;
+    --cite)       CITE="${2:-}"; shift 2 ;;
+    --since)      SINCE="${2:-}"; shift 2 ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
 done
 
 say(){ [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+
+# --cite is a single-transcript query; it never scans a corpus.
+if [ -n "$CITE" ] && [ -z "$TRANSCRIPT" ]; then
+  echo "FAIL: --cite requires --transcript PATH" >&2
+  exit 1
+fi
 
 if [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
   echo "FAIL: pass --transcript PATH or --dir PATH" >&2
@@ -143,17 +163,39 @@ command -v node >/dev/null 2>&1 || { echo "FAIL: node is required" >&2; exit 1; 
 
 THRESHOLD=$(( BUDGET + GRACE ))
 
-AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" node <<'NODE'
+AI_DLC_T="$TRANSCRIPT" AI_DLC_D="$DIR" AI_DLC_TH="$THRESHOLD" AI_DLC_B="$BUDGET" AI_DLC_MB="$MAX_BEATS" AI_DLC_Q="$QUIET" AI_DLC_C="$COUNT" AI_DLC_CITE="$CITE" AI_DLC_SINCE="$SINCE" node <<'NODE'
 const fs = require("fs"), path = require("path");
 const TH = +process.env.AI_DLC_TH, BUDGET = +process.env.AI_DLC_B;
 const MAX_BEATS = +process.env.AI_DLC_MB;
 const QUIET = process.env.AI_DLC_Q === "1";
 const COUNT = process.env.AI_DLC_C === "1";
+const CITE = process.env.AI_DLC_CITE || "";
+const SINCE = process.env.AI_DLC_SINCE || "";
 const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 
 // AskUserQuestion measures the human's think-time, not machine starvation.
 const EXEMPT = new Set(["AskUserQuestion"]);
 const ADVANCING = new Set(["Agent", "Task", "Skill", "TaskCreate"]);
+
+// THE genuine-operator-message predicate. This is the ONE definition of "a real
+// human typed this" -- Check B (steamroll) and --cite (provenance) both call it, so
+// they cannot drift into disagreement. Returns the cleaned message text, or "" if
+// the record is not a genuine free-text operator turn (tool_result, harness/system
+// injection, teammate traffic, or the auto-compact resume prompt). Keep every
+// exclusion here in lockstep with the "NOT AN OPERATOR MESSAGE" header notes.
+const genuineOperatorText = (r) => {
+  if (!r || r.type !== "user") return "";
+  const c = r.message?.content;
+  if (Array.isArray(c) && c.some(b => b.type === "tool_result")) return "";
+  let txt = typeof c === "string" ? c
+    : Array.isArray(c) ? c.map(b => (b.type === "text" ? b.text : "")).join(" ") : "";
+  txt = (txt || "").replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+  if (!txt) return "";
+  if (/^(<task-notification|<local-command|<command-|<agent-message|<teammate-message|Caveat:|\[Request interrupted|## Context Usage|Stop hook feedback|Base directory|Another Claude session sent a message)/.test(txt)) return "";
+  if (/<teammate-message/.test(txt)) return "";
+  if (/^This session is being continued from a previous conversation/.test(txt)) return "";
+  return txt;
+};
 
 // `_bmad-output/ai-dlc-update/**` is the UPDATER's own scratch space (reconcile
 // report, push-candidate ledger), not pipeline output. /ai-dlc-update is a
@@ -213,6 +255,33 @@ const isDenied = (b) => {
 const files = one ? [one]
   : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f));
 
+// ---- --cite: provenance-citation query (single transcript) ------------------
+// Answer one mechanical question: is CITE a verbatim (whitespace-normalized,
+// case-insensitive) substring of a GENUINE operator message at or after --since?
+// It deliberately does NOT judge whether those words AUTHORIZE anything -- that is
+// an LLM judgment, itself forgeable, and the caller (a resolution record's operator_
+// authorization field) surfaces the words verbatim for the human to own the meaning.
+// The machine notarizes provenance; the human owns meaning.
+if (CITE) {
+  const norm = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
+  const needle = norm(CITE);
+  const sinceMs = SINCE ? Date.parse(SINCE) : -Infinity;
+  let recs;
+  try {
+    recs = fs.readFileSync(one, "utf8").split("\n").filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean).filter(r => !r.isSidechain);
+  } catch { console.log("NOMATCH"); process.exit(2); }
+  for (const r of recs) {
+    const txt = genuineOperatorText(r);
+    if (!txt) continue;
+    const ts = Date.parse(r.timestamp);
+    if (!(ts >= sinceMs)) continue;
+    if (norm(txt).includes(needle)) { console.log(`MATCH ${r.timestamp}`); process.exit(0); }
+  }
+  console.log("NOMATCH"); process.exit(2);
+}
+
 const starv = [], steam = [], unbounded = [], wrongjoin = [];
 
 // A TaskOutput handed an agent_id. The harness says so in the error, verbatim.
@@ -255,21 +324,11 @@ for (const f of files) {
   // ---- Check B: operator message steamrolled by a pipeline-advancing call --
   for (let i = 0; i < recs.length; i++) {
     const r = recs[i];
-    if (r.type !== "user") continue;
-    const c = r.message?.content;
-    if (Array.isArray(c) && c.some(b => b.type === "tool_result")) continue;
-    let txt = typeof c === "string" ? c
-      : Array.isArray(c) ? c.map(b => (b.type === "text" ? b.text : "")).join(" ") : "";
-    txt = (txt || "").replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+    // The genuine-operator predicate -- shared with --cite so the two cannot drift.
+    // Excludes tool_results, harness/system injections, teammate traffic, and the
+    // auto-compact resume prompt (see genuineOperatorText and the header notes).
+    const txt = genuineOperatorText(r);
     if (!txt) continue;
-    // Not a human steer: harness/system injections and teammate traffic.
-    // "Another Claude session sent a message" wraps SendMessage traffic from a
-    // teammate -- machine, not operator. Counting it would inflate check B.
-    if (/^(<task-notification|<local-command|<command-|<agent-message|<teammate-message|Caveat:|\[Request interrupted|## Context Usage|Stop hook feedback|Base directory|Another Claude session sent a message)/.test(txt)) continue;
-    if (/<teammate-message/.test(txt)) continue;
-    // Not a human steer: the harness's own auto-compaction resume prompt. The
-    // lead advancing right after it is the recovery protocol, not a steamroll.
-    if (isCompactResume(txt)) continue;
 
     // Walk forward: does the lead ADVANCE the pipeline before it clears the
     // pause flag? The flag -- not the presence of narration -- is the contract.

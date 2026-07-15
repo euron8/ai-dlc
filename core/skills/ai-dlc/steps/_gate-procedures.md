@@ -157,7 +157,7 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    artifact_bytes_before / artifact_bytes_after: <int>
    scope_delta: <what changed, concretely>
    locked_requirements_touched: <none | entries + the operator's authorization>
-   operator_authorization: <the operator's own words, verbatim>
+   operator_authorization: <ISO-8601 UTC ts of the operator's message> | "<verbatim substring, >=12 chars, copied from it>"
    archive: <dir>            # RESTART_CYCLE only
    ADVERSARIAL_RESOLUTION_END -->
    ```
@@ -166,8 +166,19 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    |---|---|---|
    | `REVERT_REPAIR` | put the artifact back to a state an earlier pass reviewed | `artifact_sha_after` must equal some earlier pass's `artifact_sha` |
    | `CUT_SCOPE` | remove the contested scope | `artifact_bytes_after` **<** `artifact_bytes_before` |
-   | `CHANGE_APPROACH` | a different approach, on the operator's authority | sha changed; `scope_delta` + `operator_authorization` present |
+   | `CHANGE_APPROACH` | a different approach, on the operator's authority | sha changed; `scope_delta` present |
    | `RESTART_CYCLE` | abandon the series and start over | as above, **plus** the passes MOVED to an existing `archive:` dir |
+
+   **`operator_authorization` is a CITATION, required for ALL FOUR kinds, and verified.** A
+   resolution CLEARS a HARD_BLOCK, and a hard block is operator-gated by design (only the
+   operator may adjudicate). So the field is not free text — it is a *timestamp* plus a
+   *verbatim substring* of the operator's own message, and Check 24 checks that substring
+   against the harness-owned session transcript using the genuine-operator predicate (the same
+   one Rule 29 uses). If no genuine operator message in the pause window contains those words,
+   the gate FAILS: a lead-authored resolution is not an operator adjudication. Quote a real span
+   of what the operator actually typed (≥12 chars) — not a paraphrase, and not a token. The
+   machine notarizes that a human said it; you and the operator own what it means. (This closes
+   the S290 hole: four "operator" dispositions authored in a window with zero operator messages.)
 
    **FREEZE is not on this list and is rejected by name.** A hard block means CRITICALs rose in
    text a previous pass had already reviewed — text that is *already frozen*. Freezing it again

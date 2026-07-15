@@ -59,6 +59,22 @@ checks:
     enforcer: []
     ci_workflow: ~
 
+  - id: "2a"
+    title: Escalation resolution operator-citation
+    gate_types: [universal]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-escalation-resolution.sh
+    call_sites:
+      - site: gate-validation.md Check 2a
+        posture: FAILS the gate (exit 0 required)
+        why: a HARD_BLOCK is operator-gated, so marking it RESOLVED asserts an
+          operator adjudication; without a cited, transcript-verified operator
+          message that is a lead-authored fabrication (the S290 failure)
+    ci_workflow: ~
+    fixtures: [tests/fixtures/escalation-citation]
+
   - id: "3"
     title: Requirement anchor integrity?
     gate_types: [universal]

@@ -83,17 +83,24 @@ set -u
 
 SERIES_PREFIX=""
 CYCLE_STATE=0
+TRANSCRIPT=""
 FILES=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --series) SERIES_PREFIX="$2"; shift 2 ;;
     --cycle-state) CYCLE_STATE=1; shift ;;
+    --transcript) TRANSCRIPT="${2:-}"; shift 2 ;;
     -h|--help) sed -n '2,80p' "$0"; exit 0 ;;
     -*) echo "unknown argument: $1" >&2; exit 1 ;;
     *) FILES+=("$1"); shift ;;
   esac
 done
+
+# The sibling steering-budget validator owns THE genuine-operator predicate (Check B
+# and its --cite mode). Resolve it relative to $0 so this works in both the
+# distribution layout (core/scripts/) and the consumer layout (scripts/).
+STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"
 
 # -----------------------------------------------------------------------------
 # --cycle-state: adjudicate a RUNNING cycle, for the hooks.
@@ -333,6 +340,7 @@ P_FILE=()
 P_VERDICT=()
 P_SHA=()
 P_RESOLVES=()
+P_AT=()
 
 # --- E. STALL (the plateau rung) --------------------------------------------
 # Rule 8 had exactly two terminal states: CONVERGED (0 CRITICAL, 0 MAJOR) and DIVERGENT
@@ -380,6 +388,9 @@ for f in "${SORTED[@]}"; do
   P_VERDICT+=("$verdict")
   P_SHA+=("$(block_field "$f" 'artifact_sha' | tr -cd '0-9a-fA-F')")
   P_RESOLVES+=("$(block_field "$f" 'resolves_divergence')")
+  # invoked_at bounds the pause window: a resolution citation must point at an
+  # operator message at or after the divergent pass that opened the block (arm F).
+  P_AT+=("$invoked_at")
 
   if [ "$CYCLE_STATE" -eq 0 ]; then
     printf '  %s\n' "$f"
@@ -717,6 +728,74 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
       fi
       ;;
   esac
+
+  # F6 -- OPERATOR CITATION. Every resolution CLEARS a HARD_BLOCK, and a HARD_BLOCK is
+  # operator-gated by design (Rule 8 / Rule 11(a): "the operator must adjudicate"). So the
+  # record must CITE a real operator message, not merely assert one -- for ALL four kinds,
+  # because the gate being cleared is the same regardless of resolution mechanism. The
+  # citation is `<ISO ts> | "<verbatim substring>"`, verified against the harness-owned
+  # transcript with the sibling validator's --cite mode (THE genuine-operator predicate,
+  # shared with Check B, so the two cannot drift). This proves a human typed these words in
+  # the pause window; it does NOT judge whether they AUTHORIZE the resolution -- the words
+  # are surfaced verbatim and the human owns the meaning (see the CHANGE_APPROACH note).
+  #
+  #   Failure caught (S290): the lead authored four "operator" resolutions in an
+  #   operator-silent window and cleared the divergence block itself. Nothing compared the
+  #   claim to the transcript. This is that comparison.
+  local auth_quote cite_rc
+  if [ -z "$auth" ]; then
+    F_WHY="$rec declares 'resolution: $kind' with no 'operator_authorization:'. A resolution
+      clears a HARD_BLOCK, which only the operator may adjudicate. Cite the operator's own
+      words: operator_authorization: <ISO-8601 UTC ts> | \"<verbatim substring, >=12 chars>\""
+    return 1
+  fi
+  auth_quote="$(printf '%s' "$auth" | sed -n 's/.*"\(.*\)".*/\1/p')"
+  # No double-quotes: take everything after the first '|', trimmed.
+  [ -z "$auth_quote" ] && auth_quote="$(printf '%s' "${auth#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  if [ "${#auth_quote}" -lt 12 ]; then
+    F_WHY="$rec operator_authorization quotes '${auth_quote}', too short (>=12 chars) to be a
+      verifiable citation. Quote a real span of the operator's message, not a token."
+    return 1
+  fi
+  if [ -z "$TRANSCRIPT" ] || [ ! -r "$TRANSCRIPT" ]; then
+    # No ground truth to check against. Two-tier: the hook fails OPEN (never wedge the
+    # pipeline on a missing transcript) but says so for the flow log; the gate fails CLOSED
+    # -- the RELEASE surface must not open on an unverifiable claim.
+    if [ "$CYCLE_STATE" -eq 1 ]; then
+      echo "ADVERSARIAL_CITATION_UNVERIFIABLE $rec (no transcript)" >&2
+      return 0
+    fi
+    F_WHY="$rec cites operator_authorization, but no readable transcript was provided (--transcript)
+      to verify it. The gate cannot release an operator-gated HARD_BLOCK on an unverifiable claim."
+    return 1
+  fi
+  if [ ! -f "$STEER_SCRIPT" ]; then
+    if [ "$CYCLE_STATE" -eq 1 ]; then
+      echo "ADVERSARIAL_CITATION_UNVERIFIABLE $rec (no validator)" >&2
+      return 0
+    fi
+    F_WHY="$rec cites operator_authorization but the predicate validator is missing
+      ($STEER_SCRIPT), so the citation cannot be verified. Reinstall ai-dlc."
+    return 1
+  fi
+  bash "$STEER_SCRIPT" --transcript "$TRANSCRIPT" --cite "$auth_quote" \
+    --since "${P_AT[$idx]:-}" --quiet >/dev/null 2>&1
+  cite_rc=$?
+  if [ "$cite_rc" -eq 2 ]; then
+    F_WHY="$rec operator_authorization quotes \"${auth_quote}\", which appears in NO genuine
+      operator message at or after $(basename "$div") opened the block (window start:
+      ${P_AT[$idx]:-<no invoked_at>}). The resolution clears an operator-gated HARD_BLOCK,
+      and the operator did not say this. A lead-authored resolution is not an operator adjudication."
+    return 1
+  elif [ "$cite_rc" -ne 0 ]; then
+    # Tooling error (e.g. node absent), not a NOMATCH. Same two-tier posture.
+    if [ "$CYCLE_STATE" -eq 1 ]; then
+      echo "ADVERSARIAL_CITATION_UNVERIFIABLE $rec (rc=$cite_rc)" >&2
+      return 0
+    fi
+    F_WHY="$rec operator_authorization could not be verified (validator rc=$cite_rc)."
+    return 1
+  fi
   return 0
 }
 

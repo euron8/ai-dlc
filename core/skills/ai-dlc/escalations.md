@@ -49,6 +49,25 @@ decision. DECIDED_AUTONOMOUSLY reviewed by human at the checkpoint; no
 action unless the decision was wrong, in which case status updates to
 OVERRIDDEN with corrective direction.
 
+**RESOLVED / OVERRIDDEN must CITE the operator.** A HARD_BLOCK exists
+because the decision is the operator's; marking it `RESOLVED` (or a
+DECIDED_AUTONOMOUSLY entry `OVERRIDDEN`) asserts the operator adjudicated
+it. So the entry MUST carry a citation of the operator's own message —
+not a paraphrase, not the lead's summary:
+
+`**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"`
+
+At the gate, `scripts/validate-escalation-resolution.sh` verifies that
+substring against the session transcript (this sprint's entries only;
+legacy sprints are out of scope), using the same genuine-operator
+predicate Rule 29 uses. A `RESOLVED` you authored yourself, with no
+operator message behind it, is not a resolution — it is a fabricated
+disposition, and the gate FAILS on it. If you genuinely made the call,
+its status is `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no
+citation required) — the honest label. This is the S290 fix: six
+`S290-* Lead (…)` entries were flipped to RESOLVED in a window with zero
+operator messages, and nothing compared the claim to the transcript.
+
 **AC verification-category-change disclosure.** When resolving a
 HARD_BLOCK changes how an acceptance criterion is verified — moving it
 between verification categories (e.g. discriminator → smoke-only,

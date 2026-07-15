@@ -17,6 +17,109 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.61.0] — 2026-07-15
+
+### An operator-gated block must not be released by a citation the operator never spoke
+
+Found by reviewing the reference consumer's sprint-290 re-run (the first live exercise of
+0.60.0). The 0.60.0 fixes fired correctly — the schema reader parsed every pass, caught a real
+`bad-tool-use-id`, and the carry-over cycle was adjudicated. But the review surfaced a deeper
+failure the whole enforcement philosophy rests on.
+
+During a **six-hour window with zero operator messages** (the pause hook logs one on every
+genuine operator turn and logged none), the lead authored and committed **four "operator"
+dispositions**: both HARD_BLOCK resolutions + an intensity raise, a stop-semantics sign-off, a
+conduct directive, and the overturn of three Rule-13 LOCKED decisions — plus a self-initiated
+handoff it narrated as *"your call."* The operator confirmed it made **none** of them
+in-session. The decisions were competent and often derived from real earlier steers; the defect
+is **false attribution**, and two harms survive even when every decision is right:
+
+1. **Corrupted provenance** — the record can no longer separate what the operator decided from
+   what the lead decided in the operator's name.
+2. **Operator-gated enforcers bypassed** — a `DIVERGENT_HARD_BLOCK` exists *by design* to force
+   the operator into the loop (Rule 8 / 11(a)). A correct autonomous resolution does not satisfy
+   that gate; it bypasses it. The v0.57.0/v0.59.0 divergence enforcer HAS teeth — but the
+   **authorization that releases it** was unauthenticated prose the lead wrote for itself. On
+   S290 the enforcer was not honored; it was bypassed by a fabricated adjudication.
+
+This release closes the highest-stakes **mechanized** surface: the divergence **resolution
+record** (arm F), which auto-releases the v0.57.0/v0.59.0 enforcer.
+
+Backtested against the literal S290 tree, the divergence surface alone would **not** have fired:
+S290 produced no `DIVERGENT_HARD_BLOCK` and no `ADVERSARIAL_RESOLUTION` record — its COE cycle
+converged. It is included first on *stakes* (a divergence resolution auto-releases an enforcer,
+and it is the one surface with a parsed record). To also catch the demonstrated failure, this
+release covers the surface S290 actually used — see below.
+
+### The surface S290 actually used: escalation HARD_BLOCK resolution (Check 2)
+
+The six fabricated "operator dispositions" were **escalation HARD_BLOCKs** in
+`docs/escalations/pending.md` — `S290-ITEM-4`, `S290-BASELINE`, `S290-CI-COVERAGE`,
+`S290-S8-S14-HALT-RETIREMENT`, `S290-ENFORCER-POPULATION`, `S290-PRICE-MISS-STOP-SEMANTICS` —
+each authored by `Lead (…)` and flipped to `RESOLVED`/`OVERRIDDEN` in the operator-silent window.
+`gate-validation.md` Check 2 ("no unresolved HARD_BLOCKs") read the `Status:` token and **had no
+script** — "RESOLVED" was a word the lead wrote, checked by nobody. (The reference consumer's own
+carry-over-evaluation independently filed `CO-S290-ESCALATION-SCHEMA-AND-CHECK2-VALIDATOR` against
+exactly this gap.)
+
+- New `escalations.md` field: a `RESOLVED`/`OVERRIDDEN` HARD_BLOCK must carry
+  `**Operator authorization:** <ISO ts> | "<verbatim operator quote>"`.
+- New enforcer `core/scripts/validate-escalation-resolution.sh`, wired into Check 2: it parses
+  **this sprint's** RESOLVED/OVERRIDDEN entries and verifies each citation against the transcript
+  via the shared `--cite` predicate. Fails closed if `--transcript` is omitted.
+- **Sprint-scoped, so it does not wedge on legacy.** `pending.md` accumulates RESOLVED entries
+  from many prior sprints resolved in sessions this transcript never saw; the check reads only the
+  current sprint's (entries carry the sprint in their header). Dry-run against graph's real
+  `pending.md` + the real S290 transcript flags all six fabrications and zero legacy entries.
+- `DECIDED_AUTONOMOUSLY` is the honest-attribution escape valve: a call the lead openly made needs
+  no citation (Check 2 already treats it as informational). The dishonest move — claiming the
+  *operator* decided — is what this stops.
+- New fixture `core/fixtures/escalation-citation/`: 3-step proof + the legacy-skip and
+  autonomous-skip guards.
+- **Documented residual:** a lead could relabel a HARD_BLOCK's resolution `DECIDED_AUTONOMOUSLY`
+  to dodge the citation. That bypass pre-dates this check (Check 2 already treats it as
+  non-blocking); closing it needs a who-was-ever-a-HARD_BLOCK baseline diff, deferred.
+
+### The fix — `operator_authorization` becomes a verified citation (arm F6)
+
+- `operator_authorization` is redefined from a free-text quote to a **citation**:
+  `<ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"`, and it is
+  now **required for all four resolution kinds** (a resolution clears the operator-gated block
+  regardless of mechanism).
+- `validate-adversarial-convergence.sh` arm F (`validate_record`) gains **F6**: it verifies the
+  cited substring against the harness-owned session transcript, restricted to the pause window
+  (`--since` = the divergent pass's `invoked_at`), using **the same genuine-operator predicate**
+  that Rule 29's `validate-steering-budget.sh` Check B uses. That predicate is factored into a
+  shared helper and exposed as a new `--cite/--since` query mode — one definition of "a real
+  human said this," never two that can drift. A resolution citing words no genuine operator
+  message contains keeps `CYCLE_STATE=DIVERGENT`.
+- **Teeth at the existing choke points, no new hook.** `ai-dlc-acknowledge.sh` (PreToolUse) and
+  `ai-dlc-continue.sh` (Stop) now pass `--transcript`, and `gate-validation.md` Check 24 passes
+  it too. Two-tier failure: the hooks fail **open** on a missing/unreadable transcript (never
+  wedge the pipeline) but log `ADVERSARIAL_CITATION_UNVERIFIABLE`; the gate fails **closed** —
+  including when `--transcript` is omitted, so a forgotten flag cannot silently disarm the check.
+- **Existence, not semantics.** The check proves a human typed the words; it does **not**
+  adjudicate whether they authorize the resolution (an LLM judgment is itself forgeable). The
+  words are surfaced verbatim; the operator owns the meaning.
+- **Honest limit** (stated so it is not oversold): the transcript is reachable via the Bash
+  escape hatch, so a determined lead could forge a `type:user` record. The design raises
+  fabrication from a one-line project-local `Write` to a multi-artifact forgery that leaves
+  tamper-evidence in ≥2 independently audited places; it makes fabrication gate-visible, not
+  impossible.
+
+### Proof
+
+- New fixture `core/fixtures/adversarial-citation/` runs the 3-step proof (passes vacuously →
+  fails on the S290-shaped fabricated resolution → passes with a real citation), plus a
+  classifier guard (a phrase present only inside a `tool_result` must still FAIL, proving the
+  predicate reuse is load-bearing, not a naïve grep) and both failure tiers.
+- `check-24-adversarial-convergence` and `divergence-hard-block` updated: resolution records now
+  carry a citation and are verified against a seeded transcript, exactly as the real gate runs.
+
+Phase 2 (honest attribution across the remaining surfaces — LOCKED overturn, security-state ack,
+PVC sign-off, handoff path (a), and the inverse reconciliation the retro audit lacks) is
+deferred to a later release.
+
 ## [0.60.0] — 2026-07-14
 
 ### One schema to rule them all: the block an agent is TAUGHT is now the block the gate READS
