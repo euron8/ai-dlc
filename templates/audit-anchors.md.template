@@ -1,36 +1,32 @@
+<!-- BEGIN GENERATED: audit-anchors-schema — source: schemas/audit-anchors.json; rendered by scripts/validate-audit-anchors.sh --render; do not edit by hand -->
 # Audit Anchors
 
-**Purpose:** Per-sprint retro-PR merge SHA chain. Producer:
-`core/skills/ai-dlc/steps/retro.md` Step 5b. Consumer:
-`core/skills/ai-dlc/steps/carry-over-evaluation.md` Step 1a +
-`core/skills/ai-dlc/steps/gate-validation.md` Check 18.
+Append-only YAML list of per-sprint retro-PR merge SHAs. Producer: `retro.md`
+Step 5b at sprint close. Consumers: `carry-over-evaluation.md` Step 1a and
+`gate-validation.md` Check 18 (per-class test-debt audit).
 
-**Schema.** One YAML document per sprint, separated by `---`. Each
-entry:
+**Schema is canonical in `.claude/schemas/audit-anchors.json`.** This header is
+RENDERED from it by `scripts/validate-audit-anchors.sh --render` and byte-checked by
+`--check`; the same script validates every entry. Do NOT hand-edit this region — edit
+the schema and re-render. Each entry:
 
-```yaml
-sprint: <N>           # integer sprint number
-closed_at: <ISO-8601> # sprint-close timestamp
-sha: <git-sha>        # retro-PR merge SHA on main; placeholder "PENDING" if PR not yet merged
-notes: <optional>     # free-form one-liner
-```
+- `sprint: <N>` — integer sprint number. REQUIRED.
+- `sha: <sha>` — retro-PR merge SHA on `main` (short or full), or `PENDING`. REQUIRED.
+- `closed_at: <time>` — when the retro PR merged (documentary; free-form).
+- `audit_window: <prior-sprint-sha>..<sprint-N-sha>` — git rev range for the next
+  sprint's per-class test-debt audit; the lower bound is the prior sprint's `sha`.
 
-Entries are append-only. When the retro PR merges, lead edits the
-placeholder `sha: PENDING` to the actual merge SHA in a follow-on
-commit on `main`.
-
-**Audit gate behavior.** `gate-validation.md` Check 18 resolves
-`<prior_sprint_sha>` from the entry whose `sprint` field equals
-`<current_sprint> - 1`. Missing entry OR `sha: PENDING` for the prior
-sprint FAILS the gate CLOSED with explicit message. Silent skip is
-forbidden.
+Missing entry for the prior sprint OR `sha: PENDING` there FAILS Check 18 CLOSED —
+a silent skip on a missing audit anchor is forbidden (PI-S169-8).
+<!-- END GENERATED: audit-anchors-schema -->
 
 ## Entries
 
-<!-- Append new sprint entries below. Most recent last. -->
+<!-- Append new sprint entries below (most recent last). The entry shape is defined by the
+     GENERATED header above and enforced by scripts/validate-audit-anchors.sh. -->
 
----
-sprint: 0
-closed_at: 1970-01-01T00:00:00Z
-sha: PENDING
-notes: bootstrap placeholder — replace with first real sprint entry
+```yaml
+- sprint: 0
+  sha: PENDING
+  closed_at: PENDING
+```

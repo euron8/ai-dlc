@@ -311,6 +311,19 @@ for d in "$REPO_ROOT"/core/fixtures/*/; do
   done < <(grep -oE '[DC]_ROOT="\$\(cd "\$HERE/(\.\./)*\.\.' "$s" | sed -E 's#.*\$HERE/##')
 done
 
+# --- Audit-anchors template is BOUND to its canonical schema. The housekeeping schema used to
+# live in two places (this template + each project's live header) with nothing comparing them;
+# they drifted (the template went stale, missing `audit_window`). Now the schema is canonical in
+# core/schemas/audit-anchors.json, the template's header is RENDERED from it, and the entry
+# validator loads it. Assert the shipped template still passes its own validator, so the template
+# cannot silently re-stale from the schema.
+AA_VALIDATOR="$REPO_ROOT/core/scripts/validate-audit-anchors.sh"
+AA_TEMPLATE="$REPO_ROOT/templates/audit-anchors.md.template"
+if [ -f "$AA_VALIDATOR" ] && [ -f "$AA_TEMPLATE" ]; then
+  bash "$AA_VALIDATOR" "$AA_TEMPLATE" >/dev/null 2>&1 \
+    || err "templates/audit-anchors.md.template no longer matches core/schemas/audit-anchors.json (header drift or a malformed bootstrap entry). Re-render its header with 'core/scripts/validate-audit-anchors.sh --render' and fix the entry — the template must never drift from the canonical schema again."
+fi
+
 # --- I11: the convergence-cycle scope list is DERIVED, not remembered ---------
 # THREE SETS MUST BE ONE SET:
 #   (a) steps whose file dispatches an adversarial REVIEW  (they run a convergence cycle)
