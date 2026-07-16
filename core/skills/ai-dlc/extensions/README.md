@@ -16,7 +16,29 @@ extensions/
   checks/          new gate-validation checks (domain gates, extra audits)
   steps-domain/    domain additions to a pipeline step (execution-health floors, deploy gates, …)
   roles/           additions to a team-role (domain review patterns, extra constraints)
+  known-skills.json  extra skill names a consumer's own personas emit (data extension, see below)
 ```
+
+## Data extensions (not `.md` rule entries)
+
+A few layer points are **data**, not a `kind:`-tagged rule: a consumer-owned JSON file the
+reader that owns a core *list* unions in. They carry no frontmatter and no `hooks:` — the layer
+loader and `validate-layer-entries.sh` process only `*.md`, so a `.json` here is inert to them —
+and the owning reader resolves the file by name.
+
+- **`known-skills.json`** — extra skill names a consumer's own party personas or sub-skills cite
+  in their `SKILL_INVOCATION_PROVENANCE` blocks. `validate-provenance-block.sh` unions it with the
+  core `known_skills` list (`schemas/provenance-block.json`), so a provenance block naming your
+  skill passes **without editing the core schema**. Either shape:
+
+  ```json
+  { "known_skills": ["bmad-agent-tea-tea"] }
+  ```
+
+  Additive and deduped; a present-but-malformed file fails the gate **closed** (a broken layer
+  file must never silently degrade to the core-only list). This is the layer-correct alternative to
+  adding a skill name to the core schema in place — which `/ai-dlc-update` flags as
+  `HARD-UNREGISTERED-CORE-DRIFT` (schemas are drift-scanned as of v0.63.2).
 
 ## Entry contract
 
