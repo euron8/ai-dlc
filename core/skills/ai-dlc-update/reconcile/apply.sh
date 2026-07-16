@@ -49,10 +49,40 @@ consumer_path() {
     *) return 1 ;;
   esac
 }
+# Carry THEIRS's file MODE, not just its bytes.
+#
+# `git show > file` is a shell redirect: it takes the mode from the umask when the
+# file is NEW, and preserves the consumer's existing mode when it is not. So an
+# UPDATED executable keeps working (install.sh chmod'd it once, and `>` leaves
+# that alone) while a NEWLY SHIPPED executable lands 0644 and is INERT. Every
+# reconcile verification still reports green, because they all diff CONTENT and
+# the content is byte-perfect.
+#
+# That is the whole failure: v0.70.0's dispatch guard would install byte-identical
+# and non-executable in every pulling consumer, its hard_block silently
+# unenforced, with nothing anywhere reporting a problem. The check-that-cannot-
+# fire class, one layer down — the check is fine, the file it polices cannot run.
+# It stayed invisible for exactly as long as no release shipped a NEW hook that
+# denied anything.
+#
+# DERIVE the bit from git's own tree (`ls-tree` reports 100755/100644) rather than
+# hand-listing which paths are executable: a list would rot the first time someone
+# adds a hook, which is precisely the case that is already broken.
+sync_mode_from_theirs() { # <core-rel> <consumer-path>
+  local mode
+  mode="$(git -C "$DIST" ls-tree "$THEIRS" -- "core/$1" 2>/dev/null | awk '{print $1}')"
+  case "$mode" in
+    100755) chmod +x "$2" 2>/dev/null || true ;;
+    100644) chmod -x "$2" 2>/dev/null || true ;;
+    *) : ;;   # unknown/absent -> leave whatever is there; never guess
+  esac
+}
+
 overwrite_from_theirs() { # <core-rel>
   local cp="$1" cons; cons="$(consumer_path "$cp")" || return 1
   mkdir -p "$(dirname "$cons")"
   git -C "$DIST" show "${THEIRS}:core/${cp}" > "$cons" 2>/dev/null || return 1
+  sync_mode_from_theirs "$cp" "$cons"
 }
 
 # ---------------------------------------------------------------- 1. buckets (preclassify)
@@ -121,6 +151,7 @@ merged = list(dict.fromkeys([str(x) for x in cur] + new))
 open(path, "w").write(json.dumps({"known_skills": merged}, indent=2) + "\n")
 PY
         git -C "$DIST" show "${THEIRS}:core/${rel}" > "$cons" 2>/dev/null
+        sync_mode_from_theirs "$rel" "$cons"
         say RESOLVED drift-refile "$rel" "-> extensions/known-skills.json ($(echo $added | tr '\n' ' '))"
       else
         say DECISION drift "$rel" "in-place schema edit is not an additive known_skills entry — refile-vs-revert"

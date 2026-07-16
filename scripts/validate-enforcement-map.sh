@@ -319,6 +319,37 @@ if [ -r "$TEMPLATE" ]; then
   done < <(grep -oE 'ai-dlc-[a-z0-9-]+\.sh' "$TEMPLATE" | sort -u)
 fi
 
+# --- I14: a registered hook must be COMMITTED EXECUTABLE. Registration (I13) proves a hook is
+# WIRED; it does not prove it can RUN. settings.json invokes a hook as a bare path, so a hook
+# committed 0644 installs byte-perfect and inert — the harness cannot exec it, nothing errors
+# loudly, and every content-diffing verification in the reconcile still reports green.
+#
+# This is I13's own blind spot, and it had already bitten twice before anyone looked:
+# ai-dlc-driver-signal.sh (a Stop hook) and the session driver were both committed 0644. Fresh
+# installs hid it because install.sh chmods the whole glob after copying; only a PULLING consumer
+# ever saw the real mode. Assert the source mode, so the fix in reconcile/apply.sh (which now
+# derives the bit from git's tree) has a correct bit to derive FROM.
+for h in "$REPO_ROOT"/core/hooks/ai-dlc-*.sh; do
+  [ -f "$h" ] || continue
+  hb="$(basename "$h")"
+  grep -q "$hb" "$TEMPLATE" 2>/dev/null || continue          # unregistered -> I13 already errs
+  m="$(git -C "$REPO_ROOT" ls-files -s -- "core/hooks/$hb" 2>/dev/null | awk '{print $1}')"
+  [ -n "$m" ] || continue                                     # untracked -> not shippable yet
+  [ "$m" = "100755" ] \
+    || err "hook '$hb' is registered in templates/settings.json.template but is COMMITTED $m, not 100755. settings.json invokes it as a bare path, so every consumer that PULLS it gets it non-executable and INERT — its enforcement silently absent while every content check reports green. Fix with: git update-index --chmod=+x core/hooks/$hb"
+done
+
+# Same rule for anything else a consumer executes as a bare path. The session driver and the
+# pre-push git hook are both invoked directly, never via `bash <path>`. (Fixtures are exempt by
+# construction: core/git-hooks/pre-push runs them as `bash "$d/run.sh"`, so their mode is inert.)
+for rel in session-driver/ai-dlc-session-driver.sh git-hooks/pre-push; do
+  [ -e "$REPO_ROOT/core/$rel" ] || continue
+  m="$(git -C "$REPO_ROOT" ls-files -s -- "core/$rel" 2>/dev/null | awk '{print $1}')"
+  [ -n "$m" ] || continue
+  [ "$m" = "100755" ] \
+    || err "core/$rel is executed as a bare path by consumers but is COMMITTED $m, not 100755. A pulling consumer gets it non-executable. Fix with: git update-index --chmod=+x core/$rel"
+done
+
 # --- Fixture root-resolution depth: a seed that hand-resolves the repo root must use the
 # SAME `$HERE/../../..` depth for BOTH layouts. A fixture lives at `core/fixtures/<name>/`
 # upstream and `tests/fixtures/<name>/` in a consumer (install.sh's map) — BOTH exactly three
