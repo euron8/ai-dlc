@@ -157,6 +157,23 @@ sites:
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 
+  - id: setup-model-strategy
+    file: core/skills/ai-dlc-setup/SKILL.md
+    shape: heading-block
+    heading: '## STEP 2: API Tier and Model Strings'
+    next_heading: '## STEP 3: Deployment Configuration'
+    anchor_context: >-
+      The whole model-strategy config step — the strategy mode (Full /
+      Balanced / Sonnet-only), the tier-per-role example table, and the
+      `{*_model_*}` token -> tier guidance. This is per-project config the
+      operator customises at setup (STEP 2 "API Tier and Model Strings"),
+      not rulebook prose: a consumer choosing Balanced over the shipped
+      Full is a cost/capability decision, exactly like the model strings it
+      drives. Declaring the span exempts that choice from in-place core
+      drift at BOTH readers (the pull-time unregistered-drift check and the
+      retro-gate immutability check), while leaving the rest of the setup
+      wizard guarded. Bounded by the next STEP heading, exclusive.
+
   - id: deploy-command
     file: core/skills/ai-dlc/steps/deploy-validate.md
     shape: single-line
