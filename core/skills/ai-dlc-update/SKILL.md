@@ -387,9 +387,17 @@ Every consumer block that differs from upstream is one of:
    core section it duplicates, and the note that retirement is an operator-gated
    delete per Rule 27(b) — upstream never writes the layer, so it cannot remove the
    entry for you), and a
-   **blocking-layer list** (every `HARD-*` status from step 3c AND step 3d — these
-   block `apply` outright; each one carries its resolution command, because a block
-   with no path out is a block someone routes around), and a
+   **blocking-layer list — RENDERED, not composed.** Run
+   `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` and paste its
+   `BEGIN/END GENERATED: hard-blockers` region into this section VERBATIM; then write each one's
+   resolution command beneath the region (a block with no path out is a block someone routes
+   around). The script wraps step 3c's and step 3d's detectors and lists every `HARD-*` they emit.
+   Do NOT hand-author this list from your memory of the tool output: a `HARD-*` line a detector
+   emitted was silently dropped from two real reports, hiding a data-loss-grade core-schema drift —
+   which is the whole reason it is rendered now, not narrated. **After writing the report, run
+   `reconcile/hard-blockers.sh --check <report> <dist> <base> <consumer> <theirs>`. A nonzero exit
+   means the report is MISSING a blocker the detectors report: the report is UNSOUND — fix the
+   region and re-emit BEFORE the HARD STOP. This check is not optional.** And a
    **catalog-relabel list** (step 3e: every extension check heading that needs the
    `[ext:<id>]` label, report-only).
    This is a fixed filename
@@ -489,6 +497,17 @@ Every consumer block that differs from upstream is one of:
    accepts the risk per entry. `apply` authorizes writes; it does not authorize
    proceeding on an undecidable override — the same distinction the deletion gate
    below draws. Never infer that an unresolvable base means "unchanged."
+
+   **Mechanical union gate — both detectors, one call.** The prose above governs step 3c's
+   override `HARD-*`; step 3d's `HARD-UNREGISTERED-CORE-DRIFT` blocks identically. Do not collect
+   either from memory. Run `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` — it
+   wraps BOTH detectors and prints every `HARD-*` still live. `apply` may write only when it prints
+   `0 HARD blockers.`, or the operator has explicitly accepted each remaining one per-path. Also
+   verify the dry-run report the operator approved was sound:
+   `reconcile/hard-blockers.sh --check <report> <dist> <base> <consumer> <theirs>` must exit 0 — a
+   nonzero exit means the report OMITTED a blocker, so the approval was given without sight of it;
+   STOP and re-emit rather than write. (This is the gap that shipped a data-loss drift past two
+   reports: the detector caught it, the report did not.)
 
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 
