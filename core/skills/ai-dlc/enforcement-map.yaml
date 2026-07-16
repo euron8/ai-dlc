@@ -552,3 +552,102 @@ non_catalog_units:
         status: dormant — zero catches across 278 consumer sessions. Bounds a shape
           Rule 29 itself introduces (beats become the sanctioned way to wait, so
           beating forever becomes the way to hang). See Rule 29 minimum-mechanism.
+
+  - id: dispatch-model-binding
+    title: Teammate dispatch model binding (v0.70.0) — a teammate runs on the model
+      its role file pins, and a dispatch that omits the model param does not
+      silently inherit the lead's
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/hooks/ai-dlc-dispatch-guard.sh
+    call_sites:
+      - site: ai-dlc-dispatch-guard.sh (PreToolUse Agent|Task) — THE ONLY TEETH
+        posture: runtime DENY of a role-bound dispatch whose model tier disagrees
+          with the role file's pin, or which passes no model param at all
+        why: there is NO gate-time backstop and there cannot be one — an
+          Agent-spawned teammate leaves no transcript, so nothing downstream can
+          learn what model it ran on, and a verdict that self-reports its own
+          model is the trust circularity that keeps H1/H2 with the lead. The
+          dispatch param is the only observable ground truth and it is observable
+          BEFORE the work. Measured on graph S291 (docs/v0.70.0-sonnet-lead-ab.md):
+          the lead dropped the param on 3 of 42 spawns, so every remediator ran
+          Sonnet against an opus pin — and an inherited gate-adjudicator would
+          collapse the v0.62.0 Opus escalation to Sonnet-judging-Sonnet while
+          Check 26 still passed green.
+    checks:
+      - id: pin-agreement
+        asserts: a dispatch binding team-roles/<role>.md requests a model whose
+          tier matches that file's declared pin
+        protects: the role file as the single source of truth for a teammate's
+          model — v0.62.0's Opus escalation and v0.56.0's fresh-context repair
+          both rest on it
+      - id: no-silent-inherit
+        asserts: a role-bound dispatch names a model explicitly
+        protects: against absence reading as assent — an omitted param inherits
+          the lead's model, which is luck, not binding
+        excludes: roles that declare no pin (cis/sm/tea/ux) — a role file that
+          declares nothing cannot bind anything; closing that needs new setup
+          placeholders (the v0.63.0 unregistered-drift surface) and is deferred
+    fixtures: [tests/fixtures/dispatch-model-guard]
+    ci_workflow: ~
+
+  - id: arm-record
+    title: Lead arm record (v0.70.0) — which model the lead ran on is written from
+      the transcript by a hook, never self-reported
+    adjudication: script
+    hard_block: false
+    enforcer:
+      - core/hooks/ai-dlc-context-sensor.sh
+    emits: arm-log.jsonl   # {v,ts,sprint,lead_model}, deduped on (sprint, model)
+    call_sites:
+      - site: ai-dlc-context-sensor.sh (Stop | PostToolBatch)
+        posture: appends an arm record on a (sprint, model) change; never blocks
+        why: no sprint artifact recorded the arm, so "which arm ran" was
+          unfalsifiable from a sprint's own artifacts and the v0.70.0 A/B had to
+          be answered by an external script reading ~/.claude/projects. The lead
+          must not self-report it: a model naming its own weights is unreliable,
+          and a self-reported arm is the same unfalsifiable testimony the finding
+          complains about. The sensor already exits on agent_id (main session
+          only, so the model it reads IS the lead's) and already holds the correct
+          post-compaction record.
+    checks:
+      - id: transcript-sourced
+        asserts: lead_model is read from the transcript's assistant record, not
+          asserted by the lead
+        protects: falsifiability of any future model A/B
+    fixtures: [tests/fixtures/context-sensor]
+    ci_workflow: ~
+
+  - id: subagent-context-probe
+    title: Subagent context probe (v0.70.0) — measures how close teammates come to
+      the compaction threshold, and whether any actually compact
+    adjudication: script
+    hard_block: false
+    enforcer:
+      - core/hooks/ai-dlc-subagent-probe.sh
+    emits: subagent-context.jsonl   # {v,ts,sprint,agent_id,model,turns,peak_tokens,compactions}
+    call_sites:
+      - site: ai-dlc-subagent-probe.sh (SubagentStop)
+        posture: records only; NEVER blocks (a blocking SubagentStop hook hangs a teammate)
+        why: the lead is netted around compaction (snapshot, precompact sidecar,
+          recovery protocol, context sensor). A teammate has NONE of it and runs in
+          its own window — the sensor deliberately exits on agent_id. If a teammate
+          compacts it silently loses the middle of its task and returns a confident,
+          degraded verdict. That risk was argued but never measured, because
+          teammates leave no transcript in ~/.claude/projects; SubagentStop hands us
+          transcript_path at the one moment the teammate's own transcript is complete.
+          It is the only window there is, and it is what makes the autoCompactWindow
+          question answerable with data instead of a guess.
+    checks:
+      - id: peak-not-last
+        asserts: peak_tokens is the maximum across the run, including before any
+          compact_boundary
+        protects: the ceiling decision — reporting the LAST reading would show a
+          teammate that compacted at 286K as a calm 41K, which is worse than no
+          reading at all
+      - id: never-blocks
+        asserts: the hook emits nothing on stdout and always exits 0
+        protects: teammate liveness
+    fixtures: [tests/fixtures/subagent-probe]
+    ci_workflow: ~

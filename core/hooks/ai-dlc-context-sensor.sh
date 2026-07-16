@@ -217,6 +217,51 @@ done
 CUR_SIZE="$(wc -c < "$TRANSCRIPT" 2>/dev/null | tr -d ' ')"
 case "${CUR_SIZE:-}" in ''|*[!0-9]*) CUR_SIZE=0 ;; esac
 
+# -----------------------------------------------------------------------------
+# Arm record (v0.70.0 D4) -- which model the LEAD actually ran on
+#
+# No sprint artifact recorded this. The only on-disk evidence was the `model`
+# field on each assistant turn of a transcript, which lives outside the repo and
+# outside every check -- so "which arm ran" was unfalsifiable from a sprint's own
+# artifacts, and the v0.70.0 Sonnet-lead A/B had to be answered by an external
+# script reading ~/.claude/projects. An A/B whose independent variable is
+# unrecorded is not reproducible.
+#
+# The lead must NOT self-report this. Asking a model to name its own weights is
+# unreliable, and a self-reported arm is exactly the unfalsifiable testimony the
+# finding complains about. So the HOOK writes it, from the transcript, as ground
+# truth. This sensor is the right home for three reasons it already satisfies:
+# it exits above on `agent_id` (so it only ever runs in the MAIN session -- the
+# model it reads IS the lead's), it already holds the correct post-compaction
+# assistant record in $LINE, and it already gates on an active pipeline.
+#
+# Append-only, deduped on (sprint, model): one record per arm change, so a
+# mid-sprint model switch is captured rather than overwritten. Costs one tail
+# read per firing.
+#
+# Caveat inherited from the window-resolution note below: `message.model` is
+# `claude-opus-4-8` for BOTH the 200K and 1M variant. That is fine for arm
+# identity (sonnet vs opus, which is all an A/B needs) and useless for window
+# size -- never read this field for the row.
+# -----------------------------------------------------------------------------
+LEAD_MODEL="$(printf '%s' "$LINE" | jq -r '.message.model // empty' 2>/dev/null || true)"
+if [ -n "$LEAD_MODEL" ]; then
+  ARM_LOG="${STATE_DIR}/arm-log.jsonl"
+  ARM_SPRINT="$(sed -n 's/^- \*\*sprint_id:\*\* *\([0-9][0-9]*\).*/\1/p' "$SNAPSHOT_FILE" 2>/dev/null | head -1)"
+  ARM_LAST="$(tail -1 "$ARM_LOG" 2>/dev/null || true)"
+  LAST_MODEL="$(printf '%s' "$ARM_LAST" | jq -r '.lead_model // empty' 2>/dev/null || true)"
+  LAST_SPRINT="$(printf '%s' "$ARM_LAST" | jq -r '(.sprint // empty) | tostring' 2>/dev/null || true)"
+  [ "$LAST_SPRINT" = "null" ] && LAST_SPRINT=""
+  if [ "$LEAD_MODEL" != "$LAST_MODEL" ] || [ "${ARM_SPRINT:-}" != "$LAST_SPRINT" ]; then
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
+    jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+           --arg m "$LEAD_MODEL" \
+           --arg s "${ARM_SPRINT:-}" \
+      '{v:1, ts:$ts, sprint:(if $s=="" then null else ($s|tonumber) end), lead_model:$m}' \
+      >> "$ARM_LOG" 2>/dev/null || true
+  fi
+fi
+
 TOKENS="$(printf '%s' "$LINE" | jq '
   .message.usage
   | (.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)

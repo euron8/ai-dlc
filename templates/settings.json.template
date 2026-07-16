@@ -26,6 +26,15 @@
         ]
       },
       {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-dispatch-guard.sh"
+          }
+        ]
+      },
+      {
         "matcher": "Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [
           {
@@ -59,6 +68,16 @@
           {
             "type": "command",
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-context-sensor.sh"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-subagent-probe.sh"
           }
         ]
       }

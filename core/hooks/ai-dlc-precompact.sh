@@ -43,6 +43,23 @@ INPUT="$(cat 2>/dev/null || true)"
 # ai-dlc-continue.sh: no snapshot means no pipeline, so stay out of the way.
 [ -f "$SNAPSHOT" ] || exit 0
 
+# THE LEAD ONLY. A teammate runs in the same project dir, so it sees the same
+# snapshot and the same settings.json -- the gate above does NOT exclude it. This
+# hook TRUNCATES the lead's precompact sidecar (`>"$SIDECAR"`), so a teammate
+# compacting would overwrite the lead's recovery net with its own delta: the lead
+# would come back from ITS compaction reading a subagent's context as its own.
+#
+# Whether a teammate's compaction reaches PreCompact at all is not established --
+# ai-dlc-subagent-probe.sh (SubagentStop) exists to measure exactly that. The
+# gate is correct either way: a no-op if teammates never fire it, and the
+# difference between a clean and a corrupted recovery if they do. ai-dlc-recover.sh
+# and ai-dlc-context-sensor.sh already guard this way; precompact and postcompact
+# did not, and nothing decided that asymmetry -- it was an omission.
+if command -v jq >/dev/null 2>&1; then
+  _AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
+  [ -z "$_AGENT_ID" ] || exit 0
+fi
+
 field() {
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null

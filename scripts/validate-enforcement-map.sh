@@ -295,6 +295,30 @@ for d in "$REPO_ROOT"/core/fixtures/*/; do
     || err "fixture '$(basename "$d")' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
 done
 
+# --- I13: every shipped hook is REGISTERED. install.sh copies core/hooks/*.sh by GLOB, so a
+# new hook always reaches the consumer's .claude/hooks/ — but it only ever RUNS if
+# templates/settings.json.template names it in a matcher block (settings-merge.sh strips and
+# re-appends by the ai-dlc-*.sh pattern on pull, so the template is the single registration
+# site). Nothing asserted the two agree. A hook that is copied but never registered installs
+# to every consumer, is present on disk, passes its own fixture, and silently never fires:
+# a check that cannot fire, in the most literal form this repo has — the file is RIGHT THERE.
+# The glob is what makes it invisible; the fixture is what makes it feel covered.
+TEMPLATE="$REPO_ROOT/templates/settings.json.template"
+if [ -r "$TEMPLATE" ]; then
+  for h in "$REPO_ROOT"/core/hooks/ai-dlc-*.sh; do
+    [ -f "$h" ] || continue
+    hb="$(basename "$h")"
+    grep -q "$hb" "$TEMPLATE" \
+      || err "hook '$hb' exists in core/hooks/ but is never named in templates/settings.json.template. install.sh copies it by glob, so it WILL land in every consumer's .claude/hooks/ and WILL never run — no matcher block invokes it. Register it in the template (settings-merge.sh upserts it on pull), or delete the hook."
+  done
+  # And the inverse: a template entry naming a hook that no longer exists wires a consumer's
+  # settings.json to a missing command on the next pull.
+  while IFS= read -r hb; do
+    [ -f "$REPO_ROOT/core/hooks/$hb" ] \
+      || err "templates/settings.json.template registers '$hb', which does not exist in core/hooks/. Every consumer's settings.json would get a hook command pointing at a missing file."
+  done < <(grep -oE 'ai-dlc-[a-z0-9-]+\.sh' "$TEMPLATE" | sort -u)
+fi
+
 # --- Fixture root-resolution depth: a seed that hand-resolves the repo root must use the
 # SAME `$HERE/../../..` depth for BOTH layouts. A fixture lives at `core/fixtures/<name>/`
 # upstream and `tests/fixtures/<name>/` in a consumer (install.sh's map) — BOTH exactly three
