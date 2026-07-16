@@ -103,6 +103,37 @@ if printf '%s' "$out" | grep -q "install.sh never writes"; then
 else
   bad "install.sh dropping .githooks did NOT fail — I8's table can assert a destination nothing writes"
 fi
+restore
+
+# --- Assertion 4: I12 SCAN-MATCH ----------------------------------------------
+# unregistered-drift.sh's scan set is bound to I12's per-subtree policy. Drop a scan-marked
+# subtree from the tool's ls-tree and I12 must catch the divergence — this is what stops the
+# scan set silently rotting the way ai-dlc-setup/ and schemas/ did.
+UD="$ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
+if grep -q 'core/hooks core/schemas' "$UD"; then
+  sed -i.bak 's| core/hooks core/schemas | core/hooks |' "$UD"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I12:.*does NOT scan them: schemas"; then
+    ok "unregistered-drift.sh dropping core/schemas from its scan FAILS I12 (the scan set is bound, not hand-listed)"
+  else
+    bad "dropping core/schemas from the scan did NOT fail I12 — the scan set can rot silently again"
+  fi
+  restore
+else
+  bad "FIXTURE STALE: unregistered-drift.sh no longer scans 'core/hooks core/schemas'"
+fi
+
+# --- Assertion 5: I12 COMPLETENESS --------------------------------------------
+# A new core/<dir>/ with no policy row must FAIL — a new subtree cannot silently escape the scan.
+mkdir -p "$ROOT/core/brand-new-subtree"
+echo 'x' > "$ROOT/core/brand-new-subtree/thing.md"
+out="$(bash "$V" 2>&1)"
+if printf '%s' "$out" | grep -q "core/brand-new-subtree/ has no drift-scan policy row"; then
+  ok "a new core/ subtree with no I12 policy row FAILS (a new dir must be classified scan/exempt before it can ship)"
+else
+  bad "a new core/ subtree with no I12 policy row did NOT fail — the scan set is hand-listed again"
+fi
+restore
 
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi

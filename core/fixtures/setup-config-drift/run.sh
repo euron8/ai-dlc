@@ -22,9 +22,9 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-status_of() { # -> the STATUS token unregistered-drift.sh emits for our file
+status_of() { # status_of [rel] -> the STATUS token unregistered-drift.sh emits for that core file
   bash "$SCRIPT" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
-    | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}'
+    | awk -F'\t' -v f="${1:-$REL}" '$2==f {print $1; exit}'
 }
 
 echo "setup-config-drift:"
@@ -60,6 +60,16 @@ fi
 cp "$BASECONTENT" "$CF"
 s="$(status_of)"
 [ "$s" = "CORE-OK" ] && ok "restored consumer → CORE-OK" || bad "restored consumer is '$s', not CORE-OK"
+
+# --- Assertion 3b: a SCHEMA edit is scanned and flagged HARD -----------------
+# schemas/ is core the consumer must not edit — no {token}, no config region, so any edit is
+# silent drift. Proves unregistered-drift.sh actually scans core/schemas/ (the v0.63.2 gap).
+SCF="$CONSUMER/.claude/$SCHEMA_REL"
+printf '{\n  "schema_id": "FIXTURE v1",\n  "rule": "consumer-loosened-it"\n}\n' > "$SCF"
+s="$(status_of "$SCHEMA_REL")"
+[ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an in-place edit to a core schema → HARD-UNREGISTERED-CORE-DRIFT (schemas/ is scanned)" \
+  || bad "a schema edit classified '$s', expected HARD — core/schemas/ is not being scanned"
+git -C "$DIST" show "$BASE:core/$SCHEMA_REL" > "$SCF"   # restore
 
 # --- Assertion 4: the STEP 2 site is actually DECLARED ----------------------
 SITES="$(dirname "$SCRIPT")/setup-sites.md"

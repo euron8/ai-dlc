@@ -26,7 +26,9 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/setup-config-drift.XXXXXX")" || exit 2
 DIST="$WORK/dist"
 CONSUMER="$WORK/consumer"
 REL="skills/ai-dlc-setup/SKILL.md"
-mkdir -p "$DIST/core/skills/ai-dlc-setup" "$CONSUMER/.claude/skills/ai-dlc-setup"
+mkdir -p "$DIST/core/skills/ai-dlc-setup" "$CONSUMER/.claude/skills/ai-dlc-setup" \
+         "$DIST/core/schemas" "$CONSUMER/.claude/schemas"
+SCHEMA_REL="schemas/fixture-schema.json"
 
 cat > "$DIST/core/$REL" <<'SKILL'
 # ai-dlc-setup (fixture)
@@ -47,6 +49,15 @@ Fixed rulebook prose. A consumer MUST NOT edit this in place — it is
 upstream-owned and `apply` overwrites it.
 SKILL
 
+# A schema — an LLM-loaded, overwrite-on-pull core file with NO {token} and no config region, so
+# any consumer edit is silent drift the scan must flag HARD.
+cat > "$DIST/core/$SCHEMA_REL" <<'SCHEMA'
+{
+  "schema_id": "FIXTURE v1",
+  "rule": "the-strict-original"
+}
+SCHEMA
+
 # A distribution is a git repo; unregistered-drift.sh reads core@base with `git show`.
 git -C "$DIST" init -q
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
@@ -54,6 +65,7 @@ git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
 
 cp "$DIST/core/$REL" "$CONSUMER/.claude/$REL"
+cp "$DIST/core/$SCHEMA_REL" "$CONSUMER/.claude/$SCHEMA_REL"
 
 cat > "$WORK/env.sh" <<ENV
 SCRIPT="$SCRIPT"
@@ -61,6 +73,7 @@ DIST="$DIST"
 BASE="$BASE"
 CONSUMER="$CONSUMER"
 REL="$REL"
+SCHEMA_REL="$SCHEMA_REL"
 ENV
 
 printf '%s\n' "$WORK"

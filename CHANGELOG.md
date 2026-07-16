@@ -17,6 +17,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.63.2] — 2026-07-16
+
+### The drift scan covered schemas/ never, and its list could rot again
+
+An audit of every reconcile tool (prompted by 0.63.0/0.63.1, which were the same "blind to what the
+pull introduces" bug twice) found the `theirs`-ref dimension clean — `preclassify`, `layer-drift`,
+`classify-block`, `readopt-override`, `settings-merge`, and the template reconcile all read theirs
+where a pull-introduced change is the signal. But the *coverage* dimension had one live gap and the
+rot risk behind all of it:
+
+- **`unregistered-drift.sh` now scans `core/schemas/`** (added to its ls-tree pathset, `.json` to the
+  filter, a `schemas/` `consumer_path` case). Schemas are LLM-loaded and overwrite-on-pull, so a
+  consumer editing one in place — loosening a validation rule — is silent drift the scan simply never
+  looked for. Same class as `ai-dlc-setup/` before 0.63.0, not yet hit.
+- **New `validate-enforcement-map.sh` invariant I12** binds the scan set so it cannot rot: every
+  `core/skills/<skill>/` and `core/<dir>/` carries a reviewed `scan | exempt:<reason>` policy row
+  (machinery breaks loudly, not as silent prose drift; the update skill self-updates its own subtree —
+  neither belongs in the scan), and the scan-marked set must EQUAL the tool's ls-tree. A new core
+  subtree now **fails the build** until it is classified — no more finding these one pull at a time.
+- Fixtures: `setup-config-drift/` gains a schema-edit assertion (in-place schema edit → HARD);
+  `enforcement-map-sites/` gains two I12 assertions (drop a scan dir → fail; new unclassified subtree
+  → fail).
+
+`register-drift.sh` was confirmed base-only *by design* (it records the consumer's fork point; it is
+an action, not a detector). No other theirs-blindness found.
+
 ## [0.63.1] — 2026-07-16
 
 ### The relabel tool couldn't see the collision the pull was creating
