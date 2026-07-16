@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.68.1] — 2026-07-16
+
+### Fixture seeds resolved the consumer repo-root one directory too shallow
+
+Absorbs a push candidate the reference consumer filed during its v0.67.0 pull: it hit the bug live
+(its pre-push fixture suite failed) and fixed it locally so the update could proceed — but the seeds
+are overwrite-on-pull tooling, so the fix had to come upstream or the next self-update would
+reintroduce it.
+
+- **Bug.** Eight fixture seeds resolved their consumer-layout repo root with `C_ROOT="$HERE/../.."`
+  (two dirs up). A fixture lives at `core/fixtures/<name>/` upstream and `tests/fixtures/<name>/` in
+  a consumer (install.sh's map) — BOTH exactly three dirs below root. So in a consumer the seed
+  landed at `tests/`, never found its script/schema, and died with `FIXTURE ERROR: … not found in
+  either layout` → the consumer's pre-push fixture suite FAILED against tooling that is correct in
+  the distribution. The distribution always takes the other branch (`D_ROOT="$HERE/../../.."`), so it
+  never exercised the buggy path — **the distribution is not a consumer.** Affected:
+  `apply-drift-refile`, `gate-adjudication`, `known-skills-extension`, `reconcile-blocking-list`,
+  `reconcile-emit-report`, `relabel-theirs-collision`, `setup-config-drift`, and `core-write-guard`
+  (v0.68.0 shipped with the same latent copy-paste).
+- **Fix.** Every seed's consumer branch now resolves `$HERE/../../..`, matching the distribution
+  branch and the established `taught-schema`/`divergence-hard-block` pattern.
+- **Guard.** `validate-enforcement-map.sh` now asserts every seed's `[DC]_ROOT` cd-depth is exactly
+  three, so the next copy-paste cannot re-introduce it (the list was the bug — bind it).
+
+Verified: reproduced the failure in a real `tests/fixtures/<name>/` consumer layout (core Edit seed
+died), confirmed the fix makes it pass, and confirmed the distribution suite is unaffected. The fixed
+resolution block is byte-identical to the reference consumer's local fix, so its next pull replaces
+the local fix with an equivalent upstream one — no regression.
+
 ## [0.68.0] — 2026-07-16
 
 ### The core/override boundary is enforced at the keystroke, not a sprint late

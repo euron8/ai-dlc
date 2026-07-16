@@ -295,6 +295,22 @@ for d in "$REPO_ROOT"/core/fixtures/*/; do
     || err "fixture '$(basename "$d")' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
 done
 
+# --- Fixture root-resolution depth: a seed that hand-resolves the repo root must use the
+# SAME `$HERE/../../..` depth for BOTH layouts. A fixture lives at `core/fixtures/<name>/`
+# upstream and `tests/fixtures/<name>/` in a consumer (install.sh's map) — BOTH exactly three
+# dirs below root. A seed that resolves its consumer branch with `$HERE/../..` (two dirs) lands
+# at `tests/` in a consumer, never finds its script/schema, and every seed dies with "not found
+# in either layout" → the consumer's pre-push fixture suite FAILS against tooling that is
+# correct in the distribution. This bit eight fixtures at once (the distribution takes the
+# other branch, so it never exercised the buggy one — the distribution is not a consumer).
+# Assert both cd-depths are three, so the next copy-paste cannot re-introduce it.
+for d in "$REPO_ROOT"/core/fixtures/*/; do
+  s="$d/seed.sh"; [ -f "$s" ] || continue
+  while IFS= read -r depth; do
+    [ "$depth" = "../../.." ] || err "fixture '$(basename "$d")' seed resolves a repo-root var with depth '\$HERE/$depth' — must be '\$HERE/../../..' (three dirs below root, matching BOTH core/fixtures/<name>/ and tests/fixtures/<name>/). A shallower depth passes in the distribution and fails in every consumer's pre-push."
+  done < <(grep -oE '[DC]_ROOT="\$\(cd "\$HERE/(\.\./)*\.\.' "$s" | sed -E 's#.*\$HERE/##')
+done
+
 # --- I11: the convergence-cycle scope list is DERIVED, not remembered ---------
 # THREE SETS MUST BE ONE SET:
 #   (a) steps whose file dispatches an adversarial REVIEW  (they run a convergence cycle)

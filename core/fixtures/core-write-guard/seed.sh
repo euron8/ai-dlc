@@ -19,7 +19,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # Resolve the distribution root (fixtures live at core/fixtures/<name>/ upstream, or
 # tests/fixtures/<name>/ in a consumer) and the real source files.
 D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-C_ROOT="$(cd "$HERE/../.." 2>/dev/null && pwd || true)"
+C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/hooks/ai-dlc-core-guard.sh" ]; then
   HOOK="$D_ROOT/core/hooks/ai-dlc-core-guard.sh"
   SRC_MANIFEST="$D_ROOT/core/skills/ai-dlc/core-manifest.md"

@@ -14,7 +14,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # live under core/. Consumer: HERE=tests/fixtures/gate-adjudication; they live under scripts/ and
 # .claude/.
 D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-C_ROOT="$(cd "$HERE/../.." 2>/dev/null && pwd || true)"
+C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-gate-adjudication.sh" ]; then
   VALIDATOR="$D_ROOT/core/scripts/validate-gate-adjudication.sh"
   SCHEMA="$D_ROOT/core/schemas/gate-adjudication-verdict.json"
