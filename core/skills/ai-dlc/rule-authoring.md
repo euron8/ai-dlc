@@ -26,10 +26,11 @@ place:
   shadows it by id (with `shadows:` + `base_sha:`). Never an in-place core edit.
 - **Generalizable improvement** → `{skill}/extensions/` AND set
   `push_candidate: true`, which feeds the `ai-dlc-update` push-mine (spec §8.1).
-An in-place edit of a core file fails the gate-validation **Core-layer
-immutability** check. On a pre-Phase-2 consumer (no layer directories) or the
-distribution source itself, this routing is dormant and rules are authored in
-place as before.
+On a layered consumer the `ai-dlc-core-guard.sh` PreToolUse hook DENIES an
+Edit/Write/MultiEdit to a core-manifest file at the keystroke and routes it here;
+the gate-validation **Core-layer immutability** check is the retro backstop. On a
+pre-Phase-2 consumer (no layer directories) or the distribution source itself,
+both are dormant and rules are authored in place as before.
 
 **Routing traps (Rule 27(a)-(c)) — check before you file:**
 - A rule that says "only X and Y are valid" or "Z is NOT subject to" **restricts**
