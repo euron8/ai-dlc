@@ -521,6 +521,22 @@ Every consumer block that differs from upstream is one of:
 
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 
+   **First, run the resolution driver — it does the mechanical bulk.**
+   `reconcile/apply.sh <dist> <base> <consumer> <theirs>` executes every MECHANICAL resolution and
+   prints a tab-separated manifest:
+   - `RESOLVED …` — already done, no operator step: pure applies (core overwritten from theirs),
+     setup-token defaults (e.g. `gate-adjudicator` ← `adversary`'s model), **known-drift refiles**
+     (`provenance-block.json` `known_skills` → `extensions/known-skills.json`, core reverted — the
+     "migrate the drift" chore, automated), catalog relabels, and the version re-stamp.
+   - `WORKLIST …` — the only things left for YOU: each `semantic-merge` (a BOTH-CHANGED 3-way PROSE
+     merge, per `classify-block.md`) and each `override-readopt` (work it with the loop below).
+   - `DECISION …` — a genuine operator call: an unknown drift's refile-vs-revert, a deletion, a
+     token with no default. Ask ONE closed question per row.
+
+   Do NOT re-do a `RESOLVED` row by hand. Work only the `WORKLIST` and `DECISION` rows. **This is
+   what makes the update end-to-end**: the operator runs it and it lands; you handle the semantic
+   remainder, not the mechanical bulk.
+
    Do NOT hand the operator a list of blockers and ask them how to respond. A blocker
    list is a to-do list with extra steps: it makes them hand-merge prose, hand-author
    YAML frontmatter, and hand-pick a `shadows:` anchor — the three things this repo has
