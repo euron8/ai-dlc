@@ -144,6 +144,14 @@ else ok "the resolution record is WRITEABLE while paused (the one write the paus
 OUT="$(drive_ack "$W" Write "$W/_bmad-output/planning-artifacts/product-brief.md")"
 if denied "$OUT"; then ok "the carve-out is narrow: other _bmad-output writes are still denied while paused"
 else bad "the carve-out leaked — every artifact write now bypasses the pause"; fi
+
+# ...and the pipeline SNAPSHOT is writeable while paused. It is a state record (it mirrors an
+# already-passed gate / delivered teammate), not a dispatch, and the handoff path raises this
+# very flag before Rule 2(c) requires finalizing it — deny it and a handoff cannot write its
+# own snapshot (deadlock) and the resume reads stale state.
+OUT="$(drive_ack "$W" Edit "$W/_bmad-output/pipeline-snapshot.md")"
+if denied "$OUT"; then bad "the pipeline snapshot was DENIED while paused — a handoff that raised the flag cannot finalize its own snapshot, and the resume reads a stale checkpoint"
+else ok "the pipeline snapshot is WRITEABLE while paused (a state record, not a dispatch)"; fi
 rm -rf "$W"
 
 # =============================================================================

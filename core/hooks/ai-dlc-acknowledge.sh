@@ -295,6 +295,20 @@ case "$TOOL_NAME" in
       # Same shape and same reasoning as the ai-dlc-update carve-out directly above.
       */_bmad-output/planning-artifacts/*-resolution-p*.md|_bmad-output/planning-artifacts/*-resolution-p*.md) ;;
 
+      # THE PIPELINE SNAPSHOT IS A STATE RECORD, NOT A DELIVERABLE. It mirrors state that has
+      # ALREADY happened -- a gate that passed, a teammate that delivered, a resolved block --
+      # and it is what a resume or handoff reads to pick the pipeline back up. It advances
+      # nothing by itself: advancing is DISPATCH (Agent/Task/Skill/TaskCreate, still denied
+      # above), and recording the checkpoint starts no work. Denying it is the resolution-record
+      # deadlock a THIRD time: the handoff path itself raises this flag
+      # (`ai-dlc-continue.sh` tells the lead to `touch pipeline-paused.flag` when it has no next
+      # action -- a handoff), and Rule 2(c) then requires finalizing this very file before the
+      # handoff. So the flag the handoff sets would deny the snapshot the handoff must write, and
+      # a stale snapshot is a broken resume. Same shape and reasoning as the two carve-outs above.
+      # Bash can write it too (and is allowed while paused), but the lead edits an existing 40KB
+      # file with Edit, not a heredoc -- routing it to Bash is a trap, not a fix.
+      */_bmad-output/pipeline-snapshot.md|_bmad-output/pipeline-snapshot.md) ;;
+
       */_bmad-output/*|_bmad-output/*) ADVANCING=1 ;;
     esac
     ;;
