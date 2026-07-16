@@ -17,6 +17,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.68.0] — 2026-07-16
+
+### The core/override boundary is enforced at the keystroke, not a sprint late
+
+The whole 0.62.0→0.67.0 arc built ever-better DETECTION, REPORTING, and RESOLUTION for in-place core
+drift — but every one of those is cleanup *after* a consumer has already written a core file it must
+not. `BOTH-CHANGED`-on-core, the one irreducibly-semantic prose merge left in a pull, exists ONLY
+because that write was allowed to happen. This ships the structural prevention: the write is denied
+the moment it is attempted.
+
+- **New `core/hooks/ai-dlc-core-guard.sh` — a `PreToolUse` hook on `Edit|Write|MultiEdit`.** On a
+  **layered consumer** (has a `.claude/.ai-dlc-version` stamp AND `overrides/`+`extensions/` dirs —
+  the same activation gate the retro `Core-layer immutability` check uses) it DENIES an in-place edit
+  to a core-manifest file and ROUTES the change: a change to an existing core rule → an `overrides/`
+  entry shadowing it; a net-new rule → an additive `extensions/` entry; an upstream core change →
+  `/ai-dlc-update`, which writes core through the reconcile engine, not the editor.
+- **The core path set is DERIVED at runtime** from `core-manifest.md` (fallback:
+  `reconcile/setup-sites.md`'s I5-synced copy) — never a third hand-list in the hook.
+- **`/ai-dlc-setup` is not broken.** Filling a declared config region — a team-role model string, a
+  dev/qa `## Ownership` block, a deploy/smoke command — passes; the hook reuses the exact
+  `setup-sites.md` region data the retro gate and `unregistered-drift.sh` already read.
+- **The update flow is exempt by construction.** `apply.sh` and the whole reconcile engine write core
+  via SHELL (`git show >`, `cp`, `sed`), never the Edit/Write tool, so the hook — matched only to the
+  editor tools — does not touch a pull or an untangle.
+- **FAIL-OPEN, positive-match deny only.** Unreadable manifest, path outside the project, or a Write
+  the hook cannot classify → allow. An over-broad deny gets a hook turned off; the teeth are precise.
+- **Backstop retained.** The retro-gate `Core-layer immutability` check stays as defense-in-depth for
+  whatever reaches disk anyway (a shell write, `git push --no-verify`, a consumer without the hook).
+- **`core-manifest.md` now ships to consumers** (`install.sh`) — the gate check, the
+  `protected-path-editor` role, and this hook all read it, but the installer had never copied it.
+- **New fixture `core/fixtures/core-write-guard/`** — drives the real hook with synthesized
+  `PreToolUse` JSON: core Edit → deny (and the deny routes); overrides/extensions Edit → allow; a
+  Bash shell write to core → allow (update flow untouched); no stamp → no-op; a declared config fill →
+  allow; a rulebook line of a config-bearing file → deny; the `core-manifest.md`→`setup-sites.md`
+  derivation fallback; and fail-open when no manifest source exists.
+
+This is the enabler that makes `BOTH-CHANGED`-on-core rare by design — the complement to v0.67.0's
+resolution driver. Core files become clean `UPSTREAM-ONLY` applies; all consumer variation lives in
+`overrides/` (additive 3-way) and `extensions/` (additive).
+
 ## [0.67.0] — 2026-07-16
 
 ### ai-dlc-update RESOLVES the pull — it no longer hands you a to-do list

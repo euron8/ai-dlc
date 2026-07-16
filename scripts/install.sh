@@ -161,8 +161,12 @@ fi
 echo "Installing AI/DLC skill..."
 cp "$SCRIPT_DIR/../core/skills/ai-dlc/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/ai-dlc/steps/"
-# core skill docs that live at the skill root (not under steps/)
-for doc in escalations.md rule-authoring.md; do
+# core skill docs that live at the skill root (not under steps/).
+# core-manifest.md is the authoritative core file set: the gate-validation
+# Core-layer immutability check, the protected-path-editor role, and the
+# ai-dlc-core-guard.sh edit-time hook all READ it from the consumer, so it must
+# be present. It is upstream-owned and overwrite-on-pull like the rest.
+for doc in escalations.md rule-authoring.md core-manifest.md; do
   [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 done
@@ -398,7 +402,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile core-write-guard; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"

@@ -1382,6 +1382,10 @@ When a step says "run auto-handoff evaluation at Seam <X>", READ AND FOLLOW
 <!-- CHECK_LOADED: core-layer-immutability -->
 
 **Scope.** Fires at the retro / sprint-close gate (where rule authoring lands).
+The `ai-dlc-core-guard.sh` PreToolUse hook is the PRIMARY enforcement (it denies an
+in-place core Edit/Write/MultiEdit at the keystroke); this check is the BACKSTOP for
+whatever reached disk anyway — a shell write, a `git push --no-verify`, or a consumer
+without the hook wired.
 **Active only on a layered consumer** — the project has a `.claude/.ai-dlc-version`
 stamp AND the skill's `overrides/` + `extensions/` layer directories exist. The
 distribution source repo (no stamp) and a pre-Phase-2 consumer (no layer dirs)
