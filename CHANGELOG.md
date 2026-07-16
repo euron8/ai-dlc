@@ -17,6 +17,198 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.70.0] — 2026-07-16
+
+### The Sonnet-lead A/B, and the two holes it found under v0.62.0
+
+v0.62.0 shipped the escalation and deferred the A/B itself — "gate-catch parity, convergence,
+cost… needs graph on the reclassified map, a real pull." Graph pulled (v0.69.0, S291, lead on
+`claude-sonnet-5`), so this release runs it. Full write-up: `docs/v0.70.0-sonnet-lead-ab.md`.
+
+**The verdict: keep the Sonnet lead.** The hybrid holds — the escalation fires (7 verdicts),
+every `gate-adjudicator` dispatch really does request Opus, the lead held Rule 28(c) (the gate
+log separates escalated-and-adopted from lead-evaluated), and the escalated Opus adjudicator
+**caught two real FAILs** at a story gate that the lead then remediated and re-adjudicated. On
+cost the arm lands ~65% cheaper per dispatch ($2.55 vs S290's $7.39) with **no volume
+inflation** — it used fewer turns per dispatch, not more.
+
+Two things the A/B established that are worth more than the verdict:
+
+- **The counterfactual re-price is a tautology.** Sonnet 5 ($3/$15) and Opus 4.8 ($5/$25) sit at
+  a uniform 0.6 ratio on *every* component (the cache multipliers are fractions of input), so
+  "re-price at Opus rates" returns exactly 40.0% for any input whatsoever. It cannot be wrong,
+  so it cannot inform. Only the measured arm can come out either way. `ab-lead-model.js` prints
+  the identity and says so, rather than dressing it as a result.
+- **The risk moved rather than vanished.** The escalated checks are Opus by construction, so a
+  Sonnet lead's remaining surface is orchestration (Rule 28) — which no gate check measures.
+  The proxies are clean; a clean proxy is not a measurement.
+
+### Added — a teammate's model is now BOUND to its role file (`ai-dlc-dispatch-guard.sh`)
+
+The role file's `/model` line was **documentation**; the `Agent` tool's `model` param was the
+**mechanism**; nothing connected them. Measured on S291's real dispatches:
+
+- **Two remediator dispatches explicitly requested `model: 'sonnet'`** against `remediator.md`'s
+  `claude-opus-4-8[1m]` pin — undoing v0.56.0, whose whole finding was that repair must leave the
+  saturated context for a fresh, more capable one. Certain, measured, repeated: the strongest
+  defect the A/B found.
+- **4 dispatches passed no `model` param at all**, which makes the model they ran on
+  **undetermined** — see below.
+- `tea.md` declares no pin, yet the lead dispatched it `model: 'opus'` — a value with no source
+  of truth.
+
+**A missing param is not an inherit — it is an unknown.** The `Agent` tool's contract says an
+omitted model "uses the agent definition's model, or inherits from the parent"; the tool_result
+record reports `claude-opus-4-8` for every no-param S291 spawn — neither the lead's Sonnet nor
+anything derived from the role file. The two disagree, the teammate leaves no transcript, and
+nothing downstream can settle it. So absence is denied not because it inherits wrongly but because
+**no one can say what ran** — including the next reader. (`analyst-s291-architecture`: no param,
+sonnet pin, record shows opus.)
+
+**And the unenforced invariant: nothing verifies the adjudicator's model.** Check 26 validates the
+verdict's envelope, coverage and PASS/FAIL — it cannot see **who wrote it**. An explicit
+`model: 'sonnet'` on a gate-adjudicator dispatch would write a well-formed verdict at the right
+nonce, Check 26 would pass, and the v0.62.0 hybrid would collapse to Sonnet-judging-Sonnet with the
+gate still green. Scope stated honestly: this is **not** currently firing — all six S291 adjudicator
+spawns requested opus, and a dropped param would not cause it either. Its trigger is the explicit
+wrong-tier shape, which is proven to occur on remediator.
+
+New PreToolUse hook on `Agent|Task`: derive the role from the prompt's Rule 19 binding (all 42
+S291 dispatches carry one — a complete derivation surface, not a heuristic), read that role file's
+pin, and DENY on a tier mismatch or a missing param. Compared by **tier**, never by string: a role
+carries both a Personal and a Bedrock pin and the param is an alias, so string equality would deny
+everything — and tier makes ai-dlc-setup's Sonnet-only mode work by construction. Fail-open on
+every ambiguity (no binding, unreadable/unpinned role, pins that disagree on tier).
+
+**Why at dispatch and not at the gate:** there is no gate-time ground truth and there cannot be.
+An Agent-spawned teammate leaves no transcript, so nothing downstream can learn its model, and a
+verdict self-reporting its own model is the trust circularity that keeps H1/H2 with the lead. The
+dispatch param is the only observable truth, and it is observable *before* the work. This hook is
+the sole enforcement — there is no gate-time backstop to pair it with.
+
+Replayed against graph's real S291 tree: **4 denies, 42 allows, no false deny** — including every
+`gate-adjudicator` spawn, so it will not wedge a live pipeline. Of the four denies, three are real
+drift (two explicit sonnet-vs-opus remediators, one no-param analyst against a sonnet pin) and one
+is a no-param spawn whose model happened to match its pin — denied anyway, because "happened to
+match" is not a binding.
+
+**A correction this release owes its own findings.** The first draft of the A/B reported that a
+dropped param "inherits the lead's model", concluded that *every* S291 remediator ran Sonnet against
+an Opus pin, and rated the adjudicator hole CRITICAL because "the trigger already fires". The record
+says otherwise on all three counts. The claim was never checked against the `tool_result` model
+field; it was plausible, and the table it produced looked right. Worse, `ab-lead-model.js`'s own
+self-test **asserted the wrong ground truth and passed** — the exact defect the tool exists to find,
+committed by the tool. Real drift is **3, not 5**; the adjudicator hole is **MAJOR, not CRITICAL**;
+and every assertion now cites `resolved=` from the record rather than an inference about it.
+
+Known gap, deliberate: `cis`/`sm`/`tea`/`ux` declare no pin, so they fail open. Closing that needs
+new `{*_model_personal}` setup placeholders and a new setup-site — the v0.63.0 unregistered-drift
+surface — and is a separate release. Every critical role (gate-adjudicator, adversary, remediator,
+architect, protected-path-editor) is pinned and covered.
+
+### Added — the arm is now recorded in the repo (`arm-log.jsonl`)
+
+No sprint artifact recorded which model the lead ran on. The only on-disk evidence was the `model`
+field on each assistant turn of a transcript — outside the repo and outside every check — so "which
+arm ran" was **unfalsifiable from a sprint's own artifacts**, and this very A/B had to be answered
+by an external script reading `~/.claude/projects`. An A/B whose independent variable is unrecorded
+is not reproducible.
+
+The lead must **not** self-report it: a model naming its own weights is unreliable, and a
+self-reported arm is the same unfalsifiable testimony the finding complains about. So
+`ai-dlc-context-sensor.sh` writes it, from the transcript, as ground truth. The sensor was already
+the right home: it exits on `agent_id` (main session only — the model it reads IS the lead's), it
+already holds the correct post-compaction record, and it already gates on an active pipeline.
+Append-only, deduped on `(sprint, model)`, so a mid-sprint switch is captured rather than overwritten.
+
+### Added — `scripts/ab-lead-model.js`
+
+The measurement layer that did not exist (`audit-machinery-efficacy.js` has no arm dimension).
+`--graph`, `--json`, `--self-test`. Reads `arm-log.jsonl` when present and says **ABSENT** — not
+"single-arm" — when it is not. Carries the 3-step proof, mutant-verified.
+
+Two of its own filters nearly produced the wrong answer, both too-strict, both now regression-tested:
+an `isOperator` filter keyed on `/clear|/model|/compact` **deleted the S291 Sonnet lead itself** (the
+live lead issues exactly those at launch) and the resulting all-Opus table looked entirely plausible;
+and comparing historical dispatches against *today's* role pins manufactured ~11 fake drift rows for
+sprints 257–258.
+
+### Added — I13: every shipped hook must be REGISTERED
+
+`install.sh` copies `core/hooks/*.sh` by **glob**, so a new hook always reaches the consumer — but it
+only ever *runs* if `templates/settings.json.template` names it in a matcher block. Nothing asserted
+the two agree. A hook that is copied but never registered installs everywhere, sits on disk, passes
+its own fixture, and silently never fires: a check that cannot fire in the most literal form this repo
+has — the file is right there. `validate-enforcement-map.sh` now binds both directions (hook without a
+matcher; matcher naming a missing hook). The existing eleven hooks all pass.
+
+### Fixed — the enforcement map now sees its own hooks
+
+v0.68.0 shipped `ai-dlc-core-guard.sh` without registering it in `enforcement-map.yaml`
+(`core-layer-immutability` still reads `enforcer: []`), because I4 only checks map→disk, never
+disk→map. This release adds `dispatch-model-binding` and `arm-record` entries with their enforcers,
+call-sites and fixtures, so the new machinery is visible to the catalog it belongs to.
+
+### Added — the subagent blind spot: a probe, and two missing guards
+
+The lead is heavily netted around compaction: a snapshot, a precompact sidecar, a recovery
+protocol, a sensor that warns at yellow/red. **A teammate has none of it.** It runs in its own
+context window and `ai-dlc-context-sensor.sh` deliberately exits on `agent_id` ("a subagent's usage
+describes its own window, not the lead's"), so nothing warns it and nothing recovers it. If a
+teammate compacts it silently loses the middle of its own task — the gate-adjudicator loses its
+worklist, the adversary loses half the artifacts it was comparing — and returns a confident,
+quietly degraded verdict.
+
+**Two hooks were missing the guard the other two have.** `ai-dlc-recover.sh` and
+`ai-dlc-context-sensor.sh` gate on `agent_id`; `ai-dlc-precompact.sh` and `ai-dlc-postcompact.sh`
+did not, and nothing decided that asymmetry — it was an omission. Both gate only on the snapshot
+existing, which is **true for a teammate**: it shares the project dir and the settings.json.
+`precompact.sh` then **truncates** `pipeline-snapshot.precompact.md`, so a teammate's compaction
+would overwrite *the lead's* recovery net with its own delta, and the lead would return from its
+own compaction reading a subagent's context as its own. `postcompact.sh` would inflate
+`compaction-log.md` — the retro's standing evidence for how often the LEAD compacted — sending a
+retro hunting a lead problem that never happened. Whether a teammate's compaction reaches
+`PreCompact` is not established; the gate is correct either way, and is now verified in both
+directions (lead path writes, teammate path no-ops).
+
+**And the measurement, because the argument could not be settled without one.** Teammates leave no
+transcript in `~/.claude/projects`, so their context was unobservable from disk — the same wall the
+arm record hit. `SubagentStop` was named in the sensor's own comment and **wired nowhere**. New
+`ai-dlc-subagent-probe.sh` records, per teammate completion, `{peak_tokens, compactions, turns,
+model, sprint, agent_id}` to `subagent-context.jsonl`. Pure instrumentation: it never blocks (a
+blocking SubagentStop hook hangs a teammate). `peak_tokens` is the **maximum across the run,
+including before any `compact_boundary`** — reporting the last reading instead would show a teammate
+that compacted at 286K as a calm 41K, which is worse than no reading at all. Mutant-verified against
+exactly that.
+
+This is what makes the `autoCompactWindow` question answerable next sprint with data rather than a
+guess: read `peak_tokens` against the threshold (`effectiveWindow - 13000`, i.e. 287000 at the
+default). A teammate at 250K is already inside the blast radius; one at 100K is not, and no ceiling
+change would help it.
+
+### Note — the auto-compact ceiling is not a free parameter; 300000 is very nearly forced
+
+Graph runs `autoCompactWindow: 300000` on a 1M-capable model, compacting 8× per sprint in a tight
+263–267K band. That reads like leaving 70% of the context unused, and the obvious move is to raise
+it. Three measured reasons not to, in increasing order of decisiveness:
+
+1. **Cost.** Cache-read is **58% of the lead's bill** and scales linearly with resident context,
+   while compaction is comparatively cheap. Running at the full 1M would cost **~2.4×** ($282 vs
+   $117 measured on S291). The curve is flat from 150K–265K and climbs steeply above.
+2. **The setting can only ever LOWER the threshold.** `effective window = min(setting, model max)`,
+   so it cannot raise anything past the model's own context. And a value outside Claude Code's
+   accepted range `[100000, 1000000]` — e.g. `4000000` — is **silently discarded**, so the model
+   default applies: it is not a bigger ceiling, it is the loss of the ceiling you had.
+3. **The ordering invariant pins it.** `validate-compact-window.sh` requires
+   `red + 50000 < threshold < red + 100000`, and the threshold is `effectiveWindow - 13000`. With
+   red at 200K (the 1M row of SKILL.md's table), the threshold must land in 250K–300K — so
+   `autoCompactWindow` must be roughly **263000–313000**. `300000` PASSES; `500000` and `1000000`
+   both FAIL (compaction at 487K/987K against a red at 200K). Raising the ceiling therefore is not
+   a one-line settings change: it requires moving red in SKILL.md too, which buys a 2.4× bill for a
+   sensor that warns 787K tokens before the net it is supposed to precede.
+
+Leave it at 300000.
+
 ## [0.69.0] — 2026-07-16
 
 ### The audit-anchors housekeeping schema is now single-source, rendered, and enforced

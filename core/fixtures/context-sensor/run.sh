@@ -266,6 +266,43 @@ reset
 evfire below-yellow.jsonl PostToolBatch >/dev/null
 check "first PostToolBatch of a session always samples" "$(evfield last_measured)" "50000"
 
+# --- arm record (v0.70.0 D4) -------------------------------------------------
+# The lead's model must be recorded from the TRANSCRIPT, never self-reported.
+ARM="$WORK/_bmad-output/arm-log.jsonl"
+armreset() { reset; rm -f "$ARM"; }
+armfield() { tail -1 "$ARM" 2>/dev/null | jq -r "$1 // empty" 2>/dev/null; }
+
+armreset
+fire below-yellow.jsonl >/dev/null
+check "arm recorded from the transcript's model field" "$(armfield .lead_model)" "claude-opus-4-8"
+check "  arm record is schema-stamped" "$(armfield .v)" "1"
+
+# Deduped: a second identical reading must not append. An arm log that grows one
+# record per tool batch is unreadable and would bury a real arm change.
+fire below-yellow.jsonl >/dev/null
+fire at-yellow.jsonl >/dev/null
+check "  same arm + same sprint does not re-append" "$(wc -l < "$ARM" | tr -d ' ')" "1"
+
+# A sprint change appends, so an arm is attributable per sprint.
+printf -- '- **sprint_id:** 292\n' > "$WORK/_bmad-output/pipeline-snapshot.md"
+fire at-yellow.jsonl >/dev/null
+check "  a new sprint appends a fresh arm record" "$(wc -l < "$ARM" | tr -d ' ')" "2"
+check "  and carries the sprint id" "$(armfield .sprint)" "292"
+: > "$WORK/_bmad-output/pipeline-snapshot.md"
+
+# The arm is the LEAD's. A subagent must never write one -- it would attribute a
+# teammate's model to the lead and invert the arm.
+armreset
+fire at-red.jsonl ',"agent_id":"a1"' >/dev/null
+check "  a subagent writes no arm record" "$([ -f "$ARM" ] && echo present || echo absent)" "absent"
+
+# No pipeline -> no arm record (same gate as the rest of the sensor).
+armreset
+mv "$WORK/_bmad-output/pipeline-snapshot.md" "$WORK/snap.bak"
+fire at-yellow.jsonl >/dev/null
+check "  no active pipeline writes no arm record" "$([ -f "$ARM" ] && echo present || echo absent)" "absent"
+mv "$WORK/snap.bak" "$WORK/_bmad-output/pipeline-snapshot.md"
+
 echo
 echo "  $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

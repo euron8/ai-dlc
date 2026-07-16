@@ -33,6 +33,16 @@ INPUT="$(cat 2>/dev/null || true)"
 
 [ -f "$SNAPSHOT" ] || exit 0
 
+# THE LEAD ONLY -- same reasoning as ai-dlc-precompact.sh. A teammate shares the
+# project dir, so the snapshot gate does not exclude it. This hook appends to
+# compaction-log.md, which is the retro's standing evidence for "how often did
+# the LEAD compact"; a teammate's compaction landing in that log silently inflates
+# the count and would send a retro hunting a lead problem that never happened.
+if command -v jq >/dev/null 2>&1; then
+  _AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || true)"
+  [ -z "$_AGENT_ID" ] || exit 0
+fi
+
 field() {
   if command -v jq >/dev/null 2>&1; then
     printf '%s' "$INPUT" | jq -r "$1 // empty" 2>/dev/null
