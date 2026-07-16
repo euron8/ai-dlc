@@ -17,6 +17,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.65.0] — 2026-07-16
+
+### The report could drop a blocker the detector caught
+
+The 0.63.2 schema drift scan works — but on the reference consumer's pull it caught an in-place
+edit to a core schema (`provenance-block.json`) and the reconcile **report said "no unregistered
+core drift" anyway, twice.** The dry-run report is authored by the update skill's LLM from the
+detectors' output, and nothing forced every `HARD-*` line the detectors emit to appear in it. A
+blocker dropped from the report is one the operator approves `apply` without ever seeing — and
+`apply` then overwrites the consumer's edit silently. The detector was fixed; the *report*
+un-reported it. This is the whole-arc theme in the last place it could hide: **the tool's output is
+ground truth; an LLM summary of it must not be able to drop a line.**
+
+- **New `reconcile/hard-blockers.sh`** wraps both `HARD-*` detectors
+  (`unregistered-drift.sh` + `layer-drift.sh`, which take args in different orders) and:
+  - **print mode** renders the canonical blocking list into a `BEGIN/END GENERATED: hard-blockers`
+    region — the report's blocking list is now a *rendered artifact*, not composed from memory;
+  - **`--check <report>`** fails (exit 1) if the report is missing any `HARD-*` item the detectors
+    report, naming the omitted one. An empty list prints an affirmative `0 HARD blockers.`
+- **`ai-dlc-update` SKILL wired at both ends:** step 5 renders the blocking list from the script and
+  runs `--check` on the emitted report before the HARD STOP (non-optional); step 7 (apply) runs the
+  union gate across both detectors and re-verifies the approved report was sound before any write.
+- **New fixture `core/fixtures/reconcile-blocking-list/`** — 3-step proof: print renders a real
+  in-place-drift blocker; `--check` FAILS a report that omits it (reproduces the bug) and PASSES one
+  that names it; no-drift → `0 HARD blockers`.
+
+Verified against the reference consumer: `hard-blockers.sh --check` on its current report **fails**,
+naming the dropped `schemas/provenance-block.json` blocker — the exact omission that slipped through
+two hand-authored reports.
+
 ## [0.64.0] — 2026-07-16
 
 ### A consumer can register its own skills without editing the core schema

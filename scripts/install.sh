@@ -398,7 +398,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"
