@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # Resolve the REAL unregistered-drift.sh (its sibling setup-sites.md is the site manifest it reads).
 D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-C_ROOT="$(cd "$HERE/../.." 2>/dev/null && pwd || true)"
+C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh" ]; then
   SCRIPT="$D_ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
 elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/.claude/skills/ai-dlc-update/reconcile/unregistered-drift.sh" ]; then

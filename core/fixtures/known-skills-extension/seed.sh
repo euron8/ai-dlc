@@ -8,7 +8,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
-C_ROOT="$(cd "$HERE/../.." 2>/dev/null && pwd || true)"
+C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-provenance-block.sh" ]; then
   VALIDATOR="$D_ROOT/core/scripts/validate-provenance-block.sh"
 elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/validate-provenance-block.sh" ]; then
