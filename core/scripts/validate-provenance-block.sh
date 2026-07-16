@@ -76,10 +76,30 @@ if [ -z "$SCHEMA" ]; then
     exit 1
 fi
 
+# Consumer-extension point for known_skills. The core list names the skills the DISTRIBUTION
+# ships; a layered consumer with its OWN party-persona or sub-skill (whose real invocation emits a
+# provenance block citing it) registers the extra name HERE — an ADDITIVE extensions/ file, per
+# Rule 27 (consumers never edit core; they add a layer entry). Absent in the distribution and in a
+# pre-layer consumer, so the core list stands alone there. Unioned into the enum below when present.
+if [ -n "${AI_DLC_KNOWN_SKILLS_EXT+x}" ]; then
+    # Explicitly set (even to empty): use it verbatim, no path search. Empty or nonexistent = none.
+    KNOWN_SKILLS_EXT="$AI_DLC_KNOWN_SKILLS_EXT"
+else
+    KNOWN_SKILLS_EXT=""
+    for cand in \
+        "$PB_ROOT/.claude/skills/ai-dlc/extensions/known-skills.json" \
+        "$PB_ROOT/skills/ai-dlc/extensions/known-skills.json" \
+        "$PB_SCRIPT_DIR/../skills/ai-dlc/extensions/known-skills.json"; do
+        [ -f "$cand" ] && { KNOWN_SKILLS_EXT="$cand"; break; }
+    done
+fi
+# A nonexistent path is "no extension"; a present-but-malformed one fails closed in python.
+[ -n "$KNOWN_SKILLS_EXT" ] && [ ! -f "$KNOWN_SKILLS_EXT" ] && KNOWN_SKILLS_EXT=""
+
 # shellcheck source=/dev/null
 [ -r "${PB_SCRIPT_DIR}/lib/meta-gate.sh" ] && . "${PB_SCRIPT_DIR}/lib/meta-gate.sh"
 
-python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" "$SCHEMA" <<'PYEOF'
+python3 - "$ARTIFACT_PATH" "$REQUIRE_SKILL" "$SCHEMA" "$KNOWN_SKILLS_EXT" <<'PYEOF'
 import json
 import re
 import sys
@@ -87,9 +107,35 @@ import sys
 artifact_path = sys.argv[1]
 require_skill = sys.argv[2] or None
 schema_path = sys.argv[3]
+ext_path = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4] else None
 
 with open(schema_path, "r", encoding="utf-8") as fh:
     S = json.load(fh)
+
+# Union the consumer known_skills extension (additive layer). Fail closed on a present-but-broken
+# extension: a malformed layer file must not silently degrade to the core-only list, because then a
+# legitimately-registered consumer skill would wrongly read as a forged/unknown one.
+if ext_path:
+    try:
+        with open(ext_path, "r", encoding="utf-8") as fh:
+            ext = json.load(fh)
+    except (ValueError, OSError) as exc:
+        print(
+            f"FAIL: known_skills extension {ext_path} is present but not parseable JSON ({exc}). "
+            f"It must be a JSON list of skill names, or an object with a 'known_skills' list. "
+            f"Fix or remove it — a broken layer file must not be treated as empty.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    extra = ext.get("known_skills") if isinstance(ext, dict) else ext
+    if not isinstance(extra, list) or not all(isinstance(x, str) and x for x in extra):
+        print(
+            f"FAIL: known_skills extension {ext_path} must be a JSON list of non-empty strings, or "
+            f"an object with a 'known_skills' list of them.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    S["known_skills"] = list(dict.fromkeys(list(S["known_skills"]) + extra))
 
 ENV = S["envelope"]
 PATTERNS = S["patterns"]

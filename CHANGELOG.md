@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.64.0] — 2026-07-16
+
+### A consumer can register its own skills without editing the core schema
+
+0.63.2's schema drift scan surfaced a real one on the reference consumer: it had hand-added its
+tea-persona skill (`bmad-agent-tea-tea`) to `known_skills` in `provenance-block.json` **in place**,
+because there was no other way — `known_skills` is a core list, and a consumer with its own
+party-persona or sub-skill (whose real invocation emits a provenance block citing it) had nowhere
+to declare the name. HARD-blocking that drift without offering a layer-correct alternative was only
+half a fix. This is the other half.
+
+- **New consumer-extension point: `extensions/known-skills.json`.** An additive JSON file — either
+  `{ "known_skills": ["…"] }` or a bare `["…"]` — that `validate-provenance-block.sh` **unions**
+  with the core list. A provenance block naming your skill now passes without touching the core
+  schema. It is a **data extension**: no frontmatter, no `hooks:`, and (being `.json`) inert to the
+  `.md`-only layer loader and `validate-layer-entries.sh`; the validator resolves it by name.
+- **Fails closed** on a present-but-malformed extension (a broken layer file must never silently
+  degrade to the core-only list, or a legitimately-registered skill would read as forged). A
+  nonexistent path is simply "no extension". `AI_DLC_KNOWN_SKILLS_EXT` overrides the path (testing).
+- Documented in `extensions/README.md` (new "Data extensions" section). New fixture
+  `core/fixtures/known-skills-extension/` — proves: unknown without the extension → FAIL; object and
+  bare-array forms → PASS; malformed → fail closed; missing path → absent.
+
+**Migration for a consumer that hand-edited the schema** (e.g. the reference consumer): create
+`extensions/known-skills.json` with your added skill name(s) and revert the in-place
+`provenance-block.json` edit — the drift clears and the skill stays registered.
+
 ## [0.63.2] — 2026-07-16
 
 ### The drift scan covered schemas/ never, and its list could rot again
