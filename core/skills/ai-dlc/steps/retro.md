@@ -751,13 +751,20 @@ to `_bmad-output/audit-anchors.md` with the current sprint's
 retro-PR-merge SHA placeholder. The merge SHA is unknown until the
 retro PR merges; lead writes the entry with sprint + closed_at fields
 and updates the SHA in a follow-on commit on `main` after merge.
-Schema and producer mandate live in `audit-anchors.md` header. No
-SHA = audit-gate fails closed at next sprint's per-class test-debt
+
+The schema is canonical in `.claude/schemas/audit-anchors.json` — NOT the live
+header or the template. Re-seed the header first: replace the file's
+`BEGIN GENERATED: audit-anchors-schema … END GENERATED` region with the output
+of `scripts/validate-audit-anchors.sh --render` (a new file gets that whole
+block), then append the entry below `## Entries` in the shape it documents. Do
+NOT hand-write the header. Step 5c runs `scripts/validate-audit-anchors.sh`,
+which fails the commit on header drift or a malformed entry. No SHA for the
+prior sprint = audit-gate fails closed at the next sprint's per-class test-debt
 audit (`gate-validation.md` Check 18).
 
 ### 5c. Pre-Commit Validation Gate
 
-Before committing retro artifacts, run all three checks in order.
+Before committing retro artifacts, run all four checks in order.
 Failure on any check blocks the Step 6 commit.
 
 **Gate type for validation loading (Rule 21 / Lever 2).** This is the
@@ -786,6 +793,13 @@ core-layer-immutability).
    run separately — at Step 5c check 2 above locally, and as its own CI step.)
    MUST exit 0. If it fails, fix the issues before proceeding to
    Step 6.
+
+4. **Audit-anchor schema validation.** Run
+   `scripts/validate-audit-anchors.sh _bmad-output/audit-anchors.md`. It
+   fails closed if the Step-5b header drifted from the canonical schema
+   (`.claude/schemas/audit-anchors.json`) or the appended entry is malformed.
+   MUST exit 0 — a drifted housekeeping schema is the defect this check exists
+   to catch, not a clean file.
 
 ### 6. Commit, Push, and PR
 

@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.69.0] — 2026-07-16
+
+### The audit-anchors housekeeping schema is now single-source, rendered, and enforced
+
+The retro read the audit-anchors entry schema from each project's **live `_bmad-output/audit-anchors.md`
+header** — the file prior sprints appended to — with the only "canonical" copy in an
+`templates/audit-anchors.md.template` the installer **never shipped**. Nothing compared the two; they
+had already **drifted** (the live header grew an `audit_window` field and a YAML-list form while the
+template still described `---`-separated docs with a `notes` field). The de-facto schema survived only
+in whichever file was carried forward — a fresh install would have seeded the stale shape. Same class
+as the v0.60.0 provenance defect: N hand-synced copies of one schema, nothing comparing them.
+
+- **New `core/schemas/audit-anchors.json`** — the single definition. The header every producer reads
+  is RENDERED from `header_lines`; the entry validator loads `fields`.
+- **New `core/scripts/validate-audit-anchors.sh`** — `--render` (emit the canonical BEGIN/END
+  GENERATED header), `--check <file>` (byte-compare the file's header region — catches drift),
+  `--entries <file>` (validate entries only), `<file>` (both). Fails closed on an unreadable schema.
+- **`fields` enforce STRUCTURE, not historical format.** `sprint` is an integer; `sha` is present and
+  non-empty; `closed_at`/`audit_window` are documentary. Whether a `sha` resolves to a mergeable rev
+  is Check 18's decision, not the validator's — verified against the reference consumer's real file
+  (short SHAs, `<…>` placeholders, per-sprint `PENDING` variants, inline `# comments` all pass). A
+  stricter pattern would wedge a real consumer on first contact.
+- **Wired:** retro Step 5b re-seeds the header from `--render` before appending; Step 5c full-validates
+  (producer side). gate-validation Check 18 runs `--entries` (consumer side — migration-safe: a file
+  predating the schema is not wedged before its next retro re-seeds the header). The stale template is
+  re-rendered from canonical, and `validate-enforcement-map.sh` now asserts the shipped template
+  matches the schema so it can never re-stale.
+- **New fixture `core/fixtures/audit-anchors-schema/`** — render is deterministic; header drift and a
+  missing region fail `--check`; a missing `sha` or non-integer `sprint` fail validate; an inline
+  `# comment` passes; `--entries` passes a headerless file while full validate fails (migration); an
+  unreadable schema fails closed. Mutant-tested via the enforcement-map guard.
+
+Consumers get it on their next `/ai-dlc-update`; the first retro after the pull re-seeds the live
+header. No migration wedge — `--entries` (Check 18) passes the reference consumer's real file today.
+
 ## [0.68.2] — 2026-07-16
 
 ### Rule 29 pause no longer denies the pipeline-snapshot write (deadlock + stale-resume fix)

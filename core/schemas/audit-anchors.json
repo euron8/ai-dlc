@@ -1,0 +1,61 @@
+{
+  "$comment": [
+    "THE SINGLE DEFINITION of the audit-anchors housekeeping schema. There is no other.",
+    "",
+    "It used to live in TWO places at once: templates/audit-anchors.md.template (the declared",
+    "canonical, never shipped to a consumer by install.sh) and the header of each project's live",
+    "_bmad-output/audit-anchors.md (a hand-carried copy the retro producer reads). Nothing compared",
+    "them. They diverged: the live header grew an `audit_window` field and switched to a YAML list,",
+    "while the template still described `---`-separated documents with a `notes` field and no",
+    "audit_window. The de-facto schema survived only in whichever project's file was carried forward;",
+    "a fresh install would have seeded the stale template's shape and produced entries the consumers",
+    "(carry-over-evaluation Step 1a, gate-validation Check 18) no longer parse.",
+    "",
+    "So: the reader LOADS this file. The header every producer reads is RENDERED from `header_lines`",
+    "by scripts/validate-audit-anchors.sh --render into a BEGIN/END GENERATED region.",
+    "scripts/validate-audit-anchors.sh --check fails closed if that region drifts, and the same",
+    "script validates every entry against `fields`. Add or change a field HERE and it reaches the",
+    "rendered header and the entry validator at once. Do not hand-edit the header region.",
+    "",
+    "Same cure as schemas/provenance-block.json: not a drift detector — nothing to detect."
+  ],
+  "schema_id": "AUDIT_ANCHORS v1",
+  "entries_heading": "## Entries",
+  "region_label": "audit-anchors-schema",
+  "$fields_comment": [
+    "Enforce ONLY the STRUCTURE a reader depends on — `sprint` is an integer, `sha` is present and",
+    "non-empty — not the historical FORMAT of the values. Real consumer files carry short SHAs,",
+    "angle-bracket placeholders (`<6db95…>`), and per-sprint PENDING variants (`<PENDING-S199-RETRO>`);",
+    "whether a value actually resolves to a mergeable rev is gate-validation Check 18's decision (it",
+    "fails closed on a non-resolvable prior-sprint sha), NOT this validator's. A stricter pattern here",
+    "re-creates the wedge this whole change exists to remove: a linter that errors on real data on",
+    "first contact gets turned off."
+  ],
+  "fields": {
+    "sprint":       { "required": true,  "pattern": "^[0-9]+$", "desc": "integer sprint number" },
+    "sha":          { "required": true,  "pattern": "^\\S+$",   "desc": "retro-PR merge SHA on main (short or full), or a PENDING placeholder until merged" },
+    "closed_at":    { "required": false,                        "desc": "retro-PR merge time (documentary; free-form)" },
+    "audit_window": { "required": false,                        "desc": "<prior-sprint-sha>..<sprint-N-sha> git rev range for the next sprint's per-class test-debt audit (documentary)" }
+  },
+  "header_lines": [
+    "# Audit Anchors",
+    "",
+    "Append-only YAML list of per-sprint retro-PR merge SHAs. Producer: `retro.md`",
+    "Step 5b at sprint close. Consumers: `carry-over-evaluation.md` Step 1a and",
+    "`gate-validation.md` Check 18 (per-class test-debt audit).",
+    "",
+    "**Schema is canonical in `.claude/schemas/audit-anchors.json`.** This header is",
+    "RENDERED from it by `scripts/validate-audit-anchors.sh --render` and byte-checked by",
+    "`--check`; the same script validates every entry. Do NOT hand-edit this region — edit",
+    "the schema and re-render. Each entry:",
+    "",
+    "- `sprint: <N>` — integer sprint number. REQUIRED.",
+    "- `sha: <sha>` — retro-PR merge SHA on `main` (short or full), or `PENDING`. REQUIRED.",
+    "- `closed_at: <time>` — when the retro PR merged (documentary; free-form).",
+    "- `audit_window: <prior-sprint-sha>..<sprint-N-sha>` — git rev range for the next",
+    "  sprint's per-class test-debt audit; the lower bound is the prior sprint's `sha`.",
+    "",
+    "Missing entry for the prior sprint OR `sha: PENDING` there FAILS Check 18 CLOSED —",
+    "a silent skip on a missing audit anchor is forbidden (PI-S169-8)."
+  ]
+}

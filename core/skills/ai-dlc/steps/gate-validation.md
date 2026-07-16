@@ -850,9 +850,15 @@ only), or SHA byte-mismatch (retro only).
 `_bmad-output/audit-anchors.md` to determine the prior-sprint retro-PR
 merge SHA.
 
-**Check.** Resolve `<prior_sprint_sha>` from the most recent prior
-sprint entry (current sprint number minus one). If absent, gate FAILS
-CLOSED with explicit message — silent skip on missing audit-anchor is
+**Check.** First run `scripts/validate-audit-anchors.sh --entries
+_bmad-output/audit-anchors.md` — it enforces every entry conforms to the
+canonical schema (`.claude/schemas/audit-anchors.json`). A non-zero exit FAILS
+this check CLOSED (a malformed entry is a schema regression, not a clean file).
+`--entries` deliberately does NOT require the rendered header — a consumer whose
+file predates this schema is not wedged here; its next retro (Step 5b) re-seeds
+and full-validates the header. Then resolve `<prior_sprint_sha>` from the most
+recent prior sprint entry (current sprint number minus one). If absent, gate
+FAILS CLOSED with explicit message — silent skip on missing audit-anchor is
 forbidden.
 
 For each per-class test category audit applicable to the current
@@ -867,8 +873,10 @@ REFACTOR-IN-SPRINT (must be addressed before gate close) OR no
 
 **Producer mandate.** `retro.md` Step 5b at sprint close MUST append
 a new entry to `_bmad-output/audit-anchors.md` with the current
-sprint's retro-PR merge SHA. Schema in `audit-anchors.md` header
-(see `templates/audit-anchors.md.template`).
+sprint's retro-PR merge SHA. The schema is canonical in
+`.claude/schemas/audit-anchors.json`; the file header is RENDERED from it by
+`scripts/validate-audit-anchors.sh --render` and enforced by that script — it
+is NOT defined by the live header or the (reference-only) template.
 
 ### 19. Self-reflexive Gate 2 self-discrimination map application.
 <!-- CHECK_LOADED: 19 -->
