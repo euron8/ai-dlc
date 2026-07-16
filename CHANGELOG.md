@@ -17,6 +17,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.70.1] — 2026-07-16
+
+### Fixed — a pulled hook installed byte-perfect and NON-EXECUTABLE (v0.70.0's guard was inert)
+
+Reported by the graph consumer against a real v0.70.0 pull, and it lands squarely on this
+release's own headline: the dispatch guard would install in every pulling consumer
+byte-identical, non-executable, and **inert** — its `hard_block` silently unenforced, with every
+verification in the reconcile still reporting green, because they all diff CONTENT and the
+content was perfect.
+
+**Two independent bugs, either of which alone is sufficient.**
+
+**Transport.** `reconcile/apply.sh` wrote files with `git show ... > "$cons"` — a shell redirect.
+A redirect takes its mode from the **umask** when the file is NEW and preserves the existing mode
+when it is not. So an UPDATED executable kept working (install.sh chmod'd it once at install; `>`
+leaves that alone) while a NEWLY SHIPPED executable landed 0644. There was no `chmod` anywhere in
+the reconcile skill. This is why it stayed invisible for so long: every prior release only ever
+*updated* hooks that install.sh had already made executable. v0.70.0 is the first to ship a NEW
+hook that denies something. `apply.sh` now derives the bit from git's own tree (`ls-tree` reports
+100755/100644) rather than a hand-list of executable paths — a list would rot on exactly the case
+that was already broken.
+
+**Source.** Two files were COMMITTED 0644 and must run: `core/hooks/ai-dlc-driver-signal.sh` (a
+registered Stop hook) and `core/session-driver/ai-dlc-session-driver.sh`. Fresh installs hid this
+because install.sh chmods the whole glob after copying; only a PULLING consumer ever saw the real
+mode. A mode-faithful `apply.sh` does not help here — it would faithfully reproduce the wrong bit.
+Both are now 100755.
+
+### Added — I14: a registered hook must be committed executable
+
+I13 (v0.70.0) proved a hook is WIRED. It did not prove it can RUN — its own blind spot, and the
+gap this bug walked through. `settings.json` invokes a hook as a bare path, so a hook committed
+0644 is inert while nothing anywhere errors. I14 asserts the committed mode of every registered
+hook, plus the session driver and the pre-push git hook (fixtures are exempt by construction:
+pre-push runs them as `bash "$d/run.sh"`, so their mode cannot matter). Mutant-verified against
+both real instances — reverting either file to 0644 fails the gate.
+
+Together the two fixes are complementary and both required: I14 guarantees the source bit is
+right, `apply.sh` guarantees it survives the pull.
+
 ## [0.70.0] — 2026-07-16
 
 ### The Sonnet-lead A/B, and the two holes it found under v0.62.0
