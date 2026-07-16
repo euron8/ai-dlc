@@ -326,12 +326,18 @@ Every consumer block that differs from upstream is one of:
    - `CORE-OK` → byte-identical to the distribution at base.
 
 3e. **Consumer-catalog collisions.** Run `reconcile/relabel-extension-checks.sh
-   <consumer-root>` (dry-run). Every extension check whose number core also defines
-   needs the v0.49.0 label `### <n>. [ext:<id>] <title>`. **Report-only here; it never
-   blocks `apply`** — a collision is decidable and consumer-fixable, and a consumer
-   must never be unable to take a fix because its own catalog needs relabelling. The
-   updater OFFERS the rewrite at step 7. The integer never moves; only the label is
-   added, so existing gate history maps by identity.
+   <consumer-root> --dist <dist-repo> --theirs <theirs-ref>` (dry-run). Every extension
+   check whose number core also defines needs the v0.49.0 label `### <n>. [ext:<id>]
+   <title>`. **Pass `--dist`/`--theirs`** so the number set is the UNION of the installed
+   core and the INCOMING core: a collision the pull *creates* (upstream adds `### 26.`
+   while an extension already carries it) is invisible to a plain dry-run — the installed
+   core does not carry the new number yet — so without theirs the tool reports "none"
+   while the needs-confirmation list flags it, and the operator gets no relabel preview at
+   the one moment they can decide it. **Report-only here; it never blocks `apply`** — a
+   collision is decidable and consumer-fixable, and a consumer must never be unable to take
+   a fix because its own catalog needs relabelling. The updater OFFERS the rewrite at step
+   7. The integer never moves; only the label is added, so existing gate history maps by
+   identity.
 
 4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block

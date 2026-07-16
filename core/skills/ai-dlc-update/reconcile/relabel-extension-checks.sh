@@ -15,18 +15,47 @@
 # The integer NEVER moves. The label is added; nothing is renumbered. Existing gate
 # history maps by identity, so no consumer has to renumber on an upstream release.
 #
-# Usage: relabel-extension-checks.sh <consumer-root> [--apply]
+# THEIRS-AWARENESS — the collision a pull CREATES.
+#
+# The collision set is defined against core. Without a distribution ref, "core" is the
+# consumer's INSTALLED core — which, during a dry-run BEFORE apply, does not yet carry the
+# numbers the pull is about to add. So a NEW-THIS-PULL collision (upstream adds `### 26.`; the
+# consumer's extension already has `### 26.`) is INVISIBLE to a plain dry-run: the tool reports
+# "no collisions" while the reconcile report's needs-confirmation list — which DOES compare
+# against theirs — flags it. The relabel option is missing at the one moment the operator wants
+# to decide it. Pass `--dist <repo> --theirs <ref>` and the incoming core's numbers are UNIONED
+# in, so the dry-run previews exactly the collisions apply will materialise. (Backward compatible:
+# with neither flag, "core" is the installed core, as before — correct at step 7, after the write.)
+#
+# Usage: relabel-extension-checks.sh <consumer-root> [--apply] [--dist <repo> --theirs <ref>]
 #        (default: dry-run — print the rewrites it WOULD make)
 # Exit:  0 = nothing to do, or --apply succeeded
 #        1 = collisions found and NOT applied (dry-run with work outstanding)
+#        2 = usage error
 set -uo pipefail
 
-CONSUMER="${1:?usage: relabel-extension-checks.sh <consumer-root> [--apply]}"
-APPLY="${2:-}"
+CONSUMER=""
+APPLY=""
+DIST=""
+THEIRS=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply)  APPLY="--apply"; shift ;;
+    --dist)   DIST="${2:?--dist needs a path}"; shift 2 ;;
+    --theirs) THEIRS="${2:?--theirs needs a ref}"; shift 2 ;;
+    -*)       echo "relabel: unknown arg: $1" >&2; exit 2 ;;
+    *)        if [ -z "$CONSUMER" ]; then CONSUMER="$1"; shift
+              else echo "relabel: unexpected arg: $1" >&2; exit 2; fi ;;
+  esac
+done
+[ -n "$CONSUMER" ] || { echo "usage: relabel-extension-checks.sh <consumer-root> [--apply] [--dist <repo> --theirs <ref>]" >&2; exit 2; }
 
 SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 [ -d "$EXT_DIR" ] || { echo "relabel: no extensions/ under $SKILL_DIR"; exit 0; }
+
+# core headings -> bare numbers, one per line. Reads a stream on stdin.
+core_num_stream() { grep -oE '^#{2,4} [0-9]+[a-z]*\.' | sed 's/^#* //; s/\.$//'; }
 
 fm() { sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1; }
 
@@ -41,11 +70,20 @@ while IFS= read -r ext; do
   hooks="$(fm "$ext" hooks)"
   [ -n "$id" ] && [ -n "$hooks" ] || continue
 
+  # Numbers core defines in the file this extension hooks — the UNION of the installed core
+  # (present today) and, when given, theirs (what the pull will add). The union is what makes a
+  # pull-introduced collision visible during the dry-run instead of only after the write.
   core_file="$SKILL_DIR/$hooks"
-  [ -f "$core_file" ] || continue
-
-  # Numbers core defines in the file this extension hooks.
-  core_nums="$(grep -oE '^#{2,4} [0-9]+[a-z]*\.' "$core_file" | sed 's/^#* //; s/\.$//' | sort -u)"
+  nums_installed=""
+  [ -f "$core_file" ] && nums_installed="$(core_num_stream < "$core_file")"
+  nums_theirs=""
+  if [ -n "$DIST" ] && [ -n "$THEIRS" ]; then
+    tp="core/skills/ai-dlc/${hooks}"
+    if git -C "$DIST" cat-file -e "${THEIRS}:${tp}" 2>/dev/null; then
+      nums_theirs="$(git -C "$DIST" show "${THEIRS}:${tp}" | core_num_stream)"
+    fi
+  fi
+  core_nums="$(printf '%s\n%s\n' "$nums_installed" "$nums_theirs" | grep -E '.' | sort -u)"
   [ -n "$core_nums" ] || continue
 
   while IFS= read -r n; do

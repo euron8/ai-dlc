@@ -17,6 +17,30 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.63.1] — 2026-07-16
+
+### The relabel tool couldn't see the collision the pull was creating
+
+Found on the reference consumer's 0.63.0 dry-run. Core's new gate-adjudicator Check 26 collides
+with the consumer's extension check 26 (`gate-validation-domain`) — the reconcile report's
+needs-confirmation list flagged it, but `relabel-extension-checks.sh` (the tool that fixes it)
+reported "no unlabelled core-number collisions", so the operator got a flagged collision with **no
+relabel option**. The tool defined "core" as the consumer's **installed** core, which in a dry-run
+*before apply* does not yet carry the number the pull adds — so a **NEW-THIS-PULL** collision was
+invisible exactly when the operator wanted to decide it. Same class as 0.63.0's drift blind spot: a
+tool blind to what the pull brings in. (The step-7 `--apply`, run after the core write, did see it —
+but the dry-run preview, where the decision belongs, did not.)
+
+- `relabel-extension-checks.sh` takes optional `--dist <repo> --theirs <ref>` and **unions the
+  incoming core's numbers** into the collision set, so the dry-run previews exactly the collisions
+  apply will materialise. Backward compatible: with neither flag, "core" is the installed core, as
+  before. Flag arg-parse replaces the positional `$2`; usage errors now exit 2.
+- `ai-dlc-update` SKILL step 3e now passes `--dist`/`--theirs`, so the dry-run offers the relabel at
+  decision time.
+- New fixture `core/fixtures/relabel-theirs-collision/` — 3-step proof: without `--theirs` the
+  pull-created collision is invisible (reproduces the bug); with `--theirs` the dry-run previews the
+  `[ext:<id>]` relabel; `--apply` writes it (integer unchanged) and re-runs clean.
+
 ## [0.63.0] — 2026-07-16
 
 ### The one core file the drift detector never looked at
