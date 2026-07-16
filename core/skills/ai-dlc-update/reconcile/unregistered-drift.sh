@@ -79,9 +79,48 @@ absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <tota
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
+# setup-sites.md is this script's SIBLING — ai-dlc-update is self-contained and never reads
+# pipeline files, so the drift check reads the SAME setup-site manifest gate-validation.md's
+# immutability check reads. That is the point: the two must agree on what is operator config.
+SITES_FILE="$(cd "$(dirname "$0")" && pwd)/setup-sites.md"
+
+# exempt_ranges <full-core-path> -> "S-E,S-E,..." (empty if none)
+#
+# The core@base line ranges spanned by every declared `heading-block` setup-site that names
+# this file. A hunk whose base-side lines fall inside one is operator config, not drift — the
+# same exemption core-layer-immutability already grants a heading-block site. `single-line`
+# {token} sites need no range: the {token} on the base side already exempts their hunk below.
+exempt_ranges() {
+  local cp="$1" base heading nexth hs ns nl out=""
+  [ -f "$SITES_FILE" ] || { printf ''; return; }
+  base="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null)" || { printf ''; return; }
+  while IFS="$(printf '\t')" read -r heading nexth; do
+    [ -n "$heading" ] || continue
+    # setup-sites values are YAML single-quoted; strip the surrounding quotes here (not in awk).
+    heading="${heading#\'}"; heading="${heading%\'}"
+    nexth="${nexth#\'}";     nexth="${nexth%\'}"
+    hs="$(printf '%s\n' "$base" | grep -nxF -- "$heading" | head -1 | cut -d: -f1)"
+    [ -n "$hs" ] || continue
+    ns="$(printf '%s\n' "$base" | awk -v s="$hs" -v nh="$nexth" 'NR>s && $0==nh {print NR; exit}')"
+    if [ -z "$ns" ]; then nl="$(printf '%s\n' "$base" | wc -l | tr -d ' ')"; ns="$(( nl + 1 ))"; fi
+    out="${out}${out:+,}${hs}-$(( ns - 1 ))"
+  done <<EOF
+$(awk -v want="$cp" '
+  /^[[:space:]]*-[[:space:]]*id:/  { f=""; sh=""; hd=""; nh="" }
+  /^[[:space:]]*file:/         { f=$0;  sub(/^[[:space:]]*file:[[:space:]]*/,"",f) }
+  /^[[:space:]]*shape:/        { sh=$0; sub(/^[[:space:]]*shape:[[:space:]]*/,"",sh) }
+  /^[[:space:]]*heading:/      { hd=$0; sub(/^[[:space:]]*heading:[[:space:]]*/,"",hd) }
+  /^[[:space:]]*next_heading:/ { nh=$0; sub(/^[[:space:]]*next_heading:[[:space:]]*/,"",nh);
+                                 if (sh=="heading-block" && f==want && hd!="" && nh!="") print hd "\t" nh }
+' "$SITES_FILE")
+EOF
+  printf '%s' "$out"
+}
+
 # core/<path> -> consumer path. Mirrors install.sh's layout.
 consumer_path() {
   case "$1" in
+    skills/ai-dlc-setup/*) printf '%s/.claude/skills/ai-dlc-setup/%s' "$CONSUMER" "${1#skills/ai-dlc-setup/}" ;;
     skills/ai-dlc/*) printf '%s/.claude/skills/ai-dlc/%s' "$CONSUMER" "${1#skills/ai-dlc/}" ;;
     team-roles/*)    printf '%s/.claude/team-roles/%s'    "$CONSUMER" "${1#team-roles/}" ;;
     hooks/*)         printf '%s/.claude/hooks/%s'         "$CONSUMER" "${1#hooks/}" ;;
@@ -102,17 +141,34 @@ consumer_path() {
 # phantom final hunk that carries no token — and every file then reads as
 # unregistered drift. A check that fires on everything is a check that gets
 # turned off.
+# A hunk is exempt (config, not drift) iff EITHER its base side carries a {token}, OR its
+# base-side line range falls inside a declared heading-block setup-site (exempt_ranges). The
+# diff hunk header (`12,15c12,18`) carries the base range on its LEFT of the a/c/d operator;
+# `match(h,/[acd]/)` + substr is POSIX awk — no gawk `match(...,arr)` extension (bash-3.2 floor).
 is_unregistered() {
-  local cp="$1" cons="$2"
-  diff <(git -C "$DIST" show "${BASE}:${cp}") "$cons" 2>/dev/null | awk '
-    /^[0-9]/ { if (hunk && !tok) bad=1; hunk=1; tok=0; next }
+  local cp="$1" cons="$2" ranges
+  ranges="$(exempt_ranges "$cp")"
+  diff <(git -C "$DIST" show "${BASE}:${cp}") "$cons" 2>/dev/null | awk -v ranges="$ranges" '
+    function left_exempt(h,   p,left,n,LR,ls,le,m,RG,i,rr) {
+      p = match(h, /[acd]/); if (p == 0) return 0
+      left = substr(h, 1, p - 1)
+      n = split(left, LR, ","); ls = LR[1] + 0; le = (n > 1 ? LR[2] : LR[1]) + 0
+      m = split(ranges, RG, ",")
+      for (i = 1; i <= m; i++) {
+        if (RG[i] == "") continue
+        split(RG[i], rr, "-")
+        if (rr[1] != "" && ls >= rr[1] + 0 && le <= rr[2] + 0) return 1
+      }
+      return 0
+    }
+    /^[0-9]/ { if (hunk && !tok) bad=1; hunk=1; tok=0; if (left_exempt($0)) tok=1; next }
     /^</     { if ($0 ~ /\{[a-z_][a-z0-9_]*\}/) tok=1 }
     END      { if (hunk && !tok) bad=1; print (bad ? "yes" : "no") }
   '
 }
 
 git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
-      core/skills/ai-dlc core/team-roles core/hooks 2>/dev/null \
+      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks 2>/dev/null \
   | grep -E '\.(md|sh)$' \
   | while IFS= read -r cp; do
       rel="${cp#core/}"
@@ -127,7 +183,7 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
       fi
 
       if [ "$(is_unregistered "$cp" "$cons")" = "no" ]; then
-        emit CORE-TEMPLATE-SUBSTITUTED "$rel" "differs only at {token} template sites"
+        emit CORE-TEMPLATE-SUBSTITUTED "$rel" "differs only at declared setup-substitution sites ({token} lines or heading-block config regions)"
         continue
       fi
 

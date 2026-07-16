@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.63.0] — 2026-07-16
+
+### The one core file the drift detector never looked at
+
+Found by advising a real `ai-dlc-update` pull on the reference consumer. The consumer's setup
+wizard (`ai-dlc-setup/SKILL.md`) carried an in-place rewrite of its model-strategy section (the
+project's "Balanced" tier choice vs the shipped "Full"), with **no `overrides/` entry** tracking
+it — the exact in-place core drift the layer system forbids. But `unregistered-drift.sh` reported
+it clean, because **it never scanned `ai-dlc-setup/SKILL.md` at all**: its scan covered
+`skills/ai-dlc/**`, `team-roles/**`, `hooks/**` — not the setup skill. So the divergence fell
+through to the both-changed classifier, whose default is **keep-ours**, silently perpetuating the
+drift. The invariant ("a consumer never edits core in place") had a coverage hole *and* a soft
+default — two fail-open points — on a file `apply` overwrites wholesale.
+
+The honest complication: that file is *both* overwrite-on-pull core *and* the operator-customised
+setup wizard. Its `## STEP 2: API Tier and Model Strings` section (strategy mode + tier-per-role
+table + `{*_model_*}` → tier guidance) is genuinely per-project config, like the model strings it
+drives. So the fix draws the line explicitly instead of letting the tool guess:
+
+- **`unregistered-drift.sh` now scans `core/skills/ai-dlc-setup/`** (added to its ls-tree pathset
+  + a `consumer_path` case), so in-place edits there get the same `HARD-UNREGISTERED-CORE-DRIFT`
+  refile-or-revert gate as the rest of core.
+- **It now honors `heading-block` setup-sites as exempt config regions**, reading the SAME
+  `setup-sites.md` the retro-gate `core-layer-immutability` check reads — so the two agree on what
+  is config vs rulebook. (This also fixes a latent false-positive: an operator-filled `## Ownership`
+  block on a `dev`/`qa` role with no `{token}` would previously have read as drift.) Portable POSIX
+  awk (`match`+`substr`), no gawk extension — bash 3.2 floor preserved.
+- **New `setup-model-strategy` heading-block site** in `setup-sites.md` declares `## STEP 2` as
+  config. A consumer's Balanced-vs-Full choice is now exempt *by declaration* at both readers; any
+  in-place edit to the **rest** of the wizard blocks the pull.
+- **New fixture `core/fixtures/setup-config-drift/`** — 3-step proof: config edit inside STEP 2 →
+  exempt; in-place edit outside STEP 2 → HARD; clean → OK; and the site is really declared. The
+  fake distribution carries the real STEP 2/STEP 3 headings, so it tests the actual declaration.
+- Verified against the reference consumer's real tree: its Balanced divergence classifies
+  `CORE-TEMPLATE-SUBSTITUTED` (exempt), zero `HARD-*` — the config choice is honored, not silently
+  kept, and a future non-config edit there would block.
+
+No `core-manifest.md` change: the fix lives entirely in `ai-dlc-update`'s self-contained
+`reconcile/` (its own `setup-sites.md`), so it neither reads pipeline files nor touches the
+core-manifest path resolution.
+
 ## [0.62.1] — 2026-07-15
 
 ### The new role's model tokens were taught to the operator but not to the reconciler
