@@ -124,6 +124,7 @@ consumer_path() {
     skills/ai-dlc/*) printf '%s/.claude/skills/ai-dlc/%s' "$CONSUMER" "${1#skills/ai-dlc/}" ;;
     team-roles/*)    printf '%s/.claude/team-roles/%s'    "$CONSUMER" "${1#team-roles/}" ;;
     hooks/*)         printf '%s/.claude/hooks/%s'         "$CONSUMER" "${1#hooks/}" ;;
+    schemas/*)       printf '%s/.claude/schemas/%s'       "$CONSUMER" "${1#schemas/}" ;;
     *) return 1 ;;
   esac
 }
@@ -167,9 +168,15 @@ is_unregistered() {
   '
 }
 
+# Scan set. Prose/schema core a consumer could edit and silently drift — overwrite-on-pull, so
+# an in-place edit is lost without a word. Deliberately NOT machinery (scripts/, session-driver/,
+# ci-templates/, git-hooks/: an edit breaks LOUDLY, not silently) and NOT skills/ai-dlc-update
+# (self-update owns it, step 2). This set is BOUND by validate-enforcement-map.sh I12 to a
+# reviewed per-subtree policy, so a new core dir cannot silently escape the scan the way
+# ai-dlc-setup/ and schemas/ each did in turn.
 git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
-      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks 2>/dev/null \
-  | grep -E '\.(md|sh)$' \
+      core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null \
+  | grep -E '\.(md|sh|json)$' \
   | while IFS= read -r cp; do
       rel="${cp#core/}"
       cons="$(consumer_path "$rel")" || continue

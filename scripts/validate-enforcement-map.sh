@@ -69,6 +69,13 @@
 #                         gate reads — which reads exactly like a loop that converged. The
 #                         list was hand-maintained and rotted twice (v0.58.0 caught two of
 #                         three; carry-over-evaluation was the third).
+#   I12 drift-scan coverage bound — reconcile/unregistered-drift.sh's hand-listed scan set is
+#                         bound to a reviewed per-subtree policy: every core/skills/<skill>/ and
+#                         core/<dir>/ is classified scan|exempt:<reason>, and the scan-marked set
+#                         must EQUAL the tool's ls-tree. The list rotted twice (ai-dlc-setup/ in
+#                         v0.63.0, schemas/ this release) — a new core dir escaping the scan reads
+#                         exactly like a dir with no drift. Now a new subtree fails the build until
+#                         it is classified.
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -560,10 +567,68 @@ if [ "$cm" != "$ss" ]; then
   diff <(printf '%s\n' "$cm") <(printf '%s\n' "$ss") >&2 || true
 fi
 
+# --- I12: unregistered-drift scan set is BOUND, not hand-listed ---------------
+# reconcile/unregistered-drift.sh scans a HAND-LISTED set of core subtrees for in-place drift.
+# Twice that list silently missed a subtree that carried silently-driftable content —
+# ai-dlc-setup/ (v0.63.0) and schemas/ (this release) — each overwrite-on-pull, each undetected
+# until a real pull hit it. A hand-list is exactly the shape that rots: the next core dir escapes
+# the scan and reads, forever, like a dir with no drift. So bind the list to a REVIEWED per-subtree
+# policy, and make a new core subtree FAIL the build until it is classified.
+#
+#   COMPLETENESS — every core/skills/<skill>/ and every other core/<dir>/ has a policy row.
+#   SCAN-MATCH   — the rows marked `scan` are EXACTLY the subtrees the ls-tree scans.
+# The reason string on each `exempt` row is the review: machinery breaks loudly (not silent prose
+# drift), and the update skill self-updates its own tree — neither belongs in the drift scan.
+UD="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
+if [ -f "$UD" ]; then
+  DRIFT_POLICY="$(cat <<'POL'
+skills/ai-dlc|scan
+skills/ai-dlc-setup|scan
+skills/ai-dlc-update|exempt:self-update owns this subtree (step 2), not the drift scan
+team-roles|scan
+hooks|scan
+schemas|scan
+scripts|exempt:machinery — an in-place edit breaks loudly (a failing validator), not as silent prose drift
+session-driver|exempt:machinery (automation shell), not consumer-read rulebook
+ci-templates|exempt:CI templates run from .github/workflows, not consumer-read rulebook
+git-hooks|exempt:machinery (git hook), not consumer-read rulebook
+fixtures|exempt:adversarial test data, not consumer-authored rulebook
+POL
+)"
+  # Subtrees actually scanned: the core/ paths on unregistered-drift's ls-tree pathspec line.
+  ud_scanned="$(awk '/ls-tree -r --name-only/{f=1} f{print} /2>\/dev\/null/{f=0}' "$UD" \
+    | grep -oE 'core/skills/[A-Za-z0-9_-]+|core/[A-Za-z0-9_-]+' | sed 's#^core/##' | sort -u)"
+  # Units on disk: each skill under core/skills/, plus each other core/<dir>.
+  ud_units="$( { for d in "$REPO_ROOT"/core/skills/*/; do [ -d "$d" ] && echo "skills/$(basename "$d")"; done
+                 for d in "$REPO_ROOT"/core/*/; do b="$(basename "$d")"; [ "$b" = skills ] && continue; [ -d "$d" ] && echo "$b"; done; } | sort -u)"
+
+  # COMPLETENESS — every unit on disk is classified.
+  while IFS= read -r u; do
+    [ -n "$u" ] || continue
+    printf '%s\n' "$DRIFT_POLICY" | grep -q "^${u}|" \
+      || err "core/${u}/ has no drift-scan policy row in validate-enforcement-map.sh I12. Classify it 'scan' (prose/schema a consumer could silently drift) or 'exempt:<reason>' (machinery / self-updated). This is the guard that stops the unregistered-drift scan set rotting the way ai-dlc-setup/ and schemas/ did."
+  done <<EOF
+$ud_units
+EOF
+  # Stale rows — every policy row names a real subtree.
+  while IFS='|' read -r u disp; do
+    [ -n "$u" ] || continue
+    [ -d "$REPO_ROOT/core/$u" ] || err "I12 drift-scan policy names core/$u/, which does not exist — stale row."
+  done <<EOF
+$DRIFT_POLICY
+EOF
+  # SCAN-MATCH — the scan-marked policy set equals the tool's actual scan set.
+  scan_policy="$(printf '%s\n' "$DRIFT_POLICY" | awk -F'|' '$2=="scan"{print $1}' | sort -u)"
+  miss_scan="$(comm -23 <(printf '%s\n' "$scan_policy") <(printf '%s\n' "$ud_scanned"))"
+  extra_scan="$(comm -13 <(printf '%s\n' "$scan_policy") <(printf '%s\n' "$ud_scanned"))"
+  [ -n "$miss_scan" ]  && err "I12: policy marks these core subtrees 'scan' but unregistered-drift.sh does NOT scan them: $(echo $miss_scan). A scan-marked dir the tool skips is a silent-drift hole."
+  [ -n "$extra_scan" ] && err "I12: unregistered-drift.sh scans these but the policy does not mark them 'scan': $(echo $extra_scan). Add a 'scan' row or drop them from the ls-tree."
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12)."
   exit 0
 fi
 exit 1
