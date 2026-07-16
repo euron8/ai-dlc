@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.67.0] — 2026-07-16
+
+### ai-dlc-update RESOLVES the pull — it no longer hands you a to-do list
+
+The whole arc built better detection and better reporting; the operator still had to "migrate the
+drift manually," readopt the override, relabel the collision by hand. That is the wrong half: the
+goal is one skill that does the update end-to-end. This ships the missing **resolution** half.
+
+- **New `reconcile/apply.sh` — the resolution driver.** It executes every MECHANICAL resolution a
+  pull needs and prints a manifest:
+  - `RESOLVED` — done, no operator step: **pure applies** (core overwritten from theirs),
+    **setup-token defaults** (a new `gate-adjudicator` role's `{*_model_*}` filled from the
+    consumer's `adversary` role — same opus tier, no prompt), **known-drift refiles** (an in-place
+    `known_skills` edit to `provenance-block.json` refiled to `extensions/known-skills.json` and the
+    schema reverted — the "migrate the drift" chore, automated), **catalog relabels**, and the
+    version **re-stamp**.
+  - `WORKLIST` — the only things left for the skill's LLM to execute inline: the BOTH-CHANGED 3-way
+    prose merges, and each `HARD-OVERRIDE-DRIFT-SECTION` readopt.
+  - `DECISION` — a genuine operator call (unknown drift refile-vs-revert, a deletion, a token with
+    no default).
+- **SKILL step 7 wired:** the apply flow runs `apply.sh` first (mechanical bulk), then the LLM works
+  only the `WORKLIST`/`DECISION` rows, then commit → branch → PR. The operator runs the update and it
+  lands; the skill does the work, not the operator.
+- **New fixture `core/fixtures/apply-drift-refile/`** — proves the `known_skills` drift is refiled to
+  the extension and the schema reverted automatically, and the stamp advanced.
+
+Verified against the reference consumer's real tree (on a copy): one `apply.sh` run resolved 27 pure
+applies, the token defaults, the `known_skills` drift refile (schema reverted, extension created),
+the ext-26 relabel, and the re-stamp — leaving only 4 semantic merges + 1 override readopt for the
+skill to execute inline. No manual migration.
+
+**Honest boundary.** The BOTH-CHANGED 3-way *prose* merges and a real override CONFLICT are
+irreducibly semantic — the skill's LLM executes them during apply; a true CONFLICT still surfaces to
+the operator. Zero-touch is not claimed. What's removed is doing the mechanical resolutions by hand.
+
 ## [0.66.0] — 2026-07-16
 
 ### The reconcile report's mechanical sections are now RENDERED by a driver, not narrated
