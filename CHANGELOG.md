@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.66.0] — 2026-07-16
+
+### The reconcile report's mechanical sections are now RENDERED by a driver, not narrated
+
+The through-line of this whole arc: fixing a detector doesn't help if an LLM stands between it and
+the operator and drops the finding. 0.65.0 made the blocking list renderable+checkable but left it
+LLM-optional — the skill still had to *remember* to run the check. That is the same trust the two
+dropped reports abused. This inverts control.
+
+- **New `reconcile/emit-report.sh` — the reconcile driver.** It runs every mechanical detector
+  (`preclassify`, `unregistered-drift`, `layer-drift`, `hard-blockers`, `relabel`) and RENDERS them
+  into one deterministic `BEGIN/END GENERATED: reconcile-mechanical` region: the per-file buckets,
+  the semantic worklist (the files that genuinely need a 3-way merge), deletions, the blocking-layer
+  list, unregistered drift, layer drift, and catalog relabel — every mechanical finding, complete.
+  The update skill now pastes that region VERBATIM and authors only the semantic sections around it.
+- **`--verify <report>`** re-renders and byte-compares the report's region. A report whose region is
+  **missing**, **stale**, or **hand-edited to drop a finding** fails (exit 1). The mechanical
+  findings are no longer optional-by-omission, and they can't be doctored. **The operator can run
+  `--verify` themselves** — one command tells them whether a report is sound, instead of re-running
+  detectors by hand.
+- **SKILL wired both ends:** step 5 renders the region + runs `--verify` before the HARD STOP
+  (non-optional); step 7 (apply) requires `--verify` exit 0 AND a clean blocking list before any
+  write. `hard-blockers.sh` is now a sub-tool the driver calls.
+- **New fixture `core/fixtures/reconcile-emit-report/`** — proves the driver renders the HARD
+  blocker, and `--verify` passes a verbatim region, fails a missing region, and fails a region
+  hand-edited to drop the blocker.
+
+Verified against the reference consumer: the driver renders its complete mechanical report — with
+`schemas/provenance-block.json` and the check-25 override BOTH in the blocking list (the exact
+finding two hand-authored reports dropped) — and `--verify` on the current narrated report fails.
+
+**What this does and does not buy.** The report's mechanical findings are now complete and
+operator-verifiable, and apply is fail-closed on them. The residual LLM work — the 3-way *prose*
+merges for BOTH-CHANGED files — is irreducibly semantic and still done by the model; zero-touch apply
+is not claimed. What's removed is the babysitting: re-running detectors by hand to check whether the
+report told the truth.
+
 ## [0.65.0] — 2026-07-16
 
 ### The report could drop a blocker the detector caught

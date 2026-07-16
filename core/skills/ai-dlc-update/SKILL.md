@@ -347,7 +347,24 @@ Every consumer block that differs from upstream is one of:
    structured per-block buckets. Agents return DATA (bucket tallies + only the
    conflict/flag details), never echoed file content — keeps the orchestrator
    context clean.
-5. **Emit the dry-run report, then HARD STOP (unconditional).** Write
+5. **Emit the dry-run report, then HARD STOP (unconditional).**
+
+   **The mechanical sections are RENDERED by a driver, not narrated by you.** Run
+   `reconcile/emit-report.sh <dist> <base> <consumer> <theirs>` and paste its
+   `BEGIN/END GENERATED: reconcile-mechanical` region into the report **VERBATIM**. That region
+   is the per-file buckets, the semantic worklist, deletions, the **blocking-layer list**,
+   unregistered drift, layer drift, and catalog relabel — every mechanical finding, complete,
+   from every detector. You write ONLY the genuinely semantic sections AROUND it: for each file in
+   the region's "Semantic worklist", its 3-way merge result (`classify-block`), the conflict list,
+   and the needs-confirmation questions. **Do NOT restate, summarise, or edit anything inside the
+   region** — a mechanical finding narrated by you is a finding you can drop, and one already was
+   (a HARD core-schema drift, twice). After writing the report, run
+   `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>`; **it MUST exit 0
+   before the HARD STOP.** A nonzero exit means the region is missing, stale, or was hand-edited —
+   the report is unsound; regenerate and re-emit. This check is not optional, and the operator can
+   run the same `--verify` to trust any report without re-running the detectors by hand.
+
+   Write
    `_bmad-output/ai-dlc-update/reconcile-report.md`: a header stating
    `Generated: <UTC timestamp> by ai-dlc-update skill_version <X> @ <sha>`
    (read `skill_version`/`skill_commit` from the stamp), then per-file +
@@ -387,17 +404,12 @@ Every consumer block that differs from upstream is one of:
    core section it duplicates, and the note that retirement is an operator-gated
    delete per Rule 27(b) — upstream never writes the layer, so it cannot remove the
    entry for you), and a
-   **blocking-layer list — RENDERED, not composed.** Run
-   `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` and paste its
-   `BEGIN/END GENERATED: hard-blockers` region into this section VERBATIM; then write each one's
-   resolution command beneath the region (a block with no path out is a block someone routes
-   around). The script wraps step 3c's and step 3d's detectors and lists every `HARD-*` they emit.
-   Do NOT hand-author this list from your memory of the tool output: a `HARD-*` line a detector
-   emitted was silently dropped from two real reports, hiding a data-loss-grade core-schema drift —
-   which is the whole reason it is rendered now, not narrated. **After writing the report, run
-   `reconcile/hard-blockers.sh --check <report> <dist> <base> <consumer> <theirs>`. A nonzero exit
-   means the report is MISSING a blocker the detectors report: the report is UNSOUND — fix the
-   region and re-emit BEFORE the HARD STOP. This check is not optional.** And a
+   **blocking-layer list** — this is part of the driver-rendered `reconcile-mechanical` region
+   (step 5's `emit-report.sh`), which lists every `HARD-*` the detectors emit and blocks `apply`.
+   Beneath the region, write each blocker's resolution command (a block with no path out is a block
+   someone routes around). Do NOT re-author the list from memory of the tool output — a `HARD-*`
+   line was silently dropped from two real reports that way, hiding a data-loss-grade core-schema
+   drift; `emit-report.sh --verify` now fails if the rendered list drifts from the tools. And a
    **catalog-relabel list** (step 3e: every extension check heading that needs the
    `[ext:<id>]` label, report-only).
    This is a fixed filename
@@ -498,16 +510,14 @@ Every consumer block that differs from upstream is one of:
    proceeding on an undecidable override — the same distinction the deletion gate
    below draws. Never infer that an unresolvable base means "unchanged."
 
-   **Mechanical union gate — both detectors, one call.** The prose above governs step 3c's
-   override `HARD-*`; step 3d's `HARD-UNREGISTERED-CORE-DRIFT` blocks identically. Do not collect
-   either from memory. Run `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` — it
-   wraps BOTH detectors and prints every `HARD-*` still live. `apply` may write only when it prints
-   `0 HARD blockers.`, or the operator has explicitly accepted each remaining one per-path. Also
-   verify the dry-run report the operator approved was sound:
-   `reconcile/hard-blockers.sh --check <report> <dist> <base> <consumer> <theirs>` must exit 0 — a
-   nonzero exit means the report OMITTED a blocker, so the approval was given without sight of it;
-   STOP and re-emit rather than write. (This is the gap that shipped a data-loss drift past two
-   reports: the detector caught it, the report did not.)
+   **Mechanical union gate — the driver, not memory.** `apply` may write only after BOTH hold:
+   (1) `reconcile/emit-report.sh --verify <report> <dist> <base> <consumer> <theirs>` exits 0 — the
+   report the operator approved carries a current, complete mechanical region; a nonzero exit means
+   the approval was given without sight of a finding, so STOP and re-emit rather than write; and
+   (2) re-running the blocking list, every `HARD-*` is resolved —
+   `reconcile/hard-blockers.sh <dist> <base> <consumer> <theirs>` prints `0 HARD blockers.`, or the
+   operator has explicitly accepted each remaining one per-path. This is the gap that shipped a
+   data-loss drift past two reports: the detector caught it, the narrated report did not.
 
    **THE ADJUDICATION LOOP — YOU do the work; the operator APPROVES it.**
 
