@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.68.2] — 2026-07-16
+
+### Rule 29 pause no longer denies the pipeline-snapshot write (deadlock + stale-resume fix)
+
+Found in the reference consumer's live session: while paused, the lead's `Edit` to
+`_bmad-output/pipeline-snapshot.md` was denied three times by the Rule 29 ack hook
+(`ai-dlc-acknowledge.sh`). The lead had just passed a gate and was updating the snapshot to record
+the passage (resolved block, delivered teammate, next route) — a state record, not a dispatch — and
+the write silently failed, leaving the snapshot stale relative to the gate log.
+
+- **Bug.** Check 3's deny surface is every `Write/Edit` under `_bmad-output/**`, carved out only for
+  `ai-dlc-update/*` and the `*-resolution-p*.md` record. `pipeline-snapshot.md` was not carved out,
+  so any snapshot write while paused was denied. Worse, it is the resolution-record deadlock a third
+  time: the **handoff path itself raises the flag** (`ai-dlc-continue.sh` tells the lead to `touch
+  pipeline-paused.flag` when it has no next action), and Rule 2(c) then requires finalizing the
+  snapshot before handing off — so the flag the handoff sets denies the snapshot the handoff must
+  write, and a stale snapshot is a broken resume.
+- **Fix.** Carve out `_bmad-output/pipeline-snapshot.md` in Check 3, with the same reasoning as the
+  resolution-record carve-out: it is a state record that mirrors what already happened, it advances
+  nothing by itself (advancing is DISPATCH — `Agent/Task/Skill/TaskCreate`, still denied), and
+  denying it deadlocks the handoff. The carve-out stays narrow: every other `_bmad-output/`
+  deliverable write is still denied while paused.
+- **Test.** Extended `core/fixtures/divergence-hard-block/run.sh` — the snapshot is writeable while
+  paused, and the existing narrow-carve-out assertion (a deliverable write is still denied) still
+  holds. Mutant-tested: removing the carve-out fails the new assertion.
+
+Consumers get the fix on their next `/ai-dlc-update`. A session paused at this bug can also write the
+snapshot via Bash (always allowed while paused) or clear the flag on resume.
+
 ## [0.68.1] — 2026-07-16
 
 ### Fixture seeds resolved the consumer repo-root one directory too shallow
