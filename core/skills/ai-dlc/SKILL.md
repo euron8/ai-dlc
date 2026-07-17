@@ -1228,8 +1228,12 @@ longer than 2 minutes, the worst for **36 minutes**.
 budget (`steering_budget`, default **120 seconds**).
 
 **Bounded-join dispatch.** Spawn teammates with `run_in_background: true`, then
-JOIN them in bounded beats. Every beat is a tool boundary, so a waiting operator
-is heard within one budget.
+JOIN them by arming a bounded, **backgrounded** wait-beat and ENDING YOUR TURN.
+The beat's exit re-invokes you -- the harness re-invokes a session when a
+background task it spawned exits -- so the wait runs off the foreground entirely:
+a *yielded* lead has no in-flight foreground call at all, and a queued operator
+message lands on the very next turn, sooner than it would while you sat out a
+foreground beat.
 
 **Which join, and this is not a preference -- one of them does not work.**
 
@@ -1263,10 +1267,14 @@ What this does NOT change:
 - **The join is preserved.** You still consume the teammate's result before
   routing it into the next gate. Nothing is detached; a gated cycle stays
   gated. Only *how you wait* changes.
-- **Rule 3 is preserved.** Every beat is a tool call, so you never emit a
-  text-only response, the Stop hook never fires, and you never stall. You do
-  NOT end your turn to let the operator in -- that would trade a queued prompt
-  for a dead pipeline.
+- **Rule 3 is preserved -- by the armed beat, not by refusing to yield.** A join
+  is a bounded WAIT; you conduct it by arming a backgrounded wait-beat and then
+  ending your turn. When that beat exits -- on delivery, or at its budget -- the
+  harness re-invokes you, so the yield is never a stall. The Stop hook
+  (`ai-dlc-continue.sh` Check 2b) lets your turn end for exactly as long as a
+  live beat is sleeping. **The one hard invariant: never end your turn on an
+  outstanding join without a live backgrounded beat armed** -- that, not the
+  yield itself, is what would trade a queued prompt for a dead pipeline.
 - **Parallelism is preserved.** Dispatch the whole wave in ONE message, then
   beat-join each teammate (`implementation.md`).
 
@@ -1302,12 +1310,13 @@ path.
 
 It enforces both bounds so you do not have to hold them:
 
-- A beat is ONE foreground `Bash` call that returns **within
-  `steering_budget`**. It MAY poll inside itself --
+- A beat is ONE `Bash` call, run in the background (`run_in_background: true`),
+  that returns **within `steering_budget`**. It polls inside itself --
   `for i in $(seq 1 11); do [ -s "$f" ] && exit 0; sleep 10; done` is the shape
-  the script implements -- because every beat is still a tool boundary and a
-  queued operator lands within one budget. What it may NOT do is outlast the
-  budget.
+  the script implements -- and while it sleeps you have ended your turn, so a
+  queued operator lands immediately and the beat still re-invokes you within one
+  budget. What it may NOT do is outlast the budget: that bound is what keeps the
+  re-invocation, and any queued steering, inside one steering window.
 - Bound the **sequence**, not just the call: `max_wait_beats` (default **10**,
   giving a 20-minute ceiling at the default budget). Exhaustion means the file
   is absent, which Rule 20 already defines as non-delivery -- **re-dispatch**
@@ -1328,7 +1337,10 @@ the handle an `Agent` actually returns.
 Check A (duration) and Check C (count) bind different things: an over-budget
 call is a window in which the operator cannot be heard; an unbounded beat
 sequence advances nothing forever. An unbounded wait is a hang, not a gag.
-**The loop goes in the beat count, never inside the call.**
+**The loop goes in the beat count, never inside the call.** (Now that the beat
+is backgrounded, `validate-steering-budget.sh` Check C sees fewer *foreground*
+wait-shaped calls; the sequence bound lives in the sidecar counter, where it
+already did. Do not read a quiet Check C as "leads stopped over-waiting.")
 
 **When the operator does reach you, answer them.** An operator message sets
 `_bmad-output/pipeline-paused.flag` (UserPromptSubmit hook). While it exists

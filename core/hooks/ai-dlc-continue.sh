@@ -79,6 +79,10 @@ LOG_DIR="${PROJECT_DIR}/_bmad-output"
 LOG_FILE="${LOG_DIR}/pipeline-continuation-log.md"
 PAUSE_FLAG="${LOG_DIR}/pipeline-paused.flag"
 STATE_FILE="${LOG_DIR}/pipeline-block-state.txt"
+# Beat-liveness marker written by scripts/wait-for-deliverable.sh while a
+# backgrounded wait-beat is genuinely sleeping (Check 2b, v0.81.0). Same dir and
+# default as the script's AI_DLC_STATE_DIR (_bmad-output).
+BEAT_MARKER="${LOG_DIR}/.beat-inflight"
 
 # Rapid-fire thresholds
 RAPID_WINDOW_SECONDS=30
@@ -375,6 +379,39 @@ if [ ! -f "$SNAPSHOT_FILE" ]; then
   # No pipeline; no state to track
   rm -f "$STATE_FILE"
   exit 0
+fi
+
+# -----------------------------------------------------------------------------
+# Check 2b: A backgrounded wait-beat is live (Rule 29 yield-during-join, v0.81.0)
+# -----------------------------------------------------------------------------
+# The lead is permitted to END ITS TURN while a teammate join is outstanding, on
+# the one condition that a backgrounded `wait-for-deliverable.sh` beat is genuinely
+# sleeping -- because THAT process will exit and re-invoke this idle session (the
+# harness re-invokes a session when a background task it spawned exits). Yielding
+# there is not a stall: it is the bounded wait, off the foreground, and a queued
+# operator lands on the very next turn instead of after a 120s blocking beat.
+#
+# The signal is a marker the script writes ONLY on its genuine-sleep path,
+# carrying the beat's worst-case end epoch. We allow the stop iff the marker
+# exists AND its epoch is still in the future. Every other case -- missing,
+# unreadable, non-numeric, or expired (a SIGKILLed beat that never cleaned up) --
+# FALLS THROUGH to the block below. The fail-safe direction is the pre-0.81.0
+# behavior (force-continue), never a new silent stall.
+if [ -f "$BEAT_MARKER" ]; then
+  BEAT_DEADLINE=$(cat "$BEAT_MARKER" 2>/dev/null || echo "")
+  if [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] && [ "$BEAT_DEADLINE" -gt "$NOW" ]; then
+    {
+      echo "## ${TIMESTAMP} -- ALLOWED_BY_LIVE_BEAT"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Backgrounded wait-beat live until epoch ${BEAT_DEADLINE} (now ${NOW}); yield allowed"
+      echo ""
+    } >> "$LOG_FILE"
+    # A live beat is forward progress, not a stall: reset the rapid-fire counter
+    # so a burst of legitimate yields cannot trip the backoff and let a later
+    # genuine stall through.
+    rm -f "$STATE_FILE"
+    exit 0
+  fi
 fi
 
 # -----------------------------------------------------------------------------
