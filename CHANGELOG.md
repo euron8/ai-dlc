@@ -17,6 +17,29 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.78.1] — 2026-07-17
+
+### Fixed — the escalated Dev tier shipped at the standard effort level, escalating only the model
+
+v0.78.0 added `core/team-roles/dev-escalated.md` as the standard Dev contract on a
+stronger model, pinned via `/model` and dispatched by the guard. But its effort line
+was left at `/effort medium` — the exact value `dev.md` carries — so a story routed
+to the escalated tier ran the more-capable model at the *same* reasoning effort as a
+standard Dev. The escalation was half-applied: the point of routing capital-path work
+here is more deliberation, and effort is the lever for that on the same model. Set to
+`/effort high`.
+
+The role's own prose contradicted the fix before it: it declared the escalated tier's
+"ONLY delta is your model tier" and that it "adds nothing to and removes nothing from
+the Dev contract except the model tier." That enumeration goes false the moment effort
+diverges, the same lie-in-prose class v0.78.0 removed from `dev.md`. Rather than swap
+one hard-coded enumeration (model) for another (model **and** effort) — which would
+re-break for any consumer whose `dev.md` already runs high effort, leaving effort no
+longer a delta — both lines now point at the session-setup block as the sole delta
+surface: whatever model and effort that block pins is the tier, and everything else is
+`dev.md` verbatim. The contract text tracks the block instead of asserting a fixed set
+of deltas.
+
 ## [0.78.0] — 2026-07-17
 
 ### Added — conditional model escalation is a routed role, not a call-site model override
