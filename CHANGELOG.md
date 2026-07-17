@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.76.0] — 2026-07-17
+
+### Changed — the router classifies a bug by substance, not by the token "bug"
+
+A live reference-consumer sprint (graph S292) mis-routed. The operator's `/ai-dlc`
+prompt named two fresh production defects — a *"fee-display failure"* and a
+*"wide-mode misreport"* — on top of a carried backlog item. `route.md` Step 2
+matched bug signals as literal keywords (`fix`, `bug`, `broken`, `wrong`,
+`error`, `doesn't work`), so neither defect fired one. The router classified the
+sprint `carry-over`, folded both defects into a single carry-over story as
+"sub-questions," and ran the full planning cycle
+(`carry-over-evaluation → discovery → research-requirements → architecture →
+stories-test-strategy → …`) on an unverified serving-layer hypothesis — an ADR
+labeled *"PROPOSED — hypothesis-pending-evidence"* that four planning gates
+passed anyway. The purpose-built `bug` path (`bug-investigation.md`, which opens
+with a Falsification ladder and reproduces before planning) was never entered.
+
+The operator asked whether they should have labeled the items "bug." They should
+not have needed to: a sharper label would have masked the defect, not fixed it.
+The defect is pipeline-side and two-fold — **semantic under-detection** (bug
+signals matched as keywords, so "failure"/"misreport"/"regression" slip through)
+and a **skipped mandatory clarification** (a mixed carry-over + defect prompt
+must ask the Rule 11 priority question; Step 4 was prose with zero enforcement,
+so it was rationalized away — a check that cannot fire reads exactly like one
+that passed).
+
+Changed:
+
+- **`route.md` Step 2** — the bug signal is reframed from a keyword list to a
+  semantic criterion: *any* description of the system behaving contrary to intent
+  is a bug signal, whatever words carry it; the literal token "bug" is sufficient
+  but not necessary. A defect described **inside** a carry-over/backlog item still
+  sets the signal — content is classified on its substance, not its envelope.
+- **`route.md` Step 4** — a defect signal co-occurring with a carry-over or
+  sprint-execute signal is a **MUST-ASK**: the lead asks the one clarifying
+  priority question unless the operator already directed it. Fires on signal
+  co-occurrence, not on operator phrasing.
+- **`route.md` Step 6 / `gate-validation.md` Check 14** — the pipeline snapshot's
+  Pipeline Position now carries a routing record: `user_request_verbatim` (the
+  only on-disk copy of the operator's request) plus `bug_signal_present`,
+  `carryover_or_sprint_signal_present`, and `clarification_asked`.
+- **`carry-over-evaluation.md` §2** — a defect-detection branch (the routing
+  backstop). A carry-over item whose content is a production defect gets
+  bug-investigation rigor (reproduce + Falsification ladder) rather than uniform
+  feature-planning; a defect that is the sprint's dominant work escalates to
+  re-route.
+
+### Added — Check 27 (routing sanity), escalated to the gate-adjudicator
+
+- **`gate-validation.md` Check 27** — at the first planning gate, on the same
+  non-`bug` variant scope as Check 1c, an `adjudication: llm` check re-adjudicates
+  the routing decision. It is escalated to the fresh `gate-adjudicator`, which
+  **re-derives the signals from `user_request_verbatim`** rather than trusting the
+  router's recorded booleans — the router that misclassified also wrote them, so
+  reading them back would pass vacuously on the exact failure. FAIL (HARD_BLOCK,
+  adopted through the existing fail-closed Check 26) when a defect co-occurs with
+  a carry-over/sprint signal while `variant ≠ bug` and no clarification was
+  recorded. No new validator: the verdict flows through `GATE_ADJUDICATION_VERDICT
+  v1` and `validate-gate-adjudication.sh` unchanged.
+- **`enforcement-map.yaml`** — Check 27 registered (`adjudication: llm`,
+  `gate_types: [planning]`), so `validate-gate-adjudication.sh --expected planning`
+  derives it into the adjudicator worklist and the Check 26 completeness set with
+  no hand-listing. Added to the GATE_MANIFEST planning row and the H1
+  enumerated-fixture list.
+- **`core/fixtures/route-defect-classification/`** — seeds the S292 misroute plus
+  a vacuous-PASS control and two single-field mutants (re-route → `bug`; record
+  `clarification_asked: yes`); `run.sh` proves the seed is well-formed and
+  adversarial (the verdict itself is the adjudicator's). Shipped by `install.sh`.
+
 ## [0.75.0] — 2026-07-17
 
 ### Added — sprint-status.yaml has a mechanical lifecycle: `scripts/sprint-status.sh`

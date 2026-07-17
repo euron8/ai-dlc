@@ -165,8 +165,15 @@ Classify the user's request:
   "execute the sprint", "run the stories", "pick up implementation",
   "start building", or sprint-status.yaml shows stories in ready-for-dev
   or in-progress status AND user does not describe a new feature/bug.
-- **Bug signal**: Input mentions "fix", "bug", "broken", "wrong", "error",
-  "doesn't work", describes unexpected behavior, or references a defect.
+- **Bug signal**: Input describes the system behaving contrary to intent —
+  a failure, a misreport, wrong/stale/incorrect values, a regression,
+  "stopped working", "started after a deploy", or any unexpected behavior.
+  The literal tokens "fix", "bug", "broken", "wrong", "error", "doesn't work"
+  are sufficient but NOT necessary: keyword absence is not signal absence. A
+  production-defect description is a bug signal whatever words carry it —
+  and that includes a defect described *inside* a carry-over/backlog item.
+  Arriving as an operator-dispositioned backlog entry does not neutralize a
+  defect; the content is classified on its substance, not its envelope.
 - **Feature signal**: Input describes new capability, enhancement, addition,
   or references a feature spec / escalation doc.
 - **Carry-over signal**: Input mentions "carry-over", "backlog", "next sprint",
@@ -225,6 +232,21 @@ clarifying question. Examples of genuine ambiguity:
 - User said "run the sprint" but there are both carry-over items AND a new
   feature spec — which takes priority?
 - User gave a description that could be a bug or a feature enhancement.
+- A defect signal (per Step 2) co-occurs with a carry-over or sprint-execute
+  signal — a backlog / "next sprint" request that ALSO describes a production
+  defect — which takes priority, the planned work or triaging the defect?
+
+**Mixed defect + carry-over/sprint is a MUST-ASK, not optional.** When a bug
+signal (per Step 2) co-occurs with a carry-over or sprint-execute signal and
+the operator has NOT already directed the priority, you MUST ask the one
+clarifying question before routing. This case fires on signal co-occurrence,
+not on operator phrasing — do not resolve it silently by subordinating the
+defect into a carry-over/feature story. The "Do NOT ask" allowance below does
+NOT cover it: co-occurring defect + carry-over is ambiguous by definition,
+because the two route to different pipelines (`bug` → repro-first triage;
+`carry-over` → full planning). Record the outcome in the snapshot's
+`clarification_asked` field (Step 6): `yes` if you asked, `n-a` if the
+operator pre-directed the priority.
 
 Do NOT ask if the variant is clear from the project state + input.
 
@@ -355,7 +377,15 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 - **If the file does NOT exist:** create it with initial state:
   - Pipeline Position (detected variant, first step file, no
     last-completed step yet, no gates passed yet, current git
-    branch from `git branch --show-current`)
+    branch from `git branch --show-current`; plus the **routing record**,
+    which Check 27 re-adjudicates at the first planning gate:
+    - `user_request_verbatim` — the operator's request text, verbatim.
+      Persist it because a fresh gate-adjudicator has no access to this
+      routing conversation and cannot re-classify what was never written
+      to disk. `user_input` (Step 2) otherwise lives only in context.
+    - `bug_signal_present` — `yes`/`no`, as resolved in Step 2.
+    - `carryover_or_sprint_signal_present` — `yes`/`no`, as resolved in Step 2.
+    - `clarification_asked` — `yes`/`no`/`n-a`, as resolved in Step 4)
   - Sprint Context (`sprint_id` as resolved above — an integer, never
     `none`; remaining fields from `sprint-status.yaml` if it exists)
   - Recent Activity (empty — will be populated by `gate-validation.md`

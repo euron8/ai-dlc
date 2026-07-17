@@ -369,6 +369,25 @@ checks:
     fixtures: [tests/fixtures/gate-adjudication]
     ci_workflow: ~
 
+  - id: "27"
+    title: Routing sanity — a subordinated defect
+    gate_types: [planning]
+    adjudication: llm   # the gate-adjudicator re-derives signals from user_request_verbatim
+    hard_block: true
+    enforcer: []        # teeth are Check 26 (fail-closed adoption of the escalated verdict)
+    call_sites:
+      - site: gate-validation.md Check 27
+        posture: FAILS the first planning gate (adopted via Check 26)
+        why: a production defect described without the token "bug" (graph S292's
+          "fee-display failure" / "wide-mode misreport") was subordinated into a
+          carry-over story and run through the full planning cycle; the router's
+          bug-signal was keyword-only and the Rule 11 mixed-signal question never
+          fired. The adjudicator re-reads the verbatim request rather than the
+          router's self-declared booleans — the misclassifying router wrote those,
+          so reading them back would pass vacuously on the exact failure.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/route-defect-classification]
+
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
     gate_types: [universal]
