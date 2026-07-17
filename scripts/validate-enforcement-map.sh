@@ -219,6 +219,13 @@ if [ -f "$SEED" ]; then
   }
   seed_has() { grep -qF "<!-- CHECK_LOADED: $1 -->" "$SEED"; }
 
+  # The universal half of that sentence was a hand-maintained copy too, and it had
+  # rotted the same way every other copy of this set rotted: the seed carried the
+  # 14 ids the old gate-validation.md PROSE listed and never gained 2a or 25. The
+  # universal core is a manifest row as of v0.73.0, so derive it here like any other.
+  for cid in $(manifest_row universal); do
+    seed_has "$cid" || err "check-manifest-bypass/seed.sh seeds the UNIVERSAL core but omits check $cid, which the GATE_MANIFEST universal row requires — the fixture claims to seed 'universal core + the planning row' and does not, so H1's self-test runs against a slice no gate ever loads"
+  done
   for cid in $(manifest_row planning); do
     seed_has "$cid" || err "check-manifest-bypass/seed.sh seeds the PLANNING slice but omits check $cid, which the GATE_MANIFEST planning row requires — the fixture no longer seeds what it claims, and H1's self-test is testing a slice that does not exist"
   done

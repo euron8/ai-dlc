@@ -99,15 +99,18 @@ the discussion:
 
 3. **Provenance block cites transcript@sha.** The provenance block's
    `transcript_path` field uses the `path@<sha>` format where
-   `<sha>` is the git blob SHA of the committed transcript file.
-   `scripts/validate-retro-evidence.sh` enforces byte-match between
-   the cited SHA and the file contents on HEAD.
+   `<sha>` is the **commit** SHA of the commit that added the transcript
+   — NOT the blob SHA. `scripts/validate-retro-evidence.sh` resolves the
+   citation with `git cat-file -p <sha>:<path>`, and that syntax takes a
+   tree-ish: handed a blob it exits `fatal: path '<path>' exists on disk,
+   but not in '<sha>'`. It then enforces byte-match between the cited
+   SHA's content and the file on HEAD.
 
 **Author the transcript to pass on the first commit — do not backfill.**
 `validate-retro-evidence.sh` enforces a shape floor and
 `validate-provenance-block.sh` a provenance format, both at the Step-5c gate.
 Discovering those there and patching the transcript afterward re-invalidates
-the cited blob SHA (forcing a re-cite) and often triggers a provenance
+the cited commit SHA (forcing a re-cite) and often triggers a provenance
 reformat — a multi-commit loop repeated every sprint. Prevent it by satisfying
 both at authoring time and committing in this order:
 
@@ -118,8 +121,11 @@ both at authoring time and committing in this order:
    required count of distinct canonical `Phase N` labels (from its
    `PHASE_LABELS` allow-list), and its minimum character count. Committing the
    full agent responses verbatim (not summaries) clears all three.
-2. **Commit the transcript as its own commit first**, then read back its blob
-   SHA: `git rev-parse HEAD:_bmad-output/party-mode-transcripts/sprint-<N>-retro.md`.
+2. **Commit the transcript as its own commit first**, then read back that
+   COMMIT's SHA: `git rev-parse HEAD`. Not `git rev-parse HEAD:<path>` — that
+   returns the BLOB sha, which is what this step said until v0.73.0 and is
+   exactly the citation the validator rejects. Committing the transcript alone
+   is what makes `HEAD` name it unambiguously.
 3. **Write the `SKILL_INVOCATION_PROVENANCE v1` block once**, citing that SHA. Copy the
    envelope below exactly — the delimiters are what the parser reads, and a block in a ```
    fence is scored as no block at all. Get it right the first time; a reformat pass is the
@@ -403,18 +409,28 @@ slicing (`gate-validation.md` "Gate-type manifest") loads checks by gate
 type; a manifest ID with no matching check, or a check with no manifest
 claim, silently mis-slices a gate. Two-way resolve against
 `steps/gate-validation.md`:
-- **Manifest → anchor.** For every check ID listed in the `GATE_MANIFEST`
-  table rows AND in the universal-core set, confirm a matching
-  `<!-- CHECK_LOADED: <id> -->` anchor exists in the file. An ID with no
-  anchor is manifest drift (a row names a check that was renamed or
-  removed) — FAIL.
+- **Manifest → anchor.** For every check ID listed in a `GATE_MANIFEST`
+  table row — `universal` included, it is a row like any other — confirm a
+  matching `<!-- CHECK_LOADED: <id> -->` anchor exists in the file. An ID
+  with no anchor is manifest drift (a row names a check that was renamed
+  or removed) — FAIL.
 - **Anchor → manifest.** For every `<!-- CHECK_LOADED: <id> -->` anchor
-  in the file, confirm the ID appears in the universal-core set or ≥1
-  manifest row. An orphan anchor (a check no gate type requires) is drift
-  in the other direction — FAIL.
+  in the file, confirm the ID appears in ≥1 manifest row. An orphan
+  anchor (a check no gate type requires) is drift in the other
+  direction — FAIL.
+
+The command below DERIVES both sides from the manifest and hard-codes no
+check ID. It read its own copy of the universal-core set until v0.73.0,
+and that copy drifted twice over — it omitted `2a`, `25` and `26`, so the
+scan reported `ORPHAN: 2a 25 26` against a correctly-wired tree. A
+manifest-consistency checker whose reference set is a hand-maintained
+copy of the thing it is checking cannot do its job: every future retro
+either re-derives "actually this is fine", or files a backlog item to
+populate a check that was never missing an enforcer, only missing from a
+stale array.
 
 ```
-node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/steps/gate-validation.md','utf8');const anchors=[...s.matchAll(/^<!-- CHECK_LOADED: (\S+) -->$/gm)].map(m=>m[1]);const uni=['1','2','3','4','7','12','13','14','15','16','H1','H2','failure'];const m=s.slice(s.indexOf('GATE_MANIFEST v1'),s.indexOf('GATE_MANIFEST_END'));const ids=new Set(uni);for(const r of m.matchAll(/\|\s*(?:planning|story|implementation|sprint-review|retro)\s*\|([^|]*)\|/g)){for(const t of r[1].split(',').map(x=>x.trim()).filter(Boolean))ids.add(t);}const missing=[...ids].filter(i=>!anchors.includes(i));const orphan=anchors.filter(a=>!ids.has(a));console.log('MISSING (manifest ID, no anchor):',missing.join(' ')||'none');console.log('ORPHAN (anchor, no manifest claim):',orphan.join(' ')||'none');"
+node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/steps/gate-validation.md','utf8');const anchors=[...s.matchAll(/^<!-- CHECK_LOADED: (\S+) -->$/gm)].map(m=>m[1]);const m=s.slice(s.indexOf('GATE_MANIFEST v1'),s.indexOf('GATE_MANIFEST_END'));const rows=[...m.matchAll(/^\|[ ]*([a-z][a-z-]*)[ ]*\|([^|]*)\|/gm)];if(!rows.length)throw new Error('GATE_MANIFEST: no rows parsed — the scan would pass by comparing nothing');if(!rows.some(r=>r[1]==='universal'))throw new Error('GATE_MANIFEST: no universal row — the always-loaded set is unreadable and every universal check would report as an orphan');const ids=new Set();for(const r of rows)for(const t of r[2].split(',').map(x=>x.trim()).filter(Boolean))ids.add(t);const missing=[...ids].filter(i=>!anchors.includes(i));const orphan=anchors.filter(a=>!ids.has(a));console.log('rows:',rows.map(r=>r[1]).join(' '));console.log('MISSING (manifest ID, no anchor):',missing.join(' ')||'none');console.log('ORPHAN (anchor, no manifest claim):',orphan.join(' ')||'none');"
 ```
 
 Both lists MUST be empty. Record the result in the same

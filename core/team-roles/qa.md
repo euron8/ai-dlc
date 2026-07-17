@@ -209,8 +209,19 @@ For each completed task, verify:
   green test over hand-assembled input is insufficient evidence = REJECT.
 - [ ] **Skill-invocation provenance (HARD GATE):** For artifacts that
   require a validation sub-skill (retros, PRDs, stories, architecture
-  docs), verify `scripts/validate-provenance-block.sh <artifact>`
-  exits 0. For retro docs, additionally run
+  docs), verify `scripts/validate-provenance-block.sh <artifact>
+  --require-skill <the evaluation that artifact class requires>` exits 0.
+  PRDs and stories require `ai-dlc-adversary-review`; a retro party-mode
+  artifact requires `bmad-party-mode`. **The flag is not optional, and its
+  VALUE is per artifact class.** Flagless, the script checks the block is
+  well-formed and names a KNOWN skill — but never that it names the RIGHT
+  one — so an artifact citing any sanctioned evaluation exits 0 and you
+  pass a HARD GATE having verified nothing about which one actually ran; a
+  gate that cannot fail is not a gate. Pinning the wrong class's skill is
+  the opposite failure and just as
+  bad: a retro legitimately cites `bmad-party-mode`, so demanding
+  `ai-dlc-adversary-review` of it exits 1 and REJECTS a correct artifact.
+  For retro docs, additionally run
   `scripts/validate-retro-evidence.sh <sprint-number>` and confirm
   exit 0 (enforces transcript file + byte-match). Missing or
   malformed `SKILL_INVOCATION_PROVENANCE v1` block = REJECT. Inline

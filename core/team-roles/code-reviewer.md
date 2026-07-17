@@ -301,11 +301,20 @@ perspectives in a retro doc WITHOUT a provenance block citing the
 rule prevents and must be rejected.
 
 Reviewer's valid responses: (a) APPROVED only if
-`scripts/validate-provenance-block.sh <artifact>` exits 0 AND
-(for retro docs)
+`scripts/validate-provenance-block.sh <artifact> --require-skill <the
+evaluation that artifact class requires>` exits 0 AND (for retro docs)
 `scripts/validate-retro-evidence.sh <sprint-number>` also exits 0;
 (b) NEEDS_REWORK naming the missing block, missing field, or
 script failure output.
+
+**Run it WITH the flag, and pin the class's own skill.** Flagless, the
+script checks the block is well-formed and names a KNOWN skill — but never
+that it names the RIGHT one. So the precise condition this section calls
+Critical, a block naming a sanctioned skill that was not the evaluation
+this artifact required, is exactly the one the flagless check cannot
+detect. PRDs and stories pin `ai-dlc-adversary-review`; a retro
+party-mode artifact pins `bmad-party-mode` and exits 1 against the former,
+so a blanket pin rejects correct work instead of catching forged work.
 
 ### Missing Bug-Class Audit for Class-of-Bug Fix = Critical
 
