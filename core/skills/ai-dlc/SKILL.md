@@ -632,8 +632,14 @@ the whole contract, not just the model. Two bindings are mandatory:
 that role's `/model` directive in its role file -- the single source of
 truth. Do NOT restate a role-to-model mapping here or in step files; a
 second mapping drifts from the role file and is itself a violation.
-Omitted `model` inherits from the parent conversation and bypasses the
-role's cost/capability contract.
+Omitting it (or passing the wrong tier) no longer wedges the dispatch: the
+`ai-dlc-dispatch-guard` PreToolUse hook reads the bound role file's pin and
+INJECTS the correct tier via `updatedInput` before the teammate spawns, so
+the spawn is first-time-correct even on a resumed session where this rule is
+not in context. That guard is a safety net (and only fires in a layered
+consumer); setting `model` explicitly is still the norm, and a spawn that
+omits it or names the wrong tier is still a Rule 19 violation Check 22
+records at retro.
 
 **(b) Role contract.** The dispatch prompt MUST carry, as a standing
 line, the instruction: *"Your operating contract is

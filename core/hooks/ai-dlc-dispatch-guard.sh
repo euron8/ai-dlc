@@ -21,9 +21,13 @@
 #      reports `claude-opus-4-8` for all four no-param S291 spawns, which is
 #      neither the lead's model (sonnet) nor anything derived from the role file.
 #      The two disagree and no subagent transcript exists to break the tie. So
-#      the model a no-param spawn runs on is NOT KNOWABLE FROM THE RECORD. That
-#      is the argument for denying absence: not "it inherits wrong", but "you
-#      cannot know what you got, and neither can the next reader".
+#      the model a no-param spawn runs on is NOT KNOWABLE FROM THE RECORD. The
+#      original teeth DENIED absence on that ground — not "it inherits wrong" but
+#      "you cannot know what you got." v0.79.x goes one better: instead of denying
+#      an unknowable model, the guard SETS a known one — `model` = the pin's tier,
+#      written into the call via `updatedInput` — so the value is both correct AND
+#      on the record. A no-param spawn on a resumed session (where Rule 19(a)
+#      recall is weakest — the motivating failure) is now corrected, not rejected.
 #      (Measured consequence either way: `analyst-s291-architecture` shipped with
 #      no param against a sonnet pin and the record shows opus — a real drift.)
 #   D3 NOTHING VERIFIES THE ADJUDICATOR'S MODEL. Check 26 validates the verdict's
@@ -54,22 +58,29 @@
 #   `.claude/team-roles/` dir. The distribution repo (no stamp; roles live under
 #   core/team-roles/) is a no-op.
 #
-#   DENY iff the dispatch BINDS a role file that DECLARES a model pin AND the
+#   SET iff the dispatch BINDS a role file that DECLARES a model pin AND the
 #   requested model's TIER disagrees with the pin's tier — or no model was
-#   requested at all (D2: absence is not neutral, it inherits). Everything else
-#   allows.
+#   requested at all (D2: absence is not neutral, it inherits). In that case the
+#   guard injects `model` = the pin's tier via `updatedInput` and returns `allow`,
+#   so the teammate runs on the pinned tier first-time. Everything else exits 0
+#   unchanged. (Through v0.79.0 this path DENIED and made the caller re-dispatch;
+#   PreToolUse `updatedInput` lets the guard correct the call instead of rejecting
+#   it, which removes the round trip and the dependence on the caller's recall.)
 #
 #   Compared by TIER (opus|sonnet), never by string. A role file carries BOTH a
 #   Personal and a Bedrock pin (`claude-opus-4-8[1m]` / `global.anthropic.-
 #   claude-opus-4-6-v1`) and the `model` param is an alias (`opus`/`sonnet`), so
-#   string equality would deny everything. Tier also makes ai-dlc-setup's
-#   Sonnet-only mode work by construction: there the pins RENDER to sonnet, so
-#   the guard follows the role file rather than a hardcoded expectation.
+#   string equality would treat every correct dispatch as a mismatch and rewrite
+#   it needlessly. Tier also makes ai-dlc-setup's Sonnet-only mode work by
+#   construction: there the pins RENDER to sonnet, so the guard follows the role
+#   file rather than a hardcoded expectation.
 #
 #   FAIL-OPEN on any ambiguity: no prompt, no role binding, unreadable or
 #   unpinned role file, a role whose Personal and Bedrock pins disagree on tier,
-#   an unrecognised tier, unparseable input. A false-deny wedges a live
-#   pipeline mid-sprint; the teeth are precise and positive-match only.
+#   an unrecognised tier, unparseable input, or a `tool_input` jq cannot amend.
+#   A false correction would silently mis-bind a teammate's model, so fail-open
+#   (exit 0, no change) is the safe direction; the teeth are precise and
+#   positive-match only, and only ever ADD/CORRECT the model — never deny.
 #
 #   KNOWN GAP, deliberate: `cis.md`, `sm.md`, `tea.md`, `ux.md` declare no pin,
 #   so D1 stays open for them (fail-open — a role file that declares nothing
@@ -147,35 +158,51 @@ $PINS
 EOF
 [ -n "$EXPECT" ] || exit 0
 
-# `model` absent => UNDETERMINED (D2b): the tool contract says inherit-from-parent,
-# the record says claude-opus-4-8, and nothing can settle it after the fact. Deny,
-# because a model nobody can name is not a model anybody chose.
 REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
+GOT="$(tier "$REQUESTED")"
 
-deny() {
-  local reason ctx
-  reason="$1"
-  ctx="AI/DLC dispatch guard: a teammate's model is bound by its role file, not chosen at the call site. ${ROLE}.md declares ${EXPECT}-tier. Pass the matching \`model\` param on the Agent call. If the role's model is genuinely wrong, change ${ROLE}.md — that file is the single source of truth, and editing it is what makes the change visible to the gate and to the next pull."
-  jq -n --arg reason "$reason" --arg ctx "$ctx" '{
+# ALREADY CORRECT: the requested tier IS the pinned tier. Allow unchanged — exit 0 with no
+# decision, so the dispatch keeps whatever approval posture it would otherwise have. (Tier compare,
+# not string: `opus` and `claude-opus-4-8[1m]` are the same tier.)
+if [ "$GOT" = "$EXPECT" ]; then
+  exit 0
+fi
+
+# OTHERWISE the model is ABSENT, a WRONG tier, or an unpoliced value (haiku/fable/inherit/garbage)
+# — none of which is the tier the role file pins. SET it, do not deny it. This is the v0.79.x flip:
+# the guard used to DENY here and make the lead re-dispatch, which cost a round trip AND depended on
+# the lead recalling Rule 19(a) — and the failure that motivated this was a no-param spawn on a
+# RESUMED session, exactly where that recall is weakest. Now the guard binds the model itself, from
+# the role file (the single source of truth), so the dispatch is first-time-correct with nothing
+# required in the lead's context.
+#
+# WHY THIS IS SAFE (does not force-approve). PreToolUse merges every matching hook's verdict
+# most-restrictive-first — deny > defer > ask > allow (hooks docs). `allow` is the LEAST restrictive,
+# so it cannot override another hook's `deny` (the Rule 29 pause hook still blocks a spawn while
+# paused) nor a settings `permissions.deny` rule. We emit `allow` ONLY on the correcting path, and
+# ONLY to carry `updatedInput`; a dispatch that was already correct never reaches here, so its
+# approval posture is untouched. If jq cannot build the corrected input, FAIL OPEN (exit 0) rather
+# than emit a broken decision.
+set_model() {
+  local note reason ctx updated
+  if [ -z "$REQUESTED" ]; then
+    note="no \`model\` param was passed"
+  else
+    note="\`model: \"$REQUESTED\"\` (tier ${GOT:-unrecognised}) did not match the pin"
+  fi
+  reason="AI/DLC dispatch guard: bound \`team-roles/${ROLE}.md\` to its ${EXPECT}-tier model — ${note}. Set \`model\` to \"${EXPECT}\" from the role file, the single source of truth for a teammate's model, so this teammate runs on the tier its role pins. First-time-correct, with nothing required in the caller's context. If the role's model is genuinely wrong, change the pin in ${ROLE}.md."
+  ctx="dispatch-guard: model bound to ${EXPECT} from team-roles/${ROLE}.md (requested: ${REQUESTED:-<absent>}). The role file, not the call site, is the source of truth for a teammate's model."
+  updated="$(printf '%s' "$INPUT" | jq -c --arg m "$EXPECT" '.tool_input + {model: $m}' 2>/dev/null)"
+  [ -n "$updated" ] || exit 0
+  jq -n --arg reason "$reason" --arg ctx "$ctx" --argjson ui "$updated" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
-      permissionDecision: "deny",
+      permissionDecision: "allow",
       permissionDecisionReason: $reason,
+      updatedInput: $ui,
       additionalContext: $ctx
     }
   }'
   exit 0
 }
-
-if [ -z "$REQUESTED" ]; then
-  deny "This Agent call binds \`team-roles/${ROLE}.md\`, which pins a ${EXPECT}-tier model, but passes NO \`model\` param — so the model this teammate runs on is UNDETERMINED. The Agent tool's contract says an omitted model inherits from the parent; the tool_result record shows no-param spawns reporting \`claude-opus-4-8\`. Those disagree, the teammate leaves no transcript, and nothing downstream can settle it — so neither you nor the next reader can say what ran. Name it: re-dispatch with \`model: \"${EXPECT}\"\`. (Measured on this exact path in S291: \`analyst-s291-architecture\` shipped with no param against a sonnet pin and the record shows opus.)"
-fi
-
-GOT="$(tier "$REQUESTED")"
-[ -n "$GOT" ] || exit 0             # e.g. haiku/fable — not a tier we police
-
-if [ "$GOT" != "$EXPECT" ]; then
-  deny "This Agent call binds \`team-roles/${ROLE}.md\`, which pins a ${EXPECT}-tier model, but requests \`model: \"${REQUESTED}\"\` (${GOT}-tier). The role file is the single source of truth for a teammate's model; a call site cannot override it. Re-dispatch with \`model: \"${EXPECT}\"\`, or change the pin in ${ROLE}.md if the role's model is genuinely wrong."
-fi
-
-exit 0
+set_model

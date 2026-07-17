@@ -25,9 +25,10 @@ A story's frontmatter MAY carry a **routing tag** that changes WHICH role
 the lead binds when it dispatches the story, overriding the default `dev`.
 This is the sanctioned way to give a story a different contract or a
 different model tier: model is a property of the role file, not of the
-dispatch call site (SKILL.md Rule 19; the dispatch guard denies a
-call-site model override), so "this story needs a different role/model"
-is always expressed as "route this story to a different role file."
+dispatch call site (SKILL.md Rule 19; the dispatch guard binds the model
+from the role file and rebinds any call-site override back to it), so
+"this story needs a different role/model" is always expressed as "route
+this story to a different role file."
 
 **Routing map (canonical — `implementation.md` binds from it at dispatch,
 gate-validation Check 22 re-derives from it at retro; add a row here, in
