@@ -350,6 +350,60 @@ for rel in session-driver/ai-dlc-session-driver.sh git-hooks/pre-push; do
     || err "core/$rel is executed as a bare path by consumers but is COMMITTED $m, not 100755. A pulling consumer gets it non-executable. Fix with: git update-index --chmod=+x core/$rel"
 done
 
+# --- I15: ONE anchor grammar. layer-drift.sh REPORTS a heading-number collision and
+# relabel-extension-checks.sh FIXES it. They are two programs reading one thing, so a
+# grammar that drifts between them means the operator is told to relabel a collision with
+# a tool that cannot see the heading. relabel shipped the narrower copy for ~20 versions:
+# it required `[0-9]+` first, so core's real `### H1.` / `### H2.` yielded no anchor and an
+# extension colliding on H1 was unrelabellable.
+#
+# The two are now byte-identical by assertion rather than by hope. A sourced helper would
+# be the textbook fix, but it must then be installed and resolved in both fixture layouts —
+# the v0.55.2 dead-path failure mode — for a single shared line. Assert equality instead.
+#
+# NOT joined to validate-enforcement-map's own head_ids (line 149): that one is deliberately
+# narrower and its sibling at line 146 BANS the `Check ` prefix ANCHOR_RE tolerates. It
+# polices core's catalog form; these two read arbitrary consumer layer files. Different job.
+ag_drift="$(sed -n 's/^ANCHOR_RE=//p' "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/layer-drift.sh" | head -1)"
+ag_relabel="$(sed -n 's/^ANCHOR_RE=//p' "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" | head -1)"
+if [ -z "$ag_drift" ] || [ -z "$ag_relabel" ]; then
+  err "I15 cannot find an ANCHOR_RE definition in layer-drift.sh and/or relabel-extension-checks.sh. The check that binds the two anchor grammars just went vacuous — it must locate both or fail loudly, never pass by finding nothing."
+elif [ "$ag_drift" != "$ag_relabel" ]; then
+  err "the anchor grammar has forked: layer-drift.sh defines ANCHOR_RE=$ag_drift but relabel-extension-checks.sh defines ANCHOR_RE=$ag_relabel. layer-drift REPORTS collisions and relabel FIXES them; a narrower grammar in either means a reported collision no tool can resolve. Make them byte-identical."
+fi
+
+# --- I16: runtime-pipeline prose must cite CONSUMER paths, never `core/`-prefixed ones.
+# install.sh maps core/<x> -> .claude/<x>, but that governs where files LAND, not path
+# references in the prose INSIDE them. So installed core kept citing the distribution's own
+# layout, which resolves nowhere at any consumer: Check 19 sent the reviewer to
+# `core/team-roles/code-reviewer.md` for the Self-Discrimination Map, a dead path.
+#
+# Not cosmetic. That one unsubstituted ref is the only legitimate reason a consumer's Check-19
+# extension forked from core at all — it localized the path, and in forking silently dropped
+# core's ~28-line core-path wiring-citation clause. One dead link cost a live gate rule.
+#
+# DERIVE the directory list from core/*/ on disk. The hand-listed five-directory set this bug
+# was first reported with already omitted four live subtrees (schemas, fixtures, ci-templates,
+# git-hooks) — the same rot I8 exists to catch.
+#
+# Scope is the RUNTIME pipeline only. `core/skills/ai-dlc-update/**` reasons about the
+# distribution layout by design (comparing core/ to .claude/), fixtures build real core/ trees
+# on disk, and enforcement-map.yaml's `core/scripts/...` values are DATA this very script greps
+# in that exact shape at I9. Markdown-only + the core-manifest exclusion keeps all of them out.
+core_dirs="$(find "$REPO_ROOT/core" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort | paste -sd'|' -)"
+if [ -z "$core_dirs" ]; then
+  err "I16 derived an EMPTY core/ directory list — the prose-path check just went vacuous and would pass over any dead citation. Expected core/*/ subtrees to exist."
+else
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    err "runtime-pipeline prose cites a distribution path that does not exist at any consumer: ${hit}. install.sh maps core/<x> -> .claude/<x>, so an installed file citing 'core/...' is a dead link for every reader. Cite the consumer path (e.g. '.claude/team-roles/qa.md' — core's own convention, ~29 uses) or a bare filename."
+  done < <(find "$REPO_ROOT/core/skills/ai-dlc" "$REPO_ROOT/core/team-roles" -name '*.md' -type f \
+             ! -name 'core-manifest.md' 2>/dev/null \
+           | sort \
+           | xargs grep -InE "core/(${core_dirs})/" 2>/dev/null \
+           | sed "s|^$REPO_ROOT/||" | cut -c1-160)
+fi
+
 # --- Fixture root-resolution depth: a seed that hand-resolves the repo root must use the
 # SAME `$HERE/../../..` depth for BOTH layouts. A fixture lives at `core/fixtures/<name>/`
 # upstream and `tests/fixtures/<name>/` in a consumer (install.sh's map) — BOTH exactly three

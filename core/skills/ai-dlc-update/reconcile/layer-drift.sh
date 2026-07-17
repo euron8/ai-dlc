@@ -201,7 +201,24 @@ same_section() { # same_section <textA> <textB>
       for (k in b) { nb++; if (!(k in a)) u++ }
       if (u == 0 || na == 0 || nb == 0) exit 1
       smaller = (na < nb) ? na : nb
-      exit (inter / u >= 0.6 || inter / smaller >= 0.75) ? 0 : 1
+      # NOTE: this awk is a single-quoted string. No apostrophes below, ever.
+      #
+      # Containment forgives an appended provenance tag -- but it DEGENERATES when the
+      # shorter title has ONE significant token: inter/smaller is then 1/1 = 1.00 for any
+      # title containing that word, and the OR short-circuits the jaccard test. The core
+      # heading "### 2. Deploy" reduces to {deploy} (the stoplist eats gate/gates), so
+      # every consumer heading naming deploy matched it at jaccard 0.12-0.20. Twelve of
+      # the 166 anchored core headings reduce to one token: not a one-file accident.
+      #
+      # Requiring smaller >= 2 is the same rule as "containment needs >=2 shared
+      # significant tokens": at 0.75, smaller=2 already forces inter=2.
+      #
+      # The cost is a real false NEGATIVE, not the impossibility it looks like: with a
+      # 1-token core title and inter=1, jaccard is 1/nb, so a 2-token ext title scores
+      # 0.5 and is now missed. That is the correct trade here -- this predicate drives
+      # EXTENSION-RETIRE-CANDIDATE, which proposes DELETION, and a loose title match is
+      # worse than no title match (see above).
+      exit (inter / u >= 0.6 || (smaller >= 2 && inter / smaller >= 0.75)) ? 0 : 1
     }'
 }
 

@@ -135,6 +135,70 @@ else
 fi
 restore
 
+# --- Assertion 6: I15 GRAMMAR FORK --------------------------------------------
+# layer-drift.sh REPORTS a heading-number collision; relabel-extension-checks.sh FIXES it.
+# relabel shipped the narrower grammar for ~20 versions, so core's real `### H1.` yielded no
+# anchor and a collision on it was unrelabellable — the operator was told to relabel with a
+# tool that could not see the heading. Narrow one copy and I15 must catch the fork.
+RELABEL="$ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
+if grep -q '^ANCHOR_RE=' "$RELABEL"; then
+  sed -i.bak "s|^ANCHOR_RE=.*|ANCHOR_RE='^#{2,4} [0-9]+[a-z]*\\\\.'|" "$RELABEL"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "the anchor grammar has forked"; then
+    ok "narrowing relabel's ANCHOR_RE FAILS I15 (the reporter and the fixer cannot drift apart)"
+  else
+    bad "narrowing relabel's ANCHOR_RE did NOT fail I15 — the two grammars can fork again and H1-style collisions go unrelabellable"
+  fi
+  restore
+  RELABEL="$ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
+else
+  bad "FIXTURE STALE: relabel-extension-checks.sh no longer defines ANCHOR_RE"
+fi
+
+# --- Assertion 7: I15 NON-VACUITY ---------------------------------------------
+# I15 greps both files for ANCHOR_RE. If a definition simply vanishes, the check must say so
+# rather than find nothing and pass — "no definitions to compare" must never read as "equal".
+if grep -q '^ANCHOR_RE=' "$RELABEL"; then
+  sed -i.bak '/^ANCHOR_RE=/d' "$RELABEL"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I15 cannot find an ANCHOR_RE definition"; then
+    ok "deleting an ANCHOR_RE definition FAILS I15 loudly (it cannot pass by comparing nothing)"
+  else
+    bad "deleting an ANCHOR_RE definition did NOT fail I15 — the check goes vacuous exactly when the grammar is missing"
+  fi
+  restore
+fi
+
+# --- Assertion 8: I16 DEAD PROSE PATH -----------------------------------------
+# The real bug: Check 19 cited `core/team-roles/code-reviewer.md`, a path that exists in the
+# distribution and at NO consumer. install.sh maps core/<x> -> .claude/<x>, but that moves
+# FILES, not the paths written inside them. Plant one and I16 must fire.
+printf '\nSee `core/team-roles/dev.md` for the map.\n' >> "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+out="$(bash "$V" 2>&1)"
+if printf '%s' "$out" | grep -q "runtime-pipeline prose cites a distribution path"; then
+  ok "a core/-prefixed prose path in a runtime step file FAILS I16 (installed core cannot ship a dead citation)"
+else
+  bad "a core/-prefixed prose path did NOT fail I16 — installed core can cite the distribution's layout again, and one dead link already cost a live gate rule"
+fi
+restore
+
+# --- Assertion 9: I16 PRECISION -----------------------------------------------
+# The other side of the same check, and the one that keeps it usable. The word "core" is
+# everywhere in this rulebook ("core rule", "core catalog", "core-path wiring"), and the
+# update machinery cites `core/...` paths BY DESIGN — comparing distribution to consumer is
+# its whole job. If I16 flags either, it gets switched off and stops catching the real thing.
+printf '\nThe core rule lives in the core catalog; core-path wiring is a core concern.\n' \
+  >> "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+printf '\nDiff base->theirs restricted to `core/skills/ai-dlc-update/**` and `core/team-roles/dev.md`.\n' \
+  >> "$ROOT/core/skills/ai-dlc-update/SKILL.md"
+out="$(bash "$V" 2>&1)"
+if printf '%s' "$out" | grep -q "runtime-pipeline prose cites a distribution path"; then
+  bad "I16 fired on the English word 'core' or on ai-dlc-update's by-design core/ citations — a check with false positives is a check the operator turns off"
+else
+  ok "I16 ignores the English word 'core' and ai-dlc-update's by-design core/ paths (precise enough to stay on)"
+fi
+restore
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

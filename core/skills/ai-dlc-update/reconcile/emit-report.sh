@@ -85,7 +85,10 @@ render() {
   none_or "$ld"
 
   sub "Catalog relabel (extension check-number collisions, incl. NEW-THIS-PULL from theirs):"
-  rl="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>/dev/null | grep -E '^\s+\+\s+### ' | sed 's/^[[:space:]]*+[[:space:]]*/  /' | sort -u || true)"
+  # `#{2,4}`, not a literal `### `: relabel matches headings at h2-h4, so filtering the
+  # report to h3 dropped a real proposed relabel out of the operator-facing summary
+  # while the tool itself reported it. The filter must be as wide as the tool.
+  rl="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>/dev/null | grep -E '^[[:space:]]+\+[[:space:]]+#{2,4} ' | sed 's/^[[:space:]]*+[[:space:]]*/  /' | sort -u || true)"
   none_or "$rl"
 
   echo
