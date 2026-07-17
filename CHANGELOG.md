@@ -17,6 +17,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.74.0] — 2026-07-17
+
+### Fixed — Rule 8 defined four validation intensities and Check 20 could adjudicate three
+
+The seventh defect from the same consumer-layer audit, and it should have shipped in v0.73.0.
+It was left out because that release was scoped from the audit's `overrides/` half while this
+one surfaced in the `extensions/` half — a boundary that exists in how the analysis was
+organized, not in the work. Same class as the other six: a live core defect a consumer was
+carrying the patch for.
+
+**Check 20 kept its own copy of the minimums, and the copy dropped a row.** SKILL.md Rule 8's
+table defines FOUR intensities; Check 20 — the one check that enforces intensity — enumerated
+`full`, `standard` and `lightweight`. **`carry-over-single` appeared zero times in the whole of
+`gate-validation.md`.** So a gate declaring the intensity Rule 8 reserves for carry-over sprints
+reached the check that exists to enforce intensity and found no minimum to test against, which
+reads exactly like a gate that met its minimum.
+
+Check 20 now RESOLVES the minimum from Rule 8's `Minimum cycle per planning artifact` column
+instead of restating it. SKILL.md is resident at every gate, so the table is always readable
+there. Reading the table cannot drift from the table, and all four intensities become
+adjudicable by construction rather than by remembering to add the fourth bullet.
+
+**Third instance in two releases of one class: a set declared twice, one copy drifts.** The
+universal core across three sources, `check-manifest-bypass`'s fourth copy of it (v0.73.0), and
+now the intensity minimums. Where the duplicate MUST exist, the copies are bound (I15, I18).
+Here it must not exist at all — so new **I19** asserts the minimums are enumerated nowhere
+outside Rule 8's table, rather than binding a copy into permanence. Naming an intensity stays
+fine and common (`route.md` declares one, `discovery.md` branches on one); RESTATING what it
+requires is the defect, so the signal is an intensity name and an evaluation name on one line.
+
+**I19 found a fourth copy the moment it was written.** `carry-over-evaluation.md` restated
+Rule 8's `full` row inline (*"at `full` that is Party Mode → Advanced Elicitation → Adversarial
+Review, 2+ passes"*). A hand sweep had already missed it: the candidate list was built from files
+mentioning `carry-over-single` or `lightweight`, and that file names only `full`. It now cites
+the table and keeps its own point — that the review must CONVERGE, the pass count being a floor
+rather than a target.
+
+### Testing
+
+Full suite 25/25; enforcement map in sync. I19 is mutant-tested in both directions — silent on
+the clean tree, and it names the file and line when an enumeration is restored to Check 20.
+
 ## [0.73.0] — 2026-07-17
 
 ### Fixed — six core defects a consumer had been carrying patches for
