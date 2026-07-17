@@ -46,21 +46,32 @@ the lead does not restate them per dispatch.
 Violation of (a) or (b) fails gate-validation Check 22 on detection at
 retro. Per SKILL.md Rule 19.
 
-**Protected-path editor delegation (Rule 28).** Before dispatching for
-any story, the lead MUST inspect the story's frontmatter for
-`protected_path_editor: true`. If set, the lead MUST dispatch the story
-to a `protected-path-editor` teammate (from
-`.claude/team-roles/protected-path-editor.md`, bound per Rule 19(a)+(b))
-— NOT execute it inline (Rule 28: protected-path editing is delegable,
-not lead-only) and NOT delegate it to a dev teammate. The
-`protected-path-editor` returns a review-ready diff; the lead reviews
-the diff before merging it (the lead-owned safety on a delegated edit).
-Stories with `single_dev_serialized: true` MUST
-NOT be dispatched to parallel teammates that touch the same protected
-file — protected-path stories are dispatched one at a time. Lead MAY
-invoke validation sub-skills via the Skill tool per Rule 20. Catalog and
-field semantics defined in `stories-test-strategy.md` "Protected-Path
-Story Tag" subsection. Violation fails gate-validation Check 22 on
+**Pre-dispatch routing (Rule 28).** Before dispatching for any story,
+the lead MUST inspect the story's frontmatter for a **routing tag** and,
+if one is present, bind the routed role (per Rule 19(a)+(b)) instead of
+the default `dev`. The flag→role map is canonical in
+`stories-test-strategy.md` "Story Routing Tags" — bind from that map, do
+NOT hardcode a second copy here. The two routes today:
+
+- `protected_path_editor: true` → dispatch the story to a
+  `protected-path-editor` teammate (from
+  `.claude/team-roles/protected-path-editor.md`) — NOT execute it inline
+  (Rule 28: protected-path editing is delegable, not lead-only) and NOT
+  delegate it to a dev teammate. The `protected-path-editor` returns a
+  review-ready diff; the lead reviews the diff before merging it (the
+  lead-owned safety on a delegated edit). Stories with
+  `single_dev_serialized: true` MUST NOT be dispatched to parallel
+  teammates that touch the same protected file — protected-path stories
+  are dispatched one at a time.
+- `escalate_model: true` → dispatch the story to a `dev-escalated`
+  teammate (from `.claude/team-roles/dev-escalated.md`) instead of
+  `dev`. Same Dev contract, stronger (opus-tier) model. Do NOT instead
+  pass a higher `model` param to a `dev` dispatch — the dispatch guard
+  binds `dev`'s model to `dev.md`'s pin and denies a call-site override.
+
+Lead MAY invoke validation sub-skills via the Skill tool per Rule 20.
+Catalog and field semantics defined in `stories-test-strategy.md` "Story
+Routing Tags" subsection. Violation fails gate-validation Check 22 on
 detection at retro.
 
 **Pre-dispatch auth check.** Before any dev dispatch, run:
@@ -259,6 +270,9 @@ Verify:
   `protected-path-editor` teammate (serialized), not executed inline by
   the lead and not delegated to a dev. Record the dispatch in the gate
   log.
+- Every story tagged `escalate_model: true` was dispatched to a
+  `dev-escalated` teammate, not to a plain `dev`. Record the dispatch in
+  the gate log.
 
 Log task list validation in gate log.
 

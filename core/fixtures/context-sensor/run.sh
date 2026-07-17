@@ -28,6 +28,15 @@ set -u
 # assignments (`AI_DLC_MODEL_ROW=1M "$HOOK"`) still work: those are the deliberate tests.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 
+# Same class, different prefix. v0.77.0 makes CLAUDE_CODE_AUTO_COMPACT_WINDOW supersede EVERY
+# settings layer, so an ambient export of it silently overrides the sandboxed local/user
+# layers the settings-precedence cases below build -- and the AI_DLC_* pattern above does not
+# match it. Observed live: a consumer's shell had CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000
+# exported; the "settings.local.json overrides project" (expects 250000) and "user settings
+# used" (expects 420000) cases both read 300000 and false-failed. The env-supersedes cases
+# set it per-command (`CLAUDE_CODE_AUTO_COMPACT_WINDOW=200k "$HOOK"`), so they are unaffected.
+unset CLAUDE_CODE_AUTO_COMPACT_WINDOW
+
 
 FIXTURES="$(cd "$(dirname "$0")" && pwd)"
 

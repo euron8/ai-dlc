@@ -105,6 +105,23 @@ d="$(decision "$CONSUMER" "$(mkjson Agent dev opus)")"
 [ "$d" = deny ] && ok "dev.md still denies opus — the real pin binds, not the prose line" \
   || bad "dev.md opus classified '$d', expected deny — dev's pin is not being read at all"
 
+# --- 8b. dev-escalated: model escalation is a ROLE, and its pin is enforced ---
+# A story routed with `escalate_model: true` binds dev-escalated.md (opus pin),
+# NOT dev.md with a call-site opus override (case 8 proves that override is
+# denied). The escalated role's own pin must bind: opus allowed, sonnet denied,
+# no-param denied. The sonnet case is the tooth that matters — routing a story to
+# the escalated tier but then running it on the cheap model is the exact slip
+# escalation invites, and it must not pass silently.
+d="$(decision "$CONSUMER" "$(mkjson Agent dev-escalated opus)")"
+[ "$d" = allow ] && ok "dev-escalated requested opus against its opus pin → allow (the escalation happy path)" \
+  || bad "dev-escalated opus classified '$d', expected allow — the escalated route would wedge"
+d="$(decision "$CONSUMER" "$(mkjson Agent dev-escalated sonnet)")"
+[ "$d" = deny ] && ok "dev-escalated requested sonnet against its opus pin → deny (escalated route, cheap model)" \
+  || bad "dev-escalated sonnet classified '$d', expected deny — the escalated tier is not being enforced"
+d="$(decision "$CONSUMER" "$(mkjson Agent dev-escalated)")"
+[ "$d" = deny ] && ok "dev-escalated dispatch with no model param → deny (undetermined model)" \
+  || bad "no-model dev-escalated classified '$d', expected deny"
+
 # --- 9. no role binding in the prompt -> ALLOW ------------------------------
 d="$(decision "$CONSUMER" "$(mkjson Agent - opus)")"
 [ "$d" = allow ] && ok "dispatch with no role binding → allow (not ours)" \
@@ -137,6 +154,10 @@ d="$(decision "$CONSUMER" "$(mkjson Task remediator)")"
 REAL_PIN="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null | head -1)"
 [ -n "$REAL_PIN" ] && ok "real core gate-adjudicator.md still carries a parseable pin line" \
   || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md has no '- Personal/Bedrock: \`/model ...\`' line — the guard would silently stop binding"
+
+REAL_PIN="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$SRC_ROLES/dev-escalated.md" 2>/dev/null | head -1)"
+[ -n "$REAL_PIN" ] && ok "real core dev-escalated.md still carries a parseable pin line" \
+  || bad "FIXTURE STALE: core/team-roles/dev-escalated.md has no '- Personal/Bedrock: \`/model ...\`' line — the guard would silently stop binding the escalated tier"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi

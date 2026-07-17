@@ -17,6 +17,74 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.78.0] — 2026-07-17
+
+### Added — conditional model escalation is a routed role, not a call-site model override
+
+A consumer wanted a dev story that needs more capability to run its teammate on
+opus instead of the default sonnet. Since v0.70.0 the dispatch guard binds a
+teammate's model to its role file and denies a call-site tier override, so "dev
+role + opus" is forbidden by construction — model is a property of the role, one
+role file, one tier. The sanctioned mechanism is therefore to route the story to
+a distinct opus-pinned role, generalizing the existing `protected_path_editor`
+routing.
+
+- **New role `core/team-roles/dev-escalated.md`** — the standard Dev contract on a
+  stronger model. A thin reference variant: it reads and follows `dev.md` in full
+  (identity, ownership, constraints, workflow, escalation) and differs ONLY in its
+  opus-tier `/model` pin. No second copy of the Dev rules, so no forked twin to
+  drift.
+
+- **Story routing tags, generalized and single-sourced.** The
+  `stories-test-strategy.md` "Protected-Path Story Tag" section becomes "Story
+  Routing Tags" with a canonical flag→role map: `protected_path_editor: true` →
+  `protected-path-editor.md`, `escalate_model: true` → `dev-escalated.md`.
+  `implementation.md` pre-dispatch routing binds FROM that map (no hardcoded second
+  copy); a story with no routing tag goes to `dev` as before. The flag name is
+  deliberately domain-neutral — consumers map their own vocabulary onto it.
+
+- **`dev.md` prose corrected.** The old line "the more capable model is
+  appropriate… the lead may override this default when spawning you" promised an
+  override the dispatch guard now denies. It is replaced with a pointer to the
+  `escalate_model` routing.
+
+- **Gate-validation Check 22** gains a routing clause that RE-DERIVES the expected
+  role from each story's PERSISTED frontmatter — not from the lead's spawn-record
+  self-report — and fails a story serviced by a role other than the one its
+  frontmatter routes to (an `escalate_model` story run on a plain `dev`; a
+  protected-path story run inline or by a dev). Re-deriving from the persisted
+  story is the point: a lead that mis-routed cannot vouch for its own routing.
+  Check 22 is `adjudication: llm`; the gate-adjudicator enforces it.
+
+- **Setup wiring** for `{dev_escalated_model_*}`: model-strategy map row in
+  `ai-dlc-setup/SKILL.md`, config sites in `reconcile/setup-sites.md` (so the
+  core-guard exempts editing the pin), and a nearest-equivalent token fill in
+  `reconcile/apply.sh` (`dev-escalated` ← `protected-path-editor`, same opus tier).
+  In Sonnet-only mode the escalated pin collapses to sonnet with every other role,
+  and escalation becomes a harmless no-op the guard passes trivially.
+
+- **Fixture** `core/fixtures/dispatch-model-guard/` gains `dev-escalated` cases
+  (opus → allow, sonnet → deny, no-param → deny). The sonnet-deny case is the tooth
+  that matters: routing a story to the escalated tier but running it on the cheap
+  model is the exact slip escalation invites, and it must not pass silently.
+  Verified with a mutant proof (flipping the seed pin to sonnet fails exactly the
+  two tier-bound assertions).
+
+### Fixed — context-sensor fixture leaked the ambient auto-compact window
+
+`core/fixtures/context-sensor/run.sh` scrubbed every `AI_DLC_*` tunable for
+hermeticity but not `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, a different prefix the
+pattern missed. Under v0.77.0's env-supersedes-all-layers precedence, an operator
+whose shell exported that variable (observed live at 300000) had it override the
+fixture's sandboxed local (250000) and user (420000) settings layers, so the two
+settings-precedence cases false-failed and the pre-push gate blocked the push.
+
+- The hermetic setup block now `unset`s `CLAUDE_CODE_AUTO_COMPACT_WINDOW`. The
+  env-supersedes cases set it per-command and are unaffected; the settings-layer
+  cases become hermetic regardless of the operator's shell. Verified with a
+  stashed-fix proof: pre-fix reproduces the exact two failures, post-fix is 48/0
+  both with the variable exported and unset. Push-candidate for upstream.
+
 ## [0.77.0] — 2026-07-17
 
 ### Changed — autoCompactWindow is resolved across every settings layer, and drives every context band

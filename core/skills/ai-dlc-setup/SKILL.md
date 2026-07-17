@@ -560,6 +560,13 @@ string.
 - `{dev_model_bedrock}` -> sonnet-tier model bedrock string
 - `{dev_model_local}` -> local model string (or remove the line if N/A)
 
+**`.claude/team-roles/dev-escalated.md`:** (the standard Dev contract on a
+stronger model, for stories tagged `escalate_model: true` — opus-tier, like the
+architect; in Sonnet-only mode this collapses to the sonnet string with every
+other role, and escalation becomes a harmless no-op)
+- `{dev_escalated_model_personal}` -> opus-tier model personal string
+- `{dev_escalated_model_bedrock}` -> opus-tier model bedrock string
+
 **`.claude/team-roles/qa.md`:**
 - `{qa_model_personal}` -> sonnet-tier model personal string
 - `{qa_model_bedrock}` -> sonnet-tier model bedrock string

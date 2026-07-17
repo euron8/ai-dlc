@@ -133,6 +133,17 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
           [ -n "$b" ] && sed -i.bak "s|{gate_adjudicator_model_bedrock}|$b|g" "$cons"
           rm -f "$cons.bak"
         fi
+        # Fill {dev_escalated_model_*} from the consumer's protected-path-editor role (same opus
+        # tier). dev-escalated is the standard Dev contract on a stronger model; ppe is the
+        # nearest existing role that already pins the escalated tier the consumer chose.
+        ppe="$CONSUMER/.claude/team-roles/protected-path-editor.md"
+        if [ -f "$ppe" ]; then
+          p="$(sed -nE 's/^- Personal: `\/model (.+)`$/\1/p' "$ppe" | head -1)"
+          b="$(sed -nE 's/^- Bedrock: `\/model (.+)`$/\1/p' "$ppe" | head -1)"
+          [ -n "$p" ] && sed -i.bak "s|{dev_escalated_model_personal}|$p|g" "$cons"
+          [ -n "$b" ] && sed -i.bak "s|{dev_escalated_model_bedrock}|$b|g" "$cons"
+          rm -f "$cons.bak"
+        fi
         if grep -q '{[a-z_]*_model_[a-z]*}' "$cons" 2>/dev/null; then
           say DECISION setup-token "$rel" "a {*_model_*} token had no default source"
         else

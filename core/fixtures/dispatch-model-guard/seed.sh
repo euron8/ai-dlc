@@ -61,6 +61,10 @@ ROLE
 render_role gate-adjudicator 'claude-opus-4-8[1m]'   'global.anthropic.claude-opus-4-6-v1'
 render_role remediator       'claude-opus-4-8[1m]'   'global.anthropic.claude-opus-4-6-v1'
 render_role analyst          'claude-sonnet-5[1m]'   'global.anthropic.claude-sonnet-4-6'
+# dev-escalated: the standard Dev contract on the escalated (opus) tier a Balanced
+# consumer fills in. The guard must bind THIS pin, so running the escalated role on
+# the cheap model — the exact slip escalation invites — is denied.
+render_role dev-escalated    'claude-opus-4-8[1m]'   'global.anthropic.claude-opus-4-6-v1'
 
 # An UNPINNED role — the real tea.md/sm.md/ux.md/cis.md shape. The guard must
 # fail open here: a role file that declares nothing cannot bind anything.
