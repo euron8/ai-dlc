@@ -107,7 +107,8 @@ git_show() { git -C "$DIST" show "$1:$2" 2>/dev/null; }
 have()     { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; }
 
 # Section anchors a markdown STREAM defines: `### 5c. T` headings + `**7a-post. T**`
-# bold anchors (an override defines 7a-post the bold way).
+# bold anchors (a layer entry may define 7a-post the bold way; see
+# bold_anchors_of_file below for how a bold anchor is told from a bold prose list).
 #
 # Three tolerances, each paid for by a real miss:
 #   `Check `  core wrote one check as `### Check 24.` while every other is
@@ -128,10 +129,32 @@ anchors_of_stream() {
   { grep -Eho "$ANCHOR_RE" | strip_anchor
   } 2>/dev/null | grep -E '.' | sort -u
 }
+# A bold section ANCHOR (`**7a-post. Log Rotation …**`) against a bold PROSE LIST
+# item (`**1. Narrative drift.** Rule text continues…`). Both open identically, so
+# the opening is not the signal: what follows the CLOSING `**` is. An anchor's bold
+# span IS the heading — it ends the line, or the heading wraps and never closes on
+# it. A list item closes its label and then continues in plain prose.
+#
+# Paid for by a real miss, like the tolerances above. Matching the opening alone read
+# a consumer's three-item rule-weakness triage list as sections 1/2/3 and collided
+# them with core's retro steps 1/2/3: a defect reported on every pull, forever, in
+# text that defines no section — and the remedy the message prescribes ("label the
+# heading `### 1. [ext:<id>] …`") cannot be applied to a sentence. A detector that
+# cannot be silenced by following its own advice teaches the operator to stop
+# reading it, which is the failure the whole file is written against.
+bold_anchors_of_file() {
+  awk '
+    /^\*\*(Check[ \t]+)?[0-9]+[a-z-]*\./ {
+      if ($0 ~ /^\*\*[^*]*\*\*[ \t]*[^ \t]/) next   # label closes, prose follows -> list item
+      id = $0
+      sub(/^\*\*(Check[ \t]+)?/, "", id)
+      sub(/\..*$/, "", id)
+      print id
+    }' "$1" 2>/dev/null
+}
 anchors_of_file() {
   { grep -Eho "$ANCHOR_RE" "$1" 2>/dev/null | strip_anchor
-    grep -Eho '^\*\*(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
-      | sed -E 's/^\*\*(Check[[:space:]]+)?//; s/\.$//'
+    bold_anchors_of_file "$1"
   } | grep -E '.' | sort -u
 }
 
