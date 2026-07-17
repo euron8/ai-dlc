@@ -347,8 +347,22 @@ checks:
           a starvation window is conduct already committed and cannot be repaired, so
           a raw count would make the gate unpassable, and an unpassable gate gets
           turned off
+      - site: ai-dlc-continue.sh (Stop) Check 2b — the yield permission (v0.81.0)
+        posture: ALLOWS the stop while a backgrounded wait-beat is live
+          (`.beat-inflight` epoch > now); every other marker state falls through to
+          the Rule 3 block
+        why: the bounded join is a WAIT, and forcing a tool call on every beat made
+          the lead ride the forced-continuation churn (45-150 blocks per
+          implementation day). The beat is now backgrounded and the lead yields; the
+          beat's own exit re-invokes it, so the marker is self-proving of
+          re-invocation. Keying the allow on "deliverable absent" instead would
+          authorize a yield into a SILENT stall — the marker is written only while a
+          real beat sleeps (wait-for-deliverable.sh), and the check fails safe to
+          BLOCK on any missing / expired / malformed marker
     ci_workflow: ~
-    fixtures: [tests/fixtures/check-25-steering-conduct]
+    fixtures:
+      - tests/fixtures/check-25-steering-conduct
+      - tests/fixtures/implementation-join-yield
 
   - id: "26"
     title: Gate-check adjudication — every escalated llm check evaluated by the adjudicator and PASS

@@ -130,31 +130,44 @@ While that call is in flight there is no tool boundary, so a queued
 operator message cannot be delivered: the human is locked out for the
 duration.
 
-The lead MUST therefore dispatch with `run_in_background: true` and
-JOIN in bounded beats — on the **deliverable file**, not on a `task_id`.
+The lead MUST therefore dispatch teammates with `run_in_background: true`
+and JOIN on the **deliverable file**, not a `task_id` — conducting that
+join by arming a **backgrounded** wait-beat and ENDING THE TURN.
 
 A dev, code-reviewer, and qa are all `Agent` spawns. **`TaskOutput`
 cannot join an `Agent` spawn** (Rule 29, "Which join, and this is not a
 preference") — it takes a `task_id`, which only `TaskCreate` produces.
 Every ai-dlc teammate delivers by file (Rule 20), so the file IS the
-handle. Join it with Rule 29's **bounded file-wait beat**, which is a
-script — do not retype the loop:
+handle. Wait on it with Rule 29's **bounded file-wait beat**, run in the
+background — do not retype the loop:
 
-    scripts/wait-for-deliverable.sh <path> [<path>...]
+    Bash(run_in_background: true):
+      scripts/wait-for-deliverable.sh <path> [<path>...]
+
+Then END YOUR TURN. The beat sleeps off the foreground; when it exits the
+harness re-invokes you with its result. Branch on the exit code THEN:
 
     exit 0 — DELIVERED. Consume them, route into gate-1.
-    exit 2 — WAITING. Beat again (this call WAS the beat).
+    exit 2 — WAITING. Re-arm the beat (Bash, `run_in_background: true`)
+             over the still-pending paths and yield again. Do NOT
+             foreground-poll, and do NOT narrate-then-stop.
     exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK.
 
-**A wave dispatched in one message is joined in ONE call.** Pass every
+**The one hard invariant: never end your turn on an outstanding join
+without a live backgrounded beat armed.** The armed beat IS your own
+re-invocation; a yield without one is a dead pipeline. While a beat is
+live the Stop hook (`ai-dlc-continue.sh` Check 2b) allows the turn to
+end — a yielded lead is reachable *immediately*, better than mid-beat,
+not worse.
+
+**A wave dispatched in one message is joined in ONE beat.** Pass every
 teammate's deliverable to a single invocation — they poll inside the
 same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash`
 call: two beats is two budgets and the call overruns.
 
-Each beat is a tool boundary, so a queued operator lands within one
-budget, and the script bounds the sequence for you (`max_wait_beats`,
-default 10). The lead consumes the deliverables and routes them into
-gate-1 exactly as before; nothing is detached and no gate is skipped.
+The script bounds the sequence for you (`max_wait_beats`, default 10).
+The lead consumes the deliverables and routes them into gate-1 exactly
+as before; nothing is detached and no gate is skipped.
 
 The deliverable path for each teammate is the one recorded in the
 snapshot's **In-Flight Teammates** row at dispatch — the same path, and

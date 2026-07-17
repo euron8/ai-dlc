@@ -129,8 +129,12 @@ snapshot's \`In-Flight Teammates\` section:
 - **Deliverable exists and is non-empty** -> the teammate DELIVERED. Consume the
   file and strike the row. Never re-dispatch it.
 - **Deliverable absent** -> not yet delivered, which is not the same as dead.
-  Resume Rule 29's bounded file-wait beat. Re-dispatch ONLY on Rule 20
-  non-delivery, after \`max_wait_beats\` is exhausted.
+  The pre-compaction wait-beat did NOT survive this compaction, so resume Rule
+  29's join by ARMING A FRESH backgrounded beat (\`wait-for-deliverable.sh\`,
+  \`run_in_background: true\`) over the absent paths BEFORE you end your turn.
+  Ending your turn with no live beat armed is the one dead-pipeline case (Rule
+  29). Re-dispatch the teammate ONLY on Rule 20 non-delivery, after
+  \`max_wait_beats\` is exhausted.
 
 Re-dispatching a live or already-delivered teammate is a lead-conduct retro
 finding. If the snapshot has no \`In-Flight Teammates\` section, treat it as empty

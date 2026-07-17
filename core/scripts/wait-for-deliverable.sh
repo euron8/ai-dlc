@@ -123,7 +123,15 @@ PENDING=""
 EXHAUSTED=""
 OLDIFS="$IFS"; IFS='|'
 for t in $TARGETS; do
-  [ -n "$t" ] || continue
+  # A blank target is a malformed wait -- an empty In-Flight Teammates row cell,
+  # or a lead that built the path from an unset variable. The old code silently
+  # `continue`d past it, so a wave of nothing-but-blank paths fell straight
+  # through to the `[ -z "$PENDING" ] && exit 0` below and reported DELIVERED: a
+  # false join on a teammate that never ran. Fail loud and immediately instead.
+  case "$t" in
+    *[![:space:]]*) : ;;   # contains a non-whitespace char -- a real path
+    *) echo "FAIL: empty/blank deliverable path in target list." >&2; exit 64 ;;
+  esac
   c="${COUNTER_DIR}/$(key_of "$t")"
   [ "$RESET" -eq 1 ] && rm -f "$c" 2>/dev/null
 
@@ -197,6 +205,21 @@ IFS="$OLDIFS"
 RESERVE="$MARGIN"
 [ "$POLL" -gt "$RESERVE" ] && RESERVE="$POLL"
 DEADLINE=$(( $(date +%s) + BUDGET - RESERVE ))
+
+# ---------------------------------------------------------------------------
+# Beat-liveness marker (v0.81.0). A live, backgrounded beat is the ONLY state in
+# which the lead may end its turn: the Stop hook (ai-dlc-continue.sh Check 2b)
+# allows the yield iff this marker exists and is unexpired, because THIS process
+# will exit and re-invoke the idle lead. We write it only here, on the genuine-
+# sleep path (a non-sleeping return above never reaches this line), so a
+# foreground beat clears it on exit via the trap and post-beat prose still
+# BLOCKS -- unchanged behavior. The stored epoch is the true worst-case beat
+# end (`DEADLINE + POLL`, still <= now + BUDGET since RESERVE >= POLL): the hook's
+# `epoch > now` test rejects a SIGKILLed beat's stale marker with no cleanup
+# dependency, exactly like the `.shell-*` mmin prune above self-heals.
+BEAT_MARKER="${STATE_DIR}/.beat-inflight"
+printf '%s' "$(( DEADLINE + POLL ))" > "$BEAT_MARKER" 2>/dev/null || true
+trap 'rm -f "$BEAT_MARKER" 2>/dev/null || true' EXIT
 
 all_present() {
   IFS='|'

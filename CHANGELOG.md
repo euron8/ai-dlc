@@ -17,6 +17,56 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.81.0] — 2026-07-17
+
+### Changed — the lead yields during a teammate join instead of riding forced-continuations
+
+During implementation the lead dispatches teammates as background `Agent` spawns and joins them by
+polling deliverable files in bounded 120s beats (Rule 29). The Stop hook `ai-dlc-continue.sh`
+force-continues every text-only turn during an active pipeline, so it fired between beats — whenever
+the lead ended a turn with prose instead of chaining the next beat. Measured on the reference
+consumer: 45–150 forced-continuation blocks per implementation day, the single most frequent blocking
+step, and NOT a regression — it is intrinsic to polling-by-forced-continuation and predates both the
+Sonnet lead and the gate-adjudicator escalation. Those blocks were the pipeline's de-facto wait
+heartbeat: each "keep going" is what pushed the lead to issue the next beat. It worked, but it was
+noise riding the rapid-fire-backoff edge — one 3-in-30s burst and the hook gives up and lets the
+pipeline stop.
+
+The beat is now BACKGROUNDED and the lead ENDS ITS TURN. When the background `Bash` beat exits — on
+delivery, or at its budget — the harness re-invokes the idle lead, so the yield is not a stall: a
+live beat guarantees the lead's own re-invocation. A *yielded* lead is also more reachable than one
+mid-beat: with no in-flight foreground call, a queued operator message lands on the very next turn
+instead of after a full budget.
+
+- **The Stop hook gained Check 2b.** `ai-dlc-continue.sh` allows the stop while a backgrounded beat
+  is genuinely sleeping, signalled by a `.beat-inflight` marker that `wait-for-deliverable.sh` writes
+  only on its sleep path, carrying the beat's worst-case end epoch. It allows iff the marker exists
+  and its epoch is still in the future; every other state — missing, empty, non-numeric, expired
+  (a SIGKILLed beat that never cleaned up), unreadable — falls through to the existing Rule 3 block.
+  The fail-safe direction is the pre-0.81.0 force-continue, never a new silent stall.
+
+- **Keyed on the beat, not the deliverable.** "Deliverable absent" is the unsafe sensor: it does not
+  imply a live task will re-invoke the lead, so it would authorize a yield into a permanent silent
+  stall. The marker exists only while a real background beat sleeps, so it is self-proving of
+  re-invocation and immune to In-Flight-Teammates row drift.
+
+- **Empty deliverable paths now fail loud.** `wait-for-deliverable.sh` skipped a blank target with a
+  silent `continue`, so a wave of nothing-but-blank paths reported DELIVERED — a false join. It now
+  exits 64 on any empty/whitespace path.
+
+- **Compaction recovery re-arms the beat.** The pre-compaction beat does not survive a compaction, so
+  `ai-dlc-recover.sh` now tells the resumed lead to arm a fresh backgrounded beat over any absent
+  deliverable before ending its turn.
+
+- **Fixture `implementation-join-yield`** drives the real Stop hook across the case matrix — a stall
+  blocks, a live beat allows, every dead-marker state fails safe, pause precedence and no-pipeline
+  gating hold, and a live-beat allow resets the rapid-fire counter — and is mutation-checked to bite
+  on both the missing-allow and the missing-guard bugs.
+
+This depends on the harness re-invoking an idle session when a background task exits (verified in the
+target harness with a throwaway probe). If that ever fails, the marker's epoch-expiry falls the hook
+back to the pre-0.81.0 blocking behavior — noisy like before, never a dead pipeline.
+
 ## [0.80.0] — 2026-07-17
 
 ### Changed — the dispatch guard now SETS a teammate's model instead of DENYING a wrong/absent one
