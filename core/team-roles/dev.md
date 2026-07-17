@@ -70,10 +70,14 @@ assigned story files and the architecture document.
   commit each phase atomically — in particular, a symbol-removal commit BEFORE
   the commit that updates its callers — so a mid-flight interruption leaves an
   inspectable `git diff` rather than a half-applied orphan.
-- For well-scoped stories with precise implementation checklists, use the
-  standard dev model. The more capable model is appropriate when the story
-  requires architectural judgment, cross-layer analysis, or the implementation
-  approach is open-ended. The lead may override this default when spawning you.
+- You run on the standard dev model. A story that needs the more capable model
+  — one requiring architectural judgment, cross-layer analysis, or an open-ended
+  implementation approach — is not handled by the lead passing you a different
+  model at spawn; the dispatch guard binds your model to this role file and
+  denies a call-site override. Instead such a story is tagged `escalate_model:
+  true` and routed to the `dev-escalated` role (the same contract you follow
+  here, on a stronger model). See `stories-test-strategy.md` "Story Routing
+  Tags" and `implementation.md` pre-dispatch routing.
 - The lead may assign a local model for stories that meet ALL of the following
   criteria:
   - The story has a precise implementation checklist with specific functions,

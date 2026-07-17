@@ -1049,8 +1049,8 @@ it as new.
 <!-- CHECK_LOADED: 22 -->
 
 **Scope.** Runs at implementation-phase gates for any gate whose sprint
-dispatched teammates via the Agent tool (dev, code-reviewer, qa, or a
-`protected-path-editor`). Skips gates with no Agent-tool spawn.
+dispatched teammates via the Agent tool (dev, dev-escalated, code-reviewer,
+qa, or a `protected-path-editor`). Skips gates with no Agent-tool spawn.
 
 **Check.** Read the gate log's per-teammate spawn records
 (`implementation.md` Step 4 self-validate writes them). For EVERY
@@ -1064,24 +1064,38 @@ record missing either the model value or the role-contract citation
 FAILS this check. Fail-closed: a teammate that ran without a resolvable
 role-file binding is a Rule 19 violation, not a pass.
 
-Additionally, for any story tagged `protected_path_editor: true`
-(`stories-test-strategy.md` Protected-Path Story Tag), confirm the story
-was serviced by a `protected-path-editor` spawn (serialized), NOT
-executed inline by the lead and NOT delegated to a dev teammate.
+Additionally, verify **story routing** against the canonical map in
+`stories-test-strategy.md` "Story Routing Tags". For EVERY story in the
+sprint, RE-DERIVE the expected role from the story file's PERSISTED
+frontmatter — NOT from the spawn record's self-report — then confirm the
+story was serviced by the routed role:
+- `protected_path_editor: true` → a `protected-path-editor` spawn
+  (serialized), NOT executed inline by the lead and NOT delegated to a
+  dev teammate.
+- `escalate_model: true` → a `dev-escalated` spawn, NOT a plain `dev`
+  spawn.
+Re-deriving from the persisted story is the point: a lead that mis-routed
+cannot vouch for its own routing, so the check reads the story file the
+routing was owed to, then compares the actual spawn against it. A routing
+tag present in the frontmatter with no matching routed spawn FAILS.
 
 **PASS:** every spawn record cites both a role-matched model and the
-role-contract binding, and every protected-path story routed to the
-`protected-path-editor`. **FAIL:** any spawn omits a binding, cites a
-model that does not match its role file, or any protected-path story was
-executed inline or by a dev.
+role-contract binding, and every story was serviced by the role its
+persisted frontmatter routes to. **FAIL:** any spawn omits a binding,
+cites a model that does not match its role file, or any story was
+serviced by a role other than the one its frontmatter routes to (a
+protected-path story executed inline or by a dev; an `escalate_model`
+story handled by a plain `dev`).
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a subagent run
 without its role contract — a dev without its ownership/constraint
-boundary, or the lead absorbing a protected-path edit it should have
-delegated (Rule 28). False-positive cost: one gate-log read of records
-the lead already writes at Step 4 — no new artifact. Removal condition:
-retire once the Agent-tool spawn API structurally attaches the role file
-(no lead-authored dispatch line to verify).
+boundary, the lead absorbing a protected-path edit it should have
+delegated (Rule 28), or an `escalate_model` story silently run on the
+standard model instead of the routed `dev-escalated` tier. False-positive
+cost: one gate-log read plus one frontmatter read per routed story —
+persisted artifacts the lead already writes, no new artifact. Removal
+condition: retire once the Agent-tool spawn API structurally attaches the
+role file (no lead-authored dispatch line to verify).
 
 ### 23. Analyst-draft sprint stamps (all planning gates).
 <!-- CHECK_LOADED: 23 -->

@@ -98,6 +98,15 @@ sites:
     heading: '## Ownership'
     next_heading: '## Responsibilities'
 
+  - id: dev-escalated-model-personal
+    file: core/team-roles/dev-escalated.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: dev-escalated-model-bedrock
+    file: core/team-roles/dev-escalated.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
   - id: qa-model-personal
     file: core/team-roles/qa.md
     shape: single-line

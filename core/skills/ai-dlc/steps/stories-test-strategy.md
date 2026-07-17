@@ -19,24 +19,50 @@ Invoke `/bmad-check-implementation-readiness` — validate PRD + architecture
 have everything needed for stories. Fix all gaps directly in the source
 artifacts.
 
-### Protected-Path Story Tag
+### Story Routing Tags
 
-Stories that modify files in the protected-path catalog MUST be
-tagged for delegated protected-path editing. Three story-frontmatter
-fields gate this behavior:
+A story's frontmatter MAY carry a **routing tag** that changes WHICH role
+the lead binds when it dispatches the story, overriding the default `dev`.
+This is the sanctioned way to give a story a different contract or a
+different model tier: model is a property of the role file, not of the
+dispatch call site (SKILL.md Rule 19; the dispatch guard denies a
+call-site model override), so "this story needs a different role/model"
+is always expressed as "route this story to a different role file."
+
+**Routing map (canonical — `implementation.md` binds from it at dispatch,
+gate-validation Check 22 re-derives from it at retro; add a row here, in
+ONE place, to add a route):**
+
+| Frontmatter flag           | Routed role file                        | Why |
+|----------------------------|-----------------------------------------|-----|
+| `protected_path_editor: true` | `.claude/team-roles/protected-path-editor.md` | Editing the rulebook/governance surface needs the strictest change discipline and lead-reviewed diffs. |
+| `escalate_model: true`     | `.claude/team-roles/dev-escalated.md`   | The standard Dev contract on a stronger (opus-tier) model, for work that needs architectural judgment, cross-layer analysis, or an open-ended implementation approach. |
+
+Absent any routing tag, a story is dispatched to `dev` as usual.
+
+**Protected-path editing** additionally uses these frontmatter fields:
 
 - `protected_paths: [<path-glob-list>]` — list of paths the story
   edits that are in the protected-path catalog.
-- `protected_path_editor: true` — when set, the lead MUST dispatch the
-  story to a `protected-path-editor` teammate
-  (`.claude/team-roles/protected-path-editor.md`), which returns a
-  review-ready diff the lead reviews before merge. The lead does NOT
-  execute the story inline (Rule 28: protected-path editing is
-  delegable) and does NOT delegate it to a dev teammate. Lead may invoke
-  validation sub-skills via Skill tool per Rule 20.
+- `protected_path_editor: true` — routes per the map above. The
+  `protected-path-editor` returns a review-ready diff the lead reviews
+  before merge. The lead does NOT execute the story inline (Rule 28:
+  protected-path editing is delegable) and does NOT delegate it to a dev
+  teammate. Lead may invoke validation sub-skills via Skill tool per
+  Rule 20.
 - `single_dev_serialized: true` — when set, lead orchestration
   MUST NOT spawn parallel teammates that touch the same
   protected file; protected-path stories are dispatched one at a time.
+
+**Model escalation** uses one frontmatter field:
+
+- `escalate_model: true` — routes per the map above to `dev-escalated`
+  instead of `dev`. That role reads and follows `dev.md` in full — same
+  ownership boundaries and constraints — and differs ONLY in model tier.
+  Use it for a story that genuinely needs the more capable model; a
+  well-scoped story with a precise checklist stays on `dev`. The tag is
+  authored with the story (by PM/architect), not chosen at dispatch, so
+  the routing is auditable from the persisted story file.
 
 **Protected-path catalog** (default; consumers extend via
 `CLAUDE.md` or a project-local override):
@@ -50,8 +76,11 @@ fields gate this behavior:
 When a story file's `protected_paths` field intersects this
 catalog, both `protected_path_editor: true` and
 `single_dev_serialized: true` are MANDATORY. `implementation.md`
-enforces these tags at dispatch time; gate-validation Check 22 verifies
-the story was serviced by a `protected-path-editor` spawn.
+enforces every routing tag at dispatch time; gate-validation Check 22
+re-derives the expected route from each story's persisted frontmatter
+and verifies the story was serviced by the routed role (a
+`protected-path-editor` spawn for `protected_path_editor: true`, a
+`dev-escalated` spawn for `escalate_model: true`).
 
 ### Discriminating-AC Authoring Standard
 
