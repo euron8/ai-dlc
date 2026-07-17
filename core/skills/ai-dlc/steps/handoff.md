@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: The human-requested (path a) handoff procedure — stop teammates, commit, finalize snapshot, emit resume line, pause. Loaded at a handoff seam; terminal.
+description: The human-requested (path a) handoff procedure — stop teammates, commit, finalize snapshot and push to origin, emit resume line, pause. Loaded at a handoff seam; terminal.
 nextStepFile: STOP
 ---
 <!-- STEP_LOADED_TOKEN: handoff -->
@@ -26,7 +26,13 @@ Execute this 5-step procedure in order:
    work teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing
    anything not yet reflected, including the stopped-teammate
-   record from Step 1.
+   record from Step 1. Commit the finalized snapshot if the project
+   tracks `_bmad-output/`, then push the current branch to origin
+   (`git push`) so the Step 2 commit and the finalized state reach the
+   remote and are not stranded on this machine. If the push fails (no
+   remote configured, offline, or a protected branch), report it to the
+   operator in one line and continue; the local commits still stand and
+   the handoff is not blocked.
 4. Emit the successor's entry line — exactly `/ai-dlc resume`, wrapped in
    `----` delimiter lines (one before, one after) for copy-paste. Nothing
    else: no narrated body. If auto-session-chaining is in use, also
