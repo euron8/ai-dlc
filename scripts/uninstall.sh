@@ -118,7 +118,7 @@ fi
 # fixtures it does not name. It had already drifted: install shipped nine, this listed
 # five. `scripts/validate-enforcement-map.sh` (I8) now asserts the two lists and
 # core/fixtures/ agree, so the next fixture cannot be added to one loop only.
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle; do
   if [ -d "$PROJECT_ROOT/tests/fixtures/$fixture_dir" ]; then
     DIRS_TO_REMOVE+=("tests/fixtures/$fixture_dir/")
   fi

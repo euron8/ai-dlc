@@ -1,0 +1,105 @@
+{
+  "$comment": [
+    "THE SINGLE DEFINITION of the sprint-status envelope schema. There is no other.",
+    "",
+    "Before this file, sprint-status.yaml was the only major pipeline artifact with NO mechanical",
+    "producer anywhere in core/: no creator, no template, no schema, no rotation. Every write was an",
+    "LLM Edit call by six different actors (dev, code-reviewer, lead at three steps) against a shape",
+    "documented nowhere. The only field enumeration in the whole distribution was a role checklist in",
+    "team-roles/dev.md.",
+    "",
+    "The cost was two checks that read a shape nothing writes. route.md Step 6 branches on the",
+    "top-level `status:` to derive sprint_id (done -> N+1), and validate-mandatory-rules.sh Check 3",
+    "asserts `status: done` plus a `sprint_<N>_housekeeping` block with `envelope_status` and",
+    "`closure_evidence`. No step file and no role file has ever instructed anyone to write ANY of",
+    "them. Check 3 was an enforcer with no producer: the lead reverse-engineered the shape from the",
+    "failure message each sprint. scripts/sprint-status.sh is that missing producer, and it renders",
+    "its header from this file.",
+    "",
+    "Same cure as schemas/audit-anchors.json and schemas/provenance-block.json: not a drift detector",
+    "-- nothing to detect, because there is only one copy."
+  ],
+  "schema_id": "SPRINT_STATUS v1",
+  "region_label": "sprint-status-schema",
+
+  "$grammar_comment": [
+    "THE GRAMMAR IS LOAD-BEARING AND IT IS NOT THE ONE THE REFERENCE CONSUMER'S TOOL ASSUMES.",
+    "",
+    "The live canonical is a SINGLE-SPRINT SCALAR-HEADER document: top-level `sprint: 291`,",
+    "`status: in_progress`, then a `stories:` mapping. The reference consumer's own rotation tool",
+    "(generate-sprint-status.py) is written against a MONOLITH grammar of col-0 block keys",
+    "(`sprint_290:`) via SPRINT_KEY_RE = ^sprint[_-]([0-9]+)(?:[_-][A-Za-z0-9][A-Za-z0-9_-]*)?: .",
+    "The two grammars are DISJOINT: that regex matches ZERO lines in either live canonical, so",
+    "--close-sweep silently no-ops and exits 0 while reporting success. Verified by running it.",
+    "",
+    "Worse, that regex DOES match `sprint_291_housekeeping:` and yields group(1)=291 -- so the moment",
+    "a housekeeping block exists, the tool mistakes it for the sprint block, deletes the closure",
+    "evidence Check 3 needs, and leaves the rows un-pruned. That is why the housekeeping key is",
+    "matched here by an ANCHORED, EXPLICIT pattern that cannot collide with a sprint block key.",
+    "",
+    "Enforce ONLY the STRUCTURE a reader depends on -- `sprint` is an integer, `status` is present --",
+    "never the historical FORMAT. Real consumer files carry inline `# comments`, block scalars, and",
+    "free-form prose in closure_evidence. A stricter pattern here re-creates the wedge this change",
+    "exists to remove: a linter that errors on real data on first contact gets turned off."
+  ],
+
+  "keys": {
+    "sprint_re": "^sprint:[ \\t]*([0-9]+)[ \\t]*(?:#.*)?$",
+    "status_re": "^status:[ \\t]*([^#\\s]+)[ \\t]*(?:#.*)?$",
+    "housekeeping_re": "^sprint_([0-9]+)_housekeeping:[ \\t]*(?:#.*)?$",
+    "stories_re": "^stories:[ \\t]*(?:#.*)?$"
+  },
+
+  "$fields_comment": [
+    "`status: done` is the ONE value with mechanical meaning: it is the predicate route.md Step 6",
+    "reads to decide a new sprint has started (done -> N+1, anything else -> N, i.e. a re-plan of the",
+    "sprint still in flight). Every other value is free-form and deliberately un-enumerated -- the",
+    "reference consumer uses `in_progress`, and constraining the enum here would wedge any consumer",
+    "using a different in-flight word."
+  ],
+  "fields": {
+    "sprint": { "required": true, "pattern": "^[0-9]+$", "desc": "integer sprint number -- the pipeline's sprint identity" },
+    "status": { "required": true, "pattern": "^\\S+$", "desc": "sprint envelope status; `done` means closed (route.md Step 6 reads this to derive N+1). Any other value means in-flight." },
+    "name": { "required": false, "desc": "sprint title (documentary; free-form)" },
+    "variant": { "required": false, "desc": "pipeline variant this sprint was routed as (documentary)" }
+  },
+
+  "$housekeeping_comment": [
+    "The close envelope. Written ONLY by `sprint-status.sh close`, read by validate-mandatory-rules.sh",
+    "Check 3 at retro Step 5c. `closure_evidence` is free-form prose by design -- the reference",
+    "consumer's real entries run to several hundred characters of PR/deploy/smoke-test narrative.",
+    "Check 3 asserts it is NON-EMPTY, never that it matches a shape."
+  ],
+  "housekeeping_fields": {
+    "envelope_status": { "required": true, "pattern": "^done$", "desc": "always `done` -- the block exists only at close" },
+    "closure_evidence": { "required": true, "pattern": "^.*\\S.*$", "desc": "non-empty prose: what proves the sprint closed (PRs, deploys, smoke tests, operator validation)" },
+    "closed_at": { "required": false, "desc": "close date (documentary; free-form)" },
+    "retro_doc": { "required": false, "desc": "path to the retro document (documentary)" }
+  },
+
+  "header_lines": [
+    "# Sprint Status",
+    "",
+    "The sprint envelope + per-story execution ledger. ONE canonical copy, at",
+    "`_bmad-output/implementation-artifacts/sprint-status.yaml`.",
+    "",
+    "**Schema is canonical in `.claude/schemas/sprint-status.json`.** This header is",
+    "RENDERED from it by `scripts/sprint-status.sh --render` and byte-checked by",
+    "`--check`. Do NOT hand-edit this region — edit the schema and re-render.",
+    "",
+    "- `sprint: <N>` — integer sprint number. REQUIRED. The pipeline's sprint identity;",
+    "  `route.md` Step 6 derives it mechanically via `sprint-status.sh sprint-id`.",
+    "- `status: <value>` — REQUIRED. `done` means the sprint is closed; any other value",
+    "  means in-flight. Only `done` carries mechanical meaning.",
+    "- `stories:` — a MAPPING keyed by normalized story id (`story-<N>-<M>:`). NOT a list:",
+    "  a list form matches no reader and reports vacuous-green all sprint.",
+    "- `sprint_<N>_housekeeping:` — the close envelope, written ONLY by",
+    "  `sprint-status.sh close`. Carries `envelope_status: done` + non-empty",
+    "  `closure_evidence`. Check 3 (validate-mandatory-rules.sh) fails closed without it.",
+    "",
+    "Rotation is MECHANICAL and happens at pipeline START, not at close: `sprint-status.sh",
+    "roll` freezes the closed sprint to `sprint-status/sprint-<N>.yaml` and writes the new",
+    "envelope in ONE atomic step. This is why the closed sprint's `status: done` stays",
+    "readable until its successor exists — which is exactly what Step 6 reads."
+  ]
+}
