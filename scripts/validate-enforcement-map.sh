@@ -372,6 +372,29 @@ elif [ "$ag_drift" != "$ag_relabel" ]; then
   err "the anchor grammar has forked: layer-drift.sh defines ANCHOR_RE=$ag_drift but relabel-extension-checks.sh defines ANCHOR_RE=$ag_relabel. layer-drift REPORTS collisions and relabel FIXES them; a narrower grammar in either means a reported collision no tool can resolve. Make them byte-identical."
 fi
 
+# --- I18: ONE bold-anchor rule. The SAME split as I15, one function down. layer-drift.sh
+# classifies a pull; validate-layer-entries.sh lints at authoring time and runs in CI. Both
+# must agree on what a bold `**7a-post. …**` anchor is versus a `**1. Narrative drift.** …`
+# prose list item, because whichever the operator did not run is the one that is wrong.
+#
+# The narrower question — does the opening `**N.` alone make an anchor? — shipped as YES in
+# both copies and read a consumer's three-item triage list as sections 1/2/3, colliding them
+# with core's retro steps 1/2/3 forever, with a prescribed remedy ("label the heading") that
+# cannot be applied to a sentence.
+#
+# Byte-identical by assertion, not by hope — same reasoning as I15: a sourced helper must then
+# be installed and resolved in both fixture layouts (the v0.55.2 dead-path mode) for one shared
+# function. The layer-catalog-collision fixture binds the two BEHAVIOURALLY on a real input;
+# this binds them TEXTUALLY, and unlike the fixture it also runs when nobody seeds a consumer.
+ba_fn() { awk '/^bold_anchors_of_file\(\) \{/,/^\}/' "$1" 2>/dev/null; }
+ba_drift="$(ba_fn "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/layer-drift.sh")"
+ba_lint="$(ba_fn "$REPO_ROOT/core/scripts/validate-layer-entries.sh")"
+if [ -z "$ba_drift" ] || [ -z "$ba_lint" ]; then
+  err "I18 cannot find a bold_anchors_of_file() definition in layer-drift.sh and/or validate-layer-entries.sh. The check that binds the two bold-anchor rules just went vacuous — it must locate both or fail loudly, never pass by finding nothing."
+elif [ "$ba_drift" != "$ba_lint" ]; then
+  err "the bold-anchor rule has forked between layer-drift.sh and validate-layer-entries.sh. One classifies the pull and the other lints authoring and gates CI; a rule that differs between them means the two disagree about what a section IS, and the operator believes whichever they happened to run. Make bold_anchors_of_file() byte-identical."
+fi
+
 # --- I16: runtime-pipeline prose must cite CONSUMER paths, never `core/`-prefixed ones.
 # install.sh maps core/<x> -> .claude/<x>, but that governs where files LAND, not path
 # references in the prose INSIDE them. So installed core kept citing the distribution's own

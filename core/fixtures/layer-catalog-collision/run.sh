@@ -55,6 +55,43 @@ printf '%s' "$out" | grep -q "'7\.'" \
   && bad "core-only check 7 flagged — the detector is comparing the wrong sets" \
   || ok "core-only check 7 correctly silent"
 
+# --- Part 1b: a bold PROSE LIST is not a section catalog -----------------------
+# `**1. Narrative drift.** Rule text continues...` is a sentence. Reading it as an
+# anchor collides it with core's step 1 and reports a defect in text that defines
+# no section at all — and the remedy the message prescribes ("label the heading
+# `### 1. [ext:prose]`") cannot be applied to a list item. A detector that cannot
+# be silenced by following its own advice trains the operator to stop reading it.
+for n in 1 2; do
+  printf '%s' "$out" | grep -q "COLLISION on '$n\.'" \
+    && bad "bold prose list item '**$n. …**' read as a section anchor — it collides with core step $n, and the fix the message asks for cannot be applied to a sentence" \
+    || ok "bold prose list item '**$n. …**' correctly not an anchor"
+done
+
+# THE POSITIVE CONTROL, and it must be able to fail. The bold tolerance exists for
+# a real anchor; narrowing it must not take `**7a-post.**` with it. Core defines
+# 7a-post with a DIFFERENT title, so a collision is reported only if the bold
+# anchor was extracted — the assertion goes silent the moment the arm is cut too
+# deep. Without this, "no findings" would score as a pass for a detector that had
+# simply stopped looking.
+printf '%s' "$out" | grep -q "COLLISION on '7a-post\.'" \
+  && ok "bold anchor '**7a-post. …**' still extracted (collides with core's 7a-post, as it must)" \
+  || bad "bold anchor '**7a-post. …**' no longer extracted — the tolerance was cut too deep, re-opening the miss it was added for"
+
+# --- Part 1c: frontmatter that never closes ------------------------------------
+# The readers are tolerant by design (they scan to EOF for their keys), so an entry
+# whose `---` never closes yields its shadows/base_sha and satisfies every other
+# check. Nothing asked whether the block CLOSED, so the shape linted clean while the
+# body it was supposed to carry sat inside the YAML.
+printf '%s' "$out" | grep -q "unterminated\.md: frontmatter opens with '---' but never closes" \
+  && ok "unterminated frontmatter is an ERROR (the body is not a body)" \
+  || bad "unterminated frontmatter accepted — the entry lints clean while its '### …' body parses as a YAML comment"
+
+# NB: match the full basename — "terminated.md" is a substring of "unterminated.md",
+# so a looser pattern reports the trap as the control and always fails.
+printf '%s' "$out" | grep -q "steps__retro__terminated\.md: frontmatter opens" \
+  && bad "the well-formed override was flagged too — the check fires on every entry, not the broken one" \
+  || ok "the well-formed override stays silent (the check discriminates)"
+
 # --- Part 2: the title predicates, tested directly -----------------------------
 # Extract each matcher from its own file and exercise it. Both implement the same
 # rule; both are load-bearing; both must agree.
@@ -89,6 +126,28 @@ probe() { # probe <file> <fn-name> <a> <b> ; exit 0 = matched
     ${fn} \"\$1\" \"\$2\"
   " _ "$a" "$b" 2>/dev/null
 }
+
+# The bold-anchor rule, extracted from BOTH files and run on the same input. It is a
+# known drifting pair: one copy narrowed and the other not means the pull-time
+# classifier and the authoring-time linter disagree about what a section even is, and
+# whichever the operator did not run is the one that is wrong. Same split, three prior
+# defects (readopt-override vs layer-drift; register-drift vs layer-drift; the
+# heading-label rule) — so bind it here rather than trusting a comment.
+BOLD_IN="$ROOT/.claude/skills/ai-dlc/extensions/steps-domain/prose.md"
+for spec in "$LINTER|validate-layer-entries.sh" "$DRIFT|layer-drift.sh"; do
+  f="${spec%%|*}"; name="${spec##*|}"
+  [ -n "$f" ] && [ -f "$f" ] || { bad "$name not found — cannot test its bold-anchor rule"; continue; }
+  got="$(bash -c "
+    $(extract "$f" bold_anchors_of_file)
+    bold_anchors_of_file \"\$1\"
+  " _ "$BOLD_IN" 2>/dev/null | sort -u | tr '\n' ' ')"
+  got="${got% }"
+  if [ "$got" = "7a-post" ]; then
+    ok "$name/bold_anchors_of_file: extracts the anchor and only the anchor ('7a-post')"
+  else
+    bad "$name/bold_anchors_of_file: returned '$got', expected '7a-post' — the two copies disagree about what a bold anchor is, or the prose list leaked back in"
+  fi
+done
 
 for spec in "$LINTER|same_title|validate-layer-entries.sh" "$DRIFT|same_section|layer-drift.sh"; do
   f="${spec%%|*}"; rest="${spec#*|}"; fn="${rest%%|*}"; name="${rest##*|}"

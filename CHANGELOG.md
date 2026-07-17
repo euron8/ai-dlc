@@ -17,6 +17,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.72.0] — 2026-07-17
+
+### Fixed — the layer detector read a prose list as sections, and its own advice could not silence it
+
+Found while auditing the reference consumer's layer to decide what could be retired — that is,
+by trying to USE the retire signal for the job it exists to do. Of the 8 findings it reported,
+3 were text that defines no section at all.
+
+**A bold prose list is not a catalog.** `anchors_of_file()` harvested `**7a-post. Title**` bold
+anchors by matching the OPENING alone, so a consumer's three-item rule-weakness triage list —
+`**1. Narrative drift.**`, `**2. Rule weakness.**`, `**3. Complexity accretion.**` — was read as
+sections 1/2/3 and collided against core's `retro.md` steps 1/2/3. Reported on every pull,
+forever, and unfixable on its own terms: the remedy the message prescribes ("label the heading
+`### 1. [ext:<id>] …`") cannot be applied to a sentence. A detector that cannot be silenced by
+following its own advice teaches the operator to stop reading it — the exact failure
+`layer-drift.sh` says it exists to prevent (*"a report that is always wrong is a report nobody
+reads"*), now committed by the tool itself.
+
+The opening cannot discriminate: `**7a-post. Log Rotation …**` and `**1. Narrative drift.** Rule
+text continues…` open identically. What follows the CLOSING `**` decides — an anchor's bold span
+IS the heading (it ends the line, or the heading wraps and never closes on it); a list item closes
+its label and continues in plain prose. Measured on the reference consumer: **8 findings → 5**.
+
+**The tolerance's stated reason was wrong about mechanism, and the arm was kept anyway.** Its
+comment reads *"an override defines 7a-post the bold way"* — but `anchors_of_file()` is called
+only from the extensions loop; overrides resolve through `section_of()` and never reach it. The
+justification names a path that cannot arrive. The arm is still narrowed rather than deleted:
+`defined_anchors()` in `validate-layer-entries.sh` DOES read overrides, real bold anchors live
+there (`**6a.**` … `**7a-post.**`), and the fixture's positive control fails the moment the arm
+is cut deep enough to lose them.
+
+**An override whose frontmatter never closes linted clean.** `fm()` is deliberately tolerant —
+finding no closing `---` it scans to EOF for `key:` and returns it — so an entry with ONE `---`
+still yields `shadows`/`base_sha` and satisfies every other check, while its body sits inside
+the YAML block where the `### …` heading carrying the override parses as a COMMENT. Nothing ever
+asked whether the block closed. New error in `validate-layer-entries.sh`; the reference consumer's
+newest override is exactly this shape and reported **0 errors** before this release.
+
+**One predicate, two implementations — the fourth instance.** `bold_anchors_of_file()` is bound
+across `layer-drift.sh` (classifies the pull) and `validate-layer-entries.sh` (lints authoring,
+gates CI) two ways: new **I18** asserts the two definitions are byte-identical and fails loudly
+if it cannot locate either, and the `layer-catalog-collision` fixture extracts both and asserts
+they return the same anchors for the same input. Same reasoning as I15 — a sourced helper must
+then be installed and resolved in both fixture layouts (the v0.55.2 dead-path mode) for one
+shared function.
+
+**Correction to v0.71.0.** That release measured the same consumer at 8 → 5 and recorded *"the
+surviving 5 are genuine Rule 27(c) restatements"*. Re-derived by reading the BODIES rather than
+the titles: **4 of the 5 are genuine, not 5.** Core has fully absorbed `sprint-review-domain` §3
+(same HARD_BLOCK, same mutation-RED wiring test, same verbatim-risk clause) and §0 (mechanism and
+rationale both), and `gate-validation-push` 5/7 are hardenings mis-filed as extensions. But
+`sprint-review-push` §3 is a genuine addendum — its subject, decision-branch execution-coverage,
+has **zero occurrences** in core — matched only because core's `### 3. Fix and Re-Validate`
+reduces to 3 significant tokens that any `Fix and Re-Validate — <qualifier>` title contains.
+Not fixed here: the title join cannot separate that pair, because the two differ in body, not
+title. `same_section()` is left alone — v0.71.0's `smaller >= 2` guard was tuned to the 1-token
+case and this is the 3-token case, and widening a predicate that drives DELETION to chase one
+false positive is the trade that release explicitly refused.
+
+### Testing
+
+`layer-catalog-collision` grew the negative cases it never had — it asserted only that true
+positives FIRE, never that the detector stays SILENT where it must, which is why this shipped.
+Added: the bold prose list (must not be an anchor), a real `**7a-post.**` anchor colliding with
+core at a different title (the positive control — it goes quiet the moment the arm is cut too
+deep, so "no findings" cannot score as a pass for a detector that stopped looking), an
+unterminated override, a well-formed override on the same target (the control), and the
+cross-file behavioural binding.
+
+That last control earned itself immediately: the first `fm_unterminated()` wrote its result with
+`exit` inside awk rules, but `exit` still runs `END`, and `END { exit 0 }` overrode every status —
+so it returned "unterminated" for EVERY entry. The trap assertion passed for the wrong reason and
+only the well-formed control caught it. Both I18 arms and the binding are mutant-tested. Full
+suite: 25 fixtures green.
+
 ## [0.71.1] — 2026-07-16
 
 ### Fixed — a core/ subtree silently did not apply, and the same run stamped it as landed

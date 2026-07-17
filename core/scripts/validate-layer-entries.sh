@@ -96,6 +96,26 @@ fm() { # fm <file> <key> -- first frontmatter scalar, trimmed
   ' "$1"
 }
 
+# Does the frontmatter block CLOSE? Nothing asked before, and the omission hid a real
+# entry: fm() is deliberately tolerant -- finding no closing `---`, it scans to EOF for
+# `key:` and returns it -- so an entry whose block never closes still yields its
+# shadows/base_sha and passes every other check here. It reports zero errors while its
+# BODY is not a body at all: the text sits inside the YAML block, where the `### …`
+# heading that carries the override is read as a comment.
+#
+# Only the opened-but-never-closed shape is an error here. A file with no frontmatter
+# at all is already caught, loudly, by the missing-key checks below.
+# NB: `exit` inside a rule still runs END, and an `exit` there overrides the status --
+# so the state must be carried in a flag and decided once, in END. Writing the rc
+# directly in the rules made this always-true, and it read as the trap passing.
+fm_unterminated() { # fm_unterminated <file> -- rc 0 when `---` opens and never closes
+  awk '
+    NR==1 && $0!="---" { nofm=1; exit }
+    NR>1  && $0=="---" { closed=1; exit }
+    END { exit (nofm || closed) ? 1 : 0 }
+  ' "$1"
+}
+
 # Section anchors a file DEFINES. Both `### 5c. Title` headings and
 # `**7a-post. Title**` bold anchors (an override defines 7a-post that way; a
 # heading-only scan would report every reference to it as dangling).
@@ -105,13 +125,41 @@ fm() { # fm <file> <key> -- first frontmatter scalar, trimmed
 # it, so W1 -- the one check that would have caught the v0.48.0 number collision
 # -- was blind to precisely the check that caused it. Match the prefix, strip it,
 # and the anchor set is the catalog again.
+#
+# A bold ANCHOR is not a bold PROSE LIST item, and the opening cannot tell them
+# apart -- `**7a-post. Log Rotation …**` and `**1. Narrative drift.** Rule text
+# continues…` open identically. What follows the CLOSING `**` decides: an anchor's
+# bold span IS the heading (it ends the line, or the heading wraps and never closes
+# on it); a list item closes its label and continues in plain prose. Matching the
+# opening alone read a consumer's three-item rule-weakness triage list as sections
+# 1/2/3 and collided them with core's retro steps 1/2/3 -- a defect reported on
+# every run, forever, in text that defines no section, and whose prescribed remedy
+# ("label the heading `### 1. [ext:<id>] …`") cannot be applied to a sentence. It
+# also fed those sentences to the STEP namespace below, where a prose item could
+# silently satisfy a dangling "Step N".
+#
+# This predicate also lives in `reconcile/layer-drift.sh`, under the same name and
+# with the same body. The two are a KNOWN drifting pair -- the same split has already
+# cost this project three defects (readopt-override's resolver vs layer-drift's;
+# register-drift's vs layer-drift's; the heading-label rule) -- so the
+# layer-catalog-collision fixture extracts BOTH copies and asserts they return the
+# same anchors for the same input. Change one, change the other, or the fixture says so.
+bold_anchors_of_file() {
+  awk '
+    /^\*\*(Check[ \t]+)?[0-9]+[a-z-]*\./ {
+      if ($0 ~ /^\*\*[^*]*\*\*[ \t]*[^ \t]/) next   # label closes, prose follows -> list item
+      id = $0
+      sub(/^\*\*(Check[ \t]+)?/, "", id)
+      sub(/\..*$/, "", id)
+      print id
+    }' "$1" 2>/dev/null
+}
 defined_anchors() {
   [ -f "$1" ] || return 0
   { grep -Eho '^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
-      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//'
-    grep -Eho '^\*\*(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
-      | sed -E 's/^\*\*(Check[[:space:]]+)?//'
-  } | sed -E 's/\.$//' | sort -u
+      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/\.$//'
+    bold_anchors_of_file "$1"
+  } | sort -u
 }
 
 # Normalized heading TEXT for one anchor. A shared NUMBER is not a shared check:
@@ -232,6 +280,9 @@ while IFS= read -r f; do
   [ -n "$f" ] || continue
   shadows="$(fm "$f" shadows)"; base_sha="$(fm "$f" base_sha)"
 
+  fm_unterminated "$f" \
+    && err "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the override parses as a comment, not a section."
+
   [ -n "$shadows" ] || err "$(rel "$f"): missing 'shadows:' frontmatter"
 
   if [ -z "$base_sha" ]; then
@@ -257,6 +308,9 @@ echo "== extensions =="
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   kind="$(fm "$f" kind)"; hooks="$(fm "$f" hooks | awk '{print $1}')"; id="$(fm "$f" id)"
+
+  fm_unterminated "$f" \
+    && err "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the extension parses as a comment, not a section."
 
   [ -n "$kind" ] || err "$(rel "$f"): missing 'kind:' frontmatter"
   [ -n "$id" ]   || err "$(rel "$f"): missing 'id:' frontmatter"
