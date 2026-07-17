@@ -163,6 +163,12 @@ heading_labelled() { # heading_labelled <file> <anchor>
 # drag jaccard under the bar and it reads as a collision. Score the shorter title's
 # coverage instead, and the suffix stops mattering. The bar stays at 0.75 so the
 # smoke-test pair above (0.4 contained) is still correctly two different checks.
+#
+# Containment additionally requires the shorter title to carry >=2 significant tokens,
+# or it degenerates to 1/1 = 1.00 against any title sharing that one word. This rule is
+# byte-identical to `layer-drift.sh` same_section() and MUST stay that way -- the
+# `layer-catalog-collision` fixture drives both through the same vectors for that
+# reason. Change one, change the other. Full rationale lives beside same_section().
 same_title() { # same_title <normA> <normB>
   [ -n "$1" ] && [ -n "$2" ] || return 1
   awk -v A="$1" -v B="$2" '
@@ -175,7 +181,7 @@ same_title() { # same_title <normA> <normB>
       for (k in b) { nb++; if (!(k in a)) u++ }
       if (u == 0 || na == 0 || nb == 0) exit 1
       smaller = (na < nb) ? na : nb
-      exit (inter / u >= 0.6 || inter / smaller >= 0.75) ? 0 : 1
+      exit (inter / u >= 0.6 || (smaller >= 2 && inter / smaller >= 0.75)) ? 0 : 1
     }'
 }
 

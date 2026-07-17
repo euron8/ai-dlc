@@ -17,6 +17,113 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.71.0] — 2026-07-16
+
+### Fixed — four layer-machinery defects found by a consumer's catalog pass
+
+All four arrived as consumer-side change specs. Every claim was re-derived against this tree
+before anything was applied, and **two of the four specs were wrong about mechanism or impact**
+in ways that changed the fix. Recorded here because the corrections, not the specs, are the
+reusable part.
+
+**The title matcher degenerated on one-token headings.** `same_section()` matched on
+`jaccard >= 0.6 OR containment >= 0.75`, where `containment = inter/smaller`. When the shorter
+title reduces to ONE significant token, containment is `1/1 = 1.00` against *any* title
+containing that word, and the OR short-circuits the jaccard test. Core's `### 2. Deploy` reduces
+to `{deploy}` (the stoplist eats `gate`/`gates`), so every consumer heading naming deploy matched
+it at jaccard 0.12–0.20. Twelve of core's 166 anchored headings reduce to one token. Containment
+now requires the shorter title to carry >=2 significant tokens.
+
+**The spec proposed patching `layer-drift.sh`. That would have forked the predicate.**
+`validate-layer-entries.sh` `same_title()` is a byte-identical twin with **opposite polarity** —
+it negates the match (`! same_title`) and its then-branch can `err`, and it runs in CI. Both are
+patched together; the `layer-catalog-collision` fixture already drove both through one loop, and
+would not have caught a one-sided fix on its existing vectors. The `err` branch was proven
+unreachable by this guard before shipping: it fires only for `kind: check`, `kind: check`
+extensions hook `gate-validation.md`, and **no heading in `gate-validation.md` reduces to one
+token**. Measured against the reference consumer: 0 errors before, 0 errors after.
+
+The spec claimed all 8 of that consumer's `EXTENSION-RESTATES-CORE` findings were this bug and
+that the fix was the only thing that could clear them. Measured: **8 → 5**, with one converting
+to a new `EXTENSION-CHECK-NUMBER-COLLISION` (6 → 7). The surviving 5 are genuine Rule 27(c)
+restatements and are consumer-fixable. The spec also called under-reporting "impossible"; it is
+not — a 1-token core title now matches only an ext title reducing to that same token. That trade
+is deliberate: this predicate drives `EXTENSION-RETIRE-CANDIDATE`, which proposes DELETION, and
+a loose title match is worse than no title match.
+
+**`relabel-extension-checks.sh` looked at the wrong files, with the wrong grammar.**
+`[ "$kind" = check ] || continue` skipped every `kind: step-domain` entry — and on the reference
+consumer all six live collisions were step-domain, so the tool printed *"no unlabelled
+core-number collisions"* over every one of them while `layer-drift.sh` reported them correctly.
+A report that is always wrong is a report nobody reads. Its anchor grammar was also narrower than
+the detector's: it required `[0-9]+` first, so core's real `### H1.` / `### H2.` in
+`gate-validation.md` yielded ZERO anchors and a collision on them was unrelabellable even after
+the filter fix. The rewrite now INSERTS the label instead of rebuilding the heading from parts,
+which had silently normalized away em-dash separators and `Check ` prefixes.
+
+**One predicate, four implementations.** Widening in place rather than lifting a shared helper
+(an installed shared file must be registered in install.sh's loop and resolve in both fixture
+layouts — the v0.55.2 dead-path mode). The two copies are instead **bound**: new `I15` asserts
+`layer-drift.sh` and `relabel-extension-checks.sh` define a byte-identical `ANCHOR_RE`, and fails
+loudly if it cannot find either rather than passing by comparing nothing.
+`validate-enforcement-map.sh`'s own `head_ids` is deliberately excluded — it polices core's
+catalog form and BANS the `Check ` prefix `ANCHOR_RE` tolerates. Different job.
+
+**Three `retro.md` scans could not be overridden.** The relocation-pointer, path-filter dormancy,
+and rule-file-audit scans were each introduced by a **bold line with no heading**, so no override
+could anchor to one: a consumer carrying an override for the Invariant-3 scan was permanently
+`OVERRIDE-ANCHOR-UNRESOLVED` — still shadowing the right text, but with drift detection dead.
+
+**The spec's mechanism for this was wrong, and the correction removed the whole design question.**
+Override anchors do not resolve via `ANCHOR_RE`; they resolve via `section_of()`, which greps
+`^#{2,6}` **headings only** and matches by normalized-text substring — no bold arm, no ID
+required. So the "which ID, and is `4c` positionally out of order?" question was moot. All three
+scans are now plain `####` headings with no ID: the consumer's existing free-text `shadows:`
+value resolves **unchanged**, and `####` (not `###`) keeps section `#4` at its full 198-line span
+instead of truncating it to 130. Renumbering was rejected — `SKILL.md` and this CHANGELOG cite
+`retro.md` §4a/§4b by number, and a CHANGELOG is an append-only record.
+
+**Installed core cited paths that exist at no consumer.** `install.sh` maps `core/<x>` ->
+`.claude/<x>`, but that governs where files LAND, not `core/`-prefixed path references in the
+prose INSIDE them. Check 19 sent the reviewer to `core/team-roles/code-reviewer.md` for the
+Self-Discrimination Map — a dead path in every consumer. Not cosmetic: that single unsubstituted
+ref is the sole legitimate reason the reference consumer's Check-19 extension forked from core at
+all, and in forking it silently dropped core's ~28-line core-path wiring-citation clause. **One
+dead link cost a live gate rule.**
+
+The spec recommended rewriting prose refs at install time. The sweep says otherwise: of **142**
+`core/`-prefixed refs in the tree, only **3** are prose citations — all in `gate-validation.md`.
+The other 139 are legitimate and must survive: 40 in `ai-dlc-update/**` (comparing distribution
+`core/` to consumer `.claude/` is its whole job), 63 in fixtures, and 25 `enforcement-map.yaml`
+data values that `validate-enforcement-map.sh` greps in exactly that shape. An install-time
+rewrite would need an exemption list that rots. The 3 refs are corrected in place to
+`.claude/team-roles/…` — core's own incumbent convention, with 29 existing uses; the same
+sentence already cited `sprint-review.md` bare. New `I16` fails if runtime-pipeline prose cites
+`core/<dir>/`, with the directory list DERIVED from `core/*/` on disk (the five-directory set the
+bug was reported with already omitted four live subtrees).
+
+### Added
+
+- `I15` — one anchor grammar: `layer-drift.sh` and `relabel-extension-checks.sh` must define a
+  byte-identical `ANCHOR_RE`. Fails loudly when it cannot find a definition.
+- `I16` — runtime-pipeline prose must cite consumer paths, never `core/`-prefixed ones.
+  Directory list derived from disk.
+
+### Changed
+
+- `core/fixtures/layer-catalog-collision` — two vectors, both directions, driven through BOTH
+  matchers. The one-token pair must NOT match; a 6-shared-token containment pair at jaccard 0.545
+  MUST still match. The pre-existing `ABS` pair could not stand in for the latter: it scores
+  jaccard 0.667 and passes on the jaccard arm, so deleting the containment arm outright left it
+  green. Only the new vector fails a guard drawn too wide.
+- `core/fixtures/relabel-theirs-collision` — seeds a step-domain collision, a letter-anchor
+  (`H1`) collision, and a `kind: role` entry that must stay untouched (the guard against widening
+  the filter to everything). Both new assertions were confirmed to FAIL against 0.70.1.
+- `core/fixtures/enforcement-map-sites` — four assertions for I15/I16, including one asserting
+  I16 does NOT fire on the English word "core" or on `ai-dlc-update`'s by-design `core/` paths.
+- `reconcile/emit-report.sh` — the relabel filter matched a literal `### `, dropping a real
+  proposed relabel at h2/h4 out of the operator-facing report while the tool itself reported it.
+
 ## [0.70.1] — 2026-07-16
 
 ### Fixed — a pulled hook installed byte-perfect and NON-EXECUTABLE (v0.70.0's guard was inert)

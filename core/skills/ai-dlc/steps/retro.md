@@ -222,7 +222,7 @@ state the enforcement consequence inline, and contain no origin narrative.
 The WHY of each improvement goes in the commit message below, not in the
 rule file.
 
-**Rule file audit (every retro):**
+#### Rule file audit (every retro)
 
 **Ordering is load-bearing.** This scan MUST see post-improvement file
 state, so it is issued only after the "apply process improvements" edits
@@ -321,7 +321,7 @@ output stays out of the resident prefix and the lead reads only the
 IN/OUT and MISSING/ORPHAN verdict lines. If `planning_offload: off`, run
 the scans inline. Per SKILL.md Rule 24.
 
-**Path-filter dormancy scan (every retro):**
+#### Path-filter dormancy scan (every retro)
 
 If the project has no `.github/workflows/` directory (a script-based
 consumer that runs validators via `validate-*.sh` / `ci-local.sh`
@@ -344,7 +344,7 @@ including for each dormant job: evidence
 (`gh run list --workflow=<wf> --branch=main --limit 30`), sprint
 window, and (a) or (b) remediation.
 
-**Relocation-pointer + resident-ordering scan (every retro):**
+#### Relocation-pointer + resident-ordering scan (every retro)
 
 Resident-context slimming relocates rule bodies out of `SKILL.md` into
 JIT files and leaves a pointer at the seam. Three invariants MUST hold

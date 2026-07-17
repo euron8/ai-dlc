@@ -63,6 +63,22 @@ TRAP_B='smoke test coverage for user facing changes implementation gates only'  
 ABS_A='cross story test strategy 3 deliverable presence sprint review gate only'        # consumer check 33
 ABS_B='test strategy deliverable presence sprint review gate'                           # core check 21 — SAME check
 
+# The containment arm needs BOTH directions or a broken guard scores a clean run.
+#
+# DEGEN is the bug: core `### 2. Deploy` reduces to the single token {deploy} (the
+# stoplist eats gate/gates), so inter/smaller is 1/1 = 1.00 against ANY title naming
+# deploy and the OR short-circuits the jaccard test at 0.20.
+#
+# CONT is the control, and it is the load-bearing one. ABS above CANNOT stand in for
+# it: ABS scores jaccard 0.667, so it passes on the JACCARD arm and never exercises
+# containment at all — delete the containment arm outright and ABS still reports a
+# match. CONT scores jaccard 0.545, under the 0.6 gate, so ONLY containment can carry
+# it. It is the single vector here that fails when a guard is drawn too wide.
+DEGEN_A='deploy'                                                                        # core step 2 — one significant token
+DEGEN_B='deploy freshness gate hard gate non skippable'                                 # consumer 2d — na=1 nb=5 jaccard=0.200 containment=1.000
+CONT_A='cross story test strategy 3 deliverable presence sprint review gate only s281 1' # consumer check 33 + provenance tag
+CONT_B='test strategy deliverable presence sprint review gate'                          # core check 21 — na=11 nb=6 inter=6 jaccard=0.545 containment=1.000
+
 extract() { # extract <file> <fn-name> — awk, not sed: BSD sed mis-parses the `{` in the address
   awk -v fn="$2" '$0 ~ "^" fn "\\(\\) \\{" {p=1} p {print} p && /^\}/ {exit}' "$1"
 }
@@ -97,6 +113,18 @@ for spec in "$LINTER|same_title|validate-layer-entries.sh" "$DRIFT|same_section|
     ok "$name/$fn: matches the renumbered absorption (consumer 33 IS core 21)"
   else
     bad "$name/$fn: missed the renumbered absorption — a duplicate upstream already absorbed stays invisible, which is how two survived ~35 minor versions"
+  fi
+
+  if probe "$f" "$fn" "$DEGEN_A" "$DEGEN_B"; then
+    bad "$name/$fn: matched core's one-token '2. Deploy' to 'Deploy freshness gate' on {deploy} at jaccard 0.20 — containment degenerated to 1/1, so every consumer heading naming deploy restates core"
+  else
+    ok "$name/$fn: rejects the one-token containment degeneration (jaccard 0.20 is not a section match)"
+  fi
+
+  if probe "$f" "$fn" "$CONT_A" "$CONT_B"; then
+    ok "$name/$fn: still matches a 6-shared-token containment pair at jaccard 0.545 (the arm survives the guard)"
+  else
+    bad "$name/$fn: lost the provenance-tagged absorption at jaccard 0.545 — the guard was drawn too wide and took the containment arm with it"
   fi
 done
 

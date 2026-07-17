@@ -908,7 +908,7 @@ PASS verdict without map citation, OR the citation block omits one
 of the three named patterns.
 
 **Reference.** Map content + the three failure patterns are defined
-in `core/team-roles/code-reviewer.md` "Self-Discrimination Map"
+in `.claude/team-roles/code-reviewer.md` "Self-Discrimination Map"
 section. This check enforces application; the reviewer role file
 owns the pattern definitions. No content duplication.
 
@@ -926,8 +926,8 @@ inert-feature defect (a function implemented and unit-tested but never
 invoked in production) slipped through Gate 2. This is the gate-side
 meta-check that the orphaned-function / core-path wiring enforcement was
 actually applied — the reviewer severity is owned by
-`core/team-roles/code-reviewer.md` "Orphaned Function / Core-Path Wiring
-= Critical", the QA-inspection counterpart by `core/team-roles/qa.md`
+`.claude/team-roles/code-reviewer.md` "Orphaned Function / Core-Path Wiring
+= Critical", the QA-inspection counterpart by `.claude/team-roles/qa.md`
 "Orphaned-function / core-path wiring (HARD GATE)", and the seam
 non-deferral rule by `sprint-review.md` "Core-path seam non-deferral";
 this clause verifies the PASS verdict carries their evidence, exactly as

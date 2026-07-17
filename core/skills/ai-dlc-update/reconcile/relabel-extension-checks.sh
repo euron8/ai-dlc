@@ -54,8 +54,17 @@ SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 [ -d "$EXT_DIR" ] || { echo "relabel: no extensions/ under $SKILL_DIR"; exit 0; }
 
-# core headings -> bare numbers, one per line. Reads a stream on stdin.
-core_num_stream() { grep -oE '^#{2,4} [0-9]+[a-z]*\.' | sed 's/^#* //; s/\.$//'; }
+# core headings -> bare anchor ids, one per line. Reads a stream on stdin.
+#
+# This grammar is layer-drift.sh's ANCHOR_RE, byte for byte, and MUST stay that way:
+# layer-drift REPORTS the collision and this script FIXES it, so a narrower grammar here
+# means layer-drift names a collision the operator is told to relabel with a tool that
+# cannot see it. The old regex was narrower on three counts, and one of them is live in
+# core today -- `### H1.` / `### H2.` in gate-validation.md yielded NO anchor at all, so
+# an extension colliding on H1 was unrelabellable. `validate-enforcement-map.sh` asserts
+# the two definitions are identical; widen there and here together, or not at all.
+ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
+core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
 
 fm() { sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1; }
 
@@ -65,7 +74,13 @@ applied=0
 while IFS= read -r ext; do
   [ -n "$ext" ] || continue
   kind="$(fm "$ext" kind)"
-  [ "$kind" = check ] || continue
+  # step-domain extensions collide on core step numbers exactly as check extensions
+  # collide on core check numbers -- and every collision this tool was built to fix
+  # turned out to live in a step-domain file, where the old `= check` filter never
+  # looked. It reported "no unlabelled collisions" over six live ones while
+  # layer-drift.sh reported them correctly. Widen to the kinds that carry numbered
+  # headings, not to everything: a `role` entry has no anchor namespace to collide in.
+  case "$kind" in check|step-domain) ;; *) continue ;; esac
   id="$(fm "$ext" id)"
   hooks="$(fm "$ext" hooks)"
   [ -n "$id" ] && [ -n "$hooks" ] || continue
@@ -88,15 +103,20 @@ while IFS= read -r ext; do
 
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    # This extension's heading at that number, if any, and not already labelled.
-    hd="$(grep -nE "^#{2,4} ${n}\. " "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
+    # This extension's heading at that anchor, if any, and not already labelled. The
+    # separator class matches ANCHOR_RE, so `### 24. T`, `### Check 24. T` and
+    # `## Check AP — T` all resolve; requiring a literal `. ` skipped the last two.
+    anchor_at="^#{2,4}[[:space:]]+(Check[[:space:]]+)?${n}[[:space:]]*[.—][[:space:]]*"
+    hd="$(grep -nE "$anchor_at" "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
     [ -n "$hd" ] || continue
 
     lineno="${hd%%:*}"
     text="${hd#*:}"
-    title="$(printf '%s' "$text" | sed -E "s/^(#{2,4}) ${n}\. //")"
-    hashes="$(printf '%s' "$text" | grep -oE '^#{2,4}')"
-    new="${hashes} ${n}. [ext:${id}] ${title}"
+    # INSERT the label; do not rebuild the heading from parts. The old form re-emitted a
+    # hardcoded `<hashes> <n>. `, which silently rewrote an em-dash separator or dropped
+    # a `Check ` prefix -- mangling the very headings the widened grammar just taught it
+    # to see. Everything left of the title is carried through untouched.
+    new="$(printf '%s' "$text" | sed -E "s|(${anchor_at})|\1[ext:${id}] |")"
 
     found=$((found+1))
     printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
