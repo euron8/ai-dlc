@@ -968,13 +968,21 @@ redundant.
 deploy-validate, and retro gates.
 
 **Check.** Read `validation_intensity` from the pipeline snapshot's
-Sprint Context. Confirm the validation cycle run at this gate met at
-least the declared intensity's minimum:
-- `full`: Party Mode + Advanced Elicitation + Adversarial Review (2+
-  passes) — all three MUST have been invoked.
-- `standard`: Party Mode + Adversarial Review (1+ pass) — both MUST have
-  been invoked.
-- `lightweight`: Adversarial Review (1 pass) MUST have been invoked.
+Sprint Context. Resolve that intensity's minimum from **SKILL.md Rule 8's
+intensity table** — the `Minimum cycle per planning artifact` column is
+the single source, and this check deliberately does not restate it.
+Confirm the validation cycle run at this gate invoked at least every
+evaluation that row names. SKILL.md is resident at every gate, so the
+table is always readable here.
+
+This check enumerated its own copy of the minimums until v0.74.0, and the
+copy had already dropped a row: Rule 8 defines FOUR intensities and the
+list here named three, omitting `carry-over-single` entirely — zero
+occurrences in this whole file. A gate declaring the intensity Rule 8
+reserves for carry-over sprints reached the one check that enforces
+intensity and found no minimum to test it against, which reads exactly
+like a gate that met its minimum. Reading the table cannot drift from the
+table.
 
 An architecture gate that reaches a NO-CHANGES-NEEDED assessment MAY
 skip the validation cycle (fast-track). The gate log entry MUST record

@@ -402,6 +402,27 @@ elif [ "$ba_drift" != "$ba_lint" ]; then
   err "the bold-anchor rule has forked between layer-drift.sh and validate-layer-entries.sh. One classifies the pull and the other lints authoring and gates CI; a rule that differs between them means the two disagree about what a section IS, and the operator believes whichever they happened to run. Make bold_anchors_of_file() byte-identical."
 fi
 
+# --- I19: SKILL.md Rule 8's intensity table is the ONLY place the validation-cycle
+# minimums are enumerated. Check 20 kept its own copy of them and the copy dropped a row:
+# Rule 8 defines four intensities, Check 20 listed three, and `carry-over-single` appeared
+# ZERO times in gate-validation.md. A gate declaring it reached the one check that enforces
+# intensity and found no minimum to test against — indistinguishable from a gate that met it.
+#
+# Third instance in two releases of one class: a set declared twice, one copy drifts (the
+# universal core across three sources; check-manifest-bypass's fourth copy of it; now this).
+# Where the duplicate MUST exist the copies are bound (I15, I18). Here it must not exist at
+# all, so assert it does not come back rather than binding a copy into permanence.
+#
+# The signal is an intensity name and an evaluation name on one line — how a minimum is
+# written. Naming an intensity is fine and common (route.md declares one, discovery.md
+# branches on one); RESTATING what it requires is the defect.
+r8_dupes="$(grep -rnE '`(full|standard|lightweight|carry-over-single)`[^|]*(Party Mode|Advanced Elicitation|Adversarial Review)' \
+             "$REPO_ROOT/core/skills/ai-dlc/steps/" 2>/dev/null | grep -v '^[^:]*:[0-9]*:.*Rule 8' || true)"
+if [ -n "$r8_dupes" ]; then
+  err "the validation-intensity minimums are enumerated outside SKILL.md Rule 8's table — that table is the single source and a second copy is what dropped carry-over-single from Check 20. Cite the table's 'Minimum cycle per planning artifact' column instead of restating it:
+$r8_dupes"
+fi
+
 # --- I16: runtime-pipeline prose must cite CONSUMER paths, never `core/`-prefixed ones.
 # install.sh maps core/<x> -> .claude/<x>, but that governs where files LAND, not path
 # references in the prose INSIDE them. So installed core kept citing the distribution's own

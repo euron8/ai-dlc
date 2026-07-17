@@ -88,8 +88,10 @@ exercise stories.
 ### 3a. Validation cycle (Rule 8)
 
 **This step produces a planning artifact, so Rule 8 binds it like any other.** Run the
-minimum cycle for the declared `validation_intensity` — at `full` that is Party Mode (§3)
-→ Advanced Elicitation → **Adversarial Review, 2+ passes, and it must CONVERGE.**
+minimum cycle that SKILL.md Rule 8's intensity table names for the declared
+`validation_intensity` — read the row there; a copy of it here is a copy that drifts.
+Whatever the row names, the **Adversarial Review must CONVERGE**: its pass count is a
+floor, not a target, and Party Mode dispatches per §3.
 
 - **Review passes:** `_gate-procedures.md`, "Adversarial review dispatch" — ONE `adversary`
   per pass, ai-dlc-native, no Skill.
