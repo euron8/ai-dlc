@@ -380,7 +380,13 @@ carry the no-human-present additions:
    teammates left in the working tree.
 3. Finalize the pipeline snapshot — one last update capturing
    in-flight state, current sub-step, and the stopped-teammate
-   record from Step 1.
+   record from Step 1. Commit the finalized snapshot if the project
+   tracks `_bmad-output/`, then push the current branch to origin
+   (`git push`) so the Step 2 commit and the finalized state reach the
+   remote and are not stranded on this machine. If the push fails (no
+   remote configured, offline, or a protected branch), note the reason
+   in the auto-handoff line and continue; the local commits still stand
+   and the handoff is not blocked.
 4. Output the distinguishing auto-handoff line (substitute mode,
    seam label, and trigger basis), then output the resume prompt
    (SKILL.md Handoff Protocol template) wrapped in `----` delimiter
@@ -427,10 +433,12 @@ field is absent (e.g., snapshot predates this rule), initialize
 missing fields before proceeding: `context_reminders_sent: none`
 and each `last_*_fire_tokens`/`last_*_fire_turns` to `null`.
 
-The active thresholds live in the SKILL.md Handoff Protocol
-"Threshold defaults" table, which the sensor hook parses directly:
-- 200K model context → yellow 80K tokens, red 120K tokens
-- 1M model context  → yellow 120K tokens, red 200K tokens
+The active thresholds are DERIVED by the sensor from the resolved
+effective window — each band is a clamped percentage of the window, a
+bounded lead below the ceiling (`effectiveWindow - 31,000`), not read
+from a table. At a 200K window that lands at yellow 80K / red 120K; at
+larger windows the bands scale with the ceiling, clamped. The sensor
+records the level it fired in `_bmad-output/.context-sensor-state`.
 
 The lead does not measure or estimate its own context window. The
 `ai-dlc-context-sensor.sh` hook measures it every turn (Stop) and every tool batch (PostToolBatch) from the

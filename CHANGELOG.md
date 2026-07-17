@@ -17,6 +17,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.77.0] — 2026-07-17
+
+### Changed — autoCompactWindow is resolved across every settings layer, and drives every context band
+
+The context sensor and the compact-window validator resolved
+`autoCompactWindow` from only the *project* `.claude/settings.json` (plus the
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` env override). An operator who set the window
+in `.claude/settings.local.json` (higher precedence) or in the user-level
+settings file was silently treated as "model default", so the sensor
+mis-thresholded Rule 2 and the validator checked the wrong window. Claude Code
+does not expose the resolved window to a hook (not in stdin, not injected as env,
+transcript format unstable), so the replica had to be completed rather than
+observed.
+
+- **Resolution now walks Claude Code's precedence order** — env
+  `CLAUDE_CODE_AUTO_COMPACT_WINDOW` > `.claude/settings.local.json` > project
+  `.claude/settings.json` > `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json` >
+  model default. The highest layer that *defines* the key wins; a layer that does
+  not set it does not shadow a lower one; a defining layer whose value is
+  unparseable or out of range resolves to the model default. Factored into one
+  `resolve_window()` duplicated byte-identically between
+  `core/hooks/ai-dlc-context-sensor.sh` and
+  `core/scripts/validate-compact-window.sh` (hooks cannot `source` from
+  `scripts/`). Managed/enterprise settings and CLI flags outrank all layers but
+  are unreachable from a hook — documented as a limitation.
+
+- **All three bands now derive from the resolved effective window**, not a static
+  per-row table. Each band is a percentage of the window, CLAMPED to a bounded
+  lead below the ceiling (`effectiveWindow - 31,000`):
+  `clamp(effectiveWindow * PCT, ceiling - MAX_LEAD, ceiling - MIN_LEAD)`. The
+  percentage scales the bands with the window; the clamp keeps the runway sane (a
+  straight percentage fires red ~200 turns early on a 1M window and too late on a
+  small one). The MIN_LEADs are the historical 200K offsets, so small/mid windows
+  clamp to exactly the old thresholds (200K → yellow 80K / red 120K / imminent
+  149K; 300K → 180K / 220K / 249K) and only large windows go proportional (1M →
+  769K / 881K / 945K). Ordering holds BY CONSTRUCTION because the clamp ranges do
+  not overlap — the retired "auto-compact ordering invariant" table is no longer
+  a check that can silently fail to fire. Tunable via
+  `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_{PCT,MIN_LEAD,MAX_LEAD}`.
+
+- **`validate-compact-window.sh`** now reports the resolved window and its winning
+  layer, FAILs on an out-of-range value, and guards the band constants (valid
+  clamp ranges, disjoint ordering, monotonic percentages, red runway) instead of
+  re-deriving per-row thresholds from the SKILL.md table. `--skill`/`--row` are
+  accepted but ignored; the bands are row-independent.
+
+- **Handoff pushes to origin.** `steps/handoff.md` (and the auto-handoff variant
+  in `_gate-procedures.md`) now push the current branch to origin after
+  finalizing the snapshot, so committed in-flight work and the finalized state
+  are not stranded on the handing-off machine. A failed push (no remote, offline,
+  protected branch) is reported and does not block the handoff.
+
+- **Fixture** `core/fixtures/context-sensor/` gains a hermetic user-settings layer
+  (`CLAUDE_CONFIG_DIR` sandboxed) and new cases proving the layer precedence
+  (local > project > user, env supersedes) and that the bands move with the
+  resolved window (225,000 is red at a 300K window, silent at 500K). Verified as a
+  3-step proof: the new assertions fail against the pre-change sensor and pass
+  after.
+
 ## [0.76.0] — 2026-07-17
 
 ### Changed — the router classifies a bug by substance, not by the token "bug"

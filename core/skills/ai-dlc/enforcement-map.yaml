@@ -513,16 +513,18 @@ non_catalog_units:
     ci_workflow: core/ci-templates/validate-ci-gates.yml
 
   - id: compact-window-ordering
-    title: Auto-compact threshold must fire after red and bound degraded running
+    title: Context-band lead constants keep yellow < red < imminent < compaction
     adjudication: script
     enforcer:
       - core/scripts/validate-compact-window.sh
     call_sites:
       - site: SKILL.md Rule 2 (context-budget setup)
         posture: advisory — the operator sets autoCompactWindow, the lead verifies
-        why: the window is settings.json state, not pipeline state; no gate can
-          repair it and no step writes it, so the only honest posture is "check and
-          tell the operator"
+        why: the bands are a clamped percentage of the resolved effective window,
+          so red fires before compaction by construction; the script guards the band
+          constants (disjoint clamp ranges, monotonic percentages, runway) and reports
+          the resolved window, but the window itself is settings state no gate can
+          repair, so the honest posture stays "check and tell the operator"
 
   - id: h2-attestation
     title: H2 harness self-test (gate-validation.md H2) — drives the real fixtures

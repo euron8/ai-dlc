@@ -47,8 +47,11 @@ if [ -f scripts/validate-layer-entries.sh ]; then
     bash scripts/validate-layer-entries.sh
 fi
 
-# 2. The auto-compact ordering invariant: red must fire before the harness compacts,
-#    or the handoff never gets first refusal. A config check, decidable from disk.
+# 2. The context bands derive from the resolved effective window, so red fires
+#    before the harness compacts by construction. This guards the lead constants
+#    (yellow > red > imminent > 0, red with runway to spare) and reports the
+#    resolved autoCompactWindow, FAILing on an out-of-range value. Decidable from
+#    disk.
 if [ -f scripts/validate-compact-window.sh ]; then
   step "compact-window invariant" \
     bash scripts/validate-compact-window.sh

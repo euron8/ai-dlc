@@ -418,19 +418,37 @@ sprint-PR merge, the Production Validation Checkpoint, a
 disposition. Treating resume text as standing approval is a rule
 violation.
 
-### Threshold defaults
+### Reminder thresholds
 
-| Model context window | Yellow (first reminder) | Red (urgent reminder) |
-|---|---|---|
-| 200K | 80K tokens | 120K tokens |
-| 1M   | 120K tokens | 200K tokens |
+Yellow, red, and imminent are DERIVED from the resolved effective window,
+not read from a table. Each band's threshold is a percentage of the window,
+CLAMPED to a bounded distance ("lead") below the ceiling
+(`effectiveWindow - 31,000`):
 
-Projects override defaults by editing the table above directly.
-Absolute token counts, not percentages.
+```
+threshold = clamp(effectiveWindow * PCT, ceiling - MAX_LEAD, ceiling - MIN_LEAD)
+```
 
-Red MUST fire before Claude Code's auto-compact threshold -- see
-"Auto-compact ordering invariant" below. The check is mechanized in
-`scripts/validate-compact-window.sh`.
+The percentage lets the bands scale with the window; the clamp keeps the
+runway before compaction sane -- a straight percentage would fire red ~200
+turns early on a 1M window (noise) and too late on a small one. Defaults:
+
+| Band | PCT | Min lead | Max lead |
+|---|---|---|---|
+| yellow   | 60% | 89,000 | 200,000 |
+| red      | 75% | 49,000 |  88,000 |
+| imminent | 90% | 20,000 |  24,000 |
+
+The MIN_LEADs are the historical 200K offsets, so at small/mid windows every
+band clamps to the old thresholds (200K → yellow 80,000 / red 120,000 /
+imminent 149,000; 300K → 180,000 / 220,000 / 249,000) and only goes
+proportional on large windows, where MAX_LEAD caps the runway (1M → 769,000
+/ 881,000 / 945,000). Tune with `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_PCT`
+and `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_{MIN,MAX}_LEAD`.
+
+Red fires before Claude Code's auto-compact threshold BY CONSTRUCTION -- the
+clamp ranges do not overlap -- see "Auto-compact ordering invariant" below.
+The constants are guarded by `scripts/validate-compact-window.sh`.
 
 ### Reminder semantics
 
@@ -487,32 +505,44 @@ Imminent (critical band, ranked above red):
 > via /clear + /ai-dlc resume. Compaction is strictly lower fidelity
 > than the handoff.`
 
-The critical band opens at `effectiveWindow - 31,000 - 20,000` and is
+All three bands are a clamped percentage of the effective window below
+`effectiveWindow - 31,000` (see "Reminder thresholds" above). imminent is
 its own level ranked above red, so entering it always fires on the first
-crossing. It fires only when the model row is known, never on an assumed
-row.
+crossing, and it fires only when the model row is known -- never on an
+assumed row. yellow and red still fire on the assumed 200K row, so a fresh
+project is never left un-warned before its row is proven.
 
 ### Auto-compact ordering invariant
 
 Claude Code compacts when the context reaches `effectiveWindow - 13000`,
-where `effectiveWindow` is `min(autoCompactWindow, model max)` and
-`autoCompactWindow` is an integer in `[100000, 1000000]` set in
-`.claude/settings.json`, via `/config`, or by
-`CLAUDE_CODE_AUTO_COMPACT_WINDOW`. That threshold must satisfy:
+where `effectiveWindow` is `min(autoCompactWindow, model max)`.
+`autoCompactWindow` is an integer in `[100000, 1000000]`, resolved in
+Claude Code's precedence order -- highest first:
 
 ```
-red + MIN_SLACK  <  threshold  <  red + MAX_DRIFT
+env CLAUDE_CODE_AUTO_COMPACT_WINDOW
+  > .claude/settings.local.json
+  > .claude/settings.json        (project)
+  > ~/.claude/settings.json      (user; or $CLAUDE_CONFIG_DIR/settings.json)
+  > model default
 ```
 
-with `MIN_SLACK` 50,000 and `MAX_DRIFT` 100,000 by default.
+(Managed/enterprise settings and CLI flags outrank all of these but are
+not readable from a hook, so they cannot be modelled.)
 
-Red must fire before the auto-compact threshold so the handoff gets
-first refusal; the upper bound caps how far a run drifts past red when
-the reminder is ignored.
+Because every band is a clamped percentage anchored to the resolved
+ceiling, red fires before the compaction threshold BY CONSTRUCTION: red's
+clamp keeps it at least `RED_MIN_LEAD` (49,000) below the ceiling, so it
+clears the `effectiveWindow - 13,000` compaction point by at least 67,000
+tokens for any window, and the disjoint clamp ranges keep yellow < red <
+imminent. The ordering no longer depends on hand-tuned per-row thresholds.
 
 AI/DLC does not write `autoCompactWindow`. Run
-`scripts/validate-compact-window.sh` to check the invariant, and pass
-`--row` to scope it to the context size the project actually runs.
+`scripts/validate-compact-window.sh` to confirm the band constants keep the
+ordering (disjoint clamp ranges, monotonic percentages, red with runway to
+spare) and to report the resolved window; it FAILs on a value outside
+`[100000, 1000000]`, which Claude Code would silently discard back to the
+model default.
 
 ### Auto-handoff (configurable via `auto_handoff_mode`)
 

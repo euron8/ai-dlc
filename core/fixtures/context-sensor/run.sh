@@ -54,8 +54,14 @@ fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$WORK/_bmad-output" "$WORK/.claude/skills/ai-dlc"
+mkdir -p "$WORK/_bmad-output" "$WORK/.claude/skills/ai-dlc" "$WORK/home"
 touch "$WORK/_bmad-output/pipeline-snapshot.md"
+
+# HERMETIC user-settings layer. resolve_window() reads
+# ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json as the lowest layer; point it
+# at the sandbox so a case with no project/local window never reads the real
+# ~/.claude/settings.json (which would make the assertions depend on the machine).
+export CLAUDE_CONFIG_DIR="$WORK/home"
 
 cat > "$WORK/.claude/skills/ai-dlc/SKILL.md" <<'SKILL'
 ### Threshold defaults
@@ -85,6 +91,12 @@ fire()   { printf '{"transcript_path":"%s","session_id":"t"%s}' "$FIXTURES/$1" "
              | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
 ctx()    { jq -r '.hookSpecificOutput.additionalContext // empty' 2>/dev/null; }
 field()  { sed -n "s/^$1=//p" "$STATE" 2>/dev/null | head -1; }
+at()     { # $1 = tokens -> writes a one-line transcript, returns its path
+  printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
+    "$(( $1 - 2 ))" > "$WORK/at.jsonl"
+  printf '%s' "$WORK/at.jsonl"
+}
+raw()    { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
 
 ok()   { PASS=$((PASS+1)); printf '  PASS  %s\n' "$1"; }
 bad()  { FAIL=$((FAIL+1)); printf '  FAIL  %s -- %s\n' "$1" "$2"; }
@@ -160,23 +172,18 @@ check "assumed row does not claim imminence" \
 check "  and stays row_known=0" "$(field row_known)" "0"
 
 reset
-OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$FIXTURES/at-red.jsonl" \
+OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 185000)" \
         | AI_DLC_MODEL_ROW=1M CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
 check "AI_DLC_MODEL_ROW pins the row" "$(field model_row)" "1M"
-check "  130000 is only yellow on the 1M row" \
+check "  185000 is yellow on the 1M row (300000 window -> yellow 180000)" \
   "$(printf '%s' "$OUT" | grep -c 'YELLOW' | tr -d ' ')" "1"
 
 # --- compact_imminent band ----------------------------------------------------
-# window 300000 -> ceiling 269000 -> critical band opens at 249000.
-# A warning AT the ceiling is useless: all three real graph compactions last
-# measured 268,892 / 267,719 / 267,445, i.e. BELOW 269000, because compaction
-# preempts the next turn. The band must open with turns to spare.
-at() { # $1 = tokens -> writes a one-line transcript, returns its path
-  printf '{"type":"assistant","isSidechain":false,"message":{"model":"claude-opus-4-8","usage":{"input_tokens":2,"cache_creation_input_tokens":0,"cache_read_input_tokens":%s}}}\n' \
-    "$(( $1 - 2 ))" > "$WORK/at.jsonl"
-  printf '%s' "$WORK/at.jsonl"
-}
-raw() { printf '{"transcript_path":"%s","session_id":"t"}' "$1" | CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null; }
+# window 300000 -> ceiling 269000 -> critical band opens at 249000 (imminent
+# clamps to its 20000 min-lead here). A warning AT the ceiling is useless: all
+# three real graph compactions last measured 268,892 / 267,719 / 267,445, i.e.
+# BELOW 269000, because compaction preempts the next turn. The band must open
+# with turns to spare. (at()/raw() are defined near the top helpers.)
 
 reset; printf 'row=1M\n' > "$MODEL"
 OUT="$(raw "$(at 249001)" | ctx)"
@@ -194,9 +201,9 @@ case "$OUT" in *"RED threshold"*) ok "just below the band is red, not imminent" 
 # The real ordering hazard: red already fired, then the band opens well inside
 # red's 50K/20-turn recurrence window. imminent must escalate immediately.
 reset; printf 'row=1M\n' > "$MODEL"
-raw "$(at 210000)" >/dev/null                       # red fires
+raw "$(at 225000)" >/dev/null                       # red fires (300000 window -> red 220000)
 check "  red fired first" "$(field last_level)" "red"
-OUT="$(raw "$(at 250000)" | ctx)"                   # +40K, only 1 turn later
+OUT="$(raw "$(at 250000)" | ctx)"                   # +25K, only 1 turn later
 case "$OUT" in *"Auto-compact will fire"*) ok "imminent escalates from red inside the recurrence window" ;;
   *) bad "imminent escalates from red inside the recurrence window" "got: ${OUT:-<silent>}" ;; esac
 
@@ -216,11 +223,53 @@ reset
 printf 'row=1M\n' > "$MODEL"
 FIRES=0
 i=0
+FLAT="$(at 185000)"                                 # yellow at the 300000 window
 while [ "$i" -lt 25 ]; do
   i=$((i+1))
-  [ -n "$(fire at-red.jsonl | ctx)" ] && FIRES=$((FIRES+1))
+  [ -n "$(raw "$FLAT" | ctx)" ] && FIRES=$((FIRES+1))
 done
 check "flat context fires twice in 25 turns (initial + 20-turn recurrence)" "$FIRES" "2"
+
+# --- window resolution across settings layers (Change A) ----------------------
+# effective_window (recorded in .context-sensor-state) = min(resolved
+# autoCompactWindow, model max); on a 1M row the max is 1000000, so it echoes the
+# resolved window. Each case proves a layer the pre-change sensor could not see:
+# it read only the project settings.json, so local/user cases would report 300000.
+reset; printf 'row=1M\n' > "$MODEL"
+echo '{"autoCompactWindow":250000}' > "$WORK/.claude/settings.local.json"    # project is 300000
+raw "$(at 100000)" >/dev/null
+check "settings.local.json overrides project settings.json" "$(field effective_window)" "250000"
+rm -f "$WORK/.claude/settings.local.json"
+
+reset; printf 'row=1M\n' > "$MODEL"
+mv "$WORK/.claude/settings.json" "$WORK/.claude/settings.json.bak"           # drop project layer
+echo '{"autoCompactWindow":420000}' > "$WORK/home/settings.json"             # user layer ($CLAUDE_CONFIG_DIR)
+raw "$(at 100000)" >/dev/null
+check "user settings used when no project/local layer sets the key" "$(field effective_window)" "420000"
+mv "$WORK/.claude/settings.json.bak" "$WORK/.claude/settings.json"
+rm -f "$WORK/home/settings.json"
+
+reset; printf 'row=1M\n' > "$MODEL"
+printf '{"transcript_path":"%s","session_id":"t"}' "$(at 100000)" \
+  | CLAUDE_CODE_AUTO_COMPACT_WINDOW=200k CLAUDE_PROJECT_DIR="$WORK" "$HOOK" >/dev/null 2>&1
+check "env CLAUDE_CODE_AUTO_COMPACT_WINDOW supersedes settings files" "$(field effective_window)" "200000"
+
+# --- bands track the resolved window (Change B) -------------------------------
+# The SAME reading changes level as the window changes, because the bands are a
+# clamped percentage of the effective window: at a 300000 window red is 220000,
+# but at 500000 the bands move up and 225000 no longer even reaches yellow
+# (300000). The pre-change sensor read red off the 1M table (200000) regardless
+# of the window, so 225000 fired red at BOTH -- this silent-at-500000 case is what
+# it could not produce.
+reset; printf 'row=1M\n' > "$MODEL"
+OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 225000)" \
+  | CLAUDE_CODE_AUTO_COMPACT_WINDOW=300000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
+check "225000 is RED at a 300000 window" "$(printf '%s' "$OUT" | grep -c 'RED threshold' | tr -d ' ')" "1"
+
+reset; printf 'row=1M\n' > "$MODEL"
+OUT="$(printf '{"transcript_path":"%s","session_id":"t"}' "$(at 225000)" \
+  | CLAUDE_CODE_AUTO_COMPACT_WINDOW=500000 CLAUDE_PROJECT_DIR="$WORK" "$HOOK" 2>/dev/null | ctx)"
+check "the same 225000 is silent at a 500000 window (bands moved up)" "${OUT:-EMPTY}" "EMPTY"
 
 # --- PostToolBatch event + throttle ------------------------------------------
 # The sensor is wired to Stop AND PostToolBatch so it samples during turn-less

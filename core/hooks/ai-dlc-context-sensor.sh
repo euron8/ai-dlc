@@ -78,8 +78,12 @@ STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"
 SNAPSHOT_FILE="${STATE_DIR}/pipeline-snapshot.md"
 STATE_FILE="${STATE_DIR}/.context-sensor-state"
 MODEL_FILE="${STATE_DIR}/.context-sensor-model"
-SKILL_MD="${PROJECT_DIR}/.claude/skills/ai-dlc/SKILL.md"
-SETTINGS_JSON="${PROJECT_DIR}/.claude/settings.json"
+# autoCompactWindow resolution reads these settings layers in Claude Code's
+# precedence order (highest first). Managed/enterprise settings and CLI-flag
+# overrides are not reachable from a hook, so they cannot be modelled here.
+SETTINGS_LOCAL="${PROJECT_DIR}/.claude/settings.local.json"
+SETTINGS_PROJECT="${PROJECT_DIR}/.claude/settings.json"
+SETTINGS_USER="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
 
 # Claude Code compacts at `effectiveWindow - COMPACT_RESERVE`, but the quantity
 # THIS hook measures sits a further ~18,000 below that at fire time: the check
@@ -89,16 +93,40 @@ SETTINGS_JSON="${PROJECT_DIR}/.claude/settings.json"
 COMPACT_RESERVE=13000
 SENSOR_RESERVE="${AI_DLC_SENSOR_RESERVE:-31000}"
 
-# A warning delivered AT the ceiling is worthless: compaction fires on the very
-# next model request, so the injected directive is destroyed by the event it
-# warns about. Worse, the ceiling is usually never observed at all -- the three
-# real compactions on the `graph` consumer last measured 268,892 / 267,719 /
-# 267,445 against a 269,000 ceiling, because compaction preempted the next turn.
+# The three context bands are a PERCENTAGE of the resolved effective window,
+# CLAMPED so the distance below the ceiling (EFFECTIVE - SENSOR_RESERVE) stays
+# within absolute bounds. The percentage lets the bands scale with the window; the
+# clamp keeps the runway before compaction sane -- a straight percentage would
+# fire red ~200 turns early on a 1M window (noise) and too late on a small one.
 #
-# So the critical band opens IMMINENT_LEAD tokens below the ceiling. At the
-# measured p50 growth of ~1,200 tokens/turn, 20,000 buys roughly 16 turns -- room
-# to refresh the snapshot and hand off deliberately.
-IMMINENT_LEAD="${AI_DLC_SENSOR_IMMINENT_LEAD:-20000}"
+# Each band's threshold is clamp(EFFECTIVE * PCT / 100, ceiling - MAX_LEAD,
+# ceiling - MIN_LEAD). MIN_LEAD is the closest the band may sit to the ceiling
+# (latest fire); MAX_LEAD the furthest (earliest). The MIN_LEADs are the
+# historical 200K offsets, so at small/mid windows every band clamps to exactly
+# the old thresholds (200K -> yellow 80000, red 120000, imminent 149000; a 300000
+# window -> 180000 / 220000 / 249000) and only goes proportional on large windows,
+# where MAX_LEAD caps the runway.
+#
+# Ordering holds BY CONSTRUCTION: the clamp ranges do not overlap, because
+# YELLOW_MIN_LEAD > RED_MAX_LEAD and RED_MIN_LEAD > IMMINENT_MAX_LEAD. So
+# T_yellow <= ceiling-YELLOW_MIN_LEAD < ceiling-RED_MAX_LEAD <= T_red, and likewise
+# T_red < T_imminent, for ANY window and ANY percentages.
+# validate-compact-window.sh guards these constants.
+#
+# A warning delivered AT the ceiling is worthless (compaction fires on the very
+# next request and destroys the injected directive), and the ceiling is usually
+# never observed at all -- three real `graph` compactions last measured 268,892 /
+# 267,719 / 267,445 against a 269,000 ceiling. So imminent's MIN_LEAD (20,000)
+# opens its band ~16 turns early at the measured ~1,200 tokens/turn.
+YELLOW_PCT="${AI_DLC_SENSOR_YELLOW_PCT:-60}"
+RED_PCT="${AI_DLC_SENSOR_RED_PCT:-75}"
+IMMINENT_PCT="${AI_DLC_SENSOR_IMMINENT_PCT:-90}"
+YELLOW_MIN_LEAD="${AI_DLC_SENSOR_YELLOW_MIN_LEAD:-89000}"
+YELLOW_MAX_LEAD="${AI_DLC_SENSOR_YELLOW_MAX_LEAD:-200000}"
+RED_MIN_LEAD="${AI_DLC_SENSOR_RED_MIN_LEAD:-49000}"
+RED_MAX_LEAD="${AI_DLC_SENSOR_RED_MAX_LEAD:-88000}"
+IMMINENT_MIN_LEAD="${AI_DLC_SENSOR_IMMINENT_MIN_LEAD:-20000}"
+IMMINENT_MAX_LEAD="${AI_DLC_SENSOR_IMMINENT_MAX_LEAD:-24000}"
 
 # Recurrence, matching _gate-procedures.md: re-fire the current level after a
 # 50,000-token or 20-turn delta.
@@ -315,12 +343,14 @@ case "$ROW" in
   *)  MODEL_MAX=200000 ;;
 esac
 
-# autoCompactWindow: env > settings.json > unset. Accepts Claude Code's own
-# spellings ("auto", "400k", "1m", bare int where 100..1000 means thousands).
+# autoCompactWindow resolution. parse_window() accepts Claude Code's own
+# spellings ("auto", "400k", "1m", bare int where 100..1000 means thousands);
+# resolve_window() walks the settings layers in Claude Code's precedence order.
 #
-# NOTE: byte-identical to parse_window() in scripts/validate-compact-window.sh.
-# Hooks install to .claude/hooks/ and cannot source from scripts/, so this is
-# duplicated deliberately. Keep the two in step.
+# NOTE: parse_window() and resolve_window() below are byte-identical to the
+# copies in scripts/validate-compact-window.sh. Hooks install to .claude/hooks/
+# and cannot source from scripts/, so they are duplicated deliberately. Keep the
+# two in step.
 parse_window() {
   local raw
   raw="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
@@ -339,14 +369,27 @@ parse_window() {
   esac
 }
 
-WINDOW=""
-if [ -n "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" ]; then
-  WINDOW="$(parse_window "$CLAUDE_CODE_AUTO_COMPACT_WINDOW" 2>/dev/null || true)"
-fi
-if [ -z "$WINDOW" ] && [ -r "$SETTINGS_JSON" ]; then
-  RAW_WINDOW="$(jq -r '.autoCompactWindow // empty' "$SETTINGS_JSON" 2>/dev/null || true)"
-  [ -n "$RAW_WINDOW" ] && WINDOW="$(parse_window "$RAW_WINDOW" 2>/dev/null || true)"
-fi
+# The highest-precedence layer that DEFINES autoCompactWindow wins; a layer that
+# does not set the key does not shadow a lower one; a defining layer whose value
+# is unparseable ("auto") or otherwise not a plain integer resolves to the model
+# default and lower layers are not consulted -- this mirrors Claude Code's own
+# config merge.
+resolve_window() {
+  local raw val
+  if [ -n "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" ]; then
+    if val="$(parse_window "$CLAUDE_CODE_AUTO_COMPACT_WINDOW")"; then printf '%s' "$val"; fi
+    return 0
+  fi
+  for f in "$SETTINGS_LOCAL" "$SETTINGS_PROJECT" "$SETTINGS_USER"; do
+    [ -r "$f" ] || continue
+    raw="$(jq -r '.autoCompactWindow // empty' "$f" 2>/dev/null || true)"
+    [ -n "$raw" ] || continue
+    if val="$(parse_window "$raw")"; then printf '%s' "$val"; fi
+    return 0
+  done
+}
+
+WINDOW="$(resolve_window 2>/dev/null || true)"
 case "${WINDOW:-}" in ''|*[!0-9]*) WINDOW="" ;; esac
 
 EFFECTIVE="$MODEL_MAX"
@@ -355,43 +398,30 @@ if [ -n "$WINDOW" ] && [ "$WINDOW" -lt "$MODEL_MAX" ]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Thresholds from the SKILL.md table -- the same rows validate-compact-window.sh
-# reads, and the ones projects are told to edit directly.
-#   | 200K | 80K tokens  | 120K tokens |
-#   | 1M   | 120K tokens | 200K tokens |
+# Context bands: a clamped percentage of the resolved effective window (see the
+# constant block above). imminent stays gated on ROW_KNOWN below -- EFFECTIVE is a
+# guess on an assumed row, and assuming 1M on a real 200K model would push
+# imminent past the real compaction point. yellow/red still fire on the assumed
+# 200K row, so a fresh project is never left un-warned before its row is proven.
+# A band whose threshold is <= 0 (a window near the 100000 floor, where MAX_LEAD
+# exceeds the ceiling) is disabled for that reading rather than firing at every
+# token count.
 # -----------------------------------------------------------------------------
-[ -r "$SKILL_MD" ] || exit 0
-
-read -r YELLOW RED <<EOF
-$(awk -F'|' -v want="$ROW" '
-  /^\|[[:space:]]*(200K|1M)[[:space:]]*\|/ {
-    gsub(/[[:space:]]/, "", $2)
-    gsub(/[[:space:]]|tokens/, "", $3)
-    gsub(/[[:space:]]|tokens/, "", $4)
-    if ($2 != want) next
-    y = $3; r = $4
-    ymult = (y ~ /K$/) ? 1000 : 1; sub(/K$/, "", y)
-    rmult = (r ~ /K$/) ? 1000 : 1; sub(/K$/, "", r)
-    printf "%d %d\n", y * ymult, r * rmult
-    exit
-  }
-' "$SKILL_MD" 2>/dev/null)
-EOF
-
-case "${YELLOW:-}" in ''|*[!0-9]*) exit 0 ;; esac
-case "${RED:-}" in ''|*[!0-9]*) exit 0 ;; esac
-[ "$RED" -gt "$YELLOW" ] || exit 0
-
-# Runtime backstop for the ordering invariant that validate-compact-window.sh
-# only checks at config time: if the configured red sits above this project's
-# actual ceiling, red would never fire before compaction. Only meaningful when
-# the row is KNOWN -- on an assumed row, EFFECTIVE is a guess and this would
-# raise a false alarm ~100 turns early.
 CEILING=$(( EFFECTIVE - SENSOR_RESERVE ))
-IMMINENT=0
-if [ "$ROW_KNOWN" -eq 1 ] && [ "$TOKENS" -ge $(( CEILING - IMMINENT_LEAD )) ]; then
-  IMMINENT=1
-fi
+
+band() {  # $1 pct  $2 min_lead  $3 max_lead  -> echoes the clamped threshold
+  local raw hi lo
+  raw=$(( EFFECTIVE * $1 / 100 ))
+  hi=$(( CEILING - $2 ))          # closest allowed to the ceiling (latest fire)
+  lo=$(( CEILING - $3 ))          # furthest allowed from it   (earliest fire)
+  [ "$raw" -gt "$hi" ] && raw="$hi"
+  [ "$raw" -lt "$lo" ] && raw="$lo"
+  printf '%s' "$raw"
+}
+
+T_YELLOW="$(band "$YELLOW_PCT" "$YELLOW_MIN_LEAD" "$YELLOW_MAX_LEAD")"
+T_RED="$(band "$RED_PCT" "$RED_MIN_LEAD" "$RED_MAX_LEAD")"
+T_IMMINENT="$(band "$IMMINENT_PCT" "$IMMINENT_MIN_LEAD" "$IMMINENT_MAX_LEAD")"
 
 # -----------------------------------------------------------------------------
 # Fire state
@@ -428,11 +458,11 @@ fi
 # on the 50,000-token / 20-turn recurrence delta and could sail into compaction
 # without ever being told to refresh the snapshot.
 LEVEL=none
-if [ "$IMMINENT" -eq 1 ]; then
+if   [ "$ROW_KNOWN" -eq 1 ] && [ "$T_IMMINENT" -gt 0 ] && [ "$TOKENS" -ge "$T_IMMINENT" ]; then
   LEVEL=imminent
-elif [ "$TOKENS" -ge "$RED" ]; then
+elif [ "$T_RED" -gt 0 ] && [ "$TOKENS" -ge "$T_RED" ]; then
   LEVEL=red
-elif [ "$TOKENS" -ge "$YELLOW" ]; then
+elif [ "$T_YELLOW" -gt 0 ] && [ "$TOKENS" -ge "$T_YELLOW" ]; then
   LEVEL=yellow
 fi
 
@@ -483,15 +513,15 @@ fi
 PCT="$(awk -v t="$TOKENS" -v e="$EFFECTIVE" 'BEGIN{ printf "%d", (e > 0 ? t * 100 / e : 0) }')"
 
 if [ "$LEVEL" = imminent ]; then
-  THR=$(( CEILING - IMMINENT_LEAD ))
+  THR="$T_IMMINENT"
   # Turns of headroom at the measured p50 growth rate. Deliberately rounded down.
   TURNS_LEFT="$(awk -v c="$CEILING" -v t="$TOKENS" 'BEGIN{ n=int((c-t)/1200); print (n<1?1:n) }')"
   ADVICE="Auto-compact will fire at ~${CEILING} tokens -- roughly ${TURNS_LEFT} more turns at the observed growth rate. BEFORE your next pipeline action, refresh _bmad-output/pipeline-snapshot.md so it reflects the CURRENT state: Pipeline Position (current step file, in-flight sub-step), Recent Activity, Open Items, and any Locked Decisions taken since the last gate. A snapshot last written at a gate may be hundreds of turns stale, and it is what ai-dlc-recover.sh re-reads after compaction -- a stale snapshot is recovered faithfully and is still wrong. Having refreshed it, CONTINUE. Compaction is lower fidelity than a handoff, so SURFACE that trade-off to the operator in one line and let THEM call it -- do NOT hand off on your own. Rule 2: only path (a) initiates a handoff, and path (a) is the operator asking. A threshold is not a request."
 elif [ "$LEVEL" = red ]; then
-  THR="$RED"
+  THR="$T_RED"
   ADVICE="Rule 2(c) is a REMINDER, not an instruction to hand off. Finalize the pipeline snapshot so it is not stale, then CONTINUE. If you judge a handoff would be higher fidelity than the coming auto-compact, say so in one line and let the operator decide -- do NOT initiate one yourself."
 else
-  THR="$YELLOW"
+  THR="$T_YELLOW"
   ADVICE="Rule 2(b): finish the current sub-step, then continue."
 fi
 
