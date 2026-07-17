@@ -17,6 +17,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.80.0] — 2026-07-17
+
+### Changed — the dispatch guard now SETS a teammate's model instead of DENYING a wrong/absent one
+
+The dispatch guard (v0.70.0) binds a teammate's model to its role file: it reads the role's `/model`
+pin and, when the Agent dispatch requested a different tier or no `model` param at all, it DENIED —
+forcing the lead to re-dispatch. That worked, but it cost a round trip AND depended on the lead
+recalling Rule 19(a) to fix it. The motivating failure was exactly where that recall is weakest: on
+graph S292, the adversary was dispatched with NO `model` param as the first dispatch of a RESUMED
+session (a fresh transcript, hours after the prior passes), the guard denied, and the lead
+re-dispatched with `opus` 18 seconds later. First-time-correct, not deny-then-retry, was the ask.
+
+PreToolUse hooks can rewrite a tool call's arguments via `updatedInput`. The guard already parsed
+the role file's pin to CHECK the model; now it uses that same pin to SET it. When the requested tier
+disagrees with the pin, or no `model` was passed, the guard injects `model` = the pinned tier via
+`updatedInput` and returns `allow`. An already-correct dispatch is untouched (exit 0, no decision),
+so its approval posture is unchanged. The dispatch is now correct on the FIRST spawn with nothing
+required in the caller's context — the failure mode was a no-param spawn on a resumed session, and
+that is now bound, not rejected.
+
+- **Safe by construction — it cannot force-approve.** PreToolUse merges every matching hook's verdict
+  most-restrictive-first (`deny` > `defer` > `ask` > `allow`, per the hooks docs). `allow` is the
+  LEAST restrictive, so the guard's `allow` cannot override another hook's `deny` (the Rule 29 pause
+  hook still blocks a spawn while paused) nor a settings `permissions.deny` rule. The guard emits
+  `allow` ONLY on the correcting path and ONLY to carry `updatedInput`.
+- **Still fail-open** on every ambiguity (no role binding, unpinned or unreadable role, pins that
+  disagree on tier, unparseable input, or a `tool_input` jq cannot amend): exit 0, no change. The
+  guard only ever ADDS/CORRECTS the model — it never denies.
+- **Docs realigned.** `dev.md`, `implementation.md`, `stories-test-strategy.md`, and SKILL.md Rule
+  19(a) said the guard "denies a call-site override"; they now say it rebinds the override to the
+  pin. The invariant is unchanged and stronger: a call site cannot set a teammate's model — the role
+  file is the source of truth — but the override is silently corrected, not rejected. Setting `model`
+  explicitly remains the norm and Check 22 still records a miss at retro.
+- **Fixture `dispatch-model-guard` rewritten** to assert the INJECTED tier (absent → pin, wrong tier
+  → pin, already-correct → untouched, all fail-open branches → untouched), that the emission is
+  `allow` and preserves the original prompt/role binding, and that Task is policed like Agent. Mutant-
+  verified: neutering the set path empties every correcting assertion and the fixture goes red.
+
+DEPENDENCY, disclosed: this relies on the harness honoring `updatedInput` on a PreToolUse `allow`
+(documented behavior — "when multiple PreToolUse hooks return `updatedInput`, the last takes
+effect"). It is verified here that the guard EMITS the correct contract, but honoring is a harness
+behavior not exercisable from the distribution repo (the guard no-ops outside a layered consumer).
+If a future harness drops `updatedInput` support, this path must revert to DENY.
+
 ## [0.79.0] — 2026-07-17
 
 ### Added — the terminal-pass provenance block on story files is written mechanically, not "per precedent"

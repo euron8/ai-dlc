@@ -74,7 +74,7 @@ assigned story files and the architecture document.
   — one requiring architectural judgment, cross-layer analysis, or an open-ended
   implementation approach — is not handled by the lead passing you a different
   model at spawn; the dispatch guard binds your model to this role file and
-  denies a call-site override. Instead such a story is tagged `escalate_model:
+  rebinds any call-site override back to its pin. Instead such a story is tagged `escalate_model:
   true` and routed to the `dev-escalated` role (the same contract you follow
   here, on a stronger model). See `stories-test-strategy.md` "Story Routing
   Tags" and `implementation.md` pre-dispatch routing.

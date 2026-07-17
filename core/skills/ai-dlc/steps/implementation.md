@@ -67,7 +67,9 @@ NOT hardcode a second copy here. The two routes today:
   teammate (from `.claude/team-roles/dev-escalated.md`) instead of
   `dev`. Same Dev contract, stronger (opus-tier) model. Do NOT instead
   pass a higher `model` param to a `dev` dispatch — the dispatch guard
-  binds `dev`'s model to `dev.md`'s pin and denies a call-site override.
+  binds `dev`'s model to `dev.md`'s pin and rebinds a call-site override
+  back to it, so a higher `model` on a `dev` dispatch is silently corrected
+  to dev's tier, never honored. Escalation is a ROLE, not a call-site param.
 
 Lead MAY invoke validation sub-skills via the Skill tool per Rule 20.
 Catalog and field semantics defined in `stories-test-strategy.md` "Story
