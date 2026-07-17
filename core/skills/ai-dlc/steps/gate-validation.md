@@ -61,7 +61,7 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24                                              |
+| planning       | 1c, 17, 20, 23, 24, 27                                          |
 | story          | 3a, 3b, 5, 17, 24                                               |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
 | sprint-review  | 18, 21                                                          |
@@ -618,7 +618,14 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   `git branch --show-current`); plus any handoff-only resume instruction
   not derivable from the other fields (e.g., a bg watcher PID the
   successor must re-arm) so that a bare `/ai-dlc resume` is
-  self-sufficient.
+  self-sufficient. This section also carries the **routing record**
+  written once by `route.md` Step 6 and never rewritten after: the
+  verbatim request and the routing signals Check 27 re-adjudicates —
+  `user_request_verbatim`, `bug_signal_present` (yes/no),
+  `carryover_or_sprint_signal_present` (yes/no), and `clarification_asked`
+  (yes/no/n-a). `user_request_verbatim` is the only on-disk copy of the
+  operator's original request; without it the fresh gate-adjudicator that
+  Check 27 escalates to cannot re-classify the routing decision.
 - **Sprint Context** — sprint ID (or `none`); stories in scope with
   statuses, synced with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,
@@ -1281,9 +1288,9 @@ recursive-invocation fixture.
 **Scope.** Meta-check. Runs at every gate. Verifies that each
 phase-specific check added to this file (currently: Check 1c, Check 3b
 locked-anchor, Check 16's content-verification strengthening, Check 17
-provenance, Check 23 draft-stamps, Check 24 adversarial-convergence) ships
-with an adversarial self-test fixture under `tests/fixtures/` that the check
-catches.
+provenance, Check 23 draft-stamps, Check 24 adversarial-convergence, Check 27
+routing-sanity) ships with an adversarial self-test fixture under
+`tests/fixtures/` that the check catches.
 
 **Check.** For each phase-specific check enumerated below, confirm
 both (i) the fixture directory exists with a README.md describing
@@ -1304,6 +1311,8 @@ Enumerated checks under H1:
   `tests/fixtures/check-23-draft-stamps/`.
 - **Check 24 (adversarial cycle convergence)** — fixture at
   `tests/fixtures/check-24-adversarial-convergence/`.
+- **Check 27 (routing sanity — subordinated defect)** — fixture at
+  `tests/fixtures/route-defect-classification/`.
 
 **Manifest completeness (v0.24.0 Lever 2 — slicing fidelity prover).**
 After the fixture enumeration, and only when `H1_DEPTH` was not already
@@ -1509,6 +1518,67 @@ mis-judging or skipping a judgment check — a check that cannot fire reads exac
 passed, and an absent verdict reads exactly like a clean one. False-positive cost: one
 adjudicator dispatch and one script call per gate. Removal condition: retire if the lead
 returns to Opus for all gates, or the escalated checks become script-adjudicated.
+
+### 27. Routing sanity — a subordinated defect (first planning gate).
+<!-- CHECK_LOADED: 27 -->
+
+**Scope.** Fires only at the **first planning gate** of a pipeline (the first
+gate whose `last_completed_step_file` is the variant's opening step), and only
+when the recorded `pipeline_variant` is one of `{greenfield, feature,
+brownfield-a, brownfield-b, brownfield-c, carry-over}`. SKIPS `{bug,
+sprint-execute, analysis-only}` — a defect correctly routed to `bug` needs no
+re-adjudication, and the other two describe no defect. This is the same scope
+posture as Check 1c: a misrouted defect lands on exactly these non-bug planning
+paths, so the check fires where the failure lands. On a later planning gate in
+the same pipeline, cite the first gate's verdict and PASS.
+
+**Why escalated (`adjudication: llm`).** This is a read-and-compare judgment, so
+it is escalated once per gate to the fresh `gate-adjudicator` and adopted through
+Check 26 (the lead never evaluates it inline — Rule 20). The adjudicator
+**re-derives the signals from `user_request_verbatim` in the snapshot's Pipeline
+Position — it does NOT trust the router's recorded `bug_signal_present`.**
+Re-reading the raw request is what closes the self-declaration hole: the router
+that misclassified also wrote the booleans, so a check that only read them back
+would pass vacuously on the exact failure it exists to catch.
+
+**Check.** Reading `user_request_verbatim` on its own substance (a bug signal is
+any description of the system behaving contrary to intent — a failure, a
+misreport, wrong/stale values, a regression — whatever words carry it; the
+literal token "bug" is not required — see `route.md` Step 2):
+
+**FAIL** when the verbatim request describes a production defect AND also carries
+a carry-over or sprint-execute signal (a backlog / "next sprint" / "run the
+stories" request), while the recorded `pipeline_variant` is not `bug` AND
+`clarification_asked` is neither `yes` nor `n-a`. That is a defect subordinated
+into a non-bug route without the Rule 11 clarifying question `route.md` Step 4
+makes mandatory for the mixed case — the `bug` path (repro-first triage,
+Falsification ladder) was skipped for the full planning cycle on a defect that
+was never triaged as one.
+
+**PASS** when any of: the verbatim carries no defect signal; the defect and the
+carry-over/sprint signal do not co-occur; `pipeline_variant` is `bug`;
+`clarification_asked` is `yes` (the operator was asked) or `n-a` (the operator
+pre-directed the priority — a defect the operator explicitly deferred is a
+disposition, not a misroute).
+
+**Migration safety (do not wedge an in-flight sprint).** If the snapshot carries
+no `user_request_verbatim` field at all, it was written before this release and
+the adjudicator has nothing to re-classify. Report **PENDING** with one line
+("routing record predates v0.76.0; Check 27 cannot re-adjudicate") — never FAIL.
+A pre-migration snapshot is not a misroute, and a fresh start after this release
+always writes the field (`route.md` Step 6).
+
+Fixture: `tests/fixtures/route-defect-classification/`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: the graph S292 misroute — a
+`/ai-dlc` prompt naming a "fee-display failure" and a "wide-mode misreport"
+(defects in substance, neither carrying the token "bug") was folded into a
+carry-over story as sub-questions and run through the full planning cycle on an
+unverified hypothesis; the mandatory mixed-signal question never fired. False-positive
+cost: one clarifying question, or one `n-a` annotation when the operator already
+dispositioned the item. Removal condition: retire when routing is no longer
+LLM-judged from free-text input — i.e., when the variant is derived from a
+structured intake the operator fills in directly.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

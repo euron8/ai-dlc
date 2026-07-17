@@ -70,6 +70,22 @@ For each OPEN item in the backlog, evaluate:
    - Evaluate options using project context and user preferences
    - Select the best option
    - Document as `DECIDED_AUTONOMOUSLY` with rationale
+5. **Defect check (routing backstop).** Is this item a production defect —
+   the system behaving contrary to intent (a failure, a misreport,
+   wrong/stale values, a regression), whatever words the entry uses and
+   however the operator dispositioned it? A defect folded into uniform
+   feature-planning skips the repro-first triage the `bug` pipeline exists to
+   give it. If YES:
+   - Before a fix story is shaped, the evaluation MUST reproduce the defect
+     and run the **Falsification ladder** (`bug-investigation.md` §2): for
+     each layer the defect could originate from, document with live evidence
+     why it IS or IS NOT the root cause. A "likely cause" that rules out no
+     other layer is insufficient — a self-consistent plan on an unverified
+     premise passes every downstream gate.
+   - If the defect is the sprint's dominant work rather than one item among
+     features, STOP and escalate to re-route (raise the pause flag): the
+     pipeline should be running the `bug` variant, not carry-over. Do not
+     plan a fix on an unverified hypothesis.
 
 **Process-exercise scoping.** For any item classified as a
 process exercise, the evaluation MUST define a fail-condition trigger:

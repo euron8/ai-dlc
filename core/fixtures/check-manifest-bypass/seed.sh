@@ -62,6 +62,7 @@ actually present in context:
 <!-- CHECK_LOADED: 20 -->
 <!-- CHECK_LOADED: 23 -->
 <!-- CHECK_LOADED: 24 -->
+<!-- CHECK_LOADED: 27 -->
 
 ## What is missing
 
