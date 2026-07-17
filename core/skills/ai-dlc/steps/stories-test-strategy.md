@@ -329,6 +329,24 @@ between them:**
    returns FIRE, the session ends; otherwise continue.
    **When the final pass produces only nitpicks, immediately proceed to step 4:**
 4. Append a changelog to each story file.
+
+   **Stamp the terminal-pass provenance block onto every story — MECHANICALLY,
+   never by hand.** Check 17's story-readiness gate requires a
+   `SKILL_INVOCATION_PROVENANCE` block on each story file. Do NOT transcribe it
+   "per precedent" — that is how it drifted (one sprint carried `artifact_sha`,
+   the next did not, each with a different free-text comment). Run:
+
+   `scripts/stamp-story-provenance.sh --series
+   <this-sprint's-stories-adversarial-pass-prefix> <story-file>...`
+
+   It reads the TERMINAL convergence pass (the single source of truth), copies
+   every batch-invariant field verbatim, computes each story's `artifact_sha`,
+   and writes a schema-conformant block — idempotently. If the terminal pass
+   could not self-report its Agent-dispatch `tool_use_id` (the placeholder from
+   the self-introspection defect), recover it from the session transcript and
+   pass `--tool-use-id <toolu_...>`; the writer backfills the terminal pass too,
+   so it is corrected once at the source. You author nothing; the gate's
+   `--check` re-derives the same block and fails on any drift.
    **Then immediately proceed to Test Strategy:**
 
 ### 5. Test Strategy
