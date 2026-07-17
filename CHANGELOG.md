@@ -17,6 +17,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.79.0] — 2026-07-17
+
+### Added — the terminal-pass provenance block on story files is written mechanically, not "per precedent"
+
+Check 17's story-readiness gate has always REQUIRED a `SKILL_INVOCATION_PROVENANCE` block on every
+story file (`validate-provenance-block.sh <story> --require-skill ai-dlc-adversary-review`, per
+story). That block was machine-READ but hand-WRITTEN: the lead transcribed it onto each story "per
+the S290/S291 precedent." A mandated, validated artifact with a precedent-authored write side — and
+it drifted exactly as a hand-copied schema always does. In the reference consumer, sprint 291's
+story blocks omit `artifact_sha`; sprint 292's include it; each carries a different free-text `#`
+comment the parser silently ignores. The read side was single-sourced from
+`schemas/provenance-block.json` (v0.60.0); the write side was not.
+
+This makes the write side mechanical, from the same schema.
+
+- **`scripts/stamp-story-provenance.sh`** — the writer. Given the terminal convergence pass (the
+  single source of truth) and the story files, it copies every batch-invariant field
+  (`skill`/`invoked_at`/`tool_use_id`/`mode`/`lead_role`/`findings_*`/`verdict`) verbatim, computes
+  each story's `artifact_sha` over the story BODY with provenance blocks stripped (so a stamp never
+  notarizes itself), and writes a schema-conformant block — idempotently. The lead authors nothing.
+  `--series <prefix>` resolves the terminal pass (highest `p<N>`) the one way Check 24 already names
+  it. Refuses to stamp unless the terminal verdict is `EXIT_CONDITION_MET` — a story residue must
+  notarize a CONVERGED cycle.
+
+- **`story-provenance` profile in the schema.** The story block is the `adversary-pass` shape with
+  `artifact` and `artifact_sha` REQUIRED (profile-scoped, so party-mode blocks are untouched), which
+  makes the s291/s292 drift impossible by construction: the writer always emits them, the check
+  always demands them.
+
+- **Check 17 story gate gains the cross-check.** After the shape validator, the gate runs
+  `stamp-story-provenance.sh --series <prefix> --check <story>...`. `validate-provenance-block.sh`
+  proves the block is schema-SHAPED; this proves it is the RIGHT block — fields equal the terminal
+  pass, `artifact_sha` matches the story's current bytes. It is the SAME derivation the writer uses
+  (`--check` re-runs the writer without writing), so the check cannot drift from the stamp. A block
+  invented, copied stale, or edited after the fact now FAILS the gate even though it passes the shape
+  validator.
+
+- **The tool_use_id self-introspection defect is surfaced, not propagated.** A subagent cannot
+  observe the Agent `tool_use_id` that spawned it, so the terminal pass often holds a placeholder
+  until it is recovered from the transcript — and the reference lead recovered it onto the STORY by
+  hand while leaving the pass file (the SoR) uncorrected. The writer validates the id against the
+  schema pattern and REFUSES to stamp a placeholder; given `--tool-use-id <toolu_...>` it stamps AND
+  backfills the terminal pass, correcting the SoR once so the gate's `--check` then runs
+  override-free. Fully automatic transcript recovery of that id is left as a follow-up — it belongs
+  with fixing the self-introspection defect at its source.
+
+- **`stories-test-strategy.md` step 4** now instructs the mechanical stamp and forbids
+  hand-transcription. **Fixture `story-provenance`** proves the three-step shape (drift → stamp →
+  clean), plus mutant assertions (tampered field, stale sha, garbage/placeholder tool_use_id) and
+  the unconverged-refusal — green in both the distribution and a simulated consumer layout. Writer
+  registered in `install.sh`/`uninstall.sh`; the pull path maps it through the existing
+  `core/scripts/*` and `core/fixtures/*` globs.
+
 ## [0.78.1] — 2026-07-17
 
 ### Fixed — the escalated Dev tier shipped at the standard effort level, escalating only the model

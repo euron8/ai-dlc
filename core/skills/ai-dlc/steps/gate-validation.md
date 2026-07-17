@@ -867,6 +867,19 @@ gate's primary artifact.
   checks are the usual site — MUST update it in the same pull, or the pinned
   check fails at runtime on the first story of the next sprint.)*
 
+  Then run the story-provenance CROSS-CHECK, once for the whole batch:
+  `scripts/stamp-story-provenance.sh --series
+  <path-prefix-of-this-sprint's-stories-adversarial-pass-series> --check
+  <story-file>...`; exit 0 required. `validate-provenance-block.sh` proves the
+  block is schema-SHAPED; this proves it is the RIGHT block — every
+  batch-invariant field equals the terminal convergence pass (the single source
+  of truth) and `artifact_sha` is the current bytes of the story it sits on. It
+  is the SAME derivation the writer uses (`--check` re-runs the writer without
+  writing), so the check cannot drift from the stamp. This is what closes the
+  hole the block was hand-transcribed "per precedent" through: a story block
+  invented, copied stale, or edited after the fact FAILS here even though it
+  passes the shape validator. Use the SAME `--series` prefix Check 24 takes.
+
 **PASS:** all required provenance scripts exit 0. **FAIL:** any
 script reports a missing block, malformed field, unknown skill,
 `mode: solo` on any block, missing transcript file (retro
