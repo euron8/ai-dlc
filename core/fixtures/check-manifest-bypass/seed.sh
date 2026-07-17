@@ -43,6 +43,7 @@ actually present in context:
 
 <!-- CHECK_LOADED: 1 -->
 <!-- CHECK_LOADED: 2 -->
+<!-- CHECK_LOADED: 2a -->
 <!-- CHECK_LOADED: 3 -->
 <!-- CHECK_LOADED: 4 -->
 <!-- CHECK_LOADED: 7 -->
@@ -51,6 +52,7 @@ actually present in context:
 <!-- CHECK_LOADED: 14 -->
 <!-- CHECK_LOADED: 15 -->
 <!-- CHECK_LOADED: 16 -->
+<!-- CHECK_LOADED: 25 -->
 <!-- CHECK_LOADED: 26 -->
 <!-- CHECK_LOADED: H1 -->
 <!-- CHECK_LOADED: H2 -->

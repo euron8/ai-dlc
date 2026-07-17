@@ -65,6 +65,15 @@ for your findings, and (d) a shared context block. You MUST:
 3. **Write findings to the canonical output path and return ONLY that path.** A
    text-only final message is an unreliable transport (Rule 20 file-write
    deliverable); the lead treats an absent file as non-delivery and re-dispatches.
+   **Do NOT run worktree-isolated, and write directly in the primary tree.** An
+   absolute output path handed to a worktree-isolated agent resolves inside that
+   agent's own worktree, so "write to the canonical output path" is unsatisfiable
+   by construction: you report success, the file exists, and the lead reading the
+   primary tree sees non-delivery and re-dispatches you — indefinitely, because
+   every retry lands in a fresh worktree. You have no file ownership and no
+   artifact stake (below), so isolation buys nothing here; it only breaks
+   delivery. This binds the DISPATCH: the lead MUST NOT pass `isolation:
+   "worktree"` when spawning this role.
 4. **Be adversarial, not agreeable — and be willing to converge.** Your value is
    the finding the authoring context could not see: the weak requirement, the
    unproven premise, the missing edge case, the convenient interpretation — each

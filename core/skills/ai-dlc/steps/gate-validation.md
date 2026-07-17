@@ -30,36 +30,58 @@ self-skip via their own scope clauses (`is_ui_epic == false`, "no stories
 modify schema", "deployment not claimed"). This avoids a combined
 UI-and-schema sprint being unable to declare two types at once.
 
-**Universal core (always loaded, every gate, every type).** Checks
-**1, 2, 3, 4, 7, 12, 13, 14, 15, 16, 26, H1, H2, Gate Failure**. These run
-regardless of gate type and are never sliced out (§6). Check 16
-(stub-audit) is universal, not implementation-only: it is keyed on
-`changed_files` *content* (any gate whose diff touches a hot-path file),
-not on gate phase, so slicing it to one type would drop it on a planning
-gate that edits `scripts/*.sh`.
+**Universal core (always loaded, every gate, every type).** The
+`universal` row of the `GATE_MANIFEST` block below **is** the universal
+core — it is the single source, and this paragraph deliberately does not
+restate the set. These run regardless of gate type and are never sliced
+out (§6).
+
+`universal` is NOT a declarable gate type: the enum a gate declares stays
+`planning · story · implementation · sprint-review · retro`. The row
+names the set every one of them loads FIRST, in addition to its own row.
+
+Prior releases carried the set here as prose and left the manifest to the
+other rows. Every consumer of the set then had to hand-copy it, and all
+three copies drifted: this paragraph omitted `2a`/`25`, `retro.md`'s
+Invariant-3 array omitted `2a`/`25`/`26`, and only `enforcement-map.yaml`
+was right. The manifest's own orphan rule below could not see the gap,
+because it asks whether a check is claimed by a manifest ROW and the
+universal core was not one — so `2a`, `25` and `26` were orphans by the
+letter of the rule while being the checks that run at every gate. Making
+`universal` a row is what lets that rule, and the two-way resolve in
+`retro.md` Invariant 3, read the set instead of re-declaring it.
+
+Check 16 (stub-audit) is universal, not implementation-only: it is keyed
+on `changed_files` *content* (any gate whose diff touches a hot-path
+file), not on gate phase, so slicing it to one type would drop it on a
+planning gate that edits `scripts/*.sh`.
 
 ```
 <!-- GATE_MANIFEST v1 -->
-| Gate type      | Required checks (beyond universal core)          |
-|----------------|--------------------------------------------------|
-| planning       | 1c, 17, 20, 23, 24                               |
-| story          | 3a, 3b, 5, 17, 24                                |
-| implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                  |
-| sprint-review  | 18, 21                                           |
-| retro          | 8, 9, 17, core-layer-immutability                |
+| Gate type      | Required checks                                                 |
+|----------------|-----------------------------------------------------------------|
+| universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
+| planning       | 1c, 17, 20, 23, 24                                              |
+| story          | 3a, 3b, 5, 17, 24                                               |
+| implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
+| sprint-review  | 18, 21                                                          |
+| retro          | 8, 9, 17, core-layer-immutability                               |
 <!-- GATE_MANIFEST_END -->
 ```
 
 **Loader contract (Rule 21).** The step invoking gate validation reads
 this manifest, resolves the declared gate type, and loads (READ AND
-FOLLOW) the universal core **plus** every check ID in that type's row.
+FOLLOW) the `universal` row **plus** every check ID in that type's row.
 "Loaded" for `gate-validation.md` means exactly this set present in
 context — not the whole file (§5.2). Each check carries a
 `<!-- CHECK_LOADED: <id> -->` anchor directly under its heading; H1
 reads the manifest and FAILS the gate if any required check's anchor is
 absent from loaded context. A check present in this file but absent from
 every manifest row (an orphan) is also an H1 FAIL — the manifest and the
-check set must stay in sync.
+check set must stay in sync. Since `universal` is a row, a check that
+runs at every gate is claimed by that row and is not an orphan; there is
+no second set to consult, and no way to be claimed by a set the rule
+cannot read.
 
 **Correctness rule (do not over-slice).** When a check's firing gate is
 uncertain, include its ID in every candidate type's row: over-inclusion

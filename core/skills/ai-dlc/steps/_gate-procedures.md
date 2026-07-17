@@ -285,23 +285,35 @@ effects, the step resumes.**
    `safe-seam`, all defined seams (`Seam A` through `Seam E`) are
    permitted. Proceed to precondition 2.
 
-2. **Trigger basis (mode-dependent).** Under `safe-seam`, the seam
-   itself is the trigger. Only the token *magnitude* is advisory — how
-   many tokens are in play does not gate the fire. The seam being
-   reached is the firing condition: skip the red check and proceed to
-   precondition 3. "Advisory magnitude" does NOT mean the handoff is
-   optional — once a defined seam is reached and preconditions 3–7
-   pass, the fire is mandatory, not a judgment call about whether the
-   context feels large enough. Under
-   `deploy-only`, require **measured red**: read `last_level` from
-   `_bmad-output/.context-sensor-state` (authoritative and current
-   every turn; fall back to `context_reminders_sent` in the snapshot
-   Context Reminders block if the sidecar is absent). If it is not
-   `red`, return CONTINUE. The sensor sets `red` only from a real
-   measurement of resident context — Claude Code's own figure, read
-   off the transcript — so this precondition is equivalent to "red
-   threshold measured, not estimated". There is no estimate path: the
-   sensor is silent when it cannot measure.
+2. **Trigger basis (mode-dependent).** Exactly ONE of 2a / 2b applies:
+   the one naming your `auto_handoff_mode`. Read that sub-item and stop.
+   The other mode's rule does not apply to you, and reaching for it is
+   the failure this split exists to prevent — these were a single
+   paragraph until v0.73.0, and a `safe-seam` session read the
+   `deploy-only` measured-red sentence out of it, found no red, and
+   returned CONTINUE at three consecutive seams. Auto-handoff was
+   silently disabled while the mode said it was on, which reads exactly
+   like a mode with no seam reached.
+
+   **2a. Under `safe-seam`** — the seam itself is the trigger. Only the
+   token *magnitude* is advisory: how many tokens are in play does not
+   gate the fire. The seam being reached IS the firing condition, so
+   **skip the red check entirely** and proceed to precondition 3. There
+   is no measured-red requirement in this mode; 2b does not apply.
+   "Advisory magnitude" does NOT mean the handoff is optional — once a
+   defined seam is reached and preconditions 3–7 pass, the fire is
+   mandatory, not a judgment call about whether the context feels large
+   enough.
+
+   **2b. Under `deploy-only`** — require **measured red**: read
+   `last_level` from `_bmad-output/.context-sensor-state` (authoritative
+   and current every turn; fall back to `context_reminders_sent` in the
+   snapshot Context Reminders block if the sidecar is absent). If it is
+   not `red`, return CONTINUE. The sensor sets `red` only from a real
+   measurement of resident context — Claude Code's own figure, read off
+   the transcript — so this precondition is equivalent to "red threshold
+   measured, not estimated". There is no estimate path: the sensor is
+   silent when it cannot measure.
 
 3. **Snapshot is current.** Read the most recent Recent Activity
    entry. If it does not reflect either (a) the gate passage that

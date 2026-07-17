@@ -17,6 +17,97 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.73.0] — 2026-07-17
+
+### Fixed — six core defects a consumer had been carrying patches for
+
+The reference consumer's `overrides/` layer was audited to decide what could be retired.
+Sixteen entries, and the layer's own detector reported `OVERRIDE-OK` on every one: core had
+not changed a line of the text they shadow. Ten were policy — effort levels, a model-menu
+bullet, `auto_handoff_mode`, role ownership — and belong to the consumer permanently. **Six
+were core defects.** The consumer had been carrying the fix, alone, for as long as ~20
+releases, and nothing upstream ever asked why.
+
+Each is fixed at the ROOT here, not ported. A patch copied upstream would move the duplicate;
+the point is that the override becomes unnecessary. Consumers carrying these SHOULD now see
+`HARD-OVERRIDE-DRIFT-SECTION` on the shadowed sections — that is the signal to re-adopt and
+retire, and it is the intended migration path.
+
+**1 + 2. The universal core was prose, so every consumer of it kept a private copy — and all
+three copies drifted.** `gate-validation.md`'s `GATE_MANIFEST` had a row per gate type and no
+row for the set every gate loads first, so the universal core lived in a prose paragraph. Three
+places then declared it independently and disagreed:
+
+| source | omitted |
+|---|---|
+| `gate-validation.md` prose | `2a`, `25` |
+| `retro.md` Invariant-3 `uni` array | `2a`, `25`, `26` |
+| `enforcement-map.yaml` | — (correct) |
+
+Ground truth is the map: Check 25 says *"Scope. Every gate"* and Check 26 says *"Scope. Every
+gate (universal)"* in their own bodies. The manifest's orphan rule — *"a check present in this
+file but absent from every manifest row is an H1 FAIL"* — could not see the gap, because it asks
+whether a row claims the check and the universal core was not a row. So `2a`, `25` and `26` were
+orphans by the letter of the rule while being the checks that run at every gate, and **core's own
+Invariant 3 failed against core's own file**: run verbatim it reported `ORPHAN: 2a 25 26`.
+
+`universal` is now a manifest ROW. That single move makes the existing rules work rather than
+adding new ones: the orphan rule reads it, Invariant 3 derives from it (the command now
+hard-codes no check ID at all and throws if it parses zero rows or finds no universal row —
+a scan that silently compares nothing is the failure it exists to catch), and I3 binds the map
+to it for free, which is now proven by mutant rather than asserted: dropping `universal` from
+check 25's `gate_types` yields *"map entry 25 omits gate_type 'universal' that GATE_MANIFEST
+requires"*. The prose paragraph no longer restates the set; `universal` remains NOT a declarable
+gate type. Invariant 3 against core today: `MISSING: none, ORPHAN: none`.
+
+I7 gained the same treatment — `check-manifest-bypass/seed.sh`'s universal slice was a fourth
+hand-copy, and it had rotted identically (it carried the prose set, missing `2a`/`25`). It is
+now derived from the manifest row and the seed is fixed. It caught the rot the moment it was
+written.
+
+**3. `retro.md` taught a citation its own validator rejects.** Step 3 said `<sha>` is the *"git
+blob SHA"* and step 2 read it back with `git rev-parse HEAD:<path>` — which returns a blob.
+`validate-retro-evidence.sh` resolves the citation with `git cat-file -p <sha>:<path>`, and that
+syntax takes a tree-ish. Measured: a blob sha yields `fatal: path 'VERSION' exists on disk, but
+not in '<sha>'`. The doc has instructed an unusable citation for as long as both have existed;
+the validator's own header said "commit SHA" the whole time. Now: commit SHA, read back with
+`git rev-parse HEAD`.
+
+**4. The adversary's delivery contract was unsatisfiable under worktree isolation.** *"Write
+findings to the canonical output path and return ONLY that path"* — an absolute path handed to a
+worktree-isolated agent resolves inside that agent's worktree. The adversary reports success, the
+file exists, the lead reads the primary tree, sees non-delivery, and re-dispatches — indefinitely,
+because every retry gets a fresh worktree. Core had ZERO occurrences of "worktree" anywhere. The
+contract now binds the DISPATCH: the lead MUST NOT pass `isolation: "worktree"` for this role.
+
+**5. Three role files ran the provenance validator flagless, and the flag is the check.**
+`dev.md`, `qa.md` and `code-reviewer.md` all invoked `validate-provenance-block.sh <artifact>`
+with no `--require-skill`, while `gate-validation.md` Check 17 passes it. QA's is a HARD GATE.
+
+**The obvious fix was wrong, and testing caught it before it shipped.** A blanket
+`--require-skill ai-dlc-adversary-review` **exits 1 on a retro**, which legitimately cites
+`bmad-party-mode` — it would have rejected every correct retro. `dev.md` names five possible
+evaluations. The flag's VALUE is per artifact class, so all three now say so and give the
+mapping. The prose was corrected a second time for the same reason: flagless does NOT accept
+"any skill" — the script validates against a known-skills allow-list. It accepts any *sanctioned*
+skill without checking it is the *required* one. Measured, and it is the whole gap: a story
+citing `bmad-party-mode` exits **0** flagless and **1** pinned.
+
+**6. Precondition 2 multiplexed both modes in one paragraph.** A `safe-seam` session read the
+`deploy-only` measured-red sentence out of it, found no red, and returned CONTINUE at three
+consecutive seams — auto-handoff silently disabled while the mode said it was on, which reads
+exactly like a mode whose seam was never reached. Split into mode-scoped `2a` (safe-seam, no red
+check) and `2b` (deploy-only, measured red). Zero mechanism change; the seven preconditions are
+still seven.
+
+### Testing
+
+Full suite 25/25; enforcement map in sync. Invariant 3, I3's universal binding, and I7's new
+universal arm are each mutant-tested — including the vacuity guards, which fire on a deleted
+universal row rather than passing over a set they cannot read. Every behavioural claim written
+into the role files was measured against the real script rather than reasoned about; two of them
+were wrong the first time.
+
 ## [0.72.0] — 2026-07-17
 
 ### Fixed — the layer detector read a prose list as sections, and its own advice could not silence it
