@@ -17,7 +17,8 @@ fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-drift.XXXXXX")" || exit 2
 DIST="$WORK/dist"; CONSUMER="$WORK/consumer"
-mkdir -p "$DIST/core/schemas" "$CONSUMER/.claude/schemas"
+mkdir -p "$DIST/core/schemas" "$CONSUMER/.claude/schemas" \
+         "$DIST/core/session-driver" "$CONSUMER/.claude/session-driver"
 
 cat > "$DIST/core/schemas/provenance-block.json" <<'JSON'
 {
@@ -27,11 +28,24 @@ cat > "$DIST/core/schemas/provenance-block.json" <<'JSON'
   ]
 }
 JSON
+# A core/ subtree OUTSIDE the paths apply.sh happened to hand-list. The consumer's copy is
+# untouched, so the pull's only job is to overwrite it: the plainest UPSTREAM-ONLY there is.
+printf '#!/usr/bin/env bash\n# driver v1\n' > "$DIST/core/session-driver/ai-dlc-session-driver.sh"
 printf '9.9.9\n' > "$DIST/VERSION"
 git -C "$DIST" init -q
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
+
+# THEIRS changes the driver's CONTENT. The real defect hid behind a mode-only delta the
+# consumer already had, so a content delta is what makes the miss observable at all.
+printf '#!/usr/bin/env bash\n# driver v2 UPSTREAM\n' > "$DIST/core/session-driver/ai-dlc-session-driver.sh"
+git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
+git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m theirs
+THEIRS="$(git -C "$DIST" rev-parse HEAD)"
+
+# Consumer sits at v1, unmodified — nothing for the operator to decide.
+printf '#!/usr/bin/env bash\n# driver v1\n' > "$CONSUMER/.claude/session-driver/ai-dlc-session-driver.sh"
 
 # Consumer added its own persona skill to the core list, in place — the drift.
 cat > "$CONSUMER/.claude/schemas/provenance-block.json" <<'JSON'
@@ -49,10 +63,12 @@ cat > "$WORK/env.sh" <<ENV
 APPLY="$APPLY"
 DIST="$DIST"
 BASE="$BASE"
+THEIRS="$THEIRS"
 CONSUMER="$CONSUMER"
 EXT="$CONSUMER/.claude/skills/ai-dlc/extensions/known-skills.json"
 SCHEMA="$CONSUMER/.claude/schemas/provenance-block.json"
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
+DRIVER="$CONSUMER/.claude/session-driver/ai-dlc-session-driver.sh"
 ENV
 
 printf '%s\n' "$WORK"

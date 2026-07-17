@@ -12,7 +12,9 @@
 #                         (provenance-block.json known_skills -> extensions/known-skills.json) and
 #                         the core file reverted — the "migrate the drift" chore, automated
 #   - catalog relabel     relabel-extension-checks.sh --apply (labels NEW-THIS-PULL collisions)
-#   - re-stamp            .ai-dlc-version base -> theirs
+#   - re-stamp            .ai-dlc-version base -> theirs, and ONLY if every mechanical apply
+#                         landed. The stamp asserts "this tree is at theirs"; if a file that
+#                         should have been placed was not, it says so instead (see phase 5).
 #
 # WHAT IT HANDS BACK (it does NOT guess these):
 #   WORKLIST semantic-merge   <path>      a BOTH-CHANGED file needing a 3-way PROSE merge (LLM)
@@ -20,6 +22,9 @@
 #                                         readopt-override.sh --stamp readopt (LLM + gated script)
 #   DECISION <kind> <path> <why>          a genuine operator call (unknown drift refile-vs-revert,
 #                                         a deletion, a value with no default)
+#   DECISION restamp-withheld <stamp>     a file that SHOULD have applied mechanically did not,
+#                                         so the stamp was NOT advanced — this one is a bug in
+#                                         THIS file, not a call the operator can make
 #
 # Usage:  apply.sh <dist> <base> <consumer> <theirs>
 # Exit:   0 = mechanical resolution completed (a residual WORKLIST/DECISION is normal, not failure)
@@ -35,19 +40,32 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 say() { printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}"; }
 err() { echo "apply: $*" >&2; exit 1; }
 
-# core/<rel> -> consumer path (mirrors install.sh / unregistered-drift.sh).
-consumer_path() {
-  case "$1" in
-    skills/ai-dlc-setup/*) printf '%s/.claude/skills/ai-dlc-setup/%s' "$CONSUMER" "${1#skills/ai-dlc-setup/}" ;;
-    skills/ai-dlc-update/*) printf '%s/.claude/skills/ai-dlc-update/%s' "$CONSUMER" "${1#skills/ai-dlc-update/}" ;;
-    skills/ai-dlc/*)  printf '%s/.claude/skills/ai-dlc/%s'  "$CONSUMER" "${1#skills/ai-dlc/}" ;;
-    team-roles/*)     printf '%s/.claude/team-roles/%s'     "$CONSUMER" "${1#team-roles/}" ;;
-    hooks/*)          printf '%s/.claude/hooks/%s'          "$CONSUMER" "${1#hooks/}" ;;
-    schemas/*)        printf '%s/.claude/schemas/%s'        "$CONSUMER" "${1#schemas/}" ;;
-    scripts/*)        printf '%s/scripts/%s'                "$CONSUMER" "${1#scripts/}" ;;
-    fixtures/*)       printf '%s/tests/fixtures/%s'         "$CONSUMER" "${1#fixtures/}" ;;
-    *) return 1 ;;
-  esac
+# core/<rel> -> consumer path. ONE mapper.
+#
+# `preclassify.sh`'s map_consumer() IS the mapping, and I8 binds it at both ends: every
+# core/<dir>/ on disk must have a site row, and that row's destination must be a path
+# install.sh really writes. This function had its own hand-listed copy of the same table --
+# a fourth statement of the map, bound to nothing -- and it drifted exactly as the earlier
+# copies did. It enumerated destinations by hand and omitted core/session-driver/,
+# core/ci-templates/ and core/git-hooks/, so those hit `*) return 1` and NEVER APPLIED while
+# the same run re-stamped .ai-dlc-version -- a stamp claiming a version the tree lacks.
+#
+# It hid because the only delta core/session-driver/ ever carried was a mode bit (100644 ->
+# 100755) that install.sh had already set on the consumer, so nothing observable broke.
+# `skills/` was queued to be next: three hardcoded skill names, and a fourth would have
+# fallen straight through.
+#
+# So: derive, never re-list. Note the direction -- preclassify already computes this and
+# hands it back as column 3 of its own output, which this file then threw away to recompute
+# with a worse mapper. I17 now evaluates this function against I8's table so it cannot grow
+# a private one again.
+eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$SELF/preclassify.sh" 2>/dev/null)"
+command -v map_consumer >/dev/null 2>&1 || err "could not load map_consumer() from $SELF/preclassify.sh — refusing to guess consumer paths. Falling back to a private table is the exact bug this delegation removes: it would apply some subtrees, skip others, and re-stamp as though everything landed."
+
+consumer_path() { # <core-stripped rel> -> absolute consumer path
+  local m; m="$(map_consumer "core/$1")"
+  [ -n "$m" ] || return 1
+  printf '%s/%s' "$CONSUMER" "$m"
 }
 # Carry THEIRS's file MODE, not just its bytes.
 #
@@ -85,6 +103,14 @@ overwrite_from_theirs() { # <core-rel>
   sync_mode_from_theirs "$cp" "$cons"
 }
 
+# A file that SHOULD have been applied mechanically but could not be. NOT the same as the
+# declared hand-backs: a WORKLIST semantic-merge or an operator DECISION is work the caller
+# completes in this same run, and the stamp is still true once it does. This counter is for
+# the other thing -- apply.sh not knowing how to place a file the pull classified and the
+# installer ships. That is a bug in this file, and it must not end with a stamp saying the
+# tree is at THEIRS.
+mech_fail=0
+
 # ---------------------------------------------------------------- 1. buckets (preclassify)
 PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
 
@@ -93,7 +119,8 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
   rel="${path#core/}"
   case "$bucket" in
     UPSTREAM-ONLY|UPSTREAM-ONLY-ADD)
-      overwrite_from_theirs "$rel" && say RESOLVED pure-apply "$rel" || say DECISION unmapped-path "$rel" "no consumer path mapping" ;;
+      overwrite_from_theirs "$rel" && say RESOLVED pure-apply "$rel" \
+        || { say DECISION unmapped-path "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1)); } ;;
     *SETUP-TOKENS*)
       if overwrite_from_theirs "$rel"; then
         cons="$(consumer_path "$rel")"
@@ -112,14 +139,14 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
           say RESOLVED token-substitute "$rel"
         fi
       else
-        say DECISION unmapped-path "$rel" "no consumer path mapping"
+        say DECISION unmapped-path "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1))
       fi ;;
     *CLASSIFY*)
       say WORKLIST semantic-merge "$rel" ;;
     UPSTREAM-DELETED|ORPHANED-RELOCATED*)
       say DECISION deletion "$rel" "apply would remove a consumer file — gated" ;;
     ALREADY-AT-THEIRS|ALREADY-PRESENT|*NOOP|DIST-ONLY-SKIP) : ;;
-    *) say DECISION unhandled-bucket "$rel" "$bucket" ;;
+    *) say DECISION unhandled-bucket "$rel" "$bucket"; mech_fail=$((mech_fail+1)) ;;
   esac
 done <<EOF
 $PC
@@ -131,7 +158,7 @@ EOF
 UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
 while IFS= read -r rel; do
   [ -n "$rel" ] || continue
-  cons="$(consumer_path "$rel")" || { say DECISION drift "$rel" "no consumer path mapping"; continue; }
+  cons="$(consumer_path "$rel")" || { say DECISION drift "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1)); continue; }
   case "$rel" in
     schemas/provenance-block.json)
       added="$(diff <(git -C "$DIST" show "${THEIRS}:core/${rel}" 2>/dev/null) "$cons" 2>/dev/null \
@@ -178,8 +205,20 @@ if bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" -
 fi
 
 # ---------------------------------------------------------------- 5. re-stamp
+#
+# The stamp asserts "this tree is at THEIRS". It used to be written unconditionally, so a
+# pull that silently failed to place a file still ended with a record claiming the new
+# version -- the same shape as the v0.70.1 exec-bit defect, where every content check
+# reported green over a file that could not run. A record that cannot be wrong about the
+# thing it records is worthless.
+#
+# Withholding is the safe direction: the stamp stays at BASE, so the next pull simply
+# re-applies from BASE. Overwriting an unchanged file twice costs nothing; believing a
+# version landed when it did not costs a silent divergence nobody looks for.
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
-if [ -f "$STAMP" ]; then
+if [ "$mech_fail" -gt 0 ]; then
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically — the stamp would claim ${THEIRS} while the tree lacks them. Left at ${BASE}; fix the paths above and re-run."
+elif [ -f "$STAMP" ]; then
   theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null || echo "$THEIRS")"
   ver="$(cat "$DIST/VERSION" 2>/dev/null || true)"
   sed -i.bak -E "s/^(commit:).*/\1 ${theirs_sha}/" "$STAMP" 2>/dev/null || true

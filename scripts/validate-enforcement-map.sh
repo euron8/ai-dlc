@@ -522,6 +522,25 @@ fi
 PRECLASS="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
 if [ -f "$PRECLASS" ]; then
   maps_to() { bash -c "CONS=/nonexistent; $(awk '/^map_consumer\(\) \{/,/^\}/' "$PRECLASS"); map_consumer '$1'" 2>/dev/null; }
+
+  # I17's probe. Compose the two functions exactly as apply.sh does at runtime — map_consumer
+  # from preclassify, consumer_path from apply — and evaluate the result. Composing rather
+  # than grepping means this stays honest whether apply.sh delegates (as it must) or someone
+  # reintroduces a private case list: either way we measure where a real path LANDS.
+  APPLY_SH="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
+  APPLIES_TO_OK=""
+  if [ -f "$APPLY_SH" ]; then
+    applies_to() { bash -c "
+      CONSUMER=/nonexistent-consumer
+      $(awk '/^map_consumer\(\) \{/,/^\}/' "$PRECLASS")
+      $(awk '/^consumer_path\(\) \{/,/^\}/' "$APPLY_SH")
+      consumer_path '$1'" 2>/dev/null; }
+    if [ -n "$(applies_to 'team-roles/PROBE')" ]; then
+      APPLIES_TO_OK=yes
+    else
+      err "I17 could not evaluate apply.sh's consumer_path() — the check that binds the pull's WRITER to install.sh just went vacuous, and a vacuous check reads exactly like a passing one. Expected 'consumer_path() {' in $APPLY_SH and 'map_consumer() {' in $PRECLASS, each with its closing brace in column 0."
+    fi
+  fi
   # <core dir>|<the destination install.sh writes>. Every core/ subtree the installer
   # ALSO places must be listed, or the catch-all silently invents a second home for it.
   # Three entries here were live bugs: fixtures landed in .claude/fixtures/ (dead, while
@@ -569,6 +588,17 @@ SITES
     # writes it — the check would be as hand-wavy as the list it replaced.
     dest_re="$(printf '%s' "$dest" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
     grep -qE '\$PROJECT_ROOT/'"$dest_re"'([/"]|$)' "$REPO_ROOT/scripts/install.sh" || err "I8's site table says core/$cdir/ goes to '$dest/', but install.sh never writes \$PROJECT_ROOT/$dest. Either the row is wrong or the installer stopped shipping it."
+    # (d) I17 — THE WRITER. map_consumer() only CLASSIFIES; on a pull, reconcile/apply.sh is
+    # the thing that actually places files, and it was bound to nothing. It carried its own
+    # hand-listed copy of this table and omitted core/session-driver/, core/ci-templates/ and
+    # core/git-hooks/ — which therefore never applied, while the same run re-stamped
+    # .ai-dlc-version anyway. A consumer's stamp claimed a version its tree did not have.
+    # session-driver hid for releases because its only delta was ever a mode bit install.sh
+    # had already set. Evaluate the real composed function; a grep would not have caught it.
+    if [ -n "$APPLIES_TO_OK" ]; then
+      got_a="$(applies_to "$cdir/PROBE")"
+      [ "$got_a" = "/nonexistent-consumer/$dest/PROBE" ] || err "reconcile/apply.sh — the thing that WRITES on a pull — sends core/$cdir/ to '${got_a:-<nothing>}', but I8's table and install.sh say '$dest/'. A subtree apply.sh cannot place is silently skipped while the run still re-stamps, leaving a consumer whose .ai-dlc-version claims a version its tree lacks. apply.sh must derive every path from preclassify.sh's map_consumer(), never from a private table."
+    fi
   done <<< "$SITES_TABLE"
 fi
 

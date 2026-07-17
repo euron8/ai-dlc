@@ -17,6 +17,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.71.1] — 2026-07-16
+
+### Fixed — a core/ subtree silently did not apply, and the same run stamped it as landed
+
+Reported by the graph consumer while applying v0.71.0, and it is the v0.71.0 headline one
+layer down: `reconcile/apply.sh`'s `consumer_path()` enumerated destinations **by hand** and
+omitted `core/session-driver/`, `core/ci-templates/` and `core/git-hooks/`. Those hit
+`*) return 1` and never applied — while phase 5 re-stamped `.ai-dlc-version` **unconditionally**,
+leaving a consumer whose stamp claims a version its tree does not have. `skills/` was queued to
+be next: three hardcoded skill names, and a fourth would have fallen straight through. I17
+confirms all four against the 0.71.0 code.
+
+**It escaped harm by luck, and the luck is the lesson.** The only delta `core/session-driver/`
+had ever carried was a **mode bit** — `196188e` 100644 → `be1dbb8` 100755, content delta
+literally zero — and `install.sh` chmods at install, so every consumer already had it. A
+subtree that had never once needed a content update cannot demonstrate that it fails to update.
+
+**One mapping, five statements, and the writer was bound to none of them.** `map_consumer()`
+only CLASSIFIES; `apply.sh` is what actually places files on a pull. I8 bound the *classifier*
+to the *installer* and called `preclassify.sh` "the third writer" — but preclassify writes
+nothing. The actual writer kept a private copy of the table with no referee at all.
+
+The fix is subtractive. `preclassify.sh` already computes the correct path and hands it back as
+column 3 of its own output; `apply.sh` read it into `cons` and then **threw it away** to
+recompute the same answer with a worse mapper. `consumer_path()` now delegates to
+`map_consumer()` — the one mapper, already bound to `install.sh` at both ends — so `apply.sh`
+holds no independent mapping knowledge. Failure to load it is **fail-closed**: it refuses and
+exits rather than falling back to a private table, because a partial apply that stamps as
+complete is the defect being removed.
+
+**A record that cannot be wrong about what it records is worthless.** Phase 5 now withholds the
+stamp when a file that should have applied did not, and says so
+(`DECISION restamp-withheld`). Scoped narrowly to mechanical FAILURE — a `WORKLIST
+semantic-merge` or an operator `DECISION` is declared work the caller completes, and the stamp
+is still true once it does. Withholding is the safe direction: the stamp stays at BASE and the
+next pull re-applies from BASE. Overwriting an unchanged file twice costs nothing; believing a
+version landed when it did not costs a silent divergence nobody looks for.
+
+### Added
+
+- `I17` — the pull's WRITER is bound to the installer. Evaluates `apply.sh`'s `consumer_path()`
+  composed with `map_consumer()` against I8's site table, per `core/*/` subtree on disk. Fails
+  loudly if it cannot evaluate the function rather than passing by measuring nothing.
+
+### Changed
+
+- `core/fixtures/apply-drift-refile` — seeds a real `core/session-driver/` content delta across
+  base→theirs and asserts it lands; asserts no `DECISION unmapped-path`; asserts a broken mapper
+  **withholds** the stamp and says so; asserts `apply.sh` severed from `map_consumer()` refuses
+  loudly instead of guessing. All four confirmed to FAIL against 0.71.0. The mutant runs against
+  a **second, fresh seed** — pointed at the already-applied tree it finds every bucket
+  `ALREADY-AT-THEIRS`, fails at nothing, and re-stamps, scoring a false result for a reason
+  unrelated to the guard.
+- `core/fixtures/enforcement-map-sites` — reintroducing a private hand-listed table in `apply.sh`
+  must fail I17.
+
 ## [0.71.0] — 2026-07-16
 
 ### Fixed — four layer-machinery defects found by a consumer's catalog pass

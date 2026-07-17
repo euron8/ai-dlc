@@ -169,6 +169,38 @@ if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   restore
 fi
 
+# --- Assertion 7b: I17 THE WRITER ---------------------------------------------
+# map_consumer() only CLASSIFIES. reconcile/apply.sh is what actually PLACES files on a pull,
+# and it was bound to nothing — it kept a private hand-listed copy of the site table and
+# omitted session-driver, ci-templates and git-hooks, which therefore never applied while the
+# same run re-stamped .ai-dlc-version anyway. Give apply.sh a private table again and I17
+# must catch it, exactly as I8 catches map_consumer drifting.
+APPLY_F="$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
+if grep -q '^consumer_path() {' "$APPLY_F"; then
+  python3 - "$APPLY_F" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+# Reintroduce the exact defect: a hand-listed table with no session-driver case.
+mutant = '''consumer_path() {
+  case "$1" in
+    team-roles/*) printf '%s/.claude/team-roles/%s' "$CONSUMER" "${1#team-roles/}" ;;
+    *) return 1 ;;
+  esac
+}'''
+s = re.sub(r'^consumer_path\(\) \{.*?^\}', mutant, s, count=1, flags=re.S | re.M)
+open(p, 'w').write(s)
+PY
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "sends core/session-driver/ to"; then
+    ok "apply.sh regrowing a private path table FAILS I17 (the pull's WRITER is bound to the installer, not just the classifier)"
+  else
+    bad "apply.sh with a hand-listed table missing session-driver did NOT fail I17 — a subtree can silently not apply while the run re-stamps, and the consumer's stamp claims a version its tree lacks"
+  fi
+  restore
+else
+  bad "FIXTURE STALE: apply.sh no longer defines consumer_path()"
+fi
+
 # --- Assertion 8: I16 DEAD PROSE PATH -----------------------------------------
 # The real bug: Check 19 cited `core/team-roles/code-reviewer.md`, a path that exists in the
 # distribution and at NO consumer. install.sh maps core/<x> -> .claude/<x>, but that moves
