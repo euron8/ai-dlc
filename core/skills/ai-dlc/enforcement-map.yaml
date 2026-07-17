@@ -434,6 +434,53 @@ non_catalog_units:
           the only place the claim can be checked against the artifact
     ci_workflow: core/ci-templates/validate-retro-compliance.yml
 
+  - id: sprint-status-lifecycle
+    title: Sprint-status envelope — mechanical sprint_id + atomic freeze/roll-forward
+    adjudication: script
+    enforcer:
+      - core/scripts/sprint-status.sh
+    reads:
+      - core/schemas/sprint-status.json
+    call_sites:
+      - site: route.md Step 6 (sprint-id)
+        posture: BLOCKS on exit 3 (the two canonical copies disagree on `sprint:`)
+        why: pipeline start is the only place the sprint number is derived, and every
+          downstream consumer reads it from the snapshot rather than re-deriving it.
+          It used to be four prose rules the model applied by hand, with NO case for a
+          canonical that exists but carries no `sprint:` key — the state a
+          rotate-at-close leaves behind. Read as greenfield, that restamps a live
+          project from sprint 1 and destroys the prior sprint's drafts.
+      - site: route.md Step 6 (roll)
+        posture: BLOCKS on exit 3 (prior sprint not closed, or a frozen archive differs)
+        why: the pipeline's ONLY rotation point. Rotation belongs at START, not at
+          close: sprint-id must read the closed sprint's `status: done`, and a
+          rotate-at-close prunes exactly that block before the successor exists — so
+          the number has nowhere to come from and the roll falls to whoever remembers
+          to do it by hand.
+    checks:
+      - id: preamble-only-never-greenfield
+        asserts: a canonical with no `sprint:` key resolves from the frozen archives
+          (max + 1), never to 1
+        protects: the prior sprint's drafts — Rule 24 stamps every analyst-draft write
+          path with sprint_id, and an unstamped/restamped fallback silently destroys
+          the previous sprint's work
+      - id: housekeeping-is-not-a-sprint-block
+        asserts: `sprint_<N>_housekeeping:` is never parsed as the sprint envelope,
+          and a canonical carrying one still derives N+1
+        protects: against the reference consumer's live grammar collision — its
+          rotation regex matches ZERO lines of the real canonical (so its sweep
+          no-ops and exits 0 reporting success) yet DOES match the housekeeping key,
+          which would delete the closure evidence Check 3 requires
+      - id: roll-is-idempotent-and-byte-faithful
+        asserts: a frozen archive byte-equals the pre-roll canonical, and a re-run
+          neither re-freezes nor overwrites it
+        protects: the durable per-sprint record (Rule 25(a) move-never-delete)
+      - id: never-freeze-live-state
+        asserts: roll exits 3 rather than freeze a sprint whose status is not `done`
+        protects: the in-flight sprint's story ledger
+    fixtures: [tests/fixtures/sprint-status-lifecycle]
+    ci_workflow: ~
+
   - id: ci-gate-dormancy
     title: Dormant CI-gate detector (retro-declared gates vs workflows)
     adjudication: script

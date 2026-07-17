@@ -302,29 +302,52 @@ Sprint Context section.
 
 **Resolve `sprint_id` (MANDATORY — this is the pipeline's sprint
 identity).** A fresh pipeline start is the only place the sprint number
-is mechanically derived; every downstream consumer reads it from the
-snapshot, never re-derives it. Resolve it here, before creating the
-snapshot, by this rule:
+is derived; every downstream consumer reads it from the snapshot, never
+re-derives it. Resolve it here, before creating the snapshot:
 
-1. Read `sprint:` and `status:` from
-   `_bmad-output/planning-artifacts/sprint-status.yaml`.
-2. If the file does not exist (greenfield) → `sprint_id: 1`.
-3. If `status: done` → the prior sprint is closed and a new pipeline is
-   starting → **`sprint_id: <sprint> + 1`**.
-4. If `status:` is anything else → the sprint is still in flight and this
-   is a re-plan, not a new sprint → `sprint_id: <sprint>`.
-5. If a second `sprint-status.yaml` exists at
-   `_bmad-output/implementation-artifacts/sprint-status.yaml` and its
-   `sprint:` disagrees → **HARD_BLOCK** (Rule 11). Surface both values
-   and wait. Never guess which copy is authoritative.
+    scripts/sprint-status.sh sprint-id
 
-`sprint_id` MUST resolve to an integer. `none` is a hard stop, never a
-fallback — the analyst-draft write paths below are stamped with it
-(Rule 24), and an unstamped fallback silently destroys the prior
-sprint's draft, which is the exact defect the stamp exists to prevent.
+It prints an integer on stdout. Use that value. Do NOT re-derive it by
+reading `sprint-status.yaml` yourself — the rules are the script's, and a
+second implementation is a second answer.
 
-Getting rule 3 wrong stamps every draft of this sprint one number off,
-permanently, in the filename. Read `status:` — do not assume.
+Exit codes: **0** — use the printed integer. **3** — HARD_BLOCK (Rule 11):
+the two `sprint-status.yaml` copies disagree on `sprint:`. Surface both
+values and wait; never guess which is authoritative. **1** — fail-closed;
+report it and stop.
+
+`sprint_id` MUST be an integer. `none` is a hard stop, never a fallback —
+the analyst-draft write paths below are stamped with it (Rule 24), and an
+unstamped fallback silently destroys the prior sprint's draft, which is
+the exact defect the stamp exists to prevent.
+
+This used to be four prose rules the model applied by hand, and they had
+no case for a canonical that exists but carries no `sprint:` key — the
+state a rotate-at-close leaves behind. Read as "greenfield", it restamps
+a live project from sprint 1. The script derives that case from the
+frozen archives instead.
+
+**Rotate the sprint envelope (MANDATORY).** Immediately after resolving
+`sprint_id`, run:
+
+    scripts/sprint-status.sh roll --sprint <sprint_id> \
+      [--name "<sprint name>"] [--variant <variant>] [--intensity <intensity>]
+
+This is the pipeline's ONLY rotation point, and it is idempotent — on a
+re-plan (`sprint_id` unchanged) it is a no-op, so it is always safe to run.
+When the prior sprint is closed it freezes that sprint to
+`sprint-status/sprint-<N>.yaml` and writes the new envelope in ONE step.
+On a greenfield project it creates the file.
+
+Rotation lives HERE, at pipeline start, and not at sprint close, for one
+reason: `sprint-id` above must be able to read the closed sprint's
+`status: done`. Rotating at close prunes that block, and the successor
+does not exist yet — so the number has nowhere to come from and the roll
+falls to whoever remembers to do it by hand.
+
+Exit **3** is a HARD_BLOCK: the prior sprint is not closed (`status:` is
+not `done`), or a frozen archive already exists and differs from the
+canonical it would freeze. Surface it and wait — never freeze live state.
 
 **Initialize the pipeline snapshot.** Before the READ AND FOLLOW, handle
 the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:

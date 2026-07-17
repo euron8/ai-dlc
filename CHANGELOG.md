@@ -17,6 +17,87 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.75.0] — 2026-07-17
+
+### Added — sprint-status.yaml has a mechanical lifecycle: `scripts/sprint-status.sh`
+
+`sprint-status.yaml` was the only major pipeline artifact with **no mechanical producer anywhere
+in `core/`** — no creator, no template, no schema, no rotation. Every write was an LLM `Edit` call
+by six different actors (dev, code-reviewer, the lead at three steps) against a shape documented
+nowhere. The only field enumeration in the whole distribution was a role checklist in
+`team-roles/dev.md`.
+
+**`sprint_id` had no mechanical source.** `route.md` Step 6 carried ~25 lines of prose the model
+executed by hand — "mechanically derived" there meant *by rule*, not *by code* — with four rules:
+absent → 1; `status: done` → N+1; anything else → N; the two copies disagree → HARD_BLOCK.
+
+**None of those rules match a canonical that exists but carries no `sprint:` key.** That is
+precisely the state a rotate-at-close leaves behind, and the likeliest reading of the prose in that
+state is rule 1, "greenfield → 1". Rule 24 stamps every analyst-draft write path with `sprint_id`,
+so resolving 1 on a live project restamps its drafts from sprint 1 and — in route.md's own words —
+"silently destroys the prior sprint's draft, which is the exact defect the stamp exists to
+prevent." The reference consumer fills that hole by hand; its live file says so verbatim: *"Rolled
+forward by the LEAD BY HAND at this S291 [story] gate"* — at the `[story]` gate, **after** route
+already needed the number.
+
+**Rotation now happens at pipeline START, not at close, and that is the whole point.** `sprint-id`
+must be able to read the closed sprint's `status: done`. A rotate-at-close prunes exactly that
+block before the successor exists, so the number has nowhere to come from. `sprint-status.sh roll`
+freezes the closed sprint to `sprint-status/sprint-<N>.yaml` and writes the new envelope in ONE
+idempotent step, which keeps the predecessor's terminal state readable exactly until its successor
+exists.
+
+Added:
+
+- **`core/schemas/sprint-status.json`** — the single definition of the envelope: key grammar,
+  fields, and the rendered header. Same cure as `audit-anchors.json` (v0.69.0): not a drift
+  detector, because there is only one copy. Enforces only the STRUCTURE a reader depends on, never
+  the historical FORMAT — a stricter pattern re-creates the wedge it exists to remove.
+- **`core/scripts/sprint-status.sh`** — `--render` / `--check <file>` / `sprint-id` / `roll`.
+  Bash wrapper + `python3` stdlib heredoc (the `validate-audit-anchors.sh` pattern), so it stays
+  inside the shellcheck net a bare `.py` would escape. Exit 3 = HARD_BLOCK, never a guess.
+  `roll` is also the artifact's first-ever **creator**, and on greenfield it seeds the primary view
+  only — seeding both would mint the second copy the two-view drift is made of.
+- **`core/fixtures/sprint-status-lifecycle/`** — 16 assertions incl. two mutants. Both drive the
+  fixture RED: reintroducing the preamble-only → 1 fallback fires assertion 4; widening the key
+  grammar to the reference tool's colliding pattern fires assertion 8.
+- **`enforcement-map.yaml`** — new `sprint-status-lifecycle` non-catalog unit.
+
+`route.md` Step 6's four prose rules collapse to two script invocations.
+
+### Notes — the reference consumer's rotation is dead, and its "fix" verifies a dead path
+
+Recorded because the next release absorbs this leg, and because the failure is this repo's
+signature defect one layer down.
+
+The consumer's `generate-sprint-status.py` (1068 lines) matches sprint blocks with
+`^sprint[_-]([0-9]+)(?:[_-][A-Za-z0-9][A-Za-z0-9_-]*)?:`. Against its own live corpus that regex
+matches **zero** lines — the canonical is a scalar-header document (`sprint: 291`), not a monolith
+of col-0 block keys. The two grammars are disjoint, so `--close-sweep` is a **structural no-op**.
+Run against a copy of the real tree:
+
+    $ python3 scripts/generate-sprint-status.py --close-sweep --sprint 291
+    close-sweep: froze+pruned sprint-291 for []; already-closed (no-op): ['implementation', 'planning']
+    EXIT: 0
+
+It froze sprint-291 for `[]` — an empty list of views — called a live `in_progress` sprint
+"already-closed", and exited 0. The canonical was unchanged and no archive was created. That is the
+consumer's `CO-S290-CLOSE-SWEEP-UNDER-PRUNES`, root-caused.
+
+Its S291 repair added 101 lines and **never touched the regex**: it added a write-and-verify layer
+(`_byte_diff`, a new verification exit code, post-write read-back). The tool now rigorously
+**verifies that it wrote nothing**, and passes, because a no-op is faithfully a no-op. The story's
+own Dev Agent Record concedes the root cause was *"inconclusive"* and that the file
+*"round-trips correctly today"*.
+
+And the collision is armed in the other direction: that regex **does** match
+`sprint_291_housekeeping:` → `291`. The moment anyone writes the housekeeping block that Check 3
+*requires*, the tool mistakes it for the sprint envelope, deletes the closure evidence, and leaves
+the rows un-pruned. Nothing has ever instructed writing that block — which is the only reason this
+has not fired. Assertions 8/9 of the new fixture are the regression lock; the ordering constraint
+(retire the tool before shipping a housekeeping producer) is why the close leg is a **rewrite**,
+not an absorption, and why it is a separate release.
+
 ## [0.74.0] — 2026-07-17
 
 ### Fixed — Rule 8 defined four validation intensities and Check 20 could adjudicate three
