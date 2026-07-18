@@ -17,6 +17,28 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.84.0] — 2026-07-18
+
+### Added — code-reviewer-escalated role for reviewer-side model escalation
+
+The dev tier had an escalation route (`dev-escalated.md`, v0.78.0) but the reviewer tier had none:
+a review that needed the stronger model — a capital-path or high-blast-radius diff — had no
+sanctioned way to get it. The graph consumer's answer (F7) was to repoint `code-reviewer.md` to Opus
+permanently, so EVERY review ran Opus, not just the risky ones.
+
+`code-reviewer-escalated.md` mirrors `dev-escalated.md`: a thin role that reads `code-reviewer.md` in
+full and pins only the model/effort (opus-tier). The lead dispatches it for a capital-path or
+high-blast-radius diff instead of the standard reviewer. No dispatch-guard change — the guard already
+binds any role file's declared pin by tier (v0.80.0), so the new role auto-binds Opus in a consumer
+and no-ops in Sonnet-only mode, exactly like dev-escalated. Setup fills its two model placeholders;
+install/uninstall and the reconcile mappers already glob `team-roles/`, so the new file is carried
+with no enumerated-list edit.
+
+Vetting dropped the architect's alternative (a per-review model dispatch field): it fights the
+v0.78.0/v0.80.0 mechanism, where the guard SETS model = role-pin and overrides a call-site model
+param, so a per-review field would be silently corrected away. Escalation is a ROLE, not a call-site
+param. Surfaced by the S292 retro (F7 / Human Commentary).
+
 ## [0.83.0] — 2026-07-18
 
 ### Changed — gate verdicts are grep-sourced from the review file, not lead-asserted
