@@ -103,7 +103,7 @@ if [ "$EST_TOKENS" -gt "$CEILING" ]; then
   echo "      Content ABOVE the protocol grew and is pushing its tail toward the 5K" >&2
   echo "      cliff, where a compaction would drop the recovery instructions." >&2
   echo "      Fix: move non-critical prose BELOW the protocol (into the HANDOFF" >&2
-  echo "      TRIGGERS section) or relocate rationale to docs/context-hardening-notes.md." >&2
+  echo "      TRIGGERS section) or relocate rationale out of the resident region." >&2
   exit 1
 fi
 
