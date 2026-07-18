@@ -17,6 +17,24 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.82.0] — 2026-07-18
+
+### Added — permanent-default change disclosure on HARD_BLOCK resolution
+
+Resolving a HARD_BLOCK by changing a PERMANENT DEFAULT — model routing, a config default, a gate's
+severity, a role's `/model` pin — now MUST disclose the change and its ongoing cost for explicit
+operator acknowledgement (`Permanent default <name> changed <old> → <new>. Ongoing cost: <…>.
+Operator ack Y/N`), the same way an AC verification-category change already must. A point fix pays its
+cost once; a permanent-default change keeps charging on every future run, so folding it silently into
+an escalation record hides a standing policy change inside a one-time fix. The instance: the graph
+consumer's Sprint 292 resolved a capital-path reviewer HARD_BLOCK by repointing every review to Opus,
+absorbed with no cost note.
+
+One clause in `escalations.md`, a sibling to "AC verification-category-change disclosure", plus a
+parallel `SKILL.md` Rule 12 pointer. No new script (KISS): the disclosure rides the existing
+`RESOLVED`/`OVERRIDDEN` operator-citation backstop (`validate-escalation-resolution.sh`) — a fabricated
+ack fails the citation check exactly as it does for the sibling. Surfaced by the S292 retro (F-cross).
+
 ## [0.81.0] — 2026-07-17
 
 ### Changed — the lead yields during a teammate join instead of riding forced-continuations
