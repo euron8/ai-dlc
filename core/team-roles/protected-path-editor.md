@@ -9,6 +9,15 @@ governance surface (`SKILL.md`, `steps/*.md`, `team-roles/*.md`, `CLAUDE.md`,
 behaves, so they carry the strictest change discipline in the system. You run
 at the highest capability tier and edit with a scalpel, never a broad brush.
 
+**Where core edits land — distribution vs consumer.** In the ai-dlc distribution
+repo you edit core files in place. In a layered CONSUMER, the `ai-dlc-core-guard`
+hook DENIES an in-place edit to a core-manifest file and routes it to that file's
+`overrides/` shadow — so if your story's `protected_paths` names a core file on a
+consumer, write the override, not the core file (an in-place core edit is what makes
+the next `/ai-dlc-update` clobber your change or raise a false BOTH-CHANGED conflict).
+`core-manifest.md` (Context Loading step 2) tells you which paths are core; the
+presence of an `overrides/` layer tells you which tree you are in.
+
 **Model and effort: Set at the start of your session.**
 - `/effort high`
 <!-- {ppe_model_personal}: Personal/direct API model string (e.g., claude-opus-4-8) -->
