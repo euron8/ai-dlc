@@ -36,6 +36,11 @@ Read planning artifacts:
 Read the relevant source code, tests, and configuration. Trace the bug
 to its root cause. Document:
 - **Root cause:** what is wrong and where
+- **Root-cause input, not just location:** trace whether the inputs FEEDING
+  the root cause were themselves computed correctly. "A distinct root cause"
+  names WHERE the defect is, not whether the values it acts on are right — a
+  fix that corrects the site while leaving a wrong input upstream still ships
+  the defect (e.g. a safeguard that fires correctly on a mis-computed input).
 - **Impact scope:** what else is affected
 - **Classification:** design flaw vs. implementation error
 
@@ -53,6 +58,18 @@ that layer IS or IS NOT the root cause, with evidence (query result,
 code trace, or test output). "Likely cause at layer X" without
 evidence ruling out other layers is insufficient. Violation: gate
 fails on incomplete falsification.
+
+**Revert-control completeness.** "Root cause identified" is a
+classification, not a proof the fix is complete. The null hypothesis the
+fix must rule out is: what degenerate or incomplete fix would still earn
+the root-cause label while leaving part of the original defect live?
+Prove it with a control — revert the fix, confirm the ORIGINAL symptom
+returns UNCHANGED IN SHAPE, then re-apply. The revert result is required
+evidence in the fix story (`reverted at <sha>, original symptom <X>
+reproduced in shape, re-applied`); its absence fails the gate exactly as
+an incomplete falsification ladder does. Ties to the falsification ladder
+above: that proves the cause is correctly LOCATED, this proves the fix is
+COMPLETE.
 
 ### 3. Create Fix Story
 

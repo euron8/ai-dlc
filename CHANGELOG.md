@@ -17,6 +17,28 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.85.0] — 2026-07-18
+
+### Added — revert-control completeness for bug investigations
+
+A bug investigation could close on "distinct root cause identified" — a classification, not a proof
+the fix is complete. The graph consumer's Sprint 292 (F10) shipped the gap: a WIDE-mode question was
+closed as "distinct root cause, legitimate safeguard behavior" without checking whether the safeguard's
+OWN input was computed correctly (it was not) — the operator caught it mid-turn.
+
+`bug-investigation.md` §2 now requires two things the falsification ladder did not cover:
+- **Root-cause input, not just location** — trace whether the inputs feeding the root cause were
+  computed correctly; a fix that corrects the site while leaving a wrong input upstream still ships the
+  defect (e.g. a safeguard that fires correctly on a mis-computed input).
+- **Revert-control completeness** — prove the fix is complete with a control: revert it, confirm the
+  ORIGINAL symptom returns unchanged in shape, re-apply. The revert result is required evidence in the
+  fix story; its absence fails the gate exactly as an incomplete falsification ladder does.
+
+Evidence-carrying prose-with-teeth, enforced the same way as the falsification ladder — no new script
+(that ladder proves the cause is LOCATED; this proves the fix is COMPLETE). Vetting retargeted the
+proposal from `gate-validation.md` (a runnable revert-at-gate-time has no harness) to
+`bug-investigation.md`. Surfaced by the S292 retro (F10).
+
 ## [0.84.0] — 2026-07-18
 
 ### Added — code-reviewer-escalated role for reviewer-side model escalation
