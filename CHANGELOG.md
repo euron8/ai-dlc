@@ -17,6 +17,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.88.0] — 2026-07-18
+
+### Fixed — the retro-compliance validator can finally pass (dead since S138)
+
+`validate-mandatory-rules.sh` — the Rule 18 retro-compliance gate wired into
+`validate-retro-compliance.yml` and retro.md Step 5c — exited 1 on every real sprint since S138. It
+delegated Check 2 to `validate-cycle-commits.sh` and Check 4 to `validate-retro-prereq.sh`, two sibling
+scripts core never shipped; Check 5 keyed on a `## Gate Log: Sprint N` header no core artifact writes;
+and Check 3 read a `sprint_<N>_housekeeping` block whose schema said it was "written ONLY by
+`sprint-status.sh close`" — a producer that did not exist. A wired CI gate that can never pass enforces
+nothing.
+
+Fixed under KISS — no new schemas or ledgers:
+- **Check 3 gets its producer.** `sprint-status.sh` gains a `close` mode that flips `status: done` and
+  writes the housekeeping block (write-verified, idempotent), wired into retro.md's Close-Out Sweep.
+  Check 3 reads the canonical `implementation-artifacts/` copy (was the legacy `planning-artifacts/`).
+  It now genuinely enforces envelope-close: PASS on a closed envelope, FAIL on an open one.
+- **Checks 2, 4, 5 stop poisoning the gate.** Each SKIPs loudly when its input is absent — Checks 2/4
+  are consumer-provided siblings (cycle evidence moved to per-artifact changelogs; the deploy-action
+  set is deploy-target specific), Check 5 when it cannot isolate the sprint's gate-log section (the
+  entry format is consumer-defined). A consumer that ships the sibling or uses the header still gets
+  the real check; core no longer fails the whole gate on a check it cannot universally enforce.
+
+New fixture `validate-mandatory-rules-revive` (registered; install/uninstall twins) locks it: on a
+compliant tree Checks 2/4/5 SKIP and Check 3 PASSes, and the MUTANT (un-closed envelope) FAILs Check 3
+— proving the revival is not vacuous. Surfaced by the S292 retro
+(`CO-S291-VALIDATE-MANDATORY-RULES-CHECK3-CHECK4-DEAD`).
+
+Vetting note: the earlier "schema-ify the gate-log" direction was dropped under KISS — reviving 2/4/5
+as universal-core enforcers would require new mandatory emission machinery for artifacts that are
+inherently consumer-format-specific, so skip-when-absent is the honest minimum.
+
 ## [0.87.0] — 2026-07-18
 
 ### Fixed — core no longer cites dev-repo docs that are dead in every consumer

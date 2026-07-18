@@ -53,14 +53,15 @@ else
   exit 1
 fi
 
-MODE=""; FILE=""; PROJECT_ROOT=""; SPRINT=""; NAME=""; VARIANT=""; INTENSITY=""
+MODE=""; FILE=""; PROJECT_ROOT=""; SPRINT=""; NAME=""; VARIANT=""; INTENSITY=""; EVIDENCE=""; CLOSED_AT=""; RETRO_DOC=""
 
 case "${1:-}" in
   --render)   MODE="render"; shift ;;
   --check)    MODE="check"; FILE="${2:-}"; shift 2 2>/dev/null || shift ;;
   sprint-id)  MODE="sprint-id"; shift ;;
   roll)       MODE="roll"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N>" >&2; exit 2 ;;
+  close)      MODE="close"; shift ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text>" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
@@ -71,6 +72,9 @@ while [ $# -gt 0 ]; do
     --name)      NAME="${2:-}"; shift 2 ;;
     --variant)   VARIANT="${2:-}"; shift 2 ;;
     --intensity) INTENSITY="${2:-}"; shift 2 ;;
+    --evidence)  EVIDENCE="${2:-}"; shift 2 ;;
+    --closed-at) CLOSED_AT="${2:-}"; shift 2 ;;
+    --retro-doc) RETRO_DOC="${2:-}"; shift 2 ;;
     *)           echo "sprint-status: unknown option '$1'" >&2; exit 2 ;;
   esac
 done
@@ -84,13 +88,17 @@ fi
 if [ "$MODE" = "roll" ] && [ -z "$SPRINT" ]; then
   echo "usage: sprint-status.sh roll --sprint <N>" >&2; exit 2
 fi
+if [ "$MODE" = "close" ] && [ -z "$EVIDENCE" ]; then
+  echo "usage: sprint-status.sh close --evidence <text> [--sprint <N>] [--closed-at <date>] [--retro-doc <path>]" >&2; exit 2
+fi
 
 [ -n "$PROJECT_ROOT" ] || PROJECT_ROOT="$(pwd)"
 
 command -v python3 >/dev/null 2>&1 || { echo "sprint-status: FAIL — python3 required" >&2; exit 1; }
 
 MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" PROJECT_ROOT="$PROJECT_ROOT" \
-SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" python3 - <<'PY'
+SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" \
+EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" python3 - <<'PY'
 import json, os, re, sys
 from pathlib import Path
 
@@ -285,6 +293,83 @@ def new_envelope(n):
     lines.append("  # (story-%d-<M>:), never a list — a list form matches no reader." % n)
     return "\n".join(lines) + "\n"
 
+def set_status_done(text):
+    """Flip the top-level `status:` to done. First match only — the housekeeping block's indented
+    `envelope_status` never matches STATUS_RE's `^status:` anchor, so this cannot touch it."""
+    new, count = STATUS_RE.subn("status: done", text, count=1)
+    if count == 0:
+        fail("canonical has no top-level `status:` line to flip to done (schema-required field "
+             "missing) — refusing to guess where the envelope begins.", code=1)
+    return new
+
+def upsert_housekeeping(text, n, evidence, closed_at, retro_doc):
+    """Insert or replace THIS sprint's `sprint_<n>_housekeeping:` block. Idempotent: a second close
+    with identical inputs rebuilds a byte-identical block, so close() then writes nothing."""
+    body = ["  envelope_status: done",
+            '  closure_evidence: "%s"' % evidence.replace("\\", "\\\\").replace('"', '\\"')]
+    if closed_at:
+        body.append("  closed_at: %s" % closed_at)
+    if retro_doc:
+        body.append("  retro_doc: %s" % retro_doc)
+    block = ["sprint_%d_housekeeping:" % n] + body
+
+    keypat = re.compile(r"^sprint_%d_housekeeping:[ \t]*(?:#.*)?$" % n)
+    lines = text.split("\n")
+    out, i, replaced = [], 0, False
+    while i < len(lines):
+        if keypat.match(lines[i]):
+            # drop the existing block: the key line plus its indented/blank continuation lines
+            i += 1
+            while i < len(lines) and (lines[i] == "" or lines[i][:1] in (" ", "\t")):
+                i += 1
+            out.extend(block)
+            replaced = True
+        else:
+            out.append(lines[i]); i += 1
+    if not replaced:
+        while out and out[-1] == "":
+            out.pop()
+        out.extend(block)
+    result = "\n".join(out)
+    return result if result.endswith("\n") else result + "\n"
+
+def close():
+    """Retro-close: flip status -> done and stamp the housekeeping block Check 3 reads. This is the
+    producer the schema names ('written ONLY by sprint-status.sh close') and that never existed."""
+    want = os.environ.get("SPRINT")
+    want = int(want) if want else None
+    evidence   = os.environ["EVIDENCE"]
+    closed_at  = os.environ.get("CLOSED_AT") or ""
+    retro_doc  = os.environ.get("RETRO_DOC") or ""
+
+    existing = [(v, VIEWS[v]) for v in VIEWS if VIEWS[v].is_file()]
+    if not existing:
+        fail("no sprint-status.yaml canonical exists to close. A sprint must be rolled before it can "
+             "be closed (sprint-status.sh roll).", code=1)
+
+    written = []
+    for view, canonical in existing:
+        text = canonical.read_text()
+        sprint, status = parse(text)
+        if sprint is None:
+            fail("%s canonical carries no `sprint:` key — cannot close a preamble-only envelope."
+                 % view, code=1)
+        if want is not None and sprint != want:
+            fail("%s canonical holds sprint %d, but close was asked for sprint %d. Never guess which "
+                 "is authoritative (route.md Step 6 rule 5)." % (view, sprint, want), code=3)
+        new_text = upsert_housekeeping(set_status_done(text), sprint, evidence, closed_at, retro_doc)
+        if new_text != text:
+            write_verified(canonical, new_text, "%s close" % view)
+            written.append(str(canonical))
+
+    if written:
+        print("sprint-status: closed sprint envelope (status: done + housekeeping)")
+        for w in written:
+            print("  %s" % w)
+    else:
+        print("sprint-status: already closed (no-op)")
+    return 0
+
 if mode == "render":
     print(render_header())
     sys.exit(0)
@@ -295,6 +380,8 @@ elif mode == "sprint-id":
     sys.exit(0)
 elif mode == "roll":
     sys.exit(roll())
+elif mode == "close":
+    sys.exit(close())
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY

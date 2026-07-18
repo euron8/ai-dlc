@@ -615,6 +615,18 @@ gate.
    sweep is the last guard against drift. Any mismatch found here is
    a retro finding — record it and fix.
 
+   Then **close the envelope mechanically** — do NOT hand-edit `status:`:
+
+       scripts/sprint-status.sh close \
+         --evidence "<what proves the sprint closed: PR/merge, deploy, smoke>" \
+         --retro-doc docs/retro/sprint-<N>.md
+
+   This flips `status: done` and writes the `sprint_<N>_housekeeping:` block
+   (`envelope_status: done` + non-empty `closure_evidence`) that Step 5c's
+   `validate-mandatory-rules.sh` Check 3 reads — the ONLY writer of that block
+   (`schemas/sprint-status.json`), write-verified and idempotent. The next
+   sprint's `roll` (route.md Step 6) freezes this closed envelope.
+
 **Record results in the retro doc** under a `## Close-Out Sweep`
 section: carry-over items closed/partial, escalations resolved or
 deferred, any status-yaml drift caught and corrected. If everything
@@ -803,12 +815,14 @@ core-layer-immutability).
 
 3. **Mandatory rules validation.** Run:
    `scripts/validate-mandatory-rules.sh <N>` (where N is the sprint
-   number). This chains `validate-retro-evidence.sh` (Check 1),
-   `validate-cycle-commits.sh` (Check 2), and `validate-retro-prereq.sh`
-   (Check 4), plus inline Checks 3/5/6. (`validate-provenance-block.sh` is
-   run separately — at Step 5c check 2 above locally, and as its own CI step.)
-   MUST exit 0. If it fails, fix the issues before proceeding to
-   Step 6.
+   number). It runs `validate-retro-evidence.sh` (Check 1) and inline
+   Checks 3/5/6; Checks 2 (`validate-cycle-commits.sh`) and 4
+   (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
+   sibling script is absent from core. Check 3 reads the envelope you closed
+   in the Close-Out Sweep above via `sprint-status.sh close`.
+   (`validate-provenance-block.sh` is run separately — at Step 5c check 2
+   above locally, and as its own CI step.) MUST exit 0. If it fails, fix the
+   issues before proceeding to Step 6.
 
 4. **Audit-anchor schema validation.** Run
    `scripts/validate-audit-anchors.sh _bmad-output/audit-anchors.md`. It

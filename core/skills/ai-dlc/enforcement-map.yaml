@@ -514,6 +514,39 @@ non_catalog_units:
     fixtures: [tests/fixtures/sprint-status-lifecycle]
     ci_workflow: ~
 
+  - id: validate-mandatory-rules-revive
+    title: Retro-compliance validator — un-poisoned; Check 3 enforces the closed envelope
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-mandatory-rules.sh
+      - core/scripts/sprint-status.sh
+    reads:
+      - core/schemas/sprint-status.json
+    call_sites:
+      - site: retro.md Close-Out Sweep step 3 (sprint-status.sh close)
+        posture: writes status:done + the sprint_<N>_housekeeping block
+        why: the ONLY producer of the closure block Check 3 reads. Hand-editing
+          `status: done` leaves the block unwritten, so Check 3 could never pass —
+          the block had no producer at all until this `close` mode.
+      - site: retro.md Step 5c (validate-mandatory-rules.sh <N>)
+        posture: gates the retro commit
+        why: Checks 2 and 4 delegated to sibling scripts core never shipped, and Check 5
+          keyed on a "## Gate Log: Sprint N" header no core artifact writes — so the
+          validator exited 1 on every real retro since S138, a wired CI gate that could
+          never pass. The dead delegations now SKIP (consumer-provided), and Check 3 reads
+          the sprint_<N>_housekeeping block that sprint-status.sh `close` writes.
+    checks:
+      - id: dead-delegation-skips-not-fails
+        asserts: Checks 2/4 SKIP (not FAIL) when their consumer-provided sibling is absent,
+          and Check 5 SKIPs when it cannot isolate the sprint's gate-log section
+        protects: the whole gate from a dead-in-core delegation poisoning every retro
+      - id: check-3-enforces-the-closed-envelope
+        asserts: Check 3 PASSes on a closed envelope and FAILs on an un-closed one
+        protects: against a vacuous revival — the producer (`close`) and the reader
+          (Check 3) must agree, and the check must still bite
+    fixtures: [tests/fixtures/validate-mandatory-rules-revive]
+    ci_workflow: core/ci-templates/validate-retro-compliance.yml
+
   - id: ci-gate-dormancy
     title: Dormant CI-gate detector (retro-declared gates vs workflows)
     adjudication: script

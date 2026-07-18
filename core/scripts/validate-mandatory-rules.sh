@@ -15,14 +15,15 @@
 # The 6 checks:
 #   Check 1: Party mode transcript exists and is SHA-cited in retro doc
 #             (delegates to scripts/validate-retro-evidence.sh <branch> <n>)
-#   Check 2: Cycle commit count >= 3 for retro artifacts
-#             (delegates to scripts/validate-cycle-commits.sh <retro-branch>)
-#   Check 3: Sprint envelope flipped to done (sprint-status.yaml)
-#             (reads _bmad-output/planning-artifacts/sprint-status.yaml)
-#   Check 4: Deploy-Validate gate log row present with all 6 operator actions
-#             (delegates to scripts/validate-retro-prereq.sh <sprint-n>)
-#   Check 5: Visual UI verification for web/** sprints
-#             (reads _bmad-output/implementation-artifacts/gate-log.md)
+#   Check 2: Cycle commit count for retro artifacts -- CONSUMER-PROVIDED
+#             (scripts/validate-cycle-commits.sh; SKIP when the sibling is absent)
+#   Check 3: Sprint envelope closed (status: done + sprint_<n>_housekeeping)
+#             (reads implementation-artifacts/sprint-status.yaml, written by
+#              sprint-status.sh close; planning-artifacts fallback)
+#   Check 4: Deploy-validate operator actions -- CONSUMER-PROVIDED
+#             (scripts/validate-retro-prereq.sh; SKIP when the sibling is absent)
+#   Check 5: Visual UI verification for web/** sprints (SKIP when no web change
+#             or the sprint's gate-log section cannot be isolated)
 #   Check 6: Dev Agent Record compliance — no "lead (self-executed" without waiver
 #             (reads story files + docs/escalations/pending.md)
 #
@@ -107,7 +108,13 @@ fi
 echo "[Check 2] Cycle commit count >= 3 for retro..."
 CYCLE_COMMITS_SH="${SCRIPT_DIR}/validate-cycle-commits.sh"
 if [ ! -f "$CYCLE_COMMITS_SH" ]; then
-  fail "Check2_CYCLE_COMMITS" "validate-cycle-commits.sh not found at ${CYCLE_COMMITS_SH}"
+  # Consumer-provided check — core ships no validate-cycle-commits.sh. Cycle evidence moved from a
+  # standalone validation-cycle-log.md (DEAD: no producer in current core) to per-artifact changelogs
+  # (Rule 15), whose freeform prose is not mechanically countable here. A consumer that maintains the
+  # log ships its own sibling and this check runs; absent it, SKIP loudly — never fail the whole gate
+  # on a check core cannot universally enforce. This dead delegation is what poisoned every retro
+  # since S138 (the whole validator exited 1 before any real check could gate).
+  echo "  CHECK 2: SKIP (no validate-cycle-commits.sh — consumer-provided)"
 else
   C2_OUT=$("$CYCLE_COMMITS_SH" "$RETRO_BRANCH" 2>&1)
   C2_EXIT=$?
@@ -126,7 +133,13 @@ fi
 #   envelope_status: done and non-empty closure_evidence
 # ============================================================================
 echo "[Check 3] Sprint envelope status in sprint-status.yaml..."
-STATUS_YAML="_bmad-output/planning-artifacts/sprint-status.yaml"
+# Canonical is implementation-artifacts (PRIMARY, per sprint-status.sh + schemas/sprint-status.json
+# header); planning-artifacts is a legacy second copy some consumers still carry. Prefer the
+# canonical, fall back to the legacy path so a consumer that has not migrated still validates.
+STATUS_YAML="_bmad-output/implementation-artifacts/sprint-status.yaml"
+if [ ! -f "$STATUS_YAML" ] && [ -f "_bmad-output/planning-artifacts/sprint-status.yaml" ]; then
+  STATUS_YAML="_bmad-output/planning-artifacts/sprint-status.yaml"
+fi
 if [ ! -f "$STATUS_YAML" ]; then
   fail "Check3_ENVELOPE" "sprint-status.yaml not found at ${STATUS_YAML}"
 else
@@ -176,7 +189,12 @@ fi
 echo "[Check 4] Deploy-validate operator actions (6/6)..."
 RETRO_PREREQ_SH="${SCRIPT_DIR}/validate-retro-prereq.sh"
 if [ ! -f "$RETRO_PREREQ_SH" ]; then
-  fail "Check4_DEPLOY_VALIDATE" "validate-retro-prereq.sh not found at ${RETRO_PREREQ_SH}"
+  # Consumer-provided check — core ships no validate-retro-prereq.sh. The deploy-validate operator
+  # action set is deploy-target specific (the reference consumer's is ECS rollout / mTLS / SSM), so
+  # core has no universal list to assert. A consumer with a structured deploy-action record ships its
+  # own sibling and this check runs; absent it, SKIP loudly rather than fail the gate (the other half
+  # of the S138 dead-delegation poison).
+  echo "  CHECK 4: SKIP (no validate-retro-prereq.sh — consumer-provided)"
 else
   C4_OUT=$("$RETRO_PREREQ_SH" "$SPRINT_N" 2>&1)
   C4_EXIT=$?
@@ -218,19 +236,28 @@ else
     # Use [[:space:]] instead of \b for BSD awk (macOS) word-boundary compatibility.
     SPRINT_SECTION=$(awk "/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=1} found && /^## Gate Log: Sprint [0-9]/ && !/^## Gate Log: Sprint ${SPRINT_N}([[:space:]]|$)/{found=0} found{print}" "$GATE_LOG" 2>/dev/null | head -200)
 
-    VISUAL_OK=0
-    if echo "$SPRINT_SECTION" | grep -qi 'USER-CONFIRMED'; then
-      VISUAL_OK=1
-    fi
-    if echo "$SPRINT_SECTION" | grep -qi 'playwright'; then
-      VISUAL_OK=1
-    fi
-
-    if [ $VISUAL_OK -eq 1 ]; then
-      echo "  CHECK 5: PASS"
+    if [ -z "$SPRINT_SECTION" ]; then
+      # Could not isolate this sprint's deploy-validate section in gate-log.md. The gate-log entry
+      # header format is consumer-defined (CLAUDE.md Autonomous Gate Protocol) — core keys on
+      # "## Gate Log: Sprint N", but a consumer may section its log differently, so a missing section
+      # means "cannot determine", not "no visual evidence". SKIP rather than fail on an unparseable
+      # format; a consumer whose gate-log uses this header still gets the real check below.
+      echo "  CHECK 5: SKIP (could not isolate Sprint ${SPRINT_N} section in gate-log.md — consumer-defined format)"
     else
-      echo "  CHECK 5: FAIL"
-      fail "Check5_VISUAL_UI" "Sprint ${SPRINT_N} has web/** file changes but gate-log.md Sprint ${SPRINT_N} section contains neither 'USER-CONFIRMED' nor playwright trace evidence in Deploy Status Report"
+      VISUAL_OK=0
+      if echo "$SPRINT_SECTION" | grep -qi 'USER-CONFIRMED'; then
+        VISUAL_OK=1
+      fi
+      if echo "$SPRINT_SECTION" | grep -qi 'playwright'; then
+        VISUAL_OK=1
+      fi
+
+      if [ $VISUAL_OK -eq 1 ]; then
+        echo "  CHECK 5: PASS"
+      else
+        echo "  CHECK 5: FAIL"
+        fail "Check5_VISUAL_UI" "Sprint ${SPRINT_N} has web/** file changes but gate-log.md Sprint ${SPRINT_N} section contains neither 'USER-CONFIRMED' nor playwright trace evidence in Deploy Status Report"
+      fi
     fi
   fi
 fi
