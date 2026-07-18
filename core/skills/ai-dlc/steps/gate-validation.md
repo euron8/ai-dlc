@@ -153,6 +153,13 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   remain)?
 - For implementation artifacts: Code Review approved? QA approved?
   Story Validation passed?
+- **Read each verdict from its review file, do not assert it.** The Code
+  Review / QA / Story Validation answers above are grep-sourced from the
+  review file's own verdict line (`grep -E '^(Verdict|Decision):' <review-file>`,
+  a Git-tracked path `code-reviewer.md` guarantees and the story's Gate-status
+  line cites), never from recollection — a lead-asserted gate claim is how a
+  sprint ran deploy as APPROVED while its gate-1 review file on disk still read
+  CHANGES-REQUESTED.
 - If any required validation was skipped, run it now before proceeding.
 - **Evidence:** Gate log must record which validations were run and their
   outcomes. "Completed" without evidence is not completed.

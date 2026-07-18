@@ -17,6 +17,26 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.83.0] — 2026-07-18
+
+### Changed — gate verdicts are grep-sourced from the review file, not lead-asserted
+
+Check 1 ("Validation cycle complete?") asked "Code Review approved? QA approved? Story Validation
+passed?" and accepted the lead's yes/no — nothing tied that answer to the review file's actual verdict.
+The graph consumer's Sprint 292 shipped the failure: a story ran gate-2/gate-3/deploy as APPROVED while
+its gate-1 review file on disk still read CHANGES-REQUESTED, because the snapshot claim was lead-asserted
+and no check compared it to the file.
+
+Check 1 now requires each verdict be read from the review file's own verdict line
+(`grep -E '^(Verdict|Decision):' <review-file>`) — the Git-tracked path `code-reviewer.md` guarantees
+and the story's Gate-status line cites — never from recollection. Check 1 is `adjudication: llm`, so the
+fresh gate-adjudicator (v0.62.0) already re-derives it; this gives that adjudicator a concrete instruction
+to grep rather than accept an assertion. One bullet, no new script — the enforcer already exists.
+
+Surfaced by the S292 retro (F1). The proposal's other half — a hand-written "gate-2 reproduction
+discharge" annotation — was dropped in vetting: it was a self-declared, non-operator path to discharge an
+operator-gated Critical (a check that cannot fire).
+
 ## [0.82.0] — 2026-07-18
 
 ### Added — permanent-default change disclosure on HARD_BLOCK resolution
@@ -30,8 +50,8 @@ an escalation record hides a standing policy change inside a one-time fix. The i
 consumer's Sprint 292 resolved a capital-path reviewer HARD_BLOCK by repointing every review to Opus,
 absorbed with no cost note.
 
-One clause in `escalations.md`, a sibling to "AC verification-category-change disclosure", plus a
-parallel `SKILL.md` Rule 12 pointer. No new script (KISS): the disclosure rides the existing
+One clause in `escalations.md`, a sibling to "AC verification-category-change disclosure". No new
+script and no `SKILL.md` change (KISS): the disclosure rides the existing
 `RESOLVED`/`OVERRIDDEN` operator-citation backstop (`validate-escalation-resolution.sh`) — a fabricated
 ack fails the citation check exactly as it does for the sibling. Surfaced by the S292 retro (F-cross).
 
