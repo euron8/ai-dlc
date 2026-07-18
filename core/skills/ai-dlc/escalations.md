@@ -80,6 +80,21 @@ without an explicit ack silently downgrades the acceptance contract. The
 operator's `Y` is required before the resolution closes; a `N` returns
 the AC to its prior category. Governed by SKILL.md Rule 12.
 
+**Permanent-default change disclosure.** When resolving a HARD_BLOCK
+changes a PERMANENT DEFAULT — a standing policy the pipeline keeps
+applying after the entry closes (model routing, a config default, a
+gate's severity, a role's `/model` pin) — the resolution MUST state the
+change and its ongoing cost for operator acknowledgement:
+`Permanent default <name> changed <old> → <new>. Ongoing cost: <what it
+now affects on every future run>. Operator ack Y/N`. A point fix pays its
+cost once; a permanent-default change keeps charging on every future run,
+so folding it silently into a HARD_BLOCK resolution hides a standing
+policy change inside a one-time fix. The operator's `Y` is required
+before the resolution closes; a `N` reverts the default. Same enforcement
+path as the sibling above — the `RESOLVED`/`OVERRIDDEN` operator citation
+(`validate-escalation-resolution.sh`) is what makes a fabricated ack fail.
+Governed by SKILL.md Rule 12.
+
 **Terminal-entry archival (Rule 25(a)/(c) — move, never delete).** Once
 an entry reaches a terminal status — RESOLVED or OVERRIDDEN — it is
 MOVED (cut-and-paste, verbatim) out of the live `pending.md` into a dated
