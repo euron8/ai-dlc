@@ -551,6 +551,13 @@ string.
 - `{reviewer_model_personal}` -> sonnet-tier model personal string
 - `{reviewer_model_bedrock}` -> sonnet-tier model bedrock string
 
+**`.claude/team-roles/code-reviewer-escalated.md`:** (the standard Code Reviewer
+contract on a stronger model, for reviews the lead routes to the escalated tier —
+capital-path or high-blast-radius diffs — opus-tier, like the architect; in Sonnet-only
+mode this collapses to the sonnet string and escalation becomes a harmless no-op)
+- `{reviewer_escalated_model_personal}` -> opus-tier model personal string
+- `{reviewer_escalated_model_bedrock}` -> opus-tier model bedrock string
+
 **`.claude/team-roles/pm.md`:**
 - `{pm_model_personal}` -> sonnet-tier model personal string
 - `{pm_model_bedrock}` -> sonnet-tier model bedrock string

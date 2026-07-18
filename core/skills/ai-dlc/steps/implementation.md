@@ -253,7 +253,12 @@ dispatch-incomplete.
 - **dev** from `dev.md`. Assign ownership based on story scope per the
   ownership paths defined in the dev role file.
 - **code-reviewer** from `code-reviewer.md`. Read-only, produces reviews
-  in docs/reviews/.
+  in docs/reviews/. For a capital-path or high-blast-radius diff, dispatch a
+  `code-reviewer-escalated` teammate (from `code-reviewer-escalated.md`)
+  instead — same review contract, stronger (opus-tier) model. As with
+  `dev-escalated`, escalation is a ROLE, not a call-site `model` param: a
+  higher `model` on a plain `code-reviewer` dispatch is silently corrected to
+  the standard tier by the dispatch guard.
 - **qa** from `qa.md`. Validates acceptance criteria, runs tests.
 
 Spawn additional dev teammates if stories span multiple ownership
