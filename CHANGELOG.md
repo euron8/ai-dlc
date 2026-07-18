@@ -17,6 +17,22 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.86.0] — 2026-07-18
+
+### Changed — protected-path-editor is now override-aware (distribution vs consumer)
+
+`protected-path-editor.md` framed the role as the in-place editor of the core-manifest set (SKILL.md,
+steps, team-roles, CLAUDE.md, coding-conventions) with no mention of `overrides/`. Correct in the ai-dlc
+distribution repo, where the core-guard is a no-op — but a latent deadlock in a layered CONSUMER, where
+the `ai-dlc-core-guard` hook DENIES an in-place core edit and routes it to the file's `overrides/`
+shadow. The role has been stale since v0.21.0, predating the v0.68.0 edit-time core boundary it now has
+to live under.
+
+Identity now states where core edits land: in place on the distribution, into the `overrides/` shadow on
+a consumer (the guard enforces it). No new mechanism — the core-guard already routes; this aligns the
+role prose so the lead does not dispatch a protected-path edit the guard then deadlocks. Surfaced by the
+graph consumer's S292 retro (Rule File Audit A#2).
+
 ## [0.85.0] — 2026-07-18
 
 ### Added — revert-control completeness for bug investigations
