@@ -14,8 +14,7 @@ this protocol. Every check must PASS. Any failure blocks the gate.
 
 Checks in this file are **sliced by gate type**: a gate loads the
 universal core plus only the checks its declared type requires, per the
-`GATE_MANIFEST` below. See
-`docs/v0.24.0-gate-validation-slicing-spec.md` §5.
+`GATE_MANIFEST` below.
 
 **Gate-type enum (canonical, co-located per Rule 26).** The invoking step
 declares exactly one type when it says "run gate validation

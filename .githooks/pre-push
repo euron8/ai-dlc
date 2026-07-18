@@ -41,6 +41,11 @@ step "taught schema == read schema (provenance examples derive from schemas/)" \
 step "enforcement-map integrity (I1-I11)" \
   bash scripts/validate-enforcement-map.sh
 
+# 1b. A core/ pointer at a dev-repo docs/ spec that install never ships is dead in every
+#     consumer tree — resolves for a maintainer, 404s for a consumer. Derived, no hand-list.
+step "no dead doc refs (core/ cites no unshipped dev-repo doc)" \
+  bash scripts/validate-no-dead-doc-refs.sh
+
 # 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident
 #    region sits within a few hundred tokens of the ceiling, so an edit above the fold
 #    can silently push the post-compact recovery protocol below it.

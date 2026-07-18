@@ -652,7 +652,7 @@ non_catalog_units:
           learn what model it ran on, and a verdict that self-reports its own
           model is the trust circularity that keeps H1/H2 with the lead. The
           dispatch param is the only observable ground truth and it is observable
-          BEFORE the work. Measured on graph S291 (docs/v0.70.0-sonnet-lead-ab.md):
+          BEFORE the work. Measured on graph S291 (v0.70.0 Sonnet-lead A/B):
           the lead dropped the param on 3 of 42 spawns, so every remediator ran
           Sonnet against an opus pin — and an inherited gate-adjudicator would
           collapse the v0.62.0 Opus escalation to Sonnet-judging-Sonnet while

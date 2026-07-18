@@ -17,6 +17,24 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.87.0] — 2026-07-18
+
+### Fixed — core no longer cites dev-repo docs that are dead in every consumer
+
+`SKILL.md` cited `docs/v0.24.0-gate-validation-slicing-spec.md`, a design spec at the dev-repo `docs/`
+root — outside `core/`, so install never ships it. The relative pointer resolved for a maintainer but
+was dead in every consumer tree. A sweep found the same class in five more sites
+(`v0.70.0-sonnet-lead-ab.md`, `context-hardening-notes.md`) across `SKILL.md`, `gate-validation.md`,
+`research-citations.md`, `enforcement-map.yaml`, `ai-dlc-subagent-probe.sh`, and
+`validate-reattach-budget.sh`. All six now drop the dead path (each kept a live sibling or a bare
+version tag).
+
+New dist-side guard `scripts/validate-no-dead-doc-refs.sh` (wired into pre-push alongside
+`validate-enforcement-map.sh`) prevents recurrence: it DERIVES the dead set — a top-level `docs/<X>.md`
+referenced in `core/` that `install.sh` does not ship — with no hand-list, so consumer-runtime docs
+(`architecture.md`, `docs/reviews/…`) are correctly excluded. Proven: PASS after the fixes, FAIL on an
+injected dead ref, PASS again. Surfaced by the graph consumer's S292 CLAUDE.md audit.
+
 ## [0.86.0] — 2026-07-18
 
 ### Changed — protected-path-editor is now override-aware (distribution vs consumer)

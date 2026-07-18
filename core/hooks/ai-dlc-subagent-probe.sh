@@ -18,7 +18,7 @@
 # That risk has been argued but never measured, and it is the open question under
 # `autoCompactWindow`. Raising the ceiling (400000, say) buys teammates headroom
 # before an unprotected compaction — but it costs ~19% on a bill whose cache-read
-# term scales linearly with resident context (docs/v0.70.0-sonnet-lead-ab.md §6).
+# term scales linearly with resident context (v0.70.0 Sonnet-lead A/B, §6).
 # Paying a certain 19% for an unquantified benefit is a guess. THIS HOOK TURNS IT
 # INTO A MEASUREMENT: how close do teammates actually get to the threshold, and
 # do any of them compact?

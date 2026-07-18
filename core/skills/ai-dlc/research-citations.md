@@ -70,7 +70,7 @@ Supports:
 ## Citation Policy
 
 When any of the following change, cite the specific source in the
-commit and in `docs/context-hardening-notes.md`:
+commit message:
 
 - Yellow or red token threshold values.
 - Reminder recurrence arithmetic (currently 50K tokens / 20 turns).

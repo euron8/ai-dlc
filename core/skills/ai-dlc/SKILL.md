@@ -816,8 +816,7 @@ is not read whole), so each check carries its own
 `<!-- CHECK_LOADED: <id> -->` anchor and H1 reads the manifest and FAILS
 the gate if any required check's anchor is absent — completeness is a
 checked invariant, not a trust-the-loader assumption. See
-`steps/gate-validation.md` "Gate-type manifest" and
-`docs/v0.24.0-gate-validation-slicing-spec.md` §5.2. All OTHER step
+`steps/gate-validation.md` "Gate-type manifest". All OTHER step
 files remain whole-file `READ AND FOLLOW` as above.
 
 **Failure mode this prevents.** In hot sessions with many completed
