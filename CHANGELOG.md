@@ -17,6 +17,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.89.0] — 2026-07-19
+
+### Changed — KISS vestigial-scar-tissue sweep: delete prose whose mechanism already landed
+
+Rules, hooks, gates, and fixtures accumulated over ~40 sprints, and the prose that
+argued for each one stayed behind after the enforcing mechanism shipped. That prose
+is scar tissue: a post-mortem explaining *why* a check exists teaches nothing an
+agent can act on once the check itself fires and fails the gate. The delete bar was
+narrow — remove a passage only when a live mechanism already enforces what it
+describes, so the lesson survives in the thing that runs. Nothing here changes
+behaviour: no rule, hook, check, or fixture was weakened, and every gate is green
+before and after.
+
+Resident-path cost is the reason to care. `SKILL.md` and `steps/*.md` are re-read
+whole by the recovery hook on *every* compaction, so a line of dead rationale is
+paid again each cycle, not once.
+
+- **Validation-cycle sub-routine extracted** (`steps/_gate-procedures.md`, new).
+  Six step files — `architecture`, `discovery`, `doc-repair-backfill`,
+  `research-requirements`, `sprint-review-next`, `stories-test-strategy` — each
+  carried its own near-identical copy of the run-gate / read-verdict / remediate /
+  re-run cycle. Collapsed to one sub-routine the steps call. Net −121 lines, and
+  the cycle now has one home to correct instead of six to keep in sync.
+- **Historical post-mortems deleted** (`steps/gate-validation.md`, `steps/retro.md`,
+  and the `adversary` / `code-reviewer` / `dev` / `gate-adjudicator` / `qa` /
+  `remediator` role files). Each passage narrated a past failure whose fix is now a
+  live check. Narrative in a role file primes the agent toward the failure it
+  describes; the check does the work. Net −53 lines.
+- **Compaction prose trimmed from `SKILL.md`** (−33 lines). Vestigial explanation of
+  behaviour the compaction hooks and the context sensor already implement.
+- **`SKILL.md` small clauses plus the S3 drift resolution** (−40 lines / −2127 bytes).
+
+#### The S3 drift resolution
+
+`SKILL.md` restated the context-sensor's yellow/red/post-compact reminder text
+verbatim — and that restatement had drifted from what `ai-dlc-context-sensor.sh`
+actually emits, while also contradicting Rule 2's own body on whether the reminder
+blocks the pipeline. Three sources, two of them wrong.
+
+Reading Rule 2's body settled it: **the rule and the hook agreed** — the reminder is
+non-blocking, and only path (a) is the lossless one. The restatement was simply the
+stale copy. It is now replaced by a sole-emitter pointer: `ai-dlc-context-sensor.sh`
+owns the exact wording, and `SKILL.md` names it as the owner rather than duplicating
+it. The generalisable move: when a restatement contradicts its emitter, read the
+authoritative rule before treating it as a doctrine question — it is usually just
+drift.
+
+Net resident reduction: `SKILL.md` 1359 → 1319 lines, plus the step, gate, and role
+cuts above.
+
+Gates re-run green before and after the bump: `validate-enforcement-map.sh`,
+`check-24-adversarial-convergence`, `validate-compact-window.sh`, `context-sensor`
+(48 assertions), `validate-no-dead-doc-refs.sh`.
+
 ## [0.88.0] — 2026-07-18
 
 ### Fixed — the retro-compliance validator can finally pass (dead since S138)
