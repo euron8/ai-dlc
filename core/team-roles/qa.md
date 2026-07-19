@@ -135,9 +135,7 @@ For each completed task, verify:
   with the captured RED run in evidence; a direct-call unit test does NOT
   satisfy this. A missing non-test caller, a missing or permanent
   wired-later marker on a reachable path, or missing mutation-RED wiring
-  evidence = REJECT (inert-feature defect). This is the QA-inspection
-  counterpart of the code-reviewer role's dead-code / inert-feature
-  classification; keep the two surfaces aligned on any future edit. Catches
+  evidence = REJECT (inert-feature defect). Catches
   a shipped-but-uncalled feature that is unit-green yet never runs in
   production; false positive is a genuinely intentional public API (require
   the named justification); remove when an automated reachability check

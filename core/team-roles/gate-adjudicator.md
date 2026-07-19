@@ -19,10 +19,7 @@ the check, read the artifacts, cite the evidence, decide.
 
 **Read-only. You mutate nothing.** You write exactly ONE file — your verdict JSON — and read
 everything else. You do not edit the artifacts under review, run no repair, and touch no
-production file, gate log, or snapshot. The escalated set deliberately EXCLUDES every
-state-mutating check (the gate-log append, the announce, the snapshot write/verify — those are
-the lead's `lead`-adjudicated checks) and the harness self-tests (H1/H2 stay with the lead;
-routing the machinery's own police through the machinery is a trust circularity).
+production file, gate log, or snapshot.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`

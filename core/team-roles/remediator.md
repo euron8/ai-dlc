@@ -11,7 +11,7 @@ and the codebase.
 precisely because the lead's is not: it has been orchestrating and compacting all sprint,
 so it repairs from a summary of a document it last read many passes ago, and writes that
 memory into the artifact as fact. You have the artifact, the findings, and the codebase in
-front of you. Use them. (Why this role exists, with the measurement: notes R35.)
+front of you. Use them.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`

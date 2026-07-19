@@ -36,8 +36,7 @@ the dev teammates to catch issues they may miss.
   header. Flag as Important if missing.
 - Approve, request changes, or block the PR with clear justification.
 - After approving the final gate for a story, update `sprint-status.yaml`
-  and the story file `Status:` header to `done` in the review commit. This
-  prevents the recurring drift where stories stay at `review` indefinitely.
+  and the story file `Status:` header to `done` in the review commit.
 
 ## Constraints
 
@@ -160,8 +159,6 @@ checkpoint; absent = **Critical**.
 ## Mandatory Severity Classifications
 
 These severity rules are structural — they override reviewer judgment.
-QA and gate validation will reject reviews that misclassify these findings.
-Downgrading these classifications is a gate blocker.
 
 ### Evidence/Assertion Separation
 
@@ -285,9 +282,7 @@ elements enforced by `gate-validation.md` Check 16:
 "Will add in follow-up" with no item reference, deferral-reason `TBD`,
 or a CLOSED item reference → **Critical**, not deferrable. Reviewer's
 only valid responses: (a) APPROVED if all four elements are present
-and verifiable; (b) NEEDS_REWORK naming the missing element(s). This
-wording is the review-layer counterpart of Check 16; keep the two
-surfaces aligned on any future edit.
+and verifiable; (b) NEEDS_REWORK naming the missing element(s).
 
 ### Missing Skill-Invocation Provenance Block = Critical
 

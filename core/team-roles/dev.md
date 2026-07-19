@@ -41,9 +41,7 @@ assigned story files and the architecture document.
   `_bmad-output/**` — `gate-log.md` and `pipeline-snapshot.md` are the
   lead's; never commit them. If your work requires updating one, emit the
   proposed update as text in your completion report; lead applies it on the
-  sprint branch. Violation: produces dev-branch vs main divergence on
-  `_bmad-output/**` paths after sprint-branch lead commits land via parallel
-  PRs, requiring force-push rebuild to resolve. The status updates the
+  sprint branch. The status updates the
   Workflow steps below explicitly assign you (the story file, and the
   `sprint-status.yaml` / `carry-over-backlog.md` / escalation status marks)
   you DO commit, in the same commit as the story change, exactly as those
@@ -70,14 +68,6 @@ assigned story files and the architecture document.
   commit each phase atomically — in particular, a symbol-removal commit BEFORE
   the commit that updates its callers — so a mid-flight interruption leaves an
   inspectable `git diff` rather than a half-applied orphan.
-- You run on the standard dev model. A story that needs the more capable model
-  — one requiring architectural judgment, cross-layer analysis, or an open-ended
-  implementation approach — is not handled by the lead passing you a different
-  model at spawn; the dispatch guard binds your model to this role file and
-  rebinds any call-site override back to its pin. Instead such a story is tagged `escalate_model:
-  true` and routed to the `dev-escalated` role (the same contract you follow
-  here, on a stronger model). See `stories-test-strategy.md` "Story Routing
-  Tags" and `implementation.md` pre-dispatch routing.
 - The lead may assign a local model for stories that meet ALL of the following
   criteria:
   - The story has a precise implementation checklist with specific functions,
@@ -281,5 +271,3 @@ iterating on bash version, locale, runner OS, or pipeline differences. A
 `.gitignore` rule silently excluding test fixtures, scripts, or config files
 is the canonical case — the files exist on the dev machine, are absent from the
 CI checkout, and the failing check fails for unrelated-looking reasons.
-Violation: additional fix-forward iterations attributed to the wrong root
-cause.

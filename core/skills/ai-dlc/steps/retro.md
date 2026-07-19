@@ -123,8 +123,8 @@ both at authoring time and committing in this order:
    full agent responses verbatim (not summaries) clears all three.
 2. **Commit the transcript as its own commit first**, then read back that
    COMMIT's SHA: `git rev-parse HEAD`. Not `git rev-parse HEAD:<path>` — that
-   returns the BLOB sha, which is what this step said until v0.73.0 and is
-   exactly the citation the validator rejects. Committing the transcript alone
+   returns the BLOB sha, which is exactly the citation the validator rejects.
+   Committing the transcript alone
    is what makes `HEAD` name it unambiguously.
 3. **Write the `SKILL_INVOCATION_PROVENANCE v1` block once**, citing that SHA. Copy the
    envelope below exactly — the delimiters are what the parser reads, and a block in a ```
@@ -420,14 +420,7 @@ claim, silently mis-slices a gate. Two-way resolve against
   direction — FAIL.
 
 The command below DERIVES both sides from the manifest and hard-codes no
-check ID. It read its own copy of the universal-core set until v0.73.0,
-and that copy drifted twice over — it omitted `2a`, `25` and `26`, so the
-scan reported `ORPHAN: 2a 25 26` against a correctly-wired tree. A
-manifest-consistency checker whose reference set is a hand-maintained
-copy of the thing it is checking cannot do its job: every future retro
-either re-derives "actually this is fine", or files a backlog item to
-populate a check that was never missing an enforcer, only missing from a
-stale array.
+check ID.
 
 ```
 node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/steps/gate-validation.md','utf8');const anchors=[...s.matchAll(/^<!-- CHECK_LOADED: (\S+) -->$/gm)].map(m=>m[1]);const m=s.slice(s.indexOf('GATE_MANIFEST v1'),s.indexOf('GATE_MANIFEST_END'));const rows=[...m.matchAll(/^\|[ ]*([a-z][a-z-]*)[ ]*\|([^|]*)\|/gm)];if(!rows.length)throw new Error('GATE_MANIFEST: no rows parsed — the scan would pass by comparing nothing');if(!rows.some(r=>r[1]==='universal'))throw new Error('GATE_MANIFEST: no universal row — the always-loaded set is unreadable and every universal check would report as an orphan');const ids=new Set();for(const r of rows)for(const t of r[2].split(',').map(x=>x.trim()).filter(Boolean))ids.add(t);const missing=[...ids].filter(i=>!anchors.includes(i));const orphan=anchors.filter(a=>!ids.has(a));console.log('rows:',rows.map(r=>r[1]).join(' '));console.log('MISSING (manifest ID, no anchor):',missing.join(' ')||'none');console.log('ORPHAN (anchor, no manifest claim):',orphan.join(' ')||'none');"
@@ -641,10 +634,8 @@ Record its output verbatim in the retro doc under `## Artifact-Size Audit`. If i
 reports no breaches, note "Artifact sizes: within budgets".
 
 The script owns the canonical budgets and the per-artifact remedy — the numbers
-are NOT restated here. They used to be, and a threshold that lives in prose is a
-threshold that drifts from the one that executes; the script is the copy you can
-run. A project overrides a budget with `AI_DLC_BUDGET_<NAME>` (see the script
-header), not by editing this paragraph.
+are NOT restated here. A project overrides a budget with `AI_DLC_BUDGET_<NAME>`
+(see the script header), not by editing this paragraph.
 
 `--warn-only` is deliberate and is the ONLY posture retro takes. Retro reports on
 a sprint that has already paid for every oversized read; blocking it now helps
