@@ -798,59 +798,24 @@ bmad-advanced-elicitation, bmad-review-adversarial-general,
 bmad-validate-prd, ai-dlc-adversary-review) was required by the current
 phase. Skip on gates that do not produce a provenance-bearing artifact.
 
-**Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Every validation
-evaluation (Rule 20) MUST emit this block into the artifact it
-produces; `validate-provenance-block.sh` parses it:
+**Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Owned by
+`schemas/provenance-block.json`. It is rendered into the role files of the agents
+that WRITE blocks (`team-roles/adversary.md`, `steps/retro.md`) and loaded by the
+parser that READS them (`validate-provenance-block.sh`); `scripts/sync-taught-schema.sh
+--check` fails the build on any hand-written copy, and the fixture
+`fixtures/taught-schema/` parses the taught example with the shipped parser. The
+field list is deliberately NOT restated here: this check's verdict is the parser's
+exit code, and the lead running the gate writes no provenance block. Rule 20 owns
+the `mode: subagent` requirement and names this check; the validator rejects
+`mode: solo` unconditionally, per schema.
 
-<!-- BEGIN GENERATED: provenance-block/full — source: schemas/provenance-block.json; do not edit by hand -->
-```
-<!-- SKILL_INVOCATION_PROVENANCE v1
-skill: <bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review> # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
-invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
-tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the only non-forgeable evidence the evaluation ran in a real independent context.
-mode: subagent                              # never solo.
-lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
-transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.
-artifact: <path of the artifact you reviewed> # what this pass reviewed.
-artifact_sha: <sha256 of that file, as you read it> # `shasum -a 256 <artifact> | cut -d' ' -f1`. Makes the pass a notarization of the bytes it reviewed, which is what lets the gate later prove a claimed revert landed on a state some pass actually saw.
-findings_critical: <int>                    # the residue the verdict is adjudicated against.
-findings_critical_prior_scope: <int>        # of the CRITICALs above, those in text the PRIOR pass also reviewed. OPTIONAL BY DESIGN: absent means the validator assumes ALL of them (fail-closed). Requiring it would invert that default and reject the safe omission. This is what separates 'not converging' from 'the document is moving'.
-findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
-findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
-resolves_divergence: <path to the resolution record> # ONLY on the verification pass, and only if the pass before you STOPPED.
-verdict: <EXIT_CONDITION_MET|EXIT_CONDITION_NOT_MET|DIVERGENT_HARD_BLOCK> # required on every adversarial-review pass. There is no free-text verdict.
-SKILL_INVOCATION_PROVENANCE_END -->
-```
-<!-- END GENERATED: provenance-block -->
-
-The block above, the parser in `validate-provenance-block.sh`, and the example every role
-file shows its agent are all rendered from / loaded from `schemas/provenance-block.json`.
-**Do not hand-write a provenance example anywhere** — `scripts/sync-taught-schema.sh --check`
-fails the build on one, because a hand-written copy is a copy that can drift, and when this
-one drifted the reader parsed nothing and the gate called two unadjudicated passes clean.
-
-**The four adversarial fields.** `findings_*` and `verdict` are REQUIRED
-on every `ai-dlc-adversary-review` / `bmad-review-adversarial-general` /
-`bmad-validate-prd` pass and are absent elsewhere (party-mode and elicitation
-produce no severity residue). The residue decides the verdict; see the mapping
-in `team-roles/adversary.md` ("The verdict"). Check 24 enforces it.
-
-**`ai-dlc-adversary-review` — the CONVERGENCE review (v0.58.0).** The Rule 8
-cycle invokes NO skill: the lead dispatches the `adversary` role, which runs the
-native method in `team-roles/adversary.md`. The bmad skill is kept for the
-ONE-SHOT reviews only (`bug-investigation`, `sprint-review`, the test-strategy
-sweep), because its contract — *find ≥10, HALT on zero, emit no severity* — has
-no fixed point in a loop whose exit condition is zero CRITICAL and zero MAJOR,
-and it forbids the very fields this gate reads. `tool_use_id` is the Agent
-dispatch's; the block is emitted by the adversary, as before.
-
-**Mode enforcement (Rule 20 — every tracked evaluation).** `mode` MUST be
-`subagent` for EVERY validation evaluation, not only party-mode: it runs in a
-real independent subagent (party-mode spawns personas internally; single-voice
-skills and the convergence review are dispatched to a Rule-19-bound teammate).
-`mode: solo` is a violation — the lead roleplayed the validation in its own
-context — and FAILS this check. `validate-provenance-block.sh` rejects
-`mode: solo` on ANY provenance block, unconditionally.
+**`rules.counts_always` — every known evaluation records its residue.** All five
+evaluations owe `findings_critical` / `findings_major` / `findings_minor`, not only
+the verdict-bearing convergence review. Counts ONLY: a `verdict` is a convergence
+exit signal Check 24 orders into a series, so party-mode and elicitation must not
+stamp one. These evaluations are MEASURED, not GATED — nothing in this check reads
+the values, and a genuine zero is a valid reading. Fixture:
+`fixtures/check-17-counts/`.
 
 **Check.** Invoke `scripts/validate-provenance-block.sh` against the
 gate's primary artifact.
@@ -1185,41 +1150,12 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the transcript does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (schema above, mapping in `team-roles/adversary.md`) and enforces
-seven things:
-
-- **A — VOCABULARY.** Every pass declares a `verdict:` from the enumerated set, **and
-  the CRITICAL/MAJOR counts that verdict is adjudicated against.** A pass with no
-  verdict, or a free-text one, is un-adjudicable. A pass with a verdict and no counts
-  turns arm E off for the whole series.
-- **B — CONSISTENCY.** The verdict agrees with the residue. `0 CRITICAL + 0
-  MAJOR` means the exit condition IS met — the ladder puts MINOR/NIT in the
-  nitpick bucket and the exit condition is *"until only nitpicks remain."* A
-  clean residue stamped `EXIT_CONDITION_NOT_MET` is a review refusing to
-  converge; a dirty residue stamped `EXIT_CONDITION_MET` is one claiming a
-  convergence it does not have.
-- **C — DIVERGENCE (scope-relative).** A pass whose
-  `findings_critical_prior_scope` exceeds the previous pass's `findings_critical`
-  must stamp `DIVERGENT_HARD_BLOCK`. Rule 8: divergence is a HARD_BLOCK, not a
-  reason for another pass.
-  CRITICALs in scope the sprint ADDED mid-cycle are **not** divergence: they count
-  in `findings_critical` and not in `findings_critical_prior_scope`. Absent field ⇒
-  the validator assumes ALL CRITICALs are prior-scope.
-- **D — TERMINAL.** The last pass must be `EXIT_CONDITION_MET`. If the series ends
-  unconverged **and** any pass found CRITICALs in newly-added scope, the remedy is
-  **freeze the artifact and cut the added scope** — not another pass.
-- **E — STALL.** A nonzero MAJOR held at zero CRITICAL across two or more consecutive
-  passes is a cycle that is neither converging nor diverging. Another pass is not the
-  remedy: verify the disputed fact mechanically, cut the claim, or escalate.
-- **F — RESOLUTION.** A pass that runs *after* a `DIVERGENT_HARD_BLOCK` must declare
-  `resolves_divergence:` naming a resolution record, and that record must hold up —
-  see the resume contract below. The record's `operator_authorization` must **cite** a
-  genuine operator message (timestamp + verbatim substring), verified against the
-  transcript: a resolution clears an operator-gated hard block, so a lead-authored one
-  that quotes an operator who never spoke is rejected. (The S290 fix.)
-- **G — CHRONOLOGY.** The series must be monotone in `invoked_at`. A pass that claims
-  to follow another but was written before it is the tail of a **dead cycle**, left on
-  disk by a restart and chained onto the live series by the glob.
+pass in the series (mapping in `team-roles/adversary.md`) and enforces seven arms:
+**A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
+**E** STALL, **F** RESOLUTION, **G** CHRONOLOGY. Each arm emits its own named failure
+with the offending pass and the concrete counts — `err "C -- DIVERGENCE" "<file> declares
+findings_critical_prior_scope=N but ..."` — so the remedy arrives with the verdict and is
+not restated here. Arm F is why `--transcript` is mandatory.
 
 It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
 that to each planning step's own intensity gate; duplicating it here would fail

@@ -63,6 +63,25 @@ fire "$PROJ" compacted.jsonl >/dev/null
 chk "detects a teammate compaction" "$(last .compactions)" "1"
 chk "  peak survives the compact_boundary (pre-compaction peak, not post)" "$(last .peak_tokens)" "286000"
 
+# --- 4b. THE STALL SIGNAL: long wall-clock, almost no turns ------------------
+# peak_tokens reports 45000 here — calm — for a teammate that produced two turns
+# in two hours. Duration is the only field that sees it, and duration alone is
+# not enough either: a healthy long run turns steadily. Assert BOTH, and assert
+# the ratio, because that pair is what a bound would eventually be argued from.
+reset
+fire "$PROJ" stalled.jsonl >/dev/null
+chk "records duration_s (the field peak_tokens cannot substitute for)" "$(last .duration_s)" "7200"
+chk "  records the Rule 19 role binding from the dispatch prompt" "$(last .role)" "dev"
+chk "  peak still reads CALM, which is why duration is not redundant" "$(last .peak_tokens)" "45000"
+chk "  turns-per-hour is the discriminator, not duration alone" "$(last .turns)" "2"
+
+# A field that is ALWAYS null looks exactly like a field with nothing to report.
+# These two prove the null is a reading, not the only thing the code can emit.
+reset
+fire "$PROJ" calm.jsonl >/dev/null
+chk "duration_s is null when the transcript carries no timestamps (not 0)" "$(last .duration_s)" ""
+chk "  role is null when no binding was dispatched (not empty-string)" "$(last .role)" ""
+
 # --- 5. silence cases --------------------------------------------------------
 reset
 fire "$PROJ" nousage.jsonl >/dev/null

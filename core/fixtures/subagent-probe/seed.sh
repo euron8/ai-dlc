@@ -53,6 +53,24 @@ mkrec() {
 # 4. No usage anywhere -> nothing to assert, must stay silent.
 jq -nc '{type:"user", message:{content:"hi"}}' > "$WORK/nousage.jsonl"
 
+# 5. A STALLED teammate: 2 hours of wall-clock across 2 turns, nowhere near the
+#    ceiling. peak_tokens calls this healthy — 45000 is calm — and that is exactly
+#    the point. Duration is the only field that sees it. The reference consumer's
+#    worst case was 699 minutes at 127 turns while a HEALTHY run took 151 minutes
+#    at 781 turns, so neither duration nor turns alone separates them; the seed
+#    carries both so the pair can be asserted.
+#
+#    It also carries the Rule 19 role binding in its opening prompt, because a
+#    `role` that is always null makes every per-role reading of this log vacuous
+#    while looking exactly like a log with nothing to report.
+{ jq -nc '{type:"user", timestamp:"2026-07-19T08:00:00.000Z",
+           message:{role:"user", content:"READ AND FOLLOW .claude/team-roles/dev.md then implement story 3"}}'
+  jq -nc '{type:"assistant", timestamp:"2026-07-19T08:05:00.000Z",
+           message:{model:"claude-opus-4-8", usage:{input_tokens:1000, cache_creation_input_tokens:0, cache_read_input_tokens:44000}}}'
+  jq -nc '{type:"assistant", timestamp:"2026-07-19T10:00:00.000Z",
+           message:{model:"claude-opus-4-8", usage:{input_tokens:1000, cache_creation_input_tokens:0, cache_read_input_tokens:30000}}}'
+} > "$WORK/stalled.jsonl"
+
 cat > "$WORK/env.sh" <<ENV
 HOOK="$HOOK"
 PROJ="$PROJ"

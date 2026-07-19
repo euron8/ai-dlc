@@ -114,9 +114,10 @@
       "name": "findings_critical",
       "required": false,
       "required_for_verdict": true,
+      "required_for_evaluation": true,
       "pattern_ref": "integer",
       "placeholder": "<int>",
-      "doc": "the residue the verdict is adjudicated against."
+      "doc": "the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always."
     },
     {
       "name": "findings_critical_prior_scope",
@@ -130,6 +131,7 @@
       "name": "findings_major",
       "required": false,
       "required_for_verdict": true,
+      "required_for_evaluation": true,
       "pattern_ref": "integer",
       "placeholder": "<int>",
       "doc": "omit it and the stall rung goes silent for the ENTIRE series."
@@ -138,6 +140,7 @@
       "name": "findings_minor",
       "required": false,
       "required_for_verdict": true,
+      "required_for_evaluation": true,
       "pattern_ref": "integer",
       "placeholder": "<int>",
       "doc": "the nitpick bucket. Does not block the exit condition."
@@ -195,6 +198,13 @@
       ]
     },
     "retro-party-mode": {
+      "$comment": [
+        "The findings_* fields are in this profile because rules.counts_always requires them of",
+        "every known evaluation. A profile that showed fewer fields than the reader demands is",
+        "precisely the drift this schema exists to prevent: the agent emits what it was taught,",
+        "the reader rejects it, and the gate fails on a block the doc told the agent to write.",
+        "No verdict — party-mode is measured, not gated. See rules.counts_always.scope."
+      ],
       "title": "a retro party-mode invocation",
       "pin": {
         "skill": "bmad-party-mode",
@@ -206,7 +216,10 @@
         "tool_use_id",
         "mode",
         "lead_role",
-        "transcript_path"
+        "transcript_path",
+        "findings_critical",
+        "findings_major",
+        "findings_minor"
       ]
     },
     "story-provenance": {
@@ -271,6 +284,12 @@
       "assert": "when `verdict` is present, findings_critical / findings_major / findings_minor are present and non-empty",
       "why": "A verdict is adjudicated AGAINST a residue. A pass with a verdict and no counts turns the stall rung off for the whole series.",
       "scope": "Check 17 asserts the COUNTS a verdict is adjudicated against. It does NOT assert artifact/artifact_sha — those are Check 24 arm A's, and duplicating them here made Check 17 reject blocks arm A accepts."
+    },
+    "counts_always": {
+      "when": "skill is in known_skills",
+      "assert": "findings_critical / findings_major / findings_minor are present and non-empty on EVERY known evaluation, verdict-bearing or not",
+      "why": "An evaluation that records no residue cannot be scored, and 30+ sprints of the reference consumer prove what that costs: of 831 bmad-party-mode / bmad-advanced-elicitation / bmad-review-adversarial-general / bmad-validate-prd blocks on disk, 16 carried any severity residue (0.7% for party-mode). ai-dlc-adversary-review carried it on 55 of 55, which is the ONLY reason anyone can say whether a convergence pass earns its cost — and the answer turned out to be interesting (pass 1 finds real defects; 12 of 13 second passes find no CRITICAL or MAJOR). The same question about party-mode and elicitation is unanswerable, not answered-negative. This rule makes it answerable. Counting is not adjudicating: the counts are recorded, and nothing here gates on them.",
+      "scope": "Counts ONLY. `verdict` stays optional by design — a verdict is a convergence-cycle exit signal that Check 24 orders into a series, and stamping one on a party-mode or elicitation pass would enrol it in a cycle it is not part of. These evaluations are MEASURED, not GATED."
     },
     "no_solo": {
       "when": "always",
