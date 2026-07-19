@@ -198,8 +198,7 @@ SKILL_INVOCATION_PROVENANCE_END -->
 <!-- END GENERATED: provenance-block -->
 
 The block above is rendered from `schemas/provenance-block.json`, which is also the file the
-gate's parser loads. There is no second copy of this schema to disagree with — there used to
-be, and the disagreement cost sprint 290 two unadjudicated passes.
+gate's parser loads. There is no second copy of this schema to disagree with.
 
 `artifact_sha` is `shasum -a 256 <artifact> | cut -d' ' -f1` (or `sha256sum`). It is not a
 judgment and you cannot shade it: it is a computed fact about a file you already read. It

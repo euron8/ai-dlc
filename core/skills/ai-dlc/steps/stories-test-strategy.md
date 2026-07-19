@@ -294,42 +294,19 @@ risk assessment suggests phasing:
 
 ### 4. Story Validation Cycle (Rule 8)
 
-**Join every spawn on its DELIVERABLE** — one
-`scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
-(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
-wait is a Rule 29 Check A violation; gate Check 25 counts it.
-
-
-**Execute all sub-skills back-to-back without pausing for human input
-between them:**
-
-1. `/bmad-party-mode` — SM, Dev, Architect, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through EVERY story.
-   Every acceptance criterion, every edge case, every dependency.
-   Apply all improvements.
-   **Requirement fidelity check:** For each story derived from a carry-over
-   item or user instruction, verify: does every AC preserve the specific
-   details from the source requirement?
-   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
-   snapshot update\"). **Then immediately proceed to step 2:**
-2. `/bmad-advanced-elicitation` — probe every story's requirements,
-   acceptance criteria, and edge cases until zero ambiguity remains.
-   Update story files with all findings.
-   **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review
-   dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes on stories. Focus on
-   missing acceptance criteria, untestable criteria, scope creep, missing
-   NFRs, and over-engineering (Rule 26: ACs demanding mechanism no
-   locked requirement needs — propose removals).
-   **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
-   **Source fidelity pass:** Verify stories implement what was requested,
-   not a different or lower-effort alternative.
-   **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
-   \"Auto-handoff evaluation\") at `Seam D` with the label
-   `stories-test-strategy adversarial pass <N>`. If evaluation
-   returns FIRE, the session ends; otherwise continue.
-   **When the final pass produces only nitpicks, immediately proceed to step 4:**
-4. Append a changelog to each story file.
+Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the
+sprint's stories — its passes use the **Adversarial review dispatch** and
+**Adversarial repair dispatch** sub-routines. Parameters:
+- **party-mode seats / subject:** SM, Dev, Architect, TEA — every story: every
+  acceptance criterion, every edge case, every dependency.
+- **source-fidelity check:** for each story derived from a carry-over item or user
+  instruction, verify every AC preserves the specific details from the source.
+- **adversarial focus:** missing acceptance criteria, untestable criteria, scope
+  creep, missing NFRs, and over-engineering (Rule 26: ACs demanding mechanism no
+  locked requirement needs — propose removals).
+- **`Seam D` label:** `stories-test-strategy adversarial pass <N>`.
+- **on convergence:** append a changelog to each story file, then stamp story
+  provenance (below).
 
    **Stamp the terminal-pass provenance block onto every story — MECHANICALLY,
    never by hand.** Check 17's story-readiness gate requires a

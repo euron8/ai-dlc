@@ -126,6 +126,51 @@ the native path with its own schema.
 Inline-evaluating an `adjudication: llm` check is a Rule 20 solo violation — that judgment is the
 adjudicator's, adopted at Check 26.
 
+## Validation cycle (referenced by step files)
+
+When a step file says "run the validation cycle", execute this — the Rule 8
+convergence loop a planning step runs over its artifact. The step supplies the
+PARAMETERS (party-mode seats + subject, adversarial focus, the `Seam D` label,
+the artifact to changelog, and any source-fidelity check); everything here is the
+same for every step, so it lives here and not restated in each step file.
+
+**What the adversary and remediator DO is not restated in step files.** The
+severity ladder, the verdict envelope, `EXIT_CONDITION_MET` /
+`EXIT_CONDITION_NOT_MET` / `DIVERGENT_HARD_BLOCK`, the prior-scope discipline, and
+the underived-claim bar all live in `team-roles/adversary.md` and
+`team-roles/remediator.md`, and the gate enforces them mechanically
+(`scripts/validate-adversarial-convergence.sh`, invoked by Check 24). A copy in a
+step file is a copy that drifts.
+
+**Join every spawn on its DELIVERABLE** — one `scripts/wait-for-deliverable.sh
+<path> [<path> ...]` call per wave ("Bounded-join beat" above). A hand-rolled
+`until`/`while`/`sleep` wait is a Rule 29 Check A violation that gate Check 25
+counts.
+
+**Intensity.** Run the minimum cycle SKILL.md Rule 8's intensity table names for
+the declared `validation_intensity` — read that row; a copy here drifts. A
+`lightweight` single pass is still a CONVERGENCE pass: it stamps a `verdict:` and
+Check 24 reads it.
+
+Execute the sub-skills back-to-back, with no pause for human input between them:
+
+1. `/bmad-party-mode` — the step's seats (bound via the Rule 20 role-manifest
+   preamble to their `.claude/team-roles/<role>.md`) walk the step's subject and
+   apply every improvement; run the step's source-fidelity check if it names one.
+   **Run sub-step snapshot update** ("Sub-step snapshot update" above), then
+   proceed.
+2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the
+   artifact. **Run sub-step snapshot update**, then proceed.
+3. **Adversarial convergence** — 2+ passes (a floor, not a target) through the
+   **Adversarial review dispatch** and **Adversarial repair dispatch**
+   sub-routines (below), carrying the step's declared focus. **Run sub-step
+   snapshot update after each pass**, then **run auto-handoff evaluation**
+   ("Auto-handoff evaluation" below) at `Seam D` with the step's label — FIRE
+   ends the session, otherwise continue until the terminal pass stamps
+   `EXIT_CONDITION_MET`. A `DIVERGENT_HARD_BLOCK` or STALL does not end the loop:
+   follow "Divergence resolution dispatch" below.
+4. Append the step's changelog, then proceed to the step's next action.
+
 ## Adversarial review dispatch (referenced by step files)
 
 When a step file says "run an adversarial review pass", execute this. It is the REVIEW half of

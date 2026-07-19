@@ -35,34 +35,15 @@ For each missing artifact identified in the gap analysis:
 
 ### 3. Validation Cycle
 
-Execute all sub-skills back-to-back without pausing for human input
-between them:
-
-Run the full validation cycle (SKILL.md Rule 8) on all repaired and
-backfilled artifacts:
-1. `/bmad-party-mode` — PM, Architect, Dev walk through all artifacts
-   against the codebase. Do they accurately represent reality?
-   **Then immediately proceed to step 2:**
-2. `/bmad-advanced-elicitation` — probe until zero ambiguity
-   **Then immediately proceed to step 3:**
-3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
-   **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
-   \"Auto-handoff evaluation\") at `Seam D` with the label
-   `doc-repair-backfill adversarial pass <N>`. If evaluation returns
-   FIRE, the session ends; otherwise continue.
-   Continue until only nitpicks remain — "nitpick" is the MINOR/NIT rung of the
-   `team-roles/adversary.md` severity ladder: **zero CRITICAL and zero MAJOR IS the
-   exit condition met**, and the terminating pass stamps `verdict: EXIT_CONDITION_MET`.
-   **Gate Check 24 reads that field** (v0.58.0: this loop is now gated; before, it ran
-   unbounded and no gate ever read its verdict). CRITICALs rising **in the scope the
-   prior pass reviewed** are a `DIVERGENT_HARD_BLOCK` — **it STOPS THE CYCLE**; do not
-   run another pass. A MAJOR that will not fall for two consecutive passes at zero
-   CRITICAL is a STALL, not progress: derive the disputed fact or cut the claim, then
-   escalate (Check 24 §E).
-   **When the final pass stamps `EXIT_CONDITION_MET`, immediately proceed to step 4:**
-4. Append changelogs to all modified artifacts.
-   **Then immediately proceed to gate validation:**
+Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on all
+repaired and backfilled artifacts — its passes use the **Adversarial review
+dispatch** and **Adversarial repair dispatch** sub-routines. Parameters:
+- **party-mode seats / subject:** PM, Architect, Dev — all artifacts against the
+  codebase: do they accurately represent reality?
+- **adversarial focus:** none beyond the adversary's default contract.
+- **`Seam D` label:** `doc-repair-backfill adversarial pass <N>`.
+- **on convergence:** append changelogs to all modified artifacts, then proceed to
+  gate validation.
 
 ### 4. Gate Validation and Proceed
 

@@ -847,9 +847,7 @@ real independent subagent (party-mode spawns personas internally; single-voice
 skills and the convergence review are dispatched to a Rule-19-bound teammate).
 `mode: solo` is a violation — the lead roleplayed the validation in its own
 context — and FAILS this check. `validate-provenance-block.sh` rejects
-`mode: solo` on ANY provenance block, unconditionally: that assertion used to be
-gated on the skill enum, which meant a new evaluation name could silently disarm
-it. It is no longer gated on anything.
+`mode: solo` on ANY provenance block, unconditionally.
 
 **Check.** Invoke `scripts/validate-provenance-block.sh` against the
 gate's primary artifact.
@@ -1000,15 +998,6 @@ the single source, and this check deliberately does not restate it.
 Confirm the validation cycle run at this gate invoked at least every
 evaluation that row names. SKILL.md is resident at every gate, so the
 table is always readable here.
-
-This check enumerated its own copy of the minimums until v0.74.0, and the
-copy had already dropped a row: Rule 8 defines FOUR intensities and the
-list here named three, omitting `carry-over-single` entirely — zero
-occurrences in this whole file. A gate declaring the intensity Rule 8
-reserves for carry-over sprints reached the one check that enforces
-intensity and found no minimum to test it against, which reads exactly
-like a gate that met its minimum. Reading the table cannot drift from the
-table.
 
 An architecture gate that reaches a NO-CHANGES-NEEDED assessment MAY
 skip the validation cycle (fast-track). The gate log entry MUST record
@@ -1176,25 +1165,15 @@ a loop that must reach zero CRITICAL and zero MAJOR to leave. Those steps are:
 pass and still stamps a verdict), `stories-test-strategy`, `doc-repair-backfill`, and
 `sprint-review-next`.
 
-**This list is DERIVED, and I11 fails the build if it drifts.** It was hand-maintained,
-and it rotted twice: v0.58.0 found `doc-repair-backfill` and `sprint-review-next` running
-unadjudicated convergence loops and added them — and missed `carry-over-evaluation`, which
-was running one too. A step whose file dispatches an adversarial review MUST appear here
-and MUST also reference the repair dispatch; I11 asserts all three sets are the same set.
+**This list is DERIVED, and I11 fails the build if it drifts.** A step whose file
+dispatches an adversarial review MUST appear here and MUST also reference the repair
+dispatch; I11 asserts all three sets are the same set.
 
 **Self-skips** on any gate whose step ran no convergence cycle — including gates
 whose step ran only a ONE-SHOT adversarial review (`bug-investigation`,
 `sprint-review`, the test-strategy sweep in `stories-test-strategy` §5). A
 one-shot stamps no verdict and this check has nothing to read; do not drag its
 artifact into the series.
-
-*(v0.58.0 added `doc-repair-backfill` and `sprint-review-next`. Both have run
-`2+ passes … until only nitpicks remain` since they were written, and **no gate
-had ever read their verdicts** — an unbounded convergence loop adjudicated by
-nobody, which reads exactly like a loop that converged. `doc-repair-backfill`
-gates `planning`, so Check 24 already loaded there and only this scope clause
-excluded it; `sprint-review-next` gates `story`, which is why 24 joins the story
-manifest row.)*
 
 **Check.** Invoke `scripts/validate-adversarial-convergence.sh --series
 <path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path>`;

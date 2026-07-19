@@ -71,54 +71,22 @@ gaps found.
 
 ### 4. Validation Cycle (Rule 8)
 
-**Join every spawn on its DELIVERABLE** — one
-`scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
-(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
-wait is a Rule 29 Check A violation; gate Check 25 counts it.
-
-
-**Intensity gate for lightweight.** When `validation_intensity ==
-lightweight`, replace this full cycle with a single adversarial pass:
-skip steps 1–2 (party-mode + advanced-elicitation) and run step 3 as
-exactly one **adversarial review pass** (`_gate-procedures.md`, "Adversarial
-review dispatch" — ai-dlc-native, no Skill), then proceed to step 4. Otherwise
-run the full cycle below. **This lone pass is still a CONVERGENCE pass:** Check
-24's scope includes `research-requirements`, so it must stamp a `verdict:` and
-its residue must support it. A single pass is not a one-shot review.
-
-**Execute all sub-skills back-to-back without pausing for human input
-between them:**
-
-1. `/bmad-party-mode` — PM, Architect, UX, Dev, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate every section
-   of the PRD (personas, stories, NFRs, metrics, risks, constraints).
-   Walk through exhaustively. Apply all improvements.
-   **Requirement fidelity check:** Verify each new requirement preserves
-   specific details from its source.
-   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
-   snapshot update\"). **Then immediately proceed to step 2:**
-2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
-   Update the PRD with every clarification.
-   **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes. **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
-   between passes. Continue until only nitpicks remain — and **"nitpick" is
-   the MINOR/NIT rung of the `team-roles/adversary.md` severity ladder, not a
-   feeling.** Zero CRITICAL and zero MAJOR IS the exit condition met, with
-   MINORs still open; the terminating pass stamps `verdict: EXIT_CONDITION_MET`
-   and gate Check 24 reads that field. A pass reporting more CRITICALs **in the
-   scope the prior pass already reviewed** (`findings_critical_prior_scope`) is a
-   `DIVERGENT_HARD_BLOCK` — stop and change approach, do not run another pass
-   (Rule 8). CRITICALs in scope ADDED mid-cycle are NOT divergence: cut the added
-   scope and freeze the artifact.
-   **Source fidelity pass:** Verify requirements implement what was
-   requested, not a generalized or lower-effort alternative.
-   **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
-   \"Auto-handoff evaluation\") at `Seam D` with the label
-   `research-requirements adversarial pass <N>`. If evaluation
-   returns FIRE, the session ends; otherwise continue.
-   **When the final pass produces only nitpicks, immediately proceed to step 4:**
-4. Append a changelog to the PRD.
-   **Then immediately proceed to gate validation:**
+Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the PRD —
+its passes use the **Adversarial review dispatch** and **Adversarial repair
+dispatch** sub-routines. Parameters:
+- **party-mode seats / subject:** PM, Architect, UX, Dev, TEA — every section of
+  the PRD (personas, stories, NFRs, metrics, risks, constraints).
+- **source-fidelity check:** verify each requirement implements what was
+  requested, not a generalized or lower-effort alternative, preserving specific
+  details from its source.
+- **adversarial focus:** none beyond the adversary's default contract.
+- **intensity:** on `validation_intensity == lightweight`, run one adversarial
+  pass only — skip party-mode and advanced-elicitation. It is still a convergence
+  pass (Check 24's scope includes `research-requirements`), so it stamps a
+  `verdict:`; a single pass is not a one-shot review.
+- **`Seam D` label:** `research-requirements adversarial pass <N>`.
+- **on convergence:** append a changelog to the PRD, then proceed to gate
+  validation.
 
 ### 5. Gate Validation and Proceed
 
