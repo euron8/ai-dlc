@@ -248,51 +248,21 @@ design coherence against PRD. Fix any misalignment found.
 
 ### 4. Validation Cycle (Rule 8)
 
-**Join every spawn on its DELIVERABLE** — one
-`scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
-(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
-wait is a Rule 29 Check A violation; gate Check 25 counts it.
-
-
-**Intensity gate for lightweight.** When `validation_intensity ==
-lightweight` AND the Step 2 assessment is NO CHANGES NEEDED, skip this
-validation cycle entirely (the Rule 5 fast-track still applies) and
-proceed to Step 5. Otherwise run the full cycle below.
-
-**Execute all sub-skills back-to-back without pausing for human input
-between them:**
-
-1. `/bmad-party-mode` — Architect, Dev, TEA, PM (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate every design
-   decision, every component boundary, every data flow. Walk through
-   exhaustively. Apply all improvements.
-   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
-   snapshot update\"). **Then immediately proceed to step 2:**
-2. `/bmad-advanced-elicitation` — probe every design assumption until
-   zero ambiguity remains. Update the architecture doc with all findings.
-   **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review
-   dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes. Focus on security,
-   scalability, coupling, single points of failure, backward
-   compatibility, migration risk, integration seams, and
-   over-engineering (Rule 26: mechanism beyond requirements, parallel
-   paths, unjustified guards — propose removals as findings).
-   **Repair the findings** between passes (`_gate-procedures.md`,
-   "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not
-   repair the artifact itself). Continue until only nitpicks remain — where
-   "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
-   ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
-   terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
-   that field; CRITICALs rising **in the scope the prior pass reviewed** are a
-   `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
-   added scope and freeze the artifact).
-   **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
-   \"Auto-handoff evaluation\") at `Seam D` with the label
-   `architecture adversarial pass <N>`. If evaluation returns FIRE,
-   the session ends; otherwise continue.
-   **When the final pass produces only nitpicks, immediately proceed to step 4:**
-4. Append a changelog to the architecture doc.
-   **Then immediately proceed to index regeneration:**
+Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the
+architecture doc — its passes use the **Adversarial review dispatch** and
+**Adversarial repair dispatch** sub-routines. Parameters:
+- **party-mode seats / subject:** Architect, Dev, TEA, PM — every design
+  decision, every component boundary, every data flow.
+- **adversarial focus:** security, scalability, coupling, single points of
+  failure, backward compatibility, migration risk, integration seams, and
+  over-engineering (Rule 26: mechanism beyond requirements, parallel paths,
+  unjustified guards — propose removals as findings).
+- **intensity:** on `validation_intensity == lightweight` AND the Step 2
+  assessment is NO CHANGES NEEDED, skip this cycle entirely (Rule 5 fast-track)
+  and proceed to Step 5; otherwise run the full cycle.
+- **`Seam D` label:** `architecture adversarial pass <N>`.
+- **on convergence:** append a changelog to the architecture doc, then proceed to
+  index regeneration (§4a).
 
 ### 4a. Regenerate the architecture index (Rule 25(b) slice enabler)
 

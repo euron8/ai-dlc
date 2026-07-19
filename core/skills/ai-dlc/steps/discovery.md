@@ -136,55 +136,18 @@ verbatim or as close to verbatim as the source allows.
 
 ### 5. Validation Cycle (Rule 8)
 
-Run the full validation cycle on the brief. **Execute all sub-skills
-back-to-back without pausing for human input between them:**
-
-**Join every spawn on its DELIVERABLE** — party seats and adversarial passes
-alike. One `scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
-(`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`while`/`sleep`
-wait is a Rule 29 Check A violation; gate Check 25 counts it.
-
-1. `/bmad-party-mode` — PM, Architect, UX, CIS (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) debate the brief. Walk
-   through every element. Apply all improvements directly.
-   **Requirement fidelity check:** If features originate from carry-over
-   items or user instructions with specific details, verify those details
-   are preserved. Flag any generalization.
-   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
-   snapshot update\"). **Then immediately proceed to step 2:**
-2. `/bmad-advanced-elicitation` — probe every section until zero ambiguity.
-   Update the brief with every answer.
-   **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review dispatch"
-   — ONE `adversary` per pass, ai-dlc-native, no Skill). **Repair the findings**
-   (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per
-   pass; **the lead does not repair the artifact itself**). Run a second pass.
-   Continue until only nitpicks remain — where
-   "nitpick" is the MINOR/NIT rung of the `team-roles/adversary.md` severity
-   ladder: zero CRITICAL and zero MAJOR IS the exit condition met, and the
-   terminating pass stamps `verdict: EXIT_CONDITION_MET` (gate Check 24 reads
-   that field; CRITICALs rising **in the scope the prior pass reviewed** are a
-   `DIVERGENT_HARD_BLOCK`. CRITICALs in scope ADDED mid-cycle are not: cut the
-   added scope and freeze the artifact).
-   An underived factual claim in a repair is a MAJOR (`adversary.md`) — the
-   remediator's evidence contract is where the bar is stated.
-   **A MAJOR that will not fall for two consecutive passes at zero CRITICAL is a
-   STALL, not progress.** Another pass buys another counterexample. Derive the
-   disputed fact, or cut the claim, then escalate (gate Check 24 §E).
-   **A `DIVERGENT_HARD_BLOCK` STOPS THE CYCLE.** Do not run another pass, and do
-   not clear the pause flag to get past it — `ai-dlc-continue.sh` raises it and
-   the operator adjudicates. First ask what the last repair DELETED: an AC, a
-   predicate, or a `LOCKED_REQUIREMENTS` entry that no longer has anything to
-   fail against is the divergence, and reverting that repair is the remedy.
-   **Source fidelity pass:** Verify the brief preserves the user's stated
-   details and selected options.
-   **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
-   \"Auto-handoff evaluation\") at `Seam D` with the label
-   `discovery adversarial pass <N>`. If evaluation returns FIRE, the
-   session ends; otherwise continue.
-   **When the final pass produces only nitpicks, immediately proceed to step 4:**
-4. Append a changelog to the brief summarizing improvements.
-   **Then immediately proceed to gate validation:**
+Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the
+product brief — its passes use the **Adversarial review dispatch** and
+**Adversarial repair dispatch** sub-routines. Parameters:
+- **party-mode seats / subject:** PM, Architect, UX, CIS — walk every element of
+  the brief.
+- **source-fidelity check:** where features originate from carry-over items or
+  user instructions with specific details, verify those details are preserved and
+  flag any generalization.
+- **adversarial focus:** none beyond the adversary's default contract.
+- **`Seam D` label:** `discovery adversarial pass <N>`.
+- **on convergence:** append a changelog to the brief summarizing improvements,
+  then proceed to gate validation.
 
 ### 6. Gate Validation and Proceed
 

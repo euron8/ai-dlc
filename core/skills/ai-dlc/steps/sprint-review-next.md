@@ -47,44 +47,19 @@ is orchestration bookkeeping and stays on the lead.
 
 ### 3. Story Validation Cycle (Rule 8)
 
-**Execute all sub-skills back-to-back without pausing for human input
-between them:**
-
-1. `/bmad-party-mode` — SM, Dev, Architect, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through EVERY
-   story in this sprint. Every acceptance criterion, every edge case,
-   every dependency. Apply all improvements.
-   **Cross-sprint check:** For each story, verify it accounts for
-   patterns, APIs, and components introduced in the previous sprint.
-   **Run sub-step snapshot update** (see `_gate-procedures.md` \"Sub-step
-   snapshot update\"). **Then immediately proceed to step 2:**
-2. `/bmad-advanced-elicitation` — probe every story's requirements,
-   acceptance criteria, and edge cases until zero ambiguity remains.
-   Update story files with all findings.
-   **Run sub-step snapshot update. Then immediately proceed to step 3:**
-3. **Adversarial review pass** (`_gate-procedures.md`, "Adversarial review
-   dispatch" — ONE `adversary` per pass, ai-dlc-native, no Skill) — 2+ passes on stories. Focus on
-   missing acceptance criteria, untestable criteria, scope creep,
-   missing NFRs, cross-sprint consistency, and over-engineering
-   (Rule 26: ACs demanding mechanism no locked requirement needs —
-   propose removals).
-   **Repair the findings** (`_gate-procedures.md`, "Adversarial repair dispatch" — ONE `remediator` per pass; the lead does not repair the artifact itself).
-   **Run sub-step snapshot update after each adversarial pass.**
-   **Then run auto-handoff evaluation** (see `_gate-procedures.md`
-   \"Auto-handoff evaluation\") at `Seam D` with the label
-   `sprint-review-next adversarial pass <N>`. If evaluation returns
-   FIRE, the session ends; otherwise continue.
-   Continue until only nitpicks remain — "nitpick" is the MINOR/NIT rung of the
-   `team-roles/adversary.md` severity ladder: **zero CRITICAL and zero MAJOR IS the
-   exit condition met**, and the terminating pass stamps `verdict: EXIT_CONDITION_MET`.
-   **Gate Check 24 reads that field** (v0.58.0: this loop is now gated; before, it ran
-   unbounded and no gate ever read its verdict). CRITICALs rising **in the scope the
-   prior pass reviewed** are a `DIVERGENT_HARD_BLOCK` — **it STOPS THE CYCLE**; do not
-   run another pass. A MAJOR that will not fall for two consecutive passes at zero
-   CRITICAL is a STALL, not progress: derive the disputed fact or cut the claim, then
-   escalate (Check 24 §E).
-   **When the final pass stamps `EXIT_CONDITION_MET`, immediately proceed to step 4:**
-4. Append a changelog to each modified story file.
-   **Then immediately proceed to Commit Updated Stories:**
+Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on this
+sprint's stories — its passes use the **Adversarial review dispatch** and
+**Adversarial repair dispatch** sub-routines. Parameters:
+- **party-mode seats / subject:** SM, Dev, Architect, TEA — every story in this
+  sprint: every acceptance criterion, every edge case, every dependency.
+- **cross-sprint check:** for each story, verify it accounts for patterns, APIs,
+  and components introduced in the previous sprint.
+- **adversarial focus:** missing acceptance criteria, untestable criteria, scope
+  creep, missing NFRs, cross-sprint consistency, and over-engineering (Rule 26:
+  ACs demanding mechanism no locked requirement needs — propose removals).
+- **`Seam D` label:** `sprint-review-next adversarial pass <N>`.
+- **on convergence:** append a changelog to each modified story file, then proceed
+  to Commit Updated Stories.
 
 ### 4. Commit Updated Stories
 
