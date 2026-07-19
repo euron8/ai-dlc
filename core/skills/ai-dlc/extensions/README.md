@@ -100,8 +100,8 @@ and wrongly report every role hook missing.
     core's section; there is no grain for that today (`overrides/` gets you there
     only by replacing the whole section verbatim, and then you carry `base_sha`
     drift on prose you never meant to change). If that placement matters for your
-    entry, raise it upstream rather than reaching for an override — see
-    `docs/v0.100.0-additive-extension-grain-spec.md`.
+    entry, raise it upstream as a push candidate rather than reaching for an
+    override.
 - **Label your catalog (Rule 27(d)) — `kind: check` entries.** Your check numbers are
   your own namespace, but they render into the SAME merged list as core's, under the
   SAME integers. So say which catalog a check belongs to, in the heading and in the

@@ -190,7 +190,8 @@ invariant = {k: tfields[k] for k in PROFILE["batch_invariant"] if k in tfields a
 # `toolu_PLACEHOLDER` or `toolu_aaaaaaaa`. Nothing here — or in the reader — checks the id against
 # a transcript, so neither side can tell a recovered id from a plausible one. Say "well-formed",
 # never "real": this comment previously claimed the latter, which is how a shape check comes to be
-# trusted as proof. See docs/v0.99.0-tool-use-id-evidence-spec.md.
+# trusted as proof. Binding the id to a cited transcript — the way transcript_path is bound by
+# validate-retro-evidence.sh — is the only thing that would make it evidence.
 TID_RE = S["patterns"]["tool_use_id"]
 tid = tool_use_id_override or invariant.get("tool_use_id", "")
 if not re.match(TID_RE, tid):
