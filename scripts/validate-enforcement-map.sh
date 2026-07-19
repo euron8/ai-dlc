@@ -45,6 +45,12 @@
 #                         that passed; two adversarial fixtures sat in that hole for
 #                         their whole existence. Exemptions are derived from the
 #                         READMEs, never hand-listed here.
+#   I21 reconcile helpers single-homed — no reconcile/*.sh redefines a helper that
+#                         reconcile/lib.sh already owns, and none calls one without
+#                         sourcing lib.sh. `section_of()` shipped divergent twice
+#                         (v0.52.0, v0.54.2); v0.90.0 collapsed the three copies but
+#                         nothing stopped a fourth. The helper set is derived from
+#                         lib.sh, never hand-listed.
 #   I9  enforcer ⇒ call site — every `adjudication: script` entry declares
 #                         `call_sites:` with a posture (W1), and no declared site
 #                         is fictional — the file it names must at least know the
@@ -887,10 +893,69 @@ for d in "$REPO_ROOT"/core/fixtures/*/; do
     || err "I20 fixture '$name' has no run.sh and its README does not declare the exemption. pre-push skips it silently ('[ -f \"\$d/run.sh\" ] || continue'), so it reads exactly like a fixture that passed. Add a driver, or state why one is impossible with the marker '$EXEMPT_MARKER' and the reason."
 done
 
+# --- I21: ONE home for the reconcile helpers, and nothing may grow a second.
+#
+# `section_of()` is THE section resolver the drift classifiers share, and its divergence
+# has already SHIPPED TWICE:
+#
+#   v0.52.0 — readopt-override's copy was WEAKER than layer-drift's, so it could not
+#             resolve the anchor layer-drift had just blocked on, found no stale lines,
+#             and would have CLEARED the block.
+#   v0.54.2 — register-drift's copy was STRICTER, so it misfiled a renamed section
+#             (`## Escalation Protocol` vs core's `## Escalation`) as an ADDITION, which
+#             would have rendered core's heading and the consumer's side by side.
+#
+# Both times the remedy was to hand-copy one body over the other, and both times the
+# CHANGELOG recorded "there is one resolver" while nothing MADE it one — so the copies
+# drifted again. v0.90.0 finally collapsed all three into reconcile/lib.sh, which the
+# three classifiers now source. That fixed the INSTANCES. It did not fix the HOLE:
+# nothing stops a fourth file from inlining its own `section_of()` tomorrow, and the
+# failure mode is silent by construction — a private copy runs, resolves differently,
+# and the tool reports a confident verdict computed from the wrong section.
+#
+# Same shape as I19, and the same remedy: where the duplicate MUST exist the copies are
+# bound (I15, I18); here it must not exist at all, so assert it does not come back rather
+# than binding a copy into permanence.
+#
+# The helper set is DERIVED from lib.sh's own definitions, never hand-listed — a
+# hand-list is the thing that stops being updated (I8's site table, I12's scan set).
+# Two failures, because a helper can go wrong in two directions: a file that REDEFINES
+# it has a private copy that can drift, and a file that CALLS it without sourcing lib.sh
+# has a call that cannot resolve at all.
+RLIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+if [ ! -f "$RLIB" ]; then
+  err "I21 cannot find core/skills/ai-dlc-update/reconcile/lib.sh. The check that keeps the shared drift helpers single-homed just went vacuous — it must locate the library or fail loudly, never pass by finding nothing to bind."
+else
+  lib_fns="$(sed -n 's/^\([a-z_][a-z0-9_]*\)() {.*/\1/p' "$RLIB")"
+  if [ -z "$lib_fns" ]; then
+    err "I21 found no function definitions in reconcile/lib.sh. Either the library was emptied or its definition form changed; either way the no-second-copy assertion is now testing nothing and would pass against a tree with four resolvers in it."
+  else
+    for f in "$REPO_ROOT"/core/skills/ai-dlc-update/reconcile/*.sh; do
+      [ -f "$f" ] || continue
+      fbase="$(basename "$f")"
+      [ "$fbase" = "lib.sh" ] && continue
+      # Comment lines are stripped: every classifier documents WHY it sources lib.sh,
+      # and a check that reads its own documentation as a violation is a check that
+      # gets switched off.
+      fcode="$(grep -v '^[[:space:]]*#' "$f")"
+      sources_lib=0
+      printf '%s\n' "$fcode" | grep -q 'lib\.sh' && sources_lib=1
+      for fn in $lib_fns; do
+        if printf '%s\n' "$fcode" | grep -qE "^[[:space:]]*${fn}\(\)[[:space:]]*\{"; then
+          err "I21 reconcile/$fbase defines its own ${fn}(), but reconcile/lib.sh is its ONE home. A private copy is exactly the shape that shipped divergent resolvers in v0.52.0 and v0.54.2: each tool reports a confident verdict computed from a different section, and no run compares them. Delete the local definition and source lib.sh."
+        elif [ "$sources_lib" -eq 0 ] \
+          && printf '%s\n' "$fcode" | grep -qE "(^|[^a-zA-Z0-9_])${fn}([[:space:]]|\$)"; then
+          err "I21 reconcile/$fbase calls ${fn}() but never sources reconcile/lib.sh. The call resolves to nothing at runtime, and these scripts run on a consumer's pull — where the resulting empty section reads as 'no drift' rather than as an error. Add: . \"\$SELF/lib.sh\""
+        fi
+      done
+    done
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21)."
   exit 0
 fi
 exit 1
