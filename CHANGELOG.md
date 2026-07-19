@@ -17,6 +17,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.93.0] — 2026-07-19
+
+### Added — I21: the reconcile helpers stay single-homed
+
+v0.90.0 collapsed three divergent copies of `section_of()` into
+`reconcile/lib.sh`, which the drift classifiers now source. That fixed the
+instances. It did not fix the hole: nothing stopped a fourth file inlining its
+own copy tomorrow, and the failure mode is silent by construction — a private
+resolver returns a different section and the tool reports a confident verdict
+computed from it.
+
+The divergence has already shipped twice. In v0.52.0 `readopt-override`'s copy
+was WEAKER than `layer-drift`'s, so it could not resolve the anchor
+`layer-drift` had just blocked on, found no stale lines, and would have CLEARED
+the block. In v0.54.2 `register-drift`'s copy was STRICTER, so it misfiled a
+renamed section (`## Escalation Protocol` against core's `## Escalation`) as an
+ADDITION, which would have rendered core's heading and the consumer's side by
+side. Both times the remedy was a hand-copy plus a CHANGELOG line recording
+"there is one resolver", with nothing making it one — so the copies drifted
+again. A hand-synced invariant is not an invariant.
+
+I21 asserts, of every `reconcile/*.sh` other than `lib.sh`: it does not redefine
+a helper `lib.sh` owns, and it does not call one without sourcing `lib.sh`. The
+second direction matters as much as the first — an unresolved call returns an
+empty section, and an empty section reads as "no drift" rather than as an error,
+which is the v0.52.0 cleared-block shape exactly.
+
+Same remedy as I19. Where a duplicate MUST exist the copies are bound (I15,
+I18); here it must not exist at all, so the check asserts it does not come back
+rather than binding a copy into permanence. The helper set is DERIVED from
+`lib.sh`'s own definitions, never hand-listed — a hand-list is the shape that
+rots (I8's site table, I12's scan set). Non-vacuity is explicit: a missing
+`lib.sh`, or definitions that stop matching the derived form, FAIL loudly rather
+than binding an empty set and passing.
+
+Three assertions in `enforcement-map-sites`, each confirmed load-bearing: with
+the I21 block removed from the validator, all three go red with their named
+errors, and the fourth-copy mutant otherwise passes the whole validator at exit
+0.
+
+### Closed without building — three catalog items whose premises had expired
+
+Recorded because the recheck is the reusable part, not the outcome.
+
+- **Fixture name↔check mismatches.** Renaming `check-15-bypass` now touches the
+  map, I4, I20, `install.sh`'s copy list, `uninstall.sh`'s twin and pre-push's
+  enumeration at once, to fix a name whose README already documents the
+  historical spelling as deliberate. Legibility nit; rename cost exceeds it.
+- **`verdict.sh --all` covers 4 of 16 validators.** The omission is already
+  documented at the site, with its reason: the other twelve need a sprint
+  number, a transcript or a target file, "and guessing one would be a check that
+  cannot fail -- worse than no check at all." Nothing in the tree calls `--all`.
+  Completing the affordance means manufacturing exactly the class the comment
+  names.
+- **15 fixtures unreferenced by the gate map.** The premise was that an unmapped
+  fixture is invisible. I20 (v0.92.0) now requires every fixture on disk to have
+  a driver or a declared exemption, and pre-push runs every `run.sh` it finds
+  regardless of map membership — 34 dirs, 32 drivers, 2 declared. "Unmapped" now
+  means only "does not enforce a numbered gate check", which is correct for the
+  reconcile population. A second index would index nothing that is hidden.
+
 ## [0.92.0] — 2026-07-19
 
 Both items here were surfaced by v0.91.0 and deliberately not bundled into it —
