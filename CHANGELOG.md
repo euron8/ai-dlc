@@ -17,6 +17,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.98.0] — 2026-07-19
+
+### Fixed — the re-stamp read VERSION from the working tree
+
+`apply.sh` resolves every file it copies through `git show "${THEIRS}:core/..."`, and
+takes the stamp's `commit:` from `git rev-parse "$THEIRS"`. One line did not follow: the
+stamp's `version:` came from `cat "$DIST/VERSION"` — whatever ref the operator's
+distribution checkout happened to be sitting on.
+
+Hit live on the v0.92.0 pull. The checkout sat on a v0.93.0 branch while `theirs` was
+`origin/main` at v0.92.0, so the stamp was written `version: 0.93.0` against 0.92.0
+content and had to be corrected by hand. Note the shape: the same stamp carried a
+`commit:` taken correctly from theirs. The result is not merely stale, it is
+**incoherent** — a version and a commit that cannot both be true of one tree.
+
+`.ai-dlc-version` is what the next pull reads to compute its base, so an overstating
+version silently mis-bases that merge and the damage surfaces a pull later, far from the
+run that caused it.
+
+### Added — a fixture that fails if the stamp ever leaves theirs again
+
+A one-line fix with nothing holding it is a suggestion. `apply-restamp-theirs` builds a
+distribution repo carrying **three** different versions — base 1.0.0, theirs 2.0.0,
+working tree 9.9.9 — and asserts the stamp takes theirs'.
+
+The separation is the whole fixture, so it is asserted rather than assumed: assertion 0
+aborts with exit 2 if the working tree and theirs ever stop differing, because at that
+point `cat` and `git show` agree and every later assertion would pass vacuously against
+the reverted bug. Assertion 2 checks the version/commit **pair**, since a coherent commit
+beside an incoherent version is the defect's actual signature. Assertion 3 is a control
+on the ordinary path — and it puts the tree on theirs by writing the file, not by
+`git checkout`, which would leave the dirty VERSION in place and quietly test the
+mismatched case a second time while claiming to test the aligned one.
+
+Verified by mutation, not by inspection: with `git show` reverted to `cat`, assertions 1
+and 2 fail and the control still passes, which is the discrimination the fixture exists
+to make. Registered in both the install and uninstall loops (I8) and confirmed to run
+from a real consumer install, not only the distribution tree.
+
+Found by the graph consumer during its v0.92.0 pull, after it corrected the bad stamp by
+hand.
+
 ## [0.97.0] — 2026-07-19
 
 ### Fixed — the escalated reviewer's model strings were not maskable
