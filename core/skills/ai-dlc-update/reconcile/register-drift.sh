@@ -53,33 +53,21 @@ mkdir -p "$OVR_DIR"
 # Top-level heading names in the consumer's file.
 headings_of() { grep -nE '^#{2,3} ' "$1" | sed 's/:.*#\{2,3\} /:/'; }
 
-# Extract one heading's section — the resolver from layer-drift.sh, BYTE FOR BYTE.
+# section_of() — the ONE resolver, from lib.sh.
 #
-# A stricter matcher here does not merely miss a section; it MISFILES it. `layer-drift`
+# A stricter matcher here does not merely miss a section; it MISFILES it. The resolver
 # matches bidirectionally on substrings, so the consumer's `## Escalation Protocol`
 # resolves against core's `## Escalation` — a RENAMED section, which is an override. An
 # exact matcher finds nothing, concludes core has no such heading, and routes it to
 # `extensions/` as an ADDITION. Extensions are additive: core's `Escalation` and the
 # consumer's `Escalation Protocol` would then BOTH render, as duplicate and conflicting
-# guidance in one document.
+# guidance in one document. That shipped, in v0.54.2.
 #
-# Same lesson as readopt-override.sh: two resolvers that disagree means the tool and the
-# gate disagree, and the tool wins. There is one resolver.
-section_of() {
-  awk -v want="$1" '
-    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-    BEGIN { w = nrm(want) }
-    /^#{2,6}[ \t]/ {
-      match($0, /^#+/); lvl = RLENGTH
-      h = $0; sub(/^#+[ \t]+/, "", h); h = nrm(h)
-      if (inside) { if (lvl <= mylvl) exit }
-      else if (w != "" && (index(h, w) > 0 || (length(h) > 3 && index(w, h) > 0))) {
-        inside = 1; mylvl = lvl; print; next
-      }
-    }
-    inside { print }
-  '
-}
+# Two resolvers that disagree means the tool and the gate disagree, and the tool wins.
+# This used to say "byte for byte" over a hand-copied body; now there is one body.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || { echo "register-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
 
 # Which sections did the consumer actually change? Only those go in the override —
 # an override that restates unchanged core is a fork waiting to happen (Rule 27(c)).
