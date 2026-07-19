@@ -81,6 +81,27 @@ and wrongly report every role hook missing.
     the same title, means the rendered file defines it twice and a "Step 5c"
     reference becomes ambiguous. An extension's body is *added* to core, not merged
     with it.
+  - **Adding a rule that QUALIFIES a core section? Label the heading.** This is the
+    case that gets misfiled most often, because reusing the core section's heading
+    feels like the natural way to hook onto it — and it is exactly what the rule
+    above forbids. Give the entry its own labelled heading instead, the same
+    Rule 27(d) pattern check catalogs use:
+
+    ```markdown
+    ### 3. [ext:sprint-review-domain] Decision-branch execution coverage.
+    ```
+
+    Not `### 3. Fix and Re-Validate` — that is core's heading, and duplicating it
+    makes the merged file define one section twice.
+
+    The labelled form renders as its own section, so the reference stays
+    unambiguous and `/ai-dlc-update` stops reporting `EXTENSION-RESTATES-CORE`
+    against it on every pull. What it does NOT do is render the rule *inside*
+    core's section; there is no grain for that today (`overrides/` gets you there
+    only by replacing the whole section verbatim, and then you carry `base_sha`
+    drift on prose you never meant to change). If that placement matters for your
+    entry, raise it upstream rather than reaching for an override — see
+    `docs/v0.100.0-additive-extension-grain-spec.md`.
 - **Label your catalog (Rule 27(d)) — `kind: check` entries.** Your check numbers are
   your own namespace, but they render into the SAME merged list as core's, under the
   SAME integers. So say which catalog a check belongs to, in the heading and in the

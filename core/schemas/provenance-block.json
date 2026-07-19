@@ -60,7 +60,7 @@
       "required": true,
       "pattern_ref": "tool_use_id",
       "placeholder": "<toolu_... — from the Skill tool response, or the Agent dispatch that spawned you>",
-      "doc": "the only non-forgeable evidence the evaluation ran in a real independent context."
+      "doc": "the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran."
     },
     {
       "name": "mode",

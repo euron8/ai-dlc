@@ -17,6 +17,63 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.99.0] — 2026-07-19
+
+### Fixed — two statements in core that promised more than any mechanism delivers
+
+The provenance schema described `tool_use_id` as *"the only non-forgeable evidence the
+evaluation ran in a real independent context."* Nothing verifies it. The field is matched
+against `^toolu_[A-Za-z0-9_-]{6,}$` and never checked against a transcript, so
+`toolu_aaaaaaaa` satisfies it. Compare `transcript_path` on the same block, which *is*
+verified — `validate-retro-evidence.sh` runs `git cat-file -p <sha>:<path>`, binding the
+citation to immutable content. One field on that block is evidence; the other was a shape
+wearing the word.
+
+`stamp-story-provenance.sh` carried the same overstatement from the writer's side. Its
+comment read *"Refusing to stamp a placeholder onto the stories"* while its predicate was
+the identical charset pattern — so it refuses malformed ids and believed that was the same
+thing. Both sites load the pattern from the schema, which is why they were wrong in the
+same way.
+
+The schema doc now says the field is checked for shape only and is not proof the
+evaluation ran, and the writer's comment states what its predicate actually does, names
+the shapes it cannot catch (`toolu_PLACEHOLDER`, `toolu_aaaaaaaa`), and says to write
+"well-formed", never "real". Because the doc string is **rendered into the taught
+examples**, the correction reaches `team-roles/adversary.md` and `steps/retro.md` — the
+text agents actually author from — and `sync-taught-schema.sh --check` gated the re-render.
+
+**No placeholder blocklist was added**, though the report that surfaced this proposed one.
+Measured first: 8 of the 10 literals in the consumer's list are already rejected by the
+shipped pattern (`{6,}` kills every short marker, `...` fails the charset), the real leak
+is one word in two casings, and that literal appears **nowhere in this repository** — every
+id in `core/fixtures/` is either well-formed or already rejected. A constraint guarding a
+case with zero upstream instances is speculative mechanism, and it would stop
+`toolu_PLACEHOLDER` while doing nothing about `toolu_aaaaaaaa` — leaving a reader trusting
+a shape check as proof, which is the defect being fixed. Binding the id to evidence is the
+only remedy that makes the original claim true; it is specced, not built
+(`docs/v0.99.0-tool-use-id-evidence-spec.md`).
+
+### Added — how to write an additive rule that qualifies a core section
+
+`extensions/README.md` already said "never restate a core section," and
+`/ai-dlc-update` enforces it. What it did not say is what to do *instead* when the rule you
+are adding genuinely belongs to a core section — so the natural move, reusing that
+section's heading, trips the rule and reports `EXTENSION-RESTATES-CORE` on every pull
+forever. A consumer hit this three times and concluded the drift detector was
+matching too loosely.
+
+It is not. The detector enforces a deliberate contract whose stated reason is heading
+ambiguity in the rendered file, so comparing bodies instead would silence a warning those
+entries genuinely trip and would miss reworded duplicates. The gap was the missing
+instruction, now added: give the entry its own labelled heading
+(`### 3. [ext:sprint-review-domain] …`), the same Rule 27(d) pattern check catalogs use.
+
+The contract is also explicit now about what that does **not** buy — the rule renders as
+its own section, not inside core's, and no grain exists for the latter. `overrides/` gets
+you there only by reproducing the whole core section verbatim and carrying `base_sha`
+drift on prose you never meant to change. An `appends_to:` grain is specced
+(`docs/v0.100.0-additive-extension-grain-spec.md`), not built.
+
 ## [0.98.0] — 2026-07-19
 
 ### Fixed — the re-stamp read VERSION from the working tree

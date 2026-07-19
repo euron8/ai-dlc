@@ -182,7 +182,7 @@ parses it, so every field in it goes unadjudicated and the gate reports your pas
 <!-- SKILL_INVOCATION_PROVENANCE v1
 skill: ai-dlc-adversary-review              # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
 invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on this. Ambiguity here reorders the cycle.
-tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the only non-forgeable evidence the evaluation ran in a real independent context.
+tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 artifact: <path of the artifact you reviewed> # what this pass reviewed.
