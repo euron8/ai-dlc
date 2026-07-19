@@ -22,3 +22,10 @@ exists to prevent.
 H2 item (3) re-drives this fixture and FAILS if H1 does not catch it.
 
 Run `seed.sh` to reproduce idempotently.
+
+**No `run.sh`, deliberately.** H1's manifest-completeness pass is an LLM read
+of loaded context; a script cannot observe what a lead loaded, so there is
+nothing for a driver to assert. The seed hands H1 a real artifact to scan
+instead. Do not file this as an undriven fixture; `check-1c-bypass` and
+`check-15-bypass` got drivers because their checks publish mechanical regexes,
+and this one does not.

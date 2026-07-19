@@ -39,6 +39,12 @@
 #                         had already rotted (the manifest gained check 24, the
 #                         fixture did not), so H1's self-test was seeding a slice
 #                         that no longer existed.
+#   I20 fixture ⇒ driver — every fixture under core/fixtures/ has a run.sh, or a
+#                         README declaring why one is impossible. pre-push skips a
+#                         driverless fixture silently, so it reads exactly like one
+#                         that passed; two adversarial fixtures sat in that hole for
+#                         their whole existence. Exemptions are derived from the
+#                         READMEs, never hand-listed here.
 #   I9  enforcer ⇒ call site — every `adjudication: script` entry declares
 #                         `call_sites:` with a posture (W1), and no declared site
 #                         is fictional — the file it names must at least know the
@@ -844,10 +850,47 @@ EOF
   [ -n "$extra_scan" ] && err "I12: unregistered-drift.sh scans these but the policy does not mark them 'scan': $(echo $extra_scan). Add a 'scan' row or drop them from the ls-tree."
 fi
 
+# --- I20: every fixture is DRIVEN, or declares in writing that it cannot be -----
+# core/git-hooks/pre-push runs the fixture suite as
+#
+#     for d in tests/fixtures/*/; do
+#       [ -f "$d/run.sh" ] || continue
+#
+# directly beneath the comment "a fixture never driven is a green light nobody earned."
+# A fixture with no run.sh is therefore SKIPPED on every push, silently, while still
+# being declared an adversarial self-test in the map. check-1c-bypass and
+# check-15-bypass sat in that hole for their entire existence: both were `echo`
+# statements describing artifacts they never created, both were bound to a check, and
+# no gate, hook or suite could tell them from fixtures that passed.
+#
+# The hole is structural, not a property of those two — the NEXT driverless fixture
+# disappears the same way. So require, of every fixture on disk: a run.sh, or a README
+# that states plainly why one is impossible. Two fixtures legitimately cannot have one
+# (check-h1-recursion tests an LLM's control flow; check-manifest-bypass tests an LLM's
+# read of loaded context — no script observes either), and the exemption is DERIVED
+# from each README rather than hand-listed here, because a hand-list is the shape that
+# rots: the list itself becomes the thing nobody updates.
+#
+# Scope: this validator is a dev-repo gate (not installed, not called by pre-push), so
+# I20 binds fixtures where they are AUTHORED. A fixture that reaches a consumer without
+# a driver has already passed through here.
+EXEMPT_MARKER='No `run.sh`, deliberately'
+for d in "$REPO_ROOT"/core/fixtures/*/; do
+  [ -d "$d" ] || continue
+  name="$(basename "$d")"
+  [ -f "$d/run.sh" ] && continue
+  if [ ! -f "$d/README.md" ]; then
+    err "I20 fixture '$name' has neither run.sh nor a README. pre-push skips it silently, so it is indistinguishable from a fixture that passed. Add a driver, or a README stating why one is impossible (marker: '$EXEMPT_MARKER')."
+    continue
+  fi
+  grep -qF "$EXEMPT_MARKER" "$d/README.md" \
+    || err "I20 fixture '$name' has no run.sh and its README does not declare the exemption. pre-push skips it silently ('[ -f \"\$d/run.sh\" ] || continue'), so it reads exactly like a fixture that passed. Add a driver, or state why one is impossible with the marker '$EXEMPT_MARKER' and the reason."
+done
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20)."
   exit 0
 fi
 exit 1
