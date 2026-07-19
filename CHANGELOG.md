@@ -17,6 +17,79 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.91.0] — 2026-07-19
+
+### Fixed — two adversarial fixtures that could not fail
+
+`check-1c-bypass` and `check-15-bypass` were bound to Check 1c and Check 16 in
+`enforcement-map.yaml` and declared as adversarial self-tests. Neither
+established the condition it claimed to test. `check-1c-bypass` was five `echo`
+statements describing a commit subject and a PRD that were never created;
+`check-15-bypass` was two `echo` statements naming "four bypass variants" that
+did not exist. Neither had a `run.sh`.
+
+`core/git-hooks/pre-push` carries the comment *"a fixture never driven is a
+green light nobody earned"* directly above the loop
+
+```sh
+for d in tests/fixtures/*/; do
+  [ -f "$d/run.sh" ] || continue
+```
+
+so both fixtures were **silently skipped on every push**, for as long as they
+have existed, while remaining bound in the map. That is the
+check-that-cannot-fire shape: a fixture that is never driven is indistinguishable
+from one that passed.
+
+Each seed now writes real artifacts and each gets a driver.
+
+- **`check-1c-bypass`** seeds a real git repo with two branches: `bypass` (a
+  commit subject carrying `research` in unrelated prose, and a PRD with a real
+  "Research Findings" heading but `R1:` colon markers — both naive forms match,
+  neither anchored arm does) and `honest` (satisfies both anchored arms).
+  `run.sh` asserts the eight-way match matrix.
+- **`check-15-bypass`** seeds five hot-path files and a real carry-over backlog.
+  Each adversary satisfies every element of Check 16 but one, so `run.sh`
+  asserts **which** element rejects it — a variant rejected on the wrong element
+  is indistinguishable from a healthy reject by exit code alone. Two variants
+  were added beyond the four the README named: **V6** (a file reference with no
+  digits after the colon) and **V7** (a CLOSED backlog item). A mutation run
+  showed the original four covered neither element 3's digit-only rule nor
+  element 2's CLOSED case: a loosened element 3 and a CLOSED-accepting element 2
+  both passed the fixture unchanged.
+
+Both fixtures carry a **positive control**, without which an element mutated
+into always-rejecting would still look correct — every adversary would be
+rejected and the fixture would report success.
+
+**What the drivers do not prove, stated in both `run.sh` headers and READMEs.**
+Check 1c and Check 16 are `adjudication: llm` with `enforcer: []`. No validator
+script exists to call the way `check-17-bypass`'s driver calls the real
+`validate-provenance-block.sh`. The drivers evaluate each check's own published
+regexes against the seed, which tests the **fixtures'** claims, not the
+**adjudicators'** behaviour. An LLM that ignores the published regexes is not
+detected here and cannot be, from a script. A driver that implied otherwise
+would be a worse lie than the echo it replaces.
+
+### Documented — why two sibling fixtures have no driver
+
+`check-h1-recursion` and `check-manifest-bypass` were rewritten out of the
+echo-only shape in an earlier release and both establish real conditions.
+Neither can have a `run.sh`: the condition under test is an LLM's control flow
+in one case and an LLM's read of loaded context in the other, and no script
+observes either. Their READMEs now say so and name the discriminator — a driver
+is possible where the check publishes mechanical regexes — so the next sweep
+does not re-file them alongside the two that genuinely were inert.
+
+### Known — Check 16's element 4 anchor (not changed here)
+
+Element 4's regex is `^`-anchored (`^deferral-reason:\s+\S.{19,}`) but the text
+it inspects is a comment block, where every line carries a `#` or `//` prefix.
+Read literally the anchor can never match in a real source file. The check is
+LLM-adjudicated, so an adjudicator strips the prefix as a matter of course and
+nothing has failed in practice; `check-15-bypass`'s driver does the same and
+says so. Left as a spec looseness rather than bundled into a fixture change.
+
 ## [0.90.0] — 2026-07-19
 
 ### Changed — one section resolver, in `reconcile/lib.sh`
