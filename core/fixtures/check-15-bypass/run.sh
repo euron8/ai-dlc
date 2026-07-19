@@ -18,12 +18,12 @@
 # element that fired — and the honest control (V5) is the mutant-detector that goes red
 # if any element is broken into always-rejecting.
 #
-# ONE INTERPRETATION IS MADE EXPLICIT. Element 4's regex is `^`-anchored
-# (`^deferral-reason:\s+\S.{19,}`) but the text it inspects is a COMMENT BLOCK, where
-# every line carries a `#`/`//` prefix. Read literally the anchor can never match in a
-# real source file. This driver strips a leading comment prefix before applying the
-# anchored regex — the reading an adjudicator would take. If the check body is ever
-# tightened, tighten this with it.
+# COMMENT-PREFIX STRIPPING. Element 4's regex is `^`-anchored but the text it inspects
+# is a COMMENT BLOCK, where every line carries a `#`/`//`/`--` prefix — so the anchor
+# matches nothing until the prefix is stripped. The check body now says to strip it;
+# `decomment()` below is that step. This fixture is what surfaced the omission: the
+# anchor had been unmatchable-as-written for the life of the check, invisible because
+# an LLM adjudicator strips the prefix without being told to.
 #
 # Usage: run.sh
 

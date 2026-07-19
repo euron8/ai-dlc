@@ -773,7 +773,10 @@ comment block (preceding 5 lines + the matched line):
    items fail this element.
 3. **`file:line` reference.** Regex `(^|\s)\S+:[0-9]+(\s|$)` —
    path token + colon + 1+ digits. Digit-only; rejects `file:FIXME`.
-4. **Deferral-reason line with min-content + density.** Primary
+4. **Deferral-reason line with min-content + density.** Strip each
+   line's leading comment prefix (`#`/`//`/`--`, plus optional
+   space) before matching: the block under inspection is source
+   comments, so an unstripped `^` anchor matches nothing. Primary
    regex: `^deferral-reason:\s+\S.{19,}` (at least one non-
    whitespace char after `deferral-reason:\s+`, then 19+ more chars
    of any kind). Secondary density check: the reason body
