@@ -63,31 +63,19 @@ esac
 
 [ -n "$BASE_SHA" ] || { echo "readopt-override: override has no base_sha:" >&2; exit 2; }
 
-# Section resolver — byte-for-byte the one in layer-drift.sh, deliberately.
+# section_of()/norm() — the ONE resolver, from lib.sh.
 #
 # A WEAKER resolver here is not a cosmetic divergence: layer-drift decides the
 # section DRIFTED and blocks, this script then fails to resolve the same anchor,
 # finds no stale lines, and clears the block. Two resolvers means the gate and its
-# remedy can disagree, and the remedy always wins. (Caught live: the anchor
-# "Empirical gate validation (the `Enforcement:` paragraph)" is a descriptive
-# label whose heading is just "## Empirical gate validation" — layer-drift's
-# bidirectional-substring match resolves it; an exact/prefix match does not.)
-norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ /g; s/^ +| +$//g'; }
-
-section_of() {
-  awk -v want="$(norm "$1")" '
-    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-    /^#{2,6}[ \t]/ {
-      match($0, /^#+/); lvl = RLENGTH
-      h = $0; sub(/^#+[ \t]+/, "", h); h = nrm(h)
-      if (inside) { if (lvl <= mylvl) exit }
-      else if (want != "" && (index(h, want) > 0 || (length(h) > 3 && index(want, h) > 0))) {
-        inside = 1; mylvl = lvl; print; next
-      }
-    }
-    inside { print }
-  '
-}
+# remedy can disagree, and the remedy always wins. That shipped, in v0.52.0.
+# (Caught live: the anchor "Empirical gate validation (the `Enforcement:`
+# paragraph)" is a descriptive label whose heading is just "## Empirical gate
+# validation" — the bidirectional-substring match resolves it; an exact/prefix
+# match does not.)
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || { echo "readopt-override: cannot source $SELF/lib.sh" >&2; exit 1; }
 
 # Does every anchor in `shadows:` resolve in BOTH base and theirs?
 #

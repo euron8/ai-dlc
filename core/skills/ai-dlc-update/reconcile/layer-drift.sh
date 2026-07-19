@@ -82,6 +82,13 @@ SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 OVR_DIR="$SKILL_DIR/overrides"
 
+# section_of()/norm() — shared with register-drift.sh and readopt-override.sh.
+# Three copies of the section resolver drifted apart twice (v0.52.0, v0.54.2);
+# see lib.sh for the history and why this one is sourced rather than inlined.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || { echo "layer-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
+
 emit() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
 
 # core/-relative layer target -> path INSIDE the distribution tree.
@@ -157,8 +164,6 @@ anchors_of_file() {
     bold_anchors_of_file "$1"
   } | grep -E '.' | sort -u
 }
-
-norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ /g; s/^ +| +$//g'; }
 
 # Normalized heading TEXT for a given anchor, from a stream on stdin.
 # e.g. anchor "1a" in "### 1a. Prior-Decision Search (settled corpus)" -> "prior decision search settled corpus"
@@ -246,21 +251,7 @@ same_section() { # same_section <textA> <textB>
 }
 
 # Extract the section named by <id> from a markdown stream on stdin.
-# Prints nothing (rc 1) if no heading matches.
-section_of() { # section_of <id>  < stream
-  awk -v want="$(norm "$1")" '
-    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
-    /^#{2,6}[ \t]/ {
-      match($0, /^#+/); lvl = RLENGTH
-      h = $0; sub(/^#+[ \t]+/, "", h); h = nrm(h)
-      if (inside) { if (lvl <= mylvl) exit }
-      else if (want != "" && (index(h, want) > 0 || (length(h) > 3 && index(want, h) > 0))) {
-        inside = 1; mylvl = lvl; print; next
-      }
-    }
-    inside { print }
-  '
-}
+# Prints nothing (rc 1) if no heading matches.  Defined in lib.sh — one resolver.
 
 # ---------------------------------------------------------------------------
 # Overrides

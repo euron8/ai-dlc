@@ -17,6 +17,85 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.90.0] — 2026-07-19
+
+### Changed — one section resolver, in `reconcile/lib.sh`
+
+`section_of()` — the predicate that decides which markdown section an override
+anchor names — was defined three times, in `layer-drift.sh`, `register-drift.sh`
+and `readopt-override.sh`. The divergence has already shipped twice:
+
+- **v0.52.0** — `readopt-override`'s resolver was **weaker** than `layer-drift`'s,
+  so it could not resolve the anchor `layer-drift` had just **blocked** on, found
+  no stale lines, and would have **cleared the block**.
+- **v0.54.2** — `register-drift`'s was **stricter**, so it **misfiled a renamed
+  section** (`## Escalation Protocol` against core's `## Escalation`) as an
+  *addition*. Extensions are additive, so core's heading and the consumer's would
+  **both have rendered**, as conflicting guidance in one document.
+
+Both times the fix was to hand-copy one body over the other, and both times the
+CHANGELOG recorded *"there is one resolver."* **Nothing made it one.** By the time
+this release was written the three copies had drifted in form again —
+`register-drift` normalized inside awk (`BEGIN { w = nrm(want) }`) while the other
+two normalized shell-side through `norm()`. Behaviourally equivalent this time, by
+luck rather than by construction. **A hand-synced invariant is not an invariant.**
+
+There is now one body, in `reconcile/lib.sh`, sourced by all three. The
+awk-internal normalization is the one kept: it drops the dependency on a `norm()`
+the caller might not define (`register-drift` defined none), and normalization is
+idempotent, so a caller that pre-normalizes gets the same answer either way.
+
+**This is not a line reduction — it is +34 lines.** Three copies of a 15-line body
+became one, but the divergence history that justified each copy now has one home
+instead of three. The catalogue predicted this item would be the largest raw line
+saving in the repo; it is the opposite. The value is the invariant.
+
+**Verified, not assumed.** A refactor that passes the fixtures can still change
+behaviour the fixtures do not cover, so equivalence was proven directly:
+
+- **Differential harness** — all three original bodies, extracted from the
+  pre-refactor tree, versus the unified one across **3106 anchors × 75 real
+  markdown files**. Byte-identical output from all three.
+- **The harness was proven non-vacuous by mutation** — exact-match instead of
+  bidirectional (109269 differing lines), the `length(h) > 3` guard dropped (78),
+  normalization dropped (119638). All three caught. A differential harness that
+  cannot fail is worth exactly as much as a check that cannot fire.
+- **Six reconcile fixtures** byte-identical before versus after.
+  `layer-readopt-gate`'s only delta is git SHAs, which differ between two
+  consecutive runs on an unchanged tree.
+- **`register-drift.sh` has no fixture**, so it was driven directly on the v0.54.2
+  shape: output byte-identical to the pre-refactor script, and the renamed section
+  still files as an override rather than an extension.
+- **Not a dependency that cannot fire** — hiding `lib.sh` turns `layer-readopt-gate`
+  from PASS to FAIL(20) and makes `register-drift` exit 1, each with a named error.
+
+`lib.sh` ships at mode 755. `install.sh` chmods `+x` over `reconcile/*.sh`
+unconditionally, so 644 in git would have left install and the pull disagreeing
+about the bit on every cycle — the v0.70.1 failure shape, inverted.
+
+### Deliberately left duplicated
+
+Collapsing these would change behaviour rather than remove a failure mode, which
+is the opposite of the point:
+
+- **`fm()`** — `layer-drift`'s awk requires `---` on line 1 (`NR==1`);
+  `readopt-override`'s and `relabel-extension-checks`'s sed matches a `---` range
+  anywhere in the file. Neither subsumes the other.
+- **`emit()` / `say()`** — three different arities. A variadic unification changes
+  `apply.sh`'s output bytes on 2-argument calls.
+- **`consumer_path()` / `map_consumer()`** — already unified in v0.71.1, where
+  `apply.sh` stopped carrying a private table and started loading the classifier's.
+  Relocating either into `lib.sh` would break **I17**, which greps both definitions
+  out of their current files by name.
+- **`unregistered-drift.sh`'s `consumer_path()`** — agrees with `map_consumer()` on
+  all five handled cases, but its `*) return 1` is load-bearing scoping, not an
+  omission.
+
+**Follow-up owed:** nothing yet prevents a *fourth* copy of `section_of()` from
+appearing. The invariant is now single-sourced but not enforced; a check binding it
+belongs with the I-series, and is deliberately not bundled into a behaviour-
+preserving refactor.
+
 ## [0.89.0] — 2026-07-19
 
 ### Changed — KISS vestigial-scar-tissue sweep: delete prose whose mechanism already landed
