@@ -87,19 +87,32 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # one in play. A session that runs /ai-dlc-update and then /ai-dlc resume is a
 # pipeline session again, and the pause gate applies to it in full.
 # -----------------------------------------------------------------------------
-UPDATER_SESSION=0
-if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  LAST_UPDATE=$(grep -n '<command-name>/ai-dlc-update</command-name>' "$TRANSCRIPT" 2>/dev/null | tail -1 | cut -d: -f1)
-  LAST_PIPELINE=$(grep -n '<command-name>/ai-dlc</command-name>' "$TRANSCRIPT" 2>/dev/null | tail -1 | cut -d: -f1)
-  if [ -n "$LAST_UPDATE" ] && [ "$LAST_UPDATE" -gt "${LAST_PIPELINE:-0}" ] 2>/dev/null; then
-    UPDATER_SESSION=1
-  fi
-fi
-
 # -----------------------------------------------------------------------------
 # Check 1: no active pipeline -> allow
 # -----------------------------------------------------------------------------
+# ORDERING IS LOAD-BEARING. This guard precedes the transcript scan below because
+# the scan is the expensive part of this hook and the guard is free. The hook
+# fires on Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit -- 10271
+# such calls over 30 days on the reference consumer, against transcripts that run
+# p90 4.3MB and reach 27.7MB. Scanning before knowing whether there is a pipeline
+# at all charged every non-pipeline session in the project for a question only a
+# pipeline session asks. `ai-dlc-context-sensor.sh` already bails on no-snapshot
+# before it reads a byte of transcript, and names the hazard at its own read site:
+# a full scan "often is real hot-path latency". Same discipline, same reason.
 [ -f "$SNAPSHOT_FILE" ] || exit 0
+
+UPDATER_SESSION=0
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  # ONE scan, not two. The question is "whichever skill was invoked LAST", so the
+  # last line matching EITHER marker is the whole answer -- two separate greps
+  # each read the file to EOF (both take `tail -1`) to reconstruct by line number
+  # what a single alternation reads once and answers directly. The closing tag is
+  # part of both patterns, so `/ai-dlc` cannot match an `/ai-dlc-update` line.
+  LAST_SKILL=$(grep -oE '<command-name>/ai-dlc(-update)?</command-name>' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  case "$LAST_SKILL" in
+    *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
+  esac
+fi
 
 # -----------------------------------------------------------------------------
 # Check 2a: the adversarial cycle has STOPPED (Rule 8) -- THE TEETH

@@ -17,6 +17,216 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.95.0] — 2026-07-19
+
+### Added — every known evaluation records what it found
+
+v0.94.0 measured the gate machinery and could say something sharp about exactly one
+validation step, because exactly one records its own residue. Counted on the
+reference consumer's artifacts:
+
+| skill | provenance blocks | carrying `findings_*` |
+|---|---|---|
+| `ai-dlc-adversary-review` | 55 | **55 (100%)** |
+| `bmad-review-adversarial-general` | 356 | 9 (2.5%) |
+| `bmad-party-mode` | 276 | **2 (0.7%)** |
+| `bmad-advanced-elicitation` | 129 | 3 (2.3%) |
+| `bmad-validate-prd` | 70 | 2 (2.9%) |
+
+Because the convergence review records its residue, its value is answerable and the
+answer is specific: pass 1 finds real defects — an acceptance criterion that
+deadlocks two stories, four call-site line numbers that all exceed the file's
+length, a stale `deploy_scope` that would have shipped a rebalancer fix to the
+aggregator, unrequested mechanism under Rule 26 — while **12 of 13 second passes
+find no CRITICAL and no MAJOR**, and both later-pass hits across 15 changed-artifact
+pass-pairs were repair-induced rather than discovered. That is a usable finding.
+
+No comparable sentence can be written about party-mode at any price. 831 sub-skill
+invocations recorded 16 residues between them. The problem is not that those steps
+are worthless — it is that they are UNMEASURABLE, and after 30+ sprints an
+unmeasurable step is one nobody can defend keeping or justify cutting. An evaluation
+that records nothing is indistinguishable from one that found nothing.
+
+`rules.counts_always` in `schemas/provenance-block.json` now requires
+`findings_critical` / `findings_major` / `findings_minor` of every skill in
+`known_skills`, verdict-bearing or not. `validate-provenance-block.sh` enforces it,
+so Check 17 carries it at every gate that already runs.
+
+**Counts only — `verdict` stays optional, and that boundary is the design.** A
+verdict is a convergence-cycle exit signal that Check 24 orders into a pass series;
+stamping one on a party-mode or elicitation invocation would enrol it in a cycle it
+is not part of. These evaluations are MEASURED, not GATED: nothing reads the values
+at gate time, and a genuine zero is a valid reading. If reporting zero were refused,
+the only way to pass would be to inflate, and the measurement would be worse than
+none.
+
+**Consumer-registered skills owe the counts too.** The rule keys on membership in
+`known_skills`, and an `extensions/known-skills.json` registration puts a skill in
+that set. Exempting extensions would make "register your own skill name" an opt-out
+from being measured, which is the one loophole this cannot afford.
+
+The taught examples were re-rendered from the schema, so the `retro-party-mode`
+profile now shows the three fields. That half is what rots: a reader demanding a
+field the doc omits fails every honest author, which is precisely the drift
+`provenance-block.json` exists to make impossible — and `fixtures/check-17-counts/`
+asserts it directly by extracting the example `retro.md` teaches and running the
+shipped parser over it.
+
+New fixture `check-17-counts` (13 assertions): each of the four sub-skills refused
+when silent, accepted when counted, zero accepted as a reading, partial and
+present-but-empty refused, counts-without-verdict accepted, the Rule 8 pass
+unchanged, verdict-without-counts still refused, taught-example-parses-clean, and a
+non-vacuity assertion that the schema still marks exactly three fields
+`required_for_evaluation` — without which every assertion above would pass by
+accepting everything. Mutation-tested three ways: dropping the schema flag turns 7
+assertions red, removing the fields from the taught profile turns the drift
+assertion red, and widening the rule to also demand a verdict turns the
+measured-not-gated assertions red.
+
+**MIGRATION.** This is enforced at the next gate, so an in-flight sprint holding a
+provenance block written before this release will fail Check 17 until the three
+counts are added to it. The fix is three integers per block — the evaluation already
+happened and its findings are in the artifact prose. `check-17-bypass`'s V5 seed and
+`known-skills-extension`'s seed both needed exactly this update, and V5's is
+instructive: it must pass the shape validator to reach the SHA byte-match rung it
+exists to test, so a countless V5 would have short-circuited the forgery floor —
+the same class of defect its own header already records once.
+
+To read the data once a sprint has run it:
+
+    grep -rhA14 'SKILL_INVOCATION_PROVENANCE v1' _bmad-output docs/retro \
+      | awk '/^skill:/{s=$2} /^findings_major:/{print s, $2}' | sort | uniq -c
+
+One sprint of this answers "does party-mode earn its ~1.4M tokens of transcript"
+the same way the convergence review's residue answered it for the adversary. No
+pruning decisions before that data exists — cutting on the current evidence would
+be guessing, which is the same error as keeping it on faith.
+
+## [0.94.0] — 2026-07-19
+
+### Measured first — where pre-implementation time actually goes
+
+The premise was that an ai-dlc cycle spends too long before implementation. It
+does, and three independent estimators over the reference consumer agree on the
+size: **~45% of active machine effort lands before implementation** (43.5% by
+main-thread active time on prose phase markers, 44.7% on genuine `Read` markers,
+47.5% by subagent wall-clock over 1,979 teammate runs). Active time excludes gaps
+over five minutes, so this is machine work, not an absent operator — raw
+wall-clock between gate stamps runs 7–17h per sprint but is 66% idle, and is
+useless for this question.
+
+Per-PHASE ranking is NOT robust and nothing here is planned against it:
+architecture reads as the top pre-implementation sink under one marker method
+(27.6h) and near the bottom under the other (9.4h). Only the aggregate split
+survives both.
+
+Two hypotheses were tested and DISCARDED, recorded because re-deriving them costs
+more than reading this:
+
+- *"Adversarial cycles run to p15/p17 against a 2+ pass rule."* The regex matched
+  `validate-adversarial-convergence.sh`'s own comments describing the stall
+  threshold, and `ai-dlc-acknowledge.sh`'s header recording the S290 incident that
+  motivated the teeth. On-disk maximum is **p4**, mean max pass 3.04. The teeth
+  work; the numbers in the prose are the history, not the present. (Same shape as
+  v0.48.0: diffing a bug's source looks like the bug firing.)
+- *"28.6% backward-transition rework rate."* Unsupported. 89.8% of step-file
+  references are prose mentions rather than `Read` calls, so "implementation →
+  architecture" was overwhelmingly the lead *discussing* architecture.
+
+Gate catch rate is 2 FAILs in 520 evaluations. Deliberately NOT acted on: v0.27.0
+established that pruning on fire-count kills live enforcement, and a check that
+never fires may be deterring rather than dormant.
+
+### Changed — script-check bodies stop teaching what the lead does not write
+
+Observed on the consumer: `script`-adjudicated checks cost **485 tok of lead
+context per evaluation against 210 for `llm` checks** — inverted. An `llm` check's
+prose IS its specification, read by the fresh adjudicator. A `script` check's
+verdict is an exit code; the lead needs when-to-fire and how-to-invoke, and
+nothing else. `verdict.sh` already exists for exactly this ("run a validator,
+print ONE decisive line, exit with ITS code") and its own header records the same
+defect one layer down: 71 hand-rolled output filters, ~26k resident tokens in one
+implementation phase.
+
+Two checks carried the fat, and both are now scope + invocation + verdict:
+
+- **Check 17** (−52%): its body rendered the full `SKILL_INVOCATION_PROVENANCE`
+  field list. That schema is owned by `schemas/provenance-block.json`, rendered
+  into the role files of the agents that WRITE blocks, and loaded by the parser
+  that READS them — while the gate lead writes no provenance block. The `mode:
+  solo` prohibition it restated is owned by Rule 20, which is always resident and
+  names this check by number. Verified before cutting: `sync-taught-schema.sh`
+  derives its sites by walking every `.md`, so removing a rendering is not a
+  missing-site failure; the `taught-schema` fixture asserts against
+  `adversary.md`, not this file.
+- **Check 24** (−29%): its body restated arms A–G. Every arm emits its own named
+  failure with the offending pass and concrete counts (`err "C -- DIVERGENCE"
+  "<file> declares findings_critical_prior_scope=N but ..."`), so the remedy
+  already arrives with the verdict. The arm names stay; the static restatement
+  goes.
+
+**H2 was examined and NOT cut, because its premise was false.** It is
+`adjudication: script`, but two of its three items are LLM-adjudicated and its
+body is a procedure the lead executes (`--verify`, then drive three items, then
+`--attest`). The adjudication field understates what the lead does there. The
+remaining five script checks (2a, 3b, 23, 25, 26) are 24–50 lines of scope and
+invocation with no comparable fat, and are left alone.
+
+Honest size: **~1,433 tok of lead context per sprint, 7.6% of observed gate slice
+spend** — not the order-of-magnitude the raw 485-vs-210 split suggests, because
+only two checks carried removable prose. Every tooth verified intact:
+`check-17-bypass` (forgery floor, V1–V7), `check-24-adversarial-convergence` (34
+assertions), `taught-schema` (6), `validate-enforcement-map.sh`, full pre-push.
+
+### Fixed — `ai-dlc-acknowledge.sh` scanned the transcript before knowing it had to
+
+The hook ran two unbounded `grep -n` passes over the session transcript, then
+reached its "no active pipeline → exit 0" guard. Both use sites of the value are
+below that guard, so every non-pipeline session in the project paid two full
+scans to answer a question only a pipeline session asks. It fires on
+`Agent|Task|Skill|TaskCreate|Write|Edit|MultiEdit|NotebookEdit` — 10,271 such
+calls over 30 days on the reference consumer, against transcripts at p90 4.3MB
+and max 27.7MB.
+
+`ai-dlc-context-sensor.sh` already had the discipline and names the hazard at its
+own read site: a full scan "often is real hot-path latency". The guard now
+precedes the scan, and the two greps collapse into one — the question is
+"whichever skill was invoked LAST", which one alternation answers directly
+instead of two full passes reconstructing it by line number.
+
+Measured on a 16MB transcript, 20 runs each: **95.1 → 18.2 ms/call for
+non-pipeline sessions (−81%)**, 95.6 → 82.1 ms/call for pipeline sessions (−14%,
+page-cache bound). A four-case differential (update-then-pipeline,
+pipeline-then-update, neither, and an early marker followed by 50k lines — the
+bounded-tail trap) shows old and new logic agreeing on every case; the scan stays
+full precisely so the early-marker case keeps working. Note the exit-code control
+is VACUOUS here — both versions swallow grep errors and exit 0 — so the timing
+delta is the only real evidence, and it is what is cited.
+
+### Added — the subagent probe records how long a teammate ran, and as what
+
+`subagent-context.jsonl` gains `duration_s` and `role`. `peak_tokens` answers
+"did a teammate approach the ceiling"; it cannot answer "did a teammate stop
+making progress", and those are different failures with different remedies.
+Measured across 1,979 teammate runs: p50 4.1m, p90 15.0m, p99 61.6m, max **699m**
+— and 10% of runs longer than 15 minutes account for **47% of summed agent-hours**.
+Duration alone does not separate stalled from busy (the 699m run had 127 turns; a
+healthy 151m run had 781), which is why both fields are emitted and neither is
+emitted as a verdict.
+
+Still PURE INSTRUMENTATION: nothing bounds, kills, or warns. A bound argued from
+one incident is a guess; this is the measurement that would justify one.
+
+Both fields come from a single bounded `head` read, matching the bounded-tail
+discipline the same hook already used — this runs on every teammate completion
+and must not become the thing it measures. Null means "not observed", never zero.
+
+The `stalled` fixture seed is the part that matters: two hours of wall-clock
+across two turns at a calm 45000 peak — the case `peak_tokens` calls healthy.
+Without it, a `role` or `duration_s` that never populated would read exactly like
+a log with nothing to report. Mutation-tested: forcing `duration_s` null and
+breaking the role extraction each turn the fixture red on the named assertion.
+
 ## [0.93.0] — 2026-07-19
 
 ### Added — I21: the reconcile helpers stay single-homed

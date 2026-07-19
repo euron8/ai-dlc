@@ -651,9 +651,18 @@ what lets a cheaper-model lead run the gate without weakening it. Procedure:
 `_gate-procedures.md`, "Gate-adjudication dispatch".
 
 **Provenance block.** Every invocation MUST emit a
-`SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces.
-The block's field schema lives in `gate-validation.md` Check 17, which
-parses it. `scripts/validate-provenance-block.sh` parses the block;
+`SKILL_INVOCATION_PROVENANCE v1` block into the artifact it produces,
+**including `findings_critical` / `findings_major` / `findings_minor` —
+what this evaluation actually found, at each severity.** All five owe the
+counts, not only the convergence review; zero is a valid reading and the
+honest one when nothing surfaced. Do NOT stamp a `verdict` unless you are
+a Rule 8 convergence pass: a verdict enrols the block in a pass series
+(Check 24). An evaluation that records no residue cannot be told apart
+from one that found nothing, which is how a validation step accumulates
+cost nobody can defend or cut on evidence.
+The block's field schema lives in `schemas/provenance-block.json`, which
+the reader loads and every taught example is rendered from.
+`scripts/validate-provenance-block.sh` parses the block;
 `scripts/validate-retro-evidence.sh` enforces transcript artifact +
 byte-matched SHA citation for retro party-mode (see
 `gate-validation.md` Check 17). Both run on every retro PR via

@@ -140,6 +140,9 @@ tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch 
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
 transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.
+findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
+findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
+findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
 SKILL_INVOCATION_PROVENANCE_END -->
 ```
 <!-- END GENERATED: provenance-block -->

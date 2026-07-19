@@ -290,6 +290,32 @@ for idx, raw_block in enumerate(blocks, start=1):
                     f"{S['rules']['verdict_requires_counts']['why']}"
                 )
 
+    # --- rules.counts_always ---
+    # Keyed on membership in known_skills, NOT on the presence of a verdict. An
+    # evaluation that records no residue cannot be scored, and an unscoreable
+    # evaluation is indistinguishable from one that found nothing — which is how
+    # 831 sub-skill invocations accumulated on the reference consumer with 16
+    # carrying any counts. Unknown skills are left alone: this asserts a contract
+    # on the evaluations the pipeline defines, not on every block an author writes.
+    if fields.get("skill") in KNOWN_SKILLS:
+        missing_counts = [
+            name for name, spec in FIELDS.items()
+            if spec.get("required_for_evaluation") and not fields.get(name)
+        ]
+        # ONE failure naming all of them. Three near-identical lines each repeating
+        # the same rationale paragraph is the output shape verdict.sh exists to
+        # stop; a validator should not need wrapping to be readable.
+        if missing_counts:
+            failures.append(
+                f"block #{idx}: skill '{fields['skill']}' is missing "
+                f"{', '.join(repr(n) for n in missing_counts)} (rules.counts_always). "
+                f"Every known evaluation records its residue, verdict-bearing or not — "
+                f"an evaluation that records nothing cannot be told apart from one that "
+                f"found nothing. Emit the three counts; `verdict` stays optional, and "
+                f"stamping one here would enrol this pass in a convergence cycle "
+                f"(Check 24) it is not part of."
+            )
+
     if fields.get("skill") == "bmad-party-mode":
         party_mode_blocks.append((idx, fields))
         if is_retro and not fields.get("transcript_path"):

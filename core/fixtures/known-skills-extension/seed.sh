@@ -20,7 +20,14 @@ fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/known-skills.XXXXXX")" || exit 2
 
-# A well-formed provenance block citing a consumer-only skill (no verdict → no counts required).
+# A well-formed provenance block citing a consumer-only skill.
+#
+# It carries findings_* because rules.counts_always keys on membership in
+# known_skills, and registering an extension skill PUTS IT IN that set — so a
+# consumer evaluation owes its residue exactly as a core one does. That is
+# deliberate: exempting the extension would make "register your own skill name"
+# a way to opt out of being measured, which is the one loophole the rule cannot
+# afford. No verdict: this is not a Rule 8 convergence pass.
 cat > "$WORK/artifact.md" <<'ART'
 # Consumer party-mode transcript (fixture)
 
@@ -30,6 +37,9 @@ invoked_at: 2026-07-16T12:00:00Z
 tool_use_id: toolu_fixtureABC123
 mode: subagent
 lead_role: retro.md
+findings_critical: 0
+findings_major: 1
+findings_minor: 0
 SKILL_INVOCATION_PROVENANCE_END -->
 ART
 

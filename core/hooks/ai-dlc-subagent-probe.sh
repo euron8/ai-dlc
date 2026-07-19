@@ -29,10 +29,15 @@
 # transcript is complete. That is the only window there is.
 #
 # EMITS  ${AI_DLC_STATE_DIR:-_bmad-output}/subagent-context.jsonl
-#   {v, ts, sprint, agent_id, model, turns, peak_tokens, compactions}
+#   {v, ts, sprint, agent_id, model, role, turns, peak_tokens, compactions, duration_s}
 # One line per teammate completion. Append-only. Read it with:
 #   jq -s 'max_by(.peak_tokens)'            <- the closest any teammate came
 #   jq -s 'map(select(.compactions>0))'     <- teammates that actually compacted
+#   jq -s 'map(select(.duration_s>900))'    <- the tail: 10% of runs, ~47% of agent-hours
+#   jq -s 'map(select(.duration_s>900 and (.turns/(.duration_s/60))<1))'
+#                                           <- long AND barely turning: stalled, not working
+# `role` and `duration_s` are null when the transcript's opening records do not
+# carry them; a null is "not observed", never "zero".
 #
 # READ peak_tokens AGAINST THE THRESHOLD, NOT THE WINDOW: compaction fires at
 # `effectiveWindow - 13000` (287000 at the default 300000 setting). A teammate at
@@ -72,7 +77,7 @@ AGENT_ID="$(printf '%s' "$INPUT" | jq -r '.agent_id // empty' 2>/dev/null || tru
 # want the PEAK across the whole run, not the latest reading — a teammate that
 # compacted and came back down still spent time at the ceiling, and that peak is
 # the number the ceiling decision needs.
-PEAK=0; TURNS=0; COMPACTIONS=0; MODEL=""
+PEAK=0; TURNS=0; COMPACTIONS=0; MODEL=""; END_TS=""
 for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
   READ="$(tail -c "$N" "$TRANSCRIPT" 2>/dev/null | jq -Rsc '
       (split("\n") | map(fromjson?)) as $a
@@ -87,7 +92,8 @@ for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
           compactions: ([ $a[]
                           | select(.type == "system" and .subtype == "compact_boundary")
                         ] | length),
-          model: ([ $a[] | select(.type == "assistant") | .message.model // empty ] | last // "")
+          model: ([ $a[] | select(.type == "assistant") | .message.model // empty ] | last // ""),
+          end_ts: ([ $a[] | .timestamp // empty ] | last // "")
         }
     ' 2>/dev/null)"
   [ -n "$READ" ] || continue
@@ -95,11 +101,54 @@ for N in ${AI_DLC_PROBE_TAIL_BYTES:-1048576} 4194304 16777216; do
   TURNS="$(printf '%s' "$READ" | jq -r '.turns' 2>/dev/null || echo 0)"
   COMPACTIONS="$(printf '%s' "$READ" | jq -r '.compactions' 2>/dev/null || echo 0)"
   MODEL="$(printf '%s' "$READ" | jq -r '.model' 2>/dev/null || echo "")"
+  END_TS="$(printf '%s' "$READ" | jq -r '.end_ts' 2>/dev/null || echo "")"
   # A tail that captured no assistant turn means the window was too small for
   # even one record — escalate. Otherwise this reading stands.
   case "${TURNS:-0}" in ''|0) continue ;; esac
   break
 done
+
+# --- DURATION and ROLE: one bounded HEAD read ------------------------------
+# Both answers live in the transcript's opening records — the first timestamp,
+# and the Rule 19 role binding carried in the dispatch prompt — so one small
+# head read settles both. It is a head and not a full scan for the same reason
+# the block above is a bounded tail: this hook runs on EVERY teammate
+# completion and must not become the thing it measures.
+#
+# WHY DURATION. peak_tokens answers "did a teammate approach the ceiling". It
+# cannot answer "did a teammate STOP MAKING PROGRESS", and those are different
+# failures with different remedies. Measured on the reference consumer's 1,979
+# teammate runs: p50 4.1m, p90 15.0m, p99 61.6m, max 699m — and the 699m run
+# had 127 turns while a healthy 151m run had 781. Duration alone does not
+# separate them; duration WITH turns does (turns-per-minute), which is why both
+# fields are emitted and neither is emitted as a verdict. This records the
+# fact. Nothing here bounds, kills, or warns — see the header: PURE
+# INSTRUMENTATION. A bound argued from one incident is a guess; this is the
+# measurement that would justify one.
+START_TS=""; ROLE=""
+HEAD_READ="$(head -c "${AI_DLC_PROBE_HEAD_BYTES:-262144}" "$TRANSCRIPT" 2>/dev/null)"
+if [ -n "$HEAD_READ" ]; then
+  START_TS="$(printf '%s' "$HEAD_READ" | jq -Rsc '
+      [ (split("\n") | map(fromjson?))[] | .timestamp // empty ] | first // ""
+    ' 2>/dev/null | tr -d '"')"
+  # Role binding: `.claude/team-roles/<role>.md` as dispatched (Rule 19). Read
+  # from the raw text, not a JSON path — the binding is prose inside the prompt.
+  ROLE="$(printf '%s' "$HEAD_READ" \
+            | grep -oE 'team-roles/[a-z0-9-]+\.md' 2>/dev/null \
+            | head -1 | sed 's|team-roles/||; s|\.md$||')"
+fi
+
+# Seconds, not milliseconds: the spread being measured runs minutes to hours,
+# and sub-second precision on a SubagentStop timestamp would be false precision.
+# Fractional seconds are stripped because fromdateiso8601 rejects them.
+DURATION=""
+if [ -n "$START_TS" ] && [ -n "$END_TS" ]; then
+  DURATION="$(jq -nr --arg a "$START_TS" --arg b "$END_TS" '
+      def t: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
+      (($b | t) - ($a | t)) as $d | if $d >= 0 then $d else empty end
+    ' 2>/dev/null || echo "")"
+fi
+case "${DURATION:-}" in ''|*[!0-9]*) DURATION="" ;; esac
 
 case "${PEAK:-}" in ''|*[!0-9]*) exit 0 ;; esac
 [ "$PEAK" -gt 0 ] || exit 0
@@ -111,12 +160,16 @@ jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
        --arg s "${SPRINT:-}" \
        --arg a "$AGENT_ID" \
        --arg m "${MODEL:-}" \
+       --arg r "${ROLE:-}" \
+       --arg d "${DURATION:-}" \
        --argjson turns "${TURNS:-0}" \
        --argjson peak "${PEAK:-0}" \
        --argjson comp "${COMPACTIONS:-0}" \
   '{v:1, ts:$ts, sprint:(if $s=="" then null else ($s|tonumber) end),
     agent_id:$a, model:(if $m=="" then null else $m end),
-    turns:$turns, peak_tokens:$peak, compactions:$comp}' \
+    role:(if $r=="" then null else $r end),
+    turns:$turns, peak_tokens:$peak, compactions:$comp,
+    duration_s:(if $d=="" then null else ($d|tonumber) end)}' \
   >> "$OUT" 2>/dev/null || true
 
 exit 0
