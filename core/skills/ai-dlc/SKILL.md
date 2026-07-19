@@ -420,35 +420,15 @@ violation.
 
 ### Reminder thresholds
 
-Yellow, red, and imminent are DERIVED from the resolved effective window,
-not read from a table. Each band's threshold is a percentage of the window,
-CLAMPED to a bounded distance ("lead") below the ceiling
-(`effectiveWindow - 31,000`):
-
-```
-threshold = clamp(effectiveWindow * PCT, ceiling - MAX_LEAD, ceiling - MIN_LEAD)
-```
-
-The percentage lets the bands scale with the window; the clamp keeps the
-runway before compaction sane -- a straight percentage would fire red ~200
-turns early on a 1M window (noise) and too late on a small one. Defaults:
-
-| Band | PCT | Min lead | Max lead |
-|---|---|---|---|
-| yellow   | 60% | 89,000 | 200,000 |
-| red      | 75% | 49,000 |  88,000 |
-| imminent | 90% | 20,000 |  24,000 |
-
-The MIN_LEADs are the historical 200K offsets, so at small/mid windows every
-band clamps to the old thresholds (200K → yellow 80,000 / red 120,000 /
-imminent 149,000; 300K → 180,000 / 220,000 / 249,000) and only goes
-proportional on large windows, where MAX_LEAD caps the runway (1M → 769,000
-/ 881,000 / 945,000). Tune with `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_PCT`
-and `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_{MIN,MAX}_LEAD`.
-
-Red fires before Claude Code's auto-compact threshold BY CONSTRUCTION -- the
-clamp ranges do not overlap -- see "Auto-compact ordering invariant" below.
-The constants are guarded by `scripts/validate-compact-window.sh`.
+Yellow, red, and imminent are DERIVED from the resolved effective window --
+a percentage of the window CLAMPED to a bounded "lead" below the ceiling
+(`effectiveWindow - 31,000`), not read from a per-row table. The
+`ai-dlc-context-sensor.sh` hook computes them and owns the formula, the
+defaults, and the worked examples; tune via
+`AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_PCT` and
+`AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_{MIN,MAX}_LEAD`. The band constants are
+guarded by `scripts/validate-compact-window.sh` (see "Auto-compact ordering
+invariant" below).
 
 ### Reminder semantics
 
@@ -514,28 +494,15 @@ project is never left un-warned before its row is proven.
 
 ### Auto-compact ordering invariant
 
-Claude Code compacts when the context reaches `effectiveWindow - 13000`,
-where `effectiveWindow` is `min(autoCompactWindow, model max)`.
-`autoCompactWindow` is an integer in `[100000, 1000000]`, resolved in
-Claude Code's precedence order -- highest first:
-
-```
-env CLAUDE_CODE_AUTO_COMPACT_WINDOW
-  > .claude/settings.local.json
-  > .claude/settings.json        (project)
-  > ~/.claude/settings.json      (user; or $CLAUDE_CONFIG_DIR/settings.json)
-  > model default
-```
-
-(Managed/enterprise settings and CLI flags outrank all of these but are
-not readable from a hook, so they cannot be modelled.)
-
-Because every band is a clamped percentage anchored to the resolved
-ceiling, red fires before the compaction threshold BY CONSTRUCTION: red's
-clamp keeps it at least `RED_MIN_LEAD` (49,000) below the ceiling, so it
-clears the `effectiveWindow - 13,000` compaction point by at least 67,000
-tokens for any window, and the disjoint clamp ranges keep yellow < red <
-imminent. The ordering no longer depends on hand-tuned per-row thresholds.
+Claude Code compacts at `effectiveWindow - 13,000`, where `effectiveWindow`
+is `min(autoCompactWindow, model max)` and `autoCompactWindow` resolves in
+Claude Code's precedence order (env > settings.local.json > project
+settings.json > user settings; managed/enterprise settings and CLI flags
+outrank all of these but are not readable from a hook, so they cannot be
+modelled). Because every band is a clamped percentage anchored to the
+resolved ceiling, red clears the compaction point BY CONSTRUCTION and the
+disjoint clamp ranges keep yellow < red < imminent < compaction for any
+window.
 
 AI/DLC does not write `autoCompactWindow`. Run
 `scripts/validate-compact-window.sh` to confirm the band constants keep the
