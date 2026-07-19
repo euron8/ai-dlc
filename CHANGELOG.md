@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.96.0] — 2026-07-19
+
+### Fixed — the check-17-counts fixture had never run anywhere
+
+`core/fixtures/check-17-counts/run.sh` shipped in 0.95.0 probing two layouts for
+`validate-provenance-block.sh`: `$ROOT/core/scripts/` and `$ROOT/.claude/scripts/`.
+The second path is one `install.sh` never writes. `install.sh` maps
+`core/scripts/<x>` to `scripts/<x>` at the project root and maps only everything
+*else* under `.claude/`, so on a consumer the validator and the schema land in
+**different trees** — validator in `scripts/`, schema in `.claude/schemas/`. The
+consumer branch paired the wrong validator path with the right schema path, matched
+nothing, and the fixture aborted:
+
+```
+FIXTURE ERROR: validate-provenance-block.sh not found in either layout
+```
+
+exit 2, on every consumer, since the day it was written.
+
+It was no better in the distribution. `core/git-hooks/pre-push` drives fixtures by
+iterating `tests/fixtures/*/`, a directory that exists only after an install — this
+repo has no `tests/fixtures/`. So the distribution never ran it either. **Thirteen
+assertions, zero executions, in any repo.**
+
+It passed every gate we have. `validate-enforcement-map.sh` I20 asks whether a
+fixture has a `run.sh`, not whether that `run.sh` can resolve its own subject, and
+the fixture carries no `.dist-only` marker (`enforcement-map-sites` has one, so the
+mechanism was available and deliberately not used here) — it was meant to ship and
+run on consumers. This is the check-that-cannot-fire class again, and this time it
+shipped inside the fixture suite whose whole purpose is to catch it.
+
+The consumer branch now reads `$ROOT/scripts/` for the validator while keeping
+`.claude/` for the schema and the retro doc, both derived from `install.sh`'s
+documented mapping rather than guessed. The dead `.claude/scripts/` branch is
+removed rather than left beside a third: a probe path no installer writes is not a
+fallback, it is scar tissue.
+
+Proof, since a content diff proves nothing for this class: the fixture exits 2 on a
+scratch consumer install before the change and runs all 13 assertions after;
+mutating the **consumer's own** schema (`required_for_evaluation` true → false)
+drops it to exit 1 with 7 assertions failing, which is what shows the assertions
+reach the consumer's files and are not passing vacuously.
+
+The sibling `check-17-bypass/run.sh` resolves its subject through `seed.sh` and is
+unaffected — that asymmetry is why this went unnoticed.
+
+Found by the graph consumer during its 0.95.0 pull, ground-truthed here.
+
 ## [0.95.0] — 2026-07-19
 
 ### Added — every known evaluation records what it found

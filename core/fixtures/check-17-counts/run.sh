@@ -36,16 +36,25 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
+# Two layouts, both derived from install.sh's mapping -- NOT guessed. install.sh
+# maps `core/scripts/<x>` to `scripts/<x>` at the project root and maps everything
+# else under `.claude/`, so on a consumer the validator and the schema land in
+# DIFFERENT trees. The consumer branch below previously read `.claude/scripts/`,
+# a path install.sh never writes, so it matched nothing and this fixture aborted
+# with exit 2 on every consumer while passing in the distribution repo.
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-provenance-block.sh" ]; then
+  # Distribution repo: everything under core/.
   VALIDATOR="$ROOT/core/scripts/validate-provenance-block.sh"
   SCHEMA="$ROOT/core/schemas/provenance-block.json"
   RETRO_DOC="$ROOT/core/skills/ai-dlc/steps/retro.md"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/.claude/scripts/validate-provenance-block.sh" ]; then
-  VALIDATOR="$ROOT/.claude/scripts/validate-provenance-block.sh"
+elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/validate-provenance-block.sh" ]; then
+  # Consumer install: scripts/ at the project root, the rest under .claude/.
+  VALIDATOR="$ROOT/scripts/validate-provenance-block.sh"
   SCHEMA="$ROOT/.claude/schemas/provenance-block.json"
   RETRO_DOC="$ROOT/.claude/skills/ai-dlc/steps/retro.md"
 else
   echo "FIXTURE ERROR: validate-provenance-block.sh not found in either layout" >&2
+  echo "  looked in: $ROOT/core/scripts/ (distribution), $ROOT/scripts/ (consumer)" >&2
   exit 2
 fi
 [ -f "$SCHEMA" ] || { echo "FIXTURE ERROR: schema not found at $SCHEMA" >&2; exit 2; }
