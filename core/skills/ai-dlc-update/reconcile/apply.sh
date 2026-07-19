@@ -231,7 +231,15 @@ if [ "$mech_fail" -gt 0 ]; then
   say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically — the stamp would claim ${THEIRS} while the tree lacks them. Left at ${BASE}; fix the paths above and re-run."
 elif [ -f "$STAMP" ]; then
   theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null || echo "$THEIRS")"
-  ver="$(cat "$DIST/VERSION" 2>/dev/null || true)"
+  # From THEIRS, not the working tree. Every file copy above resolves through
+  # `git show "${THEIRS}:core/..."`; reading VERSION with `cat` was the one place that
+  # trusted whatever ref the operator's distribution checkout happened to be sitting on.
+  # Hit live on the v0.92.0 pull: the checkout was on a v0.93.0 branch while theirs was
+  # origin/main at v0.92.0, so the stamp was written `version: 0.93.0` against 0.92.0
+  # content — beside a `commit:` taken correctly from theirs, which is what makes the
+  # result incoherent rather than merely stale. The stamp is the one field the NEXT pull
+  # trusts to compute its base, so an overstating version silently mis-bases that merge.
+  ver="$(git -C "$DIST" show "${THEIRS}:VERSION" 2>/dev/null || true)"
   sed -i.bak -E "s/^(commit:).*/\1 ${theirs_sha}/" "$STAMP" 2>/dev/null || true
   [ -n "$ver" ] && sed -i.bak -E "s/^(version:).*/\1 ${ver}/" "$STAMP" 2>/dev/null || true
   rm -f "$STAMP.bak"

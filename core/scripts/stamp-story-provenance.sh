@@ -180,8 +180,18 @@ invariant = {k: tfields[k] for k in PROFILE["batch_invariant"] if k in tfields a
 # every story would stamp a schema-INVALID block (and the reader would reject it downstream). So:
 # validate the value against the schema's tool_use_id pattern; an explicit --tool-use-id override
 # wins (a single verifiable token, recovered from the transcript — the sanctioned mitigation); and
-# if neither the pass file nor the override yields a real toolu_ id, REFUSE rather than propagate a
-# placebo. The cure belongs in the SoR: backfill the terminal pass's tool_use_id, then re-stamp.
+# if neither the pass file nor the override yields a WELL-FORMED toolu_ id, REFUSE rather than
+# propagate a placebo. The cure belongs in the SoR: backfill the terminal pass's tool_use_id, then
+# re-stamp.
+#
+# WHAT THIS DOES NOT DO. The test below is the schema's charset pattern and nothing more, so it
+# catches the placeholder SHAPES the pattern already excludes (empty, `toolu_`, `toolu_...`, and
+# every marker shorter than six chars) and does NOT catch a well-formed invention such as
+# `toolu_PLACEHOLDER` or `toolu_aaaaaaaa`. Nothing here — or in the reader — checks the id against
+# a transcript, so neither side can tell a recovered id from a plausible one. Say "well-formed",
+# never "real": this comment previously claimed the latter, which is how a shape check comes to be
+# trusted as proof. Binding the id to a cited transcript — the way transcript_path is bound by
+# validate-retro-evidence.sh — is the only thing that would make it evidence.
 TID_RE = S["patterns"]["tool_use_id"]
 tid = tool_use_id_override or invariant.get("tool_use_id", "")
 if not re.match(TID_RE, tid):
@@ -191,7 +201,7 @@ if not re.match(TID_RE, tid):
         f"not self-report its Agent-dispatch id (the tool_use_id self-introspection defect), so the "
         f"SoR still holds a placeholder. Recover the terminal Agent-dispatch tool_use_id from the "
         f"session transcript and either backfill it into {terminal_path} or pass it as "
-        f"--tool-use-id <toolu_...>. Refusing to stamp a placeholder onto the stories.",
+        f"--tool-use-id <toolu_...>. Refusing to stamp a malformed id onto the stories.",
         file=sys.stderr,
     )
     sys.exit(1)

@@ -17,6 +17,199 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.99.0] — 2026-07-19
+
+### Fixed — two statements in core that promised more than any mechanism delivers
+
+The provenance schema described `tool_use_id` as *"the only non-forgeable evidence the
+evaluation ran in a real independent context."* Nothing verifies it. The field is matched
+against `^toolu_[A-Za-z0-9_-]{6,}$` and never checked against a transcript, so
+`toolu_aaaaaaaa` satisfies it. Compare `transcript_path` on the same block, which *is*
+verified — `validate-retro-evidence.sh` runs `git cat-file -p <sha>:<path>`, binding the
+citation to immutable content. One field on that block is evidence; the other was a shape
+wearing the word.
+
+`stamp-story-provenance.sh` carried the same overstatement from the writer's side. Its
+comment read *"Refusing to stamp a placeholder onto the stories"* while its predicate was
+the identical charset pattern — so it refuses malformed ids and believed that was the same
+thing. Both sites load the pattern from the schema, which is why they were wrong in the
+same way.
+
+The schema doc now says the field is checked for shape only and is not proof the
+evaluation ran, and the writer's comment states what its predicate actually does, names
+the shapes it cannot catch (`toolu_PLACEHOLDER`, `toolu_aaaaaaaa`), and says to write
+"well-formed", never "real". Because the doc string is **rendered into the taught
+examples**, the correction reaches `team-roles/adversary.md` and `steps/retro.md` — the
+text agents actually author from — and `sync-taught-schema.sh --check` gated the re-render.
+
+**No placeholder blocklist was added**, though the report that surfaced this proposed one.
+Measured first: 8 of the 10 literals in the consumer's list are already rejected by the
+shipped pattern (`{6,}` kills every short marker, `...` fails the charset), the real leak
+is one word in two casings, and that literal appears **nowhere in this repository** — every
+id in `core/fixtures/` is either well-formed or already rejected. A constraint guarding a
+case with zero upstream instances is speculative mechanism, and it would stop
+`toolu_PLACEHOLDER` while doing nothing about `toolu_aaaaaaaa` — leaving a reader trusting
+a shape check as proof, which is the defect being fixed. Binding the id to evidence is the
+only remedy that makes the original claim true; it is specced, not built
+(`docs/v0.99.0-tool-use-id-evidence-spec.md`).
+
+### Added — how to write an additive rule that qualifies a core section
+
+`extensions/README.md` already said "never restate a core section," and
+`/ai-dlc-update` enforces it. What it did not say is what to do *instead* when the rule you
+are adding genuinely belongs to a core section — so the natural move, reusing that
+section's heading, trips the rule and reports `EXTENSION-RESTATES-CORE` on every pull
+forever. A consumer hit this three times and concluded the drift detector was
+matching too loosely.
+
+It is not. The detector enforces a deliberate contract whose stated reason is heading
+ambiguity in the rendered file, so comparing bodies instead would silence a warning those
+entries genuinely trip and would miss reworded duplicates. The gap was the missing
+instruction, now added: give the entry its own labelled heading
+(`### 3. [ext:sprint-review-domain] …`), the same Rule 27(d) pattern check catalogs use.
+
+The contract is also explicit now about what that does **not** buy — the rule renders as
+its own section, not inside core's, and no grain exists for the latter. `overrides/` gets
+you there only by reproducing the whole core section verbatim and carrying `base_sha`
+drift on prose you never meant to change. An `appends_to:` grain is specced
+(`docs/v0.100.0-additive-extension-grain-spec.md`), not built.
+
+## [0.98.0] — 2026-07-19
+
+### Fixed — the re-stamp read VERSION from the working tree
+
+`apply.sh` resolves every file it copies through `git show "${THEIRS}:core/..."`, and
+takes the stamp's `commit:` from `git rev-parse "$THEIRS"`. One line did not follow: the
+stamp's `version:` came from `cat "$DIST/VERSION"` — whatever ref the operator's
+distribution checkout happened to be sitting on.
+
+Hit live on the v0.92.0 pull. The checkout sat on a v0.93.0 branch while `theirs` was
+`origin/main` at v0.92.0, so the stamp was written `version: 0.93.0` against 0.92.0
+content and had to be corrected by hand. Note the shape: the same stamp carried a
+`commit:` taken correctly from theirs. The result is not merely stale, it is
+**incoherent** — a version and a commit that cannot both be true of one tree.
+
+`.ai-dlc-version` is what the next pull reads to compute its base, so an overstating
+version silently mis-bases that merge and the damage surfaces a pull later, far from the
+run that caused it.
+
+### Added — a fixture that fails if the stamp ever leaves theirs again
+
+A one-line fix with nothing holding it is a suggestion. `apply-restamp-theirs` builds a
+distribution repo carrying **three** different versions — base 1.0.0, theirs 2.0.0,
+working tree 9.9.9 — and asserts the stamp takes theirs'.
+
+The separation is the whole fixture, so it is asserted rather than assumed: assertion 0
+aborts with exit 2 if the working tree and theirs ever stop differing, because at that
+point `cat` and `git show` agree and every later assertion would pass vacuously against
+the reverted bug. Assertion 2 checks the version/commit **pair**, since a coherent commit
+beside an incoherent version is the defect's actual signature. Assertion 3 is a control
+on the ordinary path — and it puts the tree on theirs by writing the file, not by
+`git checkout`, which would leave the dirty VERSION in place and quietly test the
+mismatched case a second time while claiming to test the aligned one.
+
+Verified by mutation, not by inspection: with `git show` reverted to `cat`, assertions 1
+and 2 fail and the control still passes, which is the discrimination the fixture exists
+to make. Registered in both the install and uninstall loops (I8) and confirmed to run
+from a real consumer install, not only the distribution tree.
+
+Found by the graph consumer during its v0.92.0 pull, after it corrected the bad stamp by
+hand.
+
+## [0.97.0] — 2026-07-19
+
+### Fixed — the escalated reviewer's model strings were not maskable
+
+`reconcile/setup-sites.md` is the single source of truth for "this looks like core
+divergence but is actually consumer config." A `{*_model_*}` token missing from it is
+not masked during the core-overwrite step, so a pull that touches the file writes the
+placeholder back over the consumer's live `/model` string, and the role then dispatches
+against a literal `{reviewer_escalated_model_personal}`.
+
+v0.84.0 added `core/team-roles/code-reviewer-escalated.md` carrying two such tokens and
+wired it into `ai-dlc-setup` STEP 2 — the manifest's own authoring rule says an entry is
+owed for exactly that. No entry was ever added. Both sites are declared now.
+
+### Added — I22, every model token is a declared setup site
+
+Fixing the instance is not fixing the hole, and this hole has opened twice. The first
+time it did the damage: `adversary.md` carried a model token from **v0.30.0** and was
+not declared until **v0.47.0** — seventeen versions — and the title of the commit that
+closed it is *"the reconcile blanked the config it exists to preserve."* The consumer
+report that surfaced the second instance called it a nine-version gap; the history says
+seventeen, so the class is worse than reported, not better.
+
+The manifest's authoring rule was one-directional. It says every entry MUST trace to a
+"Files to replace in" directive in `ai-dlc-setup/SKILL.md`, which stops entries being
+invented — but nothing walked the other way and asked whether a file carrying a token
+had an entry. Both times, nothing did.
+
+`validate-enforcement-map.sh` now asserts that every `core/team-roles/*.md` carrying a
+`{*_model_*}` token is either declared in `setup-sites.md` or listed under its
+"Explicitly NOT sites" section. The subject set is **derived from the tokens on disk**,
+never hand-listed — a hand-maintained list is the thing that stops being updated, which
+is what I8's site table and I12's scan set already cost us. The carve-out set is derived
+from the manifest's own prose for the same reason. The assertion is one-directional
+containment, not set equality: a file with a token and no entry is the data-loss bug,
+while an entry with no token is inert.
+
+Verified against the historical bug rather than only the fixed tree — with the two new
+entries reverted, I22 names `code-reviewer-escalated.md` and exits 1; restored, it
+passes. Confirmed against the reference consumer that both site regexes capture its live
+values (`claude-opus-4-8[1m]`, `global.anthropic.claude-opus-4-6-v1`) rather than the
+doc-comment tokens above them.
+
+Found by the graph consumer, which had added the two sites locally and watched its
+v0.92.0 self-update preserve them.
+
+## [0.96.0] — 2026-07-19
+
+### Fixed — the check-17-counts fixture had never run anywhere
+
+`core/fixtures/check-17-counts/run.sh` shipped in 0.95.0 probing two layouts for
+`validate-provenance-block.sh`: `$ROOT/core/scripts/` and `$ROOT/.claude/scripts/`.
+The second path is one `install.sh` never writes. `install.sh` maps
+`core/scripts/<x>` to `scripts/<x>` at the project root and maps only everything
+*else* under `.claude/`, so on a consumer the validator and the schema land in
+**different trees** — validator in `scripts/`, schema in `.claude/schemas/`. The
+consumer branch paired the wrong validator path with the right schema path, matched
+nothing, and the fixture aborted:
+
+```
+FIXTURE ERROR: validate-provenance-block.sh not found in either layout
+```
+
+exit 2, on every consumer, since the day it was written.
+
+It was no better in the distribution. `core/git-hooks/pre-push` drives fixtures by
+iterating `tests/fixtures/*/`, a directory that exists only after an install — this
+repo has no `tests/fixtures/`. So the distribution never ran it either. **Thirteen
+assertions, zero executions, in any repo.**
+
+It passed every gate we have. `validate-enforcement-map.sh` I20 asks whether a
+fixture has a `run.sh`, not whether that `run.sh` can resolve its own subject, and
+the fixture carries no `.dist-only` marker (`enforcement-map-sites` has one, so the
+mechanism was available and deliberately not used here) — it was meant to ship and
+run on consumers. This is the check-that-cannot-fire class again, and this time it
+shipped inside the fixture suite whose whole purpose is to catch it.
+
+The consumer branch now reads `$ROOT/scripts/` for the validator while keeping
+`.claude/` for the schema and the retro doc, both derived from `install.sh`'s
+documented mapping rather than guessed. The dead `.claude/scripts/` branch is
+removed rather than left beside a third: a probe path no installer writes is not a
+fallback, it is scar tissue.
+
+Proof, since a content diff proves nothing for this class: the fixture exits 2 on a
+scratch consumer install before the change and runs all 13 assertions after;
+mutating the **consumer's own** schema (`required_for_evaluation` true → false)
+drops it to exit 1 with 7 assertions failing, which is what shows the assertions
+reach the consumer's files and are not passing vacuously.
+
+The sibling `check-17-bypass/run.sh` resolves its subject through `seed.sh` and is
+unaffected — that asymmetry is why this went unnoticed.
+
+Found by the graph consumer during its 0.95.0 pull, ground-truthed here.
+
 ## [0.95.0] — 2026-07-19
 
 ### Added — every known evaluation records what it found

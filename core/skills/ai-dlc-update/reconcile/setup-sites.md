@@ -75,6 +75,15 @@ sites:
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 
+  - id: reviewer-escalated-model-personal
+    file: core/team-roles/code-reviewer-escalated.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: reviewer-escalated-model-bedrock
+    file: core/team-roles/code-reviewer-escalated.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
   - id: pm-model-personal
     file: core/team-roles/pm.md
     shape: single-line
