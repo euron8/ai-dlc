@@ -231,6 +231,60 @@ else
 fi
 restore
 
+# --- Assertion 10: I21 FOURTH COPY --------------------------------------------
+# `section_of()` shipped divergent twice (v0.52.0 weaker, v0.54.2 stricter), and both
+# times the remedy was a hand-copy and a CHANGELOG line saying "there is one resolver".
+# v0.90.0 collapsed the three copies into lib.sh — that fixed the INSTANCES. The HOLE is
+# that nothing stopped a fourth file inlining its own, and a private resolver fails
+# silently: the tool reports a confident verdict computed from a different section.
+RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+APPLY_F="$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
+printf '\nsection_of() { echo private; }\n' >> "$APPLY_F"
+out="$(bash "$V" 2>&1)"
+if printf '%s' "$out" | grep -q "I21 reconcile/apply.sh defines its own section_of()"; then
+  ok "a fourth inline section_of() FAILS I21 (the resolver cannot fork a third time)"
+else
+  bad "a fourth inline section_of() did NOT fail I21 — the divergence that shipped in v0.52.0 and v0.54.2 can return, and nothing compares the copies"
+fi
+restore
+RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+
+# --- Assertion 11: I21 UNSOURCED CALL -----------------------------------------
+# The other direction. A classifier that calls section_of() without sourcing lib.sh gets
+# an EMPTY section back on a consumer's pull, and an empty section reads as "no drift"
+# rather than as an error — the same shape as the v0.52.0 cleared block.
+REG_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
+if grep -q '^\. "\$SELF/lib\.sh"' "$REG_F"; then
+  sed -i.bak '/^\. "\$SELF\/lib\.sh"/d' "$REG_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I21 reconcile/register-drift.sh calls section_of() but never sources"; then
+    ok "a classifier that drops its lib.sh source FAILS I21 (a call that resolves to nothing cannot ship)"
+  else
+    bad "register-drift.sh dropping its lib.sh source did NOT fail I21 — section_of() resolves to nothing on a real pull and the empty section reads as 'no drift'"
+  fi
+  restore
+  RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+else
+  bad "FIXTURE STALE: register-drift.sh no longer sources lib.sh at the expected anchor"
+fi
+
+# --- Assertion 12: I21 NON-VACUITY --------------------------------------------
+# I21 derives the helper set from lib.sh's own definitions. If those stop matching — the
+# library emptied, or its definition form changed — the check must say so rather than bind
+# an empty set and pass. "Nothing to compare" must never read as "no second copy exists".
+if grep -qE '^[a-z_]+\(\) \{' "$RLIB_F"; then
+  grep -vE '^[a-z_]+\(\) \{' "$RLIB_F" > "$RLIB_F.tmp" && mv "$RLIB_F.tmp" "$RLIB_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I21 found no function definitions"; then
+    ok "lib.sh losing its definitions FAILS I21 loudly (it cannot pass by binding an empty helper set)"
+  else
+    bad "emptying lib.sh did NOT fail I21 — the check goes vacuous exactly when the single home stops being one"
+  fi
+  restore
+else
+  bad "FIXTURE STALE: reconcile/lib.sh no longer defines helpers in the '<name>() {' form I21 derives from"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2
