@@ -17,6 +17,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.92.0] — 2026-07-19
+
+Both items here were surfaced by v0.91.0 and deliberately not bundled into it —
+a behaviour fix and a gate addition do not belong in a fixture-repair commit.
+
+### Fixed — Check 16's element 4 anchor could never match
+
+Element 4 is specified as `^deferral-reason:\s+\S.{19,}`, applied to "the match's
+surrounding comment block". Every line of a source comment block carries a `#`,
+`//` or `--` prefix, so the `^` anchor matches nothing as written: the element
+could not pass on any real file.
+
+Nothing failed in practice because Check 16 is `adjudication: llm` — an
+adjudicator strips the prefix as a matter of course, without being told to. That
+is exactly why it survived unnoticed. A published regex that works only when the
+reader silently repairs it is not a specification, and the first script to
+implement it gets a different answer than the LLM did.
+
+The check body now says to strip the prefix. Writing the elements out
+mechanically, to give `check-15-bypass` a driver, is what made this visible.
+
+### Added — I20: every fixture is driven, or declares why it cannot be
+
+`core/git-hooks/pre-push` runs the fixture suite as
+
+```sh
+for d in tests/fixtures/*/; do
+  [ -f "$d/run.sh" ] || continue
+```
+
+directly beneath the comment *"a fixture never driven is a green light nobody
+earned."* A fixture with no `run.sh` is skipped on every push, silently, while
+still being declared an adversarial self-test in the map.
+
+v0.91.0 gave the two fixtures in that hole a driver. That fixed the instances,
+not the hole — the next driverless fixture would disappear the same way.
+
+`validate-enforcement-map.sh` now requires, of every fixture on disk, a `run.sh`
+or a README stating why one is impossible. Two fixtures legitimately cannot have
+one (`check-h1-recursion` tests an LLM's control flow; `check-manifest-bypass`
+tests an LLM's read of loaded context — no script observes either), and their
+exemption is **derived from their READMEs** rather than hand-listed in the
+validator, because a hand-list is the shape that rots (v0.55.2: the list IS the
+bug).
+
+Scope: this validator is a dev-repo gate, not installed and not called by
+pre-push, so I20 binds fixtures where they are authored. A fixture that reaches a
+consumer without a driver has already passed through here.
+
+Verified it can fire: a driven fixture losing its `run.sh`, an exempt fixture
+losing its declaration, and a brand-new driverless fixture directory each produce
+a named I20 failure.
+
 ## [0.91.0] — 2026-07-19
 
 ### Fixed — two adversarial fixtures that could not fail
