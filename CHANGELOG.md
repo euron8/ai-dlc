@@ -17,6 +17,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.97.0] — 2026-07-19
+
+### Fixed — the escalated reviewer's model strings were not maskable
+
+`reconcile/setup-sites.md` is the single source of truth for "this looks like core
+divergence but is actually consumer config." A `{*_model_*}` token missing from it is
+not masked during the core-overwrite step, so a pull that touches the file writes the
+placeholder back over the consumer's live `/model` string, and the role then dispatches
+against a literal `{reviewer_escalated_model_personal}`.
+
+v0.84.0 added `core/team-roles/code-reviewer-escalated.md` carrying two such tokens and
+wired it into `ai-dlc-setup` STEP 2 — the manifest's own authoring rule says an entry is
+owed for exactly that. No entry was ever added. Both sites are declared now.
+
+### Added — I22, every model token is a declared setup site
+
+Fixing the instance is not fixing the hole, and this hole has opened twice. The first
+time it did the damage: `adversary.md` carried a model token from **v0.30.0** and was
+not declared until **v0.47.0** — seventeen versions — and the title of the commit that
+closed it is *"the reconcile blanked the config it exists to preserve."* The consumer
+report that surfaced the second instance called it a nine-version gap; the history says
+seventeen, so the class is worse than reported, not better.
+
+The manifest's authoring rule was one-directional. It says every entry MUST trace to a
+"Files to replace in" directive in `ai-dlc-setup/SKILL.md`, which stops entries being
+invented — but nothing walked the other way and asked whether a file carrying a token
+had an entry. Both times, nothing did.
+
+`validate-enforcement-map.sh` now asserts that every `core/team-roles/*.md` carrying a
+`{*_model_*}` token is either declared in `setup-sites.md` or listed under its
+"Explicitly NOT sites" section. The subject set is **derived from the tokens on disk**,
+never hand-listed — a hand-maintained list is the thing that stops being updated, which
+is what I8's site table and I12's scan set already cost us. The carve-out set is derived
+from the manifest's own prose for the same reason. The assertion is one-directional
+containment, not set equality: a file with a token and no entry is the data-loss bug,
+while an entry with no token is inert.
+
+Verified against the historical bug rather than only the fixed tree — with the two new
+entries reverted, I22 names `code-reviewer-escalated.md` and exits 1; restored, it
+passes. Confirmed against the reference consumer that both site regexes capture its live
+values (`claude-opus-4-8[1m]`, `global.anthropic.claude-opus-4-6-v1`) rather than the
+doc-comment tokens above them.
+
+Found by the graph consumer, which had added the two sites locally and watched its
+v0.92.0 self-update preserve them.
+
 ## [0.96.0] — 2026-07-19
 
 ### Fixed — the check-17-counts fixture had never run anywhere

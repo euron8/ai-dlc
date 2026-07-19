@@ -952,10 +952,59 @@ else
   fi
 fi
 
+# --- I22: every model-token role file is a declared setup-substitution site.
+#
+# `reconcile/setup-sites.md` is the SINGLE SOURCE OF TRUTH for "this looks like core
+# divergence but is actually consumer config". A `{*_model_*}` token that is not listed
+# there is not masked during the core-overwrite step, so a pull that touches the file
+# writes the placeholder back over the consumer's live `/model` string. The role then
+# dispatches against a literal `{reviewer_escalated_model_personal}` and the failure
+# surfaces far from the pull that caused it.
+#
+# This has now shipped TWICE, and the first time it did the damage. `adversary.md`
+# carried a model token from v0.30.0 (3727f68) and was not declared a site until
+# v0.47.0 (e86cd9e) — seventeen versions, and that commit's own title is "the
+# reconcile blanked the config it exists to preserve". Then v0.84.0 added
+# `code-reviewer-escalated.md` carrying two tokens, wired it into ai-dlc-setup
+# STEP 2, and again never added the manifest entries — caught only because a
+# consumer's pull happened to preserve its live values and it reported the gap.
+#
+# The manifest's authoring rule says every entry MUST trace to a "Files to replace in"
+# directive in ai-dlc-setup/SKILL.md. That rule is one-directional: it stops entries
+# being invented, but nothing walked the other way and asked whether a file carrying a
+# token had an entry. A hand-maintained list is the recurring bug here (I8's site table,
+# I12's scan set), so DERIVE the subject set from the tokens on disk.
+#
+# Direction matters: a file with a token and no entry is the data-loss bug. A file with
+# an entry and no token is harmless (a stale entry simply never matches), so this asserts
+# one containment, not set equality.
+SITES_MD="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/setup-sites.md"
+if [ ! -f "$SITES_MD" ]; then
+  err "I22 cannot find core/skills/ai-dlc-update/reconcile/setup-sites.md. The check that keeps every model token maskable just went vacuous — it must locate the manifest or fail loudly, never pass by finding nothing to compare."
+else
+  # NOT-sites carve-out: the party-persona roles are spawned by /bmad-party-mode, which
+  # controls their model, so an ai-dlc token there would be inert. Derived from the
+  # manifest's own "Explicitly NOT sites" section rather than restated here.
+  not_sites="$(sed -n '/^## Explicitly NOT sites/,$p' "$SITES_MD" | grep -oE '`[a-z-]+\.md`' | tr -d '`' | sort -u)"
+  declared="$(grep -oE 'core/team-roles/[a-z-]+\.md' "$SITES_MD" | sort -u)"
+  tokened="$(grep -rlE '\{[a-z_]*model[a-z_]*\}' "$REPO_ROOT"/core/team-roles/*.md 2>/dev/null | sed "s|^$REPO_ROOT/||" | sort -u)"
+  if [ -z "$tokened" ]; then
+    err "I22 found no {*_model_*} tokens in core/team-roles/. Either the token form changed or the role files were emptied; either way this assertion is now testing nothing and would pass against a tree whose every model site is unlisted."
+  else
+    for tf in $tokened; do
+      tbase="$(basename "$tf")"
+      printf '%s\n' "$not_sites" | grep -qx "$tbase" && continue
+      if ! printf '%s\n' "$declared" | grep -qx "$tf"; then
+        err "I22 $tf carries a {*_model_*} token but setup-sites.md declares no site for it. On the next pull that touches this file the mask/reinject step will not know the token is consumer config, so it overwrites the consumer's live /model string with the placeholder and the role dispatches against a literal token. This is the adversary.md nine-version gap and the code-reviewer-escalated.md gap. Add the site entries, or list the file under 'Explicitly NOT sites' with the reason it carries an inert token."
+      fi
+    done
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22)."
   exit 0
 fi
 exit 1
