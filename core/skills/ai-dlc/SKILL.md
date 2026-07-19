@@ -60,15 +60,14 @@ and the user's judgment is authoritative. Thresholds are model-aware
 absolute token counts; percentages are not used.
 
 **A threshold is not a request.** The lead may *name* a handoff as an option;
-it may never *take* one. Why this had to be said: the
-`ai-dlc-context-sensor.sh` header.
+it may never *take* one.
 
 Reminders (b) and (c) are fired by the `ai-dlc-context-sensor.sh` Stop
 hook, which measures resident context from the session transcript on
 every turn. The lead neither measures nor estimates its own context.
-Full snapshot structure, reminder text, recurrence arithmetic, and
-auto-handoff configuration live in the two **Handoff Protocol**
-sections below and in `gate-validation.md` Check 14.
+Reminder text is owned by that hook. Full snapshot structure, recurrence
+arithmetic, and auto-handoff configuration live in the two **Handoff
+Protocol** sections below and in `gate-validation.md` Check 14.
 
 ### Rule 3 -- Never stall the pipeline
 
@@ -447,43 +446,13 @@ Check 14).
 
 ### Reminder text
 
-The hook emits these; a gate may restate one.
-
-Yellow (Rule 2(b)):
-
-> `[AI/DLC context sensor] Resident context is ~{tokens} tokens
-> (~{pct}% of the {window}-token effective window), crossing the YELLOW
-> threshold ({threshold}). Rule 2(b): finish the current sub-step, then
-> continue. This reminder is non-blocking: the pipeline continues and
-> the decision is the user's. Reconcile the snapshot Context Reminders
-> fields to this reading at the next gate.`
-
-Red (Rule 2(c)):
-
-> `[AI/DLC context sensor] Resident context is ~{tokens} tokens
-> (~{pct}% of the {window}-token effective window), crossing the RED
-> threshold ({threshold}). Rule 2(c): finalize the pipeline snapshot
-> and hand off via /clear + /ai-dlc resume before auto-compact takes
-> the lossy path. If continuing, do so deliberately. This reminder is
-> non-blocking: the pipeline continues and the decision is the user's.
-> Reconcile the snapshot Context Reminders fields to this reading at
-> the next gate.`
-
-Imminent (critical band, ranked above red):
-
-> `[AI/DLC context sensor] Resident context is ~{tokens} tokens (~{pct}%
-> of the {window}-token effective window), crossing the IMMINENT
-> threshold ({threshold}). Auto-compact will fire at ~{ceiling} tokens
-> -- roughly {n} more turns at the observed growth rate. BEFORE your
-> next pipeline action, refresh `_bmad-output/pipeline-snapshot.md` so
-> it reflects the CURRENT state: Pipeline Position (current step file,
-> in-flight sub-step), Recent Activity, Open Items, and any Locked
-> Decisions taken since the last gate. A snapshot last written at a gate
-> may be hundreds of turns stale, and it is what `ai-dlc-recover.sh`
-> re-reads after compaction -- a stale snapshot is recovered faithfully
-> and is still wrong. Having refreshed it, prefer Rule 2(a): hand off
-> via /clear + /ai-dlc resume. Compaction is strictly lower fidelity
-> than the handoff.`
+`ai-dlc-context-sensor.sh` is the SOLE emitter and owns the exact wording of
+all three bands; do not restate it here or in a step file. Every band ends in
+the same doctrine Rule 2 states: the reminder is non-blocking, only path (a)
+initiates a handoff, and path (a) is the operator asking. Imminent additionally
+directs a snapshot refresh BEFORE the next pipeline action, because
+`ai-dlc-recover.sh` re-reads that snapshot after compaction and recovers a
+stale one faithfully.
 
 All three bands are a clamped percentage of the effective window below
 `effectiveWindow - 31,000` (see "Reminder thresholds" above). imminent is
@@ -598,15 +567,10 @@ the whole contract, not just the model. Two bindings are mandatory:
 **(a) Model.** The `model` parameter MUST be set explicitly, derived from
 that role's `/model` directive in its role file -- the single source of
 truth. Do NOT restate a role-to-model mapping here or in step files; a
-second mapping drifts from the role file and is itself a violation.
-Omitting it (or passing the wrong tier) no longer wedges the dispatch: the
-`ai-dlc-dispatch-guard` PreToolUse hook reads the bound role file's pin and
-INJECTS the correct tier via `updatedInput` before the teammate spawns, so
-the spawn is first-time-correct even on a resumed session where this rule is
-not in context. That guard is a safety net (and only fires in a layered
-consumer); setting `model` explicitly is still the norm, and a spawn that
-omits it or names the wrong tier is still a Rule 19 violation Check 22
-records at retro.
+second mapping drifts from the role file and is itself a violation. The
+`ai-dlc-dispatch-guard` PreToolUse hook injects the role's pinned tier as a
+safety net, but it is a net, not the norm: a spawn that omits `model` or names
+the wrong tier is still a Rule 19 violation Check 22 records at retro.
 
 **(b) Role contract.** The dispatch prompt MUST carry, as a standing
 line, the instruction: *"Your operating contract is
@@ -722,9 +686,7 @@ opinions from a single LLM and defeats independent evaluation. Any evaluation
 that emits `mode: solo` -- or generates evaluation output without a real
 subagent -- is a rule violation and FAILS Check 17 (enforced by
 `scripts/validate-provenance-block.sh`, which rejects `mode: solo` on **any**
-provenance block, unconditionally -- that rejection used to be gated on the
-tracked-skill enum, so adding a new evaluation without adding its name silently
-disarmed the only teeth this rule has).
+provenance block, unconditionally).
 
 **Role-manifest preamble (persona-spawning sub-skills).** A validation
 sub-skill that spawns personas (`/bmad-party-mode`) spawns real
@@ -1206,10 +1168,8 @@ foreground beat.
 `Agent` returns an **`agent_id`** (`<name>@session-<id>`). `TaskOutput` joins a
 **`task_id`**, which only `TaskCreate` produces. **`TaskOutput` cannot join an
 `Agent` spawn.** Handed an `agent_id` it returns `No task found with ID: ...` and
-you have burned a call and learned nothing. Measured across 278 consumer sessions:
-137 `TaskOutput` calls succeeded -- every one of them on a real `TaskCreate` task --
-and all 18 failures were an agent's name passed to an API that does not take one.
-This rule used to prescribe exactly that failure.
+you have burned a call and learned nothing. `validate-steering-budget.sh` Check D
+flags it.
 
 So:
 
