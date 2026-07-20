@@ -1424,11 +1424,13 @@ exists.
 `git diff --name-only <sprint-base>..HEAD`. Intersect with the core manifest
 (read `core-manifest.md` in the skill dir for the authoritative path list:
 `.claude/skills/ai-dlc/SKILL.md`, `steps/*.md`, `escalations.md`,
-`rule-authoring.md`, `.claude/team-roles/*.md`, `.claude/hooks/*.sh`). For each
-core file in that intersection lacking a matching `overrides/` entry (frontmatter
-`shadows:` names that file):
-(A changed `hooks/*.sh` can have no `overrides/` shadow and no setup-site, so it
-always takes the FAIL path below — hooks are machinery with no consumer layer.)
+`rule-authoring.md`, `.claude/team-roles/*.md`, `.claude/hooks/ai-dlc-*.sh`). For
+each core file in that intersection lacking a matching `overrides/` entry
+(frontmatter `shadows:` names that file):
+(A changed core hook — `.claude/hooks/ai-dlc-*.sh` — can have no `overrides/` shadow
+and no setup-site, so it always takes the FAIL path below: hooks are machinery with
+no consumer layer. A consumer's OWN hook, without the `ai-dlc-` prefix, is not core
+and is not in scope.)
 
 - If `.claude/skills/ai-dlc-update/reconcile/setup-sites.md` is present, read
   it (the one documented, one-directional exception to this file never

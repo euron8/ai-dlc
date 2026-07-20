@@ -17,6 +17,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.106.0] — 2026-07-20
+
+### Fixed — the core-hook manifest glob was `hooks/*.sh`, over-capturing consumer hooks
+
+0.105.0 added `hooks/*.sh` to the core manifest so the guard protects core hooks. But that
+glob matches EVERY hook in `.claude/hooks/`, including ones a consumer ships of its own — the
+flagship consumer has a `guarded-merge.sh` beside the core set. Under `hooks/*.sh` the
+core-guard would deny an in-place edit to that consumer-owned hook, and the retro Core-layer
+immutability check would FAIL a sprint that touched it (a hook has no `overrides/` grain, so
+there is no sanctioned path) — blocking the consumer on its own file. Caught by a dry-run
+reconcile against that consumer before it applied.
+
+- **Glob narrowed to `hooks/ai-dlc-*.sh`** in both manifest copies (`core-manifest.md` and
+  the I5-synced `reconcile/setup-sites.md`). Every hook `/ai-dlc-update` ships carries the
+  `ai-dlc-` prefix; the prefix is the core/consumer boundary. A consumer's own non-`ai-dlc`
+  hook is no longer captured — the guard allows edits to it and the immutability check
+  ignores it.
+- **Fixture** `core-write-guard` gains an assertion that a consumer-owned hook
+  (`guarded-merge.sh`) is ALLOWED, alongside the existing core-hook-denied assertion. Widening
+  the manifest back to `hooks/*.sh` flips the consumer hook to deny (mutation-proven).
+
 ## [0.105.0] — 2026-07-20
 
 ### Changed — `hooks/*.sh` are now enumerated in the core manifest

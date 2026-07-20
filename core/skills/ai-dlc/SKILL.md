@@ -1025,12 +1025,13 @@ self-improves *without* re-tangling core against upstream (spec §7).
 
 **core** -- the upstream-owned files enumerated in `core-manifest.md`
 (alongside this file): `SKILL.md`, `steps/*.md`, `escalations.md`,
-`rule-authoring.md`, `team-roles/*.md`, plus `hooks/*.sh`.
+`rule-authoring.md`, `team-roles/*.md`, plus `hooks/ai-dlc-*.sh`.
 `/ai-dlc-update` overwrites these wholesale. You MUST NOT edit a core file
 in place (enforced at the keystroke by `ai-dlc-core-guard.sh` and at the
 gate by **Core-layer immutability**). The rulebook files route to a layer;
-`hooks/*.sh` are machinery with no layer grain — a hook change goes upstream
-or through its declared `AI_DLC_*` tunables, never into `overrides/`.
+`hooks/ai-dlc-*.sh` are machinery with no layer grain — a hook change goes
+upstream or through its declared `AI_DLC_*` tunables, never into `overrides/`.
+Only the `ai-dlc-*` hooks are core; a consumer's own hooks are not.
 
 **extensions** (`{skill}/extensions/`) -- consumer-owned, additive: net-new
 rules, gate-checks, and domain step logic upstream does not carry. Upstream

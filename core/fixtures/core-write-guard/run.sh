@@ -120,13 +120,22 @@ d="$(decision "$CONSUMER" "$MULTI")"
   || bad "a MultiEdit to core classified '$d', expected deny"
 
 # --- Assertion 10b: in-place edit to a CORE HOOK → DENY ---------------------
-# Hooks are upstream-owned machinery; the manifest now lists hooks/*.sh, so the guard
-# denies an in-place hook edit. Before this, hooks were absent from the manifest and read
-# as an editable target — two agents concluded they were consumer-owned (LD-S295-1).
+# Core hooks are upstream-owned machinery; the manifest lists hooks/ai-dlc-*.sh, so the
+# guard denies an in-place edit to one. Before this, hooks were absent from the manifest
+# and read as an editable target — two agents concluded they were consumer-owned (LD-S295-1).
 HOOKF="$CONSUMER/.claude/hooks/ai-dlc-pause.sh"
 d="$(decision "$CONSUMER" "$(mkjson Edit "$HOOKF" 'touch $PAUSE_FLAG')")"
-[ "$d" = deny ] && ok "Edit to a core hook (.claude/hooks/*.sh) → deny" \
+[ "$d" = deny ] && ok "Edit to a core hook (.claude/hooks/ai-dlc-*.sh) → deny" \
   || bad "Edit to a core hook classified '$d', expected deny — hooks were an editable target"
+
+# --- Assertion 10d: edit to a CONSUMER-OWNED hook → ALLOW -------------------
+# The glob is hooks/ai-dlc-*.sh, not hooks/*.sh: a consumer may ship its own hooks
+# (e.g. guarded-merge.sh) beside the core set. Those are consumer-owned — the guard MUST
+# NOT deny them, or a consumer cannot edit its own hook. This is the over-capture fix.
+CONSUMER_HOOK="$CONSUMER/.claude/hooks/guarded-merge.sh"
+d="$(decision "$CONSUMER" "$(mkjson Edit "$CONSUMER_HOOK" 'consumer body')")"
+[ "$d" = allow ] && ok "Edit to a consumer-owned hook (non-ai-dlc) → allow" \
+  || bad "Edit to a consumer hook classified '$d', expected allow — hooks/*.sh over-captures consumer hooks"
 
 # --- Assertion 10c: the hook deny gives MACHINERY advice, not layer routing --
 # A hook has no overrides/extensions grain; the message must say so and point at the
