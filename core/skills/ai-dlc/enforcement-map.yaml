@@ -359,10 +359,22 @@ checks:
           authorize a yield into a SILENT stall — the marker is written only while a
           real beat sleeps (wait-for-deliverable.sh), and the check fails safe to
           BLOCK on any missing / expired / malformed marker
+      - site: wait-for-deliverable.sh — the delivery predicate
+        posture: a target counts as delivered only when it is non-empty AND written
+          since the join armed; a file that predates the join is treated as pending
+        why: a presence-only test reported the PREVIOUS sprint's file at a reused
+          deliverable path as delivered in under a second, which is consumed as this
+          sprint's input with nothing downstream to re-examine it. It also returned
+          before the sleep, so `.beat-inflight` was never written and the lead could
+          not yield — the same defect starves Check 2b above. The join epoch is
+          captured by the script, not taken from the caller: leads round
+          `dispatched-at` UP, and a future threshold no write can satisfy walks the
+          counter to a false non-delivery. `--since` is clamped to now for that reason
     ci_workflow: ~
     fixtures:
       - tests/fixtures/check-25-steering-conduct
       - tests/fixtures/implementation-join-yield
+      - tests/fixtures/wait-stale-deliverable
 
   - id: "26"
     title: Gate-check adjudication — every escalated llm check evaluated by the adjudicator and PASS

@@ -81,11 +81,21 @@ and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by 
 
 **The call.** One `Bash` call, every path in the wave:
 
-    scripts/wait-for-deliverable.sh <path> [<path> ...]
+    scripts/wait-for-deliverable.sh [--since <epoch|ISO8601>] <path> [<path> ...]
 
 - `exit 0` — all delivered. Consume them.
 - `exit 2` — not yet. Beat again (the script bounds the sequence).
 - `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK.
+
+**Delivered means non-empty AND written since the join armed** — not merely present.
+A deliverable path reused across sprints otherwise reports the PREVIOUS sprint's file
+as delivered in under a second, and that is consumed as this sprint's input with
+nothing downstream to catch it.
+
+**`--since` is optional and only ever needed when the teammate may have delivered
+BEFORE you armed the join** — normally only when resuming a join after a compaction.
+Pass the `dispatched-at` value from the row (defined above). It can only move the
+threshold earlier; a stamp later than now is clamped, so rounding it is harmless.
 
 **Pass the whole wave to ONE call.** Never chain beats in a single `Bash` call.
 
