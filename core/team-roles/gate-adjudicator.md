@@ -76,7 +76,8 @@ Write exactly the shape below. It is rendered from `schemas/gate-adjudication-ve
 which is also the file `validate-gate-adjudication.sh` LOADS to check your verdict. There is no
 second copy to drift from it. `gate_nonce` MUST equal the one the lead handed you (and the
 verdict filename stem) — it is the freshness anchor: a verdict at the wrong nonce is a stale
-verdict, and the gate refuses it. `catalog` is `core` unless you were told a consumer extension
+verdict, and the gate refuses it. Your verdict binds to this one dispatch; a later gate entry
+gets a new nonce and a fresh adjudication, never a reuse of this one. `catalog` is `core` unless you were told a consumer extension
 catalog. The set of `check_id`s MUST equal the derived escalated set exactly — no omission, no
 extra, no duplicate.
 

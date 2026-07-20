@@ -151,9 +151,11 @@ SKILL_INVOCATION_PROVENANCE_END -->
    cited SHA stale and forces steps 2–3 again. If the transcript is wrong, fix
    it before step 2, not after step 3.
 
-Local enforcement runs in Step 5c (pre-commit validation gate).
-CI enforcement: `.github/workflows/validate-retro-compliance.yml`
-re-runs the same scripts on the retro PR.
+Local enforcement runs in Step 5c (pre-commit validation gate) and is
+authoritative. CI enforcement is conditional: a consumer that ships
+`.github/workflows/validate-retro-compliance.yml` re-runs the same scripts
+on the retro PR; a script-based consumer with no `.github/workflows/`
+directory runs them locally only.
 
 ### 3. Write Retro Document
 
@@ -441,8 +443,10 @@ within that window fails the next retro. Shipping a gate wired to no workflow
 trigger, or wired only to a workflow that does not run on any PR in the
 exercise window, is the dormant-gate anti-pattern.
 
-Enforcement: `scripts/validate-ci-gates.sh` runs on every pull request via
-`.github/workflows/validate-ci-gates.yml`. The script scans `docs/retro/**/*.md`
+Enforcement (conditional on the consumer shipping CI): where
+`.github/workflows/validate-ci-gates.yml` is present, `scripts/validate-ci-gates.sh`
+runs on every pull request; a script-based consumer with no `.github/workflows/`
+runs it locally. The script scans `docs/retro/**/*.md`
 for declared gate names and grep's `.github/workflows/**` for each; any
 declared gate with zero workflow matches is flagged as DORMANT and the
 workflow exits non-zero, failing the PR check. Retro authors MUST ship the

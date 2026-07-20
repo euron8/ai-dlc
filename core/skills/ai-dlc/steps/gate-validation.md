@@ -130,8 +130,11 @@ the number. Enforced by `scripts/validate-layer-entries.sh` (E6: a check extensi
 that redefines a core check number with a different title is an ERROR) and
 `ai-dlc-update`'s `reconcile/layer-drift.sh`
 (`EXTENSION-CHECK-NUMBER-COLLISION` / `EXTENSION-RESTATES-CORE`, both title-joined and
-level-triggered, so a duplicate absorbed releases ago still reports). Remove when core
-and consumer catalogs no longer share a rendered namespace.
+level-triggered, so a duplicate absorbed releases ago still reports). False-positive cost:
+an additive extension that hooks a core check by reusing its number and title is reported
+as a collision and must be refiled as an override reproducing the section — friction on a
+legitimate entry, not data loss. Remove when core and consumer catalogs no longer share a
+rendered namespace.
 
 ## Validation Checklist
 
@@ -142,6 +145,12 @@ then READ AND FOLLOW `_gate-procedures.md` "Gate-adjudication dispatch" — disp
 adjudicator `run_in_background`, join its verdict. While it runs, evaluate ONLY the `script` /
 `project` / `lead` checks below; inline-evaluating an `llm` check is a Rule 20 solo violation.
 Adopt the adjudicator's per-check verdicts through the terminal **Check 26** (fail-closed).
+A verdict is valid ONLY for the dispatch that produced it. If you re-dispatch — because
+state moved, or the prior verdict cited state that has since changed — generate a fresh
+`gate_nonce` and re-derive every check from current state; never carry forward, cite, or
+reconcile against a verdict from a superseded dispatch. The nonce is that dispatch's
+identity, not a staleness comparator: deleting inheritance dissolves the freshness problem
+rather than adding a corrector fed from the snapshot it corrects.
 H1/H2 stay with the lead — a self-test is never escalated into the mechanism it polices.
 
 ### 1. Validation cycle complete?
@@ -1272,8 +1281,10 @@ too), H1 proves the slice loaded enough:
 
 1. Read the `GATE_MANIFEST` block at the top of this file and the gate
    type the invoking step declared (§5.3).
-2. Resolve the required set = universal core (1, 2, 3, 4, 7, 12, 13, 14,
-   15, 16, 26, H1, H2, failure) ∪ the declared type's manifest row.
+2. Resolve the required set = the `universal` row of the `GATE_MANIFEST`
+   block (read it, do not restate it here — the same single-source
+   discipline the file states at its top and Invariant 3 already follows)
+   ∪ the declared type's manifest row.
 3. For each required check ID, confirm its `<!-- CHECK_LOADED: <id> -->`
    anchor is present in loaded context. A required ID whose anchor is
    absent = **FAIL** — the slice dropped a required check, identical
