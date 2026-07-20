@@ -17,6 +17,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.104.0] — 2026-07-20
+
+### Added — ai-dlc-update closes push-candidate ledger entries upstream has absorbed
+
+The push-candidate ledger (`_bmad-output/ai-dlc-update/push-candidate-ledger.md`) is the
+queue of consumer innovations upstream lacks and consumer-filed upstream defects. The pull
+APPENDED to it (step 8) but nothing ever CLOSED it: when upstream adopted an entry it stayed
+open forever, re-surfaced every push arc, and could be re-pushed. No `reconcile/*` file even
+named the ledger. The reference consumer's three `ADOPTED UPSTREAM` closures landed by hand,
+in a separate commit 19 minutes after the pull, by a human remembering to re-check each entry
+against `origin/main`.
+
+- **New detector `reconcile/ledger-reverify.sh` + pull step 3f.** For each OPEN entry
+  carrying an opt-in `verify:` line, it re-runs the entry's own receipt against `theirs` and
+  classifies it `CLOSE-CANDIDATE` (absorbed) / `STILL-LIVE` (stays open) / `NEEDS-REVIEW`
+  (malformed or path unresolved). This is the ledger twin of `unregistered-drift.sh`'s
+  `HARD-CORE-DRIFT-ABSORBED`: it re-runs a mechanical check against `theirs` and lets the
+  operator confirm. Exit 0 always — a classifier, never a gate; a close touches no core and
+  never blocks `apply`, and the tool never edits the ledger.
+- **KISS: the ledger stays prose.** No schema migration. The convention is one optional line
+  per entry — `theirs_lacks <core-path> "<substr>"`, `theirs_has <core-path> "<substr>"`, or
+  `sh <one-liner>` — which is the existing "Still live upstream — verified at `<sha>:<path>`"
+  receipt made machine-runnable. Entries without it fall back to hand-review, as today.
+- **Rendered, not narrated.** `emit-report.sh` renders CLOSE-CANDIDATE / NEEDS-REVIEW rows
+  into the un-droppable `BEGIN/END GENERATED: reconcile-mechanical` region, so a closure
+  cannot be silently dropped by the report's LLM author. Step 8 tells the operator to confirm
+  and annotate `ADOPTED UPSTREAM (v<theirs>, verified <date>)` — an `Edit` under the
+  updater's own `_bmad-output/ai-dlc-update/**` (carved out of the Rule 29 acknowledge hook),
+  never deleted (retro and the §8.1 fan-in read it), never automatic.
+- **Fixture with a mutation proof.** `core/fixtures/ledger-reverify/` builds a throwaway
+  dist repo with `base`/`theirs` commits and a ledger whose two live entries differ only in
+  what `theirs` contains; pointing the closer at `base` instead of `theirs` collapses them
+  and the fixture goes red. Shipped to consumers (install/uninstall loops, I8).
+
 ## [0.103.0] — 2026-07-20
 
 ### Added — Check 24 arm H: the repair between adversarial passes must be delegated and recorded

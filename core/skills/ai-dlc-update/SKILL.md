@@ -339,6 +339,23 @@ Every consumer block that differs from upstream is one of:
    7. The integer never moves; only the label is added, so existing gate history maps by
    identity.
 
+3f. **Push-candidate ledger re-verify — the CLOSE path.** Run
+   `reconcile/ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref>`.
+   Step 8 APPENDS to the ledger; nothing ever closed it, so an entry upstream adopted stayed
+   open forever and could be re-pushed. For each OPEN entry carrying a `verify:` line, this
+   re-runs the entry's own receipt against `theirs`:
+   - `CLOSE-CANDIDATE` → the innovation is now present upstream / the defect no longer
+     reproduces. **Report-only; never blocks `apply`** (a close touches no core and cannot
+     lose data). The operator confirms and annotates at step 8 — the tool never edits the
+     ledger, exactly as `HARD-CORE-DRIFT-ABSORBED` never reverts a file itself.
+   - `STILL-LIVE` → stays open, filtered from the report.
+   - `NEEDS-REVIEW` → the `verify:` line is malformed or its path does not resolve at theirs.
+   An entry with NO `verify:` line is left to hand-review as today; the convention is opt-in
+   and the ledger stays prose. The line is one of `theirs_lacks <core-path> "<substr>"`
+   (innovation upstream lacks), `theirs_has <core-path> "<substr>"` (defect present upstream),
+   or `sh <one-liner>` (exit 0 = still reproduces). Rendered into the step-5 report by
+   `emit-report.sh`, so a CLOSE-CANDIDATE cannot be silently dropped.
+
 4. **Semantic per-block classify** — for every file the pre-pass marked
    `…CLASSIFY`, dispatch ONE generic agent per file (batch trivial single-block
    diffs) using `reconcile/classify-block.md` as the prompt. Block granularity
@@ -353,8 +370,8 @@ Every consumer block that differs from upstream is one of:
    `reconcile/emit-report.sh <dist> <base> <consumer> <theirs>` and paste its
    `BEGIN/END GENERATED: reconcile-mechanical` region into the report **VERBATIM**. That region
    is the per-file buckets, the semantic worklist, deletions, the **blocking-layer list**,
-   unregistered drift, layer drift, and catalog relabel — every mechanical finding, complete,
-   from every detector. You write ONLY the genuinely semantic sections AROUND it: for each file in
+   unregistered drift, layer drift, catalog relabel, and the push-candidate ledger re-verify —
+   every mechanical finding, complete, from every detector. You write ONLY the genuinely semantic sections AROUND it: for each file in
    the region's "Semantic worklist", its 3-way merge result (`classify-block`), the conflict list,
    and the needs-confirmation questions. **Do NOT restate, summarise, or edit anything inside the
    region** — a mechanical finding narrated by you is a finding you can drop, and one already was
@@ -847,6 +864,13 @@ declared sites, not everywhere unconditionally.
      working branch.
    - Drain any `push_candidate`-flagged extensions into the push-candidate ledger
      for a later upstream push-mine (spec §8.1).
+   - **Close any `CLOSE-CANDIDATE` entries from step 3f.** For each, confirm the upstream
+     version at `theirs` covers your entry (the row's detail names the sha and the version),
+     then annotate the ledger entry `ADOPTED UPSTREAM (v<theirs>, verified <date>)`, matching
+     the existing hand-written closure format. **Do NOT delete the entry** — retro and the
+     §8.1 fan-in read it. The annotation is an `Edit` under `_bmad-output/ai-dlc-update/**`
+     (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a
+     Bash write, and never automatic.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the
