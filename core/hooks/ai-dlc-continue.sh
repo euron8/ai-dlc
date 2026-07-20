@@ -470,6 +470,8 @@ CHECK BEFORE ACTING: Did you just complete a sub-skill and need to present its o
 
 If you genuinely have no next action (HARD_BLOCK, PVC, handoff, retro commentary): create the pause flag (touch _bmad-output/pipeline-paused.flag).
 
+IF YOU ARE WAITING ON A TEAMMATE, this block means NO LIVE WAIT-BEAT IS ARMED. Your turn may end during a join only while _bmad-output/.beat-inflight holds a future epoch, and the ONLY thing that writes it is scripts/wait-for-deliverable.sh, on its sleeping path. Four ways you can believe you have a beat and not have one: (1) a hand-rolled sleep/stat/until loop — it writes no marker, and is the Rule 29 Check A violation gate Check 25 counts; (2) a foreground call — its exit trap clears the marker before your turn ends; (3) a call that RETURNED INSTANTLY because every target was already on disk; (4) a second beat chained into the same Bash call as another. Do NOT emit filler tool calls to get past this block. Re-arm the real beat and end your turn in the SAME response: Bash(run_in_background: true) scripts/wait-for-deliverable.sh <path> [<path>...]
+
 If you have a next action but emitted text first: pair the text with the tool call in your next response. Text + tool call = valid turn. Text alone = this hook fires.
 
 IMPORTANT: This hook exists to prevent 'should I continue?' stalls (Rule 3). It does NOT mean 'skip the current step to produce a tool call faster.' Every numbered section in the current step file must be completed in full (Rule 4). If a section produces text output (party-mode results, failure classification, gate announcements), emit that text WITH the next section's tool call in the same response.

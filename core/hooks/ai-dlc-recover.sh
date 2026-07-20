@@ -126,12 +126,17 @@ delivers by file (Rule 20), so **the deliverable file IS the handle** -- it need
 no \`agent_id\`, takes no \`task_id\`, and outlives a compaction. For each row of the
 snapshot's \`In-Flight Teammates\` section:
 
-- **Deliverable exists and is non-empty** -> the teammate DELIVERED. Consume the
-  file and strike the row. Never re-dispatch it.
+- **Deliverable exists, is non-empty, and is NEWER than the row's \`dispatched-at\`**
+  -> the teammate DELIVERED. Consume the file and strike the row. Never re-dispatch.
+- **Deliverable exists but PREDATES \`dispatched-at\`** -> it is a previous sprint's
+  file at a reused path, not your teammate's answer. Existence alone is not
+  delivery. Treat it as absent and re-arm, exactly as below.
 - **Deliverable absent** -> not yet delivered, which is not the same as dead.
   The pre-compaction wait-beat did NOT survive this compaction, so resume Rule
   29's join by ARMING A FRESH backgrounded beat (\`wait-for-deliverable.sh\`,
-  \`run_in_background: true\`) over the absent paths BEFORE you end your turn.
+  \`run_in_background: true\`) over the undelivered paths BEFORE you end your turn.
+  This is the one join where the teammate may have delivered while you were
+  compacting, so pass the row's dispatch time: \`--since <dispatched-at>\`.
   Ending your turn with no live beat armed is the one dead-pipeline case (Rule
   29). Re-dispatch the teammate ONLY on Rule 20 non-delivery, after
   \`max_wait_beats\` is exhausted.

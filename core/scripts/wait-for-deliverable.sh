@@ -38,12 +38,42 @@
 # never read. The loop goes in the beat count, never inside the call -- and
 # neither does a second beat.
 #
+# WHY MTIME, NOT PRESENCE. Delivery is "non-empty AND written since this join
+# armed" -- not merely "non-empty". A presence-only test cannot tell a teammate's
+# answer from the PREVIOUS sprint's file sitting at the same path, and it reports
+# the stale one as DELIVERED in under a second. That is not a stall the lead can
+# notice; it is a silent wrong answer that gets consumed as this sprint's input.
+# It happened: a bug-investigation join landed on a 41KB analysis from three
+# sprints earlier, and the lead caught it only by reading a date line in the body.
+#
+# Note the asymmetry the old predicate got backwards. This script's counter logic
+# below is careful about false NON-DELIVERY (it re-dispatches a live teammate --
+# loud, bounded, and a retro finding). False DELIVERY is worse: nothing downstream
+# ever re-examines it. So when the two cannot be told apart, we wait.
+#
+# The join epoch is captured HERE, at arming, not taken from the caller. A lead
+# writes `dispatched-at` into the snapshot ROUNDED (observed: 23:30:00Z recorded
+# for a 23:29:50 dispatch -- ten seconds into the future). A future threshold is an
+# ABSORBING failure: the teammate's file is never rewritten, so every later beat
+# re-reads the same mtime, the counter walks to max_wait_beats, and the script
+# declares non-delivery on a complete artifact. --since may therefore only move the
+# threshold EARLIER (see the clamp at join_of), never later.
+#
+# LIMIT -- mtime is a heuristic, not a proof. `git checkout`, a branch switch,
+# `stash pop`, and a fresh clone all stamp tracked files with the current time, so
+# a stale artifact can still look fresh. The structural fix is a deliverable path
+# that CANNOT collide: the nonce'd and sprint-stamped paths this pipeline already
+# uses elsewhere (`s<N>-...`, `<nonce>.verdict.json`) are immune by construction.
+# The collision above happened on a lead-invented UNSTAMPED path. This test is the
+# belt for paths that escaped that discipline.
+#
 # USAGE
 #   scripts/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
+#                                   [--since <epoch|ISO8601>]
 #
 # EXIT CODES (distinct on purpose -- the lead branches on these)
-#   0  DELIVERED     every path exists and is non-empty. Consume them.
-#   2  WAITING       at least one is absent, beats remain. Call again.
+#   0  DELIVERED     every path is non-empty AND written since this join armed.
+#   2  WAITING       at least one is undelivered, beats remain. Call again.
 #   1  NON-DELIVERY  a path exhausted max_wait_beats. Rule 20 non-delivery:
 #                    re-dispatch ONCE (with --reset), then HARD_BLOCK.
 #
@@ -51,6 +81,7 @@
 #   AI_DLC_STEERING_BUDGET   seconds a beat may take        (default 120)
 #   AI_DLC_WAIT_POLL_SECS    seconds between polls          (default 10)
 #   AI_DLC_MAX_WAIT_BEATS    beats before non-delivery      (default 10)
+#   AI_DLC_WAIT_MARGIN_SECS  reserve held back from budget  (default 10)
 #   AI_DLC_STATE_DIR         state dir                      (default _bmad-output)
 
 set -u
@@ -64,12 +95,44 @@ MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
 QUIET=0
 RESET=0
 TARGETS=""
+SINCE=""
+
+# ---------------------------------------------------------------------------
+# Platform probes, done ONCE. `stat` and `date` split BSD/GNU on exactly the two
+# things this script needs, and probing per poll would re-fork them every 10s for
+# the life of a 20-minute join.
+# ---------------------------------------------------------------------------
+if stat -f "%m" . >/dev/null 2>&1; then STAT_FLAVOR="bsd"; else STAT_FLAVOR="gnu"; fi
+
+mtime_of() {  # epoch of $1's last write, or 0 if it cannot be read
+  if [ "$STAT_FLAVOR" = "bsd" ]; then
+    stat -f "%m" "$1" 2>/dev/null || echo 0
+  else
+    stat -c "%Y" "$1" 2>/dev/null || echo 0
+  fi
+}
+
+to_epoch() {  # accept a bare epoch or an ISO8601 stamp; empty on failure
+  case "$1" in
+    ''|*[!0-9]*) : ;;
+    *) printf '%s' "$1"; return 0 ;;
+  esac
+  date -u -d "$1" +%s 2>/dev/null && return 0          # GNU
+  date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null && return 0   # BSD
+  return 1
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --reset) RESET=1; shift ;;
     --quiet) QUIET=1; shift ;;
-    -h|--help) sed -n '2,55p' "$0"; exit 0 ;;
+    --since)
+      shift
+      [ $# -gt 0 ] || { echo "FAIL: --since needs a value (epoch or ISO8601)." >&2; exit 64; }
+      SINCE="$(to_epoch "$1")" || {
+        echo "FAIL: --since value '$1' is not an epoch or an ISO8601 stamp." >&2; exit 64; }
+      shift ;;
+    -h|--help) sed -n '2,86p' "$0"; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -88,6 +151,45 @@ COUNTER_DIR="${STATE_DIR}/.wait-beats"
 mkdir -p "$COUNTER_DIR" 2>/dev/null || true
 
 key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
+
+# ---------------------------------------------------------------------------
+# THE JOIN EPOCH. Recorded per target in a `.since` sidecar beside the counter, on
+# the first beat, and reused by every later beat of the same join. The counter file
+# itself stays a bare integer: consumers have live counters mid-sprint and nothing
+# may change how those parse.
+#
+# --since is a HINT, not the authority. It is clamped so it can only pull the
+# threshold EARLIER -- never past `now`, and never later than a value an earlier
+# beat already settled on. Earlier is the direction only the caller can know
+# (a teammate that delivered before this join armed, which is the normal shape
+# after a compaction). Later is the direction that produces a threshold no write
+# can ever satisfy.
+# ---------------------------------------------------------------------------
+join_of() {
+  t_="$1"
+  f_="${COUNTER_DIR}/$(key_of "$t_").since"
+  now_="$(date +%s)"
+  stored_=""
+  [ -f "$f_" ] && stored_="$(cat "$f_" 2>/dev/null || echo '')"
+  case "$stored_" in ''|*[!0-9]*) stored_="" ;; esac
+
+  if [ -z "$stored_" ]; then j_="$now_"; else j_="$stored_"; fi
+  [ -n "$SINCE" ] && [ "$SINCE" -lt "$j_" ] && j_="$SINCE"
+  [ "$j_" -gt "$now_" ] && j_="$now_"
+
+  printf '%s' "$j_" > "$f_" 2>/dev/null || true
+  printf '%s' "$j_"
+}
+
+# The delivery predicate, single-sourced. Every place that asks "is this one done?"
+# MUST come through here. If the pre-sweep and the poll loop disagree, the loop
+# breaks the moment it sees a stale file present, the sweep then reports WAITING,
+# and the beat returns in zero seconds having CHARGED a beat and slept none --
+# ten instant beats straight to a false non-delivery.
+is_delivered() {  # $1 = path, $2 = join epoch
+  [ -s "$1" ] || return 1
+  [ "$(mtime_of "$1")" -ge "$2" ]
+}
 
 # ---------------------------------------------------------------------------
 # CHAINED-BEAT GUARD. Two invocations chained in one Bash call (`wait a; wait b`)
@@ -121,6 +223,7 @@ printf '%s' "$(date +%s)" > "$SIBLING" 2>/dev/null || true
 # ---------------------------------------------------------------------------
 PENDING=""
 EXHAUSTED=""
+PREEXISTING=""
 OLDIFS="$IFS"; IFS='|'
 for t in $TARGETS; do
   # A blank target is a malformed wait -- an empty In-Flight Teammates row cell,
@@ -133,13 +236,24 @@ for t in $TARGETS; do
     *) echo "FAIL: empty/blank deliverable path in target list." >&2; exit 64 ;;
   esac
   c="${COUNTER_DIR}/$(key_of "$t")"
-  [ "$RESET" -eq 1 ] && rm -f "$c" 2>/dev/null
+  s="${c}.since"
+  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" 2>/dev/null
 
-  if [ -s "$t" ]; then
-    rm -f "$c" 2>/dev/null || true
+  # Whether THIS beat armed the join must be read before join_of, which creates
+  # the sidecar as a side effect.
+  FIRST=0; [ -f "$s" ] || FIRST=1
+  j="$(join_of "$t")"
+
+  if is_delivered "$t" "$j"; then
+    rm -f "$c" "$s" 2>/dev/null || true
     say "DELIVERED $t"
     continue
   fi
+
+  # Non-empty, but not newer than the arming instant: the ambiguous case. Name it
+  # on the one beat that decides it, so the lead learns the flag while it is still
+  # actionable -- not at minute twenty via a non-delivery it cannot explain.
+  [ "$FIRST" -eq 1 ] && [ -s "$t" ] && PREEXISTING="${PREEXISTING}${PREEXISTING:+|}$t"
 
   b=0; [ -f "$c" ] && b="$(cat "$c" 2>/dev/null || echo 0)"
   case "$b" in ''|*[!0-9]*) b=0 ;; esac
@@ -174,7 +288,27 @@ if [ -n "$EXHAUSTED" ]; then
   exit 1
 fi
 
-[ -z "$PENDING" ] && exit 0   # everything was already on disk
+if [ -n "$PREEXISTING" ]; then
+  NOW_="$(date +%s)"
+  IFS='|'; for t in $PREEXISTING; do
+    AGE_=$(( NOW_ - $(mtime_of "$t") ))
+    if   [ "$AGE_" -ge 86400 ]; then AGE_H="$(( AGE_ / 86400 ))d old"
+    elif [ "$AGE_" -ge 3600 ];  then AGE_H="$(( AGE_ / 3600 ))h old"
+    else                             AGE_H="$(( AGE_ / 60 ))m old"
+    fi
+    echo "NOTE      $t already had content when this join armed (${AGE_H})."
+  done; IFS="$OLDIFS"
+  echo "  Not accepting it on sight; this join waits for a write NEWER than the"
+  echo "  arming instant. A file that predates the join cannot be shown to be THIS"
+  echo "  dispatch's answer -- it is equally the previous sprint's artifact at a"
+  echo "  reused path, and consuming that is a silent wrong answer."
+  echo "  If your teammate may have delivered BEFORE this join armed (the normal"
+  echo "  shape when you are resuming a join after a compaction), re-run with the"
+  echo "  dispatch time from the snapshot's In-Flight Teammates row:"
+  echo "    scripts/wait-for-deliverable.sh --since <epoch|ISO8601> <path> ..."
+fi
+
+[ -z "$PENDING" ] && exit 0   # everything was already delivered
 
 if [ "$MAY_SLEEP" -eq 0 ]; then
   IFS='|'; for t in $PENDING; do echo "WAITING   $t -- not yet delivered."; done; IFS="$OLDIFS"
@@ -224,7 +358,7 @@ trap 'rm -f "$BEAT_MARKER" 2>/dev/null || true' EXIT
 all_present() {
   IFS='|'
   for t in $PENDING; do
-    if [ ! -s "$t" ]; then IFS="$OLDIFS"; return 1; fi
+    if ! is_delivered "$t" "$(join_of "$t")"; then IFS="$OLDIFS"; return 1; fi
   done
   IFS="$OLDIFS"; return 0
 }
@@ -239,8 +373,9 @@ RC=0
 IFS='|'
 for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
-  if [ -s "$t" ]; then
-    rm -f "$c" 2>/dev/null || true
+  s="${c}.since"
+  if is_delivered "$t" "$(join_of "$t")"; then
+    rm -f "$c" "$s" 2>/dev/null || true
     say "DELIVERED $t"
   else
     b="$(cat "$c" 2>/dev/null || echo '?')"

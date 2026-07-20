@@ -367,9 +367,11 @@ agent MUST output:
 - Last completed gate with timestamp (from snapshot `Pipeline
   Position`)
 - Any in-flight sub-step from `Recent Activity`, and every
-  `In-Flight Teammates` row with whether its deliverable exists.
-  Exists = DELIVERED: consume it, never re-dispatch. Absent = not
-  dead: resume the wait beat. Unreachable never means dead.
+  `In-Flight Teammates` row with whether its deliverable exists
+  and is newer than its `dispatched-at`. Newer = DELIVERED:
+  consume it, never re-dispatch. Older = a prior sprint's file,
+  not delivery: resume the beat, as for absent. Unreachable
+  never means dead.
 - Current git branch and last commit (`git branch --show-current` and
   `git log -1 --oneline`)
 

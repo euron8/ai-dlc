@@ -17,6 +17,86 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.100.0] — 2026-07-19
+
+### Fixed — the bounded join accepted the previous sprint's file as this sprint's answer
+
+`wait-for-deliverable.sh` tested delivery with `[ -s "$t" ]`. A deliverable path that
+already held a file therefore reported `DELIVERED` in under a second, whatever wrote it
+and whenever. Observed on the reference consumer: a bug-investigation join armed on
+`_bmad-output/planning-artifacts/bug-analysis.md` and was handed a 41KB analysis from
+three sprints earlier, committed 25 days before. The lead caught it only by noticing a
+date line in the body.
+
+That is not the stall it looks like. A join that always succeeds reads exactly like a
+join that worked, and nothing downstream re-examines a consumed deliverable — the whole
+bug fix would have been built on the wrong root cause. Note the asymmetry the old
+predicate had backwards: the script's counter logic is careful about false NON-delivery,
+which re-dispatches a live teammate and is loud, bounded, and a retro finding. False
+DELIVERY is silent. When the two cannot be told apart, the join now waits.
+
+The second-order failure is why this presented as a monitoring bug. The instant-delivered
+path returned before the script reached its sleep, so `.beat-inflight` was never written —
+and that marker is the only thing Stop-hook Check 2b accepts as permission to end a turn
+mid-join. The lead could not yield, hand-rolled an mtime loop that writes no marker
+either, was blocked again, emitted filler tool calls to get past its own enforcer, and
+fell back to foreground polling: ~10 beats × 105s blocked, retyping a ~170-token loop each
+time. That is precisely the cost this script was written to eliminate. Fixing the
+predicate restores the yield with no hook change, because a stale-but-present target now
+reaches the sleeping path that writes the marker.
+
+Delivery is now non-empty **and** written since the join armed. The arming epoch is
+recorded per target in a `.since` sidecar beside the existing beat counter, which stays a
+bare integer — consumers have live counters mid-sprint and nothing may change how those
+parse. The predicate is single-sourced through `is_delivered()` and called from all three
+sites that ask the question; a pre-existing target draws an in-band `NOTE` naming the
+ambiguity on the one beat that decides it, rather than at minute twenty via a
+non-delivery the lead cannot explain.
+
+`--since` is a clamped hint, never the authority. Leads round `dispatched-at` **up** — the
+live incident recorded `23:30:00Z` for a 23:29:50 dispatch, ten seconds into the future —
+and a future threshold is absorbing: the teammate's file is never rewritten, so every
+later beat re-reads the same mtime and the join walks to a non-delivery on a complete
+artifact. `--since` may therefore only move the threshold earlier, and is clamped to now.
+Exit codes 0/2/1 are unchanged; refusing the ambiguous case with a fourth code was
+considered and rejected, because the script's own documented recovery (`re-dispatch, then
+re-run with --reset`) would then refuse itself on a failed teammate's non-empty stub.
+
+**mtime is a heuristic, not a proof** — `git checkout`, a branch switch, `stash pop`, and
+a fresh clone all restamp tracked files. The durable fix is a deliverable path that cannot
+collide, which this pipeline already uses elsewhere (`s<N>-…`, `<nonce>.verdict.json`) and
+which the colliding lead-invented path lacked. This is the belt for paths that escaped
+that discipline.
+
+Also corrected the same presence-only rule where the **lead** carries it and the script
+fix cannot reach: `ai-dlc-recover.sh` ("Deliverable exists and is non-empty -> the teammate
+DELIVERED") and the `SKILL.md` verification-turn bullet ("Exists = DELIVERED"). Both are
+post-compaction paths, where the artifact on disk is most likely to be stale and the lead
+has no memory of what it dispatched — and it is the one join where a teammate may
+legitimately have delivered before the join armed, so both now name `--since`.
+
+### Added — a fixture for a join that cannot fail, and the block message that names the marker
+
+`tests/fixtures/wait-stale-deliverable` covers the stale target, the `.beat-inflight`
+marker observed **during** the beat (it is removed by an exit trap, so the fixture
+backgrounds the subject and polls), a mid-beat delivery, the future-`--since` clamp, and
+`--since` recovering an early delivery without sleeping.
+
+Verified by mutation, not by inspection. Reverting the pre-sweep predicate to bare
+presence reds 7 assertions; diverging **only** `all_present()` from the sweep reds 4,
+including a `DELIVERED` that arrives in 0s — the specific trap where the poll loop breaks
+on mere presence, the sweep disagrees, and the beat returns having charged a beat and
+slept none, ten instant beats to a false non-delivery. `since-clamp` stays green under the
+first mutation by design; a fixture whose every case reddens on one mutation is one
+assertion in a trench coat. Registered in both the install and uninstall loops (I8).
+
+The Stop hook's block message never mentioned `.beat-inflight`, which is why the lead
+diagnosed the block as a hook fault rather than a missing beat. It now names the marker,
+names `wait-for-deliverable.sh` as its only writer, enumerates the four ways a lead can
+believe it has a beat and not have one — including "the call returned instantly because
+every target was already on disk", the case above — and says not to emit filler tool calls
+to get past it.
+
 ## [0.99.0] — 2026-07-19
 
 ### Fixed — two statements in core that promised more than any mechanism delivers
