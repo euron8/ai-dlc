@@ -68,15 +68,29 @@ echo "wait-stale-deliverable:"
 # --- 1. the headline: a file from a prior sprint is not this join's answer ------
 W="$( bash "$SEED" stale )"
 beat "$W"
-if [ "$RC" -eq 2 ]; then ok "stale: rc 2 (WAITING), not accepted on sight"
-else bad "stale: rc $RC — a 25-day-old artifact was accepted as this join's delivery"; fi
-case "$OUT" in
-  *DELIVERED*) bad "stale: printed DELIVERED for a file that predates the join" ;;
-  *)           ok  "stale: never printed DELIVERED" ;;
-esac
+if [ "$RC" -eq 0 ]; then ok "stale: rc 0 (beat complete) — waiting is not a failure"
+else bad "stale: rc $RC — a still-waiting beat must not exit nonzero (harness reads it as failed)"; fi
+# Anchored to the per-path line, not a bare substring: the BEAT COMPLETE summary
+# legitimately contains the word "DELIVERED" while reporting zero of them.
+if grep -q '^DELIVERED' "$BEATOUT"; then
+  bad "stale: printed DELIVERED for a file that predates the join"
+else
+  ok "stale: no DELIVERED line for a file that predates the join"
+fi
 case "$OUT" in
   *"already had content when this join armed"*) ok "stale: NOTE names the ambiguity and --since" ;;
   *) bad "stale: no NOTE — the lead learns nothing until the sequence bound trips" ;;
+esac
+# With WAITING no longer distinguishable by exit code, stdout is the ONLY channel
+# carrying it. If these lines ever stop being printed, every outcome looks like
+# rc 0 and the lead consumes a file that was never delivered.
+case "$OUT" in
+  *"WAITING"*) ok "stale: stdout carries WAITING — the signal the exit code no longer holds" ;;
+  *) bad "stale: rc 0 and no WAITING in stdout — an undelivered join is indistinguishable from a delivered one" ;;
+esac
+case "$OUT" in
+  *"BEAT COMPLETE -- 0 delivered, 1 still out"*) ok "stale: summary states what to consume" ;;
+  *) bad "stale: no BEAT COMPLETE summary naming the counts" ;;
 esac
 rm -rf "$W"
 
@@ -110,8 +124,9 @@ START="$(date +%s)"
 beat "$W"
 ELAPSED=$(( $(date +%s) - START ))
 wait "$WRITER" 2>/dev/null || true
-if [ "$RC" -eq 0 ]; then ok "arrives-mid-beat: rc 0 (DELIVERED) once the real write lands"
-else bad "arrives-mid-beat: rc $RC — a genuine delivery was missed"; fi
+if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
+  ok "arrives-mid-beat: DELIVERED once the real write lands"
+else bad "arrives-mid-beat: rc $RC, no DELIVERED line — a genuine delivery was missed"; fi
 # Zero elapsed means the poll loop broke on the stale file's mere presence while
 # the sweep applied the fresh predicate: a beat charged, none slept.
 if [ "$ELAPSED" -ge 2 ]; then ok "arrives-mid-beat: beat actually slept (${ELAPSED}s) — predicates agree"
@@ -119,26 +134,34 @@ else bad "arrives-mid-beat: returned in ${ELAPSED}s — poll loop and sweep disa
 rm -rf "$W"
 
 # --- 4. a rounded-UP dispatch stamp must not become an unmeetable threshold -----
+# MUTATION NOTE: this case reds only when BOTH guards in join_of are removed --
+# `[ "$SINCE" -lt "$j_" ]` (apply --since only if it lowers) and `[ "$j_" -gt
+# "$now_" ]` (never above now). Either alone defeats a future stamp, so mutating one
+# leaves the case green. That is redundancy, not vacuity: verified by removing both,
+# which reds it. Do not conclude this assertion is dead from a single-line mutation.
 W="$( bash "$SEED" since-clamp )"
 FUT=$(( $(date +%s) + 600 ))
 ( sleep 2; printf 'the actual answer for this sprint\n' > "$W/deliv.md" ) &
 WRITER=$!
 beat "$W" --since "$FUT"
 wait "$WRITER" 2>/dev/null || true
-if [ "$RC" -eq 0 ]; then ok "since-clamp: a 10-minute-future --since still accepts the real write"
-else bad "since-clamp: rc $RC — --since was trusted past now, threshold is unsatisfiable"; fi
+if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
+  ok "since-clamp: a 10-minute-future --since still accepts the real write"
+else bad "since-clamp: no DELIVERED line — --since was trusted past now, threshold unsatisfiable"; fi
 rm -rf "$W"
 
 # --- 5. --since may pull the threshold EARLIER (the post-compaction join) -------
 W="$( bash "$SEED" since-earlier )"
 beat "$W"
-if [ "$RC" -eq 2 ]; then ok "since-earlier: bare call waits — a pre-join file is not proof"
-else bad "since-earlier: rc $RC — accepted a file written before the join armed"; fi
+if [ "$RC" -eq 0 ] && grep -q '^WAITING' "$BEATOUT" && ! grep -q '^DELIVERED' "$BEATOUT"; then
+  ok "since-earlier: bare call waits — a pre-join file is not proof, and waiting is not a failure"
+else bad "since-earlier: rc $RC — expected a WAITING beat with no DELIVERED line"; fi
 START="$(date +%s)"
 beat "$W" --since "$(( $(date +%s) - 60 ))"
 ELAPSED=$(( $(date +%s) - START ))
-if [ "$RC" -eq 0 ]; then ok "since-earlier: --since in the past recovers the early delivery"
-else bad "since-earlier: rc $RC — --since could not move the threshold earlier"; fi
+if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
+  ok "since-earlier: --since in the past recovers the early delivery"
+else bad "since-earlier: no DELIVERED line — --since could not move the threshold earlier"; fi
 # Also proves the fix did not turn every join into a mandatory sleep.
 if [ "$ELAPSED" -le 1 ]; then ok "since-earlier: returned without sleeping"
 else bad "since-earlier: slept ${ELAPSED}s on an already-satisfied join"; fi
@@ -147,13 +170,21 @@ rm -rf "$W"
 # --- 6. regression guards -------------------------------------------------------
 W="$( bash "$SEED" exhausted )"
 beat "$W"
-if [ "$RC" -eq 1 ]; then ok "exhausted: rc 1 (NON-DELIVERY) once the sequence bound is spent"
-else bad "exhausted: rc $RC — the sequence bound no longer terminates the wait"; fi
+# The ONE state that still exits nonzero. Nonzero is now reserved for "needs a
+# decision", so if this ever returns 0 a real non-delivery becomes invisible --
+# and the whole point of retiring exit 2 was to stop drowning this signal.
+if [ "$RC" -eq 1 ]; then ok "exhausted: rc 1 (NON-DELIVERY) — the one loud state, still loud"
+else bad "exhausted: rc $RC — a genuine non-delivery no longer exits nonzero"; fi
+case "$OUT" in
+  *"NON-DELIVERY"*) ok "exhausted: stdout names NON-DELIVERY" ;;
+  *) bad "exhausted: no NON-DELIVERY in stdout" ;;
+esac
 rm -rf "$W"
 
 W="$( bash "$SEED" absent )"
 beat "$W"
-if [ "$RC" -eq 2 ]; then ok "absent: rc 2 (WAITING) — unchanged for a path with no file"
+if [ "$RC" -eq 0 ] && grep -q '^WAITING' "$BEATOUT"; then
+  ok "absent: beat completes with WAITING for a path with no file"
 else bad "absent: rc $RC — the ordinary absent case regressed"; fi
 case "$OUT" in
   *"already had content"*) bad "absent: emitted the pre-existing NOTE for a file that never existed" ;;

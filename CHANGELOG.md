@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.101.0] — 2026-07-20
+
+### Changed — a waiting beat no longer exits nonzero (exit 2 retired)
+
+`wait-for-deliverable.sh` published `0 DELIVERED / 2 WAITING / 1 NON-DELIVERY`. But since
+v0.81.0 the prescribed join is a *backgrounded* beat, and the harness reports any nonzero
+exit from a background command as a failure — injecting `<status>failed</status>` into the
+lead's own context. So every healthy join announced a failure roughly every two minutes,
+for its entire life, because it was still waiting. Waiting is what nine of every ten beats
+report.
+
+That is not cosmetic. A lead that reads an attempt as an outcome re-dispatches live
+teammates — v0.50.0 is the precedent, where `No task found` was read as death and 13 of 39
+teammates were re-dispatched. And a genuine `exit 1` non-delivery, the one state that
+actually needs a decision, was indistinguishable from the routine noise around it.
+
+The contract is now two codes:
+
+- `0` — **beat complete**. Read stdout: `DELIVERED <path>` lines are the lead's to consume,
+  `WAITING <path>` lines are still out, and a closing `BEAT COMPLETE — N delivered, M still
+  out` states which. Exit 0 does **not** mean everything landed.
+- `1` — **non-delivery**, unchanged. Nonzero now means exactly one thing.
+
+Nothing mechanical read exit 2 — no hook or script branched on it; it lived in three prose
+branch tables (`SKILL.md`, `implementation.md`, `_gate-procedures.md`), all updated. The
+delivered/waiting distinction moved to stdout, which the lead always had to read anyway: an
+exit code could never say *which* path in a multi-path wave was still outstanding.
+
+Consumers pulling this mid-sprint should do so at a phase boundary rather than mid-join, so
+no lead is holding the old branch table in context while the new script answers.
+
+### Fixed — five fixture assertions that the new contract had made vacuous
+
+Retiring exit 2 silently weakened `wait-stale-deliverable`: five cases asserted `rc -eq 0`,
+which became trivially true whether the join delivered or waited. That is the same
+cannot-fail class v0.100.0 was written to close, reintroduced in its own test. Caught by
+re-running the mutations — `all_present`-divergence dropped from 4 reds to 2, which is what
+exposed it. Those cases now assert the anchored `^DELIVERED` / `^WAITING` line, and new
+assertions cover the `BEAT COMPLETE` summary and that non-delivery still names itself in
+stdout.
+
+Mutation results on the current fixture: bare-presence pre-sweep reds 9, `all_present`
+divergence reds 4, dropping the per-path `WAITING` line reds 1, making non-delivery exit 0
+reds 1. `since-clamp` reds only when **both** clamps in `join_of` are removed — either
+alone defeats a future `--since`, so a single-line mutation leaves it green. That is
+redundancy rather than vacuity, verified by removing both, and it is now recorded in the
+fixture so the next reader does not mistake one for the other.
+
 ## [0.100.0] — 2026-07-19
 
 ### Fixed — the bounded join accepted the previous sprint's file as this sprint's answer
