@@ -119,6 +119,27 @@ d="$(decision "$CONSUMER" "$MULTI")"
 [ "$d" = deny ] && ok "MultiEdit to a core rulebook file → deny" \
   || bad "a MultiEdit to core classified '$d', expected deny"
 
+# --- Assertion 10b: in-place edit to a CORE HOOK → DENY ---------------------
+# Hooks are upstream-owned machinery; the manifest now lists hooks/*.sh, so the guard
+# denies an in-place hook edit. Before this, hooks were absent from the manifest and read
+# as an editable target — two agents concluded they were consumer-owned (LD-S295-1).
+HOOKF="$CONSUMER/.claude/hooks/ai-dlc-pause.sh"
+d="$(decision "$CONSUMER" "$(mkjson Edit "$HOOKF" 'touch $PAUSE_FLAG')")"
+[ "$d" = deny ] && ok "Edit to a core hook (.claude/hooks/*.sh) → deny" \
+  || bad "Edit to a core hook classified '$d', expected deny — hooks were an editable target"
+
+# --- Assertion 10c: the hook deny gives MACHINERY advice, not layer routing --
+# A hook has no overrides/extensions grain; the message must say so and point at the
+# hook's AI_DLC_* tunables / upstream, not send the author to a layer that cannot hold it.
+OUTH="$(raw "$CONSUMER" "$(mkjson Edit "$HOOKF" 'touch $PAUSE_FLAG')")"
+if printf '%s' "$OUTH" | grep -q 'machinery' \
+   && printf '%s' "$OUTH" | grep -q 'AI_DLC_' \
+   && ! printf '%s' "$OUTH" | grep -q 'Route it to the layer instead'; then
+  ok "hook deny gives machinery/AI_DLC_ advice, not overrides/extensions routing"
+else
+  bad "hook deny gave layer-routing advice — a hook cannot go in overrides/ or extensions/"
+fi
+
 # --- Assertion 11: derivation FALLBACK — remove core-manifest.md, keep sites -
 # The hook must fall back to setup-sites.md's I5-synced core_manifest copy and still deny.
 rm -f "$CONSUMER/.claude/skills/ai-dlc/core-manifest.md"

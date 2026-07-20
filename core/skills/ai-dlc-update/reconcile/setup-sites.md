@@ -51,6 +51,7 @@ core_manifest:
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/team-roles/*.md
+  - core/hooks/*.sh
 ```
 
 ## Sites
