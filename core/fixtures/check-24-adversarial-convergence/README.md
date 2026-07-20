@@ -57,6 +57,27 @@ terminal pass, and the only thing separating it from `refused-to-converge` is th
 verdict the adversary stamped. That is the whole point: **the residue decides
 whether the verdict is honest; the verdict decides whether the gate opens.**
 
+## v0.103.0 — arm H, the repair-record differential
+
+A converging series proves findings **fell**, which proves a repair happened between
+those passes. `carry-over-evaluation.md` §3a fences that repair to a `remediator`
+subagent (*"the lead does not repair the artifact itself"*) delivered as a repair record
+the next pass verifies against. Arm H asserts the record exists and is structured — and
+the two cases that prove it is real are a **differential**:
+
+| Case | Shape | Must |
+|---|---|---|
+| `repaired-delegated` | 2C/1M → 0C/1M → 0C/0M MET, **with** `s1-brief-repair-p1/p2.md` | **PASS** |
+| `repaired-inline-no-record` | the SAME series, **no** repair records | **FAIL** (H) |
+| `repair-record-empty` | same series, p1's record is narrative prose, not structured | **FAIL** (H) |
+
+`repaired-delegated` and `repaired-inline-no-record` carry **byte-identical pass series**;
+the only difference on disk is the two repair records. A validator that reads the series
+instead of statting the record cannot separate them — neutralize arm H and
+`repaired-inline-no-record` flips to exit 0, which is the mutation proof baked into the
+pair. This is the S295 defect: a lead that repairs inline leaves a series indistinguishable
+from a delegated one, and arms A–G pass over it.
+
 ## The `skill:` field in the seeded blocks is INERT — do not read it as coverage
 
 v0.58.0 changed the seeded blocks to `skill: ai-dlc-adversary-review`, because that is

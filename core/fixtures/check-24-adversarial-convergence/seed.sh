@@ -76,11 +76,36 @@ record() {
   } > "$file"
 }
 
+# A REPAIR RECORD -- the remediator's deliverable, one per repaired pass (§3a). Arm H
+# (v0.103.0) asserts it EXISTS and carries the three structured fields; a converging
+# cycle had repairs, so a delegated one leaves these on disk.
+# $1 file  $2 (optional) "unstructured" -> write prose only, to trip arm H's structure arm
+repair() {
+  local file="$1" mode="${2:-}"
+  if [ "$mode" = "unstructured" ]; then
+    printf 'The findings were addressed. See the artifact.\n' > "$file"
+    return
+  fi
+  {
+    printf '# Repair record\n\n'
+    printf '### F1 — CRITICAL\n'
+    printf -- '- disposition: repaired\n'
+    printf -- '- edit: product-brief.md:42\n'
+    printf -- '- derivation:\n'
+    printf '    $ grep -c "load-bearing site" product-brief.md\n'
+    printf '    3\n'
+    printf -- '- claim now asserted: all three sites are enumerated\n'
+  } > "$file"
+}
+
 # --- converged: the cycle the machinery is supposed to produce ---------------
 mkdir -p "$TARGET/converged"
 pass "$TARGET/converged/s1-adversarial-pass1.md" 1 3 4 2 EXIT_CONDITION_NOT_MET
 pass "$TARGET/converged/s1-adversarial-pass2.md" 2 1 2 3 EXIT_CONDITION_NOT_MET
 pass "$TARGET/converged/s1-adversarial-pass3.md" 3 0 0 1 EXIT_CONDITION_MET
+# each falling pass had a delegated repair; arm H requires the record (v0.103.0).
+repair "$TARGET/converged/s1-brief-repair-p1.md"
+repair "$TARGET/converged/s1-brief-repair-p2.md"
 
 # --- nitpicks-remain: THE DECOY ----------------------------------------------
 # Clean of CRITICAL and MAJOR, but five MINORs still open. The step's exit
@@ -90,6 +115,7 @@ pass "$TARGET/converged/s1-adversarial-pass3.md" 3 0 0 1 EXIT_CONDITION_MET
 mkdir -p "$TARGET/nitpicks-remain"
 pass "$TARGET/nitpicks-remain/s1-adversarial-pass1.md" 1 2 3 1 EXIT_CONDITION_NOT_MET
 pass "$TARGET/nitpicks-remain/s1-adversarial-pass2.md" 2 0 0 5 EXIT_CONDITION_MET
+repair "$TARGET/nitpicks-remain/s1-brief-repair-p1.md"
 
 # --- refused-to-converge: the S289 pass-4 shape ------------------------------
 mkdir -p "$TARGET/refused-to-converge"
@@ -118,6 +144,8 @@ mkdir -p "$TARGET/scope-grew-converges"
 pass "$TARGET/scope-grew-converges/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET 2
 pass "$TARGET/scope-grew-converges/s1-adversarial-pass2.md" 2 3 1 2 EXIT_CONDITION_NOT_MET 1
 pass "$TARGET/scope-grew-converges/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET     0
+# p1->p2 CRITICALs rise (no fall, arm H skips); p2->p3 falls 3C->0C -- its repair is recorded.
+repair "$TARGET/scope-grew-converges/s1-brief-repair-p2.md"
 
 # --- repair-injected: real divergence, WITH the field present -----------------
 # All 3 of pass 2's CRITICALs are in prior scope (3 > pass 1's 2). This is S289's
@@ -156,6 +184,8 @@ pass "$TARGET/long-series-p-naming/s1-adversarial-p8.md"   8 2 1 2 EXIT_CONDITIO
 pass "$TARGET/long-series-p-naming/s1-adversarial-p9.md"   9 2 1 1 EXIT_CONDITION_NOT_MET 2
 pass "$TARGET/long-series-p-naming/s1-adversarial-p10.md" 10 1 1 1 EXIT_CONDITION_NOT_MET 1
 pass "$TARGET/long-series-p-naming/s1-adversarial-p11.md" 11 0 0 3 EXIT_CONDITION_MET     0
+# repair record for every pass whose findings FELL into its successor (arm H).
+for m in 1 3 6 7 9 10; do repair "$TARGET/long-series-p-naming/s1-brief-repair-p$m.md"; done
 
 # --- stalled: S290's brief cycle, passes 11-13 --------------------------------
 # ZERO CRITICAL, MAJOR pinned at 1, three passes running. Not converged (MAJOR>0), not
@@ -176,6 +206,9 @@ pass "$TARGET/stall-then-converges/s1-adversarial-p1.md" 1 2 2 1 EXIT_CONDITION_
 pass "$TARGET/stall-then-converges/s1-adversarial-p2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET 0
 pass "$TARGET/stall-then-converges/s1-adversarial-p3.md" 3 0 1 2 EXIT_CONDITION_NOT_MET 0
 pass "$TARGET/stall-then-converges/s1-adversarial-p4.md" 4 0 0 2 EXIT_CONDITION_MET     0
+# p1->p2 falls (2C->0C) and p3->p4 falls (1M->0M); both repairs recorded (arm H).
+repair "$TARGET/stall-then-converges/s1-brief-repair-p1.md"
+repair "$TARGET/stall-then-converges/s1-brief-repair-p3.md"
 
 # =============================================================================
 # v0.59.0 -- the RESUME CONTRACT: STOP -> ADJUDICATE -> RESOLVE -> VERIFY.
@@ -342,6 +375,44 @@ pass "$TARGET/divergent-terminal-resolved/s1-adversarial-p2.md" 2 3 1 2 DIVERGEN
 record "$TARGET/divergent-terminal-resolved/s1-resolution-p2.md" \
   s1-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000 "reverted the p1->p2 repair wholesale" \
   '2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"'
+
+# =============================================================================
+# v0.103.0 -- arm H, the repair-record. THREE cases, and the first two are a
+# DIFFERENTIAL: identical pass series, differing ONLY in whether the repair records
+# exist. A validator that does not stat the record cannot separate them.
+# =============================================================================
+
+# --- repaired-inline-no-record: THE S295 DEFECT -- MUST FAIL (H) --------------
+# A clean converging series (2C/1M -> 0C/1M -> 0C/0M MET). Findings FELL at p1->p2 and
+# p2->p3, so a repair happened before each -- but NO repair record exists. That is the
+# lead having repaired the artifact inline: every other arm passes, and only reading the
+# record for a file that is not there tells the difference.
+mkdir -p "$TARGET/repaired-inline-no-record"
+pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repaired-inline-no-record/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET
+
+# --- repaired-delegated: THE PASS TWIN -- MUST PASS ---------------------------
+# Byte-identical pass series to repaired-inline-no-record. The ONLY difference is that
+# the two repairs left structured records on disk. Arm H passes; the differential is the
+# proof arm H stats the record rather than reading the series.
+mkdir -p "$TARGET/repaired-delegated"
+pass "$TARGET/repaired-delegated/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repaired-delegated/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repaired-delegated/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET
+repair "$TARGET/repaired-delegated/s1-brief-repair-p1.md"
+repair "$TARGET/repaired-delegated/s1-brief-repair-p2.md"
+
+# --- repair-record-empty: STRUCTURE, isolated -- MUST FAIL (H) ----------------
+# Same series again. p2's record is present and structured; p1's record EXISTS but is
+# narrative prose -- no disposition/edit/derivation. Isolates the structure arm from bare
+# existence: a stub file is not a repair record.
+mkdir -p "$TARGET/repair-record-empty"
+pass "$TARGET/repair-record-empty/s1-adversarial-pass1.md" 1 2 1 1 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repair-record-empty/s1-adversarial-pass2.md" 2 0 1 2 EXIT_CONDITION_NOT_MET
+pass "$TARGET/repair-record-empty/s1-adversarial-pass3.md" 3 0 0 2 EXIT_CONDITION_MET
+repair "$TARGET/repair-record-empty/s1-brief-repair-p1.md" unstructured
+repair "$TARGET/repair-record-empty/s1-brief-repair-p2.md"
 
 # The harness-owned transcript the RESOLUTION citations verify against (v0.61.0). A resolution
 # clears an operator-gated HARD_BLOCK, so its operator_authorization must quote a GENUINE

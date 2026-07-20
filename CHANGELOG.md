@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.103.0] — 2026-07-20
+
+### Added — Check 24 arm H: the repair between adversarial passes must be delegated and recorded
+
+The delegation boundary (Rule 28; `carry-over-evaluation.md` §3a, *"the lead does not
+repair the artifact itself"*) was stated in ~15 prose homes and enforced by nothing but
+a post-hoc retro finding. `validate-adversarial-convergence.sh` already excluded
+`*-repair-p*` records from the pass series so they could not collide with a pass number —
+and that exclusion meant nothing ever asserted a repair record EXISTS. A lead that
+repairs a planning artifact inline (from its compacted summary — the exact
+context-saturation failure the `remediator` role exists to end) and writes no record
+produces a pass series byte-identical to a delegated one: the findings fall either way,
+and arms A–G pass over it. This is the S295 defect, where the lead repaired the
+carry-over synthesis on passes 1 and 2 itself, and the violation surfaced only when pass 3
+went looking for the record it was contracted to verify against.
+
+- **New arm H (REPAIR-RECORD), under the existing Check 24 — no new check id.** Check 24's
+  firing scope already equals the repair-dispatch set that I11 keeps in sync, so arm H
+  rides that set with no second list to drift. For every pass whose findings a later pass
+  measured as FELL (the provable fingerprint that a repair landed), arm H asserts the
+  `s<N>-<artifact>-repair-p<M>.md` record exists and is structured (a `disposition:`, an
+  `edit:` site, a `derivation:` per finding). Gate-mode only — never in `--cycle-state`,
+  where a running cycle may legitimately sit between a repair and its record.
+- **Honest scope: existence + structure, not authorship.** Arm H proves a structured
+  repair record exists; it does NOT prove a `remediator` subagent rather than the lead
+  authored it (a subagent leaves no transcript, the `--cite` predicate is operator-only,
+  the provenance `tool_use_id` is shape-only). Cryptographic authorship attribution is a
+  later, separate mechanism.
+- **Fixture: a differential that proves the arm is non-vacuous.** `repaired-delegated` and
+  `repaired-inline-no-record` carry byte-identical pass series and differ only in whether
+  the repair records exist on disk; `repair-record-empty` isolates the structure check from
+  bare existence. Neutralizing arm H flips both failing cases to exit 0 and the fixture
+  goes red — a validator that reads the series instead of the record cannot pass it.
+- **Migration.** A converging adversarial cycle *had* repairs, so a delegated one already
+  leaves these records on disk (`remediator.md` contract; Rule 20 "the file is the
+  deliverable"). A cycle that has been repairing inline will now fail Check 24 — which is
+  the defect being surfaced, correctly.
+
 ## [0.102.0] — 2026-07-20
 
 ### Changed — prose corrections surfaced by the graph consumer's push-candidate review

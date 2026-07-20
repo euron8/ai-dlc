@@ -335,12 +335,17 @@ LAST_CRIT=""
 LAST_MAJOR=""
 
 # Per-pass arrays. Arm F chains a divergent pass to its successor, so it needs the
-# series as a whole, not a rolling window.
+# series as a whole, not a rolling window. Arm H (repair-record) needs each pass's
+# severity residue and its bare pass number, neither of which survives the rolling
+# PREV_*/LAST_* window.
 P_FILE=()
 P_VERDICT=()
 P_SHA=()
 P_RESOLVES=()
 P_AT=()
+P_CRIT=()
+P_MAJOR=()
+P_NUM=()
 
 # --- E. STALL (the plateau rung) --------------------------------------------
 # Rule 8 had exactly two terminal states: CONVERGED (0 CRITICAL, 0 MAJOR) and DIVERGENT
@@ -391,6 +396,9 @@ for f in "${SORTED[@]}"; do
   # invoked_at bounds the pause window: a resolution citation must point at an
   # operator message at or after the divergent pass that opened the block (arm F).
   P_AT+=("$invoked_at")
+  P_CRIT+=("$crit")
+  P_MAJOR+=("$major")
+  P_NUM+=("$(order_key "$f" | sed 's/^0*//')")   # bare pass number for the repair-record glob (arm H)
 
   if [ "$CYCLE_STATE" -eq 0 ]; then
     printf '  %s\n' "$f"
@@ -911,6 +919,101 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
   printf '%s\t%s\n' "$STATE" "$LAST_FILE"
   exit "$RC"
 fi
+
+# =============================================================================
+# H. REPAIR-RECORD -- the repair between two passes was delegated and recorded.
+# =============================================================================
+# GATE ONLY -- never in --cycle-state. A running cycle may sit between a repair
+# and the record's write; only at the gate is the record owed. (Same reason arm D
+# is gate-only: firing on a healthy in-progress state pauses the pipeline on
+# compliance.)
+#
+# Rule 28 / carry-over-evaluation.md §3a: a repair is the remediator's job --
+# "the lead does not repair the artifact itself" -- delivered as ONE repair record
+# per pass at `<dir>/s<N>-<artifact>-repair-p<M>.md`, which the next pass verifies
+# against. The record is EXCLUDED from the pass series above (the `*-repair-p*`
+# exclusion) so it never collides with a pass number -- and that exclusion meant
+# nothing, until here, asserted it EXISTS. A lead that repairs inline and writes no
+# record produces a pass series byte-identical to a delegated one: the findings fall
+# either way, and arms A-G pass over it. That is the S295 defect.
+#
+# WHAT THIS PROVES, AND WHAT IT DOES NOT. Arm H proves a STRUCTURED repair record
+# exists for every pass whose findings a later pass verified as repaired. It does
+# NOT prove a `remediator` subagent, rather than the lead, authored it: a subagent's
+# context leaves no transcript on disk, the sibling --cite predicate is operator-only,
+# and the provenance tool_use_id is shape-only. Existence + structure is the honest
+# floor and it is what separates "repaired inline, no record" from "delegated";
+# authorship attribution is a separate, later mechanism.
+#
+# Minimum mechanism (Rule 26(c)).
+#   Failure caught: the lead repairs a planning artifact inline, from its compacted
+#     summary -- the exact context-saturation failure the remediator role exists to
+#     end -- and writes no record. Measured on the reference consumer's S295
+#     carry-over cycle: the lead repaired passes 1 and 2 itself, no record was written
+#     for either, and the violation surfaced only when pass 3 went looking for the
+#     record it was contracted to verify against.
+#   False-positive cost: one directory glob + a three-field structure grep per pass
+#     whose findings demonstrably FELL. A delegated cycle always leaves the record on
+#     disk (remediator.md contract; Rule 20 "the file is the deliverable"), so a
+#     compliant cycle pays nothing.
+#   Removal condition: retire when the `remediator` role is retired under its own
+#     condition (two consecutive sprints of clean inline repair) -- with no delegation
+#     boundary left, arm H protects nothing.
+for ((h = 0; h + 1 < N; h++)); do
+  # A verification pass after a RESOLUTION is arm F's business, not a repair pass.
+  [ -n "${P_RESOLVES[$((h + 1))]:-}" ] && continue
+  # A divergent pass is owned by arms C/D/F: its "repair" is the injected defect, and
+  # requiring a clean repair record there would double-report the divergence.
+  [ "${P_VERDICT[$h]}" = "DIVERGENT_HARD_BLOCK" ] && continue
+
+  c0="${P_CRIT[$h]:-}"; m0="${P_MAJOR[$h]:-}"
+  c1="${P_CRIT[$((h + 1))]:-}"; m1="${P_MAJOR[$((h + 1))]:-}"
+  # Unparseable counts already failed arm A; without them had/fell is undefined -- skip.
+  { [ -n "$c0" ] && [ -n "$m0" ] && [ -n "$c1" ] && [ -n "$m1" ]; } || continue
+
+  # A repair is PROVABLE only when this pass had findings and the next reports fewer
+  # (an edit closed them). No fall => no proof a repair landed here: a plateau is arm
+  # E's, a rise is arm C's. Fire only on the provable case -- the conservative floor
+  # keeps arm H off cycles where nothing can be shown to have been repaired.
+  had=0; { [ "$c0" -gt 0 ] || [ "$m0" -gt 0 ]; } && had=1
+  fell=0; { [ "$c1" -lt "$c0" ] || [ "$m1" -lt "$m0" ]; } && fell=1
+  { [ "$had" -eq 1 ] && [ "$fell" -eq 1 ]; } || continue
+
+  M="${P_NUM[$h]:-}"
+  [ -n "$M" ] || continue   # an unorderable pass already failed the ORDER check
+  dir="$(dirname "${P_FILE[$h]}")"
+
+  rec=""; rec_unstructured=""
+  for cand in "$dir"/*-repair-p"$M".md; do
+    [ -f "$cand" ] && [ -s "$cand" ] || continue
+    # Structured per remediator.md: at least one finding block carrying a disposition,
+    # an edit site, and a derivation line. An empty or narrative-only file fails.
+    if grep -q '^[[:space:]-]*disposition:' "$cand" \
+       && grep -q '^[[:space:]-]*edit:' "$cand" \
+       && grep -q '^[[:space:]-]*derivation:' "$cand"; then
+      rec="$cand"; break
+    fi
+    rec_unstructured="$cand"
+  done
+
+  if [ -n "$rec" ]; then
+    :   # delegated and recorded -- nothing owed
+  elif [ -n "$rec_unstructured" ]; then
+    err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$((h + 1))]}") verifies a repair of
+      $(basename "${P_FILE[$h]}") (findings fell ${c0}C/${m0}M -> ${c1}C/${m1}M), and a repair
+      record exists at $rec_unstructured but is not a structured record: it lacks one of
+      'disposition:', 'edit:', 'derivation:' (remediator.md). A repair record written from a
+      compacted summary reads like prose; a remediator's record derives every claim it asserts."
+  else
+    err "H -- REPAIR-RECORD" "$(basename "${P_FILE[$h]}")'s findings were repaired before
+      $(basename "${P_FILE[$((h + 1))]}") (fell ${c0}C/${m0}M -> ${c1}C/${m1}M), but no repair
+      record $dir/*-repair-p$M.md exists.
+      carry-over-evaluation.md §3a: 'the lead does not repair the artifact itself' -- ONE
+      remediator per pass writes the record the next pass verifies against. A missing record is
+      the lead having repaired inline; the pass series alone cannot tell that from a delegated
+      repair, which is why this arm reads the record, not the series."
+  fi
+done
 
 # --- D. TERMINAL ------------------------------------------------------------
 case "$LAST_VERDICT" in

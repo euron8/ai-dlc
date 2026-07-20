@@ -58,6 +58,14 @@ CITE='2026-07-12T03:00:00Z | "reframe the AC as a class invariant"'
 mkdir -p "$ROOT/clean"
 pass "$ROOT/clean/s-adversarial-p1.md" 1 1 1 1 EXIT_CONDITION_NOT_MET aaa1
 pass "$ROOT/clean/s-adversarial-p2.md" 2 0 0 1 EXIT_CONDITION_MET     aaa1
+# p1's findings fell into p2: a repair happened, so Check 24 arm H (v0.103.0) requires its
+# record. A delegated repair leaves this on disk; without it the cycle looks lead-repaired.
+{
+  printf '### F1 — CRITICAL\n'
+  printf -- '- disposition: repaired\n'
+  printf -- '- edit: coe.md:12\n'
+  printf -- '- derivation: n/a (no factual claim)\n'
+} > "$ROOT/clean/s-coe-repair-p1.md"
 
 # --- resolved: p2 hard-blocks, the record resolves it, p3 verifies MET. This is the GATE
 #     shape (terminal MET, non-terminal divergence resolved on the record).
