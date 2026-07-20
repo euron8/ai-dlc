@@ -1232,9 +1232,10 @@ on in beats:
 
     scripts/wait-for-deliverable.sh <path> [<path>...]
 
-    exit 0 -- DELIVERED. Every path is on disk. Consume them.
-    exit 2 -- WAITING. At least one is absent; beats remain. Call again.
-              This call WAS the beat.
+    exit 0 -- BEAT COMPLETE. This call WAS the beat. READ THE OUTPUT:
+              `DELIVERED <path>` lines are yours to consume; `WAITING
+              <path>` lines are still out -- beat again over those.
+              Exit 0 does NOT mean everything landed.
     exit 1 -- NON-DELIVERY. Sequence exhausted: re-dispatch ONCE (then
               re-run with --reset), and if it fails again, HARD_BLOCK.
 

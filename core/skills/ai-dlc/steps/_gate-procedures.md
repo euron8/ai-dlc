@@ -83,9 +83,15 @@ and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by 
 
     scripts/wait-for-deliverable.sh [--since <epoch|ISO8601>] <path> [<path> ...]
 
-- `exit 0` — all delivered. Consume them.
-- `exit 2` — not yet. Beat again (the script bounds the sequence).
+- `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines,
+  beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
 - `exit 1` — Rule 20 non-delivery. Re-dispatch, then HARD_BLOCK.
+
+**A waiting beat exits 0 on purpose.** Waiting is what most beats report, and a
+nonzero exit from a backgrounded command is reported to you as `status: failed` —
+which would announce a failure every couple of minutes on every healthy join, and
+bury the one exit code that does need a decision. Nonzero means non-delivery, nothing
+else.
 
 **Delivered means non-empty AND written since the join armed** — not merely present.
 A deliverable path reused across sprints otherwise reports the PREVIOUS sprint's file

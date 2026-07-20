@@ -71,11 +71,23 @@
 #   scripts/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
 #                                   [--since <epoch|ISO8601>]
 #
-# EXIT CODES (distinct on purpose -- the lead branches on these)
-#   0  DELIVERED     every path is non-empty AND written since this join armed.
-#   2  WAITING       at least one is undelivered, beats remain. Call again.
-#   1  NON-DELIVERY  a path exhausted max_wait_beats. Rule 20 non-delivery:
-#                    re-dispatch ONCE (with --reset), then HARD_BLOCK.
+# EXIT CODES
+#   0  BEAT COMPLETE  the beat ran and returned. Read stdout for per-path status:
+#                     `DELIVERED <path>` / `WAITING <path>`, then the BEAT COMPLETE
+#                     summary line. Consume ONLY the delivered paths.
+#   1  NON-DELIVERY   a path exhausted max_wait_beats. Rule 20 non-delivery:
+#                     re-dispatch ONCE (with --reset), then HARD_BLOCK.
+#
+# WHY WAITING IS NOT NONZERO. A join that is still waiting is the ordinary case --
+# it is what nine of every ten beats report. The harness treats a nonzero exit from
+# a BACKGROUNDED command as a failure and injects `<status>failed</status>` into
+# the lead's context, so the old `exit 2` announced a failure roughly every two
+# minutes for the entire life of every healthy join. That is not merely noise: a
+# lead that reads an attempt as an outcome re-dispatches live teammates (it has
+# happened), and a real non-delivery drowns in the false ones. Nonzero is now
+# reserved for the one state that genuinely needs a decision. The delivered/waiting
+# distinction moved to stdout, which the lead had to read anyway -- an exit code
+# could never say WHICH path in a wave was still out.
 #
 # ENV
 #   AI_DLC_STEERING_BUDGET   seconds a beat may take        (default 120)
@@ -132,7 +144,7 @@ while [ $# -gt 0 ]; do
       SINCE="$(to_epoch "$1")" || {
         echo "FAIL: --since value '$1' is not an epoch or an ISO8601 stamp." >&2; exit 64; }
       shift ;;
-    -h|--help) sed -n '2,86p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,97p' "$0"; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -317,7 +329,7 @@ if [ "$MAY_SLEEP" -eq 0 ]; then
   echo "  it past the ${BUDGET}s steering budget (Rule 29, Check A). Do not loop or chain"
   echo "  beats; pass every deliverable to ONE call, and beat again on the NEXT call:"
   echo "    scripts/wait-for-deliverable.sh path-a path-b path-c"
-  exit 2
+  exit 0
 fi
 
 # This invocation is going to wait, so it costs a beat. Charge it here and
@@ -370,6 +382,8 @@ while :; do
 done
 
 RC=0
+N_DELIVERED=0
+N_WAITING=0
 IFS='|'
 for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
@@ -377,12 +391,23 @@ for t in $PENDING; do
   if is_delivered "$t" "$(join_of "$t")"; then
     rm -f "$c" "$s" 2>/dev/null || true
     say "DELIVERED $t"
+    N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
     b="$(cat "$c" 2>/dev/null || echo '?')"
     say "WAITING   $t -- beat $b/$MAX_BEATS, not yet delivered. Beat again."
-    RC=2
+    N_WAITING=$(( N_WAITING + 1 ))
   fi
 done
 IFS="$OLDIFS"
+
+# The beat ran to completion, which is what exit 0 now means -- NOT "everything
+# landed". A wave beat can finish with some paths delivered and some still out, so
+# the last line states which, and the lead consumes only the DELIVERED ones. This
+# is the line that has to be unmissable: the exit code no longer carries it.
+if [ "$N_WAITING" -eq 0 ]; then
+  say "BEAT COMPLETE -- all ${N_DELIVERED} delivered. Consume them."
+else
+  say "BEAT COMPLETE -- ${N_DELIVERED} delivered, ${N_WAITING} still out. Consume only the DELIVERED paths, then beat again."
+fi
 
 exit "$RC"

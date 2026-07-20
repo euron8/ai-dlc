@@ -147,10 +147,12 @@ background — do not retype the loop:
 Then END YOUR TURN. The beat sleeps off the foreground; when it exits the
 harness re-invokes you with its result. Branch on the exit code THEN:
 
-    exit 0 — DELIVERED. Consume them, route into gate-1.
-    exit 2 — WAITING. Re-arm the beat (Bash, `run_in_background: true`)
-             over the still-pending paths and yield again. Do NOT
-             foreground-poll, and do NOT narrate-then-stop.
+    exit 0 — BEAT COMPLETE. Read the output, do not infer from the code:
+             `DELIVERED <path>` — consume it, route into gate-1.
+             `WAITING <path>`  — re-arm the beat (Bash,
+             `run_in_background: true`) over the still-pending paths and
+             yield again. Do NOT foreground-poll, do NOT narrate-then-stop.
+             A beat that is still waiting exits 0; that is not a failure.
     exit 1 — NON-DELIVERY. Re-dispatch ONCE (--reset), then HARD_BLOCK.
 
 **The one hard invariant: never end your turn on an outstanding join
