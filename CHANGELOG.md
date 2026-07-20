@@ -17,6 +17,25 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.106.1] — 2026-07-20
+
+### Fixed — ledger-reverify fixture could not locate its detector on a consumer
+
+`core/fixtures/ledger-reverify/run.sh` (shipped with the 0.104.0 ledger-reverify detector)
+located `ledger-reverify.sh` from a hard-coded candidate list whose consumer branch was
+`$DIR/../../.claude/…` — two levels up. On a consumer, `install.sh` relocates fixtures to
+`tests/fixtures/<name>/` and the detector to `.claude/skills/ai-dlc-update/reconcile/`, which
+is **three** levels up; two resolves to `tests/.claude/…`, which does not exist. So the
+fixture aborted `cannot locate ledger-reverify.sh` on every relocated-fixture consumer,
+blocking its pre-push suite — while the distribution stayed green on the first candidate,
+where `core/` sits two up. Distribution green ≠ consumer green.
+
+- Consumer candidate corrected to `$DIR/../../../.claude/…`, and the abort path now prints a
+  **"Looked in:"** list so a future mis-resolution is diagnosable rather than silent.
+- Verified in a synthesized consumer layout (fixture under `tests/fixtures/`, detector under
+  `.claude/`, no `core/` present so only the consumer candidate can match); restoring the old
+  two-up depth reproduces the abort (mutation-proven).
+
 ## [0.106.0] — 2026-07-20
 
 ### Fixed — the core-hook manifest glob was `hooks/*.sh`, over-capturing consumer hooks

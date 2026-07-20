@@ -9,14 +9,24 @@
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Locate the detector in BOTH layouts. Distribution: fixtures at core/fixtures/<name>/,
+# detector at core/skills/…. Consumer: install.sh relocates fixtures to tests/fixtures/<name>/
+# and the detector to .claude/skills/… — three levels up from the fixture, NOT two. The
+# consumer candidate was `../../.claude` (two up → tests/.claude/, which does not exist), so
+# every relocated-fixture consumer aborted `cannot locate` and blocked its pre-push suite,
+# while the distribution stayed green on the first candidate. Test it as a CONSUMER, not only
+# where core/ sits two up.
 CLOSER=""
+LOOKED=""
 for cand in \
   "$DIR/../../skills/ai-dlc-update/reconcile/ledger-reverify.sh" \
   "$DIR/../../../core/skills/ai-dlc-update/reconcile/ledger-reverify.sh" \
-  "$DIR/../../.claude/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; do
+  "$DIR/../../../.claude/skills/ai-dlc-update/reconcile/ledger-reverify.sh"; do
+  LOOKED="$LOOKED  $cand
+"
   [ -f "$cand" ] && CLOSER="$cand" && break
 done
-[ -n "$CLOSER" ] || { echo "FAIL: cannot locate ledger-reverify.sh from $DIR"; exit 1; }
+[ -n "$CLOSER" ] || { printf 'FAIL: cannot locate ledger-reverify.sh from %s. Looked in:\n%s' "$DIR" "$LOOKED"; exit 1; }
 
 read -r DIST BASE CONS THEIRS < <(bash "$DIR/seed.sh")
 trap 'rm -rf "$(dirname "$DIST")"' EXIT
