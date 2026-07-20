@@ -181,6 +181,21 @@ expect_says counts-omitted s1-adversarial-p "A-counts-required" \
   "severity counts are not derivable" "arm E in particular goes SILENT"
 
 echo
+# --- v0.103.0: arm H, the repair-record ---------------------------------------
+# THE DIFFERENTIAL. repaired-delegated and repaired-inline-no-record have BYTE-IDENTICAL
+# pass series; the only difference on disk is the two repair records. If arm H is
+# neutralized (does not stat the record), repaired-inline-no-record flips to exit 0 and
+# the assertion below goes red -- the fixture cannot pass a validator that ignores the
+# record. That is the mutation proof, baked into the pair.
+expect repaired-delegated        0 "converging series WITH repair records -- arm H satisfied"
+expect repaired-inline-no-record 1 "S295: same series, NO repair records -- the lead repaired inline (H)"
+expect_says repaired-inline-no-record s1-adversarial-pass "H-missing-record" \
+  "H -- REPAIR-RECORD" "the lead does not repair the artifact itself"
+expect repair-record-empty       1 "a narrative stub is not a structured repair record -- FAIL (H)"
+expect_says repair-record-empty s1-adversarial-pass "H-structure" \
+  "H -- REPAIR-RECORD" "not a structured record"
+
+echo
 # --- v0.59.0: --cycle-state, the mode the hooks call --------------------------
 # The hooks hold NO logic. They shell out, read the exit code, and deny on 3. These five
 # assertions are the entire contract between the validator and both hooks.

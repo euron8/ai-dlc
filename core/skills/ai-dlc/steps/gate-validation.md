@@ -1159,9 +1159,9 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the transcript does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (mapping in `team-roles/adversary.md`) and enforces seven arms:
+pass in the series (mapping in `team-roles/adversary.md`) and enforces eight arms:
 **A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
-**E** STALL, **F** RESOLUTION, **G** CHRONOLOGY. Each arm emits its own named failure
+**E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD. Each arm emits its own named failure
 with the offending pass and the concrete counts — `err "C -- DIVERGENCE" "<file> declares
 findings_critical_prior_scope=N but ..."` — so the remedy arrives with the verdict and is
 not restated here. Arm F is why `--transcript` is mandatory.
@@ -1186,12 +1186,26 @@ and the gate can never pass. (Freezing IS the remedy for a **moving artifact** �
 D's scope-grew branch. Different failure, opposite remedy; conflating them is what
 parked a live pipeline for a day.)
 
+**The repair between passes is delegated and recorded (arm H).** A converging series
+proves findings FELL, which proves a repair happened — but not that a `remediator` did
+it. `carry-over-evaluation.md` §3a fences repair to a subagent (*"the lead does not
+repair the artifact itself"*), delivered as `planning-artifacts/s<N>-<artifact>-repair-p<M>.md`
+that the next pass verifies against. Arm H asserts that record exists and is structured
+(a `disposition:`, an `edit:` site, a `derivation:` per finding) for every pass whose
+findings a later pass measured as repaired. It proves the record EXISTS, not who authored
+it — a subagent leaves no transcript and the provenance id is shape-only, so existence +
+structure is the honest floor. Without it, a lead that repairs inline writes a pass series
+byte-identical to a delegated one, and arms A–G pass over it. That is the S295 defect.
+
 Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Three cases decide
 shippability: `nitpicks-remain` (terminal 0 CRITICAL / 0 MAJOR with five open MINORs
 must PASS), `scope-grew-converges` (a CRITICAL rise of 2→3 with only 1 in prior scope
 must PASS), and **`divergent-resolved`** (hard block → resolution record →
 verification pass → MET must PASS: it is the sanctioned exit, and if it goes red the
-cycle has no way out of a hard block).
+cycle has no way out of a hard block). Arm H adds a **differential**: `repaired-delegated`
+and `repaired-inline-no-record` carry byte-identical pass series and differ only in whether
+the repair records exist on disk, so a validator that reads the series instead of the record
+cannot pass the fixture.
 
 **PASS:** exit 0. **FAIL:** exit 1 — a pass with no verdict, a verdict
 contradicting its residue, an unescalated divergent pass, or a series whose last
@@ -1201,11 +1215,15 @@ pass is not `EXIT_CONDITION_MET`.
 an adversarial cycle that never converged. Rule 8 requires convergence and calls
 divergence a HARD_BLOCK, but with nothing counting a CRITICAL and nothing reading
 a verdict, that requirement is unfalsifiable and termination comes from the lead
-overriding the adversary's own field. False-positive cost: one line per pass, naming the field to
+overriding the adversary's own field — or (arm H) a cycle that converged only because
+the lead repaired it inline, leaving no `remediator` record, which reads identically
+to a delegated repair. False-positive cost: one line per pass, naming the field to
 fix; the residue is already in the report, so stamping it costs the adversary
-nothing it has not already computed. Removal condition: retire once the provenance
-block is GENERATED from the findings table rather than hand-stamped, so the verdict
-cannot disagree with the residue beside it.
+nothing it has not already computed. Arm H's own contract (existence + structure, not
+authorship) is stated at its block in `validate-adversarial-convergence.sh`. Removal
+condition: retire once the provenance block is GENERATED from the findings table rather
+than hand-stamped, so the verdict cannot disagree with the residue beside it — and, for
+arm H, once the `remediator` role retires under its own condition.
 
 ### 25. Rule 29 bounded-join conduct — the operator was reachable.
 <!-- CHECK_LOADED: 25 -->
