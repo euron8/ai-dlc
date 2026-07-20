@@ -28,6 +28,7 @@
 #   layer-drift.sh        <dist> <base> <theirs> <consumer>   STATUS<TAB>entry<TAB>tgt<TAB>detail
 #   hard-blockers.sh      <dist> <base> <consumer> <theirs>   (its own wrapper, stripped here)
 #   relabel-…             <consumer> --dist <dist> --theirs <theirs>
+#   ledger-reverify.sh    <dist> <base> <consumer> <theirs>   STATUS<TAB>entry<TAB>detail
 #
 # Usage:
 #   emit-report.sh <dist> <base> <consumer> <theirs>                 # print the mechanical region
@@ -90,6 +91,11 @@ render() {
   # while the tool itself reported it. The filter must be as wide as the tool.
   rl="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>/dev/null | grep -E '^[[:space:]]+\+[[:space:]]+#{2,4} ' | sed 's/^[[:space:]]*+[[:space:]]*/  /' | sort -u || true)"
   none_or "$rl"
+
+  sub "Push-candidate ledger — CLOSE-CANDIDATE / NEEDS-REVIEW (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
+  local lr
+  lr="$(bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="STILL-LIVE"{print $1"  "$2}' | sort -u)"
+  none_or "$lr"
 
   echo
   echo "<!-- END GENERATED: reconcile-mechanical -->"
