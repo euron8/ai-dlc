@@ -107,6 +107,7 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
   local e="${1#core/}"                    # setup-sites.md form carries a core/ prefix
   case "$e" in
     team-roles/*)     printf '.claude/%s\n' "$e" ;;
+    hooks/*)          printf '.claude/%s\n' "$e" ;;   # hooks live at .claude/hooks/, outside the skill dir
     skills/ai-dlc/*)  printf '.claude/%s\n' "$e" ;;
     *)                printf '.claude/skills/ai-dlc/%s\n' "$e" ;;
   esac
@@ -132,7 +133,8 @@ is_core() {
 }
 
 # Not a core-manifest file (overrides/, extensions/, source, tests, docs, the
-# ai-dlc-setup / ai-dlc-update skills, schemas, hooks) — allow.
+# ai-dlc-setup / ai-dlc-update skills, schemas) — allow. Core hooks ARE in the
+# manifest now, so they take the deny path below (with hook-specific routing).
 is_core "$REL" || exit 0
 
 # ---------------------------------------------------------------------------
@@ -142,8 +144,17 @@ is_core "$REL" || exit 0
 # ---------------------------------------------------------------------------
 route_and_deny() {
   local reason ctx
-  reason="${REL} is an upstream-owned CORE file (Rule 27 core-manifest); a layered consumer MUST NOT edit it in place — an in-place edit is exactly what makes the next /ai-dlc-update clobber your change or raise a false BOTH-CHANGED conflict. Route it to the layer instead: a change to an EXISTING core rule/check -> an overrides/ entry that shadows it (see .claude/skills/ai-dlc/rule-authoring.md); a NET-NEW consumer rule/check/step -> an additive extensions/ entry (see .claude/skills/ai-dlc/extensions/README.md). To pull an UPSTREAM core change, run /ai-dlc-update — it writes core through the reconcile engine (git show / cp / sed), not the editor, so core stays byte-reconcilable with upstream."
-  ctx="AI/DLC core-layer guard: core files are upstream-owned and reconciled by /ai-dlc-update, never hand-edited. Put the change in overrides/ (shadow a core rule) or extensions/ (additive). The retro-gate core-layer-immutability check is the backstop; this hook is the primary. Editing a declared /ai-dlc-setup config region (a team-role model string, a dev/qa ## Ownership block, a deploy/smoke command) is allowed — this deny means the edit fell outside every such region."
+  case "$REL" in
+    .claude/hooks/*)
+      # Hooks are machinery, not rulebook: no overrides/ or extensions/ grain applies.
+      reason="${REL} is an upstream-owned CORE hook (Rule 27 core-manifest). Hooks are machinery, not rulebook — there is NO consumer layer for them: no overrides/ shadow and no extensions/ entry applies to a hook. Do NOT edit it in place; the next /ai-dlc-update overwrites core and clobbers the change. To change hook behavior, either configure it through the hook's declared AI_DLC_* settings/env tunables, or take the change upstream and pull it with /ai-dlc-update (which writes core through the reconcile engine, not the editor)."
+      ctx="AI/DLC core-layer guard: .claude/hooks/*.sh are upstream-owned machinery with no consumer layer. Reconciled by /ai-dlc-update, never hand-edited. If a hook must behave differently, use its declared AI_DLC_* tunables or contribute the change upstream — there is no overrides/ or extensions/ entry for a hook."
+      ;;
+    *)
+      reason="${REL} is an upstream-owned CORE file (Rule 27 core-manifest); a layered consumer MUST NOT edit it in place — an in-place edit is exactly what makes the next /ai-dlc-update clobber your change or raise a false BOTH-CHANGED conflict. Route it to the layer instead: a change to an EXISTING core rule/check -> an overrides/ entry that shadows it (see .claude/skills/ai-dlc/rule-authoring.md); a NET-NEW consumer rule/check/step -> an additive extensions/ entry (see .claude/skills/ai-dlc/extensions/README.md). To pull an UPSTREAM core change, run /ai-dlc-update — it writes core through the reconcile engine (git show / cp / sed), not the editor, so core stays byte-reconcilable with upstream."
+      ctx="AI/DLC core-layer guard: core files are upstream-owned and reconciled by /ai-dlc-update, never hand-edited. Put the change in overrides/ (shadow a core rule) or extensions/ (additive). The retro-gate core-layer-immutability check is the backstop; this hook is the primary. Editing a declared /ai-dlc-setup config region (a team-role model string, a dev/qa ## Ownership block, a deploy/smoke command) is allowed — this deny means the edit fell outside every such region."
+      ;;
+  esac
   jq -n --arg reason "$reason" --arg ctx "$ctx" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.105.0] — 2026-07-20
+
+### Changed — `hooks/*.sh` are now enumerated in the core manifest
+
+`core-manifest.md` (and its I5-synced copy in `reconcile/setup-sites.md`) is the single
+source of truth for the core layer — the files `ai-dlc-core-guard.sh` denies in-place edits
+to and the gate's Core-layer immutability check backstops. It listed the rulebook prose
+(`SKILL.md`, `steps/*.md`, `escalations.md`, `rule-authoring.md`, `team-roles/*.md`) but NOT
+`hooks/*.sh`. Because the guard derives its deny set from the manifest, core hooks read as an
+editable target: two independent agents in a downstream sprint concluded hooks were
+consumer-owned and in scope to patch locally (LD-S295-1), a conclusion the operator had to
+overturn.
+
+- **`hooks/*.sh` added to both manifest copies.** The guard now denies an in-place Edit /
+  Write / MultiEdit to a `.claude/hooks/*.sh` file, and the retro gate flags one that reached
+  disk anyway.
+- **Hooks route as machinery, not rulebook.** A hook has no `overrides/` or `extensions/`
+  grain — it is upstream-owned machinery. The guard's deny message says so and points at the
+  hook's declared `AI_DLC_*` tunables or an upstream contribution, instead of sending the
+  author to a layer that cannot hold a hook. `to_consumer_glob` gained a `hooks/*` case
+  mapping to `.claude/hooks/` (outside the skill dir, like `team-roles/`).
+- **No reconcile ripple.** The pull already diffs all of `core/` (hooks included);
+  `map_consumer` already maps `core/hooks/*` → `.claude/hooks/*`; the I12 drift-scan set is
+  unchanged (hooks stay exempt there by policy — machinery breaks loudly, not silently). The
+  change arms the edit-time guard and the gate backstop, nothing else.
+- **Fixture.** `core-write-guard` gains two assertions: a hook edit is denied, and its deny
+  gives machinery/`AI_DLC_` advice rather than layer routing. Dropping the `hooks/*` glob
+  case flips the hook edit back to allow and the fixture goes red (mutation-proven).
+
 ## [0.104.0] — 2026-07-20
 
 ### Added — ai-dlc-update closes push-candidate ledger entries upstream has absorbed
