@@ -667,9 +667,12 @@ the reader loads and every taught example is rendered from.
 `scripts/validate-provenance-block.sh` parses the block;
 `scripts/validate-retro-evidence.sh` enforces transcript artifact +
 byte-matched SHA citation for retro party-mode (see
-`gate-validation.md` Check 17). Both run on every retro PR via
-`.github/workflows/validate-retro-compliance.yml`. Absence of the
-block at gate-validation is a HARD_BLOCK.
+`gate-validation.md` Check 17). Both run at the Step 5c pre-commit gate;
+a consumer that ships `.github/workflows/validate-retro-compliance.yml`
+also re-runs them on the retro PR, but a script-based consumer with no
+`.github/workflows/` enforces them locally only — the local gate is
+authoritative either way. Absence of the block at gate-validation is a
+HARD_BLOCK.
 
 **Forbidden failure mode.** Skill-shaped output (role-played personas,
 findings lists) WITHOUT Skill tool invocation and WITHOUT provenance

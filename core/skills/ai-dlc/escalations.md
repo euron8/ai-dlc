@@ -68,6 +68,14 @@ citation required) — the honest label. This is the S290 fix: six
 `S290-* Lead (…)` entries were flipped to RESOLVED in a window with zero
 operator messages, and nothing compared the claim to the transcript.
 
+The citation is written in the SAME edit that sets the status. An edit
+flipping an entry to `RESOLVED` / `OVERRIDDEN` without the
+`**Operator authorization:**` line is incomplete, not pending — never a
+follow-up. The decay path is a handoff to a fresh session: a successor
+lead cannot reconstruct a verbatim substring it never received, so a
+citation deferred past the edit is not late, it is unrecoverable except
+by asking the operator to repeat themselves.
+
 **AC verification-category-change disclosure.** When resolving a
 HARD_BLOCK changes how an acceptance criterion is verified — moving it
 between verification categories (e.g. discriminator → smoke-only,

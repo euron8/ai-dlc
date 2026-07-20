@@ -17,6 +17,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.102.0] — 2026-07-20
+
+### Changed — prose corrections surfaced by the graph consumer's push-candidate review
+
+Five standalone rule/doc corrections, no new mechanism. Each was validated
+against the tree before landing; five sibling push-candidates were refuted and
+dropped (including a schema-pointer "fix" that would have broken the logical
+`schemas/…` name the tree uses consistently in both install layouts).
+
+- **CI enforcement is now stated conditionally.** `SKILL.md` and `steps/retro.md`
+  asserted, without a conditional, that the retro validators "run on every retro
+  PR via `.github/workflows/validate-retro-compliance.yml`" (and the sibling
+  `validate-ci-gates.yml`). A script-based consumer with no `.github/workflows/`
+  inherited a false enforcement claim in its loaded rulebook. Both sentences now
+  name the Step-5c local gate as authoritative and the PR runner as conditional
+  on the consumer shipping the workflow — reusing the hedge `retro.md` already
+  carries for the path-filter dormancy scan.
+- **The H1 slicing-fidelity check derives the universal set instead of
+  restating it.** `gate-validation.md`'s H1 procedure carried a hardcoded
+  `(1, 2, 3, …)` universal-core list that had drifted from the `GATE_MANIFEST`
+  `universal` row (it omitted `2a` and `25`) — the same hand-listed-set class
+  Invariant 3 was already fixed for. It now reads the manifest row.
+- **The operator citation is required at authorship time.** `escalations.md`
+  stated the citation requirement and its gate-time check but not *when* it is
+  written; a citation-less `RESOLVED` was well-formed until a gate ran. One
+  sentence now binds the citation to the same edit that sets the status — the
+  decay path is a handoff to a fresh session that can no longer reconstruct the
+  verbatim substring.
+- **A gate-adjudication verdict is valid only for its dispatch.** The nonce was
+  a freshness label with no rule forbidding a lead from carrying forward, citing,
+  or reconciling against a verdict derived from state that has since moved.
+  `gate-validation.md` and `team-roles/gate-adjudicator.md` now state that a
+  re-dispatch re-derives every check from current state — a deletion of
+  inheritance, not a staleness comparator.
+- **A Rule 26(c) block in the file that enforces the triple now carries all
+  three fields.** `gate-validation.md`'s check-namespace block stated the
+  failure caught and the removal condition but not the false-positive cost. The
+  missing sentence is added.
+
 ## [0.101.0] — 2026-07-20
 
 ### Changed — a waiting beat no longer exits nonzero (exit 2 retired)
