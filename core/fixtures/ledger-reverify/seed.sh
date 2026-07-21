@@ -64,6 +64,31 @@ cat > "$LED" <<'LEDGER'
 
 - **Entry D has no verify line.** A legacy prose entry, hand-review as today.
   <br>No machine-runnable receipt; the closer must not emit a row for it.
+
+---
+
+## PC-FIXTURE-HEADING-ABSORBED — the heading entry shape (filed for the fixture)
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+Entries grow into this shape once the receipt outgrows a bullet. Identical directive to
+Entry B, so it must classify identically — a parser that treats a heading as a pure
+terminator drops it silently and reports nothing to close.
+
+---
+
+## PC-FIXTURE-HEADING-CLOSED — heading shape, already adopted
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+ADOPTED UPSTREAM (v0.101.0, verified for the fixture). Closed — must not be re-emitted.
+
+---
+
+## PC-FIXTURE-HEADING-NO-VERIFY — heading shape, no directive
+
+Prose only. Must NOT inherit the directive of the heading entry above it: a heading opens
+an entry, so it also ends the one before it.
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

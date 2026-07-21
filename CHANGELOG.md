@@ -17,6 +17,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.116.0] — 2026-07-21
+
+### Fixed — the push-candidate ledger closer could not see a heading-shaped entry, so the one entry that adopted its own convention was invisible
+
+`ledger-reverify.sh` (v0.106.0) closes ledger entries upstream has absorbed, driven by an
+opt-in `verify:` line. Its parser treated an entry as a top-level `- **Title**` bullet and
+treated EVERY `##`–`######` heading as a pure terminator: flush, then clear the label. A
+`verify:` line inside a heading-shaped entry therefore parsed its directive against an empty
+label, and `flush()` — which requires a non-empty label — dropped it. The detector emitted
+nothing and exited 0, which is byte-identical to "no entry has anything to close."
+
+**Measured on the reference consumer.** Ledgers grow into the `## SECTION-ID — title` shape
+as entries acquire receipts too long to read as a bullet; every entry filed there after
+2026-07-20 uses it, including the ONE entry in a 40-entry ledger that had adopted the
+`verify:` convention at all. Upstream had already fixed that entry's defect at 0.114.0. The
+closer said nothing. Running it against the real ledger produced no output; rewriting that
+single heading as a bullet, with no other change, produced the `CLOSE-CANDIDATE` row it
+should have emitted all along.
+
+A heading now OPENS an entry — after flushing the previous one, so the terminator semantics
+that made section headers work are unchanged — and its label is the text before the first
+` — `. The fixture gains three heading-shaped entries carrying the same directives as the
+existing bullet entries B/C/D, so the two shapes are asserted to classify identically; the
+new `CLOSE-CANDIDATE` assertion goes red against the pre-fix parser.
+
 ## [0.115.0] — 2026-07-21
 
 ### Fixed — the retro rule-audit's consumer-layer scope was one directory level too shallow, so it matched one file in thirty-two

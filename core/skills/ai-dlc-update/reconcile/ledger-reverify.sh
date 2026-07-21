@@ -32,6 +32,19 @@
 # An entry with NO `verify:` line is left to hand-review, exactly as today — it is not
 # emitted. An entry already annotated `ADOPTED UPSTREAM` is closed and skipped.
 #
+# BOTH ENTRY SHAPES CARRY A `verify:` LINE. A ledger entry is either a top-level
+# `- **Title**` bullet or a `## SECTION-ID — title` heading; ledgers grow into the heading
+# shape as entries acquire receipts too long to read as a bullet. The parser originally
+# treated EVERY heading as a pure terminator — it flushed and cleared the label — so a
+# `verify:` line inside a heading-shaped entry set the directive against an empty label and
+# `flush()` dropped it. The detector emitted nothing and exited 0, which is byte-identical
+# to "no entry has anything to close."
+#
+# Measured on the reference consumer: every entry filed after 2026-07-20 uses the heading
+# shape, including the ONE entry that had adopted this convention at all. Upstream had
+# already fixed that entry's defect; the closer stayed silent about it. A heading now OPENS
+# an entry (after flushing the previous one, so the terminator semantics are unchanged).
+#
 # Usage:  ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref> [ledger-path]
 #         (arg order matches unregistered-drift.sh)
 # Output: TSV — STATUS<TAB>ENTRY<TAB>DETAIL
@@ -60,11 +73,16 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 [ -n "$TV" ] || TV="$THEIRS"
 
 # Extract (label<TAB>directive) for each OPEN entry carrying a verify: line. An entry is a
-# top-level `- **…**` bullet; the entry ends at the next such bullet or any `##`-`######`
-# heading. `ADOPTED UPSTREAM` anywhere in the entry marks it closed → skip. Piped into a
-# while-read loop rather than `mapfile` so it runs under bash 3.2 (macOS), like the sibling
-# reconcile classifiers.
-awk '
+# top-level `- **…**` bullet OR a `##`-`######` heading; either one ends the entry before it.
+# `ADOPTED UPSTREAM` anywhere in the entry marks it closed → skip. Piped into a while-read
+# loop rather than `mapfile` so it runs under bash 3.2 (macOS), like the sibling reconcile
+# classifiers.
+#
+# DASH is passed in rather than written as an awk escape: it is a multibyte em dash, and
+# `\xNN` escapes are not portable across the awks this ships to (BSD awk on macOS, gawk and
+# mawk on Linux). A heading's label is the text before the first " — ", so
+# `## PC-FOO — long prose title (filed …)` labels as `PC-FOO`.
+awk -v DASH=' — ' '
   function flush(){
     if (has_verify && !closed && label != "")
       printf "%s\t%s\n", label, directive
@@ -76,7 +94,14 @@ awk '
     gsub(/`/,"",l); label=substr(l,1,70)
     next
   }
-  /^#{2,6}[ \t]/ { flush(); next }
+  /^#{2,6}[ \t]/ {
+    flush()
+    l=$0; sub(/^#+[ \t]*/,"",l)
+    p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
+    sub(/[[:space:]]+$/,"",l)
+    gsub(/`/,"",l); label=substr(l,1,70)
+    next
+  }
   /ADOPTED UPSTREAM/ { closed=1 }
   match($0, /verify:[ \t]*/) {
     has_verify=1
