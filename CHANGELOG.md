@@ -17,6 +17,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.107.0] — 2026-07-21
+
+### Fixed — a clean pull reported the driver's own writes as consumer drift, and told the operator to revert them
+
+`reconcile/apply.sh` phase 1 overwrites every pure-apply core file from `THEIRS`. The
+`unregistered-drift.sh` capture sat below that, in phase 2, and its comparison is
+`git show "${BASE}:${cp}" | cmp -s - "$cons"` — against **BASE**, on the files phase 1 had
+just set to **THEIRS**. Any file that was both a pure-apply and changed upstream therefore
+reported as consumer drift *necessarily*, on a pull carrying no consumer drift at all. The
+detector was measuring the write the driver made moments earlier.
+
+That is a poisoned signal rather than a noisy one, because the rows are destructive and
+confidently worded. `HARD-CORE-DRIFT-ABSORBED` hands the operator a ready
+`git show … > <consumer-path>` revert command and asserts "This still blocks because a revert
+DELETES text and only you can confirm nothing was lost"; `HARD-UNREGISTERED-CORE-DRIFT`
+reaches `apply.sh` itself as `DECISION drift … refile-as-override or revert`. An operator who
+trusts either authors a bogus `overrides/` entry shadowing a rule they never changed, or
+reverts a file to the version it already is. And on a pull that *did* carry real drift, the
+true rows would be indistinguishable from the false ones.
+
+Observed on the 0.95.0 → 0.99.0 pull: three findings on files the driver had itself written,
+each detail string carrying its own refutation (`0 lines vs <base>` — zero consumer-added
+lines), on a reconcile whose *pre*-apply run had returned no `HARD-*` rows.
+
+**Fix.** Both detector captures now run in a new phase 0, before anything is written — the
+only state in which ours-vs-base means what the status name claims. Phases 1 and 2 consume
+what phase 0 measured; phase 2 no longer recomputes.
+
+Phase 3's `layer-drift.sh` is deliberately left where it is and is not exposed to the same
+fault: its consumer-side reads go through `layer_files()`, which walks consumer-authored
+`*.md` under `overrides/` and `extensions/` — files phase 1 never overwrites, with
+`README.md` explicitly excluded — and every core-side comparison resolves through
+`git -C "$DIST" show`, never the installed file.
+
+**Measured on a real consumer**, not only the fixture: a reconstructed 0.101.0 → 0.106.1 pull
+of the reference consumer has exactly **1** genuine in-place drift before any write. The
+fixed driver reports that 1. A mutant with the capture moved back below phase 1 reports **2**
+— manufacturing `skills/ai-dlc-setup/SKILL.md`, a file it had just written itself.
+
+New fixture `core/fixtures/apply-drift-after-write/` seeds a consumer byte-identical to BASE
+with both files changed upstream — zero drift by construction — and asserts the clean pull
+produces no drift decision. Its anti-vacuity assertion re-runs the detector *after* the write
+and requires both hazard rows to appear, so a pass cannot come from having picked files the
+detector never looks at; its mutant assertion moves the capture back down and requires the
+fixture to fail.
+
 ## [0.106.1] — 2026-07-20
 
 ### Fixed — ledger-reverify fixture could not locate its detector on a consumer
