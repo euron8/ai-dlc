@@ -17,6 +17,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.114.0] — 2026-07-21
+
+### Fixed — a CLASSIFY file's ours/theirs comparison was unfalsifiable prose, and came out inverted
+
+`emit-report.sh` renders the reconcile report's mechanical region and `--verify` byte-compares
+it, so a narrated report cannot drop a finding. But the semantic worklist was only a LIST OF
+PATHS. The resolution for each CLASSIFY file — including the claim about which side holds what
+— is prose the LLM composes, and no detector re-reads it.
+
+**Observed on the 0.106.1 → 0.113.1 pull of the reference consumer.** The report's comparison
+table for a `BOTH-ADDED` template assigned each side the *other's* content: it credited the
+consumer with upstream's `Typical Source` column and `narrative-drift` / `dormant-gate`, and
+credited upstream with the consumer's `perf-cliff` / `financial-correctness`. Because the
+recommended ACTION is written from the comparison, the inversion propagated into it — the
+disposition would have filed the consumer's `overrides/` entry carrying **upstream's** rows
+(an override restating core, which `layer-drift.sh` flags on the next pull) while dropping the
+two domain classes that were the consumer's whole reason for the file. It also inverted the
+push-candidate note, listing three things upstream already ships as consumer innovations to
+push.
+
+The generated region was correct throughout — it named the file and its bucket. Only the
+content claim was unchecked, which is the same shape this region already exists to close one
+layer up, so it gets the same treatment.
+
+**Fix.** `emit-report.sh` now renders a **Semantic worklist orientation** block per CLASSIFY
+file, inside the `reconcile-mechanical` region: both sides labelled with their resolved
+locations and line counts, and each side's exclusive lines shown. Because it is inside the
+region, the existing `--verify` covers it byte-exactly — no new verifier, no new script. The
+`ai-dlc-update` SKILL.md now requires every ours/theirs claim to be derived from that block
+rather than recalled.
+
+Two details that decide whether the block works:
+
+- **The sample cap is 12, not 6.** At 6 the sample was entirely boilerplate — both sides' first
+  rows were table headers and the same four generic class names, while the lines that actually
+  decide the resolution sat in the suppressed tail. A sample showing only what the two sides
+  have in COMMON orients nobody.
+- **Truncation is always stated** (`complete`, or an explicit suppressed count) and every file
+  carries a `full: diff …` command, so a partial list can never read as a whole one.
+
+The fixture asserts the labelling rather than trusting it, using per-side sentinels; a mutation
+that swaps the marker→side mapping makes it fail with that exact diagnosis. A further mutant
+deletes an orientation line and requires `--verify` to catch it, proving the block is inside
+the verified region rather than decoration beside it.
+
 ## [0.113.1] — 2026-07-21
 
 ### Fixed — Check 26's enforcer was inert on every fresh install

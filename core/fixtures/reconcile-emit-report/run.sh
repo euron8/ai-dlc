@@ -20,6 +20,12 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
 verify() { bash "$EMIT" --verify "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1; RC=$?; }
 
+# The orientation block for the BOTH-ADDED template, as rendered.
+ORIENT="$(awk '/Semantic worklist orientation/,/^\*\*Deletions/' "$REGION")"
+# Which side is the line attributed to? Prints THEIRS or OURS, or nothing.
+side_of() { printf '%s\n' "$ORIENT" | awk -v pat="$1" '
+  /ONLY IN THEIRS/{s="THEIRS"} /ONLY IN OURS/{s="OURS"} $0 ~ pat {print s; exit}'; }
+
 echo "reconcile-emit-report:"
 
 # --- Assertion 0: SANITY — the rendered region carries the HARD blocker -------
@@ -44,6 +50,50 @@ verify "$REPORT_MISSING"
 verify "$REPORT_STALE"
 [ "$RC" -eq 1 ] && ok "--verify FAILS a region hand-edited to drop the HARD blocker (exit 1) — an edited render cannot hide a finding" \
   || bad "--verify did NOT catch a dropped-blocker edit (rc=$RC) — the region could still be doctored"
+
+# --- Assertion 4: a CLASSIFY file gets an ORIENTATION block -------------------
+# The bucket list alone names the file; it says nothing about which side holds what. That
+# claim used to live only in LLM prose, and on the 0.106.1 -> 0.113.1 pull it came out
+# INVERTED, taking the recommended action down with it.
+if printf '%s\n' "$ORIENT" | grep -q 'templates/classes.md'; then
+  ok "the BOTH-ADDED file gets an orientation block in the rendered region"
+else
+  bad "no orientation block for the CLASSIFY file — which side holds what is unstated again"
+fi
+
+# --- Assertion 5: THE DEFECT — each side's line is attributed to THAT side -----
+t_side="$(side_of 'SENTINEL-THEIRS-ONLY')"
+o_side="$(side_of 'SENTINEL-OURS-ONLY')"
+if [ "$t_side" = "THEIRS" ] && [ "$o_side" = "OURS" ]; then
+  ok "orientation attributes each side's exclusive line to the correct side (theirs->THEIRS, ours->OURS)"
+else
+  bad "ORIENTATION INVERTED: upstream's line reported under '$t_side', consumer's under '$o_side'. This is the defect the block exists to prevent, in the block itself."
+fi
+
+# --- Assertion 6: a truncated side never reads as complete --------------------
+# The sample is capped. A cap that does not say so turns a partial list into an apparent
+# full one — and the resolution is written from it.
+if printf '%s\n' "$ORIENT" | grep -qE 'ONLY IN (THEIRS|OURS) \([0-9]+, complete\)|suppressed'; then
+  ok "every sample states whether it is complete or how many lines were suppressed"
+else
+  bad "the orientation sample is neither marked complete nor reports a suppressed count — a truncated side reads as the whole side"
+fi
+
+# --- Assertion 7: the escape hatch is present ---------------------------------
+if printf '%s\n' "$ORIENT" | grep -q "full: diff "; then
+  ok "each file carries a full-diff command, so a truncated sample is never the only source"
+else
+  bad "no full-diff command emitted — a suppressed tail would be unreachable from the report"
+fi
+
+# --- Assertion 8: MUTANT — orientation lives INSIDE the verified region --------
+# If the block sat outside the GENERATED markers, the LLM could edit or drop it and --verify
+# would still pass, which is exactly how the narrated report dropped findings before.
+MUT="$WORK/report-orient-doctored.md"
+{ echo "# Reconcile report (fixture)"; echo; grep -v 'SENTINEL-OURS-ONLY' "$REGION"; } > "$MUT"
+verify "$MUT"
+[ "$RC" -eq 1 ] && ok "mutant: deleting an orientation line FAILS --verify — the block is inside the verified region" \
+  || bad "MUTANT DID NOT FAIL (rc=$RC) — orientation can be doctored without --verify noticing, so it is decoration"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
