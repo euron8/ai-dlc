@@ -17,6 +17,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.117.0] — 2026-07-21
+
+### Fixed — the steerability audit was scoped to one session but adjudicated a sprint, and the flow log's own legend counted as data
+
+Two defects in `retro.md` §4b, both of the vacuous-pass shape: a measurement whose scope
+excludes the region its failures live in, and a tally that counts documentation.
+
+**Scope.** §4b directed `validate-steering-budget.sh --transcript <session-id>.jsonl` —
+"this session's transcript", singular — while the findings it produces are sprint-level
+lead-conduct findings. A sprint does not run in one session: every handoff and every
+auto-compact starts a new transcript, so Checks A and B could not fail for anything before
+the last compaction, which in a long sprint is most of it. **Measured on the reference
+consumer:** three lead-session transcripts; run as directed the audit returned
+`PASS (B)`, run across all three Check B returned `FAIL (B -- STEAMROLL): 2` — both in a
+session the directed invocation never opens, and one of them a violation that sprint had
+already recorded by hand. The directed form would have reported the sprint clean on a
+violation class it had committed twice. That is worse than an unrun check, because it
+produces a PASS the retro then cites.
+
+§4b now directs the corpus mode with a sprint bound, and requires the reported
+`transcripts scanned : N` to be recorded — stating that N > 1 on any sprint that handed off
+or auto-compacted, so a single-transcript scan is visible rather than assumed.
+`--dir` already existed; what it lacked was a bound, so scanning a corpus reached back
+across sprint boundaries and made the count meaningless against Check 25's previous-gate
+baseline. `--since` now filters the corpus by file mtime (a transcript last written before
+the sprint opened cannot hold an event inside it), and the excluded count is **printed, not
+silently dropped** — a narrow scan being invisible is the defect being fixed, so the fix
+must not reintroduce it. `--transcript` and `--cite` are untouched.
+
+**The legend.** The flow log opens with a header naming every event type, and the file is
+then a sequence of `## <timestamp> -- <EVENT>` entries. §4b directed the lead to read
+`ACK_DENIED` / `USER_PAUSE` / `BLOCKED` / `BACKOFF` counts without specifying how to count
+them. The obvious form, `grep -c BACKOFF`, returns **3 on a log containing zero BACKOFF
+events** — the header mentions the token three times. Nothing about `3` signals it measured
+documentation: it is a plausible number of stalls. Observed twice, one sprint apart, by the
+same consumer, with a written lesson between the two occurrences that did not prevent the
+repeat.
+
+The counting form is now stated in §4b *and* in the log header itself, so it travels with
+the file. The header is seeded by three hooks (`ai-dlc-continue.sh`, `ai-dlc-pause.sh`,
+`ai-dlc-acknowledge.sh`) — three homes, all three updated. Note the header is written only
+into an absent-or-empty log, so existing consumer logs keep their current header until the
+next Rule 25(c) rotation; the §4b directive covers them meanwhile. The legend was left
+readable rather than mangled into a non-matching spelling: no edit to it can stop a bare
+substring grep from matching, so the anchored form is the fix and obfuscating the prose
+would only have cost the reader.
+
 ## [0.116.0] — 2026-07-21
 
 ### Fixed — the push-candidate ledger closer could not see a heading-shaped entry, so the one entry that adopted its own convention was invisible
