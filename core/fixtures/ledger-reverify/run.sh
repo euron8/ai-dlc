@@ -65,6 +65,16 @@ row_is "Entry B" CLOSE-CANDIDATE "theirs now has MARKER_B -> upstream absorbed i
 row_is "Entry C" ABSENT          "already ADOPTED UPSTREAM -> closed, not re-emitted"
 row_is "Entry D" ABSENT          "no verify: line -> hand-review, no row"
 
+# THE SECOND DIFFERENTIAL — entry SHAPE. These three carry the same directives as B/C/D but
+# in the `## SECTION-ID — title` shape instead of a `- **bullet**`. A parser that treats every
+# heading as a pure terminator clears the label, so the directive is parsed and then dropped:
+# no row, exit 0, indistinguishable from "nothing to close". Measured on the reference
+# consumer, where every entry filed after 2026-07-20 used this shape and the one entry that
+# had adopted the verify: convention at all was invisible while upstream had already fixed it.
+row_is "PC-FIXTURE-HEADING-ABSORBED"  CLOSE-CANDIDATE "heading entry, theirs has MARKER_B -> same verdict as Entry B"
+row_is "PC-FIXTURE-HEADING-CLOSED"    ABSENT          "heading entry annotated ADOPTED UPSTREAM -> closed"
+row_is "PC-FIXTURE-HEADING-NO-VERIFY" ABSENT          "heading opens an entry, so it ends the one above -> no inherited directive"
+
 # The closer must NEVER exit nonzero — it is a classifier and a close never blocks apply.
 ASSERTIONS=$((ASSERTIONS + 1))
 bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" >/dev/null 2>&1

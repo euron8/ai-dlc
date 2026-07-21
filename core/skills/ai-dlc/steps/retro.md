@@ -267,8 +267,8 @@ The analyst scans the following files for violations of SKILL.md Rule 18:
 - `docs/coding-conventions.md`
 - `.claude/skills/ai-dlc/steps/*.md`
 - `.claude/team-roles/*.md`
-- `.claude/skills/ai-dlc/extensions/*.md`
-- `.claude/skills/ai-dlc/overrides/*.md`
+- `.claude/skills/ai-dlc/extensions/**/*.md`
+- `.claude/skills/ai-dlc/overrides/**/*.md`
 
 The last two are not an afterthought. Rule 27 forbids a consumer to hand-edit any of the
 first four, so a scope naming only those scans exactly the text the consumer cannot author
@@ -277,6 +277,13 @@ which means every consumer that adopts Rule 27 has it, and the audit's CLEAN ver
 indistinguishable from its never having run against the relevant corpus. Measured on the
 reference consumer: six blocks of narrative drift added across two `extensions/` files in one
 sprint, with the audit reporting `Class 1: CLEAN (of 39 files scanned)` throughout.
+
+**The `**` is load-bearing — do NOT narrow it to `*`.** `extensions/` is conventionally
+organised into subdirectories (`checks/`, `roles/`, `steps-domain/`), so a single-level glob
+matches the README and nothing else. Measured on the reference consumer: `extensions/*.md`
+resolves to **1** file, `extensions/**/*.md` to **32** — and the drift that justified adding
+these two lines sits in `extensions/steps-domain/`, outside the narrow form. A scope that
+misses the corpus reports CLEAN exactly as loudly as one that scanned it.
 
 Three classes of violation to detect:
 
@@ -686,9 +693,20 @@ The operator must be able to reach the lead mid-section. Two failures make that
 impossible, and both are mechanically detectable. **Audit first, rotate second** —
 rotating before the audit destroys the evidence the audit reads.
 
-**Audit.** Run the validator against this session's transcript:
+**Audit.** Run the validator across every transcript in the SPRINT window, not this
+session's:
 
-    scripts/validate-steering-budget.sh --transcript ~/.claude/projects/<project-slug>/<session-id>.jsonl
+    scripts/validate-steering-budget.sh \
+      --dir ~/.claude/projects/<project-slug>/ \
+      --since <ISO-8601 UTC of the sprint's first commit>
+
+Record the reported `transcripts scanned : N` in the retro. **N must be greater than 1 on
+any sprint that handed off or auto-compacted**, and a scan of 1 on such a sprint is a
+mis-scoped audit, not a clean one. The findings here are sprint-level lead-conduct
+findings, but a sprint does not run in one session: every handoff and every auto-compact
+starts a new transcript file, so a single-session scan cannot fail for anything before the
+last compaction — which in a long sprint is most of it. That is the vacuous-pass shape, and
+it is worse than an unrun check because it produces a PASS the retro then cites.
 
 - **Check A (starvation)** — any foreground tool call that outlasted the steering
   budget. While it was in flight there was no tool boundary, so a queued operator
@@ -699,7 +717,12 @@ rotating before the audit destroys the evidence the audit reads.
   call before the pause flag was released. The lead received a steer and executed
   through it. Each is a **lead-conduct finding**.
 
-Then read the flow log, `_bmad-output/pipeline-continuation-log.md`:
+Then read the flow log, `_bmad-output/pipeline-continuation-log.md`. **Count entries with
+`grep -c '^## .*-- <EVENT>'`, never a bare `grep -c <EVENT>`** — the log's own header
+legend names every event type, so the bare form counts documentation as data and inflates
+the tally by the number of times the header mentions the token. The inflated figure is
+plausible (a bare `grep -c BACKOFF` returns 3 on a log holding zero BACKOFF events), so
+nothing about the result signals that it measured the wrong thing:
 
 - `ACK_DENIED` — the `PreToolUse` hook had to physically block the lead from
   advancing past a waiting operator. A nonzero count means the lead tried; the

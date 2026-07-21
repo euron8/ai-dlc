@@ -369,6 +369,11 @@ Event types:
   not the lead's judgment -- is what stopped it. Investigate each one.
 - `BACKOFF`: rapid-fire stop attempts detected; stall confirmed
 
+Counting entries: one event is one `## <timestamp> -- <EVENT>` line. Count with
+`grep -c '^## .*-- <EVENT>'`. A bare `grep -c <EVENT>` also matches this header,
+which mentions every event name, so it over-reports — and the inflated number is
+plausible enough that nothing about the result signals it counted documentation.
+
 ---
 
 EOF

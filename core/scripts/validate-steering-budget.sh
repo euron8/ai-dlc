@@ -88,7 +88,14 @@
 #
 # USAGE
 #   core/scripts/validate-steering-budget.sh --transcript PATH [--quiet]
-#   core/scripts/validate-steering-budget.sh --dir PATH [--quiet]   # scan a corpus
+#   core/scripts/validate-steering-budget.sh --dir PATH [--since ISO] [--quiet]
+#       Scan a corpus. This is the SPRINT-scoped mode: a sprint spans many transcripts
+#       (every handoff and auto-compact starts a new one), so a single --transcript run
+#       audits only the window since the last compaction and cannot fail for anything
+#       earlier. --since bounds the corpus by file mtime to the sprint window; without it
+#       the scan reaches back across sprint boundaries. The count of transcripts scanned
+#       and the count excluded are both printed, so a narrow scan is visible rather than
+#       assumed.
 #   core/scripts/validate-steering-budget.sh --transcript PATH --count
 #       Print ONLY the total violation count (A+B+C+D) as a bare integer, exit 0.
 #       gate-validation.md Check 25 needs an integer to compare against the count
@@ -319,8 +326,34 @@ const isDenied = (b) => {
   return DENY_MARK.test(raw);
 };
 
+// A sprint does not run in one session. Every handoff and every auto-compact starts a new
+// transcript file, so a single --transcript scan covers only the window since the last
+// compaction -- in a long sprint, a minority of it. Checks A and B therefore cannot fail for
+// anything earlier, and the retro cites a PASS produced by a scope that excluded the region
+// where its failures live. Measured on the reference consumer: run as retro.md then directed
+// (one transcript) the audit returned PASS; run across that sprint's three transcripts,
+// Check B returned FAIL (B -- STEAMROLL): 2 -- both in a session the directed invocation
+// never opened, and one of them a violation the sprint had already recorded by hand.
+//
+// --dir is the sprint-scoped mode, and --since bounds it. Without the bound it scans the
+// project's whole session history, which over-reports across sprint boundaries and makes the
+// count meaningless against Check 25's previous-gate baseline. The filter is on file mtime:
+// a transcript last written before the sprint opened cannot hold an event inside it. Files
+// excluded are REPORTED, never silently dropped -- a narrow scan must be visible, which is
+// the whole defect being fixed here.
+let skippedBySince = 0;
 const files = one ? [one]
-  : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f));
+  : fs.readdirSync(dir).filter(f => f.endsWith(".jsonl")).map(f => path.join(dir, f))
+      .filter(f => {
+        if (!SINCE) return true;
+        const cut = Date.parse(SINCE);
+        if (Number.isNaN(cut)) return true;
+        let mt;
+        try { mt = fs.statSync(f).mtimeMs; } catch { return true; }
+        if (mt >= cut) return true;
+        skippedBySince++;
+        return false;
+      });
 
 // ---- --cite: provenance-citation query (single transcript) ------------------
 // Answer one mechanical question: is CITE a verbatim (whitespace-normalized,
@@ -473,7 +506,7 @@ if (COUNT) {
 
 const log = (...a) => { if (!QUIET) console.log(...a); };
 log(`steering budget     : ${BUDGET}s (foreground calls may not block longer)`);
-log(`transcripts scanned : ${files.length}`);
+log(`transcripts scanned : ${files.length}${SINCE && !one ? ` (${skippedBySince} excluded: mtime before ${SINCE})` : ""}`);
 log(`exempt from check A : AskUserQuestion (human think-time, not starvation)`);
 log("");
 
