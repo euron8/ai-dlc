@@ -17,6 +17,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.115.0] — 2026-07-21
+
+### Fixed — the retro rule-audit's consumer-layer scope was one directory level too shallow, so it matched one file in thirty-two
+
+v0.114.0 added `extensions/*.md` and `overrides/*.md` to the Step-4 rule-file audit scope,
+closing a blind spot that followed from Rule 27 itself: a scope naming only core-owned files
+scans exactly the text a consumer may not author and stays silent on all the text it does.
+The globs landed single-level. `extensions/` is conventionally organised into
+subdirectories (`checks/`, `roles/`, `steps-domain/`), so `extensions/*.md` matches the
+README and nothing else.
+
+**Measured on the reference consumer:** `extensions/*.md` resolves to **1** file,
+`extensions/**/*.md` to **32** — and the drift that justified adding the two lines in the
+first place ("six blocks of narrative drift across two `extensions/steps-domain/` files")
+sits in a subdirectory, outside the narrow form. The consumer's own local override had
+written `**/*.md`; the upstream adoption took the idea and lost the depth. A fix that cannot
+reach the corpus its receipt was measured on reports CLEAN exactly as loudly as one that
+scanned it.
+
+Both globs are now `**/*.md`, with the depth receipt recorded inline so a future reader
+cannot re-narrow them. `rule-authoring.md`'s own **Scope** paragraph carried the same
+omission — it listed the core-owned rule files and never claimed `overrides/**` or
+`extensions/**`, which Rule 27 makes the only rule files a consumer may author — and now
+names them.
+
 ## [0.114.0] — 2026-07-21
 
 ### Fixed — a CLASSIFY file's ours/theirs comparison was unfalsifiable prose, and came out inverted

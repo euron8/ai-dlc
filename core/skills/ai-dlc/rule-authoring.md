@@ -50,9 +50,11 @@ both are dormant and rules are authored in place as before.
 pointers). Run it before committing the entry.
 
 **Scope.** Rule files only: this skill, CLAUDE.md,
-coding-conventions.md, step files, team role files. Planning
-artifacts (PRDs, stories, reviews, retros) and export bundles are
-different formats.
+coding-conventions.md, step files, team role files, and a consumer's
+own `overrides/**` and `extensions/**` entries — those carry rule text
+too, and Rule 27 makes them the ONLY rule files a consumer may author.
+Planning artifacts (PRDs, stories, reviews, retros) and export bundles
+are different formats.
 
 **Cleanup.** The retro's rule file audit (`retro.md` Step 4) scans
 rule files each sprint for three classes of violation: **narrative

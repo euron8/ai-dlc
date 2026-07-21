@@ -267,8 +267,8 @@ The analyst scans the following files for violations of SKILL.md Rule 18:
 - `docs/coding-conventions.md`
 - `.claude/skills/ai-dlc/steps/*.md`
 - `.claude/team-roles/*.md`
-- `.claude/skills/ai-dlc/extensions/*.md`
-- `.claude/skills/ai-dlc/overrides/*.md`
+- `.claude/skills/ai-dlc/extensions/**/*.md`
+- `.claude/skills/ai-dlc/overrides/**/*.md`
 
 The last two are not an afterthought. Rule 27 forbids a consumer to hand-edit any of the
 first four, so a scope naming only those scans exactly the text the consumer cannot author
@@ -277,6 +277,13 @@ which means every consumer that adopts Rule 27 has it, and the audit's CLEAN ver
 indistinguishable from its never having run against the relevant corpus. Measured on the
 reference consumer: six blocks of narrative drift added across two `extensions/` files in one
 sprint, with the audit reporting `Class 1: CLEAN (of 39 files scanned)` throughout.
+
+**The `**` is load-bearing — do NOT narrow it to `*`.** `extensions/` is conventionally
+organised into subdirectories (`checks/`, `roles/`, `steps-domain/`), so a single-level glob
+matches the README and nothing else. Measured on the reference consumer: `extensions/*.md`
+resolves to **1** file, `extensions/**/*.md` to **32** — and the drift that justified adding
+these two lines sits in `extensions/steps-domain/`, outside the narrow form. A scope that
+misses the corpus reports CLEAN exactly as loudly as one that scanned it.
 
 Three classes of violation to detect:
 
