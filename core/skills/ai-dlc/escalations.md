@@ -21,6 +21,17 @@ holds *how* to write and resolve one.
 **Impact if skipped:** [What happens if work continues without this answer]
 ```
 
+**Terminal statuses** (set at resolution, never at authorship): `RESOLVED | OVERRIDDEN`
+
+Those two lines — the `**Status:**` line in the format block above and the terminal
+list here — are the CLOSED vocabulary. Every token an entry's `**Status:**` field may
+carry appears in exactly one of them, and `scripts/validate-escalation-status-vocabulary.sh`
+derives its set by reading them rather than restating it. A status outside the set is
+malformed: `gate-validation.md` Check 2 branches on these tokens and has no else, so an
+entry carrying a sixth token is not blocked, not surfaced and not recorded — Check 2
+computes no verdict for it and reports PASS. Adding a token means editing one of these two
+lines, which is the point.
+
 The `Evidence observed:` / `Assertion (beyond evidence):` pair is
 MANDATORY on every HARD_BLOCK. A HARD_BLOCK that conflates an observed
 fact with an inferred root cause propagates the inference as settled

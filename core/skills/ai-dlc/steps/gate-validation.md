@@ -206,6 +206,15 @@ Two arms, either satisfies (dual-arm OR):
 <!-- CHECK_LOADED: 2 -->
 
 - Read `docs/escalations/pending.md` (if it exists).
+- **First, the vocabulary.** Run
+
+      scripts/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md
+
+  The branches below are a closed set with no else, so an entry on a token outside it
+  is neither blocked, surfaced nor recorded — no verdict is computed for it and this
+  check reports PASS regardless. The script derives the set from `escalations.md` and
+  FAILS the gate on any entry outside it. Run it before the branches, not after: a
+  token the branches cannot reach is not a wrong verdict, it is a missing one.
 - If any entry has status `HARD_BLOCK` and is not RESOLVED, do NOT
   proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
   report the block and wait for human input.
