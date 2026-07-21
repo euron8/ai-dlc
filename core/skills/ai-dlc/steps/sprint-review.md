@@ -82,7 +82,7 @@ lightweight`, skip this sprint-level party mode — the single Step 1
 adversarial pass satisfies the lightweight minimum. Proceed to Step 3
 (Fix and Re-Validate) with any Step 1 findings.
 
-`/bmad-party-mode` — PM, Architect, Dev, TEA, QA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through the
+`/bmad-party-mode --mode subagent --non-interactive` — PM, Architect, Dev, TEA, QA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) walk through the
 entire sprint implementation:
 - Does the implementation match the requirements?
 - Are there cross-cutting concerns?

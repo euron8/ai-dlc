@@ -96,7 +96,7 @@ exercise stories.
 
 ### 3. Party Mode Evaluation
 
-`/bmad-party-mode` — PM, Architect, Dev, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) evaluate every item:
+`/bmad-party-mode --mode subagent --non-interactive` — PM, Architect, Dev, TEA (bound via the **Rule 20 role-manifest preamble** to their `.claude/team-roles/<role>.md`) evaluate every item:
 - Valid or close? If valid, rough story shape?
 - Surface any items that have become higher/lower priority
 - Surface any that are clearly no longer worth doing

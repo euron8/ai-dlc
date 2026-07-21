@@ -62,12 +62,15 @@ otherwise continue to Step 2.
 Execute all sub-skills back-to-back without pausing for human input
 between them.
 
-**Invoke `/bmad-party-mode` via the Skill tool.** The Skill invocation
+**Invoke `/bmad-party-mode --mode subagent --non-interactive` via the Skill tool.**
+The Skill invocation
 IS the satisfier for this step — role-playing PM/Architect/Dev/SM/
 TEA/QA perspectives inline in the retro doc without invoking the
 Skill is a Rule 3 violation per SKILL.md, regardless of how
 well-formed the output appears. This is non-negotiable.
 Each agent MUST be spawned as a real subagent for independent perspective. Solo mode (roleplaying agents inline) is forbidden.
+**The flags are what make that true — the sub-skill's own default is solo.**
+SKILL.md Rule 20 (i) owns why; pass both, every time.
 **Pass the Rule 20 role-manifest preamble** so each persona Reads and
 debates from its `.claude/team-roles/<role>.md` (PM→`pm.md`,
 Architect→`architect.md`, Dev→`dev.md`, SM→`sm.md`, TEA→`tea.md`,

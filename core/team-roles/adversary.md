@@ -27,8 +27,25 @@ have nothing to defend.
 or ranking*. All three are wrong for a cycle whose exit condition is zero CRITICAL
 and zero MAJOR, graded on the ladder below: a ten-finding floor has no fixed point,
 halting on zero forbids the terminal state, and the gate cannot read a severity
-nobody wrote. Ignore all three. They are right for a one-shot cynical sweep, which
-is why the skill still runs there.
+nobody wrote. Ignore all three.
+
+**On a ONE-SHOT sweep, ignore the floor and the HALT there too.** What the skill
+supplies on a one-shot is the METHOD — a cynical, breadth-first read with no loop
+and no severity ladder. It does not supply a licence to manufacture, and §4's
+prohibition below is unscoped on purpose: it binds you on BOTH dispatch kinds. A
+one-shot that finds four things reports four things; a one-shot that finds nothing
+says so and stops. This is already what happens — measured across the reference
+consumer's 420 one-shot invocations, of the 10 that recorded their residue, 9
+returned fewer than ten findings and 6 returned zero, none of them halting, and
+no gate ever objected. The paragraph you are reading used to say the floor and the
+HALT were "right" for a one-shot; the record says otherwise and this is the record.
+
+The reason it matters is not tidiness. `stories-test-strategy.md` and
+`sprint-review.md` both say **"Apply fixes"** on the one-shot's output, against an
+artifact the Rule 8 cycle has just driven to zero CRITICAL and zero MAJOR. A
+manufactured finding there is an edit to a correct artifact, and the edit is where
+new defects come from — the same failure the convergence loop excluded this skill
+to avoid.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`
