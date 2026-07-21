@@ -17,6 +17,22 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.113.1] — 2026-07-21
+
+### Fixed — Check 26's enforcer was inert on every fresh install
+
+`install.sh` never copied `enforcement-map.yaml` to the consumer.
+`validate-gate-adjudication.sh` DERIVES the escalated check set from that file and fails
+closed when it is absent — `FAIL: enforcement-map.yaml not found … this validator has no
+built-in list and will not guess` — so on a fresh install the enforcer refused rather than
+adjudicating, and nothing reported that it had never run.
+
+It reached the reference consumer only through the `ai-dlc-update` pull path, which maps the
+whole skill directory, so the gap was invisible to anyone who had ever pulled. Found by
+running the fixture suite from a real consumer install rather than from the distribution —
+`tests/fixtures/gate-adjudication/` could not seed there, on `main`, before any change in this
+series. Distribution green is not consumer green.
+
 ## [0.113.0] — 2026-07-21
 
 ### Fixed — Check 12 sourced a REQUIRED field from tooling no consumer has

@@ -166,7 +166,13 @@ cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/
 # Core-layer immutability check, the protected-path-editor role, and the
 # ai-dlc-core-guard.sh edit-time hook all READ it from the consumer, so it must
 # be present. It is upstream-owned and overwrite-on-pull like the rest.
-for doc in escalations.md rule-authoring.md core-manifest.md; do
+# enforcement-map.yaml is in this list because validate-gate-adjudication.sh DERIVES
+# the escalated check set from it and fails closed (exit 2, "will not guess") when it
+# is absent. Without it here, Check 26's enforcer was inert on every fresh install --
+# refusing rather than adjudicating, with nothing reporting that it never ran. It
+# reached the reference consumer only through the ai-dlc-update pull path, which maps
+# the whole skill dir, so the gap was invisible to anyone who had ever pulled.
+for doc in escalations.md rule-authoring.md core-manifest.md enforcement-map.yaml; do
   [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 done
