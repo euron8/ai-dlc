@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.112.0] — 2026-07-21
+
+### Fixed — a dispatch whose delivery contract was a chat reply was reachable, and its failure read as teammate death
+
+Core mandates delivery-by-file (Rule 20) and the file-join (Rule 29), and
+`_gate-procedures.md` already requires an In-Flight Teammates row of
+`agent name | role | deliverable path | dispatched-at` written at dispatch. But nothing
+stopped a brief that said "reply with your analysis". Such a teammate produces an idle
+notification and no file — and core's own post-compact guidance then correctly reads
+unreachability as handle-loss rather than death. So the lead sees a symptom meaning "you lost
+the handle" for a teammate that never had a deliverable to lose, and re-dispatches.
+
+**Receipt.** Six personas dispatched on a chat-reply contract; three returned zero content
+twice each. The same three, re-messaged with only the contract changed to name a path,
+delivered 767 / 947 / 689 words on the next beat. No re-dispatch occurred — the contract was
+the defect.
+
+This is enforcement of rules that already exist, at authorship, not new mechanism. Three
+layers, no new script and no new reader:
+
+- **Rule 20** gains the requirement: a content-expecting dispatch states the exact path the
+  teammate writes to, in the brief. A chat-reply contract is malformed and must not be issued.
+  The path in the brief, the path in the register row, and the path the join is armed over are
+  one value written once in three places that must agree.
+- **Check 14** — which already owns the row shape — now FAILS the gate on a row whose
+  `deliverable path` cell is blank. That row records a teammate the lead has no way to reach.
+  The remedy is to re-issue the dispatch with the path stated, not to invent a path to fill
+  the cell.
+- **`wait-for-deliverable.sh`** already rejects a blank target outright, so the join-time arm
+  needed no change.
+
+No new fixture: Check 14 is `adjudication: llm`, and the script-observable arm is the blank
+target `wait-for-deliverable.sh` already guards and already covers.
+
+Resident-cost checked, since `SKILL.md` is loaded every session: the re-attach budget still
+passes with 253 tokens of slack, and Rule 3 / Rule 4 / Rule 11 / the post-compact protocol all
+remain inside the first 20000 characters.
+
 ## [0.111.0] — 2026-07-21
 
 ### Fixed — two gate enforcers whose stated remedy could not be executed

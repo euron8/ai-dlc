@@ -679,6 +679,27 @@ findings lists) WITHOUT Skill tool invocation and WITHOUT provenance
 block is a rule violation. "The findings are real" is not a valid
 rationalization — the process IS the validation.
 
+**The brief names the file.** Every dispatch that expects content back MUST state
+the exact path the teammate writes to, in the brief itself. A brief whose delivery
+contract is a chat reply ("reply with your analysis", "return your findings") is
+MALFORMED and MUST NOT be issued. This rule and Rule 29 already say the file is the
+handle; nothing stopped a dispatch from not having one.
+
+The failure is not that the content is lost — it is that the loss is unreadable. A
+teammate told to reply produces an idle notification and no file, and the post-compact
+guidance then correctly reads unreachability as handle-loss rather than death. So the
+lead sees a symptom that means "you lost the handle" for a teammate that never had a
+deliverable to lose, and re-dispatches. Measured: six personas dispatched on a
+chat-reply contract, three returned zero content twice each; the SAME three, re-messaged
+with only the contract changed to name a path, delivered 767 / 947 / 689 words on the
+next beat, with no re-dispatch.
+
+The path in the brief is the same path that goes in the In-Flight Teammates row at
+dispatch (`_gate-procedures.md`, "Sub-step snapshot update") and the same path the
+bounded join is armed over (Rule 29). One value, written once, in three places that
+must agree — so a dispatch with no path produces no row, and there is nothing to arm the
+join over, which is exactly the observed failure.
+
 **File-write deliverable.** A party-mode persona delivers its verdict by
 writing it to the canonical output/transcript path the invocation
 defines and returning ONLY that path. A text-only final message from a

@@ -677,6 +677,12 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   is not in flight; Recent Activity and the gate log already record that
   it delivered. The section is bounded by the teammates actually
   outstanding.
+  **A row whose `deliverable path` cell is blank FAILS this gate.** That row
+  cannot be joined — `wait-for-deliverable.sh` rejects a blank target outright —
+  so it records a teammate the lead has no way to reach, which presents as
+  teammate death rather than as the malformed dispatch it is. A blank cell means
+  the brief did not name a file, which Rule 20 forbids; the remedy is to re-issue
+  the dispatch with the path stated, not to invent a path for the row.
 - **Context Reminders** — `context_reminders_sent` (none | yellow |
   red), `last_yellow_fire_tokens`, `last_yellow_fire_turns`,
   `last_red_fire_tokens`, `last_red_fire_turns`. Reconcile these from
