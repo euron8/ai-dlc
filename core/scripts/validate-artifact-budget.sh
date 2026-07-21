@@ -28,10 +28,36 @@
 #
 # WHAT IT MEASURES
 # Bytes / AI_DLC_BYTES_PER_TOKEN for each known living artifact found under the
-# project's _bmad-output/ and docs/. The divisor is the SAME calibration
-# validate-reattach-budget.sh uses (17,990 bytes ~= 4,439 real Claude tokens ->
-# ~4.05 B/tok; the default divisor 4 is slightly conservative, i.e. it over-counts
-# tokens, so the check trips before the real cliff).
+# project's _bmad-output/ and docs/. The divisor is the same NUMBER
+# validate-reattach-budget.sh uses, but NOT the same measurement -- and the
+# difference matters in the direction of the error.
+#
+# THE DIVISOR UNDER-COUNTS ON THIS POPULATION, BY 5-11%.
+# validate-reattach-budget.sh calibrated bytes/4 against SKILL.md's recovery
+# protocol (17,990 bytes ~= 4,439 tokens -> ~4.05 B/tok) and concluded the divisor
+# is "slightly conservative, i.e. it over-counts." That is true OF THAT TEXT. This
+# script inherited the sentence and applied it to a different population -- prose-
+# heavy planning artifacts -- where the ratio, and therefore the DIRECTION of the
+# error, reverses.
+#
+# Measured at sprint 290 in the reference consumer against a 147,176-byte planning
+# artifact with four tokenizers (@anthropic-ai/tokenizer, and tiktoken cl100k_base
+# / o200k_base / gpt2): 3.62-3.84 bytes/token, so bytes/4 reports ~5-11% FEWER
+# tokens than exist. The same four run against SKILL.md returned 3.94-4.22, which
+# brackets 4.05 -- so both statements are correct about their own file, and the
+# copied one was never re-measured here.
+#
+# CAVEAT ON THAT MEASUREMENT: no ground-truth Claude tokenizer was reachable (no
+# API key in that environment). All four numbers are proxies -- three OpenAI
+# vocabularies, plus Anthropic's own local package, which bundles the older Claude
+# 1/2 vocab and not the current family's BPE. They converge within a ~15% band,
+# which is why the direction is trustworthy; the exact percentage is not. Anyone
+# with `count_tokens` access should re-run it and replace this range.
+#
+# THE DIVISOR STANDS ANYWAY. 5-11% sits inside the 10% grace band below and changed
+# no pass/fail verdict found when it was measured. But it errs toward PASSING, not
+# toward tripping early, so do not reason about a near-budget artifact as though the
+# estimate were conservative. It is not.
 #
 # History/archive files are NOT measured. Rule 25(a) makes them write-only -- never
 # read in the hot path -- so their growth is free. That is the whole point of
@@ -222,7 +248,7 @@ SCHEMA_FILE="$ROOT/.ai-dlc-snapshot-schema.tmp"
 # sub-step path, so a stale file is a pipeline stall with no artifact behind it.
 rm -f "$BREACH_FILE" "$SCHEMA_FILE"
 
-say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh)"
+say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; under-counts 5-11% on this population)"
 say "project root        : ${ROOT}"
 say ""
 

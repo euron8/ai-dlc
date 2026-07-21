@@ -17,6 +17,48 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.118.1] — 2026-07-21
+
+### Fixed — a calibration was copied to a population it was never measured on, and the error reverses direction there
+
+`validate-reattach-budget.sh` calibrated `bytes/4` against SKILL.md's recovery protocol
+(17,990 bytes ≈ 4,439 tokens by Claude's own tokenizer → ~4.05 B/tok) and concluded the
+divisor is *"slightly conservative, i.e. it over-counts tokens."* True of that text.
+`validate-artifact-budget.sh` inherited the sentence verbatim and applied it to prose-heavy
+planning artifacts, where the ratio — and therefore the **direction** of the error —
+reverses. It carried it backwards for four releases.
+
+**Measured at sprint 290 in the reference consumer** against a 147,176-byte planning
+artifact with four tokenizers (`@anthropic-ai/tokenizer`, and tiktoken `cl100k_base` /
+`o200k_base` / `gpt2`): **3.62–3.84 bytes/token**, so `bytes/4` reports ~5–11% FEWER tokens
+than exist. The same four run against SKILL.md returned 3.94–4.22, which brackets 4.05. Both
+sentences are correct about their own file; only one of them was ever re-measured.
+
+This matters in the direction that matters: the header told readers the estimate was
+conservative and trips early, when on the population this script actually measures it errs
+toward **passing**. A near-budget artifact was being reasoned about with the sign flipped.
+
+Both homes fixed, asymmetrically — the claim is not wrong, it is unscoped:
+
+- `validate-artifact-budget.sh` documents the reversal, the measurement, and the consequence.
+- `validate-reattach-budget.sh` keeps its (correct) conclusion and now states that the ratio
+  is a property of *that text*, so the next copy cannot inherit a population-blind claim.
+
+The per-gate `say` line now reads `under-counts 5-11% on this population`.
+
+**The divisor is unchanged**, and deliberately: 5–11% sits inside the existing 10% grace band
+and changed no pass/fail verdict found when it was measured.
+
+**Caveat carried into the source, not just this entry.** No ground-truth Claude tokenizer was
+reachable when this was measured — all four numbers are proxies (three OpenAI vocabularies
+plus Anthropic's own local package, which bundles the older Claude 1/2 vocab). They converge
+within a ~15% band, so the direction is trustworthy; the exact percentage is not. Anyone with
+`count_tokens` access should re-run it and replace the range.
+
+Found by the reference consumer, which measured this independently and had been carrying a
+local correction. Upstreaming it retires that divergence and the reconcile conflict hunk that
+came with it.
+
 ## [0.118.0] — 2026-07-21
 
 ### Fixed — the snapshot's seven-section schema was a required-set, so an eighth section was invisible until bytes breached

@@ -26,6 +26,14 @@
 # exceeds the budget minus a safety margin, so it trips BEFORE the real 5,000
 # cliff, leaving room for tokenizer variance.
 #
+# THAT RATIO IS A PROPERTY OF THIS TEXT, NOT OF THE DIVISOR. Do not carry the
+# "slightly conservative" conclusion to another population without re-measuring it:
+# the ratio is content-dependent and the DIRECTION of the error reverses. Prose-heavy
+# planning artifacts measure 3.62-3.84 bytes/token, where bytes/4 UNDER-counts by
+# 5-11% — the opposite of the sentence above. validate-artifact-budget.sh copied this
+# conclusion to exactly that population and carried it backwards for four releases;
+# its header now documents the reversal. Same divisor, same number, opposite error.
+#
 # USAGE
 #   core/scripts/validate-reattach-budget.sh [--skill PATH] [--quiet]
 #
