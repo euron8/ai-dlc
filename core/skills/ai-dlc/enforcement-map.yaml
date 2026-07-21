@@ -67,8 +67,18 @@ checks:
     gate_types: [universal]
     adjudication: llm
     hard_block: true
-    enforcer: []
+    enforcer:
+      - core/scripts/validate-escalation-status-vocabulary.sh
+    call_sites:
+      - site: gate-validation.md Check 2
+        posture: FAILS the gate (exit 0 required)
+        why: Check 2's own predicate is three branches with no else, so an entry
+          on a token outside the published set is neither blocked, surfaced nor
+          recorded — no verdict is computed for it and the gate reports PASS.
+          The script guards the vocabulary the LLM adjudication branches on; the
+          adjudication itself stays llm.
     ci_workflow: ~
+    fixtures: [tests/fixtures/escalation-status-vocabulary]
 
   - id: "2a"
     title: Escalation resolution operator-citation

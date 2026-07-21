@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.108.0] — 2026-07-21
+
+### Added — Check 2 silently skipped every escalation on a status token it could not branch on
+
+`gate-validation.md` Check 2 is three branches with no else. It blocks on `HARD_BLOCK`,
+passes over `DECIDED_AUTONOMOUSLY` as informational, and scopes `DEFERRAL_REQUEST` to the
+deferred item. An entry whose status is a fourth token satisfies none of them: Check 2 does
+not block on it, does not surface it, and does not record it. It is silently skipped, and
+the gate reports Check 2 as passing either way.
+
+The failure is not a wrong verdict — it is an entry no verdict was ever computed for. A
+green indistinguishable from having examined nothing, which is the check-that-cannot-fire
+class in its purest form.
+
+**Receipt, measured against the real artifact.** The reference consumer's
+`docs/escalations/pending.md` at `a62ba6037` carries **8** entries on tokens core never
+defined — `FILED` (5) and `OPEN` (3) — accumulated across the sprints they were written in,
+with every gate in that window reporting Check 2 as passing. The new validator run against
+that exact historical file reports `FAIL: 8 of 27 escalation entries carry a status outside
+the closed set`, independently reproducing the count the consumer measured by hand.
+
+**New:** `core/scripts/validate-escalation-status-vocabulary.sh`, run at the top of Check 2
+before its branches. Its scope is deliberately wider than `validate-escalation-resolution.sh`
+(Check 2a), which scopes to the current sprint because it verifies citations against this
+session's transcript: a malformed token is malformed whenever it was written, and this drift
+accumulates precisely in the entries old enough that nobody re-reads them. The two are
+orthogonal — Check 2a parses the status token only to *select* entries and never validates
+it.
+
+**The vocabulary is derived, not restated.** A hand-listed copy of a published set is the
+defect this release series keeps finding. `escalations.md` now publishes the closed set
+across two lines — the `**Status:**` line in the entry-format block (authorship tokens) and a
+new `**Terminal statuses**` line (`RESOLVED | OVERRIDDEN`, set at resolution) — and the
+script reads both. Every token lives in exactly one place; adding one means editing
+`escalations.md`, which is where it should be a visible decision.
+
+If `escalations.md` cannot be found, or neither line parses, the script **refuses** (exit 2)
+rather than falling back to a built-in set. A validator that guesses its own vocabulary when
+it cannot read the source has reintroduced the hand-listed copy silently.
+
+New fixture `core/fixtures/escalation-status-vocabulary/` carries a positive control, the
+drifted case, a `**Status:**` field mid-entry rather than at line start (the blind spot in
+the naive line-anchored validator anyone writes first), and the refusal path. Two of its
+assertions exist to test the derivation itself rather than the check: widening
+`escalations.md`'s terminal list must make the drifted file pass, and narrowing its format
+block must make the clean file fail. If either does not move, "derived" is decoration and
+the script is carrying a private set.
+
 ## [0.107.0] — 2026-07-21
 
 ### Fixed — a clean pull reported the driver's own writes as consumer drift, and told the operator to revert them
