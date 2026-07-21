@@ -76,7 +76,12 @@
 #   --only NAME    check a single artifact by basename (gates use
 #                  `--only pipeline-snapshot.md`)
 #   --warn-only    report breaches but exit 0 (retro's Rule 25(d) posture: the
-#                  sprint is over, blocking it helps nobody)
+#                  sprint is over, blocking it helps nobody). retro.md is its ONLY
+#                  caller. Gate Check 14 and the sub-step path deliberately do not
+#                  pass it -- there the sprint is still running and the artifact is
+#                  still growing, which is the only reason those two enforce at all.
+#                  Reading this flag as a general "defer the breach" lever is how a
+#                  blocking gate quietly becomes a log line.
 #
 # WARN AT 100%, BLOCK AT 100% + GRACE.
 # The grace band is not softness, it is aim. This check exists to stop a RATCHET,

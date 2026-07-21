@@ -51,6 +51,12 @@ When a step file says "run sub-step snapshot update", execute:
    exit 0) and breaches only past it.
 
    - `warn` (over budget, within grace) → note it and continue.
+   - **Do NOT add `--warn-only` to this invocation.** It is `retro.md`'s
+     sprint-end posture, where blocking helps nobody because the sprint is
+     over. Here the sprint is running and the snapshot is still growing,
+     which is the only reason this check sits between gates at all. The flag
+     turns the one mechanism that catches growth *while it happens* into a
+     log line.
    - **Exit 1 (past the grace band) → TRIM NOW, before the next
      sub-step.** Move superseded narrative verbatim to
      `pipeline-snapshot-history.md` (write-only), re-run, then continue.
