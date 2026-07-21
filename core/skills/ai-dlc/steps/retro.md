@@ -188,7 +188,7 @@ Write the retro to `docs/retro/sprint-N.md` with:
 - `hard_block_count` (integer): total HARD_BLOCKs encountered this sprint
 - `hard_block_class[]`: list of HARD_BLOCK classifications (e.g., requirement-divergence, scope-conflict, infra-outage)
 - Agent findings (from party mode)
-  with finding-class per pass (see templates/pipeline/retro-finding-class-tracking.md)
+  with finding-class per pass (see templates/retro-finding-class-tracking.md)
 - Specific, actionable improvements
 - Which improvements should update CLAUDE.md, team roles, or pipeline steps
 
@@ -267,6 +267,16 @@ The analyst scans the following files for violations of SKILL.md Rule 18:
 - `docs/coding-conventions.md`
 - `.claude/skills/ai-dlc/steps/*.md`
 - `.claude/team-roles/*.md`
+- `.claude/skills/ai-dlc/extensions/*.md`
+- `.claude/skills/ai-dlc/overrides/*.md`
+
+The last two are not an afterthought. Rule 27 forbids a consumer to hand-edit any of the
+first four, so a scope naming only those scans exactly the text the consumer cannot author
+and stays silent on all the text it does. The blind spot follows from the layering itself,
+which means every consumer that adopts Rule 27 has it, and the audit's CLEAN verdict is
+indistinguishable from its never having run against the relevant corpus. Measured on the
+reference consumer: six blocks of narrative drift added across two `extensions/` files in one
+sprint, with the audit reporting `Class 1: CLEAN (of 39 files scanned)` throughout.
 
 Three classes of violation to detect:
 

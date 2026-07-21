@@ -17,6 +17,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.111.0] — 2026-07-21
+
+### Fixed — two gate enforcers whose stated remedy could not be executed
+
+**`validate-retro-evidence.sh`'s commit-subject marker is deleted.** It failed the blocking
+Step-5c gate with `COMMIT_MISSING` unless some commit on `<merge-base>..<retro-branch>`
+matched `Sprint <N> retro.*[Pp]arty[- ][Mm]ode` — a contract `retro.md` states nowhere. Step 2
+specifies the transcript's path, its commit ordering and its `path@<sha>` citation, and says
+nothing about the subject.
+
+It was not a naming nit. The script resolves `origin/<branch>`, so it cannot run until Step 6b
+has pushed; a non-conforming subject was undiscoverable until the commit was already
+published, at which point rewording requires a force-push to a pushed branch. The only remedy
+left was an extra commit created solely to satisfy an unwritten rule. Observed: a retro whose
+transcript was committed in full, at the correct path, cited by SHA in the provenance block,
+still blocked — because the subject read `sprint-294` where the pattern wanted a space.
+
+Deleted rather than documented, because it was a strictly weaker proxy for what the surviving
+markers already prove: marker 2 asserts the transcript is committed on the branch, and
+4b/4c assert the retro doc cites the exact commit and that its blob still matches HEAD
+byte-for-byte. Verified as a differential against the real failure shape — `rc=1` with
+`COMMIT_MISSING` before, `rc=0` after, with every substantive requirement met in both — and
+`check-17-bypass` confirms a fabricated SHA is still rejected.
+
+**Check 25's "On FAIL" now names arm B's disposition.** It previously gave one remedy —
+re-issue pending waits through `wait-for-deliverable.sh` — which addresses arms A and C. Arm B
+(steamroll) fires on a historical fact in an append-only transcript: nothing to re-issue, and
+re-running re-reads the same transcript. `Gate Failure` step 2 ("re-run the FAILED check")
+therefore read as unsatisfiable and HARD_BLOCK looked like the only reachable exit.
+
+The mechanism was already correct and only the prose was missing: the check records the new
+count on a failing gate too, and compares against the *previous* entry, so **recording the
+count is the release**. That is now stated, along with the escalation disposition for the
+conduct itself. No mechanism change.
+
+### Fixed — `retro.md` cited a finding-class template no consumer had
+
+`retro.md` pointed at `templates/pipeline/retro-finding-class-tracking.md`. The ledger filed
+this as a wrong path segment; it is worse than that. `install.sh` never copied the file at
+all, so on a fresh consumer *neither* `templates/pipeline/…` nor `templates/…` resolved. A
+reader that cannot resolve the pointer applies no finding-class and nothing reports it — the
+same shape as a check whose PASS is identical to its never having run.
+
+The template now ships as ordinary core at `core/skills/ai-dlc/templates/`, installed to the
+skill root so the existing relative form resolves, and the pointer drops the `pipeline/`
+segment. It is upstream-owned and overwrite-on-pull, not an additive scaffold: it sits under
+`core/skills/ai-dlc/`, so `unregistered-drift.sh` already scans it, and a consumer adding its
+own domain finding-classes in place is reported and routed to an `extensions/` entry. The
+reference consumer has exactly such a copy today — drifted to a different taxonomy and
+carrying project-specific classes — precisely because nothing shipped or tracked this file.
+
+### Fixed — the retro rule-audit scanned only files consumers may not write
+
+`retro.md` Step 4's scope named `CLAUDE.md`, `docs/coding-conventions.md`, `steps/*.md` and
+`team-roles/*.md` — under Rule 27, exactly the files a consumer may never hand-edit. The audit
+therefore read only text the consumer cannot author and stayed silent on all the text it does.
+The blind spot follows from the layering itself, so every consumer that adopts Rule 27 has it,
+and the audit's CLEAN verdict is indistinguishable from its never having run against the
+relevant corpus. Measured on the reference consumer: six blocks of narrative drift added
+across two `extensions/` files in one sprint, with the audit reporting
+`Class 1: CLEAN (of 39 files scanned)` throughout. `extensions/*.md` and `overrides/*.md` are
+added to the scope.
+
 ## [0.110.0] — 2026-07-21
 
 ### Fixed — the pause hook paused the pipeline on prompts no human typed
