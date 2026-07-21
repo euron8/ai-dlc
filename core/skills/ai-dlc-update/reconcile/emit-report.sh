@@ -69,6 +69,77 @@ render() {
   classify="$(printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2}' | sort -u)"
   none_or "$classify"
 
+  # ---- Orientation: which side actually holds what -------------------------
+  # A CLASSIFY file's resolution is prose the LLM writes, and prose is where OURS and THEIRS
+  # get swapped. Observed live on the 0.106.1 -> 0.113.1 pull: the report's comparison table
+  # for a BOTH-ADDED template assigned each side the OTHER's content, and the recommended
+  # action was written from the inverted table -- it would have filed the consumer's override
+  # carrying UPSTREAM's rows (an override restating core, which layer-drift.sh flags) while
+  # dropping the two domain classes that were the consumer's actual reason for the file.
+  #
+  # Nothing could catch it. The generated region named the file and its bucket correctly; the
+  # claim about CONTENT lived in free prose that no detector compares to the files. That is the
+  # same shape this region already exists to close one layer up (a narrated report silently
+  # dropping a mechanical finding), so it gets the same treatment: render the orientation
+  # facts HERE, inside the region --verify byte-compares, and have the prose derive from them.
+  #
+  # Deliberately NOT the full diff: these run 24-190 changed lines each on a real pull, and a
+  # region nobody reads is a region nobody checks. What is emitted is the part that was gotten
+  # wrong -- which side holds which lines -- capped, with the suppressed count STATED so a
+  # truncated sample can never read as a complete one.
+  if [ -n "$classify" ]; then
+    sub "Semantic worklist orientation — OURS = consumer, THEIRS = upstream at theirs. Every ours/theirs claim in the resolution prose MUST be derived from this block, never from recall:"
+    printf '%s\n' "$pc" | awk -F'\t' 'NF>=4 && $4 ~ /CLASSIFY/ {print $2"\t"$3}' | sort -u \
+    | while IFS="$(printf '\t')" read -r cp cons; do
+        [ -n "${cp:-}" ] || continue
+        local_ours="$CONSUMER/$cons"
+        echo
+        echo "  $cp"
+        # `diff THEIRS OURS`: '<' lines are THEIRS, '>' lines are OURS. Stated because getting
+        # this backwards is precisely the defect, and the fixture asserts the direction.
+        t="$(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null)"
+        if [ -z "$t" ]; then
+          echo "    THEIRS absent at ${THEIRS} — nothing upstream to compare"
+        elif [ ! -f "$local_ours" ]; then
+          echo "    OURS absent at ${cons} — nothing consumer-side to compare"
+        else
+          echo "    OURS   $cons ($(wc -l < "$local_ours" | tr -d ' ') lines)"
+          echo "    THEIRS ${THEIRS}:${cp} ($(printf '%s\n' "$t" | wc -l | tr -d ' ') lines)"
+          d="$(diff <(printf '%s\n' "$t") "$local_ours" 2>/dev/null || true)"
+          for side in THEIRS OURS; do
+            case "$side" in
+              THEIRS) marker='^< ' ;;
+              OURS)   marker='^> ' ;;
+            esac
+            lines="$(printf '%s\n' "$d" | grep -E "$marker" | sed -E 's/^[<>] //' | grep -vE '^[[:space:]]*$' || true)"
+            n="$(printf '%s\n' "$lines" | grep -c . || true)"
+            # CAP=12, not 6. At 6 the sample was all boilerplate: on the pull that motivated
+            # this block, both sides' first rows were table headers and the same four generic
+            # class names, while the lines that actually decided the resolution -- the
+            # consumer's two domain classes, upstream's two process classes -- sat in the
+            # suppressed tail. A sample that shows only what the two sides have in COMMON
+            # orients nobody. 12 covers that case whole; anything larger is read by command.
+            if [ "${n:-0}" -eq 0 ]; then
+              echo "    ONLY IN ${side}: none"
+            else
+              shown=12
+              [ "$n" -lt "$shown" ] && shown="$n"
+              if [ "$n" -gt 12 ]; then
+                echo "    ONLY IN ${side} (${shown} of ${n} shown, $((n - shown)) suppressed — read the rest with the command below):"
+              else
+                echo "    ONLY IN ${side} (${n}, complete):"
+              fi
+              printf '%s\n' "$lines" | head -12 | cut -c1-100 | sed 's/^/      /'
+            fi
+          done
+          # The escape hatch, printed for EVERY file so a truncated sample is never the only
+          # thing available. Same argument order as above: theirs on the left, ours on the
+          # right, so '<' stays THEIRS and '>' stays OURS in the operator's own terminal too.
+          echo "      full: diff <(git -C $DIST show ${THEIRS}:${cp}) $CONSUMER/$cons   # '<' THEIRS, '>' OURS"
+        fi
+      done
+  fi
+
   sub "Deletions (apply would git rm a consumer file — gated per-path):"
   del="$(printf '%s\n' "$pc" | awk -F'\t' '$4=="UPSTREAM-DELETED" || $4 ~ /^ORPHANED-RELOCATED/ {print $4"  "$2}' | sort -u)"
   none_or "$del"

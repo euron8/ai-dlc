@@ -73,6 +73,22 @@ Every consumer block that differs from upstream is one of:
 | **un-pushed-innovation** | generalizable improvement not yet absorbed upstream | keep ours; **flag for push** (feeds the absorption arc) |
 | **conflict** | both changed the same core rule incompatibly | operator adjudicates |
 
+**Every ours/theirs claim is DERIVED, never recalled.** A bucket above is a claim about
+which side holds what, and the resolution prose you write is the only place that claim
+appears — no detector re-reads it. So take it from the report's **Semantic worklist
+orientation** block, which `emit-report.sh` renders per CLASSIFY file with the two sides
+labelled and their exclusive lines shown; where a side is truncated, run the `full:` diff
+command it prints. Do not describe a side from having read the file earlier in the run.
+
+Failure caught: the sides get swapped, and because the recommended ACTION is written from
+the comparison, the swap propagates into it. Observed on the 0.106.1 → 0.113.1 pull — a
+BOTH-ADDED template's table assigned each side the other's rows, and the resolution would
+have filed the consumer's override carrying *upstream's* content (an override restating
+core, which `layer-drift.sh` flags on the next pull) while dropping the two domain classes
+that were the consumer's whole reason for the file. False-positive cost: none — it
+constrains where a claim comes from, not what it may say. Removed when the resolution
+prose is itself generated rather than composed.
+
 ## Procedure
 
 1. **Resolve inputs.** Read the stamp: `base` = the `commit` field (rulebook

@@ -33,6 +33,19 @@ THEIRS="$BASE"
 # Consumer edits the core schema IN PLACE → a HARD blocker the mechanical region must carry.
 printf '{\n  "rule": "consumer-edited"\n}\n' > "$CONSUMER/.claude/schemas/thing.json"
 
+# A BOTH-ADDED file: upstream and the consumer each added the same path independently, with
+# DISTINGUISHABLE exclusive content on each side. This is the CLASSIFY shape whose resolution
+# is prose, and prose is where OURS and THEIRS get swapped -- the sentinels below let run.sh
+# assert the orientation block attributes each side's line to the correct side.
+mkdir -p "$DIST/core/skills/ai-dlc/templates" "$CONSUMER/.claude/skills/ai-dlc/templates"
+printf 'shared line\nSENTINEL-THEIRS-ONLY upstream process class\n' \
+  > "$DIST/core/skills/ai-dlc/templates/classes.md"
+git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
+git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m theirs-adds-template
+THEIRS="$(git -C "$DIST" rev-parse HEAD)"
+printf 'shared line\nSENTINEL-OURS-ONLY consumer domain class\n' \
+  > "$CONSUMER/.claude/skills/ai-dlc/templates/classes.md"
+
 # The driver's rendered region — ground truth.
 REGION="$WORK/region.md"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$REGION" 2>/dev/null
