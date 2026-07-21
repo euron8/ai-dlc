@@ -215,6 +215,22 @@ prose is itself generated rather than composed.
      file whose bytes it can prove it wrote.
    - `BOTH-CHANGED` / `BOTH-ADDED` / `UPSTREAM-MOD+consumer-deleted` /
      `UPSTREAM-DELETED+consumer-modified` → **needs semantic classify**
+3a-ii. **Retired contract tokens** (cheap, deterministic — no agents):
+   run `reconcile/retired-tokens.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
+   Every `CLASSIFY` file's semantic merge MUST clear this before it counts as done.
+   It names the one merge defect no other detector here can see: upstream retired a
+   shared contract (a channel, a scratch path, a state file) and the consumer's own
+   code — inside the same upstream-maintained file — still speaks the old one. That
+   merges cleanly, parses cleanly, and yields a gate that cannot fire. It happened:
+   on the 0.114.0 → 0.118.2 pull a consumer's pool block kept writing to a retired
+   temp path and its budget gate reported PASS at **1212% of budget, exit 0**. Nothing
+   flagged it; a person found it by hand-building a functional test.
+   **A non-empty result means the merge is NOT complete.** Re-point the consumer's
+   reference at whatever THEIRS replaced it with, then re-run until the output is
+   empty — or record in the report why a survivor is safe. `apply.sh` carries the
+   token list on the worklist item itself, so the obligation arrives with the work.
+   Note what it does NOT catch: a consumer path upstream never had (there is no
+   retirement to detect). A clean result is not proof the merge is semantically whole.
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
    <consumer-root> --templates`. The `core/` reconcile above never sees

@@ -17,6 +17,70 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.119.0] — 2026-07-21
+
+### Added — `reconcile/retired-tokens.sh`: the merge defect that reads as a clean merge
+
+Upstream retires a shared contract — a channel, a scratch path, a state file — and the
+consumer's own code, living inside the same upstream-maintained file, still speaks the old
+one. `diff3` merges it cleanly. `bash -n` passes. The result is a gate that cannot fire.
+
+**Measured on the reference consumer's 0.114.0 → 0.118.2 pull.** v0.118.2 moved the budget
+scanner's channels into a per-run `mktemp -d`. The consumer's `WHOLE_READ_POOL` block — code
+upstream does not have — kept writing its `OVER` verdict to the retired
+`$ROOT/.ai-dlc-budget-breach.tmp`. Writer and reader became different files. On a forced
+breach the merged script printed `PASS  every measured living artifact is within its Rule
+25(d) budget` and **exited 0 with the pool at 1212% of its budget**.
+
+Nothing in `reconcile/` flagged it. A person found it by hand-building a functional test,
+which is the machine's job being done by hand — and it would have needed doing again on the
+next release that touched that file.
+
+**The signal was already there and the cap hid it.** `emit-report.sh`'s orientation block
+does emit `ONLY IN OURS`, and the severed line was in it — at *"149 lines, 137 suppressed."*
+So the fix is not a new comparison, it is a partition of one that already runs: tokens BASE
+used, THEIRS eliminated, and OURS still references. Small by construction, and emitted
+**uncapped** for exactly the reason the cap failed here.
+
+- New sibling detector under `reconcile/`, same TAB-delimited contract as `preclassify.sh`
+  and friends (single-homed per `validate-enforcement-map.sh` I21).
+- `emit-report.sh` renders it per `CLASSIFY` file inside the `--verify`-compared region.
+- `apply.sh` carries the token list **on the worklist item itself**, so the obligation
+  arrives with the work rather than in a report section that can be skimmed.
+- `SKILL.md` step 3a-ii: a non-empty result means the merge is **not complete**.
+
+**Scope, stated in the source rather than discovered later.** It matches variable-rooted
+paths (`$VAR/path`) only — the shape a channel or scratch file takes in these scripts.
+Widening it to bare identifiers would flag every renamed local and drown the finding. It
+therefore does **not** catch a consumer path upstream never had: in the motivating case the
+consumer's `POOL_TMP="$ROOT/.ai-dlc-pool.tmp"` is invisible, because there is no retirement
+to detect. That one is hygiene (a killed run leaves it behind); the one this catches is
+correctness (the gate goes silent). A clean result is not proof the merge is semantically
+whole, and the header says so.
+
+**Comments are stripped before matching, and that is load-bearing in the surprising
+direction.** Upstream routinely documents a path it just retired — v0.118.2's own header
+quotes both old paths. Counting that mention makes the token look still-in-use, `retired`
+comes back empty, and a genuinely severed contract reports **nothing**. The failure mode of
+not stripping is silence, not noise: a detector muted by the release note explaining the very
+change it exists to police. The fixture's mutation asserts precisely this.
+
+### Testing
+
+New fixture `retired-contract-token/`: catches a severed contract; stays silent on a
+correctly re-pointed consumer (the control — without it, "catches everything" and "catches
+nothing" are indistinguishable); stays silent on a retired path named only in a comment; and
+a mutation proving the comment strip is load-bearing.
+
+Two fixture-authoring notes recorded because both were gotten wrong first:
+
+- The mutation swaps the filter for `cat` rather than deleting the line. Deleting it leaves a
+  pipeline starting with `|`, so the mutant dies on a syntax error, produces no output, and
+  that reads as "did not fire" — passing the assertion for entirely the wrong reason. The
+  fixture now `bash -n`s the mutant before trusting it.
+- The mutation is applied to both sides at once, so it must assert the *silencing*, not the
+  noise. The first version asserted the opposite and failed.
+
 ## [0.118.2] — 2026-07-21
 
 ### Fixed — the scan channels lived in the project root, where they littered, and where a stale one is unfalsifiable to a reader

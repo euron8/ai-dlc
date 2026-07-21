@@ -29,6 +29,7 @@
 #   hard-blockers.sh      <dist> <base> <consumer> <theirs>   (its own wrapper, stripped here)
 #   relabel-…             <consumer> --dist <dist> --theirs <theirs>
 #   ledger-reverify.sh    <dist> <base> <consumer> <theirs>   STATUS<TAB>entry<TAB>detail
+#   retired-tokens.sh     <dist> <base> <theirs> <consumer> [path]  STATUS<TAB>path<TAB>token
 #
 # Usage:
 #   emit-report.sh <dist> <base> <consumer> <theirs>                 # print the mechanical region
@@ -136,6 +137,26 @@ render() {
           # thing available. Same argument order as above: theirs on the left, ours on the
           # right, so '<' stays THEIRS and '>' stays OURS in the operator's own terminal too.
           echo "      full: diff <(git -C $DIST show ${THEIRS}:${cp}) $CONSUMER/$cons   # '<' THEIRS, '>' OURS"
+
+          # ---- RETIRED CONTRACT TOKENS -----------------------------------------
+          # The one class of merge defect the sample above CANNOT surface: upstream
+          # retires a shared contract and the consumer's own code inside the same file
+          # still speaks the old one. diff3 merges it cleanly and the result is a gate
+          # that cannot fire. retired-tokens.sh owns the derivation and the rationale;
+          # this only renders it. UNCAPPED on purpose -- the signal was already inside
+          # "ONLY IN OURS" above on the pull that motivated it, buried at "137
+          # suppressed", and the cap is what hid it.
+          rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$cp" 2>/dev/null \
+                | awk -F'\t' '{print $3}')"
+          if [ -n "$rt" ]; then
+            echo "    RETIRED-CONTRACT-TOKEN — OURS still references what THEIRS eliminated (uncapped; resolve EVERY one):"
+            printf '%s\n' "$rt" | sed 's/^/      /'
+            echo "      Each is a live reference in the consumer's own code to a contract upstream"
+            echo "      retired. The merge will carry it and stay syntactically valid. Find what"
+            echo "      THEIRS replaced it with and re-point OURS at that, or state why it is safe."
+          else
+            echo "    RETIRED-CONTRACT-TOKEN: none"
+          fi
         fi
       done
   fi
