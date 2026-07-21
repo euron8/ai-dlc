@@ -1251,9 +1251,25 @@ against the one the previous gate recorded:
 - **Count INCREASED → the gate FAILS.** Unchanged → PASS.
 - Record the new count as `steering_violations:` in this gate's log entry either way.
 
-**On FAIL.** The validator names the offending calls. Re-issue any still-pending wait
-through `scripts/wait-for-deliverable.sh` — one call, every path in the wave — and
-record the count.
+**On FAIL.** The validator names the offending calls. The remedy depends on which arm fired,
+and only one of them has something left to do:
+
+- **Arms A / C (starvation, unbounded wait).** Re-issue any still-pending wait through
+  `scripts/wait-for-deliverable.sh` — one call, every path in the wave — and record the
+  count.
+- **Arm B (steamroll), and arm D.** Nothing to re-issue. These fire on a historical fact in
+  an append-only transcript: the call was made, and no later action un-makes it. Do NOT read
+  `Gate Failure` step 2 ("re-run the FAILED check") as the exit — re-running re-reads the same
+  transcript and necessarily returns the same count. **Recording the count IS the release.**
+  The line above says to record it either way, including on a failing gate, and the check
+  compares against the previous entry, so the recorded count becomes the next read's baseline
+  and the gate is not deadlocked. Disposition the conduct itself as an escalation —
+  `DECIDED_AUTONOMOUSLY` for a single lapse the lead owns, `HARD_BLOCK` if it is a pattern or
+  the operator's steer went unanswered — and proceed.
+
+Stating this is the whole fix: the mechanism already behaved this way, but nothing said so,
+so a true positive on arm B read as an enforcer with no release and HARD_BLOCK looked like
+the only reachable exit.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a hand-rolled `until`/`while`/
 `sleep` wait on a deliverable blocks a foreground call past the steering budget, and

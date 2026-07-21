@@ -6,19 +6,39 @@
 #
 # Enforces that a retro branch actually invoked /bmad-party-mode (retro.md
 # Step 2 MANDATORY SUB-SKILL INVOCATION) rather than simulating it inline.
-# Verifies four markers, applies a non-triviality floor to the transcript,
+# Verifies three markers, applies a non-triviality floor to the transcript,
 # and (Sprint 138 extension) verifies the retro doc cites the transcript
 # with a specific commit SHA (path@sha format) that still points at the
 # current blob.
 #
-# Markers (per Story 137-5 AC2):
-#   1. Party-mode commit subject on <merge-base>..<retro-branch> matching
-#      regex "Sprint <N> retro.*[Pp]arty[- ][Mm]ode" (case-insensitive)
-#   2. docs/retro/sprint-<N>.md cites the canonical transcript path
+# Markers (per Story 137-5 AC2, minus the commit-subject marker -- see below):
+#   1. docs/retro/sprint-<N>.md cites the canonical transcript path
 #      _bmad-output/party-mode-transcripts/sprint-<N>-retro.md
-#   3. Transcript file exists at canonical path AND is committed to the
+#   2. Transcript file exists at canonical path AND is committed to the
 #      retro branch (verified via `git ls-tree`)
-#   4. Transcript file is non-empty
+#   3. Transcript file is non-empty
+#
+# REMOVED: the party-mode COMMIT SUBJECT marker. It failed the blocking Step-5c
+# gate with COMMIT_MISSING unless some commit on <merge-base>..<retro-branch>
+# matched "Sprint <N> retro.*[Pp]arty[- ][Mm]ode" -- a contract retro.md states
+# NOWHERE. Step 2 specifies the transcript's path, its commit ordering and its
+# path@<sha> citation, and says nothing about the subject.
+#
+# It was not a naming nit. This script resolves origin/<branch>, so it cannot run
+# until Step 6b has pushed; a non-conforming subject was therefore undiscoverable
+# until the commit was already published, at which point rewording requires a
+# force-push to a pushed branch. The only remedy left was an extra commit created
+# solely to satisfy a rule nobody had written down. Observed: a retro whose
+# transcript was committed in full, at the correct path, cited by SHA in the
+# provenance block, still blocked -- because the subject read "sprint-294" where
+# the pattern wanted a space.
+#
+# Deleted rather than documented, because it was a strictly weaker proxy for
+# something the surviving markers already prove. Marker 2 asserts the transcript
+# is committed on the branch, and 4b/4c assert the retro doc cites the exact
+# commit and that its blob still matches HEAD byte-for-byte. "The party-mode
+# transcript was committed on this branch and the retro cites that commit" is
+# established without reference to a subject line anyone can type.
 #
 # Non-triviality floor (per Story 137-5 AC3):
 #   - Transcript ≥ MIN_CHARS characters
@@ -30,11 +50,11 @@
 #
 # Transcript SHA citation sub-check (Sprint 138 Story 138-3 / Item 326 A.3,
 # per LR-S138-21):
-#   5a. retro doc citation has @<sha> suffix form
+#   4a. retro doc citation has @<sha> suffix form
 #       (path like _bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>)
-#   5b. `git cat-file -p <sha>:<path>` successfully reads the transcript at
+#   4b. `git cat-file -p <sha>:<path>` successfully reads the transcript at
 #       the cited commit
-#   5c. Blob at cited SHA matches `git show HEAD:<path>` byte-for-byte
+#   4c. Blob at cited SHA matches `git show HEAD:<path>` byte-for-byte
 #       (transcript immutability — any later edit to the transcript invalidates
 #       the citation)
 # Exit codes unchanged; the SHA sub-check is ADDITIVE to the existing
@@ -134,36 +154,15 @@ retro_doc = f"docs/retro/sprint-{sprint_n}.md"
 transcript_path = f"_bmad-output/party-mode-transcripts/sprint-{sprint_n}-retro.md"
 
 # ---- Resolve merge-base <retro-branch> main --------------------------------
+# Audit locator only. Nothing branches on it since the commit-subject marker was removed
+# (see the header note); it is printed so a human reading a failure can find the range.
 mb = subprocess.run(
     ["git", "merge-base", retro_branch, "main"],
     capture_output=True, text=True
 )
-if mb.returncode != 0:
-    print("VALIDATE-RETRO-EVIDENCE: FAIL")
-    print(f"  Sprint {sprint_n} / {retro_branch}")
-    print(f"  [COMMIT_MISSING] git merge-base failed: {mb.stderr.strip()}")
-    sys.exit(1)
-merge_base = mb.stdout.strip()
+merge_base = mb.stdout.strip() if mb.returncode == 0 else ""
 
-# ---- Marker 1: party-mode commit subject on <merge-base>..<retro-branch> ---
-log = subprocess.run(
-    ["git", "log", f"{merge_base}..{retro_branch}", "--format=%H %s"],
-    capture_output=True, text=True
-)
-commits = [l for l in log.stdout.strip().splitlines() if l] if log.returncode == 0 else []
-
-pm_regex = re.compile(
-    rf"Sprint {re.escape(sprint_n)} retro.*[Pp]arty[- ][Mm]ode",
-    re.IGNORECASE,
-)
-pm_commit = None
-for line in commits:
-    parts = line.split(" ", 1)
-    if len(parts) == 2 and pm_regex.search(parts[1]):
-        pm_commit = (parts[0], parts[1])
-        break
-
-# ---- Marker 2: retro doc cites canonical transcript path -------------------
+# ---- Marker 1: retro doc cites canonical transcript path -------------------
 # Sprint 138 Story 138-3 / LR-S138-21: citation MUST include @<sha> suffix
 # form for the SHA sub-check to be runnable. Path-only citation fails with
 # "missing SHA in transcript citation".
@@ -190,14 +189,14 @@ try:
 except FileNotFoundError:
     citation_line = None
 
-# ---- Marker 3: transcript file committed to retro branch -------------------
+# ---- Marker 2: transcript file committed to retro branch -------------------
 ls = subprocess.run(
     ["git", "ls-tree", retro_branch, "--", transcript_path],
     capture_output=True, text=True
 )
 transcript_tracked = bool(ls.stdout.strip()) and ls.returncode == 0
 
-# ---- Marker 4: transcript file non-empty (and load for floor checks) ------
+# ---- Marker 3: transcript file non-empty (and load for floor checks) ------
 transcript_text = None
 try:
     with open(transcript_path, encoding='utf-8') as f:
@@ -311,12 +310,6 @@ if transcript_text:
 
 # ---- Aggregate pass/fail ---------------------------------------------------
 failures = []
-if pm_commit is None:
-    failures.append(
-        ("COMMIT_MISSING",
-         f"no commit on {merge_base[:8]}..{retro_branch} matches "
-         f"'Sprint {sprint_n} retro.*[Pp]arty[- ][Mm]ode'")
-    )
 if citation_line is None:
     failures.append(
         ("CITATION_MISSING",
@@ -380,8 +373,6 @@ if failures:
     print("VALIDATE-RETRO-EVIDENCE: FAIL")
     print(f"  Sprint {sprint_n} / {retro_branch}")
     print(f"  merge-base: {merge_base[:12] if merge_base else '(missing)'}")
-    print(f"  party-mode commit: {mark(pm_commit is not None)}"
-          + (f' ({pm_commit[0][:12]} "{pm_commit[1]}")' if pm_commit else ""))
     print(f"  retro doc citation ({retro_doc}): {mark(citation_line is not None)}"
           + (f" line {citation_line}" if citation_line else ""))
     print(f"  transcript committed ({transcript_path}): {mark(transcript_tracked)}")
@@ -407,8 +398,7 @@ if failures:
 # ---- PASS path -------------------------------------------------------------
 print("VALIDATE-RETRO-EVIDENCE: PASS")
 print(f"  Sprint {sprint_n} / {retro_branch}")
-print(f"  merge-base: {merge_base[:12]}")
-print(f'  party-mode commit: {pm_commit[0][:12]} "{pm_commit[1]}"')
+print(f"  merge-base: {merge_base[:12] if merge_base else '(missing)'}")
 print(f"  retro doc cites transcript: {retro_doc}:{citation_line}")
 print(f"  transcript file: {transcript_path} ({chars} chars)")
 print(sha_status_line())

@@ -170,6 +170,25 @@ for doc in escalations.md rule-authoring.md core-manifest.md; do
   [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 done
+# Skill templates cited by step files with a skill-root-relative path
+# (retro.md's finding-class table). These were previously kept at the dev repo's
+# templates/pipeline/ and never copied, so retro.md pointed at a file no consumer
+# had. A reader that cannot resolve the pointer applies no finding-class at all
+# and nothing reports it -- the same shape as a check whose PASS is identical to
+# its never having run.
+#
+# Upstream-owned and overwrite-on-pull like the rest of core, NOT an additive
+# scaffold like extensions/ and overrides/. They sit under core/skills/ai-dlc/,
+# so unregistered-drift.sh already scans them (I12 classifies at skill
+# granularity): a consumer that adds its own domain finding-classes in place is
+# reported and routed to an extensions/ entry, which is Rule 27 working. The
+# reference consumer HAS such a copy today, drifted and unmanaged, precisely
+# because nothing shipped or tracked this file.
+if [ -d "$SCRIPT_DIR/../core/skills/ai-dlc/templates" ]; then
+  mkdir -p "$PROJECT_ROOT/.claude/skills/ai-dlc/templates"
+  cp "$SCRIPT_DIR/../core/skills/ai-dlc/templates/"*.md \
+     "$PROJECT_ROOT/.claude/skills/ai-dlc/templates/" 2>/dev/null || true
+fi
 
 # Layered rulebook (Rule 27 / spec §7): consumer-owned extensions/ + overrides/.
 # ADDITIVE — create if absent and seed the README contract; NEVER overwrite a
