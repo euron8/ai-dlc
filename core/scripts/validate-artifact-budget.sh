@@ -239,14 +239,31 @@ env_override() {
 BREACH=0
 CHECKED=0
 
-BREACH_FILE="$ROOT/.ai-dlc-budget-breach.tmp"
-SCHEMA_FILE="$ROOT/.ai-dlc-snapshot-schema.tmp"
-
-# Clear both channels BEFORE the scan. A run killed mid-flight leaves its temp
-# file behind, and the next run would then report a breach nobody measured. That
-# matters more for the schema channel than the byte one: this script blocks the
-# sub-step path, so a stale file is a pipeline stall with no artifact behind it.
-rm -f "$BREACH_FILE" "$SCHEMA_FILE"
+# The subshell channels. These exist because the scan loops run on the right of a
+# `|` and cannot export a variable back (documented at the reporting block below);
+# a file is how the verdict escapes.
+#
+# THEY LIVE IN A PRIVATE TEMP DIR, NOT THE PROJECT ROOT. They used to be
+# `$ROOT/.ai-dlc-*.tmp`, and that was wrong three ways at once:
+#
+#   1. LITTER. Nothing gitignores them -- not the consumer's .gitignore, not the
+#      distribution's, and install.sh writes no rule. A killed run left them
+#      untracked in the project root, where a broad `git add -A` at sprint-review
+#      or deploy-validate commits them.
+#   2. A STALE FILE IS UNFALSIFIABLE TO A READER. Clearing them at start stopped a
+#      leftover producing a false verdict from the SCRIPT, but not from a human or
+#      agent who opens the file. That is not hypothetical: a v0.118.1 reconcile
+#      report quoted a 12-minute-old leftover as this run's evidence. It happened
+#      to be accurate; nothing about the file could have said otherwise.
+#   3. CROSS-RUN STATE AT ALL. Two runs in the same project shared a path.
+#
+# A fresh mktemp dir per run removes the class rather than defending against it:
+# there is no leftover to gitignore, to clear, or to misread.
+TMPROOT="$(mktemp -d 2>/dev/null)" || {
+  echo "FAIL: could not create a temp dir for the scan channels" >&2; exit 1; }
+trap 'rm -rf "$TMPROOT"' EXIT
+BREACH_FILE="$TMPROOT/breach"
+SCHEMA_FILE="$TMPROOT/schema"
 
 say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; under-counts 5-11% on this population)"
 say "project root        : ${ROOT}"
@@ -278,7 +295,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
     if [ "$tokens" -gt "$ceiling" ]; then
       over=$(( tokens * 100 / budget ))
       printf 'OVER  %-32s %7s tok  (budget %6s, %s%% of it)  -> %s\n' \
-        "$rel" "$tokens" "$budget" "$over" "$remedy" >> "$ROOT/.ai-dlc-budget-breach.tmp"
+        "$rel" "$tokens" "$budget" "$over" "$remedy" >> "$BREACH_FILE"
     elif [ "$tokens" -gt "$budget" ]; then
       # Over budget but inside the grace band. Say so -- the number is the truth --
       # but do not block: see "WARN AT 100%, BLOCK AT 100% + GRACE" in the header.

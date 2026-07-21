@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.118.2] — 2026-07-21
+
+### Fixed — the scan channels lived in the project root, where they littered, and where a stale one is unfalsifiable to a reader
+
+`validate-artifact-budget.sh`'s subshell channels were `$ROOT/.ai-dlc-budget-breach.tmp` and
+`$ROOT/.ai-dlc-snapshot-schema.tmp` (the second added in v0.118.0). Wrong three ways:
+
+1. **Litter.** Nothing gitignores them — not the reference consumer's `.gitignore`, not this
+   repo's, and `install.sh` writes no rule. A killed run leaves them untracked in the project
+   root, where a broad `git add -A` at sprint-review or deploy-validate commits them.
+2. **A stale file is unfalsifiable to a reader.** v0.118.0's clear-at-start stopped a leftover
+   producing a false verdict from the *script*; it did nothing about a human or agent who opens
+   the file. Not hypothetical — a v0.118.1 reconcile report quoted a 12-minute-old leftover from
+   an interrupted run as that run's evidence. It happened to be accurate, and nothing about the
+   file could have said otherwise.
+3. **Cross-run state.** Two runs in the same project shared a path.
+
+Both channels now live in a per-run `mktemp -d` cleared by a trap. That removes the class
+rather than defending against it: no leftover to gitignore, to clear, or to misread.
+
+**A writer was also on a hardcoded path.** The `OVER` line wrote to
+`"$ROOT/.ai-dlc-budget-breach.tmp"` literally while the reader used `$BREACH_FILE`. They
+happened to be the same string, so it worked — and moving only the variable would have left the
+writer behind, giving an empty read and a **silently passing byte budget on every over-budget
+artifact**. Fixed to `$BREACH_FILE`, and the fixture now asserts it (see below).
+
+> **⚠️ CONSUMERS WITH LOCAL EDITS TO THIS SCRIPT — READ BEFORE MERGING.**
+> If your copy adds its own channels or writers, they must move in the same commit. The
+> reference consumer has three sites this release does not touch: a `POOL_TMP` at
+> `$ROOT/.ai-dlc-pool.tmp`, and **two** further hardcoded writes to
+> `$ROOT/.ai-dlc-budget-breach.tmp` (its pool-breach line and its per-file breach line). Take
+> the reader change without those and the byte budget goes **silent** — no error, no output,
+> every over-budget artifact passing. Grep your copy for `ROOT/\.ai-dlc` after merging; it
+> should return nothing.
+
+### Testing
+
+`fixtures/snapshot-section-schema/` gains two assertions and loses one that the fix made vacuous:
+
+- **no temp file remains in the project root after a failing run** — replaces v0.118.0's
+  stale-file assertion, which tested a hazard that no longer exists. "No litter" is the
+  property; "the litter is cleared" was the workaround.
+- **an over-budget snapshot still reaches the byte-budget reader** — guards the writer/reader
+  path split above. Verified by control: reintroducing the hardcoded writer turns this
+  assertion red with its own diagnostic, and *no other assertion in the file notices* — the
+  schema assertions only ever assert the byte budget is QUIET, so this is the one that catches
+  it.
+
 ## [0.118.1] — 2026-07-21
 
 ### Fixed — a calibration was copied to a population it was never measured on, and the error reverses direction there
