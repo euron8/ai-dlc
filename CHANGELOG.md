@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.119.1] — 2026-07-21
+
+### Fixed — the docs let `--warn-only` read as a general "defer the breach" lever
+
+`validate-artifact-budget.sh` documented `--warn-only` as "retro's Rule 25(d) posture," and
+neither gate Check 14 nor `_gate-procedures.md`'s sub-step step 5 said it was unavailable to
+them. So "apply now and run it with `--warn-only` until the artifact is migrated" reads as a
+supported deferral. It is not: neither call site passes the flag, so taking that route means
+editing core — which is a disposition, not a toggle.
+
+**Measured:** a single consumer's reconcile series proposed the `--warn-only` route in four
+consecutive reports, presenting a two-way decision as three. It was never available in any of
+them, and the reports were reasoning correctly from what the docs said.
+
+The flag is unchanged and `retro.md` remains its only caller — correctly, because at retro the
+sprint is over and blocking helps nobody. The gate and the sub-step path are the opposite case:
+the sprint is running and the artifact is still growing, which is the only reason those two
+enforce at all. Passing the flag there turns the one mechanism that catches growth *while it
+happens* into a log line.
+
+Stated at all three homes — the script's usage block, Check 14, and sub-step step 5 — because
+the inference came from the script's header and the two call sites' silence together, and
+closing only one of them leaves the inference available.
+
+A consumer that genuinely needs the gate softened gets an `overrides/` entry with a stated
+removal condition, not a flag appended at the call site.
+
 ## [0.119.0] — 2026-07-21
 
 ### Added — `reconcile/retired-tokens.sh`: the merge defect that reads as a clean merge

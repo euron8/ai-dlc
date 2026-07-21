@@ -753,6 +753,16 @@ A `warn` line (over budget, inside the grace band) does **not** fail the gate â€
 at your next natural pause. See Rule 25(d), "Warn at 100%, block at 100% + grace."
 The schema verdict has no grace band: an invented section is never a near miss.
 
+**`--warn-only` is not available here, and "run it with `--warn-only` for now" is not a
+deferral this check offers.** The flag exists for `retro.md`'s sprint-end audit, where the
+sprint is over and blocking helps nobody. At a gate the sprint is still running and the
+artifact is still growing, which is the whole reason the budget is enforced here rather than
+only at sprint start. Adding the flag to this invocation converts a blocking gate into a
+log line â€” it is a core edit, and if a consumer genuinely needs it, that is an
+`overrides/` entry with a stated removal condition, not a flag quietly appended at the call
+site. Reconcile reports have proposed the `--warn-only` route four times across one
+consumer's pull series; it was never available any of those times.
+
 The snapshot is the only artifact whose budget is enforced *at gates* rather than
 only at sprint start: it is the only one that grows *within* a sprint. The protocol
 whole-reads it here (Checks 14/15), on every resume, and after every compaction
