@@ -728,13 +728,30 @@ pipe a validator into `grep` to read its verdict — the pipe hands the exit
 status to `grep`, and a validator that prints FAIL and exits 1 then reads as a
 pass.
 
-Exit 1 → **Check 14 FAILS.** Trim the snapshot to the seven-section schema defined
-above (the `Recent Activity` section holds the last ~10 entries and nothing more;
-superseded narrative and handoff appendices move to `pipeline-snapshot-history.md`,
-which is write-only), then re-run Check 14 and Check 15.
+**Paste the validator's verdict line verbatim into this check's `evidence` cell in
+the gate log** — the same way Check 24 cites its command and output. An evidence
+cell reading `—` is not a record that the check passed; it is a record that nothing
+was measured, and the two are indistinguishable afterwards. Measured in the
+reference consumer: 12 consecutive Check 14 rows reading `done after this entry | —`,
+across a sprint in which the snapshot went from 99% to 156% of budget.
+
+Exit 1 → **Check 14 FAILS**, on either of two independent verdicts:
+
+- **Over budget.** Trim the snapshot (the `Recent Activity` section holds the last
+  ~10 entries and nothing more; superseded narrative and handoff appendices move to
+  `pipeline-snapshot-history.md`, which is write-only).
+- **Outside the seven-section schema.** The validator names each unknown section.
+  Move it verbatim to `pipeline-snapshot-history.md` and delete it here. Do **not**
+  fold its content into one of the seven — that keeps the bytes and loses the
+  finding. A section nothing in core writes is a section nothing in core reads:
+  not recovered after compaction, not consumed at any gate, not part of the handoff
+  contract.
+
+Then re-run Check 14 and Check 15.
 
 A `warn` line (over budget, inside the grace band) does **not** fail the gate — trim
 at your next natural pause. See Rule 25(d), "Warn at 100%, block at 100% + grace."
+The schema verdict has no grace band: an invented section is never a near miss.
 
 The snapshot is the only artifact whose budget is enforced *at gates* rather than
 only at sprint start: it is the only one that grows *within* a sprint. The protocol
@@ -759,6 +776,12 @@ After Check 14 writes the snapshot, re-read
 - If `context_reminders_sent` was advanced this cycle, the matching
   `last_*_fire_tokens` / `last_*_fire_turns` were also set to
   non-null values.
+- **The Check 14 row's `evidence` cell carries the budget validator's
+  verdict line**, not `—` and not a restatement like "budget OK". The
+  line is the validator's own output. A Check 14 row with an empty
+  evidence cell FAILS this check: the budget check is the one part of
+  Check 14 that leaves no trace in the snapshot itself, so it is the
+  one part Check 15 cannot verify any other way.
 
 This check exists because Check 14 is an assertion ("update the
 snapshot"); Check 15 is a verification that the assertion took

@@ -151,6 +151,58 @@ is_not_artifact() {
   esac
 }
 
+# -----------------------------------------------------------------------------
+# THE SNAPSHOT'S SEVEN-SECTION SCHEMA (gate-validation.md Check 14 owns it).
+#
+# Check 14 enumerates seven sections to REFRESH. It never said "and no others,"
+# and nothing counted them -- so the schema was a REQUIRED-set, not a CLOSED-set.
+# An eighth section was invisible to every check until total BYTES breached, and
+# by then the remedy text ("trim to its 7-section schema", below) was pointing at
+# a schema nothing could evaluate.
+#
+# Measured in the reference consumer at sprint 296, mid-sprint: the snapshot held
+# TEN `## ` sections at 141% of budget. Three were lead invention that no hook, no
+# step and no script writes -- `Teammate Ledger (detail)` (5.7 KB), `Discovery
+# phase -- CLOSED` (1.9 KB), `Post-compact recovery log` (1.4 KB): 9.0 KB of 34 KB,
+# accumulated between gates, undetectable until the byte budget finally tripped.
+#
+# PREFIX match, not exact. `## In-Flight Teammates (none)` is that section wearing
+# a decoration, and failing it would be noise -- and noisy gates get ignored (see
+# "WARN AT 100%" above; same reasoning). `## Teammate Ledger (detail)` is not a
+# decoration of anything, and fails.
+#
+# CLOSED-set ONLY -- this deliberately does NOT require all seven to be PRESENT.
+# A snapshot is legitimately under-populated between route.md Step 0 and the first
+# gate, and this script runs on the BLOCKING sub-step path (_gate-procedures.md
+# "Sub-step snapshot update" step 5, "Exit 1 -> TRIM NOW"). A presence rule there
+# would stall a pipeline over a snapshot that is merely young. ABSENCE is Check
+# 14's to judge, against a snapshot it has just written. INVENTION is this
+# script's: it is never legitimate, at any age.
+# -----------------------------------------------------------------------------
+is_canonical_section() {
+  case "$1" in
+    "Pipeline Position"*|\
+    "Sprint Context"*|\
+    "Recent Activity"*|\
+    "Open Items"*|\
+    "Locked Decisions"*|\
+    "In-Flight Teammates"*|\
+    "Context Reminders"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# $1 = file path, $2 = path relative to ROOT (for the message)
+check_snapshot_sections() {
+  grep '^## ' "$1" 2>/dev/null \
+    | sed -e 's/^##[[:space:]]*//' -e 's/[[:space:]]*$//' \
+    | while IFS= read -r heading; do
+        [ -n "$heading" ] || continue
+        is_canonical_section "$heading" && continue
+        printf 'SCHEMA  %-32s unknown section: ## %s\n' "$2" "$heading" >> "$SCHEMA_FILE"
+      done
+}
+
 env_override() {
   # prd.md -> AI_DLC_BUDGET_PRD_MD
   local key
@@ -160,6 +212,15 @@ env_override() {
 
 BREACH=0
 CHECKED=0
+
+BREACH_FILE="$ROOT/.ai-dlc-budget-breach.tmp"
+SCHEMA_FILE="$ROOT/.ai-dlc-snapshot-schema.tmp"
+
+# Clear both channels BEFORE the scan. A run killed mid-flight leaves its temp
+# file behind, and the next run would then report a breach nobody measured. That
+# matters more for the schema channel than the byte one: this script blocks the
+# sub-step path, so a stale file is a pipeline stall with no artifact behind it.
+rm -f "$BREACH_FILE" "$SCHEMA_FILE"
 
 say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh)"
 say "project root        : ${ROOT}"
@@ -182,6 +243,12 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
     tokens=$(( bytes / BPT ))
     rel="${f#"$ROOT"/}"
     ceiling=$(( budget + (budget * GRACE_PCT / 100) ))
+
+    # Schema and budget are INDEPENDENT verdicts. An in-budget snapshot can still
+    # carry an invented section (that is how the 296 one started), and the point
+    # of checking here is to catch it while it is still cheap.
+    [ "$name" = "pipeline-snapshot.md" ] && check_snapshot_sections "$f" "$rel"
+
     if [ "$tokens" -gt "$ceiling" ]; then
       over=$(( tokens * 100 / budget ))
       printf 'OVER  %-32s %7s tok  (budget %6s, %s%% of it)  -> %s\n' \
@@ -202,7 +269,7 @@ done
 # temp file is the channel. Deliberate: rewriting this as a process-substitution
 # loop is a bashism and install.sh targets /bin/bash but consumers have run this
 # under sh before.
-BREACH_FILE="$ROOT/.ai-dlc-budget-breach.tmp"
+RC=0
 if [ -s "$BREACH_FILE" ]; then
   BREACH=$(wc -l < "$BREACH_FILE" | tr -d ' ')
   say ""
@@ -228,12 +295,43 @@ if [ -s "$BREACH_FILE" ]; then
                        seven -- it is the dispatch ledger, and deleting it is how a lead
                        re-dispatches a teammate that is still alive.
 EOF
-  rm -f "$BREACH_FILE"
-  [ "$WARN_ONLY" -eq 1 ] && exit 0
-  exit 1
+  [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
-
 rm -f "$BREACH_FILE"
-say ""
-say "PASS  every measured living artifact is within its Rule 25(d) budget."
-exit 0
+
+# Reported SEPARATELY from the byte budget, and never folded into that count: an
+# invented section is not "over the Rule 25(d) budget", and saying so would send
+# the lead to the wrong remedy. Trimming bytes out of a section that should not
+# exist is how 9 KB of invention survives a trim.
+if [ -s "$SCHEMA_FILE" ]; then
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ]; then
+    echo "WARN: pipeline-snapshot.md carries section(s) outside its seven-section schema."
+  else
+    echo "FAIL: pipeline-snapshot.md carries section(s) outside its seven-section schema." >&2
+  fi
+  cat "$SCHEMA_FILE" >&2
+  cat >&2 <<'EOF'
+
+      The seven sections are Pipeline Position, Sprint Context, Recent Activity,
+      Open Items, Locked Decisions, In-Flight Teammates, Context Reminders.
+      gate-validation.md Check 14 defines them; nothing else may be added.
+
+      Remedy: move each unknown section verbatim to pipeline-snapshot-history.md
+      (write-only, Rule 25(a)) and delete it here. Do NOT fold its content into one
+      of the seven -- that keeps the bytes and loses the finding.
+
+      A section nothing in core writes is a section nothing in core reads. It is
+      not recovered after compaction, not consumed at any gate, and not part of the
+      handoff contract -- it is context the pipeline pays for on every whole-read
+      and never spends.
+EOF
+  [ "$WARN_ONLY" -eq 1 ] || RC=1
+fi
+rm -f "$SCHEMA_FILE"
+
+if [ "$RC" -eq 0 ]; then
+  say ""
+  say "PASS  every measured living artifact is within its Rule 25(d) budget."
+fi
+exit "$RC"

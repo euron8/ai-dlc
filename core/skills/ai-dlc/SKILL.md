@@ -605,10 +605,34 @@ party-mode) and FAILS gate-validation Check 17.
 Three provenance-bearing execution shapes, all `mode: subagent` (plus a fourth native shape
 (iv) below, which carries its own schema instead of a provenance block):
 
-**(i) Persona-spawning (`/bmad-party-mode`).** The lead invokes it via the Skill
-tool in its own conversation; the sub-skill spawns real persona subagents
-internally (bound by the role-manifest preamble below). The internal spawns
-satisfy independence.
+**(i) Persona-spawning (`/bmad-party-mode --mode subagent --non-interactive`).**
+The lead invokes it via the Skill tool in its own conversation, **with both flags**;
+the sub-skill then spawns real persona subagents internally (bound by the
+role-manifest preamble below), and those internal spawns satisfy independence.
+
+**The flags are the mechanism. Without them this shape does not hold.**
+`bmad-party-mode` ships `party_mode = "session"` in its `customize.toml` —
+documented there as *"never spawn — one mind voices every persona inline"* — which
+is precisely the solo roleplay this rule forbids. Only `--mode subagent` overrides
+it. For 30+ sprints ai-dlc asserted the internal spawn as a fact, hardcoded
+`mode: subagent` into the provenance template, and had Check 17 fail `mode: solo`
+— while passing no flag and nothing ever observing the actual mode. The block the
+lead writes is a self-declaration, so the check could only ever confirm what the
+lead already believed.
+
+`--non-interactive` is not optional and not cosmetic. The sub-skill's own contract
+is *"a party is interactive and open-ended… it runs round after round until the
+**user** signals done,"* with `--non-interactive` named as the one exception. Under
+the old solo default that was absorbed — the lead voiced the personas in its own
+context and simply stopped. Under `subagent` it is a live stall. **The two flags
+must be passed together or the fix creates the deadlock.**
+
+If a future harness drops Skill arguments, this shape is void and party-mode
+personas must be dispatched by the lead as ordinary Agent spawns on per-seat
+deliverables (the shape `carry-over-evaluation.md` already produces under
+`planning-artifacts/party-mode/`). Verify with `/bmad-party-mode --list-groups`:
+it returns the group menu and starts no party. If a party starts instead, the
+arguments did not arrive.
 
 **(ii) Single-voice (`/bmad-advanced-elicitation`,
 `/bmad-review-adversarial-general`, `/bmad-validate-prd`).** These have no

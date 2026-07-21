@@ -17,6 +17,94 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.118.0] — 2026-07-21
+
+### Fixed — the snapshot's seven-section schema was a required-set, so an eighth section was invisible until bytes breached
+
+`gate-validation.md` Check 14 enumerates seven sections to REFRESH. It never said "and no
+others," and nothing counted them. `validate-artifact-budget.sh` measured bytes and named
+the seven-section schema only in its comments and its remedy string — so the remedy told
+the lead to "trim to its 7-section schema" while nothing on disk could evaluate one.
+
+**Measured on the reference consumer, mid-sprint at S296:** the snapshot held TEN `## `
+sections at 141% of its 6,000-token budget, and 158% ninety minutes later — still growing.
+Three sections were lead invention that no hook, no step and no script writes:
+`Teammate Ledger (detail)` (5.7 KB), `Discovery phase — CLOSED` (1.9 KB), `Post-compact
+recovery log` (1.4 KB). 9.0 KB of 34 KB, accumulated BETWEEN gates, on the one artifact
+that is whole-read at every gate, on every resume, and after every compaction.
+
+`validate-artifact-budget.sh` now asserts the CLOSED set for `pipeline-snapshot.md` and
+names each unknown section. Reported as a verdict separate from the byte budget, because
+they demand different remedies: an invented section is not "over budget," and trimming
+bytes out of a section that should not exist is how 9 KB of invention survives a trim.
+Prefix-matched, so `## In-Flight Teammates (none)` still passes — a noisy gate is an
+ignored gate, the same reasoning as the budget's grace band. Deliberately closed-set only
+and NOT presence-checking: this runs on the blocking sub-step path, and a snapshot is
+legitimately under-populated between `route.md` Step 0 and the first gate.
+
+No new wiring — the identical command was already invoked at both enforcement points
+(Check 14, and `_gate-procedures.md` "Sub-step snapshot update" step 5), so both gained
+the tooth at once.
+
+**And the verdict was never recorded.** `gate-log.md` on the reference consumer carried 12
+consecutive Check 14 rows reading `done after this entry | —`, with zero occurrences of
+`validate-artifact-budget` anywhere in the file, across the sprint in which the snapshot
+went from 99% to 158%. A gate that skipped the validator was byte-identical to one that
+ran it and passed. Check 14 now requires the verdict line pasted verbatim into its evidence
+cell (as Check 24 already does), and Check 15 — the check that exists solely to verify
+Check 14's assertion took effect — now FAILS on an empty cell. The budget check is the one
+part of Check 14 that leaves no trace in the snapshot itself, so it is the one part Check
+15 could not otherwise verify.
+
+New fixture `snapshot-section-schema/` proves the check can fail, including the control the
+first KISS differential lacked: it removes the schema call from a copy of the validator and
+demands the same input go green.
+
+### Fixed — Rule 20 mandated subagent personas and passed no flag; the sub-skill's default is solo
+
+Rule 20 shape (i) asserted that `/bmad-party-mode` "spawns real persona subagents
+internally." Its `customize.toml` ships `party_mode = "session"` — documented there as
+*"never spawn — one mind voices every persona inline"* — and no file in the distribution or
+in any consumer passed `--mode subagent`. For 30+ sprints ai-dlc mandated independence in
+prose, hardcoded `mode: subagent` into the provenance template, and had Check 17 fail
+`mode: solo` — while the block was a self-declaration the lead wrote itself and nothing
+ever observed the actual mode.
+
+All four invocation homes now pass `--mode subagent --non-interactive`:
+`_gate-procedures.md` (the validation cycle, covering discovery/architecture/
+research-requirements/stories), `carry-over-evaluation.md`, `sprint-review.md`, `retro.md`.
+
+**Both flags, together.** The sub-skill's contract is *"a party is interactive and
+open-ended… it runs round after round until the **user** signals done,"* with
+`--non-interactive` named as the one exception. Under the old solo default that was
+absorbed; under `subagent` it is a live stall. Passing the mode flag alone would have
+traded a silent independence failure for a pipeline deadlock.
+
+Rule 20 (i) is the single rationale home and records the fallback: if a harness drops Skill
+arguments this shape is void, personas must be dispatched as ordinary Agent spawns on
+per-seat deliverables, and `/bmad-party-mode --list-groups` is the one-command probe.
+
+### Fixed — the one-shot review's ten-finding floor contradicted the adversary's anti-quota contract
+
+`adversary.md` §4 forbids manufacturing findings, unscoped: *"no floor, no minimum."* The
+same file then said the bmad review skill's *"find at least ten issues / HALT if zero"*
+contract was "right for a one-shot cynical sweep." A one-shot adversary therefore held two
+contradictory standing instructions, and `stories-test-strategy.md` and `sprint-review.md`
+both say **"Apply fixes"** on its output — against an artifact the Rule 8 cycle has just
+driven to zero CRITICAL and zero MAJOR.
+
+**Measured before changing anything.** Across the reference consumer's 420 one-shot
+`bmad-review-adversarial-general` provenance blocks, 10 record their residue. Of those, 9
+returned FEWER than ten findings and 6 returned ZERO — none halting, no gate objecting. The
+floor and the HALT are already inert; §4's prohibition is what the subagent actually obeys.
+
+So the dispatch is unchanged and the three one-shot sites stay as they are. What changed is
+the sentence the record falsifies: `adversary.md` now says the floor and the HALT are
+ignored on BOTH dispatch kinds, that what the skill supplies on a one-shot is the METHOD
+(cynical, breadth-first, no loop, no ladder) and not a licence to manufacture, and why it
+matters — a manufactured finding on a converged artifact is an edit to correct text, and
+the edit is where new defects come from.
+
 ## [0.117.0] — 2026-07-21
 
 ### Fixed — the steerability audit was scoped to one session but adjudicated a sprint, and the flow log's own legend counted as data

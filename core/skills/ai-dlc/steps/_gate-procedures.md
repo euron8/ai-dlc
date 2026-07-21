@@ -54,6 +54,11 @@ When a step file says "run sub-step snapshot update", execute:
    - **Exit 1 (past the grace band) → TRIM NOW, before the next
      sub-step.** Move superseded narrative verbatim to
      `pipeline-snapshot-history.md` (write-only), re-run, then continue.
+   - **Exit 1 naming a section outside the seven-section schema → MOVE IT
+     NOW**, same destination, same "before the next sub-step." This is the
+     verdict that matters here rather than at the gate: invented sections
+     accumulate BETWEEN gates, which is the only place they can, and by the
+     time bytes breach they are already load-bearing in the lead's head.
 
    Do NOT defer the trim to a later pause. The gate (Check 14) remains
    the blocking point.
@@ -172,9 +177,12 @@ Check 24 reads it.
 
 Execute the sub-skills back-to-back, with no pause for human input between them:
 
-1. `/bmad-party-mode` — the step's seats (bound via the Rule 20 role-manifest
-   preamble to their `.claude/team-roles/<role>.md`) walk the step's subject and
+1. `/bmad-party-mode --mode subagent --non-interactive` — the step's seats (bound
+   via the Rule 20 role-manifest preamble to their `.claude/team-roles/<role>.md`)
+   walk the step's subject and
    apply every improvement; run the step's source-fidelity check if it names one.
+   **Both flags are load-bearing and neither is optional — SKILL.md Rule 20 (i)
+   owns why.**
    **Run sub-step snapshot update** ("Sub-step snapshot update" above), then
    proceed.
 2. `/bmad-advanced-elicitation` — probe until zero ambiguity and update the
