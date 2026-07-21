@@ -111,9 +111,42 @@ overwrite_from_theirs() { # <core-rel>
 # tree is at THEIRS.
 mech_fail=0
 
-# ---------------------------------------------------------------- 1. buckets (preclassify)
+# ------------------------------------------------- 0. MEASURE, before anything is written
+#
+# Every detector this file consults answers a question about the CONSUMER'S OWN STATE:
+# preclassify buckets a file by how consumer, base and theirs relate; unregistered-drift
+# asks whether a core file was edited in place, which it decides with
+# `git show "${BASE}:${cp}" | cmp -s - "$cons"` (unregistered-drift.sh:187). Both are only
+# meaningful BEFORE this script starts overwriting that state.
+#
+# The drift capture used to sit down in phase 2, AFTER phase 1 had already overwritten every
+# pure-apply file from THEIRS. So any file that was both a pure-apply and changed upstream
+# NECESSARILY reported as consumer drift -- the detector was measuring the write this driver
+# had made moments earlier, in a pull with no consumer drift in it at all.
+#
+# That is not a spurious row. unregistered-drift.sh emits HARD-CORE-DRIFT-ABSORBED with a
+# ready `git show ... > <consumer-path>` revert command and the line "This still blocks
+# because a revert DELETES text and only you can confirm nothing was lost." A CLEAN pull
+# therefore handed the operator a destructive instruction, confidently worded, at exactly
+# the step where the tool asks for an irreversible decision. Observed on the v0.95.0 ->
+# v0.99.0 pull: three findings on files this driver had just written, each detail string
+# carrying its own refutation (`0 lines vs <base>` -- zero consumer-added lines).
+#
+# And it does not stop at noise: on a pull that DID carry real drift, the true rows would be
+# indistinguishable from these. A poisoned signal is worse than a missing one.
+#
+# So both captures happen here, together, in the only state in which ours-vs-base means what
+# the status name claims. Phases 1 and 2 consume what this phase measured.
+#
+# Phase 3's layer-drift.sh does NOT belong here and is not exposed to the same fault: its
+# consumer-side reads are layer_files() (`:110`), which walks consumer-authored *.md under
+# overrides/ and extensions/ -- files phase 1 never overwrites, README.md explicitly excluded
+# -- and every core-side comparison resolves through `git -C "$DIST" show`, never the
+# installed file. Leaving its call where it is keeps that visible.
 PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
+UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
 
+# ---------------------------------------------------------------- 1. buckets (preclassify)
 while IFS="$(printf '\t')" read -r kind path cons bucket; do
   [ -n "${bucket:-}" ] || continue
   rel="${path#core/}"
@@ -166,7 +199,10 @@ EOF
 # ---------------------------------------------------------------- 2. drift refile (known patterns)
 # provenance-block.json known_skills: the consumer added skill names in place. Refile them to the
 # sanctioned extension point (extensions/known-skills.json) and revert the schema to theirs.
-UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+#
+# UD was captured in phase 0, before phase 1 wrote anything. Do NOT recompute it here: at this
+# point every pure-apply file already equals THEIRS, so a fresh run reports the driver's own
+# writes as consumer drift. See phase 0.
 while IFS= read -r rel; do
   [ -n "$rel" ] || continue
   cons="$(consumer_path "$rel")" || { say DECISION drift "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1)); continue; }
