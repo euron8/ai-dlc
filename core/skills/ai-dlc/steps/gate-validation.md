@@ -599,15 +599,19 @@ cross-catalog confound). Per-line schema:
 - **`evidence`** is a pointer (path / run-id), never prose.
 - **`tok_slice`** is **REQUIRED** (integer): the token cost of this check's
   loaded slice — the cost side of efficacy, so cost-vs-catch is computable
-  without re-measuring. Emit the check's own token size as loaded this gate
-  (a stable per-check figure; `scripts/audit-machinery-efficacy.js` prints
-  the current per-check counts). Never `null` — a record without a real
-  `tok_slice` cannot answer "does this check earn its cost."
+  without re-measuring. Never `null` — a record without a real `tok_slice`
+  cannot answer "does this check earn its cost."
+  **How to source it.** Measure this check's own span in this file — from its
+  `<!-- CHECK_LOADED: N -->` anchor to the next one — and record the method
+  alongside the number in the gate log. Any stable basis is acceptable
+  (`chars/4` is fine) provided the SAME basis is used across a comparison; the
+  figure is only ever read as a ratio against other checks' slices, so a
+  consistent estimator beats an exact one nobody can reproduce. Do not emit an
+  unsourced number, and do not leave the field out.
 
 The prose gate-log is unchanged and remains the human/audit trail; this
 record is additive. Absence of the file on a consumer simply means audit
-tooling falls back to the prose path. Consumed by
-`scripts/audit-machinery-efficacy.js` and any analytics dashboard.
+tooling falls back to the prose path.
 
 ### 13. Announce gate passage.
 <!-- CHECK_LOADED: 13 -->

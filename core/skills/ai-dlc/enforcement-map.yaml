@@ -196,7 +196,11 @@ checks:
     title: Append gate log entry
     gate_types: [universal]
     adjudication: lead   # mutates the gate log; a read-only adjudicator cannot do it
-    emits: gate-metrics.jsonl   # GATE_METRIC v1, consumed by audit-machinery-efficacy.js
+    emits: gate-metrics.jsonl   # GATE_METRIC v1. Consumed by whatever audit tooling a
+                                # consumer runs; core ships no reader for it. The
+                                # distribution's own scripts/audit-machinery-efficacy.js is a
+                                # MAINTAINER tool and install.sh does not ship it, so naming
+                                # it here read as a consumer-runnable dependency it never was.
     enforcer: []
     ci_workflow: ~
 
