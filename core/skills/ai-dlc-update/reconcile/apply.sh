@@ -186,7 +186,18 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
         say DECISION unmapped-path "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1))
       fi ;;
     *CLASSIFY*)
-      say WORKLIST semantic-merge "$rel" ;;
+      # A semantic merge is not done when the text reconciles -- it is done when the
+      # merged file still WORKS. retired-tokens.sh names the one way that can fail
+      # invisibly: consumer-only code inside this file still referencing a contract
+      # upstream retired. Carried on the worklist item itself so the obligation
+      # arrives with the work, not in a report section that can be skimmed.
+      rt="$(bash "$SELF/retired-tokens.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" "$path" 2>/dev/null \
+            | awk -F'\t' '{print $3}' | paste -sd' ' -)"
+      if [ -n "${rt:-}" ]; then
+        say WORKLIST semantic-merge "$rel" "MUST ALSO re-point retired contract token(s): ${rt} — re-run retired-tokens.sh after merging; a non-empty result means the merge is NOT complete"
+      else
+        say WORKLIST semantic-merge "$rel"
+      fi ;;
     UPSTREAM-DELETED|ORPHANED-RELOCATED*)
       say DECISION deletion "$rel" "apply would remove a consumer file — gated" ;;
     ALREADY-AT-THEIRS|ALREADY-PRESENT|*NOOP|DIST-ONLY-SKIP) : ;;
