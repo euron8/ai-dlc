@@ -162,13 +162,37 @@ else
   bad "--warn-only exit $warn_status / message missing -- retro posture broken"
 fi
 
-# --- 7. No stale-state carry-over ----------------------------------------------
-# The schema channel is a temp file, and this script runs on the BLOCKING sub-step
-# path. A file left behind by a killed run would stall a pipeline over a snapshot
-# that is perfectly clean.
-printf 'SCHEMA  stale  unknown section: ## Ghost\n' > "$WORK/.ai-dlc-snapshot-schema.tmp"
+# --- 7. THE CHANNELS LEAVE NOTHING IN THE PROJECT ROOT --------------------------
+# Both channels used to be `$ROOT/.ai-dlc-*.tmp`. Nothing gitignores those, so a
+# killed run left them untracked in the consumer's project root where a broad
+# `git add -A` commits them -- and a leftover is indistinguishable, to a READER,
+# from a fresh verdict (a v0.118.1 reconcile report quoted a 12-minute-old one as
+# current evidence). They live in a per-run mktemp dir now. Assert the absence,
+# because "no litter" is the property, not "the litter is cleared".
+seed 'Teammate Ledger (detail)'
+run_validator >/dev/null
+stray="$(find "$WORK" -maxdepth 1 -name '*.tmp' 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$stray" = "0" ]; then
+  ok "a failing run leaves no temp file in the project root"
+else
+  bad "a failing run left $stray temp file(s) in the project root"
+fi
+
+# --- 8. THE BYTE CHANNEL STILL FIRES --------------------------------------------
+# Guards the fix that moved the OVER writer off a hardcoded `$ROOT/...tmp` path and
+# onto $BREACH_FILE. Had the writer kept the old path while the reader moved, the
+# reader would have found an empty file and the byte budget would have gone SILENT
+# -- passing every over-budget snapshot, with no error anywhere. The schema
+# assertions above would not have noticed: they only ever assert the budget is
+# QUIET. This is the one that would have caught it.
 seed
-expect_status 0 "a stale temp file from a killed run does not fail a clean snapshot"
+head -c 40000 /dev/zero | tr '\0' 'x' >> "$SNAP"
+run_validator >/dev/null
+if grep -q '^OVER ' "$WORK/out.txt" && grep -q 'over the Rule 25(d) budget' "$WORK/out.txt"; then
+  ok "an over-budget snapshot still reaches the byte-budget reader"
+else
+  bad "the byte channel went SILENT -- writer and reader disagree on the temp path"
+fi
 
 echo ""
 if [ "$fails" -eq 0 ]; then
