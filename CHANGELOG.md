@@ -17,6 +17,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.113.1] — 2026-07-21
+
+### Fixed — Check 26's enforcer was inert on every fresh install
+
+`install.sh` never copied `enforcement-map.yaml` to the consumer.
+`validate-gate-adjudication.sh` DERIVES the escalated check set from that file and fails
+closed when it is absent — `FAIL: enforcement-map.yaml not found … this validator has no
+built-in list and will not guess` — so on a fresh install the enforcer refused rather than
+adjudicating, and nothing reported that it had never run.
+
+It reached the reference consumer only through the `ai-dlc-update` pull path, which maps the
+whole skill directory, so the gap was invisible to anyone who had ever pulled. Found by
+running the fixture suite from a real consumer install rather than from the distribution —
+`tests/fixtures/gate-adjudication/` could not seed there, on `main`, before any change in this
+series. Distribution green is not consumer green.
+
+## [0.113.0] — 2026-07-21
+
+### Fixed — Check 12 sourced a REQUIRED field from tooling no consumer has
+
+`gate-validation.md`'s `GATE_METRIC v1` clause named `scripts/audit-machinery-efficacy.js` as
+the source of the per-check `tok_slice` figure — a field the same clause marks **REQUIRED**
+and "Never `null`". Invoking it on a consumer returns `MODULE_NOT_FOUND`. A gate emitting the
+record therefore had no specified way to populate a field it was forbidden to omit, and the
+`enforcement-map.yaml` row repeated the citation.
+
+**The ledger's premise needed refining before the fix.** It filed this as a script that "was
+never written". False for this repo — it exists at `scripts/audit-machinery-efficacy.js` as a
+maintainer tool. It is absent from `core/scripts/`, so `install.sh` never ships it. This is
+distribution-is-not-a-consumer rather than a phantom reference, and it changes the fix:
+consumer-loaded text must stop asserting a tool the consumer does not have, and Check 12 must
+name a method the consumer can actually execute.
+
+Check 12 now states how to source `tok_slice` directly: measure the check's own span between
+`<!-- CHECK_LOADED: N -->` anchors and record the method alongside the number. Any stable
+basis is acceptable provided the same basis is used across a comparison — the figure is only
+ever read as a ratio between checks, so a consistent estimator beats an exact one nobody can
+reproduce.
+
+### Considered and rejected — a generalized dead-script-reference check
+
+The obvious generalization was to extend `scripts/validate-no-dead-doc-refs.sh` (which already
+enforces this class for `docs/`) with a `scripts/` arm: for every `scripts/<name>` cited in
+`core/**`, assert `core/scripts/<name>` exists. **It was measured before being built, and the
+measurement killed it.** Over the scope that matters — consumer-loaded rules and shipped
+scripts — the predicate returns 8 hits, of which exactly **one** is the defect above:
+
+- `validate-cycle-commits.sh`, `validate-retro-prereq.sh` — deliberately consumer-provided.
+  `validate-mandatory-rules.sh:191-197` tests for the sibling and SKIPs loudly when absent,
+  with the reason recorded inline (the operator-action set is deploy-target specific, so core
+  has no universal list to assert). Not debt; a documented design.
+- `install.sh`, `uninstall.sh` — the distribution's own installer, cited as
+  `./path/to/ai-dlc/scripts/install.sh`.
+- `validate-enforcement-map.sh` — a distribution tool, cited only from a distribution-only
+  fixture.
+- `deploy.sh`, `smoke-test.sh` — examples of the *consumer's* own project scripts.
+
+A check that needs seven exemptions to surface one finding is not worth its cost, and the
+exemption list would itself be the hand-maintained set this release series keeps removing.
+Recorded here so the next reader does not rebuild it from the same tempting premise.
+
 ## [0.112.0] — 2026-07-21
 
 ### Fixed — a dispatch whose delivery contract was a chat reply was reachable, and its failure read as teammate death
