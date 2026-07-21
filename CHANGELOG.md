@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.110.0] — 2026-07-21
+
+### Fixed — the pause hook paused the pipeline on prompts no human typed
+
+`ai-dlc-pause.sh` touched the pause flag on every `UserPromptSubmit` with no inspection of
+the prompt at all — it read `.prompt` only for a 120-char log preview. The harness raises
+`UserPromptSubmit` identically when a backgrounded task completes as when a human types, so
+the hook created a pause flag for events carrying no operator prose, and the lead then
+blocked on a pause no human initiated. Five occurrences across two sprints on the reference
+consumer went undiagnosed, because a flag looks the same whoever created it.
+
+**The predicate is deliberately narrow:** skip only when `.prompt` is empty, or whitespace
+once `<system-reminder>` blocks are stripped. A false NON-pause is the dangerous direction —
+it means the lead executes straight through a real operator steer, the failure Rule 29 and
+the whole steering-budget check exist to prevent. This arm cannot swallow a prompt carrying
+operator prose, because it fires only when there is none.
+
+It deliberately does **not** mirror `validate-steering-budget.sh`'s `genuineOperatorText`
+prefix list (`<task-notification`, `<local-command`, `<agent-message`, …) into bash. That
+would re-home a hand-maintained enumeration of harness spellings as two lists in two
+languages that drift apart, and it trades the safe failure direction for the unsafe one — a
+mis-scoped prefix silently discards a real steer. The hook's header says so, so the next
+reader does not "complete" it.
+
+The wider arms are not acted on here because the consumer's own evidence retracted them: one
+arm was falsified by a live negative control, and two later `<task-notification>` events did
+not create the flag, contradicting its own measured rate. The empty-prompt arm is the part
+that survived.
+
+**The skip is recorded, never silent.** A pause that never happened reads exactly like a
+pause the lead already cleared. The hook logs `PAUSE_SKIPPED` to
+`pipeline-continuation-log.md`, and the log's event-type legend documents it — the header
+seeding moved into a function both paths call, so a session whose first event is a skip does
+not produce a log whose legend omits the only event type in it.
+
+New fixture `core/fixtures/pause-hook-origin/` drives the real hook with five stdin payloads.
+Assertions 3 and 4 are the load-bearing ones — operator prose alone, and operator prose
+arriving alongside a `<system-reminder>` (the shape every real operator turn has), must both
+still pause — so a strip that ever consumed the prose would be caught rather than silently
+discarding every steer.
+
 ## [0.109.0] — 2026-07-21
 
 ### Fixed — a genuine operator disposition made through AskUserQuestion could not be cited, by construction
