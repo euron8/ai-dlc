@@ -17,6 +17,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.109.0] — 2026-07-21
+
+### Fixed — a genuine operator disposition made through AskUserQuestion could not be cited, by construction
+
+`validate-steering-budget.sh`'s `genuineOperatorText` returns `""` for any user record whose
+content carries a `tool_result`. An `AskUserQuestion` answer arrives in the transcript as
+exactly that shape — a `type: "user"` record whose content array holds a `tool_result`
+replying to the `AskUserQuestion` `tool_use`. So `--cite` structurally could not accept
+**any** AskUserQuestion-sourced answer for Check 2a's `**Operator authorization:**`
+requirement. Not a defect in one citation: a closed class.
+
+That is the mirror of the failure Check 2a exists to catch. Rule 11(a) names AskUserQuestion
+as the sanctioned mechanism for exactly this kind of operator decision, and the reference
+consumer dispositioned `S295-LEAD-STEAMROLL-1` through it — a real, deliberate, timestamped
+selection. Citing it per Check 2a's own format failed with the identical message the S290
+fabrication case produced (`appears in NO genuine operator message in the transcript`). Here
+a genuine citation cannot pass, rather than a fabricated one passing.
+
+**The predicate is split, not widened.** Sharing one definition was wrong in both directions:
+
+- **Check B keeps `genuineOperatorText` unchanged.** The lead *solicits* an AskUserQuestion
+  answer. No pause flag is set — the answer is a tool result, not a `UserPromptSubmit` — and
+  no acknowledgement is owed, because the lead already stopped and asked. Widening the shared
+  predicate would have scored every `AskUserQuestion → advance` sequence as a steamroll, in
+  the one check whose design notes twice warn against reading a machine event as a human one.
+- **`--cite` uses a new `citableOperatorText`** = `genuineOperatorText` or an AskUserQuestion
+  answer. Every other `tool_result` shape stays rejected, and the call is resolved by PAIRING
+  the result to its `tool_use` rather than by sniffing the result text — any subagent can emit
+  a string that looks like an answer block.
+
+**Only the answer side is accepted.** The `tool_result` text is
+`Your questions have been answered: "<question>"="<answer>", …` — and the questions are text
+the **lead** authored. Accepting the whole string would let a lead cite words it wrote itself
+and pass the provenance check, reintroducing the S290 fabrication through the repair of its
+mirror image. The extraction takes only the answer side of each pair, and stops at the first
+unescaped quote so an answer containing a literal `"` is truncated rather than over-read — a
+citation may fail to match, which is the safe direction for a provenance check.
+
+**Check B is provably untouched:** `--dir` output over the full reference session corpus is
+byte-for-byte identical before and after.
+
+New fixture `core/fixtures/askuserquestion-citation/`, whose record shapes are copied from a
+real harness transcript rather than invented. Its second assertion is the load-bearing one —
+the lead-authored question in the same `tool_result` must NOT be citable — and its mutant
+assertion widens the extraction to the whole string and requires that question to become
+citable, so the guard is proven to be testing the extraction rather than passing incidentally.
+
 ## [0.108.0] — 2026-07-21
 
 ### Added — Check 2 silently skipped every escalation on a status token it could not branch on

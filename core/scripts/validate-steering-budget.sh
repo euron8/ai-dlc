@@ -100,9 +100,14 @@
 #       and exits 0 (found) / 2 (not found). --since bounds the search to messages at
 #       or after an ISO-8601 timestamp (the pause window). This exists so a record
 #       that CLAIMS operator authorization (an ADVERSARIAL_RESOLUTION operator_
-#       authorization citation) can be checked against the harness-owned transcript
-#       using the SAME genuine-operator predicate Check B uses -- one definition of
-#       "a real human said this", never two that can drift.
+#       authorization citation) can be checked against the harness-owned transcript.
+#
+#       Its predicate is Check B's, plus AskUserQuestion ANSWERS -- and only the answer
+#       side, never the lead-authored question. Check B deliberately does NOT accept
+#       them. The two checks ask different questions ("did the lead execute through a
+#       steer?" vs "did the operator say these words?"), and an answer the lead
+#       solicited is evidence for the second while being a false positive for the
+#       first. See the note on citableOperatorText.
 #
 # ENV OVERRIDES
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
@@ -177,12 +182,14 @@ const one = process.env.AI_DLC_T, dir = process.env.AI_DLC_D;
 const EXEMPT = new Set(["AskUserQuestion"]);
 const ADVANCING = new Set(["Agent", "Task", "Skill", "TaskCreate"]);
 
-// THE genuine-operator-message predicate. This is the ONE definition of "a real
-// human typed this" -- Check B (steamroll) and --cite (provenance) both call it, so
-// they cannot drift into disagreement. Returns the cleaned message text, or "" if
-// the record is not a genuine free-text operator turn (tool_result, harness/system
-// injection, teammate traffic, or the auto-compact resume prompt). Keep every
+// THE genuine-operator-message predicate: "a real human FREELY TYPED this". Returns the
+// cleaned message text, or "" if the record is not a free-text operator turn (tool_result,
+// harness/system injection, teammate traffic, or the auto-compact resume prompt). Keep every
 // exclusion here in lockstep with the "NOT AN OPERATOR MESSAGE" header notes.
+//
+// Check B (steamroll) is its ONLY caller. --cite calls citableOperatorText below, which is
+// this plus one carefully-bounded addition. The two were deliberately separated; see the note
+// on citableOperatorText for why sharing one predicate was wrong in BOTH directions.
 const genuineOperatorText = (r) => {
   if (!r || r.type !== "user") return "";
   const c = r.message?.content;
@@ -196,6 +203,66 @@ const genuineOperatorText = (r) => {
   if (/^This session is being continued from a previous conversation/.test(txt)) return "";
   return txt;
 };
+
+// ---------------------------------------------------------------------------
+// AskUserQuestion answers: citable, but NOT steamroll-relevant.
+//
+// WHY THIS EXISTS. genuineOperatorText rejects any record carrying a tool_result (:189).
+// An AskUserQuestion answer arrives in the transcript as EXACTLY that shape -- a type:"user"
+// record whose content array holds a tool_result replying to the AskUserQuestion tool_use. So
+// --cite structurally could not accept ANY AskUserQuestion-sourced answer as a citable
+// operator message. Not one bad citation: a closed class.
+//
+// That is the MIRROR of the failure Check 2a exists to catch. Rule 11(a) names AskUserQuestion
+// as the sanctioned mechanism for exactly this kind of operator decision, and the reference
+// consumer dispositioned a HARD_BLOCK through it. Citing that answer in Check 2a's own format
+// failed with the identical message the S290 fabrication case produced ("appears in NO genuine
+// operator message in the transcript") -- a genuine, mechanism-sanctioned citation rejected,
+// rather than a fabricated one accepted.
+//
+// WHY THE PREDICATE IS SPLIT RATHER THAN WIDENED. Sharing one predicate was wrong in both
+// directions, and widening genuineOperatorText would have broken Check B:
+//
+//   Check B asks "did an operator message land that the lead then executed straight
+//   through?" The lead SOLICITS an AskUserQuestion answer. No pause flag is set, because the
+//   answer is a tool result rather than a UserPromptSubmit, and no acknowledgement is owed --
+//   the lead already stopped and asked. Every AskUserQuestion -> advance sequence would score
+//   as a steamroll, in the one check whose design notes twice warn against reading a machine
+//   event as a human one.
+//
+//   --cite asks a different question: "did the operator actually say these words?" For that,
+//   a deliberate timestamped selection is evidence of the same kind as typed prose.
+//
+// WHY ONLY THE ANSWER SIDE. The tool_result text is
+//
+//     Your questions have been answered: "<question>"="<answer>", "<question>"="<answer>". ...
+//
+// and the QUESTIONS are text the LEAD authored. Accepting the whole string would let a lead
+// cite words it wrote itself and pass the provenance check -- reintroducing the S290
+// fabrication through the fix for its mirror image. Only the answer side of each pair is
+// returned. The extraction stops at the first unescaped quote, so an answer containing a
+// literal `"` is truncated rather than over-read: a citation may fail to match, which is the
+// safe direction for a provenance check.
+const askUserQuestionAnswers = (r, askIds) => {
+  if (!r || r.type !== "user") return "";
+  const c = r.message?.content;
+  if (!Array.isArray(c)) return "";
+  const out = [];
+  for (const b of c) {
+    if (b.type !== "tool_result" || !askIds.has(b.tool_use_id)) continue;
+    const raw = typeof b.content === "string" ? b.content
+      : Array.isArray(b.content) ? b.content.map(x => (x.type === "text" ? x.text : "")).join(" ")
+      : "";
+    for (const m of raw.matchAll(/"\s*=\s*"([^"]*)"/g)) out.push(m[1]);
+  }
+  return out.join(" ").trim();
+};
+
+// The --cite predicate. genuineOperatorText, plus an AskUserQuestion answer. Every OTHER
+// tool_result shape stays rejected -- a Bash result, a file read, a subagent return is not an
+// operator message however operator-sounding its bytes are.
+const citableOperatorText = (r, askIds) =>
+  genuineOperatorText(r) || askUserQuestionAnswers(r, askIds);
 
 // `_bmad-output/ai-dlc-update/**` is the UPDATER's own scratch space (reconcile
 // report, push-candidate ledger), not pipeline output. /ai-dlc-update is a
@@ -272,8 +339,17 @@ if (CITE) {
       .map(l => { try { return JSON.parse(l); } catch { return null; } })
       .filter(Boolean).filter(r => !r.isSidechain);
   } catch { console.log("NOMATCH"); process.exit(2); }
+  // Which tool_use ids are AskUserQuestion calls. Resolved by PAIRING, never by sniffing the
+  // result text: any subagent can emit a string that looks like an answer block, and only the
+  // tool_use it replies to says what actually asked the operator.
+  const askIds = new Set();
   for (const r of recs) {
-    const txt = genuineOperatorText(r);
+    const c = r.message?.content;
+    if (!Array.isArray(c)) continue;
+    for (const b of c) if (b.type === "tool_use" && b.name === "AskUserQuestion") askIds.add(b.id);
+  }
+  for (const r of recs) {
+    const txt = citableOperatorText(r, askIds);
     if (!txt) continue;
     const ts = Date.parse(r.timestamp);
     if (!(ts >= sinceMs)) continue;
