@@ -272,6 +272,218 @@ fi
 #
 # Withholding is the safe direction: the stamp stays at BASE, so the next pull simply
 # re-applies from BASE. Overwriting an unchanged file twice costs nothing; believing a
+# -----------------------------------------------------------------------------
+# LEGACY SCRIPT LOCATION (pre-0.126.0). Core validators used to be installed loose
+# in scripts/; they now live in scripts/ai-dlc/. This driver places the new copies
+# and NEVER deletes the old ones -- but silence here would be worse than the mess.
+#
+# The move made the old path INVISIBLE to every detector at once, and that is the
+# reason this block exists rather than a line in the changelog:
+#
+#   - map_consumer() now sends core/scripts/X to scripts/ai-dlc/X. On a consumer
+#     that has not moved yet, that path does not exist, so the file classifies as a
+#     clean ADD. The copy at scripts/X is no longer compared against anything.
+#   - unregistered-drift.sh deliberately excludes scripts/ ("an edit breaks LOUDLY,
+#     not silently"). That premise was already thin -- the reference consumer had
+#     TWO edited validators nobody noticed for months -- and after the move nothing
+#     scans the old path at all.
+#
+# Before the move, an edited scripts/X surfaced as a BOTH-CHANGED conflict. Losing
+# that without replacing it would turn a real local change into an orphan: not
+# clobbered, just never mentioned again. So the check moves here, where the mapping
+# already lives.
+#
+# REPORTS, NEVER DELETES. A difference is a local edit -- the very thing the new
+# boundary exists to prevent -- and it belongs upstream as a push candidate, not in
+# the bin. An operator who has read the diff can remove them in one command.
+# LEVEL-TRIGGERED, for the same reason the orphan pass in preclassify.sh is: a
+# relocation is a STATE of the consumer tree, not an event in upstream history.
+#
+# This matters more here than anywhere else, because preclassify enumerates
+# `git diff --name-status BASE THEIRS -- core/` -- only files that CHANGED. On the
+# 0.119.1 -> 0.126.0 pull just five of the twenty-five validators changed, so an
+# event-driven migration would write five files into scripts/ai-dlc/ and leave the
+# other twenty behind, while every core reference now points at the new directory.
+# That is not a stale duplicate, it is a pipeline that breaks at the first gate
+# calling a validator that was never written.
+#
+# It cannot use preclassify's RELOCATIONS table either. Every prefix in that table
+# (.claude/fixtures, .claude/ci-templates, .claude/git-hooks) is a directory that is
+# exclusively ours, so it can `find` the whole tree. scripts/ is SHARED -- 103 files
+# in the reference consumer, 78 of them theirs -- so the same walk would indict their
+# tooling and would descend into scripts/ai-dlc/ and call our own new copies orphans.
+#
+# THE MANIFEST IS THE DECLARATION -- of the set AND of where each file goes.
+#
+# `ls-tree core/scripts` would give the same 25 files (validate-enforcement-map.sh
+# I5b asserts the two agree in both directions, so neither can drift). It is not used
+# because it answers only "what is shipped", and the destination would then have to
+# come from map_consumer()'s `scripts/ai-dlc/` prefix rule -- a SECOND statement of a
+# path the manifest entries already spell out in full. One declaration, or the two
+# drift the first time a relocation is only half-applied.
+#
+# setup-sites.md, not core-manifest.md: this skill's HARD CONSTRAINT is that it reads
+# only its own reconcile/ files, which is exactly why that duplicate copy exists. I5
+# binds the two copies, so reading either yields the same declaration.
+#
+# map_consumer() deliberately stays a prefix mapper and is NOT rewritten to consult
+# this list. It must map ARBITRARY core paths -- including `core/scripts/PROBE`, which
+# I8 synthesises to test the mapping and which no manifest will ever contain. A lookup
+# table cannot answer for a path that does not exist yet; a prefix rule can.
+manifest_dests() { # -> consumer-relative destinations declared under scripts/ai-dlc/
+  awk '
+    /^core_manifest:/ {f=1; next}
+    f && /^[ \t]*-[ \t]+/ { v=$0; sub(/^[ \t]*-[ \t]+/,"",v); sub(/[ \t]+$/,"",v); print v; next }
+    f && /^[^ \t]/ { f=0 }
+  ' "$SELF/setup-sites.md" 2>/dev/null | sed -e 's#^core/##' -e '/^scripts\/ai-dlc\//!d'
+}
+
+legacy_same=""
+legacy_same_n=0
+manifest_n=0
+for dest in $(manifest_dests); do
+  manifest_n=$((manifest_n+1))
+  base="${dest#scripts/ai-dlc/}"
+  old="$CONSUMER/scripts/$base"
+  new="$CONSUMER/$dest"
+
+  # A declared file THEIRS does not ship. That is a distribution inconsistency and
+  # validate-enforcement-map.sh I5b owns it -- it asserts the manifest and
+  # core/scripts/ agree in both directions, so this cannot reach a real release.
+  # Treating it as a mechanical failure HERE would block a pull over a defect the
+  # consumer cannot fix and did not cause.
+  git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/${base}" 2>/dev/null || continue
+
+  # 1. Place it if the changed-files pass did not. Never overwrite: a file already
+  #    at the new path was written by that pass from this same THEIRS.
+  if [ ! -f "$new" ]; then
+    if overwrite_from_theirs "scripts/$base"; then
+      say RESOLVED relocate "$dest" "placed at its declared location (unchanged in this range, so the changed-files pass did not carry it)"
+    else
+      say DECISION unmapped-path "scripts/$base" "declared at $dest but could not be placed"
+      mech_fail=$((mech_fail+1))
+    fi
+  fi
+
+  # 2. MOVE: the old path is emptied once the new one holds THEIRS' content. A
+  #    leftover is not harmless -- it shadows nothing, nothing refreshes it, and it
+  #    silently diverges from the file it is a copy of, which is the rot the pull
+  #    exists to prevent.
+  #
+  #    A copy that DIFFERS is announced before it goes. It is a local edit to a core
+  #    validator, made while the old layout permitted it, and it is the thing most
+  #    worth knowing about in this whole migration -- the reference consumer has two,
+  #    one of them a real fix never filed upstream. The removal is recoverable
+  #    (consumers are git repositories and the file was tracked); the SILENCE would
+  #    not have been.
+  [ -f "$old" ] || continue
+  if cmp -s "$old" "$new"; then
+    legacy_same="${legacy_same}${legacy_same:+ }scripts/$base"
+    legacy_same_n=$((legacy_same_n+1))
+  else
+    say DECISION legacy-script-edited "scripts/$base" \
+      "differed from $dest before it was moved — a local edit to a core validator. Recover it with \`git show HEAD:scripts/$base\` and file the difference as a push candidate; the new copy is upstream's."
+  fi
+  rm -f "$old"
+done
+
+# A manifest that yields nothing is a manifest this driver could not read, and a
+# silent zero here relocates NOTHING while the run still re-stamps -- the stamp then
+# claims a version whose validators are not where every core reference points. Same
+# posture as install.sh refusing to install zero validators.
+if [ "$manifest_n" -eq 0 ]; then
+  say DECISION manifest-unreadable "reconcile/setup-sites.md" \
+    "no scripts/ai-dlc/ entries found in the core_manifest block — refusing to treat that as 'nothing to relocate'."
+  mech_fail=$((mech_fail+1))
+fi
+
+if [ "$legacy_same_n" -gt 0 ]; then
+  say RESOLVED relocate-move "$legacy_same" \
+    "${legacy_same_n} core validator(s) moved from the pre-0.126.0 path; each was byte-identical to its declared location, so nothing was lost."
+fi
+
+# -----------------------------------------------------------------------------
+# THE DECLARED SET IS VERIFIED WHOLE, after every move.
+#
+# Not "what this run touched" -- every file the manifest declares, whether it was
+# just relocated, placed by the changed-files pass, already correct, or never
+# examined at all. A migration that half-lands is the failure mode here: the old
+# path is now empty, so a validator missing from the new path is missing FULL STOP,
+# and every core reference to it resolves to nothing.
+#
+# Presence AND mode, together, because they fail differently and both fail silently.
+# An absent validator makes its call site error; a present non-executable one makes
+# it error too, but v0.70.1 showed the second kind survives every content-diff
+# verification looking green. Neither is visible without asking directly.
+declared_bad=0
+for dest in $(manifest_dests); do
+  base="${dest#scripts/ai-dlc/}"
+  git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/${base}" 2>/dev/null || continue
+  target="$CONSUMER/$dest"
+  if [ ! -f "$target" ]; then
+    say DECISION declared-missing "$dest" \
+      "declared in the core manifest and shipped by THEIRS, but not present after apply. The pre-0.126.0 path is empty now, so every reference to this validator resolves to nothing."
+    declared_bad=$((declared_bad+1))
+    continue
+  fi
+  want="$(git -C "$DIST" ls-tree "$THEIRS" -- "core/scripts/${base}" 2>/dev/null | awk '{print $1}')"
+  if [ "$want" = "100755" ] && [ ! -x "$target" ]; then
+    say DECISION declared-not-executable "$dest" \
+      "shipped 100755 upstream but not executable here — installed and inert. \`chmod +x\` and re-run."
+    declared_bad=$((declared_bad+1))
+  fi
+done
+[ "$declared_bad" -eq 0 ] || mech_fail=$((mech_fail + declared_bad))
+
+# -----------------------------------------------------------------------------
+# EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
+# consumer tree once this driver is done.
+#
+# sync_mode_from_theirs() already chmods each file it writes, and derives the bit
+# from git's own tree rather than a hand-list. But it chmods with `|| true`, so a
+# failure is silent -- and nothing anywhere asserted the RESULT. That is the exact
+# shape of the v0.70.1 defect: `git show > file` is a shell redirect that takes the
+# mode from the umask, the dispatch guard installed non-executable and INERT, and
+# every content-diff verification reported green over a file that could not run.
+# WIRED IS NOT CAN-RUN, and a content check cannot tell the difference.
+#
+# LEVEL, NOT EDGE. It audits the whole shipped set, not just what this run wrote:
+# a file left non-executable by an EARLIER pull is still a validator that cannot
+# run, and an event-driven audit would never look at it again.
+#
+# COUNTS AS A MECHANICAL FAILURE, so the re-stamp is withheld. A stamp asserting
+# THEIRS over a tree whose validators cannot execute is precisely the claim v0.70.1
+# showed is worse than no stamp: the next pull bases its merge on it.
+# A command substitution, not a temp file: the scan runs in a subshell either way,
+# but `$(...)` carries its output back to the parent without putting a channel file
+# anywhere. The budget validator's scan channels had to be moved out of the project
+# root in v0.118.2 for exactly that reason -- nothing gitignored them, and a killed
+# run left litter a broad `git add -A` then committed.
+NOEXEC="$(
+  git -C "$DIST" ls-tree -r "$THEIRS" -- core/ 2>/dev/null \
+    | awk '$1=="100755"{ sub(/^[^\t]*\t/,""); print }' \
+    | while IFS= read -r cp; do
+        rel="${cp#core/}"
+        cons="$(consumer_path "$rel" 2>/dev/null)" || continue
+        # Not every shipped file lands on every consumer (ci-templates only with
+        # .github/, for one). Absent is a different finding, covered above.
+        [ -f "$cons" ] || continue
+        [ -x "$cons" ] && continue
+        printf '%s\n' "$cons"
+      done
+)"
+
+if [ -n "$NOEXEC" ]; then
+  while IFS= read -r cons; do
+    [ -n "$cons" ] || continue
+    say DECISION not-executable "${cons#"$CONSUMER"/}" \
+      "upstream ships this 100755 but the consumer copy is not executable — installed and inert. \`chmod +x\` it and re-run; every call site that invokes it directly fails until then."
+    mech_fail=$((mech_fail+1))
+  done <<EOF
+$NOEXEC
+EOF
+fi
+
 # version landed when it did not costs a silent divergence nobody looks for.
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
 if [ "$mech_fail" -gt 0 ]; then
