@@ -17,6 +17,94 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.120.0] — 2026-07-21
+
+### Changed — retro's bookkeeping was orchestrated at a scale its enforcement never needed
+
+Retro was the pipeline's longest step. Measured on the reference consumer at sprint 295, the
+instruction load to *run* one retro was **32,802 tokens** across nine files, before any work:
+`steps/retro.md` (14,478), a single consumer override (11,665), and seven more layer entries.
+It issued **5 analyst dispatches** writing **6 intermediate artifacts**, mandated ~11 retro-doc
+sections, and carried two `node -e` one-liners inline. `_bmad-output/retro-artifacts/` had
+reached 61 files / 1.0 MB, unrotated, read by nothing after the dispatch that wrote it returned.
+
+**Detection is now mechanical; disposition stays the lead's.** Two new scripts replace the
+Step-4 scan dispatch:
+
+- **`scripts/audit-rule-files.sh`** — narrative drift, incomplete Rule 26(c) triple, rule
+  weakness, relocation-pointer resolution, path-filter dormancy. It scans `extensions/**` and
+  `overrides/**` recursively, which is where a Rule 27 consumer's rule text actually lives.
+- **`scripts/validate-gate-manifest.sh`** — the two-way `GATE_MANIFEST` ↔ `CHECK_LOADED`
+  resolve, formerly a ~900-character `node -e` one-liner re-parsed from prose every retro.
+
+**The scan found a live defect on its first run, in this repo.** `extensions/README.md:167`
+pointed at `steps/rule-authoring.md`; the file is at `rule-authoring.md`. Sprint 295's analyst
+pointer scan had reported clean — correctly, because core's prose scoped invariant 1 to
+`SKILL.md` + `steps/*.md` and the analyst obeyed it. **The spec's scope was the bug**, and a
+CLEAN verdict from a scan aimed at the wrong corpus reads exactly like a scan that found
+nothing. Pointer fixed; the scan now covers every skill file.
+
+**Both scripts are proved able to fail.** `core/fixtures/retro-audit-scans/` asserts every
+class in both directions — seeded violation → FLAGGED, clean tree → CLEAN — plus the vacuous
+cases: an empty corpus exits 2 rather than scoring nothing as clean, and a manifest with no
+rows, no `universal` row, or no anchors exits 2 rather than resolving against an empty set.
+The zero-rows assertion binds on the *reason*, not the exit code: `not rows` implies
+`no universal row`, so a bare exit-2 assertion passes off the wrong guard.
+
+**Class 3 (complexity accretion) reports `DID-NOT-RUN`, never CLEAN.** It needs each gate's
+catch/false-positive history since introduction, which no static scan holds. A CLEAN there
+would be a check that cannot fire reporting as one that passed.
+
+**Measured before shipping — the false positives were the whole detector.** Ported verbatim
+from the reference consumer's script, Class 1 and Class 2 returned **7 hits, all false**: every
+one was the line *defining* the violation ("`"because we"` justification"), a negative mandate
+("should never"), or a rule saying something is not a mandate. Quoted and backticked spans are
+now blanked before matching — a phrase in quotes is being mentioned, not used — and both
+classes return zero on the reference tree with the true positives intact.
+
+### Changed — the rest of the step
+
+- **5 dispatches → 3.** The Step-1 context digest was written to disk and read by exactly one
+  consumer: Step 3's own analyst. Party mode never touched it. Folded into Step 3, which needs
+  the same corpus plus the transcript that does not exist until Step 2 closes.
+- **The analyst-dispatch binding is stated once**, not repeated verbatim at five sites.
+- **The freshness reconciliation merged into the justification triple** it was already the
+  CONDITION slot of — the text said so itself, then restated the rule at full length.
+- **One `## Machine Audits` table replaces five verbatim-transcription mandates.** A clean run's
+  output is reproducible by re-running the script; a failure's output is the finding. The
+  evidence cell is mandatory and never `—`: an empty cell is indistinguishable from a check that
+  never ran. Non-clean rows still expand in full.
+- **Invariant 2's `node -e` heading check is gone.** `validate-reattach-budget.sh` measures the
+  protocol's END offset — strictly stronger, against a tighter ceiling. Two ceilings for one
+  invariant is what let sprint 295 read a 3-token margin as 253.
+- **Step 6a's completeness checklist is deleted.** One of its four items asked the lead to
+  confirm the next-sprint prompt was emitted — at Step 6a, which runs *before* Step 7d emits it.
+  The item could never be true where it sat. The other three are enforced by Step 5c's scripts,
+  whose failure already blocks the same commit. Step 5c check 2 now runs
+  `validate-provenance-block.sh` instead of re-reading the block by hand, keeping only the
+  never-fabricate-a-`tool_use_id` rule.
+- **`_bmad-output/retro-artifacts/` is deleted at close.** Scratch inputs to dispatches that
+  already returned, whose conclusions are committed in the retro doc.
+
+`steps/retro.md`: 1,099 → 979 lines, 14,478 → 12,049 tokens.
+
+### Fixed — the re-attach guard overstated its own headroom by exactly its safety margin
+
+`validate-reattach-budget.sh` FAILs at `BUDGET - MARGIN` (4750 by default) but reported slack
+against `BUDGET` (5000). At the current 4747 tokens it printed "253 tokens of slack" when the
+honest headroom to the gate that actually fires is **3**. Sprint 295's retro caught the
+discrepancy by hand and recorded it as a finding; a reader budgeting the next `SKILL.md`
+addition against 253 would spend a margin that is not there. Slack is now measured against the
+ceiling and the line names both figures.
+
+### Fixed — `install.sh` shipped validators from a hand-maintained list
+
+The script-copy loop enumerated 23 filenames. It happened to match `core/scripts/` exactly, but
+nothing bound the two — unlike the fixture loops, which `validate-enforcement-map.sh` I8 binds
+across install, uninstall and disk. A validator added to `core/scripts/` and forgotten there
+ships **absent and inert** on every fresh install while all content verification stays green.
+The loop now derives from the directory and refuses to install zero validators.
+
 ## [0.119.1] — 2026-07-21
 
 ### Fixed — the docs let `--warn-only` read as a general "defer the breach" lever

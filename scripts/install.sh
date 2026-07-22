@@ -369,12 +369,24 @@ fi
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
 mkdir -p "$PROJECT_ROOT/scripts"
-for script in validate-provenance-block.sh validate-audit-anchors.sh validate-locked-anchor.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh validate-layer-entries.sh validate-compact-window.sh validate-reattach-budget.sh validate-draft-stamps.sh validate-steering-budget.sh validate-artifact-budget.sh validate-h2-attestation.sh validate-adversarial-convergence.sh validate-escalation-resolution.sh validate-escalation-status-vocabulary.sh validate-gate-adjudication.sh stamp-story-provenance.sh sprint-status.sh sync-taught-schema.sh wait-for-deliverable.sh verdict.sh gen-architecture-index.js; do
-  if [ -f "$SCRIPT_DIR/../core/scripts/$script" ]; then
-    cp "$SCRIPT_DIR/../core/scripts/$script" "$PROJECT_ROOT/scripts/"
-    chmod +x "$PROJECT_ROOT/scripts/$script"
-    echo "  $script installed"
-  fi
+# DERIVED from core/scripts/, never enumerated. A hand-listed loop ships a new
+# validator absent-and-inert on every fresh install while all content
+# verification stays green — the list becomes the bug. Unlike the fixture loop
+# below (which uninstall.sh must mirror, and which validate-enforcement-map.sh
+# I8 binds), nothing pairs with this one, so deriving it is strictly simpler
+# than adding a check to guard it.
+core_scripts=("$SCRIPT_DIR"/../core/scripts/*)
+if [ ! -e "${core_scripts[0]}" ]; then
+  echo "  Error: core/scripts/ is empty or missing — refusing to install zero validators."
+  echo "  A silent no-op here yields a project whose every check is absent and inert."
+  exit 1
+fi
+for script_path in "${core_scripts[@]}"; do
+  [ -f "$script_path" ] || continue
+  script="$(basename "$script_path")"
+  cp "$script_path" "$PROJECT_ROOT/scripts/"
+  chmod +x "$PROJECT_ROOT/scripts/$script"
+  echo "  $script installed"
 done
 
 # Install CI workflow templates (copy only if .github/workflows/ exists)
@@ -427,7 +439,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive ledger-reverify snapshot-section-schema retired-contract-token; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive ledger-reverify snapshot-section-schema retired-contract-token retro-audit-scans; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"
