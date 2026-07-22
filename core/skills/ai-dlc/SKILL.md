@@ -863,11 +863,16 @@ prefix. Two hard limits: (1) state-mutating commands (`git`
 commit/branch/merge/worktree, `gh`, `chmod`, file writes) MUST run via
 native Bash — a context-mode subprocess discards filesystem changes, so
 routing a mutation through ctx silently no-ops it; when in doubt whether a
-command mutates, use native Bash. (2) Verbatim-load files (snapshot,
-`gate-log.md`, escalations, rule/step/role files) MUST NOT be routed
-through `ctx_execute_file`/`ctx_batch_execute` — consolidation drops
-directives and breaks load fidelity (the `ai-dlc-protect.sh` guard hook
-hard-blocks this; see the CLAUDE.md "Tool-Output Routing" carve-outs).
+command mutates, use native Bash. (2) Verbatim-load files (rule/step/role
+files, schemas, snapshot, `gate-log.md`, escalations, `audit-anchors.md`,
+`sprint-status.yaml`, story files) MUST NOT be routed through
+`ctx_execute_file` / `ctx_batch_execute` / `ctx_index` — consolidation drops
+directives and breaks load fidelity. `ai-dlc-protect.sh` hard-blocks it and
+is the SET's source of record: `PROTECTED_PATTERNS` there, extended per
+project by `extensions/protected-paths.json`. A directory or glob that spans
+one of those files is blocked too. Archives and the planning corpus (`prd.md`,
+`product-brief.md`, `carry-over-backlog.md`) are deliberately NOT protected —
+offload them freely.
 
 ### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
 

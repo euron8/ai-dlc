@@ -2,12 +2,23 @@
 #
 # AI/DLC Path Protection Hook
 #
-# Prevents context-mode MCP tools (ctx_execute_file, ctx_batch_execute)
+# Prevents context-mode MCP tools (ctx_execute_file, ctx_batch_execute, ctx_index)
 # from consolidating files that AI/DLC requires to load verbatim.
 #
 # PROTECTED PATHS (see PROTECTED_PATTERNS below):
-# Rule files, pipeline snapshot, gate log, escalations, setup skill.
-# Consolidation risks pipeline integrity drift.
+# Rule files, schemas, pipeline snapshot, gate log, escalations, setup skill,
+# audit anchors, sprint status, story files. Consolidation risks pipeline
+# integrity drift.
+#
+# WHAT IS DELIBERATELY *NOT* PROTECTED. The planning corpus (prd.md,
+# architecture.md, product-brief.md, carry-over-backlog.md) is the single
+# largest read surface in the pipeline and Rule 24 exists to offload it. It is
+# safe to consolidate because the byte-exactness claims made against it are
+# enforced SCRIPT-side, not model-side: `validate-locked-anchor.sh` resolves
+# every `full_text_source:` against the SoR file on disk, so a consolidated
+# read cannot forge a passing anchor. Protecting it would force hundreds of
+# native Reads into the lead for no fidelity gain. Artifact ARCHIVES are
+# excluded for the same reason — see EXCLUDED_PATTERNS.
 #
 # INSTALL
 # 1. Place at .claude/hooks/ai-dlc-protect.sh
@@ -15,7 +26,7 @@
 # 3. Ensure .claude/settings.json has:
 #      "hooks": {
 #        "PreToolUse": [{
-#          "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute_file|mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+#          "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute_file|mcp__plugin_context-mode_context-mode__ctx_batch_execute|mcp__plugin_context-mode_context-mode__ctx_index",
 #          "hooks": [{
 #            "type": "command",
 #            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/ai-dlc-protect.sh"
@@ -26,20 +37,49 @@
 set -u
 
 # -----------------------------------------------------------------------------
-# Protected paths
+# Protected paths (core). A consumer EXTENDS this list through
+# extensions/protected-paths.json — see the layer resolution below. Core stays
+# project-agnostic on purpose: a consumer that keeps its architecture SoR at
+# docs/architecture.md declares that itself rather than shipping one project's
+# vocabulary to every other consumer.
 # -----------------------------------------------------------------------------
 
 PROTECTED_PATTERNS=(
   ".claude/skills/ai-dlc/*"
-  ".claude/skills/ai-dlc/steps/*"
   ".claude/skills/ai-dlc-setup/SKILL.md"
   ".claude/team-roles/*.md"
+  ".claude/schemas/*.json"
   "CLAUDE.md"
+  "*/CLAUDE.md"
   "SKILL.md"
   "docs/coding-conventions.md"
-  "_bmad-output/pipeline-snapshot.md"
-  "_bmad-output/implementation-artifacts/gate-log.md"
   "docs/escalations/pending.md"
+  "_bmad-output/pipeline-snapshot.md"
+  "_bmad-output/audit-anchors.md"
+  "_bmad-output/implementation-artifacts/gate-log.md"
+  "_bmad-output/implementation-artifacts/sprint-status.yaml"
+  "_bmad-output/planning-artifacts/sprint-status.yaml"
+  "_bmad-output/planning-artifacts/stories/*.md"
+)
+
+# -----------------------------------------------------------------------------
+# Excluded paths — matched FIRST, and a match means allow.
+#
+# Archives and history files are the retro's analysis corpus: they are read to
+# be summarized, which is exactly what consolidation is for. They were already
+# allowed before this list existed, but only by accident of pattern spelling
+# (`gate-log-archive-s287.md` happens not to equal `gate-log.md`). Naming them
+# makes it a decision, and keeps the archive allowed once the live file's
+# pattern is widened.
+# -----------------------------------------------------------------------------
+
+EXCLUDED_PATTERNS=(
+  "*.archive.*"
+  "*-archive.md"
+  "*-archive-*.md"
+  "*-history.md"
+  "*/pre-ai-dlc/*"
+  "*/node_modules/*"
 )
 
 # -----------------------------------------------------------------------------
@@ -72,35 +112,197 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # -----------------------------------------------------------------------------
-# Extract file paths from tool_input
+# Consumer layer: extensions/protected-paths.json
+#
+# A DATA EXTENSION in the sense extensions/README.md defines: consumer-owned
+# JSON that the reader owning a core list unions in, with no core edit. Shape:
+#
+#   { "protected_paths": ["docs/architecture.md"],
+#     "excluded_paths":  ["docs/architecture-drafts/*"] }
+#
+# Both keys optional. A present-but-malformed file fails CLOSED — every path
+# the call carries is treated as protected — because a broken layer file must
+# never silently degrade to the core-only list. It fails closed on the decision
+# it was asked to make, not on the whole tool: a call carrying no path still
+# passes, so a typo cannot wedge the session with no way out.
 # -----------------------------------------------------------------------------
+
+EXT_JSON=""
+for _cand in \
+  "${CLAUDE_PROJECT_DIR:-.}/.claude/skills/ai-dlc/extensions/protected-paths.json" \
+  "${CLAUDE_PROJECT_DIR:-.}/skills/ai-dlc/extensions/protected-paths.json"; do
+  if [ -f "$_cand" ]; then EXT_JSON="$_cand"; break; fi
+done
+
+EXT_BAD=""
+if [ -n "$EXT_JSON" ]; then
+  if jq -e '
+        type == "object"
+        and ((.protected_paths // []) | type == "array")
+        and ((.excluded_paths  // []) | type == "array")
+        and ((((.protected_paths // []) + (.excluded_paths // [])) | map(type == "string") | all))
+      ' "$EXT_JSON" >/dev/null 2>&1; then
+    while IFS= read -r _p; do
+      [ -n "$_p" ] && PROTECTED_PATTERNS+=("$_p")
+    done <<< "$(jq -r '(.protected_paths // [])[]' "$EXT_JSON" 2>/dev/null)"
+    while IFS= read -r _x; do
+      [ -n "$_x" ] && EXCLUDED_PATTERNS+=("$_x")
+    done <<< "$(jq -r '(.excluded_paths // [])[]' "$EXT_JSON" 2>/dev/null)"
+  else
+    EXT_BAD="$EXT_JSON"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# Path extraction
+#
+# The batch arm's alternation is DERIVED from PROTECTED_PATTERNS, not written
+# out beside it. It used to be a hand-kept list of four prefixes; any pattern
+# added outside them was enforced on the file arm and invisible on the batch
+# arm — a check that reads as covering a path it cannot see. Two writers had to
+# remember the same thing, so the list was the bug.
+# -----------------------------------------------------------------------------
+
+path_alternation() {
+  local pattern seg roots="" bases="" out=""
+  for pattern in "${PROTECTED_PATTERNS[@]}"; do
+    case "$pattern" in
+      */*) seg="${pattern%%/*}" ;;
+      *)   case " $bases " in *" $pattern "*) ;; *) bases="$bases $pattern" ;; esac
+           continue ;;
+    esac
+    # A wildcard leading segment (*/CLAUDE.md) anchors nothing; its basename
+    # alternative carries it instead.
+    case "$seg" in *[*?]*) continue ;; esac
+    case " $roots " in *" $seg "*) ;; *) roots="$roots $seg" ;; esac
+  done
+  for seg in $roots; do
+    out="${out}${out:+|}$(printf '%s' "$seg" | sed 's/[.[\*^$]/\\&/g')"
+  done
+  out="(${out})/[A-Za-z0-9_.*?/@-]+"
+  for seg in $bases; do
+    out="${out}|$(printf '%s' "$seg" | sed 's/[.[\*^$]/\\&/g')"
+  done
+  printf '%s' "$out"
+}
+
+PATH_RE="$(path_alternation)"
 
 FILE_PATHS=""
 
-if [ "$TOOL_NAME" = "mcp__plugin_context-mode_context-mode__ctx_execute_file" ]; then
-  FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.path // empty')
-fi
+case "$TOOL_NAME" in
+  mcp__plugin_context-mode_context-mode__ctx_execute_file \
+  | mcp__plugin_context-mode_context-mode__ctx_index)
+    # ctx_index also accepts `content:` (bytes already in context — nothing to
+    # protect) and a DIRECTORY `path:`, which walks up to maxFiles and indexes
+    # each one. The directory arm of is_protected() is what covers that.
+    FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.path // empty')
+    ;;
+  mcp__plugin_context-mode_context-mode__ctx_batch_execute)
+    FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.commands[]? // empty' \
+      | grep -oE "$PATH_RE" \
+      | sort -u || true)
+    ;;
+esac
 
-if [ "$TOOL_NAME" = "mcp__plugin_context-mode_context-mode__ctx_batch_execute" ]; then
-  FILE_PATHS=$(echo "$INPUT" | jq -r '.tool_input.commands[]? // empty' \
-    | grep -oE '(\.claude/[a-zA-Z0-9_./*-]+|_bmad-output/[a-zA-Z0-9_./*-]+|docs/[a-zA-Z0-9_./*-]+|CLAUDE\.md|SKILL\.md)' \
-    | sort -u || true)
-fi
+# -----------------------------------------------------------------------------
+# Normalization
+#
+# Cut everything before the last known root segment instead of stripping a
+# literal $CLAUDE_PROJECT_DIR prefix. The prefix strip failed open on every
+# absolute path that did not share the project root's exact spelling — which on
+# a consumer running story worktrees is most of them. A real s292 log line shows
+# /Users/n8/git/graph-s288-story-p1/docs/coding-conventions.md ALLOWED while the
+# same file under the main root denied. Suffix anchoring also absorbs symlinked
+# roots (/tmp vs /private/tmp) with no realpath call on a path that may not
+# exist yet.
+# -----------------------------------------------------------------------------
+
+# Space-delimited, not an array: bash 3.2 (the macOS system bash every consumer
+# runs) errors on "${arr[@]}" for an EMPTY array under `set -u`, and the hook's
+# only failure mode is a silent one — a non-zero exit produces no decision, the
+# tool proceeds, and the log records nothing. Root segments never contain
+# spaces, so a string is the shape that cannot fail.
+ROOT_SEGMENTS=""
+for _p in "${PROTECTED_PATTERNS[@]}"; do
+  case "$_p" in
+    */*) _s="${_p%%/*}" ;;
+    *)   continue ;;
+  esac
+  case "$_s" in *[*?]*) continue ;; esac
+  case " $ROOT_SEGMENTS " in *" $_s "*) ;; *) ROOT_SEGMENTS="$ROOT_SEGMENTS $_s" ;; esac
+done
+
+normalize() {
+  local p="$1" root
+  p="${p#./}"
+  # shellcheck disable=SC2086
+  for root in $ROOT_SEGMENTS; do
+    case "$p" in
+      */"$root"/*) p="$root/${p##*/"$root"/}"; break ;;
+    esac
+  done
+  # Still absolute and inside the project? Fall back to the literal prefix strip.
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    p="${p#"${CLAUDE_PROJECT_DIR}"/}"
+  fi
+  printf '%s' "$p"
+}
 
 # -----------------------------------------------------------------------------
 # Match against protected patterns
 # -----------------------------------------------------------------------------
 
+is_excluded() {
+  local path="$1" x
+  for x in "${EXCLUDED_PATTERNS[@]}"; do
+    # shellcheck disable=SC2254
+    case "$path" in
+      $x) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 is_protected() {
-  local path="$1"
-  path="${path#./}"
-  path="${path#"${CLAUDE_PROJECT_DIR:-}"/}"
+  local path pattern has_glob=1
+  path="$(normalize "$1")"
+
+  is_excluded "$path" && return 1
+
+  case "$path" in *[*?]*) has_glob=0 ;; esac
 
   for pattern in "${PROTECTED_PATTERNS[@]}"; do
+    # (a) the ordinary case: the path names a protected file.
     # shellcheck disable=SC2254
     case "$path" in
       $pattern) return 0 ;;
     esac
+
+    # (b) a DIRECTORY reference that contains a protected rulebook file.
+    # `wc -l .claude/skills/ai-dlc` and ctx_index on `.claude/team-roles` read
+    # the whole rulebook while naming no file, and both appear in the live log.
+    # Scoped to .claude/ patterns deliberately: a rulebook directory is never
+    # legitimately consolidated wholesale, whereas an artifact directory sweep
+    # (planning-artifacts/, stories/) is precisely the Rule 24 offload.
+    case "$pattern" in
+      .claude/*)
+        case "$pattern" in
+          "$path"/*) return 0 ;;
+        esac
+        ;;
+    esac
+
+    # (c) the path is itself a GLOB that spans a protected file.
+    # `cat _bmad-output/implementation-artifacts/gate-log*.md` expands inside
+    # the sandbox to include the live gate-log; the literal token does not
+    # equal any pattern, so (a) waves it through. Match the other direction.
+    if [ "$has_glob" -eq 0 ]; then
+      # shellcheck disable=SC2254
+      case "$pattern" in
+        $path) return 0 ;;
+      esac
+    fi
   done
 
   return 1
@@ -116,7 +318,9 @@ if [ -n "$FILE_PATHS" ]; then
   while IFS= read -r path; do
     [ -z "$path" ] && continue
     ALL_PATHS+=("$path")
-    if is_protected "$path"; then
+    if [ -n "$EXT_BAD" ]; then
+      PROTECTED_HITS+=("$path")
+    elif is_protected "$path"; then
       PROTECTED_HITS+=("$path")
     fi
   done <<< "$FILE_PATHS"
@@ -131,6 +335,7 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     echo "## ${TIMESTAMP} -- ${TOOL_NAME} -- PROTECTED"
     echo "- Session: ${SESSION_ID}"
     echo "- Decision: deny"
+    [ -n "$EXT_BAD" ] && echo "- Cause: malformed layer file \`${EXT_BAD}\` (fail-closed)"
     echo "- Protected paths detected:"
     for p in "${PROTECTED_HITS[@]}"; do
       echo "  - \`${p}\`"
@@ -138,11 +343,17 @@ if [ ${#PROTECTED_HITS[@]} -gt 0 ]; then
     echo ""
   } >> "$LOG_FILE"
 
-  REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Use native Read for verbatim content."
+  if [ -n "$EXT_BAD" ]; then
+    REASON="extensions/protected-paths.json is malformed, so the protected-path set cannot be resolved: ${EXT_BAD}. Failing closed. Fix the file (shape: {\"protected_paths\":[\"...\"],\"excluded_paths\":[\"...\"]}, both optional, string arrays) or remove it to fall back to the core set."
+    CONTEXT="A broken layer file must never silently degrade to the core-only protected set — that would read as 'nothing matched' while the consumer's own verbatim-load paths went unguarded. Use the native Read tool meanwhile; calls carrying no path are unaffected."
+  else
+    REASON="AI/DLC protected path(s) detected: $(printf '%s, ' "${PROTECTED_HITS[@]}" | sed 's/, $//'). Use native Read for verbatim content."
+    CONTEXT="This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, schemas, pipeline snapshot, gate log, escalations, audit anchors, sprint status, story files. Archives and the planning corpus (prd/architecture/product-brief/carry-over) are NOT protected — consolidate those freely."
+  fi
 
   jq -n \
     --arg reason "$REASON" \
-    --arg context "This path is protected by AI/DLC integrity rules. Use the native Read tool for verbatim file content. Protected categories: rule files, pipeline snapshot, gate log, escalations." \
+    --arg context "$CONTEXT" \
     '{
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
