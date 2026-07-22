@@ -17,6 +17,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.5] — 2026-07-22
+
+### Fixed — the v0.126.4 fixture was inert in the one layout it existed to defend
+
+`core/fixtures/validator-path-resolution` resolved its subject directory from
+`$ROOT/core/scripts` or `$ROOT/.claude/scripts`. **`.claude/scripts` does not exist in any
+layout.** An installed consumer keeps the core validators at `scripts/ai-dlc/`, so on a consumer
+tree the fixture hit neither candidate and exited 2 `FIXTURE ERROR` — installed, listed, and
+never once executing an assertion.
+
+That is the same defect the fixture was written to catch, one level up: a check that cannot fire.
+It shipped anyway because the distribution suite runs every fixture from `core/fixtures/`, where
+the first candidate always resolves, and a consumer's fixture directory is verified against a
+MANIFEST rather than executed. Neither side would ever have reported it.
+
+`scripts/ai-dlc/` is now a candidate. Bare `scripts/` deliberately is not: before the relocation
+it holds the core validators, but it also holds the consumer's own scripts — 78 of them in the
+reference consumer — which carry no location-agnosticism obligation and which this fixture cannot
+tell apart. A consumer that has not yet pulled the relocation has nothing here to test.
+
+`resolve_src` is now exercised against synthetic roots of each shape — distribution, consumer,
+pre-relocation consumer, and neither — because its failure mode is silence: a fixture that exits 2
+on a consumer tree is indistinguishable from one that was never installed. The v0.126.4 candidate
+list fails the consumer case. The fixture also prints which layout it resolved.
+
 ## [0.126.4] — 2026-07-22
 
 ### Fixed — the v0.126.0 relocation broke path resolution in seven validators, and one failed OPEN

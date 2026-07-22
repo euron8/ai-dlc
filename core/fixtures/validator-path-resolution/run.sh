@@ -47,10 +47,30 @@ unset CLAUDE_PROJECT_DIR
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
-for cand in "$ROOT/core/scripts" "$ROOT/.claude/scripts"; do
-  [ -d "$cand" ] && SRC="$cand" && break
-done
-[ -n "${SRC:-}" ] || { echo "FIXTURE ERROR: core scripts directory not found" >&2; exit 2; }
+# Where the core validators live, in each layout this fixture can run from. The first
+# draft listed `core/scripts` and `.claude/scripts` — and `.claude/scripts` does not
+# exist in ANY layout. An installed consumer keeps them at `scripts/ai-dlc/`, so this
+# fixture shipped inert there: exit 2 FIXTURE ERROR, on the one tree whose layout it
+# was written to defend. Nothing would have reported that, because a consumer's
+# fixture directory is checked against a MANIFEST, not executed.
+#
+# Bare `scripts/` is deliberately NOT a candidate. Pre-relocation it holds the core
+# validators, but it also holds ~78 consumer-authored scripts that carry no
+# location-agnosticism obligation, and this fixture cannot tell them apart. A
+# consumer that has not yet pulled the relocation has nothing here to test.
+resolve_src() { # resolve_src <root> -> prints the core-validator dir, or fails
+  local root="$1" cand
+  for cand in "$root/core/scripts" "$root/scripts/ai-dlc"; do
+    [ -d "$cand" ] && { printf '%s\n' "$cand"; return 0; }
+  done
+  return 1
+}
+SRC="$(resolve_src "$ROOT" || true)"
+[ -n "$SRC" ] || {
+  echo "FIXTURE ERROR: core validators not found under $ROOT" >&2
+  echo "  looked in: $ROOT/core/scripts (distribution), $ROOT/scripts/ai-dlc (consumer)" >&2
+  exit 2
+}
 for cand in "$ROOT/core/schemas" "$ROOT/.claude/schemas"; do
   [ -d "$cand" ] && SCHEMAS="$cand" && break
 done
@@ -145,7 +165,32 @@ run_one() { # run_one <layout-dir> <script-name> <wrong-root|""> -> "rc=<n>\n<ou
 }
 
 echo "validator-path-resolution"
+echo "  subject dir: ${SRC#"$ROOT/"} (of $ROOT)"
 echo "  installed $n_installed core script(s) into scripts/ and scripts/ai-dlc/"
+echo ""
+
+# --- the resolver's own control ------------------------------------------------
+# resolve_src decides whether this fixture runs at all, and its failure mode is a
+# silent no-op: a fixture that exits 2 in a consumer tree is indistinguishable from
+# one that was never installed. So it is exercised against synthetic roots of each
+# shape, including the negative. The v0.126.4 draft would fail the consumer case.
+LAY="$WORK/.layouts"
+mkdir -p "$LAY/dist/core/scripts" "$LAY/cons/scripts/ai-dlc" "$LAY/cons/scripts" \
+         "$LAY/legacy/scripts" "$LAY/none" || exit 2
+got="$(resolve_src "$LAY/dist" || echo "")"
+[ "$got" = "$LAY/dist/core/scripts" ] && ok "resolve_src finds the distribution layout (core/scripts)" \
+                                      || bad "resolve_src missed the distribution layout — got '${got:-<none>}'"
+got="$(resolve_src "$LAY/cons" || echo "")"
+[ "$got" = "$LAY/cons/scripts/ai-dlc" ] && ok "resolve_src finds the consumer layout (scripts/ai-dlc) — the case v0.126.4 shipped broken" \
+                                        || bad "resolve_src missed the consumer layout — got '${got:-<none>}'"
+# A consumer that has not pulled the relocation must NOT resolve: scripts/ there is
+# 100+ files this fixture has no standing to hold to a location contract.
+got="$(resolve_src "$LAY/legacy" || echo "")"
+[ -z "$got" ] && ok "resolve_src declines a pre-relocation consumer (bare scripts/ is not a candidate)" \
+              || bad "resolve_src accepted bare scripts/ — it would test consumer-authored scripts"
+got="$(resolve_src "$LAY/none" || echo "")"
+[ -z "$got" ] && ok "resolve_src fails closed on a tree with neither layout" \
+              || bad "resolve_src invented a subject dir — got '$got'"
 echo ""
 
 sensitive_list=""
