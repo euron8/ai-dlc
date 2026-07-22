@@ -17,6 +17,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.121.0] — 2026-07-21
+
+### Added — core accused the operator of missing a rotation it never defined
+
+`validate-artifact-budget.sh` marks four artifacts with remedy `rotate`, and renders that
+remedy on breach as **"a rotation was MISSED. Move the epoch to a dated archive"**. `retro.md`
+defined a rotation for two of them:
+
+| log | budget | remedy | rotation site before this release |
+|-----|--------|--------|-----------------------------------|
+| `pipeline-continuation-log.md` | 10000 | `rotate` | §4b |
+| `context-mode-protection-log.md` | 10000 | `rotate` | §4b |
+| `gate-log.md` | 25000 | `rotate` | **none** |
+| `compaction-log.md` | 10000 | `rotate` | **none** |
+
+Core ships the writer for both gaps — `gate-log.md` is written throughout implementation and
+deploy-validate, `compaction-log.md` by `hooks/ai-dlc-postcompact.sh` — budgets them, and tells
+the operator a rotation was missed when they breach. No step performed one. The message was
+accurate about the problem and wrong about the cause: nothing had been skipped, because nothing
+had been specified.
+
+**New Step 7a-post** rotates both, after the retro PR merges.
+
+**Why post-merge and not in §4b with the other two.** A consumer may ship a merge-time
+validator that reads the live `## Gate Log: Sprint <N>` section with no archive fallback —
+`validate-retro-prereq.sh` is the common one, and it is consumer-provided, absent from core.
+Emptying the live log before that runs makes the section missing and the merge is denied.
+Rotating later is safe for every consumer; rotating earlier is safe only for some. If Step 7a
+ended with the operator declining the merge, rotation does not run at all.
+
+Two rotation sites, because the two constraints differ: the §4b pair must follow the audit that
+reads them, this pair must follow the merge. §4b now says so, so a reader there does not take
+its set for the whole one.
+
+`compaction-log.md` is absent on any sprint that never compacted. That absence is a pass, not a
+missed rotation. No-loss is verified per file by byte count before the commit; a mismatch is a
+HARD_BLOCK.
+
+### Provenance
+
+Found by asking why a consumer override carried ~200 lines of rotation procedure that core did
+not. Three causes, and only this one was a defect: part of that override is genuinely local
+(consumer-only scripts), part was pushed upstream and **correctly rejected** on policy (the
+consumer rotated unconditionally per-sprint; core rotates on a threshold — the operator ruled
+for core), and the remaining *procedure* gap was never filed as its own candidate. The
+reference consumer's push-candidate ledger records "core has no 5e" as a filing aside rather
+than a finding, and the entry was retired for the policy conflict, taking the unrelated gap
+with it.
+
+Core's threshold policy is unchanged. This adds only the procedure the threshold's own breach
+message already assumed existed.
+
 ## [0.120.1] — 2026-07-21
 
 ### Fixed — two mislevelled headings made every override downstream of them false-drift
