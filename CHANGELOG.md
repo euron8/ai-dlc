@@ -17,6 +17,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.121.1] — 2026-07-21
+
+### Fixed — retro announced the pipeline finished with four sub-steps still pending
+
+`retro.md` said `"Sprint [N] complete. Pipeline finished."` at 6c and again at 6e — before
+Step 7a's merge gate, 7a-post's rotation commit to `main`, and 7b–7d's next-sprint handoff.
+Two terminal announcements, neither of them terminal.
+
+v0.121.0 made it worse: adding 7a-post put a commit to `main` *after* the point where core told
+the operator the pipeline was done.
+
+6c now routes without announcing. 6e announces status — "artifacts committed", and for the PR
+path "proceeding to merge gate" — and names Step 7d's handoff block as the pipeline's only
+terminal announcement.
+
+### Fixed — 7a-post was unreachable on the direct-to-main path
+
+Also introduced by v0.121.0. Step 7a's pre-existing routing sent the direct-to-main case
+"directly to 7b", which skips the rotation step added between them. On a consumer that commits
+retro artifacts straight to `main`, `gate-log.md` and `compaction-log.md` would never rotate,
+and nothing would report it — the budget check would just keep saying a rotation was missed,
+which is the exact defect v0.121.0 set out to fix. 7a now routes that path to 7a-post; its
+precondition (artifacts on `main`) is already met there.
+
+### Provenance
+
+Both found by a consumer mid-apply, pushing back on an instruction of mine. Told to retire its
+§6 override as an 87%-similar frozen copy, it identified that the remaining 13% was a local
+correction to core's premature announcement and asked rather than complying. The similarity
+figure was measured; the conclusion drawn from it was not — the delta was read as cosmetic
+without being read at all.
+
 ## [0.121.0] — 2026-07-21
 
 ### Added — core accused the operator of missing a rotation it never defined
