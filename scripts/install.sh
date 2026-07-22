@@ -401,7 +401,7 @@ for script_path in "${core_scripts[@]}"; do
   chmod +x "$PROJECT_ROOT/scripts/ai-dlc/$script"
   echo "  ai-dlc/$script installed"
   # MIGRATION, NOT CLEANUP. A pre-0.126.0 consumer has this script loose in
-  # scripts/, possibly with local edits (the reference consumer had two). Deleting
+  # scripts/, possibly with local edits (the reference consumer had one). Deleting
   # it here would discard those silently, so the old copy is REPORTED and left in
   # place. Removing it is the operator's call, after they have looked at it.
   if [ -f "$PROJECT_ROOT/scripts/$script" ]; then

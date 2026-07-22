@@ -15,8 +15,18 @@
 #     a clean ADD and the copy at scripts/X is compared against nothing.
 #   - unregistered-drift.sh deliberately excludes scripts/ on the premise that "an
 #     edit breaks LOUDLY, not silently". That premise was already thin: the
-#     reference consumer had TWO edited validators that nobody noticed for months,
-#     and one of them was a real fix that was never filed upstream.
+#     reference consumer had a validator 160 lines diverged from upstream, carrying
+#     a whole derivation nothing upstream knew about, and nothing said a word about
+#     it until it was diffed by hand.
+#
+#     It was ONE validator, not two. The original note here said two, and the
+#     second was a miscount worth recording because of HOW it happened: the
+#     consumer was diffed against its STAMPED BASE, which answers "does this tree
+#     differ from what it was given" -- not "does it differ from what upstream has
+#     NOW". Against HEAD that file was byte-identical; upstream had made the same
+#     fix independently three releases later. Diffing against the base finds every
+#     local change AND every upstream change the consumer has not yet pulled, and
+#     reports them the same way.
 #
 # BEFORE the move, an edited scripts/X surfaced as a BOTH-CHANGED conflict. The move
 # removed that without replacing it, which would turn a real local change into an
