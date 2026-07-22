@@ -3,11 +3,11 @@
 # DERIVER of the escalated check set.
 #
 # Usage:
-#   ./scripts/validate-gate-adjudication.sh --expected <gate_type>
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>
 #        → prints the derived escalated check_ids (one per line) for that gate type.
 #          This is the adjudicator's worklist AND the completeness check's expected set,
 #          from ONE derivation, so the two can never disagree.
-#   ./scripts/validate-gate-adjudication.sh <gate_type> <verdict_path>
+#   ./scripts/ai-dlc/validate-gate-adjudication.sh <gate_type> <verdict_path>
 #        → completeness adjudication of the verdict at <verdict_path>.
 #
 # THE SET IS DERIVED, NOT LISTED. The escalated set is

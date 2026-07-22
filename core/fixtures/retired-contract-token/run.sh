@@ -46,7 +46,7 @@ CORE_PATH="core/scripts/validate-artifact-budget.sh"
 DIST="$WORK/dist"
 CONS="$WORK/consumer"
 
-mkdir -p "$DIST/core/scripts" "$CONS/scripts" || exit 2
+mkdir -p "$DIST/core/scripts" "$CONS/scripts/ai-dlc" || exit 2
 
 # --- build the dist history: base retires nothing, theirs retires $ROOT/.chan ----
 git -C "$DIST" init -q . 2>/dev/null || exit 2
@@ -83,7 +83,7 @@ echo "retired-contract-token"
 # --- 1. THE SEVERED CONTRACT IS CAUGHT -----------------------------------------
 # Consumer carries its own block (upstream has no such thing) still writing to the
 # retired path. This is the shape that merges clean and fails silent.
-cat > "$CONS/scripts/validate-artifact-budget.sh" <<'OURS'
+cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
 #!/bin/bash
 CHAN="$ROOT/.chan"
 printf 'x\n' >> "$ROOT/.chan"
@@ -100,7 +100,7 @@ fi
 # --- 2. RE-POINTED CONSUMER IS CLEAN -------------------------------------------
 # The control. Without it, assertion 1 could be passing because the detector flags
 # everything, which is the same as flagging nothing.
-cat > "$CONS/scripts/validate-artifact-budget.sh" <<'OURS'
+cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
 #!/bin/bash
 TMPROOT="$(mktemp -d)"
 CHAN="$TMPROOT/chan"
@@ -117,7 +117,7 @@ fi
 # --- 3. A COMMENT IS NOT A REFERENCE -------------------------------------------
 # The consumer documents the old path in prose, exactly as upstream's own header
 # does. Flagging this is how a detector gets muted after one release.
-cat > "$CONS/scripts/validate-artifact-budget.sh" <<'OURS'
+cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
 #!/bin/bash
 # Historical note: this used to write to $ROOT/.chan before the move.
 TMPROOT="$(mktemp -d)"
@@ -150,7 +150,7 @@ bash -n "$MUTANT" 2>/dev/null || {
   exit 2; }
 # Re-seed assertion 1's input: a genuinely severed contract, which the real
 # detector catches.
-cat > "$CONS/scripts/validate-artifact-budget.sh" <<'OURS'
+cat > "$CONS/scripts/ai-dlc/validate-artifact-budget.sh" <<'OURS'
 #!/bin/bash
 CHAN="$ROOT/.chan"
 printf 'x\n' >> "$ROOT/.chan"

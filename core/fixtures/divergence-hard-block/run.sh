@@ -251,7 +251,7 @@ rm -rf "$W"
 # said so for two minor releases. If the validator is missing the hooks fail OPEN (a hook
 # that wedges the pipeline on its own bug gets switched off) — but they must leave a trace.
 W="$(bash "$HERE/seed.sh" divergent)"
-rm -f "$W/scripts/validate-adversarial-convergence.sh"
+rm -f "$W/scripts/ai-dlc/validate-adversarial-convergence.sh"
 OUT="$(drive_ack "$W" Agent)"
 if denied "$OUT"; then bad "a missing validator DENIED the dispatch — hooks must fail OPEN on their own breakage"
 else ok "a missing validator fails OPEN (a hook that wedges the pipeline gets switched off)"; fi

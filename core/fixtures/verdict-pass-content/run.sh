@@ -36,7 +36,7 @@ ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 # maps `core/scripts/<x>` to `scripts/<x>` at the project root.
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/verdict.sh" ]; then
   SCRIPTS="$ROOT/core/scripts"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/verdict.sh" ]; then
+elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/verdict.sh" ]; then
   SCRIPTS="$ROOT/scripts"
 else
   echo "FIXTURE ERROR: verdict.sh not found in either layout" >&2

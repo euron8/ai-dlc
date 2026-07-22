@@ -47,7 +47,7 @@ When a step file says "run sub-step snapshot update", execute:
    boundaries per `gate-validation.md` Check 14.
 5. Run the snapshot budget check:
 
-       scripts/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
+       scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
 
    The script reports an overage inside the grace band (a `warn` line,
    exit 0) and breaches only past it.
@@ -96,7 +96,7 @@ and a `Skill` spawn returns no handle at all. Every ai-dlc teammate delivers by 
 
 **The call.** One `Bash` call, every path in the wave:
 
-    scripts/wait-for-deliverable.sh [--since <epoch|ISO8601>] <path> [<path> ...]
+    scripts/ai-dlc/wait-for-deliverable.sh [--since <epoch|ISO8601>] <path> [<path> ...]
 
 - `exit 0` — beat complete. Read the output: consume the `DELIVERED <path>` lines,
   beat again over the `WAITING <path>` ones. Exit 0 alone does not mean all landed.
@@ -146,12 +146,12 @@ closes the "absent verdict reads as pass" hole.
 not block the operator), bound to `.claude/team-roles/gate-adjudicator.md` per SKILL.md Rule 19
 (both bindings: `model` and the standing role-contract Read line). Give it: the `gate_type`, the
 `gate_nonce`, the verdict output path, and the artifact roots it may read. It derives its own
-worklist with `scripts/validate-gate-adjudication.sh --expected <gate_type>` (the SAME derivation
+worklist with `scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>` (the SAME derivation
 Check 26 uses), reads each escalated check's body in `gate-validation.md` as the spec, and writes
 one `GATE_ADJUDICATION_VERDICT v1` JSON to the verdict path. No Skill, no provenance block — it is
 the native path with its own schema.
 
-**Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <verdict_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <verdict_path>`.
 
 **While it runs, the lead evaluates ONLY the `script` / `project` / `lead` checks.**
 Inline-evaluating an `adjudication: llm` check is a Rule 20 solo violation — that judgment is the
@@ -170,10 +170,10 @@ severity ladder, the verdict envelope, `EXIT_CONDITION_MET` /
 `EXIT_CONDITION_NOT_MET` / `DIVERGENT_HARD_BLOCK`, the prior-scope discipline, and
 the underived-claim bar all live in `team-roles/adversary.md` and
 `team-roles/remediator.md`, and the gate enforces them mechanically
-(`scripts/validate-adversarial-convergence.sh`, invoked by Check 24). A copy in a
+(`scripts/ai-dlc/validate-adversarial-convergence.sh`, invoked by Check 24). A copy in a
 step file is a copy that drifts.
 
-**Join every spawn on its DELIVERABLE** — one `scripts/wait-for-deliverable.sh
+**Join every spawn on its DELIVERABLE** — one `scripts/ai-dlc/wait-for-deliverable.sh
 <path> [<path> ...]` call per wave ("Bounded-join beat" above). A hand-rolled
 `until`/`while`/`sleep` wait is a Rule 29 Check A violation that gate Check 25
 counts.
@@ -229,7 +229,7 @@ carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-
 `findings_*` counts, and the `verdict:`. Filename numbering is load-bearing: Check 24 orders the
 series by the `p<M>` token.
 
-**Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <findings_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <findings_path>`.
 
 **Zero findings on a later pass is the EXPECTED outcome, not a suspicious one.** The cycle exists
 to reach it. An adversary that manufactures a finding to justify its pass sends the remediator to
@@ -323,7 +323,7 @@ It writes the repaired artifact in place plus a **repair record** at
 per finding, the disposition, the edit site, and the command that derives every factual claim
 the repair asserts, with its output. The next adversarial pass verifies against that record.
 
-**Join** with the bounded-join beat (above): `scripts/wait-for-deliverable.sh <repair_record_path>`.
+**Join** with the bounded-join beat (above): `scripts/ai-dlc/wait-for-deliverable.sh <repair_record_path>`.
 
 **The lead keeps** dispatch, the join, and the **Rule 11/13 scope calls** the remediator
 escalates (cut-versus-fix, `LOCKED_REQUIREMENTS`, anything changing what the sprint delivers).

@@ -17,7 +17,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATOR=""
 for cand in \
   "$DIR/../../scripts/validate-steering-budget.sh" \
-  "$DIR/../../../scripts/validate-steering-budget.sh" \
+  "$DIR/../../../scripts/ai-dlc/validate-steering-budget.sh" \
   "$DIR/../../core/scripts/validate-steering-budget.sh"; do
   [ -f "$cand" ] && VALIDATOR="$cand" && break
 done

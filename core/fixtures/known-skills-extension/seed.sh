@@ -11,8 +11,8 @@ D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-provenance-block.sh" ]; then
   VALIDATOR="$D_ROOT/core/scripts/validate-provenance-block.sh"
-elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/validate-provenance-block.sh" ]; then
-  VALIDATOR="$C_ROOT/scripts/validate-provenance-block.sh"
+elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-provenance-block.sh" ]; then
+  VALIDATOR="$C_ROOT/scripts/ai-dlc/validate-provenance-block.sh"
 else
   echo "FIXTURE ERROR: validate-provenance-block.sh not found in either layout" >&2
   exit 2

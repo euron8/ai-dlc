@@ -45,7 +45,7 @@ both are dormant and rules are authored in place as before.
   detection for that entry — the pull diffs it inside the distribution checkout.
 
 **Validate after authoring or revising any layer entry:**
-`scripts/validate-layer-entries.sh` (errors on a poisoned `base_sha` or a broken
+`scripts/ai-dlc/validate-layer-entries.sh` (errors on a poisoned `base_sha` or a broken
 `hooks:`/`shadows:` target; warns on restatement, restriction, and dangling step
 pointers). Run it before committing the entry.
 

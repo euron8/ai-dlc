@@ -47,7 +47,7 @@ Keep `base_sha` current whenever you revise an override.
 > **silently dead** for that entry — upstream changes are lost to a stale shadow
 > with no warning.
 > Rule of thumb: **a correct `base_sha` never resolves in your own repo.**
-> `scripts/validate-layer-entries.sh` errors on a poisoned one;
+> `scripts/ai-dlc/validate-layer-entries.sh` errors on a poisoned one;
 > `/ai-dlc-update` reports it as HARD and refuses to `apply` until it is fixed. This residual three-way
 is small but not zero — it is the price of deliberately diverging from a core rule.
 

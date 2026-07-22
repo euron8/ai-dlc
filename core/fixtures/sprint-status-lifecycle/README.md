@@ -1,6 +1,6 @@
 # sprint-status-lifecycle
 
-Proves `scripts/sprint-status.sh` derives `sprint_id` mechanically and rotates the sprint envelope
+Proves `scripts/ai-dlc/sprint-status.sh` derives `sprint_id` mechanically and rotates the sprint envelope
 atomically, and that neither can repeat the two defects this fixture is named after.
 
 ## The defect this exists to catch

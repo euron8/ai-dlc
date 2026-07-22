@@ -81,7 +81,7 @@ For `prd.md`, invoke `/bmad-validate-prd` on the consolidated live draft
 brief/backlog, run the appropriate validation sub-skill. For
 `architecture.md`, run the architecture validation sub-skill on the
 consolidated live draft and regenerate `docs/architecture-index.md` from it
-(`scripts/gen-architecture-index.js`). The consolidation must not weaken the
+(`scripts/ai-dlc/gen-architecture-index.js`). The consolidation must not weaken the
 artifact's validity, only its size.
 
 ### 5. Commit the swap

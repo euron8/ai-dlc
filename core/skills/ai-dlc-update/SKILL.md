@@ -667,7 +667,7 @@ prose is itself generated rather than composed.
 
    **Offer the catalog relabel (step 3e).** Run `reconcile/relabel-extension-checks.sh
    <consumer-root> --apply` once core is in place, since the collision set is defined
-   against the NEW core. Then run `scripts/validate-layer-entries.sh` and report its
+   against the NEW core. Then run `scripts/ai-dlc/validate-layer-entries.sh` and report its
    errors/warnings in the apply summary. This never blocks the apply.
 
    **Flagged-block checkpoint (mid-apply, every block, not just conflicts).**

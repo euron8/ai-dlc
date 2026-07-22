@@ -428,7 +428,7 @@ a percentage of the window CLAMPED to a bounded "lead" below the ceiling
 defaults, and the worked examples; tune via
 `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_PCT` and
 `AI_DLC_SENSOR_{YELLOW,RED,IMMINENT}_{MIN,MAX}_LEAD`. The band constants are
-guarded by `scripts/validate-compact-window.sh` (see "Auto-compact ordering
+guarded by `scripts/ai-dlc/validate-compact-window.sh` (see "Auto-compact ordering
 invariant" below).
 
 ### Reminder semantics
@@ -476,7 +476,7 @@ disjoint clamp ranges keep yellow < red < imminent < compaction for any
 window.
 
 AI/DLC does not write `autoCompactWindow`. Run
-`scripts/validate-compact-window.sh` to confirm the band constants keep the
+`scripts/ai-dlc/validate-compact-window.sh` to confirm the band constants keep the
 ordering (disjoint clamp ranges, monotonic percentages, red with runway to
 spare) and to report the resolved window; it FAILs on a value outside
 `[100000, 1000000]`, which Claude Code would silently discard back to the
@@ -688,8 +688,8 @@ from one that found nothing, which is how a validation step accumulates
 cost nobody can defend or cut on evidence.
 The block's field schema lives in `schemas/provenance-block.json`, which
 the reader loads and every taught example is rendered from.
-`scripts/validate-provenance-block.sh` parses the block;
-`scripts/validate-retro-evidence.sh` enforces transcript artifact +
+`scripts/ai-dlc/validate-provenance-block.sh` parses the block;
+`scripts/ai-dlc/validate-retro-evidence.sh` enforces transcript artifact +
 byte-matched SHA citation for retro party-mode (see
 `gate-validation.md` Check 17). Both run at the Step 5c pre-commit gate;
 a consumer that ships `.github/workflows/validate-retro-compliance.yml`
@@ -744,7 +744,7 @@ convergence review in the lead's own context (solo mode) produces convergent
 opinions from a single LLM and defeats independent evaluation. Any evaluation
 that emits `mode: solo` -- or generates evaluation output without a real
 subagent -- is a rule violation and FAILS Check 17 (enforced by
-`scripts/validate-provenance-block.sh`, which rejects `mode: solo` on **any**
+`scripts/ai-dlc/validate-provenance-block.sh`, which rejects `mode: solo` on **any**
 provenance block, unconditionally).
 
 **Role-manifest preamble (persona-spawning sub-skills).** A validation
@@ -940,7 +940,7 @@ The stamp lives in the **filename**. The draft's H1 is prose and MUST NOT
 be parsed for the sprint number. The returned `artifact_path` is
 authoritative — never reconstruct the path from the basename.
 
-Mechanized by `scripts/validate-draft-stamps.sh` (gate-validation Check
+Mechanized by `scripts/ai-dlc/validate-draft-stamps.sh` (gate-validation Check
 23, planning gates), which fails on an unstamped draft on disk or a
 consumer `extensions/`/`overrides/` layer that restates a §0 write path
 without the stamp.
@@ -1012,7 +1012,7 @@ escalations — mechanism in `escalations.md` "Terminal-entry archival".
 
 **(d) Size budgets — blocking at sprint start, warn-only at retro.** The
 canonical per-artifact budgets and their remedies live in ONE place,
-`scripts/validate-artifact-budget.sh`, which every caller runs rather than
+`scripts/ai-dlc/validate-artifact-budget.sh`, which every caller runs rather than
 restating (a threshold copied into prose is a threshold that drifts from the one
 that executes).
 
@@ -1107,7 +1107,7 @@ same way, not skill-relative.
 resolves in the *consumer's own* repo is invalid: `/ai-dlc-update` computes drift
 with `git diff <base_sha>..<theirs>` inside the distribution checkout, so a
 consumer sha makes that diff impossible and drift detection silently dies for
-that entry. `scripts/validate-layer-entries.sh` fails on it (a correct base_sha
+that entry. `scripts/ai-dlc/validate-layer-entries.sh` fails on it (a correct base_sha
 never resolves in the consumer repo); `reconcile/layer-drift.sh` reports it as
 HARD and blocks `apply` until the operator adjudicates. Re-stamp `base_sha`
 whenever you revise an override.
@@ -1137,7 +1137,7 @@ check defined in `extensions/checks/` belongs to **that file's** catalog, keyed 
 history maps by identity and no consumer renumbers on an upstream release. Loading is
 what binds the catalog: a check read from `extensions/checks/` is that file's check
 **however its heading is written**, so an un-migrated consumer is correct, just not yet
-legible. Enforced by `scripts/validate-layer-entries.sh` (E6) and, at pull time, by
+legible. Enforced by `scripts/ai-dlc/validate-layer-entries.sh` (E6) and, at pull time, by
 `EXTENSION-CHECK-NUMBER-COLLISION` in the reconcile report. Full convention:
 `steps/gate-validation.md`, "Consumer-catalog crosswalk".
 
@@ -1286,7 +1286,7 @@ on in beats:
 
 **Do not retype the loop. Call the script -- and pass the WHOLE WAVE to ONE call:**
 
-    scripts/wait-for-deliverable.sh <path> [<path>...]
+    scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
 
     exit 0 -- BEAT COMPLETE. This call WAS the beat. READ THE OUTPUT:
               `DELIVERED <path>` lines are yours to consume; `WAITING
@@ -1361,7 +1361,7 @@ season of retros shows leads re-dispatch on exhaustion without it; retire the
 whole rule when the harness bounds foreground tool-call duration itself, or
 delivers queued input mid-call.
 
-Enforcement: `scripts/validate-steering-budget.sh` (Checks A, B, C, D) and
+Enforcement: `scripts/ai-dlc/validate-steering-budget.sh` (Checks A, B, C, D) and
 `.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).
 
 ## INITIALIZATION

@@ -15,7 +15,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATOR=""
 for cand in \
   "$DIR/../../scripts/validate-escalation-resolution.sh" \
-  "$DIR/../../../scripts/validate-escalation-resolution.sh" \
+  "$DIR/../../../scripts/ai-dlc/validate-escalation-resolution.sh" \
   "$DIR/../../core/scripts/validate-escalation-resolution.sh"; do
   [ -f "$cand" ] && VALIDATOR="$cand" && break
 done

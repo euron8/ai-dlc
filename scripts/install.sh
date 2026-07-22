@@ -368,13 +368,26 @@ fi
 
 # Install validation + pipeline scripts (always overwrite with AI/DLC versions)
 echo "Installing validation scripts..."
-mkdir -p "$PROJECT_ROOT/scripts"
+# CORE SCRIPTS LIVE IN THEIR OWN DIRECTORY, AND ONLY CORE SCRIPTS LIVE THERE.
+#
+# They used to land loose in scripts/, mixed in with the consumer's own. In the
+# reference consumer that directory holds 103 files of which 25 are ours, and no
+# prefix separates them -- ai-dlc ships `audit-rule-files.sh` while the consumer
+# owns `audit-dormant-gates.sh`, `audit-main-since.sh`, `audit-rule-exercise.sh`.
+#
+# That mattered because the edit-time core guard derives its deny set from
+# core-manifest.md, and no glob over a shared directory can name our 25 without
+# also naming theirs. So the enforcers -- the scripts every gate's teeth depend
+# on -- were the one part of core a consumer could edit in place, and two of them
+# had been. A directory boundary is what makes the set expressible.
+mkdir -p "$PROJECT_ROOT/scripts/ai-dlc"
 # DERIVED from core/scripts/, never enumerated. A hand-listed loop ships a new
 # validator absent-and-inert on every fresh install while all content
 # verification stays green — the list becomes the bug. Unlike the fixture loop
 # below (which uninstall.sh must mirror, and which validate-enforcement-map.sh
 # I8 binds), nothing pairs with this one, so deriving it is strictly simpler
 # than adding a check to guard it.
+STALE_CORE_SCRIPTS=()
 core_scripts=("$SCRIPT_DIR"/../core/scripts/*)
 if [ ! -e "${core_scripts[0]}" ]; then
   echo "  Error: core/scripts/ is empty or missing — refusing to install zero validators."
@@ -384,10 +397,34 @@ fi
 for script_path in "${core_scripts[@]}"; do
   [ -f "$script_path" ] || continue
   script="$(basename "$script_path")"
-  cp "$script_path" "$PROJECT_ROOT/scripts/"
-  chmod +x "$PROJECT_ROOT/scripts/$script"
-  echo "  $script installed"
+  cp "$script_path" "$PROJECT_ROOT/scripts/ai-dlc/"
+  chmod +x "$PROJECT_ROOT/scripts/ai-dlc/$script"
+  echo "  ai-dlc/$script installed"
+  # MIGRATION, NOT CLEANUP. A pre-0.126.0 consumer has this script loose in
+  # scripts/, possibly with local edits (the reference consumer had two). Deleting
+  # it here would discard those silently, so the old copy is REPORTED and left in
+  # place. Removing it is the operator's call, after they have looked at it.
+  if [ -f "$PROJECT_ROOT/scripts/$script" ]; then
+    STALE_CORE_SCRIPTS+=("scripts/$script")
+  fi
 done
+
+# bash 3.2 (macOS default) errors on "${arr[@]}" for an EMPTY array under set -u,
+# so the count is tested before the array is ever expanded.
+if [ "${#STALE_CORE_SCRIPTS[@]}" -gt 0 ]; then
+  echo ""
+  echo "  NOTE: ${#STALE_CORE_SCRIPTS[@]} core script(s) remain at the pre-0.126.0 location."
+  echo "  They are superseded by scripts/ai-dlc/ and nothing invokes them any more."
+  echo "  They were NOT deleted: a consumer that edited one in place (which the old"
+  echo "  layout permitted) would lose that change without ever seeing it."
+  echo ""
+  for s in "${STALE_CORE_SCRIPTS[@]}"; do
+    echo "    $s"
+  done
+  echo ""
+  echo "  Diff each against scripts/ai-dlc/ before removing. A difference is a local"
+  echo "  edit that belongs upstream as a push candidate, not in the bin."
+fi
 
 # Install CI workflow templates (copy only if .github/workflows/ exists)
 if [ -d "$PROJECT_ROOT/.github/workflows" ]; then
@@ -419,7 +456,7 @@ if [ "$(git -C "$PROJECT_ROOT" config core.hooksPath 2>/dev/null)" = ".githooks"
 else
   echo "  .githooks/pre-push installed (not enabled)"
   echo "  Enable with: git config core.hooksPath .githooks"
-  echo "  Check first: bash scripts/validate-layer-entries.sh"
+  echo "  Check first: bash scripts/ai-dlc/validate-layer-entries.sh"
 fi
 
 # Install schemas (always overwrite with AI/DLC versions)
@@ -439,7 +476,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive ledger-reverify snapshot-section-schema retired-contract-token retro-audit-scans context-mode-protect verdict-pass-content snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive ledger-reverify snapshot-section-schema retired-contract-token retro-audit-scans context-mode-protect verdict-pass-content snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"

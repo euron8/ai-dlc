@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate-provenance-block.sh — the READER of SKILL_INVOCATION_PROVENANCE v1.
 #
-# Usage: ./scripts/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
+# Usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
 #
 # THE SCHEMA IS NOT IN THIS FILE. It is in schemas/provenance-block.json, which this script
 # LOADS: the envelope, the field list, the enums, the patterns, and the cross-field rules all
@@ -47,7 +47,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$ARTIFACT_PATH" ]]; then
-    echo "usage: ./scripts/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]" >&2
+    echo "usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]" >&2
     exit 2
 fi
 

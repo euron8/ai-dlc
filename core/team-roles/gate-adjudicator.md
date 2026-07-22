@@ -36,7 +36,7 @@ and (d) the artifact roots you may read. You MUST:
 
 1. **Derive your worklist — do not accept a hand-passed list.** Run
 
-       scripts/validate-gate-adjudication.sh --expected <gate_type>
+       scripts/ai-dlc/validate-gate-adjudication.sh --expected <gate_type>
 
    It prints the escalated check_ids, one per line (the `adjudication: llm` checks for this
    gate type, from `enforcement-map.yaml`). This is the SAME derivation `Check 26` uses to

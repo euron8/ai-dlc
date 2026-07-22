@@ -348,7 +348,7 @@ esac
 # resolve_window() walks the settings layers in Claude Code's precedence order.
 #
 # NOTE: parse_window() and resolve_window() below are byte-identical to the
-# copies in scripts/validate-compact-window.sh. Hooks install to .claude/hooks/
+# copies in scripts/ai-dlc/validate-compact-window.sh. Hooks install to .claude/hooks/
 # and cannot source from scripts/, so they are duplicated deliberately. Keep the
 # two in step.
 parse_window() {

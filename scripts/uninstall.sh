@@ -92,11 +92,15 @@ if [ -f "$PROJECT_ROOT/docs/escalations/pending.md" ]; then
 fi
 
 # -- Validation scripts installed by AI/DLC --
-for script in validate-provenance-block.sh validate-retro-evidence.sh validate-mandatory-rules.sh validate-ci-gates.sh; do
-  if [ -f "$PROJECT_ROOT/scripts/$script" ]; then
-    FILES_TO_REMOVE+=("scripts/$script")
-  fi
-done
+# The whole directory, because the whole directory is ours -- that is the point of
+# scripts/ai-dlc/ and what core-manifest.md's enumeration asserts.
+#
+# This used to be a hand-list of FOUR names against the 25 install.sh ships, so an
+# uninstall left 21 core validators behind and reported success. The list was the
+# bug, exactly as it was for map_consumer() in v0.55.2. A directory needs no list.
+if [ -d "$PROJECT_ROOT/scripts/ai-dlc" ]; then
+  DIRS_TO_REMOVE+=("scripts/ai-dlc")
+fi
 
 # -- CI workflows installed by AI/DLC --
 for wf in validate-retro-compliance.yml validate-ci-gates.yml; do
@@ -118,7 +122,7 @@ fi
 # fixtures it does not name. It had already drifted: install shipped nine, this listed
 # five. `scripts/validate-enforcement-map.sh` (I8) now asserts the two lists and
 # core/fixtures/ agree, so the next fixture cannot be added to one loop only.
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive ledger-reverify snapshot-section-schema retired-contract-token retro-audit-scans context-mode-protect verdict-pass-content snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-catalog-collision layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive ledger-reverify snapshot-section-schema retired-contract-token retro-audit-scans context-mode-protect verdict-pass-content snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary; do
   if [ -d "$PROJECT_ROOT/tests/fixtures/$fixture_dir" ]; then
     DIRS_TO_REMOVE+=("tests/fixtures/$fixture_dir/")
   fi

@@ -7,7 +7,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATOR=""
 for cand in \
   "$DIR/../../scripts/validate-locked-anchor.sh" \
-  "$DIR/../../../scripts/validate-locked-anchor.sh" \
+  "$DIR/../../../scripts/ai-dlc/validate-locked-anchor.sh" \
   "$DIR/../../core/scripts/validate-locked-anchor.sh"; do
   [ -f "$cand" ] && VALIDATOR="$cand" && break
 done

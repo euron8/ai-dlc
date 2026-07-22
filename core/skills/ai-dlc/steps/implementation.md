@@ -142,7 +142,7 @@ handle. Wait on it with Rule 29's **bounded file-wait beat**, run in the
 background — do not retype the loop:
 
     Bash(run_in_background: true):
-      scripts/wait-for-deliverable.sh <path> [<path>...]
+      scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
 
 Then END YOUR TURN. The beat sleeps off the foreground; when it exits the
 harness re-invokes you with its result. Branch on the exit code THEN:
@@ -177,7 +177,7 @@ the same handle, that survives a compaction.
 
 A blocking (`run_in_background: false` / omitted) dev dispatch is a
 lead-conduct retro finding: it reintroduces a window in which the
-operator cannot be heard. `scripts/validate-steering-budget.sh` fails
+operator cannot be heard. `scripts/ai-dlc/validate-steering-budget.sh` fails
 the gate on it.
 
 **Bounded-join ≠ serial execution.** The beat governs HOW the lead

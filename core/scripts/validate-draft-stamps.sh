@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # validate-draft-stamps.sh — Rule 24 analyst-draft sprint stamps
 #
-# Usage: ./scripts/validate-draft-stamps.sh [project-root]
-# Example: ./scripts/validate-draft-stamps.sh .
+# Usage: ./scripts/ai-dlc/validate-draft-stamps.sh [project-root]
+# Example: ./scripts/ai-dlc/validate-draft-stamps.sh .
 #
 # Gate-validation Check 23 enforcer (planning gates).
 #

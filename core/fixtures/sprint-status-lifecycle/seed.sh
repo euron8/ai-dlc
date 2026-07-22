@@ -14,8 +14,8 @@ C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if   [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/sprint-status.sh" ]; then
   TOOL="$D_ROOT/core/scripts/sprint-status.sh"
   SCHEMA="$D_ROOT/core/schemas/sprint-status.json"
-elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/sprint-status.sh" ]; then
-  TOOL="$C_ROOT/scripts/sprint-status.sh"
+elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/sprint-status.sh" ]; then
+  TOOL="$C_ROOT/scripts/ai-dlc/sprint-status.sh"
   SCHEMA="$C_ROOT/.claude/schemas/sprint-status.json"
 else
   echo "FIXTURE ERROR: sprint-status.sh not found in either layout" >&2

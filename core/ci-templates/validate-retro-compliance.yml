@@ -18,10 +18,10 @@ on:
     paths:
       - "docs/retro/sprint-*.md"
       - "_bmad-output/party-mode-transcripts/**"
-      - "scripts/validate-retro-evidence.sh"
+      - "scripts/ai-dlc/validate-retro-evidence.sh"
       - "scripts/validate-cycle-commits.sh"
-      - "scripts/validate-mandatory-rules.sh"
-      - "scripts/validate-provenance-block.sh"
+      - "scripts/ai-dlc/validate-mandatory-rules.sh"
+      - "scripts/ai-dlc/validate-provenance-block.sh"
       - ".github/workflows/validate-retro-compliance.yml"
 
 jobs:
@@ -68,16 +68,16 @@ jobs:
         if: steps.sprint.outputs.sprint != ''
         run: |
           set -euo pipefail
-          chmod +x scripts/validate-mandatory-rules.sh \
-                   scripts/validate-retro-evidence.sh \
+          chmod +x scripts/ai-dlc/validate-mandatory-rules.sh \
+                   scripts/ai-dlc/validate-retro-evidence.sh \
                    scripts/validate-cycle-commits.sh \
                    scripts/validate-retro-prereq.sh \
                    scripts/validate-phase-sequencing.sh 2>/dev/null || true
-          ./scripts/validate-mandatory-rules.sh "${{ steps.sprint.outputs.sprint }}"
+          ./scripts/ai-dlc/validate-mandatory-rules.sh "${{ steps.sprint.outputs.sprint }}"
 
       - name: Run validate-provenance-block.sh on retro doc
         if: steps.sprint.outputs.sprint != ''
         run: |
           set -euo pipefail
-          chmod +x scripts/validate-provenance-block.sh
-          ./scripts/validate-provenance-block.sh "docs/retro/sprint-${{ steps.sprint.outputs.sprint }}.md"
+          chmod +x scripts/ai-dlc/validate-provenance-block.sh
+          ./scripts/ai-dlc/validate-provenance-block.sh "docs/retro/sprint-${{ steps.sprint.outputs.sprint }}.md"

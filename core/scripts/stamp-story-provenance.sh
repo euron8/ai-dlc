@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # stamp-story-provenance.sh — the MECHANICAL WRITER of the terminal-pass residue on story files.
 #
-# Usage: ./scripts/stamp-story-provenance.sh --terminal <terminal-adversarial-pass-file> \
+# Usage: ./scripts/ai-dlc/stamp-story-provenance.sh --terminal <terminal-adversarial-pass-file> \
 #          <story-file> [<story-file> ...]
-#        ./scripts/stamp-story-provenance.sh --terminal <pass> --check <story-file> ...
+#        ./scripts/ai-dlc/stamp-story-provenance.sh --terminal <pass> --check <story-file> ...
 #
 # Check 17's story-readiness gate REQUIRES a SKILL_INVOCATION_PROVENANCE block on EVERY story
 # file (validate-provenance-block.sh --require-skill ai-dlc-adversary-review, per story). That
@@ -67,7 +67,7 @@ if [[ -n "$SERIES" && -z "$TERMINAL" ]]; then
 fi
 
 if [[ -z "$TERMINAL" || ${#STORIES[@]} -eq 0 ]]; then
-    echo "usage: ./scripts/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--check] <story-file>..." >&2
+    echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--check] <story-file>..." >&2
     exit 2
 fi
 [[ -f "$TERMINAL" ]] || { echo "ERROR: terminal pass file not found: $TERMINAL" >&2; exit 1; }

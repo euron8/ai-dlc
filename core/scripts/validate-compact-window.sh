@@ -45,7 +45,7 @@
 #   min(setting, model max), so the setting can only ever lower the threshold.
 #
 # USAGE
-#   scripts/validate-compact-window.sh [--settings PATH] [--quiet]
+#   scripts/ai-dlc/validate-compact-window.sh [--settings PATH] [--quiet]
 #   (--skill and --row are accepted but ignored; the bands are row-independent.)
 #
 # EXIT

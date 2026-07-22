@@ -25,7 +25,7 @@ holds *how* to write and resolve one.
 
 Those two lines — the `**Status:**` line in the format block above and the terminal
 list here — are the CLOSED vocabulary. Every token an entry's `**Status:**` field may
-carry appears in exactly one of them, and `scripts/validate-escalation-status-vocabulary.sh`
+carry appears in exactly one of them, and `scripts/ai-dlc/validate-escalation-status-vocabulary.sh`
 derives its set by reading them rather than restating it. A status outside the set is
 malformed: `gate-validation.md` Check 2 branches on these tokens and has no else, so an
 entry carrying a sixth token is not blocked, not surfaced and not recorded — Check 2
@@ -68,7 +68,7 @@ not a paraphrase, not the lead's summary:
 
 `**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"`
 
-At the gate, `scripts/validate-escalation-resolution.sh` verifies that
+At the gate, `scripts/ai-dlc/validate-escalation-resolution.sh` verifies that
 substring against the session transcript (this sprint's entries only;
 legacy sprints are out of scope), using the same genuine-operator
 predicate Rule 29 uses. A `RESOLVED` you authored yourself, with no

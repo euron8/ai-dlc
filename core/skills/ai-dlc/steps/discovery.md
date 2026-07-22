@@ -24,7 +24,7 @@ sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6), returning only
 `{artifact_path, summary, gaps}`. Then resume at section 2.
 **Join it with the bounded-join beat** (`_gate-procedures.md`, "Bounded-join beat"):
-`scripts/wait-for-deliverable.sh <artifact_path>`. A hand-rolled `until`/`sleep` wait
+`scripts/ai-dlc/wait-for-deliverable.sh <artifact_path>`. A hand-rolled `until`/`sleep` wait
 is a Rule 29 Check A violation and gate Check 25 counts it.
 **Brainstorm and brief AUTHORING stay inline in the lead** — they need
 whole-document intent. **The Rule 8 validation cycle is not one thing:**

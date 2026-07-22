@@ -3,8 +3,8 @@
 # no hand-written copy of it survives anywhere.
 #
 # Usage:
-#   ./scripts/sync-taught-schema.sh            # rewrite the generated regions in place
-#   ./scripts/sync-taught-schema.sh --check    # fail if any region is stale or hand-written
+#   ./scripts/ai-dlc/sync-taught-schema.sh            # rewrite the generated regions in place
+#   ./scripts/ai-dlc/sync-taught-schema.sh --check    # fail if any region is stale or hand-written
 #
 # Exit: 0 = every taught example is rendered from the schema and current.
 #       1 = a region drifted, or a provenance example exists that was not rendered from here.
@@ -248,7 +248,7 @@ if mode == "check":
         print(
             f"FAIL  {rel}: the generated '{profile}' example is STALE — it does not match "
             f"what schemas/{source} renders today.\n"
-            f"      FIX: run scripts/sync-taught-schema.sh (no arguments). Do not hand-edit "
+            f"      FIX: run scripts/ai-dlc/sync-taught-schema.sh (no arguments). Do not hand-edit "
             f"the region; the schema is the source.",
             file=sys.stderr,
         )
@@ -264,7 +264,7 @@ for rel, line_no, slug, source, profiles in handwritten:
         f"      FIX: replace it with\n"
         f"        <!-- BEGIN GENERATED: {slug}/<profile> — source: schemas/{source}; do not edit by hand -->\n"
         f"        <!-- END GENERATED: {slug} -->\n"
-        f"      and run scripts/sync-taught-schema.sh. Profiles: {profiles}",
+        f"      and run scripts/ai-dlc/sync-taught-schema.sh. Profiles: {profiles}",
         file=sys.stderr,
     )
     rc = 1

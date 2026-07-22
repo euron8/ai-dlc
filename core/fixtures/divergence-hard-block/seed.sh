@@ -11,7 +11,7 @@
 # The real layout, which install.sh produces:
 #   <root>/_bmad-output/pipeline-snapshot.md          the hooks' "is a pipeline running" gate
 #   <root>/_bmad-output/planning-artifacts/*.md       the pass series
-#   <root>/scripts/validate-adversarial-convergence.sh  core/scripts/ -> consumer scripts/
+#   <root>/scripts/ai-dlc/validate-adversarial-convergence.sh  core/scripts/ -> consumer scripts/
 set -eu
 
 CASE="${1:?case}"
@@ -19,7 +19,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 VALIDATOR=""
 for c in "$HERE/../../scripts/validate-adversarial-convergence.sh" \
-         "$HERE/../../../scripts/validate-adversarial-convergence.sh" \
+         "$HERE/../../../scripts/ai-dlc/validate-adversarial-convergence.sh" \
          "$HERE/../../core/scripts/validate-adversarial-convergence.sh"; do
   [ -f "$c" ] && VALIDATOR="$c" && break
 done
@@ -27,9 +27,9 @@ done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/divergence-XXXXXX")"
 ART="$WORK/_bmad-output/planning-artifacts"
-mkdir -p "$ART" "$WORK/scripts"
+mkdir -p "$ART" "$WORK/scripts/ai-dlc"
 touch "$WORK/_bmad-output/pipeline-snapshot.md"
-cp "$VALIDATOR" "$WORK/scripts/validate-adversarial-convergence.sh"
+cp "$VALIDATOR" "$WORK/scripts/ai-dlc/validate-adversarial-convergence.sh"
 
 # $1 n  $2 crit  $3 prior  $4 major  $5 verdict  $6 sha  $7 resolves(optional)
 pass() {

@@ -272,7 +272,7 @@ as `<heading title> — #<anchor> — <one-line summary>`. This is the discovera
 backstop dev/qa consult (per their Context Loading contracts) to locate the
 section(s) to slice-read when a story's `architecture_refs` is absent or stale.
 
-Run the deterministic generator `scripts/gen-architecture-index.js` (headings +
+Run the deterministic generator `scripts/ai-dlc/gen-architecture-index.js` (headings +
 anchors are extracted mechanically; keep it cheap and always-current — do NOT
 author the index by hand or by LLM summary of the whole doc, which would
 re-incur the whole-read cost this index exists to avoid). Commit the regenerated
