@@ -805,7 +805,7 @@ git push -u origin HEAD
 
 Check the current branch:
 - If on `main` or `master`: No PR needed — work was committed directly.
-  Announce: "Sprint [N] complete. Pipeline finished."
+  Skip the 7a merge gate and proceed to 7a-post.
 - If on any other branch: A PR is warranted. Proceed to 6d.
 
 **6d. Create a pull request.**
@@ -845,14 +845,18 @@ Generate a PR using the sprint's artifacts as the source material:
 - If `gh` is not available, provide the user with the branch name
   and suggest they create the PR manually.
 
-**6e. Announce completion.**
+**6e. Announce status — NOT completion.**
 
 Present to the user:
 - PR URL (if created)
 - Sprint summary (stories delivered, gate results)
 - Any open escalations that need human review
 
-Announce: "Sprint [N] complete. Pipeline finished."
+Then announce:
+- **PR created:** "Sprint [N] artifacts committed. Proceeding to merge gate."
+- **Direct-to-main:** "Sprint [N] artifacts committed."
+
+The pipeline's only terminal announcement is Step 7d's handoff block.
 
 ### 7. Merge and Next-Sprint Handoff
 
@@ -874,8 +878,9 @@ epic scope, and residual risks are still in the lead's working context.
   - **n:** Do not merge. Emit the next-sprint prompt immediately with a
     one-line preamble noting the PR is still open and the user should
     paste the prompt after it merges.
-- **If no PR was created (direct-to-main in 6c):** Skip the merge gate
-  and proceed directly to 7b.
+- **If no PR was created (direct-to-main in 6c):** Skip the merge gate and
+  proceed to **7a-post** — not straight to 7b. The artifacts are already on
+  `main`, so the rotation's precondition is met and it still has to run.
 
 **7a-post. Rotate the two merge-sensitive logs (Rule 25(c)).**
 
