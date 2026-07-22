@@ -338,8 +338,8 @@ manifest_dests() { # -> consumer-relative destinations declared under scripts/ai
   ' "$SELF/setup-sites.md" 2>/dev/null | sed -e 's#^core/##' -e '/^scripts\/ai-dlc\//!d'
 }
 
-legacy_same=""
-legacy_same_n=0
+legacy_moved=""
+legacy_moved_n=0
 manifest_n=0
 for dest in $(manifest_dests); do
   manifest_n=$((manifest_n+1))
@@ -370,21 +370,21 @@ for dest in $(manifest_dests); do
   #    silently diverges from the file it is a copy of, which is the rot the pull
   #    exists to prevent.
   #
-  #    A copy that DIFFERS is announced before it goes. It is a local edit to a core
-  #    validator, made while the old layout permitted it, and it is the thing most
-  #    worth knowing about in this whole migration -- the reference consumer has two,
-  #    one of them a real fix never filed upstream. The removal is recoverable
-  #    (consumers are git repositories and the file was tracked); the SILENCE would
-  #    not have been.
+  #    A LOCAL EDIT IS OVERWRITTEN, NOT ADJUDICATED. Core is upstream-owned and
+  #    overwrite-on-pull; validators are machinery with no consumer layer, exactly
+  #    like hooks -- there is no overrides/ shadow and no extensions/ entry for one.
+  #    So an edited copy at the old path is a boundary violation the new layout
+  #    prevents, not a decision the operator owes an answer to. It gets the same
+  #    treatment every other core file gets on every pull.
+  #
+  #    Nothing is lost that was not already recoverable: consumers are git
+  #    repositories and these files were tracked. This step deliberately does NOT
+  #    compare old against new first -- a differ/identical split would put a row in
+  #    front of the operator implying a call to make, and there is none.
   [ -f "$old" ] || continue
-  if cmp -s "$old" "$new"; then
-    legacy_same="${legacy_same}${legacy_same:+ }scripts/$base"
-    legacy_same_n=$((legacy_same_n+1))
-  else
-    say DECISION legacy-script-edited "scripts/$base" \
-      "differed from $dest before it was moved — a local edit to a core validator. Recover it with \`git show HEAD:scripts/$base\` and file the difference as a push candidate; the new copy is upstream's."
-  fi
   rm -f "$old"
+  legacy_moved="${legacy_moved}${legacy_moved:+ }scripts/$base"
+  legacy_moved_n=$((legacy_moved_n+1))
 done
 
 # A manifest that yields nothing is a manifest this driver could not read, and a
@@ -397,9 +397,9 @@ if [ "$manifest_n" -eq 0 ]; then
   mech_fail=$((mech_fail+1))
 fi
 
-if [ "$legacy_same_n" -gt 0 ]; then
-  say RESOLVED relocate-move "$legacy_same" \
-    "${legacy_same_n} core validator(s) moved from the pre-0.126.0 path; each was byte-identical to its declared location, so nothing was lost."
+if [ "$legacy_moved_n" -gt 0 ]; then
+  say RESOLVED relocate-move "$legacy_moved" \
+    "${legacy_moved_n} core validator(s) removed from the pre-0.126.0 path; upstream's copy is at the declared location. Core is overwrite-on-pull and a validator has no consumer layer, so a local edit here is superseded like any other core file's."
 fi
 
 # -----------------------------------------------------------------------------

@@ -17,6 +17,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.2] — 2026-07-22
+
+### Changed — a local edit to a core validator is overwritten, not adjudicated
+
+v0.126.1 announced an edited copy at the pre-0.126.0 path as a `DECISION` row before moving it. That was
+the wrong posture and it is removed.
+
+Core is upstream-owned and overwrite-on-pull. A validator is **machinery with no consumer layer** —
+no `overrides/` shadow, no `extensions/` entry, exactly like a hook, which is what `core-manifest.md`
+and the core guard have said since v0.126.0. So an edit at the old path is a boundary violation the new
+layout prevents, not a call the operator owes an answer to. It now gets the same treatment every other
+core file gets on every pull.
+
+The `differs`-vs-`identical` comparison is gone with it. Splitting the two put a row in front of the
+operator implying a decision that does not exist; every moved copy is now reported in one `RESOLVED`
+row. Nothing is lost that was not already recoverable — consumers are git repositories and these files
+were tracked.
+
+The new location continues to hold THEIRS' content: a stale local edit is never promoted over
+upstream's copy.
+
 ## [0.126.1] — 2026-07-22
 
 ### Fixed — the update path placed only *changed* validators at the new location
