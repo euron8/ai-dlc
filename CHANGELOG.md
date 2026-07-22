@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.120.1] — 2026-07-21
+
+### Fixed — two mislevelled headings made every override downstream of them false-drift
+
+`retro.md` carried `## Empirical gate validation` and `## Sprint-Ship Verification` at `##`,
+sandwiched between the `### N.` steps of the EXECUTION SEQUENCE. `section_of()` (reconcile
+`lib.sh`) exits a section only on a heading of equal-or-shallower level, so a `##` heading
+followed by `###` siblings absorbs all of them.
+
+**Measured on the v0.119.1 → v0.120.0 pull:** the override shadowing one paragraph —
+`steps__retro__ci-gates-enforcement-surface.md`, anchored at "Empirical gate validation (the
+`Enforcement:` paragraph)" — was compared against a **328-line** extraction spanning §4a and
+§4b in full, and reported `HARD-OVERRIDE-DRIFT-SECTION`. The paragraph it actually shadows is
+**byte-identical** across the two revisions (1,282 bytes both sides). The blocker was real
+enough to stop `apply`, and the section it named had not changed.
+
+Both headings are sub-parts of the execution sequence and are now `###`, which is their true
+nesting. The heading *text* is unchanged, so every existing `shadows:` anchor still resolves
+under the bidirectional-substring matcher — this is a level fix, not a rename. The same
+extraction now yields **24 lines**.
+
+Not touched: `## Gate Failure`, `## FAILURE MODES`, `## POST-COMPACT RECOVERY PROTOCOL` and the
+other interleaved `##` headings elsewhere in core. Those genuinely open top-level sections;
+these two did not. A consumer whose stamp predates this release still sees the false drift once,
+because the *base* side of the comparison retains the old level — the fix takes effect from the
+next pull.
+
 ## [0.120.0] — 2026-07-21
 
 ### Changed — retro's bookkeeping was orchestrated at a scale its enforcement never needed
