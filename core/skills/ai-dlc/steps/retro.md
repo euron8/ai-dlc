@@ -654,6 +654,10 @@ Unrotated, this directory accumulates every sprint's inputs forever — measured
 at 61 files / 1.0 MB on the reference consumer, growing ~77 KB per sprint, read
 by nothing after the dispatch that wrote it returned.
 
+**Two more logs rotate at Step 7a-post, not here.** `gate-log.md` and
+`compaction-log.md` must wait until the retro PR has merged — see 7a-post for
+why. This section is not the whole rotation set.
+
 ### Sprint-Ship Verification
 
 Sprint-ship counters track smoke-quality across deploy-validate runs.
@@ -872,6 +876,59 @@ epic scope, and residual risks are still in the lead's working context.
     paste the prompt after it merges.
 - **If no PR was created (direct-to-main in 6c):** Skip the merge gate
   and proceed directly to 7b.
+
+**7a-post. Rotate the two merge-sensitive logs (Rule 25(c)).**
+
+`gate-log.md` and `compaction-log.md` are append-only per-sprint logs that
+`validate-artifact-budget.sh` marks `rotate`, whose breach message reads "a
+rotation was MISSED". This is the rotation. Without it that message accuses the
+operator of skipping a step this file never defined.
+
+**Runs only after the retro PR has merged** (or, on the direct-to-main path,
+once the retro artifacts are on `main`). **If 7a ended with `n` — PR still
+open — do NOT rotate;** the logs stay live and rotation happens after the
+operator merges. The reason is the gate log: a consumer may ship a merge-time
+validator that reads the live `## Gate Log: Sprint <N>` section with no archive
+fallback (`validate-retro-prereq.sh` is the common one; it is consumer-provided
+and absent from core). Emptying the live log before that runs turns the section
+missing and the merge is denied. Rotating later is safe for every consumer;
+rotating earlier is safe only for some.
+
+The other two `rotate` artifacts — `pipeline-continuation-log.md` and
+`context-mode-protection-log.md` — rotate in §4b instead, immediately after the
+audit that reads them. Two sites, because the two constraints differ: those must
+follow their audit, these must follow the merge.
+
+1. Land on the merged state:
+   `git fetch origin main && git checkout main && git merge --ff-only origin/main`
+2. Confirm no further gate-log writes remain this sprint. Retro appends no gate
+   entry; deploy-validate's was the last write.
+3. Archive the WHOLE live log verbatim:
+
+       git mv _bmad-output/implementation-artifacts/gate-log.md \
+              _bmad-output/implementation-artifacts/gate-log-archive-s<N>.md
+
+   If it holds more than this sprint — a missed prior rotation — archive all of
+   it and name the file for the span it covers
+   (`gate-log-archive-pre-s<N+1>.md`), not just the latest sprint.
+4. Recreate the live log with only the header line `# Gate Log` and a trailing
+   newline. No retained entries: no step reads a prior sprint's gate entries,
+   counters carry forward in the retro doc, and the cluster audit is git-derived.
+5. **Rotate `compaction-log.md` the same way, IF IT EXISTS.** Most sprints never
+   compact and the file is absent — that absence is a pass, not a missed
+   rotation; record "no compactions this sprint" and skip to 6. Otherwise
+   `git mv` it to `compaction-log-archive-s<N>.md` and recreate it empty; the
+   `PostCompact` hook re-seeds its header on the next write. Confirm §4a's
+   artifact-size audit already read it first — its `recovery_injected: no`
+   entries must reach the retro doc, because after rotation the live log no
+   longer carries them.
+6. **Verify no-loss per file:** each archive's byte count MUST equal that file's
+   pre-rotation live byte count, and each new live log MUST contain only its
+   header. A mismatch is a HARD_BLOCK — do not commit; restore from git and
+   investigate.
+7. Commit to `main`:
+   `chore(s<N>): rotate gate-log and compaction-log post-retro-merge`.
+   The commit touches only those files.
 
 **7b. Assemble next-sprint inputs.**
 
