@@ -641,9 +641,22 @@ non_catalog_units:
         posture: FAILS the gate (pipeline-snapshot.md only)
         why: the snapshot is the only artifact that grows WITHIN a sprint, and it is
           whole-read at every gate, every resume, and every compaction
+      - site: gate-validation.md Check 15 (--check-evidence)
+        posture: FAILS the gate
+        why: Check 14 runs the budget check and records its own result, so the
+          record was the only evidence the record was true. It failed that way — a
+          Check 14 cell read "PASS validate-artifact-budget.sh (exit 0)" at a gate
+          where the snapshot measured 126% of budget before it and 212% after. The
+          arm requires the cell to carry the measurement, which verdict.sh now puts
+          in its PASS line and which cannot be transcribed out of the instruction.
       - site: retro.md Close-Out Sweep
         posture: warn-only
         why: the sprint already paid; retro reports, it does not gate
+    fixtures:
+      - tests/fixtures/snapshot-section-schema
+      - tests/fixtures/snapshot-evidence-cell
+      - tests/fixtures/inflight-row-shape
+      - tests/fixtures/verdict-pass-content
     supersedes: the retro.md prose threshold table, which was warn-only, fired only
       at retro, and drifted from nothing because nothing else executed it
 

@@ -75,6 +75,9 @@
 #
 #   --only NAME    check a single artifact by basename (gates use
 #                  `--only pipeline-snapshot.md`)
+#   --check-evidence   audit the gate log's LAST Check 14 row instead of measuring
+#                  artifacts. gate-validation.md Check 15 runs this. See "THE
+#                  EVIDENCE CELL" below. Optionally paired with --gate-log PATH.
 #   --warn-only    report breaches but exit 0 (retro's Rule 25(d) posture: the
 #                  sprint is over, blocking it helps nobody). retro.md is its ONLY
 #                  caller. Gate Check 14 and the sub-step path deliberately do not
@@ -112,13 +115,17 @@ ROOT="${CLAUDE_PROJECT_DIR:-.}"
 ONLY=""
 WARN_ONLY=0
 QUIET=0
+CHECK_EVIDENCE=0
+GATE_LOG=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --root)      ROOT="${2:-}"; shift 2 ;;
-    --only)      ONLY="${2:-}"; shift 2 ;;
-    --warn-only) WARN_ONLY=1; shift ;;
-    --quiet)     QUIET=1; shift ;;
+    --root)           ROOT="${2:-}"; shift 2 ;;
+    --only)           ONLY="${2:-}"; shift 2 ;;
+    --warn-only)      WARN_ONLY=1; shift ;;
+    --quiet)          QUIET=1; shift ;;
+    --check-evidence) CHECK_EVIDENCE=1; shift ;;
+    --gate-log)       GATE_LOG="${2:-}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -234,12 +241,146 @@ check_snapshot_sections() {
       done
 }
 
+# -----------------------------------------------------------------------------
+# IN-FLIGHT TEAMMATES: ROWS ONLY, NEVER STRUCK.
+#
+# gate-validation.md and _gate-procedures.md both say a row is DELETED at join
+# and that the section carries "no struck-through history". Two other core files
+# said the opposite -- route.md, which is the file that CREATES the section and so
+# is the schema a lead reads first, and implementation.md -- both saying rows are
+# "struck at join". Core contradicted itself two homes to two; the contradiction
+# is removed in the same change as this check.
+#
+# Measured in the reference consumer at sprint 296: the section held 7
+# struck-through consumed rows and 302 lines of prose, 29.7 KB -- 28% of a
+# snapshot at 446% of budget, inside a canonical section where v0.118.0's
+# closed-set check cannot see it. That is the `Teammate Ledger (detail)` v0.118.0
+# deleted as an invented section, re-grown in a legal home.
+#
+# STRIKETHROUGH ONLY, NOT A PROSE-LINE CAP. Measured across 25 historical
+# snapshots in that consumer: zero struck rows in all 25, seven in the live file
+# -- one true positive, no false positives, and no threshold to fit. A prose-line
+# cap was measured too and dropped: every one of the 25 carries some In-Flight
+# prose (1-8 lines saying what is outstanding), so the cap would need a constant
+# tuned to sit between them and the violations, and a fitted constant is the
+# mistake this file's own budget table had to unwind once already. The prose is
+# priced by the byte budget, which is the thing bytes are for; the reason it was
+# written is removed by the row schema's `status` column.
+# -----------------------------------------------------------------------------
+check_inflight_rows() {
+  awk '/^## In-Flight Teammates/{f=1;next} /^## /{f=0} f && /~~/{print}' "$1" 2>/dev/null \
+    | while IFS= read -r line; do
+        printf 'INFLIGHT  %-30s struck row: %s\n' "$2" "$(printf '%s' "$line" | cut -c1-70)" \
+          >> "$INFLIGHT_FILE"
+      done
+}
+
 env_override() {
   # prd.md -> AI_DLC_BUDGET_PRD_MD
   local key
   key="AI_DLC_BUDGET_$(printf '%s' "$1" | tr '[:lower:].-' '[:upper:]__')"
   eval "printf '%s' \"\${$key:-}\""
 }
+
+# -----------------------------------------------------------------------------
+# THE EVIDENCE CELL (--check-evidence). gate-validation.md Check 15 runs this.
+#
+# Check 14 runs the budget check and writes its own result into the gate log.
+# Check 15 verifies Check 14's assertion took effect. For every other part of
+# Check 14 that verification reads the snapshot; for the budget it had nothing to
+# read but the same self-report, so the loop was closed on itself.
+#
+# It failed exactly that way. In the reference consumer at gate
+# `story-20260722T014002Z` the evidence cell read:
+#
+#     Budget validator: `PASS  validate-artifact-budget.sh` (exit 0).
+#
+# The snapshot measured 126% of budget at the commit before that gate and 212% at
+# the commit after; the validator exits 1 at both. The cell was not empty and not
+# a paraphrase of the "budget OK" kind Check 15 already rejected -- it was the
+# validator's real PASS format, which at the time carried no run-specific content
+# and so could be written without running anything. verdict.sh now puts the
+# measurement in that line (see its header); this arm requires the measurement to
+# be there.
+#
+# TWO PREDICATES, BOTH DERIVABLE FROM THE ROW ALONE:
+#
+#   1. The cell carries a token measurement (`<n> tok`). One predicate covers the
+#      whole observed failure population: the 12 consecutive `-` cells v0.118.0
+#      found, and the content-free PASS string above.
+#   2. If the row claims PASS, that number is within budget + grace. A row cannot
+#      cite a breaching measurement and call itself passing.
+#
+# WHAT THIS DELIBERATELY DOES NOT DO: join the cited number against the snapshot
+# on disk. That needs a drift tolerance -- the snapshot keeps being written after
+# the row -- and a tolerance would be a fitted constant with no derivation, which
+# is the mistake this file's own budget table had to unwind once already. No
+# observed failure needed it: every real one cited no number at all.
+#
+# SCOPE IS THE LAST ROW ONLY. Gate logs are append-only and hold years of rows
+# written under older rules; indicting them retroactively would make this arm
+# unpassable on any real consumer and it would be disabled rather than obeyed.
+# The gate being logged right now is the one Check 15 is verifying.
+# -----------------------------------------------------------------------------
+if [ "$CHECK_EVIDENCE" -eq 1 ]; then
+  if [ -z "$GATE_LOG" ]; then
+    GATE_LOG="$(find "$ROOT/_bmad-output" -type f -name 'gate-log.md' 2>/dev/null | head -1)"
+  fi
+  [ -n "$GATE_LOG" ] && [ -f "$GATE_LOG" ] || {
+    echo "FAIL: no gate-log.md found under $ROOT/_bmad-output (pass --gate-log PATH)" >&2
+    exit 1; }
+
+  # Both row shapes in use. The long form is gate-validation.md's own
+  # (`| [core] 14 - Update pipeline snapshot | PASS (lead) | <evidence> |`); the
+  # short form appears in the compact per-check tables some gates append
+  # (`| 14 | lead | <evidence> |`). Matching only the long one would pass the
+  # short one vacuously.
+  ROW="$(grep -nE '^\|[[:space:]]*(\[core\][[:space:]]*)?14[[:space:]]*[|—-]' "$GATE_LOG" 2>/dev/null | tail -1)"
+
+  if [ -z "$ROW" ]; then
+    echo "FAIL: no Check 14 row found in ${GATE_LOG#"$ROOT"/}" >&2
+    echo "      Check 15 cannot verify an assertion that was never recorded." >&2
+    exit 1
+  fi
+
+  say "gate log            : ${GATE_LOG#"$ROOT"/}"
+  say "last Check 14 row   : line ${ROW%%:*}"
+  say ""
+
+  SNAP_BUDGET="$(printf '%s\n' "$BUDGETS" | grep '^pipeline-snapshot.md|' | cut -d'|' -f2)"
+  ov="$(env_override pipeline-snapshot.md)"; [ -z "$ov" ] || SNAP_BUDGET="$ov"
+  CEILING=$(( SNAP_BUDGET + (SNAP_BUDGET * GRACE_PCT / 100) ))
+
+  # `26774 tok` / `26,774 tok`. Commas stripped before the comparison.
+  CITED="$(printf '%s\n' "$ROW" | grep -oE '[0-9][0-9,]*[[:space:]]*tok' | tail -1 \
+           | tr -d ', ' | sed 's/tok$//')"
+
+  if [ -z "$CITED" ]; then
+    echo "FAIL: the last Check 14 row cites no budget measurement." >&2
+    printf '      %s\n' "$(printf '%s' "$ROW" | cut -c1-160)" >&2
+    cat >&2 <<'EOF'
+
+      Check 14 must paste verdict.sh's line for
+      `validate-artifact-budget --only pipeline-snapshot.md` into its evidence
+      cell, and that line carries the measured token count.
+
+      A cell reading `-`, or `done after this entry`, or a bare
+      `PASS  validate-artifact-budget.sh`, records that nothing was measured --
+      not that the check passed. The two are indistinguishable afterwards, which
+      is the whole reason this arm exists.
+EOF
+    exit 1
+  fi
+
+  if printf '%s' "$ROW" | grep -q 'PASS' && [ "$CITED" -gt "$CEILING" ]; then
+    echo "FAIL: the last Check 14 row claims PASS while citing ${CITED} tok, past the ${CEILING} ceiling (budget ${SNAP_BUDGET} + ${GRACE_PCT}% grace)." >&2
+    echo "      A row cannot cite a breaching measurement and call itself passing." >&2
+    exit 1
+  fi
+
+  say "PASS  Check 14 evidence cell cites ${CITED} tok (budget ${SNAP_BUDGET}, ceiling ${CEILING})."
+  exit 0
+fi
 
 BREACH=0
 CHECKED=0
@@ -269,6 +410,7 @@ TMPROOT="$(mktemp -d 2>/dev/null)" || {
 trap 'rm -rf "$TMPROOT"' EXIT
 BREACH_FILE="$TMPROOT/breach"
 SCHEMA_FILE="$TMPROOT/schema"
+INFLIGHT_FILE="$TMPROOT/inflight"
 
 say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; under-counts 5-11% on this population)"
 say "project root        : ${ROOT}"
@@ -295,7 +437,10 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
     # Schema and budget are INDEPENDENT verdicts. An in-budget snapshot can still
     # carry an invented section (that is how the 296 one started), and the point
     # of checking here is to catch it while it is still cheap.
-    [ "$name" = "pipeline-snapshot.md" ] && check_snapshot_sections "$f" "$rel"
+    if [ "$name" = "pipeline-snapshot.md" ]; then
+      check_snapshot_sections "$f" "$rel"
+      check_inflight_rows "$f" "$rel"
+    fi
 
     if [ "$tokens" -gt "$ceiling" ]; then
       over=$(( tokens * 100 / budget ))
@@ -377,6 +522,33 @@ EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
 rm -f "$SCHEMA_FILE"
+
+# A THIRD independent verdict, for the same reason the schema one is separate: a
+# struck row is not "over budget", and sending the lead to `trim` would have it
+# shrink the prose around a row whose whole problem is that the row still exists.
+if [ -s "$INFLIGHT_FILE" ]; then
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ]; then
+    echo "WARN: In-Flight Teammates carries struck-through row(s)."
+  else
+    echo "FAIL: In-Flight Teammates carries struck-through row(s)." >&2
+  fi
+  cat "$INFLIGHT_FILE" >&2
+  cat >&2 <<'EOF'
+
+      Rows only. A row is DELETED when the teammate will not be messaged again --
+      never struck. gate-validation.md defines the section; _gate-procedures.md
+      step 3 reconciles it.
+
+      A teammate that has delivered but is still alive and re-messageable is not
+      history and does not need a strikethrough to say so: give its row
+      `status: idle-reusable`. That is what the column is for. Striking the row
+      instead keeps every byte, keeps growing, and loses the one fact the section
+      exists to carry -- who is actually outstanding.
+EOF
+  [ "$WARN_ONLY" -eq 1 ] || RC=1
+fi
+rm -f "$INFLIGHT_FILE"
 
 if [ "$RC" -eq 0 ]; then
   say ""

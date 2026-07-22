@@ -24,14 +24,36 @@
 #
 # OUTPUT
 #   PASS  <validator>
+#         <the measurement lines, verbatim, up to AI_DLC_VERDICT_LINES>
 #   FAIL  <validator>
 #         <the failing lines, verbatim, up to AI_DLC_VERDICT_LINES>
+#
+# A PASS LINE MUST CARRY EVIDENCE OF A RUN. It used to be `PASS  <validator>` and
+# nothing else -- content-free, and therefore derivable from the command alone.
+# That is not a theoretical hazard. Measured in the reference consumer at gate
+# `story-20260722T014002Z`: Check 14's evidence cell read
+#
+#     Budget validator: `PASS  validate-artifact-budget.sh` (exit 0).
+#
+# while the snapshot it names measured 126% of budget at the commit before that
+# gate and 212% at the commit after -- the validator exits 1 at both, and at every
+# commit in between. gate-validation.md Check 14 asks the lead to "paste the
+# validator's verdict line verbatim" and Check 15 rejects a cell that is `-` or "a
+# restatement like 'budget OK'". Both were satisfied by a string a lead can
+# transcribe out of the instruction without ever running anything.
+#
+# Every check that passed honestly at that same gate cited run-specific content:
+# `36 manifest ids / 36 anchors`, `digest=e1254177c37c8e23`, `1 block(s)` (was 0).
+# None of those can be written without the run. So: surface the validator's own
+# measurement on PASS, the same way failing lines are surfaced on FAIL. The cell
+# then carries a number, and a number joins -- against the file on disk, by the
+# reader or by a script.
 #
 # EXIT
 #   The validator's own exit code, unmodified. 64 for a usage error here.
 #
 # ENV
-#   AI_DLC_VERDICT_LINES   failing lines to echo on FAIL   (default 6)
+#   AI_DLC_VERDICT_LINES   lines to echo under a verdict     (default 6)
 #   AI_DLC_SCRIPTS_DIR     where validators live           (default: this dir)
 
 set -u
@@ -79,6 +101,18 @@ run_one() {
 
   if [ "$rc" -eq 0 ]; then
     echo "PASS  ${name}"
+    # Surface the measurement, not the transcript. The validators print their
+    # working; what belongs in a gate-log evidence cell is the line carrying the
+    # number they measured. `ok` / `warn` are validate-artifact-budget.sh's
+    # per-artifact lines; `OK:` and `PASS` are the other validators' summary
+    # forms.
+    #
+    # SILENCE IS A LEGITIMATE PASS. A validator that prints nothing matchable --
+    # or nothing at all, or was run --quiet -- still passed, and rendering that
+    # as an error or as empty output would break every caller that reads this as
+    # a verdict. The bare line above is the floor; these lines are additive.
+    ok_hits="$(grep -nE '^[[:space:]]*(ok|warn|OK:|PASS)' "$out" 2>/dev/null | head -n "$LINES")"
+    [ -z "$ok_hits" ] || printf '%s\n' "$ok_hits" | sed 's/^/      /'
   else
     echo "FAIL  ${name}  (rc=${rc})"
     # Surface the lines that carry the failure, not the whole transcript. If the
