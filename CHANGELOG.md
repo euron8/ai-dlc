@@ -17,6 +17,105 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.1] — 2026-07-22
+
+### Fixed — the update path placed only *changed* validators at the new location
+
+v0.126.0 moved core validators to `scripts/ai-dlc/` and verified it end-to-end through **`install.sh`**.
+The **`/ai-dlc-update`** path is different code, and it was broken.
+
+`preclassify.sh` enumerates `git diff --name-status BASE THEIRS -- core/` — only files that *changed*.
+On a 0.119.1 → 0.126.0 pull just five of the twenty-five validators changed, so the update would have
+written five files into `scripts/ai-dlc/` and left the other twenty behind — while every core reference
+now points at the new directory. Not a stale duplicate: a pipeline that breaks at the first gate calling
+a validator that was never written.
+
+`apply.sh` now places the full shipped set, **level-triggered** — the same reasoning `preclassify.sh`'s
+orphan pass already uses, that a relocation is a *state* of the consumer tree, not an event in upstream
+history. It cannot reuse that pass's `RELOCATIONS` table: every prefix there is a directory that is
+exclusively ours, and `scripts/` is shared (103 files in the reference consumer, 78 of them theirs), so
+the same walk would indict their tooling and call our own new copies orphans. The set is enumerated from
+THEIRS instead.
+
+### Changed — the old location is emptied, and the whole declared set is verified
+
+Idempotent, and it runs on every `/ai-dlc-update` rather than once at a migration.
+
+**Move, don't leave.** A leftover at the old path shadows nothing and nothing refreshes it, so it
+silently diverges from the file it is a copy of — the rot the pull exists to prevent. Both copies move.
+A copy that *differed* is announced by name first: it is a local edit to a core validator, made while
+the old layout permitted it, and it is the most important thing in the whole migration. The removal is
+recoverable (`git show HEAD:scripts/<name>`); the silence would not have been. The new location always
+holds THEIRS' content — a stale edit is never promoted over upstream's copy.
+
+**Then verify the set whole.** Not what this run touched — every file the manifest declares, whether
+just relocated, placed by the changed-files pass, already correct, or never examined. Presence *and*
+mode, because they fail differently and both fail silently: an absent validator makes its call site
+error, and a present non-executable one does too, but v0.70.1 showed that kind survives every
+content-diff verification looking green. A half-landed migration is the failure mode that matters here —
+the old path is empty now, so missing from the new path is missing full stop.
+
+**Silent in the steady state.** The second run over a migrated tree places nothing, moves nothing and
+says nothing about relocation. A process that keeps announcing a migration it already finished trains
+the operator to skim the report, which is how the rows that do matter get missed.
+
+### Fixed — a local edit at the old path became invisible
+
+Before the move, `map_consumer()` sent `core/scripts/X` to `scripts/X`, so an edited copy surfaced as a
+BOTH-CHANGED conflict. After it, that path maps to `scripts/ai-dlc/X`, which does not exist on an
+unmigrated consumer, so the file classifies as a clean ADD and the old copy is compared against nothing —
+and `unregistered-drift.sh` deliberately excludes `scripts/`. v0.126.0 removed the only detector that
+saw those edits without replacing it. The reference consumer has two such edits, one of them a real fix
+never filed upstream.
+
+`apply.sh` now reports them: one closed question per row, each *edited* copy on its own row because a
+bulk delete is exactly how an unread local change is destroyed. It never deletes.
+
+### Added — the exec bit is audited, not assumed
+
+`sync_mode_from_theirs()` derives the mode from `ls-tree` and chmods every file it writes, but with
+`|| true` — a failed chmod was silent, and nothing asserted the *result*. That is the v0.70.1 signature:
+`git show > file` is a shell redirect that takes the mode from the umask, the dispatch guard installed
+non-executable and **inert**, and every content-diff verification reported green over a file that could
+not run. Wired is not can-run, and a content check cannot tell the difference.
+
+Every file upstream ships as `100755` is now verified executable in the consumer tree after apply —
+level, not edge, so a file left non-executable by an *earlier* pull is still caught. A failure counts as
+a mechanical failure and **withholds the re-stamp**: a stamp asserting THEIRS over a tree whose
+validators cannot execute is the claim v0.70.1 showed is worse than no stamp, because the next pull
+bases its merge on it.
+
+### Changed — the manifest is the single declaration of both the set and the destination
+
+`apply.sh`'s relocation loop derives the validators *and where each one goes* from the `core_manifest`
+block, not from `ls-tree core/scripts`. The two yield the same 25 files — I5b binds them in both
+directions — but `ls-tree` answers only "what is shipped", leaving the destination to come from
+`map_consumer()`'s `scripts/ai-dlc/` prefix rule. That is a second statement of a path the manifest
+entries already spell out in full, and two statements drift the first time a relocation is half-applied.
+
+It reads `reconcile/setup-sites.md`, not `core-manifest.md`: the update skill's HARD CONSTRAINT is that
+it reads only its own `reconcile/` files, which is why that duplicate copy exists. I5 binds the copies.
+
+**`map_consumer()` deliberately stays a prefix mapper.** It must map arbitrary core paths — including
+`core/scripts/PROBE`, which I8 synthesises to test the mapping and which no manifest will ever contain.
+A lookup table cannot answer for a path that does not exist yet. So the manifest governs the
+level-triggered relocation; the general changed-files pass still maps by prefix, and I5b is what keeps
+the two consistent.
+
+A manifest yielding zero entries is reported and withholds the re-stamp rather than reading as "nothing
+to relocate" — the same posture as `install.sh` refusing to install zero validators. A file *declared*
+but absent from THEIRS is skipped, not failed: that is a distribution inconsistency I5b owns, and
+blocking a pull over it would punish the consumer for a defect they cannot fix.
+
+### Fixtures
+
+`apply-legacy-script-path/` — drives the real `apply.sh` against a synthetic pre-0.126.0 consumer with
+one untouched and one locally-edited validator, plus a consumer-owned script that must never be
+mentioned. Asserts placement, per-file reporting, that nothing is deleted, that the exec bit lands, that
+a `chmod -x`'d copy is caught by name and withholds the stamp, and a mutation control. Its first run
+caught the fixture's own dist blobs being committed 644, which would have made the exec-bit assertions
+vacuous; a setup guard now fails if that recurs. 51/51 fixtures.
+
 ## [0.126.0] — 2026-07-22
 
 > **Install-layout change.** Core validators move from `scripts/` to `scripts/ai-dlc/`.
