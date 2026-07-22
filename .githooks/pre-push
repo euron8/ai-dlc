@@ -46,6 +46,13 @@ step "enforcement-map integrity (I1-I11)" \
 step "no dead doc refs (core/ cites no unshipped dev-repo doc)" \
   bash scripts/validate-no-dead-doc-refs.sh
 
+# 1c. Three things name a release -- the commit subject, VERSION, and the CHANGELOG's
+#     top heading -- and until v0.125.0 nothing joined them. v0.124.1 was committed
+#     with a subject one patch ahead of both. Push is the right seam: it is the last
+#     point before the version becomes a claim other people read.
+step "release version triple (subject == VERSION == CHANGELOG heading)" \
+  bash scripts/validate-release-version.sh
+
 # 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident
 #    region sits within a few hundred tokens of the ceiling, so an edit above the fold
 #    can silently push the post-compact recovery protocol below it.
