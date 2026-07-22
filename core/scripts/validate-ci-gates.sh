@@ -30,9 +30,49 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RETRO_DIR="${REPO_ROOT}/docs/retro"
-WORKFLOW_DIR="${REPO_ROOT}/.github/workflows"
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of
+# `..` hops. This script runs from three layouts:
+#   <root>/core/scripts/X      distribution
+#   <root>/scripts/ai-dlc/X    consumer, v0.126.0+
+#   <root>/scripts/X           consumer, pre-v0.126.0
+# and no fixed hop count fits all three. v0.126.0 moved the validators one level
+# deeper, which silently turned every `dirname $0/..` root into <root>/scripts:
+# this script then found no docs/retro/, printed "Scanned 0 retros, 0 gates
+# declared, 0 dormant" and exited 0 — a check that could no longer fire, reading
+# exactly like one that passed.
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. Duplication is correct
+# here. core/fixtures/validator-path-resolution asserts both layouts agree.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$AI_DLC_ROOT" ] || {
+  echo "ERROR: cannot resolve the project root from ${AI_DLC_SELF_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 2
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
+REPO_ROOT="$AI_DLC_ROOT"
+RETRO_DIR="${AI_DLC_RETRO_DIR:-${REPO_ROOT}/docs/retro}"
+# The enforcement surface is tunable because it is not universal. A consumer whose
+# CI lives somewhere other than .github/workflows/ (a local pre-push runner, a
+# vendored pipeline dir) had only one way to keep this validator: fork it. Point
+# AI_DLC_CI_SURFACE at the directory that actually holds the gates instead.
+WORKFLOW_DIR="${AI_DLC_CI_SURFACE:-${REPO_ROOT}/.github/workflows}"
 
 if ! command -v grep >/dev/null 2>&1; then
   echo "ERROR: grep not available" >&2
@@ -44,11 +84,14 @@ if ! command -v find >/dev/null 2>&1; then
 fi
 
 if [ ! -d "${RETRO_DIR}" ]; then
-  echo "Scanned 0 retros, 0 gates declared, 0 dormant (no docs/retro/ directory)"
+  # Name the resolved root. A wrong root produces this same line, and without the
+  # path there is nothing on screen to tell "no retros" from "looked in the wrong tree".
+  echo "Scanned 0 retros, 0 gates declared, 0 dormant (no ${RETRO_DIR})"
   exit 0
 fi
 if [ ! -d "${WORKFLOW_DIR}" ]; then
-  echo "ERROR: .github/workflows/ directory missing" >&2
+  echo "ERROR: CI enforcement surface not found: ${WORKFLOW_DIR}" >&2
+  echo "  If this project's gates live elsewhere, set AI_DLC_CI_SURFACE to that directory." >&2
   exit 2
 fi
 

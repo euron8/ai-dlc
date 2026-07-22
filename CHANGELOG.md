@@ -17,6 +17,62 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.4] — 2026-07-22
+
+### Fixed — the v0.126.0 relocation broke path resolution in seven validators, and one failed OPEN
+
+v0.126.0 moved the core validators from `scripts/` to `scripts/ai-dlc/`. Seven of them derived the
+project root as `dirname($0)/..` — correct at `scripts/X`, and one level short at `scripts/ai-dlc/X`,
+where it resolves to `<root>/scripts`. Six then failed closed, loudly, unable to find their schema.
+`validate-ci-gates.sh` failed OPEN. Same tree, same script, same commit:
+
+```
+from scripts/         DORMANT: gate 'build' ...  Scanned 1 retros   rc=1
+from scripts/ai-dlc/  Scanned 0 retros, 0 gates declared, 0 dormant  rc=0
+```
+
+It scanned a directory that does not exist, found nothing wrong, and exited 0 — a dormant-gate
+detector that could no longer fire, reading exactly like one that passed.
+
+Each affected script now resolves its root by walking UP for a `.git`/`.claude` marker, never by a
+fixed number of `..` hops, so all three layouts work: `core/scripts/X` (distribution),
+`scripts/ai-dlc/X` (consumer, v0.126.0+) and `scripts/X` (consumer, before it). The resolver is
+inline and duplicated in every script that needs it, on purpose — a shared lib cannot fix this,
+because locating the lib is the same unsolved problem.
+
+Affected: `validate-ci-gates.sh`, `sprint-status.sh`, `stamp-story-provenance.sh`,
+`sync-taught-schema.sh`, `validate-audit-anchors.sh`, `validate-gate-adjudication.sh`,
+`validate-provenance-block.sh`.
+
+### Added — `core/fixtures/validator-path-resolution`
+
+Runs every core validator from BOTH `scripts/` and `scripts/ai-dlc/` in one installed-consumer tree
+and requires identical exit code and output. No existing fixture could have caught this: all 51 of
+them invoke validators from the distribution layout with an explicit `--root`, which is precisely
+what makes self-location irrelevant.
+
+The list of scripts under test is derived from the directory, never hand-written, and that mattered
+immediately — a hand investigation had found four affected scripts, and running the comparison over
+the whole directory found three more.
+
+Agreement alone would pass trivially for a script that never consults its own location, so each
+script is also run with `AI_DLC_PROJECT_ROOT` pointed at `<root>/scripts` — the exact wrong answer
+the old code computed. A script whose output is unchanged by that is reported as not path-sensitive,
+and the seven known-affected ones are required to be sensitive.
+
+### Added — `AI_DLC_CI_SURFACE` and `AI_DLC_RETRO_DIR` on `validate-ci-gates.sh`
+
+The validator hard-required `.github/workflows/`. A consumer whose CI gates live anywhere else had
+exactly one way to keep the check: fork it — and a forked enforcer is an unguarded one. The missing-
+directory error now names the tunable instead of just the path.
+
+### Changed — the core guard no longer promises tunables that mostly do not exist
+
+`ai-dlc-core-guard.sh` told a consumer to "configure it through its declared `AI_DLC_*` env
+tunables". Ten of the twenty-four validators have none. The deny text now points upstream as the
+primary remedy and says to grep the file before assuming a knob exists — a promised tunable that is
+not there is how a consumer ends up forking the enforcer.
+
 ## [0.126.3] — 2026-07-22
 
 ### Fixed — the v0.126.0 evidence overstated its own count

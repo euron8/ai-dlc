@@ -35,21 +35,52 @@
 
 set -uo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DEFAULT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of
+# `..` hops. This script runs from three layouts:
+#   <root>/core/scripts/X      distribution
+#   <root>/scripts/ai-dlc/X    consumer, v0.126.0+
+#   <root>/scripts/X           consumer, pre-v0.126.0
+# and no fixed hop count fits all three. v0.126.0 moved the validators one level
+# deeper, which silently turned every `dirname $0/..` root into <root>/scripts —
+# here that put .claude/schemas/ out of reach and every invocation failed closed.
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. Duplication is correct
+# here. core/fixtures/validator-path-resolution asserts both layouts agree.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
+SCRIPT_DIR="$AI_DLC_SELF_DIR"
 
 # Resolve the schema in both layouts (distribution core/schemas, consumer .claude/schemas), with an
 # env override for tests. No built-in copy: if it cannot be found we fail closed, never guess.
+# Script-relative first — that is the package this copy shipped in — then the resolved root.
 if [ -n "${AI_DLC_SPRINT_STATUS_SCHEMA:-}" ] && [ -f "${AI_DLC_SPRINT_STATUS_SCHEMA}" ]; then
   SCHEMA="$AI_DLC_SPRINT_STATUS_SCHEMA"
 elif [ -f "$SCRIPT_DIR/../schemas/sprint-status.json" ]; then
   SCHEMA="$(cd "$SCRIPT_DIR/../schemas" && pwd)/sprint-status.json"
-elif [ -f "$ROOT_DEFAULT/.claude/schemas/sprint-status.json" ]; then
-  SCHEMA="$ROOT_DEFAULT/.claude/schemas/sprint-status.json"
+elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/core/schemas/sprint-status.json" ]; then
+  SCHEMA="$AI_DLC_ROOT/core/schemas/sprint-status.json"
+elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/.claude/schemas/sprint-status.json" ]; then
+  SCHEMA="$AI_DLC_ROOT/.claude/schemas/sprint-status.json"
 else
   echo "sprint-status: FAIL — cannot find schemas/sprint-status.json (the source of truth; this" >&2
   echo "  script has no built-in copy and will not guess). Looked in $SCRIPT_DIR/../schemas/ and" >&2
-  echo "  $ROOT_DEFAULT/.claude/schemas/." >&2
+  echo "  ${AI_DLC_ROOT:-<unresolved project root>}/{core,.claude}/schemas/." >&2
   exit 1
 fi
 
