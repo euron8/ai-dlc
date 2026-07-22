@@ -284,9 +284,9 @@ fi
 #     that has not moved yet, that path does not exist, so the file classifies as a
 #     clean ADD. The copy at scripts/X is no longer compared against anything.
 #   - unregistered-drift.sh deliberately excludes scripts/ ("an edit breaks LOUDLY,
-#     not silently"). That premise was already thin -- the reference consumer had
-#     TWO edited validators nobody noticed for months -- and after the move nothing
-#     scans the old path at all.
+#     not silently"). That premise was already thin -- the reference consumer had a
+#     validator 160 lines diverged from upstream, silently, until it was diffed by
+#     hand -- and after the move nothing scans the old path at all.
 #
 # Before the move, an edited scripts/X surfaced as a BOTH-CHANGED conflict. Losing
 # that without replacing it would turn a real local change into an orphan: not

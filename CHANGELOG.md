@@ -17,6 +17,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.3] — 2026-07-22
+
+### Fixed — the v0.126.0 evidence overstated its own count
+
+The v0.126.0 and v0.126.1 notes say the reference consumer had **two** locally edited core validators.
+It had **one**. `validate-artifact-budget.sh` was genuinely 160 lines diverged, carrying a whole
+derivation nothing upstream knew about — that one is real, and it is the evidence the boundary rests on.
+`validate-reattach-budget.sh` was not: it is byte-identical to core HEAD. Upstream had made the same
+`CEILING`-vs-`BUDGET` slack fix independently in v0.120.0, three releases after the consumer's stamped
+0.119.1.
+
+**How the miscount happened is the part worth keeping.** The consumer was diffed against its *stamped
+base*, which answers "does this tree differ from what it was given" — not "does it differ from what
+upstream has now". Those are different questions, and the first reports every local change **and** every
+upstream change the consumer has not yet pulled, identically. A file the consumer is merely behind on
+reads exactly like a file the consumer has edited.
+
+Corrected in `apply.sh`, `install.sh` and `apply-legacy-script-path/run.sh`, each of which cited the
+number as evidence. The earlier CHANGELOG entries are left as written — they are the record of what was
+believed at the time, and this entry is the correction.
+
+**Nothing about the v0.126.0 boundary changes.** `scripts/*` was absent from `core-manifest.md`
+regardless of how many files had been edited through the gap, and one 160-line silent divergence makes
+the case as well as two would have.
+
 ## [0.126.2] — 2026-07-22
 
 ### Changed — a local edit to a core validator is overwritten, not adjudicated
