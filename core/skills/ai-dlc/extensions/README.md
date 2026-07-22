@@ -40,6 +40,35 @@ and the owning reader resolves the file by name.
   adding a skill name to the core schema in place — which `/ai-dlc-update` flags as
   `HARD-UNREGISTERED-CORE-DRIFT` (schemas are drift-scanned as of v0.63.2).
 
+- **`protected-paths.json`** — consumer paths that must load VERBATIM, i.e. that
+  `ai-dlc-protect.sh` must stop context-mode from consolidating. Core protects the rulebook
+  (skill, roles, schemas, `CLAUDE.md`, coding conventions) and the pipeline artifacts it
+  itself defines (snapshot, gate log, escalations, audit anchors, sprint status, stories).
+  It cannot protect *your* source-of-record locations without shipping one project's
+  vocabulary to every other consumer — a project that keeps its architecture SoR at
+  `docs/architecture.md` declares that here:
+
+  ```json
+  {
+    "protected_paths": ["docs/architecture.md", "docs/architecture-index.md"],
+    "excluded_paths":  ["docs/architecture-drafts/*"]
+  }
+  ```
+
+  Both keys optional, string arrays, unioned with the core sets. Entries are matched as
+  globs against a project-relative path, so `docs/adr/*.md` works; `excluded_paths` wins
+  over `protected_paths` and is how you carve an archive back out. A present-but-malformed
+  file fails **closed** — every path the call carries is denied, with the filename in the
+  reason — because a broken layer file must never silently degrade to the core-only set.
+  Calls carrying no path still pass, so a typo cannot wedge the session.
+
+  What NOT to put here: the planning corpus (`prd.md`, `architecture.md` when it is a
+  generated index, `product-brief.md`, `carry-over-backlog.md`) if its byte-exactness is
+  already enforced script-side. Rule 24 exists to offload exactly those files, and
+  `validate-locked-anchor.sh` resolves every `full_text_source:` against the SoR on disk,
+  so a consolidated read cannot forge a passing anchor. Protect what a *model* must quote
+  verbatim, not what a *script* already byte-checks.
+
 ## Entry contract
 
 Each entry is a markdown file that declares, in frontmatter, where it hooks into

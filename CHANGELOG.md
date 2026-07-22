@@ -17,6 +17,89 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.122.0] — 2026-07-22
+
+### Added — the verbatim-load guard was frozen at the v0.23.0 file tree
+
+`PROTECTED_PATTERNS` in `ai-dlc-protect.sh` had not been edited since the hook returned in
+v0.23.0. Ninety-nine releases later it still protected the v0.23.0 set — rule files, snapshot,
+gate log, escalations — while every byte-enforced artifact added since was consolidatable:
+
+| artifact | landed | what a consolidated read costs |
+|---|---|---|
+| `_bmad-output/audit-anchors.md` | v0.69.0 | an anchor IS its bytes; nothing byte-checks a *quoted* one |
+| `planning-artifacts/stories/*.md` | v0.40.0 | the AC text the dev implements from |
+| `sprint-status.yaml` (both homes) | v0.75.0 | schema-validated machine state read as prose |
+| `.claude/schemas/*.json` | v0.60.0 | v0.60.0's whole premise is one schema, read not paraphrased |
+
+All five now protected. `ctx_index` joins the matcher: it consolidates like the other two and
+then *persists* the result into an FTS base that outlives the session and comes back through
+`ctx_search` reading authoritative.
+
+### Added — `extensions/protected-paths.json`, a consumer carve-out
+
+Core protects the rulebook and the artifacts core itself defines. It cannot name a consumer's
+own sources of record without shipping one project's vocabulary to every other consumer — the
+reference consumer keeps its architecture SoR at `docs/architecture.md`, which core has no way
+to know. Consumers declare theirs in a data extension, in the sense `extensions/README.md`
+already defines for `known-skills.json`: `{"protected_paths":[…],"excluded_paths":[…]}`, unioned
+with the core sets, malformed fails **closed** with the filename in the reason. A call carrying
+no path still passes — a typo in the layer file must not wedge the session.
+
+### Fixed — three ways a protected file reached context-mode anyway
+
+Found by auditing 376KB of the reference consumer's own protection log across s289–s296. Each
+of these is a real logged `allowed` line, and each is now an assertion in the fixture:
+
+- **Worktree fail-open.** The guard stripped a literal `$CLAUDE_PROJECT_DIR` prefix, so any
+  absolute path not sharing the project root's exact spelling matched nothing.
+  `/Users/n8/git/graph-s288-story-p1/docs/coding-conventions.md` was allowed while the same
+  file under the main root denied — on a consumer running ~100 story worktrees. Paths are now
+  anchored on the trailing root segment, which also absorbs symlinked roots (`/tmp` vs
+  `/private/tmp`) with no `realpath` on a path that may not exist.
+- **A glob spanning a protected file.** `cat …/gate-log*.md` expands inside the sandbox to
+  include the live gate log; the literal token equals no pattern, so a one-directional match
+  waved it through. Matching is now bidirectional.
+- **A bare directory reference.** `wc -l .claude/skills/ai-dlc`, and `ctx_index` on a
+  directory, read the whole rulebook while naming no file. Directory references are blocked for
+  `.claude/` patterns only — an artifact-directory sweep (`planning-artifacts/`, `stories/`) is
+  precisely the Rule 24 offload and stays allowed.
+
+### Fixed — the batch arm's path extraction was a second, hand-kept list
+
+It recognized four hardcoded prefixes. Any pattern added outside them was enforced on the
+`ctx_execute_file` arm and invisible on the `ctx_batch_execute` arm — a guard that reads as
+covering a path it cannot see. The alternation is now derived from `PROTECTED_PATTERNS`, so the
+consumer layer extends both arms at once.
+
+### Fixed — `ROOT_SEGMENTS` would have made all of the above moot
+
+bash 3.2 — the macOS system bash every consumer runs — errors on `"${arr[@]}"` for an *empty*
+array under `set -u`. The hook's only failure mode is silent: a non-zero exit emits no decision,
+the tool proceeds, and the log records nothing. Caught in development when the first draft did
+exactly that; the segment list is a space-delimited string for that reason, and the fixture pins
+the exit code on every arm.
+
+### Decided — archives and the planning corpus stay offloadable
+
+`prd.md` (116 consolidations in the audited window), `product-brief.md` (105) and
+`carry-over-backlog.md` (118) are the largest read surface in the pipeline and Rule 24 exists to
+keep them out of the lead. Their byte-exactness claims are enforced **script-side** —
+`validate-locked-anchor.sh` resolves every `full_text_source:` against the SoR on disk — so a
+consolidated read cannot forge a passing anchor. Protecting them would have cost hundreds of
+native Reads for no fidelity gain. Archives (`*-archive-*.md`, `*.archive.*`, `*-history.md`,
+`pre-ai-dlc/`) are the retro's analysis corpus and are now excluded *by decision* rather than by
+accident of pattern spelling: they were allowed only because `gate-log-archive-s287.md` happens
+not to equal `gate-log.md`, which would have silently reversed the moment a pattern widened.
+
+### Added — `core/fixtures/context-mode-protect/`
+
+The hook had shipped for 99 releases with no fixture. 36 assertions over both decisions, all
+three tool arms, the layer file (valid, malformed, absent), and the exit code. Verified
+falsifiable: six independent mutations of the hook — dropping the glob test, the directory test,
+the suffix anchoring, `ctx_index` from the matcher, the derived alternation, and fail-closed —
+each kill it.
+
 ## [0.121.1] — 2026-07-21
 
 ### Fixed — retro announced the pipeline finished with four sub-steps still pending
