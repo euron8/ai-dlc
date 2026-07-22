@@ -40,24 +40,57 @@ set -uo pipefail
 MODE="sync"
 [ "${1:-}" = "--check" ] && MODE="check"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of
+# `..` hops. This script runs from three layouts:
+#   <root>/core/scripts/X      distribution
+#   <root>/scripts/ai-dlc/X    consumer, v0.126.0+
+#   <root>/scripts/X           consumer, pre-v0.126.0
+# and no fixed hop count fits all three. v0.126.0 moved the validators one level
+# deeper, which silently turned every `dirname $0/..` root into <root>/scripts —
+# here that put .claude/schemas/ out of reach and every invocation failed closed.
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. Duplication is correct
+# here. core/fixtures/validator-path-resolution asserts both layouts agree.
+ai_dlc_resolve_root() {
+    local d="$1"
+    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+        if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+            printf '%s\n' "$d"; return 0
+        fi
+        d="$(dirname "$d")"
+    done
+    return 1
+}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$SCRIPT_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+# --- end AI_DLC_ROOT --------------------------------------------------------
 
 # Two layouts, and the script must work in both:
-#   distribution — core/scripts/  alongside core/schemas/,  core/skills/,  core/team-roles/
-#   consumer     — scripts/       alongside .claude/schemas/, .claude/skills/, .claude/team-roles/
-# In the distribution ROOT is core/; in a consumer ROOT is the repo root. Resolve relative to
-# the SCRIPT's own directory, which is the one thing true in both.
+#   distribution — core/scripts/ alongside core/schemas/,  core/skills/,  core/team-roles/
+#   consumer     — the schemas and docs sit under .claude/ at the project root
+# Script-relative first: that is the package THIS copy shipped in, and it is the one
+# answer that stays right no matter where the package as a whole was installed.
 if [ -f "$SCRIPT_DIR/../schemas/provenance-block.json" ]; then
     SCHEMA="$(cd "$SCRIPT_DIR/../schemas" && pwd)/provenance-block.json"
+    ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
     DOC_DIRS=("$ROOT/skills" "$ROOT/team-roles")
-elif [ -f "$ROOT/.claude/schemas/provenance-block.json" ]; then
-    SCHEMA="$ROOT/.claude/schemas/provenance-block.json"
+elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/core/schemas/provenance-block.json" ]; then
+    SCHEMA="$AI_DLC_ROOT/core/schemas/provenance-block.json"
+    ROOT="$AI_DLC_ROOT/core"
+    DOC_DIRS=("$ROOT/skills" "$ROOT/team-roles")
+elif [ -n "$AI_DLC_ROOT" ] && [ -f "$AI_DLC_ROOT/.claude/schemas/provenance-block.json" ]; then
+    SCHEMA="$AI_DLC_ROOT/.claude/schemas/provenance-block.json"
+    ROOT="$AI_DLC_ROOT"
     DOC_DIRS=("$ROOT/.claude/skills" "$ROOT/.claude/team-roles")
 else
     echo "sync-taught-schema: FAIL — cannot find schemas/provenance-block.json." >&2
     echo "  The schema is the source of truth; this script has no built-in copy and will not" >&2
-    echo "  guess. Looked in: $SCRIPT_DIR/../schemas/ and $ROOT/.claude/schemas/" >&2
+    echo "  guess. Looked in: $SCRIPT_DIR/../schemas/ and" >&2
+    echo "  ${AI_DLC_ROOT:-<unresolved project root>}/{core,.claude}/schemas/" >&2
     exit 1
 fi
 

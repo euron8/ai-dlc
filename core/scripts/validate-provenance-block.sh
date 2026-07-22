@@ -56,8 +56,35 @@ if [[ ! -f "$ARTIFACT_PATH" ]]; then
     exit 1
 fi
 
-PB_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PB_ROOT="$(cd "$PB_SCRIPT_DIR/.." && pwd)"
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of
+# `..` hops. This script runs from three layouts:
+#   <root>/core/scripts/X      distribution
+#   <root>/scripts/ai-dlc/X    consumer, v0.126.0+
+#   <root>/scripts/X           consumer, pre-v0.126.0
+# and no fixed hop count fits all three. v0.126.0 moved the validators one level
+# deeper, which silently turned every `dirname $0/..` root into <root>/scripts —
+# here that put both the schema and the known-skills extension out of reach.
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. Duplication is correct
+# here. core/fixtures/validator-path-resolution asserts both layouts agree.
+ai_dlc_resolve_root() {
+    local d="$1"
+    while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+        if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+            printf '%s\n' "$d"; return 0
+        fi
+        d="$(dirname "$d")"
+    done
+    return 1
+}
+PB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PB_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$PB_ROOT" ] || PB_ROOT="$(ai_dlc_resolve_root "$PB_SCRIPT_DIR" || true)"
+[ -n "$PB_ROOT" ] || PB_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$PB_ROOT" ] || PB_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+PB_ROOT="${PB_ROOT:-/nonexistent}"
+# --- end AI_DLC_ROOT --------------------------------------------------------
 
 SCHEMA=""
 for cand in \
