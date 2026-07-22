@@ -31,11 +31,13 @@ When a step file says "run sub-step snapshot update", execute:
    `docs/escalations/pending.md` and any open triage items.
 3. Reconcile **In-Flight Teammates**: add a row for every teammate
    dispatched since the last update (`agent name | role | deliverable
-   path | dispatched-at`) — the deliverable path is COPIED FROM THE BRIEF,
-   which Rule 20 requires to name it, never invented here to fill the cell
-   — and **DELETE** every row whose deliverable has
-   been consumed. Rows only — no prose, no struck-through history. A
-   consumed teammate is not in flight. This section must be written **at
+   path | dispatched-at | status`, `status: in-flight`) — the deliverable
+   path is COPIED FROM THE BRIEF, which Rule 20 requires to name it, never
+   invented here to fill the cell. When a deliverable is consumed, set that
+   row's `status` to `idle-reusable` if the teammate is still alive and you
+   may message it again, and **DELETE** the row outright once you will not.
+   Rows only — no prose, no struck-through history; `status` is how a row
+   says it has delivered. This section must be written **at
    dispatch**, not only at the transition that follows it — a teammate
    dispatched and compacted-over before its row is written is exactly the
    teammate the lead will re-dispatch blind.

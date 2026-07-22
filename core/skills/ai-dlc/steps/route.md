@@ -393,8 +393,10 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
   - Open Items (empty)
   - Locked Decisions (empty)
   - In-Flight Teammates (empty table, header row only:
-    `agent | role | deliverable | dispatched-at`; rows are added at
-    dispatch and struck at join)
+    `agent | role | deliverable | dispatched-at | status`; rows are added
+    at dispatch as `in-flight`, become `idle-reusable` at join if the
+    teammate may still be messaged, and are deleted — never struck — once
+    it will not be)
   - Context Reminders (initialized here; the `ai-dlc-context-sensor.sh`
     hook owns runtime firing and dedupe in its own sidecar, and Check 14
     reconciles these fields from it at each gate):

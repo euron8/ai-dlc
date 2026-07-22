@@ -17,6 +17,184 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.124.1] — 2026-07-22
+
+### Fixed — the resident path carried the incident, not the rule
+
+Self-review against Rule 26(c) resident-path discipline. `gate-validation.md` is whole-re-read at
+every gate and after every compaction, so what it carries is paid for on every load. Three of the
+four step-file edits in 0.123.0 were clean mechanism; this one was not.
+
+Check 15's evidence bullet had grown 17 lines, 9 of them the S296 incident: which gate, what the
+snapshot measured before and after, why the old PASS format was transcribable. None of it changes
+what the lead does — run the command, exit 1 fails the check — and all of it was already in the
+validator's own header comment and this changelog, neither of which costs context.
+
+Worse than verbose: **it quoted the fabricated cell verbatim.** A gate instruction that prints the
+exact string a lead can write *instead of* running the check is priming, in the file the lead reads
+immediately before writing that cell. Same class as "a deletion imperative in a role file primes
+deletion". Deleted.
+
+The In-Flight Teammates bullet lost 8 lines of the same kind. The schema, the two `status` values,
+when each applies, and the fact that the validator fails on a struck row all stay — that is the part
+that changes what gets written.
+
+`gate-validation.md`: 36 added lines → 19. Across all four step files, 0.123.0–0.124.1 now adds 32
+lines to the resident path, every one of them mechanism.
+
+Also corrects an overclaim in the `--check-evidence` header, which presented both predicates as
+measured. Predicate 2 (a row claiming PASS while citing a breaching number) has never been observed;
+predicate 1 caught every real failure. It stays because it costs nothing and needs no constant, and
+the comment now says so rather than letting a later reader take it for a failure that happened.
+
+No behaviour change: 48/48 fixtures, enforcement-map green, live consumer output unchanged.
+
+## [0.124.0] — 2026-07-22
+
+### Changed — the planning-artifact budget is derived from its reader, and the reader's window is resolved
+
+Absorbed from the reference consumer, which derived this at S290 (`8d6396e4`) and has run it since.
+
+The four planning artifacts carried per-file budgets of 60000/60000/40000/60000 tokens with no
+derivation: no ADR, no measurement, no named reader, and a per-artifact env override. A physical
+limit does not ship with an override flag. Asked "is 60K a true hard line?", nobody could say.
+
+That mattered because the gate they back is a HARD_BLOCK at sprint start over artifacts holding
+LOCKED requirements (Rule 13) that no rule retires. Growth is monotonic by construction, so the
+gate was eventually unpassable — and its standing remedy was to relocate locked requirements
+governing live capital to satisfy a number nobody derived. In the reference consumer that
+relocation ran at S242, S247 and S274; it grew back every time.
+
+Exactly one agent whole-reads the four: the Rule-24 analyst at `carry-over-evaluation.md` §1
+(Rule 25(b)). The lead only slice-reads. So the binding quantity is the **sum** against **one**
+context window, not four per-file limits that bounded nothing real:
+
+    WHOLE_READ_POOL = <analyst window> × 33%
+
+The 33% is the single judgement call and is stated in the script rather than hidden in a constant.
+Four underived constants become one derived one, and it still binds: the consumer's four currently
+sum to 351,677 against a 330,000 pool — 106%, warning inside the grace band.
+
+**The window is resolved, not inherited — this is the part that is core's and not the consumer's.**
+The consumer wrote 1,000,000 in as a literal with a comment telling a human *"if that model line
+changes, THIS NUMBER CHANGES. Re-derive; do not inherit."* Core cannot execute an instruction to a
+human, and the number is not core's to take: core ships `team-roles/analyst.md` as a **template**
+(`{analyst_model_personal}`) that setup fills per project. Shipping 1,000,000 to everyone would
+hand a 200K-window analyst a pool 1.65× its entire context — a fail-open at a HARD_BLOCK, on the
+one gate that exists to stop the analyst blowing its window a step later.
+
+`resolve_reader_window()` reads the `- Personal:` line and matches Claude Code's own `[1m]`
+suffix — the thing that actually selects the window — rather than a model-name table, which is a
+hand-maintained list that goes stale silently. **Unresolved falls back to 200,000, never to the
+larger number.** An unfilled template, a missing role file and an unrecognised model all mean "we
+do not know", and unknown must tighten a HARD_BLOCK rather than open it. The pool line names its
+own source so an operator-raised pool is never confused with a derived one.
+
+Verified byte-identical to the consumer's own copy against its live tree (`351677 tok  (pool
+330000, 106%)`), and a fresh install with an unfilled template resolves to 66,000.
+
+Also absorbed: the `consolidate` remedy text now says the pool breaches as a **sum**, so the remedy
+is chosen across the four rather than per file — and that raising the pool is not a remedy. The
+ratchet is priced honestly, not stopped; Rule 13 locks requirements and nothing retires them, so
+the sum can only rise. The cure is a retirement path for locked requirements.
+
+### Fixtures
+
+`whole-read-pool/` — window resolution in four directions ([1m], plain, unfilled template, missing
+file), the pool binding in both directions, `--only pipeline-snapshot.md` not dragging the pool
+into a mid-sprint gate, and no per-file planning budget surviving. Its mutation control flips
+**both** fallback sites; the first draft flipped one and the assertion correctly refused to pass.
+48/48 fixtures.
+
+## [0.123.0] — 2026-07-22
+
+### Fixed — a gate cited a passing budget check that had failed at every commit around it
+
+v0.118.0 made the snapshot's seven-section schema a closed set and required Check 14 to paste the
+budget validator's verdict into its evidence cell. Reviewing the same consumer eight days later,
+mid-sprint: the closed-set check is green at every single commit and the snapshot went from 26 KB
+to 107 KB in fourteen hours.
+
+| commit | sections | measured | validator |
+|---|---|---|---|
+| reconcile landing v0.118.0–0.119.1 | 7 | 132% of budget | exit 1 |
+| +5h | 7 | 212% | exit 1 |
+| +13h | 7 | 418% | exit 1 |
+| live | 7 | 446% | exit 1 |
+
+The check works and is inert: the invention relocated *inside* the seven, which is the failure its
+own remedy string warns about. Nothing stopped it because the one gate that measured it recorded
+the opposite of what it measured. At gate `story-20260722T014002Z`, Check 14's evidence cell read
+
+    Budget validator: `PASS  validate-artifact-budget.sh` (exit 0).
+
+against a snapshot measuring 126% of budget at the commit before that gate and 212% at the commit
+after.
+
+**`verdict.sh`'s PASS line was content-free.** `PASS  <validator>` is derivable from the command
+alone, so "paste the verdict line verbatim" (Check 14) and "not `—`, not a restatement" (Check 15)
+were both satisfiable by transcribing the instruction. Every check that passed honestly at that
+same gate cited run-specific content — `36 manifest ids / 36 anchors`, `digest=e1254177c37c8e23`,
+`1 block(s)`. Check 14's requirement was the only one that could be met without the run.
+
+`verdict.sh` now surfaces the validator's own measurement under a PASS, the way it already
+surfaces failing lines under a FAIL. A silent validator still renders `PASS` — the lines are
+additive, never required. Every `verdict.sh` caller gains a citable number.
+
+### Added — `validate-artifact-budget.sh --check-evidence`, wired at Check 15
+
+Check 14 ran the budget check and recorded its own result; Check 15 verified that record by
+reading the same record. Two predicates, both derivable from the row alone: the cell must carry a
+token measurement, and a row claiming PASS may not cite a number past the ceiling. Scoped to the
+**last** Check 14 row — gate logs are append-only and hold years of rows written under older
+rules, and an arm that indicts them retroactively gets turned off rather than obeyed.
+
+It deliberately does **not** join the cited number against the snapshot on disk: that needs a
+drift tolerance, a tolerance is a fitted constant, and every observed failure cited no number at
+all.
+
+### Fixed — core contradicted itself on struck-through teammate rows, two homes to two
+
+`gate-validation.md` and `_gate-procedures.md` said a row is DELETED at join with "no
+struck-through history". `route.md` — the file that *creates* the section, so the schema a lead
+reads first — and `implementation.md` both said rows are "struck at join". The consumer's live
+snapshot carried 7 struck rows. That was route.md compliance, not disobedience. The losing prose
+is deleted, not reconciled with a new sentence.
+
+### Added — `status` on the In-Flight Teammates row, and a struck-row verdict
+
+That section had grown to 29.7 KB: 10 rows and **302 lines of prose**, 28% of the snapshot, inside
+a canonical section where the closed-set check cannot see it — the `Teammate Ledger (detail)`
+v0.118.0 deleted, re-grown in a legal home. The prose was bookkeeping for re-messaging a teammate
+that had already delivered instead of re-spawning it, and `grep -rn SendMessage core/skills/ai-dlc/`
+returned nothing. A state the protocol will not model is a state the lead models in prose.
+
+The row is now `agent | role | deliverable | dispatched-at | status`, `status ∈ {in-flight,
+idle-reusable}`. `wait-for-deliverable.sh` takes targets as arguments and does not parse the table,
+so nothing mechanical reads the extra column.
+
+A third independent verdict in `validate-artifact-budget.sh` fails on a struck row — separate from
+bytes and from the schema, because a struck row is not "over budget" and `trim` is the wrong
+remedy. **Strikethrough only.** A prose-line cap was measured across 25 historical snapshots and
+rejected: all 25 carry In-Flight prose (1–8 lines), so the cap needed a constant fitted to sit
+between them and the violations. Struck rows: 0 in all 25, 7 in the live file. The prose is priced
+by bytes, and the reason it was written is removed by the column.
+
+### Rejected — a per-section byte budget
+
+The obvious answer to growth-inside-the-seven, and wrong. It needs seven underived constants, and
+this file's own budget table had to unwind exactly that mistake once. More decisively: the
+file-level number fired correctly at every commit above. The defect was a true FAIL recorded as a
+PASS, not a check that was too coarse.
+
+### Fixtures
+
+`verdict-pass-content/`, `snapshot-evidence-cell/` (asserts the S296 cell string verbatim), and
+`inflight-row-shape/`. Each carries the KISS differential control: strip the new code from a copy
+of the script and require the same input to go green. 47/47 fixtures pass, `validate-enforcement-map.sh`
+sees all three in both the install and uninstall loops, and all three run green from the consumer
+layout with their exec bits intact.
+
 ## [0.122.0] — 2026-07-22
 
 ### Added — the verbatim-load guard was frozen at the v0.23.0 file tree

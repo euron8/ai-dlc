@@ -641,11 +641,33 @@ non_catalog_units:
         posture: FAILS the gate (pipeline-snapshot.md only)
         why: the snapshot is the only artifact that grows WITHIN a sprint, and it is
           whole-read at every gate, every resume, and every compaction
+      - site: gate-validation.md Check 15 (--check-evidence)
+        posture: FAILS the gate
+        why: Check 14 runs the budget check and records its own result, so the
+          record was the only evidence the record was true. It failed that way — a
+          Check 14 cell read "PASS validate-artifact-budget.sh (exit 0)" at a gate
+          where the snapshot measured 126% of budget before it and 212% after. The
+          arm requires the cell to carry the measurement, which verdict.sh now puts
+          in its PASS line and which cannot be transcribed out of the instruction.
       - site: retro.md Close-Out Sweep
         posture: warn-only
         why: the sprint already paid; retro reports, it does not gate
+    fixtures:
+      - tests/fixtures/snapshot-section-schema
+      - tests/fixtures/snapshot-evidence-cell
+      - tests/fixtures/inflight-row-shape
+      - tests/fixtures/verdict-pass-content
+      - tests/fixtures/whole-read-pool
     supersedes: the retro.md prose threshold table, which was warn-only, fired only
-      at retro, and drifted from nothing because nothing else executed it
+      at retro, and drifted from nothing because nothing else executed it; and the
+      four per-file planning-artifact constants (prd/product-brief/carry-over-backlog/
+      architecture), which had no derivation and whose standing remedy was to relocate
+      locked requirements to satisfy them. Replaced by ONE derived number: the four are
+      whole-read by exactly one reader (the Rule-24 analyst at carry-over-evaluation
+      section 1), so the bound is their SUM against that reader's window. The window is
+      resolved from team-roles/analyst.md at run time and falls back to 200K when
+      unresolved — core ships that role file as a template, and inheriting the
+      reference consumer's 1M would fail this HARD_BLOCK open for everyone else.
 
   - id: steering-budget
     title: Operator steerability (Rule 29) — no foreground call may outlast the

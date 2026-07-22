@@ -672,15 +672,19 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
 - **Locked Decisions** — locked requirements and human-flagged direction
   changes the lead accepted; append any new ones confirmed during this
   gate.
-- **In-Flight Teammates** — one row per dispatched teammate not yet
-  joined: `agent name | role | deliverable path | dispatched-at`. A row
-  is added at dispatch and **DELETED at join** (see `_gate-procedures.md`
-  "Sub-step snapshot update"). An empty table is normal and means nothing
-  is in flight.
-  **Rows only. No prose, no struck-through history.** A consumed teammate
-  is not in flight; Recent Activity and the gate log already record that
-  it delivered. The section is bounded by the teammates actually
-  outstanding.
+- **In-Flight Teammates** — one row per teammate the lead may still need
+  to reach: `agent name | role | deliverable path | dispatched-at |
+  status`, where `status` is `in-flight` or `idle-reusable`. A row is
+  added at dispatch as `in-flight`; at join it becomes `idle-reusable`
+  if the teammate is still alive and may be messaged again, and is
+  **DELETED** once it will not be (see `_gate-procedures.md` "Sub-step
+  snapshot update"). An empty table is normal and means nothing is in
+  flight.
+  **Rows only. No prose, no struck-through history** — `status` is how a
+  row says it has delivered. `validate-artifact-budget.sh` fails on a
+  struck row. Recent Activity and the gate log already record what a
+  teammate delivered; this section records only whether the lead can
+  still reach it. The section is bounded by the teammates that exist.
   **A row whose `deliverable path` cell is blank FAILS this gate.** That row
   cannot be joined — `wait-for-deliverable.sh` rejects a blank target outright —
   so it records a teammate the lead has no way to reach, which presents as
@@ -788,10 +792,14 @@ After Check 14 writes the snapshot, re-read
   non-null values.
 - **The Check 14 row's `evidence` cell carries the budget validator's
   verdict line**, not `—` and not a restatement like "budget OK". The
-  line is the validator's own output. A Check 14 row with an empty
-  evidence cell FAILS this check: the budget check is the one part of
-  Check 14 that leaves no trace in the snapshot itself, so it is the
-  one part Check 15 cannot verify any other way.
+  line is the validator's own output, and it carries the measured token
+  count. Verify it mechanically — do not eyeball your own cell:
+
+      scripts/verdict.sh validate-artifact-budget --check-evidence
+
+  Exit 1 → **Check 15 FAILS.** The budget check is the one part of Check
+  14 that leaves no trace in the snapshot itself, so it is the one part
+  Check 15 cannot verify any other way.
 
 This check exists because Check 14 is an assertion ("update the
 snapshot"); Check 15 is a verification that the assertion took
