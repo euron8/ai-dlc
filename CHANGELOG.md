@@ -17,6 +17,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.125.0] — 2026-07-22
+
+### Added — `validate-release-version.sh`, and the pre-push gate that runs it
+
+Three things name a release — the commit subject, `VERSION`, and the CHANGELOG's top heading — and
+nothing joined them. Every other consistency claim in this repo has an enforcer; this one was a
+convention, held by whoever remembered.
+
+It failed the first time it was tested. **v0.124.1 was committed with the subject `fix(v0.124.1):`
+while `VERSION` still read `0.124.0` and CHANGELOG.md had no 0.124.1 heading.** pre-push ran six
+gates and none of them read a version. It was caught by hand.
+
+`check-version.sh` does not cover this: it compares an *installed consumer's* stamp against the
+distribution's VERSION — a different join, in the other direction, silent about the CHANGELOG and
+about the commit that made the claim.
+
+Two predicates, both measured against this repo's real history before shipping:
+
+- **A subject carrying a `vX.Y.Z` token must match `VERSION`.** 16 of the last 30 bumps carry the
+  token; all 16 match. A *missing* token is not a failure — 14 of those 30 predate the convention.
+- **`VERSION` must equal the CHANGELOG's top `## [X.Y.Z]` heading.** Unconditional: 40 of the last
+  40 non-merge commits agree.
+
+Together they pass **62 of 62** non-merge commits in the measured range — silent on every correct
+commit this repo has made, and loud on the one that was wrong. Verified by running the check
+against the real pre-amend commit object (`9529afe`), not a reconstruction.
+
+**Merges are skipped, and that is scope rather than a loophole.** A merge's VERSION differs from its
+first parent by construction and its subject carries no token; measured on the last 3 merges to
+main, all 3 would have fired. A gate that fires on every correct action gets turned off. The commits
+a merge brings in are each checked on their own — the fixture asserts a bad commit cannot hide
+behind one.
+
+Wired into `.githooks/pre-push`, which is where the repo's other six gates live. Push is the seam:
+the last point before the version becomes a claim other people read.
+
+### Rejected — "a commit that changes VERSION must name it in its subject"
+
+Built, measured, removed. It would catch a silent bump, but it fired on **21 of those 62 commits** —
+every release at or below v0.114.0, all correct under the naming convention of their time. Scoping
+it to "after v0.115.0" would be a fitted constant with no derivation, and no observed defect
+motivated it: predicate A caught the only failure that has actually happened. A check that is wrong
+about a third of the history it is pointed at gets turned off, and takes the working predicates with
+it. Fixture assertion 5 pins the rejection so it cannot return by accident.
+
+### Fixtures
+
+`release-version-triple/` — builds a throwaway repository rather than asserting against this one's
+log, which would rot on the next release. Covers both halves of the real failure (subject ahead of
+VERSION, VERSION ahead of the CHANGELOG), a missing heading not reading as agreement, the rejected
+predicate staying rejected, merge scoping in both directions, and a mutation control that disables
+the subject comparison and requires the failing input to go green. 49/49 fixtures.
+
 ## [0.124.1] — 2026-07-22
 
 ### Fixed — the resident path carried the incident, not the rule
