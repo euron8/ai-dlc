@@ -119,19 +119,22 @@ else
   bad "the identical leftover was NOT moved/reported -- the consumer keeps a silent duplicate"
 fi
 
-# --- 2. THE EDITED ONE GETS ITS OWN ROW, AND IS NAMED --------------------------
-# The assertion this fixture exists for. Bundling it with the identical copies would
-# invite a bulk delete, which is precisely how the local edit gets destroyed unread.
-if printf '%s' "$OUT" | grep -q 'legacy-script-edited.*validate-edited\.sh'; then
-  ok "the locally EDITED leftover is reported separately and by name"
-else
-  bad "the edited leftover was not reported on its own -- a real local change would be deleted unread"
+# --- 2. AN EDITED COPY IS OVERWRITTEN, NOT ADJUDICATED -------------------------
+# Core is upstream-owned and overwrite-on-pull, and a validator is machinery with no
+# consumer layer -- no overrides/ shadow, no extensions/ entry, exactly like a hook.
+# So an edit at the old path is a boundary violation the new layout prevents, not a
+# call the operator owes an answer to. It is reported as done, in the same row as
+# every other moved copy, and never as a DECISION.
+if printf '%s' "$OUT" | grep -q 'DECISION.*legacy-script'; then
+  bad "an edited leftover was raised as a DECISION -- it is overwrite-on-pull, not a call to make"
   printf '%s\n' "$OUT" | grep -i legacy | sed 's/^/        /'
-fi
-if printf '%s' "$OUT" | grep 'legacy-script-duplicates' | grep -q 'validate-edited\.sh'; then
-  bad "  the EDITED file was bundled with the identical ones -- a bulk delete destroys it"
 else
-  ok "  and it is NOT bundled with the identical ones"
+  ok "no DECISION row is raised for a locally edited leftover"
+fi
+if printf '%s' "$OUT" | grep 'relocate-move' | grep -q 'validate-edited\.sh'; then
+  ok "  the edited copy is reported as moved, alongside the rest"
+else
+  bad "  the edited copy was moved without appearing in the move record"
 fi
 
 # --- 3. THE OLD PATH IS EMPTIED -------------------------------------------------
@@ -142,14 +145,6 @@ if [ ! -f "$CONSUMER/scripts/validate-untouched.sh" ] \
   ok "both old copies are moved away, including the edited one"
 else
   bad "a core validator is still at the pre-0.126.0 path after apply"
-fi
-# The edited one must have been ANNOUNCED before it went. The removal is recoverable
-# from git; the silence would not have been, and this is the single most important
-# thing to say in the whole migration.
-if printf '%s' "$OUT" | grep -q 'legacy-script-edited.*validate-edited\.sh'; then
-  ok "  and the edited one was announced by name before the move"
-else
-  bad "  the edited copy was removed with no mention -- a real local change vanished"
 fi
 # The new copy must be UPSTREAM's, not the consumer's stale edit promoted over it.
 if grep -q 'LOCAL EDIT' "$CONSUMER/scripts/ai-dlc/validate-edited.sh" 2>/dev/null; then
