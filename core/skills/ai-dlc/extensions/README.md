@@ -164,4 +164,4 @@ of your next `/ai-dlc-update` report, then freeze it:
 The retro / rule-authoring loop MUST route a *new consumer-specific rule* here,
 never into a core file. A sprint diff that edits a core-manifest file without a
 matching `overrides/` entry FAILS the gate-validation **Core-layer immutability**
-check. See `steps/rule-authoring.md`.
+check. See `rule-authoring.md`.

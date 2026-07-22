@@ -27,30 +27,22 @@ followed by the sprint number). Abbreviated forms (`s<N>`,
 `retro-<N>`) cause validation failures because the script's
 branch-detection regex requires the `sprint-<N>` substring.
 
-**Context digest (Dispatch A — Rule 24).** Branch creation above stays
-inline — it is a git mutation (Rule 28(a) / Rule 23(c): mutations run
-native, never through a subagent that discards the FS). Dispatch A is
-issued only AFTER the branch exists.
+Branch creation stays inline — it is a git mutation (Rule 28(a) / Rule
+23(c): mutations run native, never through a subagent that discards the FS).
 
-If `planning_offload: on` (default), do NOT read the sprint artifacts
-inline. Spawn an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
-scoped to the sprint-artifact read — it reads:
-- Sprint stories in `_bmad-output/planning-artifacts/stories/`
-- Code reviews in `docs/reviews/`
-- Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
-- Escalation log at `docs/escalations/pending.md`
-- Sprint-status.yaml
-- Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
-
-and writes a structured digest to
-`_bmad-output/retro-artifacts/sprint-<N>-context.md` — planned-vs-delivered
-table, rework-cycle count, `DECIDED_AUTONOMOUSLY` list, `hard_block_count`
-+ `hard_block_class[]` tally, per-escalation state, gate-log outcomes —
-returning only `{artifact_path, summary, gaps}`. The lead consumes the
-digest in Step 3 (reads it from disk only when a decision needs it, Rule
-23(a)); an absent artifact at the returned path is non-delivery → the
-lead re-dispatches. If `planning_offload: off`, read the artifacts
+**Analyst dispatch binding — read once, applies to every dispatch in this
+file.** Where a step below says "dispatch an `analyst`", it means: the Agent
+tool, bound to the analyst role file `.claude/team-roles/analyst.md` per
+SKILL.md Rule 19 — both bindings, `model` and the standing role-contract Read
+line. The subagent writes its artifact and returns only
+`{artifact_path, summary, gaps}`; an absent artifact at the returned path is
+non-delivery → the lead re-dispatches. Every dispatch is conditional on
+`planning_offload: on` (the default); with it `off`, the lead does that read
 inline. Per SKILL.md Rule 24.
+
+The sprint-artifact read is NOT issued here. It is folded into the Step-3
+dispatch, which needs the same corpus plus the party-mode transcript that does
+not exist until Step 2 closes.
 
 Run auto-handoff evaluation at `Seam E` with the label
 `retro Step 1 pre-flight` (see `_gate-procedures.md` \"Auto-handoff
@@ -162,14 +154,21 @@ directory runs them locally only.
 
 ### 3. Write Retro Document
 
-**Doc split (Dispatch A, continued — Rule 24).** If `planning_offload:
-on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
-to draft the **descriptive/analytical** sections only — the sprint
+**Doc split (Dispatch A — Rule 24).** Dispatch an `analyst` to read the sprint
+corpus and draft the **descriptive/analytical** sections only — the sprint
 summary, `hard_block_count` + `hard_block_class[]`, and the **Agent-findings
-summary** — from (a) the Step-1 context digest and (b) the committed
-party-mode transcript. It writes the draft to
-`_bmad-output/retro-artifacts/sprint-<N>-retro-draft.md`, returning only
-`{artifact_path, summary, gaps}`. Two hard constraints on that draft:
+summary**. It reads:
+- Sprint stories in `_bmad-output/planning-artifacts/stories/`
+- Code reviews in `docs/reviews/`
+- Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
+- Escalation log at `docs/escalations/pending.md`
+- Sprint-status.yaml
+- Context-mode protection log at `_bmad-output/context-mode-protection-log.md` (if it exists)
+- The committed party-mode transcript from Step 2
+
+and writes the draft to
+`_bmad-output/retro-artifacts/sprint-<N>-retro-draft.md`. Two hard
+constraints on that draft:
 - The Agent-findings summary MUST cite the existing `transcript_path:
   path@<sha>` verbatim and summarize that already-byte-cited transcript.
   It NEVER re-derives party-mode findings from scratch (that path is
@@ -183,8 +182,7 @@ retro's decision content (pipeline self-governance), as non-delegable as
 gate decisions: "specific, actionable improvements," "which improvements
 should update CLAUDE.md / team roles / pipeline steps," and the Step-4
 5-layer enforcement decisions. The lead assembles the analyst draft and
-its own prescriptive sections into the final retro doc. If
-`planning_offload: off`, write the whole doc inline. Per SKILL.md Rule 24.
+its own prescriptive sections into the final retro doc.
 
 Write the retro to `docs/retro/sprint-N.md` with:
 - Sprint summary (planned vs delivered, rework cycles, autonomous decisions)
@@ -238,78 +236,39 @@ rule file.
 
 #### Rule file audit (every retro)
 
-**Ordering is load-bearing.** This scan MUST see post-improvement file
-state, so it is issued only after the "apply process improvements" edits
+**Ordering is load-bearing.** This audit MUST see post-improvement file
+state, so it runs only after the "apply process improvements" edits
 above land (§2 blocker 1) and before the Step-5c audit commit.
 
-If `planning_offload: on`, dispatch a **single** `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) for **all** of Step 4's post-improvement scans — this rule-file audit **and** the path-filter dormancy + relocation-pointer-invariant-1 scans below. All fire at the identical post-improvement point; the "Scan dispatch" below extends this one spawn rather than adding a second (a second round-trip at the same causal point buys nothing). This dispatch produces the **candidate list** — scanning the files and violation
-classes below and, for each suspected violation, recording `file:line`,
-the violation class (narrative-drift / weakness / complexity-accretion),
-the bare-rule-survives-without-narrative judgment as a **recommendation**,
-and for accretion findings the catch/false-positive tally. Written to
-`_bmad-output/retro-artifacts/sprint-<N>-rule-audit-candidates.md`,
-returning only `{artifact_path, summary, gaps}`. Detection is the
-delegable read. The lead **dispositions each candidate and authors every
-rewrite inline** — rule rewriting is a governance judgment expressed as
-text, tightly coupled to disposition; routing the decided text-insertion
-to a dev is pure overhead (Rule 26: no dispatch hop for a decision the
-lead already made). If `planning_offload: off`, scan inline. Per SKILL.md
-Rule 24.
+Detection is mechanical and is not dispatched. Run:
 
-**Structural invariant (retro audits itself).** The scan of
-`.claude/skills/ai-dlc/steps/*.md` MUST assert that every read-heavy
-section of `retro.md` (Steps 1, 3, 4, 4a, 7b) carries its analyst
-dispatch when `planning_offload: on` (Step 4's rule-file audit and its
-dormancy/pointer scans share one post-improvement dispatch — that is one
-carried dispatch, not a missing one); a read-heavy retro section that
-reads inline instead is a Rule 28 lead-conduct finding.
+    scripts/audit-rule-files.sh
 
-The analyst scans the following files for violations of SKILL.md Rule 18:
+The script owns the scan corpus and the detection regexes — neither is
+restated here, where they would drift from the thing that runs. It reports
+six scans: narrative drift (Class 1), an incomplete Rule 26(c) triple
+(Class 1b), rule weakness (Class 2), complexity accretion (Class 3),
+relocation-pointer resolution, and path-filter dormancy. Exit 0 = every
+mechanized scan clean; exit 1 = findings; exit 2 = the scan could not be
+performed, which is never a pass.
 
-- `CLAUDE.md`
-- `docs/coding-conventions.md`
-- `.claude/skills/ai-dlc/steps/*.md`
-- `.claude/team-roles/*.md`
-- `.claude/skills/ai-dlc/extensions/**/*.md`
-- `.claude/skills/ai-dlc/overrides/**/*.md`
+**Class 3 always reports `DID-NOT-RUN`, and that is correct.** Complexity
+accretion needs each gate's catch/false-positive history since introduction,
+which no static scan holds. It is the lead's, every retro: for each gate,
+check, hook, guard, or rule added in a prior sprint, confirm it carries the
+Rule 26(c) contract (concrete failure caught, false-positive cost, removal
+condition) and that its false positives since introduction do not exceed its
+true catches. Record the tally per finding and propose removal or narrowing
+as a process improvement — machinery is removed through the same Step 4
+mechanism that added it.
 
-The last two are not an afterthought. Rule 27 forbids a consumer to hand-edit any of the
-first four, so a scope naming only those scans exactly the text the consumer cannot author
-and stays silent on all the text it does. The blind spot follows from the layering itself,
-which means every consumer that adopts Rule 27 has it, and the audit's CLEAN verdict is
-indistinguishable from its never having run against the relevant corpus. Measured on the
-reference consumer: six blocks of narrative drift added across two `extensions/` files in one
-sprint, with the audit reporting `Class 1: CLEAN (of 39 files scanned)` throughout.
+**The lead dispositions every finding and authors every rewrite inline.**
+Rule rewriting is a governance judgment expressed as text, tightly coupled
+to disposition; routing the decided text-insertion to a dev is pure overhead
+(Rule 26: no dispatch hop for a decision the lead already made). Per finding:
 
-**The `**` is load-bearing — do NOT narrow it to `*`.** `extensions/` is conventionally
-organised into subdirectories (`checks/`, `roles/`, `steps-domain/`), so a single-level glob
-matches the README and nothing else. Measured on the reference consumer: `extensions/*.md`
-resolves to **1** file, `extensions/**/*.md` to **32** — and the drift that justified adding
-these two lines sits in `extensions/steps-domain/`, outside the narrow form. A scope that
-misses the corpus reports CLEAN exactly as loudly as one that scanned it.
-
-Three classes of violation to detect:
-
-**1. Narrative drift.** Rule text contains sprint/story references,
-incident descriptions, "because we" justification, parenthetical origin
-notes, embedded dates, or quoted retro findings.
-
-**2. Rule weakness.** Rule text uses "should", "try to", "consider",
-"prefer", "in most cases", or similar soft language where a mandate is
-intended. Missing enforcement consequence where one would apply.
-
-**3. Complexity accretion.** A gate, check, hook, guard, or rule
-added in a prior sprint that lacks the Rule 26(c) contract (concrete
-failure caught, false-positive cost, removal condition), or whose
-false positives since introduction exceed its true catches. For each
-such finding, record the catch/false-positive tally and propose
-removal or narrowing as a process improvement in this retro —
-machinery is removed through the same Step 4 mechanism that added it.
-
-Per finding, judge case by case:
-- Is the text part of a rule statement (prescriptive/directive), or
-  prose explaining how something works (descriptive)? Descriptive prose
-  is exempt from both classes.
+- Is the text part of a rule statement (prescriptive/directive), or prose
+  explaining how something works (descriptive)? Descriptive prose is exempt.
 - For narrative drift: does the bare rule still make sense when the
   narrative is removed?
   - **Yes** → strip the narrative; the WHY goes to the audit commit message.
@@ -317,143 +276,55 @@ Per finding, judge case by case:
     Rule 18 style), or mark for removal and raise during Step 5 human
     commentary.
 - For rule weakness: rewrite the rule using imperative or MUST/MUST NOT/SHALL.
-  If the soft language was intentional (genuine advisory preference),
-  the rule does not belong in rule files — move it to the retro doc
-  as a lesson or remove it.
+  If the soft language was intentional (genuine advisory preference), the
+  rule does not belong in rule files — move it to the retro doc as a lesson
+  or remove it.
+- A dangling pointer is a HARD_BLOCK: restore the target or correct the
+  pointer before the Step 5c audit commit.
+- A dormant CI job MUST get a remediation path, not a report: either cite an
+  existing `schedule:` cron trigger that exercises it independent of path
+  filters, or file a Sprint N+1 task to add a weekly one. A dormancy finding
+  without remediation is narrative drift.
 
-Record audit results in the retro doc under a `## Rule File Audit`
-section: files scanned, narrative drifts found (list each), rule
-weaknesses found (list each), complexity accretions found (list each
-with catch/false-positive tally), rules rewritten, rules marked for
-removal.
+Record the verdicts in the `## Machine Audits` table (below), and the
+dispositions — rules rewritten, rules marked for removal, accretion tallies —
+under `## Rule File Audit`.
 
 If the audit produced file changes, do NOT commit them yet — Step 5c
 handles the audit commit as a separate commit before the main retro
 commit in Step 6.
 
-If zero violations found, note "Audit: clean" in the retro doc.
+#### Resident-ordering scan (every retro)
 
-**Scan dispatch (Dispatch A, continued — Rule 24).** The path-filter
-dormancy scan and relocation-pointer invariant 1 below are read-heavy
-multi-file / multi-job scans. They are covered by the **same single
-post-improvement analyst dispatch** already issued for the rule-file audit
-above — extend that spawn's scope to run both; do NOT spawn a second analyst
-(both scans fire at the identical post-improvement point). When
-`planning_offload: on`, that analyst returns their tables to
-`_bmad-output/retro-artifacts/sprint-<N>-scan-tables.md` (returning only
-`{artifact_path, summary, gaps}`): the dormancy table (job, sprint-window,
-last non-SKIPPED SHA, `gh run list` evidence) and the pointer table
-(pointer, target, exists Y/N, anchor-resolves Y/N). `gh run list` is a
-state-read, safe for a subagent. The lead owns the remediation choice and
-every HARD_BLOCK verdict below; the analyst gathers evidence, it never
-dispositions. **Invariants 2 and 3 are NOT dispatched** — they are compact
-`node -e` one-liners; run them via `ctx_execute` (Rule 23(c)) so their
-output stays out of the resident prefix and the lead reads only the
-IN/OUT and MISSING/ORPHAN verdict lines. If `planning_offload: off`, run
-the scans inline. Per SKILL.md Rule 24.
+Resident-context slimming relocates rule bodies out of `SKILL.md` into JIT
+files. Pointer resolution is covered by `audit-rule-files.sh` above. Two
+further invariants MUST hold each retro; both are HARD_BLOCK on failure and
+MUST be fixed before the Step 5c audit commit.
 
-#### Path-filter dormancy scan (every retro)
-
-If the project has no `.github/workflows/` directory (a script-based
-consumer that runs validators via `validate-*.sh` / `ci-local.sh`
-directly rather than GitHub Actions), record this scan as **N/A** — an
-empty workflow set is the expected state, not a dormancy finding — and
-skip to the relocation-pointer scan below. Otherwise:
-
-After the rule-file audit, enumerate CI jobs in `.github/workflows/**`
-that use `paths:` or `paths-ignore:` filters. For each such job,
-determine the last main-branch SHA on which the job actually ran
-(not SKIPPED). If ≥3 sprints have elapsed with zero non-SKIPPED runs
-on `main`, the retro MUST either (a) cite an existing `schedule:`
-cron trigger on the workflow that exercises the job independent of
-path filters, or (b) file a Sprint N+1 task to add a weekly
-`schedule:` cron run to that workflow. Reporting-only is not
-sufficient — a dormancy finding without a remediation path is
-narrative drift. Record results in the retro doc under
-`## Rule File Audit` in a `Path-filter dormancy scan` sub-section,
-including for each dormant job: evidence
-(`gh run list --workflow=<wf> --branch=main --limit 30`), sprint
-window, and (a) or (b) remediation.
-
-#### Relocation-pointer + resident-ordering scan (every retro)
-
-Resident-context slimming relocates rule bodies out of `SKILL.md` into
-JIT files and leaves a pointer at the seam. Three invariants MUST hold
-each retro; all are HARD_BLOCK on failure and MUST be fixed before the
-Step 5c audit commit.
-
-**1. Every relocation pointer resolves to a live file.** Scan `SKILL.md`
-and `.claude/skills/ai-dlc/steps/*.md` for pointers to **skill-loadable
-content** — `READ AND FOLLOW \`<path>\``, and prose locators of the form
-"lives in / defined in / canonical … in / schema in / see \`<file>\`[
-Check N]" that name a step file (`steps/*.md`), a sibling skill reference
-file (`rule-authoring.md`, `escalations.md`,
-`steps/handoff.md`), or a team-role file (`.claude/team-roles/*.md`). For each, confirm the named
-file exists on disk (and, when a specific anchor like `Check 14` is
-cited, that the anchor exists in the target). **Out of scope — do NOT
-flag:** runtime artifacts and project files that exist only in an
-installed project, not in the skill source (`_bmad-output/**`, `docs/**`,
-`CLAUDE.md`, and the living/runtime artifacts `prd.md`,
-`product-brief.md`, `carry-over-backlog.md`, `gate-log.md`,
-`pipeline-snapshot.md`, `pipeline-snapshot.precompact.md`,
-`compaction-log.md`, `audit-anchors.md` and their `*-history` /
-`*-archive` variants). A skill-content pointer whose target is missing is
-a dangling reference — FAIL the audit and either restore the target or
-correct the pointer. Zero dangling skill-content pointers is the pass
-condition.
-
-**2. The critical set stays inside the first-5K re-attach window.**
+**1. The POST-COMPACT RECOVERY PROTOCOL fits inside the re-attach window.**
 Claude Code re-attaches only the first ~5,000 tokens of `SKILL.md` after
-compact. Measure the cut point (chars/4 estimate: the first 20,000 chars)
-and assert the `## POST-COMPACT RECOVERY PROTOCOL` heading and Rules 3, 4,
-and 11 all begin inside it:
+compact, and a protocol truncated by the event it handles is worthless. Run:
 
-```
-node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/SKILL.md','utf8');for(const t of ['## POST-COMPACT RECOVERY PROTOCOL','### Rule 3 ','### Rule 4 ','### Rule 11 ']){const i=s.indexOf(t);console.log((i>=0&&i<20000?'IN ':'OUT'),Math.round(i/4),t.trim());}"
-```
+    scripts/validate-reattach-budget.sh
 
-Any target reported `OUT` means a relocation (or an addition ahead of it)
-pushed a critical rule past the re-attach boundary — FAIL and reorder so
-the critical set precedes the cut before committing. Rules 21–26,
-INITIALIZATION, and `## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT
-THRESHOLDS` are second-tier by the file's own design ("may sit past
-the 5K boundary") and are NOT required within 5K. The node check tests the
-POST-COMPACT *heading* start; the section's whole *body* must also precede
-the cut (a protocol truncated by the event it handles is worthless). That
-body invariant is mechanized — run `scripts/validate-reattach-budget.sh`,
-which FAILS if the protocol's END offset exceeds the re-attach window; a
-non-zero exit is a hard audit failure. Record all three results in the retro
-doc under `## Rule File Audit` in a `Relocation-pointer + resident-ordering
-scan` sub-section: pointers checked (count + any dangling), the measured
-token offset of POST-COMPACT + Rules 3/4/11 with IN/OUT verdicts, and the
-`validate-reattach-budget.sh` PASS/FAIL with its slack figure.
+It FAILS if the protocol's END offset exceeds the ceiling; a non-zero exit is
+a hard audit failure. Its slack figure is measured against that ceiling, so it
+is the headroom the next addition to `SKILL.md` actually has. Rules 21–26, INITIALIZATION, and
+`## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS` are second-tier by
+the file's own design ("may sit past the 5K boundary") and are NOT required
+within the window.
 
-**3. Every `GATE_MANIFEST` check ID resolves to a live check anchor, and
-every check anchor is claimed by the manifest.** The gate-type
-slicing (`gate-validation.md` "Gate-type manifest") loads checks by gate
-type; a manifest ID with no matching check, or a check with no manifest
-claim, silently mis-slices a gate. Two-way resolve against
-`steps/gate-validation.md`:
-- **Manifest → anchor.** For every check ID listed in a `GATE_MANIFEST`
-  table row — `universal` included, it is a row like any other — confirm a
-  matching `<!-- CHECK_LOADED: <id> -->` anchor exists in the file. An ID
-  with no anchor is manifest drift (a row names a check that was renamed
-  or removed) — FAIL.
-- **Anchor → manifest.** For every `<!-- CHECK_LOADED: <id> -->` anchor
-  in the file, confirm the ID appears in ≥1 manifest row. An orphan
-  anchor (a check no gate type requires) is drift in the other
-  direction — FAIL.
+**2. Every `GATE_MANIFEST` check ID resolves to a live check anchor, and
+every check anchor is claimed by the manifest.** Gate-type slicing loads
+checks by gate type; a manifest ID with no matching check, or a check with no
+manifest claim, silently mis-slices a gate — it runs, reports PASS, and the
+missing check never fires. Run:
 
-The command below DERIVES both sides from the manifest and hard-codes no
-check ID.
+    scripts/validate-gate-manifest.sh
 
-```
-node -e "const s=require('fs').readFileSync('.claude/skills/ai-dlc/steps/gate-validation.md','utf8');const anchors=[...s.matchAll(/^<!-- CHECK_LOADED: (\S+) -->$/gm)].map(m=>m[1]);const m=s.slice(s.indexOf('GATE_MANIFEST v1'),s.indexOf('GATE_MANIFEST_END'));const rows=[...m.matchAll(/^\|[ ]*([a-z][a-z-]*)[ ]*\|([^|]*)\|/gm)];if(!rows.length)throw new Error('GATE_MANIFEST: no rows parsed — the scan would pass by comparing nothing');if(!rows.some(r=>r[1]==='universal'))throw new Error('GATE_MANIFEST: no universal row — the always-loaded set is unreadable and every universal check would report as an orphan');const ids=new Set();for(const r of rows)for(const t of r[2].split(',').map(x=>x.trim()).filter(Boolean))ids.add(t);const missing=[...ids].filter(i=>!anchors.includes(i));const orphan=anchors.filter(a=>!ids.has(a));console.log('rows:',rows.map(r=>r[1]).join(' '));console.log('MISSING (manifest ID, no anchor):',missing.join(' ')||'none');console.log('ORPHAN (anchor, no manifest claim):',orphan.join(' ')||'none');"
-```
-
-Both lists MUST be empty. Record the result in the same
-`Relocation-pointer + resident-ordering scan` sub-section: manifest IDs
-resolved (count + any MISSING/ORPHAN).
+It derives both directions from the manifest and hard-codes no check ID.
+MISSING and ORPHAN must both be empty. Exit 2 means the resolve could not be
+performed (no anchors, no rows, no `universal` row) and is never a pass.
 
 ## Empirical gate validation
 
@@ -486,11 +357,9 @@ transition to `done` (see `implementation.md` step 5). This sweep is
 the backstop: it catches items that slipped past inline closure and
 ensures no sprint ends with stale OPEN/IN_SPRINT state.
 
-**Close-Out gather (Dispatch A, continued — Rule 24).** If
-`planning_offload: on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
-to RUN and MATCH — never to dispose. It writes its tables to
-`_bmad-output/retro-artifacts/sprint-<N>-closeout-tables.md`, returning
-only `{artifact_path, summary, gaps}`:
+**Close-Out gather (Dispatch B).** Dispatch an `analyst` to RUN and MATCH —
+never to dispose. It writes its tables to
+`_bmad-output/retro-artifacts/sprint-<N>-closeout-tables.md`:
 - **Deferral reconciliation.** For each deferral / re-affirmed deferral /
   passive monitor, the analyst RUNS the live condition (the cited test,
   query, or observable) and returns the reconciliation table: item,
@@ -516,60 +385,46 @@ governance decision, lead-only (see below). The **mutations** (mark
 `CLOSED`, verbatim archive cut-paste per Rule 25(a), status-yaml drift
 correction) encode the lead's just-made decision — keep them inline with
 the disposition; dispatch the mechanical archive-moves to `dev` only if a
-batch is large. If `planning_offload: off`, run the sweep inline. Per
-SKILL.md Rule 24.
+batch is large.
 
-**Deferral-freshness reconciliation (run BEFORE the three sweeps,
-MANDATORY).** For every carry-over deferral, re-affirmed deferral, or
-passive monitor whose blocking or monitored condition is a runnable
-test, anchor, query, or observable event, the lead MUST re-verify that
-condition LIVE at close-out — run the cited test, query the cited
-source, or read the monitored signal. If the condition is now satisfied
-(test green where it was held red, event observed, value in-band), the
-item is reclassified `CLOSED - delivered in sprint <N>` /
-`CLOSED - satisfied` with the verification evidence cited — NOT carried,
-NOT re-deferred. A deferral whose target is already delivered is a
-vacuous deferral, and the lead is its detector: surfacing it as "defer"
-at the production validation checkpoint (PVC), where the operator rather
-than the lead discovers it, is a close-out failure. Record each
-re-verification (item, condition, result) in the retro `## Close-Out
-Sweep` section. Rule 26(c): this catches a vacuous deferral reaching the
-operator at the PVC; its false-positive cost is one redundant re-run of
-an already-runnable check (a still-unmet condition simply confirms the
-carry); it is removed when successive retros record zero
-reclassifications. Violation: a stale or already-satisfied deferral
-surfaced at the PVC → retro finding.
+**Deferral-justification triple (MANDATORY).** Every carry-over deferral,
+re-affirmed deferral, passive monitor, and sprint-cut deferral surfaced at
+close-out MUST fill all three slots. Any unfillable slot reclassifies the item
+BEFORE the production validation checkpoint (PVC) — close it, or do it now.
+The lead is the detector, not the operator:
 
-**Deferral-justification triple (MANDATORY — extends the freshness
-reconciliation above to the trigger and effort axes).** The freshness
-rule checks only the CONDITION axis (is the blocking condition still
-unmet?). That is necessary but insufficient: a deferral can be vacuous
-because its premise is false OR because it conceals trivially-doable
-work. So every carry-over deferral, re-affirmed deferral, and every
-sprint-cut deferral surfaced at close-out MUST fill all three slots, and
-any unfillable slot reclassifies the item BEFORE the PVC — close it, or
-do it now (the lead is the detector, not the operator):
-- **TRIGGER** — the specific in-sprint diff or path that creates the
-  need, cited `file:line`. No citable trigger → the item is INVALID;
-  delete it, do not carry it.
-- **EFFORT-BLOCKER** — what concretely prevents in-sprint delivery, with
-  an estimate. If the work is below an OBJECTIVE bright-line — a ≤~10-line
-  config edit, or the deletion of a single artifact — it is IN-SCOPE NOW,
-  not a deferral. The bright-line MUST be objective, never "lead
-  judgment".
-- **CONDITION** — the runnable test, query, or observable and its
-  current LIVE result (the freshness reconciliation above).
-  Already-satisfied → `CLOSED - delivered`.
-A deferral surviving all three slots is presented at the PVC with its
-triple as evidence — a stress-tested deferral the operator reviews, not
-one the operator must detect. Rule 26(c): this catches an untriggered or
-trivially-doable deferral before it reaches the operator; its
-false-positive cost is filling three short slots per surviving deferral;
-it is removed when successive retros record zero unfillable slots.
-Violation: any deferral or carry-over surfaced at the PVC without its
-triple, or the operator (not the lead) catching a vacuous deferral →
-retro finding.
+- **TRIGGER** — the specific in-sprint diff or path that creates the need,
+  cited `file:line`. No citable trigger → the item is INVALID; delete it, do
+  not carry it.
+- **EFFORT-BLOCKER** — what concretely prevents in-sprint delivery, with an
+  estimate. If the work is below an OBJECTIVE bright-line — a ≤~10-line config
+  edit, or the deletion of a single artifact — it is IN-SCOPE NOW, not a
+  deferral. The bright-line MUST be objective, never "lead judgment".
+- **CONDITION** — the runnable test, anchor, query, or observable, re-verified
+  LIVE at close-out. Run the cited test, query the cited source, read the
+  monitored signal. If it is now satisfied (test green where it was held red,
+  event observed, value in-band), the item is reclassified
+  `CLOSED - delivered in sprint <N>` / `CLOSED - satisfied` with the
+  verification evidence cited — NOT carried, NOT re-deferred.
 
+A deferral whose target is already delivered, or whose premise was never
+triggered, or that conceals trivially-doable work, is a vacuous deferral.
+Surfacing one at the PVC, where the operator rather than the lead discovers
+it, is a close-out failure. A deferral surviving all three slots is presented
+at the PVC with its triple as evidence — a stress-tested deferral the operator
+reviews, not one the operator must detect.
+
+Record each item's triple (item, trigger, effort-blocker, condition + LIVE
+result) in the retro `## Close-Out Sweep` section.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: an untriggered,
+trivially-doable, or already-satisfied deferral reaching the operator at the
+PVC. False-positive cost: filling three short slots per surviving deferral,
+one of which re-runs an already-runnable check (a still-unmet condition simply
+confirms the carry). Removal condition: retire when successive retros record
+zero unfillable slots and zero reclassifications. Violation: any deferral or
+carry-over surfaced at the PVC without its triple, or the operator (not the
+lead) catching a vacuous deferral → retro finding.
 **Locked-requirement deferral needs recorded operator disposition.** The
 freshness rule above lets an ordinary deferral whose target was already
 delivered close as `CLOSED - delivered` — delivery cleanses it. This does
@@ -657,9 +512,6 @@ inline during implementation)".
 
     scripts/validate-artifact-budget.sh --warn-only
 
-Record its output verbatim in the retro doc under `## Artifact-Size Audit`. If it
-reports no breaches, note "Artifact sizes: within budgets".
-
 The script owns the canonical budgets and the per-artifact remedy — the numbers
 are NOT restated here. A project overrides a budget with `AI_DLC_BUDGET_<NAME>`
 (see the script header), not by editing this paragraph.
@@ -680,15 +532,37 @@ Two breaches deserve a finding in their own right, not just a size warning:
   at gate passages. The gates that let it grow are the finding — not the file.
 
 **Layer-entry audit (Rule 27, warn-only).** On a layered consumer, run
-`scripts/validate-layer-entries.sh` and record a `## Layer-Entry Audit` section in
-the retro doc with its output. ERRORs are mechanized invariants — a poisoned
+`scripts/validate-layer-entries.sh`. ERRORs are mechanized invariants — a poisoned
 `base_sha` (Rule 27(a)) silently disables override-drift detection for that entry,
 so the next pull cannot tell whether upstream changed the rule it shadows. WARNs
 are smells needing judgement: an extension restating a core section, a restriction
 filed in the additive layer, a dangling `Step <n>` pointer. Fix ERRORs before the
 next `/ai-dlc-update`; triage WARNs into the backlog. Warn-only — never blocks the
-pipeline. On a consumer with no layer directories the script exits clean; note
-"Layer entries: n/a (unlayered)".
+pipeline. On a consumer with no layer directories the script exits clean.
+
+#### `## Machine Audits` — one table, not five transcriptions
+
+Every scan above reports into ONE `## Machine Audits` table in the retro doc.
+Do NOT paste a clean run's output: a PASS's detail is reproducible by
+re-running the script, and five verbatim blocks per retro is the sprint's
+largest single writing cost for its least-read content.
+
+| check | verdict | evidence |
+|-------|---------|----------|
+| `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
+| `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling |
+| `validate-gate-manifest.sh` | PASS / FAIL | exit code + the MISSING/ORPHAN lines |
+| `validate-artifact-budget.sh --warn-only` | CLEAN / BREACH | exit code + each breached artifact, or "within budgets" |
+| `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |
+
+**The evidence cell is mandatory and is never `—`.** An empty evidence cell is
+not a passing record — it is indistinguishable from a check that never ran, and
+that is the failure this table exists to make impossible. A row whose verdict is
+anything but clean expands to its full output immediately below the table; a
+clean row does not.
+
+A scan that could not run (`gh` absent, exit 2, N/A) records that verdict
+verbatim with its reason. SKIPPED and N/A are NOT clean.
 
 ### 4b. Operator-steerability audit, then flow-log rotation (Rule 29 / Rule 25(c))
 
@@ -767,6 +641,19 @@ the class, and this rotates the instance:
 Same contract: the hook re-seeds the header on its next write, the archive is
 write-only, rotation is unconditional and per-sprint.
 
+**Discard the retro scratch directory.** `_bmad-output/retro-artifacts/` holds
+this step's dispatch inputs — the retro draft, the close-out tables, the
+next-sprint bundle. Every one of them has already been consumed and its
+conclusions committed in `docs/retro/sprint-<N>.md`, which is the record. They
+are scratch, not a log, so Rule 25(a)'s no-loss archive duty does not apply and
+they are deleted rather than rotated:
+
+    rm -rf _bmad-output/retro-artifacts
+
+Unrotated, this directory accumulates every sprint's inputs forever — measured
+at 61 files / 1.0 MB on the reference consumer, growing ~77 KB per sprint, read
+by nothing after the dispatch that wrote it returned.
+
 ## Sprint-Ship Verification
 
 Sprint-ship counters track smoke-quality across deploy-validate runs.
@@ -827,7 +714,11 @@ audit (`gate-validation.md` Check 18).
 ### 5c. Pre-Commit Validation Gate
 
 Before committing retro artifacts, run all four checks in order.
-Failure on any check blocks the Step 6 commit.
+Failure on any check blocks the Step 6 commit. **This gate is the only
+completeness check retro performs** — the scripts below read the gate log,
+the housekeeping envelope, the transcript shape and the provenance block, so
+a second hand-run checklist at Step 6a would restate what already blocks the
+commit.
 
 **Gate type for validation loading (Rule 21 / Lever 2).** This is the
 `retro` gate. When running gate validation (`gate-validation.md`) at
@@ -840,12 +731,11 @@ core-layer-immutability).
    `docs(rules): rule file audit (retro) — strip narrative, harden weak rules`.
    If the audit was clean, skip.
 
-2. **Provenance block verification.** Open the retro doc and verify
-   the `SKILL_INVOCATION_PROVENANCE v1` block cites a valid
-   `tool_use_id`. If the tool_use_id is NOT_ACCESSIBLE (common after
-   compact), that is acceptable — note it in the provenance block.
-   If the provenance block is missing entirely, add it now before
-   proceeding.
+2. **Provenance block verification.** Run
+   `scripts/validate-provenance-block.sh` — it owns the block's shape and
+   is also its own CI step. MUST exit 0. **Never invent a `tool_use_id`:**
+   if it is not accessible in the conversation (common after compact),
+   write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.
 
 3. **Mandatory rules validation.** Run:
    `scripts/validate-mandatory-rules.sh <N>` (where N is the sprint
@@ -854,9 +744,7 @@ core-layer-immutability).
    (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
    sibling script is absent from core. Check 3 reads the envelope you closed
    in the Close-Out Sweep above via `sprint-status.sh close`.
-   (`validate-provenance-block.sh` is run separately — at Step 5c check 2
-   above locally, and as its own CI step.) MUST exit 0. If it fails, fix the
-   issues before proceeding to Step 6.
+   MUST exit 0. If it fails, fix the issues before proceeding to Step 6.
 
 4. **Audit-anchor schema validation.** Run
    `scripts/validate-audit-anchors.sh _bmad-output/audit-anchors.md`. It
@@ -869,17 +757,11 @@ core-layer-immutability).
 
 **6a. Commit all remaining artifacts.**
 
-**Pre-commit completeness check.** Before staging, verify these
-artifacts exist for this sprint. Missing items indicate a skipped
-step — go back and complete it before committing:
-
-- [ ] Gate-log entry exists in `_bmad-output/implementation-artifacts/gate-log.md` for this sprint
-- [ ] `_bmad-output/audit-anchors.md` updated (Step 5b)
-- [ ] Next-sprint prompt emitted (Step 7) OR "no next sprint" stated explicitly
-- [ ] Retro doc has provenance block citing party-mode transcript
-
-If any item is missing, complete the skipped step NOW before
-proceeding. Do not commit an incomplete retro.
+Completeness is already gated: Step 5c's four checks fail the commit on a
+missing gate-log entry, a missing or malformed audit-anchor entry, and a
+missing or malformed provenance block. Do not re-verify them by hand here.
+(The next-sprint prompt cannot be checked at this point at all — Step 7d
+emits it after this commit, after the merge gate.)
 
 Run `git status` to identify any uncommitted files. Stage and commit
 everything produced during the sprint that hasn't been committed yet.
@@ -994,17 +876,14 @@ epic scope, and residual risks are still in the lead's working context.
 **7b. Assemble next-sprint inputs.**
 
 Issued AFTER the 7a merge gate (a human y/n seam — no dispatch before
-Step 5 can cover post-merge inputs, §2 blocker 2). If `planning_offload:
-on`, dispatch an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line)
-— **Dispatch B** — to gather all six input classes below (including the
+Step 5 can cover post-merge inputs, §2 blocker 2). Dispatch an `analyst` —
+**Dispatch C** — to gather all six input classes below (including the
 relatedness analysis in input 6) and write the structured bundle to
-`_bmad-output/retro-artifacts/sprint-<N>-next-inputs.md`, returning only
-`{artifact_path, summary, gaps}`. The lead derives the theme (7c) and
-authors the paste-able prompt (7d) from that bundle **plus its own
-retained retro findings** — the Step-3 improvements and Step-4
-dispositions stay resident because the lead decided them; only the raw
-file reads move to the analyst. If `planning_offload: off`, gather
-inline. Per SKILL.md Rule 24.
+`_bmad-output/retro-artifacts/sprint-<N>-next-inputs.md`. The lead derives
+the theme (7c) and authors the paste-able prompt (7d) from that bundle
+**plus its own retained retro findings** — the Step-3 improvements and
+Step-4 dispositions stay resident because the lead decided them; only the
+raw file reads move to the analyst.
 
 Gather the material the next-sprint prompt will draw from. Read, do not
 summarize prematurely:

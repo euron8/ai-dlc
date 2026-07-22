@@ -97,7 +97,12 @@ fi
 PROTO_END=$(( END_LINE - 1 ))
 BYTES="$(head -n "$PROTO_END" "$SKILL_MD" | wc -c | tr -d ' ')"
 EST_TOKENS=$(( BYTES / BPT ))
-SLACK=$(( BUDGET - EST_TOKENS ))
+# Slack is measured against the ceiling that actually FAILS this script, not
+# against the raw window. Reporting it against BUDGET overstates the headroom by
+# exactly MARGIN, and a reader budgeting the next addition against the larger
+# figure spends a margin that is not there: at 4747 tokens the honest headroom is
+# 3, and the old message read "253 tokens of slack".
+SLACK=$(( CEILING - EST_TOKENS ))
 
 say "re-attach window    : ${BUDGET} tokens (Claude Code re-attaches the first ~${BUDGET})"
 say "safety margin       : ${MARGIN} tokens  (ceiling ${CEILING})"
@@ -115,5 +120,5 @@ if [ "$EST_TOKENS" -gt "$CEILING" ]; then
   exit 1
 fi
 
-say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${BUDGET} window."
+say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin)."
 exit 0
