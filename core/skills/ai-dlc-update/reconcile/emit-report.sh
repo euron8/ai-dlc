@@ -165,6 +165,15 @@ render() {
   del="$(printf '%s\n' "$pc" | awk -F'\t' '$4=="UPSTREAM-DELETED" || $4 ~ /^ORPHANED-RELOCATED/ {print $4"  "$2}' | sort -u)"
   none_or "$del"
 
+  # Rendered mechanically, inside the --verify'd region, precisely because the failure
+  # this closes was a narrated report asserting OURS==BASE for all 25 validators against
+  # a comparison that never ran. A +consumer-edited row means apply will overwrite a
+  # locally adapted enforcer on the move; the operator confirms it was filed as a push
+  # candidate first. Author prose cannot drop what the byte-compare requires to be here.
+  sub "Scripts relocation (scripts/ → scripts/ai-dlc/; +consumer-edited = a local adaptation apply will discard — confirm the push-candidate ledger before apply):"
+  reloc="$(printf '%s\n' "$pc" | awk -F'\t' '$4 ~ /^RELOCATE-MOVE/ {print $4"  "$2}' | sort -u)"
+  none_or "$reloc"
+
   sub "Blocking-layer (HARD-* — blocks apply):"
   bash "$SELF/hard-blockers.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null \
     | sed '/BEGIN GENERATED: hard-blockers/d;/END GENERATED: hard-blockers/d'

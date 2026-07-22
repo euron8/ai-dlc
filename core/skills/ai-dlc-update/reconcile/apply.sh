@@ -200,6 +200,14 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
       fi ;;
     UPSTREAM-DELETED|ORPHANED-RELOCATED*)
       say DECISION deletion "$rel" "apply would remove a consumer file — gated" ;;
+    RELOCATE-MOVE*)
+      # Report-only. The level-triggered manifest_dests loop (section below) owns the
+      # actual move: it places THEIRS at scripts/ai-dlc/ and empties the old path. A
+      # +consumer-edited row is the report's disclosure that a moved copy carried a
+      # local edit — overwrite-on-pull, not a decision — so it must NOT become a
+      # semantic-merge worklist item here (which is what the old consumer-deleted
+      # ->CLASSIFY verdict produced: a fake merge task beside a real move). No action. ;;
+      : ;;
     ALREADY-AT-THEIRS|ALREADY-PRESENT|*NOOP|DIST-ONLY-SKIP) : ;;
     *) say DECISION unhandled-bucket "$rel" "$bucket"; mech_fail=$((mech_fail+1)) ;;
   esac

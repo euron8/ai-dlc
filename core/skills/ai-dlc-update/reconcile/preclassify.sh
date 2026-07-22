@@ -189,8 +189,83 @@ dist_only() { # core/fixtures/<name>/... -> is it marked dist-only?
   esac
 }
 
+# ---------------------------------------------------------------------------
+# Scripts-relocation pass — the core validators moved scripts/ -> scripts/ai-dlc/
+# in v0.126.0, and a consumer that has not migrated holds every one of them at the
+# OLD path. This pass exists because NOTHING ELSE SEES THEM:
+#
+#   - map_consumer() sends core/scripts/X to scripts/ai-dlc/X, which is empty on a
+#     pre-relocation consumer. The changed-files pass below therefore reads the
+#     16 upstream-modified validators as "consumer-deleted" and files each a
+#     CLASSIFY row -- a semantic merge for a file the consumer never deleted and
+#     apply moves mechanically. The 9 UNMODIFIED validators are not in the
+#     base..theirs diff at all, so that pass never even mentions them.
+#   - unregistered-drift.sh excludes scripts/ by design.
+#
+# So a locally edited validator at the old path is invisible to the report, and
+# the last dry-run asserted OURS==BASE for all 25 against a comparison that never
+# ran. This is the detector for it, and it is the report's ground truth.
+#
+# LEVEL-TRIGGERED, like the orphan pass and like apply.sh's own manifest_dests
+# loop: a relocation is a STATE of the consumer tree, not an event in the
+# base..theirs history, so the subject set is every validator THEIRS ships, not
+# the ones that happen to have changed.
+#
+# ENUMERATED FROM THE UPSTREAM TREE, never from `find scripts/`. scripts/ is
+# SHARED -- the reference consumer owns ~78 of its own scripts beside our 25, and
+# no prefix separates them. Driving off `git ls-tree THEIRS core/scripts` is the
+# same "derive from the manifest, do not glob the shared dir" discipline the
+# core-guard boundary rests on; a find-the-directory pass would indict every
+# consumer-authored script as an unknown orphan.
+#
+# REPORT-ONLY. apply.sh's manifest_dests loop owns the actual move (place THEIRS
+# at the new path, empty the old one). These rows carry no action -- apply maps
+# RELOCATE-MOVE* to a no-op. The +consumer-edited suffix is a DISCLOSURE, not a
+# decision: a validator is machinery with no consumer layer, so the edit is
+# overwrite-on-pull like any core file, and the row's only job is to tell the
+# operator a local adaptation is about to be discarded so they can confirm it was
+# filed as a push candidate first.
+while IFS= read -r core_path; do
+  [ -n "$core_path" ] || continue
+  base="${core_path#core/scripts/}"
+  case "$base" in */*) continue ;; esac   # flat dir only; never descend a subtree
+  new_cons="scripts/ai-dlc/$base"
+  old_cons="scripts/$base"
+
+  # Already migrated: the file is at its canonical new path and the changed-files
+  # pass classifies it there like any other core file. Nothing to relocate.
+  [ "$(file_hash "$new_cons")" = MISSING ] || continue
+
+  # Not at the old path either: the consumer simply lacks it. apply's manifest
+  # place-arm writes THEIRS; there is no pre-existing copy to move or disclose.
+  old_h="$(file_hash "$old_cons")"
+  [ "$old_h" = MISSING ] && continue
+
+  theirs_h="$(blob_hash "$THEIRS" "$core_path")"
+  base_h="$(blob_hash "$BASE" "$core_path")"
+  if [ "$old_h" = "$theirs_h" ] || [ "$old_h" = "$base_h" ]; then
+    bucket="RELOCATE-MOVE"
+  else
+    bucket="RELOCATE-MOVE+consumer-edited"
+  fi
+  printf '%s\t%s\t%s\t%s\n' "R" "$core_path" "$old_cons" "$bucket -> now at $new_cons"
+done < <(git -C "$DIST" ls-tree --name-only "$THEIRS" core/scripts/ 2>/dev/null)
+
 git -C "$DIST" diff --name-status "$BASE" "$THEIRS" -- core/ | while IFS=$'\t' read -r status path; do
   cons="$(map_consumer "$path")"
+
+  # core/scripts/* is owned by the scripts-relocation pass above. On a pre-relocation
+  # consumer the copy lives at the OLD path, which this base..theirs diff cannot see,
+  # so the MISSING-at-new-path result would be a false "consumer-deleted". Suppress it
+  # for a not-yet-migrated copy; the relocation pass has already emitted the real
+  # RELOCATE-MOVE row. A migrated consumer (new path present) falls through and
+  # classifies normally.
+  case "$path" in
+    core/scripts/*)
+      if [ "$(file_hash "$cons")" = MISSING ] && [ -f "$CONS/scripts/${path#core/scripts/}" ]; then
+        continue
+      fi ;;
+  esac
 
   if dist_only "$path"; then
     printf '%s\t%s\t%s\t%s\n' "$status" "$path" "$cons" "DIST-ONLY-SKIP"
