@@ -17,6 +17,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.6] — 2026-07-22
+
+### Fixed — the dry-run report was blind to pre-relocation validators, and asserted OURS==BASE for all 25
+
+v0.126.0 moved the core validators `scripts/` → `scripts/ai-dlc/`. `apply.sh` relocates them
+correctly through a level-triggered `manifest_dests` loop, but `preclassify.sh` — which feeds the
+reconcile REPORT — never saw the pre-relocation copies:
+
+- `map_consumer()` sends `core/scripts/X` to the new path, empty on an un-migrated consumer, so the
+  changed-files pass read the 16 upstream-modified validators as `consumer-deleted` and filed each
+  a `CLASSIFY` (semantic-merge) row — a fake merge task beside a real move. The 9 unmodified ones
+  were absent from the `base..theirs` diff entirely, so nothing named them.
+- `unregistered-drift.sh` excludes `scripts/` by design.
+
+With no row to render, a live dry-run asserted `OURS==BASE` for all 25 against a comparison that
+never ran — the unsafe direction: `apply` overwrites a locally adapted enforcer and nothing warns
+the operator. The reference consumer has **five** edited validators
+(`validate-ci-gates.sh` 188 lines, `validate-mandatory-rules.sh` 318, `validate-provenance-block.sh`
+125, `validate-retro-evidence.sh` 40, `validate-locked-anchor.sh` 28).
+
+`preclassify.sh` gains a **level-triggered scripts-relocation pass**, enumerated from
+`git ls-tree THEIRS core/scripts` — never from `find scripts/`, because `scripts/` is shared with
+~78 consumer-authored files and a directory glob would indict every one of them. Each pre-relocation
+copy is classified `RELOCATE-MOVE`, or `RELOCATE-MOVE+consumer-edited` when it diverges from both
+base and theirs. The changed-files pass no longer emits a false `consumer-deleted->CLASSIFY` for a
+copy sitting at the old path, which also removes the ~15 spurious semantic-merge rows a pull
+previously handed the operator.
+
+The rows are **report-only** — `apply.sh` maps `RELOCATE-MOVE*` to a no-op, since its own
+`manifest_dests` loop owns the move. `+consumer-edited` is a disclosure, not a decision: a validator
+is machinery with no consumer layer, so the edit is overwrite-on-pull like any core file, and the
+row exists to tell the operator a local adaptation is about to be discarded — confirm it was filed
+as a push candidate first.
+
+`emit-report.sh` renders the relocation set **inside the `--verify`'d region**, precisely because
+the failure it closes was narrated prose dropping a mechanical finding. Author prose can no longer
+assert `OURS==BASE` over what the byte-compare requires to be present.
+
+### Added — `core/fixtures/relocation-preclassify`
+
+Drives `preclassify.sh` against a synthetic pre-relocation consumer: an edited validator surfaces
+`+consumer-edited`, unchanged-in-range copies still surface (level-triggered), a consumer-authored
+script sharing the directory is never mentioned, a migrated copy stops emitting a relocation row,
+and no `core/scripts/*` path is filed as a semantic merge. The mutation control removes the
+`ls-tree` enumerator and requires the edit disclosure to disappear.
+
 ## [0.126.5] — 2026-07-22
 
 ### Fixed — the v0.126.4 fixture was inert in the one layout it existed to defend
