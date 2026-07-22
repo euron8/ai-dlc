@@ -134,8 +134,107 @@ say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 
 [ -d "$ROOT" ] || { echo "FAIL: project root not readable: $ROOT" >&2; exit 1; }
 
+# =============================================================================
+# THE PLANNING-ARTIFACT BUDGET IS DERIVED. HERE IS THE DERIVATION.
+# =============================================================================
+#
+# The four planning artifacts used to carry per-file budgets of
+# 60000/60000/40000/60000 tokens. Those numbers had NO derivation: no ADR, no
+# measurement, no named reader. They were a bash literal with a per-artifact env
+# override -- and a physical limit does not ship with an override flag. Asked "is
+# 60K a true hard line?", nobody could say. The honest answer was no.
+#
+# That mattered, because the gate they back is a HARD_BLOCK at sprint start
+# (route.md Step 1a) over artifacts holding LOCKED requirements (Rule 13) that no
+# rule retires. Growth is monotonic by construction, so those constants made the
+# gate eventually unpassable -- and the standing remedy was to relocate locked
+# requirements in order to satisfy a number nobody derived. In the reference
+# consumer that relocation ran at S242, S247 and S274; it grew back every time.
+#
+# So: derive it from the only thing that is actually physical -- the reader.
+#
+#   WHO WHOLE-READS THEM. Exactly one agent. carry-over-evaluation.md section 1
+#   (Rule 25(b)) reads carry-over-backlog.md, docs/architecture.md,
+#   product-brief.md and prd.md IN FULL into a single Rule-24 analyst subagent.
+#   No other step whole-reads them; the lead only ever slice-reads. So the
+#   quantity that binds is the SUM of the four against ONE context window -- not
+#   four separate per-file limits, which bounded nothing real.
+#
+#   THE WINDOW IS RESOLVED, NOT ASSUMED. See resolve_reader_window() below. The
+#   reference consumer derived this same pool with the window written in as
+#   1,000,000 and a comment telling a human "if that model line changes, THIS
+#   NUMBER CHANGES. Re-derive; do not inherit." Core cannot execute an
+#   instruction to a human, and the number is not core's to inherit: core ships
+#   team-roles/analyst.md as a TEMPLATE (`{analyst_model_personal}`) that setup
+#   fills per project. Shipping 1,000,000 to every consumer would hand a
+#   200K-window analyst a pool 1.65x its entire context -- a fail-open at a
+#   HARD_BLOCK, on exactly the gate that exists to prevent the analyst blowing
+#   its window one step later.
+#
+#   THE SHARE. The analyst does not only read these four files. It also reads the
+#   carry-over items in detail, docs/escalations/pending.md, the last retro, git
+#   history and source, plus its own tool output -- and it must have room left to
+#   reason and to write its draft. Giving the four artifacts ONE THIRD of the
+#   window and leaving two thirds for everything else is the one judgement call in
+#   this derivation, and it is stated here rather than hidden in a constant.
+#
+#   WHOLE_READ_POOL = <resolved window> * 33%, for all four combined.
+#
+# This is a SUBTRACTION: four underived constants -> one derived one. It is also
+# still a real gate, not a rubber stamp. At the sprint that first derived it the
+# four artifacts summed to 324,037 tokens against a 330,000 pool -- 98%, inside
+# the grace band and warning. It binds today.
+#
+# WHAT IT DOES NOT FIX. The pool does not stop the ratchet, it only prices it
+# honestly. Rule 13 locks requirements and nothing retires them, so the sum can
+# only rise. The real cure is a RETIREMENT PATH for locked requirements. Raising
+# the pool again, or overriding it below, instead of building one, is the failure
+# this comment exists to make visible.
 # -----------------------------------------------------------------------------
-# The canonical Rule 25(d) budgets. Format: basename|tokens|remedy
+WHOLE_READ_SET="prd.md product-brief.md architecture.md carry-over-backlog.md"
+
+# The analyst's context window, from the role file setup writes. `[1m]` is Claude
+# Code's own suffix for the 1M-context variant, which is why it is the token
+# matched rather than a model-name table -- a name table is a hand-maintained list
+# that goes stale silently, and the suffix is the thing that actually selects the
+# window.
+#
+# UNRESOLVED FALLS BACK TO 200000, NEVER TO THE LARGER NUMBER. An unfilled
+# template, a missing role file and an unrecognised model all mean the same thing:
+# we do not know. 200K is the standard window and the value the context sensor
+# already defaults to (`*) MODEL_MAX=200000`), so the unknown case tightens the
+# gate rather than opening it. A consumer whose analyst genuinely has more room
+# sets AI_DLC_READER_WINDOW_TOKENS -- and unlike the four constants this replaces,
+# the number being overridden has a derivation to argue against.
+resolve_reader_window() {
+  role="$ROOT/.claude/team-roles/analyst.md"
+  [ -f "$role" ] || role="$ROOT/core/team-roles/analyst.md"
+  [ -f "$role" ] || { printf '200000'; return; }
+  case "$(grep -m1 '^- Personal:' "$role" 2>/dev/null)" in
+    *'[1m]'*) printf '1000000' ;;
+    *)        printf '200000' ;;
+  esac
+}
+
+if [ -n "${AI_DLC_READER_WINDOW_TOKENS:-}" ]; then
+  READER_WINDOW_TOKENS="$AI_DLC_READER_WINDOW_TOKENS"
+  WINDOW_SOURCE="AI_DLC_READER_WINDOW_TOKENS"
+else
+  READER_WINDOW_TOKENS="$(resolve_reader_window)"
+  WINDOW_SOURCE="team-roles/analyst.md"
+fi
+ARTIFACT_SHARE_PCT="${AI_DLC_ARTIFACT_SHARE_PCT:-33}"
+WHOLE_READ_POOL=$(( READER_WINDOW_TOKENS * ARTIFACT_SHARE_PCT / 100 ))
+
+# -----------------------------------------------------------------------------
+# The per-file Rule 25(d) budgets. Format: basename|tokens|remedy
+#
+# These are the artifacts the LEAD reads, not the analyst -- a different reader
+# and a different constraint, so they stay per-file. They are bounded by rotation
+# and trimming, which are mechanical and lossless; unlike consolidation, neither
+# can drop a locked requirement, so a wrong number here costs minutes, not
+# fidelity. The four whole-read planning artifacts are NOT in this table; they are
+# bounded as a sum by the pool above.
 #
 # remedy is the BOUNDING MECHANISM for that artifact's class, not a generic
 # "make it smaller" -- the remedies are genuinely different and applying the
@@ -156,10 +255,6 @@ say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 #                grow are the finding -- not the file.
 # -----------------------------------------------------------------------------
 BUDGETS="
-prd.md|60000|consolidate
-product-brief.md|60000|consolidate
-carry-over-backlog.md|40000|consolidate
-architecture.md|60000|consolidate
 gate-log.md|25000|rotate
 compaction-log.md|10000|rotate
 pipeline-continuation-log.md|10000|rotate
@@ -416,6 +511,64 @@ say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; 
 say "project root        : ${ROOT}"
 say ""
 
+# -----------------------------------------------------------------------------
+# THE WHOLE-READ POOL. The four planning artifacts are measured as a SUM against
+# one analyst window, per the derivation at the top of this file.
+#
+# Skipped when --only names an artifact outside the set: the pool is a property of
+# the four together, and reporting it while the caller asked about
+# pipeline-snapshot.md would be noise at the two enforcement points (Check 14 and
+# the sub-step path) that only ever ask about the snapshot. --only naming one OF
+# the four still measures all four, because the pool is the only budget any of
+# them has.
+# -----------------------------------------------------------------------------
+POOL_APPLIES=0
+if [ -z "$ONLY" ]; then
+  POOL_APPLIES=1
+else
+  for n in $WHOLE_READ_SET; do
+    [ "$ONLY" = "$n" ] && POOL_APPLIES=1
+  done
+fi
+
+if [ "$POOL_APPLIES" -eq 1 ]; then
+  POOL_TMP="$TMPROOT/pool"
+  rm -f "$POOL_TMP"
+  for name in $WHOLE_READ_SET; do
+    find "$ROOT/_bmad-output" "$ROOT/docs" -type f -name "$name" 2>/dev/null | while read -r f; do
+      is_archive "$f" && continue
+      is_not_artifact "$f" && continue
+      bytes="$(wc -c < "$f" | tr -d ' ')"
+      printf '%s|%s\n' "$(( bytes / BPT ))" "${f#"$ROOT"/}" >> "$POOL_TMP"
+    done
+  done
+
+  POOL_TOTAL=0
+  say "whole-read pool     : ${WHOLE_READ_POOL} tok  (${ARTIFACT_SHARE_PCT}% of the analyst's ${READER_WINDOW_TOKENS}-tok window, resolved from ${WINDOW_SOURCE})"
+  if [ -s "$POOL_TMP" ]; then
+    while IFS='|' read -r tokens rel; do
+      POOL_TOTAL=$(( POOL_TOTAL + tokens ))
+      [ "$QUIET" -eq 1 ] || printf '      %-44s %8s tok\n' "$rel" "$tokens"
+    done < "$POOL_TMP"
+  fi
+  rm -f "$POOL_TMP"
+
+  POOL_LABEL="WHOLE-READ POOL (4 planning artifacts)"
+  POOL_CEILING=$(( WHOLE_READ_POOL + (WHOLE_READ_POOL * GRACE_PCT / 100) ))
+  POOL_PCT=$(( POOL_TOTAL * 100 / WHOLE_READ_POOL ))
+  if [ "$POOL_TOTAL" -gt "$POOL_CEILING" ]; then
+    printf 'OVER  %-44s %8s tok  (pool %6s, %s%% of it)  -> consolidate\n' \
+      "$POOL_LABEL" "$POOL_TOTAL" "$WHOLE_READ_POOL" "$POOL_PCT" >> "$BREACH_FILE"
+  elif [ "$POOL_TOTAL" -gt "$WHOLE_READ_POOL" ]; then
+    printf 'warn  %-44s %8s tok  (pool %6s, %s%% — within %s%% grace)  -> consolidate soon\n' \
+      "$POOL_LABEL" "$POOL_TOTAL" "$WHOLE_READ_POOL" "$POOL_PCT" "$GRACE_PCT"
+  else
+    [ "$QUIET" -eq 1 ] || printf '  ok  %-44s %8s tok  (pool %6s, %s%% of it)\n' \
+      "$POOL_LABEL" "$POOL_TOTAL" "$WHOLE_READ_POOL" "$POOL_PCT"
+  fi
+  say ""
+fi
+
 printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
   [ -n "$name" ] || continue
   [ -z "$ONLY" ] || [ "$ONLY" = "$name" ] || continue
@@ -480,6 +633,11 @@ if [ -s "$BREACH_FILE" ]; then
 
       Remedies (they are NOT interchangeable):
         consolidate -> artifact-consolidation.md. Operator-invoked, fidelity-critical.
+                       The WHOLE-READ POOL breaches as a SUM, so the remedy is chosen
+                       across the four, not per file. Before consolidating: check
+                       whether the growth is locked requirements (Rule 13), because
+                       consolidation cannot retire one and relocating them needs
+                       operator sign-off. Raising the pool is NOT a remedy.
         rotate      -> a rotation was MISSED. Move the epoch to a dated archive
                        (Rule 25(c)); never rewrite a log.
         trim        -> trim pipeline-snapshot.md to its 7-section schema (gate-validation

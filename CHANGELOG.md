@@ -17,6 +17,63 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.124.0] — 2026-07-22
+
+### Changed — the planning-artifact budget is derived from its reader, and the reader's window is resolved
+
+Absorbed from the reference consumer, which derived this at S290 (`8d6396e4`) and has run it since.
+
+The four planning artifacts carried per-file budgets of 60000/60000/40000/60000 tokens with no
+derivation: no ADR, no measurement, no named reader, and a per-artifact env override. A physical
+limit does not ship with an override flag. Asked "is 60K a true hard line?", nobody could say.
+
+That mattered because the gate they back is a HARD_BLOCK at sprint start over artifacts holding
+LOCKED requirements (Rule 13) that no rule retires. Growth is monotonic by construction, so the
+gate was eventually unpassable — and its standing remedy was to relocate locked requirements
+governing live capital to satisfy a number nobody derived. In the reference consumer that
+relocation ran at S242, S247 and S274; it grew back every time.
+
+Exactly one agent whole-reads the four: the Rule-24 analyst at `carry-over-evaluation.md` §1
+(Rule 25(b)). The lead only slice-reads. So the binding quantity is the **sum** against **one**
+context window, not four per-file limits that bounded nothing real:
+
+    WHOLE_READ_POOL = <analyst window> × 33%
+
+The 33% is the single judgement call and is stated in the script rather than hidden in a constant.
+Four underived constants become one derived one, and it still binds: the consumer's four currently
+sum to 351,677 against a 330,000 pool — 106%, warning inside the grace band.
+
+**The window is resolved, not inherited — this is the part that is core's and not the consumer's.**
+The consumer wrote 1,000,000 in as a literal with a comment telling a human *"if that model line
+changes, THIS NUMBER CHANGES. Re-derive; do not inherit."* Core cannot execute an instruction to a
+human, and the number is not core's to take: core ships `team-roles/analyst.md` as a **template**
+(`{analyst_model_personal}`) that setup fills per project. Shipping 1,000,000 to everyone would
+hand a 200K-window analyst a pool 1.65× its entire context — a fail-open at a HARD_BLOCK, on the
+one gate that exists to stop the analyst blowing its window a step later.
+
+`resolve_reader_window()` reads the `- Personal:` line and matches Claude Code's own `[1m]`
+suffix — the thing that actually selects the window — rather than a model-name table, which is a
+hand-maintained list that goes stale silently. **Unresolved falls back to 200,000, never to the
+larger number.** An unfilled template, a missing role file and an unrecognised model all mean "we
+do not know", and unknown must tighten a HARD_BLOCK rather than open it. The pool line names its
+own source so an operator-raised pool is never confused with a derived one.
+
+Verified byte-identical to the consumer's own copy against its live tree (`351677 tok  (pool
+330000, 106%)`), and a fresh install with an unfilled template resolves to 66,000.
+
+Also absorbed: the `consolidate` remedy text now says the pool breaches as a **sum**, so the remedy
+is chosen across the four rather than per file — and that raising the pool is not a remedy. The
+ratchet is priced honestly, not stopped; Rule 13 locks requirements and nothing retires them, so
+the sum can only rise. The cure is a retirement path for locked requirements.
+
+### Fixtures
+
+`whole-read-pool/` — window resolution in four directions ([1m], plain, unfilled template, missing
+file), the pool binding in both directions, `--only pipeline-snapshot.md` not dragging the pool
+into a mid-sprint gate, and no per-file planning budget surviving. Its mutation control flips
+**both** fallback sites; the first draft flipped one and the assertion correctly refused to pass.
+48/48 fixtures.
+
 ## [0.123.0] — 2026-07-22
 
 ### Fixed — a gate cited a passing budget check that had failed at every commit around it

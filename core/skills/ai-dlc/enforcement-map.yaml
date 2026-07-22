@@ -657,8 +657,17 @@ non_catalog_units:
       - tests/fixtures/snapshot-evidence-cell
       - tests/fixtures/inflight-row-shape
       - tests/fixtures/verdict-pass-content
+      - tests/fixtures/whole-read-pool
     supersedes: the retro.md prose threshold table, which was warn-only, fired only
-      at retro, and drifted from nothing because nothing else executed it
+      at retro, and drifted from nothing because nothing else executed it; and the
+      four per-file planning-artifact constants (prd/product-brief/carry-over-backlog/
+      architecture), which had no derivation and whose standing remedy was to relocate
+      locked requirements to satisfy them. Replaced by ONE derived number: the four are
+      whole-read by exactly one reader (the Rule-24 analyst at carry-over-evaluation
+      section 1), so the bound is their SUM against that reader's window. The window is
+      resolved from team-roles/analyst.md at run time and falls back to 200K when
+      unresolved — core ships that role file as a template, and inheriting the
+      reference consumer's 1M would fail this HARD_BLOCK open for everyone else.
 
   - id: steering-budget
     title: Operator steerability (Rule 29) — no foreground call may outlast the
