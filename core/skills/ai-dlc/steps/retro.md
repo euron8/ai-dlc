@@ -326,7 +326,7 @@ It derives both directions from the manifest and hard-codes no check ID.
 MISSING and ORPHAN must both be empty. Exit 2 means the resolve could not be
 performed (no anchors, no rows, no `universal` row) and is never a pass.
 
-## Empirical gate validation
+### Empirical gate validation
 
 Every gate added via retro MUST be exercised on a green run within the next
 PR that naturally touches the gate's enforcement domain. Absence of exercise
@@ -654,7 +654,7 @@ Unrotated, this directory accumulates every sprint's inputs forever — measured
 at 61 files / 1.0 MB on the reference consumer, growing ~77 KB per sprint, read
 by nothing after the dispatch that wrote it returned.
 
-## Sprint-Ship Verification
+### Sprint-Ship Verification
 
 Sprint-ship counters track smoke-quality across deploy-validate runs.
 
