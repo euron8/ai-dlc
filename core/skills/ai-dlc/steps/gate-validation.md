@@ -680,19 +680,11 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   **DELETED** once it will not be (see `_gate-procedures.md` "Sub-step
   snapshot update"). An empty table is normal and means nothing is in
   flight.
-  **Rows only. No prose, no struck-through history.** A teammate that
-  has delivered is not history to be struck and is not narrative to be
-  summarized — it is a row whose `status` says which of the two states
-  it is in. `validate-artifact-budget.sh` fails on a struck row.
-  Recent Activity and the gate log already record what a teammate
-  delivered; this section records only whether the lead can still reach
-  it. The section is bounded by the teammates that actually exist.
-  **`idle-reusable` exists because the harness lets a lead re-message a
-  teammate that has already delivered** rather than re-spawn it, and a
-  four-column row could not say so. The reference consumer wrote 302
-  lines of prose into this section to record exactly that, inside a
-  canonical section where nothing could see it. A state the protocol
-  will not model is a state the lead models in prose.
+  **Rows only. No prose, no struck-through history** — `status` is how a
+  row says it has delivered. `validate-artifact-budget.sh` fails on a
+  struck row. Recent Activity and the gate log already record what a
+  teammate delivered; this section records only whether the lead can
+  still reach it. The section is bounded by the teammates that exist.
   **A row whose `deliverable path` cell is blank FAILS this gate.** That row
   cannot be joined — `wait-for-deliverable.sh` rejects a blank target outright —
   so it records a teammate the lead has no way to reach, which presents as
@@ -807,16 +799,7 @@ After Check 14 writes the snapshot, re-read
 
   Exit 1 → **Check 15 FAILS.** The budget check is the one part of Check
   14 that leaves no trace in the snapshot itself, so it is the one part
-  Check 15 cannot verify any other way — which is exactly why it was the
-  part that got written without being run. Measured in the reference
-  consumer: a Check 14 cell reading
-  `` Budget validator: `PASS  validate-artifact-budget.sh` (exit 0) ``
-  at a gate where the snapshot measured 126% of budget before it and 212%
-  after. That cell was not empty and was not a "budget OK" paraphrase; it
-  was the validator's real PASS format, which then carried no
-  run-specific content and so could be transcribed straight out of this
-  instruction. `verdict.sh` now puts the measurement in the line, and this
-  arm requires the measurement to be in the cell.
+  Check 15 cannot verify any other way.
 
 This check exists because Check 14 is an assertion ("update the
 snapshot"); Check 15 is a verification that the assertion took

@@ -17,6 +17,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.124.1] — 2026-07-22
+
+### Fixed — the resident path carried the incident, not the rule
+
+Self-review against Rule 26(c) resident-path discipline. `gate-validation.md` is whole-re-read at
+every gate and after every compaction, so what it carries is paid for on every load. Three of the
+four step-file edits in 0.123.0 were clean mechanism; this one was not.
+
+Check 15's evidence bullet had grown 17 lines, 9 of them the S296 incident: which gate, what the
+snapshot measured before and after, why the old PASS format was transcribable. None of it changes
+what the lead does — run the command, exit 1 fails the check — and all of it was already in the
+validator's own header comment and this changelog, neither of which costs context.
+
+Worse than verbose: **it quoted the fabricated cell verbatim.** A gate instruction that prints the
+exact string a lead can write *instead of* running the check is priming, in the file the lead reads
+immediately before writing that cell. Same class as "a deletion imperative in a role file primes
+deletion". Deleted.
+
+The In-Flight Teammates bullet lost 8 lines of the same kind. The schema, the two `status` values,
+when each applies, and the fact that the validator fails on a struck row all stay — that is the part
+that changes what gets written.
+
+`gate-validation.md`: 36 added lines → 19. Across all four step files, 0.123.0–0.124.1 now adds 32
+lines to the resident path, every one of them mechanism.
+
+Also corrects an overclaim in the `--check-evidence` header, which presented both predicates as
+measured. Predicate 2 (a row claiming PASS while citing a breaching number) has never been observed;
+predicate 1 caught every real failure. It stays because it costs nothing and needs no constant, and
+the comment now says so rather than letting a later reader take it for a failure that happened.
+
+No behaviour change: 48/48 fixtures, enforcement-map green, live consumer output unchanged.
+
 ## [0.124.0] — 2026-07-22
 
 ### Changed — the planning-artifact budget is derived from its reader, and the reader's window is resolved

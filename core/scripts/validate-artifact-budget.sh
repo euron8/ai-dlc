@@ -404,7 +404,10 @@ env_override() {
 #      whole observed failure population: the 12 consecutive `-` cells v0.118.0
 #      found, and the content-free PASS string above.
 #   2. If the row claims PASS, that number is within budget + grace. A row cannot
-#      cite a breaching measurement and call itself passing.
+#      cite a breaching measurement and call itself passing. UNOBSERVED -- no real
+#      cell has ever done this; predicate 1 caught every one of them. It is here
+#      because it costs nothing and needs no constant, not because it was measured.
+#      Do not read it as evidence of a failure mode that happened.
 #
 # WHAT THIS DELIBERATELY DOES NOT DO: join the cited number against the snapshot
 # on disk. That needs a drift tolerance -- the snapshot keeps being written after
