@@ -11,9 +11,9 @@ if   [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-mandatory-rules.sh" ]; 
   VMR="$ROOT/core/scripts/validate-mandatory-rules.sh"
   SS="$ROOT/core/scripts/sprint-status.sh"
   SCHEMA="$ROOT/core/schemas/sprint-status.json"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/validate-mandatory-rules.sh" ]; then
-  VMR="$ROOT/scripts/validate-mandatory-rules.sh"
-  SS="$ROOT/scripts/sprint-status.sh"
+elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-mandatory-rules.sh" ]; then
+  VMR="$ROOT/scripts/ai-dlc/validate-mandatory-rules.sh"
+  SS="$ROOT/scripts/ai-dlc/sprint-status.sh"
   SCHEMA="$ROOT/.claude/schemas/sprint-status.json"
 else
   echo "FIXTURE ERROR: validate-mandatory-rules.sh not found in either layout" >&2

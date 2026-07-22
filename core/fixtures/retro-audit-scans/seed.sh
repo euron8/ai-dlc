@@ -14,9 +14,9 @@ ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if   [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/audit-rule-files.sh" ]; then
   AUDIT="$ROOT/core/scripts/audit-rule-files.sh"
   MANIFEST="$ROOT/core/scripts/validate-gate-manifest.sh"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/audit-rule-files.sh" ]; then
-  AUDIT="$ROOT/scripts/audit-rule-files.sh"
-  MANIFEST="$ROOT/scripts/validate-gate-manifest.sh"
+elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/audit-rule-files.sh" ]; then
+  AUDIT="$ROOT/scripts/ai-dlc/audit-rule-files.sh"
+  MANIFEST="$ROOT/scripts/ai-dlc/validate-gate-manifest.sh"
 else
   echo "FIXTURE ERROR: audit-rule-files.sh not found in either layout" >&2
   exit 2

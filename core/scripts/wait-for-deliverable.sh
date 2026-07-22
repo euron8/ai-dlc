@@ -26,7 +26,7 @@
 #
 # WAIT ON A WHOLE WAVE IN ONE BEAT. Pass every deliverable you are joining:
 #
-#     scripts/wait-for-deliverable.sh docs/reviews/a.md docs/reviews/b.md ...
+#     scripts/ai-dlc/wait-for-deliverable.sh docs/reviews/a.md docs/reviews/b.md ...
 #
 # All paths are polled inside the SAME beat, concurrently. This is the point:
 # a wave of three teammates joined as three separate calls is 3 x 110s of
@@ -68,7 +68,7 @@
 # belt for paths that escaped that discipline.
 #
 # USAGE
-#   scripts/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
+#   scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
 #                                   [--since <epoch|ISO8601>]
 #
 # EXIT CODES
@@ -317,7 +317,7 @@ if [ -n "$PREEXISTING" ]; then
   echo "  If your teammate may have delivered BEFORE this join armed (the normal"
   echo "  shape when you are resuming a join after a compaction), re-run with the"
   echo "  dispatch time from the snapshot's In-Flight Teammates row:"
-  echo "    scripts/wait-for-deliverable.sh --since <epoch|ISO8601> <path> ..."
+  echo "    scripts/ai-dlc/wait-for-deliverable.sh --since <epoch|ISO8601> <path> ..."
 fi
 
 [ -z "$PENDING" ] && exit 0   # everything was already delivered
@@ -328,7 +328,7 @@ if [ "$MAY_SLEEP" -eq 0 ]; then
   echo "  NOT sleep and did NOT consume a beat -- two beats in one call would push"
   echo "  it past the ${BUDGET}s steering budget (Rule 29, Check A). Do not loop or chain"
   echo "  beats; pass every deliverable to ONE call, and beat again on the NEXT call:"
-  echo "    scripts/wait-for-deliverable.sh path-a path-b path-c"
+  echo "    scripts/ai-dlc/wait-for-deliverable.sh path-a path-b path-c"
   exit 0
 fi
 

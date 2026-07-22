@@ -25,7 +25,7 @@
 # therefore harmless and automatic; ENABLING it is an explicit operator action you take
 # once the tree is clean. Run the checks by hand first:
 #
-#     bash scripts/validate-layer-entries.sh
+#     bash scripts/ai-dlc/validate-layer-entries.sh
 #
 # `git push --no-verify` bypasses the hook. That is a decision made on the record,
 # not a default fallen into.
@@ -42,9 +42,9 @@ step() {
 # 1. Rule 27 layer hygiene. Overrides carry a resolvable `base_sha`; extension checks
 #    do not collide with a core check NUMBER (a bare "Check N" in a gate log has no
 #    referent when two catalogs share one integer). THE check this hook exists for.
-if [ -f scripts/validate-layer-entries.sh ]; then
+if [ -f scripts/ai-dlc/validate-layer-entries.sh ]; then
   step "layer entries (Rule 27: override base_sha, catalog collisions)" \
-    bash scripts/validate-layer-entries.sh
+    bash scripts/ai-dlc/validate-layer-entries.sh
 fi
 
 # 2. The context bands derive from the resolved effective window, so red fires
@@ -52,9 +52,9 @@ fi
 #    (yellow > red > imminent > 0, red with runway to spare) and reports the
 #    resolved autoCompactWindow, FAILing on an out-of-range value. Decidable from
 #    disk.
-if [ -f scripts/validate-compact-window.sh ]; then
+if [ -f scripts/ai-dlc/validate-compact-window.sh ]; then
   step "compact-window invariant" \
-    bash scripts/validate-compact-window.sh
+    bash scripts/ai-dlc/validate-compact-window.sh
 fi
 
 # 3. The schema an agent is TAUGHT and the schema the gate READS must be the same schema.
@@ -63,9 +63,9 @@ fi
 #    "no provenance block required or present" and exited 0 — so two full adversarial passes
 #    of a real sprint went unadjudicated and the gate called them clean. An unparseable block
 #    scores exactly like a clean artifact.
-if [ -f scripts/sync-taught-schema.sh ]; then
+if [ -f scripts/ai-dlc/sync-taught-schema.sh ]; then
   step "taught schema == read schema (provenance examples derive from schemas/)" \
-    bash scripts/sync-taught-schema.sh --check
+    bash scripts/ai-dlc/sync-taught-schema.sh --check
 fi
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.

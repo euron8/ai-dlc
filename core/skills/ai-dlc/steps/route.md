@@ -141,7 +141,7 @@ Check for existing artifacts on disk:
 
 ### Step 1a: Artifact-Size Budget Gate (Rule 25(d)) — HARD_BLOCK
 
-Run `scripts/validate-artifact-budget.sh`.
+Run `scripts/ai-dlc/validate-artifact-budget.sh`.
 
 **Exit 0** — every living artifact is within budget. Continue to Step 2.
 
@@ -327,7 +327,7 @@ identity).** A fresh pipeline start is the only place the sprint number
 is derived; every downstream consumer reads it from the snapshot, never
 re-derives it. Resolve it here, before creating the snapshot:
 
-    scripts/sprint-status.sh sprint-id
+    scripts/ai-dlc/sprint-status.sh sprint-id
 
 It prints an integer on stdout. Use that value. Do NOT re-derive it by
 reading `sprint-status.yaml` yourself — the rules are the script's, and a
@@ -352,7 +352,7 @@ frozen archives instead.
 **Rotate the sprint envelope (MANDATORY).** Immediately after resolving
 `sprint_id`, run:
 
-    scripts/sprint-status.sh roll --sprint <sprint_id> \
+    scripts/ai-dlc/sprint-status.sh roll --sprint <sprint_id> \
       [--name "<sprint name>"] [--variant <variant>] [--intensity <intensity>]
 
 This is the pipeline's ONLY rotation point, and it is idempotent — on a

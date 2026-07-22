@@ -11,8 +11,8 @@ D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if   [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-audit-anchors.sh" ]; then
   VALIDATOR="$D_ROOT/core/scripts/validate-audit-anchors.sh"
-elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/validate-audit-anchors.sh" ]; then
-  VALIDATOR="$C_ROOT/scripts/validate-audit-anchors.sh"
+elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-audit-anchors.sh" ]; then
+  VALIDATOR="$C_ROOT/scripts/ai-dlc/validate-audit-anchors.sh"
 else
   echo "FIXTURE ERROR: validate-audit-anchors.sh not found in either layout" >&2
   exit 2

@@ -47,9 +47,9 @@ if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-provenance-block.sh" ]; t
   VALIDATOR="$ROOT/core/scripts/validate-provenance-block.sh"
   SCHEMA="$ROOT/core/schemas/provenance-block.json"
   RETRO_DOC="$ROOT/core/skills/ai-dlc/steps/retro.md"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/validate-provenance-block.sh" ]; then
+elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-provenance-block.sh" ]; then
   # Consumer install: scripts/ at the project root, the rest under .claude/.
-  VALIDATOR="$ROOT/scripts/validate-provenance-block.sh"
+  VALIDATOR="$ROOT/scripts/ai-dlc/validate-provenance-block.sh"
   SCHEMA="$ROOT/.claude/schemas/provenance-block.json"
   RETRO_DOC="$ROOT/.claude/skills/ai-dlc/steps/retro.md"
 else

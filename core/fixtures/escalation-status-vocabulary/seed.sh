@@ -16,8 +16,8 @@ C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-escalation-status-vocabulary.sh" ]; then
   VALIDATOR="$D_ROOT/core/scripts/validate-escalation-status-vocabulary.sh"
   SPEC_SRC="$D_ROOT/core/skills/ai-dlc/escalations.md"
-elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/validate-escalation-status-vocabulary.sh" ]; then
-  VALIDATOR="$C_ROOT/scripts/validate-escalation-status-vocabulary.sh"
+elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-escalation-status-vocabulary.sh" ]; then
+  VALIDATOR="$C_ROOT/scripts/ai-dlc/validate-escalation-status-vocabulary.sh"
   SPEC_SRC="$C_ROOT/.claude/skills/ai-dlc/escalations.md"
 else
   echo "FIXTURE ERROR: validate-escalation-status-vocabulary.sh not found in either layout" >&2

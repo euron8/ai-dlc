@@ -196,10 +196,10 @@ console.log(local.join('  '));
 console.log('\n## non-check units (token/line cost + consumer usage)\n');
 const hasWorkflows = fs.existsSync(path.join(GRAPH, '.github/workflows'));
 const units = [
-  ['scripts/validate-ci-gates.sh', 'core/scripts/validate-ci-gates.sh'],
-  ['scripts/validate-mandatory-rules.sh', 'core/scripts/validate-mandatory-rules.sh'],
-  ['scripts/validate-provenance-block.sh', 'core/scripts/validate-provenance-block.sh'],
-  ['scripts/validate-retro-evidence.sh', 'core/scripts/validate-retro-evidence.sh'],
+  ['scripts/ai-dlc/validate-ci-gates.sh', 'core/scripts/validate-ci-gates.sh'],
+  ['scripts/ai-dlc/validate-mandatory-rules.sh', 'core/scripts/validate-mandatory-rules.sh'],
+  ['scripts/ai-dlc/validate-provenance-block.sh', 'core/scripts/validate-provenance-block.sh'],
+  ['scripts/ai-dlc/validate-retro-evidence.sh', 'core/scripts/validate-retro-evidence.sh'],
   ['ci/validate-ci-gates.yml', 'core/ci-templates/validate-ci-gates.yml'],
   ['ci/validate-retro-compliance.yml', 'core/ci-templates/validate-retro-compliance.yml'],
 ];

@@ -153,7 +153,7 @@ and wrongly report every role hook missing.
   Without the label, a bare `Check 24: PASSED` in your gate log — the durable audit
   record — has no referent once core also defines a check 24. That is not a
   hypothetical: it has already happened, and the lead had to disambiguate by hand in
-  prose. `scripts/validate-layer-entries.sh` fails (E6) on a check that redefines a
+  prose. `scripts/ai-dlc/validate-layer-entries.sh` fails (E6) on a check that redefines a
   core check number with a different title, and `/ai-dlc-update` reports
   `EXTENSION-CHECK-NUMBER-COLLISION` at pull time when an incoming release creates one.
 - **`push_candidate: true`** marks a generalizable improvement. `ai-dlc-update`
@@ -186,7 +186,7 @@ of your next `/ai-dlc-update` report, then freeze it:
 |---|---|---|---|---|
 | 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24 (adversarial convergence), added upstream in v0.48.0 |
 
-**Validate any entry you author or revise:** `scripts/validate-layer-entries.sh`.
+**Validate any entry you author or revise:** `scripts/ai-dlc/validate-layer-entries.sh`.
 
 ## Authoring routing (§7.1 — enforced)
 

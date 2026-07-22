@@ -36,7 +36,7 @@ mkdir -p "$ROOT/clean"
 F="$ROOT/clean/session.jsonl"
 : > "$F"
 turn "$F" t1 Bash \
-  '{"command":"scripts/wait-for-deliverable.sh _bmad-output/planning-artifacts/s290-brief-adversarial-p1.md"}' \
+  '{"command":"scripts/ai-dlc/wait-for-deliverable.sh _bmad-output/planning-artifacts/s290-brief-adversarial-p1.md"}' \
   "2026-07-13T12:00:00.000Z" "2026-07-13T12:01:50.000Z"
 
 # --- backgrounded: the decoy that must NOT fire -------------------------------

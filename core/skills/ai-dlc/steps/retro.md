@@ -16,7 +16,7 @@ a chance to comment or ask questions before it closes.
 ### 1. Context Loading
 
 Create the retro branch using the canonical name that
-`scripts/validate-mandatory-rules.sh` expects:
+`scripts/ai-dlc/validate-mandatory-rules.sh` expects:
 
 ```bash
 git checkout -b ai-dlc/retro/sprint-<N>
@@ -95,7 +95,7 @@ the discussion:
 3. **Provenance block cites transcript@sha.** The provenance block's
    `transcript_path` field uses the `path@<sha>` format where
    `<sha>` is the **commit** SHA of the commit that added the transcript
-   — NOT the blob SHA. `scripts/validate-retro-evidence.sh` resolves the
+   — NOT the blob SHA. `scripts/ai-dlc/validate-retro-evidence.sh` resolves the
    citation with `git cat-file -p <sha>:<path>`, and that syntax takes a
    tree-ish: handed a blob it exits `fatal: path '<path>' exists on disk,
    but not in '<sha>'`. It then enforces byte-match between the cited
@@ -242,7 +242,7 @@ above land (§2 blocker 1) and before the Step-5c audit commit.
 
 Detection is mechanical and is not dispatched. Run:
 
-    scripts/audit-rule-files.sh
+    scripts/ai-dlc/audit-rule-files.sh
 
 The script owns the scan corpus and the detection regexes — neither is
 restated here, where they would drift from the thing that runs. It reports
@@ -305,7 +305,7 @@ MUST be fixed before the Step 5c audit commit.
 Claude Code re-attaches only the first ~5,000 tokens of `SKILL.md` after
 compact, and a protocol truncated by the event it handles is worthless. Run:
 
-    scripts/validate-reattach-budget.sh
+    scripts/ai-dlc/validate-reattach-budget.sh
 
 It FAILS if the protocol's END offset exceeds the ceiling; a non-zero exit is
 a hard audit failure. Its slack figure is measured against that ceiling, so it
@@ -320,7 +320,7 @@ checks by gate type; a manifest ID with no matching check, or a check with no
 manifest claim, silently mis-slices a gate — it runs, reports PASS, and the
 missing check never fires. Run:
 
-    scripts/validate-gate-manifest.sh
+    scripts/ai-dlc/validate-gate-manifest.sh
 
 It derives both directions from the manifest and hard-codes no check ID.
 MISSING and ORPHAN must both be empty. Exit 2 means the resolve could not be
@@ -335,7 +335,7 @@ trigger, or wired only to a workflow that does not run on any PR in the
 exercise window, is the dormant-gate anti-pattern.
 
 Enforcement (conditional on the consumer shipping CI): where
-`.github/workflows/validate-ci-gates.yml` is present, `scripts/validate-ci-gates.sh`
+`.github/workflows/validate-ci-gates.yml` is present, `scripts/ai-dlc/validate-ci-gates.sh`
 runs on every pull request; a script-based consumer with no `.github/workflows/`
 runs it locally. The script scans `docs/retro/**/*.md`
 for declared gate names and grep's `.github/workflows/**` for each; any
@@ -373,7 +373,7 @@ never to dispose. It writes its tables to
 - **Artifact-size audit.** Measures the live artifacts and returns
   sizes-vs-thresholds.
 - **Layer-entry audit (Rule 27, layered consumers only).** Runs
-  `scripts/validate-layer-entries.sh` and returns its errors/warnings. Skip on a
+  `scripts/ai-dlc/validate-layer-entries.sh` and returns its errors/warnings. Skip on a
   consumer with no `extensions/`/`overrides/` directories (it exits clean anyway).
 
 The lead **dispositions** every row before the PVC — "the lead is the
@@ -492,7 +492,7 @@ gate.
 
    Then **close the envelope mechanically** — do NOT hand-edit `status:`:
 
-       scripts/sprint-status.sh close \
+       scripts/ai-dlc/sprint-status.sh close \
          --evidence "<what proves the sprint closed: PR/merge, deploy, smoke>" \
          --retro-doc docs/retro/sprint-<N>.md
 
@@ -510,7 +510,7 @@ inline during implementation)".
 
 **Artifact-size audit (Rule 25(d), warn-only here).** Run:
 
-    scripts/validate-artifact-budget.sh --warn-only
+    scripts/ai-dlc/validate-artifact-budget.sh --warn-only
 
 The script owns the canonical budgets and the per-artifact remedy — the numbers
 are NOT restated here. A project overrides a budget with `AI_DLC_BUDGET_<NAME>`
@@ -532,7 +532,7 @@ Two breaches deserve a finding in their own right, not just a size warning:
   at gate passages. The gates that let it grow are the finding — not the file.
 
 **Layer-entry audit (Rule 27, warn-only).** On a layered consumer, run
-`scripts/validate-layer-entries.sh`. ERRORs are mechanized invariants — a poisoned
+`scripts/ai-dlc/validate-layer-entries.sh`. ERRORs are mechanized invariants — a poisoned
 `base_sha` (Rule 27(a)) silently disables override-drift detection for that entry,
 so the next pull cannot tell whether upstream changed the rule it shadows. WARNs
 are smells needing judgement: an extension restating a core section, a restriction
@@ -573,7 +573,7 @@ rotating before the audit destroys the evidence the audit reads.
 **Audit.** Run the validator across every transcript in the SPRINT window, not this
 session's:
 
-    scripts/validate-steering-budget.sh \
+    scripts/ai-dlc/validate-steering-budget.sh \
       --dir ~/.claude/projects/<project-slug>/ \
       --since <ISO-8601 UTC of the sprint's first commit>
 
@@ -708,9 +708,9 @@ and updates the SHA in a follow-on commit on `main` after merge.
 The schema is canonical in `.claude/schemas/audit-anchors.json` — NOT the live
 header or the template. Re-seed the header first: replace the file's
 `BEGIN GENERATED: audit-anchors-schema … END GENERATED` region with the output
-of `scripts/validate-audit-anchors.sh --render` (a new file gets that whole
+of `scripts/ai-dlc/validate-audit-anchors.sh --render` (a new file gets that whole
 block), then append the entry below `## Entries` in the shape it documents. Do
-NOT hand-write the header. Step 5c runs `scripts/validate-audit-anchors.sh`,
+NOT hand-write the header. Step 5c runs `scripts/ai-dlc/validate-audit-anchors.sh`,
 which fails the commit on header drift or a malformed entry. No SHA for the
 prior sprint = audit-gate fails closed at the next sprint's per-class test-debt
 audit (`gate-validation.md` Check 18).
@@ -736,13 +736,13 @@ core-layer-immutability).
    If the audit was clean, skip.
 
 2. **Provenance block verification.** Run
-   `scripts/validate-provenance-block.sh` — it owns the block's shape and
+   `scripts/ai-dlc/validate-provenance-block.sh` — it owns the block's shape and
    is also its own CI step. MUST exit 0. **Never invent a `tool_use_id`:**
    if it is not accessible in the conversation (common after compact),
    write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a forged block.
 
 3. **Mandatory rules validation.** Run:
-   `scripts/validate-mandatory-rules.sh <N>` (where N is the sprint
+   `scripts/ai-dlc/validate-mandatory-rules.sh <N>` (where N is the sprint
    number). It runs `validate-retro-evidence.sh` (Check 1) and inline
    Checks 3/5/6; Checks 2 (`validate-cycle-commits.sh`) and 4
    (`validate-retro-prereq.sh`) are consumer-provided and SKIP when their
@@ -751,7 +751,7 @@ core-layer-immutability).
    MUST exit 0. If it fails, fix the issues before proceeding to Step 6.
 
 4. **Audit-anchor schema validation.** Run
-   `scripts/validate-audit-anchors.sh _bmad-output/audit-anchors.md`. It
+   `scripts/ai-dlc/validate-audit-anchors.sh _bmad-output/audit-anchors.md`. It
    fails closed if the Step-5b header drifted from the canonical schema
    (`.claude/schemas/audit-anchors.json`) or the appended entry is malformed.
    MUST exit 0 — a drifted housekeeping schema is the defect this check exists

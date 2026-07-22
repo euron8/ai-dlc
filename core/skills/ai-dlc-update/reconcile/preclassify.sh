@@ -65,7 +65,7 @@ CONS="$(cd "$CONS" 2>/dev/null && pwd)" || { echo "preclassify: consumer-root no
 # it disagrees with install.sh.
 map_consumer() { # core/... -> consumer-relative path
   case "$1" in
-    core/scripts/*)      echo "scripts/${1#core/scripts/}" ;;
+    core/scripts/*)      echo "scripts/ai-dlc/${1#core/scripts/}" ;;
     core/fixtures/*)     echo "tests/fixtures/${1#core/fixtures/}" ;;
     core/ci-templates/*) echo ".github/workflows/${1#core/ci-templates/}" ;;
     core/git-hooks/*)    echo ".githooks/${1#core/git-hooks/}" ;;

@@ -19,8 +19,8 @@ if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-gate-adjudication.sh"
   VALIDATOR="$D_ROOT/core/scripts/validate-gate-adjudication.sh"
   SCHEMA="$D_ROOT/core/schemas/gate-adjudication-verdict.json"
   MAP_SRC="$D_ROOT/core/skills/ai-dlc/enforcement-map.yaml"
-elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/validate-gate-adjudication.sh" ]; then
-  VALIDATOR="$C_ROOT/scripts/validate-gate-adjudication.sh"
+elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-gate-adjudication.sh" ]; then
+  VALIDATOR="$C_ROOT/scripts/ai-dlc/validate-gate-adjudication.sh"
   SCHEMA="$C_ROOT/.claude/schemas/gate-adjudication-verdict.json"
   MAP_SRC="$C_ROOT/.claude/skills/ai-dlc/enforcement-map.yaml"
 else

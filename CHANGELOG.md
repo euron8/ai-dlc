@@ -17,6 +17,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.126.0] — 2026-07-22
+
+> **Install-layout change.** Core validators move from `scripts/` to `scripts/ai-dlc/`.
+> Per the bump rules this is a MAJOR-class change landing in MINOR pre-1.0. Existing
+> consumers keep working — the installer places the new copies and **reports** the old
+> ones rather than deleting them. See "Migration" below.
+
+### Fixed — the enforcers were the one part of core a consumer could edit in place
+
+`ai-dlc-core-guard.sh` derives its deny set from `core-manifest.md` and hand-lists nothing, which
+is right. But `scripts/*` was never *in* the manifest, so the ~25 validators — the machinery every
+gate's teeth depend on — were unguarded at edit time. Verified against the reference consumer's
+installed guard:
+
+```
+.claude/skills/ai-dlc/steps/retro.md    deny
+.claude/hooks/ai-dlc-protect.sh         deny
+scripts/validate-artifact-budget.sh     allow     <-- 160 lines of local divergence
+scripts/validate-reattach-budget.sh     allow     <--   9 lines, never filed upstream
+```
+
+Both had been edited. Neither was filed as a push candidate, and the second — a genuine fix to
+slack reporting — would have been found by nobody. **An edited enforcer is a weakened gate:** every
+check citing it is only as good as the copy on disk. That is the deeper form of the defect v0.123.0
+closed, which was a lead fabricating a check's *verdict*; this is a lead editing the *check*.
+
+Hooks were added to the manifest deliberately (v0.105.0, narrowed v0.106.0) precisely because they
+are machinery. Validators are the same class and were simply never added.
+
+### Changed — core validators live in `scripts/ai-dlc/`, and the manifest enumerates them
+
+They could not just be globbed in. `scripts/` is **shared**: in the reference consumer it holds 103
+files of which 25 are core, and no prefix separates them — ai-dlc ships `audit-rule-files.sh` while
+the consumer owns `audit-dormant-gates.sh`, `audit-main-since.sh` and `audit-rule-exercise.sh`. A
+`scripts/audit-*` glob denies the consumer's own tooling, which is the trap `hooks/*.sh` hit before
+it was narrowed to `hooks/ai-dlc-*.sh`. A directory boundary is what makes the set expressible.
+
+**The enumeration and the directory are each other's check.** New `I5b` in
+`validate-enforcement-map.sh` asserts the manifest's `scripts/ai-dlc/` list equals `core/scripts/`
+exactly, in both directions — a validator shipped without an entry is unguarded and fails the
+distribution's own gate; an entry with no file is a deny that protects nothing. This repo has
+watched a hand-list rot three times (`uninstall.sh` named 4 of 25, `map_consumer()` had no case for
+a whole tree in v0.55.2, `unregistered-drift.sh` missed two subtrees in v0.63.0), so the list is
+never maintained alone.
+
+Consumer-authored pipeline tooling has a stated home, `scripts/ai-dlc-local/`, which core never
+reads, writes or overwrites. It is a convention with a destination in the guard's remedy text, not
+new machinery — nothing creates it.
+
+### Fixed — `uninstall.sh` removed 4 of 25 validators and reported success
+
+A hand-list against the 25 `install.sh` derives and ships. The directory boundary makes it one
+`DIRS_TO_REMOVE` entry and deletes the list.
+
+### Migration
+
+The installer writes `scripts/ai-dlc/` and then **reports** any core script still at the old path
+instead of deleting it:
+
+```
+NOTE: 2 core script(s) remain at the pre-0.126.0 location.
+  They were NOT deleted: a consumer that edited one in place (which the old
+  layout permitted) would lose that change without ever seeing it.
+    scripts/validate-reattach-budget.sh
+    scripts/verdict.sh
+  Diff each against scripts/ai-dlc/ before removing. A difference is a local
+  edit that belongs upstream as a push candidate, not in the bin.
+```
+
+Deleting them silently would discard exactly the local edits this release exists to prevent, and
+the reference consumer has two. `map_consumer()` and I8's site table move with it, so the pull and
+the installer agree on the destination — I8 caught them disagreeing mid-change, which is its job.
+
+### Fixtures
+
+`core-script-boundary/` — the boundary must be silent on everything that is not ours, so most of it
+asserts *allow*: consumer scripts, `ai-dlc-local/`, and the colliding basenames. Plus a manifest
+entry being the authority rather than the directory, the deny routing to the validator arm (the
+generic arm's advice to use `overrides/` is wrong for machinery), `Bash` staying out of scope so
+the pull can still write core, and a mutation control on `to_consumer_glob`'s `scripts/` arm.
+50/50 fixtures.
+
 ## [0.125.0] — 2026-07-22
 
 ### Added — `validate-release-version.sh`, and the pre-push gate that runs it

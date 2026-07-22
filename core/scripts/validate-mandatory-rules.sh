@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # validate-mandatory-rules.sh
 #
-# Usage: ./scripts/validate-mandatory-rules.sh <sprint-number>
-# Example: ./scripts/validate-mandatory-rules.sh 138
+# Usage: ./scripts/ai-dlc/validate-mandatory-rules.sh <sprint-number>
+# Example: ./scripts/ai-dlc/validate-mandatory-rules.sh 138
 #
 # Implements 6 retro-compliance checks for Rule 18 enforcement (Sprint 139
 # retro Item 366 / Story 140-1). Verifies that the AI/DLC pipeline was
@@ -14,7 +14,7 @@
 #
 # The 6 checks:
 #   Check 1: Party mode transcript exists and is SHA-cited in retro doc
-#             (delegates to scripts/validate-retro-evidence.sh <branch> <n>)
+#             (delegates to scripts/ai-dlc/validate-retro-evidence.sh <branch> <n>)
 #   Check 2: Cycle commit count for retro artifacts -- CONSUMER-PROVIDED
 #             (scripts/validate-cycle-commits.sh; SKIP when the sibling is absent)
 #   Check 3: Sprint envelope closed (status: done + sprint_<n>_housekeeping)
@@ -38,7 +38,7 @@
 #
 # Part of Sprint 140 Story 140-1 (Item 366 enforcement layers 2-5).
 # Sibling scripts (contracts documented in Dev Agent Record):
-#   - scripts/validate-retro-evidence.sh  (Check 1)
+#   - scripts/ai-dlc/validate-retro-evidence.sh  (Check 1)
 #   - scripts/validate-cycle-commits.sh   (Check 2)
 #   - scripts/validate-retro-prereq.sh    (Check 4)
 
@@ -46,8 +46,8 @@ set -u
 
 # ---- Usage check -----------------------------------------------------------
 if [ $# -ne 1 ]; then
-  echo "usage: ./scripts/validate-mandatory-rules.sh <sprint-number>" >&2
-  echo "example: ./scripts/validate-mandatory-rules.sh 138" >&2
+  echo "usage: ./scripts/ai-dlc/validate-mandatory-rules.sh <sprint-number>" >&2
+  echo "example: ./scripts/ai-dlc/validate-mandatory-rules.sh 138" >&2
   exit 2
 fi
 
@@ -56,7 +56,7 @@ SPRINT_N="$1"
 # Sprint number must be a positive integer
 case "$SPRINT_N" in
   ''|*[!0-9]*)
-    echo "usage: ./scripts/validate-mandatory-rules.sh <sprint-number>" >&2
+    echo "usage: ./scripts/ai-dlc/validate-mandatory-rules.sh <sprint-number>" >&2
     echo "error: sprint-number must be a positive integer (got: $SPRINT_N)" >&2
     exit 2
     ;;
@@ -82,7 +82,7 @@ echo ""
 
 # ============================================================================
 # Check 1: Party mode transcript exists and is SHA-cited
-#   Delegates to scripts/validate-retro-evidence.sh <retro-branch> <sprint-n>
+#   Delegates to scripts/ai-dlc/validate-retro-evidence.sh <retro-branch> <sprint-n>
 #   Contract: args=(retro-branch sprint-number), exit 0=pass, 1=fail, 2=usage
 # ============================================================================
 echo "[Check 1] Party mode transcript + SHA citation..."

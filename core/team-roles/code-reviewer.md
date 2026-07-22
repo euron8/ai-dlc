@@ -296,9 +296,9 @@ perspectives in a retro doc WITHOUT a provenance block citing the
 rule prevents and must be rejected.
 
 Reviewer's valid responses: (a) APPROVED only if
-`scripts/validate-provenance-block.sh <artifact> --require-skill <the
+`scripts/ai-dlc/validate-provenance-block.sh <artifact> --require-skill <the
 evaluation that artifact class requires>` exits 0 AND (for retro docs)
-`scripts/validate-retro-evidence.sh <sprint-number>` also exits 0;
+`scripts/ai-dlc/validate-retro-evidence.sh <sprint-number>` also exits 0;
 (b) NEEDS_REWORK naming the missing block, missing field, or
 script failure output.
 

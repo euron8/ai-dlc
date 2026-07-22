@@ -89,7 +89,7 @@ except Exception as e:
     sys.exit(1)
 
 BEGIN = (f"<!-- BEGIN GENERATED: {label} — source: schemas/audit-anchors.json; "
-         f"rendered by scripts/validate-audit-anchors.sh --render; do not edit by hand -->")
+         f"rendered by scripts/ai-dlc/validate-audit-anchors.sh --render; do not edit by hand -->")
 END   = f"<!-- END GENERATED: {label} -->"
 
 def render():
@@ -115,12 +115,12 @@ if mode in ("check", "validate"):
     if end_idx is None:
         sys.stderr.write(
             f"validate-audit-anchors: FAIL — {file_path} has no '{label}' GENERATED header region.\n"
-            f"  Re-seed it with: scripts/validate-audit-anchors.sh --render\n")
+            f"  Re-seed it with: scripts/ai-dlc/validate-audit-anchors.sh --render\n")
         sys.exit(1)
     if text[b:e] + "\n" != render():
         sys.stderr.write(
             f"validate-audit-anchors: FAIL — {file_path}'s header region has drifted from the schema.\n"
-            f"  It was hand-edited or the schema changed. Re-render: scripts/validate-audit-anchors.sh --render\n")
+            f"  It was hand-edited or the schema changed. Re-render: scripts/ai-dlc/validate-audit-anchors.sh --render\n")
         sys.exit(1)
     if mode == "check":
         sys.exit(0)

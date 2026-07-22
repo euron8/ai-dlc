@@ -19,7 +19,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
-LINTER="$(pick "${1:-}" "$HERE/../../../scripts/validate-layer-entries.sh" \
+LINTER="$(pick "${1:-}" "$HERE/../../../scripts/ai-dlc/validate-layer-entries.sh" \
                         "$HERE/../../scripts/validate-layer-entries.sh" \
                         "$HERE/../../../core/scripts/validate-layer-entries.sh")"
 DRIFT="$(pick "${2:-}" "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer-drift.sh" \

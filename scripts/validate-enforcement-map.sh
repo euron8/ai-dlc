@@ -627,7 +627,7 @@ fixtures|tests/fixtures
 git-hooks|.githooks
 schemas|.claude/schemas
 hooks|.claude/hooks
-scripts|scripts
+scripts|scripts/ai-dlc
 session-driver|.claude/session-driver
 skills|.claude/skills
 team-roles|.claude/team-roles
@@ -796,6 +796,30 @@ ss="$(norm_core_manifest "$SETUP_SITES")"
 if [ "$cm" != "$ss" ]; then
   err "core_manifest copies diverge (core-manifest.md vs reconcile/setup-sites.md):"
   diff <(printf '%s\n' "$cm") <(printf '%s\n' "$ss") >&2 || true
+fi
+
+# --- I5b: the enumerated validators ARE core/scripts/, exactly ----------------
+# Every other manifest entry is a glob, which needs no reconciliation with the
+# tree. The validators are enumerated instead, because scripts/ is shared with the
+# consumer and no glob can name our 25 without also naming their ~78.
+#
+# An enumeration that nothing joins to the directory is a hand-list, and this repo
+# has watched a hand-list rot three times: uninstall.sh named 4 of 25 validators,
+# map_consumer() had no case for a whole tree (v0.55.2), and unregistered-drift.sh
+# missed two subtrees (v0.63.0). So the list and the directory are each other's
+# check, in BOTH directions:
+#
+#   a validator added upstream with no manifest entry -> unguarded at edit time,
+#     and it fails here rather than shipping silently unprotected.
+#   a manifest entry with no file -> the guard denies edits to a path that does
+#     not exist, and the deny reads as protection that is not there.
+manifest_scripts="$(printf '%s\n' "$cm" | sed -n 's#^scripts/ai-dlc/##p' | sort -u)"
+tree_scripts="$(ls "$REPO_ROOT/core/scripts" 2>/dev/null | sort -u)"
+if [ "$manifest_scripts" != "$tree_scripts" ]; then
+  err "core_manifest's scripts/ai-dlc/ enumeration does not match core/scripts/:"
+  diff <(printf '%s\n' "$manifest_scripts") <(printf '%s\n' "$tree_scripts") >&2 || true
+  echo "      < only in the manifest (entry with no file — a deny that protects nothing)" >&2
+  echo "      > only in core/scripts/ (a validator no guard protects)" >&2
 fi
 
 # --- I12: unregistered-drift scan set is BOUND, not hand-listed ---------------

@@ -17,7 +17,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 WRITER=""
 for cand in \
   "$DIR/../../scripts/stamp-story-provenance.sh" \
-  "$DIR/../../../scripts/stamp-story-provenance.sh" \
+  "$DIR/../../../scripts/ai-dlc/stamp-story-provenance.sh" \
   "$DIR/../../core/scripts/stamp-story-provenance.sh"; do
   [ -f "$cand" ] && WRITER="$cand" && break
 done

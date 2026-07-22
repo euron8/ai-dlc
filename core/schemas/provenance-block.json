@@ -13,7 +13,7 @@
     "and the gate called them clean. An unparseable block scores exactly like a clean artifact.",
     "",
     "So: the reader LOADS this file. The example every agent is taught is RENDERED from this",
-    "file. scripts/sync-taught-schema.sh --check fails the build if any rendered example has",
+    "file. scripts/ai-dlc/sync-taught-schema.sh --check fails the build if any rendered example has",
     "drifted, or if any provenance example exists in an agent-read file that was NOT rendered",
     "from here. Add a field here and it appears in the parser and in every doc at once.",
     "",
@@ -225,7 +225,7 @@
     "story-provenance": {
       "$comment": [
         "The terminal-pass residue transcribed onto EACH story file, required by Check 17's",
-        "story-readiness gate. It is NOT hand-authored: scripts/stamp-story-provenance.sh derives",
+        "story-readiness gate. It is NOT hand-authored: scripts/ai-dlc/stamp-story-provenance.sh derives",
         "every field from the terminal adversarial pass (the single source of truth) and computes",
         "artifact_sha over the story BODY with provenance blocks stripped; scripts/validate-story-",
         "provenance.sh re-derives the same and fails closed on any drift. The batch-invariant fields",

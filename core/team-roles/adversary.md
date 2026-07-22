@@ -253,7 +253,7 @@ cannot, **it counts as prior scope.** An unfalsifiable exclusion is not an exclu
 `findings_critical_prior_scope` may never exceed `findings_critical`: it is a subset
 of your own count, not a second opinion about it.
 
-`scripts/validate-adversarial-convergence.sh` (gate Check 24) reads exactly these
+`scripts/ai-dlc/validate-adversarial-convergence.sh` (gate Check 24) reads exactly these
 fields and refuses a gate whose last pass is not `EXIT_CONDITION_MET`. Omitting
 `findings_critical_prior_scope` is safe but **hostile to you**: the validator then
 assumes ALL your CRITICALs are prior-scope — the strictest reading, and the one most

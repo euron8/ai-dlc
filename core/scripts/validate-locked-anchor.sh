@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # validate-locked-anchor.sh
 #
-# Usage: ./scripts/validate-locked-anchor.sh <story-file> [--sor <path-or-basename>]
-# Example: ./scripts/validate-locked-anchor.sh _bmad-output/planning-artifacts/stories/s288-p1.md
-#          ./scripts/validate-locked-anchor.sh <story> --sor docs/requirements-of-record.md
+# Usage: ./scripts/ai-dlc/validate-locked-anchor.sh <story-file> [--sor <path-or-basename>]
+# Example: ./scripts/ai-dlc/validate-locked-anchor.sh _bmad-output/planning-artifacts/stories/s288-p1.md
+#          ./scripts/ai-dlc/validate-locked-anchor.sh <story> --sor docs/requirements-of-record.md
 #
 # Gate-validation Check 3b enforcer. Complements the LLM-adjudicated Check 3
 # ("Requirement anchor integrity"), which does INTRA-artifact drift detection
@@ -74,7 +74,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$STORY_PATH" ]]; then
-    echo "usage: ./scripts/validate-locked-anchor.sh <story-file> [--sor <path>]" >&2
+    echo "usage: ./scripts/ai-dlc/validate-locked-anchor.sh <story-file> [--sor <path>]" >&2
     exit 2
 fi
 

@@ -22,7 +22,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATOR=""
 for cand in \
   "$DIR/../../scripts/validate-adversarial-convergence.sh" \
-  "$DIR/../../../scripts/validate-adversarial-convergence.sh" \
+  "$DIR/../../../scripts/ai-dlc/validate-adversarial-convergence.sh" \
   "$DIR/../../core/scripts/validate-adversarial-convergence.sh"; do
   [ -f "$cand" ] && VALIDATOR="$cand" && break
 done

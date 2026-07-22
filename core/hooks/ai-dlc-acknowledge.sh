@@ -150,7 +150,7 @@ case "$TOOL_NAME" in Agent|Task|Skill|TaskCreate) ADVANCING_TOOL=1 ;; esac
 
 if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
   ART_DIR="${LOG_DIR}/planning-artifacts"
-  CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/validate-adversarial-convergence.sh"
+  CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-adversarial-convergence.sh"
   NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"
 
   if [ -n "$NEWEST_PASS" ] && [ -f "$CONVERGENCE_VALIDATOR" ]; then
@@ -256,7 +256,7 @@ Clearing the pause flag does NOT lift this. It is not a stall and Rule 3 does no
     {
       echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
       echo "- Session: ${SESSION_ID}"
-      echo "- scripts/validate-adversarial-convergence.sh is MISSING; the Rule 8 stop state"
+      echo "- scripts/ai-dlc/validate-adversarial-convergence.sh is MISSING; the Rule 8 stop state"
       echo "  cannot be adjudicated and the divergence/stall hard block is NOT armed."
       echo ""
     } >> "$LOG_FILE"

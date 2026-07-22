@@ -41,8 +41,8 @@ ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/validate-artifact-budget.sh" ]; then
   VALIDATOR="$ROOT/core/scripts/validate-artifact-budget.sh"
-elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/validate-artifact-budget.sh" ]; then
-  VALIDATOR="$ROOT/scripts/validate-artifact-budget.sh"
+elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-artifact-budget.sh" ]; then
+  VALIDATOR="$ROOT/scripts/ai-dlc/validate-artifact-budget.sh"
 else
   echo "FIXTURE ERROR: validate-artifact-budget.sh not found in either layout" >&2
   echo "  looked in: $ROOT/core/scripts/ (distribution), $ROOT/scripts/ (consumer)" >&2

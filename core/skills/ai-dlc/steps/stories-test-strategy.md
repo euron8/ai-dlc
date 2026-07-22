@@ -233,7 +233,7 @@ distinguish two citation forms — they are NOT interchangeable:
   requirement text lives at this anchor. The artifact MUST be the
   byte-verbatim **source of record** (the product brief, where §4a
   extracts the block), NOT a condensed index. `gate-validation.md`
-  Check 3b (`scripts/validate-locked-anchor.sh`) byte-verifies that
+  Check 3b (`scripts/ai-dlc/validate-locked-anchor.sh`) byte-verifies that
   every bullet in the block is present verbatim at the cited anchor and
   FAILS the gate on a mis-anchored or summarized claim.
 - `requires_context: <artifact>#<anchor>` — a dev-time load pointer.
@@ -314,7 +314,7 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
    "per precedent" — that is how it drifted (one sprint carried `artifact_sha`,
    the next did not, each with a different free-text comment). Run:
 
-   `scripts/stamp-story-provenance.sh --series
+   `scripts/ai-dlc/stamp-story-provenance.sh --series
    <this-sprint's-stories-adversarial-pass-prefix> <story-file>...`
 
    It reads the TERMINAL convergence pass (the single source of truth), copies

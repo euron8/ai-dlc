@@ -23,8 +23,8 @@ D_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 C_ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 if [ -n "$D_ROOT" ] && [ -f "$D_ROOT/core/scripts/validate-steering-budget.sh" ]; then
   VALIDATOR="$D_ROOT/core/scripts/validate-steering-budget.sh"
-elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/validate-steering-budget.sh" ]; then
-  VALIDATOR="$C_ROOT/scripts/validate-steering-budget.sh"
+elif [ -n "$C_ROOT" ] && [ -f "$C_ROOT/scripts/ai-dlc/validate-steering-budget.sh" ]; then
+  VALIDATOR="$C_ROOT/scripts/ai-dlc/validate-steering-budget.sh"
 else
   echo "FIXTURE ERROR: validate-steering-budget.sh not found in either layout" >&2; exit 2
 fi

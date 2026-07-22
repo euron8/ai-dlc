@@ -1,6 +1,6 @@
 # check-23-draft-stamps — adversarial fixture
 
-Proves `scripts/validate-draft-stamps.sh` (gate-validation Check 23) actually
+Proves `scripts/ai-dlc/validate-draft-stamps.sh` (gate-validation Check 23) actually
 fails on an unstamped analyst-draft write path, and does not fire on the things
 that merely look like one.
 

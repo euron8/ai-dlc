@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # validate-retro-evidence.sh
 #
-# Usage: ./scripts/validate-retro-evidence.sh <retro-branch-name> <sprint-number>
-# Example: ./scripts/validate-retro-evidence.sh ai-dlc/retro/sprint-137 137
+# Usage: ./scripts/ai-dlc/validate-retro-evidence.sh <retro-branch-name> <sprint-number>
+# Example: ./scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-137 137
 #
 # Enforces that a retro branch actually invoked /bmad-party-mode (retro.md
 # Step 2 MANDATORY SUB-SKILL INVOCATION) rather than simulating it inline.
@@ -95,8 +95,8 @@ set -u
 
 # ---- Usage check -----------------------------------------------------------
 if [ $# -ne 2 ]; then
-  echo "usage: ./scripts/validate-retro-evidence.sh <retro-branch-name> <sprint-number>" >&2
-  echo "example: ./scripts/validate-retro-evidence.sh ai-dlc/retro/sprint-137 137" >&2
+  echo "usage: ./scripts/ai-dlc/validate-retro-evidence.sh <retro-branch-name> <sprint-number>" >&2
+  echo "example: ./scripts/ai-dlc/validate-retro-evidence.sh ai-dlc/retro/sprint-137 137" >&2
   exit 2
 fi
 
@@ -106,7 +106,7 @@ SPRINT_N="$2"
 # Sprint number must be a positive integer
 case "$SPRINT_N" in
   ''|*[!0-9]*)
-    echo "usage: ./scripts/validate-retro-evidence.sh <retro-branch-name> <sprint-number>" >&2
+    echo "usage: ./scripts/ai-dlc/validate-retro-evidence.sh <retro-branch-name> <sprint-number>" >&2
     echo "error: sprint-number must be a positive integer (got: $SPRINT_N)" >&2
     exit 2
     ;;

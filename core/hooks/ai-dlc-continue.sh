@@ -79,7 +79,7 @@ LOG_DIR="${PROJECT_DIR}/_bmad-output"
 LOG_FILE="${LOG_DIR}/pipeline-continuation-log.md"
 PAUSE_FLAG="${LOG_DIR}/pipeline-paused.flag"
 STATE_FILE="${LOG_DIR}/pipeline-block-state.txt"
-# Beat-liveness marker written by scripts/wait-for-deliverable.sh while a
+# Beat-liveness marker written by scripts/ai-dlc/wait-for-deliverable.sh while a
 # backgrounded wait-beat is genuinely sleeping (Check 2b, v0.81.0). Same dir and
 # default as the script's AI_DLC_STATE_DIR (_bmad-output).
 BEAT_MARKER="${LOG_DIR}/.beat-inflight"
@@ -264,7 +264,7 @@ fi
 #   the VALIDATOR picks the PASS -- "which pass is last" is an ORDERING question. Not mtime.
 ADVERSARIAL_STOP="${LOG_DIR}/.adversarial-stop"
 ART_DIR="${LOG_DIR}/planning-artifacts"
-CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/validate-adversarial-convergence.sh"
+CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-adversarial-convergence.sh"
 
 CYCLE_STATE=""; CYCLE_RC=0; CYCLE_PASS=""
 NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"
@@ -276,7 +276,7 @@ if [ -n "$NEWEST_PASS" ]; then
     {
       echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
       echo "- Session: ${SESSION_ID}"
-      echo "- scripts/validate-adversarial-convergence.sh is MISSING; the Rule 8 stop state"
+      echo "- scripts/ai-dlc/validate-adversarial-convergence.sh is MISSING; the Rule 8 stop state"
       echo "  cannot be adjudicated and the divergence/stall hard block is NOT armed."
       echo ""
     } >> "$LOG_FILE"
@@ -475,7 +475,7 @@ CHECK BEFORE ACTING: Did you just complete a sub-skill and need to present its o
 
 If you genuinely have no next action (HARD_BLOCK, PVC, handoff, retro commentary): create the pause flag (touch _bmad-output/pipeline-paused.flag).
 
-IF YOU ARE WAITING ON A TEAMMATE, this block means NO LIVE WAIT-BEAT IS ARMED. Your turn may end during a join only while _bmad-output/.beat-inflight holds a future epoch, and the ONLY thing that writes it is scripts/wait-for-deliverable.sh, on its sleeping path. Four ways you can believe you have a beat and not have one: (1) a hand-rolled sleep/stat/until loop — it writes no marker, and is the Rule 29 Check A violation gate Check 25 counts; (2) a foreground call — its exit trap clears the marker before your turn ends; (3) a call that RETURNED INSTANTLY because every target was already on disk; (4) a second beat chained into the same Bash call as another. Do NOT emit filler tool calls to get past this block. Re-arm the real beat and end your turn in the SAME response: Bash(run_in_background: true) scripts/wait-for-deliverable.sh <path> [<path>...]
+IF YOU ARE WAITING ON A TEAMMATE, this block means NO LIVE WAIT-BEAT IS ARMED. Your turn may end during a join only while _bmad-output/.beat-inflight holds a future epoch, and the ONLY thing that writes it is scripts/ai-dlc/wait-for-deliverable.sh, on its sleeping path. Four ways you can believe you have a beat and not have one: (1) a hand-rolled sleep/stat/until loop — it writes no marker, and is the Rule 29 Check A violation gate Check 25 counts; (2) a foreground call — its exit trap clears the marker before your turn ends; (3) a call that RETURNED INSTANTLY because every target was already on disk; (4) a second beat chained into the same Bash call as another. Do NOT emit filler tool calls to get past this block. Re-arm the real beat and end your turn in the SAME response: Bash(run_in_background: true) scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...]
 
 If you have a next action but emitted text first: pair the text with the tool call in your next response. Text + tool call = valid turn. Text alone = this hook fires.
 

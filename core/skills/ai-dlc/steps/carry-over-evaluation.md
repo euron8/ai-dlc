@@ -26,7 +26,7 @@ Context, resolved at `route.md` Step 6 — never the unstamped path, which
 would destroy the prior sprint's evaluation), returning
 only `{artifact_path, summary, gaps}`. Then resume at section 3.
 **Join it, and section 3's party seats, on their DELIVERABLES** — one
-`scripts/wait-for-deliverable.sh <path> [<path> ...]` call per wave
+`scripts/ai-dlc/wait-for-deliverable.sh <path> [<path> ...]` call per wave
 (`_gate-procedures.md`, "Bounded-join beat"). A hand-rolled `until`/`sleep` wait is
 a Rule 29 Check A violation; gate Check 25 counts it.
 **Sections 3 onward stay inline in the lead** — section 3 is party mode

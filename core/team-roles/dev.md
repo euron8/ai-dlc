@@ -219,7 +219,7 @@ Before starting any task, read these files in order:
   `SKILL_INVOCATION_PROVENANCE v1` block (schema in SKILL.md Rule 3).
   Producing validation-shaped output without the real independent subagent
   behind it is a Rule 3 violation. Pre-submission: run
-  `scripts/validate-provenance-block.sh <artifact> --require-skill <the
+  `scripts/ai-dlc/validate-provenance-block.sh <artifact> --require-skill <the
   evaluation this story's contract requires>` and confirm exit 0 — e.g.
   `--require-skill ai-dlc-adversary-review` for a convergence review,
   `--require-skill bmad-party-mode` for a party-mode artifact.

@@ -33,7 +33,7 @@ for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v";
 HERE="$(cd "$(dirname "$0")" && pwd)"
 pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
 SUBJ="$(pick "$HERE/../../scripts/wait-for-deliverable.sh" \
-             "$HERE/../../../scripts/wait-for-deliverable.sh" \
+             "$HERE/../../../scripts/ai-dlc/wait-for-deliverable.sh" \
              "$HERE/../../../core/scripts/wait-for-deliverable.sh")"
 [ -n "$SUBJ" ] || { echo "FIXTURE ERROR: cannot locate wait-for-deliverable.sh" >&2; exit 2; }
 SEED="$HERE/seed.sh"

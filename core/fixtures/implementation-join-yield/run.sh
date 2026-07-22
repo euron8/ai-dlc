@@ -7,7 +7,7 @@
 # turn during an active pipeline (Rule 3). A lead waiting on teammates is
 # therefore shoved through dozens of forced continuations per implementation
 # phase (measured: 45-150/day on the reference consumer). Check 2b lets the lead
-# END ITS TURN iff `scripts/wait-for-deliverable.sh` has a backgrounded beat
+# END ITS TURN iff `scripts/ai-dlc/wait-for-deliverable.sh` has a backgrounded beat
 # genuinely sleeping — signalled by an unexpired `.beat-inflight` marker, which is
 # self-proving of re-invocation: that same background `Bash` exits and re-invokes
 # the idle lead.

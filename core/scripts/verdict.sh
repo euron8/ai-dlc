@@ -5,7 +5,7 @@
 # PASS lines, remediation prose. That is right for a human reading a gate failure
 # and wrong for a lead that needs a verdict. So the lead wraps them:
 #
-#     bash scripts/validate-artifact-budget.sh --only pipeline-snapshot.md 2>&1 \
+#     bash scripts/ai-dlc/validate-artifact-budget.sh --only pipeline-snapshot.md 2>&1 \
 #       | grep -E 'warn|OVER|PASS' | head -2
 #
 # Measured on the reference consumer's S289 implementation phase: 71 such calls,
@@ -19,8 +19,8 @@
 # status directly, and the status it exits with is the validator's own.
 #
 # USAGE
-#   scripts/verdict.sh <validator> [args...]
-#   scripts/verdict.sh --all                  # every validator that needs no args
+#   scripts/ai-dlc/verdict.sh <validator> [args...]
+#   scripts/ai-dlc/verdict.sh --all                  # every validator that needs no args
 #
 # OUTPUT
 #   PASS  <validator>

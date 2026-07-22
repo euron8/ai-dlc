@@ -126,7 +126,7 @@ date. Dating a reference is unsound here; titling it is not.
 integer in the merged document, so `Check 24: PASSED` in the audit trail has no
 referent — and, in the other direction, a consumer check upstream already absorbed
 under a *different* number, duplicated forever because the retirement signal joined on
-the number. Enforced by `scripts/validate-layer-entries.sh` (E6: a check extension
+the number. Enforced by `scripts/ai-dlc/validate-layer-entries.sh` (E6: a check extension
 that redefines a core check number with a different title is an ERROR) and
 `ai-dlc-update`'s `reconcile/layer-drift.sh`
 (`EXTENSION-CHECK-NUMBER-COLLISION` / `EXTENSION-RESTATES-CORE`, both title-joined and
@@ -208,7 +208,7 @@ Two arms, either satisfies (dual-arm OR):
 - Read `docs/escalations/pending.md` (if it exists).
 - **First, the vocabulary.** Run
 
-      scripts/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md
+      scripts/ai-dlc/verdict.sh validate-escalation-status-vocabulary docs/escalations/pending.md
 
   The branches below are a closed set with no else, so an entry on a token outside it
   is neither blocked, surfaced nor recorded — no verdict is computed for it and this
@@ -246,7 +246,7 @@ operator adjudicated it — so the entry MUST carry
 `**Operator authorization:** <ISO ts> | "<verbatim operator quote, ≥12 chars>"`
 (see `escalations.md`).
 
-**Check.** Invoke `scripts/validate-escalation-resolution.sh --escalations
+**Check.** Invoke `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
 docs/escalations/pending.md --sprint <N> --transcript <this session's
 transcript_path>`; exit 0 required. It reads **this sprint's**
 RESOLVED/OVERRIDDEN entries (entries carry the sprint in their header;
@@ -352,7 +352,7 @@ block distinguishes a full-text CLAIM from a load POINTER:
   stays legal).
 
 **Check.** For each story, invoke
-`scripts/validate-locked-anchor.sh <story-file>`; exit 0 required. For
+`scripts/ai-dlc/validate-locked-anchor.sh <story-file>`; exit 0 required. For
 every `full_text_source:` citation it asserts (a) the artifact is the
 byte-verbatim source of record — default `product-brief.md`, where
 discovery.md §4a extracts the block — and NOT a condensed index
@@ -725,7 +725,7 @@ self-orientation source of truth. Do not skip this check.
 **Snapshot budget (Rule 25(d)) — this check FAILS if the snapshot is over it.**
 After writing, run:
 
-    scripts/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
+    scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md
 
 `verdict.sh` prints one line and exits with the validator's own status. Never
 pipe a validator into `grep` to read its verdict — the pipe hands the exit
@@ -795,7 +795,7 @@ After Check 14 writes the snapshot, re-read
   line is the validator's own output, and it carries the measured token
   count. Verify it mechanically — do not eyeball your own cell:
 
-      scripts/verdict.sh validate-artifact-budget --check-evidence
+      scripts/ai-dlc/verdict.sh validate-artifact-budget --check-evidence
 
   Exit 1 → **Check 15 FAILS.** The budget check is the one part of Check
   14 that leaves no trace in the snapshot itself, so it is the one part
@@ -870,7 +870,7 @@ phase. Skip on gates that do not produce a provenance-bearing artifact.
 **Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Owned by
 `schemas/provenance-block.json`. It is rendered into the role files of the agents
 that WRITE blocks (`team-roles/adversary.md`, `steps/retro.md`) and loaded by the
-parser that READS them (`validate-provenance-block.sh`); `scripts/sync-taught-schema.sh
+parser that READS them (`validate-provenance-block.sh`); `scripts/ai-dlc/sync-taught-schema.sh
 --check` fails the build on any hand-written copy, and the fixture
 `fixtures/taught-schema/` parses the taught example with the shipped parser. The
 field list is deliberately NOT restated here: this check's verdict is the parser's
@@ -886,21 +886,21 @@ stamp one. These evaluations are MEASURED, not GATED — nothing in this check r
 the values, and a genuine zero is a valid reading. Fixture:
 `fixtures/check-17-counts/`.
 
-**Check.** Invoke `scripts/validate-provenance-block.sh` against the
+**Check.** Invoke `scripts/ai-dlc/validate-provenance-block.sh` against the
 gate's primary artifact.
 
-- **Retro gate:** run `scripts/validate-provenance-block.sh
-  docs/retro/sprint-<N>.md` AND `scripts/validate-retro-evidence.sh
+- **Retro gate:** run `scripts/ai-dlc/validate-provenance-block.sh
+  docs/retro/sprint-<N>.md` AND `scripts/ai-dlc/validate-retro-evidence.sh
   <N>`. Both must exit 0. validate-retro-evidence.sh additionally
   enforces transcript file presence, byte-match against the cited
   SHA, and non-triviality floors (MIN_CHARS, MIN_PERSONAS,
   MIN_PHASES).
 - **PRD gate (research-requirements phase):** run
-  `scripts/validate-provenance-block.sh
+  `scripts/ai-dlc/validate-provenance-block.sh
   _bmad-output/planning-artifacts/prd.md --require-skill
   bmad-validate-prd`.
 - **Story readiness gate (stories-test-strategy):** run
-  `scripts/validate-provenance-block.sh <story-file>
+  `scripts/ai-dlc/validate-provenance-block.sh <story-file>
   --require-skill ai-dlc-adversary-review` for each story.
   *(v0.58.0: was `bmad-review-adversarial-general`. The stories cycle is a
   CONVERGENCE cycle, so it now stamps the native identifier. A consumer that
@@ -909,7 +909,7 @@ gate's primary artifact.
   check fails at runtime on the first story of the next sprint.)*
 
   Then run the story-provenance CROSS-CHECK, once for the whole batch:
-  `scripts/stamp-story-provenance.sh --series
+  `scripts/ai-dlc/stamp-story-provenance.sh --series
   <path-prefix-of-this-sprint's-stories-adversarial-pass-series> --check
   <story-file>...`; exit 0 required. `validate-provenance-block.sh` proves the
   block is schema-SHAPED; this proves it is the RIGHT block — every
@@ -933,7 +933,7 @@ only), or SHA byte-mismatch (retro only).
 `_bmad-output/audit-anchors.md` to determine the prior-sprint retro-PR
 merge SHA.
 
-**Check.** First run `scripts/validate-audit-anchors.sh --entries
+**Check.** First run `scripts/ai-dlc/validate-audit-anchors.sh --entries
 _bmad-output/audit-anchors.md` — it enforces every entry conforms to the
 canonical schema (`.claude/schemas/audit-anchors.json`). A non-zero exit FAILS
 this check CLOSED (a malformed entry is a schema regression, not a clean file).
@@ -958,7 +958,7 @@ REFACTOR-IN-SPRINT (must be addressed before gate close) OR no
 a new entry to `_bmad-output/audit-anchors.md` with the current
 sprint's retro-PR merge SHA. The schema is canonical in
 `.claude/schemas/audit-anchors.json`; the file header is RENDERED from it by
-`scripts/validate-audit-anchors.sh --render` and enforced by that script — it
+`scripts/ai-dlc/validate-audit-anchors.sh --render` and enforced by that script — it
 is NOT defined by the live header or the (reference-only) template.
 
 ### 19. Self-reflexive Gate 2 self-discrimination map application.
@@ -1148,7 +1148,7 @@ role file (no lead-authored dispatch line to verify).
 **Scope.** Fires at every planning-phase gate. Skips story,
 implementation, sprint-review, and retro gates.
 
-**Check.** Invoke `scripts/validate-draft-stamps.sh`; exit 0 required.
+**Check.** Invoke `scripts/ai-dlc/validate-draft-stamps.sh`; exit 0 required.
 It asserts the four per-sprint analyst drafts (Rule 24) are written to
 their sprint-stamped paths — `s<N>-carry-over-evaluation.md`,
 `s<N>-discovery-context.md`, `s<N>-research-notes.md`,
@@ -1212,7 +1212,7 @@ whose step ran only a ONE-SHOT adversarial review (`bug-investigation`,
 one-shot stamps no verdict and this check has nothing to read; do not drag its
 artifact into the series.
 
-**Check.** Invoke `scripts/validate-adversarial-convergence.sh --series
+**Check.** Invoke `scripts/ai-dlc/validate-adversarial-convergence.sh --series
 <path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path>`;
 exit 0 required. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
 resolution record's `operator_authorization` against ground truth; the gate **fails closed**
@@ -1294,7 +1294,7 @@ arm H, once the `remediator` role retires under its own condition.
 against the one the previous gate recorded:
 
     T=$(ls -t ~/.claude/projects/"$(pwd | sed 's|/|-|g')"/*.jsonl 2>/dev/null | head -1)
-    scripts/validate-steering-budget.sh --transcript "$T" --count
+    scripts/ai-dlc/validate-steering-budget.sh --transcript "$T" --count
 
 - **No transcript** (CI, a non-Claude-Code runner) → **SKIP**, recorded as SKIP.
 - Read `steering_violations:` from the **previous gate-log entry of this session**
@@ -1306,7 +1306,7 @@ against the one the previous gate recorded:
 and only one of them has something left to do:
 
 - **Arms A / C (starvation, unbounded wait).** Re-issue any still-pending wait through
-  `scripts/wait-for-deliverable.sh` — one call, every path in the wave — and record the
+  `scripts/ai-dlc/wait-for-deliverable.sh` — one call, every path in the wave — and record the
   count.
 - **Arm B (steamroll), and arm D.** Nothing to re-issue. These fire on a historical fact in
   an append-only transcript: the call was made, and no later action un-makes it. Do NOT read
@@ -1413,7 +1413,7 @@ first gate. Later gates in the same sprint verify the attestation and cite it.
 
 **Start here, at every gate:**
 
-    scripts/validate-h2-attestation.sh --verify --sprint <N>
+    scripts/ai-dlc/validate-h2-attestation.sh --verify --sprint <N>
 
 **Exit 0** — this sprint already drove H2, and the fixture set is byte-identical
 to when it did. Cite the `H2_ATTESTED v1` line the script prints. H2 PASSES. Done.
@@ -1421,7 +1421,7 @@ to when it did. Cite the `H2_ATTESTED v1` line the script prints. H2 PASSES. Don
 **Exit 1** — either this is the sprint's first gate, or a fixture changed. Drive
 all three items below in full, then:
 
-    scripts/validate-h2-attestation.sh --attest --sprint <N>
+    scripts/ai-dlc/validate-h2-attestation.sh --attest --sprint <N>
 
 which re-drives the mechanical fixture itself and, on success, prints the
 `H2_ATTESTED v1` line to append to the gate log. If it exits 1, **the gate FAILS**.
@@ -1561,7 +1561,7 @@ entry (the escalation preamble at the top of this file; `_gate-procedures.md`
 **Check.** Join the verdict at
 `${AI_DLC_STATE_DIR:-_bmad-output}/gate-adjudication/<gate_nonce>.verdict.json`, then:
 
-    scripts/verdict.sh validate-gate-adjudication <gate_type> <verdict_path>
+    scripts/ai-dlc/verdict.sh validate-gate-adjudication <gate_type> <verdict_path>
 
 Exit 0 required. The validator DERIVES the escalated set from `enforcement-map.yaml`
 (`--expected <gate_type>` — the same derivation the adjudicator used) and fails closed: a

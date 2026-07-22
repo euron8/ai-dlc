@@ -1,4 +1,4 @@
-<!-- BEGIN GENERATED: audit-anchors-schema — source: schemas/audit-anchors.json; rendered by scripts/validate-audit-anchors.sh --render; do not edit by hand -->
+<!-- BEGIN GENERATED: audit-anchors-schema — source: schemas/audit-anchors.json; rendered by scripts/ai-dlc/validate-audit-anchors.sh --render; do not edit by hand -->
 # Audit Anchors
 
 Append-only YAML list of per-sprint retro-PR merge SHAs. Producer: `retro.md`
@@ -6,7 +6,7 @@ Step 5b at sprint close. Consumers: `carry-over-evaluation.md` Step 1a and
 `gate-validation.md` Check 18 (per-class test-debt audit).
 
 **Schema is canonical in `.claude/schemas/audit-anchors.json`.** This header is
-RENDERED from it by `scripts/validate-audit-anchors.sh --render` and byte-checked by
+RENDERED from it by `scripts/ai-dlc/validate-audit-anchors.sh --render` and byte-checked by
 `--check`; the same script validates every entry. Do NOT hand-edit this region — edit
 the schema and re-render. Each entry:
 
@@ -23,7 +23,7 @@ a silent skip on a missing audit anchor is forbidden (PI-S169-8).
 ## Entries
 
 <!-- Append new sprint entries below (most recent last). The entry shape is defined by the
-     GENERATED header above and enforced by scripts/validate-audit-anchors.sh. -->
+     GENERATED header above and enforced by scripts/ai-dlc/validate-audit-anchors.sh. -->
 
 ```yaml
 - sprint: 0

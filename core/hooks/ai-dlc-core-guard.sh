@@ -108,6 +108,7 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
   case "$e" in
     team-roles/*)     printf '.claude/%s\n' "$e" ;;
     hooks/*)          printf '.claude/%s\n' "$e" ;;   # hooks live at .claude/hooks/, outside the skill dir
+    scripts/*)        printf '%s\n' "$e" ;;           # scripts/ai-dlc/* is at the project root, not under .claude/
     skills/ai-dlc/*)  printf '.claude/%s\n' "$e" ;;
     *)                printf '.claude/skills/ai-dlc/%s\n' "$e" ;;
   esac
@@ -149,6 +150,14 @@ route_and_deny() {
       # Hooks are machinery, not rulebook: no overrides/ or extensions/ grain applies.
       reason="${REL} is an upstream-owned CORE hook (Rule 27 core-manifest). Hooks are machinery, not rulebook — there is NO consumer layer for them: no overrides/ shadow and no extensions/ entry applies to a hook. Do NOT edit it in place; the next /ai-dlc-update overwrites core and clobbers the change. To change hook behavior, either configure it through the hook's declared AI_DLC_* settings/env tunables, or take the change upstream and pull it with /ai-dlc-update (which writes core through the reconcile engine, not the editor)."
       ctx="AI/DLC core-layer guard: .claude/hooks/*.sh are upstream-owned machinery with no consumer layer. Reconciled by /ai-dlc-update, never hand-edited. If a hook must behave differently, use its declared AI_DLC_* tunables or contribute the change upstream — there is no overrides/ or extensions/ entry for a hook."
+      ;;
+    scripts/ai-dlc/*)
+      # Same grain as hooks: machinery, no overrides/ or extensions/ shadow applies.
+      # This is the class that was unguarded until v0.126.0 -- the validators every
+      # gate's teeth depend on were the one part of core a consumer could edit in
+      # place, because they lived loose in a directory the consumer also owns.
+      reason="${REL} is an upstream-owned CORE validator (Rule 27 core-manifest). Scripts are machinery, not rulebook — there is NO consumer layer for them: no overrides/ shadow and no extensions/ entry applies to a validator. Do NOT edit it in place; the next /ai-dlc-update overwrites core and clobbers the change. An edited validator is also a weakened gate: every check that cites it is only as good as the copy on disk. To change its behavior, either configure it through its declared AI_DLC_* env tunables, or take the change upstream and pull it with /ai-dlc-update. If this is YOUR script rather than ours, it is in the wrong directory — scripts/ai-dlc/ is core-owned and enumerated in core-manifest.md; consumer-authored pipeline tooling goes in scripts/ai-dlc-local/."
+      ctx="AI/DLC core-layer guard: scripts/ai-dlc/* are upstream-owned validators with no consumer layer. Reconciled by /ai-dlc-update, never hand-edited — an edited enforcer silently changes what every gate citing it actually checks. Use its AI_DLC_* tunables or contribute upstream. Consumer-authored ai-dlc tooling belongs in scripts/ai-dlc-local/."
       ;;
     *)
       reason="${REL} is an upstream-owned CORE file (Rule 27 core-manifest); a layered consumer MUST NOT edit it in place — an in-place edit is exactly what makes the next /ai-dlc-update clobber your change or raise a false BOTH-CHANGED conflict. Route it to the layer instead: a change to an EXISTING core rule/check -> an overrides/ entry that shadows it (see .claude/skills/ai-dlc/rule-authoring.md); a NET-NEW consumer rule/check/step -> an additive extensions/ entry (see .claude/skills/ai-dlc/extensions/README.md). To pull an UPSTREAM core change, run /ai-dlc-update — it writes core through the reconcile engine (git show / cp / sed), not the editor, so core stays byte-reconcilable with upstream."
