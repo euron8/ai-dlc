@@ -45,6 +45,28 @@
 
 set -u
 
+# ---- Subset mode: --check-clean-tree ---------------------------------------
+# A tree-state-agnostic entrypoint (no sprint number, no in-flight retro): assert
+# only that the delegated toolchain is present, so a pre-push on any commit can
+# confirm the validator set is installed without running the retro check series.
+# The toolchain floor is the REQUIRED siblings: Check 1 hard-fails without
+# validate-retro-evidence.sh, and Check 2 delegates to validate-cycle-commits.sh.
+# validate-retro-prereq.sh is consumer-provided (Check 4 SKIPs when absent), so it
+# is NOT part of the floor — its absence is expected on a stock install.
+if [ "${1:-}" = "--check-clean-tree" ]; then
+  CT_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  ct_missing=0
+  for dep in validate-retro-evidence.sh validate-cycle-commits.sh; do
+    [ -f "${CT_SCRIPT_DIR}/${dep}" ] || { echo "clean-tree: sibling validator missing: ${dep}" >&2; ct_missing=1; }
+  done
+  if [ "$ct_missing" -ne 0 ]; then
+    echo "VALIDATE-MANDATORY-RULES: FAIL (--check-clean-tree: validator toolchain incomplete)" >&2
+    exit 1
+  fi
+  echo "VALIDATE-MANDATORY-RULES: PASS (--check-clean-tree: no in-flight sprint/retro context; toolchain present)"
+  exit 0
+fi
+
 # ---- Usage check -----------------------------------------------------------
 if [ $# -ne 1 ]; then
   echo "usage: ./scripts/ai-dlc/validate-mandatory-rules.sh <sprint-number>" >&2

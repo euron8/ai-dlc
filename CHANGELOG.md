@@ -17,6 +17,21 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.134.0] — 2026-07-23
+
+### Added — `validate-mandatory-rules.sh --check-clean-tree` subset entrypoint
+
+A tree-state-agnostic mode that asserts only the delegated toolchain floor is installed —
+no sprint number, no in-flight retro — so a pre-push on any commit can confirm the validator
+set is present without running the retro check series. The floor is the REQUIRED siblings:
+`validate-retro-evidence.sh` (Check 1 hard-fails without it) and `validate-cycle-commits.sh`
+(Check 2's delegate). `validate-retro-prereq.sh` is consumer-provided (Check 4 SKIPs when
+absent) and is deliberately NOT part of the floor, so `--check-clean-tree` PASSes on a stock
+install that ships no retro-prereq.
+
+New fixture `mandatory-rules-clean-tree` proves the PASS (toolchain present, retro-prereq
+absent) and a mutation control (a missing required sibling FAILs).
+
 ## [0.133.0] — 2026-07-23
 
 ### Fixed — `validate-provenance-block.sh` rejected the `NOT_ACCESSIBLE` id its own doc mandates
