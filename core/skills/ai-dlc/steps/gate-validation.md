@@ -545,6 +545,16 @@ The gate log entry MUST include:
 A gate log entry without per-check results is incomplete and must be
 rewritten before proceeding.
 
+**An absence claim MUST carry its control.** Any evidence row asserting that
+something is not there — a zero count, "no hits", "no occurrences", "none found" —
+MUST state, in the same row, the control that proves the search could have found
+it: a positive match the same command returns elsewhere, a non-zero count from the
+same corpus, or the command's own listing of what it did scan. A bare zero is
+indistinguishable from a command that matched nothing because it was malformed,
+scoped to the wrong path, or run against an empty set. A row that claims absence
+without a control is incomplete on the same terms as a missing per-check result,
+and is rewritten before proceeding.
+
 **Every per-check row id carries its CATALOG** — `[core] 24 — <title>` for a check
 from this file, `[ext:<id>] 24 — <title>` for one from a consumer
 `extensions/checks/` file (`<id>` = that file's `id:` frontmatter). A bare `24` is

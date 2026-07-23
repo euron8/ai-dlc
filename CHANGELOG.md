@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.138.0] — 2026-07-23
+
+### Added — project memory is not a filing destination for pipeline behaviour
+
+`rule-authoring.md`'s layer-routing block named three destinations for an authored
+rule (extension, override, extension + `push_candidate`) and did not name the one
+consumers actually reach for. Checked across `extensions/README.md`,
+`overrides/README.md` and `rule-authoring.md` — 319 lines governing where a consumer
+delta goes, zero mentions of memory. The layer system and the harness memory system
+do not know about each other.
+
+The reference consumer had accumulated behaviour deltas in memory that had layer
+homes sitting empty beside them: a required-but-operator-executed deploy step whose
+`deploy-validate` extension (466 lines, plus a 232-line push twin) never mentioned
+it, and the behavioural consequence of `auto_handoff_mode: off` filed anywhere except
+the override named for that config key.
+
+A behaviour delta in memory carries no `shadows:`/`base_sha:`, so no pull re-bases it
+and no drift scan sees it; it is never retired when core absorbs it; it cannot reach
+the push-mine, so a lesson that generalizes can never be promoted. And it arrives by
+relevance recall rather than by the Rule 27 load, which puts it in competition with
+the step file for authority — a competition it can win. That is not hypothetical: it
+is how the v0.137.0 defect surfaced.
+
+The routing block also now names `CLAUDE.md` — a project operations fact that holds
+with or without the pipeline (how this project deploys, restarts, rolls back) belongs
+there, and a step file or layer entry cites it rather than restating it. It was
+already in the Scope list as a rule file but absent from the routing list, so a
+routing block that forbade memory without naming CLAUDE.md read as forbidding both.
+The reference consumer's CLAUDE.md is the correctly-shaped case: it declares its own
+boundary against the skill, and its deployment rules are cited by the deploy-validate
+step and its extensions rather than duplicated into them.
+
+Memory keeps what it should keep — domain and operator facts a rule must not encode.
+
+### Added — an absence claim in a gate log entry must carry its control (Check 12)
+
+Check 12 rejected an entry with no per-check results but accepted an evidence row
+reading "0 occurrences" with nothing showing the search could have found any. A bare
+zero is indistinguishable from a command that matched nothing because it was
+malformed, scoped to the wrong path, or run against an empty set — the same
+check-that-cannot-fire shape Check 26's own Rule 26(c) block describes, one layer
+down, in the lead's own evidence.
+
+Core practised this in three places (verdict.sh's evidence-carrying PASS line,
+Check 15's evidence-cell audit, the fixture suite's paired assertions) and stated it
+in none. An absence row now names its control — a positive match the same command
+returns elsewhere, a non-zero count from the same corpus, or the command's listing of
+what it scanned — and is incomplete without one.
+
+Both changes are prose at the point of decision and carry no script enforcer: neither
+"you filed this in the wrong system" nor "this zero has no control" is cheaply
+mechanizable. Check 12's addition at least states a failure condition its adjudicator
+can apply, on the same terms as a missing per-check result.
+
 ## [0.137.0] — 2026-07-23
 
 ### Fixed — the resume path read one section of the snapshot while five places said it whole-reads it
