@@ -211,6 +211,63 @@ else
   else
     note "ok" "sprint-999 (git)" "fabricated SHA rejected by validate-retro-evidence.sh"
   fi
+
+  # ---- Origin-only ref resolution — the CI checkout condition ----------------
+  # CI runners (GitHub Actions) fetch refs into origin/* and keep NO local branch
+  # per ref, so a plain branch name fed to `git ls-tree` resolved nothing and the
+  # transcript read as "not committed" — a false COMMIT_MISSING with nothing to do
+  # with the retro. Reproduce it exactly: clone so the retro branch exists ONLY as
+  # origin/ai-dlc/retro/sprint-999, then run with the plain name. The retro cites
+  # @deadbee, so it FAILS overall either way; the tell is Marker 2 — did ls-tree
+  # find the transcript ON the branch? "transcript committed: OK" iff resolution
+  # reached origin/<name>.
+  # $REPO's HEAD sits on the retro branch, so a plain `git clone` would create a
+  # LOCAL ai-dlc/retro/sprint-999 and defeat the whole premise. Detach and delete
+  # it, leaving the branch reachable ONLY as origin/ai-dlc/retro/sprint-999 — the
+  # exact CI condition. The mutation control below is what caught this.
+  CLONE="$WORK/retro-clone"
+  git clone -q "$REPO" "$CLONE" >/dev/null 2>&1
+  (
+    cd "$CLONE"
+    git checkout -q --detach
+    git branch -D ai-dlc/retro/sprint-999
+  ) >/dev/null 2>&1
+  NEW_OUT="$( cd "$CLONE" && bash "$EVID" ai-dlc/retro/sprint-999 999 2>&1 )"
+  if printf '%s\n' "$NEW_OUT" | grep -Eq 'transcript committed.*: OK'; then
+    note "ok" "sprint-999 (origin-only)" "retro branch resolves via origin/<name> (ls-tree found the transcript)"
+  else
+    note "BAD" "sprint-999 (origin-only)" "the origin-only branch did NOT resolve — the CI-checkout bug is back"
+    fails=$((fails + 1))
+  fi
+
+  # Fail-fast: a branch that resolves NEITHER locally NOR as origin/ must fail
+  # immediately, naming both refs it tried — not die opaquely in merge-base later.
+  FF_OUT="$( cd "$CLONE" && bash "$EVID" no-such-retro-branch 999 2>&1 )"
+  if printf '%s\n' "$FF_OUT" | grep -Eq 'not found — tried: no-such-retro-branch, origin/no-such-retro-branch'; then
+    note "ok" "fail-fast" "an unresolvable branch fails fast, naming both refs tried"
+  else
+    note "BAD" "fail-fast" "an unresolvable branch did not fail-fast naming both refs"
+    fails=$((fails + 1))
+  fi
+
+  # MUTATION control: revert the resolution to the old verbatim-name behaviour
+  # (retro_branch stays the plain name) and require the origin-only branch to STOP
+  # resolving — Marker 2 must flip to FAIL. A pass above is evidence for the
+  # resolution only if removing it removes the pass.
+  MUT="$WORK/retro-evidence.mutant.sh"
+  sed 's/^retro_branch = _resolved$/retro_branch = retro_branch  # MUTANT: keep the unresolved name/' "$EVID" > "$MUT"
+  if cmp -s "$EVID" "$MUT"; then
+    note "BAD" "sprint-999 (origin-only)" "MUTATION matched nothing — the resolution reassignment was renamed"
+    fails=$((fails + 1))
+  else
+    MUT_OUT="$( cd "$CLONE" && bash "$MUT" ai-dlc/retro/sprint-999 999 2>&1 )"
+    if printf '%s\n' "$MUT_OUT" | grep -Eq 'transcript committed.*: FAIL'; then
+      note "ok" "sprint-999 (origin-only)" "MUTATION — without resolution the origin-only branch is unresolved (ls-tree FAIL)"
+    else
+      note "BAD" "sprint-999 (origin-only)" "MUTATION — the branch resolved with resolution disabled; the assertion proves nothing"
+      fails=$((fails + 1))
+    fi
+  fi
 fi
 
 echo

@@ -17,6 +17,31 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.129.0] — 2026-07-22
+
+### Fixed — validate-retro-evidence.sh: resolve the retro branch, don't feed a plain name to git
+
+The header's contract is that this validator runs on the PUSHED branch
+(`origin/<branch>`), but the branch name was fed to `git ls-tree`/`git merge-base`
+verbatim. On a CI runner — which fetches refs into `origin/*` and keeps NO local
+branch for each — `git ls-tree sprint-137 -- <path>` resolves nothing, and the
+transcript reads as "not committed": a false `COMMIT_MISSING` that has nothing to do
+with the retro, surfacing 30 lines downstream as an opaque error.
+
+The validator now resolves the ref: it tries the name as given first (a local branch,
+or a name already qualified as `origin/…`, still works — no regression for any input
+that passed before), then falls back to `origin/<name>`, and fails fast naming both
+refs if neither resolves. The consumer's local variant hardcoded `origin/<branch>`
+only, which breaks a local, unpushed retro; this generalizes to resolve across both
+checkouts.
+
+`core/fixtures/check-17-bypass` gains an origin-only assertion: it clones the fixture
+repo so the retro branch is reachable ONLY as `origin/ai-dlc/retro/sprint-999` (the
+exact CI condition), proves the transcript now resolves (Marker 2 OK), proves an
+unresolvable branch fails fast naming both refs, and carries a MUTATION control that
+reverts the resolution to the old verbatim-name behaviour and requires Marker 2 to flip
+to FAIL.
+
 ## [0.128.0] — 2026-07-22
 
 ### Added — validate-provenance-block.sh: a placeholder tool_use_id is a forged evidence cell
