@@ -17,6 +17,23 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.133.0] — 2026-07-23
+
+### Fixed — `validate-provenance-block.sh` rejected the `NOT_ACCESSIBLE` id its own doc mandates
+
+retro.md Step 2 tells authors: "Never invent a `tool_use_id`: if it is not accessible in the
+conversation (common after compact), write `tool_use_id: NOT_ACCESSIBLE`. A fabricated id is a
+forged block." But the validator's `^toolu_` pattern rejected that exact literal — the gate
+retro.md calls the owner of the block's shape failed a value retro.md requires. A real retro
+after a compact could not pass without either forging an id or failing the gate.
+
+Fixed schema-driven: the `tool_use_id` field declares `"sentinel": "NOT_ACCESSIBLE"`, and
+`check_value` bypasses the shape checks for a field's declared sentinel — an honest declaration
+of absence, not a shape claim. A placeholder literal (`toolu_PLACEHOLDER`, …) stays `forbidden`:
+it pretends to be a real id, where the sentinel names its own absence. New fixture
+`provenance-not-accessible` proves acceptance, that a fabricated id and a placeholder still FAIL,
+and a mutation control (removing the bypass flips `NOT_ACCESSIBLE` back to FAIL).
+
 ## [0.132.0] — 2026-07-23
 
 ### Added — `validate-cycle-commits.sh` in core; Check 2 re-keyed to the log producer

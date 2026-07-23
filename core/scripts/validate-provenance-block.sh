@@ -257,6 +257,15 @@ def check_value(idx, name, value, failures):
     if spec is None:
         return  # unknown field: permitted and recorded (schema['parser']['unknown_fields'])
 
+    # A declared sentinel is a sanctioned literal that bypasses the shape checks. The one
+    # sentinel is tool_use_id: NOT_ACCESSIBLE, written per retro.md when the Skill/Agent tool's
+    # id is not retrievable (common after a compact) — the honest alternative to inventing an
+    # id, which would be a forged block. It is NOT a placeholder (those are `forbidden`, and
+    # pretend to be a real id): the sentinel names its own absence. Schema-declared so the
+    # allowance lives in the schema, not a per-field code branch.
+    if spec.get("sentinel") is not None and value == spec["sentinel"]:
+        return
+
     enum = spec.get("enum")
     if enum is None and spec.get("enum_ref"):
         enum = S[spec["enum_ref"]]
