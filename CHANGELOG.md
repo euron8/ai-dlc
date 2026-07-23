@@ -17,6 +17,69 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.139.0] — 2026-07-23
+
+### Fixed — H2's attestation wrapper could not drive its own fixture in a consumer
+
+`validate-h2-attestation.sh --attest` failed in every installed consumer with
+
+    FAIL: cannot locate validate-provenance-block.sh (pass --scripts DIR)
+
+while the same fixture, `tests/fixtures/check-17-bypass/run.sh` run by hand with no
+arguments, self-located and passed its full matrix. The reference consumer hit this
+mid-gate: all three H2 items were driven and held, but no `H2_ATTESTED v1` line could
+be produced, so the sprint's gate log carried no mechanical result for the one check
+that checks the checkers.
+
+The wrapper derived the validator directory itself:
+
+    SCRIPTS_DIR="$PROJECT_DIR/scripts"
+    [ -f "$SCRIPTS_DIR/validate-provenance-block.sh" ] || SCRIPTS_DIR="$PROJECT_DIR/core/scripts"
+    ...
+    bash "$RUN" --scripts "$SCRIPTS_DIR"
+
+Two faults, and the second is what made it fatal. The candidate pair predates the
+v0.126.0 relocation, so it never names `scripts/ai-dlc/`. And the fallback is assigned
+with **no existence test** — "not found" is indistinguishable from "found at
+`core/scripts`". That unchecked guess was then *asserted* to the fixture runner as an
+explicit `--scripts` override, overriding `check-17-bypass/run.sh`'s own candidate
+list, which has included `scripts/ai-dlc/` since v0.126.0 and was right all along.
+
+Upstream it worked. The distribution has a `scripts/` that holds no validators, so the
+fallback fired and landed on `core/scripts` — correct. The check worked everywhere it
+was authored and nowhere it shipped, which is the distribution-is-not-a-consumer shape
+this repo has now fixed several times.
+
+The derivation is deleted rather than corrected. `run.sh` self-locates, it was the only
+consumer of `SCRIPTS_DIR` in the wrapper, and one candidate list cannot go out of sync
+with itself. `--scripts DIR` survives as an operator override — `--fixtures`'s twin,
+for a relocated fixture tree — and is forwarded only when supplied, so the wrapper can
+never again defeat a correct answer with a guessed one.
+
+A sweep of `core/` and `scripts/` for `--scripts` and for bare `$PROJECT_DIR/scripts`
+derivations found no other site. `validate-adversarial-convergence.sh` and
+`validate-escalation-resolution.sh` resolve siblings with `dirname "$0"`, which is
+location-agnostic.
+
+### Added — `core/fixtures/h2-attest-scripts-dir`
+
+Asserts `--attest` drives its fixture end to end from a faithful installed consumer
+layout, with a non-vacuity control (a wrong explicit `--scripts` must be fatal) and a
+mutation control (the pre-relocation derivation reinstated must fail on validator
+location, `cmp`-guarded so a sed that matches nothing is a FAIL and never a pass).
+
+It is a fixture of its own because `validator-path-resolution` **cannot** host the
+proof: to compare layouts that fixture installs all ~26 validators into both `scripts/`
+and `scripts/ai-dlc/`, and in that tree the broken derivation finds
+`$WORK/scripts/validate-provenance-block.sh` and succeeds. The assertion would have
+been green against the exact bug it was written for. This fixture builds the tree a
+consumer actually has — bare `scripts/` populated with consumer-authored tooling and no
+core validator — and exits 2 if that ever stops being true.
+
+Verified non-vacuous against the real defect, not only the mutant: with the wrapper
+reverted to its v0.138.0 form the drive assertion goes red with the consumer's verbatim
+error, and the other three stay green.
+
 ## [0.138.0] — 2026-07-23
 
 ### Added — project memory is not a filing destination for pipeline behaviour
