@@ -152,6 +152,31 @@ if [ "$m" != "CHANGED" ]; then bad "F MUTATION matched nothing (leg i test renam
     || bad "F MUTATION — unwired case still dormant with leg (i) off (rc=$rc); F proves nothing"
 fi
 
+# ===================== G. angle-bracket placeholder skip ====================
+# A retro TEMPLATE / declaration-format example (`CI gate `<gate-name>``) is
+# documentation, not a declared gate. It must be skipped, or it reads as a phantom
+# dormant gate and exits 1 on template noise.
+printf 'jobs:\n  build:\n    run: ./build.sh\n  deploy:\n    run: ./deploy.sh\n' \
+  > "$WORK/surface/ci.yml"
+printf 'Retro.\n\nAdded CI gate `build`. Also CI gate `deploy`. Format: CI gate `<gate-name>`.\n' \
+  > "$WORK/docs/retro/s1.md"
+rc="$(run_ci "$VALIDATOR" "$WORK/surface")"
+if [ "$rc" = "0" ] && grep -q '2 gates declared' "$WORK/out.txt"; then
+  ok "G a <placeholder> gate name is skipped (2 declared, not 3) -> clean"
+else
+  bad "G placeholder not skipped (rc=$rc): $(tail -1 "$WORK/out.txt")"
+fi
+# MUTATION: neuter the placeholder skip; the <gate-name> token must then count and go DORMANT.
+m="$(mutate '*"<"*">"*) continue' '*"<"*">"*) :')"
+if [ "$m" != "CHANGED" ]; then bad "G MUTATION matched nothing (placeholder skip renamed)"; else
+  rc="$(run_ci "$WORK/mutant.sh" "$WORK/surface")"
+  if [ "$rc" = "1" ] && grep -q "DORMANT: gate '<gate-name>'" "$WORK/out.txt"; then
+    ok "G MUTATION — without the skip the <gate-name> placeholder counts and is DORMANT (skip is real)"
+  else
+    bad "G MUTATION — placeholder still skipped without the guard (rc=$rc); G proves nothing"
+  fi
+fi
+
 echo
 [ "$fails" -eq 0 ] && { echo "ci-gates-resolution: PASS"; exit 0; }
 echo "ci-gates-resolution: $fails assertion(s) violated." >&2
