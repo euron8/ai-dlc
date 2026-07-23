@@ -5,15 +5,36 @@
 # No hard dep on jq/yq/rg (portable subset; each is checked-and-degraded if referenced).
 #
 # Exit codes:
-#   0 — clean scan (no dormant gates)
-#   1 — one or more dormant gates detected (declared in a retro but no workflow reference)
-#   2 — tool-availability failure
+#   0  — clean scan (no dormant gates)
+#   1  — one or more dormant gates detected (declared in a retro, no enforcer match)
+#   2  — tool-availability failure
+#   78 — VACUOUS: no enforcement surface exists to scan against. A check that CANNOT
+#        run must not share an exit code with one that ran and passed (0) or one that
+#        ran and found a specific dormant gate (1). A consumer that disabled GitHub
+#        Actions and points AI_DLC_CI_SURFACE at a missing/empty directory reaches this.
 #
 # Contract:
 #   Scans docs/retro/**/*.md for declared CI gate names using the patterns below, then
-#   grep's .github/workflows/** for each gate name. A declared gate with zero workflow
-#   matches is flagged as DORMANT. Deeper GHA-API introspection is intentionally out of
-#   scope — this is a file-grep first-line defense.
+#   checks each name against the enforcement surface (AI_DLC_CI_SURFACE, default
+#   .github/workflows/). A declared gate with no enforcer match is flagged as DORMANT.
+#   Deeper GHA-API introspection is intentionally out of scope — a file-grep first-line
+#   defense.
+#
+#   The match is COMMENT-AWARE, not a raw substring: a gate name that survives only in a
+#   `#` comment (a banner left behind after its enforcing step was deleted) does NOT count
+#   as enforced. The old `grep -rqF` was fail-open — any substring anywhere, comments
+#   included, read as enforcement, so a gate stayed "enforced" after its detector was cut.
+#
+#   OPTIONAL two-legged ALIAS TABLE (AI_DLC_CI_ALIAS_TABLE, unset by default): a gate
+#   declared under one name may be enforced under another (a differently-named CI step, a
+#   local runner). Each row is `declared_gate|enforcer_id|enforcing_file|anchor`, and a
+#   row is honoured ONLY when BOTH legs hold: (i) enforcer_id is present in the enforcing
+#   file's NON-COMMENT code (the gate is wired), and (ii) the anchor — the literal whose
+#   deletion destroys the enforcement, never the gate's name and never a diagnostic
+#   string — occurs EXACTLY ONCE in that file's non-comment code (the detection exists).
+#   A row failing either leg confers nothing: the table cannot alias a gate that nothing
+#   enforces, which is what separates it from a suppression list with one extra hop. The
+#   rows are consumer data; the resolution mechanism is here.
 #
 # Declaration pattern (case-insensitive, canonical form):
 #   - "CI gate `<NAME>`"  — backtick-quoted gate name after the explicit
@@ -90,9 +111,13 @@ if [ ! -d "${RETRO_DIR}" ]; then
   exit 0
 fi
 if [ ! -d "${WORKFLOW_DIR}" ]; then
-  echo "ERROR: CI enforcement surface not found: ${WORKFLOW_DIR}" >&2
+  # VACUOUS, not FAIL. The check cannot run — there is no surface to scan. exit 78
+  # so this never shares an exit code with a clean scan (0) or a specific dormant
+  # gate (1). Today's RC=2 was the old guard firing; that conflated "cannot check"
+  # with "tool missing", so a consumer who disabled Actions got a permanent FAIL.
+  echo "VACUOUS: no enforcement surface to scan — ${WORKFLOW_DIR} does not exist." >&2
   echo "  If this project's gates live elsewhere, set AI_DLC_CI_SURFACE to that directory." >&2
-  exit 2
+  exit 78
 fi
 
 retro_count=0
@@ -124,11 +149,67 @@ if [ -z "$unique_gates" ]; then
   exit 0
 fi
 
-# For each unique declared gate, grep workflows/ for the name.
+# --- Enforcement matching ---------------------------------------------------
+# code_hits <file-or-dir> <literal> — count occurrences of <literal> in NON-COMMENT
+# code. A whole-line comment (optional leading whitespace + '#') is stripped first,
+# because a gate name that survives only in a comment banner is not enforcement.
+# For a directory, every file under it is scanned. Prints an integer.
+code_hits() {
+  local target="$1" literal="$2" f total=0 n
+  if [ -d "$target" ]; then
+    while IFS= read -r f; do
+      [ -f "$f" ] || continue
+      n="$(sed -e 's/^[[:space:]]*#.*$//' "$f" 2>/dev/null | grep -cF -- "$literal" 2>/dev/null || true)"
+      total=$((total + ${n:-0}))
+    done < <(find "$target" -type f 2>/dev/null)
+  elif [ -f "$target" ]; then
+    n="$(sed -e 's/^[[:space:]]*#.*$//' "$target" 2>/dev/null | grep -cF -- "$literal" 2>/dev/null || true)"
+    total=${n:-0}
+  fi
+  printf '%s' "$total"
+}
+
+# Optional two-legged alias table (AI_DLC_CI_ALIAS_TABLE, unset by default). Rows:
+#   declared_gate|enforcer_id|enforcing_file|anchor
+# A blank line or one beginning with '#' is skipped; enforcing_file is resolved
+# relative to REPO_ROOT when not absolute. See the header for the two legs.
+ALIAS_TABLE_FILE="${AI_DLC_CI_ALIAS_TABLE:-}"
+
+# alias_resolves <declared_gate> — 0 iff some row for this gate satisfies BOTH legs.
+alias_resolves() {
+  local gate="$1" a_gate a_enf a_file a_anchor resolved_file
+  [ -n "$ALIAS_TABLE_FILE" ] && [ -f "$ALIAS_TABLE_FILE" ] || return 1
+  while IFS='|' read -r a_gate a_enf a_file a_anchor; do
+    case "$a_gate" in ''|\#*) continue ;; esac
+    [ "$a_gate" = "$gate" ] || continue
+    [ -n "$a_enf" ] && [ -n "$a_file" ] && [ -n "$a_anchor" ] || continue
+    case "$a_file" in
+      /*) resolved_file="$a_file" ;;
+      *)  resolved_file="${REPO_ROOT}/${a_file}" ;;
+    esac
+    [ -f "$resolved_file" ] || continue
+    # Leg (i): the enforcer is wired — its id is present in non-comment code.
+    [ "$(code_hits "$resolved_file" "$a_enf")" -ge 1 ] || continue
+    # Leg (ii): the detection exists — the anchor occurs EXACTLY ONCE in non-comment
+    # code. Not the gate name, not a diagnostic string, not a paths trigger.
+    [ "$(code_hits "$resolved_file" "$a_anchor")" -eq 1 ] && return 0
+  done < "$ALIAS_TABLE_FILE"
+  return 1
+}
+
+# For each unique declared gate: a comment-aware match in the surface, then the
+# both-legged alias table. No match under either -> DORMANT.
+dormant_gates=""
 while IFS= read -r gate; do
   [ -z "$gate" ] && continue
-  if ! grep -rqF -- "$gate" "${WORKFLOW_DIR}" 2>/dev/null; then
-    echo "DORMANT: gate '${gate}' declared in retro but no match in .github/workflows/" >&2
+  if [ "$(code_hits "${WORKFLOW_DIR}" "$gate")" -ge 1 ]; then
+    :  # enforced under its own name, in non-comment code
+  elif alias_resolves "$gate"; then
+    :  # aliased: enforcer wired AND anchor present exactly once (both legs)
+  else
+    echo "DORMANT: gate '${gate}' declared in retro but no non-comment match in ${WORKFLOW_DIR} or a both-legged alias row" >&2
+    dormant_gates="${dormant_gates}${gate}
+"
     dormant_count=$((dormant_count + 1))
   fi
 done <<EOF
@@ -141,6 +222,8 @@ unique_count=$(printf '%s\n' "$unique_gates" | awk 'NF' | wc -l | tr -d ' ')
 echo "Scanned ${retro_count} retros, ${unique_count} gates declared, ${dormant_count} dormant"
 
 if [ "$dormant_count" -gt 0 ]; then
+  dormant_enum="$(printf '%s\n' "$dormant_gates" | awk 'NF' | tr '\n' ',' | sed 's/,$//')"
+  echo "Dormant gates n=[${dormant_enum}]" >&2
   exit 1
 fi
 exit 0
