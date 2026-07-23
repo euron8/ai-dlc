@@ -17,6 +17,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.131.0] — 2026-07-22
+
+### Added — reconcile: warn when a local validator fork's divergence is upstreamed
+
+`reconcile/warn-shadowed-local-validators.sh` flags a `scripts/ai-dlc-local/X.sh` fork whose
+push-candidate ledger entry is CLOSED (`ADOPTED UPSTREAM`) as a RETIRE-CANDIDATE: its
+divergence now lives in `core/scripts/X.sh`, so the operator should re-evaluate whether stock
+core covers the case. A fork is flagged only when all three hold — the entry is closed, the
+fork exists, and it shadows a real core validator — so a `.sh` token in ledger prose, an open
+entry, or a fork with no core twin is silent.
+
+This is the twin of `ledger-reverify.sh`'s CLOSE-CANDIDATE and `layer-drift.sh`'s
+EXTENSION-RETIRE-CANDIDATE: a mechanical SIGNAL, not a deletion. Retiring a fork needs a
+covers-my-case judgment the script cannot make (an upstream may cover only part of the
+divergence), so it emits the signal and never blocks (exit 0 always). It reuses
+ledger-reverify's entry-walk and `ADOPTED UPSTREAM` close convention.
+
+Fixture: `core/fixtures/shadowed-local-validators` (new) drives the one-true-positive plus
+four silent cases, with a mutation control that drops the CLOSED gate and requires an open
+fork to then be flagged. Registered in install.sh and uninstall.sh; enforcement-map green.
+
 ## [0.130.0] — 2026-07-22
 
 ### Added — validate-ci-gates.sh: comment-aware matching, VACUOUS-78, and a two-legged alias table
