@@ -38,7 +38,7 @@ FIXTURE_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Two layouts:
 #   distribution — core/fixtures/taught-schema/  beside  core/scripts/, core/schemas/
-#   consumer     — tests/fixtures/taught-schema/  beside  <root>/scripts/, <root>/.claude/schemas/
+#   consumer     — tests/fixtures/taught-schema/  beside  <root>/scripts/ai-dlc/, <root>/.claude/schemas/
 UP2="$(cd "$FIXTURE_DIR/../.." && pwd)"           # core/  (dist)   |  tests/  (consumer)
 UP3="$(cd "$FIXTURE_DIR/../../.." && pwd)"        # repo root in both
 
@@ -47,7 +47,14 @@ if [ -d "$UP2/scripts" ] && [ -d "$UP2/schemas" ]; then
     SCHEMA="$UP2/schemas/provenance-block.json"
     ROLE="$UP2/team-roles/adversary.md"
 else
-    SCRIPTS="$UP3/scripts"
+    # v0.126.0 moved consumer validators to scripts/ai-dlc/; prefer it, keep bare
+    # scripts/ as a pre-relocation fallback. Assigning bare scripts/ here made this
+    # fixture fail in every installed tree while passing in the distribution.
+    if [ -f "$UP3/scripts/ai-dlc/validate-provenance-block.sh" ]; then
+        SCRIPTS="$UP3/scripts/ai-dlc"
+    else
+        SCRIPTS="$UP3/scripts"
+    fi
     SCHEMA="$UP3/.claude/schemas/provenance-block.json"
     ROLE="$UP3/.claude/team-roles/adversary.md"
 fi

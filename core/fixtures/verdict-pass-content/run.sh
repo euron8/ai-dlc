@@ -33,14 +33,17 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
 # Two layouts, both derived from install.sh's mapping -- NOT guessed. install.sh
-# maps `core/scripts/<x>` to `scripts/<x>` at the project root.
+# maps `core/scripts/<x>` to `scripts/ai-dlc/<x>` at the project root (v0.126.0+).
 if [ -n "$ROOT" ] && [ -f "$ROOT/core/scripts/verdict.sh" ]; then
   SCRIPTS="$ROOT/core/scripts"
 elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/verdict.sh" ]; then
-  SCRIPTS="$ROOT/scripts"
+  # The elif condition already checked scripts/ai-dlc/ — but SCRIPTS used to be set to
+  # bare $ROOT/scripts, so VERDICT resolved to a non-existent path and this fixture
+  # failed in every installed tree while passing in the distribution.
+  SCRIPTS="$ROOT/scripts/ai-dlc"
 else
   echo "FIXTURE ERROR: verdict.sh not found in either layout" >&2
-  echo "  looked in: $ROOT/core/scripts/ (distribution), $ROOT/scripts/ (consumer)" >&2
+  echo "  looked in: $ROOT/core/scripts/ (distribution), $ROOT/scripts/ai-dlc/ (consumer)" >&2
   exit 2
 fi
 VERDICT="$SCRIPTS/verdict.sh"

@@ -17,6 +17,25 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.131.1] — 2026-07-23
+
+### Fixed — three fixtures could not self-locate in an installed (consumer) tree
+
+`check-17-bypass`, `taught-schema`, and `verdict-pass-content` resolved the consumer's
+validator directory to bare `scripts/` — the pre-v0.126.0 path. Since the relocation moved
+consumer validators to `scripts/ai-dlc/`, each failed to find its subject in every installed
+tree (`verdict-pass-content` set `SCRIPTS=$ROOT/scripts` in the branch whose condition had
+just tested `scripts/ai-dlc/`; `taught-schema` set `SCRIPTS=$UP3/scripts`; `check-17-bypass`
+had no `scripts/ai-dlc` candidate and misreported the miss as "pass --scripts DIR"). All
+three passed in the distribution layout, so `.githooks/pre-push` never caught it — the
+consumer-layout branch of each fixture's locator is dead code in the distribution's own gate.
+
+The reference consumer hit this: its shipped `pre-push` failed these three identically, which
+is what surfaced the bug. Verified by installing into a temp tree and running the whole suite
+as a consumer (0 of 54 fail after the fix; the same run confirmed the blast radius is exactly
+these three — `context-sensor` fails only when run from the wrong cwd, not under the shipped
+hook). Each now prefers `scripts/ai-dlc/` with bare `scripts/` as a pre-relocation fallback.
+
 ## [0.131.0] — 2026-07-22
 
 ### Added — reconcile: warn when a local validator fork's divergence is upstreamed

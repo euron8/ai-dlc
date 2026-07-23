@@ -32,7 +32,10 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$SCRIPTS" ]; then
-  for cand in "$HERE/../../scripts" "$HERE/../../../scripts" "$HERE/../../../core/scripts"; do
+  # Consumer validators live at scripts/ai-dlc/ since v0.126.0 — that candidate MUST be
+  # present, or the fixture cannot self-locate in an installed tree and misreports the
+  # miss as "pass --scripts DIR". scripts/ (bare) stays as a pre-relocation fallback.
+  for cand in "$HERE/../../scripts" "$HERE/../../../scripts/ai-dlc" "$HERE/../../../scripts" "$HERE/../../../core/scripts"; do
     [ -f "$cand/validate-provenance-block.sh" ] && { SCRIPTS="$(cd "$cand" && pwd)"; break; }
   done
 fi
