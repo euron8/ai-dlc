@@ -17,6 +17,25 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.135.0] — 2026-07-23
+
+### Fixed — mandatory-rules Check 5 could never fire (diffed the empty `main..HEAD`)
+
+Check 5 (visual verification for web/** sprints) enumerated changed files with
+`git diff main..HEAD`. It runs at retro time, on a retro branch cut from main *after* the
+sprint merged — so the sprint's web/** changes are ancestors of main and `main..HEAD` is
+empty. Check 5 SKIPped every sprint on an empty range: a check that cannot fire, which reads
+exactly like one that passed.
+
+Fixed by resolving the diff base from the prior sprint's audit-anchor SHA (`audit-anchors.md`,
+a core artifact written by retro.md Step 5b): the sprint's change set is `[prior-anchor..HEAD]`.
+When the base is unresolvable (no `audit-anchors.md`, no prior-sprint entry, or an unresolvable
+SHA — e.g. the first sprint), Check 5 SKIPs loudly with the reason ("cannot check", not "no
+evidence"); gate-validation Check 9 remains the primary visual-verification gate. New fixture
+`check5-anchor-base` proves Check 5 now fires on a change merged to main (empty `main..HEAD`),
+PASSes with USER-CONFIRMED evidence, and a mutation control (reverting the base to `main..HEAD`
+returns the SKIP).
+
 ## [0.134.0] — 2026-07-23
 
 ### Added — `validate-mandatory-rules.sh --check-clean-tree` subset entrypoint

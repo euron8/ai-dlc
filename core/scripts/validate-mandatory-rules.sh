@@ -243,18 +243,37 @@ echo "[Check 5] Visual UI verification (web/** sprints only)..."
 GATE_LOG="_bmad-output/implementation-artifacts/gate-log.md"
 STORIES_DIR="_bmad-output/planning-artifacts/stories"
 
-# Determine if any file actually changed under web/** for this sprint branch.
-# Use git diff --name-only against main to enumerate real changed files,
-# NOT prose-grepping story files (which triggers on mentions of web/** in AC text).
-# Falls back to HAS_WEB_STORIES=0 if git is unavailable or the branch is unknown.
-HAS_WEB_STORIES=0
-WEB_CHANGED_FILES=$(git diff --name-only main..HEAD -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null | head -20)
-if [ -n "$WEB_CHANGED_FILES" ]; then
-  HAS_WEB_STORIES=1
+# Diff base. This runs at retro time, on a retro branch cut from main AFTER the sprint merged
+# — so the sprint's web/** changes are ancestors of main and `main..HEAD` is EMPTY. Diffing
+# against main made Check 5 structurally unable to fire: it SKIPped every sprint on an empty
+# range (a check that cannot fire reads exactly like one that passed). Resolve the base from
+# the prior sprint's audit-anchor SHA (audit-anchors.md, a core artifact written by retro.md
+# Step 5b) — the sprint's changes are exactly [prior-sprint anchor .. HEAD]. Enumerate real
+# changed files, NOT prose-grepping story files (which triggers on mentions of web/** in AC
+# text). If the base is unresolvable (no audit-anchors.md, no prior-sprint entry, or an
+# unresolvable SHA — e.g. the first sprint), SKIP loudly: an undeterminable change set is
+# "cannot check", not "no evidence". Core SKIPs here where a deploy-target-specific consumer
+# may fail-close; gate-validation Check 9 is the primary visual-verification gate regardless.
+AUDIT_ANCHORS="_bmad-output/audit-anchors.md"
+PRIOR_SPRINT=$((SPRINT_N - 1))
+CHECK5_BASE=""
+CHECK5_ANCHOR_ERR=""
+if [ ! -f "$AUDIT_ANCHORS" ]; then
+  CHECK5_ANCHOR_ERR="audit-anchors.md not found at ${AUDIT_ANCHORS}"
+else
+  PRIOR_ANCHOR_RAW=$(awk -v s="$PRIOR_SPRINT" '$1=="-" && $2=="sprint:" && $3==s {f=1; next} f && $1=="sha:" {print $2; exit}' "$AUDIT_ANCHORS")
+  if [ -z "$PRIOR_ANCHOR_RAW" ]; then
+    CHECK5_ANCHOR_ERR="no audit-anchor entry for prior sprint ${PRIOR_SPRINT} in ${AUDIT_ANCHORS}"
+  else
+    CHECK5_BASE=$(git rev-parse --verify -q "${PRIOR_ANCHOR_RAW}^{commit}" 2>/dev/null || true)
+    [ -z "$CHECK5_BASE" ] && CHECK5_ANCHOR_ERR="prior-sprint (${PRIOR_SPRINT}) audit-anchor '${PRIOR_ANCHOR_RAW}' does not resolve to a commit"
+  fi
 fi
 
-if [ $HAS_WEB_STORIES -eq 0 ]; then
-  echo "  CHECK 5: SKIP (no web/** file changes detected for Sprint ${SPRINT_N} branch)"
+if [ -z "$CHECK5_BASE" ]; then
+  echo "  CHECK 5: SKIP (cannot resolve diff base: ${CHECK5_ANCHOR_ERR})"
+elif [ -z "$(git diff --name-only "${CHECK5_BASE}..HEAD" -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null | head -20)" ]; then
+  echo "  CHECK 5: SKIP (no web/** file changes in ${CHECK5_BASE}..HEAD for Sprint ${SPRINT_N})"
 else
   if [ ! -f "$GATE_LOG" ]; then
     fail "Check5_VISUAL_UI" "gate-log.md not found at ${GATE_LOG} (required for web/** sprint ${SPRINT_N})"
