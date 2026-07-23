@@ -15,8 +15,9 @@
 # The 6 checks:
 #   Check 1: Party mode transcript exists and is SHA-cited in retro doc
 #             (delegates to scripts/ai-dlc/validate-retro-evidence.sh <branch> <n>)
-#   Check 2: Cycle commit count for retro artifacts -- CONSUMER-PROVIDED
-#             (scripts/validate-cycle-commits.sh; SKIP when the sibling is absent)
+#   Check 2: Cycle commit count for retro artifacts
+#             (delegates to validate-cycle-commits.sh; SKIP when no
+#              _bmad-output/validation-cycle-log.md — per-artifact-changelog model)
 #   Check 3: Sprint envelope closed (status: done + sprint_<n>_housekeeping)
 #             (reads implementation-artifacts/sprint-status.yaml, written by
 #              sprint-status.sh close; planning-artifacts fallback)
@@ -107,14 +108,18 @@ fi
 # ============================================================================
 echo "[Check 2] Cycle commit count >= 3 for retro..."
 CYCLE_COMMITS_SH="${SCRIPT_DIR}/validate-cycle-commits.sh"
-if [ ! -f "$CYCLE_COMMITS_SH" ]; then
-  # Consumer-provided check — core ships no validate-cycle-commits.sh. Cycle evidence moved from a
-  # standalone validation-cycle-log.md (DEAD: no producer in current core) to per-artifact changelogs
-  # (Rule 15), whose freeform prose is not mechanically countable here. A consumer that maintains the
-  # log ships its own sibling and this check runs; absent it, SKIP loudly — never fail the whole gate
-  # on a check core cannot universally enforce. This dead delegation is what poisoned every retro
-  # since S138 (the whole validator exited 1 before any real check could gate).
-  echo "  CHECK 2: SKIP (no validate-cycle-commits.sh — consumer-provided)"
+CYCLE_LOG="_bmad-output/validation-cycle-log.md"
+if [ ! -f "$CYCLE_LOG" ]; then
+  # Enablement is keyed on the PRODUCER, not the validator. Cycle evidence lives
+  # either in a standalone validation-cycle-log.md (mechanically countable by the
+  # sibling) or in per-artifact changelogs (freeform prose, not countable here).
+  # A consumer on the changelog model ships no log; SKIP loudly rather than fail a
+  # gate this cannot enforce without the log. The log's presence is the observable
+  # opt-in — keying on the validator's presence instead would force-enforce on
+  # every consumer once core ships the sibling.
+  echo "  CHECK 2: SKIP (no ${CYCLE_LOG} — per-artifact-changelog model)"
+elif [ ! -f "$CYCLE_COMMITS_SH" ]; then
+  echo "  CHECK 2: SKIP (validation-cycle-log.md present but no validate-cycle-commits.sh sibling)"
 else
   C2_OUT=$("$CYCLE_COMMITS_SH" "$RETRO_BRANCH" 2>&1)
   C2_EXIT=$?

@@ -66,6 +66,7 @@ core_manifest:
   - scripts/ai-dlc/validate-audit-anchors.sh
   - scripts/ai-dlc/validate-ci-gates.sh
   - scripts/ai-dlc/validate-compact-window.sh
+  - scripts/ai-dlc/validate-cycle-commits.sh
   - scripts/ai-dlc/validate-draft-stamps.sh
   - scripts/ai-dlc/validate-escalation-resolution.sh
   - scripts/ai-dlc/validate-escalation-status-vocabulary.sh
