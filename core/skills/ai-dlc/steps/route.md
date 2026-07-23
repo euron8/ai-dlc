@@ -31,10 +31,15 @@ pipeline snapshot that indicates a resume from a previous session.
    snapshot" — this is a resume. **Before dispatching, run Step 0a
    snapshot integrity validation below.** If integrity validation
    passes:
-   - Read the snapshot's **Pipeline Position** section to determine
-     `current_step_file`.
+   - Take `current_step_file` from the snapshot Step 0a loaded. Do NOT
+     re-read or re-grep the snapshot — that one load serves all of it.
    - Acknowledge the resume in the first output line:
      *"Resuming from snapshot at `{current_step_file}`."*
+   - Reconcile every `In-Flight Teammates` row: a deliverable newer than
+     its `dispatched-at` is DELIVERED — consume it, never re-dispatch.
+     Older or absent means the beat resumes, not that the teammate died.
+     (A resume that followed `handoff.md` Step 1 finds the table empty;
+     one that followed a crash or context blow-out does not.)
    - Skip the rest of this routing sequence. Steps 1–6 are for fresh
      pipeline starts; on resume they would misclassify the input and
      overwrite the snapshot.
@@ -72,7 +77,23 @@ The lead clears the flag when the user directs the resume.
 
 Run these integrity checks in order:
 
-1. **Required sections present.** Confirm the snapshot contains all
+1. **Snapshot budget.** Before reading the snapshot, run
+   `scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md`.
+   This check protects the read that follows it: resume skips Steps 1–6,
+   so Step 1a never runs, and the next budget check is
+   `gate-validation.md` Check 14 — after the read. On non-zero exit,
+   HARD_BLOCK with the `trim` remedy the script names (Rule 25(a),
+   seven-section schema):
+   > *"Snapshot at `_bmad-output/pipeline-snapshot.md` is over budget:
+   > [verdict line, verbatim]. Reply `trim` to have me trim it to its
+   > seven-section schema, `archive` to start fresh, or `abort`."*
+
+2. **Load the snapshot.** Read `_bmad-output/pipeline-snapshot.md` **in
+   full**. This is the single load that serves every check below, the
+   Step 0 dispatch, and the rest of the session. No check below re-reads
+   or greps it.
+
+3. **Required sections present.** Confirm the snapshot contains all
    six load-bearing sections by heading:
    - `Pipeline Position`
    - `Sprint Context`
@@ -95,16 +116,16 @@ Run these integrity checks in order:
    version. The other six carry state no default can reconstruct, which
    is why they still FAIL.
 
-2. **`current_step_file` exists on disk.** Read the Pipeline Position
-   section and resolve `current_step_file` to
+4. **`current_step_file` exists on disk.** From the loaded Pipeline
+   Position section, resolve `current_step_file` to
    `{project-root}/.claude/skills/ai-dlc/steps/{current_step_file}`.
    If the file does not exist, FAIL with:
    > *"Snapshot references `current_step_file: {value}` but that
    > step file does not exist. Resume cannot dispatch. Reply
    > `archive`, `override <correct-step-file>`, or `abort`."*
 
-3. **Git branch match.** Run `git branch --show-current`. Read the
-   branch recorded in the snapshot (in Pipeline Position or Recent
+5. **Git branch match.** Run `git branch --show-current`. Compare it to
+   the branch recorded in the snapshot (in Pipeline Position or Recent
    Activity). If the current branch does not match, do NOT silently
    resume on the wrong branch:
    > *"Snapshot was finalized on branch `{snapshot_branch}` but
@@ -113,7 +134,7 @@ Run these integrity checks in order:
    > to resume on the current branch (I will update the snapshot's
    > branch field), or `abort`."*
 
-4. **`last_gate_passed` recency.** Parse the timestamp from the
+6. **`last_gate_passed` recency.** Parse the timestamp from the loaded
    `last_gate_passed` field. If more than 7 days old relative to
    today's date, surface a warning (not a hard fail):
    > *"Warning: snapshot's last gate was {days} days ago. Pipeline
@@ -123,9 +144,10 @@ Run these integrity checks in order:
 
    Wait for the user's reply before dispatching.
 
-If all four checks pass (integrity verified, branch matches or user
-confirmed, recency acceptable), continue with the Step 0 path 2
-dispatch. Otherwise the user's reply directs the next action.
+If all six checks pass (budget within threshold, snapshot loaded,
+integrity verified, branch matches or user confirmed, recency
+acceptable), continue with the Step 0 path 2 dispatch. Otherwise the
+user's reply directs the next action.
 
 ### Step 1: Read Project State
 

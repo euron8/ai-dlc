@@ -17,6 +17,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.137.0] — 2026-07-23
+
+### Fixed — the resume path read one section of the snapshot while five places said it whole-reads it
+
+Five files describe what `/ai-dlc resume` does with `_bmad-output/pipeline-snapshot.md`.
+Four of them say it reads the whole thing:
+
+- `steps/handoff.md` — the resume path "reads `_bmad-output/pipeline-snapshot.md` for **ALL state**"
+- `SKILL.md` Handoff triggers — "`route.md` Step 0 reads … **for all of it**"
+- `SKILL.md` Rule 23(a) — "the most-read file in the pipeline (every gate, **every resume**, every compaction recovery)"
+- `enforcement-map.yaml` and `validate-artifact-budget.sh`'s header — "**whole-read** at every gate, **on every resume**, and after every compaction"
+
+The fifth is `steps/route.md` Step 0, the only one that executes, and it said *"Read
+the snapshot's **Pipeline Position** section."* `git log -S` dates that line to
+`1101e17`, the commit that introduced the snapshot — written when the snapshot's only
+job was naming the next step file. Six load-bearing sections accreted around it
+(In-Flight Teammates at v0.50.0, the Check 27 routing record later) and the read was
+never widened. The claim was asserted everywhere except where it ran.
+
+Observed in the reference consumer: the lead opened a resume by announcing it would
+grep Pipeline Position only, citing a project memory whose own text says the snapshot
+is the source of truth you read and whose subject was `pending.md`. A resume that
+follows Step 0 literally dispatches without **In-Flight Teammates** — the ledger that
+exists to stop it re-dispatching a teammate that already delivered — and the
+compaction twin (`ai-dlc-recover.sh`) has reconciled that section since v0.50.0 while
+the resume twin never read it.
+
+The economy was false in the other direction too. That consumer's snapshot measures
+2,968 tokens against its 6,000-token budget. Step 0a needed six headings,
+`current_step_file`, the branch and a timestamp: three or four greps to avoid one
+~3k-token Read, while dropping Open Items, Locked Decisions and the teammate ledger.
+Step 0a now takes all six checks off a single load, which is fewer tool calls than
+before, not more.
+
+### Added — a snapshot budget check in front of the resume read (Rule 25(d) call site)
+
+Step 0 says *"Skip the rest of this routing sequence. Steps 1–6"* — which skips **Step
+1a**, the artifact-budget gate. Resume was the only path that whole-read the snapshot
+with no budget check in front of it; the next one is `gate-validation.md` Check 14,
+*after* the read. That is the shape behind the S289 measurement in
+`validate-artifact-budget.sh`'s header: a 50 KB snapshot, whole-read eight times in
+one session, the single largest byte-injector in it.
+
+`route.md` Step 0a check 1 now runs
+`scripts/ai-dlc/verdict.sh validate-artifact-budget --only pipeline-snapshot.md`
+before the read — the same invocation Check 14 and `_gate-procedures.md` already use.
+No new script, no new flag. Non-zero exit is a HARD_BLOCK carrying the `trim` remedy
+the script names. The remedy does read the file: that is the point. An over-budget
+snapshot becomes a one-time operator decision instead of a silent tax on every resume.
+
+Declared as a call site under `artifact-budget` in `enforcement-map.yaml`, so the
+posture is visible next to the other three rather than living only in step prose.
+
+### Added — `tests/fixtures/resume-whole-read`
+
+Nothing asserted any of this, which is how a one-line instruction outlived four
+statements contradicting it. Assertions are **paired**: "route.md does not contain the
+section-scoped sentence" passes vacuously against an empty file, so each absence
+assertion is joined to a positive one on the instruction that must be there instead.
+Ordering is asserted separately from presence — a budget check sitting after the read
+has already paid for the read it exists to prevent.
+
+Mutation controls, as an env var so vacuity is detected rather than assumed
+(`RESUME_FIXTURE_MUTANT=`): `section-read` restores the old wording, `no-budget`
+deletes the check, `reorder` moves the check past the read and fails the ordering
+assertion **alone**, and `blank` empties the file — failing every positive while
+passing the absence check, which is the demonstration of why they are paired. A mutant
+whose anchor no longer matches `route.md` reports FIXTURE ERROR instead of passing.
+
+Verified: fixture 7/7 and all four mutants rejected; whole suite 59/59 → 60/60;
+`validate-enforcement-map.sh` green (it caught the missing `install.sh` entry, then
+the missing `uninstall.sh` twin); budget check dry-run against the reference
+consumer's real snapshot exits 0 at 2,968/6,000, and a padded copy at 778% exits 1
+naming `trim`.
+
 ## [0.136.1] — 2026-07-23
 
 ### Fixed — the context sensor still asked the lead to offer a handoff at red and imminent
