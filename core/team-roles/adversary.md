@@ -127,8 +127,9 @@ converging.
 ### Unrequested mechanism is a MAJOR, not a nitpick (Rule 26)
 
 Mechanism the artifact specifies that no locked requirement or AC needs — a
-speculative abstraction, a parallel path beside a proven one without the Rule 26(b)
-rationale record, a guard or gate without the Rule 26(c) contract, a fallback for a
+speculative abstraction, a parallel path beside a proven one, a new dependency, or
+an optimization without the Rule 26(b) rationale record, a guard or gate without
+the Rule 26(c) contract, a fallback for a
 case that cannot occur, an AC demanding capability nothing asked for — **ships
 correct.** Nothing behaves wrong, so it is not CRITICAL. It is not style, so it is
 **not a nitpick.** It is a defect (Rule 26(a)). File it **MAJOR**, where it counts in

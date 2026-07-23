@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.140.0] — 2026-07-23
+
+### Changed — Rule 26(a) gained a counting test, Rule 26(b) gained two triggers
+
+Rule 26(a) banned mechanism added "for requirements that do not exist", which is a
+judgement about a requirement's existence with no test a reviewer can apply to a
+diff. It now also states that an abstraction, interface, or parameterization
+introduced with exactly one call site violates the clause unless a second concrete
+consumer lands in the same story or a 26(b) rationale record names it. Call sites
+are countable; "does this requirement exist" is not. 26(b) remains the escape
+hatch, which is what bounds the new clause's false positives.
+
+Rule 26(b) fired on exactly one condition: a parallel path beside a proven one. Two
+more conditions now carry the same documented-rationale requirement, the same
+artifacts (an ADR at design time, a `DECIDED_AUTONOMOUSLY` entry at implementation
+time), and the same escape hatch:
+
+- a new third-party dependency, whose record must name what it replaces and why the
+  standard library or an already-present dependency will not do;
+- caching, pooling, or any optimization, whose record must cite the measurement
+  that showed the need.
+
+Both enforcement sites enumerated the 26(b) record **bound to parallel paths** —
+`adversary.md`'s unrequested-mechanism MAJOR and `code-reviewer.md`'s
+Over-Engineering severity rule and simplicity checklist entry all named the
+parallel path and nothing else. Widening the rule alone would have shipped two
+triggers that no reviewer is told to look for: a check that cannot fire, reading
+exactly like one that passed. All three enumerations were widened in the same
+change; the rule change is not independently useful without them.
+
+Rule 26 has no gate-check binding in `enforcement-map.yaml` — its teeth are exactly
+these role files plus the `retro.md` Step 4 audit, so that triangle is where a new
+clause has to land or it has no enforcement at all.
+
+Origin and the four rejected proposals it arrived with are recorded in
+`docs/v0.140.0-working-style-proposal-triage.md`.
+
 ## [0.139.0] — 2026-07-23
 
 ### Fixed — H2's attestation wrapper could not drive its own fixture in a consumer
