@@ -457,6 +457,8 @@ checks:
       - tests/fixtures/check-h1-recursion
       - tests/fixtures/check-17-bypass
       - tests/fixtures/check-manifest-bypass
+      - tests/fixtures/h2-attest-scripts-dir   # the attestation wrapper can DRIVE the above
+                                               # from an installed consumer layout
 
   - id: core-layer-immutability
     title: Core-layer immutability (authoring guard)

@@ -27,9 +27,11 @@
 #   validate-h2-attestation.sh --digest
 #       print the fixture-set digest and exit
 #
-#   validate-h2-attestation.sh --attest --sprint N [--fixtures DIR]
+#   validate-h2-attestation.sh --attest --sprint N [--fixtures DIR] [--scripts DIR]
 #       DRIVE the mechanical fixtures, and on success print the H2_ATTESTED v1 line
 #       for the lead to append to the gate log. Exit 1 if any fixture fails.
+#       --scripts is forwarded to the fixture runner ONLY when given; without it the
+#       runner self-locates the validators, which is the correct default everywhere.
 #
 #   validate-h2-attestation.sh --verify --sprint N [--gate-log PATH]
 #       exit 0  a valid attestation for this sprint AND this digest exists -> cite it
@@ -46,6 +48,7 @@ FIXTURES=""
 GATE_LOG=""
 SPRINT=""
 MODE=""
+SCRIPTS_DIR=""   # operator override only; empty means "let the fixture self-locate"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -54,6 +57,7 @@ while [ $# -gt 0 ]; do
     --verify)   MODE="verify"; shift ;;
     --sprint)   SPRINT="${2:-}"; shift 2 ;;
     --fixtures) FIXTURES="${2:-}"; shift 2 ;;
+    --scripts)  SCRIPTS_DIR="${2:-}"; shift 2 ;;
     --gate-log) GATE_LOG="${2:-}"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -134,9 +138,6 @@ fi
 # ---------------------------------------------------------------------------
 # attest: actually drive the mechanical fixtures, then emit the line.
 # ---------------------------------------------------------------------------
-SCRIPTS_DIR="$PROJECT_DIR/scripts"
-[ -f "$SCRIPTS_DIR/validate-provenance-block.sh" ] || SCRIPTS_DIR="$PROJECT_DIR/core/scripts"
-
 RUN="$FIXTURES/check-17-bypass/run.sh"
 if [ ! -x "$RUN" ] && [ ! -f "$RUN" ]; then
   echo "FAIL: check-17-bypass/run.sh is missing. H2 item (2) cannot be driven." >&2
@@ -145,7 +146,18 @@ if [ ! -x "$RUN" ] && [ ! -f "$RUN" ]; then
 fi
 
 echo "H2 attestation — driving the mechanical fixture (item 2)…"
-if ! bash "$RUN" --scripts "$SCRIPTS_DIR"; then
+# check-17-bypass/run.sh SELF-LOCATES the validators, and it must: in a consumer they
+# live at scripts/ai-dlc/ (since v0.126.0), in the distribution at core/scripts/. Do NOT
+# re-derive that here. A second candidate list is a second thing to go stale, and an
+# explicit --scripts DEFEATS the fixture's correct answer with this script's wrong one.
+# That is exactly what v0.138.0 shipped: this line read `--scripts "$SCRIPTS_DIR"` where
+# SCRIPTS_DIR was guessed from a pre-relocation pair (scripts/, then core/scripts/ with
+# NO existence test), so every consumer's --attest died on "cannot locate
+# validate-provenance-block.sh" while the same fixture passed when run by hand. The
+# distribution has a scripts/ that holds no validators, so the fallback fired there and
+# the bug could not be seen where it was authored.
+# --scripts is forwarded ONLY when the operator supplied one.
+if ! bash "$RUN" ${SCRIPTS_DIR:+--scripts "$SCRIPTS_DIR"}; then
   echo "" >&2
   echo "FAIL: check-17-bypass did not hold. H2 does NOT attest. The gate FAILS." >&2
   exit 1
