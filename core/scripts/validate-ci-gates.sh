@@ -134,6 +134,12 @@ while IFS= read -r retro_file; do
   # Use sed/awk to pull backtick-delimited tokens after a declaration phrase.
   while IFS= read -r name; do
     [ -z "$name" ] && continue
+    # Skip angle-bracket placeholders: a retro TEMPLATE or the declaration-format
+    # example (`CI gate `<NAME>``, the very form named in this script's own header)
+    # is documentation, not a declared gate. A real gate name never carries a <...>
+    # token, so counting one as declared reports a phantom dormant gate and exits 1
+    # on pure template noise.
+    case "$name" in *"<"*">"*) continue ;; esac
     declared_gates="${declared_gates}${name}
 "
   done < <(grep -hoEi "$declare_pattern" "$retro_file" 2>/dev/null \

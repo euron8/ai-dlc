@@ -17,6 +17,22 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.136.0] — 2026-07-23
+
+### Fixed — ci-gates counted retro-template `<placeholder>` gate names as real declared gates
+
+`validate-ci-gates.sh` collects declared gates by matching `` CI gate `X` `` in `docs/retro/**`.
+It did not skip angle-bracket placeholders, so a retro TEMPLATE or the declaration-format example
+— `` CI gate `<gate-name>` ``, the very form named in this script's own header — was counted as a
+declared gate, reported DORMANT (no enforcer), and the scan exited 1 on pure template noise. A
+consumer whose retros carry the documented placeholder got a phantom dormant gate it could never
+resolve.
+
+Fixed with a one-line skip: a collected gate name containing a `<...>` token is documentation, not
+a gate (a real gate name never carries angle brackets). New assertion + mutation control in the
+`ci-gates-resolution` fixture (a `<placeholder>` is skipped; removing the guard makes it count and
+go dormant).
+
 ## [0.135.0] — 2026-07-23
 
 ### Fixed — mandatory-rules Check 5 could never fire (diffed the empty `main..HEAD`)
