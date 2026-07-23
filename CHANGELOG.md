@@ -17,6 +17,32 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.128.0] — 2026-07-22
+
+### Added — validate-provenance-block.sh: a placeholder tool_use_id is a forged evidence cell
+
+`tool_use_id` is CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript — so a
+value that satisfies the `toolu_` charset but was never emitted by a real Skill/Agent call
+is a forgeable evidence cell. `toolu_PLACEHOLDER` (and its case variants, `toolu_example`,
+`toolu_changeme`, …) clears the `^toolu_[A-Za-z0-9_-]{6,}$` pattern and PASSED. The schema's
+`tool_use_id` field gains a `forbidden` list naming these placeholder literals; a real id is
+unaffected.
+
+The `forbidden` check is now single-homed in `check_value`, which honours the schema
+`forbidden` list of **every** field, replacing the `mode`-only hardcoded loop. `mode: solo`
+(Rule 20) is enforced by the same path — its rejection still reads `mode: solo` verbatim, so
+Check 17's fixture is unaffected — and any future field can declare `forbidden` in the schema
+alone, with no new code branch. Every listed `tool_use_id` value clears the pattern, so a
+placeholder is reported once as forbidden, not twice.
+
+Generalized from the reference consumer's local variant (the consumer's inline-transcript
+guard is already covered by core's `transcript_citation` pattern, and its `grep -c || echo 0`
+fix is on consumer-only pre-flight code core does not carry — neither was upstreamed).
+
+`core/fixtures/taught-schema` gains V4b: a placeholder `tool_use_id` must be refused, with a
+MUTATION control that strips the `forbidden` list from the schema and requires the same block
+to go green.
+
 ## [0.127.0] — 2026-07-22
 
 ### Added — validate-locked-anchor.sh: a LOCKED block that cites nothing is UNCHECKABLE, not passing
