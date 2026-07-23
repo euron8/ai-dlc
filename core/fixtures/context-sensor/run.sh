@@ -137,6 +137,24 @@ OUT="$(fire at-red.jsonl | ctx)"
 case "$OUT" in *"RED threshold (120000)"*) ok "red escalates from yellow" ;;
   *) bad "red escalates from yellow" "got: ${OUT:-<silent>}" ;; esac
 
+# --- no band offers a handoff (v0.136.1) -------------------------------------
+# The hook's header invariant is that no ADVICE string reads as an instruction to
+# the lead. v0.45.3 removed the imperative and left an OFFER ("say so in one line
+# and let the operator decide"); v0.136.1 removed the offer too, because SKILL.md
+# Rule 2(b)/(c)/(d) already owns what the lead says to the operator and a second
+# copy beside a threshold is the permission the S289 lead read as an imperative.
+#
+# PAIRED, not a bare absence check. On its own, "the output does not contain X"
+# passes vacuously against a hook that emits nothing at all -- the same
+# check-that-cannot-fire shape the suite exists to catch. The positive half
+# asserts the prohibition the band MUST still carry, so a silenced or gutted
+# ADVICE string fails here before the absence half can pass for the wrong reason.
+case "$OUT" in *"not an instruction to hand off"*) ok "red keeps the prohibition" ;;
+  *) bad "red keeps the prohibition" "got: ${OUT:-<silent>}" ;; esac
+case "$OUT" in *"let the operator decide"*|*"say so in one line"*)
+    bad "red does not ask the lead to offer a handoff" "advice re-offers the handoff" ;;
+  *) ok "red does not ask the lead to offer a handoff" ;; esac
+
 # --- self-healing reset on a compaction-sized drop ---------------------------
 OUT="$(fire post-compact-drop.jsonl | ctx)"
 check "post-compact drop is silent" "$OUT" ""
@@ -215,6 +233,14 @@ check "  red fired first" "$(field last_level)" "red"
 OUT="$(raw "$(at 250000)" | ctx)"                   # +25K, only 1 turn later
 case "$OUT" in *"Auto-compact will fire"*) ok "imminent escalates from red inside the recurrence window" ;;
   *) bad "imminent escalates from red inside the recurrence window" "got: ${OUT:-<silent>}" ;; esac
+
+# Imminent's half of the v0.136.1 invariant above. Same pairing, same reason: the
+# positive assertion is what keeps the absence assertion falsifiable.
+case "$OUT" in *"A threshold is not a request"*) ok "imminent keeps the prohibition" ;;
+  *) bad "imminent keeps the prohibition" "got: ${OUT:-<silent>}" ;; esac
+case "$OUT" in *"SURFACE that trade-off"*|*"let THEM call it"*)
+    bad "imminent does not ask the lead to offer a handoff" "advice re-offers the handoff" ;;
+  *) ok "imminent does not ask the lead to offer a handoff" ;; esac
 
 # The band must still be reachable at the values real compactions were observed at.
 reset; printf 'row=1M\n' > "$MODEL"

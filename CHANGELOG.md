@@ -17,6 +17,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.136.1] — 2026-07-23
+
+### Fixed — the context sensor still asked the lead to offer a handoff at red and imminent
+
+v0.45.3 fixed the S289 defect where `ai-dlc-context-sensor.sh` closed its IMMINENT advice with
+"prefer Rule 2(a): hand off via /clear + /ai-dlc resume" and the lead obeyed — stopping three
+delivered teammates and ending the session unasked. That fix removed the *imperative* and left an
+*offer*: red said "say so in one line and let the operator decide", imminent said "SURFACE that
+trade-off to the operator in one line and let THEM call it".
+
+The offer is a second copy of an instruction SKILL.md Rule 2(b)/(c)/(d) already owns — "the lead
+outputs a one-line reminder... still the user's call." A permission sitting beside a threshold, in
+the same injected message, is exactly the shape the S289 lead resolved into an imperative. Both
+sentences are removed; Rule 2 is now the single owner of what the lead says to the operator.
+
+The **prohibitions** stay, and are what the bands now carry: red keeps "Rule 2(c) is a REMINDER,
+not an instruction to hand off", imminent keeps "only path (a) initiates a handoff, and path (a) is
+the operator asking. A threshold is not a request." Imminent's snapshot-refresh directive and the
+shared non-blocking wrapper are unchanged. Yellow never carried an offer.
+
+Nothing asserted the advice text, so the removal was one edit away from being undone silently. The
+`context-sensor` fixture now pins it with **paired** assertions per band — a bare "output does not
+contain X" check passes vacuously against a hook that emits nothing, so each absence assertion is
+joined to a positive one on the prohibition the band must still carry. Mutation controls: putting
+either sentence back fails exactly the two absence assertions; blanking either `ADVICE` string
+fails the positive ones. SKILL.md's "Reminder text" section claimed "every band ends in the same
+doctrine" — already untrue of yellow — and now describes what each band actually carries.
+
 ## [0.136.0] — 2026-07-23
 
 ### Fixed — ci-gates counted retro-template `<placeholder>` gate names as real declared gates
