@@ -17,6 +17,30 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.127.0] — 2026-07-22
+
+### Added — validate-locked-anchor.sh: a LOCKED block that cites nothing is UNCHECKABLE, not passing
+
+A `LOCKED_REQUIREMENTS` block carrying requirement bullets but NEITHER a
+`full_text_source:` (a verbatim-text claim) nor a `requires_context:` (an honest load
+pointer) has nothing to byte-verify against, and the validator `continue`d on the absent
+`full_text_source:` — passing it with `claims_checked=0`. PASS was reachable by two
+structurally different roads sharing one exit code: "every claim verified" and "there was
+nothing to check". A block that names requirements it never has to substantiate scored
+exactly like one whose every requirement was checked verbatim — the check-that-cannot-fire
+class.
+
+The new guard fires on `bullets and no requires_context`, NOT on `not sources`: an honest
+cite-by-reference block is a load pointer this script's contract says is never byte-matched,
+so honest citation cannot fail — a validator that failed it too would red every such block
+in the repo, and one that always fails is indistinguishable from one that works.
+Generalized from the reference consumer's local variant.
+
+`core/fixtures/check-3b-locked-anchor` gains `uncheckable-story.md` (must FAIL),
+`requires-context-story.md` (honest cite-by-reference, must PASS), and a MUTATION control
+in `run.sh` that neuters the guard and requires the uncheckable case to go green — a FAIL
+is evidence for this guard only if removing the guard removes it.
+
 ## [0.126.6] — 2026-07-22
 
 ### Fixed — the dry-run report was blind to pre-relocation validators, and asserted OURS==BASE for all 25
