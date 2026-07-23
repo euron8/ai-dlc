@@ -165,6 +165,49 @@ else
 fi
 
 # ---------------------------------------------------------------------------------------
+# V4b. A placeholder tool_use_id literal that CLEARS the toolu_ charset (toolu_PLACEHOLDER)
+#      is refused as forbidden. tool_use_id is checked for SHAPE ONLY, so a value that
+#      passes the pattern but was never emitted by a real Skill/Agent call is a forged
+#      evidence cell — the same class as mode: solo. The schema carries the forbidden list;
+#      check_value enforces it for every field that declares one.
+# ---------------------------------------------------------------------------------------
+sed 's/^tool_use_id: .*/tool_use_id: toolu_PLACEHOLDER/' "$TMP/taught.md" >"$TMP/placeholder.md"
+if bash "$VALIDATOR" "$TMP/placeholder.md" >"$TMP/v4b" 2>&1; then
+    bad "V4b a placeholder tool_use_id (toolu_PLACEHOLDER) PASSED — a forged evidence cell is unpoliced"
+elif grep -q "is forbidden" "$TMP/v4b"; then
+    ok "V4b a placeholder tool_use_id is refused as forbidden (clears the charset, not from the run)"
+else
+    bad "V4b failed, but not as forbidden — the diagnosis is wrong: $(head -1 "$TMP/v4b")"
+fi
+
+# MUTATION control for V4b: strip the tool_use_id `forbidden` list from the schema and
+# require the SAME placeholder block to go green. The FAIL above is evidence for the
+# forbidden list only if removing it removes the FAIL. Anti-vacuity is grep-based (not cmp):
+# json.dump reformats the whole file, so a byte diff would report "changed" even for a
+# no-op strip — instead confirm the token was present before and is gone after.
+cp "$SCHEMA" "$TMP/schema.v4b.bak"
+python3 - "$SCHEMA" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+S = json.load(open(p))
+for f in S["fields"]:
+    if f["name"] == "tool_use_id":
+        f.pop("forbidden", None)
+        f.pop("forbidden_reason", None)
+json.dump(S, open(p, "w"), indent=2, ensure_ascii=False)
+PYEOF
+if ! grep -q 'toolu_PLACEHOLDER' "$TMP/schema.v4b.bak"; then
+    bad "V4b MUTATION setup — the real schema has no toolu_PLACEHOLDER forbidden entry to strip"
+elif grep -q 'toolu_PLACEHOLDER' "$SCHEMA"; then
+    bad "V4b MUTATION matched nothing — the tool_use_id forbidden list survived the strip"
+elif bash "$VALIDATOR" "$TMP/placeholder.md" >/dev/null 2>&1; then
+    ok "V4b MUTATION — removing the forbidden list lets the placeholder pass (the list is what fires)"
+else
+    bad "V4b MUTATION — placeholder still refused without the forbidden list; V4b proves nothing"
+fi
+cp "$TMP/schema.v4b.bak" "$SCHEMA"
+
+# ---------------------------------------------------------------------------------------
 # V5. INVARIANT: no hand-written example may exist in an agent-read file. This is the one
 #     that stops the regression from coming back — a generated region beside a hand-written
 #     one is three copies with a fresh coat of paint.

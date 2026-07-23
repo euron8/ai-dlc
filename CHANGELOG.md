@@ -17,6 +17,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.129.0] — 2026-07-22
+
+### Fixed — validate-retro-evidence.sh: resolve the retro branch, don't feed a plain name to git
+
+The header's contract is that this validator runs on the PUSHED branch
+(`origin/<branch>`), but the branch name was fed to `git ls-tree`/`git merge-base`
+verbatim. On a CI runner — which fetches refs into `origin/*` and keeps NO local
+branch for each — `git ls-tree sprint-137 -- <path>` resolves nothing, and the
+transcript reads as "not committed": a false `COMMIT_MISSING` that has nothing to do
+with the retro, surfacing 30 lines downstream as an opaque error.
+
+The validator now resolves the ref: it tries the name as given first (a local branch,
+or a name already qualified as `origin/…`, still works — no regression for any input
+that passed before), then falls back to `origin/<name>`, and fails fast naming both
+refs if neither resolves. The consumer's local variant hardcoded `origin/<branch>`
+only, which breaks a local, unpushed retro; this generalizes to resolve across both
+checkouts.
+
+`core/fixtures/check-17-bypass` gains an origin-only assertion: it clones the fixture
+repo so the retro branch is reachable ONLY as `origin/ai-dlc/retro/sprint-999` (the
+exact CI condition), proves the transcript now resolves (Marker 2 OK), proves an
+unresolvable branch fails fast naming both refs, and carries a MUTATION control that
+reverts the resolution to the old verbatim-name behaviour and requires Marker 2 to flip
+to FAIL.
+
+## [0.128.0] — 2026-07-22
+
+### Added — validate-provenance-block.sh: a placeholder tool_use_id is a forged evidence cell
+
+`tool_use_id` is CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript — so a
+value that satisfies the `toolu_` charset but was never emitted by a real Skill/Agent call
+is a forgeable evidence cell. `toolu_PLACEHOLDER` (and its case variants, `toolu_example`,
+`toolu_changeme`, …) clears the `^toolu_[A-Za-z0-9_-]{6,}$` pattern and PASSED. The schema's
+`tool_use_id` field gains a `forbidden` list naming these placeholder literals; a real id is
+unaffected.
+
+The `forbidden` check is now single-homed in `check_value`, which honours the schema
+`forbidden` list of **every** field, replacing the `mode`-only hardcoded loop. `mode: solo`
+(Rule 20) is enforced by the same path — its rejection still reads `mode: solo` verbatim, so
+Check 17's fixture is unaffected — and any future field can declare `forbidden` in the schema
+alone, with no new code branch. Every listed `tool_use_id` value clears the pattern, so a
+placeholder is reported once as forbidden, not twice.
+
+Generalized from the reference consumer's local variant (the consumer's inline-transcript
+guard is already covered by core's `transcript_citation` pattern, and its `grep -c || echo 0`
+fix is on consumer-only pre-flight code core does not carry — neither was upstreamed).
+
+`core/fixtures/taught-schema` gains V4b: a placeholder `tool_use_id` must be refused, with a
+MUTATION control that strips the `forbidden` list from the schema and requires the same block
+to go green.
+
+## [0.127.0] — 2026-07-22
+
+### Added — validate-locked-anchor.sh: a LOCKED block that cites nothing is UNCHECKABLE, not passing
+
+A `LOCKED_REQUIREMENTS` block carrying requirement bullets but NEITHER a
+`full_text_source:` (a verbatim-text claim) nor a `requires_context:` (an honest load
+pointer) has nothing to byte-verify against, and the validator `continue`d on the absent
+`full_text_source:` — passing it with `claims_checked=0`. PASS was reachable by two
+structurally different roads sharing one exit code: "every claim verified" and "there was
+nothing to check". A block that names requirements it never has to substantiate scored
+exactly like one whose every requirement was checked verbatim — the check-that-cannot-fire
+class.
+
+The new guard fires on `bullets and no requires_context`, NOT on `not sources`: an honest
+cite-by-reference block is a load pointer this script's contract says is never byte-matched,
+so honest citation cannot fail — a validator that failed it too would red every such block
+in the repo, and one that always fails is indistinguishable from one that works.
+Generalized from the reference consumer's local variant.
+
+`core/fixtures/check-3b-locked-anchor` gains `uncheckable-story.md` (must FAIL),
+`requires-context-story.md` (honest cite-by-reference, must PASS), and a MUTATION control
+in `run.sh` that neuters the guard and requires the uncheckable case to go green — a FAIL
+is evidence for this guard only if removing the guard removes it.
+
 ## [0.126.6] — 2026-07-22
 
 ### Fixed — the dry-run report was blind to pre-relocation validators, and asserted OURS==BASE for all 25

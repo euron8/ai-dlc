@@ -59,6 +59,17 @@
       "name": "tool_use_id",
       "required": true,
       "pattern_ref": "tool_use_id",
+      "forbidden": [
+        "toolu_placeholder",
+        "toolu_Placeholder",
+        "toolu_PLACEHOLDER",
+        "toolu_example",
+        "toolu_Example",
+        "toolu_EXAMPLE",
+        "toolu_changeme",
+        "toolu_replaceme"
+      ],
+      "forbidden_reason": "a placeholder literal that passes the toolu_ charset but cannot have come from a real Skill/Agent call. The id must be the one from the Skill tool response, or the Agent dispatch that spawned you. A value that satisfies the SHAPE but was not drawn from the RUN is a forged evidence cell. Every value here clears the tool_use_id pattern, so it is caught as forbidden and not double-reported as a pattern miss.",
       "placeholder": "<toolu_... — from the Skill tool response, or the Agent dispatch that spawned you>",
       "doc": "the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran."
     },

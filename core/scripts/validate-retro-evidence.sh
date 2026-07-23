@@ -121,6 +121,32 @@ import subprocess
 retro_branch = sys.argv[1]
 sprint_n = sys.argv[2]
 
+# ---- Resolve the retro branch to a git ref that actually exists ------------
+# The header's contract is that this runs on the PUSHED branch (origin/<branch>),
+# but the branch name was fed to `git merge-base`/`git ls-tree` verbatim. On a CI
+# runner, which fetches refs into origin/* and keeps NO local branch for each,
+# `git ls-tree sprint-137 -- <path>` resolves nothing and the transcript reads as
+# "not committed" — a false COMMIT_MISSING that has nothing to do with the retro.
+# Resolve it: try the ref as given first (a local branch, or a name already
+# qualified as origin/..., still works — no regression for any input that passed
+# before), then fall back to origin/<name>. Fail fast naming both refs if neither
+# resolves, instead of dying opaquely in merge-base 30 lines later.
+def _ref_exists(ref):
+    return subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", ref],
+        capture_output=True, text=True
+    ).returncode == 0
+
+_candidates = [retro_branch] if retro_branch.startswith("origin/") \
+    else [retro_branch, f"origin/{retro_branch}"]
+_resolved = next((r for r in _candidates if _ref_exists(r)), None)
+if _resolved is None:
+    print("VALIDATE-RETRO-EVIDENCE: FAIL")
+    print(f"  retro branch not found — tried: {', '.join(_candidates)}")
+    print("  the branch must exist locally or as a pushed origin/<branch> before this runs")
+    sys.exit(1)
+retro_branch = _resolved
+
 # ---- Hardcoded thresholds — EDIT HERE to tune ------------------------------
 MIN_CHARS = 2000
 MIN_PERSONAS = 4

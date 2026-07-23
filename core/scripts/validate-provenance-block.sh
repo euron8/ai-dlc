@@ -271,6 +271,22 @@ def check_value(idx, name, value, failures):
         failures.append(
             f"block #{idx}: {name} '{value}' does not match the schema's {pat_ref} pattern"
         )
+        return
+
+    # Forbidden literals, from the schema. A value can satisfy the SHAPE (enum/pattern)
+    # and still be one the schema names as never-legitimate: mode: solo (Rule 20), or a
+    # tool_use_id placeholder literal (toolu_PLACEHOLDER) that passes the charset pattern
+    # but cannot have come from a real Skill/Agent call — the forgeable-evidence-cell
+    # class. ONE mechanism for every field that declares `forbidden`, so the rule lives in
+    # the schema, not in a per-field code branch. Written `name: value` so a solo
+    # rejection still reads `mode: solo` verbatim (Check 17's fixture greps for it).
+    forbidden = spec.get("forbidden")
+    if forbidden and value in forbidden:
+        reason = spec.get("forbidden_reason")
+        msg = f"block #{idx}: {name}: {value} is forbidden"
+        if reason:
+            msg += f" — {reason}"
+        failures.append(msg)
 
 
 failures = []
@@ -297,14 +313,11 @@ for idx, raw_block in enumerate(blocks, start=1):
         if value:
             check_value(idx, name, value, failures)
 
-    # --- rules.no_solo: unconditional, per schema ---
-    mode_spec = FIELDS["mode"]
-    for bad in mode_spec.get("forbidden", []):
-        if fields.get("mode") == bad:
-            failures.append(
-                f"block #{idx}: skill '{fields.get('skill', '<absent>')}' emitted mode: {bad} — "
-                f"{mode_spec['forbidden_reason']}"
-            )
+    # --- rules.no_solo (mode: solo) and forbidden placeholder literals are enforced by
+    #     check_value above, which honours every field's schema `forbidden` list. The
+    #     rejection is unconditional: check_value runs for every present, non-empty field,
+    #     and mode is required — so a solo value cannot slip past it, with or without a
+    #     skill field (Check 17's V8). ---
 
     # --- rules.verdict_requires_counts ---
     if fields.get("verdict"):

@@ -101,6 +101,7 @@ BLOCK_RE = re.compile(
     re.DOTALL,
 )
 FULL_TEXT_RE = re.compile(r"^\s*full_text_source:\s*(\S+)\s*$")
+REQUIRES_CTX_RE = re.compile(r"^\s*requires_context:\s*\S")
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
 # An artifact that self-declares it is NOT the verbatim record.
 INDEX_MARKER_RE = re.compile(
@@ -149,12 +150,9 @@ claims_checked = 0
 for bidx, block in enumerate(blocks, start=1):
     lines = block.splitlines()
     sources = [FULL_TEXT_RE.match(ln).group(1) for ln in lines if FULL_TEXT_RE.match(ln)]
-    if not sources:
-        # No full-text claim in this block. requires_context pointers and
-        # legacy blocks are handled by the LLM Check 3; nothing to byte-enforce.
-        continue
 
     # Requirement bullets = block bullets that are not schema key:value lines.
+    # Computed BEFORE the no-sources guard below, which needs them.
     bullets = []
     for ln in lines:
         m = BULLET_RE.match(ln)
@@ -164,6 +162,31 @@ for bidx, block in enumerate(blocks, start=1):
         if re.match(r"^\s*(full_text_source|requires_context|Source)\s*:", text):
             continue
         bullets.append(text)
+
+    if not sources:
+        # A block with requirement bullets and NEITHER citation form is
+        # UNCHECKABLE: there is nothing to byte-verify it against. Passing it
+        # with claims_checked=0 makes PASS reachable by two structurally
+        # different roads -- "every claim verified" and "there was nothing to
+        # check" -- sharing one exit code. That is the check-that-cannot-fire
+        # class: a block that names requirements it never has to substantiate
+        # scores exactly like one whose every requirement was verified verbatim.
+        #
+        # The guard fires on `bullets and no requires_context`, NOT on
+        # `not sources`. An honest cite-by-reference block (requires_context:)
+        # is a load pointer, not a full-text claim, and this script's own
+        # contract (header) is that it is never byte-matched -- so honest
+        # citation cannot fail this check. Failing it too would red every
+        # cite-by-reference block in the repo, and a validator that always
+        # fails is indistinguishable from one that works. A legacy block with
+        # no bullets and no citation is left to the LLM Check 3.
+        if bullets and not any(REQUIRES_CTX_RE.match(ln) for ln in lines):
+            failures.append(
+                f"block #{bidx}: {len(bullets)} requirement bullet(s) but no parseable "
+                f"full_text_source: or requires_context: line -- the block is "
+                f"uncheckable and cannot be byte-verified against the source of record"
+            )
+        continue
 
     for cited in sources:
         claims_checked += 1
