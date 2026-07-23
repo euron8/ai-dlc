@@ -44,7 +44,7 @@ echo "$OUT" | grep -q 'CHECK 4: SKIP' \
   && ok "Check 4 SKIPs when its consumer-provided sibling is absent (un-poison)" \
   || bad "Check 4 did not SKIP"
 echo "$OUT" | grep -q 'CHECK 5: SKIP' \
-  && ok "Check 5 SKIPs (no web changes / consumer-defined gate-log format)" \
+  && ok "Check 5 SKIPs (no audit-anchors.md — diff base unresolvable on this clean tree)" \
   || bad "Check 5 did not SKIP"
 echo "$OUT" | grep -q 'CHECK 3: PASS' \
   && ok "Check 3 PASSes on a closed envelope (close wrote the housekeeping block)" \
