@@ -17,6 +17,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.130.0] — 2026-07-22
+
+### Added — validate-ci-gates.sh: comment-aware matching, VACUOUS-78, and a two-legged alias table
+
+Three generalizations, replacing a fail-open forward arm and a conflated exit code:
+
+- **Comment-aware forward match.** The old `grep -rqF "$gate" "$WORKFLOW_DIR"` treated any
+  substring anywhere — comments included — as enforcement, so a gate name left in a `#`
+  banner after its enforcing step was deleted stayed "enforced" forever: a check that
+  could not fail. The match now strips whole-line comments first; a name surviving only in
+  a comment reads DORMANT.
+- **VACUOUS = exit 78.** "No enforcement surface to scan" exited 2 (tool-failure),
+  indistinguishable from a real error and from a clean or dormant scan. A consumer who
+  disabled GitHub Actions got a permanent FAIL. A check that CANNOT run now exits 78, its
+  own code — never shared with pass (0) or a specific dormant gate (1).
+- **Optional two-legged alias table** (`AI_DLC_CI_ALIAS_TABLE`, unset by default). A gate
+  declared under one name may be enforced under another. Each row
+  `declared_gate|enforcer_id|enforcing_file|anchor` is honoured only when BOTH legs hold:
+  (i) the enforcer id is present in the enforcing file's non-comment code (the gate is
+  wired), and (ii) the anchor — the literal whose deletion destroys the enforcement, never
+  the gate name or a diagnostic string — occurs EXACTLY ONCE in that file's non-comment
+  code. A row failing either leg confers nothing, so the table cannot alias a gate nothing
+  enforces. Generalized from the reference consumer's local variant: the mechanism ships;
+  the rows, the enforcer-enumeration idiom, and the surface stay consumer data (the
+  consumer's `ci-local.sh` `run_check` model does not exist upstream).
+
+Fixture: `core/fixtures/ci-gates-resolution` (new) drives all three through the tunables,
+each general mechanism paired with a mutation control that removes it and requires the
+outcome to flip. Registered in install.sh and uninstall.sh; enforcement-map I8/I20 green.
+
 ## [0.129.0] — 2026-07-22
 
 ### Fixed — validate-retro-evidence.sh: resolve the retro branch, don't feed a plain name to git
