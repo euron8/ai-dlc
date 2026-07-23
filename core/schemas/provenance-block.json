@@ -59,6 +59,8 @@
       "name": "tool_use_id",
       "required": true,
       "pattern_ref": "tool_use_id",
+      "sentinel": "NOT_ACCESSIBLE",
+      "sentinel_reason": "the exact literal written when the Skill/Agent tool's id is not retrievable from the conversation (common after a compact). It bypasses the toolu_ pattern because it is an honest declaration of absence, not a shape claim — retro.md mandates it over inventing an id, and a fabricated id is a forged block. Distinct from a placeholder literal (forbidden), which pretends to be a real id.",
       "forbidden": [
         "toolu_placeholder",
         "toolu_Placeholder",
