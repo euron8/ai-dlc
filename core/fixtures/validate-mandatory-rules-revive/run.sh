@@ -3,16 +3,16 @@
 # self-poisons, and that Check 3 genuinely enforces the closed envelope.
 #
 # THE DEFECT THIS EXISTS TO CATCH. validate-mandatory-rules.sh delegated Checks 2 and 4 to sibling
-# scripts (validate-cycle-commits.sh, validate-retro-prereq.sh) that core never shipped, and Check 5
-# keyed on a "## Gate Log: Sprint N" header no core artifact produces. Each FAILED on a clean tree,
-# so the whole validator exited 1 on every real retro since S138 — a wired CI gate that could never
-# pass, enforcing nothing. Check 3 additionally read a shape (sprint_<N>_housekeeping) that no
-# producer wrote until sprint-status.sh `close`.
+# scripts, and Check 5 keyed on a "## Gate Log: Sprint N" header no core artifact produces. Each
+# FAILED on a clean tree, so the whole validator exited 1 on every real retro — a wired CI gate that
+# could never pass, enforcing nothing. Check 3 additionally read a shape (sprint_<N>_housekeeping)
+# that no producer wrote until sprint-status.sh `close`.
 #
-# The fix: 2/4/5 SKIP loudly when their consumer-provided input is absent (un-poison), and Check 3
-# reads the canonical envelope that `close` now writes. Regression lock below: the SKIPs must hold,
-# Check 3 must PASS on a closed envelope, and the MUTANT (un-closed) must FAIL Check 3 — else the
-# revived check is vacuous.
+# The fix: each check SKIPs loudly when its input is absent (un-poison), and Check 3 reads the
+# canonical envelope `close` writes. Check 2 now ships in core and keys its SKIP on the PRODUCER
+# (no validation-cycle-log.md -> SKIP), not on the validator's presence; Check 4's sibling stays
+# consumer-provided (SKIP when absent). Regression lock below: the SKIPs must hold, Check 3 must
+# PASS on a closed envelope, and the MUTANT (un-closed) must FAIL Check 3 — else the check is vacuous.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -38,8 +38,8 @@ bash "$SS" close --evidence "fixture: PR merged, deploy green, smoke pass" --roo
 OUT="$(cd "$P" && bash "$VMR" 900 2>/dev/null)"
 
 echo "$OUT" | grep -q 'CHECK 2: SKIP' \
-  && ok "Check 2 SKIPs when its consumer-provided sibling is absent (un-poison)" \
-  || bad "Check 2 did not SKIP — the dead delegation still poisons the gate"
+  && ok "Check 2 SKIPs when no validation-cycle-log.md (per-artifact-changelog model)" \
+  || bad "Check 2 did not SKIP — the no-log gate regressed"
 echo "$OUT" | grep -q 'CHECK 4: SKIP' \
   && ok "Check 4 SKIPs when its consumer-provided sibling is absent (un-poison)" \
   || bad "Check 4 did not SKIP"

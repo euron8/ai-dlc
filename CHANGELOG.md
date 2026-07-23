@@ -17,6 +17,27 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.132.0] — 2026-07-23
+
+### Added — `validate-cycle-commits.sh` in core; Check 2 re-keyed to the log producer
+
+Core now ships `validate-cycle-commits.sh` (previously consumer-provided): it enforces
+that each planning artifact in `_bmad-output/validation-cycle-log.md` has ≥3 distinct cycle
+commits with matching log rows and both cycle types (party-mode + adversarial-review) over
+`<trunk>..<branch>` (`trunk` defaults to `main`, override `AI_DLC_TRUNK`).
+
+Shipping the validator would have force-enabled `validate-mandatory-rules.sh` Check 2 on
+every consumer — the fork exits 1 when the standalone log is absent, and core's model moved
+cycle evidence to per-artifact changelogs. Check 2's enablement is therefore re-keyed from
+the validator's presence to the **producer's**: no `validation-cycle-log.md` → loud SKIP
+(per-artifact-changelog model); log present → enforce. A consumer that maintains the log
+(e.g. one with GitHub Actions disabled and a standalone cycle log) gets Check 2 enforced
+with no local fork.
+
+New fixture `cycle-commits-enforce` proves the ≥3-row floor, a guard-mutation control (the
+FAIL is real, not vacuous), and that Check 2 delegates to the validator on log-presence and
+SKIPs (never fails) without it.
+
 ## [0.131.1] — 2026-07-23
 
 ### Fixed — three fixtures could not self-locate in an installed (consumer) tree
