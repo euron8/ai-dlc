@@ -27,10 +27,15 @@
 # same lead had correctly held the line -- because the RED string happened to
 # carry an "if continuing, do so deliberately" escape that IMMINENT lacked.
 #
-# So: SURFACE the trade-off, keep the snapshot fresh, and CONTINUE. Naming the
-# handoff as an option for the OPERATOR is right; telling the LEAD to take it is
-# not. If you are editing these strings, the test is whether a reader with no
-# other context would read them as an instruction to the lead. If yes, rewrite.
+# So: keep the snapshot fresh and CONTINUE. No band asks the lead to voice the
+# handoff trade-off either -- SKILL.md Rule 2(b)/(c)/(d) already owns what the
+# lead says to the operator at each threshold, and a second copy of that
+# instruction inside the injected reminder is the same permission-beside-a-
+# threshold the S289 lead resolved into an imperative. What the bands DO carry is
+# the prohibition: red says the reminder is not an instruction to hand off,
+# imminent says only path (a) initiates one and a threshold is not a request.
+# If you are editing these strings, the test is whether a reader with no other
+# context would read them as an instruction to the lead. If yes, rewrite.
 #
 # HOW IT MEASURES
 # Hook stdin carries no token counts (the shared schema is session_id,
@@ -516,10 +521,10 @@ if [ "$LEVEL" = imminent ]; then
   THR="$T_IMMINENT"
   # Turns of headroom at the measured p50 growth rate. Deliberately rounded down.
   TURNS_LEFT="$(awk -v c="$CEILING" -v t="$TOKENS" 'BEGIN{ n=int((c-t)/1200); print (n<1?1:n) }')"
-  ADVICE="Auto-compact will fire at ~${CEILING} tokens -- roughly ${TURNS_LEFT} more turns at the observed growth rate. BEFORE your next pipeline action, refresh _bmad-output/pipeline-snapshot.md so it reflects the CURRENT state: Pipeline Position (current step file, in-flight sub-step), Recent Activity, Open Items, and any Locked Decisions taken since the last gate. A snapshot last written at a gate may be hundreds of turns stale, and it is what ai-dlc-recover.sh re-reads after compaction -- a stale snapshot is recovered faithfully and is still wrong. Having refreshed it, CONTINUE. Compaction is lower fidelity than a handoff, so SURFACE that trade-off to the operator in one line and let THEM call it -- do NOT hand off on your own. Rule 2: only path (a) initiates a handoff, and path (a) is the operator asking. A threshold is not a request."
+  ADVICE="Auto-compact will fire at ~${CEILING} tokens -- roughly ${TURNS_LEFT} more turns at the observed growth rate. BEFORE your next pipeline action, refresh _bmad-output/pipeline-snapshot.md so it reflects the CURRENT state: Pipeline Position (current step file, in-flight sub-step), Recent Activity, Open Items, and any Locked Decisions taken since the last gate. A snapshot last written at a gate may be hundreds of turns stale, and it is what ai-dlc-recover.sh re-reads after compaction -- a stale snapshot is recovered faithfully and is still wrong. Having refreshed it, CONTINUE. Rule 2: only path (a) initiates a handoff, and path (a) is the operator asking. A threshold is not a request."
 elif [ "$LEVEL" = red ]; then
   THR="$T_RED"
-  ADVICE="Rule 2(c) is a REMINDER, not an instruction to hand off. Finalize the pipeline snapshot so it is not stale, then CONTINUE. If you judge a handoff would be higher fidelity than the coming auto-compact, say so in one line and let the operator decide -- do NOT initiate one yourself."
+  ADVICE="Rule 2(c) is a REMINDER, not an instruction to hand off. Finalize the pipeline snapshot so it is not stale, then CONTINUE."
 else
   THR="$T_YELLOW"
   ADVICE="Rule 2(b): finish the current sub-step, then continue."

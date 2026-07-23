@@ -449,10 +449,13 @@ Check 14).
 ### Reminder text
 
 `ai-dlc-context-sensor.sh` is the SOLE emitter and owns the exact wording of
-all three bands; do not restate it here or in a step file. Every band ends in
-the same doctrine Rule 2 states: the reminder is non-blocking, only path (a)
-initiates a handoff, and path (a) is the operator asking. Imminent additionally
-directs a snapshot refresh BEFORE the next pipeline action, because
+all three bands; do not restate it here or in a step file. No band instructs
+the lead to hand off, and no band asks the lead to OFFER one either -- what the
+lead says to the operator at a threshold is (b)/(c)/(d) above, and theirs
+alone. Every band carries the non-blocking doctrine in the shared wrapper; red
+adds that the reminder is not an instruction to hand off, and imminent adds
+that only path (a) initiates one and a threshold is not a request. Imminent
+also directs a snapshot refresh BEFORE the next pipeline action, because
 `ai-dlc-recover.sh` re-reads that snapshot after compaction and recovers a
 stale one faithfully.
 
