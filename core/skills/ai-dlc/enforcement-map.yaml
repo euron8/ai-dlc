@@ -637,6 +637,13 @@ non_catalog_units:
         why: the last moment an oversized artifact is cheap to fix — the sprint has
           not read it yet, and carry-over-evaluation whole-reads brief/prd/
           architecture/backlog one step later (Rule 25(b))
+      - site: route.md Step 0a (resume)
+        posture: HARD_BLOCK (pipeline-snapshot.md only)
+        why: resume skips Steps 1-6, so Step 1a never runs, and Check 14 is AFTER the
+          read. This was the one path that whole-read the snapshot with nothing in
+          front of it — and route.md was the only file that did not say it whole-reads
+          it, contradicting handoff.md, Rule 23(a), and this entry, since the commit
+          that introduced the snapshot
       - site: gate-validation.md Check 14
         posture: FAILS the gate (pipeline-snapshot.md only)
         why: the snapshot is the only artifact that grows WITHIN a sprint, and it is
@@ -654,6 +661,7 @@ non_catalog_units:
         why: the sprint already paid; retro reports, it does not gate
     fixtures:
       - tests/fixtures/snapshot-section-schema
+      - tests/fixtures/resume-whole-read
       - tests/fixtures/snapshot-evidence-cell
       - tests/fixtures/inflight-row-shape
       - tests/fixtures/verdict-pass-content

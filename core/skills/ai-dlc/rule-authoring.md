@@ -26,6 +26,18 @@ place:
   shadows it by id (with `shadows:` + `base_sha:`). Never an in-place core edit.
 - **Generalizable improvement** → `{skill}/extensions/` AND set
   `push_candidate: true`, which feeds the `ai-dlc-update` push-mine (spec §8.1).
+- **Project operations fact that holds with or without the pipeline** (how this
+  project deploys, restarts, rolls back; where its credentials and runbooks live)
+  → `CLAUDE.md`. A step file or layer entry CITES it; it does not restate it.
+- **Never project memory.** A directive that changes how the pipeline runs MUST be
+  filed as a layer entry — or, when it holds outside the pipeline too, in CLAUDE.md
+  — even when a memory file would be quicker. Memory is for domain and operator
+  facts a rule must not encode. A behaviour delta filed there has no
+  `shadows:`/`base_sha:` anchor, so no pull re-bases it and no drift scan sees it;
+  it is never retired when core absorbs it, and it cannot reach the push-mine, so a
+  lesson that generalizes can never be promoted. It also arrives by relevance recall
+  rather than by the Rule 27 load, which puts it in competition with the step file
+  for authority — a competition it can win.
 On a layered consumer the `ai-dlc-core-guard.sh` PreToolUse hook DENIES an
 Edit/Write/MultiEdit to a core-manifest file at the keystroke and routes it here;
 the gate-validation **Core-layer immutability** check is the retro backstop. On a
