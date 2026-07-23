@@ -29,8 +29,9 @@ the dev teammates to catch issues they may miss.
   - Test coverage: Are edge cases covered? Are tests meaningful or just ceremonial?
   - Simplicity: Is this the minimum mechanism for the story's ACs
     (SKILL.md Rule 26)? Flag speculative abstraction, parallel paths
-    beside proven ones, and guard machinery without a stated trigger,
-    false-positive cost, and removal condition.
+    beside proven ones, new dependencies and optimizations without the
+    Rule 26(b) rationale record, and guard machinery without a stated
+    trigger, false-positive cost, and removal condition.
 - Produce a structured review document per PR in `docs/reviews/`.
 - Verify `sprint-status.yaml` was updated alongside the story file `Status:`
   header. Flag as Important if missing.
@@ -231,7 +232,8 @@ not Suggestion.
 
 Mechanism beyond what the story's acceptance criteria require MUST be
 classified as **Important** when it is: a parallel code path beside a
-proven one without the Rule 26(b) rationale record, guard or process
+proven one, a new dependency, or an optimization without the Rule 26(b)
+rationale record, guard or process
 machinery without the Rule 26(c) contract, or an unused
 configuration/abstraction layer. Lesser shape issues are Suggestions.
 Simplification and removal findings are first-class review output:
