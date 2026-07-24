@@ -233,6 +233,112 @@ bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
   && ok "--check green after --merge (stamp is now permitted)" \
   || bad "--check still red after --merge -- the merge did not actually clear the block"
 
+echo "== C0b. a MULTI-ANCHOR override merges per anchor, not by hand =="
+
+# This used to be `REFUSED ... merge them one at a time by hand`, which routed the
+# operator into the exact procedure C0 exists to abolish. It is also disproportionate:
+# Rule 7 and Rule 9 are BYTE-IDENTICAL base..theirs, so three of the four anchors need
+# no work at all -- only Rule 8 drifted. The differential is that the two unchanged
+# sections must come out byte-for-byte, INCLUDING their consumer deltas: a merge that
+# re-flows a section core never touched is indistinguishable, in a diff, from one that
+# quietly rewrote it.
+cat > "$OVR" <<EOF
+---
+shadows: SKILL.md#Rule 7, SKILL.md#Rule 8, SKILL.md#Rule 9
+base_sha: ${BASE}
+reason: consumer rewrites of three rule sections; only one of them drifted upstream.
+---
+
+Preamble prose no anchor covers. Must survive verbatim.
+
+## Rule 7 -- Something Else
+
+CONSUMER-DELTA-SEVEN kept exactly as written.
+
+## Rule 8 -- Validation Depth
+
+Validation intensity by path: service/ and infra/ are FULL; scripts/ and docs/ are LIGHT.
+
+**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1
+reports more CRITICALs than pass N, the repair step is injecting defects faster
+than review removes them; another pass only finds the next wave. STOP.
+
+## Rule 9 -- Trailing
+
+CONSUMER-DELTA-NINE kept exactly as written.
+EOF
+
+out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
+if [ "$rc" -eq 0 ]; then
+  ok "--merge accepted a multi-anchor override (was: REFUSED, exit 2)"
+else
+  bad "--merge still refuses a multi-anchor override (rc=$rc): $out"
+fi
+if printf '%s' "$out" | grep -q '1 merged, 2 unchanged, 0 conflicted'; then
+  ok "only the anchor that drifted was merged (1 merged, 2 unchanged)"
+else
+  bad "expected '1 merged, 2 unchanged, 0 conflicted', got: $out"
+fi
+if grep -Fqx 'CONSUMER-DELTA-SEVEN kept exactly as written.' "$OVR" \
+   && grep -Fqx 'CONSUMER-DELTA-NINE kept exactly as written.' "$OVR"; then
+  ok "the two unchanged sections came out byte-for-byte"
+else
+  bad "an unchanged section was rewritten -- --merge must not touch what core did not change"
+fi
+if grep -Fqx 'Preamble prose no anchor covers. Must survive verbatim.' "$OVR"; then
+  ok "prose outside every anchor span survived verbatim"
+else
+  bad "--merge dropped body prose no anchor covers"
+fi
+if grep -q 'IN THE SCOPE THE PRIOR PASS ALSO REVIEWED' "$OVR" \
+   && grep -q 'Validation intensity by path' "$OVR" \
+   && ! grep -q 'more CRITICALs than pass N' "$OVR"; then
+  ok "the drifted anchor took upstream's clause, kept the delta, dropped the superseded line"
+else
+  bad "the drifted anchor did not merge correctly"
+fi
+bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check >/dev/null 2>&1 \
+  && ok "--check green after the multi-anchor merge" \
+  || bad "--check still red after the multi-anchor merge"
+
+echo "== C0c. --merge invents no whitespace the file did not have =="
+
+# Found on the reference consumer, NOT here: its override has no blank line after the
+# `---` fence, and --merge emitted one because the writer appended a separator
+# unconditionally. A whitespace-only edit is still an edit to a file whose promise is that
+# untouched sections come out byte-for-byte, and it lands in every reviewer's diff. The
+# fixture's other overrides all happen to have that blank, so none of them could see it.
+cat > "$OVR" <<EOF
+---
+shadows: SKILL.md#Rule 7, SKILL.md#Rule 8
+base_sha: ${BASE}
+reason: no blank line after the fence, and none may be added.
+---
+FLUSH-PREAMBLE immediately after the fence.
+
+## Rule 7 -- Something Else
+
+CONSUMER-DELTA-SEVEN kept exactly as written.
+
+## Rule 8 -- Validation Depth
+
+**Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1
+reports more CRITICALs than pass N, the repair step is injecting defects faster
+than review removes them; another pass only finds the next wave. STOP.
+EOF
+before_line10="$(sed -n '6p' "$OVR")"
+bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge >/dev/null 2>&1
+if [ "$(sed -n '5p' "$OVR")" = '---' ] && [ "$(sed -n '6p' "$OVR")" = "$before_line10" ]; then
+  ok "no blank line invented after the frontmatter fence"
+else
+  bad "--merge inserted whitespace after the fence: line 6 was '$before_line10', now '$(sed -n '6p' "$OVR")'"
+fi
+if [ -n "$(tail -c 1 "$OVR")" ] || [ "$(tail -n 1 "$OVR")" != "" ]; then
+  ok "no trailing blank line appended at EOF"
+else
+  bad "--merge appended a trailing blank line at EOF"
+fi
+
 echo "== C1. a stamp cannot outrun an unresolved CONFLICT =="
 
 printf '\n<<<<<<< override (yours)\nfoo\n=======\nbar\n>>>>>>> core\n' >> "$OVR"

@@ -170,21 +170,21 @@ case "$MODE" in
     #
     # A real conflict leaves standard <<<<<<< markers and exits 1 — the ONE spot that
     # genuinely needs a human. Everything else lands clean.
+    # PER ANCHOR, not per file. A multi-anchor override used to be refused outright
+    # ("merge them one at a time by hand"), which sent the operator to the one procedure
+    # this mode exists to remove and step 7 warns about. It is also more work than the
+    # drift justifies: an override shadowing four sections typically has ONE that moved.
+    # Each anchor is merged in its own span; anchors whose core section is byte-identical
+    # between base and theirs are left ALONE, so the diff stays scoped to what drifted.
     if [ "$RESOLVE" != yes ]; then
       echo "REFUSED  $(basename "$OVR"): a shadowed anchor resolves to no heading; cannot merge what cannot be located." >&2
       anchors_resolve >/dev/null
       exit 1
     fi
 
-    ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
-    if [ "$(printf '%s\n' "$ids" | grep -c .)" -ne 1 ]; then
-      echo "REFUSED  $(basename "$OVR") shadows more than one anchor; merge them one at a time by hand." >&2
-      echo "  anchors: $(printf '%s' "$ids" | tr '\n' ' ')" >&2
-      exit 2
-    fi
-    id="$ids"
+    ids="$(printf '%s\n' "$SHADOWS" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//' | grep -v '^$')"
 
-    fmf="$(mktemp)"; ours="$(mktemp)"; base="$(mktemp)"; theirs="$(mktemp)"
+    fmf="$(mktemp)"; body="$(mktemp)"
     awk 'NR==1 && /^---$/ {infm=1; print; next}
          infm && /^---$/ {print; infm=0; done=1; next}
          infm {print}' "$OVR" > "$fmf"
@@ -192,41 +192,106 @@ case "$MODE" in
          NR==1 && /^---$/ {fm=1; next}
          fm && /^---$/ {fm=0; started=1; next}
          fm {next}
-         started {print}' "$OVR" > "$ours"
+         started {print}' "$OVR" > "$body"
 
-    git -C "$DIST" show "${BASE_SHA}:${CORE}" | section_of "$id" > "$base"
-    git -C "$DIST" show "${THEIRS}:${CORE}"   | section_of "$id" > "$theirs"
+    # Locate each anchor's span IN THE BODY, then walk the body in line order.
+    plan="$(mktemp)"; : > "$plan"
+    while IFS= read -r id; do
+      [ -n "$id" ] || continue
+      sp="$(span_of "$id" < "$body")"
+      [ -n "$sp" ] && printf '%s %s\n' "$sp" "$id" >> "$plan"
+    done <<EOF
+$ids
+EOF
 
-    # Align the three inputs before merging. The body extractor emits a leading blank
-    # line (the one after the frontmatter fence) while `section_of` starts flush at the
-    # heading. That one-line offset makes `git merge-file` mis-align ours against base
-    # and report a CONFLICT on a paragraph that is BYTE-IDENTICAL to base -- so a clean,
-    # mechanical re-adoption gets handed back to the operator as prose to merge by hand,
-    # which is the exact failure this mode exists to remove. Strip leading/trailing
-    # blank lines from all three.
-    for f in "$ours" "$base" "$theirs"; do
-      awk 'NF {p=1} p' "$f" | awk '{a[NR]=$0} END {n=NR; while (n>0 && a[n]=="") n--; for(i=1;i<=n;i++) print a[i]}' > "$f.n"
-      mv "$f.n" "$f"
-    done
-
-    merged="$(mktemp)"
-    cp "$ours" "$merged"
-    if git merge-file -L "override (yours)" -L "core@${BASE_SHA}" -L "core@${THEIRS_SHA}" \
-         "$merged" "$base" "$theirs"; then
-      { cat "$fmf"; echo; cat "$merged"; } > "$OVR"
-      rm -f "$fmf" "$ours" "$base" "$theirs" "$merged"
-      echo "MERGED   $(basename "$OVR"): upstream's change applied, the consumer delta preserved."
-      echo "  Review the body, then: --stamp readopt"
-      exit 0
+    # A body that restates no shadowed heading is the single-anchor shape: the whole body
+    # IS the section. Treat it as one span so that case merges exactly as it always has.
+    if [ ! -s "$plan" ]; then
+      if [ "$(printf '%s\n' "$ids" | grep -c .)" -ne 1 ]; then
+        echo "REFUSED  $(basename "$OVR"): shadows $(printf '%s\n' "$ids" | grep -c .) anchors and the body restates none of their headings, so no span can be located." >&2
+        echo "  anchors: $(printf '%s' "$ids" | tr '\n' ' ')" >&2
+        rm -f "$fmf" "$body" "$plan"
+        exit 2
+      fi
+      printf '1 %s %s\n' "$(grep -c '' "$body")" "$ids" >> "$plan"
+      WHOLE_BODY=1
     else
-      { cat "$fmf"; echo; cat "$merged"; } > "$OVR"
-      rm -f "$fmf" "$ours" "$base" "$theirs" "$merged"
-      echo "CONFLICT $(basename "$OVR"): upstream and the consumer changed the same lines." >&2
+      WHOLE_BODY=0
+    fi
+    sort -n -k1,1 "$plan" -o "$plan"
+
+    out="$(mktemp)"; : > "$out"
+    prev=0; n_merged=0; n_conflict=0; n_unchanged=0
+    while read -r s e id; do
+      [ -n "$id" ] || continue
+      # Everything between the previous span and this one is consumer prose no anchor
+      # covers -- a preamble, a section core never had. It is copied byte-for-byte.
+      [ "$s" -gt $((prev + 1)) ] && sed -n "$((prev + 1)),$((s - 1))p" "$body" >> "$out"
+      prev="$e"
+
+      ours="$(mktemp)"; base="$(mktemp)"; theirs="$(mktemp)"
+      sed -n "${s},${e}p" "$body" > "$ours"
+      git -C "$DIST" show "${BASE_SHA}:${CORE}" | section_of "$id" > "$base"
+      git -C "$DIST" show "${THEIRS}:${CORE}"   | section_of "$id" > "$theirs"
+
+      if cmp -s "$base" "$theirs"; then
+        cat "$ours" >> "$out"
+        n_unchanged=$((n_unchanged + 1))
+        echo "  UNCHANGED  #${id} — core is byte-identical base..theirs; body left untouched."
+        rm -f "$ours" "$base" "$theirs"
+        continue
+      fi
+
+      # Align the three inputs before merging. On the whole-body path the extractor emits a
+      # leading blank line (the one after the frontmatter fence) while `section_of` starts
+      # flush at the heading. That one-line offset makes `git merge-file` mis-align ours
+      # against base and report a CONFLICT on a paragraph BYTE-IDENTICAL to base -- a clean
+      # re-adoption handed back as prose to merge by hand, the exact failure this mode
+      # removes. Strip the blank runs off all three, then RESTORE ours' own counts after:
+      # the alignment is a merge concern, not a licence to reformat the operator's file.
+      lead="$(awk '{ if (NF) exit; c++ } END { print c+0 }' "$ours")"
+      tail_n="$(awk '{a[NR]=$0} END {n=NR; c=0; while (n>0 && a[n]=="") {c++; n--}; print c+0}' "$ours")"
+      for f in "$ours" "$base" "$theirs"; do
+        awk 'NF {p=1} p' "$f" | awk '{a[NR]=$0} END {n=NR; while (n>0 && a[n]=="") n--; for(i=1;i<=n;i++) print a[i]}' > "$f.n"
+        mv "$f.n" "$f"
+      done
+
+      merged="$(mktemp)"; cp "$ours" "$merged"
+      if git merge-file -L "override (yours)" -L "core@${BASE_SHA}" -L "core@${THEIRS_SHA}" \
+           "$merged" "$base" "$theirs"; then
+        n_merged=$((n_merged + 1))
+        echo "  MERGED     #${id} — upstream's change applied, the consumer delta preserved."
+      else
+        n_conflict=$((n_conflict + 1))
+        echo "  CONFLICT   #${id} — upstream and the consumer changed the same lines." >&2
+      fi
+      i=0; while [ "$i" -lt "$lead" ]; do echo >> "$out"; i=$((i + 1)); done
+      cat "$merged" >> "$out"
+      i=0; while [ "$i" -lt "$tail_n" ]; do echo >> "$out"; i=$((i + 1)); done
+      rm -f "$ours" "$base" "$theirs" "$merged"
+    done < "$plan"
+
+    # Trailing body after the last span.
+    total="$(grep -c '' "$body")"
+    [ "$total" -gt "$prev" ] && sed -n "$((prev + 1)),\$p" "$body" >> "$out"
+
+    # No separator line is invented here. Overrides do not agree on whether a blank follows
+    # the `---` fence -- the reference consumer's has none -- and emitting one unconditionally
+    # is a whitespace edit to a file whose whole promise is that sections core did not touch
+    # come out byte-for-byte. The body extractor already starts at the byte after the fence,
+    # so concatenating reproduces whatever the file had.
+    { cat "$fmf"; cat "$out"; } > "$OVR"
+    rm -f "$fmf" "$body" "$plan" "$out"
+
+    echo "$(basename "$OVR"): ${n_merged} merged, ${n_unchanged} unchanged, ${n_conflict} conflicted."
+    if [ "$n_conflict" -gt 0 ]; then
       echo "  Conflict markers are in the body. Resolve them, then: --stamp readopt" >&2
       echo "  (--stamp readopt is refused while superseded core text remains, so an" >&2
       echo "   unresolved conflict cannot be stamped away.)" >&2
       exit 1
     fi
+    echo "  Review the body, then: --stamp readopt"
+    exit 0
     ;;
 
   --stamp)
