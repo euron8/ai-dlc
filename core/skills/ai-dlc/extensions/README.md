@@ -28,7 +28,7 @@ and the owning reader resolves the file by name.
 
 - **`known-skills.json`** — extra skill names a consumer's own party personas or sub-skills cite
   in their `SKILL_INVOCATION_PROVENANCE` blocks. `validate-provenance-block.sh` unions it with the
-  core `known_skills` list (`schemas/provenance-block.json`), so a provenance block naming your
+  core `known_skills` list (`.claude/schemas/provenance-block.json`), so a provenance block naming your
   skill passes **without editing the core schema**. Either shape:
 
   ```json

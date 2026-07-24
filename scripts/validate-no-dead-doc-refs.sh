@@ -39,7 +39,35 @@ for doc in docs/*.md; do
   fi
 done
 
+# --- Schema pointers must carry the consumer-tree prefix ----------------------
+# Same class, second shape: the file IS shipped, but the pointer names a path that does not
+# exist where the reader stands. install.sh writes core/schemas/*.json to `.claude/schemas/`,
+# while every bare relative pointer in `.claude/skills/ai-dlc/**` resolves against the skill
+# root — so a bare `schemas/X.json` resolves to `.claude/skills/ai-dlc/schemas/X.json`, which
+# never exists. Measured on the reference consumer: `schemas/provenance-block.json` resolved
+# from neither the repo root nor the skill root, in 10 sites across 6 files, while 2 sibling
+# sites already carried the correct `.claude/schemas/` form. A rule file that tells the
+# reader to load a schema, at a path the reader cannot resolve, teaches nothing and reports
+# no error.
+#
+# The subject set is DERIVED from core/schemas/ — the directory is the list, so a new schema
+# is covered the day it lands.
+for schema in core/schemas/*.json; do
+  [ -f "$schema" ] || continue
+  base="$(basename "$schema")"
+  # A bare hit is `schemas/<base>` NOT preceded by `.claude/` or `core/`.
+  hits="$(grep -rnE "(^|[^.a-z/])schemas/${base}" core/ --include='*.md' 2>/dev/null \
+          | grep -v '^core/fixtures/' || true)"
+  if [ -n "$hits" ]; then
+    echo "DEAD-SCHEMA-REF: core/ cites bare 'schemas/$base'. install.sh writes it to" >&2
+    echo "  .claude/schemas/$base, and a bare pointer resolves against the skill root, so it" >&2
+    echo "  is dead in every consumer tree. Write '.claude/schemas/$base'. Sites:" >&2
+    printf '%s\n' "$hits" | sed 's/^/    /' >&2
+    fail=1
+  fi
+done
+
 if [ "$fail" -eq 0 ]; then
-  echo "validate-no-dead-doc-refs: PASS — no core/ file cites an unshipped dev-repo doc."
+  echo "validate-no-dead-doc-refs: PASS — no core/ file cites an unshipped dev-repo doc or a bare schemas/ path."
 fi
 exit "$fail"

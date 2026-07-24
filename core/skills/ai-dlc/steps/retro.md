@@ -126,7 +126,7 @@ both at authoring time and committing in this order:
    fence is scored as no block at all. Get it right the first time; a reformat pass is the
    same wasted loop as a re-cite.
 
-<!-- BEGIN GENERATED: provenance-block/retro-party-mode — source: schemas/provenance-block.json; do not edit by hand -->
+<!-- BEGIN GENERATED: provenance-block/retro-party-mode — source: .claude/schemas/provenance-block.json; do not edit by hand -->
 ```
 <!-- SKILL_INVOCATION_PROVENANCE v1
 skill: bmad-party-mode                      # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
@@ -499,7 +499,7 @@ gate.
    This flips `status: done` and writes the `sprint_<N>_housekeeping:` block
    (`envelope_status: done` + non-empty `closure_evidence`) that Step 5c's
    `validate-mandatory-rules.sh` Check 3 reads — the ONLY writer of that block
-   (`schemas/sprint-status.json`), write-verified and idempotent. The next
+   (`.claude/schemas/sprint-status.json`), write-verified and idempotent. The next
    sprint's `roll` (route.md Step 6) freezes this closed envelope.
 
 **Record results in the retro doc** under a `## Close-Out Sweep`

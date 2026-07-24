@@ -671,7 +671,7 @@ where nothing loops and no verdict is counted.
 every gate the lead dispatches ONE `gate-adjudicator` (Rule 19 binding to
 `.claude/team-roles/gate-adjudicator.md`) that evaluates every `adjudication: llm` check for
 the gate type in a fresh Opus context and delivers a `GATE_ADJUDICATION_VERDICT v1` file (its
-own schema, `schemas/gate-adjudication-verdict.json`). This is NOT one of the five validation
+own schema, `.claude/schemas/gate-adjudication-verdict.json`). This is NOT one of the five validation
 sub-skills: no Skill runs, and it emits no `SKILL_INVOCATION_PROVENANCE` block — it is off the
 Check 17 path. The lead adopts its per-check verdicts ONLY through fail-closed Check 26 and
 never evaluates an `llm` check inline; roleplaying those judgments in the lead's own context
@@ -689,7 +689,7 @@ a Rule 8 convergence pass: a verdict enrols the block in a pass series
 (Check 24). An evaluation that records no residue cannot be told apart
 from one that found nothing, which is how a validation step accumulates
 cost nobody can defend or cut on evidence.
-The block's field schema lives in `schemas/provenance-block.json`, which
+The block's field schema lives in `.claude/schemas/provenance-block.json`, which
 the reader loads and every taught example is rendered from.
 `scripts/ai-dlc/validate-provenance-block.sh` parses the block;
 `scripts/ai-dlc/validate-retro-evidence.sh` enforces transcript artifact +

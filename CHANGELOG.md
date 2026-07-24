@@ -17,6 +17,40 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.6] — 2026-07-24
+
+### Fixed — rule files told the reader to load a schema at a path that does not exist in any consumer tree
+
+`install.sh` writes `core/schemas/*.json` to `.claude/schemas/`, while every bare relative
+pointer in `.claude/skills/ai-dlc/**` resolves against the skill root. So a bare
+`schemas/provenance-block.json` resolved to `.claude/skills/ai-dlc/schemas/…`, which never
+exists — and it does not resolve from the repo root either. `SKILL.md` said "the field schema
+lives in `schemas/provenance-block.json`, which the reader loads": an instruction to open a
+path no reader can reach.
+
+Ten sites across six files, against two sibling sites that already carried the correct
+`.claude/schemas/` form — the repo had settled the convention and the stragglers were never
+conformed. All ten now carry the prefix.
+
+Three of the ten sit inside `BEGIN GENERATED` provenance markers, which
+`core/scripts/sync-taught-schema.sh` matches with a compiled regex. The marker and its
+matcher are one claim, so both moved together; the renderer's `--check` gate fails if they
+disagree, which is what proved the coupling before the markers were touched.
+
+The reference consumer's fix for this was a local override that shadowed the whole of Rule 20
+to correct one line. That override can now be retired.
+
+### Added — `validate-no-dead-doc-refs.sh` also rejects a bare `schemas/` pointer
+
+Same defect class the script already guards (core cites a path that is dead in a consumer
+tree), second shape: the file IS shipped, but the pointer names somewhere the reader is not.
+Nothing measured pointer resolution before, so ten dead pointers read exactly like live ones.
+
+The subject set is derived from `core/schemas/` — the directory is the list, so a new schema
+is covered the day it lands, with no row to maintain. Mutation-tested in both directions:
+reintroducing one bare pointer fails the gate and names the site, and a newly added schema is
+caught without editing the guard.
+
 ## [0.143.5] — 2026-07-24
 
 ### Fixed — the drift scan declared its path set twice, and only one of the two was bound
