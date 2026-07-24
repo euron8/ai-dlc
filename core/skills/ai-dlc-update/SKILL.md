@@ -381,11 +381,22 @@ prose is itself generated rather than composed.
      lose data). The operator confirms and annotates at step 8 — the tool never edits the
      ledger, exactly as `HARD-CORE-DRIFT-ABSORBED` never reverts a file itself.
    - `STILL-LIVE` → stays open, filtered from the report.
-   - `NEEDS-REVIEW` → the `verify:` line is malformed or its path does not resolve at theirs.
-   An entry with NO `verify:` line is left to hand-review as today; the convention is opt-in
-   and the ledger stays prose. The line is one of `theirs_lacks <core-path> "<substr>"`
-   (innovation upstream lacks), `theirs_has <core-path> "<substr>"` (defect present upstream),
-   or `sh <one-liner>` (exit 0 = still reproduces). Rendered into the step-5 report by
+   - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
+     it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
+     line — that emits no row at all.
+   - `NEEDS-REVIEW` → TWO causes. The DETAIL field names which; report them separately.
+     - *unresolved* — the `verify:` line is malformed, or its path resolves neither as given
+       nor by unique basename at theirs. Correct the path, then re-run.
+     - *vacuous predicate* — the STILL-LIVE side was never reachable: a `theirs_has`
+       substring absent at BOTH base and theirs, or a `theirs_lacks` substring present at
+       both. Read the body and check whether the verb is inverted. **Never drain on this
+       verdict.**
+   An entry with NO `verify:` line emits no row and is left to hand-review as today; the
+   convention is opt-in and the ledger stays prose. The line is one of
+   `theirs_lacks <core-path> "<substr>"` (innovation upstream lacks),
+   `theirs_has <core-path> "<substr>"` (defect present upstream), `sh <one-liner>`
+   (exit 0 = still reproduces), or `manual`. A `theirs_*` line MAY carry more than one quoted
+   substring; all must match. Rendered into the step-5 report by
    `emit-report.sh`, so a CLOSE-CANDIDATE cannot be silently dropped.
 
 4. **Semantic per-block classify** — for every file the pre-pass marked
@@ -902,7 +913,8 @@ declared sites, not everywhere unconditionally.
      the existing hand-written closure format. **Do NOT delete the entry** — retro and the
      §8.1 fan-in read it. The annotation is an `Edit` under `_bmad-output/ai-dlc-update/**`
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a
-     Bash write, and never automatic.
+     Bash write, and never automatic. Close ONLY `CLOSE-CANDIDATE` rows; a `NEEDS-REVIEW`
+     row is never a close, whatever its detail says.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the

@@ -715,9 +715,7 @@ which fails the commit on header drift or a malformed entry. No SHA for the
 prior sprint = audit-gate fails closed at the next sprint's per-class test-debt
 audit (`gate-validation.md` Check 18).
 
-**Then prune (Rule 25(a)/(c)).** `audit-anchors.md` is read every sprint but only
-ever one entry deep — `carry-over-evaluation.md` Step 1a and Check 18 both read
-the prior sprint's entry and nothing older. Left unpruned it is an unbounded read.
+**Then prune (Rule 25(a)/(c)).**
 
 1. Keep the **3 most recent** entries in `_bmad-output/audit-anchors.md`.
 2. Move every older entry, verbatim cut-and-paste, to
@@ -882,8 +880,7 @@ epic scope, and residual risks are still in the lead's working context.
 
 **7a. Merge gate.**
 
-- **If a PR was created in 6d:** Merge it. Do NOT ask for approval — the retro
-  is autonomous and its human seam is Step 5's commentary pause, already past.
+- **If a PR was created in 6d:** Merge it. Do NOT ask for approval.
 
   Run `gh pr merge <N> --squash --delete-branch` (use the merge strategy the
   repo's PRs normally use; check recent merges with
@@ -891,8 +888,7 @@ epic scope, and residual risks are still in the lead's working context.
 
   On failure — branch protection, required review, failing checks, conflicts —
   surface the error verbatim and STOP: do not rotate (7a-post), do not emit the
-  next-sprint prompt. Do NOT retry with `--admin`. Repo branch protection is
-  operator policy; the pipeline reports that it blocked, it does not override it.
+  next-sprint prompt. Do NOT retry with `--admin`.
 - **If no PR was created (direct-to-main in 6c):** Skip the merge and
   proceed to **7a-post** — not straight to 7b. The artifacts are already on
   `main`, so the rotation's precondition is met and it still has to run.
