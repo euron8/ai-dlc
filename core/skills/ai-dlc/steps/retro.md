@@ -58,7 +58,7 @@ between them.
 The Skill invocation
 IS the satisfier for this step — role-playing PM/Architect/Dev/SM/
 TEA/QA perspectives inline in the retro doc without invoking the
-Skill is a Rule 3 violation per SKILL.md, regardless of how
+Skill is a Rule 20 violation per SKILL.md, regardless of how
 well-formed the output appears. This is non-negotiable.
 Each agent MUST be spawned as a real subagent for independent perspective. Solo mode (roleplaying agents inline) is forbidden.
 **The flags are what make that true — the sub-skill's own default is solo.**
@@ -81,9 +81,10 @@ the discussion:
 
 1. **Skill invocation evidence.** The `/bmad-party-mode` Skill tool
    call must occur in the lead's own conversation. A `SKILL_INVOCATION_PROVENANCE v1`
-   block (schema in SKILL.md Rule 3) is written to the retro doc
+   block (schema in `.claude/schemas/provenance-block.json`) is written to the retro doc
    citing the invocation's `tool_use_id`, `invoked_at` timestamp,
-   `mode` (solo or subagent), and `transcript_path`.
+   `mode` (always `subagent` — solo is rejected by
+   `validate-provenance-block.sh`), and `transcript_path`.
 
 2. **Transcript file commit.** The party-mode transcript (all agent
    responses in full, not summarized) is committed to
@@ -680,8 +681,8 @@ line:
 dual-counter: consecutive-deploy-clean: <N>/5; consecutive-no-regression: <M>/5 (run-id: <CI-run-id>).
 ```
 
-The 5/5 ship-quality target applies to BOTH counters independently. A
-sprint is ship-quality when EITHER counter reaches 5/5.
+Each counter is tracked against its own 5/5 target. A sprint is
+ship-quality when EITHER counter reaches 5/5.
 
 ### 5. Human Commentary
 

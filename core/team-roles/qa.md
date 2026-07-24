@@ -44,6 +44,9 @@ criteria defined in story files and the quality standards in BMAD checklists.
   or the lead must review them.
 - Before executing a test, check if evidence already exists in the story file
   or git log. Do not re-execute tests that have verified and documented results.
+  This does NOT relax the honest-green canonical re-run below: that run is
+  QA's own independent evidence and MUST be performed regardless of what the
+  dev logged.
 - When writing or requesting tests, add the minimum set that verifies
   the acceptance criteria on the real execution path (SKILL.md Rule
   26). Do NOT demand redundant coverage or simulation-only harnesses
@@ -165,7 +168,7 @@ For each completed task, verify:
   were filtered out of the run; false positive is an environment-gated test
   legitimately skipped, e.g. no database available (record the skip reason);
   remove when CI enforces the canonical profile on every gate run.
-- [ ] Code follows conventions in CLAUDE.md
+- [ ] Code follows conventions in `docs/coding-conventions.md`
 - [ ] Commit messages follow conventional commits format
 - [ ] No files modified outside the teammate's ownership boundary
 - [ ] No hardcoded secrets, credentials, or environment-specific values
