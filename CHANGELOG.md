@@ -17,6 +17,35 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.4] — 2026-07-24
+
+### Fixed — the self-update's fixture write was per-directory over a set derived by grep, not per-file over the diff
+
+v0.143.2 widened step 2 to carry the fixtures that guard the update tooling, and derived
+that set by grepping every `core/fixtures/<dir>/*.sh` for `skills/ai-dlc-update`. The write
+instruction then said to overwrite `tests/fixtures/<dir>/` **for each derived fixture**.
+Those are different sets. The derivation is a grep over the fixture bodies, so it names
+directories this pull does not change — 18 of them on the reference consumer, against 2 the
+v0.141.1 → v0.143.2 diff actually touched.
+
+One of the 18, `enforcement-map-sites`, is consumer-diverged. Read literally, step 2 would
+have overwritten it from `theirs` — discarding a local adaptation with no gate, inside the
+one cycle that runs without operator approval, on a pull where upstream had not touched the
+file at all. The consumer's run avoided it only by departing from the instruction and
+writing the 3 changed files.
+
+Two changes, both at the write site:
+
+1. **Write only the paths the `base→theirs` diff names.** The derived set bounds where the
+   diff is taken; it is not itself a write list.
+2. **Never overwrite a derived fixture whose consumer copy differs from `base`** — that is a
+   consumer edit, and it is reported and left alone. Only `.claude/skills/ai-dlc-update/**`
+   is overwrite-safe by declaration. This covers the case (1) does not: a fixture upstream
+   changed *and* the consumer edited.
+
+A fixture left unpulled may then go red against the new tooling, which is the existing
+red-fixture stop: reported with its output as a finding, never bypassed.
+
 ## [0.143.3] — 2026-07-24
 
 ### Fixed — a receipt substring quoted inside the core file that receipt tests closes the entry with nothing behind it

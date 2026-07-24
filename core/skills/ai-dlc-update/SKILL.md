@@ -167,9 +167,9 @@ prose is itself generated rather than composed.
 
    If EMPTY, say so in one line and continue to step 3. If NON-EMPTY:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
-     `ai-dlc-update/self-update-<theirs-version>-<ts>`, overwrite the consumer's
-     `.claude/skills/ai-dlc-update/**` AND `tests/fixtures/<dir>/` for each derived
-     fixture with `theirs`, **update the stamp's
+     `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
+     that diff names** — under `.claude/skills/ai-dlc-update/**` and
+     `tests/fixtures/<dir>/` — never the derived set per directory, **update the stamp's
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
      preserving `version`/`commit`/`installed_at`/`upstream`), commit
      (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), **run the
@@ -181,6 +181,12 @@ prose is itself generated rather than composed.
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
+
+     **A derived fixture whose consumer copy differs from `base` is a consumer edit — never
+     overwrite it.** Report the path, leave the file, and continue the cycle. Only
+     `.claude/skills/ai-dlc-update/**` is overwrite-safe by declaration; a fixture is not,
+     and the derived set is grepped from the fixtures rather than from the diff, so it names
+     fixtures this pull does not change.
 
      **A red derived fixture STOPS the self-update; it does not get pushed and sorted out
      later.** Widening the scope makes the common case consistent, but a fixture can also
