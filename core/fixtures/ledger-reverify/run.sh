@@ -65,6 +65,41 @@ row_is "Entry B" CLOSE-CANDIDATE "theirs now has MARKER_B -> upstream absorbed i
 row_is "Entry C" ABSENT          "already ADOPTED UPSTREAM -> closed, not re-emitted"
 row_is "Entry D" ABSENT          "no verify: line -> hand-review, no row"
 
+# THE THIRD DIFFERENTIAL — a declared manual entry vs a malformed one. Both used to land on
+# NEEDS-REVIEW, so a deliberate "no mechanical predicate exists" declaration was reported in
+# the same breath as a typo, and draining the bucket meant re-reading entries that had already
+# said they need no machine check.
+row_is "Entry E" HAND-REVIEW     "verify: manual is a declaration, not a malformed line"
+row_is "Entry F" HAND-REVIEW     "trailing backtick on the verb is a formatting slip, not a different verb"
+
+# THE FOURTH DIFFERENTIAL — path namespace. G carries Entry B's claim verbatim but filed in
+# the consumer install layout. Before the basename fallback it reported NEEDS-REVIEW: the
+# substring was never compared, so the closer said nothing about a claim upstream had already
+# absorbed. G and B must agree; that they can disagree at all is the defect.
+row_is "Entry G" CLOSE-CANDIDATE "consumer-namespace path resolves by basename -> same verdict as Entry B"
+
+# ...and the fallback must REFUSE to guess. H's basename matches two files at theirs, I's
+# matches none. A fallback that picked the first match would classify H on the wrong file
+# while reading exactly like a correct verdict.
+row_is "Entry H" NEEDS-REVIEW    "ambiguous basename (2 matches) -> refuse to guess"
+row_is "Entry I" NEEDS-REVIEW    "basename matches nothing at theirs -> nothing to fall back to"
+
+# THE FIFTH DIFFERENTIAL — a close nothing upstream produced. J and K classify CLOSE-CANDIDATE
+# on the theirs-side test alone, but neither predicate's STILL-LIVE side was ever reachable:
+# J's substring is absent at base AND theirs, K's is present at both. A closer that tests only
+# theirs emits a confident close for a claim no upstream change touched, and a drain acts on
+# it. Six entries on the reference consumer had exactly this shape, every one a live defect.
+row_is "Entry J" NEEDS-REVIEW    "theirs_has on a substring absent at base too -> vacuous, not absorbed"
+row_is "Entry K" NEEDS-REVIEW    "theirs_lacks on a substring present at base too -> vacuous, not absorbed"
+
+# THE SIXTH DIFFERENTIAL — more than one substring in a directive. Joined into a single
+# literal (quotes included) the pattern matches nothing, so BOTH L and M report "still
+# lacks" and only L is right. M is the damage: theirs carries both markers, and the entry
+# would sit open forever against an upstream that had already absorbed it. Matching each
+# substring separately is what makes the pair disagree, which is what makes the test real.
+row_is "Entry L" STILL-LIVE      "two substrings, neither at theirs -> genuinely still live"
+row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
+
 # THE SECOND DIFFERENTIAL — entry SHAPE. These three carry the same directives as B/C/D but
 # in the `## SECTION-ID — title` shape instead of a `- **bullet**`. A parser that treats every
 # heading as a pure terminator clears the label, so the directive is parsed and then dropped:

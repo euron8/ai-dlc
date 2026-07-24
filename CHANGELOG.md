@@ -17,6 +17,97 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.141.0] — 2026-07-24
+
+### Fixed — the push-candidate closer reported on 41% of the entries it was given
+
+`ledger-reverify.sh` classified 19 of the reference consumer's 32 ledger entries
+`NEEDS-REVIEW`. Every one carried a machine-runnable `verify:` predicate, and none of
+those predicates ran. A never-run predicate is reported identically to an entry whose
+claim is genuinely ambiguous, so the bucket read as "these need judgement" rather than
+"these were never checked". Three separate defects produced it.
+
+**Paths filed in the consumer's install layout never resolved.** The convention wants a
+distribution-relative path (`core/skills/…`, `core/scripts/…`, `core/fixtures/…`);
+fifteen entries carried the consumer layout prefixed with `core/`
+(`core/.claude/skills/…`, `core/scripts/ai-dlc/…`, `core/tests/fixtures/…`). The
+substring was never compared. A non-resolving path now retries once by basename across
+the tree at `theirs`, taking the match only when it is unique — derived from the tree,
+never a hand-maintained prefix table, because a second list drifts from the first and
+the stale list becomes the bug. Twelve entries became verifiable; three correctly stayed
+`NEEDS-REVIEW` on an ambiguous basename (`seed.sh` exists in every fixture) or none.
+
+**Closes were emitted for predicates that could never have reported still-live.**
+`theirs_has "<substr>"` closes when the substring is gone at `theirs` — but if it was
+never at BASE either, the entry was born closed and no upstream change produced the
+verdict. Seven entries had that shape, six of them from one authoring slip: a substring
+naming the FIX ("fail-closed by default", "Check 3 and Check 4 real enforcers") paired
+with the verb that means the opposite. All six are live defects whose own bodies say so,
+and a drain would have closed them as ordinary absorbed-upstream entries. Both refs are
+now checked before any close, and a predicate that could not have fired is reported
+instead of obeyed.
+
+**Multi-substring directives matched nothing, forever.** `verify: theirs_lacks <path>
+"A" "B"` was joined into a single literal including the quotes between the substrings.
+It matched no file, so the entry reported "still lacks" regardless of what `theirs`
+held. One of the two entries using the form named two markers upstream already carries
+and would have stayed open permanently. Substrings are matched individually now; the
+single-substring form is the one-element case and behaves as before.
+
+`verify: manual` also stopped being an error. It is a declaration that no mechanical
+predicate exists, and it now reports as its own `HAND-REVIEW` verdict rather than
+sharing `unknown verify verb` with a typo. A trailing backtick on any verb is tolerated.
+
+Adjudication of the resulting backlog: `docs/reviews/s298-push-candidate-adjudication.md`.
+
+### Changed — the retro merges its own PR
+
+`retro.md` Step 7a asked "Merge PR [#N] now? (y/n)" and waited. The step file's own
+description has always said the agent runs the retro autonomously, and the human seam is
+Step 5's commentary pause, which happens earlier and is unchanged. Step 7a now runs
+`gh pr merge --squash --delete-branch` without asking.
+
+A refused merge — branch protection, required review, failing checks, conflicts —
+surfaces the error verbatim and stops: no rotation, no next-sprint prompt. It never
+retries with `--admin`. Repo branch protection is operator policy; the pipeline reports
+that it blocked rather than overriding it. The `n` branch is gone, so 7a-post's
+"if 7a ended with n" carve-out and 7b's "a human y/n seam" clause went with it. The
+ordering constraint 7a-post depends on — rotate only once the artifacts are on `main` —
+is unchanged and still load-bearing.
+
+### Fixed — `audit-anchors.md` was read every sprint and bounded by nothing
+
+`carry-over-evaluation.md` Step 1a and gate Check 18 both read exactly one entry from
+`audit-anchors.md`: the prior sprint's. The file is append-only and nothing ever pruned
+it. In the reference consumer it reached 120 entries and 37,438 tokens, 119 of them dead
+on every read.
+
+It was in neither the budget table nor `is_archive()`'s free-growth exemption, so no
+check measured it — ungoverned, not merely unrotated, which is why 120 sprints passed
+without a report. `retro.md` Step 5b now prunes to the 3 most recent entries after
+appending, moving the rest verbatim to `_bmad-output/audit-anchors-archive.md` (a
+write-only sink, already covered by the `*-archive.md` exemption) with a no-loss count
+check. `audit-anchors.md` joins the budget table at 4,000 tokens with the `rotate`
+remedy, so a missed prune is now a reported breach rather than silence. Measured on the
+reference consumer's real file: 120 entries → 3 live + 117 archived, 37,438 → 2,797
+tokens, schema validator clean in both modes.
+
+### Added — `validate-artifact-budget.sh` reports artifacts no budget covers
+
+Every check in that script measures artifacts the table already names. None of them can
+say anything about one the table forgot, and a forgotten artifact prints no row at all —
+identical to a passing one. That is exactly how `audit-anchors.md` survived.
+
+A fourth verdict now derives the read-path set from the step files, which are what
+actually name the artifacts the pipeline reads, and reports any that no budget governs
+and no archive glob exempts. Derived, not hand-listed, for the same reason as above.
+Warn-only always and never folded into the exit code: "no budget covers this" is a gap
+in the table, not a Rule 25(d) breach, and whether the artifact needs a budget or is
+bounded by being rewritten is the operator's call. A token floor
+(`AI_DLC_UNGOVERNED_FLOOR`, default 2000) keeps it quiet until the answer starts to
+matter. On the reference consumer it reports three artifacts and, with the new
+`audit-anchors.md` row removed, reports that too.
+
 ## [0.140.0] — 2026-07-23
 
 ### Changed — Rule 26(a) gained a counting test, Rule 26(b) gained two triggers
