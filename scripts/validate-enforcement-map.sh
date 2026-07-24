@@ -832,8 +832,11 @@ fi
 #
 #   COMPLETENESS — every core/skills/<skill>/ and every other core/<dir>/ has a policy row.
 #   SCAN-MATCH   — the rows marked `scan` are EXACTLY the subtrees the ls-tree scans.
-# The reason string on each `exempt` row is the review: machinery breaks loudly (not silent prose
-# drift), and the update skill self-updates its own tree — neither belongs in the drift scan.
+# The reason string on each `exempt` row is the review, and it must state a property that
+# HOLDS: machinery breaks loudly (not silent prose drift), the update skill self-updates its own
+# tree, and test data carries no rule to drift. `fixtures` was exempted as "not consumer-authored"
+# until the reference consumer was measured carrying four edited fixture files — the exemption was
+# right and its reason was false, which is the shape that survives review by being unread.
 UD="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
 if [ -f "$UD" ]; then
   DRIFT_POLICY="$(cat <<'POL'
@@ -847,7 +850,7 @@ scripts|exempt:machinery — an in-place edit breaks loudly (a failing validator
 session-driver|exempt:machinery (automation shell), not consumer-read rulebook
 ci-templates|exempt:CI templates run from .github/workflows, not consumer-read rulebook
 git-hooks|exempt:machinery (git hook), not consumer-read rulebook
-fixtures|exempt:adversarial test data, not consumer-authored rulebook
+fixtures|exempt:test data, not layered rulebook — an in-place edit changes no rule the lead obeys and has no overrides/ entry to refile into, and it cannot be silently destroyed: apply writes only the base→theirs diff, where preclassify already buckets a consumer-edited file as BOTH-CHANGED->CLASSIFY
 POL
 )"
   # Subtrees actually scanned: the core/ paths on unregistered-drift's ls-tree pathspec line.

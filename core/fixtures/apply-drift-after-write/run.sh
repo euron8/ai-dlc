@@ -114,6 +114,10 @@ fi
 # at. Strip ONLY the guard and re-run: both hazard rows must return, with the destructive
 # revert instruction intact. That proves the guard is load-bearing and the stakes are real.
 NOGUARD="$WORK/drift-noguard.sh"
+# The script resolves map_consumer() from its SIBLING preclassify.sh and refuses to scan at
+# all without it. A mutant copied away from that sibling therefore reports nothing, which
+# reads here as "the hazard did not reproduce" — a vacuous PASS of the wrong assertion.
+cp "$(dirname "$DRIFT")/preclassify.sh" "$WORK/preclassify.sh"
 awk '/^      if \[ -n "\$THEIRS" \] && git -C "\$DIST" cat-file -e "\$\{THEIRS\}:\$\{cp\}" 2>\/dev\/null \\$/ {skip=6}
      skip > 0 {skip--; next}
      {print}' "$DRIFT" > "$NOGUARD"

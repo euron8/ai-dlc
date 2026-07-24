@@ -386,6 +386,11 @@ prose is itself generated rather than composed.
      `{token}` site. That is what `install.sh` does; it is not drift, and it must
      never be reported as such.
    - `CORE-OK` → byte-identical to the distribution at base.
+   - `CORE-AT-THEIRS` → byte-identical to the distribution at `theirs`: already applied,
+     never drift. A row here is the tell that the base passed in was stale.
+   - `HARD-DRIFT-SCAN-UNAVAILABLE` → **blocks `apply`**. The scan could not load its path
+     mapper, so it scanned NOTHING and its empty output is not a clean tree. Restore
+     `reconcile/preclassify.sh` beside `unregistered-drift.sh` and re-run.
 
 3e. **Consumer-catalog collisions.** Run `reconcile/relabel-extension-checks.sh
    <consumer-root> --dist <dist-repo> --theirs <theirs-ref>` (dry-run). Every extension
