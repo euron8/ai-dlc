@@ -17,6 +17,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.5] — 2026-07-24
+
+### Fixed — the drift scan declared its path set twice, and only one of the two was bound
+
+`unregistered-drift.sh` carried a private `consumer_path()` case table listing the same five
+core subtrees its `ls-tree` scans, returning 1 for anything else — which the `|| continue` at
+the scan turns into a silent skip. So the scan set lived in two places that had to agree, and
+I12 binds only one of them. Adding a root to the `ls-tree` without also adding a case scans
+nothing, prints nothing, and an empty scan is indistinguishable from a clean tree.
+
+Measured against the reference consumer: adding `core/fixtures` to the `ls-tree` alone
+emitted **0 fixture rows** across 61 rows of output, with 4 fixture files genuinely diverged.
+After delegating to `preclassify.sh`'s `map_consumer()` — the single mapping I8 binds to
+`install.sh`, and the one `apply.sh` already uses — the same experiment emits 134 rows,
+including all 4 as `HARD-UNREGISTERED-CORE-DRIFT`. Output on the five existing roots is
+byte-identical before and after.
+
+A private table also cannot express I8's `scripts/ai-dlc/` and `.githooks/` prefixes, so it
+was wrong for any scan set reaching past `.claude/`.
+
+New status **`HARD-DRIFT-SCAN-UNAVAILABLE`**: if the mapper cannot be loaded, the scan emits
+one blocking row instead of scanning. It cannot fail closed the way `apply.sh` does — it
+never writes — so silence is its failure mode, and `hard-blockers.sh` would read an empty
+result as 0 blockers. `SKILL.md` step 3d gains this status and `CORE-AT-THEIRS`, which
+v0.143.0 added to the tool without adding to the list that explains it.
+
+### Fixed — I12's `fixtures` exemption was right for a reason that is false
+
+The row read `adversarial test data, not consumer-authored rulebook`. The reference consumer
+carries four consumer-edited fixture files, so the reason does not hold, and a reason that
+does not hold is what survives review by being unread.
+
+The exemption itself stands, on the grounds that are true: a fixture edit changes no rule the
+lead obeys and has no `overrides/` entry to refile into, and it cannot be silently destroyed —
+`apply` writes only the `base→theirs` diff, where `preclassify` already buckets a
+consumer-edited file as `BOTH-CHANGED->CLASSIFY`. Scanning them would have produced four
+`HARD-` blockers whose remedy text ("refile the delta as an `overrides/` entry") has no
+meaning for test data.
+
 ## [0.143.4] — 2026-07-24
 
 ### Fixed — the self-update's fixture write was per-directory over a set derived by grep, not per-file over the diff

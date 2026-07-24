@@ -46,6 +46,10 @@
 #   CORE-OK                       byte-identical to the distribution at base.
 #   CORE-AT-THEIRS                byte-identical to the distribution at theirs — already
 #                                 applied, not drift. Also the tell for a stale base.
+#   HARD-DRIFT-SCAN-UNAVAILABLE   the path mapper could not be loaded, so NOTHING was
+#                                 scanned. HARD- because a scan that cannot run emits the
+#                                 same empty output as a tree with no drift, and the caller
+#                                 reads that as clean.
 set -uo pipefail
 
 DIST="${1:?usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> [theirs-ref]}"
@@ -119,16 +123,29 @@ EOF
   printf '%s' "$out"
 }
 
-# core/<path> -> consumer path. Mirrors install.sh's layout.
-consumer_path() {
-  case "$1" in
-    skills/ai-dlc-setup/*) printf '%s/.claude/skills/ai-dlc-setup/%s' "$CONSUMER" "${1#skills/ai-dlc-setup/}" ;;
-    skills/ai-dlc/*) printf '%s/.claude/skills/ai-dlc/%s' "$CONSUMER" "${1#skills/ai-dlc/}" ;;
-    team-roles/*)    printf '%s/.claude/team-roles/%s'    "$CONSUMER" "${1#team-roles/}" ;;
-    hooks/*)         printf '%s/.claude/hooks/%s'         "$CONSUMER" "${1#hooks/}" ;;
-    schemas/*)       printf '%s/.claude/schemas/%s'       "$CONSUMER" "${1#schemas/}" ;;
-    *) return 1 ;;
-  esac
+# core/<path> -> consumer path. DELEGATED to preclassify.sh's map_consumer(), the single
+# mapping I8 binds to install.sh, exactly as apply.sh does.
+#
+# It was a private case table listing the five subtrees the ls-tree below happens to scan,
+# and returning 1 for everything else — which the `|| continue` at the scan turns into a
+# silent skip. So the scan set was declared in TWO places that had to agree, and only one of
+# them (the ls-tree) is bound by I12. Adding a root to the ls-tree without also adding a case
+# here scans nothing and prints nothing, and an empty scan is indistinguishable from a clean
+# tree. Measured against the reference consumer: adding `core/fixtures` to the ls-tree alone
+# emitted 0 fixture rows across 61 rows of output, with 4 files genuinely diverged.
+#
+# A second private table also cannot hold I8's `scripts/ai-dlc/` and `.githooks/` prefixes,
+# so it is wrong the moment the scan set moves past `.claude/`.
+eval "$(awk '/^map_consumer\(\) \{/,/^\}/' "$(cd "$(dirname "$0")" && pwd)/preclassify.sh" 2>/dev/null)"
+if ! command -v map_consumer >/dev/null 2>&1; then
+  emit HARD-DRIFT-SCAN-UNAVAILABLE "reconcile/preclassify.sh" \
+    "could not load map_consumer() — nothing was scanned. Refusing to fall back to a private path table: it would map some subtrees, skip the rest, and print an empty result that reads as no drift."
+  exit 0
+fi
+consumer_path() { # <core-stripped rel> -> absolute consumer path
+  local m; m="$(map_consumer "core/$1")"
+  [ -n "$m" ] || return 1
+  printf '%s/%s' "$CONSUMER" "$m"
 }
 
 # A hunk is "template substitution" iff the DISTRIBUTION side of it carries at

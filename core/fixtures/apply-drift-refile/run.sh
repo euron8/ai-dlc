@@ -122,6 +122,28 @@ else
   bad "apply.sh with no map_consumer did NOT fail closed (rc=$lone_rc) — it either guessed consumer paths or stamped anyway"
 fi
 
+# --- Assertion 9: the SECOND consumer of that mapper must also refuse ---------
+# unregistered-drift.sh delegates to the same map_consumer(). It cannot fail closed the way
+# apply.sh does — it never writes — so silence IS its failure mode: an unrunnable scan and a
+# clean tree print the same empty output, and hard-blockers.sh reads both as 0 blockers.
+UD="$(dirname "$APPLY")/unregistered-drift.sh"
+LONE_UD="$WORK/lone/unregistered-drift.sh"; cp "$UD" "$LONE_UD"
+UD_OUT="$(bash "$LONE_UD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
+if printf '%s\n' "$UD_OUT" | grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE'; then
+  ok "unregistered-drift.sh with no map_consumer to load emits a HARD row (an unrunnable scan never reads as clean)"
+else
+  bad "unregistered-drift.sh with no map_consumer printed no HARD row: $(printf '%s' "$UD_OUT" | tr '\n' '|' | cut -c1-200)"
+fi
+
+# --- Assertion 9b: ANTI-VACUITY — the scan is alive when the sibling is there -
+# Without this, 9 passes on a script that is broken for every input.
+UD_OK="$(bash "$UD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
+if [ -n "$UD_OK" ] && ! printf '%s\n' "$UD_OK" | grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE'; then
+  ok "with preclassify.sh beside it the same script scans and reports — the HARD row is the mapper, not a dead script"
+else
+  bad "the scan produced no usable rows with preclassify.sh present, so assertion 9 proves nothing: $(printf '%s' "$UD_OK" | tr '\n' '|' | cut -c1-200)"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "apply-drift-refile: PASS"; exit 0; fi
 echo "apply-drift-refile: $fails assertion(s) FAILED" >&2
