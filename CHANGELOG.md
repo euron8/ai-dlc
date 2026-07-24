@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.141.1] — 2026-07-24
+
+### Fixed — the closer gained two verdicts and the instructions that read them did not
+
+v0.141.0 added a `HAND-REVIEW` verdict and a second, more serious cause of
+`NEEDS-REVIEW` (a *vacuous predicate* — one whose STILL-LIVE side was never reachable,
+usually an inverted verb on a live defect). `ai-dlc-update/SKILL.md` step 3f still
+enumerated three verdicts and defined `NEEDS-REVIEW` as "malformed or its path does not
+resolve at theirs".
+
+The first pull to run the new engine followed that text faithfully and reported seven
+vacuous rows — six of them live upstream defects — as routine path errors, and described
+four explicit `verify: manual` declarations as entries with no `verify:` line. The signal
+was emitted correctly and discarded by the reader, which is the same defect class the
+0.141.0 batch existed to remove: a check that reports and a consumer that cannot hear it.
+
+Step 3f now documents `HAND-REVIEW`, splits `NEEDS-REVIEW` into *unresolved* and *vacuous
+predicate*, and requires the report to keep the two apart. Step 8 gains the matching guard:
+close only `CLOSE-CANDIDATE` rows, never a `NEEDS-REVIEW` row whatever its detail says. The
+multi-substring `theirs_*` form and the `manual` verb are documented alongside the other
+three.
+
+### Fixed — narrative that 0.141.0 added to two rule files
+
+`retro.md` §5b and §7a landed with rationale in the rule body: why `audit-anchors.md` needed
+pruning, why the merge no longer asks, why `--admin` is prohibited. Rule files carry what
+changes behaviour, not what justifies it; the reasoning belongs in the CHANGELOG and
+`docs/reviews/`, where it already was. Both are stripped to the mechanism. The prohibitions,
+pass conditions and no-loss check are unchanged.
+
+`audit-rule-files.sh` reported `NARRATIVE_DRIFT: CLEAN` on both files at the time. It
+matches fixed patterns, so rationale phrased any other way passes it. A CLEAN from that
+class is evidence about those patterns, not about the file.
+
+Documentation only. `ledger-reverify.sh` and `validate-artifact-budget.sh` are untouched, so
+no behaviour changes.
+
 ## [0.141.0] — 2026-07-24
 
 ### Fixed — the push-candidate closer reported on 41% of the entries it was given
