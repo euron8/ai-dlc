@@ -195,7 +195,7 @@ parses one form and one form only. A ``` code fence is **not** a provenance bloc
 parses it, so every field in it goes unadjudicated and the gate reports your pass as clean
 *because it never read a word of it*. Copy the envelope, not just the fields.
 
-<!-- BEGIN GENERATED: provenance-block/adversary-pass — source: schemas/provenance-block.json; do not edit by hand -->
+<!-- BEGIN GENERATED: provenance-block/adversary-pass — source: .claude/schemas/provenance-block.json; do not edit by hand -->
 ```
 <!-- SKILL_INVOCATION_PROVENANCE v1
 skill: ai-dlc-adversary-review              # the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block.
@@ -215,7 +215,7 @@ SKILL_INVOCATION_PROVENANCE_END -->
 ```
 <!-- END GENERATED: provenance-block -->
 
-The block above is rendered from `schemas/provenance-block.json`, which is also the file the
+The block above is rendered from `.claude/schemas/provenance-block.json`, which is also the file the
 gate's parser loads. There is no second copy of this schema to disagree with.
 
 `artifact_sha` is `shasum -a 256 <artifact> | cut -d' ' -f1` (or `sha256sum`). It is not a

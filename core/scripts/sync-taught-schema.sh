@@ -180,7 +180,7 @@ KINDS = [
 ]
 for k in KINDS:
     k["begin_re"] = re.compile(
-        r"<!-- BEGIN GENERATED: " + re.escape(k["slug"]) + r"/(?P<profile>[a-z0-9-]+) — source: schemas/"
+        r"<!-- BEGIN GENERATED: " + re.escape(k["slug"]) + r"/(?P<profile>[a-z0-9-]+) — source: \.claude/schemas/"
         + re.escape(k["source"]) + r"; do not edit by hand -->"
     )
     k["end_mark"] = f"<!-- END GENERATED: {k['slug']} -->"
@@ -295,7 +295,7 @@ for rel, line_no, slug, source, profiles in handwritten:
         f"this pattern first drifted, the reader silently parsed nothing and the gate called two "
         f"unadjudicated passes clean.\n"
         f"      FIX: replace it with\n"
-        f"        <!-- BEGIN GENERATED: {slug}/<profile> — source: schemas/{source}; do not edit by hand -->\n"
+        f"        <!-- BEGIN GENERATED: {slug}/<profile> — source: .claude/schemas/{source}; do not edit by hand -->\n"
         f"        <!-- END GENERATED: {slug} -->\n"
         f"      and run scripts/ai-dlc/sync-taught-schema.sh. Profiles: {profiles}",
         file=sys.stderr,

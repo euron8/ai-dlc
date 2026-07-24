@@ -72,7 +72,7 @@ and (d) the artifact roots you may read. You MUST:
 
 ## The verdict — the shape is the schema, not your memory
 
-Write exactly the shape below. It is rendered from `schemas/gate-adjudication-verdict.json`,
+Write exactly the shape below. It is rendered from `.claude/schemas/gate-adjudication-verdict.json`,
 which is also the file `validate-gate-adjudication.sh` LOADS to check your verdict. There is no
 second copy to drift from it. `gate_nonce` MUST equal the one the lead handed you (and the
 verdict filename stem) — it is the freshness anchor: a verdict at the wrong nonce is a stale
@@ -81,7 +81,7 @@ gets a new nonce and a fresh adjudication, never a reuse of this one. `catalog` 
 catalog. The set of `check_id`s MUST equal the derived escalated set exactly — no omission, no
 extra, no duplicate.
 
-<!-- BEGIN GENERATED: gate-adjudication-verdict/example — source: schemas/gate-adjudication-verdict.json; do not edit by hand -->
+<!-- BEGIN GENERATED: gate-adjudication-verdict/example — source: .claude/schemas/gate-adjudication-verdict.json; do not edit by hand -->
 ```json
 {
   "schema_id": "GATE_ADJUDICATION_VERDICT v1",

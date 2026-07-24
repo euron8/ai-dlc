@@ -878,7 +878,7 @@ bmad-validate-prd, ai-dlc-adversary-review) was required by the current
 phase. Skip on gates that do not produce a provenance-bearing artifact.
 
 **Block schema (`SKILL_INVOCATION_PROVENANCE v1`).** Owned by
-`schemas/provenance-block.json`. It is rendered into the role files of the agents
+`.claude/schemas/provenance-block.json`. It is rendered into the role files of the agents
 that WRITE blocks (`team-roles/adversary.md`, `steps/retro.md`) and loaded by the
 parser that READS them (`validate-provenance-block.sh`); `scripts/ai-dlc/sync-taught-schema.sh
 --check` fails the build on any hand-written copy, and the fixture
