@@ -38,7 +38,7 @@ and the owning reader resolves the file by name.
   Additive and deduped; a present-but-malformed file fails the gate **closed** (a broken layer
   file must never silently degrade to the core-only list). This is the layer-correct alternative to
   adding a skill name to the core schema in place — which `/ai-dlc-update` flags as
-  `HARD-UNREGISTERED-CORE-DRIFT` (schemas are drift-scanned as of v0.63.2).
+  `HARD-UNREGISTERED-CORE-DRIFT` (schemas are drift-scanned).
 
 - **`protected-paths.json`** — consumer paths that must load VERBATIM, i.e. that
   `ai-dlc-protect.sh` must stop context-mode from consolidating. Core protects the rulebook
@@ -192,7 +192,7 @@ of your next `/ai-dlc-update` report, then freeze it:
 
 | your number | label | title | resolves a bare `Check N` written before | notes |
 |---|---|---|---|---|
-| 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24 (adversarial convergence), added upstream in v0.48.0 |
+| 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24 (adversarial convergence), which core added later |
 
 **Validate any entry you author or revise:** `scripts/ai-dlc/validate-layer-entries.sh`.
 

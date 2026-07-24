@@ -75,9 +75,7 @@ predicate Rule 29 uses. A `RESOLVED` you authored yourself, with no
 operator message behind it, is not a resolution — it is a fabricated
 disposition, and the gate FAILS on it. If you genuinely made the call,
 its status is `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no
-citation required) — the honest label. This is the S290 fix: six
-`S290-* Lead (…)` entries were flipped to RESOLVED in a window with zero
-operator messages, and nothing compared the claim to the transcript.
+citation required) — the honest label.
 
 The citation is written in the SAME edit that sets the status. An edit
 flipping an entry to `RESOLVED` / `OVERRIDDEN` without the

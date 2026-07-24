@@ -124,11 +124,10 @@ follow the worktree-explicit dispatch protocol:
 **Bounded-join dispatch mandate (Rule 29).** A gated story-dev cycle is
 synchronous: the lead's immediate next action reads the dev's result
 and routes it into gate-1. That JOIN is mandatory and unchanged. What
-is forbidden is *how the lead used to wait* for it — a single blocking
-Agent call, which in the consumer corpus ran as long as 36 minutes.
-While that call is in flight there is no tool boundary, so a queued
-operator message cannot be delivered: the human is locked out for the
-duration.
+is forbidden is waiting for it in a single blocking Agent call, which can
+run for tens of minutes. While that call is in flight there is no tool
+boundary, so a queued operator message cannot be delivered: the human is
+locked out for the duration.
 
 The lead MUST therefore dispatch teammates with `run_in_background: true`
 and JOIN on the **deliverable file**, not a `task_id` — conducting that

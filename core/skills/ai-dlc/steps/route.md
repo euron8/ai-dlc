@@ -365,11 +365,11 @@ the analyst-draft write paths below are stamped with it (Rule 24), and an
 unstamped fallback silently destroys the prior sprint's draft, which is
 the exact defect the stamp exists to prevent.
 
-This used to be four prose rules the model applied by hand, and they had
-no case for a canonical that exists but carries no `sprint:` key — the
-state a rotate-at-close leaves behind. Read as "greenfield", it restamps
-a live project from sprint 1. The script derives that case from the
-frozen archives instead.
+The script also decides the case a hand-applied rule set has no branch for:
+a canonical that exists but carries no `sprint:` key, the state a
+rotate-at-close leaves behind. Read as "greenfield" it restamps a live
+project from sprint 1, so the script derives that case from the frozen
+archives instead.
 
 **Rotate the sprint envelope (MANDATORY).** Immediately after resolving
 `sprint_id`, run:

@@ -37,10 +37,9 @@ one-shot that finds four things reports four things; a one-shot that finds nothi
 says so and stops. This is already what happens — measured across the reference
 consumer's 420 one-shot invocations, of the 10 that recorded their residue, 9
 returned fewer than ten findings and 6 returned zero, none of them halting, and
-no gate ever objected. The paragraph you are reading used to say the floor and the
-HALT were "right" for a one-shot; the record says otherwise and this is the record.
+no gate ever objected. A finding floor and a HALT are not right for a one-shot.
 
-The reason it matters is not tidiness. `stories-test-strategy.md` and
+This is not a matter of tidiness. `stories-test-strategy.md` and
 `sprint-review.md` both say **"Apply fixes"** on the one-shot's output, against an
 artifact the Rule 8 cycle has just driven to zero CRITICAL and zero MAJOR. A
 manufactured finding there is an edit to a correct artifact, and the edit is where
@@ -179,8 +178,7 @@ authorship. Fixing a finding means writing a NEW claim about the code into the
 artifact, and nothing checked it until the next pass, one cycle later — so repairs
 injected defects at roughly the rate review removed them and the MAJOR count could not
 reach zero. Measured: a cycle ran thirteen passes without converging, and **every**
-prior-scope finding across its last five passes was a false claim introduced by a repair
-(notes R34/R35). *False-positive cost:* a MAJOR on a claim that happens to be true but is
+prior-scope finding across its last five passes was a false claim introduced by a repair. *False-positive cost:* a MAJOR on a claim that happens to be true but is
 written without its derivation — which is the point: the cost of deriving it is one
 command, and the cost of not deriving it is a full pass. *Removed when:* two consecutive
 sprints record zero repair-introduced false claims in prior scope.
@@ -286,8 +284,8 @@ the claim is honest. Neither of you is redundant.
 The record's `operator_authorization` must be a **citation** — a timestamp plus a verbatim
 substring of the operator's own message — not a paraphrase and not the lead's summary of
 what it inferred. The gate verifies that substring against the session transcript; if it
-reads like a disposition no operator actually typed (the S290 failure: a lead authoring its
-own "operator" resolution in an operator-silent window), flag it as a CRITICAL. A resolution
+reads like a disposition no operator actually typed — a lead authoring its own "operator"
+resolution in an operator-silent window — flag it as a CRITICAL. A resolution
 clears an operator-gated hard block, so an uncited or paraphrased authorization is the exact
 thing that must not pass.
 

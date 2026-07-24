@@ -8,11 +8,10 @@ description: Procedures invoked by reference from pipeline step files (sub-step 
 
 These procedures are invoked **by name** from pipeline step files — they are
 NOT gate checks and are NOT part of the `gate-validation.md` Check 1–H2
-sequence. They were extracted from `gate-validation.md` (v0.24.0 Phase 1) so
-their bodies do not sit resident on every gate; a step file loads this file
-`READ AND FOLLOW`-style when it says "run sub-step snapshot update" or "run
-auto-handoff evaluation at Seam <X>". `gate-validation.md` retains a one-line
-forwarding pointer at each former location.
+sequence. A step file loads this file `READ AND FOLLOW`-style when it says
+"run sub-step snapshot update" or "run auto-handoff evaluation at Seam <X>".
+`gate-validation.md` carries a one-line forwarding pointer at each procedure's
+former location.
 
 ## Sub-step snapshot update (referenced by step files)
 
@@ -287,8 +286,7 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    one Rule 29 uses). If no genuine operator message in the pause window contains those words,
    the gate FAILS: a lead-authored resolution is not an operator adjudication. Quote a real span
    of what the operator actually typed (≥12 chars) — not a paraphrase, and not a token. The
-   machine notarizes that a human said it; you and the operator own what it means. (This closes
-   the S290 hole: four "operator" dispositions authored in a window with zero operator messages.)
+   machine notarizes that a human said it; you and the operator own what it means.
 
    **FREEZE is not on this list and is rejected by name.** A hard block means CRITICALs rose in
    text a previous pass had already reviewed — text that is *already frozen*. Freezing it again
@@ -366,13 +364,10 @@ effects, the step resumes.**
 
 2. **Trigger basis (mode-dependent).** Exactly ONE of 2a / 2b applies:
    the one naming your `auto_handoff_mode`. Read that sub-item and stop.
-   The other mode's rule does not apply to you, and reaching for it is
-   the failure this split exists to prevent — these were a single
-   paragraph until v0.73.0, and a `safe-seam` session read the
-   `deploy-only` measured-red sentence out of it, found no red, and
-   returned CONTINUE at three consecutive seams. Auto-handoff was
-   silently disabled while the mode said it was on, which reads exactly
-   like a mode with no seam reached.
+   The other mode's rule does not apply to you. Applying the other
+   mode's condition returns CONTINUE at every seam, which disables
+   auto-handoff while the mode still reports itself on — indistinguishable
+   from a mode whose seam was never reached.
 
    **2a. Under `safe-seam`** — the seam itself is the trigger. Only the
    token *magnitude* is advisory: how many tokens are in play does not

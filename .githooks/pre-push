@@ -59,6 +59,13 @@ step "release version triple (subject == VERSION == CHANGELOG heading)" \
 step "re-attach budget (SKILL.md resident region)" \
   bash core/scripts/validate-reattach-budget.sh --skill core/skills/ai-dlc/SKILL.md
 
+# 2b. Rule 18 and rule-authoring.md govern rule prose, but the audit that enforces them
+#     was driven only from a consumer's retro. Narrative authored here reached every
+#     consumer before anything could see it. Only the deterministic tier gates the push;
+#     the judgement tier prints and is dispositioned at retro.
+step "rule-file audit (origin tags, dates, dangling pointers)" \
+  bash core/scripts/audit-rule-files.sh --fail-on=deterministic
+
 # 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
 #    never driven is a green light nobody earned.
 run_fixtures() {

@@ -254,9 +254,7 @@ legacy sprints are out of scope, so the gate does not wedge on old data)
 and verifies each citation against the session transcript with the same
 genuine-operator predicate Rule 29 uses (`validate-steering-budget.sh
 --cite`). A lead-authored "operator disposition" whose quote appears in no
-genuine operator message **FAILS** — the S290 failure, where six
-`S290-* Lead (…)` escalations were flipped to RESOLVED in a window with
-zero operator messages. If you made the call yourself, its status is
+genuine operator message **FAILS**. If you made the call yourself, its status is
 `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no citation). Fails
 **closed** if `--transcript` is omitted — a forgotten flag cannot silently
 disarm the check.
@@ -912,11 +910,11 @@ gate's primary artifact.
 - **Story readiness gate (stories-test-strategy):** run
   `scripts/ai-dlc/validate-provenance-block.sh <story-file>
   --require-skill ai-dlc-adversary-review` for each story.
-  *(v0.58.0: was `bmad-review-adversarial-general`. The stories cycle is a
-  CONVERGENCE cycle, so it now stamps the native identifier. A consumer that
-  pins the old name in an override — dev/qa/code-reviewer pre-submission
+  The stories cycle is a CONVERGENCE cycle, so it stamps the native
+  identifier. A consumer whose override pins the superseded
+  `bmad-review-adversarial-general` name — dev/qa/code-reviewer pre-submission
   checks are the usual site — MUST update it in the same pull, or the pinned
-  check fails at runtime on the first story of the next sprint.)*
+  check fails at runtime on the first story of the next sprint.
 
   Then run the story-provenance CROSS-CHECK, once for the whole batch:
   `scripts/ai-dlc/stamp-story-provenance.sh --series
@@ -1174,7 +1172,7 @@ Two halves, because the drift has two surfaces:
   unstamped draft write path. A `kind: step-domain` extension restates
   its step's whole Section 0 — including the output path — so it can
   revert the stamp in the rendered pipeline while core looks correct
-  (Rule 27; the v0.34.0 lesson).
+  (Rule 27).
 
 The stamp lives in the **filename**. The draft's H1 is prose and is NOT
 parsed — observed H1s include `Sprint 288`, `Sprint S286`,
@@ -1265,7 +1263,7 @@ that the next pass verifies against. Arm H asserts that record exists and is str
 findings a later pass measured as repaired. It proves the record EXISTS, not who authored
 it — a subagent leaves no transcript and the provenance id is shape-only, so existence +
 structure is the honest floor. Without it, a lead that repairs inline writes a pass series
-byte-identical to a delegated one, and arms A–G pass over it. That is the S295 defect.
+byte-identical to a delegated one, and arms A–G pass over it.
 
 Fixture: `tests/fixtures/check-24-adversarial-convergence/`. Three cases decide
 shippability: `nitpicks-remain` (terminal 0 CRITICAL / 0 MAJOR with five open MINORs
@@ -1378,7 +1376,7 @@ Enumerated checks under H1:
 - **Check 27 (routing sanity — subordinated defect)** — fixture at
   `tests/fixtures/route-defect-classification/`.
 
-**Manifest completeness (v0.24.0 Lever 2 — slicing fidelity prover).**
+**Manifest completeness — the slicing fidelity prover.**
 After the fixture enumeration, and only when `H1_DEPTH` was not already
 set at entry (the recursion guard above short-circuits this resolution
 too), H1 proves the slice loaded enough:
@@ -1455,7 +1453,7 @@ The three items:
    writes a real gate-context file declaring type `implementation` while carrying only
    the planning slice's `CHECK_LOADED` anchors — checks 5, 6, 8, 9, 10, 11, 11a, 19,
    22 are absent. H1's manifest-completeness pass MUST FAIL it, naming at least one
-   missing anchor. A seed H1 passes means the v0.24.0 slicing re-expression does not
+   missing anchor. A seed H1 passes means the conditional-slicing re-expression does not
    hold and a real gate could silently drop a required check. (LLM-adjudicated.)
 
 **PASS:** a valid attestation for this sprint and this fixture digest, OR all of
@@ -1463,19 +1461,18 @@ The three items:
 **FAIL:** the recursion guard does not fire, OR the seeded forgery survives, OR H1
 misses the seeded slicing-bypass, OR `--attest` reports the mechanical fixture broke.
 
-**Minimum mechanism (Rule 26(c)).** *Why once per sprint, and why that is not a
-weakening.* The three fixtures are static, checked-in files. Nothing about them
-changes between gate 1 and gate 5 of one sprint, so H2 was re-proving an identical
-fact 4–6 times per planning phase — and this check's own text used to *demand* it
-("a fresh fixture seed"). The attestation is pinned to a digest of the fixture set:
-change any byte in any of the three and the digest moves, every attestation carrying
-the old digest is void, and H2 re-drives in full. The check keeps every tooth. What
-was removed is the repetition, not the coverage.
-
-*Removal condition / what this does NOT fix.* Items (1) and (3) are LLM-adjudicated
-and their seeds can only establish the condition, not score the answer — only item
-(2) is mechanical. If a future release can drive H1 headlessly, (1) and (3) should
-join (2) inside `--attest` and H2 becomes fully mechanical.
+**Minimum mechanism (Rule 26(c)).** Failure caught: a harness self-test that is
+absent or forged — the recursion guard silent, a seeded forgery surviving, or H1
+blind to a seeded slicing bypass. False-positive cost: one attested drive per
+sprint instead of one per gate. The three fixtures are static checked-in files, so
+gates 2–5 of a sprint would otherwise re-prove an identical fact 4–6 times per
+planning phase. The attestation is pinned to a digest of the fixture set: change
+any byte in any of the three and the digest moves, every attestation carrying the
+old digest is void, and H2 re-drives in full — the repetition is bounded, the
+coverage is not. Removal condition: retire the attestation once H1 can be driven
+headlessly. Items (1) and (3) are LLM-adjudicated and their seeds establish the
+condition without scoring the answer, so only item (2) is mechanical today; when
+all three fit inside `--attest`, H2 becomes fully mechanical.
 
 ### Sub-step snapshot update (referenced by step files)
 
@@ -1640,11 +1637,11 @@ always writes the field (`route.md` Step 6).
 
 Fixture: `tests/fixtures/route-defect-classification/`.
 
-**Minimum mechanism (Rule 26(c)).** Failure caught: the graph S292 misroute — a
-`/ai-dlc` prompt naming a "fee-display failure" and a "wide-mode misreport"
-(defects in substance, neither carrying the token "bug") was folded into a
+**Minimum mechanism (Rule 26(c)).** Failure caught: a prompt naming defects in
+substance while carrying none of the routing tokens — a "fee-display failure"
+and a "wide-mode misreport", neither containing the word "bug" — folded into a
 carry-over story as sub-questions and run through the full planning cycle on an
-unverified hypothesis; the mandatory mixed-signal question never fired. False-positive
+unverified hypothesis, with the mandatory mixed-signal question never firing. False-positive
 cost: one clarifying question, or one `n-a` annotation when the operator already
 dispositioned the item. Removal condition: retire when routing is no longer
 LLM-judged from free-text input — i.e., when the variant is derived from a

@@ -74,3 +74,21 @@ drift** (rule text gained origin context), **rule weakness** (rule
 text became readable as optional), and **complexity accretion**
 (machinery lacking the Rule 26(c) contract, or with false positives
 and no true catches). All are cleanup targets.
+
+**What is mechanized, and where it bites.** `audit-rule-files.sh` reports every
+class in two tiers, and prints both regardless of which one sets its exit code.
+
+- **Tier 1 — deterministic.** Sprint and version references, parenthetical
+  origin notes, embedded dates, and dangling content pointers. A hit is a
+  violation on sight. The distribution's pre-push gate runs
+  `--fail-on=deterministic` and BLOCKS the push on one.
+- **Tier 2 — judgement.** Colloquial incident prose, soft language in a
+  mandating passage, and an incomplete Rule 26(c) triple. A hit here can be
+  legitimate: the measured failure a Rule 26(c) block states in its
+  `Failure caught:` field is the contract's required content, not drift.
+  Tier 2 never blocks a push; the lead dispositions it at retro Step 4.
+
+The corpus is every rule file the skill ships, not `SKILL.md` and `steps/`
+alone. `validate-enforcement-map.sh` (I23) asserts that: a rule file installed
+into a consumer and absent from the corpus fails the distribution's own gate,
+so the audit can never report CLEAN over a file it did not open.
