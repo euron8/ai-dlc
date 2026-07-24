@@ -282,8 +282,11 @@ resolution's name. Say so, as a CRITICAL. The gate checks the arithmetic; you ch
 the claim is honest. Neither of you is redundant.
 
 The record's `operator_authorization` must be a **citation** — a timestamp plus a verbatim
-substring of the operator's own message — not a paraphrase and not the lead's summary of
-what it inferred. The gate verifies that substring against the session transcript; if it
+substring of at least 12 characters from the operator's own message — not a paraphrase and
+not the lead's summary of
+what it inferred. **Operator** is defined in `escalations.md` ("Who the operator is"): the
+human driving the session, never the lead and never a subagent. The gate verifies that
+substring against the session transcript; if it
 reads like a disposition no operator actually typed — a lead authoring its own "operator"
 resolution in an operator-silent window — flag it as a CRITICAL. A resolution
 clears an operator-gated hard block, so an uncited or paraphrased authorization is the exact

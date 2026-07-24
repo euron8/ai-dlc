@@ -261,8 +261,7 @@ top of Step 0). Do NOT absorb content from archived
 `.claude/team-roles/*.md`. The installed upstream versions are
 authoritative.
 
-Ownership paths and model strings — the two project-specific fields
-historically carried in role files — are now configured exclusively
+Ownership paths and model strings are configured exclusively
 through Step 4 (Ownership) and Step 2 (Models) prompts. If the user
 had customized these in a prior install, they will re-enter them at
 those steps. This is the intended behavior: reinstall resets

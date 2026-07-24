@@ -62,9 +62,15 @@ both are dormant and rules are authored in place as before.
 pointers). Run it before committing the entry.
 
 **Scope.** Rule files only: this skill, CLAUDE.md,
-coding-conventions.md, step files, team role files, and a consumer's
-own `overrides/**` and `extensions/**` entries — those carry rule text
+coding-conventions.md, step files, team role files, the `ai-dlc-setup`
+and `ai-dlc-update` skills with their `reconcile/**` procedure files,
+the installed pattern references, and a consumer's own `overrides/**`
+and `extensions/**` entries — those carry rule text
 too, and Rule 27 makes them the ONLY rule files a consumer may author.
+The two sibling skills are in scope because they are executed prose like
+any step file: they carry the install and pull procedures, and a
+directive that reads two ways there misconfigures the pipeline before
+any rule in this skill runs.
 Planning artifacts (PRDs, stories, reviews, retros) and export bundles
 are different formats.
 

@@ -1028,6 +1028,35 @@ else
   fi
 fi
 
+# --- I24: H1's fixture set stays DERIVED, never restated in gate-validation.md --
+# H1 used to carry a hand-typed check->fixture enumeration. It listed 7 checks while
+# the map bound 11, so four checks shipped fixtures H1 could not see and the omission
+# read exactly like coverage. The list is gone and the map is the single source; this
+# asserts it does not grow back, and that every fixture the map names is one a check
+# actually claims.
+H1_SPAN="$(awk '/<!-- CHECK_LOADED: H1 -->/{on=1} on{print} on && /<!-- CHECK_LOADED: H2 -->/{exit}' \
+  "$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md" 2>/dev/null)"
+if [ -z "$H1_SPAN" ]; then
+  err "I24 could not isolate the H1 span in gate-validation.md. A span that does not resolve scans nothing and reports clean."
+else
+  # H1's OWN fixture is exempt: it proves H1's manifest-completeness pass, so naming it
+  # is a self-test reference, not a restatement of the coverage set H1 reads from the map.
+  # Derived from the map's H1 entry, never hand-listed here.
+  own_fx="$(awk '/^  - id: "H1"/{on=1} on && /fixtures:/{print; exit}' \
+    "$REPO_ROOT/core/skills/ai-dlc/enforcement-map.yaml" | grep -oE 'tests/fixtures/[a-z0-9-]+' | sort -u)"
+  restated="$(printf '%s\n' "$H1_SPAN" | grep -oE 'tests/fixtures/[a-z0-9-]+' | sort -u \
+    | { [ -n "$own_fx" ] && grep -vxF "$own_fx" || cat; })"
+  if [ -n "$restated" ]; then
+    err "I24 the H1 check body names fixture path(s) directly: $(echo $restated). H1's check->fixture set is derived from enforcement-map.yaml's \`fixtures:\` bindings; a path restated here is the hand-maintained list growing back, and it is what let Checks 2, 2a, 25 and 26 ship fixtures H1 could not see. Cite the map, not the path. (H1's own bound fixture is exempt.)"
+  fi
+  # And the reverse direction: a fixture bound in the map must exist on disk. I4 already
+  # covers this for enforcer paths; this closes it for the fixture bindings H1 now reads.
+  for fx in $(grep -oE 'tests/fixtures/[a-z0-9-]+' "$REPO_ROOT/core/skills/ai-dlc/enforcement-map.yaml" | sed 's|tests/fixtures/||' | sort -u); do
+    [ -d "$REPO_ROOT/core/fixtures/$fx" ] \
+      || err "I24 enforcement-map.yaml binds fixture '$fx' but core/fixtures/$fx does not exist. H1 reads these bindings as its coverage set, so a dangling one is a check reporting coverage it does not have."
+  done
+fi
+
 # --- I22b: every declared substitution TOKEN is one the setup skill instructs --
 # I22 joins role file -> setup-sites.md. Nothing joined either to the skill that
 # performs the fill, so a token could be shipped in a role file AND declared a
@@ -1070,7 +1099,9 @@ else
   else
     rule_prose="$(cd "$REPO_ROOT" && ls core/skills/ai-dlc/*.md core/skills/ai-dlc/steps/*.md \
                     core/skills/ai-dlc/templates/*.md core/skills/ai-dlc/extensions/*.md \
-                    core/skills/ai-dlc/overrides/*.md core/team-roles/*.md 2>/dev/null | sort -u)"
+                    core/skills/ai-dlc/overrides/*.md core/team-roles/*.md \
+                    core/skills/ai-dlc-setup/SKILL.md core/skills/ai-dlc-update/SKILL.md \
+                    core/skills/ai-dlc-update/reconcile/*.md patterns/*.md 2>/dev/null | sort -u)"
     unshipped=""
     for rp in $rule_prose; do
       base="$(basename "$rp")"; dir="$(dirname "$rp")"
@@ -1095,7 +1126,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24)."
   exit 0
 fi
 exit 1

@@ -15,8 +15,15 @@ the dev teammates to catch issues they may miss.
 
 ## Ownership
 
-- No file ownership. You are read-only against the codebase.
+- **Read-only against source code and tests.** You never edit the implementation
+  you are reviewing. "Read-only" scopes to source; it does NOT forbid the three
+  writes this role is required to make, listed next.
 - You produce review artifacts in `docs/reviews/`.
+- You own the **`done` transition**: after approving the final gate for a story
+  you write `status: done` to `sprint-status.yaml` and the story file `Status:`
+  header, in the review commit. Dev owns the earlier `status: review` write
+  (`dev.md`); QA verifies the two files match and rejects on mismatch. Three
+  roles write this file by design — the transitions are what separate them.
 
 ## Responsibilities
 
@@ -73,7 +80,7 @@ For each review, create a file at `docs/reviews/<story-id>-review.md`:
 One-paragraph assessment of the change.
 
 ## Verdict
-APPROVED | CHANGES REQUESTED | BLOCKED
+APPROVED | NEEDS_REWORK | BLOCKED
 
 ## Findings
 
@@ -509,8 +516,8 @@ without verbatim REPL trace.**
 ## Communication
 
 - **Deliver before idle (MANDATORY).** Before going idle/available you MUST
-  `SendMessage` your full verdict (APPROVED | APPROVED-WITH-FIXES |
-  CHANGES-REQUIRED, with per-finding severity + file:line) to the lead. A
+  `SendMessage` your full verdict (APPROVED | NEEDS_REWORK | BLOCKED, with
+  per-finding severity + file:line) to the lead. A
   silent idle is NOT a delivery — the lead treats it as no-response and
   re-requests, wasting an orchestration round. Your final thinking is not your
   final message.

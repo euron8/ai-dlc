@@ -1347,34 +1347,33 @@ pass below is also short-circuited) to prevent infinite recursion.
 Check H2 (below) verifies the guard fires on a seeded
 recursive-invocation fixture.
 
-**Scope.** Meta-check. Runs at every gate. Verifies that each
-phase-specific check added to this file (currently: Check 1c, Check 3b
-locked-anchor, Check 16's content-verification strengthening, Check 17
-provenance, Check 23 draft-stamps, Check 24 adversarial-convergence, Check 27
-routing-sanity) ships with an adversarial self-test fixture under
-`tests/fixtures/` that the check catches.
+**Scope.** Meta-check. Runs at every gate. Verifies that every check
+carrying an adversarial self-test ships that fixture, and that the fixture
+is reachable from the check without a hand-maintained list.
 
-**Check.** For each phase-specific check enumerated below, confirm
-both (i) the fixture directory exists with a README.md describing
-the bypass scenario and a `seed.sh` reproducing it idempotently, and
-(ii) the check's body references the fixture path by name so a
-future reader can trace from check → fixture.
+**The check → fixture set is DERIVED, never enumerated here.** It is the
+`fixtures:` bindings in `enforcement-map.yaml` — read them, do not restate
+them in this file. This is the same single-source discipline the
+manifest-completeness pass below applies to the `GATE_MANIFEST` universal
+row. A restated copy is what this check exists to prevent: the enumeration
+that stood here listed seven checks while the map bound eleven, so Checks
+2, 2a, 25 and 26 shipped fixtures that H1 could not see, and the omission
+read exactly like coverage.
 
-Enumerated checks under H1:
+**Check.** For each check with a non-empty `fixtures:` binding in
+`enforcement-map.yaml`, confirm both:
 
-- **Check 1c** — fixture at `tests/fixtures/check-1c-bypass/`.
-- **Check 3b (locked-requirement full-text anchor)** — fixture at
-  `tests/fixtures/check-3b-locked-anchor/`.
-- **Check 16 (stub-audit content-verification)** — fixture at
-  `tests/fixtures/check-15-bypass/`.
-- **Check 17 (skill-invocation provenance)** — fixture at
-  `tests/fixtures/check-17-bypass/`.
-- **Check 23 (analyst-draft sprint stamps)** — fixture at
-  `tests/fixtures/check-23-draft-stamps/`.
-- **Check 24 (adversarial cycle convergence)** — fixture at
-  `tests/fixtures/check-24-adversarial-convergence/`.
-- **Check 27 (routing sanity — subordinated defect)** — fixture at
-  `tests/fixtures/route-defect-classification/`.
+(i) each bound fixture directory exists, with a `README.md` describing the
+bypass scenario and a `seed.sh` reproducing it idempotently — or, where a
+fixture declares in its README that it cannot be driven, that declaration
+is present (the `validate-enforcement-map.sh` I20 contract);
+
+(ii) the binding resolves — the fixture path named in the map is the
+directory found on disk. **Do NOT require the check body to restate the
+fixture path.** The map is the trace from check → fixture; a second copy in
+the check body is the duplication this check is meant to catch, and
+requiring it made (ii) fail for every check that correctly did not carry
+one.
 
 **Manifest completeness — the slicing fidelity prover.**
 After the fixture enumeration, and only when `H1_DEPTH` was not already

@@ -126,9 +126,9 @@ a consumer that reconciles and a consumer that reinstalls converge):
   `/\.claude/hooks/ai-dlc-[^/]+\.sh` (the `strip_ai_dlc` predicate), then
   append the template's hook blocks. Because the strip/re-append is
   wholesale over all `ai-dlc-*` hooks, the current template's hook set —
-  including the `ai-dlc-protect.sh` PreToolUse matcher (re-added in
-  v0.23.0) and the `PreCompact` / `PostCompact` / `SessionStart` compaction
-  hooks (added in v0.35.0) — lands verbatim; a consumer that carried an older
+  including the `ai-dlc-protect.sh` PreToolUse matcher and the
+  `PreCompact` / `PostCompact` / `SessionStart` compaction
+  hooks — lands verbatim; a consumer that carried an older
   or absent block converges to the template's. The event-key set is a union of
   the consumer's and the template's, so a new event key needs no migration.
   **`strip_ai_dlc` is per-block, never per-event, and this now matters.**
@@ -140,7 +140,7 @@ a consumer that reconciles and a consumer that reinstalls converge):
   `$t + $u` (user wins); the reconcile follows the same rule — overlay the
   template's plugin keys onto the consumer and never drop a plugin the template
   no longer carries. `enabledPlugins` is consumer-owned state. The template's
-  own `context-mode@context-mode: true` (re-added in v0.23.0) is overlaid
+  own `context-mode@context-mode: true` is overlaid
   additively — it enables the plugin on consumers that lack the key and is a
   no-op where the consumer already set it; it never overwrites a consumer who
   explicitly set it `false`. A template dropping a plugin removes ai-dlc's
@@ -156,7 +156,7 @@ a consumer that reconciles and a consumer that reinstalls converge):
 
 ### `env.AI_DLC_MODEL_ROW` — first-run provisioning only
 
-The `ai-dlc-context-sensor.sh` Stop hook (v0.36.0) reads `AI_DLC_MODEL_ROW`
+The `ai-dlc-context-sensor.sh` Stop hook reads `AI_DLC_MODEL_ROW`
 from the settings `env` block, which Claude Code propagates into hook
 subprocesses. It selects which row of the SKILL.md threshold table applies.
 The sensor cannot infer it from the transcript: Claude Code records
@@ -166,8 +166,8 @@ appears anywhere in the transcript.
 **The reconcile NEVER writes this key when it is already present** — it is
 consumer-owned, like the rest of `env`. `settings-merge.sh` provisions it only
 when the key is **absent** AND the template being applied wires
-`ai-dlc-context-sensor.sh` (i.e. the consumer is crossing into v0.36.0+); that
-is precisely the `model_row_needed=yes` condition `--check` reports.
+`ai-dlc-context-sensor.sh`; that is precisely the `model_row_needed=yes`
+condition `--check` reports.
 
 When `--check` says yes, put the question in the step-5 dry-run report, ask the
 operator, and pass the answer to `--model-row` in step 7. `--check` prints the

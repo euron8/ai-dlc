@@ -253,8 +253,8 @@ sites:
 Documented so a future author doesn't add them:
 
 - **`- \`/effort <level>\`` in every team-role file.** Ships concrete since
-  before v0.10 (`git log` confirms the effort-per-role commit predates the
-  v0.10.0 tag) — there has never been an `{effort}` template token. A
+  before the first tagged release — there has never been an `{effort}`
+  template token. A
   consumer changing this value is real, classifiable rulebook divergence
   (most likely `domain-local`), never a setup-fill restore target.
 - **`/model` in the party-persona role files (`tea.md`, `ux.md`, `sm.md`,
