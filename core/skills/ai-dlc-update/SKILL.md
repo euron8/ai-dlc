@@ -417,13 +417,15 @@ prose is itself generated rather than composed.
        verdict.**
    **Anchor a `theirs_lacks` receipt on a token upstream MUST use, never on predicted
    prose.** The substring for a fix that does not exist yet is a guess at wording upstream
-   has not written, so it closes only if upstream happens to pick the same words. Measured:
-   of the four `PC-S298-*` entries fixed in v0.143.0, three did not close — they asked for
-   `"defects this run discovered"`, `"act on each EXTENSION-HOOK-DRIFT"` and
-   `"contradicts core"` against text that says the same things differently. Anchor on a
+   has not written, so it closes only if upstream happens to pick the same words. Anchor on a
    status name, a flag, a filename, a manifest row — something the fix cannot be written
    without. A receipt that only matches one phrasing of a fix is a receipt for that phrasing,
    not for the fix.
+
+   **Never reproduce a receipt's substring in the core file that receipt tests.** A
+   `theirs_lacks` receipt is satisfied by ANY occurrence in that file, including one written
+   to discuss the receipt, so quoting it closes the entry with nothing behind the close.
+   Name the entry; describe what it asks for.
 
    An entry with NO `verify:` line emits no row and is left to hand-review as today; the
    convention is opt-in and the ledger stays prose. The line is one of
