@@ -793,8 +793,9 @@ was not read. Gate FAILS on missing token citation.
 
 **Sliced loading for `gate-validation.md`.** For
 `gate-validation.md` alone, "loaded" does NOT mean the whole file. That
-file is sliced by gate type: "loaded" means the **universal core** (its
-Checks 1, 2, 3, 4, 7, 12, 13, 14, 15, 16, H1, H2, Gate Failure) **and**
+file is sliced by gate type: "loaded" means the **universal core** — the
+`GATE_MANIFEST` universal row in `gate-validation.md`, which is the single
+source for that set and MUST NOT be re-typed here — **and**
 every check the file's `GATE_MANIFEST` marks required for the declared
 gate type — that exact set present in context, nothing less. The
 invoking step MUST declare the gate type when it says "run gate
@@ -1020,7 +1021,7 @@ that executes).
 
 Where it runs decides what it does:
 
-- **Sprint start** (`route.md` §1.1) — **HARD_BLOCK**.
+- **Sprint start** (`route.md` Step 1a) — **HARD_BLOCK**.
 - **Gate Check 14** — **FAILS the gate** for `pipeline-snapshot.md` alone. The
   snapshot is the one artifact that grows *within* a sprint, and it is re-read at
   every gate, every resume, and every compaction.

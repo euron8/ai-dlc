@@ -269,7 +269,10 @@ for p in corpus:
     src = lines(p)
     blocks, cur = [], None
     for i, raw in enumerate(src, 1):
-        if HEAD_OPENER.search(raw) or (cur is None and FIELD_OPENER.search(raw)):
+        # `used()` here for the same reason every other class uses it: a line that
+        # NAMES the field in backticks is documenting the contract, not opening a block.
+        opener_src = used(raw)
+        if HEAD_OPENER.search(opener_src) or (cur is None and FIELD_OPENER.search(opener_src)):
             if cur:
                 blocks.append(cur)
             cur = [i, raw.strip(), [raw]]

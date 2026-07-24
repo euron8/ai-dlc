@@ -17,6 +17,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.145.0] — 2026-07-24
+
+### Added — the rule-file audit runs on the side that actually authors rule text
+
+0.144.0 wired the audit into the distribution's pre-push on the reasoning that a
+consumer authors only `extensions/` and `overrides/`, which its retro already covers.
+That reasoning was wrong, and the corpus builder is what refutes it: `extensions/` and
+`overrides/` are IN the corpus. So the exact text a consumer is permitted to author was
+the text nothing in its push path read for style. `validate-layer-entries.sh` — the only
+consumer-side check that opens a layer entry — checks frontmatter validity, restatement,
+restriction and dangling `Step N` pointers, never prose. A version tag or embedded date
+in a consumer's own override was caught by nothing until retro Step 4, which is the same
+one-release latency 0.144.0 closed upstream.
+
+`core/git-hooks/pre-push` now runs `--fail-on=deterministic`, guarded on the script's
+presence so a pre-Phase-2 consumer is unaffected.
+
+### Fixed — Class 1b scored a line that NAMES the field as a block that opens one
+
+Every other class routes its predicate through `used()`, which blanks backticked and
+quoted spans so a rule file may name the shape it forbids. Class 1b did not, and it
+found this on the first run against 0.144.0's own new prose: `rule-authoring.md`'s
+sentence describing the `Failure caught:` field opened a block that then reported itself
+incomplete. Any document naming the field tripped it.
+
+### Fixed — SKILL.md carried a fourth hand-typed copy of the universal core, and it had drifted
+
+`gate-validation.md` states the `GATE_MANIFEST` universal row **is** the universal core
+and is its single source. Rule 21 re-typed the set anyway, as
+`1, 2, 3, 4, 7, 12, 13, 14, 15, 16, H1, H2` — **missing 2a, 25 and 26**. A lead following
+Rule 21 literally loads three fewer universal checks than the manifest requires, and
+H1's own manifest-completeness pass then fails the gate it was told to load correctly.
+The enumeration is replaced by a pointer to the row, with an explicit prohibition on
+re-typing it. `implementation.md` and `retro.md` already reference the set by name rather
+than restating it; this was the last copy.
+
+### Fixed — four instructions that read two ways, in the files a lead runs from
+
+- `SKILL.md` cited `route.md §1.1` for the sprint-start HARD_BLOCK. No `§1.1` exists; the
+  gate is `Step 1a`, which `retro.md` already cites correctly.
+- `retro.md` cited **Rule 3** ("Never stall the pipeline") twice where Rule 20 is meant —
+  once for the solo-evaluation prohibition, once routing a provenance-schema lookup. The
+  schema pointer now names `.claude/schemas/provenance-block.json` directly.
+- `retro.md` described the provenance `mode` field as "(solo or subagent)" while its own
+  rendered block 51 lines later reads `mode: subagent  # never solo.` and
+  `validate-provenance-block.sh` rejects solo unconditionally.
+- `retro.md`'s ship-quality rule said the 5/5 target "applies to BOTH counters
+  independently" and then that a sprint ships when EITHER reaches 5/5. The first sentence
+  reads as a conjunction; the distributive reading is the intended one and is now the
+  only one.
+
+### Fixed — setup's idempotency test, which 0.144.0 turned from latent conflict into certain failure
+
+CRITICAL RULE 4 preserves the `<!-- {token}: … -->` declaration comment. CRITICAL RULE 5
+tested idempotency by asking whether "the literal `{variable_name}` string is not present
+in the file". Those two have always disagreed, because the preserved comment contains that
+literal — but 0.144.0's substitution-scoping fix is what made the disagreement certain: it
+requires the comment left byte-identical, so after a correct fill the token is ALWAYS still
+present and Rule 5 reports every configured site as unconfigured. The wizard then re-runs
+every substitution on every pass.
+
+Rule 5 now tests the way the Step 9 sweep already did — `| grep -v '<!--'`. The sweep had
+it right at two call sites; Rule 5 was the only place stating the test without the
+exclusion.
+
+### Fixed — two role-file rules that could not fire
+
+- `qa.md` told QA not to re-execute tests with documented results, which made the
+  honest-green canonical re-run — a HARD GATE whose whole point is QA's *independent*
+  evidence — unfireable. The token-saving rule is now explicitly scoped away from it.
+- `qa.md`'s review checklist asked whether code follows the conventions in `CLAUDE.md`.
+  `CLAUDE.md` carries no conventions and says so; they live in
+  `docs/coding-conventions.md`, which every other role file cites. The item could only
+  ever be ticked vacuously.
+
 ## [0.144.0] — 2026-07-24
 
 ### Added — the rule-authoring prohibitions that had no mechanism, and a gate that runs where rules are authored

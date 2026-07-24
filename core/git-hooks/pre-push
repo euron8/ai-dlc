@@ -68,6 +68,18 @@ if [ -f scripts/ai-dlc/sync-taught-schema.sh ]; then
     bash scripts/ai-dlc/sync-taught-schema.sh --check
 fi
 
+# 3b. Rule 27 makes `extensions/` and `overrides/` the ONLY rule files a consumer may
+#     author — and they are inside the rule-file audit's corpus. Nothing else in this
+#     hook reads them for style: validate-layer-entries.sh checks frontmatter validity,
+#     restatement, restriction and dangling Step pointers, never prose. So a version tag,
+#     an origin parenthetical or an embedded date authored into a consumer's own layer
+#     entry was caught by nothing until retro Step 4. Only the deterministic tier gates
+#     the push; the judgement tier prints and is dispositioned at retro.
+if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then
+  step "rule-file audit (origin tags, dates, dangling pointers)" \
+    bash scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic
+fi
+
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 syntax_all() {
   local rc=0 f
