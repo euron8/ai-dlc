@@ -17,6 +17,84 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.146.0] — 2026-07-24
+
+### Changed — H1's check→fixture set is DERIVED; the hand enumeration is deleted
+
+H1 verifies that each phase-specific check ships an adversarial self-test. Its second
+condition required "the check's body references the fixture path by name". Span-scoped
+grep says Checks 1c, 3b, 16 and 23 contain zero fixture references, and Check 17 names
+`taught-schema` and `check-17-counts` rather than the `check-17-bypass` H1 assigns it.
+Only Checks 24 and 27 satisfied it. H1 runs at **every gate**, so it has either been
+failing every gate since it shipped or every lead has read (ii) loosely and it can never
+fail. The text cannot distinguish those, which is the defect.
+
+The cause was a hand-typed enumeration: it listed **7** checks while
+`enforcement-map.yaml` binds **11**, so Checks 2, 2a, 25 and 26 shipped fixtures H1 could
+not see and the omission read exactly like coverage. Same shape as the drifted universal
+core removed in 0.145.0.
+
+The enumeration is gone. The set is the map's `fixtures:` bindings, read not restated.
+Condition (ii) now asserts the binding resolves to a directory on disk and **explicitly
+forbids** requiring the check body to restate the path — that restatement was the
+duplication H1 exists to catch, and demanding it made (ii) fail for every check that
+correctly did not carry one.
+
+`validate-enforcement-map.sh` **I24** keeps it derived: it fails if any fixture path is
+named inside the H1 span (H1's own bound fixture exempt, derived from the map's H1 entry,
+not hand-listed) and if any fixture the map binds is missing from `core/fixtures/`.
+Verified by mutation — reinstating one enumeration line reproduces the failure.
+
+### Added — the audit corpus now covers the skills that install and pull the pipeline
+
+`ai-dlc-setup/SKILL.md`, `ai-dlc-update/SKILL.md` and `reconcile/*.md` are executed prose
+like any step file — they carry the install and pull procedures — and a directive that
+reads two ways there misconfigures the pipeline before any rule in the main skill runs.
+They were outside the corpus. With `patterns/*.md`, `CLAUDE.md.template` and
+`coding-conventions.md.template`, the corpus goes 44 → 56 files.
+
+That surfaced **12 tier-1 sites**, all in the update skill and its reconcile docs, now
+cleared. One was a genuine false positive worth recording: `.claude/.ai-dlc-version,
+v0.17.0+` is a **stamp schema version** — mechanism, not origin — and is now written as
+the literal token it is, which is also what exempts it.
+
+Three of four new tier-2 findings were drift and are removed. The fourth is a **keep**:
+`ORPHANED-RELOCATED`'s "a file at a consumer path this distribution **used to** write and
+no longer targets" is the classifier's own predicate, not a war story. `rule-authoring.md`
+Scope and `validate-enforcement-map.sh` I23 both follow the widened set.
+
+### Fixed — `operator` was undefined, and the adversary was ordered to file a CRITICAL on it
+
+`adversary.md` requires an `operator_authorization` citation and flags as CRITICAL any
+disposition that "reads like one no operator actually typed". No role file, and no rule
+in `SKILL.md`, ever defined **operator**. If operator ≡ human, a lead-authored
+authorization is forgery; if operator means whoever drives the pipeline, it is valid. The
+adversary was enforcing a boundary the rulebook never drew.
+
+`escalations.md` now defines it once — the human driving the session, never the lead and
+never a subagent, decided by the same transcript predicate
+`validate-steering-budget.sh --cite` applies — and `adversary.md` cites that definition
+instead of implying its own. The adversary also gains the **≥12-character** minimum
+`escalations.md` already required; without it an 8-character substring passed the
+adversary's read and failed the gate.
+
+### Fixed — code-reviewer.md carried three verdict token sets, and a read-only claim that contradicted its own instructions
+
+Three sets in one file: `APPROVED | CHANGES REQUESTED | BLOCKED` in the review-doc
+template, `APPROVED | APPROVED-WITH-FIXES | CHANGES-REQUIRED` in the mandatory SendMessage,
+and `APPROVED | NEEDS_REWORK` across the classification blocks. No script or gate check
+keys on any of them, so the set was free to choose: it is now
+`APPROVED | NEEDS_REWORK | BLOCKED`, the three that carry distinct states.
+`APPROVED-WITH-FIXES` collapses into the per-finding severity the verdict already carries.
+
+The `done` transition needed no owner assigned — it already had one. `dev.md` writes
+`status: review`, `code-reviewer.md` writes `status: done` after the final gate, `qa.md`
+verifies and rejects on mismatch, and `sprint-status.sh` states the file is multi-writer
+by design. The only defect was "You are read-only against the codebase" reading as
+absolute while the same role is instructed to write `docs/reviews/`, `sprint-status.yaml`
+and the story header. Read-only is now scoped to source and tests, and the three writes
+are stated where the contradiction was.
+
 ## [0.145.0] — 2026-07-24
 
 ### Added — the rule-file audit runs on the side that actually authors rule text

@@ -113,6 +113,25 @@ for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "core-manifest.md")
 for root in (f"{SKILL}/steps", f"{SKILL}/templates", ROLES,
              f"{SKILL}/extensions", f"{SKILL}/overrides"):
     corpus.extend(tree(root))
+# The sibling skills and the templates a consumer receives as live files. These
+# are rule prose an agent executes, and the two skills below hold the pull and
+# install procedures — the corpus that stopped at `ai-dlc/` left them scanned by
+# nothing while they shipped to every consumer.
+SIBLINGS = ((".claude/skills", ".claude"), ("core/skills", "core"))
+skills_root, tpl_root = SIBLINGS[0] if LAYOUT == "consumer" else SIBLINGS[1]
+for sib in ("ai-dlc-setup", "ai-dlc-update"):
+    fp = f"{skills_root}/{sib}/SKILL.md"
+    if os.path.isfile(fp):
+        corpus.append(fp)
+corpus.extend(tree(f"{skills_root}/ai-dlc-update/reconcile"))
+# Pattern references and the two consumer-root rule documents. In a consumer these
+# are installed paths; upstream they are the sources install.sh copies from.
+for root in (("docs/ai-dlc-patterns",) if LAYOUT == "consumer" else ("patterns",)):
+    corpus.extend(tree(root))
+if LAYOUT == "distribution":
+    for t in ("templates/CLAUDE.md.template", "templates/coding-conventions.md.template"):
+        if os.path.isfile(t):
+            corpus.append(t)
 corpus = [p for p in dict.fromkeys(corpus) if os.path.isfile(p)]
 
 if MODE == "--list":

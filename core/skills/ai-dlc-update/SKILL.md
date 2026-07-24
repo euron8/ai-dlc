@@ -34,7 +34,7 @@ STOP — you don't; you diff text and classify it.
 - **base**  = distribution `core/` at the `commit` recorded in the consumer's
   stamp. The last upstream rulebook content this consumer received.
 
-  **Stamp schema (`.claude/.ai-dlc-version`, v0.17.0+):** two independently
+  **Stamp schema (`.claude/.ai-dlc-version`, `v0.17.0+`):** two independently
   advancing versions —
   ```
   version: <rulebook ver>      # core/rulebook merge-base = the PULL BASE (this)
@@ -162,8 +162,8 @@ prose is itself generated rather than composed.
    tooling against fixtures written for the old, and pre-push fails on a fixture correctly
    reporting that its subject changed underneath it — not a regression, not consumer-caused,
    and it blocks the run before the reconcile that would have shipped the matching fixture.
-   Measured: v0.143.0 changed `unregistered-drift.sh` and the fixture asserting its
-   behaviour, and a self-update carrying only the first stranded the second.
+   A self-update that carries a validator without the fixture asserting its behaviour
+   strands the fixture against code it no longer describes.
 
    If EMPTY, say so in one line and continue to step 3. If NON-EMPTY:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
@@ -277,9 +277,9 @@ prose is itself generated rather than composed.
    filled config is preserved, only upstream boilerplate is synced.
 3c. **Layer-drift detection** (cheap, deterministic — no agents):
    run `reconcile/layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>`.
-   This MECHANIZES what "Layered consumers" below used to state as prose. Do NOT
-   hand-verify overrides with ad-hoc `git diff` calls: nothing implemented that
-   check for its entire existence, and a real consumer accumulated five overrides
+   This MECHANIZES the "Layered consumers" rule below. Do NOT
+   hand-verify overrides with ad-hoc `git diff` calls: a hand check is what lets a
+   consumer accumulate overrides
    whose `base_sha` pointed at its OWN repo — every diff would have died on
    `fatal: bad revision`, and two shipped upstream changes were discarded unseen.
    Statuses:
@@ -318,9 +318,9 @@ prose is itself generated rather than composed.
      cosmetic and consumer-fixable. This changes **the rules the lead obeys**: the
      lead reads the override, not core, so an un-adjudicated drift means the core fix
      landed on disk and the pipeline went on running the rule it replaced. That is
-     not hypothetical — v0.52.0's Rule 8 fix targets a section the reference consumer
-     shadows verbatim, and under the old advisory status the fix would have been inert
-     on the one pipeline it was written for.
+     not hypothetical: a core fix routinely targets a section some consumer shadows
+     verbatim, and under an advisory status the fix is inert on exactly the pipelines
+     it was written for.
    - `OVERRIDE-DRIFT-FILE` → the anchor is not a locatable heading AND the file
      changed, so the section cannot be *proven* safe. Surface for re-confirmation.
      Conservative on purpose — an unprovable section is never reported as OK.
@@ -334,9 +334,9 @@ prose is itself generated rather than composed.
      leaves a duplicate behind.
    - `EXTENSION-RESTATES-CORE` → the same title agreement, but core already carried
      the section **at `base`**. The consumer has been duplicating a core section for
-     some number of releases and was never told, because the retirement signal used to
-     be edge-triggered — it could only fire on the one pull that landed the absorption,
-     and said nothing on every pull after. Rule 27(c) forbids restating core (the copy
+     some number of releases without being told. The retirement signal is
+     level-triggered: it fires on every pull while the duplication stands, not only on
+     the pull that landed the absorption. Rule 27(c) forbids restating core (the copy
      cannot drift-check against the original, so it forks silently and then contradicts
      it). List it in the retirement list too, but the remedy is a judgement: retire it
      if it merely duplicates core; refile it in `overrides/` with a `base_sha` if it
@@ -394,7 +394,7 @@ prose is itself generated rather than composed.
 
 3e. **Consumer-catalog collisions.** Run `reconcile/relabel-extension-checks.sh
    <consumer-root> --dist <dist-repo> --theirs <theirs-ref>` (dry-run). Every extension
-   check whose number core also defines needs the v0.49.0 label `### <n>. [ext:<id>]
+   check whose number core also defines needs the labelled form `### <n>. [ext:<id>]
    <title>`. **Pass `--dist`/`--theirs`** so the number set is the UNION of the installed
    core and the INCOMING core: a collision the pull *creates* (upstream adds `### 26.`
    while an extension already carries it) is invisible to a plain dry-run — the installed
@@ -788,8 +788,9 @@ prose is itself generated rather than composed.
      team-role's `/model`, that is the role with the same effort tier — `adversary`
      for a high-effort reviewer). Then write theirs with the answers substituted in.
      Every role file predates the consumer's install, so `ai-dlc-setup` filled these
-     tokens once and the pull never had to; `team-roles/remediator.md` (v0.56.0) is the
-     first new template-bearing core file since, and it is why this bucket exists.
+     tokens once and the pull never had to. This bucket exists for the case that
+     breaks: a template-bearing core file that postdates the consumer's install, of
+     which `team-roles/remediator.md` is one.
    - keep/domain-local/innovation blocks → leave ours; for domain-local, layer
      theirs' non-conflicting additions; for innovation, append to the
      push-candidate ledger.
@@ -882,9 +883,9 @@ prose is itself generated rather than composed.
    *Why this exists.* `untangle`'s §7v criterion 4 already asserts "zero remaining
    `{...}` tokens in any team-role file" — but 7v is untangle-only, and the
    ORDINARY pull had no equivalent, so a manifest miss landed silently on the one
-   path consumers actually run. It did: `core/team-roles/adversary.md` shipped in
-   v0.30.0 while `setup-sites.md` was last touched in v0.21.0, so for nine minor
-   versions the manifest did not declare the adversary model sites. The first
+   path consumers actually run. It did: a role file carrying model tokens shipped
+   while `setup-sites.md` went untouched for nine minor versions, so the manifest
+   did not declare that role's model sites at all. The first
    consumer pull to touch that file would have overwritten a live
    `/model claude-opus-4-8[1m]` with `/model {adversary_model_personal}` and broken
    every adversary dispatch — with nothing in the run to catch it. A manifest is a

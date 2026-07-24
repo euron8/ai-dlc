@@ -7,6 +7,14 @@ three-tier decision (HARD_BLOCK / DECIDED_AUTONOMOUSLY / not-an-escalation)
 that governs *whether* to escalate stays in SKILL.md Rule 12; this file
 holds *how* to write and resolve one.
 
+**Who the operator is.** The **operator** is the human driving the session.
+It is NOT the lead and NOT any subagent. A message counts as an operator message
+only when it originates from a human turn in the session transcript — the same
+predicate `scripts/ai-dlc/validate-steering-budget.sh --cite` applies. Every role
+file's "never prompt the human directly" rule and every `operator_authorization`
+citation refer to this one party. A lead that writes a resolution on its own
+authority has made a `DECIDED_AUTONOMOUSLY` call, whatever it labels it.
+
 **Escalation entry format (append, do not overwrite):**
 
 ```
