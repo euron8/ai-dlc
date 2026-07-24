@@ -17,6 +17,33 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.3] — 2026-07-24
+
+### Fixed — a receipt substring quoted inside the core file that receipt tests closes the entry with nothing behind it
+
+v0.143.1 added guidance against anchoring a `theirs_lacks` receipt on predicted prose, and
+illustrated it by quoting three real receipts verbatim. Two of those three name
+`core/skills/ai-dlc-update/SKILL.md` as their target — the file the guidance is written in.
+A `theirs_lacks` receipt is satisfied by ANY occurrence of its substring in the target file,
+so the sentence describing the receipts became the only text at `theirs` that matched them.
+
+Measured on the reference consumer's v0.141.1 → v0.143.2 pull: two `PC-S298-*` entries were
+reported `CLOSE-CANDIDATE` on that single line. Both defects were genuinely fixed in
+v0.143.0, elsewhere in the same file and in different words, so the verdicts were right and
+the evidence behind them was worthless — had the fixes never landed, the guidance sentence
+alone would have closed both entries. A close reached without the fix is the forgeable
+evidence cell, and it is indistinguishable from a real one in the report.
+
+The illustration is removed and the rule it demonstrated is stated instead: never reproduce
+a receipt's substring in the core file that receipt tests. The removed sentence was
+justification, not mechanism, and `SKILL.md` is re-read whole on every compaction.
+
+Consumers holding a `theirs_lacks` receipt against `SKILL.md` for either of those two
+entries must re-anchor it. `WORKLIST extension-reread` and `UPSTREAM's own tooling` are the
+tokens the two fixes cannot be written without; the phrasings quoted in v0.143.1 are gone
+from `theirs` as of this release, and an entry still anchored on one reverts to
+`STILL-LIVE`.
+
 ## [0.143.2] — 2026-07-24
 
 ### Fixed — the self-update pulled `reconcile/*` and stranded the fixtures that guard it
