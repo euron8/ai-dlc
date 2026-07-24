@@ -17,6 +17,34 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.2] — 2026-07-24
+
+### Fixed — the self-update pulled `reconcile/*` and stranded the fixtures that guard it
+
+Step 2 restricts its diff to `core/skills/ai-dlc-update/**`. v0.143.0 changed
+`unregistered-drift.sh` and, in the same release, the fixture asserting its new
+`CORE-AT-THEIRS` behaviour. A self-update carrying only the first left the reference
+consumer running new tooling against a fixture written for the old, and pre-push failed on
+`apply-drift-after-write` — a fixture correctly reporting that its subject had changed
+underneath it.
+
+Neither a regression nor consumer-caused, and it blocks the run *before* the reconcile that
+would have shipped the matching fixture. The failure also invites exactly the wrong
+remedies: hand-rewriting a core-owned fixture (forking a file the next pull overwrites),
+`git rm`-ing one that `install.sh` restores, or pushing with the gate bypassed.
+
+Step 2's scope now includes the fixtures that cover the tooling — every
+`core/fixtures/<dir>/` whose `*.sh` names `skills/ai-dlc-update`, derived by grep rather
+than enumerated. **`seed.sh` is grepped as well as `run.sh`**: a fixture commonly resolves
+the tooling path in its seed, and a `run.sh`-only derivation misses `apply-drift-after-write`
+— the one that motivated the fix.
+
+Widening alone would only move the boundary, since a fixture can also cover core outside
+`ai-dlc-update/**` and depend on a file this cycle does not pull. So the derived fixtures are
+now **run, and required green, before the push**. Green means the pulled set is
+self-consistent; red is a finding to report with the fixture name and its output, never a
+gate to bypass.
+
 ## [0.143.1] — 2026-07-24
 
 ### Fixed — a `theirs_lacks` receipt anchored on predicted prose closes only by coincidence

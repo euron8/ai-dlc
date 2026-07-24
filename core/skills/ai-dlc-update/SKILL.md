@@ -151,14 +151,29 @@ prose is itself generated rather than composed.
    lands on its OWN cycle, **autonomously — no operator approval**, distinct from
    the operator-gated rulebook reconcile (step 8).
 
-   Diff `base→theirs` restricted to `core/skills/ai-dlc-update/**`. If EMPTY, say
-   so in one line and continue to step 3. If NON-EMPTY:
+   Diff `base→theirs` restricted to `core/skills/ai-dlc-update/**` **plus the fixtures
+   that cover it** — every `core/fixtures/<dir>/` whose `*.sh` names
+   `skills/ai-dlc-update`. Derive that set by grepping the fixtures; do not enumerate it
+   here, and grep `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling
+   path in its seed, so a run.sh-only derivation misses it).
+
+   **The tooling and the fixtures that guard it move together or the suite goes red on a
+   pull that broke nothing.** Pulling `reconcile/*` alone leaves the consumer running new
+   tooling against fixtures written for the old, and pre-push fails on a fixture correctly
+   reporting that its subject changed underneath it — not a regression, not consumer-caused,
+   and it blocks the run before the reconcile that would have shipped the matching fixture.
+   Measured: v0.143.0 changed `unregistered-drift.sh` and the fixture asserting its
+   behaviour, and a self-update carrying only the first stranded the second.
+
+   If EMPTY, say so in one line and continue to step 3. If NON-EMPTY:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, overwrite the consumer's
-     `.claude/skills/ai-dlc-update/**` with `theirs`, **update the stamp's
+     `.claude/skills/ai-dlc-update/**` AND `tests/fixtures/<dir>/` for each derived
+     fixture with `theirs`, **update the stamp's
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
      preserving `version`/`commit`/`installed_at`/`upstream`), commit
-     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), push,
+     (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), **run the
+     derived fixtures and require green BEFORE the push**, push,
      open a PR, and **auto-merge (squash, delete branch)** — no operator gate (the
      step-1 git preflight confirmed the branch is in sync with `origin`, so this
      merge cannot strand local commits). If there is no remote / push fails,
@@ -166,6 +181,15 @@ prose is itself generated rather than composed.
      of the installed tool version — it is bookkeeping tied to the (already
      autonomous) self-update, and never touches `version`/`commit` (the rulebook
      base stays put until a gated apply).
+
+     **A red derived fixture STOPS the self-update; it does not get pushed and sorted out
+     later.** Widening the scope makes the common case consistent, but a fixture can also
+     cover core OUTSIDE `ai-dlc-update/**` and then depend on a file this cycle does not
+     pull. Running them here is what tells the two cases apart: green means the pulled set
+     is self-consistent, red means it is not, and the second is a finding to report — with
+     the fixture name and its output — not a gate to bypass. Pushing a known-red suite so
+     the reconcile can proceed leaves the next operator unable to tell this breakage from a
+     real one.
    - **Then STOP this invocation and re-invoke `/ai-dlc-update` automatically —
      do NOT ask whether to.** The self-update landed, but THIS invocation is
      still executing the PRE-update logic — its reconcile/classify/apply behavior
