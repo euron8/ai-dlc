@@ -170,10 +170,16 @@ case "$MODE" in
     #
     # A real conflict leaves standard <<<<<<< markers and exits 1 — the ONE spot that
     # genuinely needs a human. Everything else lands clean.
-    # PER ANCHOR, not per file. A multi-anchor override used to be refused outright
-    # ("merge them one at a time by hand"), which sent the operator to the one procedure
-    # this mode exists to remove and step 7 warns about. It is also more work than the
-    # drift justifies: an override shadowing four sections typically has ONE that moved.
+    # PER ANCHOR, not per file. A multi-anchor override used to be refused outright and
+    # sent back for a hand-merge, which is the one procedure this mode exists to remove
+    # and step 7 warns about. It is also more work than the drift justifies: an override
+    # shadowing four sections typically has ONE that moved.
+    #
+    # The removed message is deliberately NOT quoted here. A consumer's ledger receipt is
+    # a substring test against this file, so a comment that repeats a string the fix
+    # deleted keeps the receipt matching forever and the entry never closes. Measured:
+    # PC-S298-READOPT-MERGE-REFUSES-MULTI-ANCHOR-OVERRIDES reported STILL-LIVE against
+    # 0.142.0 on this comment alone. Describe a deleted string; do not reproduce it.
     # Each anchor is merged in its own span; anchors whose core section is byte-identical
     # between base and theirs are left ALONE, so the diff stays scoped to what drifted.
     if [ "$RESOLVE" != yes ]; then

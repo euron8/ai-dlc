@@ -17,6 +17,21 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.142.1] — 2026-07-24
+
+### Fixed — a comment quoting the string 0.142.0 deleted kept a consumer's receipt alive
+
+`readopt-override.sh`'s new per-anchor comment quoted the refusal message the change had
+just removed, to explain what it replaced. The reference consumer's ledger entry for that
+defect carries `verify: theirs_has … "merge them one at a time by hand"` — a substring test
+against the file — so the entry reported `STILL-LIVE` against 0.142.0 on the strength of
+the comment alone. The defect was fixed; its marker was not gone.
+
+The comment now describes the removed message instead of reproducing it. When a
+user-visible string is deleted, quoting it verbatim in the comment explaining the deletion
+keeps every substring-based detector matching — ledger receipts, dormancy scans — and the
+entry that tracks it can never close.
+
 ## [0.142.0] — 2026-07-24
 
 ### Changed — `readopt-override.sh --merge` merges per anchor instead of refusing
