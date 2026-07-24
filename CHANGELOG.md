@@ -68,6 +68,20 @@ than restating it; this was the last copy.
   reads as a conjunction; the distributive reading is the intended one and is now the
   only one.
 
+### Fixed — setup's idempotency test, which 0.144.0 turned from latent conflict into certain failure
+
+CRITICAL RULE 4 preserves the `<!-- {token}: … -->` declaration comment. CRITICAL RULE 5
+tested idempotency by asking whether "the literal `{variable_name}` string is not present
+in the file". Those two have always disagreed, because the preserved comment contains that
+literal — but 0.144.0's substitution-scoping fix is what made the disagreement certain: it
+requires the comment left byte-identical, so after a correct fill the token is ALWAYS still
+present and Rule 5 reports every configured site as unconfigured. The wizard then re-runs
+every substitution on every pass.
+
+Rule 5 now tests the way the Step 9 sweep already did — `| grep -v '<!--'`. The sweep had
+it right at two call sites; Rule 5 was the only place stating the test without the
+exclusion.
+
 ### Fixed — two role-file rules that could not fire
 
 - `qa.md` told QA not to re-execute tests with documented results, which made the

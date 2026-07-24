@@ -23,9 +23,14 @@ and validating the result.
    Claude Code runtime variable).
 4. **Preserve HTML comments.** The `<!-- ... -->` comments are inline
    documentation. Leave them in place after replacing the bare variable.
-5. **Idempotent.** If a variable is already replaced (the literal
-   `{variable_name}` string is not present in the file), skip it and
-   note that it was already configured.
+5. **Idempotent.** If a variable is already replaced, skip it and note
+   that it was already configured. Test it the same way the Step 9 sweep
+   does — **outside HTML comments only**:
+   `grep -n '{variable_name}' <file> | grep -v '<!--'`. Rule 4 preserves
+   the `<!-- {token}: … -->` declaration comment, and the model-tier
+   substitutions leave that comment byte-identical by design, so a test
+   that counts occurrences anywhere in the file reports every filled site
+   as unfilled and the wizard re-runs every substitution on every pass.
 
 ## ROUTING
 
