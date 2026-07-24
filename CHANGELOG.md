@@ -17,6 +17,26 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.1] — 2026-07-24
+
+### Fixed — a `theirs_lacks` receipt anchored on predicted prose closes only by coincidence
+
+Of the four `PC-S298-*` entries fixed in v0.143.0, three did not close. Not because the
+fixes were incomplete — each is delivered and covers its entry — but because each receipt
+tested for a phrase its author guessed upstream would write: `"defects this run
+discovered"`, `"act on each EXTENSION-HOOK-DRIFT"`, `"contradicts core"`. The shipped text
+says the same things in different words, so the substring never matched.
+
+A `theirs_lacks` substring for a fix that does not exist yet is a prediction of upstream's
+wording. It is the mirror of the vacuous predicate v0.141.0 caught: that one could never
+report STILL-LIVE, this one can never report CLOSE except by coincidence, and neither is
+visible at the PASS-string level.
+
+Step 3f now says to anchor on a token the fix cannot be written without — a status name, a
+flag, a filename, a manifest row — never on predicted prose. Convention text only; no
+tooling changed, and the three entries stay open until the consumer re-verifies them by
+coverage.
+
 ## [0.143.0] — 2026-07-24
 
 Four defects the reference consumer filed as `PC-S298-*`, all found by a pull running
