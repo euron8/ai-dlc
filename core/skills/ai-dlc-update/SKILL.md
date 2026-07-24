@@ -670,6 +670,29 @@ prose is itself generated rather than composed.
    you decided it was fine is the check-that-cannot-fail defect, in the tool built to
    prevent it.
 
+   **Pass `theirs` as the base on this re-run, not the pull's base.** Both scripts measure
+   the consumer against `<base-sha>` and presume core still sits there. Core is now at
+   `theirs`, so the pull's original base reports every line upstream ADDED as a consumer
+   addition upstream absorbed — `HARD-CORE-DRIFT-ABSORBED` on a file `apply` just wrote,
+   whose remedy is a revert to what it already is. The post-apply base IS `theirs`; that is
+   the only base against which "consumer edits vs base" means what these status names claim.
+   `CORE-AT-THEIRS` rows are the tell that the base was stale.
+
+   **Dispose of every `WORKLIST extension-reread` row.** `apply.sh` emits one per
+   `EXTENSION-HOOK-DRIFT`: the core file the extension hooks changed, and an extension has
+   no section anchor, so nothing can locate what to re-merge. Read the entry against the new
+   core text and record a verdict per entry — **still-additive**, **contradicts-core**, or
+   **retire**. The run is not clean while one is outstanding.
+
+   `contradicts-core` is the verdict `layer-drift.sh` cannot reach on its own. It emits
+   `EXTENSION-RESTATES-CORE` when an extension COPIES a core section, but an extension that
+   asserts the opposite of core in its own words restates nothing and matches nothing —
+   `extensions/README.md`'s "Additive only" has no detector, and an extension carries no
+   `base_sha` to compute one against. This re-read is that check. Do not add a textual
+   contradiction detector instead: agreement between two prose rules is not a substring
+   property, and a scanner that guesses would fire on every extension that legitimately
+   narrows a core default.
+
    **Post-apply, verify against the RENDERED pipeline, never against core alone.** A
    core fix is effective only if it survives `overrides > extensions > core`
    resolution. After the core overwrite, for every override you re-adopted, grep the
@@ -907,6 +930,15 @@ declared sites, not everywhere unconditionally.
      working branch.
    - Drain any `push_candidate`-flagged extensions into the push-candidate ledger
      for a later upstream push-mine (spec §8.1).
+   - **Drain the defects this run found in UPSTREAM's own tooling** into the same ledger,
+     one entry each, with a `verify:` line. Every other drain here moves a CONSUMER
+     artifact; this is the other source, and it had no path. A pull is the best detector
+     of these defects — it is the only context that runs `reconcile/*` end-to-end against
+     real divergence — and what it finds otherwise lands in `reconcile-report.md` under a
+     follow-ups heading that nothing re-reads and the next run overwrites (step 5: "a
+     fixed filename overwritten on every run, a snapshot, not a log"). A refusal, a status
+     with no actor, a remedy that cannot be executed, a check that passed vacuously: file
+     it. Filing it is not the same as fixing it, and this step never fixes upstream.
    - **Close any `CLOSE-CANDIDATE` entries from step 3f.** For each, confirm the upstream
      version at `theirs` covers your entry (the row's detail names the sha and the version),
      then annotate the ledger entry `ADOPTED UPSTREAM (v<theirs>, verified <date>)`, matching

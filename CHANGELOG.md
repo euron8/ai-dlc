@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.143.0] — 2026-07-24
+
+Four defects the reference consumer filed as `PC-S298-*`, all found by a pull running
+`reconcile/*` end-to-end. Every claim was re-verified against HEAD before it was fixed.
+
+### Fixed — `EXTENSION-HOOK-DRIFT` stated an obligation and assigned it to nobody
+
+`layer-drift.sh` emits it when the core file an extension hooks changes, and SKILL.md step
+3c states the duty: re-read the entry against the new core text. That was the only place it
+appeared. Step 7 had no slot, `apply.sh` emitted no manifest row for it, and no gate
+consulted it — correctly not `HARD-`, since an extension has no section anchor and nothing
+can prove the entry is now wrong. But "not blocking" was implemented as "not emitted", so
+the instruction had a stated actor of nobody and a stated deadline of never. Measured on the
+reference consumer: four entries flagged, listed in the report's own "what `apply` would
+do", then not executed — two pulls running.
+
+`apply.sh` now hands each one back as `WORKLIST extension-reread <entry>`, and step 7
+requires a verdict per entry: still-additive / contradicts-core / retire. A `WORKLIST` row
+is the weakest thing that still has an owner — the caller must dispose of it before the run
+is done, and it never gates `apply`.
+
+### Fixed — the additive-only rule had no check, and the missing verdict was the point
+
+`extensions/README.md` states "**Additive only.** An extension ADDS behavior; it never edits
+a core rule." Nothing measured it. `EXTENSION-RESTATES-CORE` catches an entry that COPIES a
+core section, but an entry asserting the OPPOSITE of core in its own words restates nothing
+and matches nothing, and an extension carries no `base_sha` to compute a contradiction
+against. Receipt: `retro-push.md`'s "Emission happens AFTER the retro PR merges, never
+before" against core's then-current "**n:** Do not merge. Emit the next-sprint prompt
+immediately" — a direct contradiction on the same sub-step, filed where additive-only is
+assumed, never surfaced.
+
+`contradicts-core` is now one of the three re-read verdicts above, and the README names the
+re-read as the whole mechanism. **A textual contradiction detector is deliberately NOT
+added**: agreement between two prose rules is not a substring property, and a scanner that
+guessed would fire on every extension that legitimately narrows a core default.
+
+### Fixed — step 7's post-apply re-run named no base, so it reproduced the signal v0.114.0 removed
+
+v0.114.0 stopped `apply.sh` reporting its own writes as consumer drift by hoisting the
+capture to phase 0. Step 7 mandates a MANUAL re-run of the same two detectors and never said
+which base to pass. Both measure the consumer against `<base-sha>` and presume core still
+sits there; post-overwrite core is at `theirs`, so the pull's base reports every line
+upstream added as a consumer addition upstream absorbed. Measured: a post-apply re-run
+reported `HARD-CORE-DRIFT-ABSORBED` on `steps/retro.md` whose sha already equalled `theirs`,
+handing the operator a revert that rewrites the file to what it already is.
+
+Two fixes, because the instruction and the detector fail independently. Step 7 now states
+that the post-apply base IS `theirs`. And `unregistered-drift.sh` emits `CORE-AT-THEIRS` for
+any file byte-identical to `theirs` — already applied, never drift, whatever base was passed
+— so a stale base announces itself instead of arriving as a plausible `HARD-` row.
+
+That second defence subsumes the first for this scenario, which made
+`apply-drift-after-write`'s mutant stop failing: with the guard in place, moving the capture
+back below phase 1 no longer reproduces anything. The fixture now proves BOTH defences and
+its mutant knocks out both, because a fixture whose mutant cannot fail is the defect it was
+written to catch.
+
+### Added — a drain path for defects the run finds in UPSTREAM's own tooling
+
+Every drain in step 8 moves a CONSUMER artifact: `push_candidate` extensions, consumer-only
+files with no upstream equivalent, untangle innovations. Defects the run discovers in
+`reconcile/*` itself had no path at all. A pull is the best detector of those — it is the
+only context that executes the tooling end-to-end against real divergence — and what it
+found landed in `reconcile-report.md` under a follow-ups heading that nothing re-reads and
+the next run overwrites. Step 8 now drains them into the same ledger, one entry each with a
+`verify:` line. This entry is self-demonstrating: it exists because the operator had to
+notice the gap and ask.
+
 ## [0.142.1] — 2026-07-24
 
 ### Fixed — a comment quoting the string 0.142.0 deleted kept a consumer's receipt alive
