@@ -41,20 +41,34 @@
 # a `norm()` its caller might not define, and normalization is idempotent
 # (post-norm text is lowercase alnum with single spaces, so re-running it is a
 # no-op), so a caller that pre-normalizes gets the same answer either way.
-section_of() { # section_of <heading-text>  < stream
+# span_of is THE matcher; section_of is a slice of it. Splitting them this way rather than
+# writing the predicate twice is the same decision the history above records: readopt-override
+# needs a section's LINE RANGE (to merge one anchor of a multi-anchor override in place and
+# leave the rest byte-untouched), everything else needs its TEXT. Two functions with two copies
+# of the matcher is how the v0.52.0 and v0.54.2 divergences happened. There is one copy.
+span_of() { # span_of <heading-text>  < stream   ->  "<start> <end>" 1-indexed inclusive, or nothing
   awk -v want="$1" '
     function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
     BEGIN { w = nrm(want) }
     /^#{2,6}[ \t]/ {
       match($0, /^#+/); lvl = RLENGTH
       h = $0; sub(/^#+[ \t]+/, "", h); h = nrm(h)
-      if (inside) { if (lvl <= mylvl) exit }
+      if (inside) { if (lvl <= mylvl) { print start, NR - 1; done = 1; exit } }
       else if (w != "" && (index(h, w) > 0 || (length(h) > 3 && index(w, h) > 0))) {
-        inside = 1; mylvl = lvl; print; next
+        inside = 1; mylvl = lvl; start = NR; next
       }
     }
-    inside { print }
+    END { if (inside && !done) print start, NR }
   '
+}
+
+section_of() { # section_of <heading-text>  < stream
+  local _t _s
+  _t="$(mktemp)" || return 1
+  cat > "$_t"
+  _s="$(span_of "$1" < "$_t")"
+  [ -n "$_s" ] && sed -n "${_s%% *},${_s##* }p" "$_t"
+  rm -f "$_t"
 }
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.142.0] — 2026-07-24
+
+### Changed — `readopt-override.sh --merge` merges per anchor instead of refusing
+
+An override shadowing more than one anchor was refused outright: `REFUSED … shadows more
+than one anchor; merge them one at a time by hand`. That sent the operator into the exact
+procedure `--merge` exists to abolish, and which SKILL.md step 7 names as "where half an
+upstream clause gets silently dropped" — with no tool-backed alternative.
+
+It was also disproportionate to the drift. On the reference consumer the blocked override
+shadows four sections; three are byte-identical between base and theirs, and only §7 moved.
+The operator was being asked to hand-merge a 510-line file to re-adopt one paragraph.
+
+`--merge` now locates each shadowed anchor's span in the body and merges it in place.
+Anchors whose core section is unchanged base..theirs are reported `UNCHANGED` and left
+alone, so the diff stays scoped to what actually drifted; body prose no anchor covers — a
+preamble, a section core never had — is copied byte-for-byte. A conflict is now per anchor
+too: `0 merged, 3 unchanged, 1 conflicted` on that override, with markers confined to §7,
+rather than one verdict for the whole file. The single-anchor path is unchanged, including
+the whole-body shape where the body restates no heading.
+
+Whitespace is preserved rather than normalized. The writer used to append a separator after
+the frontmatter fence unconditionally; the reference consumer's override has no blank line
+there, so re-emitting one was a whitespace edit to a file whose promise is that untouched
+sections come out byte-for-byte. Leading and trailing blank runs are stripped only to align
+the three merge inputs, then restored from the section's own counts.
+
+`section_of` and the new `span_of` share ONE matcher body — `section_of` is now a slice of
+`span_of`. Two copies of that predicate is how the v0.52.0 and v0.54.2 resolver divergences
+shipped, and the header records that history.
+
 ## [0.141.1] — 2026-07-24
 
 ### Fixed — the closer gained two verdicts and the instructions that read them did not
