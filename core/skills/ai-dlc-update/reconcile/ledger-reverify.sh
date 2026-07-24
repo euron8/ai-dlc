@@ -57,6 +57,29 @@
 # is worse than a NEEDS-REVIEW, because a drain acts on it. Both refs are checked before any
 # close is emitted; a predicate that could not have fired is reported, not obeyed.
 #
+# UNFALSIFIABLE PREDICATES — the third case, and the one two refs cannot decide. Both guards
+# above fire on the CLOSE side: they run where a close would be emitted. An entry that never
+# closes never reaches them. `theirs_lacks` on a substring absent from base AND theirs is
+# exactly that entry — it reports STILL-LIVE on every pull, forever, including after upstream
+# adopts the innovation, because the substring was never text upstream would write.
+#
+# It cannot be decided from base and theirs alone: absent-at-both is also the NORMAL state of
+# a genuinely live entry. What separates them is whether the substring is a literal an
+# ADOPTION would carry. SKILL.md step 3f already requires this — "anchor on a status name, a
+# flag, a filename, a manifest row — something the fix cannot be written without" — and had
+# no mechanism behind it. Measured on the reference consumer at v0.146.0: THIRTEEN entries
+# violated the rule, two of them quoting the very strings this header names above as the
+# canonical authoring error.
+#
+# So the CONSUMER's tree is read as a third ref. A token the fix cannot be written without
+# exists in the consumer's own implementation of it; prose invented to describe the fix
+# exists nowhere. Unreachable in all three → NEEDS-REVIEW, never STILL-LIVE.
+#
+# A proposal-only entry (upstream should add X; nobody has built it) legitimately has the
+# substring nowhere — and for that entry `theirs_lacks` on invented wording IS the
+# unfalsifiable case. It wants `manual`, or an anchor on a flag/filename the fix cannot
+# avoid. Firing there is the check working, not a false positive.
+#
 # So: when a path does not resolve, retry ONCE by basename across the tree at `theirs`.
 # Exactly one match → verify against it and say so in DETAIL. Zero or more than one → the
 # old NEEDS-REVIEW. The set is DERIVED from the tree, never a hand-maintained consumer→dist
@@ -124,6 +147,90 @@ base_holds() { all_present "$(base_show "$1")" "$2"; }
 theirs_basename_matches() {
   git -C "$DIST" ls-tree -r --name-only "$THEIRS" 2>/dev/null |
     awk -v b="$1" '{ n=split($0, p, "/"); if (p[n] == b) print }'
+}
+
+# --- consumer reachability: the third ref (see UNFALSIFIABLE PREDICATES in the header) -----
+#
+# SCAN SET IS DERIVED, NEVER LISTED — the same rule the basename fallback above follows.
+# `git ls-files` at the consumer gives tracked files only, which drops `.claude/worktrees/`
+# (untracked agent checkouts carrying their own copy of this ledger) for free, with no
+# --exclude-dir to keep in sync.
+#
+# TWO EXCLUSIONS, BOTH DERIVED. They are not polish; without them the check reports every
+# predicate reachable and catches nothing:
+#   - the ledger's own top-level directory, taken from $LEDGER rather than named, so it
+#     follows a ledger passed via arg 5. The ledger and the reconcile report quote each
+#     predicate verbatim. Measured: 11 of 13 unfalsifiable predicates read as "reachable"
+#     through worktree copies of _bmad-output alone.
+#   - this script's own basename, taken from $0. Its header quotes "fail-closed by default"
+#     and "Check 3 and Check 4 real enforcers" as the canonical errors, so documenting the
+#     defect would mask the defect. Only this file is excluded, not the updater directory:
+#     entries proposing fixes TO the updater are real and must stay decidable.
+LEDGER_TOP="${LEDGER#"$CONSUMER"/}"; LEDGER_TOP="${LEDGER_TOP%%/*}"
+SELF_BASE="${0##*/}"
+
+# Built ONCE, eagerly, into a global — not lazily behind a command substitution. `$(fn)`
+# runs the function in a SUBSHELL, so a global it assigns never reaches the parent: the
+# cache would miss on every call, mktemp a fresh file each time, and leak all of them past
+# a trap that still sees an empty variable.
+SCAN_LIST="$(mktemp 2>/dev/null || true)"
+trap '[ -n "${SCAN_LIST:-}" ] && rm -f "$SCAN_LIST"' EXIT
+if [ -n "$SCAN_LIST" ]; then
+  # NUL-separated end to end. Plain `git ls-files` QUOTES a path containing a quote,
+  # backslash or non-ASCII byte ("caf\303\251.md"), and plain `xargs` then parses those
+  # quotes and dies with `xargs: unterminated quote` — having produced NOTHING. With the
+  # probe's stderr discarded that abort is indistinguishable from "substring not found",
+  # so every predicate reads unfalsifiable and the check accuses the whole ledger. It did
+  # exactly that here before this line was NUL-safe. `-z` emits raw paths and `-0` stops
+  # xargs interpreting them.
+  #
+  # Literal comparisons in awk, not regex: a path component carrying '.' or '-' must not
+  # be a pattern. Same reason theirs_basename_matches splits on "/" instead of anchoring.
+  git -C "$CONSUMER" ls-files -z 2>/dev/null | tr '\0' '\n' |
+    awk -v top="$LEDGER_TOP/" -v self="/$SELF_BASE" '
+      top != "/" && index($0, top) == 1 { next }
+      substr($0, length($0) - length(self) + 1) == self { next }
+      { print }' | tr '\n' '\0' > "$SCAN_LIST"
+fi
+
+# CONTROL for the probe machinery itself. The empty pattern matches every line of every
+# file, so this MUST name a file; if it does not, the pipeline is broken rather than the
+# ledger, and every "unreachable" verdict below would be an artefact. Bounded to the first
+# 50 paths so the control costs nothing. A bare zero needs a control — without one, a
+# broken scan and a clean ledger produce byte-identical output.
+scan_probe_works() {
+  [ -s "${SCAN_LIST:-}" ] || return 1
+  _ctl="$( cd "$CONSUMER" 2>/dev/null &&
+           tr '\0' '\n' < "$SCAN_LIST" | head -50 | tr '\n' '\0' |
+           xargs -0 grep -lF -- "" 2>/dev/null | head -1 )"
+  [ -n "$_ctl" ]
+}
+
+# True iff EVERY substring is found in at least one scanned consumer file. A predicate is
+# unfalsifiable when ANY of its substrings can never appear, because all_present() requires
+# all of them to match at theirs.
+#
+# Returns 2 — NOT false — when the scan set is empty or unbuildable (consumer is not a git
+# repo, mktemp failed). Undecidable must not manufacture a verdict: reporting "unreachable"
+# there would turn a missing input into a wall of NEEDS-REVIEW on entries that are fine.
+# The caller says so in DETAIL rather than staying quiet about it.
+#
+# The hit test reads a CAPTURED STRING, never a pipeline's exit status. This file runs under
+# `set -o pipefail`, and `xargs` splits a 6000-file list into several `grep` invocations:
+# every batch with no match exits nonzero, so the pipeline reports failure whenever the
+# LAST batch missed — regardless of what the earlier ones found. That inverted the verdict
+# on real anchors, silently and in the accusing direction. Caught on `validate-provenance-
+# block`, a filename with 152 hits in the reference consumer, reported unreachable.
+consumer_reachable() {
+  scan_probe_works || return 2
+  while IFS= read -r _one; do
+    [ -n "$_one" ] || continue
+    _hit="$( cd "$CONSUMER" 2>/dev/null && xargs -0 grep -lF -- "$_one" < "$SCAN_LIST" 2>/dev/null | head -1 )"
+    [ -n "$_hit" ] || return 1
+  done <<EOF
+$1
+EOF
+  return 0
 }
 
 TV="$(theirs_show VERSION | tr -d '[:space:]')"
@@ -215,7 +322,19 @@ awk -v DASH=' — ' '
             emit CLOSE-CANDIDATE "$label" "theirs:$path now CONTAINS \"$sub\" — upstream absorbed this at $TV. Confirm the upstream version covers your entry, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry.$note"
           fi
         else
-          emit STILL-LIVE "$label" "theirs:$path still lacks \"$sub\"$note"
+          # Absent at theirs. Present at BASE means the predicate demonstrably COULD match,
+          # so the still-live side is reachable and there is nothing to decide. Absent at
+          # both is the case two refs cannot separate — ask the consumer.
+          if base_holds "$path" "$subs"; then
+            emit STILL-LIVE "$label" "theirs:$path still lacks \"$sub\"$note"
+          else
+            consumer_reachable "$subs"; _reach=$?
+            case "$_reach" in
+              0) emit STILL-LIVE "$label" "theirs:$path still lacks \"$sub\"$note" ;;
+              1) emit NEEDS-REVIEW "$label" "unfalsifiable predicate: \"$sub\" is absent at base, at theirs ($TV), AND from the consumer's own tracked tree, so no upstream adoption can produce it — this entry reports STILL-LIVE forever, including after the innovation lands. Re-anchor on a token the fix cannot be written without (a flag, a filename, a status name, a manifest row), or declare 'verify: manual' if the entry is a proposal nobody has built yet.$note" ;;
+              *) emit STILL-LIVE "$label" "theirs:$path still lacks \"$sub\" — consumer reachability NOT checked (no tracked file list at '$CONSUMER'), so an unfalsifiable predicate would not have been caught here$note" ;;
+            esac
+          fi
         fi
       else # theirs_has
         if [ "$present" -eq 1 ]; then

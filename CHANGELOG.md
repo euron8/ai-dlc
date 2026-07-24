@@ -17,6 +17,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.147.0] — 2026-07-24
+
+### Added — the ledger's unfalsifiable `theirs_lacks` predicates now have a mechanism
+
+`verify: theirs_lacks <path> "<substr>"` keeps an entry open while `theirs` lacks the
+substring. When the substring is prose the author invented to *describe* the wanted fix
+rather than a literal the fix must carry, no adoption can ever produce it, so the entry
+reports STILL-LIVE on every pull — forever, including long after the innovation lands.
+It is the mirror of a vacuous close: a permanently false "still open".
+
+Step 3f already prohibited this ("anchor on a status name, a flag, a filename, a manifest
+row — something the fix cannot be written without"). Nothing enforced it. Measured on the
+reference consumer at 0.146.0: **13 entries** violated the rule, two of them quoting the
+exact strings `ledger-reverify.sh`'s own header names as the canonical authoring error.
+
+Both existing vacuity guards sit on the **close** path — they run where a close would be
+emitted, so an entry that never closes reaches neither.
+
+Two refs cannot decide this: absent-at-both is also the normal state of a live candidate.
+The consumer's tracked tree is read as a third ref, since a token the fix cannot be written
+without exists in the consumer's own implementation of it. Absent in all three now emits
+`NEEDS-REVIEW  unfalsifiable predicate` instead of `STILL-LIVE`. Where the consumer has no
+tracked file list the check reports that it could not decide rather than accusing.
+
+The scan set is `git ls-files` at the consumer — derived, so untracked `.claude/worktrees/`
+agent checkouts carrying their own copy of the ledger drop out with no exclusion list to
+keep in sync. Two exclusions, both derived rather than named: the ledger's own top-level
+directory (from `$LEDGER`) and this script's own basename (from `$0`), whose header quotes
+the bad examples. Without them every predicate reads reachable and the check catches
+nothing.
+
+`core/fixtures/ledger-reverify-unfalsifiable/` proves it fires on invented prose, **passes**
+on a real anchor, follows the anchor under mutation, and degrades to "not checked" with no
+scan set. A check proven only to fire is indistinguishable from one that fires on
+everything.
+
 ## [0.146.0] — 2026-07-24
 
 ### Changed — H1's check→fixture set is DERIVED; the hand enumeration is deleted
