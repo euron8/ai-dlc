@@ -419,13 +419,19 @@ prose is itself generated rather than composed.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
      line — that emits no row at all.
-   - `NEEDS-REVIEW` → TWO causes. The DETAIL field names which; report them separately.
+   - `NEEDS-REVIEW` → THREE causes. The DETAIL field names which; report them separately.
      - *unresolved* — the `verify:` line is malformed, or its path resolves neither as given
        nor by unique basename at theirs. Correct the path, then re-run.
      - *vacuous predicate* — the STILL-LIVE side was never reachable: a `theirs_has`
        substring absent at BOTH base and theirs, or a `theirs_lacks` substring present at
        both. Read the body and check whether the verb is inverted. **Never drain on this
        verdict.**
+     - *unfalsifiable predicate* — a `theirs_lacks` substring absent at base, at theirs, AND
+       from the consumer's own tracked tree, so no adoption can satisfy it and the entry
+       reports STILL-LIVE on every pull. Re-anchor it per the rule below, or declare
+       `verify: manual` if the entry is a proposal nobody has built yet. **Never drain on
+       this verdict.** A DETAIL reporting reachability NOT checked means unchecked, not
+       clean.
    **Anchor a `theirs_lacks` receipt on a token upstream MUST use, never on predicted
    prose.** The substring for a fix that does not exist yet is a guess at wording upstream
    has not written, so it closes only if upstream happens to pick the same words. Anchor on a
