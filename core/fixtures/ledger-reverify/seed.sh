@@ -25,8 +25,15 @@ git -C "$DIST" init -q
 git -C "$DIST" config user.email seed@fixture
 git -C "$DIST" config user.name seed
 
-mkdir -p "$DIST/core/skills/ai-dlc"
+mkdir -p "$DIST/core/skills/ai-dlc" "$DIST/core/scripts"
 SK="$DIST/core/skills/ai-dlc/SKILL.md"
+
+# `SKILL.md` is UNIQUE in this tree — that is what lets a consumer-namespace path resolve by
+# basename. `validate-thing.sh` is DELIBERATELY duplicated across two directories so the
+# ambiguous case has something to be ambiguous about: the fallback must refuse to guess when
+# a basename matches more than one file, not pick the first.
+printf '#!/bin/sh\necho thing\n' > "$DIST/core/scripts/validate-thing.sh"
+printf '#!/bin/sh\necho thing\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
 
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
@@ -64,6 +71,51 @@ cat > "$LED" <<'LEDGER'
 
 - **Entry D has no verify line.** A legacy prose entry, hand-review as today.
   <br>No machine-runnable receipt; the closer must not emit a row for it.
+
+- **Entry E declares manual.** No mechanical predicate exists for this claim.
+  <br>Hand-review is the DECLARATION, not a malformed line — it must not share a verdict
+  with a typo.
+  verify: manual
+
+- **Entry F declares manual with a stray backtick.** Prose formatting leaked into the verb.
+  <br>A formatting slip must not change the verdict.
+  verify: manual`
+
+- **Entry G is Entry B filed in the consumer's install namespace.** Same claim, same
+  substring; only the path layout differs (`core/.claude/skills/…` instead of
+  `core/skills/…`). It MUST classify identically to Entry B — a closer that cannot resolve
+  the path never compares the substring and silently reports nothing about the claim.
+  verify: theirs_lacks core/.claude/skills/ai-dlc/SKILL.md "MARKER_B"
+
+- **Entry H names an ambiguous basename.** Two files at theirs are called
+  `validate-thing.sh`, so the fallback has no unique answer and must refuse to guess.
+  verify: theirs_lacks core/scripts/ai-dlc/validate-thing.sh "MARKER_B"
+
+- **Entry I names a basename that exists nowhere at theirs.** Nothing to fall back to.
+  verify: theirs_has core/scripts/ai-dlc/no-such-file.sh "MARKER_B"
+
+- **Entry J has an inverted verb.** MARKER_A names the FIX the entry wants, so the author
+  reached for `theirs_has` when the claim needs `theirs_lacks`.
+  <br>MARKER_A is absent at base AND at theirs, so this predicate could never have reported
+  STILL-LIVE — it was born closed and no upstream change produced the verdict.
+  verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+- **Entry K is the same vacuity in the other direction.** `rule one` is present at base AND
+  at theirs, so `theirs_lacks` could never have reported STILL-LIVE either.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "rule one"
+
+- **Entry L names TWO substrings.** Both are absent at theirs, so the entry is genuinely
+  still live — but only if each is matched separately.
+  <br>Joined into one literal (quotes and all) it matches nothing, which reports
+  "still lacks" for the right verdict by accident.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A" "MARKER_C"
+
+- **Entry M names two substrings that theirs BOTH carries.** `rule one` and `MARKER_B` are
+  each present at theirs, so upstream holds everything the entry asked for.
+  <br>This is the case the joined literal gets WRONG: it matches nothing, reports
+  "still lacks", and the entry stays open forever against an upstream that already has it.
+  Base carries `rule one` but NOT `MARKER_B`, so the close is real, not vacuous.
+  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "rule one" "MARKER_B"
 
 ---
 

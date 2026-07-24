@@ -715,6 +715,21 @@ which fails the commit on header drift or a malformed entry. No SHA for the
 prior sprint = audit-gate fails closed at the next sprint's per-class test-debt
 audit (`gate-validation.md` Check 18).
 
+**Then prune (Rule 25(a)/(c)).** `audit-anchors.md` is read every sprint but only
+ever one entry deep — `carry-over-evaluation.md` Step 1a and Check 18 both read
+the prior sprint's entry and nothing older. Left unpruned it is an unbounded read.
+
+1. Keep the **3 most recent** entries in `_bmad-output/audit-anchors.md`.
+2. Move every older entry, verbatim cut-and-paste, to
+   `_bmad-output/audit-anchors-archive.md`, appending in sprint order. Create it
+   with the single header line `# Audit Anchors — Archive` if absent. The archive
+   is a write-only sink: no rendered schema region, no validator, no budget.
+3. **Verify no-loss:** live entry count + archive entry count MUST equal the
+   pre-prune total. A mismatch is a HARD_BLOCK — restore from git, do not commit.
+
+If the file holds 3 entries or fewer, there is nothing to move; that is a pass,
+not a skipped step.
+
 ### 5c. Pre-Commit Validation Gate
 
 Before committing retro artifacts, run all four checks in order.
@@ -867,18 +882,18 @@ epic scope, and residual risks are still in the lead's working context.
 
 **7a. Merge gate.**
 
-- **If a PR was created in 6d:**
-  Ask the user: "Merge PR [#N] now? (y/n)"
-  - **y:** Run `gh pr merge <N> --squash --delete-branch` (use the merge
-    strategy the repo's PRs normally use; check recent merges with
-    `gh pr list --state merged --limit 3 --json number,title,mergedAt`
-    if unsure). If merge fails (branch protection, failing checks,
-    conflicts), surface the error and stop — do not emit the next-sprint
-    prompt until the user resolves and confirms merge.
-  - **n:** Do not merge. Emit the next-sprint prompt immediately with a
-    one-line preamble noting the PR is still open and the user should
-    paste the prompt after it merges.
-- **If no PR was created (direct-to-main in 6c):** Skip the merge gate and
+- **If a PR was created in 6d:** Merge it. Do NOT ask for approval — the retro
+  is autonomous and its human seam is Step 5's commentary pause, already past.
+
+  Run `gh pr merge <N> --squash --delete-branch` (use the merge strategy the
+  repo's PRs normally use; check recent merges with
+  `gh pr list --state merged --limit 3 --json number,title,mergedAt` if unsure).
+
+  On failure — branch protection, required review, failing checks, conflicts —
+  surface the error verbatim and STOP: do not rotate (7a-post), do not emit the
+  next-sprint prompt. Do NOT retry with `--admin`. Repo branch protection is
+  operator policy; the pipeline reports that it blocked, it does not override it.
+- **If no PR was created (direct-to-main in 6c):** Skip the merge and
   proceed to **7a-post** — not straight to 7b. The artifacts are already on
   `main`, so the rotation's precondition is met and it still has to run.
 
@@ -890,11 +905,11 @@ rotation was MISSED". This is the rotation. Without it that message accuses the
 operator of skipping a step this file never defined.
 
 **Runs only after the retro PR has merged** (or, on the direct-to-main path,
-once the retro artifacts are on `main`). **If 7a ended with `n` — PR still
-open — do NOT rotate;** the logs stay live and rotation happens after the
-operator merges. The reason is the gate log: a consumer may ship a merge-time
-validator that reads the live `## Gate Log: Sprint <N>` section with no archive
-fallback (`validate-retro-prereq.sh` is the common one; it is consumer-provided
+once the retro artifacts are on `main`). **If 7a stopped on a failed merge, do
+NOT rotate** — the logs stay live until the PR is on `main`. The reason is the
+gate log: a consumer may ship a merge-time validator that reads the live
+`## Gate Log: Sprint <N>` section with no archive fallback
+(`validate-retro-prereq.sh` is the common one; it is consumer-provided
 and absent from core). Emptying the live log before that runs turns the section
 missing and the merge is denied. Rotating later is safe for every consumer;
 rotating earlier is safe only for some.
@@ -937,8 +952,8 @@ follow their audit, these must follow the merge.
 
 **7b. Assemble next-sprint inputs.**
 
-Issued AFTER the 7a merge gate (a human y/n seam — no dispatch before
-Step 5 can cover post-merge inputs, §2 blocker 2). Dispatch an `analyst` —
+Issued AFTER the 7a merge (no dispatch before Step 5 can cover post-merge
+inputs, §2 blocker 2). Dispatch an `analyst` —
 **Dispatch C** — to gather all six input classes below (including the
 relatedness analysis in input 6) and write the structured bundle to
 `_bmad-output/retro-artifacts/sprint-<N>-next-inputs.md`. The lead derives

@@ -246,6 +246,12 @@ WHOLE_READ_POOL=$(( READER_WINDOW_TOKENS * ARTIFACT_SHARE_PCT / 100 ))
 #   rotate       append-only log -> move the epoch to a dated archive (Rule 25(c)).
 #                A live log over threshold means a rotation was MISSED, not that it
 #                needs a rewrite. artifact-consolidation.md rejects logs as targets.
+#                audit-anchors.md is in this class and is the reason the class needed
+#                a completeness check: it is read EVERY sprint (carry-over-evaluation
+#                Step 1a, gate Check 18) but only ONE entry deep, and it sat in
+#                neither this table nor is_archive() for 120 sprints. Ungoverned is
+#                not the same as unrotated -- nothing measured it, so nothing could
+#                report it. retro.md Step 5b prunes it to the 3 most recent entries.
 #   trim         pipeline-snapshot.md -> trim to its 7-section schema (Rule 25(a)).
 #                Check 14 owns the schema. It is SEVEN sections since v0.50.0 --
 #                In-Flight Teammates is one of them, and it is the ledger that
@@ -259,6 +265,7 @@ gate-log.md|25000|rotate
 compaction-log.md|10000|rotate
 pipeline-continuation-log.md|10000|rotate
 context-mode-protection-log.md|10000|rotate
+audit-anchors.md|4000|rotate
 pipeline-snapshot.md|6000|trim
 "
 
@@ -710,6 +717,84 @@ EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
 rm -f "$INFLIGHT_FILE"
+
+# -----------------------------------------------------------------------------
+# A FOURTH verdict: COVERAGE. Everything above measures artifacts this table
+# already names. It cannot say anything about an artifact the table FORGOT --
+# and a forgotten artifact reads exactly like a passing one, because no row is
+# printed either way.
+#
+# That is not hypothetical. audit-anchors.md is read every sprint
+# (carry-over-evaluation Step 1a, gate Check 18), was in neither BUDGETS nor
+# is_archive(), and reached 37k tokens over 120 sprints -- one entry of which is
+# ever read. Nothing was broken; nothing was measuring it.
+#
+# So: derive the read-path set from the STEP FILES, which are what actually names
+# the artifacts the pipeline reads, and report anything in it that no budget
+# governs. Derived, never hand-listed -- a second hand-maintained list would drift
+# from the first and the stale list becomes the bug.
+#
+# WARN-ONLY, ALWAYS, and never folded into RC. "No budget covers this" is not a
+# Rule 25(d) breach; it is a gap in the table, and the operator decides whether
+# the artifact needs a budget or is bounded by being rewritten rather than
+# appended. The floor keeps it quiet until the answer starts to matter: an
+# unmeasured artifact is only interesting once it is big enough to cost a read.
+# -----------------------------------------------------------------------------
+UNGOVERNED_FLOOR="${AI_DLC_UNGOVERNED_FLOOR:-2000}"
+
+STEPS_DIR=""
+for cand in "$ROOT/.claude/skills/ai-dlc/steps" "$ROOT/core/skills/ai-dlc/steps"; do
+  [ -d "$cand" ] && STEPS_DIR="$cand" && break
+done
+
+if [ -n "$STEPS_DIR" ] && [ -z "$ONLY" ]; then
+  UNGOV_FILE="$TMPROOT/ungoverned"
+  rm -f "$UNGOV_FILE"
+  : > "$UNGOV_FILE"
+
+  grep -Eho '_bmad-output/[A-Za-z0-9_./-]*\.(md|yaml|yml|json)' "$STEPS_DIR"/*.md 2>/dev/null |
+    sed 's#.*/##' | sort -u | while read -r name; do
+      [ -n "$name" ] || continue
+      # `sprint-<N>.md`, `story-{id}.md` and friends name a CLASS, not a file.
+      case "$name" in *'<'*|*'>'*|*'{'*|*'}'*|*'*'*|*'$'*) continue ;; esac
+      is_archive "$name" && continue
+      printf '%s\n' "$BUDGETS" | grep -q "^${name}|" && continue
+      pooled=0
+      for w in $WHOLE_READ_SET; do [ "$w" = "$name" ] && pooled=1; done
+      [ "$pooled" -eq 1 ] && continue
+
+      find "$ROOT/_bmad-output" "$ROOT/docs" -type f -name "$name" 2>/dev/null | while read -r f; do
+        is_archive "$f" && continue
+        is_not_artifact "$f" && continue
+        tokens=$(( $(wc -c < "$f" | tr -d ' ') / BPT ))
+        [ "$tokens" -ge "$UNGOVERNED_FLOOR" ] || continue
+        printf '      %-44s %7s tok\n' "${f#"$ROOT"/}" "$tokens" >> "$UNGOV_FILE"
+      done
+    done
+
+  if [ -s "$UNGOV_FILE" ]; then
+    say ""
+    echo "WARN: read-path artifact(s) over ${UNGOVERNED_FLOOR} tok that NO budget governs."
+    cat "$UNGOV_FILE" >&2
+    cat >&2 <<'EOF'
+
+      Each of these is named by a step file, so the pipeline reads it, and none of
+      them is in the BUDGETS table or exempt as a write-only *-history/*-archive
+      sink. They are unmeasured, not necessarily too big.
+
+      Decide per artifact, and record the decision in the table or the exemption:
+        appended every sprint  -> give it a budget and a rotation (audit-anchors.md
+                                  is the worked example: prune at retro Step 5b).
+        rewritten per run      -> a budget still bounds a runaway; pick one.
+        write-only sink        -> rename it *-history.md / *-archive.md so
+                                  is_archive() exempts it and says so out loud.
+
+      Tune the floor with AI_DLC_UNGOVERNED_FLOOR. Silencing a row by raising the
+      floor is a decision too -- make it deliberately.
+EOF
+  fi
+  rm -f "$UNGOV_FILE"
+fi
 
 if [ "$RC" -eq 0 ]; then
   say ""
