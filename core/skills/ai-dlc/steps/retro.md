@@ -179,8 +179,8 @@ constraints on that draft:
 
 The **prescriptive** sections stay lead-authored inline — they are the
 retro's decision content (pipeline self-governance), as non-delegable as
-gate decisions: "specific, actionable improvements," "which improvements
-should update CLAUDE.md / team roles / pipeline steps," and the Step-4
+gate decisions: "specific, actionable improvements," "improvement routing,"
+and the Step-4
 5-layer enforcement decisions. The lead assembles the analyst draft and
 its own prescriptive sections into the final retro doc.
 
@@ -191,7 +191,7 @@ Write the retro to `docs/retro/sprint-N.md` with:
 - Agent findings (from party mode)
   with finding-class per pass (see templates/retro-finding-class-tracking.md)
 - Specific, actionable improvements
-- Which improvements should update CLAUDE.md, team roles, or pipeline steps
+- Improvement routing: which improvements update CLAUDE.md, team roles, or pipeline steps
 
 Retro findings asserting infrastructure topology MUST cite the
 IaC source file and line (Terraform, CDK, CloudFormation, Docker
@@ -902,7 +902,7 @@ operator of skipping a step this file never defined.
 
 **Runs only after the retro PR has merged** (or, on the direct-to-main path,
 once the retro artifacts are on `main`). **If 7a stopped on a failed merge, do
-NOT rotate** — the logs stay live until the PR is on `main`. The reason is the
+NOT rotate** — the logs stay live until the PR is on `main`. The constraint is the
 gate log: a consumer may ship a merge-time validator that reads the live
 `## Gate Log: Sprint <N>` section with no archive fallback
 (`validate-retro-prereq.sh` is the common one; it is consumer-provided

@@ -138,9 +138,9 @@ tier() {
 
 # The pin lines are the `- Personal:`/`- Bedrock:` rows carrying a `/model`
 # directive. Anchor on those: the same model string also appears in the
-# placeholder COMMENT directly above them (and on graph's remediator.md that
-# comment is mangled), and dev.md has a prose line mentioning `/model` with no
-# model string at all. A blind `grep -m1 model` reads the wrong line.
+# placeholder COMMENT directly above them, which setup may have filled in or
+# mangled, and dev.md has a prose line mentioning `/model` with no model string
+# at all. A blind `grep -m1 model` reads the wrong line.
 PINS="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$ROLE_FILE" 2>/dev/null \
   | sed -E 's#^.*`/model ##; s#`$##')"
 [ -n "$PINS" ] || exit 0            # role declares no model — nothing to bind

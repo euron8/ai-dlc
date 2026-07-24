@@ -84,7 +84,7 @@ For each OPEN item in the backlog, evaluate:
      premise passes every downstream gate.
    - If the defect is the sprint's dominant work rather than one item among
      features, STOP and escalate to re-route (raise the pause flag): the
-     pipeline should be running the `bug` variant, not carry-over. Do not
+     pipeline MUST run the `bug` variant, not carry-over. Do not
      plan a fix on an unverified hypothesis.
 
 **Process-exercise scoping.** For any item classified as a
@@ -121,9 +121,8 @@ carry-over evaluation is one — but this file never said so, no step here refer
 repair dispatch, and Check 24's scope list omitted the step. So the cycle ran with the LEAD
 repairing its own artifact (the most context-saturated agent, which is the exact failure the
 remediator role was created to end), and no gate ever read the verdict. An unbounded
-convergence loop adjudicated by nobody reads exactly like a loop that converged. v0.58.0
-found this in `doc-repair-backfill` and `sprint-review-next` and fixed those two; the sweep
-missed this one because the scope list was hand-maintained. It is derived now — see I11.
+convergence loop adjudicated by nobody reads exactly like a loop that converged. The scope
+list is DERIVED, never hand-maintained — see I11 in `validate-enforcement-map.sh`.
 *Removed when:* Rule 8 stops binding this step.
 
 ### 4. Deferral Handling

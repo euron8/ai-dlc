@@ -1028,10 +1028,74 @@ else
   fi
 fi
 
+# --- I22b: every declared substitution TOKEN is one the setup skill instructs --
+# I22 joins role file -> setup-sites.md. Nothing joined either to the skill that
+# performs the fill, so a token could be shipped in a role file AND declared a
+# masked site AND never named in ai-dlc-setup's substitution list. A consumer
+# following setup verbatim is then left with a literal `{token}` in a live role
+# file. The dispatch guard tiers by substring, matches neither `*opus*` nor
+# `*sonnet*`, and takes its unrecognised-tier fail-open branch — so the role
+# dispatches with NO pin enforced, through the guard's open door rather than its
+# deny door. Derived from the role files, never hand-listed.
+SETUP_SKILL="$REPO_ROOT/core/skills/ai-dlc-setup/SKILL.md"
+if [ ! -f "$SETUP_SKILL" ]; then
+  err "I22b cannot run: core/skills/ai-dlc-setup/SKILL.md is missing."
+else
+  all_tokens="$(grep -ohE '\{[a-z_]*model[a-z_]*\}' "$REPO_ROOT"/core/team-roles/*.md 2>/dev/null \
+                | tr -d '{}' | sort -u)"
+  if [ -z "$all_tokens" ]; then
+    err "I22b found no {*_model_*} tokens in core/team-roles/. Either the token form changed or the role files were emptied; either way this assertion is now testing nothing."
+  else
+    for tok in $all_tokens; do
+      grep -qF -- "$tok" "$SETUP_SKILL" \
+        || err "I22b core/team-roles/ ships the token {$tok} but ai-dlc-setup/SKILL.md never instructs anyone to fill it. A consumer running setup verbatim keeps the literal token in a live role file; ai-dlc-dispatch-guard.sh then matches no tier and takes its fail-open branch, so that role dispatches with no model pin enforced at all. Add the substitution block."
+    done
+  fi
+fi
+
+# --- I23: every SHIPPED rule-prose file is in the audit corpus -----------------
+# audit-rule-files.sh enforces Rule 18 and rule-authoring.md over a corpus it
+# builds itself. Nothing compared that corpus to the set install.sh delivers, so
+# a rule file could ship to every consumer while being scanned by nothing, and
+# the audit would report CLEAN over it. Both sides are DERIVED: the shipped set
+# from install.sh's own copy paths, the corpus from `--list`.
+AUDIT_SH="$REPO_ROOT/core/scripts/audit-rule-files.sh"
+INSTALL_SH="$REPO_ROOT/scripts/install.sh"
+if [ ! -f "$AUDIT_SH" ] || [ ! -f "$INSTALL_SH" ]; then
+  err "I23 cannot run: audit-rule-files.sh or install.sh is missing. A skipped corpus check reads exactly like a covered corpus."
+else
+  corpus_list="$(cd "$REPO_ROOT" && bash core/scripts/audit-rule-files.sh --list 2>/dev/null | sort -u)"
+  if [ -z "$corpus_list" ]; then
+    err "I23 audit-rule-files.sh --list returned nothing from the distribution root. The corpus builder cannot see the distribution layout, so every class it reports is scanned over zero files."
+  else
+    rule_prose="$(cd "$REPO_ROOT" && ls core/skills/ai-dlc/*.md core/skills/ai-dlc/steps/*.md \
+                    core/skills/ai-dlc/templates/*.md core/skills/ai-dlc/extensions/*.md \
+                    core/skills/ai-dlc/overrides/*.md core/team-roles/*.md 2>/dev/null | sort -u)"
+    unshipped=""
+    for rp in $rule_prose; do
+      base="$(basename "$rp")"; dir="$(dirname "$rp")"
+      # A skill-root file is matched by basename only: every skill-root path shares
+      # the `core/skills/ai-dlc/` prefix, so a directory match there would call the
+      # whole directory shipped and the check would assert nothing.
+      if [ "$dir" = "core/skills/ai-dlc" ]; then
+        grep -qF -- "$base" "$INSTALL_SH" || { unshipped="$unshipped $rp"; continue; }
+      else
+        grep -qF -- "$dir/" "$INSTALL_SH" || grep -qF -- "$base" "$INSTALL_SH" \
+          || { unshipped="$unshipped $rp"; continue; }
+      fi
+      printf '%s\n' "$corpus_list" | grep -qx -- "$rp" \
+        || err "I23 $rp is installed into every consumer but is absent from the audit-rule-files.sh corpus. Rule 18 and rule-authoring.md are unenforced over it, and the audit reports CLEAN having never opened it. Add it to the corpus builder."
+    done
+    for rp in $unshipped; do
+      echo "  note: $rp is a rule-prose file that install.sh never ships; it is correctly outside the audit corpus." >&2
+    done
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23)."
   exit 0
 fi
 exit 1

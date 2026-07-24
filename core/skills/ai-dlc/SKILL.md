@@ -716,10 +716,9 @@ The failure is not that the content is lost — it is that the loss is unreadabl
 teammate told to reply produces an idle notification and no file, and the post-compact
 guidance then correctly reads unreachability as handle-loss rather than death. So the
 lead sees a symptom that means "you lost the handle" for a teammate that never had a
-deliverable to lose, and re-dispatches. Measured: six personas dispatched on a
-chat-reply contract, three returned zero content twice each; the SAME three, re-messaged
-with only the contract changed to name a path, delivered 767 / 947 / 689 words on the
-next beat, with no re-dispatch.
+deliverable to lose, and re-dispatches. A teammate whose contract names a path
+delivers on the next beat with no re-dispatch; the same teammate on a chat-reply
+contract returns nothing. The contract, not the teammate, decides this.
 
 The path in the brief is the same path that goes in the In-Flight Teammates row at
 dispatch (`_gate-procedures.md`, "Sub-step snapshot update") and the same path the
@@ -860,7 +859,7 @@ has not completed.
 
 **(c) Offload high-volume observational Bash (context-mode).** Large
 *read-only* command output (test-suite runs, gate-validation script output,
-`git log`/`diff`/`status` inspection, log scans) SHOULD be run via
+`git log`/`diff`/`status` inspection, log scans) MUST be run via
 `ctx_batch_execute` / `ctx_execute` so its bytes stay out of the resident
 prefix. Two hard limits: (1) state-mutating commands (`git`
 commit/branch/merge/worktree, `gh`, `chmod`, file writes) MUST run via

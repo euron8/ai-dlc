@@ -17,6 +17,116 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.144.0] — 2026-07-24
+
+### Added — the rule-authoring prohibitions that had no mechanism, and a gate that runs where rules are authored
+
+`rule-authoring.md` states five prohibitions. `audit-rule-files.sh` mechanized two of
+them, partially — and the three it did not are the ones the corpus actually carried.
+Sixteen sprint and version references sat in shipped rule prose while
+`NARRATIVE_DRIFT` reported `CLEAN`, which is the same shape as the two narrative
+blocks that shipped behind a CLEAN in 0.141.0. A prohibition with no mechanism is a
+check that cannot fire, wearing the report of one that passed.
+
+Three structural gaps, all closed here.
+
+**The patterns.** Class 1a is new and deterministic: version and sprint tags,
+parenthetical origin notes, embedded ISO dates. Class 1's phrase list gains the
+incident openers its five colloquialisms missed. Both reuse the existing `used()`
+quote-blanking, so a rule file may still NAME the shape it forbids.
+
+**Two tiers, split by falsifiability.** Tier 1 is deterministic — a hit is a
+violation on sight, and the distribution pre-push now runs
+`--fail-on=deterministic` and blocks the push. Tier 2 needs judgement, because the
+measured failure a Rule 26(c) block states in its `Failure caught:` field is the
+contract's required content rather than drift; it prints, never gates, and the lead
+dispositions it at retro Step 4. **Both tiers always print.** A tier that went
+silent under a flag would be this defect again.
+
+**The corpus was smaller than the policy.** It named `SKILL.md` plus `steps/`,
+while the policy scopes to the whole skill — so `escalations.md`,
+`rule-authoring.md`, `core-manifest.md` and `templates/*.md` shipped to every
+consumer scanned by nothing. They are in the corpus now, and
+`validate-enforcement-map.sh` I23 asserts it stays that way: both sides derived,
+one from `install.sh`'s own copy paths and one from `--list`.
+
+**The audit had no caller in the distribution at all.** Its corpus paths are
+consumer-shaped, so it resolved to nothing here and ran only from a consumer's
+retro — one release after the narrative shipped. Layout is autodetected now, and
+`.githooks/pre-push` drives it.
+
+Two fixes to existing classes fell out of the same read. Class 2 is
+paragraph-scoped rather than line-scoped: Rule 23(c) stated its primary directive
+with `SHOULD` while every exception said `MUST`, and a per-line predicate scored the
+weakest sentence in the rulebook as clean. `should be` is no longer exempt — it is
+the canonical soft-mandate form, and exempting it made the scan blind to the shape
+Rule 18 names first. Class 1b anchors on the block heading rather than on
+`Failure caught:`, which had made a block supplying NONE of the three fields the one
+shape it could not see.
+
+`retro-audit-scans/` gains fourteen assertions, including a `AI_DLC_AUDIT_MUTANT=1`
+differential that strips every tier-1 pattern and requires the same seeded corpus to
+score CLEAN — so the new patterns are what catch the new seeds, not an older class
+matching them incidentally.
+
+### Fixed — `/ai-dlc-setup` never instructed the remediator model fill, and the guard failed open on the literal token
+
+Filed by the graph consumer as `PC-S298-SETUP-NEVER-INSTRUCTS-REMEDIATOR-MODEL-FILL`,
+and confirmed here: `reconcile/setup-sites.md` declares twelve `*_model_*`
+substitution sites; `ai-dlc-setup/SKILL.md` instructed eleven. `remediator` was the
+omission, while `core/team-roles/remediator.md` ships the token. A consumer following
+setup verbatim keeps a literal `{remediator_model_personal}` in a live role file.
+`ai-dlc-dispatch-guard.sh` tiers by substring, matches neither `*opus*` nor
+`*sonnet*`, and takes its unrecognised-tier fail-open branch — so the role dispatches
+with no model pin enforced at all, reached through the guard's open door rather than
+its deny door.
+
+The substitution block is added. `validate-enforcement-map.sh` I22b is what stops it
+recurring: I22 joined role file to `setup-sites.md` and nothing joined either to the
+skill that performs the fill. Removing the new block reproduces the exact failure,
+which is how the check was proven.
+
+Residual, recorded rather than fixed under Rule 26: the guard still fails OPEN on an
+unsubstituted token. I22b makes that state unshippable from upstream, but a consumer
+that hand-edits a pin into that shape still reaches the open door.
+
+### Fixed — the setup substitution instruction was unscoped, and the token occurs twice per role file
+
+Filed as `PC-S298-SETUP-SUBSTITUTION-EATS-SITE-DECLARATION-COMMENT`. Every
+model-bearing role file carries its token twice: once in the `<!-- {token}: … -->`
+site-declaration comment, once in the `/model` directive below it. The substitution
+list said only `` `{token}` -> <value> `` and never scoped the replacement, so a
+literal global find-replace consumes the declaration comment too. The cost is to the
+reader, not the guard: that comment is the only in-file record that the line below it
+is a substitution site, and once it is gone `reconcile/setup-sites.md` is the sole
+witness. The instruction now names the two directive lines as the replacement scope
+and requires the comment left byte-identical.
+
+`ai-dlc-dispatch-guard.sh`'s inline note claimed a specific consumer's `remediator.md`
+carried a mangled comment. The consumer reports that attribution is wrong by one file,
+and a core hook has no business naming another repo's state either way. The note now
+describes the condition it guards against.
+
+### Changed — the rule-file backlog those patterns enumerate
+
+Sixteen deterministic findings cleared to zero: origin tags in `gate-validation.md`,
+`_gate-procedures.md`, `escalations.md`, `core-manifest.md`,
+`carry-over-evaluation.md`, `adversary.md` and `extensions/README.md`. Fourteen
+judgement findings dispositioned — eleven removed, three kept.
+
+The three kept are the `Measured:` lines in `adversary.md` and `remediator.md`. Each
+is the content of a Rule 26(c) `Failure caught:` / `Catches:` field, where stating the
+measured failure is what the contract asks for. They stay flagged at tier 2 by design;
+that is the steady state of a judgement tier, not an open defect.
+
+Each removal was adjudicated per line, never per file: delete the clause, re-read the
+directive, and keep it only if what the agent does is now underdetermined.
+`core-manifest.md`'s twenty-line rationale block reduces to the operative sentence —
+the enumeration and the directory are each other's check. `_gate-procedures.md` no
+longer states its extraction rationale twice, once in frontmatter and once in the body.
+H2's Rule 26(c) block is written as the triple it owes instead of as the story of the
+change that produced it, which cleared its `INCOMPLETE_26C` finding at the same time.
+
 ## [0.143.6] — 2026-07-24
 
 ### Fixed — rule files told the reader to load a schema at a path that does not exist in any consumer tree

@@ -16,21 +16,16 @@ consumer that needs different behavior configures it through the declared
 `AI_DLC_*` tunables or takes the change upstream — there is no `overrides/` or
 `extensions/` entry for a hook or a validator. The core-guard routes accordingly.
 
-**Why the validators are enumerated and the rest are globs.** A glob works when
-the directory is exclusively ours. `scripts/` never was: in the reference consumer
-it holds 103 files of which 25 are core, and no prefix separates them — ai-dlc
-ships `audit-rule-files.sh` while the consumer owns `audit-dormant-gates.sh`,
-`audit-main-since.sh` and `audit-rule-exercise.sh`. No glob over that directory can
-name our set without also naming theirs, which is the same trap `hooks/*.sh` hit
-before it was narrowed to `hooks/ai-dlc-*.sh`.
-
-So core scripts were given a directory of their own (`scripts/ai-dlc/`, as of
-v0.126.0) and the manifest enumerates its contents. **The enumeration and the
-directory are each other's check:** `validate-enforcement-map.sh` asserts the list
-below equals `core/scripts/` exactly, so a validator added upstream without a
-manifest entry fails the distribution's own gate, and a file appearing in a
-consumer's `scripts/ai-dlc/` that is not on the list is a consumer script in the
-core directory. Neither can drift silently, and neither is hand-maintained alone.
+**The validators are enumerated; everything else is a glob.** A glob names our
+set only where the directory is exclusively ours, and `scripts/` is shared — a
+consumer's own audit scripts sit beside ours under no distinguishing prefix. Core
+scripts therefore have a directory of their own, `scripts/ai-dlc/`, and the
+manifest enumerates its contents. **The enumeration and the directory are each
+other's check:** `validate-enforcement-map.sh` asserts the list below equals
+`core/scripts/` exactly, so a validator added upstream without a manifest entry
+fails the distribution's own gate, and a file appearing in a consumer's
+`scripts/ai-dlc/` that is not on the list is a consumer script in the core
+directory. Neither side is hand-maintained alone.
 
 **Consumer-authored ai-dlc scripts do not belong there.** A consumer's own
 pipeline tooling — snapshot resets, dormant-gate audits, sprint-entry sweeps —
@@ -38,10 +33,10 @@ goes in `scripts/ai-dlc-local/`, which core never reads, never writes and never
 overwrites. The two directories differ by ownership, not by subject.
 
 **Only the `ai-dlc-*` hooks are core.** The glob is `hooks/ai-dlc-*.sh`, not
-`hooks/*.sh`, because a consumer may ship its OWN hooks alongside the core set
-(e.g. a `guarded-merge.sh`). Those are consumer-owned — the guard must NOT deny
-an edit to them and the immutability check must NOT flag them. Every hook
-`/ai-dlc-update` ships carries the `ai-dlc-` prefix; the prefix is the boundary.
+`hooks/*.sh`: a consumer may ship its OWN hooks alongside the core set. Those are
+consumer-owned — the guard MUST NOT deny an edit to them and the immutability
+check MUST NOT flag them. Every hook `/ai-dlc-update` ships carries the
+`ai-dlc-` prefix; the prefix is the boundary.
 
 Paths are relative to the ai-dlc skill directory
 (`.claude/skills/ai-dlc/` in a consumer, `core/skills/ai-dlc/` upstream),

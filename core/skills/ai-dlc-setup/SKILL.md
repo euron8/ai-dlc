@@ -543,6 +543,16 @@ not model — separates PM/Code Reviewer (`high`) from Dev/QA
 model variables (including opus-tier roles) get the sonnet bedrock
 string.
 
+**Substitute in the `/model` directive lines ONLY.** Each token below occurs
+TWICE in its role file: once inside the `<!-- {token}: … -->` declaration
+comment, and once in the `- Personal:` / `- Bedrock:` `` `/model …` `` line
+under it. Replace it in the `- Personal:` / `- Bedrock:` lines and leave the
+declaration comment byte-identical. A global find-replace over the file
+consumes the comment too, and that comment is the only in-file record that the
+line below it is a substitution site — once it is gone, a filled site is
+indistinguishable from ordinary prose and `reconcile/setup-sites.md` is the sole
+remaining witness.
+
 **`.claude/team-roles/architect.md`:**
 - `{architect_model_personal}` -> opus-tier model personal string
 - `{architect_model_bedrock}` -> opus-tier model bedrock string
@@ -594,6 +604,12 @@ cheaper model — opus-tier, high effort: this is the judgment the lead is
 offloading, and a fresh Opus beats a saturated one)
 - `{gate_adjudicator_model_personal}` -> opus-tier model personal string
 - `{gate_adjudicator_model_bedrock}` -> opus-tier model bedrock string
+
+**`.claude/team-roles/remediator.md`:** (authors the repair for an adversarial
+finding — opus-tier, high effort: a repair writes a NEW claim about the code,
+and an unverified one costs a full extra pass)
+- `{remediator_model_personal}` -> opus-tier model personal string
+- `{remediator_model_bedrock}` -> opus-tier model bedrock string
 
 **`.claude/team-roles/protected-path-editor.md`:** (edits the rulebook —
 opus-tier, like the architect)
