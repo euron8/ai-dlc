@@ -20,6 +20,8 @@
 #   WORKLIST semantic-merge   <path>      a BOTH-CHANGED file needing a 3-way PROSE merge (LLM)
 #   WORKLIST override-readopt <override>  a HARD-OVERRIDE-DRIFT-SECTION: merge the section, then
 #                                         readopt-override.sh --stamp readopt (LLM + gated script)
+#   WORKLIST extension-reread <entry>     an EXTENSION-HOOK-DRIFT: the hooked core file changed,
+#                                         so re-read the entry and record a verdict (LLM)
 #   DECISION <kind> <path> <why>          a genuine operator call (unknown drift refile-vs-revert,
 #                                         a deletion, a value with no default)
 #   DECISION restamp-withheld <stamp>     a file that SHOULD have applied mechanically did not,
@@ -257,12 +259,31 @@ $UD
 EOF
 
 # ---------------------------------------------------------------- 3. override readopt (hand to LLM)
-LD_HARD="$(bash "$SELF/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null | awk -F'\t' '$1=="HARD-OVERRIDE-DRIFT-SECTION"{print $2}')"
+LD_OUT="$(bash "$SELF/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+LD_HARD="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="HARD-OVERRIDE-DRIFT-SECTION"{print $2}')"
 while IFS= read -r ovr; do
   [ -n "$ovr" ] || continue
   say WORKLIST override-readopt "$ovr" "merge the moved core section into the override body, then readopt-override.sh --stamp readopt"
 done <<EOF
 $LD_HARD
+EOF
+
+# EXTENSION-HOOK-DRIFT is NOT `HARD-`, and correctly so: an extension has no section anchor
+# (`hooks:` is file-grain), so nothing can prove the entry is now wrong and blocking the pull
+# on a suspicion would be a false gate. But "not blocking" was implemented as "not emitted",
+# and the obligation SKILL.md states at the detector -- re-read the entry against the new core
+# text -- named no actor and no deadline. It reached the report's layer-drift list and was
+# carried as a follow-up, twice running on the reference consumer.
+#
+# A WORKLIST row is the weakest thing that still has an owner: the caller must dispose of it
+# before the run is done, exactly like a semantic merge, and `apply` is not "clean" while one
+# is outstanding. That is the difference between an instruction and a work item.
+LD_HOOK="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="EXTENSION-HOOK-DRIFT"{print $2}')"
+while IFS= read -r ext; do
+  [ -n "$ext" ] || continue
+  say WORKLIST extension-reread "$ext" "hooked core file changed; re-read this entry against the new core text and record a verdict (still-additive / contradicts-core / retire)"
+done <<EOF
+$LD_HOOK
 EOF
 
 # ---------------------------------------------------------------- 4. catalog relabel (mechanical)

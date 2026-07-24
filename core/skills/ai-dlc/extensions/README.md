@@ -106,6 +106,14 @@ and wrongly report every role hook missing.
     core rule and belong in `overrides/` with a `base_sha`. Filed here they carry
     no drift anchor, so when core grows a third valid value your entry silently
     starts contradicting it.
+  - **Where this rule is checked.** At the pull, per entry: `EXTENSION-HOOK-DRIFT`
+    becomes a `WORKLIST extension-reread` row whose verdict is one of
+    still-additive / contradicts-core / retire (`ai-dlc-update/SKILL.md` step 7).
+    No scanner enforces it. `EXTENSION-RESTATES-CORE` catches an entry that COPIES
+    a core section; an entry that asserts the opposite in its own words copies
+    nothing and matches nothing, and an extension has no `base_sha` to compute a
+    contradiction against. The re-read is the whole mechanism — if it is skipped,
+    this rule is unenforced.
   - **Never restate a core section.** Same heading, or the same step number with
     the same title, means the rendered file defines it twice and a "Step 5c"
     reference becomes ambiguous. An extension's body is *added* to core, not merged

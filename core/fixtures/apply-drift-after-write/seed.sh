@@ -89,6 +89,22 @@ git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/alpha.md" > "$CONSUMER/.clau
 git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/beta.md"  > "$CONSUMER/.claude/skills/ai-dlc/steps/beta.md"
 printf 'version: 0.0.1\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 
+# ---- An extension HOOKED to alpha.md, which changes base..theirs. ----------
+# This makes layer-drift emit EXTENSION-HOOK-DRIFT, whose re-read obligation had no actor
+# until apply.sh started handing it back as a WORKLIST row. `hooks:` is file-grain and the
+# entry carries no base_sha, so nothing can locate what to re-merge -- which is exactly why
+# the disposition has to be a work item and not a status nobody owns.
+mkdir -p "$CONSUMER/.claude/skills/ai-dlc/extensions/steps-domain"
+cat > "$CONSUMER/.claude/skills/ai-dlc/extensions/steps-domain/alpha-domain.md" <<'MD'
+---
+hooks: steps/alpha.md
+reason: domain-local additions to alpha.
+push_candidate: false
+---
+
+Domain addition that must be re-read whenever alpha.md moves.
+MD
+
 cat > "$WORK/env.sh" <<ENV
 RECONCILE="$RECONCILE"
 APPLY="$RECONCILE/apply.sh"

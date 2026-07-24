@@ -44,6 +44,8 @@
 #                                 `{token}` template site. That is what install.sh
 #                                 does; it is not drift.
 #   CORE-OK                       byte-identical to the distribution at base.
+#   CORE-AT-THEIRS                byte-identical to the distribution at theirs — already
+#                                 applied, not drift. Also the tell for a stale base.
 set -uo pipefail
 
 DIST="${1:?usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> [theirs-ref]}"
@@ -186,6 +188,24 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
 
       if git -C "$DIST" show "${BASE}:${cp}" | cmp -s - "$cons"; then
         emit CORE-OK "$rel" "byte-identical to ${BASE}"
+        continue
+      fi
+
+      # Byte-identical to THEIRS is "already applied", never drift -- and saying otherwise is
+      # how a stale base poisons this whole scan. Every status below measures the consumer
+      # against BASE and presumes core still sits there; run after the overwrite with the
+      # pull's original base and every line upstream added reads as a consumer addition
+      # upstream absorbed. Measured on the reference consumer: a post-apply re-run reported
+      # HARD-CORE-DRIFT-ABSORBED on steps/retro.md whose sha already equalled theirs, and the
+      # remedy it printed was a revert that rewrites the file to what it already is.
+      #
+      # The real fix is passing the post-apply base, which SKILL.md step 7 now names. This is
+      # the guard for when it is not: a file that already IS theirs cannot be drift against
+      # theirs, whatever base was passed, so the wrong-base mistake announces itself here
+      # instead of arriving as a plausible HARD row.
+      if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null \
+         && git -C "$DIST" show "${THEIRS}:${cp}" | cmp -s - "$cons"; then
+        emit CORE-AT-THEIRS "$rel" "byte-identical to ${THEIRS} — already at the incoming core, not drift. If you expected drift here, the base is stale: post-apply, re-run with base == theirs."
         continue
       fi
 
