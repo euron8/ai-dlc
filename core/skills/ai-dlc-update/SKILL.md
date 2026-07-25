@@ -493,7 +493,11 @@ prose is itself generated rather than composed.
    gate log months later. The question is: which catalog does a bare `Check <n>` in
    your gate log now mean, and when will this entry be relabelled `[ext:<id>]`? —
    a **settings-provisioning question**, obtained by
-   running `reconcile/settings-merge.sh --check` (no writes): when it reports
+   running (no writes; `--template` needs a FILESYSTEM path, and `theirs` is a ref,
+   so materialize it first — the bare `--check` form exits 1 with usage):
+   `t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t";`
+   `reconcile/settings-merge.sh --consumer .claude/settings.json --template "$t" --check`
+   — when it reports
    `model_row_needed=yes`, reproduce its `ask:` lines verbatim as an operator
    question (the model row: `1M` / `200K` / `auto`; default `auto`, which writes
    nothing). The answer is passed to `--model-row` at apply (step 7) — a
@@ -840,8 +844,10 @@ prose is itself generated rather than composed.
      flag that file for operator adjudication — never best-effort-place a
      preserved value.
    - `TEMPLATE-JSON-MERGE` (`.claude/settings.json` — from step 3b) → run
-     `reconcile/settings-merge.sh --consumer .claude/settings.json --template
-     <theirs>/templates/settings.json.template --model-row <operator's answer>`.
+     `t=$(mktemp); git -C <dist> show <theirs>:templates/settings.json.template > "$t"`
+     then `reconcile/settings-merge.sh --consumer .claude/settings.json --template
+     "$t" --model-row <operator's answer>`. `--template` is read with `-r` and
+     `theirs` is a git ref, so a ref-qualified template path fails the read guard.
      **Do not hand-write the jq** — the script is the contract. It strips stale
      `ai-dlc-*.sh` hook blocks + appends the template's, and preserves user
      permissions/env/mcpServers/statusLine. It also provisions
@@ -993,6 +999,24 @@ declared sites, not everywhere unconditionally.
      fixed filename overwritten on every run, a snapshot, not a log"). A refusal, a status
      with no actor, a remedy that cannot be executed, a check that passed vacuously: file
      it. Filing it is not the same as fixing it, and this step never fixes upstream.
+   - **Every filed defect CITES the command that found it.** One literal command and its
+     decisive output line — the discipline `steps/discovery.md` already imposes on the
+     prior-decision search, where a zero-hit pass is valid ONLY if the command is shown. A
+     claim about WHY a detector emitted a row is an INFERENCE, not a finding: label it as one,
+     or verify it and cite that. The mechanical region is rendered and `--verify`'d precisely
+     so detector output cannot be narrated; the prose AROUND it had no such rule, and that is
+     where the wrong headline finding of each of the last two pulls came from — one filed
+     against a checker that was correctly obeying an over-wide declaration, one calling a
+     token inside a historical anecdote a second live vocabulary. Both were grep hits rendered
+     as conclusions without reading the surrounding line. A third was a CORRECTION derived
+     from the three refs already loaded rather than from the history, and it was wrong too.
+   - **Re-run the re-verifier over what you just wrote, before the drain is done.**
+     `reconcile/ledger-reverify.sh <dist> <base> <consumer> <theirs>` again, and read the rows
+     for the entries this step added. Any of them landing `NEEDS-REVIEW` — unresolved, vacuous,
+     or unfalsifiable — is a receipt to FIX NOW, not to file. Step 3f lints receipts on READ,
+     so an entry authored here is first checked one pull later, after a pull has already acted
+     on it. Last cycle this step wrote malformed receipts into the same document that correctly
+     explained that defect class. The whole ledger re-verifies in ~1.5s; this costs nothing.
    - **Close any `CLOSE-CANDIDATE` entries from step 3f.** For each, confirm the upstream
      version at `theirs` covers your entry (the row's detail names the sha and the version),
      then annotate the ledger entry `ADOPTED UPSTREAM (v<theirs>, verified <date>)`, matching
