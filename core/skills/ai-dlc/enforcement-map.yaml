@@ -230,6 +230,9 @@ checks:
     gate_types: [universal]
     adjudication: llm
     enforcer: []
+    reads:
+      - core/scripts/core-paths.sh        # --is-core: drops upstream-owned paths from scope
+      - core/skills/ai-dlc/core-manifest.md
     ci_workflow: ~
     fixtures: [tests/fixtures/check-15-bypass]
 

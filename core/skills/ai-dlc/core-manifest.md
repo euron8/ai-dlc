@@ -9,12 +9,26 @@ all read this list rather than enumerating it inline, so the set is defined
 in exactly one place on the pipeline side.
 
 Most entries are **rulebook prose** — a change to one goes into a consumer
-layer (`overrides/` to shadow a rule, `extensions/` to add one). `hooks/ai-dlc-*.sh`
-and `scripts/ai-dlc/*` are the exception: they are **machinery, not rulebook,
-and have no layer grain**. They are upstream-owned like the rest, but a
-consumer that needs different behavior configures it through the declared
-`AI_DLC_*` tunables or takes the change upstream — there is no `overrides/` or
-`extensions/` entry for a hook or a validator. The core-guard routes accordingly.
+layer (`overrides/` to shadow a rule, `extensions/` to add one). The
+**machinery** entries are the exception: `hooks/ai-dlc-*.sh`,
+`scripts/ai-dlc/*`, `session-driver/*.sh`, `schemas/*.json`, and the
+`skills/ai-dlc-setup/**` and `skills/ai-dlc-update/**` subtrees have **no layer
+grain**. They are upstream-owned like the rest, but a consumer that needs
+different behavior configures it through the declared `AI_DLC_*` tunables or
+takes the change upstream — there is no `overrides/` or `extensions/` entry for
+a hook, a validator, a schema, or the update engine. The core-guard routes
+accordingly.
+
+**The machinery subtrees were claimed late, and the gap had teeth.** Until
+v0.157.0 this list stopped at the `ai-dlc` skill dir, so five subtrees
+`install.sh` overwrites wholesale carried **no edit-time protection at all** —
+the same hole I12 records for `ai-dlc-setup/` (v0.63.0) and `schemas/`, found
+each time only when a real pull hit it. It also read the other way: Check 16's
+stub audit asks this list whether a marker sits in an upstream-owned file, and
+because `skills/ai-dlc-update/**` was unclaimed, a prose comment in
+`reconcile/apply.sh` was audited as consumer-authored and failed a consumer's
+§6 gate four times with no clearing path — a core file cannot carry a consumer
+backlog item, and the guard denies the edit that would add one.
 
 **The validators are enumerated; everything else is a glob.** A glob names our
 set only where the directory is exclusively ours, and `scripts/` is shared — a
@@ -40,8 +54,23 @@ check MUST NOT flag them. Every hook `/ai-dlc-update` ships carries the
 
 Paths are relative to the ai-dlc skill directory
 (`.claude/skills/ai-dlc/` in a consumer, `core/skills/ai-dlc/` upstream),
-except `team-roles/*.md` and `hooks/ai-dlc-*.sh`, which resolve to
-`.claude/team-roles/*.md` and `.claude/hooks/ai-dlc-*.sh` (outside the skill dir).
+except these prefixes, which resolve outside it:
+
+| entry prefix       | consumer path                    |
+|--------------------|----------------------------------|
+| `team-roles/`      | `.claude/team-roles/`            |
+| `hooks/`           | `.claude/hooks/`                 |
+| `session-driver/`  | `.claude/session-driver/`        |
+| `schemas/`         | `.claude/schemas/`               |
+| `skills/`          | `.claude/skills/`                |
+| `scripts/`         | `scripts/` (project root)        |
+
+`to_consumer_glob()` is the one implementation of that mapping. It lives in
+`hooks/ai-dlc-core-guard.sh` (edit-time) and `scripts/ai-dlc/core-paths.sh`
+(everything else, including Check 16's scope filter), byte-identical by
+assertion — `validate-enforcement-map.sh` I25 fails the build if they fork,
+because a mapping that differs between them lets the gate exempt what the guard
+protects.
 
 ```yaml
 core_manifest:
@@ -49,9 +78,15 @@ core_manifest:
   - steps/*.md
   - escalations.md
   - rule-authoring.md
+  - templates/*.md
   - team-roles/*.md
   - hooks/ai-dlc-*.sh
+  - session-driver/*.sh
+  - schemas/*.json
+  - skills/ai-dlc-setup/**
+  - skills/ai-dlc-update/**
   - scripts/ai-dlc/audit-rule-files.sh
+  - scripts/ai-dlc/core-paths.sh
   - scripts/ai-dlc/gen-architecture-index.js
   - scripts/ai-dlc/sprint-status.sh
   - scripts/ai-dlc/stamp-story-provenance.sh

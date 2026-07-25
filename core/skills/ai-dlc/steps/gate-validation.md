@@ -844,6 +844,33 @@ hot-path file. Hot-path extensions: `.py`, `.ts`, `.tsx`, `.js`,
 `.sh`, `.sql`. Hot-path paths: `.github/workflows/**.yml` (directly
 invoked by GitHub Actions).
 
+**Upstream-owned files are OUT of scope.** Drop from `changed_files`
+every path for which `scripts/ai-dlc/core-paths.sh --is-core <path>`
+exits 0 (exit 1 = consumer-owned, stays in scope; **exit 2 = could not
+determine, which is NOT an exemption** — the path stays in scope and
+the gate log records that the resolver could not answer). Exempt paths
+are excluded from the marker grep entirely, so they can neither pass nor
+fail this check; the gate log names each one it dropped.
+
+The four elements below are unsatisfiable on a core file, in both
+directions: element 1 demands an `Item N` resolvable in the CONSUMER's
+`carry-over-backlog.md`, and `ai-dlc-core-guard.sh` DENIES the in-place
+edit that would add one — there is no `overrides/` shadow and no
+`extensions/` entry for a hook, a validator, or the update engine. So a
+marker in an upstream file left the gate with no clearing path short of
+forking core (Rule 27 forbids it) or an operator waiver on every pull,
+and it fired on prose: a comment in `reconcile/apply.sh` reading
+"Phase 3's layer-drift.sh does NOT belong here" matched `Phase [0-9]`
+and failed a consumer's §6 gate four times. Stub discipline for core
+files is not waived — it binds in the DISTRIBUTION repo, against its own
+backlog, where the edit and the item number both exist.
+
+Do not hand-list the exempt set. `core-paths.sh` derives it from
+`core-manifest.md` (fallback `reconcile/setup-sites.md`), the same source
+the edit-time guard reads; `validate-enforcement-map.sh` I25 asserts the
+two derivations are byte-identical, so a file the guard protects cannot
+be audited here as consumer-authored.
+
 **Check.** Grep changed hot-path files for stub markers (regex
 `(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)`).
 For each match, verify FOUR elements in the match's surrounding

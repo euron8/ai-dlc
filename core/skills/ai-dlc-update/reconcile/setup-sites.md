@@ -50,9 +50,15 @@ core_manifest:
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
+  - core/skills/ai-dlc/templates/*.md
   - core/team-roles/*.md
   - core/hooks/ai-dlc-*.sh
+  - core/session-driver/*.sh
+  - core/schemas/*.json
+  - core/skills/ai-dlc-setup/**
+  - core/skills/ai-dlc-update/**
   - core/scripts/ai-dlc/audit-rule-files.sh
+  - core/scripts/ai-dlc/core-paths.sh
   - core/scripts/ai-dlc/gen-architecture-index.js
   - core/scripts/ai-dlc/sprint-status.sh
   - core/scripts/ai-dlc/stamp-story-provenance.sh

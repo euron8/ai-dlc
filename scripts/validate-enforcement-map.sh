@@ -414,6 +414,35 @@ elif [ "$ba_drift" != "$ba_lint" ]; then
   err "the bold-anchor rule has forked between layer-drift.sh and validate-layer-entries.sh. One classifies the pull and the other lints authoring and gates CI; a rule that differs between them means the two disagree about what a section IS, and the operator believes whichever they happened to run. Make bold_anchors_of_file() byte-identical."
 fi
 
+# --- I25: the core-path derivation is ONE rule, in two places, byte-identical --
+# `hooks/ai-dlc-core-guard.sh` decides at EDIT time whether a path is core (and
+# denies the write). `scripts/core-paths.sh` answers the same question for callers
+# that are not a hook -- Check 16's stub audit asks it whether a marker sits in an
+# upstream-owned file, because a core file can satisfy none of the four elements
+# (no consumer backlog item can be added to a file the guard forbids editing).
+#
+# Same shape as I18, and the same reason it is a COPY rather than a source: the
+# guard must stay self-contained. A guard that sources a helper stops denying core
+# writes entirely when that helper is missing from a partial install -- it fails
+# open, silently, and a disabled write guard is far worse than a duplicated
+# 25-line parser. The duplication is only safe because this assertion exists: two
+# copies bound byte-for-byte cannot drift, one copy with a fragile load path can
+# vanish. If these two ever disagree, the edit-time guard and the gate-time check
+# classify the same file differently -- the gate exempts what the guard protects,
+# or the guard denies what the gate audits.
+cp_fn() { awk "/^$2\(\) \{/,/^\}/" "$1" 2>/dev/null; }
+CP_GUARD="$REPO_ROOT/core/hooks/ai-dlc-core-guard.sh"
+CP_LIB="$REPO_ROOT/core/scripts/core-paths.sh"
+for cp_f in parse_manifest to_consumer_glob; do
+  cp_a="$(cp_fn "$CP_GUARD" "$cp_f")"
+  cp_b="$(cp_fn "$CP_LIB" "$cp_f")"
+  if [ -z "$cp_a" ] || [ -z "$cp_b" ]; then
+    err "I25 cannot find a ${cp_f}() definition in ai-dlc-core-guard.sh and/or core-paths.sh. The check binding the edit-time and gate-time core-path rules just went vacuous — it must locate both or fail loudly, never pass by finding nothing."
+  elif [ "$cp_a" != "$cp_b" ]; then
+    err "the core-path derivation has forked between ai-dlc-core-guard.sh and core-paths.sh at ${cp_f}(). One denies edits to core, the other tells Check 16 which files are core; a rule that differs between them means a file the guard protects can be audited as consumer-authored, or a file the gate exempts can still be edited. Make ${cp_f}() byte-identical."
+  fi
+done
+
 # --- I19: SKILL.md Rule 8's intensity table is the ONLY place the validation-cycle
 # minimums are enumerated. Check 20 kept its own copy of them and the copy dropped a row:
 # Rule 8 defines four intensities, Check 20 listed three, and `carry-over-single` appeared
@@ -1126,7 +1155,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25)."
   exit 0
 fi
 exit 1

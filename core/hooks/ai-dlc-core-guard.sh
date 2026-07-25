@@ -109,7 +109,9 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
     team-roles/*)     printf '.claude/%s\n' "$e" ;;
     hooks/*)          printf '.claude/%s\n' "$e" ;;   # hooks live at .claude/hooks/, outside the skill dir
     scripts/*)        printf '%s\n' "$e" ;;           # scripts/ai-dlc/* is at the project root, not under .claude/
-    skills/ai-dlc/*)  printf '.claude/%s\n' "$e" ;;
+    session-driver/*) printf '.claude/%s\n' "$e" ;;   # machinery, outside the skill dir
+    schemas/*)        printf '.claude/%s\n' "$e" ;;   # machinery, outside the skill dir
+    skills/*)         printf '.claude/%s\n' "$e" ;;   # ai-dlc/, ai-dlc-setup/ and ai-dlc-update/ all sit under .claude/skills/
     *)                printf '.claude/skills/ai-dlc/%s\n' "$e" ;;
   esac
 }

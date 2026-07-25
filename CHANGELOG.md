@@ -17,6 +17,90 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.157.0] — 2026-07-25
+
+### Fixed — a check that fails closed on files the consumer is forbidden to edit
+
+Check 16 (stub audit) is `universal`: it fires at every gate whose `changed_files` include a
+hot-path file, keyed on content, not gate phase. Its marker regex includes `Phase [0-9]`. A
+prose comment in `reconcile/apply.sh` reads:
+
+```
+# Phase 3's layer-drift.sh does NOT belong here and is not exposed to the same fault: its
+```
+
+That is a core-authored comment in a core-distributed file, and it failed the reference
+consumer's §6 gate **four times**. There was no way to clear it. The four elements demand an
+`Item N` resolvable in the **consumer's** `carry-over-backlog.md`; a core file cannot carry one,
+and `ai-dlc-core-guard.sh` DENIES the in-place edit that would add one — there is no
+`overrides/` shadow and no `extensions/` entry for a hook, a validator, or the update engine.
+The only exits were forking core (Rule 27 forbids it) or an operator waiver on every pull.
+
+**The root cause was an under-claiming manifest, not the regex.** `core-manifest.md` stopped at
+the `ai-dlc` skill dir, hooks, team-roles, and the enumerated validators. Five subtrees
+`install.sh` overwrites wholesale were unclaimed: `skills/ai-dlc-setup/**`,
+`skills/ai-dlc-update/**`, `skills/ai-dlc/templates/*.md`, `session-driver/*.sh`, and
+`schemas/*.json`. So they had **no edit-time protection either** — the same hole I12 already
+records for `ai-dlc-setup/` (v0.63.0) and `schemas/`, each found only when a real pull hit it.
+Claiming them fixes both directions at once: the guard now denies in-place edits there, and
+Check 16 now recognises them as upstream-owned.
+
+Two mechanisms considered and **rejected on measurement**, recorded so they are not re-proposed:
+
+- *Exempt by `git blame` — "the consumer never authored this line."* Only **24 of 44** marker
+  lines in distributed files blame to a `chore(ai-dlc-update)` commit. The other 20 blame to
+  consumer sprint commits predating the current landing convention (`Sprint 155: …`,
+  `chore(ai-dlc): land distribution 0.51.0 → 0.59.0`). Attribution is not stable across a long
+  consumer history.
+- *Tighten the marker regex.* Real, but a separate change: it widens a shared predicate that
+  gates every consumer's product code, and the ownership defect would survive it.
+
+### Added — `scripts/ai-dlc/core-paths.sh`, and I25 binding it to the guard
+
+`--is-core <path>` answers the ownership question for callers that are not a hook: exit 0 core,
+1 consumer-owned, **2 = could not determine**. Exit 2 is deliberately not an exemption — Check
+16 keeps such a path in scope and records that the resolver could not answer, because "no
+manifest found" and "not core" are different answers and a caller that conflates them exempts
+the whole tree.
+
+The set is derived from `core-manifest.md` (fallback `reconcile/setup-sites.md`), never
+hand-listed. `parse_manifest()` and `to_consumer_glob()` are byte-identical copies of the
+guard's, and **I25 in `validate-enforcement-map.sh` fails the build if they fork** — if the two
+disagree, the gate exempts what the guard protects, or the guard denies what the gate audits.
+The copy is deliberate: the guard must stay self-contained, because a guard that sources a
+helper stops denying core writes entirely when that helper is missing from a partial install.
+It fails open, silently, and a disabled write guard is worse than a duplicated 25-line parser.
+
+`to_consumer_glob()` gained `session-driver/`, `schemas/` and a generalised `skills/` case; the
+old table could not express the new subtrees at all — `skills/ai-dlc-setup/SKILL.md` fell to
+the default and resolved to `.claude/skills/ai-dlc/skills/ai-dlc-setup/SKILL.md`.
+
+### Fixed — the fixture that let this ship
+
+`check-15-bypass` seeded only `$TREE/src/` — consumer-authored product code. "A core file trips
+Check 16 and the consumer cannot clear it" had **no coverage**, so the harness stayed green
+while the defect shipped. Added V8 (upstream-owned `reconcile/apply.sh` carrying the verbatim
+comment that failed the real gate, expected **exempt**) and V9 (a consumer-owned
+`.claude/hooks/my-own-hook.sh` with the same bare marker, expected to **fail element 1**).
+
+The pair is the point. A blanket `.claude/` carve-out would pass V8 *and* V9 — and V9 passing is
+a consumer hook smuggling an unaudited stub through the gate. Four mutation runs confirm each
+assertion fires alone: removing the exemption flips only V8; widening it to all of `.claude/`
+flips only V9; deleting `skills/ai-dlc-update/**` from the seeded manifest flips only V8; hiding
+`core-paths.sh` makes the driver exit 2 rather than pass without ever running the filter. The
+seed copies the real `core-manifest.md` rather than a stand-in, so a change to the real
+manifest's shape cannot leave the fixture passing against stale data.
+
+### Known gap — carried, not fixed
+
+19 core-distributed hot-path files carry 45 stub-marker lines; this release exempts the ones
+under the five newly-claimed subtrees. The **30 lines under `tests/fixtures/`** are still in
+scope and will trip Check 16 on any pull that touches those files. `tests/fixtures/` is a shared
+directory — consumers author their own fixtures there — so it needs the enumerate-and-bind
+treatment `scripts/ai-dlc/` already has (an I5b-style invariant joining the enumeration to
+`core/fixtures/`), not a glob. Worst offenders: `check-15-bypass/seed.sh` (13) and its
+`variant_*.py` (11 across 5), which exist to *be* bad stubs and can never be scrubbed.
+
 ## [0.156.0] — 2026-07-25
 
 ### Fixed — a stale core file read as a consumer fork, and the acceptance that hid it was self-perpetuating
