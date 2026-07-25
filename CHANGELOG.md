@@ -17,6 +17,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.165.0] — 2026-07-25
+
+### Fixed — the self-update deadlock: the fix to the cycle was delivered BY the cycle
+
+v0.164.0 widened the self-update slice and could never reach the reference consumer, because
+**the consumer runs its own installed skill**. graph is still at `skill_version: 0.156.0` with the
+old narrow-slice wording, so the engine that executes is the broken one: it computes the narrow
+slice, pulls the new fixtures into it, requires them green, and a red one stops the invocation —
+so the gated reconcile that would install the fix never runs. Self-update branches for both
+0.163.0 and 0.164.0 were cut and blocked.
+
+That deadlock has exactly one lever: **the fixture files themselves**, because the old cycle does
+pull them. Reproduced against a copy of the consumer, the old slice's three blockers were all the
+same shape — *my subject is not installed yet*, reported as a regression:
+
+| Fixture | rc | Actual condition |
+|---|---|---|
+| `apply-restamp-theirs` | 1 | the resolved `pre-push` predates the in-flight marker — a v0.163.0 assertion of mine |
+| `check-15-bypass` | 2 | `scripts/ai-dlc/core-paths.sh` not installed |
+| `core-write-guard` | 1 | the installed `core-manifest.md` does not claim `fixtures/` yet |
+
+**A core fixture ships ahead of its subject.** A consumer receives the fixture on the pull that
+carries it, and the subject can land later in the same pull or in the gated reconcile after it.
+"Subject absent" is not "subject regressed", and reporting it as a failure blocks the cycle that
+installs the subject. All three now detect the precondition and emit a loud, non-blocking `SKIP`.
+
+**Upstream cannot go green vacuously**, which is what makes this safe rather than the
+check-that-cannot-fire class: the skip is gated on layout. In the distribution the subject is
+always present, so an absent one stays a hard failure (`check-15-bypass` still exits 2 there). Only
+a consumer layout skips. Verified: all three run in the distribution with **zero** skips.
+
+The skips are also minimal. `check-15-bypass` skips only the four ownership variants that need the
+resolver (V8/V9/V10/V11); every other variant still runs. `core-write-guard` skips 10e and its
+message check 10g, but **not** 10f — `allow` is the answer either way, so the over-capture control
+is still meaningful on an un-upgraded tree.
+
+### Verification
+
+Reproduced the **old 0.156.0 narrow slice** against a copy of the reference consumer's tree — the
+exact configuration that deadlocked: **21/21 derived fixtures green**, with 3 loud skips. graph's
+own engine can now complete the self-update, which delivers v0.164.0's machinery slice and then the
+gated reconcile.
+
 ## [0.164.0] — 2026-07-25
 
 ### Fixed — the self-update pulled a slice too narrow for the fixtures it then required green
