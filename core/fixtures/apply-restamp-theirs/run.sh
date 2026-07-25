@@ -45,6 +45,13 @@ else
   exit 2
 fi
 
+# apply.sh WRITES the in-flight marker; pre-push READS it. Both halves are resolved here,
+# because a marker nothing refuses on is a file, not a guard.
+for cand in "$ROOT/core/git-hooks/pre-push" "$ROOT/.githooks/pre-push"; do
+  [ -f "$cand" ] && PREPUSH="$cand" && break
+done
+[ -n "${PREPUSH:-}" ] || { echo "FIXTURE ERROR: pre-push not found in either layout — the marker's READER cannot be evaluated, and passing without it would report the guard as working when it was never run." >&2; exit 2; }
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-restamp.XXXXXX")" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 trap 'rm -rf "$WORK"' EXIT
 
@@ -65,12 +72,19 @@ printf '#!/usr/bin/env bash\n# driver v1\n' > "$DIST/core/session-driver/ai-dlc-
 # This fixture used to pass through that hole -- the old 27-name enumeration produced
 # 27 individual cat-file misses, and 27 misses read as "nothing to relocate".
 printf '#!/usr/bin/env bash\necho v\n' > "$DIST/core/scripts/validate-synthetic.sh"
+# A fixture that CHANGES in the range, so the write ORDER is observable. core/fixtures/
+# sorts before core/scripts/ and core/session-driver/, so preclassify emits it first and
+# the unsorted order is exactly backwards: the test lands before its subject.
+mkdir -p "$DIST/core/fixtures/synthetic-fx" "$CONSUMER/tests/fixtures/synthetic-fx" || exit 2
+printf '#!/usr/bin/env bash\n# fx v1\n' > "$DIST/core/fixtures/synthetic-fx/run.sh"
+printf '#!/usr/bin/env bash\n# fx v1\n' > "$CONSUMER/tests/fixtures/synthetic-fx/run.sh"
 gitc add -A && gitc commit -q -m base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
 
 # THEIRS at 2.0.0 — this is the version the stamp must record.
 printf '2.0.0\n' > "$DIST/VERSION"
 printf '#!/usr/bin/env bash\n# driver v2 UPSTREAM\n' > "$DIST/core/session-driver/ai-dlc-session-driver.sh"
+printf '#!/usr/bin/env bash\n# fx v2 UPSTREAM\n' > "$DIST/core/fixtures/synthetic-fx/run.sh"
 gitc add -A && gitc commit -q -m theirs
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 THEIRS_SHORT="$(git -C "$DIST" rev-parse --short HEAD)"
@@ -138,10 +152,96 @@ else
   bad "control: checkout on theirs stamped $ctl_ver, expected $theirs_ver — the ordinary path regressed"
 fi
 
+# --- Assertion 4: A FIXTURE IS WRITTEN AFTER ITS SUBJECT ----------------------
+# core/fixtures/ sorts first, so preclassify's natural order writes the test before the
+# thing it tests. A suite run in that window fails on behaviour that is not installed
+# yet: on the 0.156.0 -> 0.162.0 pull, check-15-bypass could not find core-paths.sh and
+# core-write-guard read the core-fixture deny as `allow`. Assert every fixtures/ row
+# lands after every non-fixture row.
+fx_first="$(printf '%s\n' "$out" | awk '$0 ~ /pure-apply/ {print $3}' | grep -n '^fixtures/' | head -1 | cut -d: -f1)"
+nonfx_last="$(printf '%s\n' "$out" | awk '$0 ~ /pure-apply/ {print $3}' | grep -vn '^fixtures/' | tail -1 | cut -d: -f1)"
+if [ -z "$fx_first" ] || [ -z "$nonfx_last" ]; then
+  bad "setup: the report has no fixtures/ row and/or no non-fixture row — assertion 4 would pass vacuously"
+elif [ "$fx_first" -gt "$nonfx_last" ]; then
+  ok "a changed fixture is written AFTER every non-fixture core file (test never precedes subject)"
+else
+  bad "a fixture was written at position $fx_first, before a non-fixture core file at $nonfx_last — the suite can run against a test newer than its subject"
+fi
+
+# --- Assertion 5: THE IN-FLIGHT MARKER CLEARS WITH THE STAMP ------------------
+# Ordering cannot make the window safe on its own -- only one of the two directions can
+# be last, and the reverse one breaks OLD assertions against a newer subject (this very
+# fixture and apply-drift-refile both failed that way against a newer apply.sh). So the
+# tree carries a marker saying "do not judge me yet", and pre-push refuses the suite while
+# it exists. It must be GONE after a clean apply, or the consumer can never push again.
+APPLYING="$CONSUMER/.claude/.ai-dlc-applying"
+if [ ! -f "$APPLYING" ]; then
+  ok "the in-flight marker is cleared by a clean apply (pre-push is not left wedged)"
+else
+  bad "the in-flight marker survived a CLEAN apply — every subsequent push blocks on a consistent tree"
+fi
+if printf '%s\n' "$out" | grep -q 'RESOLVED.*consistent'; then
+  ok "  and the report says so, rather than clearing it silently"
+else
+  bad "  the report does not record the tree becoming consistent"
+fi
+
+# --- Assertion 6: A WITHHELD RE-STAMP KEEPS THE MARKER -----------------------
+# The half that matters. A tree that could not be fully applied IS inconsistent, so the
+# marker must stay and keep blocking the suite. Clearing it in a trap would have looked
+# correct and defeated the whole guard. Drive the same withheld path assertion 0's
+# manifest-unreadable case uses: no core/scripts/ in THEIRS means zero validators.
+RECON2="$WORK/recon2"
+mkdir -p "$RECON2" || exit 2
+cp "$(dirname "$APPLY")"/* "$RECON2/" 2>/dev/null || { echo "FIXTURE ERROR: could not copy reconcile/" >&2; exit 2; }
+printf '# no core_manifest block here\n' > "$RECON2/setup-sites.md"
+APPLY2="$RECON2/apply.sh"
+W2="$WORK/consumer2"
+mkdir -p "$W2/.claude/session-driver" "$W2/tests/fixtures" || exit 2
+printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$W2/.claude/.ai-dlc-version"
+out6="$(bash "$APPLY2" "$DIST" "$BASE" "$W2" "$THEIRS" 2>&1)"
+if printf '%s\n' "$out6" | grep -q 'restamp-withheld'; then
+  if [ -f "$W2/.claude/.ai-dlc-applying" ]; then
+    ok "a withheld re-stamp LEAVES the marker — the suite stays blocked on a partial tree"
+  else
+    bad "the marker was cleared despite a withheld re-stamp — a partially applied tree would report false fixture failures as if they were real"
+  fi
+else
+  bad "setup: could not drive a withheld re-stamp, so assertion 6 proves nothing"
+  printf '%s\n' "$out6" | sed 's/^/        /' | head -5
+fi
+
+# --- Assertions 7/8: THE MARKER'S READER ACTUALLY REFUSES ---------------------
+# A marker nothing refuses on is a file, not a guard -- and it would have looked identical
+# in the report. Drive the real pre-push in a throwaway tree, both directions: the message
+# must appear and the hook must exit non-zero with the marker, and the suite must run
+# normally without it. The paired control is what makes assertion 7 mean anything, because
+# every other step in that minimal tree fails too.
+PP="$WORK/pptree"
+mkdir -p "$PP/.claude" "$PP/tests/fixtures/x" || exit 2
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PP/tests/fixtures/x/run.sh"
+: > "$PP/.claude/.ai-dlc-applying"
+pp_out="$(cd "$PP" && bash "$PREPUSH" </dev/null 2>&1)"; pp_rc=$?
+if printf '%s\n' "$pp_out" | grep -q 'ai-dlc-applying' && [ "$pp_rc" -ne 0 ]; then
+  ok "pre-push REFUSES the fixture suite while the marker exists, and names the file"
+else
+  bad "pre-push ran the suite on a mid-pull tree (rc=$pp_rc) — the marker is written but nothing reads it"
+fi
+rm -f "$PP/.claude/.ai-dlc-applying"
+pp_out2="$(cd "$PP" && bash "$PREPUSH" </dev/null 2>&1)"
+if ! printf '%s\n' "$pp_out2" | grep -q 'ai-dlc-applying'; then
+  ok "  control: with no marker the suite runs normally (the guard is not always-on)"
+else
+  bad "  the guard fires with no marker present — it would block every push forever"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "PASS  apply-restamp-theirs: the stamp is computed from theirs, so a distribution"
-  echo "      checkout on any other ref cannot make it claim a version the tree lacks."
+  echo "      checkout on any other ref cannot make it claim a version the tree lacks;"
+  echo "      a changed fixture is written after its subject; and the in-flight marker"
+  echo "      clears with the stamp, survives a withheld one, and is what pre-push"
+  echo "      refuses on so a mid-pull tree is never judged by its own fixtures."
   exit 0
 fi
 echo "apply-restamp-theirs: $fails assertion(s) FAILED"

@@ -17,6 +17,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.163.0] — 2026-07-25
+
+### Fixed — a mid-pull tree ran its own fixture suite and reported failures that meant nothing
+
+Reported from the reference consumer's self-update: `check-15-bypass` exited 2 (`no core-paths.sh
+found walking up`) and `core-write-guard` failed two assertions (core fixture edits still
+classified `allow`). Neither was a regression. A pull writes core one file at a time, so between
+the first write and the re-stamp the tree is a **mixture of two releases**, and the fixture suite
+run in that window is judging new tests against old subjects.
+
+Measured on the 0.156.0 → 0.162.0 range, and it fails in **both** directions:
+
+- **A fixture newer than its subject** asserts behaviour that is not installed yet. `core/fixtures/`
+  sorts before `core/scripts/`, `core/hooks/` and `core/skills/` — 13 of the 25 changed paths —
+  so preclassify's natural order writes every test *before* the thing it tests. This is exactly
+  the two failures reported.
+- **A subject newer than its fixture** breaks the old assertions. Applying only the non-fixture
+  core changes against the 0.156.0 fixtures fails `apply-restamp-theirs` and `apply-drift-refile`.
+
+So ordering alone cannot fix this — only one of the two directions can be last. Two changes:
+
+**1. Fixtures are written last.** `apply.sh` stably partitions preclassify's rows so every
+`core/fixtures/` path is applied after every other core path. The end-state ordering is now
+correct (a test is never newer than its subject), and an apply interrupted during the fixture
+batch leaves every subject already in place, so the fixtures that did land pass.
+
+**2. An in-flight marker, which is the actual guarantee.** `apply.sh` writes
+`.claude/.ai-dlc-applying` before the first core write and removes it **only where it writes the
+re-stamp**. `core/git-hooks/pre-push` refuses the fixture step while that file exists, naming it
+and saying how to finish or clear the pull.
+
+A withheld re-stamp deliberately **leaves** the marker: that tree really is inconsistent, and the
+next push should block on it rather than run a suite whose result means nothing. Clearing it in a
+`trap` would have looked correct and defeated the guard — that is one of the mutants below. The
+step **refuses** rather than skips, because a skipped suite is the green light nobody earned.
+
+### Coverage
+
+`apply-restamp-theirs` gains five assertions and a `core/fixtures/` path in its synthetic
+distribution so write order is observable: fixtures land after non-fixture core; the marker is
+cleared by a clean apply and the report says so; a withheld re-stamp keeps it; and the real
+`pre-push` refuses with the marker present and runs the suite normally without it — the paired
+control, because every other step in that minimal tree fails too and rc alone proves nothing.
+
+Each fires alone under a single-line mutant: removing the partition fires only the ordering
+assertion; never clearing the marker fires only the cleared-on-clean assertion; and clearing it in
+a `trap` — the plausible wrong implementation — fires only the withheld assertion.
+
+**New invariant I27** binds the two ends: `apply.sh` writes the marker and `pre-push` reads it, so
+they must name one path. If they fork, the marker is written with nothing refusing on it — a guard
+that is silently absent and reads exactly like a guard that passed, the shape v0.55.2's
+`map_consumer()` and v0.63.0's drift-scan list both failed in. I27 also fails loudly if either end
+cannot be located rather than passing on finding nothing.
+
+### Known limitation
+
+The consumer runs its **own** installed `apply.sh`, so this sequencing takes effect from the
+**next** pull after a consumer reaches 0.163.0. For a consumer currently mid-upgrade from an older
+release, the old engine still writes fixtures first and carries no marker: let `apply.sh` finish
+and re-run the suite only after the stamp advances. Verified against a copy of the reference
+consumer's tree — a completed pull to 0.162.0 passes 66/66, including both fixtures reported.
+
 ## [0.162.0] — 2026-07-25
 
 ### Fixed — the core-layer immutability check restated the manifest, and the restatement had rotted

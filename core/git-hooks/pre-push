@@ -105,7 +105,32 @@ run_fixtures() {
   done
   return $rc
 }
-if [ -d tests/fixtures ]; then
+#    A MID-PULL TREE CANNOT BE JUDGED. /ai-dlc-update writes core one file at a time and
+#    clears .claude/.ai-dlc-applying only when it writes the re-stamp, so while that marker
+#    exists the tree is a mixture of two releases. Its fixtures then fail in both
+#    directions — a fixture newer than its subject asserts behaviour that is not installed
+#    yet, an older one breaks against a newer subject — and neither result means anything.
+#    REFUSE rather than skip: a skipped suite is the green light nobody earned, and pushing
+#    a half-applied core is worse than not pushing.
+applying_guard() {
+  cat <<'MSG'
+   .claude/.ai-dlc-applying exists — this tree is mid-pull, and its fixture suite would
+   report failures that are neither a regression nor your fault. Finish the update:
+
+     /ai-dlc-update        (re-run; it resumes and re-stamps when the tree is consistent)
+
+   If that pull was abandoned and the tree is known good, remove the marker:
+
+     rm .claude/.ai-dlc-applying
+
+   Do not push a half-applied core. A withheld re-stamp means files are missing, and the
+   stamp still names the OLD release, so the next pull will mis-compute its base.
+MSG
+  return 1
+}
+if [ -f .claude/.ai-dlc-applying ]; then
+  step "fixture suite" applying_guard
+elif [ -d tests/fixtures ]; then
   step "fixture suite" run_fixtures
 fi
 
