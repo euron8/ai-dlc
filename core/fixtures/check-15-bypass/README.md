@@ -17,6 +17,8 @@ so the driver can assert *which* element rejects it:
 | V5 | honest stub — the positive control | none; passes all four |
 | V8 | upstream-owned `reconcile/apply.sh` — bare `Phase 3` marker | none; **dropped from scope** |
 | V9 | consumer-owned `.claude/hooks/my-own-hook.sh` — same bare marker | 1 (item ref) |
+| V10 | core fixture `tests/fixtures/check-15-bypass/seed.sh` — bare `Phase 3` | none; **dropped from scope** |
+| V11 | consumer fixture `tests/fixtures/check-15-bypass-local/seed.sh` — same marker | 1 (item ref) |
 
 V5 is what makes the fixture able to fail. Without it, an element mutated into
 always-rejecting would still look correct: every adversary would be rejected
@@ -42,9 +44,27 @@ it to all of `.claude/` flips only V9; deleting `skills/ai-dlc-update/**` from
 the seeded manifest flips only V8; hiding `core-paths.sh` makes the driver
 exit 2 rather than pass without ever running the filter.
 
+**V10/V11 are the same pair on fixture ownership**, and they matter because
+`tests/fixtures/` is genuinely shared: core ships its adversarial self-tests
+there and a consumer's own sit beside them, both using the `check-` prefix, so
+the manifest entries are name-exact rather than a glob. V11's directory is
+deliberately a core fixture's name plus a suffix — one dropped slash in an entry
+(`fixtures/check-15-bypass**`) over-captures it, where a neutrally-named control
+would not notice. The stake on V10's side is higher than on V8's: a core
+fixture's markers are the payload its own assertions read, so the only way to
+clear a Check 16 finding against one is to edit it, which VACATES the fixture.
+
+Mutation runs confirm each fires alone: forcing `core-paths.sh` to answer
+not-core for `tests/fixtures/` flips only V10; making its glob loop over-capture
+`tests/fixtures/` flips only V11; and the dropped-slash entry flips V11 together
+with the guard fixture's consumer-editable assertion and I8's missing-entry
+direction — a poor isolator, run once as evidence a malformed entry cannot ship.
+
 The seed copies the **real** `core-manifest.md` (walking up for whichever
 layout it is in) rather than inventing one, so a change to the real manifest's
-shape cannot leave this fixture passing against a stale stand-in.
+shape cannot leave this fixture passing against a stale stand-in. V10 therefore
+goes green only once the real manifest carries `fixtures/check-15-bypass/**`:
+the manifest edit and this fixture are atomic by construction.
 
 `run.sh` drives it and asserts the element-per-variant matrix.
 

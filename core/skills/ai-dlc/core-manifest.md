@@ -41,6 +41,27 @@ in-place edit AND denies the `Write` that would create such a file, routing the
 author to `scripts/ai-dlc-local/`. `core-script-boundary`'s assertion 8 asserts all
 three directions.
 
+**Fixtures are the one entry set that must be enumerated, and the enumeration is
+DERIVED.** `tests/fixtures/` is genuinely shared: core ships its adversarial
+self-tests there and a consumer's own fixtures sit beside them under no
+distinguishing prefix — in the reference consumer, core and consumer directories
+both use the `check-` prefix, so no glob separates them. Until they have a
+directory of their own, one entry per shipped fixture is the only expressible form.
+Nothing here is hand-maintained: the set is `core/fixtures/` minus every directory
+carrying a `.dist-only` marker, which is the same derivation `install.sh`'s loop and
+`validate-enforcement-map.sh` I8 already use. I8 asserts the entries below equal
+that set in both directions, so a new fixture cannot ship unclaimed and a claimed
+name cannot outlive its fixture.
+
+**A core fixture's content IS its assertion's input.** The stub markers, anchor
+counts and deliberately-malformed stanzas inside a fixture are the payload the
+`run.sh` beside it reads, so an edit that looks like tidying can leave the fixture
+passing while it proves nothing — and nothing downstream can tell a vacated fixture
+from a working one. There is no `overrides/` shadow for a seed and no `extensions/`
+entry for an assertion; the guard routes accordingly. A consumer's own fixtures go
+in `tests/fixtures/<their-own-name>/`, which core never reads, never writes and
+never overwrites, and which the pre-push suite drives exactly the same way.
+
 **Consumer-authored ai-dlc scripts do not belong there.** A consumer's own
 pipeline tooling — snapshot resets, dormant-gate audits, sprint-entry sweeps —
 goes in `scripts/ai-dlc-local/`, which core never reads, never writes and never
@@ -64,6 +85,7 @@ except these prefixes, which resolve outside it:
 | `schemas/`         | `.claude/schemas/`               |
 | `skills/`          | `.claude/skills/`                |
 | `scripts/`         | `scripts/` (project root)        |
+| `fixtures/`        | `tests/fixtures/` (project root) |
 
 `to_consumer_glob()` is the one implementation of that mapping. It lives in
 `hooks/ai-dlc-core-guard.sh` (edit-time) and `scripts/ai-dlc/core-paths.sh`
@@ -86,6 +108,72 @@ core_manifest:
   - skills/ai-dlc-setup/**
   - skills/ai-dlc-update/**
   - scripts/ai-dlc/*
+  - fixtures/adversarial-citation/**
+  - fixtures/apply-drift-after-write/**
+  - fixtures/apply-drift-refile/**
+  - fixtures/apply-legacy-script-path/**
+  - fixtures/apply-restamp-theirs/**
+  - fixtures/askuserquestion-citation/**
+  - fixtures/audit-anchors-schema/**
+  - fixtures/blocker-adjudication-record/**
+  - fixtures/check-15-bypass/**
+  - fixtures/check-17-bypass/**
+  - fixtures/check-17-counts/**
+  - fixtures/check-1c-bypass/**
+  - fixtures/check-23-draft-stamps/**
+  - fixtures/check-24-adversarial-convergence/**
+  - fixtures/check-25-steering-conduct/**
+  - fixtures/check-3b-locked-anchor/**
+  - fixtures/check-h1-recursion/**
+  - fixtures/check-manifest-bypass/**
+  - fixtures/check5-anchor-base/**
+  - fixtures/ci-gates-resolution/**
+  - fixtures/context-mode-protect/**
+  - fixtures/context-sensor/**
+  - fixtures/core-script-boundary/**
+  - fixtures/core-write-guard/**
+  - fixtures/cycle-commits-enforce/**
+  - fixtures/dispatch-model-guard/**
+  - fixtures/divergence-hard-block/**
+  - fixtures/escalation-citation/**
+  - fixtures/escalation-status-vocabulary/**
+  - fixtures/gate-adjudication/**
+  - fixtures/gate-verdict-grep-shape/**
+  - fixtures/h2-attest-scripts-dir/**
+  - fixtures/handoff-resume-guard/**
+  - fixtures/implementation-join-yield/**
+  - fixtures/inflight-row-shape/**
+  - fixtures/known-skills-extension/**
+  - fixtures/layer-catalog-collision/**
+  - fixtures/layer-readopt-gate/**
+  - fixtures/ledger-reverify/**
+  - fixtures/ledger-reverify-unfalsifiable/**
+  - fixtures/ledger-rotate/**
+  - fixtures/mandatory-rules-clean-tree/**
+  - fixtures/pause-hook-origin/**
+  - fixtures/provenance-not-accessible/**
+  - fixtures/reconcile-blocking-list/**
+  - fixtures/reconcile-emit-report/**
+  - fixtures/relabel-theirs-collision/**
+  - fixtures/release-version-triple/**
+  - fixtures/relocation-preclassify/**
+  - fixtures/resume-whole-read/**
+  - fixtures/retired-contract-token/**
+  - fixtures/retro-audit-scans/**
+  - fixtures/route-defect-classification/**
+  - fixtures/setup-config-drift/**
+  - fixtures/shadowed-local-validators/**
+  - fixtures/snapshot-evidence-cell/**
+  - fixtures/snapshot-section-schema/**
+  - fixtures/sprint-status-lifecycle/**
+  - fixtures/story-provenance/**
+  - fixtures/subagent-probe/**
+  - fixtures/taught-schema/**
+  - fixtures/validate-mandatory-rules-revive/**
+  - fixtures/validator-path-resolution/**
+  - fixtures/verdict-pass-content/**
+  - fixtures/wait-stale-deliverable/**
+  - fixtures/whole-read-pool/**
 ```
 
 **Note on the second copy.** `ai-dlc-update`'s

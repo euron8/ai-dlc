@@ -35,6 +35,14 @@ shipped declarations, not stand-ins):
   region check is line-precise, not whole-file);
 - a whole-file `Write` of a core file → **deny** (never a token fill);
 - a `MultiEdit` touching core rulebook → **deny**;
+- an Edit to an installed core fixture (`tests/fixtures/<core-name>/`) → **deny**,
+  and the deny warns that a fixture's content IS its assertion's input, rather than
+  giving layer-routing or `AI_DLC_` tunable advice that cannot apply to test data;
+- an Edit to a CONSUMER-authored fixture at an adjacent name
+  (`tests/fixtures/check-15-bypass-local/`) → **allow**. `tests/fixtures/` is shared,
+  and core and consumer directories there share the `check-` prefix, so the manifest
+  entries are name-exact; this is the over-capture control, paired with the deny above
+  exactly as the consumer-hook assertion is paired with the core-hook one;
 - with `core-manifest.md` removed, the core set is derived from
   `setup-sites.md`'s I5-synced copy and the deny still fires (derivation fallback);
 - with no manifest source at all, the hook **fails open** (allow) — it never

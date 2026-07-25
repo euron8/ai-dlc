@@ -17,6 +17,79 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.161.0] — 2026-07-25
+
+### Fixed — core test fixtures were unclaimed, so Check 16 audited them as consumer-authored
+
+`install.sh` copies each shipped fixture from `core/fixtures/<dir>/` to
+`tests/fixtures/<dir>/`, and nothing in `core-manifest.md` claimed that path. Probed against
+the real resolver before the fix:
+
+```
+$ core-paths.sh --is-core tests/fixtures/check-15-bypass/seed.sh
+not-core: ... (no core-manifest glob matches)   exit 1
+```
+
+Two consequences, both live in the reference consumer. Check 16's stub audit treated upstream
+test data as consumer-authored — measured there: **13 hot-path files carrying 34 marker lines,
+every one of them core-owned** — so any pull touching them fails a §6 gate. And the fix that
+would clear it is worse than the finding: a fixture's markers, anchor counts and
+deliberately-malformed stanzas **are the payload its own `run.sh` reads**, so adding the four
+required elements VACATES the fixture, leaving it green while it proves nothing. That is the
+failure fixtures exist to prevent. Separately, those files had no edit-time protection at all —
+upstream test data was the last part of core a consumer could edit in place.
+
+Both manifest copies now claim each shipped fixture as `fixtures/<name>/**`, and
+`to_consumer_glob()` gains one `fixtures/*` arm — written byte-identically into
+`ai-dlc-core-guard.sh` and `core-paths.sh`, which I25 asserts.
+
+**Enumerated, and that is deliberate.** `tests/fixtures/` is genuinely shared: 66 core
+directories and 29 consumer-authored ones in the reference consumer, with **10 core and 15
+consumer directories both using the `check-` prefix**, so no glob separates them. This is the
+one place a glob cannot name our set, and the entries are name-exact for that reason. The
+alternative — relocating core fixtures to `tests/fixtures/ai-dlc/` — was measured and
+**rejected**: the consumer's fixture runner globs `tests/fixtures/*/` one level deep and
+silently `continue`s a directory with no `run.sh`, so after a relocation it would drive **zero**
+core fixtures and still exit 0; and 61 fixture scripts across 59 directories bank on
+`$HERE/../../..` resolving the repo root in both layouts, a depth the validator hardcodes.
+
+**The enumeration is DERIVED, not hand-kept.** I8 already computes `shippable` —
+`core/fixtures/` minus every directory carrying a `.dist-only` marker — and already binds it to
+both install loops. It now also asserts the manifest's `fixtures/` entries equal that set in
+both directions: a shipped fixture with no entry, and an entry with no shippable fixture. One
+derivation, four readers, so this cannot become a fifth hand-list.
+
+`route_and_deny()` gains a third branch. The generic arm's `overrides/`/`extensions/` routing is
+actively wrong advice for a fixture — you cannot override a seed — so the deny says what the
+content is and what editing it costs.
+
+### Coverage
+
+- `check-15-bypass` gains **V10/V11**, the ownership pair on fixtures, built like the existing
+  V8/V9: same bare marker, zero elements satisfied, differing only in ownership. V11's directory
+  is deliberately a core fixture's name **plus a suffix**, so one dropped slash in an entry
+  over-captures it where a neutral name would not notice. The seed copies the real manifest, so
+  V10 goes green only once the entries land — atomic by construction.
+- `core-write-guard` gains **10e/10f/10g**: deny a core fixture, allow a consumer-authored one at
+  an adjacent name, and require the deny to carry test-data advice rather than layer routing.
+- Every new assertion fires **alone** under some single-line mutant: I25 (shorten the arm's
+  comment in one copy only), V10 (force `--is-core` not-core), V11 (make its glob loop
+  over-capture), 10f (make `is_core()` over-capture), 10g (remove the routing arm — still denies,
+  wrong advice), and I8 in each direction. 10e is coupled to 10g by construction, since an allow
+  leaves no message to inspect.
+
+### Operator notes for the next pull
+
+- Fixture files a consumer edited in place become core, so `preclassify` raises them as decision
+  rows rather than clobbering them silently. The reference consumer has **10** such files, part
+  version lag and part real edits.
+- `tests/fixtures/enforcement-map-sites/` is a `.dist-only` fixture that leaked into the
+  reference consumer. It is correctly **not** claimed — the operator must be able to delete it,
+  and claiming it would deny exactly that. It carries no hot-path markers.
+- Stale files a consumer holds inside a claimed fixture directory (the reference consumer has 5
+  `variant_*.py` the distribution no longer ships) become core-owned. Removal is not an
+  `Edit`/`Write`, so the guard does not block deleting them.
+
 ## [0.160.0] — 2026-07-25
 
 ### Changed — the manifest names the directory; 27 filenames and the invariant guarding them retire

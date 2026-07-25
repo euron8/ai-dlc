@@ -183,4 +183,35 @@ cat > "$TREE/.claude/hooks/my-own-hook.sh" <<'EOF'
 exit 0
 EOF
 
+# ---- V10 / V11: the same discrimination, on FIXTURE ownership -----------------
+# The manifest claims each shipped fixture dir as `fixtures/<name>/**`, and a consumer's
+# OWN fixtures share the tests/fixtures/ directory under no distinguishing prefix — core
+# and consumer dirs there both use the `check-` prefix, so no glob separates them and the
+# entries have to be name-exact. That exactness is what V11 tests.
+#
+# V10 and V11 are a PAIR, same construction as V8/V9: both under tests/fixtures/, both
+# carrying one bare `Phase 3` marker, both satisfying ZERO elements, differing ONLY in
+# ownership. V11's directory name is deliberately a core fixture's name plus a suffix — a
+# malformed entry (`fixtures/check-15-bypass**`, one dropped slash) over-captures it and
+# flips V11, where a neutrally-named control would not notice.
+#
+# These markers are the payload. Scrubbing either one makes its file marker-free, the
+# audit returns `ok`, and the assertion mismatches — loudly, not vacuously.
+mkdir -p "$TREE/tests/fixtures/check-15-bypass" \
+         "$TREE/tests/fixtures/check-15-bypass-local"
+
+# V10: a CORE fixture — `fixtures/check-15-bypass/**` in the manifest. EXEMPT.
+cat > "$TREE/tests/fixtures/check-15-bypass/seed.sh" <<'EOF'
+#!/usr/bin/env bash
+# Phase 3's layer-drift.sh is not exercised by this seed.
+: # seeded
+EOF
+
+# V11: a CONSUMER-authored fixture, one suffix from a core name. NOT core. Audited.
+cat > "$TREE/tests/fixtures/check-15-bypass-local/seed.sh" <<'EOF'
+#!/usr/bin/env bash
+# Phase 3's dispatch table is not wired here yet.
+: # seeded
+EOF
+
 echo "$TREE"
