@@ -176,6 +176,46 @@ for probe in "Entry BT:whole receipt in one code span (trailing backtick on the 
 done
 rm -f "$btick"
 
+# A receipt is a LINE; a mention is part of one.
+#
+# The ledger discusses receipts as well as carrying them, and the directive is a last-match-wins
+# scalar — so a prose mention physically AFTER the real receipt silently replaced it with
+# whatever followed the word. That is PC-S296-LEDGER-REVERIFY-LAST-MATCH-WINS, filed by the
+# consumer and still open. Measured there: 88 unanchored matches for 47 real receipts, and one
+# summary section emitted a phantom row off `verify: BOTH source predicates retained`.
+#
+# The `<br>` case is not decoration: nine of the reference consumer's real receipts are written
+# that way, and an anchor that forgets it silently DROPS them — six rows vanished on the first
+# attempt here, which is the same failure shape in the other direction.
+ASSERTIONS=$((ASSERTIONS + 1))
+anch="$CONS/_bmad-output/ai-dlc-update/anchored-ledger.md"
+mkdir -p "$(dirname "$anch")"
+{
+  printf -- '- **Entry PM** — its real receipt, then prose that mentions the word afterwards.\n'
+  printf -- '  verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"\n'
+  printf -- '  Discussion: this entry deliberately carries NO `verify: manual` declaration, and a\n'
+  printf -- '  later sentence naming `verify: theirs_has` must not become the directive.\n'
+  printf -- '- **Entry BR** — a real receipt written after an HTML break, as the ledger body does.\n'
+  printf -- '  <br>verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"\n'
+} > "$anch"
+an_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$anch" 2>&1)"
+pm="$(printf '%s\n' "$an_out" | awk -F'\t' '$2 ~ /Entry PM/ {print $1; exit}')"
+br="$(printf '%s\n' "$an_out" | awk -F'\t' '$2 ~ /Entry BR/ {print $1; exit}')"
+if [ "$pm" = "CLOSE-CANDIDATE" ]; then
+  printf '  ok    %-22s prose after the receipt does not overwrite it\n' "anchor:prose"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s got=%s want=CLOSE-CANDIDATE — a mid-sentence mention replaced the real receipt (last-match-wins)\n' "anchor:prose" "${pm:-<none>}"
+fi
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ "$br" = "CLOSE-CANDIDATE" ]; then
+  printf '  ok    %-22s a <br>-prefixed receipt still registers\n' "anchor:br"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s got=%s want=CLOSE-CANDIDATE — the anchor dropped a real receipt written after an HTML break\n' "anchor:br" "${br:-<none>}"
+fi
+rm -f "$anch"
+
 # The closer must NEVER exit nonzero — it is a classifier and a close never blocks apply.
 ASSERTIONS=$((ASSERTIONS + 1))
 bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" >/dev/null 2>&1

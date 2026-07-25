@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.153.0] — 2026-07-24
+
+### Fixed — a prose mention of `verify:` could replace an entry's real receipt
+
+The ledger discusses receipts as well as carrying them, and the parser matched `verify:` anywhere
+on a line. The directive is a last-match-wins scalar, so a sentence mentioning the word
+*physically after* the real receipt silently replaced it with whatever followed. That is
+`PC-S296-LEDGER-REVERIFY-LAST-MATCH-WINS`, filed by the reference consumer and still open.
+
+Measured there: **88 unanchored matches for 47 real receipts.** One summary section emitted a
+phantom row off `verify: BOTH source predicates retained` — a sentence about *other* entries'
+predicates, parsed as a directive with the verb `BOTH`.
+
+The match is now anchored to line-leading structure only: indentation, a list marker, an HTML
+break, and an opening backtick when the whole receipt is one code span. A receipt is a line; a
+mention is part of one.
+
+**On the reference consumer this is a net of two changes, both correct:** the phantom row
+disappears, and `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION` moves from `HAND-REVIEW` to its real
+`STILL-LIVE` — its receipt had been masked by a later prose `verify: manual`.
+
+The permitted prefix set was DERIVED from the consumer's ledger, not guessed. A first attempt
+omitted `<br>` and silently dropped **six real receipts** written that way — the same
+failure shape as the bug being fixed, in the other direction. Both directions are now fixtured.
+
+### Not done, deliberately — keying entries to their `##` heading
+
+`PC-S296`'s stated remedy is *"key an entry to its `##` heading, not to the nearest bold-colon
+fragment."* Implementing that as written would lose data, and the reason is worth recording so
+the next pull does not try it.
+
+Headings in the reference consumer's ledger are used for **sections as well as entries** —
+`## Open — filed 2026-07-22`, `## push_candidate: true extensions (by source)` — each grouping
+many `- **Entry**` bullets that are themselves the entries. Keying to the nearest `##` would
+merge a section's thirteen bullets into one entry, where a single `ADOPTED UPSTREAM` anywhere
+inside it would close all thirteen and rotation would archive them together.
+
+The entry/section ambiguity is in the ledger's structure, not in the parser, and no boundary
+rule can resolve it without a disambiguating marker. Filing that observation is the useful move;
+inventing a rule that silently sweeps live work is not.
+
 ## [0.152.0] — 2026-07-24
 
 ### Fixed — a close row named the tip, not the release that absorbed the entry
