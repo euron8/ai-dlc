@@ -381,7 +381,13 @@ checks:
           re-invocation. Keying the allow on "deliverable absent" instead would
           authorize a yield into a SILENT stall — the marker is written only while a
           real beat sleeps (wait-for-deliverable.sh), and the check fails safe to
-          BLOCK on any missing / expired / malformed marker
+          BLOCK on any missing / expired / malformed marker. v0.167.0 made the
+          marker a re-stamped LEASE (`now + 3*POLL`, rewritten each poll) rather
+          than the beat's end epoch written once: a SIGKILLed beat skips its EXIT
+          trap, and under the old shape this check kept authorizing the yield for
+          the whole remaining quantum with nothing alive to re-invoke the lead.
+          A lease expires ~30s after the beat dies whatever the quantum is, which
+          is what let the quantum grow from 120s to 600s
       - site: wait-for-deliverable.sh — the delivery predicate
         posture: a target counts as delivered only when it is non-empty AND written
           since the join armed; a file that predates the join is treated as pending
@@ -717,6 +723,10 @@ non_catalog_units:
     checks:
       - id: A
         asserts: no foreground tool call blocks longer than steering_budget
+          (120s). FOREGROUND ONLY — the check skips run_in_background calls, and
+          the backgrounded beat is bounded by its own quantum
+          (AI_DLC_WAIT_BEAT_SECS, 600s) in wait-for-deliverable.sh, not by this.
+          The two shared one env var until v0.167.0
         protects: the operator's voice — an over-budget call is a window in which
           a queued message cannot land
       - id: B
@@ -729,7 +739,7 @@ non_catalog_units:
           steamroll)
       - id: C
         asserts: no run of foreground _bmad-output/ file-wait beats exceeds
-          max_wait_beats (default 10) without an intervening re-dispatch
+          max_wait_beats (default 6) without an intervening re-dispatch
         protects: liveness, NOT steerability — every beat is a tool boundary, so
           an unbounded wait is a hang, not a gag
         status: dormant — zero catches across 278 consumer sessions. Bounds a shape

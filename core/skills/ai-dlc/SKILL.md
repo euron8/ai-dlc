@@ -1318,28 +1318,31 @@ path.
 It enforces both bounds so you do not have to hold them:
 
 - A beat is ONE `Bash` call, run in the background (`run_in_background: true`),
-  that returns **within `steering_budget`**. It polls inside itself --
-  `for i in $(seq 1 11); do [ -s "$f" ] && exit 0; sleep 10; done` is the shape
-  the script implements -- and while it sleeps you have ended your turn, so a
-  queued operator lands immediately and the beat still re-invokes you within one
-  budget. What it may NOT do is outlast the budget: that bound is what keeps the
-  re-invocation, and any queued steering, inside one steering window.
-- Bound the **sequence**, not just the call: `max_wait_beats` (default **10**,
-  giving a 20-minute ceiling at the default budget). Exhaustion means the file
+  that returns within the **beat quantum** (`AI_DLC_WAIT_BEAT_SECS`, default
+  **600 seconds**). It polls every 10s inside itself and exits the moment every
+  path it is joining has landed, so delivery re-invokes you within 10 seconds --
+  the quantum only bounds how long a STILL-WAITING join sleeps before waking you
+  with nothing to consume. While it sleeps you have ended your turn, so a queued
+  operator lands immediately.
+- **The beat quantum is not `steering_budget`.** `steering_budget` (still **120
+  seconds**) bounds a FOREGROUND call, because the operator cannot be heard while
+  one is in flight. A backgrounded beat gags nobody, so it is not bound by it.
+- Bound the **sequence**, not just the call: `max_wait_beats` (default **6**,
+  giving a 60-minute ceiling at the default quantum). Exhaustion means the file
   is absent, which Rule 20 already defines as non-delivery -- **re-dispatch**
   once, then HARD_BLOCK. The wait never runs forever. The script counts the
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.
 
 **Minimum mechanism (Rule 26(c)) -- `wait-for-deliverable.sh`.** Failure caught:
-(i) a hand-typed wait that outlasts the steering budget, gagging the operator
-(Check A); and (ii) a hand-typed wait with no sequence bound, which advances
-nothing forever (Check C). The script can commit neither -- the beat is clamped
-inside the budget, and beats are counted in a sidecar so exhaustion declares
-Rule 20 non-delivery. False-positive cost: a deliverable landing in the same
-second the sequence exhausts is re-dispatched once; `--reset` re-arms it.
-Removal condition: retire when the harness offers a join primitive that takes
-the handle an `Agent` actually returns.
+(i) a hand-typed wait, in the foreground, that outlasts the steering budget and
+gags the operator (Check A); and (ii) a hand-typed wait with no sequence bound,
+which advances nothing forever (Check C). The script can commit neither -- the
+beat is clamped inside the quantum, and beats are counted in a sidecar so
+exhaustion declares Rule 20 non-delivery. False-positive cost: a deliverable
+landing in the same second the sequence exhausts is re-dispatched once;
+`--reset` re-arms it. Removal condition: retire when the harness offers a join
+primitive that takes the handle an `Agent` actually returns.
 
 Check A (duration) and Check C (count) bind different things: an over-budget
 call is a window in which the operator cannot be heard; an unbounded beat

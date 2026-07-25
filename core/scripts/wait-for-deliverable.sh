@@ -17,12 +17,24 @@
 # So: one call site, and the two bounds are enforced HERE, not trusted to the
 # caller.
 #
-#   THE CALL BOUND  -- this script never runs longer than the steering budget.
-#                      Every invocation is ONE beat and returns inside it, so a
-#                      queued operator message lands at the next tool boundary.
+#   THE CALL BOUND  -- this script never runs longer than the BEAT QUANTUM
+#                      (AI_DLC_WAIT_BEAT_SECS). Every invocation is ONE beat and
+#                      returns inside it, so the lead is re-invoked and can act
+#                      on whatever landed.
 #   THE SEQUENCE BOUND -- beats are COUNTED across calls in a sidecar. At
 #                      max_wait_beats the script declares Rule 20 non-delivery.
 #                      An unbounded wait is a hang, not a gag (Rule 29).
+#
+# THE BEAT QUANTUM IS NOT THE STEERING BUDGET. Both were once
+# AI_DLC_STEERING_BUDGET, and the shared name was the bug. The steering budget
+# bounds a FOREGROUND call, because the operator cannot be heard while one is in
+# flight. This beat is BACKGROUNDED (v0.81.0): the lead has ended its turn, so a
+# queued operator message lands on the very next turn no matter how long the beat
+# sleeps. The quantum therefore buys nothing for steerability -- it only decides
+# how often a still-waiting join re-invokes the lead, and every one of those
+# re-invocations costs a turn. validate-steering-budget.sh already agrees: Check A
+# skips run_in_background calls and isWaitBeat requires foreground, so the
+# validator never bound this script to 120s in the first place.
 #
 # WAIT ON A WHOLE WAVE IN ONE BEAT. Pass every deliverable you are joining:
 #
@@ -90,17 +102,26 @@
 # could never say WHICH path in a wave was still out.
 #
 # ENV
-#   AI_DLC_STEERING_BUDGET   seconds a beat may take        (default 120)
+#   AI_DLC_WAIT_BEAT_SECS    seconds a beat may sleep       (default 600)
 #   AI_DLC_WAIT_POLL_SECS    seconds between polls          (default 10)
-#   AI_DLC_MAX_WAIT_BEATS    beats before non-delivery      (default 10)
-#   AI_DLC_WAIT_MARGIN_SECS  reserve held back from budget  (default 10)
+#   AI_DLC_MAX_WAIT_BEATS    beats before non-delivery      (default 6)
+#   AI_DLC_WAIT_MARGIN_SECS  reserve held back from quantum (default 10)
 #   AI_DLC_STATE_DIR         state dir                      (default _bmad-output)
+#
+# AI_DLC_STEERING_BUDGET is deliberately NOT read here -- see "THE BEAT QUANTUM
+# IS NOT THE STEERING BUDGET" above. It bounds foreground calls and belongs to
+# validate-steering-budget.sh alone.
+#
+# The wall-clock ceiling is quantum x max_wait_beats = 60 minutes. The previous
+# 20 minutes was too short for what teammates actually take: S297 declared
+# `adversary-p1-rr` non-delivered at the ceiling and re-dispatched a live
+# teammate, and S298 ran a legitimate 62-minute dispatch.
 
 set -u
 
-BUDGET="${AI_DLC_STEERING_BUDGET:-120}"
+BUDGET="${AI_DLC_WAIT_BEAT_SECS:-600}"
 POLL="${AI_DLC_WAIT_POLL_SECS:-10}"
-MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-10}"
+MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
 STATE_DIR="${AI_DLC_STATE_DIR:-_bmad-output}"
 MARGIN="${AI_DLC_WAIT_MARGIN_SECS:-10}"
 
@@ -112,7 +133,7 @@ SINCE=""
 # ---------------------------------------------------------------------------
 # Platform probes, done ONCE. `stat` and `date` split BSD/GNU on exactly the two
 # things this script needs, and probing per poll would re-fork them every 10s for
-# the life of a 20-minute join.
+# the life of a 60-minute join.
 # ---------------------------------------------------------------------------
 if stat -f "%m" . >/dev/null 2>&1; then STAT_FLAVOR="bsd"; else STAT_FLAVOR="gnu"; fi
 
@@ -144,7 +165,7 @@ while [ $# -gt 0 ]; do
       SINCE="$(to_epoch "$1")" || {
         echo "FAIL: --since value '$1' is not an epoch or an ISO8601 stamp." >&2; exit 64; }
       shift ;;
-    -h|--help) sed -n '2,97p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,118p' "$0"; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -161,6 +182,23 @@ say() { [ "$QUIET" -eq 1 ] || echo "$@"; }
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 COUNTER_DIR="${STATE_DIR}/.wait-beats"
 mkdir -p "$COUNTER_DIR" 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# COUNTERS ARE SCOPED TO THE BOUND THEY WERE COUNTED AGAINST.
+# The counters survive a pull, and a live join carrying a count of 7 against an
+# old bound of 10 would exhaust on its FIRST beat under a new bound of 6 -- a
+# false NON-DELIVERY that re-dispatches a live teammate, which is the exact
+# failure this whole script exists to prevent. So record the active bound and
+# wipe the counters once whenever it changes. Self-heals for this retune and any
+# future one; the `.since` sidecars go with them, which is correct, because a
+# re-armed join must re-capture its epoch anyway.
+BOUND_FILE="${COUNTER_DIR}/.bound"
+PREV_BOUND="$(cat "$BOUND_FILE" 2>/dev/null || echo '')"
+if [ "$PREV_BOUND" != "$MAX_BEATS" ]; then
+  rm -rf "$COUNTER_DIR" 2>/dev/null || true
+  mkdir -p "$COUNTER_DIR" 2>/dev/null || true
+  printf '%s' "$MAX_BEATS" > "$BOUND_FILE" 2>/dev/null || true
+fi
 
 key_of() { printf '%s' "$1" | cksum | tr -d ' \t' | cut -c1-16; }
 
@@ -206,10 +244,11 @@ is_delivered() {  # $1 = path, $2 = join epoch
 # ---------------------------------------------------------------------------
 # CHAINED-BEAT GUARD. Two invocations chained in one Bash call (`wait a; wait b`)
 # share a parent shell, so they share $PPID. The first consumes the call's whole
-# budget; the second then pushes the Bash call past it -- the exact Check A
-# starvation this script exists to prevent, committed by the caller instead of
-# the loop. If a sibling beat ran in this same shell moments ago, we do a single
-# instantaneous check and return: we never sleep twice inside one Bash call.
+# quantum; the second then serializes a second one behind it, so the wave waits
+# 2x as long as it needed to for no gain -- the wave should have gone to ONE call
+# and polled concurrently. If a sibling beat ran in this same shell moments ago,
+# we do a single instantaneous check and return: we never sleep twice inside one
+# Bash call.
 # ---------------------------------------------------------------------------
 # Prune stale shell markers before trusting one. They are keyed by PID, and PIDs
 # recycle -- a marker left by a long-dead shell whose PID is reissued to ours
@@ -276,7 +315,7 @@ for t in $TARGETS; do
   fi
 
   # The counter is bumped ONLY if this invocation actually sleeps -- see below.
-  # The sequence bound caps WAITING TIME (max_wait_beats x steering_budget); a
+  # The sequence bound caps WAITING TIME (max_wait_beats x the beat quantum); a
   # beat that did not wait is not a beat, and charging one for it burns the
   # budget without buying any wait. That is not academic: the reference consumer
   # wrapped beats in `for i in 3 4 5; do wait-for-deliverable.sh ...; done`, so
@@ -325,9 +364,9 @@ fi
 if [ "$MAY_SLEEP" -eq 0 ]; then
   IFS='|'; for t in $PENDING; do echo "WAITING   $t -- not yet delivered."; done; IFS="$OLDIFS"
   echo "  NOTE: a sibling beat already ran in this same Bash call, so this one did"
-  echo "  NOT sleep and did NOT consume a beat -- two beats in one call would push"
-  echo "  it past the ${BUDGET}s steering budget (Rule 29, Check A). Do not loop or chain"
-  echo "  beats; pass every deliverable to ONE call, and beat again on the NEXT call:"
+  echo "  NOT sleep and did NOT consume a beat -- two beats in one call serialize"
+  echo "  into 2 x ${BUDGET}s for a wave that ONE call polls concurrently. Do not loop"
+  echo "  or chain beats; pass every deliverable to ONE call, and beat again next call:"
   echo "    scripts/ai-dlc/wait-for-deliverable.sh path-a path-b path-c"
   exit 0
 fi
@@ -359,12 +398,26 @@ DEADLINE=$(( $(date +%s) + BUDGET - RESERVE ))
 # will exit and re-invoke the idle lead. We write it only here, on the genuine-
 # sleep path (a non-sleeping return above never reaches this line), so a
 # foreground beat clears it on exit via the trap and post-beat prose still
-# BLOCKS -- unchanged behavior. The stored epoch is the true worst-case beat
-# end (`DEADLINE + POLL`, still <= now + BUDGET since RESERVE >= POLL): the hook's
-# `epoch > now` test rejects a SIGKILLed beat's stale marker with no cleanup
-# dependency, exactly like the `.shell-*` mmin prune above self-heals.
+# BLOCKS -- unchanged behavior.
+#
+# IT IS A HEARTBEAT, NOT A PROMISE. The marker once held the beat's worst-case
+# END epoch, written once. A SIGKILLed beat skips the EXIT trap, so the lead was
+# then free to keep yielding until that epoch with NOTHING scheduled to re-invoke
+# it -- and the size of that dead window was exactly the beat quantum. At 120s
+# that was tolerable; at 600s it would not be. So the loop re-stamps the marker
+# every poll with `now + 2*POLL`: a live beat keeps it ~20s ahead, and a dead
+# one's marker goes stale within ~20s no matter how large the quantum is. The
+# hook's `epoch > now` test is unchanged, and so is the fail-safe direction --
+# a stale marker falls through to the Rule 3 block, which force-continues.
+#
+# 3*POLL, not 1*POLL: the hook may read the marker at any point between two
+# re-stamps, so the lease must outlast a whole poll interval plus slack for a
+# loaded machine. Too SHORT costs a spurious Rule 3 block on a healthy join;
+# too LONG costs idle time after a kill. 30s of lease for 10s of polling puts
+# the slack where the cheaper mistake is.
 BEAT_MARKER="${STATE_DIR}/.beat-inflight"
-printf '%s' "$(( DEADLINE + POLL ))" > "$BEAT_MARKER" 2>/dev/null || true
+beat_alive() { printf '%s' "$(( $(date +%s) + 3 * POLL ))" > "$BEAT_MARKER" 2>/dev/null || true; }
+beat_alive
 trap 'rm -f "$BEAT_MARKER" 2>/dev/null || true' EXIT
 
 all_present() {
@@ -379,6 +432,7 @@ while :; do
   if all_present; then break; fi
   [ "$(date +%s)" -ge "$DEADLINE" ] && break
   sleep "$POLL"
+  beat_alive
 done
 
 RC=0

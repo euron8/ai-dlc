@@ -396,12 +396,20 @@ fi
 # there is not a stall: it is the bounded wait, off the foreground, and a queued
 # operator lands on the very next turn instead of after a 120s blocking beat.
 #
-# The signal is a marker the script writes ONLY on its genuine-sleep path,
-# carrying the beat's worst-case end epoch. We allow the stop iff the marker
-# exists AND its epoch is still in the future. Every other case -- missing,
-# unreadable, non-numeric, or expired (a SIGKILLed beat that never cleaned up) --
-# FALLS THROUGH to the block below. The fail-safe direction is the pre-0.81.0
-# behavior (force-continue), never a new silent stall.
+# The signal is a marker the script writes ONLY on its genuine-sleep path. We
+# allow the stop iff the marker exists AND its epoch is still in the future.
+# Every other case -- missing, unreadable, non-numeric, or expired -- FALLS
+# THROUGH to the block below. The fail-safe direction is the pre-0.81.0 behavior
+# (force-continue), never a new silent stall.
+#
+# THE MARKER IS A SHORT LEASE, NOT THE BEAT'S END TIME (v0.167.0). It once held
+# the beat's worst-case end epoch, written once at arming; a SIGKILLed beat skips
+# its EXIT trap, so this check kept allowing the yield for the whole remaining
+# quantum with nothing left alive to re-invoke the lead. The script now re-stamps
+# the marker every poll with `now + 3*POLL`, so a dead beat's marker expires in
+# ~30s regardless of how long the quantum is -- which is what made raising the
+# quantum from 120s to 600s safe. Nothing here changed: `epoch > now` reads a
+# lease exactly as it read a promise.
 if [ -f "$BEAT_MARKER" ]; then
   BEAT_DEADLINE=$(cat "$BEAT_MARKER" 2>/dev/null || echo "")
   if [[ "$BEAT_DEADLINE" =~ ^[0-9]+$ ]] && [ "$BEAT_DEADLINE" -gt "$NOW" ]; then

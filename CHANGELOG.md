@@ -17,6 +17,80 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.167.0] — 2026-07-25
+
+### Changed — the beat quantum is no longer the steering budget
+
+The reference consumer's s298 spent **131 lead turns** inside `ALLOWED_BY_LIVE_BEAT` yields
+(4h04m of armed wait; prior sprints 109 / 260 / 231). One 62-minute dispatch,
+`dev-escalated-s298-1`, consumed **31 beats** on its own. The question put to this release was
+whether accurate subagent tracking makes the beat redundant — whether a monitored output file
+or a `SubagentStop`-driven signal could replace it.
+
+It cannot, and the beat was not the cost anyway.
+
+**The beat does not poll the lead's turn away.** `wait-for-deliverable.sh` already breaks its
+loop the instant every joined path lands, so a delivery re-invokes the lead within one `POLL`
+— ten seconds. 32 of s298's 52 beat counters show delivery on the **first** beat. Every wasted
+turn is a beat that *timed out with work still outstanding*, which makes the entire cost a
+function of the quantum.
+
+**Completion signalling was measured and rejected.** From s298: `subagent-context.jsonl` holds
+83 records for ~7 dispatches (agents appear ×2, ×3, ×4 — a stop is not terminal); one agent
+emitted three stop records while its deliverable was still absent (a stop is not a delivery);
+and `ai-dlc-subagent-probe.sh` exits 0 silently on absent `jq` or an unreadable transcript, so
+a Stop-hook allow computed as "ledger minus completions" would never decrement and would strand
+the lead with nothing scheduled to wake it.
+
+**What was actually wrong is a shared name.** `AI_DLC_STEERING_BUDGET` was read by both
+`validate-steering-budget.sh` (Check A — the maximum a **foreground** call may block, because a
+queued operator cannot be heard during one) and `wait-for-deliverable.sh` (how long a beat may
+sleep). Since v0.81.0 the beat is **backgrounded**: the lead has ended its turn, so it gags
+nobody. Three things in this repo already said so — Check A skips `u.bg`, `isWaitBeat` requires
+`run_in_background !== true`, and `fixtures/check-25-steering-conduct/` carries a "30-min
+backgrounded call → 0 violations" decoy whose README says flagging it "would punish the exact
+dispatch shape Rule 29 prescribes" — and the script read the variable anyway.
+
+- **New `AI_DLC_WAIT_BEAT_SECS` (default 600)** governs the backgrounded beat.
+  `AI_DLC_STEERING_BUDGET` stays **120** and is foreground-only. s298 replay: 131 → ~30 turns.
+- **`AI_DLC_MAX_WAIT_BEATS` 10 → 6**, moving the wall-clock ceiling 20 min → 60 min. The old
+  ceiling had already cost something: S297 declared `adversary-p1-rr` non-delivered at it and
+  re-dispatched a live teammate, and s298 ran a legitimate 62-minute dispatch.
+
+### Fixed — two guards without which the larger quantum would have been a regression
+
+**`.beat-inflight` is now a lease, not a promise.** It held the beat's worst-case end epoch,
+written once, and Stop-hook Check 2b authorizes the lead's yield while that epoch is future. A
+SIGKILLed beat skips its `EXIT` trap, so the authorization stood for the whole remaining
+quantum with nothing alive to re-invoke the lead — a dead window sized exactly to the quantum.
+The poll loop now re-stamps it every iteration with `now + 3*POLL`, so a dead beat's lease
+expires in ~30s however large the quantum grows. `ai-dlc-continue.sh` is unchanged: `epoch >
+now` reads a lease exactly as it read a promise.
+
+**Beat counters are scoped to the bound they were counted against.** `.wait-beats/<key>`
+counters survive a pull, so a consumer mid-join carrying a count of 7 against the old ceiling
+of 10 would have exhausted on its *first* beat under the new ceiling of 6 — the retune would
+have manufactured the false NON-DELIVERY it exists to prevent. The counter dir now records the
+active bound in `.bound` and wipes itself once when it changes.
+
+### Fixtures
+
+`wait-stale-deliverable/` gains four cases. `knob-split-forward` and `knob-split-reverse`
+assert the split from both directions — a merged knob is invisible in operation, and the
+forward case alone would miss an alias whenever the budget happened to be the smaller number.
+`marker-goes-stale` SIGKILLs a beat mid-sleep and asserts the orphaned lease expires in ≤10s
+rather than holding out the quantum. `counter-bound-reset` is `exhausted` with one byte
+changed. Mutation-verified: each mutant reds only its own case and no pre-existing case.
+`implementation-join-yield/` and `check-25-steering-conduct/` pass **unedited**, which is the
+evidence that neither the Stop-hook contract nor the foreground bound moved. Full suite 66/66.
+
+### Not shipped
+
+`CO-S290-SUBAGENT-BACKGROUND-YIELD-STRANDS` stays open. A beat could read
+`subagent-context.jsonl` and flag a `WAITING` path whose agent has already stopped, but it
+would have to be advisory — a stop is not proof of death, and an automatic verdict there
+re-dispatches live teammates. Nothing here closes that carry-over.
+
 ## [0.166.0] — 2026-07-25
 
 ### Fixed — two defects the reference consumer's dry-run report found in v0.164.0's step 2
