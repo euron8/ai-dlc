@@ -119,7 +119,14 @@
 # ENV OVERRIDES
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
 #   AI_DLC_STEERING_GRACE   jitter allowance, seconds       (default 30)
-#   AI_DLC_MAX_WAIT_BEATS   max consecutive wait beats      (default 10)
+#   AI_DLC_MAX_WAIT_BEATS   max consecutive wait beats      (default 6)
+#
+# AI_DLC_STEERING_BUDGET IS FOREGROUND-ONLY and must stay 120. It is not the
+# backgrounded beat's sleep quantum -- that is AI_DLC_WAIT_BEAT_SECS, read only
+# by wait-for-deliverable.sh. The two shared this name until v0.167.0, which is
+# why the beat inherited a bound designed for a gag it cannot commit. This file's
+# own code already knew: Check A skips `u.bg` and isWaitBeat requires
+# `run_in_background !== true`, so neither ever measured a backgrounded beat.
 #
 # EXIT
 #   0  no foreground call exceeded the budget; no steamrolled operator message;
@@ -130,7 +137,7 @@ set -u
 
 BUDGET="${AI_DLC_STEERING_BUDGET:-120}"
 GRACE="${AI_DLC_STEERING_GRACE:-30}"
-MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-10}"
+MAX_BEATS="${AI_DLC_MAX_WAIT_BEATS:-6}"
 TRANSCRIPT=""
 DIR=""
 QUIET=0

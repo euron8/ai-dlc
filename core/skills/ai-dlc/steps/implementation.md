@@ -166,7 +166,8 @@ teammate's deliverable to a single invocation — they poll inside the
 same beat. Never chain beats (`wait a.md; wait b.md`) into one `Bash`
 call: two beats is two budgets and the call overruns.
 
-The script bounds the sequence for you (`max_wait_beats`, default 10).
+The script bounds the sequence for you (`max_wait_beats`, default 6, giving a
+60-minute ceiling at the default beat quantum).
 The lead consumes the deliverables and routes them into gate-1 exactly
 as before; nothing is detached and no gate is skipped.
 

@@ -49,12 +49,32 @@ case "$CASE" in
     ;;
 
   # Sequence bound already spent. Non-empty and stale, so it cannot deliver its
-  # way out; must report non-delivery without sleeping.
+  # way out; must report non-delivery without sleeping. `.bound` MATCHES the bound
+  # the run uses, so the counter is in scope and survives to be spent.
   exhausted)
     printf 'stale\n' > "$TARGET"
     age_file "$TARGET" 2160000
     mkdir -p "$WORK/_bmad-output/.wait-beats"
-    printf '10' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)"
+    printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)"
+    printf '6' > "$WORK/_bmad-output/.wait-beats/.bound"
+    ;;
+
+  # The exact mirror of `exhausted`, differing ONLY in `.bound`: a spent counter
+  # left over from a DIFFERENT bound. This is the shape a consumer carries across
+  # a pull that retunes max_wait_beats, and it must NOT exhaust -- a count of 6
+  # against an old ceiling of 10 says nothing about a new ceiling of 6, and
+  # honouring it would declare non-delivery on a live teammate's first beat.
+  counter-bound-reset)
+    printf 'stale\n' > "$TARGET"
+    age_file "$TARGET" 2160000
+    mkdir -p "$WORK/_bmad-output/.wait-beats"
+    printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)"
+    printf '10' > "$WORK/_bmad-output/.wait-beats/.bound"
+    ;;
+
+  # Nothing on disk; the beat will sleep out its quantum. Used by the quantum and
+  # marker-lease cases, which care about timing rather than file content.
+  knob-split-forward|knob-split-reverse|marker-goes-stale)
     ;;
 
   *)
