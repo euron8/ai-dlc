@@ -121,6 +121,32 @@ else
 fi
 git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
 
+# --- BEHIND vs FORKED: the differential ---------------------------------------
+#
+# Every other status here measures the consumer against BASE, and BASE is the consumer's own
+# stamp. A file excluded from apply — by a per-entry acceptance, say — freezes while the stamp
+# advances, so its base-relative diff grows with staleness and reads as a fork that grew on its
+# own. `absorbed_pct` cannot separate the two: a real fork upstream ignored scores 0 hits, and
+# so does a stale file whose "added" lines are old upstream text upstream has since rewritten.
+# On the reference consumer that produced three consecutive pulls of the wrong disposition.
+#
+# The pair below differ in ONE variable — which upstream blob the consumer's copy is anchored
+# at. Assertion 2 above is the other half of this differential and must stay green: a consumer
+# at base plus an edit is still DRIFT, because it best-matches base's own blob.
+ASSERT_STALE="$(bash "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}')"
+[ "$ASSERT_STALE" = "HARD-CORE-BEHIND" ] \
+  && ok "a copy frozen at an ancestor of base, plus one line of its own → HARD-CORE-BEHIND (remedy is take-theirs, not refile-as-override)" \
+  || bad "a stale copy classified '$ASSERT_STALE', expected HARD-CORE-BEHIND — upstream's own change since the old release is being read as consumer drift"
+
+# The DETAIL must carry both numbers. The disposition turns on their RATIO, and an operator
+# who sees only the base-relative one adjudicates a fork that is not there.
+D="$(bash "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $3; exit}')"
+if printf '%s' "$D" | grep -q 'differs from core@.* by [0-9]* lines, but from .* by only [0-9]*'; then
+  ok "the row states both distances — against base AND against the ancestor it is really anchored at"
+else
+  bad "the HARD-CORE-BEHIND detail does not carry both distances; the operator cannot see that the base-relative number is mostly upstream's own change"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "setup-config-drift: PASS"; exit 0; fi
 echo "setup-config-drift: $fails assertion(s) FAILED" >&2

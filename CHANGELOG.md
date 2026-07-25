@@ -17,6 +17,49 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.156.0] — 2026-07-25
+
+### Fixed — a stale core file read as a consumer fork, and the acceptance that hid it was self-perpetuating
+
+`unregistered-drift.sh` measures the consumer against `base`, and `base` is the consumer's own
+stamp. A core file excluded from `apply` — by a standing per-entry acceptance, say — freezes
+while the stamp advances, so its base-relative diff grows with staleness and reads as a fork
+that grew on its own. The acceptance is what causes the growth, and the growth is what makes
+the next pull's fork reading more convincing.
+
+`absorbed_pct` cannot separate the two cases. A real fork upstream ignored scores 0 hits — and
+so does a stale file whose "added" lines are old upstream text upstream has since rewritten.
+
+Measured on the reference consumer's `skills/ai-dlc-setup/SKILL.md`: `hits=0 of 60`, 171 lines
+against base. Against its true ancestor — upstream's own blob from **2026-04-23**, three months
+before that base — just 56 lines, with **zero deletions**. The consumer had changed nothing
+upstream wrote; it had only added, and both of its two additions had since been absorbed
+upstream by other routes (invariant I22b covers the role-token instructions; the prompt-cache
+guidance ships in `templates/settings.json.template` and the setup skill itself). Three
+consecutive pulls adjudicated it a "genuine fork" and accepted it per-entry, on a walk of 27
+blobs that took the minimum distance and read 56 lines as evidence of forking.
+
+New status **`HARD-CORE-BEHIND`**: the consumer's copy best-matches a historical blob of that
+path which is a strict ancestor of `base` and older than it. The remedy is TAKE THEIRS, not
+refile-as-override — an override authored from a three-month-old blob anchors to headings
+upstream may have rewritten. It still blocks, because the residual against that ancestor is
+genuinely the consumer's and a revert deletes it; the row carries the command to read exactly
+that residual rather than the misleading base-relative diff, and states both distances so the
+disposition is not made from the wrong number.
+
+**No fitted threshold.** A consumer sitting at `base` plus local edits best-matches base's own
+blob, which is not older than base, so it falls through to `HARD-UNREGISTERED-CORE-DRIFT`
+exactly as before. The walk is bounded by construction — reached only on a row that would
+otherwise emit a HARD drift status, and it walks one path's history, not the tree.
+
+`setup-config-drift` gains the differential: two consumers of the same file differing in one
+variable — which upstream blob their copy is anchored at. Both mutants proven, in opposite
+directions: removing the branch misclassifies the stale copy as drift (the original bug), and
+dropping the strictly-better-than-base guard misclassifies four real drift cases as stale.
+
+SKILL.md also now names the tell: **a `HARD-` row carrying a recurring per-entry acceptance is
+the signal to check whether the file is merely behind.**
+
 ## [0.155.0] — 2026-07-25
 
 ### Fixed — the ledger's report named entries that do not exist, and faults it would not explain

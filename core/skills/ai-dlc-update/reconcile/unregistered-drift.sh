@@ -33,6 +33,36 @@
 #                                 It would have blocked forever on a delta core already
 #                                 carried. (Live case: the reference consumer's handoff
 #                                 resume-prompt guard, upstreamed in v0.55.0.)
+#   HARD-CORE-BEHIND              the consumer's copy best-matches a HISTORICAL blob of
+#                                 this path that is a strict ancestor of base and older
+#                                 than it. The file predates the consumer's own stamp, so
+#                                 most of what reads as "consumer drift" is upstream's own
+#                                 change since then. The remedy is TAKE THEIRS, not refile
+#                                 as an override — but the residual against that ancestor
+#                                 is genuinely the consumer's, so it still blocks and the
+#                                 operator confirms nothing in it is wanted.
+#
+#                                 EVERY OTHER STATUS HERE MEASURES AGAINST BASE, AND BASE
+#                                 IS THE CONSUMER'S STAMP. A file excluded from apply —
+#                                 by a per-entry acceptance, say — freezes while the stamp
+#                                 advances, so the base-relative diff grows with staleness
+#                                 and reads as a consumer fork that grows on its own.
+#                                 `absorbed_pct` cannot separate the two: a real fork
+#                                 upstream ignored scores 0 hits, and so does a file whose
+#                                 "added" lines are old upstream text upstream has since
+#                                 rewritten. Measured on the reference consumer's
+#                                 `skills/ai-dlc-setup/SKILL.md`: hits=0 of 60, 171 lines
+#                                 against base — and against its true ancestor (2026-04-23,
+#                                 three months before that base) just 56, with ZERO
+#                                 deletions. Three consecutive pulls adjudicated it a
+#                                 "genuine fork" and accepted it per-entry; it was a stale
+#                                 file nobody refreshed, and both of its two additions had
+#                                 been absorbed upstream by other routes.
+#
+#                                 The predicate carries NO fitted threshold. A consumer
+#                                 sitting at base plus local edits best-matches base's own
+#                                 blob, which is not older than base, so it falls through
+#                                 to HARD-UNREGISTERED-CORE-DRIFT as before.
 #   HARD-UNREGISTERED-CORE-DRIFT  core file edited in place with no layer entry.
 #                                 HARD- because the tool cannot DECIDE whether the
 #                                 edit is a deliberate hardening (-> refile as an
@@ -81,6 +111,37 @@ absorbed_pct() { # absorbed_pct <core-rel-path> <consumer-file> -> "<hits> <tota
   hits="$(comm -12 <(printf '%s\n' "$only" | sort -u) \
     <(git -C "$DIST" show "${THEIRS}:${cp}" 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | sort -u) | grep -c . || true)"
   printf '%s %s' "${hits:-0}" "$total"
+}
+
+# closest_ancestor_blob <core-rel-path> <consumer-file> -> "<sha> <date> <residual-lines>"
+#
+# The blob of <core-rel-path> in this path's own history that the consumer's file is nearest
+# to, restricted to commits that are STRICT ANCESTORS OF BASE and older than it. Empty when
+# no such blob beats base itself — which is the ordinary case and the one that must keep
+# falling through to HARD-UNREGISTERED-CORE-DRIFT.
+#
+# Bounded by construction: only reached on a row that would otherwise emit a HARD drift
+# status, and it walks one path's history, not the tree. The longest-lived core file in this
+# repo has 87 commits.
+#
+# Ties break toward the NEWER commit — if two ancestors are equidistant, the later one is the
+# more useful thing to tell an operator, because the residual is what they must read.
+closest_ancestor_blob() {
+  local cp="$1" cons="$2" sha best_sha="" best_n="" n base_n
+  base_n="$(git -C "$DIST" show "${BASE}:${cp}" 2>/dev/null | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+  [ "${base_n:-0}" -gt 0 ] || return 0
+  for sha in $(git -C "$DIST" log --format=%H "${BASE}" -- "$cp" 2>/dev/null); do
+    [ "$sha" = "$(git -C "$DIST" rev-parse "$BASE" 2>/dev/null)" ] && continue
+    git -C "$DIST" cat-file -e "${sha}:${cp}" 2>/dev/null || continue
+    n="$(git -C "$DIST" show "${sha}:${cp}" | diff - "$cons" 2>/dev/null | grep -c '^[<>]' || true)"
+    if [ -z "$best_n" ] || [ "${n:-0}" -lt "$best_n" ]; then best_n="$n"; best_sha="$sha"; fi
+  done
+  [ -n "$best_sha" ] || return 0
+  # Only a STRICTLY better match than base is evidence of staleness. Equal or worse means the
+  # consumer's copy is anchored at base, and its delta is its own.
+  [ "${best_n:-0}" -lt "${base_n:-0}" ] || return 0
+  printf '%s %s %s %s' "$(git -C "$DIST" rev-parse --short "$best_sha")" \
+    "$(git -C "$DIST" log -1 --format=%ad --date=short "$best_sha")" "$best_n" "$base_n"
 }
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
@@ -253,6 +314,20 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
             "UPSTREAM ABSORBED THIS. ${hits} of ${total} lines this consumer added (absent from core at ${BASE}) are PRESENT in core at ${THEIRS}. The remedy is a REVERT, not an override — core now carries it. Confirm the upstream version covers your delta, then: git -C ${DIST} show ${THEIRS}:${cp} > <consumer>/${cons#$CONSUMER/}. This still blocks because a revert DELETES text and only you can confirm nothing was lost."
           continue
         fi
+      fi
+
+      # BEHIND beats plain drift, for the same reason ABSORBED does: the remedy differs, and
+      # "refile the delta as an override" is actively wrong advice for a file whose delta is
+      # mostly upstream's own. Checked AFTER absorption so a genuinely absorbed change keeps
+      # its more specific claim.
+      anc="$(closest_ancestor_blob "$cp" "$cons")"
+      if [ -n "$anc" ]; then
+        read -r a_sha a_date a_n b_n <<EOF
+$anc
+EOF
+        emit HARD-CORE-BEHIND "$rel" \
+          "NOT A FORK — THIS COPY IS STALE. It differs from core@${BASE} by ${b_n} lines, but from ${a_sha} (${a_date}), an ancestor of your own base, by only ${a_n}. The gap is upstream's change since ${a_date}, which this file never took — a file excluded from apply freezes while the stamp advances. The remedy is TAKE THEIRS: git -C ${DIST} show ${THEIRS:-$BASE}:${cp} > <consumer>/${cons#$CONSUMER/}. This still blocks because the ${a_n}-line residual against ${a_sha} IS yours: read it first (git -C ${DIST} show ${a_sha}:${cp} | diff - <consumer>/${cons#$CONSUMER/}) and confirm nothing in it is still wanted."
+        continue
       fi
 
       emit HARD-UNREGISTERED-CORE-DRIFT "$rel" \

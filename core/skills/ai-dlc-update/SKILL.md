@@ -374,9 +374,23 @@ prose is itself generated rather than composed.
      the `git show <theirs>:<core-path> > <consumer-path>` command the status carries.
      This is the core-drift twin of `EXTENSION-RETIRE-CANDIDATE`.
 
+   - `HARD-CORE-BEHIND` → **this copy is STALE, not forked.** It best-matches a historical
+     blob of that path which is a strict ancestor of `base` and older than it, so the file
+     predates the consumer's own stamp and most of what reads as consumer drift is
+     upstream's change since then. The remedy is **take theirs**. It still **blocks**,
+     because the residual against that ancestor IS the consumer's: show them that diff —
+     the status carries the command — and confirm nothing in it is still wanted before
+     overwriting. **Do not adjudicate this row from the base-relative line count**; that
+     number grows with staleness on its own. A file excluded from `apply` by a standing
+     per-entry acceptance is the usual way one gets here, and the acceptance is then
+     self-perpetuating: each pull it skips makes the next pull's diff larger and the
+     "fork" reading more convincing.
+
    - `HARD-UNREGISTERED-CORE-DRIFT` → **blocks `apply`** (step 7). Undecidable by the
      tool (deliberate hardening → refile as an `overrides/` entry with a `base_sha`;
      accident → revert) and lossy if ignored. Same bar as the other `HARD-` statuses.
+     Reached only after `HARD-CORE-BEHIND` has been ruled out, so the consumer's copy is
+     anchored at `base` and the delta really is its own.
      **`reconcile/register-drift.sh <dist> <base> <consumer> <core-rel-path> --apply`
      does the refiling**: it authors the override from the consumer's own changed
      sections, anchors it to real headings, stamps `base_sha` at **base**, and reverts
@@ -745,6 +759,19 @@ prose is itself generated rather than composed.
      if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
      so, and let the operator keep it (it will report every pull) or upstream it. Do not
      paper over it.
+   - **`HARD-CORE-BEHIND`** → **the copy is stale; the remedy is TAKE THEIRS.** Do not reach
+     for `register-drift.sh`: there is little here to refile, and an override authored from a
+     three-month-old blob anchors to headings upstream may have rewritten. Read the residual
+     the detail names — `git -C <dist> show <ancestor>:<core-path> | diff - <consumer-path>` —
+     and dispose of THAT, not of the base-relative diff. Typically the residual is small and
+     already absorbed upstream by another route, in which case take theirs and say which
+     upstream mechanism now carries each piece. If part of it is genuinely still consumer-only,
+     that part — not the whole file — is the override candidate.
+     **A recurring per-entry acceptance on a `HARD-` row is the signal to check for this.**
+     An acceptance excludes the file from `apply`, which is what freezes it, which is what
+     makes the next pull's diff larger. Three consecutive pulls on the reference consumer
+     accepted a "genuine fork" that was a stale file whose two additions upstream had already
+     absorbed elsewhere.
    - **`HARD-CORE-DRIFT-ABSORBED`** → **upstream took this change; the remedy is a REVERT,
      not an override.** `unregistered-drift.sh` proves the consumer's added lines are
      already present in core at `theirs` (it reports the hit count and percentage). So the
