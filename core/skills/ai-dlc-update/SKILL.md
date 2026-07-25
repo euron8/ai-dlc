@@ -524,9 +524,32 @@ prose is itself generated rather than composed.
    **blocking-layer list** — this is part of the driver-rendered `reconcile-mechanical` region
    (step 5's `emit-report.sh`), which lists every `HARD-*` the detectors emit and blocks `apply`.
    Beneath the region, write each blocker's resolution command (a block with no path out is a block
-   someone routes around). Do NOT re-author the list from memory of the tool output — a `HARD-*`
+   someone routes around), **with every placeholder resolved** — a command carrying a literal
+   `<dist>` is a path the operator cannot walk without guessing, which is the same block one step
+   later. Do NOT re-author the list from memory of the tool output — a `HARD-*`
    line was silently dropped from two real reports that way, hiding a data-loss-grade core-schema
-   drift; `emit-report.sh --verify` now fails if the rendered list drifts from the tools. And a
+   drift; `emit-report.sh --verify` now fails if the rendered list drifts from the tools.
+
+   **A blocker DISPOSITION carries the command that verified it, exactly as a step-8 defect
+   filing does.** Name the disposition (retire / readopt / reaffirm / refile / revert), then the
+   literal command run and its decisive output line, then what you could NOT verify. A claim
+   about WHY a detector emitted the row is an INFERENCE — label it or verify it. The asymmetry
+   this closes ran the wrong way: filing a complaint against upstream already required a receipt,
+   while deciding to RETIRE — which DELETES a consumer-owned override — required none, and it is
+   the more destructive act. Treat every recommendation here as a hypothesis and run the command
+   that would falsify it; in one real pull a defect was filed against a checker that was
+   correctly obeying an over-wide declaration, and a version correction was itself three releases
+   wrong because it sampled the refs already loaded instead of walking history.
+
+   **Record the operator's answers in `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md`.**
+   A named, timestamped file, because the two destinations previously named for an answer cannot
+   hold one: this report is a fixed filename overwritten by the next dry run (below), and
+   `reconcile-log-<ts>.md` is not written until step 7 under `apply`. An answer recorded in
+   either is an answer lost — three dry runs in one day is normal. The file records, per blocker:
+   the disposition, its verification, the fully-resolved resolution command, and any answer the
+   operator gave. It ends with one readiness line: all blockers decided and `apply` may proceed,
+   or which remain open and what closes them. `apply` reads it; it is never a substitute for the
+   `apply` argument, and writing it is not authorization to resolve anything. And a
    **catalog-relabel list** (step 3e: every extension check heading that needs the
    `[ext:<id>]` label, report-only).
    This is a fixed filename
@@ -560,8 +583,11 @@ prose is itself generated rather than composed.
    **Adjudication is not authorization to write (incident-confirmed failure
    mode — do not repeat it).** An operator resolving a conflict, or asking for a
    specific fix, while reviewing a dry-run report ("restore the dropped KISS
-   bullet") is giving an ANSWER — record it into the report/log for the
-   `apply` run to act on. It is NOT an instruction to edit any file right now.
+   bullet") is giving an ANSWER — record it in
+   `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md` for the `apply` run to act on.
+   NOT in this report, which the next dry run overwrites, and not in
+   `reconcile-log-<ts>.md`, which does not exist until step 7.
+   It is NOT an instruction to edit any file right now.
    A real run misread exactly this: the operator adjudicated a conflict in
    conversation and the agent edited the live working tree immediately,
    uncommitted, off-branch, before `apply` was ever invoked. Every write,
@@ -661,6 +687,14 @@ prose is itself generated rather than composed.
    naming a heading that did not exist, and drift detection was dead for each of them
    until it was). You have the tools. Use them, then ask ONE closed question per
    blocker.
+
+   **First, read the newest `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md`, if one
+   exists.** It carries the dispositions the dry run verified and any answer the operator
+   already gave, so a decided blocker is executed rather than re-litigated. Two rules on it:
+   a row whose verification does not resolve against THIS run's refs is stale — re-verify it
+   here rather than trusting it; and the file NEVER authorizes a write on its own. It records
+   an answer; the `apply` argument on this invocation is what authorizes acting on it. A
+   blocker absent from the file, or present with no disposition, is worked from scratch below.
 
    Work the `HARD-*` rows **one at a time**. For each:
 
