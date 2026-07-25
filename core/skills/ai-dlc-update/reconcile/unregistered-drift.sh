@@ -108,7 +108,16 @@ exempt_ranges() {
     hs="$(printf '%s\n' "$base" | grep -nxF -- "$heading" | head -1 | cut -d: -f1)"
     [ -n "$hs" ] || continue
     ns="$(printf '%s\n' "$base" | awk -v s="$hs" -v nh="$nexth" 'NR>s && $0==nh {print NR; exit}')"
-    if [ -z "$ns" ]; then nl="$(printf '%s\n' "$base" | wc -l | tr -d ' ')"; ns="$(( nl + 1 ))"; fi
+    # An unresolvable terminator grants NO exemption — it used to widen the span to EOF.
+    # Both failure directions are silent, but they are not equal: exempting to EOF turns one
+    # stale anchor into a blanket exemption over the whole rest of the file, and the drift it
+    # swallows is invisible at both readers. Failing closed reports that drift as unregistered,
+    # which is wrong in the recoverable direction — the operator sees rows and fixes the anchor.
+    if [ -z "$ns" ]; then
+      printf 'unregistered-drift: setup-site terminator not found at base, exemption withheld: %s -> %s\n' \
+        "$heading" "$nexth" >&2
+      continue
+    fi
     out="${out}${out:+,}${hs}-$(( ns - 1 ))"
   done <<EOF
 $(awk -v want="$cp" '

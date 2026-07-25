@@ -17,6 +17,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.150.0] — 2026-07-24
+
+### Fixed — the setup-model-strategy exemption swallowed the wizard's substitution instructions
+
+`reconcile/setup-sites.md` declares `setup-model-strategy` as a `heading-block` site bounded by
+`## STEP 2: API Tier and Model Strings` → `## STEP 3: Deployment Configuration`. On
+`ai-dlc-setup/SKILL.md` that is **194 lines at base**. The operator's model-strategy choice —
+the thing the exemption exists for — occupies roughly the first seventy. The rest is the
+wizard's substitution INSTRUCTIONS: which role files to open and which tokens to fill.
+
+Those are rulebook prose, and exempting them means upstream can add a role's model-fill block
+and no layered consumer ever receives it, with no signal at either reader. Measured on the
+reference consumer, every affected line (570–622 at base) falls inside the declared span, and
+the `dev-escalated`, `analyst`, and `remediator` blocks are present upstream and absent there.
+
+The span now terminates at the first substitution row, `` **`.claude/team-roles/architect.md`:**
+``, which exists at base, at theirs, and in the reference consumer — a terminator that does not
+exist at base cannot bound anything. Dry-run against the real consumer: the file moves from
+`CORE-TEMPLATE-SUBSTITUTED` (silent, classified as config) to `HARD-UNREGISTERED-CORE-DRIFT`
+(-19 lines), which blocks `apply` until the operator disposes the delta.
+
+`unregistered-drift.sh` is not at fault and is unchanged in its containment test — it was
+obeying a declaration whose scope was too wide.
+
+### Fixed — an unresolvable setup-site terminator widened the span to EOF
+
+`exempt_ranges()` computes site ranges against `core@base`. When `next_heading` was not found
+there it fell back to end-of-file, so one stale anchor became a blanket exemption over the whole
+rest of the file — silently, at both readers. This is why the narrowing above could not be done
+by adding a new heading upstream: on the next pull, base would lack it and the span would have
+widened to EOF instead, which is worse than the bug being fixed.
+
+It now withholds the exemption entirely and notes the unresolved anchor on stderr. Both failure
+directions are silent, but they are not equal: failing closed reports the drift as unregistered,
+which is wrong in the recoverable direction — the operator sees rows and fixes the anchor.
+
+**`setup-config-drift` gains two assertions**, and its replica gains the real terminator row
+plus a token-free instruction line after it. The new boundary assertion deliberately edits a
+line carrying **no** `{token}`: the token arm of the exemption is independent of the span and
+exempts any hunk whose base side holds one, so a `{token}` row would read as exempt under
+either declaration and prove nothing about the boundary. The broken-terminator assertion runs
+against a **copied** reconcile engine, so an interrupted fixture cannot leave the distribution
+tree dirty.
+
 ## [0.149.0] — 2026-07-24
 
 ### Fixed — the gate's verdict grep matched almost no review file it was pointed at

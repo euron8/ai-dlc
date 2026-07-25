@@ -3,9 +3,15 @@
 # can prove unregistered-drift.sh distinguishes a declared setup-config region (exempt) from an
 # in-place edit to the rest of the setup wizard (HARD drift). Idempotent: fresh temp tree each call.
 #
-# The fake ai-dlc-setup/SKILL.md carries the REAL STEP 2 / STEP 3 headings, so the REAL
+# The fake ai-dlc-setup/SKILL.md carries the REAL STEP 2 heading, the REAL terminator row
+# (`**`.claude/team-roles/architect.md`:**`) and a substitution row after it, so the REAL
 # setup-sites.md `setup-model-strategy` site applies to it — this tests the actual declaration,
-# not a stand-in. Rename those headings and the fixture breaks loudly, exactly as the real site would.
+# not a stand-in. Rename those anchors and the fixture breaks loudly, exactly as the real site would.
+#
+# The terminator is the first substitution row, NOT `## STEP 3`. Bounding the span on the next
+# STEP heading swallowed the substitution instructions between them, so upstream could add a
+# role's model-fill block and no layered consumer would ever receive it. STEP 3 stays in the
+# replica because the rows after the terminator must be provably OUTSIDE the exemption.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -38,6 +44,12 @@ cat > "$DIST/core/$REL" <<'SKILL'
 Choose a model strategy for this project.
 
 - Full: opus for planning roles, sonnet for implementation.
+
+**`.claude/team-roles/architect.md`:**
+- `{architect_model_personal}` -> opus-tier model personal string
+
+Substitute in the /model directive lines ONLY, and leave the declaration
+comment byte-identical.
 
 ## STEP 3: Deployment Configuration
 

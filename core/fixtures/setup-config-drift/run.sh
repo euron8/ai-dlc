@@ -79,6 +79,48 @@ else
   bad "setup-sites.md does not declare the STEP 2 config site — the exemption above rests on nothing"
 fi
 
+# --- Assertion 5: the substitution INSTRUCTIONS are NOT exempt ---------------
+# The span used to run to `## STEP 3`, which swallowed the substitution instructions that
+# follow the operator's choice — which files to open, which tokens to fill. Those are rulebook
+# prose. Consequence, measured on the reference consumer: the `dev-escalated` / `analyst` /
+# `remediator` model-fill blocks are present upstream and absent there, and neither reader
+# ever said so.
+#
+# The edited line deliberately carries NO {token}. The token arm of the exemption is
+# independent of the span and exempts any hunk whose base side holds one, so a `{token}` row
+# proves nothing about the boundary — it would read as exempt under either declaration. Only a
+# token-free instruction line isolates the span.
+sed 's|Substitute in the /model directive lines ONLY|EDITED IN PLACE by the consumer|' "$BASECONTENT" > "$CF"
+if ! cmp -s "$BASECONTENT" "$CF"; then
+  s="$(status_of)"
+  [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an edit to a substitution INSTRUCTION row → HARD-UNREGISTERED-CORE-DRIFT (outside the narrowed span)" \
+    || bad "a substitution-instruction edit classified '$s', expected HARD-UNREGISTERED-CORE-DRIFT — the span still swallows the wizard's fill instructions, so upstream can add a role's model-fill block and no layered consumer receives it"
+else
+  bad "FIXTURE STALE: the substitution row did not change (seed text drifted)"
+fi
+git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
+
+# --- Assertion 6: an unresolvable terminator withholds the exemption ---------
+# The old code widened the span to EOF when `next_heading` was not found at base — one stale
+# anchor became a blanket exemption over the rest of the file, silently. Fail CLOSED instead:
+# no exemption, so the drift is reported. Wrong in the recoverable direction.
+# The engine is COPIED and the copy is perturbed — the real reconcile/ tree is never written
+# to, so an interrupted run cannot leave the distribution dirty.
+ENGINE="$WORK/engine"
+mkdir -p "$ENGINE" && cp "$(dirname "$SCRIPT")/"* "$ENGINE/" 2>/dev/null
+sed "s|next_heading: '\*\*\`.claude/team-roles/architect.md\`:\*\*'|next_heading: '## NO SUCH TERMINATOR EXISTS'|" \
+  "$SITES" > "$ENGINE/setup-sites.md"
+if ! cmp -s "$SITES" "$ENGINE/setup-sites.md"; then
+  sed 's/- Full: opus for planning roles, sonnet for implementation./- Balanced: opus for lead+architect only, sonnet elsewhere./' "$BASECONTENT" > "$CF"
+  s="$(bash "$ENGINE/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
+        | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}')"
+  [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an unresolvable terminator withholds the exemption (fail-closed), never widens the span to EOF" \
+    || bad "with an unresolvable terminator the STEP 2 edit classified '$s' — the span is being widened to EOF again, which exempts the whole rest of the file on one stale anchor"
+else
+  bad "FIXTURE STALE: could not build the broken-terminator mutant — setup-sites.md's next_heading is not the expected line"
+fi
+git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
+
 echo
 if [ "$fails" -eq 0 ]; then echo "setup-config-drift: PASS"; exit 0; fi
 echo "setup-config-drift: $fails assertion(s) FAILED" >&2
