@@ -104,6 +104,44 @@ fire "$PROJ" crowded.jsonl gate-adjudicator-s291-story >/dev/null
 chk "appends one row per teammate (never truncates)" "$(wc -l < "$OUT" | tr -d ' ')" "2"
 chk "  and keeps them distinct" "$(last .agent_id)" "gate-adjudicator-s291-story"
 
+# --- 8. role provenance: the dispatch-time ledger outranks the transcript ----
+# Check 22 compares a spawn's bound model against its role file, so a WRONG role
+# is not a cosmetic defect — it points the comparison at the wrong pin. The prose
+# read cannot be trusted alone (assertion 8a proves it), so the guard's
+# dispatch-time row is preferred (8b), joined on the longest matching name (8c).
+LEDGER="$PROJ/_bmad-output/spawn-ledger.jsonl"
+
+reset; rm -f "$LEDGER"
+fire "$PROJ" polluted.jsonl appe-hb-s298-1-disposition-db3a97 >/dev/null
+chk "8a NO ledger: injected prose beats the binding — the defect, reproduced" \
+  "$(last .role)" "adversary"
+
+reset
+{ jq -nc '{v:1,name:"ppe-hb-s298-1-disposition",role:"protected-path-editor",model_bound:"opus"}'
+  jq -nc '{v:1,name:"dev",role:"dev",model_bound:"sonnet"}'; } > "$LEDGER"
+fire "$PROJ" polluted.jsonl appe-hb-s298-1-disposition-db3a97 >/dev/null
+chk "8b ledger present: the role the guard BOUND wins over the transcript" \
+  "$(last .role)" "protected-path-editor"
+
+# 8c needs TWO rows whose names BOTH match the same agent_id, or the sort never
+# arbitrates and the assertion is decoration: `adev-escalated-s298-3-xyz` contains
+# `dev` AND `dev-escalated`. A mutation run proved the earlier single-match version
+# passed with the sort removed entirely.
+reset
+{ jq -nc '{v:1,name:"dev",role:"dev",model_bound:"sonnet"}'
+  jq -nc '{v:1,name:"dev-escalated",role:"dev-escalated",model_bound:"opus"}'; } > "$LEDGER"
+fire "$PROJ" polluted.jsonl adev-escalated-s298-3-xyz >/dev/null
+chk "8c two names match: the LONGEST wins ('dev' cannot outrank 'dev-escalated')" \
+  "$(last .role)" "dev-escalated"
+
+# An agent_id no ledger row matches must fall back, not silently inherit the
+# previous row's role — that would be a join that cannot fail.
+reset
+fire "$PROJ" polluted.jsonl aqa-s299-unrelated-ffee >/dev/null
+chk "8d unmatched agent_id falls back to the prose read, not to another row" \
+  "$(last .role)" "adversary"
+rm -f "$LEDGER"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "subagent-probe: PASS"; exit 0; fi
 echo "subagent-probe: $fails assertion(s) FAILED" >&2

@@ -17,6 +17,108 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.158.0] — 2026-07-25
+
+### Added — `spawn-ledger.jsonl`, written at dispatch, not at completion
+
+Check 22 verifies that every teammate spawn carried a role-matched model and a Rule 19(b)
+contract citation. It had **no machine record to read**, so it read a table the lead
+hand-wrote about its own conduct. Both failure modes that implies landed together on the
+reference consumer at S298, and the check failed on every one of four gate attempts:
+
+1. A `protected-path-editor` ran on **sonnet** against an opus-5 pin. `ai-dlc-dispatch-guard.sh`
+   exists precisely to make that impossible, and it works — replaying the exact payload shows it
+   emitting `updatedInput.model = opus`. But it silently no-op'd (exit 0, no record) when the
+   prompt did not literally contain `team-roles/<role>.md`, which a dispatch naming its role only
+   via `subagent_type` does not. That was the hole.
+2. `gate-adjudicator-s298-impl-3` ran, was stopped at a handoff, and left **no record at all** —
+   the probe writes on `SubagentStop`. Its absence from the spawn table was itself a Check 22
+   FAIL, with nothing the lead could do after the fact.
+
+`ai-dlc-dispatch-guard.sh` already resolved role, pin, requested model and bound model at
+PreToolUse — before the work happens — and threw all of it away. It now appends one row per
+role-bound dispatch: `{v, ts, sprint, name, role, model_pinned, tier_pinned, model_requested,
+model_bound, role_contract_cited, role_file_readable}`.
+
+Writing at dispatch rather than completion is what fixes (2) by construction: the row exists
+before the teammate can be killed. `model_bound` fixes (1): it is the value the guard actually
+set, not a self-report. `model_requested` is kept beside it so a corrected dispatch stays
+visible as a correction rather than being laundered into a clean row.
+
+Also fixed in the guard:
+
+- **`subagent_type` fallback.** A dispatch identifying its role unambiguously is now bound even
+  with no contract line in the prompt. The missing citation is recorded as
+  `role_contract_cited: false` rather than used as grounds to skip the dispatch — Check 22 fails
+  on it, which is the correct outcome, instead of nothing happening at all.
+- **An unresolvable role file is recorded, not skipped.** The guard used to `exit 0` on an
+  unreadable role file. Rule 19 is explicit that a teammate running without a resolvable
+  role-file binding is a violation, not a pass — so the row is written with
+  `role_file_readable: false` and the fail-OPEN (no correction, never a deny) happens after.
+  Silence reading as a pass is the defect class this release closes.
+
+The write is unconditionally fail-open: absent state dir, absent jq, read-only checkout — a
+dispatch is never blocked by bookkeeping. A fixture asserts binding still works with the state
+directory deleted.
+
+### Fixed — `subagent-context.jsonl`'s `role` field was measuring our own documentation
+
+The one machine record that did exist carried a `role` that was wrong on most rows. It was
+`head -1` of every `team-roles/*.md` match in the first 256 KB of the subagent transcript — a
+window that also holds injected core prose naming `team-roles/adversary.md` (`SKILL.md:164`
+among others), so the first match usually won and it was not the dispatched role.
+
+Measured over the reference consumer's 997 rows:
+
+```
+478  adversary        94  remediator        8  code-reviewer
+412  (null)            5  qa
+```
+
+Zero `protected-path-editor`, `dev`, `analyst`, `pm`, `tea`, `ux`, `sm` or `gate-adjudicator`,
+despite documented spawns of every one. Row 991 is the S298 `protected-path-editor` spawn,
+recorded as `adversary`; row 581 a `gate-adjudicator`, likewise.
+
+Two changes, because one was not enough. The prose read is now scoped to the **first
+`type:"user"` record** rather than the whole window — but that alone does not fix it, since
+injected `<system-reminder>` context can arrive inside that same record ahead of the lead's own
+text. Fixture assertion 8a reproduces exactly that and still yields `adversary`, deliberately:
+it documents the limit of any transcript-derived answer. So the probe now **prefers the
+dispatch-time ledger row**, joined on the longest ledger `name` contained in the probe's
+`agent_id` (the id embeds the name: `appe-hb-s298-1-disposition-db3a97` ⊃
+`ppe-hb-s298-1-disposition`). Longest-match, so a generic `dev` cannot outrank `dev-escalated`.
+
+An `agent_id` matching no row falls back to the prose read rather than inheriting a neighbouring
+row's role — asserted, because a join that cannot miss is a join that cannot fail.
+
+### Changed — Check 22 reads the ledger
+
+`gate-validation.md` Check 22 now reads `spawn-ledger.jsonl` as its source of record and
+compares each row against the role file's pin, instead of reading a lead-authored gate-log
+table. The routing arm is unchanged — re-deriving the expected role from persisted story
+frontmatter was already sound and was clean at S298.
+
+`model_requested` disagreeing with `model_bound` is reported but does **not** fail: the guard
+caught the slip and the teammate ran on the pinned tier. `role_contract_cited: false` and
+`role_file_readable: false` both fail.
+
+**An absent ledger is not a pass.** A consumer that has not pulled the guard, or a sprint whose
+spawns predate it, must say so and fall back to the gate-log table with that stated in the gate
+log. No rows and no spawns are different states, and a check that cannot tell them apart passes
+vacuously on exactly the sprint where the mechanism was missing.
+
+`enforcement-map.yaml`'s Check 22 row gains `reads:` and `fixtures:` — it had neither, while
+being `adjudication: llm` with `enforcer: []`.
+
+### Fixed — a vacuous assertion in this release's own fixture
+
+The first version of the longest-name-join assertion passed with the sort removed entirely,
+because each seeded `agent_id` matched exactly one ledger row and the sort never arbitrated.
+Rewritten with two rows whose names both match one id (`adev-escalated-s298-3-xyz` contains both
+`dev` and `dev-escalated`); the mutation run now fires on that assertion alone. Recorded because
+it is the second time a mutant harness here has been vacuous, and the tell is the same both
+times: a mutant that changes nothing is not a passing test.
+
 ## [0.157.0] — 2026-07-25
 
 ### Fixed — a check that fails closed on files the consumer is forbidden to edit

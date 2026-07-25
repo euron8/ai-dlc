@@ -288,7 +288,11 @@ checks:
     gate_types: [implementation]
     adjudication: llm
     enforcer: []
+    reads:
+      - _bmad-output/spawn-ledger.jsonl   # written at dispatch by ai-dlc-dispatch-guard.sh
+      - core/team-roles/*.md              # the /model pin each row is compared against
     ci_workflow: ~
+    fixtures: [tests/fixtures/dispatch-model-guard, tests/fixtures/subagent-probe]
 
   - id: "23"
     title: Analyst-draft sprint stamps (Rule 24)

@@ -154,6 +154,77 @@ REAL_PIN="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$SRC_ROLES/dev-esc
 [ -n "$REAL_PIN" ] && ok "real core dev-escalated.md still carries a parseable pin line" \
   || bad "FIXTURE STALE: core/team-roles/dev-escalated.md has no '- Personal/Bedrock: \`/model ...\`' line — the guard would silently stop binding the escalated tier"
 
+# --- SPAWN LEDGER (v0.158.0) --------------------------------------------------
+# Check 22 reads this file instead of a table the lead writes about itself. The
+# assertions below are what make that substitution safe: a row per dispatch, the
+# model ACTUALLY bound (not requested), and the Rule 19(b) citation observed
+# rather than claimed.
+LEDGER="$CONSUMER/_bmad-output/spawn-ledger.jsonl"
+mkdir -p "$CONSUMER/_bmad-output"
+printf -- '- **sprint_id:** 291\n' > "$CONSUMER/_bmad-output/pipeline-snapshot.md"
+lrow() { jq -c 'select(.name != null)' "$LEDGER" 2>/dev/null | tail -1; }
+# `tostring`, NOT `// "null"`: jq's alternative operator treats `false` as absent,
+# so `.role_contract_cited // "null"` reports "null" for the very value these
+# assertions exist to catch — a boolean field read through `//` can never be false.
+lfield() { lrow | jq -r "$1 | tostring" 2>/dev/null; }
+
+# A corrected dispatch must record BOTH values. Recording only the bound model
+# would hide the slip; only the requested one would misreport what ran.
+rm -f "$LEDGER"
+raw "$CONSUMER" "$(mkjson Agent remediator sonnet)" >/dev/null
+[ "$(lfield .model_requested)" = "sonnet" ] && [ "$(lfield .model_bound)" = "opus" ] \
+  && ok "corrected dispatch records requested=sonnet AND bound=opus (the slip stays visible)" \
+  || bad "ledger recorded requested='$(lfield .model_requested)' bound='$(lfield .model_bound)', expected sonnet/opus"
+
+[ "$(lfield .role_contract_cited)" = "true" ] \
+  && ok "role_contract_cited=true when the prompt names team-roles/<role>.md" \
+  || bad "role_contract_cited='$(lfield .role_contract_cited)', expected true"
+
+# An ALREADY-CORRECT dispatch emits nothing on stdout but must still be recorded,
+# or Check 22 sees only the sprint's mistakes and reads a clean sprint as no spawns.
+rm -f "$LEDGER"
+raw "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" >/dev/null
+[ "$(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ')" = "1" ] \
+  && ok "an already-correct dispatch is still recorded (silence on stdout is not silence on disk)" \
+  || bad "already-correct dispatch wrote $(wc -l < "$LEDGER" 2>/dev/null | tr -d ' ') row(s), expected 1"
+
+# subagent_type-only: before v0.158.0 this was a total no-op — no binding, no row.
+# It is the likeliest route by which a protected-path-editor reached sonnet on the
+# reference consumer while the guard sat installed and green.
+rm -f "$LEDGER"
+J="$(jq -nc '{tool_name:"Agent",tool_input:{name:"t-1",model:"sonnet",subagent_type:"remediator",prompt:"Do the work."}}')"
+[ "$(setmodel "$CONSUMER" "$J")" = "opus" ] \
+  && ok "subagent_type-only dispatch is bound (was a silent no-op before v0.158.0)" \
+  || bad "subagent_type-only dispatch injected '$(setmodel "$CONSUMER" "$J")', expected opus"
+raw "$CONSUMER" "$J" >/dev/null
+[ "$(lfield .role_contract_cited)" = "false" ] \
+  && ok "  and records role_contract_cited=false — the Rule 19(b) omission stays visible" \
+  || bad "  role_contract_cited='$(lfield .role_contract_cited)', expected false"
+
+# Fail-closed: a role file that does not resolve is a Rule 19 violation, and it
+# must be RECORDED. Exiting before the write would make it look like no dispatch.
+rm -f "$LEDGER"
+raw "$CONSUMER" "$(mkjson Agent nonexistent-role opus)" >/dev/null
+[ "$(lfield .role_file_readable)" = "false" ] \
+  && ok "unresolvable role file is recorded (role_file_readable=false), not silently skipped" \
+  || bad "unresolvable role file recorded readable='$(lfield .role_file_readable)', expected false"
+
+# A dispatch with no role at all is not a teammate spawn — no row, or Check 22
+# inherits noise it must then explain away.
+rm -f "$LEDGER"
+raw "$CONSUMER" "$(mkjson Agent - opus)" >/dev/null
+[ ! -s "$LEDGER" ] \
+  && ok "a dispatch binding no role writes no row (not our spawn)" \
+  || bad "a role-less dispatch wrote a ledger row: $(lrow)"
+
+# The ledger must never be able to block a spawn.
+rm -rf "$CONSUMER/_bmad-output"
+OUT_RO="$(setmodel "$CONSUMER" "$(mkjson Agent remediator sonnet)")"
+[ "$OUT_RO" = "opus" ] \
+  && ok "binding still works with the state dir absent (bookkeeping never blocks a dispatch)" \
+  || bad "with no state dir the guard injected '$OUT_RO', expected opus — the ledger write is not fail-open"
+mkdir -p "$CONSUMER/_bmad-output"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "dispatch-model-guard: PASS"; exit 0; fi
 echo "dispatch-model-guard: $fails assertion(s) FAILED" >&2

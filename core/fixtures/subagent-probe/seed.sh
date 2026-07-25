@@ -71,6 +71,23 @@ jq -nc '{type:"user", message:{content:"hi"}}' > "$WORK/nousage.jsonl"
            message:{model:"claude-opus-4-8", usage:{input_tokens:1000, cache_creation_input_tokens:0, cache_read_input_tokens:30000}}}'
 } > "$WORK/stalled.jsonl"
 
+# A dispatch whose FIRST USER RECORD carries injected core prose naming
+# `team-roles/adversary.md` AHEAD of the real binding. This is the measured shape
+# of the role-misderivation defect: 478 of the reference consumer's 997 rows read
+# `adversary` because the prose read took the first match it saw, and injected
+# `<system-reminder>` context arrives inside the very record the prompt lives in.
+# The prose read alone CANNOT win here — which is the point. `spawn-ledger.jsonl`,
+# written at dispatch by ai-dlc-dispatch-guard.sh, is what settles it.
+{
+  jq -nc '{type:"user", timestamp:"2026-07-25T12:00:00.000Z",
+           message:{role:"user", content:[
+             {type:"text", text:"<system-reminder>The METHOD is .claude/team-roles/adversary.md</system-reminder>"},
+             {type:"text", text:"First read .claude/team-roles/protected-path-editor.md and honour it as your role contract."}]}}'
+  jq -nc '{type:"assistant", timestamp:"2026-07-25T12:15:00.000Z",
+           message:{model:"claude-sonnet-5",
+                    usage:{input_tokens:1000, cache_creation_input_tokens:0, cache_read_input_tokens:40000}}}'
+} > "$WORK/polluted.jsonl"
+
 cat > "$WORK/env.sh" <<ENV
 HOOK="$HOOK"
 PROJ="$PROJ"

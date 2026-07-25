@@ -131,11 +131,61 @@ if [ -n "$HEAD_READ" ]; then
   START_TS="$(printf '%s' "$HEAD_READ" | jq -Rsc '
       [ (split("\n") | map(fromjson?))[] | .timestamp // empty ] | first // ""
     ' 2>/dev/null | tr -d '"')"
-  # Role binding: `.claude/team-roles/<role>.md` as dispatched (Rule 19). Read
-  # from the raw text, not a JSON path — the binding is prose inside the prompt.
-  ROLE="$(printf '%s' "$HEAD_READ" \
+  # Role binding: `.claude/team-roles/<role>.md` as dispatched (Rule 19).
+  #
+  # SCOPED TO THE DISPATCH PROMPT — the first `type:"user"` record — and NOT to
+  # the whole head window. Reading the window and taking `head -1` is what this
+  # field used to do, and it did not measure the dispatched role: the window also
+  # holds injected core prose naming `team-roles/adversary.md` (SKILL.md:164
+  # among others), so the FIRST match was usually that mention rather than the
+  # binding. Measured over the reference consumer's 997 rows: 478 `adversary`,
+  # 412 null, 94 `remediator`, 8 `code-reviewer`, 5 `qa` — and ZERO
+  # protected-path-editor, dev, analyst, pm, tea, ux, sm or gate-adjudicator,
+  # despite documented spawns of every one. Row 991 is a `protected-path-editor`
+  # spawn recorded as `adversary`; row 581 a `gate-adjudicator`, likewise. The
+  # field was measuring our own documentation, and Check 22 had no other machine
+  # record to compare a spawn table against.
+  #
+  # The binding is still read as PROSE (it is prose, inside the prompt), but only
+  # from the record the lead authored, so injected context cannot win.
+  ROLE="$(printf '%s' "$HEAD_READ" | jq -Rsc '
+      [ (split("\n") | map(fromjson?))[]
+        | select(.type == "user")
+        | (.message.content // .content // empty)
+        | if type == "array" then (map(.text? // "") | join(" ")) else tostring end
+      ] | first // ""
+    ' 2>/dev/null \
             | grep -oE 'team-roles/[a-z0-9-]+\.md' 2>/dev/null \
             | head -1 | sed 's|team-roles/||; s|\.md$||')"
+fi
+
+# AUTHORITATIVE OVERRIDE: the dispatch-time row, if the guard wrote one.
+#
+# Scoping the prose read to the first user record (above) removes the worst of the
+# pollution but cannot remove all of it: injected `<system-reminder>` context can
+# arrive INSIDE that same record, ahead of the lead's own text, and it carries the
+# same core prose. Any transcript-derived answer is a guess about what was
+# dispatched. `spawn-ledger.jsonl` is not a guess — `ai-dlc-dispatch-guard.sh`
+# writes it at PreToolUse from the actual tool input, before the teammate runs,
+# and it is the role the guard BOUND. Prefer it; keep the prose read as the
+# fallback for teammates dispatched before the ledger existed.
+#
+# JOIN. The probe sees `agent_id` (`appe-hb-s298-1-disposition-db3a97…`), the
+# ledger sees the dispatch `name` (`ppe-hb-s298-1-disposition`), and the id embeds
+# the name. Match on containment and take the LONGEST matching name, so a short
+# generic name (`dev`) cannot outrank a specific one that also matches.
+SPAWN_LEDGER="${STATE_DIR}/spawn-ledger.jsonl"
+if [ -n "${AGENT_ID:-}" ] && [ "${AGENT_ID}" != "unknown" ] && [ -r "$SPAWN_LEDGER" ]; then
+  LEDGER_ROLE="$(jq -rs --arg id "$AGENT_ID" '
+      [ .[]
+        | select(type == "object")
+        | select((.name // "") != "")
+        | select(.role != null)
+        | select(.name as $n | $id | contains($n))
+      ]
+      | sort_by(.name | length) | last | .role // empty
+    ' "$SPAWN_LEDGER" 2>/dev/null || true)"
+  [ -n "${LEDGER_ROLE:-}" ] && ROLE="$LEDGER_ROLE"
 fi
 
 # Seconds, not milliseconds: the spread being measured runs minutes to hours,

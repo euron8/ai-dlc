@@ -1140,17 +1140,52 @@ it as new.
 dispatched teammates via the Agent tool (dev, dev-escalated, code-reviewer,
 qa, or a `protected-path-editor`). Skips gates with no Agent-tool spawn.
 
-**Check.** Read the gate log's per-teammate spawn records
-(`implementation.md` Step 4 self-validate writes them). For EVERY
-teammate spawn recorded this sprint, confirm BOTH bindings required by
-SKILL.md Rule 19: (a) the `model` parameter was passed explicitly, and
-the recorded model matches the spawned role's `/model` directive in
-`.claude/team-roles/<role>.md`; AND (b) the dispatch carried the
-standing role-contract line binding the subagent to
-`.claude/team-roles/<role>.md` as its first action (Rule 19(b)). A spawn
-record missing either the model value or the role-contract citation
-FAILS this check. Fail-closed: a teammate that ran without a resolvable
-role-file binding is a Rule 19 violation, not a pass.
+**Check.** Read `_bmad-output/spawn-ledger.jsonl` — written by
+`ai-dlc-dispatch-guard.sh` at PreToolUse, one row per role-bound Agent/Task
+dispatch. It is the source of record, NOT the gate log's spawn table: the
+table is authored by the lead about its own conduct, and a lead that
+mis-dispatched cannot vouch for its own dispatch. Filter to this sprint
+(`sprint`), then for EVERY row confirm both bindings required by SKILL.md
+Rule 19:
+
+- **(a) model.** `model_bound` — the value the guard actually bound, not a
+  self-report — matches the tier of the `/model` directive in
+  `.claude/team-roles/<role>.md`. `model_requested` sits beside it so a
+  corrected dispatch stays visible as a correction; a `model_requested`
+  that disagrees with `model_bound` is a Rule 19(a) slip the guard caught,
+  and is reported in the gate log but does not FAIL this check — the
+  teammate ran on the pinned tier.
+- **(b) role contract.** `role_contract_cited` is `true`. `false` means the
+  dispatch named its role only via `subagent_type` and carried no Rule 19(b)
+  contract line — the guard bound the model anyway, but the contract citation
+  is owed and this FAILS.
+
+`role_file_readable: false` FAILS unconditionally: a teammate ran against a
+role file that does not resolve, which is Rule 19's fail-closed case
+("a teammate that ran without a resolvable role-file binding is a Rule 19
+violation, not a pass").
+
+**A row exists even for a teammate that was stopped mid-flight**, because the
+ledger is written at dispatch rather than at completion. That is deliberate:
+`subagent-context.jsonl` is written on `SubagentStop`, so a killed teammate
+left no record at all and its absence from the spawn table was itself a FAIL
+with nothing the lead could do about it after the fact.
+
+**Do not substitute `subagent-context.jsonl` for the ledger on the role
+field.** Before v0.158.0 its `role` was derived from the subagent transcript
+and was wrong on the majority of rows (478 of 997 read `adversary`, including
+`protected-path-editor` and `gate-adjudicator` spawns) because injected core
+prose in the transcript names `team-roles/adversary.md`. It now prefers the
+ledger row, so the two agree — but the ledger is the origin and the one to
+cite.
+
+**If the ledger is ABSENT** (a sprint whose spawns predate it, or a consumer
+that has not pulled the guard), say so explicitly and fall back to the gate
+log's spawn table, recording in the gate log that the verdict rests on
+lead-authored evidence rather than a machine record. Do NOT report a clean
+PASS from an empty file: no rows and no spawns are different states, and a
+check that cannot tell them apart passes vacuously on the sprint where the
+mechanism was missing.
 
 Additionally, verify **story routing** against the canonical map in
 `stories-test-strategy.md` "Story Routing Tags". For EVERY story in the
@@ -1180,10 +1215,21 @@ without its role contract — a dev without its ownership/constraint
 boundary, the lead absorbing a protected-path edit it should have
 delegated (Rule 28), or an `escalate_model` story silently run on the
 standard model instead of the routed `dev-escalated` tier. False-positive
-cost: one gate-log read plus one frontmatter read per routed story —
-persisted artifacts the lead already writes, no new artifact. Removal
-condition: retire once the Agent-tool spawn API structurally attaches the
-role file (no lead-authored dispatch line to verify).
+cost: one JSONL read plus one frontmatter read per routed story —
+persisted artifacts written by a hook and by the lead's own story files, no
+new artifact. Removal condition: retire once the Agent-tool spawn API
+structurally attaches the role file (no lead-authored dispatch line to
+verify).
+
+**Why the ledger and not the lead's table.** This check spent its life
+reading a table the lead hand-wrote about its own dispatches, with no machine
+record to join against — the model column was a self-report, and the one
+machine record that existed (`subagent-context.jsonl`) carried a `role` field
+that was wrong on the majority of rows. Both failure modes landed together on
+the reference consumer at S298: a `protected-path-editor` ran on sonnet
+against an opus-5 pin, and a `gate-adjudicator` stopped mid-flight had no row
+at all. The guard already resolved role, pin and model correctly at dispatch
+and threw the answer away; it now writes it down.
 
 ### 23. Analyst-draft sprint stamps (all planning gates).
 <!-- CHECK_LOADED: 23 -->
