@@ -46,6 +46,8 @@ the core file set changes:
 
 ```yaml
 core_manifest:
+  - core/skills/ai-dlc/core-manifest.md
+  - core/git-hooks/pre-push
   - core/skills/ai-dlc/SKILL.md
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/escalations.md
@@ -124,6 +126,24 @@ core_manifest:
   - core/fixtures/verdict-pass-content/**
   - core/fixtures/wait-stale-deliverable/**
   - core/fixtures/whole-read-pool/**
+
+machinery:
+  - core/skills/ai-dlc/core-manifest.md
+  - core/git-hooks/pre-push
+  - core/skills/ai-dlc/templates/*.md
+  - core/hooks/ai-dlc-*.sh
+  - core/session-driver/*.sh
+  - core/schemas/*.json
+  - core/skills/ai-dlc-setup/**
+  - core/skills/ai-dlc-update/**
+  - core/scripts/ai-dlc/*
+
+rulebook:
+  - core/skills/ai-dlc/SKILL.md
+  - core/skills/ai-dlc/steps/*.md
+  - core/skills/ai-dlc/escalations.md
+  - core/skills/ai-dlc/rule-authoring.md
+  - core/team-roles/*.md
 ```
 
 ## Sites

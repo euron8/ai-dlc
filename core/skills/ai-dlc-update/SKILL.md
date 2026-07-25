@@ -151,25 +151,51 @@ prose is itself generated rather than composed.
    lands on its OWN cycle, **autonomously — no operator approval**, distinct from
    the operator-gated rulebook reconcile (step 8).
 
-   Diff `base→theirs` restricted to `core/skills/ai-dlc-update/**` **plus the fixtures
-   that cover it** — every `core/fixtures/<dir>/` whose `*.sh` names
-   `skills/ai-dlc-update`. Derive that set by grepping the fixtures; do not enumerate it
-   here, and grep `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling
-   path in its seed, so a run.sh-only derivation misses it).
+   Diff `base→theirs` restricted to **the MACHINERY set** — read
+   `reconcile/setup-sites.md`'s `machinery:` list (the manifest, `git-hooks/pre-push`,
+   hooks, `scripts/ai-dlc/*`, schemas, session-driver, templates, and the `ai-dlc-setup` /
+   `ai-dlc-update` subtrees) — **plus the fixtures that cover it**: every
+   `core/fixtures/<dir>/` whose `*.sh` names any machinery path, EXCLUDING any dir carrying
+   a `.dist-only` marker (never shipped, so it cannot run on a consumer). Derive both sets
+   rather than enumerating either here, and grep `seed.sh` as well as `run.sh` (a fixture
+   commonly resolves the tooling path in its seed, so a run.sh-only derivation misses it).
+
+   **Match through `map_consumer()`, not against the diff path.** `machinery:` entries are
+   CONSUMER-shaped — `core/scripts/ai-dlc/*` is where a validator lands, while upstream it
+   is `core/scripts/<name>` — so testing a `git diff` path directly against them matches
+   `scripts/` not at all and silently yields an empty slice. Map each changed `core/` path
+   to its consumer destination first, then test that against the machinery entries mapped
+   through `to_consumer_glob()`. Both helpers are in `reconcile/`.
+
+   **The whole machinery set moves together, not just this skill.** Machinery is exactly
+   the core with no layer grain — no `overrides/` shadow, no `extensions/` entry, nothing
+   for an operator to adjudicate — which is the same property that makes this cycle
+   autonomous in the first place. `validate-enforcement-map.sh` I28 asserts the
+   `machinery:`/`rulebook:` lists partition the manifest, so the set cannot silently
+   narrow. The rulebook stays operator-gated at step 8.
 
    **The tooling and the fixtures that guard it move together or the suite goes red on a
    pull that broke nothing.** Pulling `reconcile/*` alone leaves the consumer running new
-   tooling against fixtures written for the old, and pre-push fails on a fixture correctly
+   tooling against fixtures written for the old, and the suite fails on a fixture correctly
    reporting that its subject changed underneath it — not a regression, not consumer-caused,
    and it blocks the run before the reconcile that would have shipped the matching fixture.
    A self-update that carries a validator without the fixture asserting its behaviour
    strands the fixture against code it no longer describes.
 
+   **Restricting the slice to this skill was itself that bug.** A fixture covering
+   `ai-dlc-update` can depend on machinery elsewhere, and two of them do: `check-15-bypass`
+   resolves `scripts/ai-dlc/core-paths.sh` and `core-manifest.md`, `core-write-guard`
+   resolves the core guard hook. Pulling only `skills/ai-dlc-update/**` left both asserting
+   against machinery this cycle did not carry, and a red derived fixture HARD-STOPS the
+   cycle — so the self-update wedged on a pull that broke nothing. The machinery set is the
+   smallest slice that closes that, because a fixture's subject is always machinery.
+
    If EMPTY, say so in one line and continue to step 3. If NON-EMPTY:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
-     that diff names** — under `.claude/skills/ai-dlc-update/**` and
-     `tests/fixtures/<dir>/` — never the derived set per directory, **update the stamp's
+     that diff names** — each at the consumer destination `map_consumer()` gives it, and
+     `tests/fixtures/<dir>/` for the covering fixtures — never the derived set per
+     directory, **update the stamp's
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
      preserving `version`/`commit`/`installed_at`/`upstream`), commit
      (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), **run the
@@ -189,8 +215,9 @@ prose is itself generated rather than composed.
      fixtures this pull does not change.
 
      **A red derived fixture STOPS the self-update; it does not get pushed and sorted out
-     later.** Widening the scope makes the common case consistent, but a fixture can also
-     cover core OUTSIDE `ai-dlc-update/**` and then depend on a file this cycle does not
+     later.** The machinery slice closes the common dependency case by construction — a
+     fixture's subject is machinery, and the whole machinery set now moves together — but a
+     fixture can still depend on RULEBOOK content, which this cycle deliberately does not
      pull. Running them here is what tells the two cases apart: green means the pulled set
      is self-consistent, red means it is not, and the second is a finding to report — with
      the fixture name and its output — not a gate to bypass. Pushing a known-red suite so

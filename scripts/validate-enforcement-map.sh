@@ -474,6 +474,47 @@ for cp_f in parse_manifest to_consumer_glob; do
   fi
 done
 
+# --- I28: layer grain is DECLARED and PARTITIONS the manifest -------------------
+# `machinery` (no overrides/ or extensions/ grain) vs `rulebook` (consumer-layerable prose)
+# decided three things and was written down in none of them: the core-guard's routing advice,
+# and -- the one that bit -- which paths ai-dlc-update's self-update cycle may pull
+# autonomously. That cycle pulled `skills/ai-dlc-update/**` plus the fixtures covering it,
+# and those fixtures depend on machinery OUTSIDE that slice (core-paths.sh, core-manifest.md),
+# so a red derived fixture HARD-STOPPED the self-update on a pull that broke nothing. The
+# slice is now the machinery set, which needs the set to exist as data.
+#
+# PARTITION, not two lists that happen to agree: every non-fixtures/ entry must be in exactly
+# one. In neither means a new entry is silently treated as rulebook and never reaches the
+# self-update slice -- the same wedge again, one release later. In both means the two readers
+# can disagree about the same path. fixtures/ is excluded: test data has no layer grain and
+# its enumeration is already derived from core/fixtures/ minus .dist-only (I8).
+norm_key() { # <file> <key> -> entries under that key, prefix-normalized like I5
+  awk -v k="$2" '
+    $0 == k ":" {f=1; next}
+    f && /^  - / {v=$0; sub(/^  - /,"",v); print v; next}
+    f && /^[^ \t]/ {f=0}
+  ' "$1" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
+}
+cm_all="$(norm_core_manifest "$CORE_MANIFEST" | grep -v '^fixtures/' | sort -u)"
+for lg_k in machinery rulebook; do
+  a="$(norm_key "$CORE_MANIFEST" "$lg_k")"
+  b="$(norm_key "$SETUP_SITES" "$lg_k")"
+  if [ -z "$a" ] || [ -z "$b" ]; then
+    err "I28 the '${lg_k}:' list is missing or unparseable in core-manifest.md and/or reconcile/setup-sites.md (found $(printf '%s' "$a" | grep -c . ) and $(printf '%s' "$b" | grep -c . ) entries). Layer grain decides the core-guard's routing and which paths the self-update may pull autonomously; an absent list makes both fall back to a default silently."
+  elif [ "$a" != "$b" ]; then
+    err "I28 the '${lg_k}:' lists diverge between core-manifest.md and reconcile/setup-sites.md:"
+    diff <(printf '%s\n' "$a") <(printf '%s\n' "$b") >&2 || true
+  fi
+done
+mach="$(norm_key "$CORE_MANIFEST" machinery)"
+rule="$(norm_key "$CORE_MANIFEST" rulebook)"
+lg_both="$(comm -12 <(printf '%s\n' "$mach") <(printf '%s\n' "$rule"))"
+[ -n "$lg_both" ] && err "I28 entr(y/ies) declared BOTH machinery and rulebook: $(echo $lg_both). Layer grain is one answer per path; two readers would route the same file differently."
+lg_neither="$(comm -23 <(printf '%s\n' "$cm_all") <(printf '%s\n' "$mach" "$rule" | sort -u))"
+[ -n "$lg_neither" ] && err "I28 core_manifest entr(y/ies) with NO layer grain declared: $(echo $lg_neither). Add each to machinery: (no overrides/extensions grain — hooks, validators, schemas, templates, the setup/update engines) or rulebook: (consumer-layerable prose). Unclassified defaults to rulebook at every reader, which is how a machinery path silently stops reaching ai-dlc-update's self-update slice."
+lg_ghost="$(comm -13 <(printf '%s\n' "$cm_all") <(printf '%s\n' "$mach" "$rule" | sort -u))"
+[ -n "$lg_ghost" ] && err "I28 layer grain declared for path(s) that are not core_manifest entries: $(echo $lg_ghost). A grain for a path the manifest does not claim protects nothing and reads as coverage."
+
 # --- I27: the in-flight marker is ONE path, written by apply.sh and read by pre-push --
 # A pull writes core one file at a time, so mid-apply the tree is a mixture of two releases
 # and its own fixture suite fails in BOTH directions -- a fixture newer than its subject
@@ -1232,7 +1273,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28)."
   exit 0
 fi
 exit 1
