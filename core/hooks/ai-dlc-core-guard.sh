@@ -110,6 +110,7 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
     hooks/*)          printf '.claude/%s\n' "$e" ;;   # hooks live at .claude/hooks/, outside the skill dir
     scripts/*)        printf '%s\n' "$e" ;;           # scripts/ai-dlc/* is at the project root, not under .claude/
     fixtures/*)       printf 'tests/%s\n' "$e" ;;     # install.sh copies core/fixtures/<n>/ to tests/fixtures/<n>/
+    git-hooks/*)      printf '.githooks/%s\n' "${e#git-hooks/}" ;;  # .githooks/, where core.hooksPath points
     session-driver/*) printf '.claude/%s\n' "$e" ;;   # machinery, outside the skill dir
     schemas/*)        printf '.claude/%s\n' "$e" ;;   # machinery, outside the skill dir
     skills/*)         printf '.claude/%s\n' "$e" ;;   # ai-dlc/, ai-dlc-setup/ and ai-dlc-update/ all sit under .claude/skills/

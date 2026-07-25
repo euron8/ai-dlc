@@ -8,16 +8,23 @@ immutability** check, the edit-time `ai-dlc-core-guard.sh` hook, and Rule 27
 all read this list rather than enumerating it inline, so the set is defined
 in exactly one place on the pipeline side.
 
-Most entries are **rulebook prose** — a change to one goes into a consumer
-layer (`overrides/` to shadow a rule, `extensions/` to add one). The
-**machinery** entries are the exception: `hooks/ai-dlc-*.sh`,
-`scripts/ai-dlc/*`, `session-driver/*.sh`, `schemas/*.json`, and the
-`skills/ai-dlc-setup/**` and `skills/ai-dlc-update/**` subtrees have **no layer
-grain**. They are upstream-owned like the rest, but a consumer that needs
-different behavior configures it through the declared `AI_DLC_*` tunables or
-takes the change upstream — there is no `overrides/` or `extensions/` entry for
-a hook, a validator, a schema, or the update engine. The core-guard routes
-accordingly.
+**Layer grain is DECLARED, in the `machinery:` and `rulebook:` lists below.** A
+`rulebook` entry is consumer-readable prose: a change to one goes into a consumer
+layer (`overrides/` to shadow a rule, `extensions/` to add one). A `machinery`
+entry has **no layer grain** — there is no `overrides/` or `extensions/` entry
+for a hook, a validator, a schema, a template or the update engine. It is
+upstream-owned like the rest, but a consumer that needs different behavior
+configures it through the declared `AI_DLC_*` tunables or takes the change
+upstream. The core-guard routes on this distinction, and `ai-dlc-update`'s
+self-update cycle pulls the machinery set autonomously, because a file with no
+layer grain has nothing for an operator to adjudicate.
+
+The two lists PARTITION every non-`fixtures/` entry: `validate-enforcement-map.sh`
+fails if one is in neither or both, so a new entry cannot be added without
+classifying it. `fixtures/` entries are machinery by category — test data has no
+layer grain either — and are excluded from the partition because their own
+enumeration is derived. This was prose-only until it was declared, and the prose
+had already rotted: it omitted `templates/*.md`.
 
 **An unclaimed core subtree fails in both directions.** It carries no edit-time
 protection, so a consumer can edit it in place and the next pull either clobbers
@@ -86,6 +93,7 @@ except these prefixes, which resolve outside it:
 | `skills/`          | `.claude/skills/`                |
 | `scripts/`         | `scripts/` (project root)        |
 | `fixtures/`        | `tests/fixtures/` (project root) |
+| `git-hooks/`       | `.githooks/` (project root)      |
 
 `to_consumer_glob()` is the one implementation of that mapping. It lives in
 `hooks/ai-dlc-core-guard.sh` (edit-time) and `scripts/ai-dlc/core-paths.sh`
@@ -96,6 +104,8 @@ protects.
 
 ```yaml
 core_manifest:
+  - core-manifest.md
+  - git-hooks/pre-push
   - SKILL.md
   - steps/*.md
   - escalations.md
@@ -174,6 +184,24 @@ core_manifest:
   - fixtures/verdict-pass-content/**
   - fixtures/wait-stale-deliverable/**
   - fixtures/whole-read-pool/**
+
+machinery:
+  - core-manifest.md
+  - git-hooks/pre-push
+  - templates/*.md
+  - hooks/ai-dlc-*.sh
+  - session-driver/*.sh
+  - schemas/*.json
+  - skills/ai-dlc-setup/**
+  - skills/ai-dlc-update/**
+  - scripts/ai-dlc/*
+
+rulebook:
+  - SKILL.md
+  - steps/*.md
+  - escalations.md
+  - rule-authoring.md
+  - team-roles/*.md
 ```
 
 **Note on the second copy.** `ai-dlc-update`'s

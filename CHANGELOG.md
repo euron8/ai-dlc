@@ -17,6 +17,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.164.0] — 2026-07-25
+
+### Fixed — the self-update pulled a slice too narrow for the fixtures it then required green
+
+This is the actual cause of the reference consumer's wedge, and v0.163.0 did not fix it.
+`ai-dlc-update`'s self-update cycle pulled `core/skills/ai-dlc-update/**` plus every fixture whose
+`*.sh` names `skills/ai-dlc-update`, then required those fixtures green **before** pushing, where
+*"a red derived fixture STOPS the self-update."*
+
+Both reported failures are in that derived set and both depend on machinery the slice does not
+pull: `check-15-bypass` resolves `scripts/ai-dlc/core-paths.sh` and `core-manifest.md`,
+`core-write-guard` resolves the core-guard hook. So the cycle hard-stopped on a pull that broke
+nothing. `SKILL.md` had already named the hazard — *"a fixture can also cover core OUTSIDE
+`ai-dlc-update/**` and then depend on a file this cycle does not pull"* — without closing it.
+
+**The slice is now the whole machinery set.** Machinery is exactly the core with no layer grain:
+no `overrides/` shadow, no `extensions/` entry, nothing for an operator to adjudicate — which is
+the same property that already made this cycle autonomous. A fixture's subject is always
+machinery, so this is the smallest slice that closes the dependency case. The rulebook stays
+operator-gated at step 8.
+
+### Layer grain was decided in three places and written down in none
+
+`machinery` vs `rulebook` drove the core-guard's routing advice and which paths the self-update
+may pull, and existed only as prose in `core-manifest.md` — prose that **had already rotted**: it
+omitted `templates/*.md`. I12's drift-policy table was the obvious derivation source and is the
+wrong axis; it classifies drift-detectability, and lists `hooks` and `schemas` as `scan` while the
+manifest calls both machinery.
+
+Both manifest copies now carry `machinery:` and `rulebook:` lists, and **new invariant I28**
+asserts they PARTITION every non-`fixtures/` entry: in neither means a new entry is silently
+treated as rulebook and never reaches the self-update slice — the same wedge one release later;
+in both means two readers can route the same path differently. `fixtures/` is excluded because its
+enumeration is already derived (I8). I28 also binds the two copies and fails loudly if either list
+is absent rather than falling back to a default.
+
+Each of I28's five arms fires on its own mutant. Three of them needed the mutation applied to
+**both** copies, because a single-copy edit trips the divergence arm first and masks the partition
+arm — the same short-circuit that made I26's per-line detector need a bespoke mutant.
+
+### Fixed — two core files the manifest never claimed
+
+Both found by actually running the slice against a copy of the reference consumer, not by reading:
+
+- **`core-manifest.md` did not claim itself.** `--is-core .claude/skills/ai-dlc/core-manifest.md`
+  returned `not-core`, so the core guard permitted editing the declaration in place, Check 16
+  audited it as consumer-authored, and the self-update slice would not have pulled it — leaving
+  `check-15-bypass` still asserting against a stale manifest.
+- **`git-hooks/pre-push` was unclaimed too**, which is why v0.163.0's new `pre-push` assertions
+  failed inside the slice. Unprotected at edit time, and not pullable by the machinery cycle.
+
+Both are now `core_manifest:` entries classified `machinery` — you cannot shadow a declaration or
+a git hook. `to_consumer_glob()` gains a `git-hooks/*` → `.githooks/` arm in both copies
+(byte-identical per I25). `.githooks/pre-push` now resolves core while a consumer's own
+`.githooks/*` does not, the same boundary `hooks/ai-dlc-*.sh` draws.
+
+### Two corrections the run forced, which reading did not
+
+- **Match through `map_consumer()`, not the diff path.** `machinery:` entries are
+  consumer-shaped: `core/scripts/ai-dlc/*` is where a validator lands, while upstream it is
+  `core/scripts/<name>`. Testing a `git diff` path directly against them matches `scripts/` not at
+  all and yields a silently empty slice — the first draft of this instruction did exactly that.
+- **`.dist-only` fixtures are excluded from the covering set.** They are never shipped, so they
+  cannot run on a consumer; including one put `settings-merge-documented-form` in the slice and
+  red.
+
+### Verification
+
+Reproduced the self-update slice against a copy of the reference consumer's tree: 9 changed
+machinery paths, 55 covering fixtures, **55/55 green — including `check-15-bypass` and
+`core-write-guard`**, the two that hard-stopped the cycle.
+
 ## [0.163.0] — 2026-07-25
 
 ### Fixed — a mid-pull tree ran its own fixture suite and reported failures that meant nothing
