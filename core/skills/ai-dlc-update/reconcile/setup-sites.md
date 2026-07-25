@@ -58,6 +58,72 @@ core_manifest:
   - core/skills/ai-dlc-setup/**
   - core/skills/ai-dlc-update/**
   - core/scripts/ai-dlc/*
+  - core/fixtures/adversarial-citation/**
+  - core/fixtures/apply-drift-after-write/**
+  - core/fixtures/apply-drift-refile/**
+  - core/fixtures/apply-legacy-script-path/**
+  - core/fixtures/apply-restamp-theirs/**
+  - core/fixtures/askuserquestion-citation/**
+  - core/fixtures/audit-anchors-schema/**
+  - core/fixtures/blocker-adjudication-record/**
+  - core/fixtures/check-15-bypass/**
+  - core/fixtures/check-17-bypass/**
+  - core/fixtures/check-17-counts/**
+  - core/fixtures/check-1c-bypass/**
+  - core/fixtures/check-23-draft-stamps/**
+  - core/fixtures/check-24-adversarial-convergence/**
+  - core/fixtures/check-25-steering-conduct/**
+  - core/fixtures/check-3b-locked-anchor/**
+  - core/fixtures/check-h1-recursion/**
+  - core/fixtures/check-manifest-bypass/**
+  - core/fixtures/check5-anchor-base/**
+  - core/fixtures/ci-gates-resolution/**
+  - core/fixtures/context-mode-protect/**
+  - core/fixtures/context-sensor/**
+  - core/fixtures/core-script-boundary/**
+  - core/fixtures/core-write-guard/**
+  - core/fixtures/cycle-commits-enforce/**
+  - core/fixtures/dispatch-model-guard/**
+  - core/fixtures/divergence-hard-block/**
+  - core/fixtures/escalation-citation/**
+  - core/fixtures/escalation-status-vocabulary/**
+  - core/fixtures/gate-adjudication/**
+  - core/fixtures/gate-verdict-grep-shape/**
+  - core/fixtures/h2-attest-scripts-dir/**
+  - core/fixtures/handoff-resume-guard/**
+  - core/fixtures/implementation-join-yield/**
+  - core/fixtures/inflight-row-shape/**
+  - core/fixtures/known-skills-extension/**
+  - core/fixtures/layer-catalog-collision/**
+  - core/fixtures/layer-readopt-gate/**
+  - core/fixtures/ledger-reverify/**
+  - core/fixtures/ledger-reverify-unfalsifiable/**
+  - core/fixtures/ledger-rotate/**
+  - core/fixtures/mandatory-rules-clean-tree/**
+  - core/fixtures/pause-hook-origin/**
+  - core/fixtures/provenance-not-accessible/**
+  - core/fixtures/reconcile-blocking-list/**
+  - core/fixtures/reconcile-emit-report/**
+  - core/fixtures/relabel-theirs-collision/**
+  - core/fixtures/release-version-triple/**
+  - core/fixtures/relocation-preclassify/**
+  - core/fixtures/resume-whole-read/**
+  - core/fixtures/retired-contract-token/**
+  - core/fixtures/retro-audit-scans/**
+  - core/fixtures/route-defect-classification/**
+  - core/fixtures/setup-config-drift/**
+  - core/fixtures/shadowed-local-validators/**
+  - core/fixtures/snapshot-evidence-cell/**
+  - core/fixtures/snapshot-section-schema/**
+  - core/fixtures/sprint-status-lifecycle/**
+  - core/fixtures/story-provenance/**
+  - core/fixtures/subagent-probe/**
+  - core/fixtures/taught-schema/**
+  - core/fixtures/validate-mandatory-rules-revive/**
+  - core/fixtures/validator-path-resolution/**
+  - core/fixtures/verdict-pass-content/**
+  - core/fixtures/wait-stale-deliverable/**
+  - core/fixtures/whole-read-pool/**
 ```
 
 ## Sites

@@ -141,13 +141,26 @@ expect .claude/skills/ai-dlc-update/reconcile/apply.sh \
 expect .claude/hooks/my-own-hook.sh \
                                 element1-item-ref  "V9 consumer hook (control)"
 
+# The FIXTURE-ownership pair, the same shape one directory over. tests/fixtures/ is
+# SHARED: core ships its self-tests there and the consumer's own sit beside them. Drop
+# the fixtures/ arm from to_consumer_glob() and V10 flips to element1-item-ref — a core
+# fixture audited as consumer-authored, whose only remediation VACATES it, because those
+# markers are what its own assertions read. Collapse the entries to a bare
+# tests/fixtures/* and V11 flips to exempt-upstream — a consumer's own unaudited stub
+# riding out on our exemption.
+expect tests/fixtures/check-15-bypass/seed.sh \
+                                exempt-upstream    "V10 core fixture"
+expect tests/fixtures/check-15-bypass-local/seed.sh \
+                                element1-item-ref  "V11 consumer fixture (control)"
+
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 9 variants correct. Each adversary is rejected on its"
+  echo "PASS  check-15-bypass: 11 variants correct. Each adversary is rejected on its"
   echo "      intended element (absent item, short reason, no file:line, padded reason,"
   echo "      digitless file ref, CLOSED item), the honest stub satisfies all four, and"
-  echo "      the upstream-owned file is dropped from scope while its consumer-owned"
-  echo "      neighbour is still audited."
+  echo "      both ownership pairs discriminate: the upstream-owned file and the core"
+  echo "      fixture are dropped from scope while their consumer-owned neighbours at"
+  echo "      adjacent paths are still audited."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails variant(s) audited wrong." >&2

@@ -149,6 +149,41 @@ else
   bad "hook deny gave layer-routing advice — a hook cannot go in overrides/ or extensions/"
 fi
 
+# --- Assertion 10e: in-place edit to an installed CORE FIXTURE → DENY -------
+# The manifest claims each shipped fixture dir as fixtures/<name>/**. Until it did,
+# upstream test data was the last part of core a consumer could edit in place, and the
+# reference consumer had edited several fixture files. The deny message matters here more
+# than elsewhere: a fixture's markers and counts ARE its assertion's input, so a tidying
+# edit can leave it green while it tests nothing.
+COREFIX="$CONSUMER/tests/fixtures/check-15-bypass/seed.sh"
+d="$(decision "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
+[ "$d" = deny ] && ok "Edit to an installed core fixture (tests/fixtures/<core-name>/) → deny" \
+  || bad "Edit to a core fixture classified '$d', expected deny — upstream test data is still editable in place"
+
+# --- Assertion 10f: edit to a CONSUMER-AUTHORED fixture → ALLOW -------------
+# tests/fixtures/ is SHARED, and core and consumer dirs there share the `check-` prefix,
+# which is why the entries are name-exact rather than a glob. A guard that denied a
+# consumer's own fixture gets turned off, and takes 10e's protection with it. The name
+# below shares every character of a core fixture's plus a suffix — the shape one dropped
+# slash in a manifest entry would over-capture.
+OWNFIX="$CONSUMER/tests/fixtures/check-15-bypass-local/seed.sh"
+d="$(decision "$CONSUMER" "$(mkjson Edit "$OWNFIX" 'consumer fixture body')")"
+[ "$d" = allow ] && ok "Edit to a consumer-authored fixture at an adjacent name → allow" \
+  || bad "Edit to a consumer fixture classified '$d', expected allow — the fixture entries over-capture"
+
+# --- Assertion 10g: the fixture deny gives TEST-DATA advice ------------------
+# Neither the layer routing nor the validator's AI_DLC_ tunable advice applies: you
+# cannot override a seed, and a fixture has no knobs. The message must say the content
+# is the assertion's input, or the reader tidies the file and vacates the test.
+OUTF="$(raw "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
+if printf '%s' "$OUTF" | grep -q 'TEST DATA' \
+   && printf '%s' "$OUTF" | grep -q 'VACATE' \
+   && ! printf '%s' "$OUTF" | grep -q 'Route it to the layer instead'; then
+  ok "fixture deny warns the content IS the assertion's input, not layer routing"
+else
+  bad "fixture deny gave layer-routing or generic advice — a seed cannot go in overrides/"
+fi
+
 # --- Assertion 11: derivation FALLBACK — remove core-manifest.md, keep sites -
 # The hook must fall back to setup-sites.md's I5-synced core_manifest copy and still deny.
 rm -f "$CONSUMER/.claude/skills/ai-dlc/core-manifest.md"

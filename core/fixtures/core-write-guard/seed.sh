@@ -95,6 +95,17 @@ id: consumer-example
 Consumer-owned additive extension body.
 EOF
 
+# --- installed fixtures: one of ours, one of theirs, at adjacent names ---------
+# tests/fixtures/ is SHARED — core ships its adversarial self-tests there and the
+# consumer's own sit beside them, both using the `check-` prefix. Created rather than
+# merely named, so the tree is the shape the hook meets on a real consumer: the deny path
+# does not stat the target today, but the config-region branch DOES read it, and a
+# name-only fixture would go silently fail-open the day a core_key() case is added here.
+mkdir -p "$CONSUMER/tests/fixtures/check-15-bypass" \
+         "$CONSUMER/tests/fixtures/check-15-bypass-local"
+printf '# TODO reword this marker\n' > "$CONSUMER/tests/fixtures/check-15-bypass/seed.sh"
+printf 'consumer fixture body\n'     > "$CONSUMER/tests/fixtures/check-15-bypass-local/seed.sh"
+
 # --- distribution shape: core files, NO stamp (activation gate must no-op) ----
 mkdir -p "$NOSTAMP/.claude/skills/ai-dlc/steps" \
          "$NOSTAMP/.claude/skills/ai-dlc/overrides" \

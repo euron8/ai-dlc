@@ -246,7 +246,18 @@ if [ -f "$SEED" ]; then
   done
 fi
 
-# --- I8: fixture packaging (core/fixtures == install loop == uninstall loop) ---
+# Defined here rather than at I5 because I8 below needs it too, and I5's own use is
+# further down the file. Pure function; its only input is $1.
+norm_core_manifest() {
+  awk '
+    /^core_manifest:/ {f=1; next}
+    f && /^  - / {v=$0; sub(/^  - /,"",v); print v; next}
+    f {f=0}
+  ' "$1" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
+}
+
+# --- I8: fixture packaging (core/fixtures == install loop == uninstall loop ==
+# --- core_manifest's fixtures/ entries) ---------------------------------------
 # The fixture dirs are shipped by a HARDCODED, enumerated loop in install.sh and
 # removed by a second hardcoded loop in uninstall.sh. Nothing kept the three in sync,
 # and they had already drifted: nine fixtures on disk, nine in install, FIVE in
@@ -265,9 +276,9 @@ in_uninstall="$(fixture_list "$REPO_ROOT/scripts/uninstall.sh")"
 # subject is not shipped cannot run there, and shipping it anyway plants a fixture that
 # is permanently dormant on every consumer — the same "the catalog claims it is covered
 # and it is not" failure this block exists to prevent, just pointed the other way. Such a
-# fixture is named here and is NOT expected in install.sh's loop.
+# fixture is NOT expected in install.sh's loop.
 #
-# The exemption is not self-certifying: each name below must ALSO be absent from
+# The exemption is not self-certifying: a dist-only fixture must ALSO be absent from
 # install.sh's loop (a stale exemption for a now-shipped fixture would silently excuse it
 # from the sync check above).
 # DERIVED, not listed. A fixture is dist-only iff it carries a `.dist-only` marker file.
@@ -281,8 +292,8 @@ DIST_ONLY="$(cd "$REPO_ROOT/core/fixtures" 2>/dev/null && for d in */; do
   [ -f "${d}.dist-only" ] && printf '%s\n' "${d%/}"
 done | sort -u)"
 for f in $DIST_ONLY; do
-  printf '%s\n' "$in_install" | grep -qx "$f" && err "fixture '$f' is listed DIST-ONLY in validate-enforcement-map.sh but install.sh ships it. Either drop the exemption or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
-  [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' is listed DIST-ONLY but does not exist in core/fixtures/ — stale exemption."
+  printf '%s\n' "$in_install" | grep -qx "$f" && err "fixture '$f' carries a .dist-only marker but install.sh ships it. Either delete the marker or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
+  [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' carries a .dist-only marker but does not exist in core/fixtures/ — stale marker."
 done
 
 shippable="$(comm -23 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$DIST_ONLY"))"
@@ -292,6 +303,26 @@ ghost_install="$(comm -13 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_insta
 [ -n "$ghost_install" ] && err "install.sh ships fixture(s) that do not exist in core/fixtures/: $(echo $ghost_install)"
 drift_uninstall="$(comm -3 <(printf '%s\n' "$in_install") <(printf '%s\n' "$in_uninstall") | tr -d '\t')"
 [ -n "$drift_uninstall" ] && err "install.sh and uninstall.sh fixture loops disagree (uninstall would orphan or over-remove): $(echo $drift_uninstall)"
+
+# The manifest CLAIMS these fixtures for the core layer, and the claim must equal the
+# set a consumer actually RECEIVES -- which is $shippable above, already computed and
+# already bound to both install loops. One derivation, four readers: a .dist-only marker
+# or an install-loop edit moves all of them together, so the manifest's fixture entries
+# cannot become a fifth hand-list. Both directions:
+#
+#   a shipped fixture with NO entry -> ai-dlc-core-guard.sh permits an in-place edit to
+#     upstream test data, and Check 16 audits it as consumer-authored -- a marker in a
+#     core fixture becomes a gate FAIL whose only remediation VACATES the fixture,
+#     because those markers are the payload its own assertions read.
+#   an entry with no shippable fixture -> the guard denies edits to a path no consumer
+#     has, and a deny that protects nothing reads as protection.
+#
+# core-manifest.md alone is sufficient: I5 binds the second copy to it.
+cm_fixtures="$(norm_core_manifest "$CORE_MANIFEST" | sed -n 's#^fixtures/\(.*\)/\*\*$#\1#p' | sort -u)"
+miss_entry="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtures"))"
+[ -n "$miss_entry" ] && err "fixture(s) install.sh ships to every consumer with NO core_manifest entry, so the core guard permits an in-place edit to upstream test data and Check 16 audits it as consumer-authored: $(echo $miss_entry). Add 'fixtures/<name>/**' to BOTH manifest copies."
+ghost_entry="$(comm -13 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtures"))"
+[ -n "$ghost_entry" ] && err "core_manifest claims fixture(s) that are not shippable — dist-only, or absent from core/fixtures/: $(echo $ghost_entry). The guard would deny edits to a path no consumer has, and a deny that protects nothing reads as protection."
 
 # --- I10: fixture hermeticity -------------------------------------------------
 # A fixture that invokes a hook and INHERITS the operator's ambient config tests the
@@ -813,13 +844,7 @@ $(awk '/^checks:/{c=1} c && /^  - id:/ { v=$0; sub(/^  - id:[ ]*/,"",v); gsub(/"
 IDS
 
 # --- I5: core_manifest copies in sync (prefix-normalized) --------------------
-norm_core_manifest() {
-  awk '
-    /^core_manifest:/ {f=1; next}
-    f && /^  - / {v=$0; sub(/^  - /,"",v); print v; next}
-    f {f=0}
-  ' "$1" | sed -E 's#^core/skills/ai-dlc/##; s#^core/##' | sort -u
-}
+# norm_core_manifest() is defined above I8, which needs it too. One definition.
 cm="$(norm_core_manifest "$CORE_MANIFEST")"
 ss="$(norm_core_manifest "$SETUP_SITES")"
 if [ "$cm" != "$ss" ]; then
