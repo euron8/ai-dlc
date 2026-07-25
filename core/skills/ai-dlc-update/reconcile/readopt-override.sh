@@ -48,6 +48,35 @@ done
 
 fm() { sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1; }
 
+# fm_block — the same read for a field that may be a YAML BLOCK SCALAR (`|` / `>`).
+#
+# `fm()` is `… | head -1`, which on `reason: |` captures the indicator character and nothing
+# else, so the dossier's "WHY THIS OVERRIDE EXISTS" panel rendered a bare `|`. Eight of the
+# reference consumer's overrides declare `reason:` as a block; every one printed empty. SKILL.md
+# step 7's retire / readopt / reaffirm decision turns on exactly that field, so the operator was
+# adjudicating a re-adoption against a blank rationale.
+#
+# The `--note` WRITER in this same file has tracked block scalars since the corruption it
+# documents at its `inreason` loop; only the reader never got the treatment. The block-END rule
+# here is that writer's rule — an unindented `key:` closes it — so reader and writer cannot
+# disagree about where a reason stops.
+#
+# fm() keeps its single-line semantics for `shadows` and `base_sha`: widening the shared reader
+# would change how two fields parse to fix a third.
+fm_block() { # fm_block <file> <key>
+  awk -v k="$2" '
+    NR==1 && /^---$/                       { fm=1; next }
+    fm && /^---$/                          { exit }
+    fm && !inb && index($0, k ":") == 1 {
+      v = substr($0, length(k) + 2); sub(/^[ \t]+/, "", v)
+      if (v ~ /^[|>][0-9]*[-+]?$/) { inb = 1; next }
+      print v; exit
+    }
+    fm && inb && /^[A-Za-z_][A-Za-z0-9_]*:/ { exit }
+    fm && inb                              { sub(/^[ \t]+/, "", $0); print }
+  ' "$1"
+}
+
 SHADOWS="$(fm "$OVR" shadows)"
 BASE_SHA="$(fm "$OVR" base_sha)"
 TARGET="$(printf '%s' "${SHADOWS%%#*}" | tr -d ' ' | sed 's/,.*//')"
@@ -389,7 +418,7 @@ base_sha  : ${BASE_SHA}  ->  theirs: ${THEIRS_SHA}
 core file : ${CORE}
 
 --- WHY THIS OVERRIDE EXISTS (its own stated reason) --------------------------
-$(fm "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | head -20)
+$(fm_block "$OVR" reason | fold -s -w 78 | sed 's/^/  /' | head -20)
 
 --- WHAT UPSTREAM CHANGED IN THE SHADOWED SECTION (${BASE_SHA}..${THEIRS_SHA}) ---
 EOF

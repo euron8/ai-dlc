@@ -17,6 +17,37 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.150.1] — 2026-07-24
+
+### Fixed — the re-adoption dossier rendered a block-scalar `reason:` as a bare `|`
+
+`readopt-override.sh`'s front-matter reader is `sed … | head -1`. Against a `reason: |` YAML
+block scalar that captures the indicator character and nothing else, so the dossier's
+"WHY THIS OVERRIDE EXISTS (its own stated reason)" panel printed:
+
+```
+--- WHY THIS OVERRIDE EXISTS (its own stated reason) ---
+  |
+```
+
+**Eight of the reference consumer's fifteen overrides** declare `reason:` as a block; every one
+rendered empty. SKILL.md step 7's retire / readopt / reaffirm decision turns on exactly that
+field, so the operator adjudicated each re-adoption against a blank rationale — and a blank
+rationale reads as an override with no stated purpose, which is an argument for retiring it.
+
+The same file's `--note` WRITER has tracked block scalars since the corruption documented at its
+`inreason` loop; only the reader never got the treatment. New `fm_block()` applies that writer's
+own block-END rule — an unindented `key:` closes it — so reader and writer cannot disagree about
+where a reason stops. `fm()` keeps its single-line semantics for `shadows` and `base_sha`:
+widening the shared reader would change how two fields parse in order to fix a third.
+
+Verified against all 16 files in the reference consumer's `overrides/`: 8 rendered empty before,
+0 after (the 16th is `README.md`, which has no front matter and is not an override).
+
+**`layer-readopt-gate` gains section B4**, the reader-side twin of B3's writer-side proof: the
+dossier must render a block scalar's text and its continuation lines, and the inline form must
+not regress. Reverting the reader to `fm()` turns both block assertions red.
+
 ## [0.150.0] — 2026-07-24
 
 ### Fixed — the setup-model-strategy exemption swallowed the wizard's substitution instructions

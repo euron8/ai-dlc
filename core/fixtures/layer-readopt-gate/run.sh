@@ -185,6 +185,57 @@ else
 fi
 rm -f "$ML"
 
+echo "== B4. the dossier must RENDER a block-scalar reason, not its indicator =="
+
+# The twin of B3, in the other direction. B3 proved the WRITER tracks a block scalar; the
+# READER did not. `fm()` is `… | head -1`, so on `reason: |` it captured the indicator and
+# nothing else and the dossier's rationale panel printed a bare `|`. Eight of the reference
+# consumer's sixteen overrides declare `reason:` as a block; every one rendered empty.
+#
+# SKILL.md step 7's retire / readopt / reaffirm decision turns on that field, so the operator
+# adjudicated a re-adoption against a blank rationale — and a blank rationale reads as an
+# override with no stated purpose, which is an argument for retiring it.
+BL="$CONS/.claude/skills/ai-dlc/overrides/SKILL__BlockReason.md"
+cat > "$BL" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: |
+  UNIQUE-BLOCK-SENTINEL the first line of the block.
+  And a continuation line that must also survive.
+---
+Body.
+EOF
+out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
+if printf '%s' "$out" | grep -q 'UNIQUE-BLOCK-SENTINEL'; then
+  ok "the dossier renders a block-scalar reason's text"
+else
+  bad "the dossier did NOT render the block-scalar reason — step 7's readopt decision turns on a field the operator cannot see"
+  printf '%s\n' "$out" | sed -n '/WHY THIS OVERRIDE EXISTS/,+3p' | sed 's/^/        /'
+fi
+if printf '%s' "$out" | grep -q 'continuation line that must also survive'; then
+  ok "the block's continuation lines render too (not just line 1)"
+else
+  bad "the dossier rendered only the block's first line — a 99-line reason still reads as a one-liner"
+fi
+# Non-vacuity in the other direction: the INLINE form must not regress.
+cat > "$BL" <<EOF
+---
+shadows: SKILL.md#Rule 7
+base_sha: ${BASE}
+reason: UNIQUE-INLINE-SENTINEL a single-line reason.
+---
+Body.
+EOF
+out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
+if printf '%s' "$out" | grep -q 'UNIQUE-INLINE-SENTINEL'; then
+  ok "an INLINE reason still renders (the block reader did not break the common path)"
+else
+  bad "the inline reason stopped rendering — fixing the block form broke the single-line form"
+  printf '%s\n' "$out" | head -12 | sed 's/^/        /'
+fi
+rm -f "$BL"
+
 echo "== C0. --merge re-adopts MECHANICALLY (no hand edit) =="
 
 # The operator must never be told to "merge the new core text in, preserving your
