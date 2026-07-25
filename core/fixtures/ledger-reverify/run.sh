@@ -216,6 +216,43 @@ else
 fi
 rm -f "$anch"
 
+# THE LABEL IS A JOIN KEY. Field 2 is what `emit-report.sh` renders as the entry name in the
+# operator's report, and what the operator greps back into the ledger to find the entry. Both
+# arms used to clip it to seventy characters, and the bullet arm never split on the em dash the
+# heading arm splits on — so a real report carried a name cut mid-word inside `(original` and
+# another that was a whole sentence. Measured on the reference consumer: ten of forty-one rows
+# came out at exactly seventy bytes.
+#
+# These assert EXACT equality, not the substring match `row_is` uses. A substring assertion
+# cannot see a truncation: the clipped prefix still matches.
+label_is() {
+  local pat="$1" want="$2" why="$3" got
+  ASSERTIONS=$((ASSERTIONS + 1))
+  got="$(printf '%s\n' "$OUT" | awk -F'\t' -v p="$pat" '$2 ~ p {print $2; exit}')"
+  if [ "$got" = "$want" ]; then
+    printf '  ok    %-22s label is the whole id  (%s)\n' "$pat" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s got=[%s] want=[%s]  (%s)\n' "$pat" "${got:-<none>}" "$want" "$why"
+  fi
+}
+
+label_is "PC-FIXTURE-BULLET-DASH" "PC-FIXTURE-BULLET-DASH" \
+  "bullet arm splits on the em dash, as the heading arm always did"
+label_is "PC-FIXTURE-HEADING-LONG-BEFORE-DASH" \
+  "PC-FIXTURE-HEADING-LONG-BEFORE-DASH (a parenthetical this long pushes the pre-dash text past seventy characters on its own)" \
+  "pre-dash text over seventy characters survives whole"
+
+# No label may come out at exactly the old cap. A single row at that width is the clip back.
+ASSERTIONS=$((ASSERTIONS + 1))
+clipped="$(printf '%s\n' "$OUT" | awk -F'\t' 'length($2)==70{n++} END{print n+0}')"
+if [ "$clipped" -eq 0 ]; then
+  printf '  ok    %-22s no label lands on the old seventy-character cap\n' "label-width"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s %s label(s) are exactly 70 bytes — the clip is back\n' "label-width" "$clipped"
+fi
+
 # The closer must NEVER exit nonzero — it is a classifier and a close never blocks apply.
 ASSERTIONS=$((ASSERTIONS + 1))
 bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" >/dev/null 2>&1

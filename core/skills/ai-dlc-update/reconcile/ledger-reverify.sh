@@ -279,8 +279,22 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 #
 # DASH is passed in rather than written as an awk escape: it is a multibyte em dash, and
 # `\xNN` escapes are not portable across the awks this ships to (BSD awk on macOS, gawk and
-# mawk on Linux). A heading's label is the text before the first " — ", so
+# mawk on Linux). A label is the text before the first " — ", so
 # `## PC-FOO — long prose title (filed …)` labels as `PC-FOO`.
+#
+# BOTH SHAPES SPLIT ON THE DASH, AND NEITHER TRUNCATES. The split was on the heading arm only,
+# and both arms then clipped the result to 70 characters. The label is the ENTRY column of this
+# tool's output and the name `emit-report.sh` renders into the operator's report; it is a join
+# key back into the ledger, and a clipped key does not grep. Measured on the reference consumer:
+# TEN of 41 rows came out at exactly 70 bytes, five of them a bullet's whole prose title because
+# the bullet arm never split, one clipped mid-word inside `(original` — two of which the operator
+# read as garbage rows in a real report. The cap was undocumented and had no padding counterpart
+# anywhere, so it was never column formatting; it was a silent clip.
+#
+# A bullet whose bold title WRAPS gets its whole first line, because `sub(/\*\*.*/)` finds no
+# closing `**` there. That is complete and greppable and visibly not an id, which is the honest
+# output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
+# instead DROP such an entry, and the reference consumer has a live one.
 awk -v DASH=' — ' "$(ledger_entry_awk)"'
   function flush(){
     if (has_verify && !closed && label != "")
@@ -292,7 +306,9 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
     if (shape == "bullet") {
       flush()
       l=$0; sub(/^- \*\*/,"",l); sub(/\*\*.*/,"",l)
-      gsub(/`/,"",l); label=substr(l,1,70)
+      p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
+      sub(/[[:space:]]+$/,"",l)
+      gsub(/`/,"",l); label=l
       next
     }
     if (shape == "heading") {
@@ -300,7 +316,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       l=$0; sub(/^#+[ \t]*/,"",l)
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/,"",l)
-      gsub(/`/,"",l); label=substr(l,1,70)
+      gsub(/`/,"",l); label=l
       next
     }
   }

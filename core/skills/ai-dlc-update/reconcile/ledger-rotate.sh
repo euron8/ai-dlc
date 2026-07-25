@@ -86,10 +86,15 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" "$(le
     if (started && closed) print label >> names
     n = 0; closed = 0; label = ""
   }
+  # NOT TRUNCATED. This label is what the run prints as `moved-names` — the record of which
+  # entries left the live ledger. Clipping it to 70 characters, as this did, produced a name the
+  # operator cannot grep back into either file. Same clip, same reason, as the one removed from
+  # ledger-reverify.sh. The em-dash split stays reverify-only: unifying the two label rules
+  # changes this output, which lib.sh records as a separate call.
   function open_entry(l) {
     flush(); started = 1
     sub(/^[-#][ \t]*/, "", l); gsub(/\*\*/, "", l); gsub(/`/, "", l)
-    sub(/[[:space:]]+$/, "", l); label = substr(l, 1, 70)
+    sub(/[[:space:]]+$/, "", l); label = l
   }
   { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0; next } }
   /\*\*ADOPTED UPSTREAM \(v/ { closed = 1 }
