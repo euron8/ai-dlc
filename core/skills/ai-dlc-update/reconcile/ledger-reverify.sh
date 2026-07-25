@@ -111,8 +111,18 @@
 #   CLOSE-CANDIDATE  upstream absorbed the entry; the operator confirms and annotates.
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
-#   NEEDS-REVIEW     the verify line is malformed or its path does not resolve at theirs
-#                    (nor by basename); hand-review, as an entry without a verify line would be.
+#   NEEDS-REVIEW     the receipt itself is at fault. THREE causes, and the DETAIL names which:
+#                    `unresolved:` (malformed line, unresolvable path, empty sh, unknown verb),
+#                    `vacuous predicate:`, `unfalsifiable predicate:`. Hand-review, as an entry
+#                    without a verify line would be.
+#
+#                    Two of the three were literal prefixes the code emitted; `unresolved` was
+#                    named in SKILL.md and nowhere in this file, spread across four sites that
+#                    emitted four different unlabelled strings. So the mode could not be grepped
+#                    or counted, and — once emit-report.sh started carrying DETAIL into the
+#                    report — it would have reached the operator as the one cause with no name.
+#                    Adding a mode means adding its prefix here; the count above is part of the
+#                    contract SKILL.md states.
 # Exit:   0 ALWAYS. A classifier, not a gate — the caller decides, and a close never blocks.
 set -uo pipefail
 
@@ -393,7 +403,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       subs="$(printf '%s' "$sub" | sed 's/" *"/\
 /g')"
       if [ -z "$path" ] || [ -z "$sub" ]; then
-        emit NEEDS-REVIEW "$label" "malformed verify: $directive"
+        emit NEEDS-REVIEW "$label" "unresolved: malformed verify: $directive"
         continue
       fi
       if ! theirs_has_path "$path"; then
@@ -404,7 +414,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
           note=" [resolved by basename from '$path' — the ledger's path is not dist-relative]"
           path="$matches"
         else
-          emit NEEDS-REVIEW "$label" "path '$path' does not resolve at theirs ($TV) and its basename matches $nmatch files there; re-verify by hand"
+          emit NEEDS-REVIEW "$label" "unresolved: path '$path' does not resolve at theirs ($TV) and its basename matches $nmatch files there; re-verify by hand"
           continue
         fi
       fi
@@ -447,7 +457,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       ;;
     sh)
       if [ -z "$rest" ]; then
-        emit NEEDS-REVIEW "$label" "empty 'verify: sh' directive"
+        emit NEEDS-REVIEW "$label" "unresolved: empty 'verify: sh' directive"
         continue
       fi
       if DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
@@ -461,7 +471,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       emit HAND-REVIEW "$label" "verify: manual — no mechanical predicate by design; adjudicate the entry body against theirs ($TV)"
       ;;
     *)
-      emit NEEDS-REVIEW "$label" "unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
+      emit NEEDS-REVIEW "$label" "unresolved: unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
       ;;
   esac
 done
