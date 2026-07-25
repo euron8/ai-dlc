@@ -42,6 +42,29 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 say() { printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}"; }
 err() { echo "apply: $*" >&2; exit 1; }
 
+# --- IN-FLIGHT MARKER: this tree is mid-pull and its self-tests do not hold ----
+# A pull writes core one file at a time, so between the first write and the re-stamp the
+# tree is a MIXTURE of two releases and its own fixture suite reports failures that are
+# neither the consumer's fault nor a real regression. Measured on the 0.156.0 -> 0.162.0
+# range, in BOTH directions: a fixture newer than its subject asserts behaviour that is
+# not there yet (check-15-bypass could not find core-paths.sh; core-write-guard read the
+# core-fixture deny as `allow` because the manifest had no fixtures/ entries), and a
+# subject newer than its fixture breaks the old assertions (apply-restamp-theirs and
+# apply-drift-refile both failed against the newer apply.sh). Ordering alone cannot fix
+# that -- only one of the two directions can be last -- so the tree has to be able to say
+# "do not judge me yet".
+#
+# The marker is written before the first core write and removed ONLY when the re-stamp is
+# written. A withheld re-stamp leaves it in place deliberately: that tree really is
+# inconsistent, and the next `git push` should block on it rather than run a suite whose
+# result means nothing. `core/git-hooks/pre-push` refuses the fixture step while it
+# exists, and names it so an abandoned pull can be cleared by hand.
+#
+# NOT a manifest entry: it is consumer runtime state, like .ai-dlc-version beside it.
+APPLYING="$CONSUMER/.claude/.ai-dlc-applying"
+mkdir -p "$CONSUMER/.claude" 2>/dev/null || true
+printf 'base: %s\ntheirs: %s\n' "$BASE" "$THEIRS" > "$APPLYING" 2>/dev/null || true
+
 # core/<rel> -> consumer path. ONE mapper.
 #
 # `preclassify.sh`'s map_consumer() IS the mapping, and I8 binds it at both ends: every
@@ -147,6 +170,20 @@ mech_fail=0
 # installed file. Leaving its call where it is keeps that visible.
 PC="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"
 UD="$(bash "$SELF/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1=="HARD-UNREGISTERED-CORE-DRIFT"{print $2}')"
+
+# A FIXTURE IS A TEST OF CORE, so it must never be written before the thing it tests.
+# preclassify emits in path order, which puts core/fixtures/ FIRST -- 13 of the 25 paths in
+# the 0.156.0 -> 0.162.0 range -- so the default order is exactly backwards. Partition the
+# rows, stably, and drive the fixtures last. This does not make the window safe on its own
+# (the reverse direction still breaks old assertions, which is what the in-flight marker is
+# for); it makes the END state ordering correct, and it means an apply interrupted during
+# the fixture batch leaves every subject already in place, so the fixtures that did land
+# pass rather than fail.
+PC="$(printf '%s\n' "$PC" | awk -F'\t' '
+  $2 ~ /^core\/fixtures\//  { fx = fx $0 "\n"; next }
+                            { print }
+  END                       { printf "%s", fx }
+')"
 
 # ---------------------------------------------------------------- 1. buckets (preclassify)
 while IFS="$(printf '\t')" read -r kind path cons bucket; do
@@ -555,6 +592,11 @@ elif [ -f "$STAMP" ]; then
   [ -n "$ver" ] && sed -i.bak -E "s/^(version:).*/\1 ${ver}/" "$STAMP" 2>/dev/null || true
   rm -f "$STAMP.bak"
   say RESOLVED restamp "$BASE -> $theirs_sha"
+  # The tree is consistent again, and ONLY here. Cleared beside the re-stamp rather than
+  # in a trap, so an exit that withholds the stamp also leaves the marker: a partially
+  # applied tree must keep blocking its own fixture suite until the pull is finished.
+  rm -f "$APPLYING"
+  say RESOLVED consistent "the tree matches $theirs_sha; fixture suite re-enabled"
 fi
 
 exit 0

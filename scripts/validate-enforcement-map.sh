@@ -474,6 +474,26 @@ for cp_f in parse_manifest to_consumer_glob; do
   fi
 done
 
+# --- I27: the in-flight marker is ONE path, written by apply.sh and read by pre-push --
+# A pull writes core one file at a time, so mid-apply the tree is a mixture of two releases
+# and its own fixture suite fails in BOTH directions -- a fixture newer than its subject
+# asserts behaviour that is not installed, an older one breaks against a newer subject.
+# apply.sh marks that state and pre-push refuses the suite while the mark is there.
+#
+# TWO FILES, ONE STRING. If they name different paths the marker is written and nothing
+# reads it: the guard is silently absent and looks exactly like a guard that passed. That
+# is the shape v0.55.2's map_consumer() and v0.63.0's drift-scan list both failed in, so
+# bind the two ends rather than trusting them to agree.
+MK_APPLY="$(sed -nE 's@^APPLYING="\$CONSUMER/(.+)"$@\1@p' \
+  "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh" | head -1)"
+MK_PP="$(sed -nE 's@^if \[ -f (\.[^ ]+) \]; then$@\1@p' \
+  "$REPO_ROOT/core/git-hooks/pre-push" | grep 'applying' | head -1)"
+if [ -z "$MK_APPLY" ] || [ -z "$MK_PP" ]; then
+  err "I27 could not locate the in-flight marker path in apply.sh (\`APPLYING=\`) and/or core/git-hooks/pre-push (\`if [ -f ... ]\`). One end missing means the marker is written with nothing refusing on it, or refused on with nothing writing it — and either way this check just went vacuous. Found apply='${MK_APPLY:-<none>}' pre-push='${MK_PP:-<none>}'."
+elif [ "$MK_APPLY" != "$MK_PP" ]; then
+  err "I27 the in-flight marker path has forked: apply.sh writes '\$CONSUMER/${MK_APPLY}' but core/git-hooks/pre-push refuses on '${MK_PP}'. The writer and the reader must name the SAME path, or a mid-pull tree runs its own fixture suite and reports failures that are neither a regression nor the consumer's fault."
+fi
+
 # --- I26: core-layer-immutability keeps the core set DERIVED, never restated ---
 # The check body used to tell the adjudicator to read core-manifest.md "for the
 # authoritative path list" and then spell that list out inline. It named 6 of the
@@ -1212,7 +1232,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27)."
   exit 0
 fi
 exit 1
