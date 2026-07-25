@@ -79,3 +79,38 @@ section_of() { # section_of <heading-text>  < stream
 # normalization the resolver uses, or a heading that section_of matches can read
 # as unresolved to its own caller.
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ /g; s/^ +| +$//g'; }
+
+# ---------------------------------------------------------------------------
+# ledger_entry_awk — THE push-candidate ledger's entry-boundary rule. One copy.
+# ---------------------------------------------------------------------------
+# `ledger-reverify.sh` decides which lines belong to which entry; `ledger-rotate.sh` decides
+# which entries move to the archive. Both need the same answer to "does this line start a new
+# entry?", and disagreeing about it is a data-loss bug in one direction (a live entry swept
+# into an archive nobody re-reads) and a silent-skip bug in the other.
+#
+# They were two hand-copies. `ledger-rotate.sh`'s header said so outright — "Entry BOUNDARIES
+# are lifted from ledger-reverify's parser unchanged" — which is the same sentence the
+# `section_of()` history above records twice before the copies drifted anyway. One release was
+# enough: the LABEL rules in that supposedly-unchanged block already differ (rotate omits
+# reverify's ` — ` truncation, so `## PC-FOO — title` labels differently in each).
+#
+# Only the BOUNDARY moves here. The two close-predicates stay in their own files because they
+# differ DELIBERATELY — reverify skips on `ADOPTED UPSTREAM` anywhere, rotate requires the
+# annotation form `**ADOPTED UPSTREAM (v` — and collapsing those would archive live entries.
+# The label rules also stay put: unifying them changes rotate's `moved-names` output, which is
+# a behaviour change and not this one's business. That is the same admission rule this file
+# opened with — a helper earns a place here only when two tools disagreeing about it is itself
+# a bug.
+#
+# Emitted as awk source rather than a shell function because both call sites are awk programs.
+# The shape is returned, not a boolean, because each caller extracts its label differently from
+# a bullet and from a heading.
+ledger_entry_awk() {
+  cat <<'AWK'
+function ledger_entry_shape(l) {
+  if (l ~ /^- \*\*/)      return "bullet"
+  if (l ~ /^#{2,6}[ \t]/) return "heading"
+  return ""
+}
+AWK
+}

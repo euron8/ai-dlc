@@ -24,8 +24,9 @@ It is wrong for **moving**, where the cost is live work filed into an archive no
 
 The phrase occurs in open entries two ways: as instruction ("annotate `ADOPTED UPSTREAM (vX,
 verified <date>)` once the grep is non-zero") and as narrative ("the sentinel ADOPTED
-UPSTREAM in v0.135.0, but…"). On the reference consumer **36 of 47 occurrences are not
-annotations**. On the loose rule, rotation reported 39 entries to move; on the annotation
+UPSTREAM in v0.135.0, but…"). On the reference consumer there are 47 occurrences, 32 of them
+in the annotation form, so **15 are not annotations**. On the loose rule, rotation reported 39
+entries to move; on the annotation
 form (`**ADOPTED UPSTREAM (v`) it reports 31. Those 8 are live entries the loose rule would
 have archived.
 

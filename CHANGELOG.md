@@ -17,6 +17,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.151.1] — 2026-07-24
+
+### Changed — the ledger's entry-boundary rule has one home
+
+`ledger-reverify.sh` decides which lines belong to which entry; `ledger-rotate.sh` decides which
+entries move to the archive. Both need the same answer to "does this line start a new entry?",
+and disagreeing about it loses data in one direction (a live entry swept into an archive nobody
+re-reads) and skips silently in the other.
+
+They were two hand-copies. `ledger-rotate.sh`'s header said so — *"Entry BOUNDARIES are lifted
+from ledger-reverify's parser unchanged"* — which is the same sentence `lib.sh`'s own history
+records twice before the `section_of()` copies drifted anyway. One release was enough here too:
+the label rule inside that supposedly-unchanged block already differs, so `## PC-FOO — title`
+labels differently in each.
+
+New `ledger_entry_awk()` in `reconcile/lib.sh` is the single boundary. It emits awk source
+rather than being a shell function because both call sites are awk programs, and it returns the
+SHAPE rather than a boolean because each caller extracts its label differently from a bullet and
+from a heading.
+
+**Only the boundary moved.** The two close-predicates stay in their own files because they differ
+DELIBERATELY — reverify skips on `ADOPTED UPSTREAM` anywhere, rotate requires the annotation form
+— and collapsing them would archive live entries. The label rules stay put too: unifying them
+changes rotate's `moved-names` output, which is a behaviour change and belongs with the entry
+re-keying, not here.
+
+**Acceptance test, and the whole point of shipping this alone:** `ledger-reverify.sh` and
+`ledger-rotate.sh` output is **byte-identical** before and after, against the reference
+consumer's live 2830-line ledger. A refactor whose no-op property cannot be demonstrated is the
+thing this change exists to prevent.
+
+### Fixed — I21's unsourced-call arm could not see a command-substitution call
+
+`validate-enforcement-map.sh`'s I21 keeps the reconcile helpers single-homed. Its "calls X but
+never sources lib.sh" arm matched the helper name only when followed by whitespace or
+end-of-line, so a `$(helper)` call was invisible to it — and `ledger_entry_awk()` is called
+exactly that way. The private-copy arm fired; this one did not.
+
+Widened to a proper word boundary. Verified by mutation in both directions: a private copy and a
+dropped `source` line each now fail I21 for the new helper.
+
+### Fixed — a wrong measurement shipped as design rationale in 0.148.0
+
+`ledger-rotate.sh` and `core/fixtures/ledger-rotate/README.md` both stated *"36 of 47 occurrences
+are not annotations"*, as the justification for rotation requiring the strict annotation form.
+Measured: 47 occurrences, 32 in the annotation form, so **15** are not annotations — and the
+reference consumer's ledger never reached 36 at any commit in its history. The adjacent
+entry-level figures (39 loose / 31 strict / 8 live entries at risk) are correct and the decision
+they justify is sound; only the occurrence sentence was wrong. The 0.148.0 CHANGELOG entry is
+corrected in place with a note.
+
 ## [0.151.0] — 2026-07-24
 
 ### Added — step 8 lints the receipts it writes, and cites what found each defect
@@ -190,7 +241,8 @@ entry as closed on `ADOPTED UPSTREAM` anywhere in it, which is right for skippin
 skipped entry costs one unverified row — and wrong for moving, where the cost is live work
 filed into an archive nobody re-reads. The phrase occurs in open entries as instruction
 ("annotate `ADOPTED UPSTREAM (vX, verified <date>)` once the grep is non-zero") and as
-narrative; 36 of 47 occurrences on the reference consumer are not annotations. Rotation
+narrative; 15 of 47 occurrences on the reference consumer are not annotations (this entry
+originally read "36 of 47" — a wrong figure, corrected in 0.151.1). Rotation
 requires the annotation form `**ADOPTED UPSTREAM (v`. On the loose rule it moved 39 entries;
 on the annotation form, 31. Those 8 are live.
 
