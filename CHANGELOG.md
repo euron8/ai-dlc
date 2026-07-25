@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.151.0] — 2026-07-24
+
+### Added — step 8 lints the receipts it writes, and cites what found each defect
+
+Two halves of one rule about what a filed defect must carry.
+
+**Receipts are linted on READ but never on WRITE.** Step 3f runs `ledger-reverify.sh` and
+already classifies *unresolved* / *vacuous* / *unfalsifiable*; step 8 said only "one entry each,
+with a `verify:` line". So a receipt authored in pull N is first checked in pull N+1 — after a
+pull has already acted on it. Last cycle this step wrote malformed receipts into the same
+document that correctly explained that defect class. Step 8 now re-runs the re-verifier over
+what it just wrote and treats a `NEEDS-REVIEW` row on a new entry as a receipt to fix now, not
+to file. No new script: all four arguments are already in hand, and the whole ledger re-verifies
+in ~1.5s.
+
+**A filed defect now cites the command that found it** — one literal command and its decisive
+output line, the discipline `steps/discovery.md` already imposes on the prior-decision search.
+A claim about WHY a detector emitted a row is an inference, not a finding, and must be labelled
+or verified. The mechanical region is rendered and `--verify`'d precisely so detector output
+cannot be narrated; the prose around it had no such rule, and that is where the wrong headline
+finding of each of the last two pulls came from — one filed against a checker correctly obeying
+an over-wide declaration, one calling a token inside a historical anecdote a second live
+vocabulary. Both were grep hits rendered as conclusions without reading the surrounding line.
+
+### Fixed — both documented `settings-merge.sh` invocations were unrunnable
+
+Step 5 documented `reconcile/settings-merge.sh --check` as "(no writes)"; the bare form exits 1
+with usage, because the script requires `--consumer` and `--template`. Step 7 supplied
+`--template <theirs>/templates/settings.json.template`, but `theirs` resolves to a git ref and
+the script reads `--template` with `-r`. Both forms now materialize the template with
+`git show` first. The script was always correct; only the prose was wrong.
+
+**New fixture `settings-merge-documented-form`** binds the two so they cannot drift again: the
+required flags are derived from the script's own usage line rather than hardcoded, every
+documented invocation must carry them, none may pass a ref-qualified path to `--template`, and
+the demonstrated form must actually run and leave the consumer's `settings.json` unwritten. Both
+historical forms are carried as mutants.
+
 ## [0.150.1] — 2026-07-24
 
 ### Fixed — the re-adoption dossier rendered a block-scalar `reason:` as a bare `|`
