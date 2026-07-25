@@ -1001,6 +1001,17 @@ declared sites, not everywhere unconditionally.
      (the updater's own directory, carved out of the Rule 29 acknowledge hook), never a
      Bash write, and never automatic. Close ONLY `CLOSE-CANDIDATE` rows; a `NEEDS-REVIEW`
      row is never a close, whatever its detail says.
+   - **Rotate the closed entries out.** `reconcile/ledger-rotate.sh <ledger>` reports what
+     would move; `--apply` moves it to `push-candidate-ledger.archive.md`. The ledger is
+     append-only otherwise, so it grows every sprint and never shrinks — measured at 2830
+     lines / 220 KB / 50 entries on the reference consumer, of which only 39 still
+     classified. Every pull parses the closed ones, every report renders them, and every
+     receipt edit pays for their bytes. Rotation moves, never deletes, and requires the
+     annotation form (`**ADOPTED UPSTREAM (v`) rather than the phrase anywhere — an entry
+     wrongly kept costs one pull to notice, one wrongly archived costs the work.
+     **Acceptance test:** `ledger-reverify.sh` output must be byte-identical before and
+     after. Rotation moves exactly the entries it already skips, so any difference means a
+     live entry was swept.
 9. **Safety.** Three independent recover layers: the step-6 reconcile **branch**
    (the working branch is never touched), the consumer's
    `docs/pre-ai-dlc/<ts>/_divergence/` archive (written by install), and the

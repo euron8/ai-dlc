@@ -17,6 +17,42 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.148.0] — 2026-07-24
+
+### Added — closed push-candidate entries rotate out of the live ledger
+
+The ledger is append-only by design: step 8 appends, `ledger-reverify.sh` never edits, and a
+close is an annotation rather than a deletion, because the entry is the provenance of an
+upstreamed change. Nothing ever moved a closed entry OUT.
+
+Measured on the reference consumer at 0.147.1: **2830 lines / 220 KB / 50 entries**, grown
+1038 → 1820 → 2325 → 2830 across 40 commits, monotonic, never once smaller. Only 39 entries
+still classified. The rest are parsed on every pull, rendered into every report, and re-read
+by every agent that edits the file, for zero classifier value — and a batch of receipt edits
+against a 220 KB file is the slowest step in the whole update.
+
+`reconcile/ledger-rotate.sh <ledger>` reports what would move; `--apply` moves it to
+`push-candidate-ledger.archive.md`. On the reference consumer that is 31 entries / 939 lines,
+leaving 1891.
+
+**Rotation is deliberately stricter than the skip rule.** `ledger-reverify.sh` treats an
+entry as closed on `ADOPTED UPSTREAM` anywhere in it, which is right for skipping — one extra
+skipped entry costs one unverified row — and wrong for moving, where the cost is live work
+filed into an archive nobody re-reads. The phrase occurs in open entries as instruction
+("annotate `ADOPTED UPSTREAM (vX, verified <date>)` once the grep is non-zero") and as
+narrative; 36 of 47 occurrences on the reference consumer are not annotations. Rotation
+requires the annotation form `**ADOPTED UPSTREAM (v`. On the loose rule it moved 39 entries;
+on the annotation form, 31. Those 8 are live.
+
+It moves, never deletes, refuses rather than reports if line accounting does not balance, and
+is idempotent.
+
+**Acceptance test:** `ledger-reverify.sh` output must be byte-identical before and after —
+rotation moves exactly the entries the classifier already skips, so any difference means a
+live entry was swept. `core/fixtures/ledger-rotate/` asserts that plus ten others, including
+a decoy entry that merely quotes the phrase. The decoy assertion caught a real bug in the
+first draft.
+
 ## [0.147.1] — 2026-07-24
 
 ### Fixed — the ledger classifier's match test was nondeterministic on large files
