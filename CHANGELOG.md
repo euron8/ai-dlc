@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.149.0] — 2026-07-24
+
+### Fixed — the gate's verdict grep matched almost no review file it was pointed at
+
+Check 1 forbids the lead from asserting a gate verdict and names the mechanism that replaces
+recollection: grep the verdict out of the review file. `code-reviewer.md` defines the template
+that writes those files, and it emits `## Verdict` with the value on the next line. The
+mandated pattern was `^(Verdict|Decision):` — column-zero, case-sensitive, no heading marks.
+It cannot match the heading the template it reads is required to produce.
+
+Measured against the reference consumer's corpus: **14 of 1011 review files matched (1.4%)**.
+The real shapes are `## Verdict` (646), `## Verdict: APPROVED` (25), `### Verdict` (17),
+`**Verdict:** REJECT`, and `## Overall Verdict`. No script implements this grep — it is prose
+the lead executes — so on 98.6% of files the lead ran it, got nothing, and had no specified
+fallback, landing back on the recollection the paragraph exists to forbid. A grep that matches
+nothing reads exactly like a verdict that is absent.
+
+The pattern now tolerates heading marks, bold and list markers, a qualifier word
+(`Overall`/`QA`), case, and the inline `## Verdict: <VALUE>` form: **880 of 1011**. It still
+refuses mid-sentence mentions, table headers, and unrelated headings, because a pattern loose
+enough to hit any prose occurrence of the word sources the gate answer from a sentence.
+
+**Widening alone would have left the hole open**, so the second half is the load-bearing one:
+a zero-match now FAILS Check 1 by name instead of falling through. An unreadable verdict is an
+unmet validation, not an absent one, and the lead may not infer it from the review's prose,
+its existence, or the story's Gate-status line. Two matches carrying different values fail the
+same way.
+
+`code-reviewer.md` now states that the heading and the bare value beneath it are a machine-read
+contract rather than formatting, so the shape cannot drift back apart silently.
+
+**New fixture `gate-verdict-grep-shape`** — the join that was missing, and the reason this
+survived to 1011 files. It derives the pattern from the rule file and the heading from the role
+file rather than hardcoding either, asserts the ten real-world shapes match and five prose
+shapes do not, and carries three mutants: restoring the historical pattern, deleting the
+zero-match FAIL rule, and renaming the template heading each turn it red.
+
 ## [0.148.0] — 2026-07-24
 
 ### Added — closed push-candidate entries rotate out of the live ledger

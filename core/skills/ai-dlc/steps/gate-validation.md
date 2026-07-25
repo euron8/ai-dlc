@@ -163,11 +163,19 @@ H1/H2 stay with the lead — a self-test is never escalated into the mechanism i
   Story Validation passed?
 - **Read each verdict from its review file, do not assert it.** The Code
   Review / QA / Story Validation answers above are grep-sourced from the
-  review file's own verdict line (`grep -E '^(Verdict|Decision):' <review-file>`,
+  review file's own verdict line
+  (`grep -inE '^[-#*[:space:]]*([A-Za-z][A-Za-z-]*[[:space:]]+)?(verdict|decision)[*[:space:]]*(:.*)?$' <review-file>`,
   a Git-tracked path `code-reviewer.md` guarantees and the story's Gate-status
   line cites), never from recollection — a lead-asserted gate claim is how a
   sprint ran deploy as APPROVED while its gate-1 review file on disk still read
-  CHANGES-REQUESTED.
+  CHANGES-REQUESTED. The value is the text after `:` on the matched line, or the
+  next non-blank line when the match is a bare heading.
+- **Zero matches FAILS this check; it is never a fallback to recollection.** An
+  unreadable verdict is an unmet validation, not an absent one. Name the file.
+  Do not infer the verdict from the review's prose, from its existence, or from
+  the story's Gate-status line. Two matches carrying different values FAIL the
+  same way — the pattern anchors the file's own verdict line, and a per-AC or
+  per-check verdict table is not it.
 - If any required validation was skipped, run it now before proceeding.
 - **Evidence:** Gate log must record which validations were run and their
   outcomes. "Completed" without evidence is not completed.
