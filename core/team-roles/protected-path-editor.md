@@ -41,7 +41,9 @@ not optional background:
    amend a rule without introducing them.
 2. `.claude/skills/ai-dlc/core-manifest.md` — the core-layer file set and the
    Rule 27 immutability model, so you know which paths are core vs
-   extensions/overrides.
+   extensions/overrides. For a per-path answer on a specific file, run
+   `scripts/ai-dlc/core-paths.sh --is-core <path>` rather than matching globs by
+   eye — it is the same derivation the edit-time guard uses.
 3. Your assigned story file (path in the task description).
 4. The current contents of every file you will edit.
 
