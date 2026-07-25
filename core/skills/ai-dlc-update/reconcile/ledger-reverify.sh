@@ -127,11 +127,28 @@ base_show() { git -C "$DIST" show "${BASE}:$1" 2>/dev/null; }
 
 # $1 = file content, $2 = newline-separated substrings. True iff EVERY one is present.
 # The convention's single-substring form is just the one-element case.
+#
+# NEVER PIPE INTO `grep -q` HERE. This file runs under `set -o pipefail`, and `grep -q` exits
+# the instant it matches. On content larger than the pipe buffer (~64 KB) the writer has not
+# finished, takes SIGPIPE, and the PIPELINE's status becomes that failure -- so a successful
+# MATCH is reported as "not found". Smaller files complete the write before grep exits and
+# behave correctly, which is what makes the bug look like flakiness rather than a size
+# threshold.
+#
+# The verdict was therefore NONDETERMINISTIC on this repo's largest rule files. Measured on
+# the reference consumer: four consecutive runs of one unchanged entry against
+# `steps/gate-validation.md` returned STILL-LIVE, NEEDS-REVIEW, STILL-LIVE, CLOSE-CANDIDATE.
+# Because this feeds the report's rendered region, `emit-report.sh --verify` failed 8/8 and
+# six renders produced four distinct outputs. Everything outside this helper was stable.
+#
+# A herestring is not a pipe: grep reads a file, there is no writer to signal, and an early
+# exit cannot become a false negative. Keeping `grep -F` (rather than a `case` glob) preserves
+# the per-LINE fixed-string semantics the convention's substrings are written against.
 all_present() {
   _c="$1"; _ok=1
   while IFS= read -r _one; do
     [ -n "$_one" ] || continue
-    printf '%s' "$_c" | grep -qF -- "$_one" || _ok=0
+    grep -qF -- "$_one" <<<"$_c" || _ok=0
   done <<EOF
 $2
 EOF
@@ -169,64 +186,45 @@ theirs_basename_matches() {
 LEDGER_TOP="${LEDGER#"$CONSUMER"/}"; LEDGER_TOP="${LEDGER_TOP%%/*}"
 SELF_BASE="${0##*/}"
 
-# Built ONCE, eagerly, into a global — not lazily behind a command substitution. `$(fn)`
-# runs the function in a SUBSHELL, so a global it assigns never reaches the parent: the
-# cache would miss on every call, mktemp a fresh file each time, and leak all of them past
-# a trap that still sees an empty variable.
-SCAN_LIST="$(mktemp 2>/dev/null || true)"
-trap '[ -n "${SCAN_LIST:-}" ] && rm -f "$SCAN_LIST"' EXIT
-if [ -n "$SCAN_LIST" ]; then
-  # NUL-separated end to end. Plain `git ls-files` QUOTES a path containing a quote,
-  # backslash or non-ASCII byte ("caf\303\251.md"), and plain `xargs` then parses those
-  # quotes and dies with `xargs: unterminated quote` — having produced NOTHING. With the
-  # probe's stderr discarded that abort is indistinguishable from "substring not found",
-  # so every predicate reads unfalsifiable and the check accuses the whole ledger. It did
-  # exactly that here before this line was NUL-safe. `-z` emits raw paths and `-0` stops
-  # xargs interpreting them.
-  #
-  # Literal comparisons in awk, not regex: a path component carrying '.' or '-' must not
-  # be a pattern. Same reason theirs_basename_matches splits on "/" instead of anchoring.
-  git -C "$CONSUMER" ls-files -z 2>/dev/null | tr '\0' '\n' |
-    awk -v top="$LEDGER_TOP/" -v self="/$SELF_BASE" '
-      top != "/" && index($0, top) == 1 { next }
-      substr($0, length($0) - length(self) + 1) == self { next }
-      { print }' | tr '\n' '\0' > "$SCAN_LIST"
-fi
-
-# CONTROL for the probe machinery itself. The empty pattern matches every line of every
-# file, so this MUST name a file; if it does not, the pipeline is broken rather than the
-# ledger, and every "unreachable" verdict below would be an artefact. Bounded to the first
-# 50 paths so the control costs nothing. A bare zero needs a control — without one, a
-# broken scan and a clean ledger produce byte-identical output.
-scan_probe_works() {
-  [ -s "${SCAN_LIST:-}" ] || return 1
-  _ctl="$( cd "$CONSUMER" 2>/dev/null &&
-           tr '\0' '\n' < "$SCAN_LIST" | head -50 | tr '\n' '\0' |
-           xargs -0 grep -lF -- "" 2>/dev/null | head -1 )"
-  [ -n "$_ctl" ]
+# THE SCAN IS `git grep`, NOT A FILE LIST PIPED INTO xargs.
+#
+# git grep searches TRACKED files in the working tree, which is the same derived set the
+# ls-files version used — `.claude/worktrees/` agent checkouts are untracked and drop out
+# for free — but it needs no temp file, no NUL plumbing, and no xargs. That matters beyond
+# tidiness: the xargs form died with `unterminated quote` on paths git had quoted, produced
+# nothing, and with stderr discarded that abort was indistinguishable from "not found", so
+# every predicate read unfalsifiable. Removing the machinery removes the failure mode.
+#
+# It is also ~40x faster (0.012s vs 0.5s per substring on the reference consumer), which is
+# not a micro-optimisation: this runs once per substring per absent-at-both entry, and at 7
+# such entries the old form was ~70% of the whole classifier's runtime.
+#
+# EXIT STATUS IS READ DIRECTLY, three ways: 0 found, 1 not found, anything else (bad
+# pathspec, not a repo) UNDECIDABLE. No pipe, so no early-exit SIGPIPE can turn a match into
+# a miss — the defect this file's all_present() carried for large files.
+consumer_scannable() {
+  git -C "$CONSUMER" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
+  [ -n "$(git -C "$CONSUMER" ls-files 2>/dev/null | head -1)" ]
 }
 
-# True iff EVERY substring is found in at least one scanned consumer file. A predicate is
+# True iff EVERY substring is found in at least one tracked consumer file. A predicate is
 # unfalsifiable when ANY of its substrings can never appear, because all_present() requires
 # all of them to match at theirs.
 #
-# Returns 2 — NOT false — when the scan set is empty or unbuildable (consumer is not a git
-# repo, mktemp failed). Undecidable must not manufacture a verdict: reporting "unreachable"
-# there would turn a missing input into a wall of NEEDS-REVIEW on entries that are fine.
-# The caller says so in DETAIL rather than staying quiet about it.
-#
-# The hit test reads a CAPTURED STRING, never a pipeline's exit status. This file runs under
-# `set -o pipefail`, and `xargs` splits a 6000-file list into several `grep` invocations:
-# every batch with no match exits nonzero, so the pipeline reports failure whenever the
-# LAST batch missed — regardless of what the earlier ones found. That inverted the verdict
-# on real anchors, silently and in the accusing direction. Caught on `validate-provenance-
-# block`, a filename with 152 hits in the reference consumer, reported unreachable.
+# Returns 2 — NOT false — when the consumer cannot be scanned. Undecidable must not
+# manufacture a verdict: reporting "unreachable" there would turn a missing input into a
+# wall of NEEDS-REVIEW on entries that are fine. The caller says so in DETAIL.
 consumer_reachable() {
-  scan_probe_works || return 2
+  consumer_scannable || return 2
   while IFS= read -r _one; do
     [ -n "$_one" ] || continue
-    _hit="$( cd "$CONSUMER" 2>/dev/null && xargs -0 grep -lF -- "$_one" < "$SCAN_LIST" 2>/dev/null | head -1 )"
-    [ -n "$_hit" ] || return 1
+    git -C "$CONSUMER" grep -qF -e "$_one" -- \
+      ":(exclude)$LEDGER_TOP" ":(exclude)*/$SELF_BASE" >/dev/null 2>&1
+    case "$?" in
+      0) : ;;
+      1) return 1 ;;
+      *) return 2 ;;
+    esac
   done <<EOF
 $1
 EOF
