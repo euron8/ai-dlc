@@ -23,6 +23,16 @@ trap 'rm -rf "$WORK"' EXIT
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. The manifest this seed copies is the consumer's
+# INSTALLED one, which on an un-upgraded tree does not yet claim fixtures/ -- so the guard
+# cannot deny a core fixture, and calling that a regression blocked the very self-update
+# cycle that installs the claim. In the DISTRIBUTION the claim is always present, so an
+# absent one is a hard error there and upstream cannot go green vacuously.
+IS_DIST=0; [ -d "$HERE/../../../core/skills/ai-dlc" ] && IS_DIST=1
+skip() { # skip <what> <why>
+  if [ "$IS_DIST" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the claim must be present here)"
+  else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
+}
 
 # raw <project_dir> <json> -> the hook's stdout (JSON on deny, empty on allow)
 raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
@@ -156,9 +166,16 @@ fi
 # than elsewhere: a fixture's markers and counts ARE its assertion's input, so a tidying
 # edit can leave it green while it tests nothing.
 COREFIX="$CONSUMER/tests/fixtures/check-15-bypass/seed.sh"
-d="$(decision "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
-[ "$d" = deny ] && ok "Edit to an installed core fixture (tests/fixtures/<core-name>/) → deny" \
-  || bad "Edit to a core fixture classified '$d', expected deny — upstream test data is still editable in place"
+CLAIMED=0
+grep -q '^  - fixtures/' "$CONSUMER/.claude/skills/ai-dlc/core-manifest.md" 2>/dev/null && CLAIMED=1
+if [ "$CLAIMED" = 0 ]; then
+  skip "core-fixture deny (10e) and its message (10g)" \
+    "the installed core-manifest.md does not claim fixtures/ yet; the claim lands with this same pull"
+else
+  d="$(decision "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
+  [ "$d" = deny ] && ok "Edit to an installed core fixture (tests/fixtures/<core-name>/) → deny" \
+    || bad "Edit to a core fixture classified '$d', expected deny — upstream test data is still editable in place"
+fi
 
 # --- Assertion 10f: edit to a CONSUMER-AUTHORED fixture → ALLOW -------------
 # tests/fixtures/ is SHARED, and core and consumer dirs there share the `check-` prefix,
@@ -166,6 +183,9 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')
 # consumer's own fixture gets turned off, and takes 10e's protection with it. The name
 # below shares every character of a core fixture's plus a suffix — the shape one dropped
 # slash in a manifest entry would over-capture.
+#
+# NOT skipped when the claim is absent: allow is the answer either way, so this arm is
+# meaningful on an un-upgraded tree too, and it is the half that catches over-capture.
 OWNFIX="$CONSUMER/tests/fixtures/check-15-bypass-local/seed.sh"
 d="$(decision "$CONSUMER" "$(mkjson Edit "$OWNFIX" 'consumer fixture body')")"
 [ "$d" = allow ] && ok "Edit to a consumer-authored fixture at an adjacent name → allow" \
@@ -175,13 +195,15 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$OWNFIX" 'consumer fixture body')")"
 # Neither the layer routing nor the validator's AI_DLC_ tunable advice applies: you
 # cannot override a seed, and a fixture has no knobs. The message must say the content
 # is the assertion's input, or the reader tidies the file and vacates the test.
-OUTF="$(raw "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
-if printf '%s' "$OUTF" | grep -q 'TEST DATA' \
-   && printf '%s' "$OUTF" | grep -q 'VACATE' \
-   && ! printf '%s' "$OUTF" | grep -q 'Route it to the layer instead'; then
-  ok "fixture deny warns the content IS the assertion's input, not layer routing"
-else
-  bad "fixture deny gave layer-routing or generic advice — a seed cannot go in overrides/"
+if [ "$CLAIMED" = 1 ]; then
+  OUTF="$(raw "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
+  if printf '%s' "$OUTF" | grep -q 'TEST DATA' \
+     && printf '%s' "$OUTF" | grep -q 'VACATE' \
+     && ! printf '%s' "$OUTF" | grep -q 'Route it to the layer instead'; then
+    ok "fixture deny warns the content IS the assertion's input, not layer routing"
+  else
+    bad "fixture deny gave layer-routing or generic advice — a seed cannot go in overrides/"
+  fi
 fi
 
 # --- Assertion 11: derivation FALLBACK — remove core-manifest.md, keep sites -

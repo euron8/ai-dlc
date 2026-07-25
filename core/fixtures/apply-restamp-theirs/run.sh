@@ -101,6 +101,20 @@ printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$STAMP"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. A consumer receives this file on the pull
+# that carries it, and the assertion's subject may land later in the same pull -- or in the
+# gated reconcile after it. "Subject not installed" is NOT "subject regressed", and
+# reporting it as a failure is what deadlocked the reference consumer: the self-update
+# requires its derived fixtures green, so a fixture failing on an un-upgraded subject blocks
+# the very cycle that would install it.
+#
+# In the DISTRIBUTION the subject is always present, so an absent one is a hard error and
+# upstream can never go green vacuously. Only a consumer layout skips.
+IS_DIST=0; [ -d "$ROOT/core/skills/ai-dlc" ] && IS_DIST=1
+skip() { # skip <what> <why>
+  if [ "$IS_DIST" = 1 ]; then bad "$1 -- $2 (HARD in the distribution: the subject must be present here)"
+  else printf '  SKIP  %s -- %s\n' "$1" "$2"; fi
+}
 
 echo "apply-restamp-theirs:"
 
@@ -217,6 +231,9 @@ fi
 # must appear and the hook must exit non-zero with the marker, and the suite must run
 # normally without it. The paired control is what makes assertion 7 mean anything, because
 # every other step in that minimal tree fails too.
+if ! grep -q 'ai-dlc-applying' "$PREPUSH" 2>/dev/null; then
+  skip "pre-push mid-pull refusal" "the resolved pre-push ($PREPUSH) predates the in-flight marker; it lands with this same pull"
+else
 PP="$WORK/pptree"
 mkdir -p "$PP/.claude" "$PP/tests/fixtures/x" || exit 2
 printf '#!/usr/bin/env bash\nexit 0\n' > "$PP/tests/fixtures/x/run.sh"
@@ -233,6 +250,7 @@ if ! printf '%s\n' "$pp_out2" | grep -q 'ai-dlc-applying'; then
   ok "  control: with no marker the suite runs normally (the guard is not always-on)"
 else
   bad "  the guard fires with no marker present — it would block every push forever"
+fi
 fi
 
 echo
