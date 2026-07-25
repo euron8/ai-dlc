@@ -109,6 +109,13 @@ Are acceptance criteria covered by tests? Are edge cases tested?
       keystore references instead)
 ```
 
+**The `## Verdict` heading and the bare verdict value beneath it are a
+machine-read contract, not formatting.** `gate-validation.md` Check 1
+grep-sources the gate answer from this line and FAILS when it cannot find it,
+so a renamed heading or a verdict buried in prose blocks the gate rather than
+degrading quietly. Emit the value alone on the line after the heading, or as
+`## Verdict: <VALUE>`.
+
 ## Field Verification (API-Consuming Stories)
 
 When reviewing a story that consumes API data for display, perform a field
