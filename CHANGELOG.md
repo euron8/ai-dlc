@@ -17,6 +17,50 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.154.0] — 2026-07-25
+
+### Added — a blocker decision is evidenced, and its answer has somewhere to live
+
+Both holes were found the same way: an operator hand-wrote a prompt supplying what the skill
+should have carried, and it worked better than the skill did.
+
+**The answer had nowhere to go.** Step 5 told the operator that adjudicating a finding "is
+giving an ANSWER — record it into the report/log for the `apply` run to act on." Neither
+destination can hold one. The report is a fixed filename **the next dry run overwrites** — the
+same step says so — and `reconcile-log-<ts>.md` is not written until step 7, under `apply`. One
+is destroyed, the other does not yet exist. Three dry runs in a day is normal on a real
+consumer, so every operator either invents a filename or loses the decision.
+
+Answers now go to `_bmad-output/ai-dlc-update/blocker-adjudication-<ts>.md`: named, timestamped,
+recording per blocker the disposition, its verification, the fully-resolved resolution command,
+and any operator answer, ending in one readiness line. **Step 7 reads it before working the
+blockers**, so a decided blocker is executed rather than re-litigated — a record nothing
+consumes is a diary, not machinery. A row that does not resolve against the current run's refs
+is stale and re-verified rather than trusted, and the file **never authorizes a write**: it
+records an answer, and the `apply` argument is what authorizes acting on it. That last clause
+matters because a durable record makes the incident-confirmed "adjudication as write order"
+failure mode *more* tempting, not less.
+
+**The disposition needed no evidence.** Step 8's defect drain has required a cited command and
+its decisive output line since 0.151.0. A blocker disposition required nothing — and `retire`
+**deletes a consumer-owned override**. The more destructive act carried the weaker bar.
+
+A disposition now carries the command that verified it, what could not be verified, and an
+explicit label on any claim about *why* a detector fired. Recommendations are hypotheses to
+falsify: in one real pull a defect was filed against a checker that was correctly obeying an
+over-wide declaration, and a version correction was itself three releases wrong because it
+sampled the refs already loaded instead of walking history.
+
+Resolution commands must also now carry **no unresolved placeholder** — a command with a literal
+`<dist>` is a path the operator cannot walk without guessing, which is the same block one step
+later.
+
+**New fixture `blocker-adjudication-record`** anchors on the step-8 rule rather than copying it:
+it reads the citation requirement out of the drain bullet and requires the blocker bullet to
+carry one too, so weakening either alone fails. If the step-8 anchor ever disappears the fixture
+exits `FIXTURE STALE` rather than passing against a skill that requires nothing. Four mutants
+verified, including that anti-vacuity one.
+
 ## [0.153.1] — 2026-07-25
 
 ### Fixed — a shipped fixture blocked every consumer's self-update for three releases
