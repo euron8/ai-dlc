@@ -17,6 +17,51 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.162.0] — 2026-07-25
+
+### Fixed — the core-layer immutability check restated the manifest, and the restatement had rotted
+
+The retro/close-gate **Core-layer immutability** check told the adjudicator to read
+`core-manifest.md` "for the authoritative path list" — and then spelled that list out inline.
+Measured against `core-paths.sh --list`, the inline copy named **6 of the manifest's 12
+non-fixture entries**. It omitted `templates/*.md`, `session-driver/*.sh`, `schemas/*.json`,
+both the `skills/ai-dlc-setup/**` and `skills/ai-dlc-update/**` subtrees, and `scripts/ai-dlc/*`.
+
+So the backstop for in-place core drift had silently stopped firing on six core subtrees, and
+the omission read exactly like a clean pass. This is the same defect I24 records for H1's
+fixture set, in the one check whose entire job is a core-manifest intersection — and the same
+under-claiming shape v0.157.0 fixed for Check 16 and v0.161.0 for fixtures, one check over.
+
+The check now asks `core-paths.sh --is-core <path>` per changed path, following Check 16's own
+"do not hand-list the exempt set" pattern, and treats **exit 2 as not-a-pass** — the path stays
+in scope and the gate log records that the resolver could not answer. `core/scripts/core-paths.sh`
+is added to the check's `reads:` in `enforcement-map.yaml`, matching Check 16's entry.
+
+**New invariant I26** stops it growing back: the check body must invoke
+`core-paths.sh --is-core`, and no line in it may name two or more manifest entries.
+
+A count of manifest references would have been the wrong detector — the body legitimately cites
+`rule-authoring.md` for guidance and names `hooks/ai-dlc-*.sh` for a real behavioural carve-out
+(a changed core hook can have no `overrides/` shadow, so it always FAILs). What distinguishes a
+restated *list* is punctuation adjacency: a list puts its entries on one line, a cross-reference
+stands alone. Measured against the pre-fix text, two lines carried three entries each; the fixed
+text carries at most one per line. I26 also fails loudly if it cannot isolate the check's span,
+rather than scanning nothing and reporting clean.
+
+All three of I26's arms are mutation-tested. The span-marker mutant fires the isolate-failure
+arm; removing the resolver call fires the delegation arm; and because that arm short-circuits,
+the per-line detector needed its own mutant — a restated list added *alongside* a kept resolver
+call. It fires at five entries on a line and at the two-entry boundary, and stays correctly
+silent on a one-entry cross-reference.
+
+### Also
+
+`SKILL.md`'s glossary carried the same rotted six-entry list; it now points at
+`core-paths.sh --is-core`. `protected-path-editor.md` gains the same pointer beside its
+context-loading step — that role still reads the manifest, because it needs the Rule 27
+immutability model and not just a path list. A sweep of all 41 shipped rule files found no other
+restated core-path list.
+
 ## [0.161.0] — 2026-07-25
 
 ### Fixed — core test fixtures were unclaimed, so Check 16 audited them as consumer-authored

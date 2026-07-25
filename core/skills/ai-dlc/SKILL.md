@@ -1084,9 +1084,11 @@ contract is flagged by the retro rule-file audit (`retro.md` Step 4).
 The consumer rulebook is three layers. This rule is how a consumer
 self-improves *without* re-tangling core against upstream (spec §7).
 
-**core** -- the upstream-owned files enumerated in `core-manifest.md`
-(alongside this file): `SKILL.md`, `steps/*.md`, `escalations.md`,
-`rule-authoring.md`, `team-roles/*.md`, plus `hooks/ai-dlc-*.sh`.
+**core** -- the upstream-owned file set declared in `core-manifest.md`
+(alongside this file). For a per-path answer, run
+`scripts/ai-dlc/core-paths.sh --is-core <path>` rather than matching globs by
+eye; it is the same derivation the edit-time guard uses, and a list restated
+anywhere else rots against the manifest silently.
 `/ai-dlc-update` overwrites these wholesale. You MUST NOT edit a core file
 in place (enforced at the keystroke by `ai-dlc-core-guard.sh` and at the
 gate by **Core-layer immutability**). The rulebook files route to a layer;

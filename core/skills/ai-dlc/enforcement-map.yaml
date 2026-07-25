@@ -474,6 +474,7 @@ checks:
     gate_types: [retro]
     adjudication: llm   # git-diff logic run by the lead; reads the manifests below
     reads:
+      - core/scripts/core-paths.sh        # --is-core: the core set, derived not restated
       - core/skills/ai-dlc/core-manifest.md
       - core/skills/ai-dlc-update/reconcile/setup-sites.md
     enforcer: []

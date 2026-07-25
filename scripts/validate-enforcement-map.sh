@@ -474,6 +474,51 @@ for cp_f in parse_manifest to_consumer_glob; do
   fi
 done
 
+# --- I26: core-layer-immutability keeps the core set DERIVED, never restated ---
+# The check body used to tell the adjudicator to read core-manifest.md "for the
+# authoritative path list" and then spell that list out inline. It named 6 of the
+# manifest's 12 non-fixture entries, omitting templates/, session-driver/, schemas/,
+# both ai-dlc-setup/ and ai-dlc-update/ subtrees, and scripts/ai-dlc/ -- so the retro
+# backstop stopped firing on six core subtrees, and the omission read exactly like a
+# clean pass. Same failure I24 records for H1's fixture set, in the one check whose
+# entire job is a core-manifest intersection.
+#
+# A COUNT of manifest entries in the span is the wrong detector: the body legitimately
+# cites rule-authoring.md for guidance and names hooks/ai-dlc-*.sh for a real
+# behavioural carve-out (a changed core hook can have no overrides/ shadow, so it always
+# FAILs). What distinguishes a restated LIST is punctuation adjacency -- a list puts the
+# entries on one line, a reference stands alone. Measured against the pre-fix text: two
+# lines carried three entries each; the fixed text carries at most one per line.
+CLI_SPAN="$(awk '/<!-- CHECK_LOADED: core-layer-immutability -->/{on=1} on{print} on && /^### /&&!/core-layer-immutability/{exit}' \
+  "$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md" 2>/dev/null)"
+if [ -z "$CLI_SPAN" ]; then
+  err "I26 could not isolate the core-layer-immutability span in gate-validation.md. A span that does not resolve scans nothing and reports clean."
+elif ! printf '%s\n' "$CLI_SPAN" | grep -q 'core-paths.sh --is-core'; then
+  err "I26 the core-layer-immutability check body does not invoke \`core-paths.sh --is-core\`. It must DERIVE the core set from the same resolver the edit-time guard reads, not decide for itself which paths are core — a body that answers that question on its own is the restated list this invariant exists to prevent."
+else
+  # Entries derived from the manifest, never hand-listed here. Fixtures are excluded:
+  # 66 of them would swamp the per-line test and none is a plausible restatement.
+  cli_entries="$(norm_core_manifest "$CORE_MANIFEST" | grep -v '^fixtures/')"
+  cli_bad=""
+  while IFS= read -r cli_line; do
+    cli_n=0
+    while IFS= read -r cli_e; do
+      [ -n "$cli_e" ] || continue
+      printf '%s' "$cli_line" | grep -qF "$cli_e" && cli_n=$((cli_n+1))
+    done <<EOF
+$cli_entries
+EOF
+    [ "$cli_n" -ge 2 ] && cli_bad="${cli_bad}
+      ${cli_n} entries on: $(printf '%s' "$cli_line" | cut -c1-80)"
+  done <<EOF
+$(printf '%s\n' "$CLI_SPAN")
+EOF
+  if [ -n "$cli_bad" ]; then
+    err "I26 the core-layer-immutability check body restates the core path set:${cli_bad}
+      A line naming two or more manifest entries is a list, not a cross-reference. The set is DERIVED from core-paths.sh --is-core; a list here rots against the manifest in the one direction that matters, because every entry it omits is a core subtree this check silently stops firing on. It had already omitted six."
+  fi
+fi
+
 # --- I19: SKILL.md Rule 8's intensity table is the ONLY place the validation-cycle
 # minimums are enumerated. Check 20 kept its own copy of them and the copy dropped a row:
 # Rule 8 defines four intensities, Check 20 listed three, and `carry-over-single` appeared
@@ -1167,7 +1212,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26)."
   exit 0
 fi
 exit 1

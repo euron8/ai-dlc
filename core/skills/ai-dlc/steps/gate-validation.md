@@ -1632,11 +1632,19 @@ activation-ordering rule — the guard can only fire once a clean core/layer spl
 exists.
 
 **Check.** Compute the sprint diff against the branch base:
-`git diff --name-only <sprint-base>..HEAD`. Intersect with the core manifest
-(read `core-manifest.md` in the skill dir for the authoritative path list:
-`.claude/skills/ai-dlc/SKILL.md`, `steps/*.md`, `escalations.md`,
-`rule-authoring.md`, `.claude/team-roles/*.md`, `.claude/hooks/ai-dlc-*.sh`). For
-each core file in that intersection lacking a matching `overrides/` entry
+`git diff --name-only <sprint-base>..HEAD`. For each changed path, ask
+`scripts/ai-dlc/core-paths.sh --is-core <path>`: exit 0 = core and in scope,
+exit 1 = not core, **exit 2 = could not determine, which is NOT a pass** — the
+path stays in scope and the gate log records that the resolver could not answer.
+
+Do not hand-list the core set here. `core-paths.sh` derives it from
+`core-manifest.md` (fallback `reconcile/setup-sites.md`), the same source the
+edit-time guard reads, so this backstop and the primary enforcement cannot
+disagree about what core is. A restated list rots against the manifest silently
+and in the one direction that matters: every entry it omits is a core subtree
+this check stops firing on, and the omission reads exactly like a clean pass.
+
+For each core file in that intersection lacking a matching `overrides/` entry
 (frontmatter `shadows:` names that file):
 (A changed core hook — `.claude/hooks/ai-dlc-*.sh` — can have no `overrides/` shadow
 and no setup-site, so it always takes the FAIL path below: hooks are machinery with
