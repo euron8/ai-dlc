@@ -305,7 +305,20 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
     }
   }
   /ADOPTED UPSTREAM/ { closed=1 }
-  match($0, /verify:[ \t]*/) {
+  # ANCHORED to the start of the line. The ledger is prose that DISCUSSES receipts as well as
+  # carrying them, and an unanchored match treated both alike: "explicitly NO verify: field"
+  # in a sentence registered as a directive. The scalar is last-match-wins, so a prose mention
+  # later in a span silently REPLACED the real receipt with whatever followed it — 450 words of
+  # narrative, in the case the consumer filed as PC-S296-LEDGER-REVERIFY-LAST-MATCH-WINS.
+  # Measured on the reference consumer: 88 unanchored matches, 47 real receipt lines.
+  # A leading list marker, indentation, or backtick still counts; a mid-sentence mention does not.
+  # The permitted prefix is LINE-LEADING STRUCTURE ONLY: indentation, a list marker, an HTML
+  # break the entry body uses to force a newline, and an opening backtick when the whole
+  # receipt is one code span. Derived from the reference consumer, where every real receipt
+  # carries one of exactly three prefixes (none, whitespace, <br>) and every other occurrence
+  # is a sentence that happens to end in a backtick before the word. A receipt is a line; a
+  # mention is part of one.
+  /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/ && match($0, /verify:[ \t]*/) {
     has_verify=1
     directive=substr($0, RSTART+RLENGTH)
     sub(/[[:space:]]+$/,"",directive)
