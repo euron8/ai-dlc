@@ -17,6 +17,36 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.154.1] — 2026-07-25
+
+### Fixed — `--verify` called a sound report STALE because the dist checkout moved
+
+The rendered region carries one machine-specific value: the absolute distribution path in each
+`full: diff <(git -C <dist> show …)` reproduction command. The path is deliberately concrete
+there — a command the operator must edit before running is a path out they cannot walk — but it
+makes the region unequal across checkouts, and `--verify` byte-compares.
+
+Measured on the reference consumer: its report was generated from a scratch clone under
+`/private/tmp/…`, and verifying that **same sound report** from a normal checkout failed with
+`STALE or HAND-EDITED` on nothing but the path. That is a false accusation, and the remedy it
+prints — regenerate and re-emit — throws away a good report.
+
+It also defeats the reason `--verify` is offered to operators at all. Step 5 says they "can run
+the same `--verify` to trust any report without re-running the detectors by hand"; in practice
+they could only trust reports generated at their own dist path, which for a fresh-clone pull is
+a temporary directory that no longer exists.
+
+The dist path is now normalized out of both sides before comparing, anchored on ` show
+<theirs>:` so a checkout path containing spaces still normalizes. **Nothing else is
+normalized** — this is the one field whose value is a property of *where the detectors ran*
+rather than *what they found*.
+
+`reconcile-emit-report` gains two assertions: a sound report verifies from a different checkout
+(a symlink alias — same repository, different literal path), and a dropped `HARD-*` row **still**
+fails from that other path. The second is the one that matters: path-independence must not be
+bought by weakening the check that stops a report hiding a finding. Removing the normalization
+turns the first red.
+
 ## [0.154.0] — 2026-07-25
 
 ### Added — a blocker decision is evidenced, and its answer has somewhere to live
