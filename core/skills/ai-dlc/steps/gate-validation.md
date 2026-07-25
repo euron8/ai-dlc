@@ -1165,6 +1165,50 @@ role file that does not resolve, which is Rule 19's fail-closed case
 ("a teammate that ran without a resolvable role-file binding is a Rule 19
 violation, not a pass").
 
+**Dispositioning a Rule 19(a) violation that already happened.** A spawn that
+ran on the wrong tier is a fact about the past. No later action changes it, so
+without a clearing path this check fails forever on a sprint where it fired
+once — the gate becomes unpassable by any consumer action, which is a defect in
+the check and not a finding about the sprint. (Exactly that happened: a
+`protected-path-editor` ran on sonnet against an opus-5 pin, the lead
+self-reported it, and four gate attempts failed with nothing anyone could do —
+the operator could not clear it either, because this check did not read the
+escalation where an authorization would live.)
+
+A recorded tier mismatch is CLEARED when **all four** hold:
+
+1. An escalation entry for the CURRENT sprint in `docs/escalations/pending.md`
+   NAMES the offending spawn — its dispatch `name` / agent id appears verbatim
+   in the entry. One entry clears one spawn; a waiver that names no spawn
+   clears nothing.
+2. That entry's `**Status:**` is `OVERRIDDEN`.
+3. `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
+   docs/escalations/pending.md --sprint <N> --transcript <this session's
+   transcript_path>` exits 0 — the SAME invocation Check 2a makes, all three
+   flags. It fails closed on a missing `--transcript` (a forgotten flag cannot
+   silently disarm it) and exits 2 on missing required args, so a truncated
+   command verifies nothing rather than appearing to pass. That validator
+   requires the entry's
+   `**Operator authorization:** <ISO ts> | "<verbatim ≥12 chars>"` line and
+   verifies the quoted substring against a GENUINE operator message in the
+   session transcript. The verdict on this arm is the validator's exit code,
+   not the adjudicator's reading — which is what makes the disposition
+   unforgeable.
+4. The entry states the REMEDIATION and names its artifact: either the work was
+   redone on the pinned tier, or the teammate's output was independently
+   verified against its source. An `OVERRIDDEN` carrying no remediation is a
+   content-free waiver — writable without anyone having looked at the output,
+   which is the forgeable-evidence shape Check 26 exists to reject.
+
+**`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
+it is the lead dispositioning its own Rule 19 violation. A self-report is the
+right conduct and is not a clearing path. Missing any of the four arms → the
+mismatch still FAILS.
+
+This clears the RECORDED violation. It does not license the next one — the
+dispatch guard binds the model before the work runs, so a post-v0.158.0 spawn
+should never reach this clause.
+
 **A row exists even for a teammate that was stopped mid-flight**, because the
 ledger is written at dispatch rather than at completion. That is deliberate:
 `subagent-context.jsonl` is written on `SubagentStop`, so a killed teammate
@@ -1179,13 +1223,19 @@ prose in the transcript names `team-roles/adversary.md`. It now prefers the
 ledger row, so the two agree — but the ledger is the origin and the one to
 cite.
 
-**If the ledger is ABSENT** (a sprint whose spawns predate it, or a consumer
-that has not pulled the guard), say so explicitly and fall back to the gate
-log's spawn table, recording in the gate log that the verdict rests on
-lead-authored evidence rather than a machine record. Do NOT report a clean
-PASS from an empty file: no rows and no spawns are different states, and a
-check that cannot tell them apart passes vacuously on the sprint where the
-mechanism was missing.
+**If the ledger has no rows for this sprint** — the file is absent, OR it
+exists but every row belongs to another sprint — treat it as PRE-LEDGER and say
+so explicitly: fall back to the gate log's spawn table and record in the gate
+log that the verdict rests on lead-authored evidence rather than a machine
+record. The two cases are one case: a consumer that pulls the guard mid-sprint
+gets a ledger file whose first row is the NEXT dispatch, so "file exists" and
+"this sprint is covered" are different claims and only the second one licenses
+reading the ledger as complete.
+
+Do NOT report a clean PASS from an empty or other-sprint ledger. Zero rows and
+zero spawns are different states; a check that cannot tell them apart passes
+vacuously on exactly the sprint where the mechanism was missing, which is the
+defect this check was rewritten to stop committing.
 
 Additionally, verify **story routing** against the canonical map in
 `stories-test-strategy.md` "Story Routing Tags". For EVERY story in the

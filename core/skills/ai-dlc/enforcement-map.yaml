@@ -291,6 +291,8 @@ checks:
     reads:
       - _bmad-output/spawn-ledger.jsonl   # written at dispatch by ai-dlc-dispatch-guard.sh
       - core/team-roles/*.md              # the /model pin each row is compared against
+      - docs/escalations/pending.md       # OVERRIDDEN entry dispositioning a recorded 19(a) violation
+      - core/scripts/validate-escalation-resolution.sh   # arm 3: the operator citation is verified, not read
     ci_workflow: ~
     fixtures: [tests/fixtures/dispatch-model-guard, tests/fixtures/subagent-probe]
 

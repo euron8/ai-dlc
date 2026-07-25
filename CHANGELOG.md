@@ -17,6 +17,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.159.0] — 2026-07-25
+
+### Fixed — Check 22 could record a Rule 19(a) violation but nobody could ever clear it
+
+v0.158.0 gave Check 22 a machine record. It did not give it a way to **close** a violation
+already in that record, and that is the difference between a gate that reports a problem and a
+gate that cannot be passed.
+
+A spawn that ran on the wrong model tier is a fact about the past. Nothing done later changes it.
+Check 22's body contained no clearing clause of any kind — grepping it for
+`overrid|waiv|except|exempt|escalat|clear|disposi` returned **zero** hits — so once the check
+fired, it fired forever. The `OVERRIDDEN` + operator-citation mechanism already existed in
+`escalations.md` and Check 2/2a already honoured it, but **Check 22 never read escalations**, so
+not even the operator could clear it. The consumer's only remaining exits were a permanent
+consumer-layer override of the check (a rulebook change to work around one historical event) or
+an indefinitely blocked sprint.
+
+This is the same defect class v0.157.0 fixed for Check 16 — fails closed, no clearing path — and
+it was mis-filed as "consumer conduct needing an operator disposition" without checking that the
+disposition mechanism existed. It did not. Filed here as core's, because it is.
+
+A recorded tier mismatch is now CLEARED when **all four** hold, and still FAILS on any one
+missing:
+
+1. An escalation entry for the current sprint NAMES the offending spawn (dispatch `name` / agent
+   id, verbatim). One entry clears one spawn; a waiver naming no spawn clears nothing.
+2. That entry's `**Status:**` is `OVERRIDDEN`.
+3. `validate-escalation-resolution.sh --escalations … --sprint N --transcript …` exits 0 — the
+   same three-flag invocation Check 2a makes. It verifies the `**Operator authorization:**`
+   quote against a genuine operator message in the session transcript, so the verdict on this
+   arm is an exit code rather than the adjudicator's reading, and the disposition cannot be
+   self-granted. It fails closed on a missing `--transcript` and exits 2 on missing args, so a
+   truncated command verifies nothing instead of appearing to pass.
+4. The entry states the REMEDIATION and names its artifact: the work was redone on the pinned
+   tier, or the output was independently verified against its source. An `OVERRIDDEN` with no
+   remediation is writable without anyone having looked at the output — the forgeable-evidence
+   shape Check 26 rejects.
+
+**`DECIDED_AUTONOMOUSLY` explicitly does not clear it.** That is the lead dispositioning its own
+Rule 19 violation. Self-reporting is correct conduct and is not a clearing path — the S298
+adjudicator was right to refuse it.
+
+Nothing here licenses the next violation: the dispatch guard binds the model before the work
+runs, so a post-v0.158.0 spawn should never reach this clause.
+
+### Fixed — my own v0.158.0 prose had the hole it warned about
+
+The new Check 22 said to fall back to the gate-log table "if the ledger is ABSENT", and warned in
+the next sentence that "no rows and no spawns are different states". It then failed to cover the
+third state: a ledger file that EXISTS but holds no rows for this sprint. That is precisely what a
+consumer gets on pulling the guard mid-sprint — the file appears, and its first row is the next
+dispatch. Absent and present-but-empty-for-this-sprint are now one case, treated as pre-ledger.
+
+### Changed
+
+`enforcement-map.yaml`'s Check 22 `reads:` gains `docs/escalations/pending.md` and
+`validate-escalation-resolution.sh`.
+
 ## [0.158.0] — 2026-07-25
 
 ### Added — `spawn-ledger.jsonl`, written at dispatch, not at completion
