@@ -95,6 +95,43 @@ verify "$MUT"
 [ "$RC" -eq 1 ] && ok "mutant: deleting an orientation line FAILS --verify — the block is inside the verified region" \
   || bad "MUTANT DID NOT FAIL (rc=$RC) — orientation can be doctored without --verify noticing, so it is decoration"
 
+# --- Assertion 9: --verify is PORTABLE across distribution checkouts ----------
+# The region embeds the absolute dist path in each `full: diff <(git -C … show …)` command.
+# The path must stay concrete — a command the operator has to edit before running is a path
+# out they cannot walk — but it made the region unequal across checkouts, and --verify
+# byte-compares.
+#
+# Measured: a consumer generated a report from a scratch clone under /private/tmp; verifying
+# that same sound report from a normal checkout failed with "STALE or HAND-EDITED" on nothing
+# but the path. A false accusation that sends the operator to regenerate a good report — and
+# it defeats the reason --verify is offered to operators at all, since they could only trust
+# reports generated at their own dist path.
+#
+# The alias is a symlink: same repository, different literal path, which is exactly the
+# difference that used to break it.
+ALIAS="$WORK/dist-alias"
+ln -sf "$DIST" "$ALIAS" 2>/dev/null
+if [ -e "$ALIAS" ]; then
+  bash "$EMIT" --verify "$REPORT_GOOD" "$ALIAS" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+  if [ "$?" -eq 0 ]; then
+    ok "--verify PASSES a sound report from a DIFFERENT dist checkout (path-independent)"
+  else
+    bad "--verify FAILED a sound report merely because the dist checkout is at another path — the operator is told a good report is STALE or HAND-EDITED, and can only verify reports generated at their own path"
+  fi
+
+  # And normalization must not have blunted it: a real edit still fails from the other path.
+  MUT2="$WORK/report-dropped-line.md"
+  { echo "# Reconcile report (fixture)"; echo; grep -v 'HARD-UNREGISTERED-CORE-DRIFT' "$REGION"; } > "$MUT2"
+  bash "$EMIT" --verify "$MUT2" "$ALIAS" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
+  if [ "$?" -eq 1 ]; then
+    ok "a dropped HARD row STILL fails from the other path (normalization did not blunt the check)"
+  else
+    bad "a dropped HARD blocker passed --verify from another dist path — path-independence was bought by weakening the check that stops a report hiding a finding"
+  fi
+else
+  bad "FIXTURE STALE: could not create a symlink alias for the dist checkout"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2

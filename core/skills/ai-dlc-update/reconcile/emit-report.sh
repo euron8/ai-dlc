@@ -209,8 +209,25 @@ fi
 
 # --- verify ---
 [ -f "$REPORT" ] || { echo "emit-report: report not found: $REPORT" >&2; exit 2; }
-want="$(render)"
-got="$(awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$REPORT")"
+# The rendered region carries ONE machine-specific value: the absolute distribution path in
+# each `full: diff <(git -C <dist> show …)` reproduction command. The path is deliberately
+# concrete there — a command the operator must edit before running is a path out they cannot
+# walk — but it makes the region unequal across checkouts, and `--verify` byte-compares.
+#
+# Consequence, measured: a consumer generated a report from a scratch clone under /private/tmp;
+# verifying the SAME report from a normal checkout failed with "STALE or HAND-EDITED" on nothing
+# but that path. That is a false accusation, and it sends the operator to regenerate a sound
+# report. It also defeats the reason `--verify` is offered to operators at all — SKILL.md step 5
+# says they "can run the same --verify to trust any report without re-running the detectors by
+# hand", and before this they could only trust reports generated at their own dist path.
+#
+# So the dist path is normalized out of BOTH sides before comparing. Anchored on ` show
+# <theirs>:` rather than a bare `[^ ]*`, so a checkout path containing spaces still normalizes.
+# Nothing else is normalized: this is the one field whose value is a property of WHERE the
+# detectors ran rather than WHAT they found, and a hand-edit anywhere else still fails.
+norm_dist() { sed -E "s|git -C .* show ${THEIRS}:|git -C <dist> show ${THEIRS}:|g"; }
+want="$(render | norm_dist)"
+got="$(awk '/BEGIN GENERATED: reconcile-mechanical/{f=1} f{print} /END GENERATED: reconcile-mechanical/{f=0}' "$REPORT" | norm_dist)"
 if [ -z "$got" ]; then
   echo "FAIL: the report has no 'reconcile-mechanical' GENERATED region. The mechanical sections" >&2
   echo "  (buckets, deletions, blocking-layer, drift, relabel) must be RENDERED by emit-report.sh," >&2
