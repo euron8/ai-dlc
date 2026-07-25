@@ -31,8 +31,14 @@
 #   verify: manual
 #       No mechanical predicate exists for this entry — hand-review is the intent, not a
 #       defect → HAND-REVIEW. This verb used to fall through to `unknown verify verb`, which
-#       filed a deliberate declaration under the same banner as a typo. A trailing backtick
-#       or period on the verb is tolerated: a formatting slip must not change the verdict.
+#       filed a deliberate declaration under the same banner as a typo.
+#
+# MARKDOWN FORMATTING IS TOLERATED, NOT REQUIRED. The ledger is prose an operator writes, so a
+# receipt arrives code-formatted as often as not — `verify: theirs_lacks …` wrapped whole, or
+# just the verb wrapped. Backticks and a trailing period are stripped from BOTH ends of the
+# verb and from the end of the directive. A formatting slip must not change a verdict, and
+# rejecting the habit outright would only move the failure from silent to loud without helping
+# anyone. Do not write receipts to satisfy the parser; write them and let it cope.
 #
 # An entry with NO `verify:` line is left to hand-review, exactly as today — it is not
 # emitted. An entry already annotated `ADOPTED UPSTREAM` is closed and skipped.
@@ -130,6 +136,31 @@ emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 theirs_show() { git -C "$DIST" show "${THEIRS}:$1" 2>/dev/null; }
 theirs_has_path() { git -C "$DIST" cat-file -e "${THEIRS}:$1" 2>/dev/null; }
 base_show() { git -C "$DIST" show "${BASE}:$1" 2>/dev/null; }
+
+# absorbed_at <path> <substring> -> the VERSION where <substring> FIRST appeared in <path>
+#
+# The close rows used to say "upstream absorbed this at $TV", where $TV is VERSION at THEIRS —
+# the tip being pulled, which has no relationship to when the substring arrived. Any absorption
+# predating theirs was annotated with the wrong release, and that annotation is permanent: the
+# ledger entry is the provenance of an upstreamed change, and retro and the §8.1 fan-in read it.
+#
+# Measured on the reference consumer: PC-S298's substring first appears at v0.144.0. The tool
+# reported 0.147.0. A hand correction filed against it said 0.146.0, derived by sampling the
+# three refs already loaded rather than walking the history — also wrong. Three releases apart,
+# in a record nothing re-derives.
+#
+# Bounded to base..theirs deliberately. Searching all history would attribute a substring that
+# was removed and later re-introduced to its ORIGINAL commit, which is a different claim than
+# "the pull you are looking at absorbed it". Falls back to $TV when the search finds nothing —
+# a relocated path, a rewritten line — because a close row with no version is worse than one
+# with the tip's.
+absorbed_at() {
+  local _c _v
+  _c="$(git -C "$DIST" log -S"$2" --reverse --format=%H "${BASE}..${THEIRS}" -- "$1" 2>/dev/null | head -1)"
+  [ -n "$_c" ] || { printf '%s' "$TV"; return; }
+  _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  [ -n "$_v" ] && printf '%s' "$_v" || printf '%s' "$TV"
+}
 
 # $1 = file content, $2 = newline-separated substrings. True iff EVERY one is present.
 # The convention's single-substring form is just the one-element case.
@@ -278,16 +309,31 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
     has_verify=1
     directive=substr($0, RSTART+RLENGTH)
     sub(/[[:space:]]+$/,"",directive)
+    # A receipt written as one inline code span is the natural thing to type in a markdown
+    # ledger, and it leaves a CLOSING backtick on the directive. Stripping backticks from the
+    # verb alone is not enough, and is actively worse: the verb then dispatches, the trailing
+    # backtick stays glued to the quoted substring, the comparison silently misses, and a loud
+    # unknown-verb report becomes a quiet STILL-LIVE. Only a FINAL backtick goes; a substring
+    # legitimately ending in one is followed by its closing quote, so this cannot eat it.
+    # NOTE no apostrophes in this block: the awk program is a single-quoted shell string.
+    sub(/`+$/,"",directive)
+    sub(/[[:space:]]+$/,"",directive)
   }
   END { flush() }
 ' "$LEDGER" | while IFS="$(printf '\t')" read -r label directive; do
   [ -n "$directive" ] || continue
   verb="${directive%% *}"
   rest="${directive#"$verb"}"; rest="${rest# }"
-  # Trailing punctuation on the verb (a stray backtick from prose formatting, a period) is a
+  # Punctuation around the verb (a stray backtick from prose formatting, a period) is a
   # formatting slip, not a different verb. Strip it for dispatch; the unknown-verb message
   # still reports what was actually written.
-  verb_norm="$(printf '%s' "$verb" | sed -E 's/[^A-Za-z_]+$//')"
+  #
+  # BOTH ends. This stripped only the trailing side, so a receipt written `` `theirs_lacks` ``
+  # — the natural thing to type in a markdown ledger — kept its LEADING backtick and fell
+  # through to `unknown verify verb`, filing a formatting slip under the same banner as a
+  # typo. That is the exact conflation the `manual` verb was added to eliminate. Four
+  # directives on the reference consumer are written that way.
+  verb_norm="$(printf '%s' "$verb" | sed -E 's/^[^A-Za-z_]+//; s/[^A-Za-z_]+$//')"
   note=""
 
   case "$verb_norm" in
@@ -326,7 +372,8 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
           if base_holds "$path" "$subs"; then
             emit NEEDS-REVIEW "$label" "vacuous predicate: \"$sub\" is present at BOTH base and theirs ($TV), so 'theirs_lacks' could never have reported STILL-LIVE — no upstream change produced this close. Re-read the entry body before draining.$note"
           else
-            emit CLOSE-CANDIDATE "$label" "theirs:$path now CONTAINS \"$sub\" — upstream absorbed this at $TV. Confirm the upstream version covers your entry, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry.$note"
+            av="$(absorbed_at "$path" "$sub")"
+            emit CLOSE-CANDIDATE "$label" "theirs:$path now CONTAINS \"$sub\" — upstream absorbed this at $av. Confirm the upstream version covers your entry, then annotate 'ADOPTED UPSTREAM (v$av, verified <date>)'. Do NOT delete the entry.$note"
           fi
         else
           # Absent at theirs. Present at BASE means the predicate demonstrably COULD match,
@@ -348,7 +395,8 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
           emit STILL-LIVE "$label" "theirs:$path still has \"$sub\"$note"
         else
           if base_holds "$path" "$subs"; then
-            emit CLOSE-CANDIDATE "$label" "theirs:$path no longer has \"$sub\" — upstream fixed this at $TV. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry.$note"
+            av="$(absorbed_at "$path" "$sub")"
+            emit CLOSE-CANDIDATE "$label" "theirs:$path no longer has \"$sub\" — upstream fixed this at $av. Confirm, then annotate 'ADOPTED UPSTREAM (v$av, verified <date>)'. Do NOT delete the entry.$note"
           else
             emit NEEDS-REVIEW "$label" "vacuous predicate: \"$sub\" is absent at BOTH base and theirs ($TV), so 'theirs_has' could never have reported STILL-LIVE — no upstream change produced this close. Usually an inverted verb: a substring naming the FIX wants theirs_lacks. Re-read the entry body before draining.$note"
           fi

@@ -110,6 +110,72 @@ row_is "PC-FIXTURE-HEADING-ABSORBED"  CLOSE-CANDIDATE "heading entry, theirs has
 row_is "PC-FIXTURE-HEADING-CLOSED"    ABSENT          "heading entry annotated ADOPTED UPSTREAM -> closed"
 row_is "PC-FIXTURE-HEADING-NO-VERIFY" ABSENT          "heading opens an entry, so it ends the one above -> no inherited directive"
 
+# A close row must name the version where the substring APPEARED, not theirs' tip.
+#
+# The row is a permanent provenance annotation — the operator copies its version straight into
+# `ADOPTED UPSTREAM (v…)`, and retro and the §8.1 fan-in read it afterwards. It used to print
+# VERSION at theirs, which is the tip being pulled and has nothing to do with when the
+# absorption happened. On the reference consumer that was three releases off, and a hand
+# correction filed against it (derived by sampling the refs already loaded, rather than walking
+# the history) was wrong in the same direction.
+#
+# The seed absorbs MARKER_B at 0.101.0 and moves theirs on to 0.102.0, so naming the tip and
+# naming the truth are different strings here. With base->theirs adjacent they would not be.
+ASSERTIONS=$((ASSERTIONS + 1))
+brow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
+if printf '%s' "$brow" | grep -q 'absorbed this at 0\.101\.0'; then
+  printf '  ok    %-22s names 0.101.0  (the version that absorbed it, not theirs 0.102.0)\n' "absorbing-version"
+elif printf '%s' "$brow" | grep -q 'absorbed this at 0\.102\.0'; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s names theirs 0.102.0 — the tip, not the absorbing release; this string is copied into a permanent ledger annotation\n' "absorbing-version"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s no recognisable version in the close row: %s\n' "absorbing-version" "$brow"
+fi
+
+# An unresolvable substring must fall back to theirs' VERSION, not print an empty version.
+# A close row with no version at all is worse than one carrying the tip's.
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | awk -F'\t' '$1=="CLOSE-CANDIDATE"' | grep -q 'at \.\|at $\|at  '; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a close row rendered an EMPTY version\n' "version-fallback"
+else
+  printf '  ok    %-22s no close row rendered an empty version\n' "version-fallback"
+fi
+
+# A verb wrapped in backticks is a formatting slip, not a different verb — on BOTH ends.
+# `theirs_lacks` with a LEADING backtick used to fall through to `unknown verify verb`, filing
+# a markdown habit under the same banner as a typo. Four directives on the reference consumer
+# are written that way.
+#
+# TWO DISTINCT FORMS, and they exercise DIFFERENT code. Wrapping the whole receipt puts the
+# stray backtick on the END of the directive, where it glues to the quoted substring. Wrapping
+# only the verb puts one on each END OF THE VERB. A single case cannot cover both: the
+# whole-span form leaves the verb clean, so it passes even with the old trailing-only verb
+# strip in place — which is exactly how the verb half nearly shipped unguarded.
+btick="$CONS/_bmad-output/ai-dlc-update/backtick-ledger.md"
+mkdir -p "$(dirname "$btick")"
+{
+  printf -- '- **Entry BT** — the whole receipt wrapped in one inline code span.\n'
+  printf -- '  `verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"`\n'
+  printf -- '- **Entry BV** — only the verb wrapped, as markdown prose invites.\n'
+  printf -- '  verify: `theirs_lacks` core/skills/ai-dlc/SKILL.md "MARKER_B"\n'
+} > "$btick"
+bt_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$btick" 2>&1)"
+for probe in "Entry BT:whole receipt in one code span (trailing backtick on the directive)" \
+             "Entry BV:only the verb backticked (a backtick on each end of the verb)"; do
+  ASSERTIONS=$((ASSERTIONS + 1))
+  plabel="${probe%%:*}"; pwhy="${probe#*:}"
+  pstatus="$(printf '%s\n' "$bt_out" | awk -F'\t' -v l="$plabel" '$2 ~ l {print $1; exit}')"
+  if [ "$pstatus" = "CLOSE-CANDIDATE" ]; then
+    printf '  ok    %-22s %s\n' "backtick:${plabel##* }" "$pwhy"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s got=%s want=CLOSE-CANDIDATE — %s; a formatting habit must not change the verdict\n' "backtick:${plabel##* }" "${pstatus:-<none>}" "$pwhy"
+  fi
+done
+rm -f "$btick"
+
 # The closer must NEVER exit nonzero — it is a classifier and a close never blocks apply.
 ASSERTIONS=$((ASSERTIONS + 1))
 bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" >/dev/null 2>&1

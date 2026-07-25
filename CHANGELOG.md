@@ -17,6 +17,53 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.152.0] — 2026-07-24
+
+### Fixed — a close row named the tip, not the release that absorbed the entry
+
+`ledger-reverify.sh` emitted "upstream absorbed this at `$TV`", where `$TV` is `VERSION` at
+`theirs` — the tip being pulled, which has no relationship to when the substring arrived. The
+operator copies that string straight into `ADOPTED UPSTREAM (v…)`, and retro and the §8.1 fan-in
+read it afterwards, so a wrong version is permanent.
+
+Measured on the reference consumer: PC-S298's substring first appears at **v0.144.0**; the tool
+reported 0.147.0, and a hand correction filed against it said 0.146.0 — derived by sampling the
+three refs already loaded rather than walking the history, and wrong in the same direction.
+Three releases apart, in a record nothing re-derives.
+
+New `absorbed_at()` resolves the first appearance with `git log -S … --reverse` bounded to
+`base..theirs`, then reads `VERSION` at that commit. Bounded deliberately: searching all history
+would attribute a substring that was removed and later re-introduced to its original commit,
+which is a different claim than "the pull you are looking at absorbed it". Falls back to `$TV`
+when nothing is found — a relocated path, a rewritten line — because a close row with no version
+is worse than one carrying the tip's. ~20ms per close row, and only on close rows.
+
+Demonstrated on live data: the entry this session closed in 0.150.0 was being annotated 0.151.0
+and now reads 0.150.0.
+
+### Fixed — a markdown-formatted receipt read as an unknown verb, or worse
+
+The ledger is prose an operator writes, so a receipt arrives code-formatted as often as not.
+Two distinct forms, and they broke differently:
+
+- **only the verb wrapped** — `` verify: `theirs_lacks` … `` — kept a LEADING backtick that the
+  trailing-only strip could not remove, and fell through to `unknown verify verb`, filing a
+  markdown habit under the same banner as a typo. That is the conflation the `manual` verb was
+  added to eliminate. Four directives on the reference consumer are written this way.
+- **the whole receipt wrapped** left a CLOSING backtick glued to the quoted substring.
+
+Fixing only the verb would have been **actively worse than leaving it alone**: the verb would
+dispatch, the trailing backtick would still corrupt the substring, the comparison would silently
+miss, and a loud unknown-verb report would become a quiet `STILL-LIVE`. Both ends of the verb and
+the end of the directive are now stripped. The header documents the tolerance rather than asking
+operators to write receipts that satisfy the parser.
+
+`ledger-reverify`'s fixture gains four assertions and a mid-history commit in its seed — the base
+and theirs commits were adjacent, so naming the tip and naming the truth produced the same string
+and the version claim was untestable. The two backtick forms are asserted separately: the
+whole-span case leaves the verb clean and passes even with the old strip in place, which is
+exactly how the verb half nearly shipped unguarded.
+
 ## [0.151.1] — 2026-07-24
 
 ### Changed — the ledger's entry-boundary rule has one home
