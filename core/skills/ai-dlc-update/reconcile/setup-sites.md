@@ -206,18 +206,28 @@ sites:
     file: core/skills/ai-dlc-setup/SKILL.md
     shape: heading-block
     heading: '## STEP 2: API Tier and Model Strings'
-    next_heading: '## STEP 3: Deployment Configuration'
+    next_heading: '**`.claude/team-roles/architect.md`:**'
     anchor_context: >-
-      The whole model-strategy config step — the strategy mode (Full /
-      Balanced / Sonnet-only), the tier-per-role example table, and the
-      `{*_model_*}` token -> tier guidance. This is per-project config the
-      operator customises at setup (STEP 2 "API Tier and Model Strings"),
-      not rulebook prose: a consumer choosing Balanced over the shipped
-      Full is a cost/capability decision, exactly like the model strings it
-      drives. Declaring the span exempts that choice from in-place core
-      drift at BOTH readers (the pull-time unregistered-drift check and the
-      retro-gate immutability check), while leaving the rest of the setup
-      wizard guarded. Bounded by the next STEP heading, exclusive.
+      The operator's model-strategy CHOICE only — the strategy mode (Full /
+      Balanced / Sonnet-only), the Bedrock follow-up, and the tier-per-role
+      example table. This is per-project config the operator customises at
+      setup, not rulebook prose: a consumer choosing Balanced over the
+      shipped Full is a cost/capability decision, exactly like the model
+      strings it drives. Declaring the span exempts that choice from
+      in-place core drift at BOTH readers (the pull-time unregistered-drift
+      check and the retro-gate immutability check), while leaving the rest
+      of the setup wizard guarded. Bounded EXCLUSIVELY at the first
+      substitution row, not at the next STEP heading. Bounding it on `##
+      STEP 3` also swallowed the ~140 lines of substitution INSTRUCTIONS
+      that follow the choice — which files to open and which tokens to fill
+      — so upstream could add a role's model-fill block and no layered
+      consumer would ever receive it, with no signal at either reader. That
+      is not hypothetical: measured on the reference consumer, the
+      `dev-escalated` / `analyst` / `remediator` blocks and the
+      `{analyst_model}` rows are all present upstream and absent there. The
+      terminator is a bold row rather than a heading because STEP 2 carries
+      no sub-headings; it is matched as a whole line, and it must exist at
+      core@base or `exempt_ranges` cannot bound the span.
 
   - id: deploy-command
     file: core/skills/ai-dlc/steps/deploy-validate.md
