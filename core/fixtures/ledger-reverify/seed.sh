@@ -167,6 +167,16 @@ characters, so the clip fired on text that was already correct and truncated it 
 The label must be the complete pre-dash text.
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-WITHDRAWN — the premise was false, so there is no defect to re-verify
+
+**WITHDRAWN for the fixture.** The entry's load-bearing claim was wrong when written. Its
+receipt would report STILL-LIVE forever, because no upstream change can make a defect that
+never existed stop existing. A finished entry must not ask for a verdict on the next pull.
+
+verify: manual
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

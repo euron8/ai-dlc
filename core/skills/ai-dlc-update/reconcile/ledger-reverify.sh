@@ -320,7 +320,20 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       next
     }
   }
-  /ADOPTED UPSTREAM/ { closed=1 }
+  # TWO WAYS AN ENTRY IS DONE, AND ONLY ONE WAS RECOGNISED. `ADOPTED UPSTREAM` closes an entry
+  # upstream took. `WITHDRAWN` closes one whose PREMISE WAS FALSE — the author found the defect
+  # they filed does not exist. Both are finished; neither wants a verdict on the next pull. Only
+  # the first was in the vocabulary, so a withdrawn entry re-reported forever, and its receipt
+  # cannot resolve the contradiction because there is no defect for the receipt to test.
+  #
+  # Measured on the reference consumer: of nine HAND-REVIEW rows, TWO were one withdrawn entry
+  # counted twice — the entry and the copy of its original text retained for the record.
+  #
+  # NOT MIRRORED INTO ledger-rotate.sh. Its close predicate is the stricter annotation form
+  # `**ADOPTED UPSTREAM (v`, and lib.sh records that the two differ deliberately. A withdrawn
+  # entry therefore stops emitting a row but is not auto-archived: the silent-skip direction,
+  # which that same note names as the safe one of the two. Rotating a withdrawal is a hand call.
+  /ADOPTED UPSTREAM|WITHDRAWN/ { closed=1 }
   # ANCHORED to the start of the line. The ledger is prose that DISCUSSES receipts as well as
   # carrying them, and an unanchored match treated both alike: "explicitly NO verify: field"
   # in a sentence registered as a directive. The scalar is last-match-wins, so a prose mention

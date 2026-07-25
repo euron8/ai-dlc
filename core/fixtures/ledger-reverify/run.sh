@@ -110,6 +110,13 @@ row_is "PC-FIXTURE-HEADING-ABSORBED"  CLOSE-CANDIDATE "heading entry, theirs has
 row_is "PC-FIXTURE-HEADING-CLOSED"    ABSENT          "heading entry annotated ADOPTED UPSTREAM -> closed"
 row_is "PC-FIXTURE-HEADING-NO-VERIFY" ABSENT          "heading opens an entry, so it ends the one above -> no inherited directive"
 
+# TWO WAYS TO BE DONE. `ADOPTED UPSTREAM` was the only closure token, so an entry WITHDRAWN
+# because its premise was false went on asking for a verdict on every pull — and its receipt
+# cannot settle it, since no upstream change can make a defect that never existed stop existing.
+# Measured on the reference consumer: two of nine HAND-REVIEW rows were one withdrawn entry,
+# counted twice. Matched as loosely as its sibling token, and for the same reason.
+row_is "PC-FIXTURE-WITHDRAWN"        ABSENT          "premise was false -> finished, exactly like ADOPTED UPSTREAM"
+
 # A close row must name the version where the substring APPEARED, not theirs' tip.
 #
 # The row is a permanent provenance annotation — the operator copies its version straight into
