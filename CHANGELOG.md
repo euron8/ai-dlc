@@ -17,6 +17,74 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.155.0] — 2026-07-25
+
+### Fixed — the ledger's report named entries that do not exist, and faults it would not explain
+
+Found by reading a real consumer's rendered reconcile report rather than a fixture. Its
+push-candidate section carried a row named `…CITATIONS (orig` — cut mid-word inside
+`(original` — and another whose name was the sentence `Rule 18 has no carve-out for terse
+traceability citations, though the `. Both are exactly 70 bytes.
+
+**The label is a join key.** Field 2 of `ledger-reverify.sh` is what `emit-report.sh` renders
+as the entry name, and it is what the operator greps to find the entry a row is about. Both
+label arms ended in `substr(l,1,70)`, and the ` — ` split that turns `## PC-FOO — long title`
+into `PC-FOO` was on the heading arm only. Measured at base `4f571fa` → theirs `1ed194b`: TEN
+of 41 rows came out at exactly 70 bytes — five a bullet's whole prose title because that arm
+never split, one cut mid-word because its em dash follows a parenthetical that already ran to
+105 characters. The cap was undocumented, in a header that explains the boundary rule and the
+split in detail, and there is no padding counterpart in either file, so it was never column
+formatting.
+
+Both arms now split and neither truncates. Measured effect: 5 labels become clean ids, 5
+become complete instead of cut, none lands on 70 — and the VERDICT column is byte-identical
+across the change, which is the acceptance test. `ledger-rotate.sh` carried the same clip on
+the `moved-names` it prints; removed there too. Its em-dash split is deliberately not added,
+because unifying the two label rules changes that output, which `lib.sh` records as a separate
+call from unifying the boundary.
+
+**A withdrawn entry asked for a verdict forever.** An entry is finished in two ways —
+`ADOPTED UPSTREAM`, upstream took it, and `WITHDRAWN`, the premise was false. Only the first
+was in the closure vocabulary, and no receipt can settle the second: there is no upstream
+change that makes a defect which never existed stop existing. Two of the reference consumer's
+nine HAND-REVIEW rows were one withdrawn entry counted twice. Matched as loosely as the token
+it joins, after measuring the false-close direction: that ledger contains the word exactly
+twice, both inside the withdrawn entry's own span. Not mirrored into `ledger-rotate.sh`, whose
+close predicate is the stricter annotation form — a withdrawal now emits no row but is not
+auto-archived, the silent-skip direction rather than the data-loss one.
+
+**A `NEEDS-REVIEW` row named no cause.** The classifier says which of three faults a receipt
+has in its DETAIL field; the report projected fields 1 and 2 and dropped it, so the artifact
+the operator reads before approving `apply` said `NEEDS-REVIEW <entry>` and nothing more.
+DETAIL is now carried for every status except `HAND-REVIEW`, whose detail is one constant
+sentence that would repeat once per manual entry. The third cause also had no name in code:
+`vacuous` and `unfalsifiable` were literal prefixes, `unresolved` was an umbrella over four
+sites emitting four unlabelled strings, so it could not be grepped or counted and would have
+reached the report as the one cause with no name.
+
+**The fixture could not have caught any of it.** `reconcile-emit-report/seed.sh` never wrote a
+ledger, `ledger-reverify.sh` short-circuits on a missing one, and the section rendered `none` —
+so an assertion of the form "no row here is truncated" passed on an empty string. The seed now
+writes one, `LEDGER_SEEDED=0` omits it as the fixture's own vacuity mutant, and the positive
+control asserting the section is non-empty runs first and hard-exits. Five mutants across the
+two fixtures, each failing only its own assertion.
+
+### Added — the anchor rule for the verb that had none
+
+`theirs_lacks` receipts have had an authoring rule since 0.147.0 and a mechanism behind it.
+`theirs_has` — the verb 24 of the reference consumer's 41 live receipts use — had neither. A
+token that merely co-occurs with the defect survives the fix and reports STILL-LIVE forever,
+while passing every lint: well-formed, path resolves, reachable at both refs. The rule now
+states the test — *could the fix be written without removing this?* — and cites the case that
+produced it, where the anchor named a rendering the fix deliberately kept while the fix itself
+landed in the comparison.
+
+No mechanism ships with it. The only cheap proxy — flag a STILL-LIVE row whose cited file
+changed in the pull range — was built and measured before being rejected: 1 of 32 rows on the
+pull that exposed the defect, the right one with no false positives, but 12 of 28 on the
+previous ten-release pull. A verdict that is wrong 43% of the time on a catch-up pull is an
+accusation the operator learns to ignore, which is how a guard becomes a suppression list.
+
 ## [0.154.1] — 2026-07-25
 
 ### Fixed — `--verify` called a sound report STALE because the dist checkout moved

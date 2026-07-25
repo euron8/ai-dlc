@@ -111,8 +111,18 @@
 #   CLOSE-CANDIDATE  upstream absorbed the entry; the operator confirms and annotates.
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
-#   NEEDS-REVIEW     the verify line is malformed or its path does not resolve at theirs
-#                    (nor by basename); hand-review, as an entry without a verify line would be.
+#   NEEDS-REVIEW     the receipt itself is at fault. THREE causes, and the DETAIL names which:
+#                    `unresolved:` (malformed line, unresolvable path, empty sh, unknown verb),
+#                    `vacuous predicate:`, `unfalsifiable predicate:`. Hand-review, as an entry
+#                    without a verify line would be.
+#
+#                    Two of the three were literal prefixes the code emitted; `unresolved` was
+#                    named in SKILL.md and nowhere in this file, spread across four sites that
+#                    emitted four different unlabelled strings. So the mode could not be grepped
+#                    or counted, and — once emit-report.sh started carrying DETAIL into the
+#                    report — it would have reached the operator as the one cause with no name.
+#                    Adding a mode means adding its prefix here; the count above is part of the
+#                    contract SKILL.md states.
 # Exit:   0 ALWAYS. A classifier, not a gate — the caller decides, and a close never blocks.
 set -uo pipefail
 
@@ -279,8 +289,22 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 #
 # DASH is passed in rather than written as an awk escape: it is a multibyte em dash, and
 # `\xNN` escapes are not portable across the awks this ships to (BSD awk on macOS, gawk and
-# mawk on Linux). A heading's label is the text before the first " — ", so
+# mawk on Linux). A label is the text before the first " — ", so
 # `## PC-FOO — long prose title (filed …)` labels as `PC-FOO`.
+#
+# BOTH SHAPES SPLIT ON THE DASH, AND NEITHER TRUNCATES. The split was on the heading arm only,
+# and both arms then clipped the result to 70 characters. The label is the ENTRY column of this
+# tool's output and the name `emit-report.sh` renders into the operator's report; it is a join
+# key back into the ledger, and a clipped key does not grep. Measured on the reference consumer:
+# TEN of 41 rows came out at exactly 70 bytes, five of them a bullet's whole prose title because
+# the bullet arm never split, one clipped mid-word inside `(original` — two of which the operator
+# read as garbage rows in a real report. The cap was undocumented and had no padding counterpart
+# anywhere, so it was never column formatting; it was a silent clip.
+#
+# A bullet whose bold title WRAPS gets its whole first line, because `sub(/\*\*.*/)` finds no
+# closing `**` there. That is complete and greppable and visibly not an id, which is the honest
+# output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
+# instead DROP such an entry, and the reference consumer has a live one.
 awk -v DASH=' — ' "$(ledger_entry_awk)"'
   function flush(){
     if (has_verify && !closed && label != "")
@@ -292,7 +316,9 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
     if (shape == "bullet") {
       flush()
       l=$0; sub(/^- \*\*/,"",l); sub(/\*\*.*/,"",l)
-      gsub(/`/,"",l); label=substr(l,1,70)
+      p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
+      sub(/[[:space:]]+$/,"",l)
+      gsub(/`/,"",l); label=l
       next
     }
     if (shape == "heading") {
@@ -300,11 +326,24 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       l=$0; sub(/^#+[ \t]*/,"",l)
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/,"",l)
-      gsub(/`/,"",l); label=substr(l,1,70)
+      gsub(/`/,"",l); label=l
       next
     }
   }
-  /ADOPTED UPSTREAM/ { closed=1 }
+  # TWO WAYS AN ENTRY IS DONE, AND ONLY ONE WAS RECOGNISED. `ADOPTED UPSTREAM` closes an entry
+  # upstream took. `WITHDRAWN` closes one whose PREMISE WAS FALSE — the author found the defect
+  # they filed does not exist. Both are finished; neither wants a verdict on the next pull. Only
+  # the first was in the vocabulary, so a withdrawn entry re-reported forever, and its receipt
+  # cannot resolve the contradiction because there is no defect for the receipt to test.
+  #
+  # Measured on the reference consumer: of nine HAND-REVIEW rows, TWO were one withdrawn entry
+  # counted twice — the entry and the copy of its original text retained for the record.
+  #
+  # NOT MIRRORED INTO ledger-rotate.sh. Its close predicate is the stricter annotation form
+  # `**ADOPTED UPSTREAM (v`, and lib.sh records that the two differ deliberately. A withdrawn
+  # entry therefore stops emitting a row but is not auto-archived: the silent-skip direction,
+  # which that same note names as the safe one of the two. Rotating a withdrawal is a hand call.
+  /ADOPTED UPSTREAM|WITHDRAWN/ { closed=1 }
   # ANCHORED to the start of the line. The ledger is prose that DISCUSSES receipts as well as
   # carrying them, and an unanchored match treated both alike: "explicitly NO verify: field"
   # in a sentence registered as a directive. The scalar is last-match-wins, so a prose mention
@@ -364,7 +403,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       subs="$(printf '%s' "$sub" | sed 's/" *"/\
 /g')"
       if [ -z "$path" ] || [ -z "$sub" ]; then
-        emit NEEDS-REVIEW "$label" "malformed verify: $directive"
+        emit NEEDS-REVIEW "$label" "unresolved: malformed verify: $directive"
         continue
       fi
       if ! theirs_has_path "$path"; then
@@ -375,7 +414,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
           note=" [resolved by basename from '$path' — the ledger's path is not dist-relative]"
           path="$matches"
         else
-          emit NEEDS-REVIEW "$label" "path '$path' does not resolve at theirs ($TV) and its basename matches $nmatch files there; re-verify by hand"
+          emit NEEDS-REVIEW "$label" "unresolved: path '$path' does not resolve at theirs ($TV) and its basename matches $nmatch files there; re-verify by hand"
           continue
         fi
       fi
@@ -418,7 +457,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       ;;
     sh)
       if [ -z "$rest" ]; then
-        emit NEEDS-REVIEW "$label" "empty 'verify: sh' directive"
+        emit NEEDS-REVIEW "$label" "unresolved: empty 'verify: sh' directive"
         continue
       fi
       if DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
@@ -432,7 +471,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       emit HAND-REVIEW "$label" "verify: manual — no mechanical predicate by design; adjudicate the entry body against theirs ($TV)"
       ;;
     *)
-      emit NEEDS-REVIEW "$label" "unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
+      emit NEEDS-REVIEW "$label" "unresolved: unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
       ;;
   esac
 done

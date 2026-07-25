@@ -132,6 +132,44 @@ else
   bad "FIXTURE STALE: could not create a symlink alias for the dist checkout"
 fi
 
+# --- The push-candidate ledger section --------------------------------------------------
+#
+# THIS SECTION WAS UNREACHABLE FROM THIS FIXTURE. The seed never wrote a ledger,
+# `ledger-reverify.sh` short-circuits on a missing one, and the section rendered `none` — so an
+# assertion of the form "no row here is truncated" passed on an empty string. Two label defects
+# and a dropped DETAIL field shipped behind exactly that shape of green.
+#
+# The POSITIVE CONTROL comes first and hard-exits. Every assertion after it is meaningless
+# against a `none` section, and a fixture that reports PASS on a section it never rendered is
+# the defect it is supposed to catch, wearing the fixture's own badge.
+LSEC="$(awk '/Push-candidate ledger —/{f=1;next} f&&/^\*\*/{f=0} f' "$REGION")"
+if printf '%s\n' "$LSEC" | grep -q 'PC-FIXTURE-EMIT-'; then
+  ok "the ledger section renders real rows (positive control — every ledger assertion below depends on it)"
+else
+  bad "FIXTURE VACUOUS — the ledger section is empty or 'none'; the assertions below would pass on nothing"
+  echo; echo "reconcile-emit-report: FIXTURE VACUOUS" >&2; exit 2
+fi
+
+# The name column is a join key back into the ledger. Whole id, not a prefix.
+if printf '%s\n' "$LSEC" | grep -qF 'PC-FIXTURE-EMIT-UNKNOWN-VERB (a parenthetical this long pushes the pre-dash text past seventy characters)'; then
+  ok "a ledger row names the whole entry, not a clipped prefix"
+else
+  bad "the ledger row's name is clipped — a truncated name cannot be grepped back into the ledger"
+fi
+
+# THE ROW MUST SAY WHY. `NEEDS-REVIEW` alone sends the operator back to a tool they must re-run.
+# Both named causes, because they are emitted from different branches.
+if printf '%s\n' "$LSEC" | grep -q 'unresolved: unknown verify verb'; then
+  ok "a NEEDS-REVIEW row carries its cause (unresolved)"
+else
+  bad "a NEEDS-REVIEW row reached the report naming no cause — the operator must re-run the tool to learn anything"
+fi
+if printf '%s\n' "$LSEC" | grep -q 'vacuous predicate:'; then
+  ok "a NEEDS-REVIEW row carries its cause (vacuous)"
+else
+  bad "the vacuous-predicate cause did not reach the report"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2

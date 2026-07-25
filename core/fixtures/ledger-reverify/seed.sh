@@ -151,6 +151,32 @@ ADOPTED UPSTREAM (v0.101.0, verified for the fixture). Closed — must not be re
 
 Prose only. Must NOT inherit the directive of the heading entry above it: a heading opens
 an entry, so it also ends the one before it.
+
+---
+
+- **PC-FIXTURE-BULLET-DASH — a bullet whose title is long enough past the em dash that the old
+  seventy-character clip would have eaten the id itself and left prose behind**
+  <br>The bullet arm never split on the em dash the way the heading arm did, so this entry's
+  label used to be its whole prose title, clipped mid-sentence. It must label as the bare id.
+  <br>verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+## PC-FIXTURE-HEADING-LONG-BEFORE-DASH (a parenthetical this long pushes the pre-dash text past seventy characters on its own) — the clip landed inside the parenthetical
+
+A heading whose em dash comes AFTER a parenthetical: the split leaves more than seventy
+characters, so the clip fired on text that was already correct and truncated it mid-word.
+The label must be the complete pre-dash text.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-WITHDRAWN — the premise was false, so there is no defect to re-verify
+
+**WITHDRAWN for the fixture.** The entry's load-bearing claim was wrong when written. Its
+receipt would report STILL-LIVE forever, because no upstream change can make a defect that
+never existed stop existing. A finished entry must not ask for a verdict on the next pull.
+
+verify: manual
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

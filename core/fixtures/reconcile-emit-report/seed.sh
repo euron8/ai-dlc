@@ -46,6 +46,35 @@ THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 printf 'shared line\nSENTINEL-OURS-ONLY consumer domain class\n' \
   > "$CONSUMER/.claude/skills/ai-dlc/templates/classes.md"
 
+# A PUSH-CANDIDATE LEDGER. Without one, `ledger-reverify.sh` short-circuits on a missing file
+# and the region's ledger section renders `none` — so every assertion about that section passes
+# on an empty string, which is how two label defects and a dropped DETAIL field shipped. Set
+# LEDGER_SEEDED=0 in the environment to omit it: run.sh uses that as its vacuity mutant, and its
+# ledger assertions must go RED when the section is `none`, not quietly stay green.
+#
+# Two entries, both mechanical faults rather than manual declarations, because HAND-REVIEW is
+# the one status whose detail the report deliberately does not carry:
+#   - an unknown verb            -> NEEDS-REVIEW, detail `unresolved: …`
+#   - theirs_lacks on a substring present at base AND theirs -> NEEDS-REVIEW, `vacuous predicate:`
+# The first id carries a parenthetical AFTER the id and BEFORE the em dash, which is the shape
+# that used to be clipped mid-word: the split leaves more than seventy characters, so the clip
+# fired on text that was already correct. Copied from the reference consumer, where the real
+# heading's pre-dash text is 105 characters.
+if [ "${LEDGER_SEEDED:-1}" != "0" ]; then
+  mkdir -p "$CONSUMER/_bmad-output/ai-dlc-update"
+  cat > "$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md" <<'LEDGER'
+# Push-candidate ledger (fixture)
+
+## PC-FIXTURE-EMIT-UNKNOWN-VERB (a parenthetical this long pushes the pre-dash text past seventy characters) — the verb is not one of the four
+
+verify: theirs_maybe core/schemas/thing.json "rule"
+
+## PC-FIXTURE-EMIT-VACUOUS — theirs_lacks a substring both refs already carry
+
+verify: theirs_lacks core/schemas/thing.json "rule"
+LEDGER
+fi
+
 # The driver's rendered region — ground truth.
 REGION="$WORK/region.md"
 bash "$EMIT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" > "$REGION" 2>/dev/null

@@ -193,9 +193,18 @@ render() {
   rl="$(bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>/dev/null | grep -E '^[[:space:]]+\+[[:space:]]+#{2,4} ' | sed 's/^[[:space:]]*+[[:space:]]*/  /' | sort -u || true)"
   none_or "$rl"
 
+  # THE ROW MUST SAY WHY. This projected fields 1 and 2 and dropped field 3 — and field 3 is the
+  # only place a NEEDS-REVIEW row names its cause (`unresolved:` / `vacuous predicate:` /
+  # `unfalsifiable predicate:`). The report is the artifact the operator reads before approving
+  # apply; a row there that says NEEDS-REVIEW and nothing else is a pointer to a tool they must
+  # re-run to learn anything, which is how a rendered worklist becomes a table of contents.
+  #
+  # HAND-REVIEW is exempt: its detail is one constant sentence, so carrying it repeats the same
+  # line once per manual entry — nine times on the reference consumer — and says nothing the
+  # status has not already said.
   sub "Push-candidate ledger — CLOSE-CANDIDATE / NEEDS-REVIEW (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
   local lr
-  lr="$(bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="STILL-LIVE"{print $1"  "$2}' | sort -u)"
+  lr="$(bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' | sort -u)"
   none_or "$lr"
 
   echo
