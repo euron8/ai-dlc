@@ -17,6 +17,45 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.166.0] — 2026-07-25
+
+### Fixed — two defects the reference consumer's dry-run report found in v0.164.0's step 2
+
+The self-update now lands (two cycles, 22/22 then 61/61 derived fixtures green) and the consumer
+produced a dry-run reconcile report against `0.165.0`. Its §7c raised two upstream tooling
+defects. Both are real, both are mine, and both are fixed here.
+
+**(i) Step 2 cited a helper this skill is forbidden to read.** `SKILL.md` said *"Both helpers are
+in `reconcile/`."* `map_consumer()` is; `to_consumer_glob()` is not — it lives in
+`core/scripts/core-paths.sh` and `core/hooks/ai-dlc-core-guard.sh`. That is worse than a wrong
+path: `ai-dlc-update`'s HARD CONSTRAINT is that it reads only its own `reconcile/` files, so the
+sentence instructed the reader to violate it, and the fallback is hand-writing the mapping the
+helper existed to make derivable.
+
+No helper is needed. Measured with `git ls-files`, **exactly one** machinery entry is not a valid
+distribution glob — `core/scripts/ai-dlc/*`, which is where a validator lands rather than where it
+lives. Step 2 now states that one substitution (`core/scripts/ai-dlc/` → `core/scripts/`), matches
+dist-to-dist, and explicitly says `to_consumer_glob()` must NOT be reached for.
+
+**(ii) Step 2's EMPTY predicate could not terminate.** The slice is `git diff base→theirs`, and
+`base` is the stamp's `commit`, which advances **only** under a gated `apply` at step 7. So once a
+self-update has written every machinery path, the diff still lists them on the next bare
+invocation: the cycle re-runs and re-invokes, indefinitely. What stopped it on the reference
+consumer was a human reading content instead of the diff.
+
+Confirmed against that consumer after both its self-update PRs merged: the diff still yields 7
+machinery paths (the report counts 9, including covering fixtures) while a per-path content check
+reports **all** of them already at `theirs` — diff-based predicate 7, content-based predicate 0.
+Step 2 now subtracts paths whose consumer copy already matches `theirs`, reusing
+`preclassify.sh`'s existing `ALREADY-AT-THEIRS` bucket rather than hand-rolling the comparison.
+
+**New invariant I29** binds the class, not the instance: every `helper()` this skill cites in
+backticks must be defined in `reconcile/`. The carve-out is deliberately narrow — a paragraph
+opening `Do NOT reach for` is a prohibition, not a citation, and the exemption ends at the next
+blank line so it cannot be stretched to excuse a real one. Mutation-tested in both directions: a
+citation re-added outside the prohibition fires it; `map_consumer()`, which *is* in `reconcile/`,
+does not.
+
 ## [0.165.0] — 2026-07-25
 
 ### Fixed — the self-update deadlock: the fix to the cycle was delivered BY the cycle

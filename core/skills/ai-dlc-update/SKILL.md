@@ -160,12 +160,19 @@ prose is itself generated rather than composed.
    rather than enumerating either here, and grep `seed.sh` as well as `run.sh` (a fixture
    commonly resolves the tooling path in its seed, so a run.sh-only derivation misses it).
 
-   **Match through `map_consumer()`, not against the diff path.** `machinery:` entries are
-   CONSUMER-shaped — `core/scripts/ai-dlc/*` is where a validator lands, while upstream it
-   is `core/scripts/<name>` — so testing a `git diff` path directly against them matches
-   `scripts/` not at all and silently yields an empty slice. Map each changed `core/` path
-   to its consumer destination first, then test that against the machinery entries mapped
-   through `to_consumer_glob()`. Both helpers are in `reconcile/`.
+   **One entry is CONSUMER-shaped; translate it and match dist-to-dist.** `machinery:`
+   entries carry a `core/` prefix and are otherwise consumer-shaped, which matters for
+   exactly one of them: `core/scripts/ai-dlc/*` is where a validator LANDS, while upstream
+   it is `core/scripts/<name>`. Testing a `git diff` path against that entry directly
+   matches `scripts/` not at all and silently yields an EMPTY slice. Every other machinery
+   entry is already a valid distribution glob (verified: only that one resolves to zero
+   files under `git ls-files`). So substitute `core/scripts/ai-dlc/` → `core/scripts/`
+   and match the diff paths against the result.
+
+   Do NOT reach for `to_consumer_glob()` here. It lives in `core/scripts/core-paths.sh`
+   and `core/hooks/ai-dlc-core-guard.sh` — outside `reconcile/`, so this skill's HARD
+   CONSTRAINT forbids reading it, and an earlier draft of this step sent the reader there
+   anyway. The one substitution above needs no helper.
 
    **The whole machinery set moves together, not just this skill.** Machinery is exactly
    the core with no layer grain — no `overrides/` shadow, no `extensions/` entry, nothing
@@ -190,7 +197,20 @@ prose is itself generated rather than composed.
    cycle — so the self-update wedged on a pull that broke nothing. The machinery set is the
    smallest slice that closes that, because a fixture's subject is always machinery.
 
-   If EMPTY, say so in one line and continue to step 3. If NON-EMPTY:
+   **EMPTY is a CONTENT question, not a diff question — or this step never terminates.**
+   The slice is `git diff base→theirs`, and `base` is the stamp's `commit`, which advances
+   only under a gated `apply` at step 7. So once a self-update has written every machinery
+   path, the diff STILL lists them on the next bare invocation: the cycle re-runs, re-invokes,
+   and re-runs again. Measured on the reference consumer after both its self-update PRs
+   merged — the diff still yielded every machinery path while a per-path content check
+   reported all of them already at `theirs`.
+   
+   So drop from the slice every path whose consumer copy already matches `theirs`. Do not
+   hand-roll that comparison: `reconcile/preclassify.sh` already buckets exactly this as
+   `ALREADY-AT-THEIRS`. The slice is the sliced paths MINUS those.
+
+   If the slice is EMPTY after that subtraction, say so in one line and continue to step 3.
+   If NON-EMPTY:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
      that diff names** — each at the consumer destination `map_consumer()` gives it, and

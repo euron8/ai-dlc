@@ -474,6 +474,39 @@ for cp_f in parse_manifest to_consumer_glob; do
   fi
 done
 
+# --- I29: ai-dlc-update names no helper that is not in reconcile/ ---------------
+# The skill's HARD CONSTRAINT is that it reads only its own reconcile/ files, which is why
+# setup-sites.md carries a duplicate manifest at all. A step that tells the reader to use a
+# helper living outside reconcile/ is not a wrong path -- it is an instruction to violate the
+# constraint, and the reader's fallback is to hand-write what the helper would have done.
+# Shipped once: step 2 said "Both helpers are in reconcile/" of map_consumer() (true) and
+# to_consumer_glob() (in core/scripts/core-paths.sh and core/hooks/ai-dlc-core-guard.sh).
+# Bind the claim to the directory rather than trusting prose.
+UPD_SKILL="$REPO_ROOT/core/skills/ai-dlc-update/SKILL.md"
+UPD_RECON="$REPO_ROOT/core/skills/ai-dlc-update/reconcile"
+if [ ! -r "$UPD_SKILL" ] || [ ! -d "$UPD_RECON" ]; then
+  err "I29 cannot read core/skills/ai-dlc-update/SKILL.md and/or its reconcile/ dir. A check that cannot locate either side scans nothing and reports clean."
+else
+  # Every `name()` the skill cites in backticks, that reconcile/ does not define.
+  #
+  # CARVE-OUT, deliberately narrow: a paragraph opening `Do NOT reach for` is a PROHIBITION,
+  # not a citation -- it exists to stop the next author re-adding the bad instruction, and
+  # naming the helper is the whole point of it. Citations there are skipped, and only there:
+  # the exemption is one opening phrase and ends at the next blank line, so it cannot be
+  # stretched to excuse a real citation.
+  upd_missing=""
+  while IFS= read -r fn; do
+    [ -n "$fn" ] || continue
+    grep -rqE "^[[:space:]]*(function[[:space:]]+)?${fn}\(\)" "$UPD_RECON" 2>/dev/null || upd_missing="$upd_missing $fn"
+  done <<EOF
+$(awk '/Do NOT reach for/{skip=1} skip&&/^[[:space:]]*$/{skip=0} !skip' "$UPD_SKILL" \
+   | grep -oE '`[a-z_][a-z0-9_]*\(\)`' | tr -d '`()' | sort -u)
+EOF
+  if [ -n "$upd_missing" ]; then
+    err "I29 ai-dlc-update/SKILL.md cites helper(s) that reconcile/ does not define:${upd_missing}. This skill's HARD CONSTRAINT is that it reads only its own reconcile/ files, so naming a helper from elsewhere instructs the reader to violate it — and the fallback is hand-writing the mapping the helper existed to make derivable. Either move the logic into reconcile/, or state the rule inline and say explicitly that the outside helper must NOT be read."
+  fi
+fi
+
 # --- I28: layer grain is DECLARED and PARTITIONS the manifest -------------------
 # `machinery` (no overrides/ or extensions/ grain) vs `rulebook` (consumer-layerable prose)
 # decided three things and was written down in none of them: the core-guard's routing advice,
@@ -1273,7 +1306,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29)."
   exit 0
 fi
 exit 1
