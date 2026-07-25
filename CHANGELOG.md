@@ -17,6 +17,38 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.153.1] — 2026-07-25
+
+### Fixed — a shipped fixture blocked every consumer's self-update for three releases
+
+`core/fixtures/settings-merge-documented-form/` was added in 0.151.0 and enumerated in
+`install.sh`'s copy loop, so it shipped to consumers. Its third assertion runs the documented
+`settings-merge.sh` form, which needs `templates/settings.json.template` — and `install.sh`
+reads that template from the DISTRIBUTION to merge a consumer's settings (`install.sh:278`)
+but never copies it into the consumer tree.
+
+So on a consumer it fails with `FIXTURE STALE: templates/settings.json.template not found in
+either layout`, and because pre-push drives every fixture in the directory by glob, that one
+failure blocks the consumer's self-update entirely. It blocked the reference consumer at
+**0.151.0, 0.151.1, and 0.152.0** — three consecutive releases, withholding the settings-merge
+doc fixes, the step-8 disciplines, the `lib.sh` entry-boundary refactor, and the absorbing-
+version fix. The consumer's own dry-run report diagnosed it; upstream's suite never could.
+
+The fixture now carries a `.dist-only` marker and is removed from both the `install.sh` and
+`uninstall.sh` loops — the marker is the single source of truth all three readers derive from,
+exactly as `enforcement-map-sites` documents.
+
+Shipping the template alongside it would be the wrong repair: a consumer has no use for the
+distribution's settings template, and adding a file to satisfy a test is how the test stops
+describing anything. The subject is upstream's own doc/script coupling, which a consumer cannot
+edit — `SKILL.md` is core, overwritten on every pull.
+
+**The distribution suite passed the entire time.** A fixture is only proven by running it in the
+layout it will live in. Its sibling in the same release, `gate-verdict-grep-shape`, WAS checked
+against a consumer-shaped replica and is fine; this one was not, and the failure message it
+prints on a consumer was written by hand and never executed. Verified now by installing into a
+clean tree and running the full shipped suite there.
+
 ## [0.153.0] — 2026-07-24
 
 ### Fixed — a prose mention of `verify:` could replace an entry's real receipt

@@ -1,0 +1,25 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is the coupling between ai-dlc-update/SKILL.md's documented `settings-merge.sh`
+invocations and the script's own usage contract. Proving the documented form RUNS requires
+`templates/settings.json.template` — and install.sh reads that template from the distribution
+to merge a consumer's settings (install.sh:278), but never copies it into the consumer tree.
+
+So the fixture's third assertion cannot pass on a consumer: there is no template to point
+`--template` at. It fails with `FIXTURE STALE: templates/settings.json.template not found in
+either layout`, and because the consumer's pre-push drives every fixture in the directory by
+glob, that one failure blocks the consumer's self-update entirely.
+
+THAT IS EXACTLY WHAT HAPPENED. Shipped in 0.151.0, enumerated in install.sh's copy loop with
+no marker here, it blocked the reference consumer's self-update for three consecutive releases
+(0.151.0, 0.151.1, 0.152.0) before the consumer's own dry-run report diagnosed it.
+
+The distribution suite passed the whole time, which is the point: a fixture is only proven by
+running it in the layout it will live in. Its sibling in the same release WAS checked against a
+consumer-shaped replica; this one was not, and the failure message it prints on a consumer was
+written by hand and never executed.
+
+Shipping the template alongside it would be the wrong repair — a consumer has no use for the
+distribution's settings template, and adding a file to satisfy a test is how the test stops
+describing anything. The subject is upstream's own doc/script coupling, which a consumer cannot
+edit (SKILL.md is core, overwritten on every pull) and therefore has no reason to re-test.
