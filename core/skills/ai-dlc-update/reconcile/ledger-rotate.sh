@@ -20,8 +20,8 @@
 #
 # The phrase occurs in open entries as instruction ("annotate `ADOPTED UPSTREAM (vX, verified
 # <date>)` once the grep is non-zero") and as narrative ("the sentinel ADOPTED UPSTREAM in
-# v0.135.0, but ..."). Measured on the reference consumer: 36 of 47 occurrences are not
-# annotations. A rotation on the loose rule archives those entries.
+# v0.135.0, but ..."). Measured on the reference consumer: 47 occurrences, 32 in the annotation
+# form, so 15 are not annotations. A rotation on the loose rule archives those entries.
 #
 # So rotation requires the ANNOTATION FORM this ledger actually writes: bolded, with the
 # version immediately after — `**ADOPTED UPSTREAM (v`. Anything else stays. An entry wrongly
@@ -45,6 +45,13 @@
 #       1 = refused: an integrity check failed and nothing was written
 #       2 = usage
 set -uo pipefail
+
+# ledger_entry_shape() — THE entry-boundary rule, from lib.sh. This block used to carry its own
+# copy, "lifted from ledger-reverify's parser unchanged"; within one release the label rule in
+# it had already drifted. There is one boundary now.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || { echo "ledger-rotate: cannot source $SELF/lib.sh" >&2; exit 1; }
 
 LEDGER="${1:-}"
 [ -n "$LEDGER" ] || { echo "usage: ledger-rotate.sh <ledger-path> [--archive <path>] [--apply]" >&2; exit 2; }
@@ -71,7 +78,7 @@ trap 'rm -rf "$TMPD"' EXIT
 # would drop every entry but the last.
 rm -f "$TMPD/keep" "$TMPD/move" "$TMPD/moved-names"
 : > "$TMPD/keep"; : > "$TMPD/move"; : > "$TMPD/moved-names"
-awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" '
+awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" "$(ledger_entry_awk)"'
   function flush(  i) {
     if (n == 0) return
     out = (started && closed) ? move : keep
@@ -84,8 +91,7 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" '
     sub(/^[-#][ \t]*/, "", l); gsub(/\*\*/, "", l); gsub(/`/, "", l)
     sub(/[[:space:]]+$/, "", l); label = substr(l, 1, 70)
   }
-  /^- \*\*/          { open_entry($0); buf[++n] = $0; next }
-  /^#{2,6}[ \t]/     { open_entry($0); buf[++n] = $0; next }
+  { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0; next } }
   /\*\*ADOPTED UPSTREAM \(v/ { closed = 1 }
                      { buf[++n] = $0 }
   END { flush() }

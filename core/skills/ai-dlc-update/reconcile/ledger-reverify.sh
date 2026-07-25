@@ -110,6 +110,12 @@
 # Exit:   0 ALWAYS. A classifier, not a gate — the caller decides, and a close never blocks.
 set -uo pipefail
 
+# ledger_entry_shape() — THE entry-boundary rule, from lib.sh. See that file for why it is not
+# copied here: rotate's copy of this block drifted within one release.
+SELF="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib.sh
+. "$SELF/lib.sh" || { echo "ledger-reverify: cannot source $SELF/lib.sh" >&2; exit 1; }
+
 DIST="${1:?usage: ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref> [ledger-path]}"
 BASE="${2:?}"
 CONSUMER="${3:?}"
@@ -244,25 +250,28 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 # `\xNN` escapes are not portable across the awks this ships to (BSD awk on macOS, gawk and
 # mawk on Linux). A heading's label is the text before the first " — ", so
 # `## PC-FOO — long prose title (filed …)` labels as `PC-FOO`.
-awk -v DASH=' — ' '
+awk -v DASH=' — ' "$(ledger_entry_awk)"'
   function flush(){
     if (has_verify && !closed && label != "")
       printf "%s\t%s\n", label, directive
     has_verify=0; closed=0; directive=""; label=""
   }
-  /^- \*\*/ {
-    flush()
-    l=$0; sub(/^- \*\*/,"",l); sub(/\*\*.*/,"",l)
-    gsub(/`/,"",l); label=substr(l,1,70)
-    next
-  }
-  /^#{2,6}[ \t]/ {
-    flush()
-    l=$0; sub(/^#+[ \t]*/,"",l)
-    p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
-    sub(/[[:space:]]+$/,"",l)
-    gsub(/`/,"",l); label=substr(l,1,70)
-    next
+  {
+    shape = ledger_entry_shape($0)
+    if (shape == "bullet") {
+      flush()
+      l=$0; sub(/^- \*\*/,"",l); sub(/\*\*.*/,"",l)
+      gsub(/`/,"",l); label=substr(l,1,70)
+      next
+    }
+    if (shape == "heading") {
+      flush()
+      l=$0; sub(/^#+[ \t]*/,"",l)
+      p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
+      sub(/[[:space:]]+$/,"",l)
+      gsub(/`/,"",l); label=substr(l,1,70)
+      next
+    }
   }
   /ADOPTED UPSTREAM/ { closed=1 }
   match($0, /verify:[ \t]*/) {
