@@ -827,29 +827,16 @@ if [ "$cm" != "$ss" ]; then
   diff <(printf '%s\n' "$cm") <(printf '%s\n' "$ss") >&2 || true
 fi
 
-# --- I5b: the enumerated validators ARE core/scripts/, exactly ----------------
-# Every other manifest entry is a glob, which needs no reconciliation with the
-# tree. The validators are enumerated instead, because scripts/ is shared with the
-# consumer and no glob can name our 25 without also naming their ~78.
-#
-# An enumeration that nothing joins to the directory is a hand-list, and this repo
-# has watched a hand-list rot three times: uninstall.sh named 4 of 25 validators,
-# map_consumer() had no case for a whole tree (v0.55.2), and unregistered-drift.sh
-# missed two subtrees (v0.63.0). So the list and the directory are each other's
-# check, in BOTH directions:
-#
-#   a validator added upstream with no manifest entry -> unguarded at edit time,
-#     and it fails here rather than shipping silently unprotected.
-#   a manifest entry with no file -> the guard denies edits to a path that does
-#     not exist, and the deny reads as protection that is not there.
-manifest_scripts="$(printf '%s\n' "$cm" | sed -n 's#^scripts/ai-dlc/##p' | sort -u)"
-tree_scripts="$(ls "$REPO_ROOT/core/scripts" 2>/dev/null | sort -u)"
-if [ "$manifest_scripts" != "$tree_scripts" ]; then
-  err "core_manifest's scripts/ai-dlc/ enumeration does not match core/scripts/:"
-  diff <(printf '%s\n' "$manifest_scripts") <(printf '%s\n' "$tree_scripts") >&2 || true
-  echo "      < only in the manifest (entry with no file — a deny that protects nothing)" >&2
-  echo "      > only in core/scripts/ (a validator no guard protects)" >&2
-fi
+# I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
+# equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
+# direction that mattered -- a validator added upstream with no manifest entry, hence
+# unguarded at edit time -- is structurally impossible rather than merely checked, and
+# an entry with no file cannot occur. What the enumeration could still detect (a
+# consumer file squatting in the core directory) measured zero occurrences and is now
+# handled at edit time instead: the guard classifies a squatter as core and denies both
+# the edit and the Write that would create it. core/fixtures/core-script-boundary/
+# assertion 8 asserts that. Nothing else in the repo joined the manifest to
+# core/scripts/, so nothing replaced it.
 
 # --- I12: unregistered-drift scan set is BOUND, not hand-listed ---------------
 # reconcile/unregistered-drift.sh scans a HAND-LISTED set of core subtrees for in-place drift.

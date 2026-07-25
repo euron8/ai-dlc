@@ -93,11 +93,13 @@ fi
 
 # -- Validation scripts installed by AI/DLC --
 # The whole directory, because the whole directory is ours -- that is the point of
-# scripts/ai-dlc/ and what core-manifest.md's enumeration asserts.
+# scripts/ai-dlc/, and what core-manifest.md's `scripts/ai-dlc/*` entry claims.
 #
-# This used to be a hand-list of FOUR names against the 25 install.sh ships, so an
-# uninstall left 21 core validators behind and reported success. The list was the
-# bug, exactly as it was for map_consumer() in v0.55.2. A directory needs no list.
+# This used to be a hand-list of FOUR names against the full set install.sh ships, so
+# an uninstall left almost every core validator behind and reported success. The list
+# was the bug, exactly as it was for map_consumer() in v0.55.2, and exactly as the
+# manifest's own enumeration of the same directory was until v0.160.0. A directory
+# needs no list, and a de-numbered comment cannot go stale the way the last one did.
 if [ -d "$PROJECT_ROOT/scripts/ai-dlc" ]; then
   DIRS_TO_REMOVE+=("scripts/ai-dlc")
 fi

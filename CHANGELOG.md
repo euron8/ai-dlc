@@ -17,6 +17,76 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.160.0] — 2026-07-25
+
+### Changed — the manifest names the directory; 27 filenames and the invariant guarding them retire
+
+`core-manifest.md` enumerated all 27 core validators as `scripts/ai-dlc/<name>`, and
+`validate-enforcement-map.sh` I5b asserted that list equalled `ls core/scripts/` exactly. The
+enumeration's stated justification was that `scripts/` is shared and no glob could name ours
+without naming theirs. That stopped being true in **v0.126.0**, which moved the validators into
+`scripts/ai-dlc/` — a directory that is exclusively ours. Measured in the reference consumer
+now: 121 loose files in `scripts/`, 26 in `scripts/ai-dlc/`, and **zero** files there that are
+not core's. The enumeration survived the relocation that made it unnecessary, and the manifest had
+begun contradicting itself — line 14 already wrote `scripts/ai-dlc/*` as a glob while the prose
+below insisted the set was enumerated.
+
+Both manifest copies now carry one entry, `scripts/ai-dlc/*`, and I5b is deleted. The direction
+I5b actually protected — a validator added upstream with no manifest entry, hence unguarded at
+edit time — is now structurally impossible rather than merely checked, and an entry with no file
+cannot occur. Every new validator used to cost a two-file manifest edit; now it costs none.
+
+**What the glob gives up, and why that is acceptable.** The enumeration could detect a
+consumer-authored file squatting in `scripts/ai-dlc/`; measured occurrences across the reference
+consumer: zero, ever. Under the glob such a file classifies as core, so the guard denies an
+in-place edit **and** denies the `Write` that would create it, routing the author to
+`scripts/ai-dlc-local/` — which is where it belonged. Only a shell-created squatter is reachable,
+and the first editor interaction emits the correct remediation.
+`core/fixtures/core-script-boundary/` assertion 8 asserts all three directions.
+
+### Fixed — the glob would have silently disabled the pull's validator relocation
+
+This was not the subtraction it looked like. `reconcile/apply.sh`'s `manifest_dests()` filtered
+the manifest to `^scripts/ai-dlc/` and iterated **literal filenames**, deriving each one's old
+path from `base="${dest#scripts/ai-dlc/}"`. Given a glob it yields one entry whose `base` is the
+literal `*`, every `git cat-file -e` misses, the relocation and level-triggered top-up loop runs
+**zero times** — and the `manifest_n -eq 0` guard does not fire, because one entry is not zero.
+The pull would have relocated nothing and re-stamped anyway, on every consumer, silently. The
+check-that-cannot-fire class, in the pull engine.
+
+`manifest_dests()` now expands a glob entry against `git ls-tree "$THEIRS" -- core/scripts/` and
+passes a literal entry through unchanged. The manifest still declares the directory *and* its
+destination; git supplies only membership, so the "one declaration" property the surrounding
+comment defends is intact. The `manifest_n -eq 0` guard also becomes meaningful for the first
+time: an unreadable manifest and an empty `ls-tree` now both reach it.
+
+**Every existing case in `apply-legacy-script-path` would have stayed green through that**,
+because all of them write hand-enumerated stand-in manifests. New case 11 drives the **shipped
+glob form** and asserts positively — files placed, old paths emptied — because asserting only
+"no failure row" passes on a loop that ran zero times. It also completes case 6's pair: the same
+undeclared third validator that case 6 requires *left alone* under a literal list must be
+*carried* under the glob, so only the manifest shape differs between them.
+
+**Two fixtures were passing through the same hole.** `apply-restamp-theirs` and
+`apply-drift-refile` build synthetic distributions that ship no `core/scripts/` at all. Under the
+old enumeration that produced 27 individual `cat-file` misses, and 27 misses read as "nothing to
+relocate"; under one glob entry it correctly reports zero validators and withholds the re-stamp.
+Both synthetic trees now ship a validator, which is what a real distribution always does.
+
+### Fixed — release archaeology out of two resident rule files (pre-push was already blocked)
+
+The rule-file audit's tier-1 `ORIGIN_TAG` check was **already failing before this release**, on
+five findings this branch had accumulated: `core-manifest.md` carried a v0.157.0/v0.63.0 history
+block, and `steps/gate-validation.md` carried three v0.158.0/S298 origin references. Rule 26
+forbids version and sprint tokens in rule prose on sight, and both files are resident paths the
+recover hook whole-re-reads, so the cost is paid every compaction. The first draft of this
+release's own manifest prose added two more.
+
+All seven are gone. Each passage now states the rule rather than its release history: what an
+unclaimed core subtree does wrong in both directions, why a glob needs an exclusively-owned
+directory, and why the spawn ledger is the record to cite. The behaviour each one encoded is
+preserved; only the archaeology is dropped, and that lives here instead.
+
 ## [0.159.0] — 2026-07-25
 
 ### Fixed — Check 22 could record a Rule 19(a) violation but nobody could ever clear it

@@ -370,16 +370,18 @@ fi
 echo "Installing validation scripts..."
 # CORE SCRIPTS LIVE IN THEIR OWN DIRECTORY, AND ONLY CORE SCRIPTS LIVE THERE.
 #
-# They used to land loose in scripts/, mixed in with the consumer's own. In the
-# reference consumer that directory holds 103 files of which 25 are ours, and no
+# They used to land loose in scripts/, mixed in with the consumer's own, and no
 # prefix separates them -- ai-dlc ships `audit-rule-files.sh` while the consumer
 # owns `audit-dormant-gates.sh`, `audit-main-since.sh`, `audit-rule-exercise.sh`.
 #
 # That mattered because the edit-time core guard derives its deny set from
-# core-manifest.md, and no glob over a shared directory can name our 25 without
+# core-manifest.md, and no glob over a SHARED directory can name our set without
 # also naming theirs. So the enforcers -- the scripts every gate's teeth depend
 # on -- were the one part of core a consumer could edit in place, and two of them
-# had been. A directory boundary is what makes the set expressible.
+# had been. The directory boundary is what makes the set expressible in one line:
+# `scripts/ai-dlc/*` means exactly ours, which is why the manifest claims the whole
+# directory rather than listing its contents (v0.160.0 -- before that it named every
+# filename, in two files, with an invariant to keep them honest).
 mkdir -p "$PROJECT_ROOT/scripts/ai-dlc"
 # DERIVED from core/scripts/, never enumerated. A hand-listed loop ships a new
 # validator absent-and-inert on every fresh install while all content

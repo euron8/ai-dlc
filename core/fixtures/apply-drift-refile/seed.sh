@@ -18,7 +18,15 @@ fi
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-drift.XXXXXX")" || exit 2
 DIST="$WORK/dist"; CONSUMER="$WORK/consumer"
 mkdir -p "$DIST/core/schemas" "$CONSUMER/.claude/schemas" \
-         "$DIST/core/session-driver" "$CONSUMER/.claude/session-driver"
+         "$DIST/core/session-driver" "$CONSUMER/.claude/session-driver" \
+         "$DIST/core/scripts"
+# A real distribution ALWAYS ships core validators, and since v0.160.0 the manifest
+# claims them as `core/scripts/ai-dlc/*` -- one entry apply.sh expands against THEIRS'
+# tree. A synthetic DIST shipping none makes that expansion empty, which apply.sh
+# reports as manifest-unreadable and withholds the re-stamp for, correctly. This
+# fixture used to pass through that hole: the old 27-name enumeration produced 27
+# individual cat-file misses, and 27 misses read as "nothing to relocate".
+printf '#!/usr/bin/env bash\necho v\n' > "$DIST/core/scripts/validate-synthetic.sh"
 
 cat > "$DIST/core/schemas/provenance-block.json" <<'JSON'
 {

@@ -342,14 +342,23 @@ fi
 # in the reference consumer, 78 of them theirs -- so the same walk would indict their
 # tooling and would descend into scripts/ai-dlc/ and call our own new copies orphans.
 #
-# THE MANIFEST IS THE DECLARATION -- of the set AND of where each file goes.
+# THE MANIFEST IS THE DECLARATION -- of the directory AND of where it goes. Git
+# supplies the membership.
 #
-# `ls-tree core/scripts` would give the same 25 files (validate-enforcement-map.sh
-# I5b asserts the two agree in both directions, so neither can drift). It is not used
-# because it answers only "what is shipped", and the destination would then have to
-# come from map_consumer()'s `scripts/ai-dlc/` prefix rule -- a SECOND statement of a
-# path the manifest entries already spell out in full. One declaration, or the two
-# drift the first time a relocation is only half-applied.
+# The manifest used to spell out all 27 validators, and this loop iterated the names.
+# v0.160.0 replaced them with `scripts/ai-dlc/*`, so a glob entry is expanded against
+# THEIRS' tree to get its members. That is still ONE declaration of the path: the
+# entry states which directory is ours and where it goes, and `ls-tree` answers only
+# "what is in it at THEIRS". The rejected alternative was to take the destination from
+# map_consumer()'s prefix rule as well -- THAT would be a second statement of a path,
+# and the two would drift the first time a relocation was half-applied.
+#
+# Reading a glob entry LITERALLY is the failure this shape exists to prevent: `base`
+# becomes `*`, every cat-file probe misses, the loop runs zero times, and manifest_n
+# is 1 -- so the silent-zero guard below does not fire and the pull relocates nothing
+# while still re-stamping. core/fixtures/apply-legacy-script-path/ case 7 drives the
+# shipped glob form for exactly that reason; cases 1-6 write enumerated stand-ins and
+# cannot see it.
 #
 # setup-sites.md, not core-manifest.md: this skill's HARD CONSTRAINT is that it reads
 # only its own reconcile/ files, which is exactly why that duplicate copy exists. I5
@@ -364,7 +373,17 @@ manifest_dests() { # -> consumer-relative destinations declared under scripts/ai
     /^core_manifest:/ {f=1; next}
     f && /^[ \t]*-[ \t]+/ { v=$0; sub(/^[ \t]*-[ \t]+/,"",v); sub(/[ \t]+$/,"",v); print v; next }
     f && /^[^ \t]/ { f=0 }
-  ' "$SELF/setup-sites.md" 2>/dev/null | sed -e 's#^core/##' -e '/^scripts\/ai-dlc\//!d'
+  ' "$SELF/setup-sites.md" 2>/dev/null | sed -e 's#^core/##' -e '/^scripts\/ai-dlc\//!d' \
+  | while IFS= read -r decl; do
+      case "$decl" in
+        # A glob entry names the directory; its members come from THEIRS' tree.
+        scripts/ai-dlc/\*)
+          git -C "$DIST" ls-tree --name-only "$THEIRS" -- core/scripts/ 2>/dev/null \
+            | sed -n 's#^core/scripts/#scripts/ai-dlc/#p' ;;
+        # A literal entry passes through, so a future single-file entry still works.
+        *) printf '%s\n' "$decl" ;;
+      esac
+    done
 }
 
 legacy_moved=""
@@ -376,11 +395,11 @@ for dest in $(manifest_dests); do
   old="$CONSUMER/scripts/$base"
   new="$CONSUMER/$dest"
 
-  # A declared file THEIRS does not ship. That is a distribution inconsistency and
-  # validate-enforcement-map.sh I5b owns it -- it asserts the manifest and
-  # core/scripts/ agree in both directions, so this cannot reach a real release.
-  # Treating it as a mechanical failure HERE would block a pull over a defect the
-  # consumer cannot fix and did not cause.
+  # Belt and braces. Under the glob entry the member list came from `ls-tree $THEIRS`,
+  # so a file reported there cannot be absent from THEIRS. The probe still runs because
+  # a LITERAL entry is passed through unexpanded, and a literal naming a file THEIRS
+  # does not ship is a distribution inconsistency. Treating that as a mechanical failure
+  # HERE would block a pull over a defect the consumer cannot fix and did not cause.
   git -C "$DIST" cat-file -e "${THEIRS}:core/scripts/${base}" 2>/dev/null || continue
 
   # 1. Place it if the changed-files pass did not. Never overwrite: a file already
@@ -416,13 +435,17 @@ for dest in $(manifest_dests); do
   legacy_moved_n=$((legacy_moved_n+1))
 done
 
-# A manifest that yields nothing is a manifest this driver could not read, and a
-# silent zero here relocates NOTHING while the run still re-stamps -- the stamp then
-# claims a version whose validators are not where every core reference points. Same
-# posture as install.sh refusing to install zero validators.
+# A declaration that yields nothing is one this driver could not read, and a silent
+# zero here relocates NOTHING while the run still re-stamps -- the stamp then claims a
+# version whose validators are not where every core reference points. Same posture as
+# install.sh refusing to install zero validators.
+#
+# The glob covers a second failure with the same guard: an unreadable manifest AND an
+# empty `ls-tree` both arrive here as zero. Against the old enumeration this guard could
+# not distinguish them, because a manifest read as one literal glob entry counted 1.
 if [ "$manifest_n" -eq 0 ]; then
   say DECISION manifest-unreadable "reconcile/setup-sites.md" \
-    "no scripts/ai-dlc/ entries found in the core_manifest block — refusing to treat that as 'nothing to relocate'."
+    "the core_manifest block yielded no scripts/ai-dlc/ destinations — either it is unreadable or THEIRS ships no core/scripts/ files. Refusing to treat that as 'nothing to relocate'."
   mech_fail=$((mech_fail+1))
 fi
 

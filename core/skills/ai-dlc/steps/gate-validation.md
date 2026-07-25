@@ -1206,8 +1206,8 @@ right conduct and is not a clearing path. Missing any of the four arms → the
 mismatch still FAILS.
 
 This clears the RECORDED violation. It does not license the next one — the
-dispatch guard binds the model before the work runs, so a post-v0.158.0 spawn
-should never reach this clause.
+dispatch guard binds the model before the work runs, so a spawn made under the
+current guard should never reach this clause.
 
 **A row exists even for a teammate that was stopped mid-flight**, because the
 ledger is written at dispatch rather than at completion. That is deliberate:
@@ -1216,12 +1216,12 @@ left no record at all and its absence from the spawn table was itself a FAIL
 with nothing the lead could do about it after the fact.
 
 **Do not substitute `subagent-context.jsonl` for the ledger on the role
-field.** Before v0.158.0 its `role` was derived from the subagent transcript
-and was wrong on the majority of rows (478 of 997 read `adversary`, including
-`protected-path-editor` and `gate-adjudicator` spawns) because injected core
-prose in the transcript names `team-roles/adversary.md`. It now prefers the
-ledger row, so the two agree — but the ledger is the origin and the one to
-cite.
+field.** Its `role` prefers the ledger row, so the two normally agree, but the
+ledger is the origin and the one to cite. Where they disagree the ledger wins:
+`subagent-context.jsonl` can only fall back to deriving the role from the
+subagent transcript, and injected core prose there names
+`team-roles/adversary.md`, which reads as an `adversary` spawn regardless of the
+role actually dispatched.
 
 **If the ledger has no rows for this sprint** — the file is absent, OR it
 exists but every row belongs to another sprint — treat it as PRE-LEDGER and say
@@ -1271,15 +1271,13 @@ new artifact. Removal condition: retire once the Agent-tool spawn API
 structurally attaches the role file (no lead-authored dispatch line to
 verify).
 
-**Why the ledger and not the lead's table.** This check spent its life
-reading a table the lead hand-wrote about its own dispatches, with no machine
-record to join against — the model column was a self-report, and the one
-machine record that existed (`subagent-context.jsonl`) carried a `role` field
-that was wrong on the majority of rows. Both failure modes landed together on
-the reference consumer at S298: a `protected-path-editor` ran on sonnet
-against an opus-5 pin, and a `gate-adjudicator` stopped mid-flight had no row
-at all. The guard already resolved role, pin and model correctly at dispatch
-and threw the answer away; it now writes it down.
+**Why the ledger and not the lead's table.** A table the lead hand-writes about
+its own dispatches is a self-report on the model column, and it has nothing to
+join against: `subagent-context.jsonl` is written on `SubagentStop`, so a
+teammate stopped mid-flight leaves no row, and its `role` is unreliable when
+derived from the transcript. The dispatch guard already resolves role, pin and
+model at dispatch, so the ledger records that answer rather than reconstructing
+it afterwards. Cite the ledger.
 
 ### 23. Analyst-draft sprint stamps (all planning gates).
 <!-- CHECK_LOADED: 23 -->

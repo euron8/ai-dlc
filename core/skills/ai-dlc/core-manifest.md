@@ -19,27 +19,27 @@ takes the change upstream — there is no `overrides/` or `extensions/` entry fo
 a hook, a validator, a schema, or the update engine. The core-guard routes
 accordingly.
 
-**The machinery subtrees were claimed late, and the gap had teeth.** Until
-v0.157.0 this list stopped at the `ai-dlc` skill dir, so five subtrees
-`install.sh` overwrites wholesale carried **no edit-time protection at all** —
-the same hole I12 records for `ai-dlc-setup/` (v0.63.0) and `schemas/`, found
-each time only when a real pull hit it. It also read the other way: Check 16's
-stub audit asks this list whether a marker sits in an upstream-owned file, and
-because `skills/ai-dlc-update/**` was unclaimed, a prose comment in
-`reconcile/apply.sh` was audited as consumer-authored and failed a consumer's
-§6 gate four times with no clearing path — a core file cannot carry a consumer
-backlog item, and the guard denies the edit that would add one.
+**An unclaimed core subtree fails in both directions.** It carries no edit-time
+protection, so a consumer can edit it in place and the next pull either clobbers
+the change or raises a false BOTH-CHANGED conflict. And Check 16's stub audit asks
+this list whether a marker sits in an upstream-owned file, so an unclaimed core
+file is audited as consumer-authored — a bar it can never clear, because a core
+file cannot carry a consumer backlog item and the guard denies the edit that would
+add one. Every subtree `install.sh` overwrites wholesale MUST appear below.
 
-**The validators are enumerated; everything else is a glob.** A glob names our
-set only where the directory is exclusively ours, and `scripts/` is shared — a
-consumer's own audit scripts sit beside ours under no distinguishing prefix. Core
-scripts therefore have a directory of their own, `scripts/ai-dlc/`, and the
-manifest enumerates its contents. **The enumeration and the directory are each
-other's check:** `validate-enforcement-map.sh` asserts the list below equals
-`core/scripts/` exactly, so a validator added upstream without a manifest entry
-fails the distribution's own gate, and a file appearing in a consumer's
-`scripts/ai-dlc/` that is not on the list is a consumer script in the core
-directory. Neither side is hand-maintained alone.
+**Every entry is a glob over a directory that is exclusively ours.** A glob names
+our set only where that holds. `scripts/` does not hold it — a consumer's own audit
+scripts sit beside ours under no distinguishing prefix — so core scripts have a
+directory of their own, `scripts/ai-dlc/`, and the manifest claims all of it. The
+same rule governs any new entry: where a directory is shared, give core its own
+directory inside it rather than listing the files we own there. Do NOT enumerate
+what a glob can name.
+
+**A file in `scripts/ai-dlc/` is core whether or not the distribution ships that
+name.** The directory is the boundary, not the file list, so the guard denies an
+in-place edit AND denies the `Write` that would create such a file, routing the
+author to `scripts/ai-dlc-local/`. `core-script-boundary`'s assertion 8 asserts all
+three directions.
 
 **Consumer-authored ai-dlc scripts do not belong there.** A consumer's own
 pipeline tooling — snapshot resets, dormant-gate audits, sprint-entry sweeps —
@@ -85,33 +85,7 @@ core_manifest:
   - schemas/*.json
   - skills/ai-dlc-setup/**
   - skills/ai-dlc-update/**
-  - scripts/ai-dlc/audit-rule-files.sh
-  - scripts/ai-dlc/core-paths.sh
-  - scripts/ai-dlc/gen-architecture-index.js
-  - scripts/ai-dlc/sprint-status.sh
-  - scripts/ai-dlc/stamp-story-provenance.sh
-  - scripts/ai-dlc/sync-taught-schema.sh
-  - scripts/ai-dlc/validate-adversarial-convergence.sh
-  - scripts/ai-dlc/validate-artifact-budget.sh
-  - scripts/ai-dlc/validate-audit-anchors.sh
-  - scripts/ai-dlc/validate-ci-gates.sh
-  - scripts/ai-dlc/validate-compact-window.sh
-  - scripts/ai-dlc/validate-cycle-commits.sh
-  - scripts/ai-dlc/validate-draft-stamps.sh
-  - scripts/ai-dlc/validate-escalation-resolution.sh
-  - scripts/ai-dlc/validate-escalation-status-vocabulary.sh
-  - scripts/ai-dlc/validate-gate-adjudication.sh
-  - scripts/ai-dlc/validate-gate-manifest.sh
-  - scripts/ai-dlc/validate-h2-attestation.sh
-  - scripts/ai-dlc/validate-layer-entries.sh
-  - scripts/ai-dlc/validate-locked-anchor.sh
-  - scripts/ai-dlc/validate-mandatory-rules.sh
-  - scripts/ai-dlc/validate-provenance-block.sh
-  - scripts/ai-dlc/validate-reattach-budget.sh
-  - scripts/ai-dlc/validate-retro-evidence.sh
-  - scripts/ai-dlc/validate-steering-budget.sh
-  - scripts/ai-dlc/verdict.sh
-  - scripts/ai-dlc/wait-for-deliverable.sh
+  - scripts/ai-dlc/*
 ```
 
 **Note on the second copy.** `ai-dlc-update`'s
