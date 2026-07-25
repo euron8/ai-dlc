@@ -439,6 +439,18 @@ prose is itself generated rather than composed.
    without. A receipt that only matches one phrasing of a fix is a receipt for that phrasing,
    not for the fix.
 
+   **Anchor a `theirs_has` receipt on a token the FIX MUST REMOVE.** The rule above protects
+   the verb the unfalsifiability guard already covers; this one has no guard at all, and it is
+   the verb most receipts use. A token that merely CO-OCCURS with the defect survives the fix,
+   so the entry reports STILL-LIVE forever against a defect that no longer exists — and it
+   passes every lint, because it is well-formed, its path resolves, and it is reachable at both
+   refs. Real case: an entry about `emit-report.sh --verify` being bound to one dist checkout
+   anchored on the rendered `full: diff <(git -C $DIST show` line. The fix landed in the
+   COMPARISON (`--verify` now normalises the path on both sides), and the rendering was kept
+   deliberately, so the anchor is still there and the receipt still says STILL-LIVE. Ask of the
+   substring: *could the fix be written without removing this?* If yes, it is the wrong anchor —
+   prefer a `theirs_lacks` on the token the fix cannot be written without.
+
    **Never reproduce a receipt's substring in the core file that receipt tests.** A
    `theirs_lacks` receipt is satisfied by ANY occurrence in that file, including one written
    to discuss the receipt, so quoting it closes the entry with nothing behind the close.
