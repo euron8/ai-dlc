@@ -42,9 +42,19 @@ git -C "$DIST" add -A
 git -C "$DIST" commit -qm base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
 
-# --- theirs: MARKER_B added (Entry B absorbed), MARKER_A still absent ---
+# --- mid: MARKER_B added HERE, at 0.101.0 (Entry B absorbed) ---
+# The absorption is deliberately NOT at the tip. A close row names the version where the
+# substring actually appeared, and with base->theirs adjacent that claim is indistinguishable
+# from naming theirs' VERSION — which is what the code used to do, wrongly, for every
+# absorption that predated the pull.
 printf '# SKILL\nrule one\nrule two\nMARKER_B a rule upstream just absorbed\n' > "$SK"
 printf '0.101.0\n' > "$DIST/VERSION"
+git -C "$DIST" add -A
+git -C "$DIST" commit -qm mid
+
+# --- theirs: an unrelated change, VERSION moves on to 0.102.0 ---
+printf '#!/bin/sh\necho thing\necho more\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
+printf '0.102.0\n' > "$DIST/VERSION"
 git -C "$DIST" add -A
 git -C "$DIST" commit -qm theirs
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
