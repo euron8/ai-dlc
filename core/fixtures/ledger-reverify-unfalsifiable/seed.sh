@@ -45,6 +45,19 @@ cat > core/scripts/validate-thing.sh <<'EOS'
 # upstream's version: no strict mode of any kind
 run_thing() { :; }
 EOS
+# A file LARGER than the pipe buffer (~64 KB), carrying its needle at the very top. Any
+# match test that pipes into `grep -q` under `set -o pipefail` reports this as NOT FOUND:
+# grep exits on the first line, the writer takes SIGPIPE, and the pipeline's status becomes
+# that failure. Under 64 KB the write completes first and the same code is correct, which is
+# why the defect presents as flakiness rather than a size threshold. run.sh pins the verdict
+# across repeated runs.
+{
+  printf 'NEEDLE_AT_TOP_OF_A_LARGE_FILE\n'
+  i=0; while [ "$i" -lt 3000 ]; do
+    printf 'padding line %s ---------------------------------------------------------\n' "$i"
+    i=$((i + 1))
+  done
+} > core/scripts/big-rule-file.md
 g "$WORK/dist" add -A; g "$WORK/dist" commit -qm base
 BASE="$(git -C "$WORK/dist" rev-parse HEAD)"
 printf '0.2.0\n' > VERSION
@@ -81,6 +94,14 @@ verify: theirs_lacks core/scripts/validate-thing.sh "--strict-provenance"
 Upstream should enforce provenance strictly by default.
 
 verify: theirs_lacks core/scripts/validate-thing.sh "strict provenance enforced by default"
+
+---
+
+## PC-BIG — a defect in a file larger than the pipe buffer
+
+Upstream still carries the marker, in a file over 64 KB.
+
+verify: theirs_has core/scripts/big-rule-file.md "NEEDLE_AT_TOP_OF_A_LARGE_FILE"
 
 ---
 EOM

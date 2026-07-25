@@ -17,6 +17,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.147.1] — 2026-07-24
+
+### Fixed — the ledger classifier's match test was nondeterministic on large files
+
+`all_present()` piped file content into `grep -qF` under `set -o pipefail`. `grep -q` exits
+the instant it matches; on content larger than the pipe buffer (~64 KB) the writer has not
+finished, takes SIGPIPE, and the pipeline's status becomes that failure — so a successful
+MATCH was reported as "not found". Smaller files complete the write before grep exits and
+behave correctly, which is what made this present as flakiness rather than a size threshold.
+
+Measured on the reference consumer: four consecutive runs of one unchanged entry against
+`steps/gate-validation.md` returned STILL-LIVE, NEEDS-REVIEW, STILL-LIVE, CLOSE-CANDIDATE.
+Because the classifier feeds the report's rendered region, `emit-report.sh --verify` failed
+8/8 and six renders produced four distinct outputs. Everything outside this helper was
+stable. Four `NEEDS-REVIEW` rows on the reference ledger were artefacts of this, not
+findings — the receipts they accused were correct.
+
+A herestring is not a pipe: grep reads a file, there is no writer to signal, and an early
+exit cannot become a false negative. `grep -F` is kept, so the per-line fixed-string
+semantics the convention is written against are unchanged.
+
+This predates 0.147.0, but 0.147.0's consumer-reachability check calls `base_holds()` →
+`all_present()`, so the new verdict inherited the nondeterminism.
+
+### Changed — consumer reachability scans with `git grep`
+
+0.147.0 built a NUL-separated file list and piped it into `xargs grep`. `git grep` searches
+the same derived set (tracked files; untracked `.claude/worktrees/` checkouts drop out for
+free) with no temp file, no NUL plumbing and no xargs — deleting the machinery that caused
+0.147.0's `unterminated quote` failure rather than guarding it. Exit status is read three
+ways: 0 found, 1 not found, anything else undecidable.
+
+It is also ~40x faster per substring (0.012s vs 0.5s on the reference consumer). At seven
+absent-at-both entries the old form was ~70% of the classifier's runtime; a full run drops
+from ~5.0s to ~1.4s. Verdicts are byte-identical.
+
+`core/fixtures/ledger-reverify-unfalsifiable/` gains a >64 KB fixture file and asserts both
+the verdict and its stability across seven runs — a single run passes half the time by luck.
+Restoring the piped `grep -q` turns that assertion red.
+
 ## [0.147.0] — 2026-07-24
 
 ### Added — the ledger's unfalsifiable `theirs_lacks` predicates now have a mechanism

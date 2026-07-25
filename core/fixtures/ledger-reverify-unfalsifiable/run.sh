@@ -68,6 +68,26 @@ else
   bad "undecidable path did not degrade safely: $(printf '%s' "$out" | awk -F'\t' '{print $1}' | tr '\n' ' ')"
 fi
 
+# --- Assertion 5: LARGE FILE — the verdict must be correct and STABLE -----------------
+# `grep -q` exits on first match; piping into it under `set -o pipefail` turns the writer's
+# SIGPIPE into the pipeline's status, so a match on a >64 KB file reads as "not found".
+# Measured before the fix: four consecutive runs of one unchanged entry returned STILL-LIVE,
+# NEEDS-REVIEW, STILL-LIVE, CLOSE-CANDIDATE. Assert the verdict AND its stability — a single
+# run passes half the time by luck, which is worse than no assertion at all.
+big="$(verdict PC-BIG)"
+if [ "$big" = "STILL-LIVE" ]; then
+  ok "PC-BIG (needle in a >64KB file) → STILL-LIVE"
+else
+  bad "PC-BIG → $big, expected STILL-LIVE — a match on a large file read as not-found"
+fi
+stable=1
+for _ in 1 2 3 4 5 6; do
+  [ "$(verdict PC-BIG)" = "$big" ] || stable=0
+done
+[ "$stable" -eq 1 ] \
+  && ok "PC-BIG verdict identical across 7 runs (no pipe-buffer nondeterminism)" \
+  || bad "PC-BIG verdict VARIES between runs — the match test is nondeterministic"
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "ledger-reverify-unfalsifiable: PASS"
