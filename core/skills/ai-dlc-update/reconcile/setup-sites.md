@@ -50,34 +50,14 @@ core_manifest:
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
+  - core/skills/ai-dlc/templates/*.md
   - core/team-roles/*.md
   - core/hooks/ai-dlc-*.sh
-  - core/scripts/ai-dlc/audit-rule-files.sh
-  - core/scripts/ai-dlc/gen-architecture-index.js
-  - core/scripts/ai-dlc/sprint-status.sh
-  - core/scripts/ai-dlc/stamp-story-provenance.sh
-  - core/scripts/ai-dlc/sync-taught-schema.sh
-  - core/scripts/ai-dlc/validate-adversarial-convergence.sh
-  - core/scripts/ai-dlc/validate-artifact-budget.sh
-  - core/scripts/ai-dlc/validate-audit-anchors.sh
-  - core/scripts/ai-dlc/validate-ci-gates.sh
-  - core/scripts/ai-dlc/validate-compact-window.sh
-  - core/scripts/ai-dlc/validate-cycle-commits.sh
-  - core/scripts/ai-dlc/validate-draft-stamps.sh
-  - core/scripts/ai-dlc/validate-escalation-resolution.sh
-  - core/scripts/ai-dlc/validate-escalation-status-vocabulary.sh
-  - core/scripts/ai-dlc/validate-gate-adjudication.sh
-  - core/scripts/ai-dlc/validate-gate-manifest.sh
-  - core/scripts/ai-dlc/validate-h2-attestation.sh
-  - core/scripts/ai-dlc/validate-layer-entries.sh
-  - core/scripts/ai-dlc/validate-locked-anchor.sh
-  - core/scripts/ai-dlc/validate-mandatory-rules.sh
-  - core/scripts/ai-dlc/validate-provenance-block.sh
-  - core/scripts/ai-dlc/validate-reattach-budget.sh
-  - core/scripts/ai-dlc/validate-retro-evidence.sh
-  - core/scripts/ai-dlc/validate-steering-budget.sh
-  - core/scripts/ai-dlc/verdict.sh
-  - core/scripts/ai-dlc/wait-for-deliverable.sh
+  - core/session-driver/*.sh
+  - core/schemas/*.json
+  - core/skills/ai-dlc-setup/**
+  - core/skills/ai-dlc-update/**
+  - core/scripts/ai-dlc/*
 ```
 
 ## Sites

@@ -49,6 +49,28 @@ BACKLOG="$TREE/_bmad-output/planning-artifacts/carry-over-backlog.md"
 fails=0
 note() { printf '  %-6s %-30s %s\n' "$1" "$2" "$3"; }
 
+# --- the scope filter: upstream-owned paths are dropped before the marker grep.
+# Resolve the real core-paths.sh by walking UP for either layout, same as seed.sh.
+RESOLVER=""
+d="$HERE"
+while [ "$d" != "/" ]; do
+  if [ -x "$d/core/scripts/core-paths.sh" ]; then RESOLVER="$d/core/scripts/core-paths.sh"; break
+  elif [ -x "$d/scripts/ai-dlc/core-paths.sh" ]; then RESOLVER="$d/scripts/ai-dlc/core-paths.sh"; break; fi
+  d="$(dirname "$d")"
+done
+[ -n "$RESOLVER" ] || { echo "FAIL: no core-paths.sh found walking up from $HERE — the scope filter cannot be evaluated, and passing without it would report the exemption as working when it was never run." >&2; exit 2; }
+
+# in_scope <tree-relative-path> -> 0 in scope, 1 exempt (upstream-owned).
+# Exit 2 from the resolver is NOT an exemption: the path stays in scope, per the
+# check body ("could not determine ... the path stays in scope").
+in_scope() {
+  local rel="$1" rc
+  ( cd "$TREE" && bash "$RESOLVER" --is-core "$rel" >/dev/null 2>&1 )
+  rc=$?
+  [ "$rc" -eq 0 ] && return 1
+  return 0
+}
+
 # Strip a leading comment prefix so the ^-anchored element-4 regex can see the key.
 decomment() { sed -E 's/^[[:space:]]*(#+|\/\/|--)[[:space:]]?//'; }
 
@@ -83,10 +105,12 @@ audit_file() {
   echo "ok"
 }
 
-expect() { # expect <file> <want-element-or-ok> <label>
-  local got; got="$(audit_file "$TREE/src/$1")"
+expect() { # expect <tree-relative-path> <want-element-or-ok|exempt-upstream> <label>
+  local got
+  if in_scope "$1"; then got="$(audit_file "$TREE/$1")"; else got="exempt-upstream"; fi
   if [ "$got" = "$2" ]; then
     if [ "$2" = "ok" ]; then note "ok" "$3" "passes all four elements"
+    elif [ "$2" = "exempt-upstream" ]; then note "ok" "$3" "dropped from scope — upstream-owned"
     else note "ok" "$3" "rejected on $got"; fi
   else
     note "BAD" "$3" "wanted '$2', got '$got'"
@@ -97,22 +121,33 @@ expect() { # expect <file> <want-element-or-ok> <label>
 echo "check-15-bypass: evaluating Check 16's published elements against the seed"
 echo
 
-expect v1_item_absent.py    element2-item-open "V1 item-absent"
-expect v2_reason_tbd.py     element4-reason    "V2 reason-tbd"
-expect v3_no_file_line.sh   element3-file-line "V3 no-file-line"
-expect v4_reason_padding.py element4-reason    "V4 reason-padding"
-expect v6_file_no_digits.py element3-file-line "V6 file-no-digits"
-expect v7_item_closed.py    element2-item-open "V7 item-closed"
+expect src/v1_item_absent.py    element2-item-open "V1 item-absent"
+expect src/v2_reason_tbd.py     element4-reason    "V2 reason-tbd"
+expect src/v3_no_file_line.sh   element3-file-line "V3 no-file-line"
+expect src/v4_reason_padding.py element4-reason    "V4 reason-padding"
+expect src/v6_file_no_digits.py element3-file-line "V6 file-no-digits"
+expect src/v7_item_closed.py    element2-item-open "V7 item-closed"
 
 # The positive control. Break any element into always-rejecting and this goes red;
 # without it, all four adversaries would still be "correctly" rejected.
-expect v5_honest.py         ok                 "V5 honest control"
+expect src/v5_honest.py         ok                 "V5 honest control"
+
+# The exemption pair. V8 satisfies zero elements and must NEVER reach the elements
+# at all; V9 satisfies zero elements at a core-ADJACENT path and must reach them.
+# Drop the exemption and V8 flips to element1-item-ref. Widen it to all of
+# `.claude/` and V9 flips to exempt-upstream — a consumer stub going unaudited.
+expect .claude/skills/ai-dlc-update/reconcile/apply.sh \
+                                exempt-upstream    "V8 upstream-owned"
+expect .claude/hooks/my-own-hook.sh \
+                                element1-item-ref  "V9 consumer hook (control)"
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 7 variants correct. Each adversary is rejected on its"
+  echo "PASS  check-15-bypass: 9 variants correct. Each adversary is rejected on its"
   echo "      intended element (absent item, short reason, no file:line, padded reason,"
-  echo "      digitless file ref, CLOSED item) and the honest stub satisfies all four."
+  echo "      digitless file ref, CLOSED item), the honest stub satisfies all four, and"
+  echo "      the upstream-owned file is dropped from scope while its consumer-owned"
+  echo "      neighbour is still audited."
   exit 0
 fi
 echo "FAIL  check-15-bypass: $fails variant(s) audited wrong." >&2

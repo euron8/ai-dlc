@@ -203,10 +203,15 @@ else
 fi
 
 # --- 6. THE RELOCATION SET IS THE MANIFEST'S, NOT THE DIRECTORY'S --------------
-# `ls-tree core/scripts` yields the same set today (I5b binds them), so the only way
-# to show which source drives the relocation is to make them DISAGREE: ship a third
+# Under a LITERAL manifest the declared set and the directory can disagree, and the
+# only way to show which one drives the relocation is to make them: ship a third
 # validator in core/scripts, present at BASE and UNCHANGED through THEIRS, and leave
 # it out of the manifest.
+#
+# The SHIPPED manifest declares the directory instead (`core/scripts/ai-dlc/*`), and
+# then the two cannot disagree by construction -- so case 11 re-runs this same tree
+# against the glob form and requires the OPPOSITE outcome on this same file. The pair
+# is what pins which source is being read; neither half means much alone.
 #
 # Unchanged is the load-bearing part. This asserts the LEVEL-TRIGGERED top-up loop
 # only, which is the code the manifest governs. A file that CHANGED in the range is
@@ -331,6 +336,65 @@ if printf '%s' "$MOUT" | grep -q 'legacy-script'; then
   bad "MUTATION: legacy rows still emitted without the loop -- assertions 1-2 prove nothing"
 else
   ok "MUTATION: disabling the legacy loop removes both rows"
+fi
+
+# --- 11. THE SHIPPED GLOB FORM IS ITERATED AS ITS MEMBERS -----------------------
+# v0.160.0 replaced the manifest's 27 filenames with `core/scripts/ai-dlc/*`. Every
+# case above writes a hand-ENUMERATED stand-in manifest, so all of them stay green
+# against a shipped manifest the mechanism can no longer iterate. That is the exact
+# vacuous shape this repo has shipped before, and it would have hidden a bad failure:
+# manifest_dests() reading the glob entry literally yields one non-path (`*`), every
+# cat-file probe misses, the loop runs zero times -- and case 7's manifest_n guard
+# does NOT fire, because one entry is not zero. The pull would relocate nothing and
+# re-stamp anyway.
+#
+# So this case writes the SHIPPED form and asserts POSITIVELY: the files are placed
+# and the old paths are gone. Asserting only "no failure row" passes on a loop that
+# ran zero times.
+#
+# It also completes case 6's pair. Same tree, same undeclared third validator, same
+# unchanged-in-range range -- and under the glob it MUST be relocated, because the
+# manifest now claims the directory it sits in. Case 6 requires it left alone under a
+# literal list; this requires it carried under the glob. Only the manifest shape
+# differs, so together they pin which source the loop reads.
+cat > "$RECON/setup-sites.md" <<'SITES'
+```yaml
+core_manifest:
+  - core/scripts/ai-dlc/*
+```
+SITES
+rm -rf "$CONSUMER/scripts/ai-dlc"
+for f in validate-untouched.sh validate-edited.sh validate-undeclared.sh; do
+  cp "$DIST/core/scripts/$f" "$CONSUMER/scripts/$f"
+done
+printf 'version: 1.0.0\ncommit: %s\n' "$BASE2" > "$CONSUMER/.claude/.ai-dlc-version"
+OUT7="$(bash "$APPLY" "$DIST" "$BASE2" "$CONSUMER" "$THEIRS2" 2>&1)"
+
+placed=0; missing=""
+for f in validate-untouched.sh validate-edited.sh validate-undeclared.sh; do
+  if [ -f "$CONSUMER/scripts/ai-dlc/$f" ]; then placed=$((placed+1)); else missing="$missing $f"; fi
+done
+if [ "$placed" -eq 3 ]; then
+  ok "the glob entry is expanded to its members: all 3 placed at scripts/ai-dlc/"
+else
+  bad "the glob entry placed only $placed of 3 --$missing left behind; manifest_dests read it literally"
+  printf '%s\n' "$OUT7" | sed 's/^/        /'
+fi
+left=""
+for f in validate-untouched.sh validate-edited.sh validate-undeclared.sh; do
+  [ -f "$CONSUMER/scripts/$f" ] && left="$left $f"
+done
+[ -z "$left" ] && ok "  and every old path is emptied" \
+              || bad "  copies remain at the old path:$left -- the move ran zero times"
+if [ -f "$CONSUMER/scripts/ai-dlc/validate-undeclared.sh" ]; then
+  ok "  the validator case 6 requires LEFT ALONE under a literal list is CARRIED under the glob"
+else
+  bad "  validate-undeclared.sh was not carried -- the glob is not claiming the whole directory"
+fi
+if printf '%s' "$OUT7" | grep -q 'manifest-unreadable'; then
+  bad "  the shipped glob form was reported unreadable -- manifest_dests cannot parse what ships"
+else
+  ok "  and no manifest-unreadable row is raised for the form that actually ships"
 fi
 
 echo ""

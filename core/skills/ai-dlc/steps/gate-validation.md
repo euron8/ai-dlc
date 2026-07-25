@@ -844,6 +844,33 @@ hot-path file. Hot-path extensions: `.py`, `.ts`, `.tsx`, `.js`,
 `.sh`, `.sql`. Hot-path paths: `.github/workflows/**.yml` (directly
 invoked by GitHub Actions).
 
+**Upstream-owned files are OUT of scope.** Drop from `changed_files`
+every path for which `scripts/ai-dlc/core-paths.sh --is-core <path>`
+exits 0 (exit 1 = consumer-owned, stays in scope; **exit 2 = could not
+determine, which is NOT an exemption** — the path stays in scope and
+the gate log records that the resolver could not answer). Exempt paths
+are excluded from the marker grep entirely, so they can neither pass nor
+fail this check; the gate log names each one it dropped.
+
+The four elements below are unsatisfiable on a core file, in both
+directions: element 1 demands an `Item N` resolvable in the CONSUMER's
+`carry-over-backlog.md`, and `ai-dlc-core-guard.sh` DENIES the in-place
+edit that would add one — there is no `overrides/` shadow and no
+`extensions/` entry for a hook, a validator, or the update engine. So a
+marker in an upstream file left the gate with no clearing path short of
+forking core (Rule 27 forbids it) or an operator waiver on every pull,
+and it fired on prose: a comment in `reconcile/apply.sh` reading
+"Phase 3's layer-drift.sh does NOT belong here" matched `Phase [0-9]`
+and failed a consumer's §6 gate four times. Stub discipline for core
+files is not waived — it binds in the DISTRIBUTION repo, against its own
+backlog, where the edit and the item number both exist.
+
+Do not hand-list the exempt set. `core-paths.sh` derives it from
+`core-manifest.md` (fallback `reconcile/setup-sites.md`), the same source
+the edit-time guard reads; `validate-enforcement-map.sh` I25 asserts the
+two derivations are byte-identical, so a file the guard protects cannot
+be audited here as consumer-authored.
+
 **Check.** Grep changed hot-path files for stub markers (regex
 `(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)`).
 For each match, verify FOUR elements in the match's surrounding
@@ -1113,17 +1140,102 @@ it as new.
 dispatched teammates via the Agent tool (dev, dev-escalated, code-reviewer,
 qa, or a `protected-path-editor`). Skips gates with no Agent-tool spawn.
 
-**Check.** Read the gate log's per-teammate spawn records
-(`implementation.md` Step 4 self-validate writes them). For EVERY
-teammate spawn recorded this sprint, confirm BOTH bindings required by
-SKILL.md Rule 19: (a) the `model` parameter was passed explicitly, and
-the recorded model matches the spawned role's `/model` directive in
-`.claude/team-roles/<role>.md`; AND (b) the dispatch carried the
-standing role-contract line binding the subagent to
-`.claude/team-roles/<role>.md` as its first action (Rule 19(b)). A spawn
-record missing either the model value or the role-contract citation
-FAILS this check. Fail-closed: a teammate that ran without a resolvable
-role-file binding is a Rule 19 violation, not a pass.
+**Check.** Read `_bmad-output/spawn-ledger.jsonl` — written by
+`ai-dlc-dispatch-guard.sh` at PreToolUse, one row per role-bound Agent/Task
+dispatch. It is the source of record, NOT the gate log's spawn table: the
+table is authored by the lead about its own conduct, and a lead that
+mis-dispatched cannot vouch for its own dispatch. Filter to this sprint
+(`sprint`), then for EVERY row confirm both bindings required by SKILL.md
+Rule 19:
+
+- **(a) model.** `model_bound` — the value the guard actually bound, not a
+  self-report — matches the tier of the `/model` directive in
+  `.claude/team-roles/<role>.md`. `model_requested` sits beside it so a
+  corrected dispatch stays visible as a correction; a `model_requested`
+  that disagrees with `model_bound` is a Rule 19(a) slip the guard caught,
+  and is reported in the gate log but does not FAIL this check — the
+  teammate ran on the pinned tier.
+- **(b) role contract.** `role_contract_cited` is `true`. `false` means the
+  dispatch named its role only via `subagent_type` and carried no Rule 19(b)
+  contract line — the guard bound the model anyway, but the contract citation
+  is owed and this FAILS.
+
+`role_file_readable: false` FAILS unconditionally: a teammate ran against a
+role file that does not resolve, which is Rule 19's fail-closed case
+("a teammate that ran without a resolvable role-file binding is a Rule 19
+violation, not a pass").
+
+**Dispositioning a Rule 19(a) violation that already happened.** A spawn that
+ran on the wrong tier is a fact about the past. No later action changes it, so
+without a clearing path this check fails forever on a sprint where it fired
+once — the gate becomes unpassable by any consumer action, which is a defect in
+the check and not a finding about the sprint. (Exactly that happened: a
+`protected-path-editor` ran on sonnet against an opus-5 pin, the lead
+self-reported it, and four gate attempts failed with nothing anyone could do —
+the operator could not clear it either, because this check did not read the
+escalation where an authorization would live.)
+
+A recorded tier mismatch is CLEARED when **all four** hold:
+
+1. An escalation entry for the CURRENT sprint in `docs/escalations/pending.md`
+   NAMES the offending spawn — its dispatch `name` / agent id appears verbatim
+   in the entry. One entry clears one spawn; a waiver that names no spawn
+   clears nothing.
+2. That entry's `**Status:**` is `OVERRIDDEN`.
+3. `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
+   docs/escalations/pending.md --sprint <N> --transcript <this session's
+   transcript_path>` exits 0 — the SAME invocation Check 2a makes, all three
+   flags. It fails closed on a missing `--transcript` (a forgotten flag cannot
+   silently disarm it) and exits 2 on missing required args, so a truncated
+   command verifies nothing rather than appearing to pass. That validator
+   requires the entry's
+   `**Operator authorization:** <ISO ts> | "<verbatim ≥12 chars>"` line and
+   verifies the quoted substring against a GENUINE operator message in the
+   session transcript. The verdict on this arm is the validator's exit code,
+   not the adjudicator's reading — which is what makes the disposition
+   unforgeable.
+4. The entry states the REMEDIATION and names its artifact: either the work was
+   redone on the pinned tier, or the teammate's output was independently
+   verified against its source. An `OVERRIDDEN` carrying no remediation is a
+   content-free waiver — writable without anyone having looked at the output,
+   which is the forgeable-evidence shape Check 26 exists to reject.
+
+**`DECIDED_AUTONOMOUSLY` does NOT clear this**, and that exclusion is the point:
+it is the lead dispositioning its own Rule 19 violation. A self-report is the
+right conduct and is not a clearing path. Missing any of the four arms → the
+mismatch still FAILS.
+
+This clears the RECORDED violation. It does not license the next one — the
+dispatch guard binds the model before the work runs, so a spawn made under the
+current guard should never reach this clause.
+
+**A row exists even for a teammate that was stopped mid-flight**, because the
+ledger is written at dispatch rather than at completion. That is deliberate:
+`subagent-context.jsonl` is written on `SubagentStop`, so a killed teammate
+left no record at all and its absence from the spawn table was itself a FAIL
+with nothing the lead could do about it after the fact.
+
+**Do not substitute `subagent-context.jsonl` for the ledger on the role
+field.** Its `role` prefers the ledger row, so the two normally agree, but the
+ledger is the origin and the one to cite. Where they disagree the ledger wins:
+`subagent-context.jsonl` can only fall back to deriving the role from the
+subagent transcript, and injected core prose there names
+`team-roles/adversary.md`, which reads as an `adversary` spawn regardless of the
+role actually dispatched.
+
+**If the ledger has no rows for this sprint** — the file is absent, OR it
+exists but every row belongs to another sprint — treat it as PRE-LEDGER and say
+so explicitly: fall back to the gate log's spawn table and record in the gate
+log that the verdict rests on lead-authored evidence rather than a machine
+record. The two cases are one case: a consumer that pulls the guard mid-sprint
+gets a ledger file whose first row is the NEXT dispatch, so "file exists" and
+"this sprint is covered" are different claims and only the second one licenses
+reading the ledger as complete.
+
+Do NOT report a clean PASS from an empty or other-sprint ledger. Zero rows and
+zero spawns are different states; a check that cannot tell them apart passes
+vacuously on exactly the sprint where the mechanism was missing, which is the
+defect this check was rewritten to stop committing.
 
 Additionally, verify **story routing** against the canonical map in
 `stories-test-strategy.md` "Story Routing Tags". For EVERY story in the
@@ -1153,10 +1265,19 @@ without its role contract — a dev without its ownership/constraint
 boundary, the lead absorbing a protected-path edit it should have
 delegated (Rule 28), or an `escalate_model` story silently run on the
 standard model instead of the routed `dev-escalated` tier. False-positive
-cost: one gate-log read plus one frontmatter read per routed story —
-persisted artifacts the lead already writes, no new artifact. Removal
-condition: retire once the Agent-tool spawn API structurally attaches the
-role file (no lead-authored dispatch line to verify).
+cost: one JSONL read plus one frontmatter read per routed story —
+persisted artifacts written by a hook and by the lead's own story files, no
+new artifact. Removal condition: retire once the Agent-tool spawn API
+structurally attaches the role file (no lead-authored dispatch line to
+verify).
+
+**Why the ledger and not the lead's table.** A table the lead hand-writes about
+its own dispatches is a self-report on the model column, and it has nothing to
+join against: `subagent-context.jsonl` is written on `SubagentStop`, so a
+teammate stopped mid-flight leaves no row, and its `role` is unreliable when
+derived from the transcript. The dispatch guard already resolves role, pin and
+model at dispatch, so the ledger records that answer rather than reconstructing
+it afterwards. Cite the ledger.
 
 ### 23. Analyst-draft sprint stamps (all planning gates).
 <!-- CHECK_LOADED: 23 -->

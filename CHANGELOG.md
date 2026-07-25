@@ -17,6 +17,320 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.160.0] — 2026-07-25
+
+### Changed — the manifest names the directory; 27 filenames and the invariant guarding them retire
+
+`core-manifest.md` enumerated all 27 core validators as `scripts/ai-dlc/<name>`, and
+`validate-enforcement-map.sh` I5b asserted that list equalled `ls core/scripts/` exactly. The
+enumeration's stated justification was that `scripts/` is shared and no glob could name ours
+without naming theirs. That stopped being true in **v0.126.0**, which moved the validators into
+`scripts/ai-dlc/` — a directory that is exclusively ours. Measured in the reference consumer
+now: 121 loose files in `scripts/`, 26 in `scripts/ai-dlc/`, and **zero** files there that are
+not core's. The enumeration survived the relocation that made it unnecessary, and the manifest had
+begun contradicting itself — line 14 already wrote `scripts/ai-dlc/*` as a glob while the prose
+below insisted the set was enumerated.
+
+Both manifest copies now carry one entry, `scripts/ai-dlc/*`, and I5b is deleted. The direction
+I5b actually protected — a validator added upstream with no manifest entry, hence unguarded at
+edit time — is now structurally impossible rather than merely checked, and an entry with no file
+cannot occur. Every new validator used to cost a two-file manifest edit; now it costs none.
+
+**What the glob gives up, and why that is acceptable.** The enumeration could detect a
+consumer-authored file squatting in `scripts/ai-dlc/`; measured occurrences across the reference
+consumer: zero, ever. Under the glob such a file classifies as core, so the guard denies an
+in-place edit **and** denies the `Write` that would create it, routing the author to
+`scripts/ai-dlc-local/` — which is where it belonged. Only a shell-created squatter is reachable,
+and the first editor interaction emits the correct remediation.
+`core/fixtures/core-script-boundary/` assertion 8 asserts all three directions.
+
+### Fixed — the glob would have silently disabled the pull's validator relocation
+
+This was not the subtraction it looked like. `reconcile/apply.sh`'s `manifest_dests()` filtered
+the manifest to `^scripts/ai-dlc/` and iterated **literal filenames**, deriving each one's old
+path from `base="${dest#scripts/ai-dlc/}"`. Given a glob it yields one entry whose `base` is the
+literal `*`, every `git cat-file -e` misses, the relocation and level-triggered top-up loop runs
+**zero times** — and the `manifest_n -eq 0` guard does not fire, because one entry is not zero.
+The pull would have relocated nothing and re-stamped anyway, on every consumer, silently. The
+check-that-cannot-fire class, in the pull engine.
+
+`manifest_dests()` now expands a glob entry against `git ls-tree "$THEIRS" -- core/scripts/` and
+passes a literal entry through unchanged. The manifest still declares the directory *and* its
+destination; git supplies only membership, so the "one declaration" property the surrounding
+comment defends is intact. The `manifest_n -eq 0` guard also becomes meaningful for the first
+time: an unreadable manifest and an empty `ls-tree` now both reach it.
+
+**Every existing case in `apply-legacy-script-path` would have stayed green through that**,
+because all of them write hand-enumerated stand-in manifests. New case 11 drives the **shipped
+glob form** and asserts positively — files placed, old paths emptied — because asserting only
+"no failure row" passes on a loop that ran zero times. It also completes case 6's pair: the same
+undeclared third validator that case 6 requires *left alone* under a literal list must be
+*carried* under the glob, so only the manifest shape differs between them.
+
+**Two fixtures were passing through the same hole.** `apply-restamp-theirs` and
+`apply-drift-refile` build synthetic distributions that ship no `core/scripts/` at all. Under the
+old enumeration that produced 27 individual `cat-file` misses, and 27 misses read as "nothing to
+relocate"; under one glob entry it correctly reports zero validators and withholds the re-stamp.
+Both synthetic trees now ship a validator, which is what a real distribution always does.
+
+### Fixed — release archaeology out of two resident rule files (pre-push was already blocked)
+
+The rule-file audit's tier-1 `ORIGIN_TAG` check was **already failing before this release**, on
+five findings this branch had accumulated: `core-manifest.md` carried a v0.157.0/v0.63.0 history
+block, and `steps/gate-validation.md` carried three v0.158.0/S298 origin references. Rule 26
+forbids version and sprint tokens in rule prose on sight, and both files are resident paths the
+recover hook whole-re-reads, so the cost is paid every compaction. The first draft of this
+release's own manifest prose added two more.
+
+All seven are gone. Each passage now states the rule rather than its release history: what an
+unclaimed core subtree does wrong in both directions, why a glob needs an exclusively-owned
+directory, and why the spawn ledger is the record to cite. The behaviour each one encoded is
+preserved; only the archaeology is dropped, and that lives here instead.
+
+## [0.159.0] — 2026-07-25
+
+### Fixed — Check 22 could record a Rule 19(a) violation but nobody could ever clear it
+
+v0.158.0 gave Check 22 a machine record. It did not give it a way to **close** a violation
+already in that record, and that is the difference between a gate that reports a problem and a
+gate that cannot be passed.
+
+A spawn that ran on the wrong model tier is a fact about the past. Nothing done later changes it.
+Check 22's body contained no clearing clause of any kind — grepping it for
+`overrid|waiv|except|exempt|escalat|clear|disposi` returned **zero** hits — so once the check
+fired, it fired forever. The `OVERRIDDEN` + operator-citation mechanism already existed in
+`escalations.md` and Check 2/2a already honoured it, but **Check 22 never read escalations**, so
+not even the operator could clear it. The consumer's only remaining exits were a permanent
+consumer-layer override of the check (a rulebook change to work around one historical event) or
+an indefinitely blocked sprint.
+
+This is the same defect class v0.157.0 fixed for Check 16 — fails closed, no clearing path — and
+it was mis-filed as "consumer conduct needing an operator disposition" without checking that the
+disposition mechanism existed. It did not. Filed here as core's, because it is.
+
+A recorded tier mismatch is now CLEARED when **all four** hold, and still FAILS on any one
+missing:
+
+1. An escalation entry for the current sprint NAMES the offending spawn (dispatch `name` / agent
+   id, verbatim). One entry clears one spawn; a waiver naming no spawn clears nothing.
+2. That entry's `**Status:**` is `OVERRIDDEN`.
+3. `validate-escalation-resolution.sh --escalations … --sprint N --transcript …` exits 0 — the
+   same three-flag invocation Check 2a makes. It verifies the `**Operator authorization:**`
+   quote against a genuine operator message in the session transcript, so the verdict on this
+   arm is an exit code rather than the adjudicator's reading, and the disposition cannot be
+   self-granted. It fails closed on a missing `--transcript` and exits 2 on missing args, so a
+   truncated command verifies nothing instead of appearing to pass.
+4. The entry states the REMEDIATION and names its artifact: the work was redone on the pinned
+   tier, or the output was independently verified against its source. An `OVERRIDDEN` with no
+   remediation is writable without anyone having looked at the output — the forgeable-evidence
+   shape Check 26 rejects.
+
+**`DECIDED_AUTONOMOUSLY` explicitly does not clear it.** That is the lead dispositioning its own
+Rule 19 violation. Self-reporting is correct conduct and is not a clearing path — the S298
+adjudicator was right to refuse it.
+
+Nothing here licenses the next violation: the dispatch guard binds the model before the work
+runs, so a post-v0.158.0 spawn should never reach this clause.
+
+### Fixed — my own v0.158.0 prose had the hole it warned about
+
+The new Check 22 said to fall back to the gate-log table "if the ledger is ABSENT", and warned in
+the next sentence that "no rows and no spawns are different states". It then failed to cover the
+third state: a ledger file that EXISTS but holds no rows for this sprint. That is precisely what a
+consumer gets on pulling the guard mid-sprint — the file appears, and its first row is the next
+dispatch. Absent and present-but-empty-for-this-sprint are now one case, treated as pre-ledger.
+
+### Changed
+
+`enforcement-map.yaml`'s Check 22 `reads:` gains `docs/escalations/pending.md` and
+`validate-escalation-resolution.sh`.
+
+## [0.158.0] — 2026-07-25
+
+### Added — `spawn-ledger.jsonl`, written at dispatch, not at completion
+
+Check 22 verifies that every teammate spawn carried a role-matched model and a Rule 19(b)
+contract citation. It had **no machine record to read**, so it read a table the lead
+hand-wrote about its own conduct. Both failure modes that implies landed together on the
+reference consumer at S298, and the check failed on every one of four gate attempts:
+
+1. A `protected-path-editor` ran on **sonnet** against an opus-5 pin. `ai-dlc-dispatch-guard.sh`
+   exists precisely to make that impossible, and it works — replaying the exact payload shows it
+   emitting `updatedInput.model = opus`. But it silently no-op'd (exit 0, no record) when the
+   prompt did not literally contain `team-roles/<role>.md`, which a dispatch naming its role only
+   via `subagent_type` does not. That was the hole.
+2. `gate-adjudicator-s298-impl-3` ran, was stopped at a handoff, and left **no record at all** —
+   the probe writes on `SubagentStop`. Its absence from the spawn table was itself a Check 22
+   FAIL, with nothing the lead could do after the fact.
+
+`ai-dlc-dispatch-guard.sh` already resolved role, pin, requested model and bound model at
+PreToolUse — before the work happens — and threw all of it away. It now appends one row per
+role-bound dispatch: `{v, ts, sprint, name, role, model_pinned, tier_pinned, model_requested,
+model_bound, role_contract_cited, role_file_readable}`.
+
+Writing at dispatch rather than completion is what fixes (2) by construction: the row exists
+before the teammate can be killed. `model_bound` fixes (1): it is the value the guard actually
+set, not a self-report. `model_requested` is kept beside it so a corrected dispatch stays
+visible as a correction rather than being laundered into a clean row.
+
+Also fixed in the guard:
+
+- **`subagent_type` fallback.** A dispatch identifying its role unambiguously is now bound even
+  with no contract line in the prompt. The missing citation is recorded as
+  `role_contract_cited: false` rather than used as grounds to skip the dispatch — Check 22 fails
+  on it, which is the correct outcome, instead of nothing happening at all.
+- **An unresolvable role file is recorded, not skipped.** The guard used to `exit 0` on an
+  unreadable role file. Rule 19 is explicit that a teammate running without a resolvable
+  role-file binding is a violation, not a pass — so the row is written with
+  `role_file_readable: false` and the fail-OPEN (no correction, never a deny) happens after.
+  Silence reading as a pass is the defect class this release closes.
+
+The write is unconditionally fail-open: absent state dir, absent jq, read-only checkout — a
+dispatch is never blocked by bookkeeping. A fixture asserts binding still works with the state
+directory deleted.
+
+### Fixed — `subagent-context.jsonl`'s `role` field was measuring our own documentation
+
+The one machine record that did exist carried a `role` that was wrong on most rows. It was
+`head -1` of every `team-roles/*.md` match in the first 256 KB of the subagent transcript — a
+window that also holds injected core prose naming `team-roles/adversary.md` (`SKILL.md:164`
+among others), so the first match usually won and it was not the dispatched role.
+
+Measured over the reference consumer's 997 rows:
+
+```
+478  adversary        94  remediator        8  code-reviewer
+412  (null)            5  qa
+```
+
+Zero `protected-path-editor`, `dev`, `analyst`, `pm`, `tea`, `ux`, `sm` or `gate-adjudicator`,
+despite documented spawns of every one. Row 991 is the S298 `protected-path-editor` spawn,
+recorded as `adversary`; row 581 a `gate-adjudicator`, likewise.
+
+Two changes, because one was not enough. The prose read is now scoped to the **first
+`type:"user"` record** rather than the whole window — but that alone does not fix it, since
+injected `<system-reminder>` context can arrive inside that same record ahead of the lead's own
+text. Fixture assertion 8a reproduces exactly that and still yields `adversary`, deliberately:
+it documents the limit of any transcript-derived answer. So the probe now **prefers the
+dispatch-time ledger row**, joined on the longest ledger `name` contained in the probe's
+`agent_id` (the id embeds the name: `appe-hb-s298-1-disposition-db3a97` ⊃
+`ppe-hb-s298-1-disposition`). Longest-match, so a generic `dev` cannot outrank `dev-escalated`.
+
+An `agent_id` matching no row falls back to the prose read rather than inheriting a neighbouring
+row's role — asserted, because a join that cannot miss is a join that cannot fail.
+
+### Changed — Check 22 reads the ledger
+
+`gate-validation.md` Check 22 now reads `spawn-ledger.jsonl` as its source of record and
+compares each row against the role file's pin, instead of reading a lead-authored gate-log
+table. The routing arm is unchanged — re-deriving the expected role from persisted story
+frontmatter was already sound and was clean at S298.
+
+`model_requested` disagreeing with `model_bound` is reported but does **not** fail: the guard
+caught the slip and the teammate ran on the pinned tier. `role_contract_cited: false` and
+`role_file_readable: false` both fail.
+
+**An absent ledger is not a pass.** A consumer that has not pulled the guard, or a sprint whose
+spawns predate it, must say so and fall back to the gate-log table with that stated in the gate
+log. No rows and no spawns are different states, and a check that cannot tell them apart passes
+vacuously on exactly the sprint where the mechanism was missing.
+
+`enforcement-map.yaml`'s Check 22 row gains `reads:` and `fixtures:` — it had neither, while
+being `adjudication: llm` with `enforcer: []`.
+
+### Fixed — a vacuous assertion in this release's own fixture
+
+The first version of the longest-name-join assertion passed with the sort removed entirely,
+because each seeded `agent_id` matched exactly one ledger row and the sort never arbitrated.
+Rewritten with two rows whose names both match one id (`adev-escalated-s298-3-xyz` contains both
+`dev` and `dev-escalated`); the mutation run now fires on that assertion alone. Recorded because
+it is the second time a mutant harness here has been vacuous, and the tell is the same both
+times: a mutant that changes nothing is not a passing test.
+
+## [0.157.0] — 2026-07-25
+
+### Fixed — a check that fails closed on files the consumer is forbidden to edit
+
+Check 16 (stub audit) is `universal`: it fires at every gate whose `changed_files` include a
+hot-path file, keyed on content, not gate phase. Its marker regex includes `Phase [0-9]`. A
+prose comment in `reconcile/apply.sh` reads:
+
+```
+# Phase 3's layer-drift.sh does NOT belong here and is not exposed to the same fault: its
+```
+
+That is a core-authored comment in a core-distributed file, and it failed the reference
+consumer's §6 gate **four times**. There was no way to clear it. The four elements demand an
+`Item N` resolvable in the **consumer's** `carry-over-backlog.md`; a core file cannot carry one,
+and `ai-dlc-core-guard.sh` DENIES the in-place edit that would add one — there is no
+`overrides/` shadow and no `extensions/` entry for a hook, a validator, or the update engine.
+The only exits were forking core (Rule 27 forbids it) or an operator waiver on every pull.
+
+**The root cause was an under-claiming manifest, not the regex.** `core-manifest.md` stopped at
+the `ai-dlc` skill dir, hooks, team-roles, and the enumerated validators. Five subtrees
+`install.sh` overwrites wholesale were unclaimed: `skills/ai-dlc-setup/**`,
+`skills/ai-dlc-update/**`, `skills/ai-dlc/templates/*.md`, `session-driver/*.sh`, and
+`schemas/*.json`. So they had **no edit-time protection either** — the same hole I12 already
+records for `ai-dlc-setup/` (v0.63.0) and `schemas/`, each found only when a real pull hit it.
+Claiming them fixes both directions at once: the guard now denies in-place edits there, and
+Check 16 now recognises them as upstream-owned.
+
+Two mechanisms considered and **rejected on measurement**, recorded so they are not re-proposed:
+
+- *Exempt by `git blame` — "the consumer never authored this line."* Only **24 of 44** marker
+  lines in distributed files blame to a `chore(ai-dlc-update)` commit. The other 20 blame to
+  consumer sprint commits predating the current landing convention (`Sprint 155: …`,
+  `chore(ai-dlc): land distribution 0.51.0 → 0.59.0`). Attribution is not stable across a long
+  consumer history.
+- *Tighten the marker regex.* Real, but a separate change: it widens a shared predicate that
+  gates every consumer's product code, and the ownership defect would survive it.
+
+### Added — `scripts/ai-dlc/core-paths.sh`, and I25 binding it to the guard
+
+`--is-core <path>` answers the ownership question for callers that are not a hook: exit 0 core,
+1 consumer-owned, **2 = could not determine**. Exit 2 is deliberately not an exemption — Check
+16 keeps such a path in scope and records that the resolver could not answer, because "no
+manifest found" and "not core" are different answers and a caller that conflates them exempts
+the whole tree.
+
+The set is derived from `core-manifest.md` (fallback `reconcile/setup-sites.md`), never
+hand-listed. `parse_manifest()` and `to_consumer_glob()` are byte-identical copies of the
+guard's, and **I25 in `validate-enforcement-map.sh` fails the build if they fork** — if the two
+disagree, the gate exempts what the guard protects, or the guard denies what the gate audits.
+The copy is deliberate: the guard must stay self-contained, because a guard that sources a
+helper stops denying core writes entirely when that helper is missing from a partial install.
+It fails open, silently, and a disabled write guard is worse than a duplicated 25-line parser.
+
+`to_consumer_glob()` gained `session-driver/`, `schemas/` and a generalised `skills/` case; the
+old table could not express the new subtrees at all — `skills/ai-dlc-setup/SKILL.md` fell to
+the default and resolved to `.claude/skills/ai-dlc/skills/ai-dlc-setup/SKILL.md`.
+
+### Fixed — the fixture that let this ship
+
+`check-15-bypass` seeded only `$TREE/src/` — consumer-authored product code. "A core file trips
+Check 16 and the consumer cannot clear it" had **no coverage**, so the harness stayed green
+while the defect shipped. Added V8 (upstream-owned `reconcile/apply.sh` carrying the verbatim
+comment that failed the real gate, expected **exempt**) and V9 (a consumer-owned
+`.claude/hooks/my-own-hook.sh` with the same bare marker, expected to **fail element 1**).
+
+The pair is the point. A blanket `.claude/` carve-out would pass V8 *and* V9 — and V9 passing is
+a consumer hook smuggling an unaudited stub through the gate. Four mutation runs confirm each
+assertion fires alone: removing the exemption flips only V8; widening it to all of `.claude/`
+flips only V9; deleting `skills/ai-dlc-update/**` from the seeded manifest flips only V8; hiding
+`core-paths.sh` makes the driver exit 2 rather than pass without ever running the filter. The
+seed copies the real `core-manifest.md` rather than a stand-in, so a change to the real
+manifest's shape cannot leave the fixture passing against stale data.
+
+### Known gap — carried, not fixed
+
+19 core-distributed hot-path files carry 45 stub-marker lines; this release exempts the ones
+under the five newly-claimed subtrees. The **30 lines under `tests/fixtures/`** are still in
+scope and will trip Check 16 on any pull that touches those files. `tests/fixtures/` is a shared
+directory — consumers author their own fixtures there — so it needs the enumerate-and-bind
+treatment `scripts/ai-dlc/` already has (an I5b-style invariant joining the enumeration to
+`core/fixtures/`), not a glob. Worst offenders: `check-15-bypass/seed.sh` (13) and its
+`variant_*.py` (11 across 5), which exist to *be* bad stubs and can never be scrubbed.
+
 ## [0.156.0] — 2026-07-25
 
 ### Fixed — a stale core file read as a consumer fork, and the acceptance that hid it was self-perpetuating

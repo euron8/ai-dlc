@@ -127,4 +127,60 @@ def widen_read_path():
     raise NotImplementedError  # stub
 EOF
 
+# ---- V8 / V9: the upstream-owned exemption, and its discrimination control ----
+# Check 16 drops upstream-owned paths from scope, because the four elements are
+# unsatisfiable there: element 1 wants an `Item N` from the CONSUMER's backlog and
+# the core guard denies the edit that would add one. Until this pair existed the
+# whole fixture seeded only `src/` — consumer-authored product code — so "a core
+# file trips Check 16 and the consumer cannot clear it" had NO coverage, and it
+# shipped. It then failed a real consumer's §6 gate four times on the exact
+# comment reproduced in V8.
+#
+# V8 and V9 are a PAIR and neither is meaningful alone. Both live under `.claude/`,
+# both carry the same bare `Phase 3` marker, and both satisfy ZERO elements. Only
+# their OWNERSHIP differs. If the exemption were a blanket `.claude/` carve-out
+# rather than a core-manifest resolve, V8 would pass and V9 would pass too — and
+# V9 passing is a consumer hook smuggling an unaudited stub through the gate.
+mkdir -p "$TREE/.claude/skills/ai-dlc/steps" \
+         "$TREE/.claude/skills/ai-dlc-update/reconcile" \
+         "$TREE/.claude/hooks"
+
+# The resolver reads the REAL core-manifest.md, not a fixture-local invention: a
+# hand-written stand-in here would keep passing after the real manifest changed
+# shape, which is the failure mode this whole check is about. Walk UP for whichever
+# layout we are in (distribution `core/`, or a consumer's installed `.claude/`)
+# rather than counting `..` — the fixture runs from both.
+MANIFEST_SRC=""
+d="$(cd "$(dirname "$0")" && pwd)"
+while [ "$d" != "/" ]; do
+  if [ -f "$d/core/skills/ai-dlc/core-manifest.md" ]; then
+    MANIFEST_SRC="$d/core/skills/ai-dlc/core-manifest.md"; break
+  elif [ -f "$d/.claude/skills/ai-dlc/core-manifest.md" ]; then
+    MANIFEST_SRC="$d/.claude/skills/ai-dlc/core-manifest.md"; break
+  fi
+  d="$(dirname "$d")"
+done
+[ -n "$MANIFEST_SRC" ] || { echo "seed: FAIL — no core-manifest.md found walking up from $0. V8/V9 would compare against nothing." >&2; exit 2; }
+cp "$MANIFEST_SRC" "$TREE/.claude/skills/ai-dlc/core-manifest.md"
+
+# V8: upstream-owned (`skills/ai-dlc-update/**`). Zero elements satisfied. EXEMPT.
+# The comment block is the verbatim text that failed the real gate.
+cat > "$TREE/.claude/skills/ai-dlc-update/reconcile/apply.sh" <<'EOF'
+#!/usr/bin/env bash
+# So both captures happen here, together, in the only state in which ours-vs-base
+# means what the status name claims. Phases 1 and 2 consume what this phase measured.
+#
+# Phase 3's layer-drift.sh does NOT belong here and is not exposed to the same fault: its
+# consumer-side reads are layer_files(), which walks consumer-authored *.md.
+PC="$(bash "$SELF/preclassify.sh" || true)"
+EOF
+
+# V9: a CONSUMER-owned hook. The core glob is `hooks/ai-dlc-*.sh`, so this is NOT
+# core, sits one directory from files that are, and MUST still be audited.
+cat > "$TREE/.claude/hooks/my-own-hook.sh" <<'EOF'
+#!/usr/bin/env bash
+# Phase 3's dispatch table is not wired here yet.
+exit 0
+EOF
+
 echo "$TREE"

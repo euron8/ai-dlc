@@ -8,22 +8,26 @@
 # THE DEFECT THIS EXISTS TO CATCH.
 #
 # ai-dlc-core-guard.sh derives its deny set from core-manifest.md and hand-lists
-# nothing, which is right. But `scripts/*` was never IN the manifest, so the ~25
+# nothing, which is right. But `scripts/*` was never IN the manifest, so the core
 # validators -- the machinery every gate's teeth depend on -- were the one part of
 # core a consumer could edit in place. Two of them had been, in the reference
 # consumer, and neither edit was ever filed as a push candidate. An edited enforcer
 # is a weakened gate: every check that cites it is only as good as the copy on disk.
 #
-# It could not simply be globbed in. `scripts/` is SHARED: in the reference
-# consumer it holds 103 files of which 25 are ours, and no prefix separates them --
-# ai-dlc ships `audit-rule-files.sh` while the consumer owns `audit-dormant-gates.sh`,
-# `audit-main-since.sh` and `audit-rule-exercise.sh`. A `scripts/audit-*` glob denies
-# the consumer's own files; that is the trap `hooks/*.sh` hit before v0.106.0
-# narrowed it to `hooks/ai-dlc-*.sh`.
+# It could not simply be globbed in. `scripts/` is SHARED: the reference consumer's
+# copy holds well over a hundred loose files, most of them theirs, and no prefix
+# separates them -- ai-dlc ships `audit-rule-files.sh` while the consumer owns
+# `audit-dormant-gates.sh`, `audit-main-since.sh` and `audit-rule-exercise.sh`. A
+# `scripts/audit-*` glob denies the consumer's own files; that is the trap
+# `hooks/*.sh` hit before v0.106.0 narrowed it to `hooks/ai-dlc-*.sh`.
 #
-# So v0.126.0 gave the core scripts a directory of their own and enumerated it.
+# So v0.126.0 gave the core scripts a directory of their own and enumerated its
+# contents, and v0.160.0 let the manifest claim the directory whole
+# (`scripts/ai-dlc/*`) once the relocation had made that expressible.
+#
 # Assertions 2-4 are the half that matters: the boundary must be silent on
-# everything that is not ours, including the names that collide.
+# everything that is not ours, including the names that collide. Assertion 8 pins
+# the one behaviour the glob changed.
 
 set -uo pipefail
 
@@ -57,8 +61,11 @@ mkdir -p "$WORK/.claude/skills/ai-dlc/overrides" \
 : > "$WORK/.claude/.ai-dlc-version"
 
 # The manifest the guard derives from. Deliberately a SMALL hand-written stand-in
-# rather than a copy of the real one: this fixture tests the boundary mechanism,
-# not the real file's contents (I5b in validate-enforcement-map.sh owns those).
+# rather than a copy of the real one: this fixture tests the boundary mechanism, not
+# the real file's contents. Two LITERAL script entries, which the shipped manifest no
+# longer uses -- that is the point. Assertions 1-4 prove the guard consults the list;
+# assertion 8 swaps in the shipped `scripts/ai-dlc/*` form and proves the two shapes
+# reach opposite answers on the same path.
 cat > "$WORK/.claude/skills/ai-dlc/core-manifest.md" <<'MANIFEST'
 <!-- CORE_MANIFEST v1 -->
 ```yaml
@@ -123,13 +130,14 @@ expect allow "scripts/audit-rule-files.sh"         "the SAME basename outside sc
 expect allow "scripts/audit-dormant-gates.sh"      "a consumer script sharing the prefix is allowed"
 expect allow "scripts/audit-rule-exercise.sh"      "  and another one"
 
-# --- 4. A validator NOT in the manifest is not protected by directory alone -----
-# The directory is a convention; the manifest is the authority. This is what makes
-# the I5b enumeration load-bearing rather than decorative: a validator that ships
-# without a manifest entry is unguarded, which is why the distribution gate fails
-# on that state instead of letting it ship.
+# --- 4. THE MANIFEST IS THE AUTHORITY, NOT THE DIRECTORY NAME -------------------
+# Under the LITERAL stub manifest above, a file in the core directory that the list
+# does not name goes allow. This is the assertion that proves the guard is reading
+# the manifest at all rather than pattern-matching the directory name -- without it,
+# assertion 1's deny could come from anywhere. The shipped manifest reaches the
+# opposite answer on this same path; assertion 8 asserts that.
 expect allow "scripts/ai-dlc/not-in-manifest.sh" \
-  "a script in the core dir but absent from the manifest is NOT denied (I5b is what prevents this)"
+  "under a LITERAL manifest, a script in the core dir but absent from the list is NOT denied"
 
 # --- 5. The deny message routes to the VALIDATOR arm ---------------------------
 # The generic arm sends the reader to overrides/ or extensions/. Neither exists for
@@ -165,6 +173,34 @@ mout="$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s/scripts/ai-dlc
 if [ -z "$mout" ]; then got=allow; else got="$(printf '%s' "$mout" | jq -r '.hookSpecificOutput.permissionDecision // "allow"')"; fi
 [ "$got" = "allow" ] && ok "MUTATION: removing the scripts/ path arm makes assertion 1 go allow" \
                      || bad "MUTATION: still $got without the scripts/ arm -- assertion 1 proves nothing"
+
+# --- 8. THE SHIPPED GLOB FORM CLAIMS THE WHOLE DIRECTORY ------------------------
+# v0.160.0 replaced the manifest's 27 filenames with `scripts/ai-dlc/*`. Under that
+# entry the DIRECTORY is the answer and a file the distribution never shipped is
+# denied too -- the same path assertion 4 sees allowed. That is the deliberate trade
+# the enumeration was retired for: the list used to detect a consumer file squatting
+# in our directory (measured across the reference consumer's installed validators:
+# zero, ever), and the glob instead denies the edit AND the Write that would create
+# it, routing the author to scripts/ai-dlc-local/ -- which is where the file belonged.
+# Asserted here so the trade is a tested property rather than a changelog claim.
+#
+# Last, because it overwrites the manifest every assertion above depends on.
+cat > "$WORK/.claude/skills/ai-dlc/core-manifest.md" <<'GLOBMANIFEST'
+<!-- CORE_MANIFEST v1 -->
+```yaml
+core_manifest:
+  - SKILL.md
+  - hooks/ai-dlc-*.sh
+  - scripts/ai-dlc/*
+```
+GLOBMANIFEST
+expect deny  "scripts/ai-dlc/not-in-manifest.sh" \
+  "under the shipped glob entry, ANY file in scripts/ai-dlc/ is denied"
+expect allow "scripts/audit-rule-files.sh" \
+  "  and the glob still stops at the directory boundary"
+got="$(decision scripts/ai-dlc/brand-new.sh Write)"
+[ "$got" = "deny" ] && ok "  and a Write that would CREATE a squatter is denied too" \
+                    || bad "  a Write creating scripts/ai-dlc/brand-new.sh was $got -- a squatter can still be planted through the editor"
 
 echo ""
 if [ "$fails" -eq 0 ]; then

@@ -113,7 +113,6 @@ ROLES_DIR="$PROJECT_DIR/.claude/team-roles"
 [ -d "$ROLES_DIR" ] || exit 0
 
 PROMPT="$(printf '%s' "$INPUT" | jq -r '.tool_input.prompt // empty' 2>/dev/null)"
-[ -n "$PROMPT" ] || exit 0          # nothing to derive a role from — fail-open
 
 # Derive the role from the Rule 19 binding the prompt carries. Every one of the
 # 42 S291 dispatches named `team-roles/<role>.md` in its prompt, so this is a
@@ -122,10 +121,39 @@ PROMPT="$(printf '%s' "$INPUT" | jq -r '.tool_input.prompt // empty' 2>/dev/null
 # chooses, the binding is the contract it must honour.
 ROLE="$(printf '%s' "$PROMPT" | grep -oE 'team-roles/[a-z][a-z-]*\.md' \
   | head -1 | sed -E 's#team-roles/##; s#\.md$##')"
+
+# Whether the Rule 19(b) contract line was actually carried — the prompt naming
+# the role file IS that citation, so this is the same read, recorded rather than
+# discarded. Check 22 needs it: a spawn with no contract citation is a Rule 19(b)
+# violation, and until now nothing observed it except the lead's own gate-log
+# prose about itself.
+ROLE_CONTRACT_CITED=false
+[ -n "$ROLE" ] && ROLE_CONTRACT_CITED=true
+
+# FALLBACK: the dispatch named a role only via `subagent_type`. Before v0.158.0
+# this path was a silent no-op — no binding, no correction, no record — and it is
+# the likeliest way a `protected-path-editor` reached sonnet against an opus pin
+# on the reference consumer while the guard sat installed and green. A dispatch
+# that identifies its role unambiguously must still be bound; it is only the
+# CONTRACT CITATION that is missing, and that is recorded as false rather than
+# used as grounds to skip the dispatch.
+if [ -z "$ROLE" ]; then
+  ROLE="$(printf '%s' "$INPUT" | jq -r '.tool_input.subagent_type // empty' 2>/dev/null \
+    | grep -oE '^[a-z][a-z-]*$' || true)"
+fi
 [ -n "$ROLE" ] || exit 0            # not a role-bound dispatch — not ours
 
 ROLE_FILE="$ROLES_DIR/$ROLE.md"
-[ -r "$ROLE_FILE" ] || exit 0       # unknown/unreadable role — fail-open
+
+# An unreadable role file is still a DISPATCH, and Check 22's fail-closed clause
+# is explicit that "a teammate that ran without a resolvable role-file binding is
+# a Rule 19 violation, not a pass". Exiting here before the ledger write would
+# make that violation indistinguishable from no dispatch at all — silence reading
+# as a pass, which is the exact class of defect this release exists to close. So
+# the flag is recorded and the fail-OPEN (no correction, never a deny) happens
+# after the row is written.
+ROLE_FILE_READABLE=true
+[ -r "$ROLE_FILE" ] || ROLE_FILE_READABLE=false
 
 # tier <model-string> -> opus | sonnet | (empty)
 tier() {
@@ -143,7 +171,6 @@ tier() {
 # at all. A blind `grep -m1 model` reads the wrong line.
 PINS="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$ROLE_FILE" 2>/dev/null \
   | sed -E 's#^.*`/model ##; s#`$##')"
-[ -n "$PINS" ] || exit 0            # role declares no model — nothing to bind
 
 # Every declared pin must agree on tier, else we cannot say what was intended.
 EXPECT=""
@@ -156,10 +183,89 @@ while IFS= read -r p; do
 done <<EOF
 $PINS
 EOF
-[ -n "$EXPECT" ] || exit 0
 
 REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
 GOT="$(tier "$REQUESTED")"
+
+# --- SPAWN LEDGER --------------------------------------------------------------
+# PURE INSTRUMENTATION, written at DISPATCH time. Nothing below bounds, denies or
+# warns; the decision logic is unchanged and follows.
+#
+# WHY HERE AND NOT AT COMPLETION. Check 22 verifies that every teammate spawn
+# carried a role-matched model and a Rule 19(b) contract citation. It had no
+# machine record to read, so it read a table the LEAD hand-wrote about its own
+# conduct, and both failure modes duly appeared on the reference consumer at
+# S298:
+#
+#   1. `subagent-context.jsonl` DOES record a role, and it is wrong. That field
+#      is `head -1` of every `team-roles/*.md` match in the first 256 KB of the
+#      subagent transcript — a window that contains injected core prose naming
+#      `team-roles/adversary.md` (SKILL.md:164 among others), so the first match
+#      wins and it is rarely the dispatched role. Measured over 997 rows: 478
+#      `adversary`, 412 null, 94 `remediator`, 8 `code-reviewer`, 5 `qa`, and
+#      ZERO for protected-path-editor, dev, analyst, pm, tea, ux, sm or
+#      gate-adjudicator despite documented spawns of all of them.
+#   2. A teammate STOPPED mid-flight leaves no record at all, because the probe
+#      writes on SubagentStop. `gate-adjudicator-s298-impl-3` ran, was stopped at
+#      a handoff, and its absence from the spawn table was itself a Check 22 FAIL.
+#
+# Writing at dispatch fixes both by construction: the role is the one the guard
+# BOUND (not a guess from a transcript), the model is the value that will
+# actually be used (not a self-report), and the row exists before the teammate
+# can be killed. `model_bound` is the operative field — `model_requested` is kept
+# beside it precisely so a corrected dispatch stays visible as a correction.
+#
+# FAIL-OPEN, ABSOLUTELY. Every failure path is swallowed: an unwritable state dir,
+# absent jq, a read-only checkout. A dispatch must never be blocked by
+# bookkeeping, and this hook's whole posture is positive-match-only.
+SPAWN_STATE_DIR="${PROJECT_DIR}/${AI_DLC_STATE_DIR:-_bmad-output}"
+SPAWN_LEDGER="${SPAWN_STATE_DIR}/spawn-ledger.jsonl"
+SPAWN_SNAPSHOT="${SPAWN_STATE_DIR}/pipeline-snapshot.md"
+
+# What the dispatch will actually run on: the pin's tier when the guard is about
+# to correct it, otherwise whatever was requested. `inherit` names the documented
+# no-param case (the Agent tool inherits, and the record cannot say what that
+# resolved to) so the field is never silently empty.
+if [ -n "$EXPECT" ] && [ "$GOT" != "$EXPECT" ]; then
+  SPAWN_BOUND="$EXPECT"
+elif [ -n "$REQUESTED" ]; then
+  SPAWN_BOUND="$REQUESTED"
+else
+  SPAWN_BOUND="inherit"
+fi
+
+SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.subagent_type // empty' 2>/dev/null || true)"
+SPAWN_SPRINT="$(sed -n 's/^- \*\*sprint_id:\*\* *\([0-9][0-9]*\).*/\1/p' "$SPAWN_SNAPSHOT" 2>/dev/null | head -1 || true)"
+SPAWN_PINS="$(printf '%s' "$PINS" | tr '\n' ' ' | sed 's/ *$//')"
+
+mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
+jq -nc \
+   --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)" \
+   --arg sprint "${SPAWN_SPRINT:-}" \
+   --arg name "${SPAWN_NAME:-}" \
+   --arg role "$ROLE" \
+   --arg pinned "${SPAWN_PINS:-}" \
+   --arg tier "${EXPECT:-}" \
+   --arg req "${REQUESTED:-}" \
+   --arg bound "$SPAWN_BOUND" \
+   --argjson cited "$ROLE_CONTRACT_CITED" \
+   --argjson readable "$ROLE_FILE_READABLE" '{
+     v: 1, ts: $ts,
+     sprint: (if $sprint == "" then null else ($sprint | tonumber? // null) end),
+     name: (if $name == "" then null else $name end),
+     role: $role,
+     model_pinned: (if $pinned == "" then null else $pinned end),
+     tier_pinned: (if $tier == "" then null else $tier end),
+     model_requested: (if $req == "" then null else $req end),
+     model_bound: $bound,
+     role_contract_cited: $cited,
+     role_file_readable: $readable
+   }' >> "$SPAWN_LEDGER" 2>/dev/null || true
+# --- end SPAWN LEDGER ---------------------------------------------------------
+
+[ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
+[ -n "$PINS" ] || exit 0            # role declares no model — nothing to bind
+[ -n "$EXPECT" ] || exit 0
 
 # ALREADY CORRECT: the requested tier IS the pinned tier. Allow unchanged — exit 0 with no
 # decision, so the dispatch keeps whatever approval posture it would otherwise have. (Tier compare,

@@ -284,9 +284,15 @@ Verify:
   SKILL.md Rule 19: (a) the Agent tool `model` parameter was passed and
   matches the role's `/model` directive, and (b) the dispatch carried
   the standing role-contract line binding the subagent to
-  `.claude/team-roles/<role>.md`. Record BOTH per teammate in the gate
-  log (model value + role-file citation) — gate-validation Check 22
-  reads these records.
+  `.claude/team-roles/<role>.md`. You do NOT hand-record these:
+  `ai-dlc-dispatch-guard.sh` writes one row per dispatch to
+  `_bmad-output/spawn-ledger.jsonl` at PreToolUse, and Check 22 reads
+  that. READ the ledger here and confirm it matches what you believe you
+  dispatched — a row with `role_contract_cited: false` or
+  `role_file_readable: false` is a Rule 19 violation you can still fix
+  before the gate. Do not restate the ledger's contents in the gate log
+  as a substitute for it; a table you write about your own dispatches is
+  what Check 22 stopped relying on.
 - Every story tagged `protected_path_editor: true` was dispatched to a
   `protected-path-editor` teammate (serialized), not executed inline by
   the lead and not delegated to a dev. Record the dispatch in the gate

@@ -49,13 +49,22 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-restamp.XXXXXX")" || { echo "FIXTURE ER
 trap 'rm -rf "$WORK"' EXIT
 
 DIST="$WORK/dist"; CONSUMER="$WORK/consumer"
-mkdir -p "$DIST/core/session-driver" "$CONSUMER/.claude/session-driver" || exit 2
+mkdir -p "$DIST/core/session-driver" "$CONSUMER/.claude/session-driver" \
+         "$DIST/core/scripts" || exit 2
 git -C "$DIST" init -q 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
 gitc() { git -C "$DIST" -c user.email=f@f -c user.name=fixture "$@"; }
 
 # BASE at 1.0.0.
 printf '1.0.0\n' > "$DIST/VERSION"
 printf '#!/usr/bin/env bash\n# driver v1\n' > "$DIST/core/session-driver/ai-dlc-session-driver.sh"
+# A real distribution ALWAYS ships core validators, and since v0.160.0 the manifest
+# claims them as `core/scripts/ai-dlc/*` -- one entry apply.sh expands against THEIRS'
+# tree. A synthetic DIST that ships none makes that expansion empty, which apply.sh
+# reports as manifest-unreadable and withholds the re-stamp for, correctly: a stamp
+# claiming a version whose validators are absent is the failure it exists to prevent.
+# This fixture used to pass through that hole -- the old 27-name enumeration produced
+# 27 individual cat-file misses, and 27 misses read as "nothing to relocate".
+printf '#!/usr/bin/env bash\necho v\n' > "$DIST/core/scripts/validate-synthetic.sh"
 gitc add -A && gitc commit -q -m base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
 

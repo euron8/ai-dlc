@@ -230,6 +230,9 @@ checks:
     gate_types: [universal]
     adjudication: llm
     enforcer: []
+    reads:
+      - core/scripts/core-paths.sh        # --is-core: drops upstream-owned paths from scope
+      - core/skills/ai-dlc/core-manifest.md
     ci_workflow: ~
     fixtures: [tests/fixtures/check-15-bypass]
 
@@ -285,7 +288,13 @@ checks:
     gate_types: [implementation]
     adjudication: llm
     enforcer: []
+    reads:
+      - _bmad-output/spawn-ledger.jsonl   # written at dispatch by ai-dlc-dispatch-guard.sh
+      - core/team-roles/*.md              # the /model pin each row is compared against
+      - docs/escalations/pending.md       # OVERRIDDEN entry dispositioning a recorded 19(a) violation
+      - core/scripts/validate-escalation-resolution.sh   # arm 3: the operator citation is verified, not read
     ci_workflow: ~
+    fixtures: [tests/fixtures/dispatch-model-guard, tests/fixtures/subagent-probe]
 
   - id: "23"
     title: Analyst-draft sprint stamps (Rule 24)
