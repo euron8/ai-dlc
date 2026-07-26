@@ -161,13 +161,27 @@ For each completed task, verify:
 - [ ] **Honest-green canonical profile (HARD GATE).** QA's independent
   re-run MUST use the canonical full-collection invocation — no test-name
   filter, marker filter, deselect, or otherwise-reduced profile. QA records
-  the collected / deselected / skipped / xfail counts in the validation
+  the **exact invocation (command and working directory)** and the
+  collected / deselected / skipped / xfail counts in the validation
   record; any nonzero deselected count is REJECT-pending-justification.
   Green under a reduced profile is not green — a test MUST NOT be hideable
-  behind a filter. Catches a suite that passes only because failing tests
-  were filtered out of the run; false positive is an environment-gated test
+  behind a filter. **Record the invocation, not just the counts:** counts alone
+  cannot distinguish a full run from a narrower one, so two steps can each report
+  honest-green from different roots and neither number reveals that one of them
+  never collected the failing tests. Catches a suite that passes only because
+  failing tests were filtered out of the run, or because it was run from a
+  narrower root; false positive is an environment-gated test
   legitimately skipped, e.g. no database available (record the skip reason);
   remove when CI enforces the canonical profile on every gate run.
+- [ ] **Permitted pre-existing failures are enumerated by test ID (HARD GATE).**
+  If the story allows the suite to be non-green on failures it did not cause,
+  the allowance MUST list the failing test IDs, and the run MUST fail exactly
+  those. A count is not an identity: "11 failed" matching a baseline of "11
+  failed" can be a completely different 11, and a regression introduced by this
+  story then lands looking like the baseline. Catches a new failure swapping
+  places with a tolerated one; false positive is a parametrized ID that changes
+  legitimately (record the new ID and why); remove when the baseline is stored
+  as a machine-checked ID set rather than prose.
 - [ ] Code follows conventions in `docs/coding-conventions.md`
 - [ ] Commit messages follow conventional commits format
 - [ ] No files modified outside the teammate's ownership boundary

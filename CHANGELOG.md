@@ -17,6 +17,92 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.168.0] — 2026-07-26
+
+### Added — a join can now be extended by evidence of work, not just by the clock
+
+The reference consumer filed this from s298 and it is the third recurrence of one
+failure: `NON-DELIVERY` means "the clock ran out", Rule 20 turns that into a
+re-dispatch, and a clock cannot tell a slow teammate from a dead one. The two prior
+fixes both moved the threshold and left the proxy in place — v0.167.0 moved the
+ceiling 20 → 60 minutes after S297 re-dispatched a live `adversary-p1-rr`, and the
+non-sleeping-sibling fix stopped charging beats that never waited. **The same
+release recorded a legitimate 62-minute dispatch**, which the raised ceiling does
+not cover either, so there is no threshold left to move.
+
+What the consumer's lead did instead is the derivation for this change: it read
+`git status` in the teammate's worktree, saw 243 insertions across 5 files, and
+re-armed rather than re-dispatched. That the lead had to hand-write the liveness
+check is the defect.
+
+**`--progress-path <dir|file>` (repeatable).** Each beat asks whether any file
+under that path was written since the previous beat. If so, a beat that would have
+declared non-delivery instead extends the sequence by one and prints `PROGRESS`.
+Omit the flag and behaviour is byte-for-byte what it was.
+
+Note the direction. v0.167.0's `### Not shipped` block rejected a
+`subagent-context.jsonl` completion signal because "a stop is not proof of death,
+and an automatic verdict there re-dispatches live teammates" — that was the *death*
+direction, which can manufacture a false NON-DELIVERY. This is the *life* direction,
+and it sits on the safe side of the asymmetry the script's own header states: it can
+only delay non-delivery, never produce a false `DELIVERED`.
+
+**The extension is bounded, and that is the load-bearing part.** "Progress resets
+the counter" would trade a false NON-DELIVERY for a join that cannot terminate — a
+teammate looping on a log file every ten minutes would hold the lead forever, and
+Rule 29's Check C exists to forbid exactly that. Grants are counted in their own
+sidecar and capped at `max_wait_beats`, so the worst case doubles (60 → 120 minutes)
+and stays finite. SKILL.md's Rule 26(c) claim that this script "can commit neither"
+failure remains literally true, and now says why.
+
+**Two ways this check could have silently never fired, both hard errors.** A
+nonexistent `--progress-path` yields no hits forever, so the grant is unreachable
+and the feature is inert while reading as working. And `_bmad-output` is the obvious
+path to reach for and the one that makes the check unable to fail: this beat
+re-stamps `.beat-inflight` every poll and writes its own counters there, and the
+lead rewrites the snapshot every turn. Both exit 64. Separately, a *teammate's*
+worktree carries its own `_bmad-output/`, which the state-dir guard cannot see
+because it is not this run's state dir — so `.wait-beats/` and `.beat-inflight` are
+pruned from the scan by name.
+
+`find -newer` and `-prune` only; no `-newermt` (GNU-only), no `-quit` (not on every
+BSD find), and no pipe to `head`, because a pipe that closes early turns SIGPIPE
+into "not found" and reports a present thing absent.
+
+Measured on a real teammate worktree (9,929 files) rather than only on the fixture's
+toy tree, in both directions: with the mark behind the tree's writes it granted, and
+with the mark at `now` against the same quiescent tree it declared NON-DELIVERY. The
+second run is the one that matters — a scan that returns "progress" on any large tree
+would be a check that cannot fail. Traversal cost 0.2s of CPU inside the beat.
+
+### Added — honest-green must record its invocation, and tolerated failures must be named
+
+Also from s298, and a separate defect: every gate that sprint reported honest-green
+while the repo-root suite was red. The snapshot carried `3827 passed, 0 failed`; the
+root run collects 6801 and fails 11. Both are "canonical full-collection" runs — from
+different roots. `qa.md`'s existing Honest-green HARD GATE records counts and forbids
+filters, so it could not see the difference it was written to prevent.
+
+- The gate now requires the **exact invocation (command and working directory)**
+  alongside the counts.
+- A new gate: any allowance for pre-existing failures must **enumerate test IDs**.
+  A count is not an identity — "11 failed" matching a baseline of "11 failed" can be
+  a completely different 11, and a regression then lands looking like the baseline.
+
+### Fixtures
+
+`wait-stale-deliverable/` gains four cases. `progress-extends` asserts `.grants`
+rather than only the message, because a subject that printed `PROGRESS` and exhausted
+anyway would still re-dispatch a live teammate while reading as fixed.
+`progress-bounded` is the case that keeps Check C true. `progress-ignores-own-state`
+seeds a teammate worktree carrying its own ticking `_bmad-output/`.
+`progress-guards` carries a CONTROL alongside its three rejections — without it, a
+subject that refused every `--progress-path` would satisfy all three. All four seed
+an already-aged `.progress` mark, which is the honest state at exhaustion; without
+it the first comparison has nothing to compare against and every case passes for the
+wrong reason. Mutation-verified, five mutants, recorded in the file: no pre-existing
+case reds under any of them. Full suite 66/66.
+
 ## [0.167.0] — 2026-07-25
 
 ### Changed — the beat quantum is no longer the steering budget
