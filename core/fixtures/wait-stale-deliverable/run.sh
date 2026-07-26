@@ -273,6 +273,98 @@ case "$LEASE" in
 esac
 rm -rf "$W"
 
+# --- 10. an exhausted sequence with evidence of work is EXTENDED, not declared ---
+# The clock says the teammate is dead; the filesystem says it wrote a file during
+# the last beat. Both prior fixes for this failure only moved the clock, and S298
+# then produced a legitimate 62-minute dispatch -- past even the raised ceiling.
+# The message alone is not the assertion: `.grants` is checked, because a subject
+# that printed PROGRESS and exhausted anyway would still re-dispatch a live
+# teammate while reading as fixed.
+W="$( bash "$SEED" progress-extends )"
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+beat "$W" --progress-path wt
+if [ "$RC" -eq 0 ] && ! grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "progress-extends: no non-delivery while the teammate is demonstrably working"
+else bad "progress-extends: rc $RC with NON-DELIVERY — a live teammate is re-dispatched on a clock"; fi
+if grep -q '^PROGRESS' "$BEATOUT"; then
+  ok "progress-extends: stdout names PROGRESS — the lead learns why not to re-dispatch"
+else bad "progress-extends: no PROGRESS line; the extension is invisible to the lead"; fi
+if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "1" ]; then
+  ok "progress-extends: one grant charged — the extension is counted, not free"
+else bad "progress-extends: .grants not 1 — an uncounted extension is an unbounded wait"; fi
+rm -rf "$W"
+
+# MUTATION NOTE for cases 10-13. Verified by removing each mechanism in turn:
+#   grant cap                -> reds ONLY progress-bounded (3 assertions)
+#   find prune               -> reds ONLY progress-ignores-own-state (2)
+#   state-dir/ancestor guard -> reds ONLY progress-guards (2)
+#   nonexistent-path refusal -> reds ONLY progress-guards (1, the other one)
+#   progress sampling itself -> reds progress-extends (3) AND progress-bounded's
+#                               explanation assertion (1)
+# No pre-existing case reds under any of them, which is the evidence that the
+# flagless path is untouched. The last mutant is the one overlap and it is not
+# vacuity: progress-bounded's NOTE is printed only when work IS observed, so a
+# subject that never observes work cannot emit it. Its other two assertions -- rc 1
+# and the grant counter held at the cap -- stay green under that mutant and red only
+# under the cap mutant, which is what makes the bound independently proven.
+
+# --- 11. ...but the extension is BOUNDED. This is the case that keeps Check C ----
+# true. Same evidence of work as case 10, every grant already spent. If this ever
+# goes green-with-rc-0 the join can be held open forever by a teammate that writes
+# and never delivers, and SKILL.md's Rule 26(c) claim that this script "can commit
+# neither" failure becomes false with nothing to say so.
+W="$( bash "$SEED" progress-bounded )"
+beat "$W" --progress-path wt
+if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "progress-bounded: rc 1 once the grants are spent — the wait still ends"
+else bad "progress-bounded: rc $RC — progress with no cap is an unbounded wait (Rule 29, Check C)"; fi
+case "$OUT" in
+  *"progress grants are spent"*) ok "progress-bounded: the NOTE says why, so the lead is not left guessing" ;;
+  *) bad "progress-bounded: non-delivery on a working teammate with no explanation" ;;
+esac
+if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "6" ]; then
+  ok "progress-bounded: grant counter held at the cap"
+else bad "progress-bounded: grant counter moved past the cap"; fi
+rm -rf "$W"
+
+# --- 12. machinery heartbeats in the watched tree are not evidence of work -------
+# A teammate worktree carries its own `_bmad-output/`. Its `.wait-beats/` counters
+# and `.beat-inflight` keep ticking whether or not the teammate is alive, and they
+# are NOT this run's state dir, so the argument guard in case 13 cannot see them.
+# Only the prune can. Without it, pointing at a worktree grants forever.
+W="$( bash "$SEED" progress-ignores-own-state )"
+beat "$W" --progress-path wt
+if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "progress-ignores-own-state: wait-beat machinery does not count as work"
+else bad "progress-ignores-own-state: rc $RC — the beat is reading its own heartbeat as the teammate's progress"; fi
+if grep -q '^PROGRESS' "$BEATOUT"; then
+  bad "progress-ignores-own-state: granted on .beat-inflight/.wait-beats churn alone"
+else ok "progress-ignores-own-state: no PROGRESS line"; fi
+rm -rf "$W"
+
+# --- 13. the two ways this check could silently never fire ----------------------
+# Both are argument errors, not runtime behaviour, because both produce a subject
+# that runs clean forever while enforcing nothing. The CONTROL matters as much as
+# the rejections: a subject that refused every --progress-path would satisfy the
+# three exit-64 assertions and be entirely useless.
+W="$( bash "$SEED" progress-guards )"
+guard() { ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
+                           AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
+              bash "$SUBJ" --progress-path "$1" deliv.md ) >/dev/null 2>&1; echo $?; }
+if [ "$(guard _bmad-output)" = "64" ]; then
+  ok "progress-guards: the state dir is refused — it is written by this beat every poll"
+else bad "progress-guards: --progress-path _bmad-output accepted; progress is then always true and NON-DELIVERY can never fire"; fi
+if [ "$(guard .)" = "64" ]; then
+  ok "progress-guards: an ANCESTOR of the state dir is refused too"
+else bad "progress-guards: --progress-path . accepted; it contains the state dir, same defect one level up"; fi
+if [ "$(guard no-such-dir)" = "64" ]; then
+  ok "progress-guards: a nonexistent path is refused — it could never show work"
+else bad "progress-guards: a typo'd progress path is accepted and silently grants nothing, ever"; fi
+if [ "$(guard wt)" != "64" ]; then
+  ok "progress-guards: CONTROL — a real worktree path is accepted"
+else bad "progress-guards: every --progress-path is rejected; the flag does nothing"; fi
+rm -rf "$W"
+
 if [ "$fails" -eq 0 ]; then
   echo "wait-stale-deliverable: PASS"
   exit 0

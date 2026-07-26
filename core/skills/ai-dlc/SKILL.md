@@ -1333,15 +1333,24 @@ It enforces both bounds so you do not have to hold them:
   once, then HARD_BLOCK. The wait never runs forever. The script counts the
   beats in a sidecar keyed by the deliverable, so the sequence terminates
   whether or not you remember it.
+- **An exhausted clock is not evidence of death.** Pass `--progress-path <the
+  teammate's worktree>` and a beat that would declare non-delivery instead
+  EXTENDS the sequence by one beat while files under that path keep changing,
+  printing `PROGRESS`. Grants are capped at `max_wait_beats` too, so the wait
+  still ends. Never point it at `_bmad-output` -- the script refuses, because it
+  writes there itself and progress would then always be true.
 
 **Minimum mechanism (Rule 26(c)) -- `wait-for-deliverable.sh`.** Failure caught:
 (i) a hand-typed wait, in the foreground, that outlasts the steering budget and
 gags the operator (Check A); and (ii) a hand-typed wait with no sequence bound,
 which advances nothing forever (Check C). The script can commit neither -- the
 beat is clamped inside the quantum, and beats are counted in a sidecar so
-exhaustion declares Rule 20 non-delivery. False-positive cost: a deliverable
-landing in the same second the sequence exhausts is re-dispatched once;
-`--reset` re-arms it. Removal condition: retire when the harness offers a join
+exhaustion declares Rule 20 non-delivery. `--progress-path` extends that
+sequence on observed work, and its grants are counted against the same bound, so
+the wait stays finite and this sentence stays true. False-positive cost: a
+deliverable landing in the same second the sequence exhausts is re-dispatched
+once; `--reset` re-arms it, and `--progress-path` removes most of the reason to
+reach for `--reset` on a hunch. Removal condition: retire when the harness offers a join
 primitive that takes the handle an `Agent` actually returns.
 
 Check A (duration) and Check C (count) bind different things: an over-budget

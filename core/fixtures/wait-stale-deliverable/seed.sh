@@ -77,6 +77,65 @@ case "$CASE" in
   knob-split-forward|knob-split-reverse|marker-goes-stale)
     ;;
 
+  # ---- progress-evidence cases -------------------------------------------------
+  # All four seed a SPENT counter, because the grant only ever matters at the beat
+  # that would otherwise declare non-delivery. They also seed the `.progress` mark
+  # ALREADY AGED: the mark is created on a join's first beat and a spent counter
+  # means five beats have been and gone, so a mark that predates this beat is the
+  # honest state at exhaustion -- not a convenience. Without it `progressed_since`
+  # returns false on its first call for want of anything to compare against, and
+  # every one of these cases would pass for the wrong reason.
+  #
+  # The deliverable is ABSENT rather than stale-and-present: a missing file cannot
+  # deliver its way out either, and it keeps the pre-existing-content NOTE out of
+  # the output these cases assert on.
+  progress-extends|progress-bounded|progress-ignores-own-state)
+    mkdir -p "$WORK/_bmad-output/.wait-beats"
+    printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md)"
+    printf '6' > "$WORK/_bmad-output/.wait-beats/.bound"
+    : > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md).progress"
+    age_file "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md).progress" 300
+
+    # The teammate's worktree. `settled.txt` is older than the mark so the tree is
+    # never empty -- an empty tree would make "no progress" true for the wrong
+    # reason and `progress-ignores-own-state` vacuous.
+    mkdir -p "$WORK/wt"
+    printf 'work from an earlier beat\n' > "$WORK/wt/settled.txt"
+    age_file "$WORK/wt/settled.txt" 600
+
+    case "$CASE" in
+      # A file written since the last beat: the teammate is demonstrably working.
+      progress-extends)
+        printf 'a partial result written during the last beat\n' > "$WORK/wt/wip.txt"
+        ;;
+      # Same evidence, but every grant is already spent. The wait must still end --
+      # a teammate that writes forever without delivering is the hang Rule 29's
+      # Check C exists to stop, and an uncapped grant would be exactly that.
+      progress-bounded)
+        printf 'a partial result written during the last beat\n' > "$WORK/wt/wip.txt"
+        printf '6' > "$WORK/_bmad-output/.wait-beats/$(key_of deliv.md).grants"
+        ;;
+      # The ONLY fresh writes in the watched tree are wait-beat machinery. A
+      # teammate worktree carries its own `_bmad-output/`, so if that teammate ran
+      # beats of its own this is what the tree looks like while it is dead: a
+      # heartbeat, not work. Nothing here is the caller's state dir, so the
+      # state-dir guard cannot see it -- only the prune can.
+      progress-ignores-own-state)
+        mkdir -p "$WORK/wt/_bmad-output/.wait-beats"
+        printf '3' > "$WORK/wt/_bmad-output/.wait-beats/$(key_of some-other-deliv.md)"
+        printf '%s' "$(date +%s)" > "$WORK/wt/_bmad-output/.beat-inflight"
+        ;;
+    esac
+    ;;
+
+  # Argument-guard cases need no state beyond one legitimate progress path, which
+  # is the CONTROL: without it, a subject that rejected every --progress-path
+  # would satisfy all three rejection assertions.
+  progress-guards)
+    mkdir -p "$WORK/wt"
+    printf 'the teammate works here\n' > "$WORK/wt/settled.txt"
+    ;;
+
   *)
     echo "FIXTURE ERROR: unknown case '$CASE'" >&2
     rm -rf "$WORK"

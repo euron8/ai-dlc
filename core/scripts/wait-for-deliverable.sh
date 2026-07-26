@@ -79,14 +79,56 @@
 # The collision above happened on a lead-invented UNSTAMPED path. This test is the
 # belt for paths that escaped that discipline.
 #
+# NON-DELIVERY MEANS "NO EVIDENCE OF WORK", NOT "TIME ELAPSED". The sequence bound
+# below is a clock, and a clock cannot tell a slow teammate from a dead one. So the
+# mechanism built to stop a lead re-dispatching a live teammate periodically causes
+# exactly that. Three recurrences, and the first two fixes both only moved the
+# threshold:
+#
+#   1. S297 -- `adversary-p1-rr` declared non-delivered at the then-20-minute
+#      ceiling; a LIVE teammate was re-dispatched. Fix: ceiling 20 -> 60 minutes.
+#   2. Non-sleeping siblings charged a beat without waiting, so the counter reached
+#      the bound while the teammate was alive and the deliverable landed four
+#      minutes later. Fix: charge a beat only when the invocation sleeps (below).
+#   3. S298 -- a legitimate 62-minute dispatch, which exceeds even the raised
+#      ceiling, and a second dispatch on the same trajectory. The lead pre-empted
+#      the false NON-DELIVERY BY HAND, checking `git status` in the teammate's
+#      worktree for changed files and re-arming instead of re-dispatching. That
+#      the lead had to hand-write the liveness check is the defect.
+#
+# --progress-path is that hand-written check, mechanized. Point it at where the
+# teammate WORKS (its worktree), and each beat asks whether any file under it was
+# written since the previous beat. If so the teammate is demonstrably working, and
+# an exhausted sequence is EXTENDED by one beat instead of declaring non-delivery.
+# Omit the flag and behaviour is byte-for-byte what it was: strictly additive.
+#
+# THE EXTENSION IS BOUNDED, AND THAT IS NOT OPTIONAL. Rule 29's Check C is the
+# other half of this script's contract -- an unbounded wait is a hang, not a gag --
+# so "progress resets the counter" would trade a false NON-DELIVERY for a join that
+# can never terminate. A teammate stuck in a loop touching a log file every ten
+# minutes would hold the lead forever, and the Rule 26(c) claim that this script
+# "can commit neither" failure would quietly become false. So grants are counted
+# too, in their own sidecar, capped at max_wait_beats. Worst case doubles; it does
+# not become infinite.
+#
+# WHY NOT A PROGRESS PATH THE SCRIPT PICKS ITSELF. Only the caller knows which tree
+# the teammate was pointed at, and a guessed one is worse than none: a path nothing
+# writes to makes the grant unreachable and the feature inert, which reads exactly
+# like a feature that is working. Hence an explicit flag, and hence the hard errors
+# on a path that does not exist and on the state dir (see the guards below) -- both
+# are ways this check could silently never fire.
+#
 # USAGE
 #   scripts/ai-dlc/wait-for-deliverable.sh <path> [<path>...] [--reset] [--quiet]
 #                                   [--since <epoch|ISO8601>]
+#                                   [--progress-path <dir|file>]...
 #
 # EXIT CODES
 #   0  BEAT COMPLETE  the beat ran and returned. Read stdout for per-path status:
 #                     `DELIVERED <path>` / `WAITING <path>`, then the BEAT COMPLETE
 #                     summary line. Consume ONLY the delivered paths.
+#                     `PROGRESS <path>` means an exhausted sequence was extended
+#                     because work was observed -- do NOT re-dispatch, beat again.
 #   1  NON-DELIVERY   a path exhausted max_wait_beats. Rule 20 non-delivery:
 #                     re-dispatch ONCE (with --reset), then HARD_BLOCK.
 #
@@ -104,7 +146,9 @@
 # ENV
 #   AI_DLC_WAIT_BEAT_SECS    seconds a beat may sleep       (default 600)
 #   AI_DLC_WAIT_POLL_SECS    seconds between polls          (default 10)
-#   AI_DLC_MAX_WAIT_BEATS    beats before non-delivery      (default 6)
+#   AI_DLC_MAX_WAIT_BEATS    beats before non-delivery      (default 6, and it is
+#                            also the cap on progress grants, so the worst-case
+#                            wait is 2 x quantum x this -- still finite)
 #   AI_DLC_WAIT_MARGIN_SECS  reserve held back from quantum (default 10)
 #   AI_DLC_STATE_DIR         state dir                      (default _bmad-output)
 #
@@ -112,10 +156,12 @@
 # IS NOT THE STEERING BUDGET" above. It bounds foreground calls and belongs to
 # validate-steering-budget.sh alone.
 #
-# The wall-clock ceiling is quantum x max_wait_beats = 60 minutes. The previous
-# 20 minutes was too short for what teammates actually take: S297 declared
+# The wall-clock ceiling is quantum x max_wait_beats = 60 minutes, or twice that
+# when --progress-path is supplied and every grant is spent. The previous 20
+# minutes was too short for what teammates actually take: S297 declared
 # `adversary-p1-rr` non-delivered at the ceiling and re-dispatched a live
-# teammate, and S298 ran a legitimate 62-minute dispatch.
+# teammate, and S298 ran a legitimate 62-minute dispatch -- which exceeds the
+# raised ceiling too, and is why raising it again is not the fix.
 
 set -u
 
@@ -129,6 +175,7 @@ QUIET=0
 RESET=0
 TARGETS=""
 SINCE=""
+PROGRESS_PATHS=""
 
 # ---------------------------------------------------------------------------
 # Platform probes, done ONCE. `stat` and `date` split BSD/GNU on exactly the two
@@ -165,7 +212,20 @@ while [ $# -gt 0 ]; do
       SINCE="$(to_epoch "$1")" || {
         echo "FAIL: --since value '$1' is not an epoch or an ISO8601 stamp." >&2; exit 64; }
       shift ;;
-    -h|--help) sed -n '2,118p' "$0"; exit 0 ;;
+    --progress-path)
+      shift
+      [ $# -gt 0 ] || { echo "FAIL: --progress-path needs a path." >&2; exit 64; }
+      # A path that does not exist yields no hits forever, so the grant becomes
+      # unreachable and this whole check silently never fires. Refuse it here --
+      # a typo must not read as "the teammate is not working".
+      [ -e "$1" ] || {
+        echo "FAIL: --progress-path '$1' does not exist. A missing progress path" >&2
+        echo "  can never show evidence of work, so the check would silently never" >&2
+        echo "  fire. Pass the directory the teammate actually writes in." >&2
+        exit 64; }
+      PROGRESS_PATHS="${PROGRESS_PATHS}${PROGRESS_PATHS:+|}$1"
+      shift ;;
+    -h|--help) sed -n '2,164p' "$0"; exit 0 ;;
     -*) echo "unknown arg: $1" >&2; exit 64 ;;
     *) TARGETS="${TARGETS}${TARGETS:+|}$1"; shift ;;
   esac
@@ -179,9 +239,46 @@ fi
 
 say() { [ "$QUIET" -eq 1 ] || echo "$@"; }
 
+abs_of() {  # normalized absolute path; no realpath dependency (not on BSD by default)
+  if [ -d "$1" ]; then ( cd "$1" 2>/dev/null && pwd -P ); return; fi
+  d_="$(dirname "$1")"; b_="$(basename "$1")"
+  ( cd "$d_" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$b_" )
+}
+
 mkdir -p "$STATE_DIR" 2>/dev/null || true
 COUNTER_DIR="${STATE_DIR}/.wait-beats"
 mkdir -p "$COUNTER_DIR" 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# THE PROGRESS PATH MAY NOT BE THE STATE DIR, OR ANY ANCESTOR OF IT.
+# `_bmad-output` is the obvious thing to reach for -- it is where deliverables
+# live -- and it is the one path that makes this check unable to fail. THIS beat
+# re-stamps `.beat-inflight` every poll and writes its own counters there, and the
+# lead rewrites the snapshot and the continuation log every turn. Evidence of work
+# would then be permanently true, NON-DELIVERY could never fire, and the join
+# would be exactly the unbounded wait Rule 29 Check C forbids -- while printing a
+# reassuring PROGRESS line each beat. Fail loudly instead, and name the fix.
+# ---------------------------------------------------------------------------
+if [ -n "$PROGRESS_PATHS" ]; then
+  SD_ABS="$(abs_of "$STATE_DIR")"
+  OLDIFS="$IFS"; IFS='|'
+  for p in $PROGRESS_PATHS; do
+    IFS="$OLDIFS"
+    P_ABS="$(abs_of "$p")"
+    if [ -n "$P_ABS" ] && [ -n "$SD_ABS" ] && \
+       { [ "$P_ABS" = "$SD_ABS" ] || case "$SD_ABS" in "$P_ABS"/*) true ;; *) false ;; esac; }; then
+      echo "FAIL: --progress-path '$p' is the state dir ('$STATE_DIR') or contains it." >&2
+      echo "  This beat writes its own counters and .beat-inflight there, and the lead" >&2
+      echo "  rewrites the snapshot every turn, so progress would ALWAYS be observed and" >&2
+      echo "  NON-DELIVERY could never fire -- an unbounded wait (Rule 29, Check C)." >&2
+      echo "  Point it at where the TEAMMATE works, e.g. its worktree:" >&2
+      echo "    --progress-path .claude/worktrees/<teammate>" >&2
+      exit 64
+    fi
+    IFS='|'
+  done
+  IFS="$OLDIFS"
+fi
 
 # ---------------------------------------------------------------------------
 # COUNTERS ARE SCOPED TO THE BOUND THEY WERE COUNTED AGAINST.
@@ -242,6 +339,43 @@ is_delivered() {  # $1 = path, $2 = join epoch
 }
 
 # ---------------------------------------------------------------------------
+# EVIDENCE OF WORK, as a delta and not a state. The lead's hand-written version of
+# this check was `git status` in the teammate's worktree -- but "there are changed
+# files" stays true forever after the first edit, including long after the teammate
+# died mid-edit. What it actually recorded, and what makes it a liveness signal, was
+# the CHANGE between two observations. So: a mark file per join, re-stamped once per
+# sleeping beat, and the question is whether anything is newer than the mark.
+#
+# `-newer` and `-prune` are POSIX. `-newermt` is GNU-only and `-quit` is not on
+# every BSD find, so neither appears here. Nor does a pipe to `head`: the output is
+# captured whole, because a pipe that closes early turns SIGPIPE into "not found"
+# and reports a present thing absent. Only files written inside the last beat can
+# match, so the capture is a handful of lines however large the tree is; the
+# traversal is the cost, once per quantum.
+#
+# The prune is not defensive decoration. A teammate worktree carries its own
+# `_bmad-output/`, so a teammate that runs its own beats leaves `.wait-beats/` and
+# `.beat-inflight` ticking inside the very tree we are watching -- machinery
+# heartbeats, not work. The state-dir guard above cannot see those: they are not
+# THIS run's state dir.
+# ---------------------------------------------------------------------------
+progressed_since() {  # $1 = mark file; 0 iff a tracked file is newer than it
+  [ -n "$PROGRESS_PATHS" ] || return 1
+  [ -f "$1" ] || return 1
+  ps_ifs_="$IFS"; hit_=""
+  IFS='|'
+  for p_ in $PROGRESS_PATHS; do
+    IFS="$ps_ifs_"
+    hit_="$(find "$p_" \( -name .git -o -name .wait-beats \) -prune \
+                 -o -type f ! -name '.beat-inflight' -newer "$1" -print 2>/dev/null)"
+    if [ -n "$hit_" ]; then IFS="$ps_ifs_"; return 0; fi
+    IFS='|'
+  done
+  IFS="$ps_ifs_"
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # CHAINED-BEAT GUARD. Two invocations chained in one Bash call (`wait a; wait b`)
 # share a parent shell, so they share $PPID. The first consumes the call's whole
 # quantum; the second then serializes a second one behind it, so the wave waits
@@ -275,6 +409,8 @@ printf '%s' "$(date +%s)" > "$SIBLING" 2>/dev/null || true
 PENDING=""
 EXHAUSTED=""
 PREEXISTING=""
+GRANTED=""
+GRANTSPENT=""
 OLDIFS="$IFS"; IFS='|'
 for t in $TARGETS; do
   # A blank target is a malformed wait -- an empty In-Flight Teammates row cell,
@@ -288,7 +424,9 @@ for t in $TARGETS; do
   esac
   c="${COUNTER_DIR}/$(key_of "$t")"
   s="${c}.since"
-  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" 2>/dev/null
+  pg="${c}.progress"
+  gr="${c}.grants"
+  [ "$RESET" -eq 1 ] && rm -f "$c" "$s" "$pg" "$gr" 2>/dev/null
 
   # Whether THIS beat armed the join must be read before join_of, which creates
   # the sidecar as a side effect.
@@ -296,7 +434,7 @@ for t in $TARGETS; do
   j="$(join_of "$t")"
 
   if is_delivered "$t" "$j"; then
-    rm -f "$c" "$s" 2>/dev/null || true
+    rm -f "$c" "$s" "$pg" "$gr" 2>/dev/null || true
     say "DELIVERED $t"
     continue
   fi
@@ -309,7 +447,34 @@ for t in $TARGETS; do
   b=0; [ -f "$c" ] && b="$(cat "$c" 2>/dev/null || echo 0)"
   case "$b" in ''|*[!0-9]*) b=0 ;; esac
 
+  # Sample evidence of work, then re-stamp the mark, so the next beat asks about
+  # the window that is about to start. Gated on MAY_SLEEP for the same reason the
+  # counter is: a non-sleeping sibling that re-stamped the mark would shrink the
+  # observation window to nothing and report a working teammate as idle.
+  PROGRESSED=0
+  if [ -n "$PROGRESS_PATHS" ] && [ "$MAY_SLEEP" -eq 1 ]; then
+    progressed_since "$pg" && PROGRESSED=1
+    : > "$pg" 2>/dev/null || true
+  fi
+
   if [ "$b" -ge "$MAX_BEATS" ]; then
+    # The sequence is spent. Before calling it non-delivery -- which Rule 20 turns
+    # into a re-dispatch -- ask whether the teammate is demonstrably working. A
+    # grant buys exactly ONE more beat and is itself counted, so this can extend
+    # the wait but can never remove its end.
+    g=0; [ -f "$gr" ] && g="$(cat "$gr" 2>/dev/null || echo 0)"
+    case "$g" in ''|*[!0-9]*) g=0 ;; esac
+
+    if [ "$PROGRESSED" -eq 1 ] && [ "$g" -lt "$MAX_BEATS" ]; then
+      g=$(( g + 1 ))
+      printf '%s' "$g" > "$gr" 2>/dev/null || true
+      printf '%s' "$(( MAX_BEATS - 1 ))" > "$c" 2>/dev/null || true
+      GRANTED="${GRANTED}${GRANTED:+|}${g}/${MAX_BEATS} $t"
+      PENDING="${PENDING}${PENDING:+|}$t"
+      continue
+    fi
+
+    [ "$PROGRESSED" -eq 1 ] && GRANTSPENT="${GRANTSPENT}${GRANTSPENT:+|}$t"
     EXHAUSTED="${EXHAUSTED}${EXHAUSTED:+|}$t"
     continue
   fi
@@ -329,13 +494,37 @@ for t in $TARGETS; do
 done
 IFS="$OLDIFS"
 
+# Printed with echo, not `say`: this is the line that tells the lead NOT to act on
+# an exhausted sequence, and --quiet must not be able to hide it.
+if [ -n "$GRANTED" ]; then
+  IFS='|'; for e in $GRANTED; do
+    echo "PROGRESS  ${e#* } -- work observed under the progress path; sequence"
+    echo "  extended by one beat (grant ${e%% *}). The teammate is demonstrably"
+    echo "  working, so this is NOT Rule 20 non-delivery. Do NOT re-dispatch; beat again."
+  done; IFS="$OLDIFS"
+fi
+
 if [ -n "$EXHAUSTED" ]; then
   IFS='|'; for t in $EXHAUSTED; do
     echo "NON-DELIVERY $t -- absent after $MAX_BEATS beats."
   done; IFS="$OLDIFS"
+  if [ -n "$GRANTSPENT" ]; then
+    IFS='|'; for t in $GRANTSPENT; do
+      echo "  NOTE: $t still shows work under the progress path, but all $MAX_BEATS"
+      echo "  progress grants are spent. The bound is deliberate -- a teammate that"
+      echo "  keeps writing without delivering is a hang, and Rule 29 Check C says a"
+      echo "  wait must end. Decide: re-dispatch, or --reset if you have read the"
+      echo "  worktree and judged it genuinely close."
+    done; IFS="$OLDIFS"
+  fi
   echo "  Rule 20 defines an absent deliverable as non-delivery. Re-dispatch the"
   echo "  teammate ONCE (then re-run with --reset), and if it fails again, HARD_BLOCK."
   echo "  Do NOT keep beating: the wait never runs forever (Rule 29, Check C)."
+  if [ -z "$PROGRESS_PATHS" ]; then
+    echo "  Before you re-dispatch: an exhausted clock is not evidence of death. If the"
+    echo "  teammate may still be working, re-arm with --reset --progress-path <its"
+    echo "  worktree> and this beat will extend the sequence while it keeps writing."
+  fi
   exit 1
 fi
 
@@ -443,7 +632,7 @@ for t in $PENDING; do
   c="${COUNTER_DIR}/$(key_of "$t")"
   s="${c}.since"
   if is_delivered "$t" "$(join_of "$t")"; then
-    rm -f "$c" "$s" 2>/dev/null || true
+    rm -f "$c" "$s" "${c}.progress" "${c}.grants" 2>/dev/null || true
     say "DELIVERED $t"
     N_DELIVERED=$(( N_DELIVERED + 1 ))
   else
