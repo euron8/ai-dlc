@@ -51,16 +51,59 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # run the function in a subshell, so the RC it sets would never reach the caller and
 # every exit-code assertion would read a stale value.
 BEATOUT="$(mktemp)"
-trap 'rm -f "$BEATOUT"' EXIT
-beat() { # <work> [extra args...] -> writes $BEATOUT; sets RC and OUT
-  local w="$1"; shift
+MUTDIR="$(mktemp -d 2>/dev/null || mktemp -d -t wait-mutants)"
+trap 'rm -f "$BEATOUT"; rm -rf "$MUTDIR"' EXIT
+beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and OUT
+  local subj="$1" w="$2"; shift 2
   ( cd "$w" && env AI_DLC_WAIT_BEAT_SECS=4 \
                    AI_DLC_WAIT_POLL_SECS=1 \
                    AI_DLC_WAIT_MARGIN_SECS=1 \
                    AI_DLC_MAX_WAIT_BEATS=6 \
-    bash "$SUBJ" "$@" deliv.md ) > "$BEATOUT" 2>&1
+    bash "$subj" "$@" deliv.md ) > "$BEATOUT" 2>&1
   RC=$?
   OUT="$(cat "$BEATOUT")"
+}
+beat() { local w="$1"; shift; beat_with "$SUBJ" "$w" "$@"; }
+
+# ---------------------------------------------------------------------------
+# MUTANTS ARE BUILT AS COPIES, AND THE SUBJECT IS NEVER EDITED.
+# A mutation proof carried as a prose note is a forgeable evidence cell: it can be
+# written without the run, and nothing in the suite re-checks it when the code it
+# describes moves. So the mutants live here, and section 14 runs them.
+#
+# Mutating a COPY is also the only reason the proof is safe to re-run. Mutating the
+# shipped script in place needs a revert, and the obvious revert -- `git checkout --
+# <file>` -- silently destroys any uncommitted work in that same file. That is not
+# hypothetical; it is how this fixture's own mutation evidence was first produced,
+# twice, and recovered by luck rather than design. There is nothing to revert here.
+#
+# `cmp -s` is the anti-vacuity guard, and it is the point of the helper. A mutant
+# whose pattern no longer matches produces a byte-identical copy, the "wrong
+# behaviour" assertion then runs against the UNMUTATED subject, and it passes --
+# reporting a proof that never happened. Renaming the code a mutant targets must
+# break this fixture LOUDLY (exit 2, fixture-broken) rather than quietly turn its
+# assertion green.
+# ---------------------------------------------------------------------------
+# Sets $MUT rather than printing it, and that is load-bearing twice over. `M="$(
+# mutant ...)"` would run this in a SUBSHELL, so its `exit 2` would kill only that
+# subshell: a mutant that matched nothing would leave M empty, `bash ""` would exit
+# 127, and a "the subject now misbehaves" assertion phrased as `!= 64` would read
+# 127 and go GREEN. That is not hypothetical -- it is what the first draft of this
+# section did. Separate `local` lines for the same family of reason: bash creates
+# every name on a single `local` before assigning any of them, so `local a=$1 b=$a`
+# leaves b empty (and trips `set -u`).
+MUT=""
+mutant() { # <name> <sed-expr> -> sets $MUT to the mutant's path
+  local name="$1"
+  local expr="$2"
+  local m="$MUTDIR/$name.sh"
+  sed "$expr" "$SUBJ" > "$m" || { echo "FIXTURE ERROR: sed failed for mutant '$name'" >&2; exit 2; }
+  if cmp -s "$SUBJ" "$m"; then
+    echo "FIXTURE ERROR: mutant '$name' matched nothing -- the code it targets was" >&2
+    echo "  renamed or removed. Re-aim the mutation; do NOT delete the assertion." >&2
+    exit 2
+  fi
+  MUT="$m"
 }
 
 echo "wait-stale-deliverable:"
@@ -294,19 +337,7 @@ if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "1" ]; t
 else bad "progress-extends: .grants not 1 — an uncounted extension is an unbounded wait"; fi
 rm -rf "$W"
 
-# MUTATION NOTE for cases 10-13. Verified by removing each mechanism in turn:
-#   grant cap                -> reds ONLY progress-bounded (3 assertions)
-#   find prune               -> reds ONLY progress-ignores-own-state (2)
-#   state-dir/ancestor guard -> reds ONLY progress-guards (2)
-#   nonexistent-path refusal -> reds ONLY progress-guards (1, the other one)
-#   progress sampling itself -> reds progress-extends (3) AND progress-bounded's
-#                               explanation assertion (1)
-# No pre-existing case reds under any of them, which is the evidence that the
-# flagless path is untouched. The last mutant is the one overlap and it is not
-# vacuity: progress-bounded's NOTE is printed only when work IS observed, so a
-# subject that never observes work cannot emit it. Its other two assertions -- rc 1
-# and the grant counter held at the cap -- stay green under that mutant and red only
-# under the cap mutant, which is what makes the bound independently proven.
+# The mutation proof for cases 10-13 is section 14, which RUNS it.
 
 # --- 11. ...but the extension is BOUNDED. This is the case that keeps Check C ----
 # true. Same evidence of work as case 10, every grant already spent. If this ever
@@ -364,6 +395,90 @@ if [ "$(guard wt)" != "64" ]; then
   ok "progress-guards: CONTROL — a real worktree path is accepted"
 else bad "progress-guards: every --progress-path is rejected; the flag does nothing"; fi
 rm -rf "$W"
+
+# --- 14. the mutation proof, executed ------------------------------------------
+# Each mutant removes ONE mechanism and asserts the subject then does the WRONG
+# thing on the seed that mechanism exists for. That is a stronger claim than "the
+# fixture reds": it names the behaviour the mechanism buys, so a reader can see what
+# would ship without it. Every mutant is a copy; the subject is untouched throughout.
+#
+# The `.progress` mark: these reuse the same seeds as cases 10-13, which age the
+# mark deliberately. See the seed file -- without that, `progressed_since` has
+# nothing to compare against on its first call and every mutant looks equally dead.
+
+mutant grant-cap 's/ \&\& \[ "\$g" -lt "\$MAX_BEATS" \]//'
+M="$MUT"
+W="$( bash "$SEED" progress-bounded )"
+beat_with "$M" "$W" --progress-path wt
+if [ "$RC" -eq 0 ]; then
+  ok "MUTANT grant-cap: without the cap a spent-grant join keeps extending — an unbounded wait"
+else bad "MUTANT grant-cap: still rc $RC with the cap removed; the cap is not what bounds the extension"; fi
+rm -rf "$W"
+
+# Two prunes, mutated separately. Lumping them proves only that ONE of the two is
+# load-bearing, and the seed ticks both `.wait-beats/<key>` and `.beat-inflight`.
+mutant unprune-wait-beats 's/-o -name \.wait-beats/-o -name .no-such-name/'
+M="$MUT"
+W="$( bash "$SEED" progress-ignores-own-state )"
+beat_with "$M" "$W" --progress-path wt
+if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
+  ok "MUTANT unprune-wait-beats: a teammate's own beat counters then read as work"
+else bad "MUTANT unprune-wait-beats: rc $RC without the .wait-beats prune; the prune is not what excludes them"; fi
+rm -rf "$W"
+
+mutant unexclude-beat-inflight "s/! -name '\.beat-inflight' //"
+M="$MUT"
+W="$( bash "$SEED" progress-ignores-own-state )"
+beat_with "$M" "$W" --progress-path wt
+if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
+  ok "MUTANT unexclude-beat-inflight: a heartbeat marker then reads as work"
+else bad "MUTANT unexclude-beat-inflight: rc $RC without the exclusion; it is not what excludes the marker"; fi
+rm -rf "$W"
+
+# Neutering SD_ABS rather than the comparison: the guard reads `[ -n "$SD_ABS" ]`,
+# so an unresolvable state dir disables it wholesale. One line, unambiguously aimed.
+mutant state-dir-guard 's/^  SD_ABS="\$(abs_of "\$STATE_DIR")"$/  SD_ABS=""/'
+M="$MUT"
+W="$( bash "$SEED" progress-guards )"
+beat_with "$M" "$W" --progress-path _bmad-output
+# `-eq 0`, not `-ne 64`: a mutant that failed to build exits 127, and `-ne 64`
+# would read that as proof. The assertion has to name the outcome it expects.
+if [ "$RC" -eq 0 ]; then
+  ok "MUTANT state-dir-guard: _bmad-output is then accepted — progress becomes permanently true"
+else bad "MUTANT state-dir-guard: rc $RC, expected a normal beat; the guard is not what rejects it"; fi
+rm -rf "$W"
+
+mutant path-exists-check 's/\[ -e "\$1" \] ||/[ 1 ] ||/'
+M="$MUT"
+W="$( bash "$SEED" progress-guards )"
+beat_with "$M" "$W" --progress-path no-such-dir
+if [ "$RC" -eq 0 ]; then
+  ok "MUTANT path-exists-check: a typo'd path is then accepted and grants nothing, forever"
+else bad "MUTANT path-exists-check: rc $RC, expected a normal beat; the check is not what rejects it"; fi
+rm -rf "$W"
+
+mutant progress-sampling '/progressed_since "\$pg" \&\& PROGRESSED=1/d'
+M="$MUT"
+W="$( bash "$SEED" progress-extends )"
+beat_with "$M" "$W" --progress-path wt
+if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+  ok "MUTANT progress-sampling: a demonstrably working teammate is declared non-delivered"
+else bad "MUTANT progress-sampling: rc $RC without sampling; the grant is reachable by some other route"; fi
+rm -rf "$W"
+
+# The other half of the claim: none of the six changes the FLAGLESS path. Asserted
+# rather than described, because "strictly additive" is exactly the sort of promise
+# that quietly stops being true. `exhausted` is the case with the most to lose --
+# it is the one state that still exits nonzero.
+for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guard \
+             path-exists-check progress-sampling; do
+  W="$( bash "$SEED" exhausted )"
+  beat_with "$MUTDIR/$mname.sh" "$W"
+  if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
+    ok "MUTANT $mname: the flagless path is untouched (exhausted still rc 1)"
+  else bad "MUTANT $mname: rc $RC on a flagless join — this mutant reaches code the default path uses"; fi
+  rm -rf "$W"
+done
 
 if [ "$fails" -eq 0 ]; then
   echo "wait-stale-deliverable: PASS"
