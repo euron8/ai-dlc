@@ -38,6 +38,7 @@
     "bmad-advanced-elicitation",
     "bmad-review-adversarial-general",
     "bmad-validate-prd",
+    "bmad-prd",
     "ai-dlc-adversary-review"
   ],
   "fields": [
@@ -45,7 +46,7 @@
       "name": "skill",
       "required": true,
       "enum_ref": "known_skills",
-      "placeholder": "<bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|ai-dlc-adversary-review>",
+      "placeholder": "<bmad-party-mode|bmad-advanced-elicitation|bmad-review-adversarial-general|bmad-validate-prd|bmad-prd|ai-dlc-adversary-review>",
       "doc": "the evaluation that ACTUALLY RAN. Naming one you did not invoke is a forged block."
     },
     {

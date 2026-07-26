@@ -17,10 +17,20 @@ implementation delivers user value as defined in the PRD.
 - `_bmad-output/planning-artifacts/product-brief.md`
 - `_bmad-output/planning-artifacts/prd.md`
 - `_bmad-output/planning-artifacts/stories/`
+- `_bmad-output/specs/` — the `bmad-spec` kernel, its `.memlog.md`, and its
+  companions. `bmad-spec` is the SOLE writer of `SPEC.md`: it re-derives the
+  kernel from the memlog on every run, so an edit made outside it is
+  overwritten on the next derive. Change the spec by re-running `bmad-spec`
+  with the change as input, never by editing `SPEC.md`.
 
 ## Responsibilities
 
-- Produce and maintain the product brief and PRD via BMAD workflows.
+- Produce and maintain the product brief, the spec kernel, and the PRD via
+  BMAD workflows. Never lock an acceptance criterion around the shape of a
+  system this project does not own — an external API response, an on-chain
+  constant, a third-party schema. Verify the field name, type, and unit
+  against the real source first and record the verifying command in the
+  story. An assumed unit is a defect, not a default.
 - Break the PRD into epics and stories with clear acceptance criteria.
 - Answer requirement questions from dev and architect teammates.
 - Prioritize stories for sprint planning.

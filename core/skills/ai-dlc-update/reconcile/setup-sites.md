@@ -213,6 +213,15 @@ sites:
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 
+  - id: pm-escalated-model-personal
+    file: core/team-roles/pm-escalated.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: pm-escalated-model-bedrock
+    file: core/team-roles/pm-escalated.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
   - id: qa-model-personal
     file: core/team-roles/qa.md
     shape: single-line

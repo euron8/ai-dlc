@@ -588,6 +588,19 @@ other role, and escalation becomes a harmless no-op)
 - `{dev_escalated_model_personal}` -> opus-tier model personal string
 - `{dev_escalated_model_bedrock}` -> opus-tier model bedrock string
 
+**`.claude/team-roles/pm-escalated.md`:** (the standard PM contract on a
+stronger model, for the `discovery.md` §4b spec derivation — opus-tier, like the
+architect, at `/effort high`. It is one dispatch per sprint. **Unlike
+`dev-escalated`, collapsing this one to the sonnet string is NOT a harmless
+no-op:** a story authored at the weaker tier fails its own gate and returns,
+whereas the spec kernel is what the PRD, the architecture spine, every story's
+IDs and Checks 29/30/31 all join against — a defect authored there is ratified
+downstream rather than caught. Sonnet-only is a knowing trade on the most
+load-bearing artifact in the pipeline, so substitute the opus string here even
+when the rest of the roster is sonnet)
+- `{pm_escalated_model_personal}` -> opus-tier model personal string
+- `{pm_escalated_model_bedrock}` -> opus-tier model bedrock string
+
 **`.claude/team-roles/qa.md`:**
 - `{qa_model_personal}` -> sonnet-tier model personal string
 - `{qa_model_bedrock}` -> sonnet-tier model bedrock string

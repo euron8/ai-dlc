@@ -134,6 +134,66 @@ Be exhaustive. Every concrete detail the user specified (placement, scope,
 behavior, approach) is a locked requirement. Do not paraphrase — quote
 verbatim or as close to verbatim as the source allows.
 
+### 4b. Derive the Spec Kernel (dispatched)
+
+Dispatch ONE `pm-escalated` subagent, bound per Rule 19 (model +
+role-contract line), to invoke `bmad-spec` **headless** with the product brief
+and its `LOCKED_REQUIREMENTS` block as input and slug `s<N>-<sprint-slug>`.
+
+**The escalated tier, not standard `pm`.** The kernel is the one artifact every
+later step reads — the PRD cites its capabilities, the architecture spine takes
+it as input, stories carry its IDs, and Checks 29/30/31 join against them — so a
+defect authored here is ratified downstream, not caught. The EARS restatement is
+the specific judgment at stake: converting a stated mechanism into the behavior
+it was meant to produce requires knowing what the mechanism was supposed to
+cause, and getting it wrong yields a requirement that passes every gate while
+the code does nothing. Cost is one dispatch per sprint. Per Rule 19 the tier is
+a property of the role file, so this is a route to `pm-escalated`, never a
+call-site model override — the dispatch guard rebinds an override back to the
+role file's value.
+
+**Dispatched, not inline.** Rule 28: spec production is not orchestration,
+routing, or a gate decision, so the lead MUST NOT run it in its own
+conversation. Rule 24's discovery row reads "authoring + validation stay
+inline"; that clause bounds the ANALYST dispatch (the analyst reads, it does
+not author) and does not exempt authoring from Rule 28 — which reassigned
+work the lead formerly executed itself. The distinguishing fact here is that
+`bmad-spec` is a self-contained transform whose result the lead consumes by
+PATH: headless it returns file paths, so none of the kernel, the template,
+the memlog exchanges, or the source material it distills enters lead
+context. `pm` owns the write (`pm.md`: "Produce and maintain the product
+brief and PRD via BMAD workflows"). `analyst` MUST NOT be used — it is
+read-only and cannot write `SPEC.md` or `.memlog.md`.
+
+**Output.** `_bmad-output/specs/spec-s<N>-<slug>/` holding `SPEC.md`, an
+append-only `.memlog.md`, and any companions. The lead reads the returned
+paths, not the content.
+
+**Every capability's `success` field MUST be in EARS form** — one of
+`THE <system> SHALL <response>`; `WHILE <state>, THE <system> SHALL …`;
+`WHEN <trigger>, THE <system> SHALL …`; `WHERE <feature>, THE <system>
+SHALL …`; `IF <trigger>, THEN THE <system> SHALL …`. A `success` field
+naming a configuration value, a flag, or a file edit instead of an
+observable response is a mechanism, not a behavior, and no gate downstream
+can catch a mechanism that was set and did nothing. `intent` stays free
+prose. Gate-validation Check 29 re-grades this in a fresh adjudicator.
+
+**Anchor locked requirements on `.memlog.md`, never on `SPEC.md`.**
+`bmad-spec` is the single writer of the kernel and re-derives it from the
+memlog on every run, so an external edit is overwritten and a byte anchor
+into it reports a drift that never happened. The memlog is append-only and
+never reordered. Story `full_text_source:` citations point there.
+
+**Returns.** On `{"status": "complete", ...}` proceed. On
+`{"status": "blocked", "error_code": "insufficient_intent" | "missing_slug"}`
+escalate as a Rule 12 HARD_BLOCK with the `reason` quoted verbatim.
+
+**Headless runs `express` mode, so gaps land as `open_questions[]` rather
+than being walked with the operator.** That is the correct behavior — a
+recorded gap beats an invented answer. But any `open_questions[]` entry that
+bears on a `LOCKED_REQUIREMENTS` bullet is a Rule 11 ambiguity and MUST be
+escalated as a Rule 12 HARD_BLOCK before the gate, not carried as a note.
+
 ### 5. Validation Cycle (Rule 8)
 
 Run the validation cycle (`_gate-procedures.md`, "Validation cycle") on the

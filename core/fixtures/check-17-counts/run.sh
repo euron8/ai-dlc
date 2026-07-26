@@ -91,7 +91,7 @@ echo "check-17-counts"
 # --- 1. THE RULE FIRES on every sub-skill that used to report nothing ---------
 # Each of these is a real invocation shape from the reference consumer: well-formed
 # in every other respect, and silent about what it found.
-for sk in bmad-party-mode bmad-advanced-elicitation bmad-review-adversarial-general bmad-validate-prd; do
+for sk in bmad-party-mode bmad-advanced-elicitation bmad-review-adversarial-general bmad-validate-prd bmad-prd; do
   emit "silent-$sk.md" "$sk"
   expect "silent-$sk.md" refuse "$sk with no residue is refused"
 done

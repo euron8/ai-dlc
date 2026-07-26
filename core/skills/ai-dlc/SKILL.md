@@ -1389,6 +1389,39 @@ delivers queued input mid-call.
 Enforcement: `scripts/ai-dlc/validate-steering-budget.sh` (Checks A, B, C, D) and
 `.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).
 
+### Rule 30 -- The spec is BMAD's; the enforcement is ours
+
+Specification artifacts MUST be produced by the BMAD workflows that own them and
+MUST NOT be reimplemented in this rulebook: the spec kernel by `bmad-spec`, the
+design spine by `bmad-architecture`, epics and the FR coverage map by
+`bmad-create-epics-and-stories`, the traceability matrix by
+`bmad-testarch-trace`. BMAD is a prerequisite; a second implementation of a
+workflow it ships is a parallel path beside a proven one and violates Rule 26(b).
+
+**A BMAD finding is not a BMAD verdict.** `lint_spine.py` exits 0
+unconditionally and leaves the call to its caller; `bmad-check-implementation-
+readiness` reports uncovered requirements without failing anything;
+`bmad-testarch-trace` emits a gate decision that blocks nothing;
+`bmad-spec`'s Spec Law is graded by the agent that authored the spec. Every one
+of those MUST be adopted by a gate check that can FAIL, and the gate check MUST
+re-derive its own judgement rather than adopt a self-declared verdict. A
+finding nothing acts on is a finding that reads exactly like a clean run.
+
+**Anchor on the append-only surface.** `bmad-spec` is the sole writer of
+`SPEC.md` and re-derives it from `.memlog.md` on every run. Byte anchors
+(Rule 13, Check 3b) MUST target `.memlog.md` or the product brief, never
+`SPEC.md`. An anchor into a re-rendered artifact holds until the next derive and
+then reports a drift that never happened.
+
+**Spec derivation is delegated (Rule 28) and escalated (Rule 19).** It is not
+orchestration, routing, or a gate decision, so the lead MUST NOT run it inline;
+it routes to `pm-escalated`, whose tier is a property of that role file and not
+a call-site argument.
+
+Violation is a MAJOR adversary finding and a `code-reviewer` finding. Retire
+this rule if BMAD stops shipping the workflows it names, or starts failing on
+its own findings.
+
 ## INITIALIZATION
 
 Clear the pipeline pause flag before any other action. The

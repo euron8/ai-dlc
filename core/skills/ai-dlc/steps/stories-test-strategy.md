@@ -268,6 +268,16 @@ stories with clear acceptance criteria.
 
 ### 2a. Propagate Locked Requirements to Stories (Rule 13)
 
+**Every story MUST carry a `capabilities:` frontmatter field** listing the
+`CAP-<n>` identifiers it delivers, e.g. `capabilities: [CAP-3, CAP-7]`.
+That field is the only mechanical link from a story to the spec; without it
+the story's place in the chain
+`LOCKED_REQUIREMENTS → CAP-<n> → FR-<n> → AC → test` is prose.
+Gate-validation Check 30 FAILS a story missing the field, and FAILS one
+citing a `CAP-<n>` that `SPEC.md` does not define — capability IDs are never
+renumbered, so a dangling reference is a typo or a stale copy, never a
+renumbering.
+
 For each story created, propagate the relevant locked requirements from
 the PRD's `LOCKED_REQUIREMENTS` block into the story file. Each story
 gets its own `LOCKED_REQUIREMENTS` block containing only the requirements
@@ -296,6 +306,14 @@ distinguish two citation forms — they are NOT interchangeable:
 Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
 "for full text" — the PRD's LR entries are §2a-propagated, and the
 brief remains the byte-verbatim source of record.
+
+**Never anchor on `SPEC.md`.** When the spec layer is in force, the second
+legal `full_text_source` target is the spec's `.memlog.md`, which is
+append-only and never edited or reordered. `SPEC.md` is NOT a legal anchor:
+`bmad-spec` is its sole writer and re-derives it from the memlog on every
+run, so an anchor there holds until the next derive and then reports a drift
+that never happened — or passes against re-rendered text that no longer says
+the same thing. The brief and the memlog are the two byte-stable surfaces.
 
 **Category error to avoid.** Context/tool thresholds (e.g. the ctx
 `INTENT_SEARCH_THRESHOLD`, which auto-indexes tool output above ~5KB)
@@ -393,6 +411,13 @@ strategy. Steps 2–3 below otherwise proceed.
 
 1. `/bmad-testarch-test-design` then select test strategy — risk-based test
    strategy for the sprint
+1a. `/bmad-testarch-trace` — generate the requirements-to-tests traceability
+   matrix and its quality gate decision (PASS / CONCERNS / FAIL / WAIVED).
+   This closes the last leg of the chain, `AC → test`, against the same
+   `CAP-<n>` IDs the spec and the PRD carry. Record the matrix path; pass the
+   decision to gate-validation Check 30 via `--trace-verdict`. **The decision
+   is advisory until that check reads it** — a `FAIL` there fails the gate, and
+   `CONCERNS`/`WAIVED` are recorded with the matrix cited rather than dropped.
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
