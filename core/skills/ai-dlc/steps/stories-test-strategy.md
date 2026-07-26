@@ -173,6 +173,10 @@ An AC whose set cannot be enumerated at authoring time carries
 enumerated>` on its own line inside that AC. Check 31 prints every
 waiver it reads; a waiver suppresses the FAIL, never the report.
 
+Run `scripts/ai-dlc/validate-ac-falsifiability.sh <story-file>` at
+authoring time — it is the same enforcer Check 31 runs, and a term
+rewritten here costs one word where the same term costs a story gate.
+
 **Prior-evidence citation.** An AC that consumes a value, fixture,
 baseline, or measurement produced BEFORE this story MUST cite it as
 `prior_evidence: <repo-relative-path>[:<anchor>]`. Naming the producing
