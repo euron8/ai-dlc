@@ -307,13 +307,19 @@ Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
 "for full text" — the PRD's LR entries are §2a-propagated, and the
 brief remains the byte-verbatim source of record.
 
-**Never anchor on `SPEC.md`.** When the spec layer is in force, the second
-legal `full_text_source` target is the spec's `.memlog.md`, which is
-append-only and never edited or reordered. `SPEC.md` is NOT a legal anchor:
-`bmad-spec` is its sole writer and re-derives it from the memlog on every
-run, so an anchor there holds until the next derive and then reports a drift
-that never happened — or passes against re-rendered text that no longer says
-the same thing. The brief and the memlog are the two byte-stable surfaces.
+**The spec layer does not add an anchor target.** `full_text_source` still
+resolves to the product brief and nothing else. Locked-requirement text
+originates in the brief at `discovery.md` §4a; the spec is DERIVED from it, so
+a spec artifact is a downstream restatement — the same category as `prd.md`,
+which is already forbidden here. Cite the spec with `requires_context:` when a
+dev needs it loaded.
+
+`SPEC.md` is the worst possible anchor: `bmad-spec` is its sole writer and
+re-renders it from `.memlog.md` on every run, so an anchor there holds until
+the next derive and then either reports a drift that never happened or passes
+against reworded text. `validate-locked-anchor.sh` already refuses any
+`full_text_source` that is not the source of record, so this needs no new
+rule — it is stated here only so nobody adds one.
 
 **Category error to avoid.** Context/tool thresholds (e.g. the ctx
 `INTENT_SEARCH_THRESHOLD`, which auto-indexes tool output above ~5KB)

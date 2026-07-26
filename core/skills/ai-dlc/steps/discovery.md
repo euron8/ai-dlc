@@ -178,11 +178,13 @@ observable response is a mechanism, not a behavior, and no gate downstream
 can catch a mechanism that was set and did nothing. `intent` stays free
 prose. Gate-validation Check 29 re-grades this in a fresh adjudicator.
 
-**Anchor locked requirements on `.memlog.md`, never on `SPEC.md`.**
-`bmad-spec` is the single writer of the kernel and re-derives it from the
-memlog on every run, so an external edit is overwritten and a byte anchor
-into it reports a drift that never happened. The memlog is append-only and
-never reordered. Story `full_text_source:` citations point there.
+**The spec does not become an anchor target.** Story `full_text_source:`
+citations keep pointing at the product brief, which §4a made the byte-verbatim
+source of record; the spec is derived from it, so citing the spec for full text
+is the same category error as citing `prd.md`. `SPEC.md` in particular is never
+a legal anchor — `bmad-spec` re-renders it from the memlog on every run, so an
+anchor there passes against reworded text or reports a drift that never
+happened. `validate-locked-anchor.sh` already refuses a non-SoR target.
 
 **Returns.** On `{"status": "complete", ...}` proceed. On
 `{"status": "blocked", "error_code": "insufficient_intent" | "missing_slug"}`

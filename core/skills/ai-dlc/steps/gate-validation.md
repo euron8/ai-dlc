@@ -1865,8 +1865,11 @@ retroactively spec-require a story written before the layer existed. Report
 
 The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` reaches an
 FR in the PRD's `FR Coverage Map`; every story `capabilities:` entry resolves to a
-capability `SPEC.md` defines. Requirement text anchors on `.memlog.md`, which is
-append-only and never reordered — never on `SPEC.md`, which is re-rendered.
+capability `SPEC.md` defines. The `LR → CAP` leg reads the memlog, which is
+append-only and never reordered; `SPEC.md` is only read for the capability set,
+never as an anchor, because it is re-rendered on every derive. Byte anchoring of
+requirement TEXT stays Check 3b's job against the product brief — the spec adds
+no anchor target.
 
 **Both borrowed verdicts are decided here, not observed.** `lint_spine.py` exits 0
 unconditionally and leaves the call to its caller; a non-empty `ad_fields` or

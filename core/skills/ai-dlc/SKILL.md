@@ -1407,11 +1407,13 @@ of those MUST be adopted by a gate check that can FAIL, and the gate check MUST
 re-derive its own judgement rather than adopt a self-declared verdict. A
 finding nothing acts on is a finding that reads exactly like a clean run.
 
-**Anchor on the append-only surface.** `bmad-spec` is the sole writer of
-`SPEC.md` and re-derives it from `.memlog.md` on every run. Byte anchors
-(Rule 13, Check 3b) MUST target `.memlog.md` or the product brief, never
-`SPEC.md`. An anchor into a re-rendered artifact holds until the next derive and
-then reports a drift that never happened.
+**A re-rendered artifact is never an anchor.** `bmad-spec` is the sole writer of
+`SPEC.md` and re-derives it from `.memlog.md` on every run, so a byte anchor
+there holds until the next derive and then either passes against reworded text or
+reports a drift that never happened. Byte anchors (Rule 13, Check 3b) keep
+targeting the product brief; a derived artifact — `prd.md`, `SPEC.md`, a spine —
+is cited with `requires_context:`, never `full_text_source:`. Anything read for
+its ID SET rather than its text may be read anywhere.
 
 **Spec derivation is delegated (Rule 28) and escalated (Rule 19).** It is not
 orchestration, routing, or a gate decision, so the lead MUST NOT run it inline;
