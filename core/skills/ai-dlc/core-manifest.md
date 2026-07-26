@@ -126,6 +126,7 @@ core_manifest:
   - fixtures/askuserquestion-citation/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
+  - fixtures/bmad-invocation-resolve/**
   - fixtures/check-15-bypass/**
   - fixtures/check-17-bypass/**
   - fixtures/check-17-counts/**
@@ -133,6 +134,7 @@ core_manifest:
   - fixtures/check-23-draft-stamps/**
   - fixtures/check-24-adversarial-convergence/**
   - fixtures/check-25-steering-conduct/**
+  - fixtures/check-31-ac-falsifiability/**
   - fixtures/check-3b-locked-anchor/**
   - fixtures/check-h1-recursion/**
   - fixtures/check-manifest-bypass/**
@@ -175,6 +177,8 @@ core_manifest:
   - fixtures/shadowed-local-validators/**
   - fixtures/snapshot-evidence-cell/**
   - fixtures/snapshot-section-schema/**
+  - fixtures/spec-adoption-floor/**
+  - fixtures/spec-join-integrity/**
   - fixtures/sprint-status-lifecycle/**
   - fixtures/story-provenance/**
   - fixtures/subagent-probe/**

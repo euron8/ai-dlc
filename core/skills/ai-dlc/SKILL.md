@@ -596,7 +596,7 @@ retro.
 
 Validation evaluations -- the four sub-skills (`/bmad-party-mode`,
 `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
-`/bmad-validate-prd`) **and the native `ai-dlc-adversary-review` convergence
+`/bmad-prd`) **and the native `ai-dlc-adversary-review` convergence
 review** -- MUST be evaluated by **real, independent subagents** -- never
 roleplayed solo in the lead's own context. Independence is the point: a single LLM
 evaluating an artifact it (or its own conversation) authored produces convergent
@@ -638,7 +638,7 @@ it returns the group menu and starts no party. If a party starts instead, the
 arguments did not arrive.
 
 **(ii) Single-voice (`/bmad-advanced-elicitation`,
-`/bmad-review-adversarial-general`, `/bmad-validate-prd`).** These have no
+`/bmad-review-adversarial-general`, `/bmad-prd`).** These have no
 internal spawn, so the lead MUST dispatch the invocation to ONE spawned
 `adversary` teammate (Rule 19 binding to `.claude/team-roles/adversary.md` --
 the role purpose-built for independent validation of a planning artifact: no

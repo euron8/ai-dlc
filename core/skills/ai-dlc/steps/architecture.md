@@ -16,7 +16,7 @@ full validation cycle.
 
 If `planning_offload: on` (default) AND the variant reads existing code or
 architecture (feature, brownfield-a, brownfield-c — NOT greenfield /
-brownfield-b, which author from scratch via `/bmad-create-architecture`),
+brownfield-b, which author from scratch via `/bmad-architecture`),
 do NOT read the codebase or existing architecture inline. Spawn an `analyst`
 subagent (Agent tool, bound to `.claude/team-roles/analyst.md` per SKILL.md
 Rule 19 — both bindings: `model` and the standing role-contract Read line)
@@ -36,7 +36,7 @@ Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 
 ### 2. Architecture Creation or Update
 
-- For **greenfield/brownfield-b**: invoke `/bmad-create-architecture` —
+- For **greenfield/brownfield-b**: invoke `/bmad-architecture` —
   full system design, tech decisions, ADRs
 - For **feature**: Assess whether existing architecture supports this
   feature as-is. If yes, document the integration approach as an addendum.

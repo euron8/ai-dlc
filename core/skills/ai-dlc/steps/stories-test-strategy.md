@@ -140,6 +140,54 @@ non-discriminating costs one fixture. Remove this standard if a static
 analyzer proves per-test discrimination automatically, or if Check 19
 is extended to cover every story's unit/integration fixtures.
 
+**AC header form.** Every acceptance criterion MUST open with a header of
+the form `- **AC<n> (<tags>).**` or `- **AC<n> — <title>.**`, where `<n>` is
+a decimal ordinal optionally suffixed with one lowercase letter (`AC1`,
+`AC4a`). One AC per header. The header carries the AC; every following
+line up to the next AC header or the next markdown heading belongs to it.
+
+A single declared form is what lets Check 31 read acceptance criteria
+without guessing. A story that declares acceptance criteria and presents
+none in this form FAILS Check 31 as DISARMED — an AC the checker cannot
+read is not an AC that passed.
+
+**Falsifiable-predicate mandate.** An acceptance criterion MUST NOT state
+its verification predicate with a qualifier that names no bounded set.
+The terms below are FORBIDDEN in acceptance-criterion text — each names a
+standard no verifier can fail, so an AC carrying one is green on sight:
+
+<!-- AC_UNBOUNDED_TERMS v1 -->
+exhaustive, exhaustively, comprehensive, comprehensively, definitively,
+thoroughly, adequately, sufficiently, appropriately, robustly,
+as needed, as appropriate, where appropriate, all relevant, if necessary
+<!-- AC_UNBOUNDED_TERMS_END -->
+
+Replace the term with the set it stands for: the enumerated members,
+their count, and an assertion that the OBSERVED set EQUALS that
+enumeration. Two constructions do NOT satisfy this mandate: a set the AC
+describes but does not list, and a count the AC states but does not tie
+to named members.
+
+An AC whose set cannot be enumerated at authoring time carries
+`falsifiability_waiver: <what is unbounded, and why it cannot be
+enumerated>` on its own line inside that AC. Check 31 prints every
+waiver it reads; a waiver suppresses the FAIL, never the report.
+
+**Prior-evidence citation.** An AC that consumes a value, fixture,
+baseline, or measurement produced BEFORE this story MUST cite it as
+`prior_evidence: <repo-relative-path>[:<anchor>]`. Naming the producing
+story, sprint, or measurement in prose is NOT a citation: prose names a
+claim, a path names a retrievable artifact.
+
+**Minimum-mechanism contract (Rule 26c).** This mandate catches an AC
+whose predicate has no failing case, so the gate reading it records PASS
+for a verification never performed, and an AC citing prior evidence that
+is not retrievable at verification time. False-positive cost: an AC using
+a forbidden term over a set it does enumerate costs one word rewritten; a
+`prior_evidence:` typo costs one path correction. Remove this mandate when
+Check 3a's adjudicator is required to construct and record a concrete
+failing case per AC, which subsumes both halves.
+
 ### Layered AC Verification Accounting
 
 Story acceptance criteria MUST be verifiable at exactly one
@@ -330,7 +378,7 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 ### 5. Test Strategy
 
 **Intensity gate for carry-over-single.** When
-`validation_intensity == carry-over-single`, skip `/bmad-agent-tea-tea`
+`validation_intensity == carry-over-single`, skip `/bmad-testarch-test-design`
 (step 1 below) and derive the test strategy directly from the story
 acceptance criteria. Test strategy for ≤2 already-scoped stories is
 covered by the story validation cycle; the TEA sub-skill adds overhead
@@ -339,7 +387,7 @@ strategy. Steps 2–3 below otherwise proceed.
 
 **Execute back-to-back without pausing:**
 
-1. `/bmad-agent-tea-tea` then select test strategy — risk-based test
+1. `/bmad-testarch-test-design` then select test strategy — risk-based test
    strategy for the sprint
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.

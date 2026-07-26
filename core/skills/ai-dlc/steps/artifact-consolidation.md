@@ -76,7 +76,7 @@ honors the no-loss guarantee (Rule 25(a)).
 
 ### 4. Rule 20 validation (lead, inline)
 
-For `prd.md`, invoke `/bmad-validate-prd` on the consolidated live draft
+For `prd.md`, invoke `/bmad-prd` on the consolidated live draft
 (Rule 20 — inline, with a `SKILL_INVOCATION_PROVENANCE` block). For the
 brief/backlog, run the appropriate validation sub-skill. For
 `architecture.md`, run the architecture validation sub-skill on the

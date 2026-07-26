@@ -42,7 +42,7 @@ if research surfaces new constraints or opportunities.
 
 ### 2. PRD Creation
 
-- For **greenfield/brownfield-b**: invoke `/bmad-create-prd` — full PRD
+- For **greenfield/brownfield-b**: invoke `/bmad-prd` — full PRD
   with personas, metrics, risks
 - For **feature/brownfield-a/c**: UPDATE the existing PRD per Rule 25(a)
   — integrate the new scope's requirements into the current-state
@@ -66,7 +66,7 @@ but does not create new locked WHAT requirements.
 
 ### 3. PRD Validation
 
-Invoke `/bmad-validate-prd` — structured completeness check. Fix all
+Invoke `/bmad-prd` — structured completeness check. Fix all
 gaps found.
 
 ### 4. Validation Cycle (Rule 8)

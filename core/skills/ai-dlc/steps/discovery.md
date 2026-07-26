@@ -104,7 +104,7 @@ Invoke `/bmad-brainstorming` — structured CIS ideation:
 
 ### 4. Product Brief
 
-- For **greenfield/brownfield-b**: invoke `/bmad-create-product-brief`
+- For **greenfield/brownfield-b**: invoke `/bmad-product-brief`
 - For **feature/brownfield-a/c**: UPDATE the existing brief per Rule
   25(a) — integrate the new scope into the current-state sections and
   **move** superseded content and prior per-sprint narrative to
