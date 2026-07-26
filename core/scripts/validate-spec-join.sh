@@ -91,8 +91,27 @@ rc=0
 note=0
 
 # --- (1) every locked requirement reaches a capability -------------------------
-# The memlog records one line per capability with its CAP-N; a locked requirement
-# that no capability line cites is a requirement that reached nothing.
+# The memlog is TYPED -- `- (capability) ...`, `- (constraint) ...`, `- (event) ...`
+# -- and this join reads CAPABILITY ENTRIES ONLY.
+#
+# READING ANY LINE IS THE DEFECT, NOT A SHORTCUT. bmad-spec's Self-Validate appends
+# its own verdict as an `(event)` entry, and that verdict enumerates the very
+# mapping this join checks:
+#
+#   - (event) pass 2 preservation PASS: LR-S300-1 -> CAP-1 + routing-knob constraint,
+#     LR-S300-2 -> CAP-2 + BLOCKS constraint, LR-S300-3 -> CAP-3 + $0.00 constraint
+#
+# A predicate that scans every line mentioning the LR is satisfied by that summary.
+# Measured against real bmad-spec output: severing the actual `(capability)` entry
+# for a requirement left the join PASSING, because the spec's own claim that the
+# join holds was being read as evidence that it holds. That is the self-declared
+# verdict Rule 30 forbids adopting, committed by the check meant to enforce it.
+CAP_ENTRIES="$(grep -E '^[[:space:]]*[-*][[:space:]]*\((capability|capabilities)\)' "$MEMLOG")"
+if [ -z "$CAP_ENTRIES" ]; then
+  echo "$PROG: DISARMED — $MEMLOG contains no '(capability)' entries. The LR->CAP join reads those entries and only those; with none present it would close against an empty set. If bmad-spec's memlog entry types have changed, this predicate must change with them rather than fall back to scanning every line." >&2
+  exit 2
+fi
+
 LRS="$(grep -ohE '\bLR-[A-Za-z0-9]+-[0-9]+[a-z]?\b' "$MEMLOG" | sort -u)"
 NLRS="$(printf '%s\n' "$LRS" | grep -c . )"
 if [ "$NLRS" -eq 0 ]; then
@@ -100,9 +119,9 @@ if [ "$NLRS" -eq 0 ]; then
   exit 2
 fi
 for lr in $LRS; do
-  # The capability entries citing this LR. A memlog line typed `capability` that
-  # names both the LR and a CAP-N is the join.
-  if ! grep -E "(^|[^A-Za-z0-9-])$lr([^A-Za-z0-9-]|\$)" "$MEMLOG" | grep -qE '\bCAP-[0-9]+\b'; then
+  # A `(capability)` entry naming both this LR and a CAP-N is the join. Nothing else
+  # counts -- see the note above on why scanning every line reads a self-report.
+  if ! printf '%s\n' "$CAP_ENTRIES" | grep -E "(^|[^A-Za-z0-9-])$lr([^A-Za-z0-9-]|\$)" | grep -qE '\bCAP-[0-9]+\b'; then
     echo "FAIL: $lr appears in the memlog but no capability entry cites it alongside a CAP-<n>. A locked requirement that reaches no capability is dropped, and every artifact downstream stays internally consistent while it is missing. Either map it to a capability or record an explicit SUPERSEDED/AMENDED disposition for it." >&2
     rc=1
   fi

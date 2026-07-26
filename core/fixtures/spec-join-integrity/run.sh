@@ -82,6 +82,24 @@ else
   bad "a CONCERNS trace verdict passed with no note — the concern is silently discarded"
 fi
 
+# --- REAL bmad-spec shape, and the self-report regression pin ------------------
+# These three run against payloads reproducing what bmad-spec actually writes,
+# frontmatter and `(event)` verdict lines included.
+want 0 "REAL SHAPE: actual bmad-spec output passes every join" \
+  --spec "$R/real" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+# THE PIN. CAP-2's `(capability)` entry is severed while the Self-Validate `(event)`
+# line still reads "LR-S300-2 -> CAP-2". A join that scans every memlog line
+# mentioning the LR is satisfied by that summary and reports PASS — reading the
+# spec's own claim that the join holds as evidence that it holds, which is the
+# self-declared verdict Rule 30 forbids adopting. Measured against a real run: the
+# first version of this check passed here.
+want 1 "PIN: a severed capability entry FAILS even though the (event) verdict still names the mapping" \
+  --spec "$R/real-severed" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
+want 2 "DISARM: no (capability) entries at all exits 2, never 0" \
+  --spec "$R/real-untyped" --prd "$R/prd-real.md" --story "$R/story-real.md"
+
 # --- MUTATION controls: one per mechanical join -------------------------------
 # Copy, then `cmp -s` to prove the edit matched. A sed matching nothing yields a
 # mutant identical to the subject, which "fails as expected" for the wrong reason.

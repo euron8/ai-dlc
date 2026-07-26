@@ -17,6 +17,43 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.1] — 2026-07-26
+
+### Fixed — Check 30 read the spec's own PASS as evidence the join held
+
+v0.169.0 said a live `bmad-spec` run could not be driven from the distribution.
+That was wrong: the skill is a self-contained instruction file, so a subagent can
+be pointed at it by absolute path — the project-directory constraint applies only
+to the `/skill-name` invocation sugar. It also needs no consumer project; the
+skill, its two assets, `memlog.py`, `resolve_customization.py` and
+`core/config.yaml` suffice.
+
+Running it exposed a defect in the check meant to enforce Rule 30, of precisely
+the kind Rule 30 forbids. `bmad-spec`'s Self-Validate appends its verdict to the
+memlog as an `(event)` entry that ENUMERATES the mapping join (1) checks:
+
+```
+- (event) pass 2 preservation PASS: LR-S300-1 -> CAP-1 + routing-knob constraint,
+  LR-S300-2 -> CAP-2 + BLOCKS constraint, LR-S300-3 -> CAP-3 + $0.00 constraint
+```
+
+The predicate scanned every memlog line mentioning an LR and asked whether any
+carried a `CAP-<n>`. Severing the real `(capability)` entry left the join
+**passing**, on the strength of that summary alone — the spec's own claim that the
+join holds, read as evidence that it holds. The memlog is typed; join (1) now
+reads `(capability)` entries and only those, and DISARMS when there are none.
+
+The fixture could not have caught it: its memlog used a `capability | ...` pipe
+format **that exists nowhere**. An invented shape is worse than no fixture — it
+passes, and it pins the wrong thing. Every payload now uses the real typed form,
+and a `real-severed` payload pins the defect directly: capability entry cut,
+`(event)` verdict intact, must FAIL.
+
+Reported upstream rather than worked around: `bmad-spec`'s `customize.toml`
+declares a `file:` persistent fact whose absence is indistinguishable from an
+empty one, and its activation step resolves `{planning_artifacts}` from a `bmm`
+section `_bmad/core/config.yaml` does not have.
+
 ## [0.169.0] — 2026-07-26
 
 ### Added — BMAD already shipped spec-driven development; ai-dlc never invoked it
