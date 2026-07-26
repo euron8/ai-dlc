@@ -17,6 +17,177 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.0] — 2026-07-26
+
+### Added — BMAD already shipped spec-driven development; ai-dlc never invoked it
+
+`bmad-spec` is installed in every consumer and referenced **zero** times in
+`core/`. Positive control: `bmad-party-mode` appears 54 times, so the zero was a
+real absence. It produces a SPEC kernel with stable `CAP-<n>` capability IDs,
+re-derived on every run from an append-only `.memlog.md`. `bmad-architecture`
+produces `AD-<n>` decisions carrying Binds/Prevents/Rule plus a linter for them.
+`bmad-create-epics-and-stories` emits an `FR Coverage Map`.
+`bmad-testarch-trace` emits a requirements-to-tests matrix and a gate decision.
+
+Building a bespoke spec triad beside all of that would have been a parallel path
+beside a proven one (Rule 26(b)). So the chain is now threaded through what BMAD
+already guarantees:
+
+```
+LOCKED_REQUIREMENTS -> CAP-<n> -> FR-<n> -> story AC -> test
+```
+
+`discovery.md` §4b derives the kernel, `research-requirements.md` requires every
+FR to cite its capability, `stories-test-strategy.md` §2a mandates a
+`capabilities:` story frontmatter field, and §5 adds the trace matrix.
+`architecture.md` invoked `/bmad-architecture` for greenfield only — the variants
+the reference consumer actually runs got hand-rolled prose — and now routes every
+variant to it, adopting the spine as a spec companion.
+
+**Rule 30 states the seam: the spec is BMAD's, the enforcement is ours.** A BMAD
+finding is not a BMAD verdict. `lint_spine.py` exits 0 unconditionally and leaves
+the call to its caller; `bmad-check-implementation-readiness` reports uncovered
+requirements without failing; the trace gate decision blocks nothing; Spec Law is
+graded by the agent that authored the spec. Each is now adopted by a check that
+can FAIL and that re-derives its own judgement.
+
+### Added — Checks 28-32 and four enforcers
+
+| Check | Adjudication | Guards |
+|---|---|---|
+| 28 | script | the adoption floor is declared; PENDING is a HARD_BLOCK |
+| 29 | llm | Spec Law re-graded in a fresh adjudicator; **EARS form on every capability's `success` field** |
+| 30 | script | the three ID joins, plus the two borrowed verdicts |
+| 31 | script | AC predicates that name no bounded set; `prior_evidence:` resolvability |
+| 32 | script | every `/bmad-*` call site resolves to a file that exists |
+
+Check 29's EARS clause is the sharp one. `THE <system> SHALL <response>` cannot
+be satisfied by "set these two knobs" — no subject, no observable response. That
+is the direct answer to a requirement authored as a config delta clearing
+discovery, research, architecture, story-validation and three gates because no
+acceptance criterion could red against a mechanism that was set and inert.
+
+Check 29 is deliberately `llm`: no script can judge whether an intent describes
+WHAT or HOW.
+
+### Added — the adoption floor, so "go-forward" is mechanical rather than claimed
+
+A scope clause reading "skip when no spec artifact is present" cannot be told
+apart from the failure it masks — a project that never adopts, one that adopted
+and quietly stopped, and one with a perfect spec all print the same silence.
+`spec-adoption.md` carries a monotone declared floor instead: an absent
+declaration is PENDING (exit 2, never 0), a pre-floor sprint prints
+`SKIPPED-PRE-ADOPTION` into the gate log, and `--declare` refuses a lower value,
+a value more than two sprints out, and any change once the floor has been in
+force for a committed sprint. Checks 30 and 31 bind to a story's **creation**
+sprint, so nothing authored before the floor is retroactively spec-required.
+
+Nothing is backfilled. Retro-fitting capability IDs onto 987 existing stories
+would be done by generation, and a generated join is worse than an absent one —
+Check 30 would then adjudicate machine-invented links and report PASS.
+Traceability coverage before the floor is zero and declared, not unknown.
+
+### Fixed — no shipped core validator was syntax-checked on any consumer
+
+`core/git-hooks/pre-push` ran `bash -n` over `scripts/*.sh .claude/hooks/*.sh
+.githooks/*`. Core validators moved to `scripts/ai-dlc/` in v0.126.0 and the
+distribution hook's glob followed; the consumer hook's did not. Two classes of
+shipped script therefore reached every consumer unchecked — including
+`.claude/skills/ai-dlc-update/reconcile/*.sh`, the update engine, where a syntax
+error breaks the pull that would deliver its own fix. The step printed the same
+green line either way.
+
+Both globs now sit inside `SYNTAX_GLOB_BEGIN/END` sentinels and **I30** derives
+the consumer set from the distribution set through the same `map_consumer()`
+rules `apply.sh` uses. Two hand-kept lists that must agree is the defect; the
+pair is derivable.
+
+I30's first draft read the block a line at a time and dropped every entry after a
+backslash continuation — from both hooks alike, so it compared two equally
+truncated sets and reported agreement it never tested.
+
+### Fixed — four live broken BMAD invocations
+
+Check 32, run against the reference consumer, found four defects across 16 call
+sites. `/bmad-agent-tea-tea` loaded an absent agent file while the live
+`bmad-testarch-*` module sat unused. `/bmad-create-product-brief` did not exist
+at all. `/bmad-create-prd`, `/bmad-validate-prd` and `/bmad-create-architecture`
+were deprecated shims scheduled for removal.
+
+A directory-existence check is not enough, and that is the point: BMAD ships dead
+loader shims beside live self-contained skills under names differing by one word,
+so a pipeline can invoke a name that resolves as a skill and loads nothing.
+Deprecations are reported, not failed — a scheduled removal must be visible
+without blocking a working pipeline.
+
+### Fixed — an escalated role that can resolve to its base tier is not an escalation
+
+`ai-dlc-setup` documented Sonnet-only mode as substituting all model variables
+"including opus-tier roles", and told the operator that for `dev-escalated` and
+`code-reviewer-escalated` this "collapses to the sonnet string and escalation
+becomes a harmless no-op."
+
+It is not harmless. A role whose model resolves to its base role's is
+byte-equivalent in behaviour to the base role, while the routing tag routes to
+it, the dispatch guard binds it, and Check 22 re-derives and verifies the route.
+All of that then confirms a path that bought nothing while the record says the
+work was escalated — the check-that-cannot-fire class applied to a role.
+Sonnet-only now states escalation is UNAVAILABLE rather than collapsed: the
+escalated tokens are left unsubstituted and the limitation is recorded. An absent
+capability is recoverable; an invisible one is not.
+
+New `pm-escalated` role at opus tier and `/effort max`, because a conditional
+model is a conditional ROLE — the dispatch guard rebinds a call-site override
+back to the role file. Standard `pm` is sonnet while `architect` is opus, which
+would have authored the spec on a weaker model than the design step consuming it.
+One dispatch per sprint, guarding the artifact every later gate treats as given.
+
+### Fixed — install.sh chmod'd two named fixture scripts instead of the glob
+
+One screen below the comment explaining why that is wrong. `cp` preserves the
+source mode on a new file and the destination's on an overwrite, so a fixture
+shipping a third executable installs 0644 forever, silently.
+
+### Fixed — the spec adds no byte-anchor target
+
+Four files declared that `full_text_source:` may target the spec's `.memlog.md`.
+`validate-locked-anchor.sh` resolves the source of record to `product-brief.md`
+and rejects anything else, so the rule was contradicted by its own mechanism.
+Requirement text originates in the brief; the spec is derived from it, which puts
+a spec artifact in exactly the category `prd.md` already occupies. Rule 30 now
+states the general form — a derived artifact is cited with `requires_context:`,
+never `full_text_source:` — rather than carving out a special case.
+
+### Verified
+
+Against a copy of the reference consumer, running its **own** `preclassify.sh`
+and `apply.sh` — the distribution is not a consumer, and a `--is-core` dry-run
+exercises the other branch of every two-layout resolver:
+
+- 43 rows classified, 38 pure-apply; `unmapped-path`, `restamp-withheld` and
+  `unhandled-bucket` all zero; in-flight marker cleared; stamp advanced
+- all four validators present **and executable**; every new fixture `*.sh`
+  executable; no `.claude/fixtures`, `.claude/scripts` or `.claude/ci-templates`
+  mis-landing
+- fixture suite 66/66 before the pull, **70/70** after
+- the floor against the real tree: undeclared is exit 2, five real legacy sprints
+  each print `SKIPPED-PRE-ADOPTION`, s300 reports `IN-FORCE`, and both refusals
+  hold
+- the syntax glob returns 1 on a seeded error in a core validator and in the
+  update engine, where the pre-fix glob returned 0
+
+Every new fixture carries red cases, an over-fire control, a fail-closed control,
+and mutation controls built as `cp` copies with a `cmp -s` matched-nothing guard.
+That guard earned itself: three `spec-join-integrity` mutants matched nothing on
+the first attempt and would otherwise have reported as passing mutation controls.
+
+### Not covered — stated plainly
+
+`bmad-spec` returning `{"status":"complete"}` from a live pipeline run is not
+verified here: it is an LLM skill resolved from the consumer's project directory,
+so it cannot be driven from the distribution. Its runtime dependencies are
+verified present.
+
 ## [0.168.1] — 2026-07-26
 
 ### Fixed — v0.168.0's mutation proof was prose, and prose is a forgeable evidence cell
