@@ -138,9 +138,23 @@ for story in "${FILES[@]}"; do
   # DISARM: a story that declares acceptance criteria but presents none in the declared
   # form is not a clean story -- it is a story this script cannot read. Reporting PASS
   # on it is the exact defect this validator exists to catch, committed by the validator.
-  if [ "${#block_ids[@]}" -eq 0 ] \
-     && grep -qiE '^#{1,6}[[:space:]]*Acceptance Criteria|^acceptance_criteria:[[:space:]]*[1-9]' "$story"; then
-    echo "$PROG: DISARMED — $story declares acceptance criteria but none are in the form stories-test-strategy.md mandates ('- **AC<n> (<tags>).**' or '- **AC<n> — <title>.**'). Exiting 2 rather than 0: an AC this script cannot read is not an AC that passed. Re-author the headers in the declared form." >&2
+  #
+  # THE TRIGGER SET IS WIDE ON PURPOSE. A first version tested only for a
+  # `## Acceptance Criteria` HEADING or an `acceptance_criteria:` frontmatter field.
+  # `bmad-create-epics-and-stories` emits neither: its real output carries a BOLD
+  # INLINE `**Acceptance Criteria:**` label followed by unnumbered Given/When/Then
+  # blocks, and contains ZERO `AC` tokens. Measured against that real output, this
+  # script reported PASS with "0 AC block(s)" on a story whose criteria contained both
+  # `definitively` and `exhaustive` — a silent false pass, which is the defect class
+  # this check exists to remove, committed by the check.
+  #
+  # Any of: an Acceptance-Criteria label in heading, bold or bare form; or a
+  # Given/When/Then block. Zero parsed AC blocks alongside any of them is a story this
+  # script cannot read.
+  if [ "${#block_ids[@]}" -eq 0 ] && grep -qiE \
+       '^#{1,6}[[:space:]]*\**[[:space:]]*Acceptance[[:space:]]+Criteria|^[[:space:]]*\*\*Acceptance[[:space:]]+Criteria|^acceptance_criteria:[[:space:]]*[1-9]|^[[:space:]]*\*\*(Given|When|Then)\*\*' \
+       "$story"; then
+    echo "$PROG: DISARMED — $story presents acceptance criteria that are not in the form stories-test-strategy.md mandates ('- **AC<n> (<tags>).**' or '- **AC<n> — <title>.**'). Exiting 2 rather than 0: an AC this script cannot read is not an AC that passed. If these came from bmad-create-epics-and-stories, its Given/When/Then blocks must be re-authored into numbered ACs when the story file is created — that is stories-test-strategy.md's job, not this script's." >&2
     exit 2
   fi
 

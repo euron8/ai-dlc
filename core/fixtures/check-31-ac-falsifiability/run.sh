@@ -76,6 +76,14 @@ expect 0 good-evidence.md     "OVER-FIRE CONTROL: a resolvable prior_evidence ci
 expect 0 waiver.md            "a declared falsifiability_waiver suppresses the FAIL"
 expect 2 undeclared-form.md   "a story declaring ACs in an undeclared form DISARMS (never exits 0)"
 
+# REAL bmad-create-epics-and-stories OUTPUT FORM. Its stories carry a BOLD INLINE
+# `**Acceptance Criteria:**` label and unnumbered Given/When/Then blocks, and contain
+# ZERO `AC` tokens. The first disarm predicate tested only for an Acceptance-Criteria
+# HEADING or an `acceptance_criteria:` field, so against this real shape the script
+# reported PASS with "0 AC block(s)" on criteria containing BOTH `definitively` and
+# `exhaustive` — a silent false pass, which is the defect class this check removes.
+expect 2 bmad-gwt-form.md      "PIN: BMAD's real Given/When/Then AC form DISARMS, never passes silently"
+
 # The waiver must still be REPORTED. A waiver that silences the report is a hole
 # nobody can audit.
 if ( cd "$DIR" && bash "$V" --lexicon-from "$LEX" "$DIR/waiver.md" ) 2>/dev/null | grep -q 'waiver'; then

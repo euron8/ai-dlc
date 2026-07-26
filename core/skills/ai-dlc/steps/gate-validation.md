@@ -1859,11 +1859,14 @@ retroactively spec-require a story written before the layer existed. Report
 `SKIPPED-PRE-ADOPTION s<story-sprint> < s<floor>` for those.
 
 **Check.** Run `scripts/ai-dlc/validate-spec-join.sh --spec <spec-folder>
---prd <prd> --story <each in-scope story>`, passing `--spine-lint` with
+--prd <prd> --story <each in-scope story>`, passing `--spine` with the
+`ARCHITECTURE-SPINE.md` path, `--spine-lint` with
 `lint_spine.py`'s JSON output and `--trace-verdict` with the
 `bmad-testarch-trace` gate decision. Exit 0 required.
 
-The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` is cited by
+The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` is bound by
+an architecture decision (`- **Binds:**` in the spine, where `all` binds every
+capability) — a capability no AD governs was never designed; every `CAP-<n>` is cited by
 a functional-requirement entry in `prd.md` (**not** in BMAD's `FR Coverage Map`,
 whose template emits an FR-to-epic mapping carrying no capability token — requiring
 one there fails a correct map, and FR-to-epic coverage is

@@ -125,6 +125,16 @@ want 1 "PIN: a severed capability entry FAILS even though the (event) verdict st
 want 2 "DISARM: no (capability) entries at all exits 2, never 0" \
   --spec "$R/real-untyped" --prd "$R/prd-real.md" --story "$R/story-real.md"
 
+# --- (2a) the CAP -> AD join, against bmad-architecture's real spine shape ------
+want 0 "OVER-FIRE CONTROL: a spine whose AD binds 'all' covers every capability" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-all.md"
+
+want 1 "join (2a): a capability no AD binds FAILS" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-cap1only.md"
+
+want 2 "DISARM: a file with no '- **Binds:**' entries exits 2, never 0" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/prd-ok.md"
+
 # --- MUTATION controls: one per mechanical join -------------------------------
 # Copy, then `cmp -s` to prove the edit matched. A sed matching nothing yields a
 # mutant identical to the subject, which "fails as expected" for the wrong reason.

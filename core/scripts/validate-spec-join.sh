@@ -28,7 +28,10 @@
 #
 # THE JOINS, all ID-mechanical:
 #   (1) every LOCKED_REQUIREMENTS bullet in the spec's memlog maps to >=1 CAP-N
-#   (2) every CAP-N in SPEC.md appears in the PRD's FR Coverage Map
+#   (2) every CAP-N in SPEC.md is cited by a functional-requirement entry in prd.md
+#       -- NOT in BMAD's FR Coverage Map, whose content propagates whatever FR label
+#       the PRD used and is therefore a derived surface, not an independent one
+#  (2a) every CAP-N is bound by an architecture decision (`- **Binds:**` in the spine)
 #   (3) every `capabilities:` entry in a story frontmatter resolves to a CAP-N
 #       that SPEC.md defines
 #
@@ -39,13 +42,15 @@
 # happened. `.memlog.md` is append-only and never reordered, so requirement text is
 # anchored there.
 #
-# TWO BORROWED VERDICTS. `--spine-lint` takes `lint_spine.py`'s JSON, which by
-# design always exits 0 and lets the caller decide; a non-empty `ad_fields` or
-# `placeholder` finding set fails here. `--trace-verdict` takes a
-# `bmad-testarch-trace` gate decision; FAIL fails, CONCERNS and WAIVED are recorded
-# with the matrix cited rather than dropped. Both are OPT-IN FLAGS: whether they ran
-# is the gate's evidence question, not something this script can infer from a
-# missing file.
+# TWO BORROWED VERDICTS, EACH READ FROM A NAMED KEY. `--spine-lint` takes
+# `lint_spine.py`'s JSON, which always exits 0 by design and lets the caller decide;
+# severity comes from its own `severity` field (any `high` fails, `low` records), never
+# from a hand-list of category names -- it has four, and the two an earlier version
+# listed omitted `ad_id`, which is the ID-stability failure every join here rests on.
+# `--trace-verdict` takes `bmad-testarch-trace`'s `gate-decision.json` and reads
+# `gate_status`; the same file carries `p0_status`, `p1_status` and a prose `rationale`,
+# so a whole-file grep for FAIL fails a gate the tool passed. Both are OPT-IN FLAGS:
+# whether they ran is the gate's evidence question, not something this script can infer.
 #
 # EXIT CODES
 #   0  -- every join closes
@@ -57,7 +62,7 @@
 set -u
 
 PROG="validate-spec-join.sh"
-SPEC=""; PRD=""; SPINE=""; TRACE=""
+SPEC=""; PRD=""; SPINE=""; SPINE_MD=""; TRACE=""
 STORIES=()
 
 while [ $# -gt 0 ]; do
@@ -65,9 +70,10 @@ while [ $# -gt 0 ]; do
     --spec)          SPEC="${2:-}"; shift 2 || exit 2 ;;
     --prd)           PRD="${2:-}";  shift 2 || exit 2 ;;
     --story)         STORIES+=("${2:-}"); shift 2 || exit 2 ;;
+    --spine)         SPINE_MD="${2:-}"; shift 2 || exit 2 ;;
     --spine-lint)    SPINE="${2:-}"; shift 2 || exit 2 ;;
     --trace-verdict) TRACE="${2:-}"; shift 2 || exit 2 ;;
-    -h|--help) echo "usage: $PROG --spec DIR --prd FILE [--story FILE]... [--spine-lint JSON] [--trace-verdict FILE]" >&2; exit 2 ;;
+    -h|--help) echo "usage: $PROG --spec DIR --prd FILE [--story FILE]... [--spine FILE] [--spine-lint JSON] [--trace-verdict FILE]" >&2; exit 2 ;;
     *) echo "$PROG: unexpected argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -171,6 +177,34 @@ if [ "${#STORIES[@]}" -gt 0 ]; then
       fi
     done
   done
+fi
+
+# --- (2a) every capability is bound by an architecture decision ----------------
+# bmad-architecture renders each decision as `### AD-<n> — <title>` followed by
+# `- **Binds:** <what>`, and Binds names CAPABILITIES: a real generated spine reads
+# `- **Binds:** CAP-1`. So the CAP -> AD leg is a real join, and the chain this check
+# documents asserted it without checking it. A leg claimed and unenforced is the same
+# defect as a rule with no mechanism.
+#
+# `all` binds every capability -- a spine-wide invariant, which is how the real output
+# expresses a decision that governs everything.
+if [ -n "$SPINE_MD" ]; then
+  [ -f "$SPINE_MD" ] || { echo "$PROG: DISARMED — --spine names an unreadable file: $SPINE_MD" >&2; exit 2; }
+  BINDS="$(grep -E '^[[:space:]]*[-*][[:space:]]*\*\*Binds:\*\*' "$SPINE_MD")"
+  if [ -z "$BINDS" ]; then
+    echo "$PROG: DISARMED — $SPINE_MD contains no '- **Binds:**' entries, so no AD declares what it governs. Either this is not an ARCHITECTURE-SPINE.md or the AD entry shape changed; both would close this join against an empty set." >&2
+    exit 2
+  fi
+  if printf '%s\n' "$BINDS" | grep -qiE '\*\*Binds:\*\*[[:space:]]*all\b'; then
+    :   # a spine-wide AD binds every capability
+  else
+    for cap in $CAPS; do
+      if ! printf '%s\n' "$BINDS" | grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"; then
+        echo "FAIL: $cap is defined in SPEC.md but no architecture decision in $SPINE_MD binds it. A capability no AD governs was never designed — it reaches implementation with no invariant constraining how." >&2
+        rc=1
+      fi
+    done
+  fi
 fi
 
 # --- borrowed verdict: lint_spine.py ------------------------------------------

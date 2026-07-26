@@ -257,4 +257,27 @@ rm -f "$ROOT/real-untyped/.memlog.md.bak"
 
 printf -- '---\ncapabilities: [CAP-1, CAP-2]\n---\n# real story\n' > "$ROOT/story-real.md"
 
+
+# --- REAL bmad-architecture spine shape ----------------------------------------
+# `### AD-<n> — <title>` then `- **Binds:** <what>` / `- **Prevents:**` / `- **Rule:**`.
+# Binds names CAPABILITIES (a real generated spine reads `- **Binds:** CAP-1`), and
+# `all` binds every capability. The chain this check documents asserted the CAP -> AD
+# leg without checking it; a leg claimed and unenforced is a rule with no mechanism.
+cat > "$ROOT/spine-all.md" <<'SPINEALL'
+# Spine
+## Decisions
+### AD-1 — Dependency direction is inward
+- **Binds:** all
+- **Prevents:** a policy decision leaking into an adapter
+- **Rule:** the core imports nothing from an adapter
+SPINEALL
+cat > "$ROOT/spine-cap1only.md" <<'SPINE1'
+# Spine
+## Decisions
+### AD-1 — router resolver owns venue choice
+- **Binds:** CAP-1
+- **Prevents:** two paths resolving a venue from different inputs
+- **Rule:** one core resolver maps routing config to a venue decision
+SPINE1
+
 printf '%s\n' "$ROOT"

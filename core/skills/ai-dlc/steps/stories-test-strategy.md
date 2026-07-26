@@ -140,7 +140,15 @@ non-discriminating costs one fixture. Remove this standard if a static
 analyzer proves per-test discrimination automatically, or if Check 19
 is extended to cover every story's unit/integration fixtures.
 
-**AC header form.** Every acceptance criterion MUST open with a header of
+**AC header form.** `/bmad-create-epics-and-stories` emits acceptance criteria as
+unnumbered Given/When/Then blocks under a bold `**Acceptance Criteria:**` label,
+carrying no `AC` token at all. Those are INPUT. When a story file is created,
+re-author each block as a numbered acceptance criterion in the form below, carrying
+its UNIVERSAL/EXISTENTIAL tag and its layer. A story file that keeps the raw
+Given/When/Then form fails Check 31 as DISARMED — an AC the checker cannot read is
+not an AC that passed, and Check 31 will not silently score it clean.
+
+Every acceptance criterion MUST open with a header of
 the form `- **AC<n> (<tags>).**` or `- **AC<n> — <title>.**`, where `<n>` is
 a decimal ordinal optionally suffixed with one lowercase letter (`AC1`,
 `AC4a`). One AC per header. The header carries the AC; every following

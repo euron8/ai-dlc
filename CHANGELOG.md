@@ -17,6 +17,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.3] — 2026-07-26
+
+### Fixed — Check 31 silently passed BMAD's real acceptance-criteria format
+
+`bmad-architecture` and `bmad-create-epics-and-stories` were the two producers whose
+formats v0.169.2 read from templates rather than from a run. Both were run headless.
+One silent false pass, one unenforced claim, and one overstated claim of my own.
+
+**Check 31 reported PASS on a story whose criteria contained `definitively` AND
+`exhaustive`.** `bmad-create-epics-and-stories` emits acceptance criteria as a **bold
+inline** `**Acceptance Criteria:**` label followed by unnumbered Given/When/Then
+blocks — with **zero `AC` tokens** in the whole document. The disarm predicate tested
+only for an `## Acceptance Criteria` HEADING or an `acceptance_criteria:` frontmatter
+field, so it matched neither, parsed 0 AC blocks, and exited 0 while printing
+"0 AC block(s)". That is the defect class this check exists to remove, committed by
+the check, on the real output of a workflow the pipeline invokes.
+
+The trigger set is now wide: an Acceptance-Criteria label in heading, bold or bare
+form, or a `**Given**`/`**When**`/`**Then**` block. Any of those with zero parsed AC
+blocks DISARMS. `stories-test-strategy.md` now states the authoring obligation
+plainly: BMAD's Given/When/Then blocks are INPUT, re-authored into numbered ACs when
+the story file is created.
+
+### Added — join (2a): every capability must be bound by an architecture decision
+
+A real spine renders `### AD-<n> — <title>` then `- **Binds:** CAP-1` — so `Binds`
+names capabilities and the `CAP -> AD` leg is a real, checkable join. This check's own
+chain diagram had asserted that leg while nothing verified it, which is a rule with no
+mechanism. `--spine` now closes it: a capability no AD binds was never designed. `all`
+binds every capability, which is how a spine-wide invariant is expressed.
+
+### Corrected — v0.169.2 overstated the FR Coverage Map finding
+
+v0.169.2 said the map requirement "could never have passed". That was wrong. The map
+propagates the FR label from the PRD verbatim — given ai-dlc's mandated
+`FR-S300-1 (CAP-1)` entries, the rendered map reads
+`FR-S300-1 (CAP-1): Epic 1 - <description>`, capability token intact. It would have
+failed only against bare `FR1` labels.
+
+The v0.169.2 fix stands, for a better reason than the one given: the map's content is
+*derived* from whatever label the PRD used, so a check reading it is coupled to
+another tool's propagation behaviour. Reading the PRD's FR entries is independent of
+it. The over-fire pin — BMAD's literal `FR1: Epic 1 - [Brief description]` must still
+PASS — is what encodes that independence.
+
+### Verified
+
+Both workflows run headless against the sandbox holding the real `SPEC.md`:
+
+- `lint_spine.py` against a **generated** spine: `ok: true`, 0 findings, exit 0;
+  Check 30 consumes that envelope correctly
+- every capability in the generated spine bound by 4 ADs
+- the rendered `FR Coverage Map`, the literal `AD-<n>` entry shape, and the literal
+  Given/When/Then AC form all captured as fixture payloads
+- `bmad-architecture` did **not** mutate `SPEC.md`'s `companions:` frontmatter, so
+  `bmad-spec` remains its sole writer as Rule 30 states
+
+26 assertions in `spec-join-integrity`, 14 in `check-31-ac-falsifiability`, three
+mutants proven in each.
+
 ## [0.169.2] — 2026-07-26
 
 ### Fixed — three invented input formats, audited against ground truth
