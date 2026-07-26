@@ -17,6 +17,68 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.168.1] — 2026-07-26
+
+### Fixed — v0.168.0's mutation proof was prose, and prose is a forgeable evidence cell
+
+`wait-stale-deliverable/` claimed five mutants in a `MUTATION NOTE`. That note could
+have been written without ever running them, nothing in the suite re-checked it, and
+it would have gone on reading as true after the code it describes moved. Same class
+as a content-free PASS line: ask whether the cell can be written without the run.
+
+Section 14 now RUNS the proof — six mutants, built as copies under a temp dir, each
+asserting the *behaviour* the removed mechanism buys rather than merely that the
+fixture reds:
+
+| mutant | without it |
+|---|---|
+| `grant-cap` | a spent-grant join keeps extending — an unbounded wait |
+| `unprune-wait-beats` | a teammate's own beat counters read as work |
+| `unexclude-beat-inflight` | a heartbeat marker reads as work |
+| `state-dir-guard` | `_bmad-output` is accepted; progress becomes permanently true |
+| `path-exists-check` | a typo'd path is accepted and grants nothing, forever |
+| `progress-sampling` | a demonstrably working teammate is declared non-delivered |
+
+The two prunes are mutated **separately**. v0.168.0's shell run lumped them, which
+proves only that one of the two is load-bearing.
+
+The "strictly additive" half is asserted too, not described: all six mutants are
+re-run against the flagless `exhausted` seed and must still exit 1.
+
+**`cmp -s` is the guard that makes the rest non-vacuous.** A mutant whose pattern
+stops matching yields a byte-identical copy, and the "subject now misbehaves"
+assertion then runs against the *unmutated* subject and passes — a proof that never
+happened. Renaming targeted code now breaks the fixture loudly (exit 2). Verified by
+aiming one mutant at a name the subject does not contain: `FIXTURE ERROR: mutant
+'unprune-wait-beats' matched nothing`, exit 2.
+
+Two bugs in the first draft of this section, both of the same family and both worth
+recording because they are how a test harness goes quietly green:
+
+- `M="$(mutant ...)"` ran the helper in a **subshell**, so its `exit 2` killed only
+  the subshell. A failed mutant left `M` empty, `bash ""` exited 127, and two
+  assertions phrased as `!= 64` read 127 and passed. The helper now sets a variable,
+  and those assertions name the outcome they expect (`-eq 0`).
+- `local a="$1" b="$MUTDIR/$a.sh"` — bash creates every name on a single `local`
+  before assigning any of them, so `$a` was unbound under `set -u`.
+
+**Mutating a copy is also why the proof is now safe to re-run.** Mutating the shipped
+script in place needs a revert, and the obvious revert — `git checkout -- <file>` —
+silently destroys uncommitted work in that same file. That is how v0.168.0's evidence
+was actually produced, twice, recovered by luck rather than design. Three existing
+fixtures (`check5-anchor-base`, `ci-gates-resolution`, `check-17-bypass`) already used
+the copy pattern; this one did not, and re-derived a worse one.
+
+PATCH, not MINOR: the shipped script is byte-identical to v0.168.0 and there is no
+consumer-visible interface change. The only other file touched is `VERSION`.
+
+`since-clamp`'s own prose mutation note (case 4) is untouched and still owed the same
+treatment.
+
+### Fixtures
+
+Full suite 66/66.
+
 ## [0.168.0] — 2026-07-26
 
 ### Added — a join can now be extended by evidence of work, not just by the clock
