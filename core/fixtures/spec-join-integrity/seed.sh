@@ -22,7 +22,19 @@ mk_spec "$ROOT/ok" '- (decision) pinned units to BLOCKS
 - (event) pass 1 coherence PASS
 - (event) pass 2 preservation PASS
 '
-printf '# PRD\n\n## FR Coverage Map\n\n- FR1 (CAP-1): Epic 1\n- FR2 (CAP-2): Epic 1\n' > "$ROOT/prd-ok.md"
+cat > "$ROOT/prd-ok.md" <<'PRDOK'
+# PRD
+
+## Functional Requirements
+
+- **FR-S300-1 (CAP-1) (<- LR-S300-1) - router venue.** body
+- **FR-S300-2 (CAP-2) (<- LR-S300-2) - sweep floor.** body
+
+### FR Coverage Map
+
+FR1: Epic 1 - router venue
+FR2: Epic 1 - sweep floor
+PRDOK
 
 # break (1): LR-S300-2 present in the memlog but no (capability) entry cites it
 mk_spec "$ROOT/orphan-lr" '- (capability) CAP-1 realises LR-S300-1
@@ -30,11 +42,41 @@ mk_spec "$ROOT/orphan-lr" '- (capability) CAP-1 realises LR-S300-1
 - (note) LR-S300-2 was discussed and then not carried
 '
 
-# break (2): coverage map omits CAP-2
-printf '# PRD\n\n## FR Coverage Map\n\n- FR1 (CAP-1): Epic 1\n' > "$ROOT/prd-missing-cap.md"
+# break (2): no FR entry cites CAP-2
+cat > "$ROOT/prd-missing-cap.md" <<'PRDMISS'
+# PRD
 
-# break (2b): no coverage map heading at all -> DISARM, not skip
-printf '# PRD\n\n## Functional Requirements\n\n- FR1: something\n' > "$ROOT/prd-no-map.md"
+## Functional Requirements
+
+- **FR-S300-1 (CAP-1) (<- LR-S300-1) - router venue.** body
+- **FR-S300-2 (<- LR-S300-2) - sweep floor, no capability cited.** body
+
+### FR Coverage Map
+
+FR1: Epic 1 - router venue
+FR2: Epic 1 - sweep floor
+PRDMISS
+
+# OVER-FIRE PIN: a PRD whose coverage map is BMAD's literal template output --
+# `FR1: Epic 1 - <desc>`, no capability token anywhere -- must still PASS, because
+# the CAP citation lives on the FR ENTRY. Requiring it in the map failed every
+# capability against a correct map.
+cat > "$ROOT/prd-real-map.md" <<'PRDREAL'
+# PRD
+
+## Functional Requirements
+
+- **FR-S300-1 (CAP-1) (<- LR-S300-1) - router venue.** body
+- **FR-S300-2 (CAP-2) (<- LR-S300-2) - sweep floor.** body
+
+### FR Coverage Map
+
+FR1: Epic 1 - [Brief description]
+FR2: Epic 1 - [Brief description]
+PRDREAL
+
+# no FR identifiers at all -> DISARM, not skip
+printf '# PRD\n\n## Scope\n\n- some prose, no requirement ids\n' > "$ROOT/prd-no-fr.md"
 
 # zero-capability kernel -> DISARM
 mkdir -p "$ROOT/no-caps"
@@ -46,12 +88,101 @@ printf -- '---\ncapabilities: [CAP-1, CAP-2]\n---\n# ok\n'  > "$ROOT/story-ok.md
 printf -- '---\ncapabilities: [CAP-9]\n---\n# dangling\n'   > "$ROOT/story-dangling.md"
 printf -- '---\nstory_id: s1\n---\n# no capabilities field\n' > "$ROOT/story-nofield.md"
 
-# borrowed verdicts
-printf '{"findings":[{"class":"ad_fields","line":12}]}\n' > "$ROOT/spine-bad.json"
-printf '{"findings":[]}\n'                                > "$ROOT/spine-ok.json"
-printf 'Gate decision: FAIL\n'                            > "$ROOT/trace-fail.txt"
-printf 'Gate decision: CONCERNS\n'                        > "$ROOT/trace-concerns.txt"
-printf 'Gate decision: PASS\n'                            > "$ROOT/trace-pass.txt"
+# borrowed verdicts.
+# The lint payloads are REAL `lint_spine.py` output, captured by running it. Its
+# envelope is {"ok","spine","total_findings","by_severity","findings":[{"category",
+# "severity","detail","location"}]} -- the key is "category", and there are FOUR
+# values: placeholder, ad_fields, ad_id, version_pin. An earlier version of this
+# fixture invented {"class": ...} with no envelope at all, so a check that reads the
+# envelope could only DISARM on it. An invented shape pins nothing.
+cat > "$ROOT/spine-ok.json" <<'LINTOK'
+{
+  "ok": true,
+  "spine": "ARCHITECTURE-SPINE.md",
+  "total_findings": 0,
+  "by_severity": {},
+  "findings": []
+}
+LINTOK
+cat > "$ROOT/spine-bad.json" <<'LINTBAD'
+{
+  "ok": false,
+  "spine": "ARCHITECTURE-SPINE.md",
+  "total_findings": 4,
+  "by_severity": {
+    "high": 4
+  },
+  "findings": [
+    {
+      "category": "placeholder",
+      "severity": "high",
+      "detail": "placeholder marker: 'TBD'",
+      "location": "ARCHITECTURE-SPINE.md (line 5)"
+    },
+    {
+      "category": "ad_fields",
+      "severity": "high",
+      "detail": "AD-1 missing required field(s): prevents, rule",
+      "location": "ARCHITECTURE-SPINE.md AD-1 (line 7)"
+    },
+    {
+      "category": "ad_id",
+      "severity": "high",
+      "detail": "AD-1 id reused (also at line 7)",
+      "location": "ARCHITECTURE-SPINE.md AD-1 (line 9)"
+    },
+    {
+      "category": "ad_id",
+      "severity": "high",
+      "detail": "AD-1 is non-monotonic (follows AD-1); ids must ascend and never renumber",
+      "location": "ARCHITECTURE-SPINE.md AD-1 (line 9)"
+    }
+  ]
+}
+LINTBAD
+cat > "$ROOT/spine-low.json" <<'LINTLOW'
+{
+  "ok": false,
+  "spine": "ARCHITECTURE-SPINE.md",
+  "total_findings": 1,
+  "by_severity": {
+    "low": 1
+  },
+  "findings": [
+    {
+      "category": "placeholder",
+      "severity": "low",
+      "detail": "possible unfilled template token (verify): '{{maybe_token}}'",
+      "location": "ARCHITECTURE-SPINE.md (line 3)"
+    }
+  ]
+}
+LINTLOW
+# Trace payloads are bmad-testarch-trace's real `gate-decision.json` shape: the
+# decision lives in `gate_status`, and the same file carries p0/p1/overall statuses
+# plus a prose rationale. `trace-concerns.json` below is the false-positive pin --
+# gate_status CONCERNS while p1_status is FAIL. A whole-file grep for FAIL fails a
+# gate the tool passed.
+mk_trace() { # <file> <gate_status> <p1_status> <rationale>
+  cat > "$1" <<TRACEJSON
+{
+  "schema_version": "0.1.0",
+  "collection_status": "complete",
+  "gate_basis": "requirements",
+  "gate_status": "$2",
+  "rationale": "$4",
+  "p0_status": "PASS",
+  "p1_status": "$3",
+  "overall_status": "$2"
+}
+TRACEJSON
+}
+mk_trace "$ROOT/trace-fail.json"     FAIL     FAIL "P0 coverage is 74% (minimum 100%)."
+mk_trace "$ROOT/trace-concerns.json" CONCERNS FAIL "P0 is 100% but P1 coverage is 82% (target 90%)."
+mk_trace "$ROOT/trace-pass.json"     PASS     PASS "P0 coverage is 100% and overall is 94%."
+# NOT_EVALUATED is deliberately EXCLUDED from gate-decision.json by the tool, so the
+# realistic shape of that state is a file with no gate_status at all -> DISARM.
+printf '{"schema_version":"0.1.0","collection_status":"partial"}\n' > "$ROOT/trace-notevaluated.json"
 # --- REAL bmad-spec SHAPE, captured from an actual headless run ----------------
 # The payloads above are hand-authored and minimal. This one reproduces what
 # bmad-spec really writes, and it exists for one reason: its Self-Validate appends
@@ -94,7 +225,19 @@ topic: S300 pilot
 - (event) pass 2 preservation PASS: LR-S300-1 -> CAP-1 + routing-knob constraint, LR-S300-2 -> CAP-2 + BLOCKS constraint
 - (event) spec finalized
 REALLOG
-printf '# PRD\n\n## FR Coverage Map\n\n- FR1 (CAP-1): Epic 1\n- FR2 (CAP-2): Epic 1\n' > "$ROOT/prd-real.md"
+cat > "$ROOT/prd-real.md" <<'PRDR'
+# PRD
+
+## Functional Requirements
+
+- **FR-S300-1 (CAP-1) (<- LR-S300-1) - router venue.** body
+- **FR-S300-2 (CAP-2) (<- LR-S300-2) - sweep floor.** body
+
+### FR Coverage Map
+
+FR1: Epic 1 - [Brief description]
+FR2: Epic 1 - [Brief description]
+PRDR
 
 # Same spec with CAP-2's capability entry SEVERED. The (event) verdict line is left
 # intact, still naming "LR-S300-2 -> CAP-2". A correct join FAILS here; the naive

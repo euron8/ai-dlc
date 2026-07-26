@@ -1863,8 +1863,12 @@ retroactively spec-require a story written before the layer existed. Report
 `lint_spine.py`'s JSON output and `--trace-verdict` with the
 `bmad-testarch-trace` gate decision. Exit 0 required.
 
-The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` reaches an
-FR in the PRD's `FR Coverage Map`; every story `capabilities:` entry resolves to a
+The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` is cited by
+a functional-requirement entry in `prd.md` (**not** in BMAD's `FR Coverage Map`,
+whose template emits an FR-to-epic mapping carrying no capability token — requiring
+one there fails a correct map, and FR-to-epic coverage is
+`bmad-check-implementation-readiness` step 03's job); every story `capabilities:`
+entry resolves to a
 capability `SPEC.md` defines. The `LR → CAP` leg reads the memlog, which is
 append-only and never reordered; `SPEC.md` is only read for the capability set,
 never as an anchor, because it is re-rendered on every derive. Byte anchoring of
@@ -1875,6 +1879,13 @@ no anchor target.
 unconditionally and leaves the call to its caller; a non-empty `ad_fields` or
 `placeholder` finding set FAILS. A `bmad-testarch-trace` decision of `FAIL` FAILS;
 `CONCERNS` and `WAIVED` are recorded in the gate log with the matrix path cited.
+Both verdicts are read from a NAMED KEY, never by scanning the file: `lint_spine.py`
+severity comes from its own `by_severity`/`severity` fields, and the trace decision
+from `gate_status` — `gate-decision.json` also carries `p0_status`, `p1_status` and a
+prose `rationale`, any of which can hold the token FAIL while the gate decision is
+CONCERNS. An absent or unreadable `gate_status` is DISARMED: `NOT_EVALUATED` runs
+write no such file, and a gate that did not evaluate reads exactly like one that
+passed.
 
 **Exit 2 is a FAIL, not a skip** — a zero-capability kernel, an absent
 `FR Coverage Map`, or an unreadable input closes every join vacuously.

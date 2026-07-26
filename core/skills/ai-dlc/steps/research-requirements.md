@@ -45,13 +45,25 @@ if research surfaces new constraints or opportunities.
 Read `_bmad-output/specs/spec-s<N>-<slug>/SPEC.md` first — it is the
 machine contract `bmad-prd` consumes, produced at `discovery.md` §4b.
 
-**Every functional requirement MUST cite the capability it realises**, as
-`FR-<n> (CAP-<m>)`. The `FR Coverage Map` that `/bmad-create-epics-and-stories`
-emits carries the same IDs. `CAP-<m>` is `bmad-spec`-owned and never reused or
-renumbered, so this is a join a script can close — unlike the `←` arrow, which
-is a character. Gate-validation Check 30 FAILS on a capability that reaches no
-FR: a capability with no functional requirement behind it is specified and
-unplanned, so it reaches no epic, no story and no test.
+**Every functional requirement MUST cite the capability it realises**, in its own
+entry, alongside the existing locked-requirement arrow:
+
+```
+- **FR-S<N>-1 (CAP-1) (← LR-S<N>-1) — <title>.** <body>
+```
+
+`CAP-<m>` is `bmad-spec`-owned and never reused or renumbered, so this is a join a
+script can close — unlike the `←` arrow, which is a character.
+
+The citation belongs on the FR entry and **NOT** in the `FR Coverage Map`. That map
+is `/bmad-create-epics-and-stories`' artifact and its template emits
+`FR1: Epic 1 - <description>` — an FR-to-epic mapping that carries no capability
+token. Requiring one there would fail a correct map. FR-to-epic coverage is
+`/bmad-check-implementation-readiness` step 03's job; do not restate it.
+
+Gate-validation Check 30 FAILS on a capability no FR cites: a capability with no
+functional requirement behind it is specified and unplanned, so it reaches no epic,
+no story and no test.
 
 - For **greenfield/brownfield-b**: invoke `/bmad-prd` — full PRD
   with personas, metrics, risks

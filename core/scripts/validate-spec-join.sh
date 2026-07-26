@@ -127,16 +127,28 @@ for lr in $LRS; do
   fi
 done
 
-# --- (2) every capability reaches an FR in the coverage map --------------------
-MAP_START="$(grep -nE '^#{1,6}[[:space:]]*FR Coverage Map' "$PRD" | head -1 | cut -d: -f1)"
-if [ -z "$MAP_START" ]; then
-  echo "$PROG: DISARMED — $PRD has no 'FR Coverage Map' heading. bmad-create-epics-and-stories emits it; without it join (2) cannot be checked, and skipping the join silently is the defect this check exists to remove." >&2
+# --- (2) every capability is cited by a functional requirement -----------------
+# READ THE PRD's FR ENTRIES, NOT BMAD's FR COVERAGE MAP.
+#
+# The Coverage Map is bmad-create-epics-and-stories' artifact and its template emits
+# `FR1: Epic 1 - <description>` — an FR-to-EPIC mapping with no capability token in
+# it at all. The first version of this join required each CAP to appear there, which
+# would have failed every capability against a perfectly correct map: a hard false
+# positive blocking every planning gate. Reading the real template settled it; a
+# paraphrase had already said `FR1: Epic 1` and the `(CAP-1)` was invented here.
+#
+# FR-to-epic coverage is already `bmad-check-implementation-readiness` step 03's job,
+# so duplicating it would violate Rule 26(b). What ai-dlc owns is prd.md's own FR
+# entries — `research-requirements.md` mandates the capability citation there, e.g.
+# `- **FR-S300-1 (CAP-1)** ...` alongside the existing `(← LR-...)` form.
+FR_LINES="$(grep -nE '(^|[^A-Za-z0-9-])N?FR-?[A-Za-z0-9]*-?[0-9]+' "$PRD")"
+if [ -z "$FR_LINES" ]; then
+  echo "$PROG: DISARMED — $PRD contains no functional-requirement identifiers (nothing matching FR-<n> / FR-S<N>-<n>). Join (2) has nothing to read, which is not the same as closing." >&2
   exit 2
 fi
-MAP="$(sed -n "${MAP_START},\$p" "$PRD" | awk 'NR>1 && /^#{1,6}[[:space:]]/{exit} {print}')"
 for cap in $CAPS; do
-  if ! printf '%s\n' "$MAP" | grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"; then
-    echo "FAIL: $cap is defined in SPEC.md but appears nowhere in the PRD's FR Coverage Map. A capability with no functional requirement behind it is specified and unplanned — it reaches no epic, no story and no test." >&2
+  if ! printf '%s\n' "$FR_LINES" | grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"; then
+    echo "FAIL: $cap is defined in SPEC.md but no functional requirement in $PRD cites it. A capability with no FR behind it is specified and unplanned — it reaches no epic, no story and no test. Add the citation to the FR entry, in the form research-requirements.md mandates." >&2
     rc=1
   fi
 done
@@ -164,27 +176,60 @@ fi
 # --- borrowed verdict: lint_spine.py ------------------------------------------
 if [ -n "$SPINE" ]; then
   [ -f "$SPINE" ] || { echo "$PROG: DISARMED — --spine-lint names an unreadable file: $SPINE" >&2; exit 2; }
-  # lint_spine.py emits JSON findings and always exits 0 by design. Two of its
-  # classes are gate-fatal here: a placeholder left in a ratified spine, and an
-  # AD-n missing its Binds/Prevents/Rule fields.
-  for cls in ad_fields placeholder; do
-    if grep -q "\"$cls\"" "$SPINE"; then
-      echo "FAIL: lint_spine.py reported '$cls' findings in the architecture spine ($SPINE). It exits 0 by design and leaves the decision to its caller; this is that decision. An AD with missing Binds/Prevents/Rule fields, or an unfilled placeholder, is a design decision that binds nothing." >&2
-      rc=1
-    fi
-  done
+  # lint_spine.py always exits 0 by design and publishes its verdict in an envelope:
+  #   {"ok": bool, "spine": str, "total_findings": int, "by_severity": {...},
+  #    "findings": [{"category": ..., "severity": ..., "detail": ..., "location": ...}]}
+  #
+  # READ THE ENVELOPE, DO NOT HAND-LIST CATEGORIES. The first version of this checked
+  # for two category names, `ad_fields` and `placeholder`. There are four —
+  # `ad_id` and `version_pin` were silently ignored, and `ad_id` is "id reused" /
+  # "non-monotonic; ids must ascend and never renumber", i.e. exactly the ID-stability
+  # failure this whole check's premise rests on. A hand-list also goes stale the moment
+  # BMAD adds a fifth category, with no signal that it has.
+  #
+  # Severity comes from the script, not from here: any `high` finding fails, `low` is
+  # reported. `low` is its "possible unfilled template token (verify)" class, and
+  # failing a gate on a maybe is how a live check earns a blanket waiver.
+  sev="$(sed -n 's/.*"severity"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$SPINE" | sort -u)"
+  total="$(sed -n 's/.*"total_findings"[[:space:]]*:[[:space:]]*\([0-9]\{1,\}\).*/\1/p' "$SPINE" | head -1)"
+  if [ -z "$total" ]; then
+    echo "$PROG: DISARMED — $SPINE carries no \"total_findings\" key, so it is not a lint_spine.py envelope. Exiting 2 rather than reporting a clean spine: a file this script cannot parse is not a file with no findings." >&2
+    exit 2
+  fi
+  if printf '%s\n' "$sev" | grep -qx high; then
+    n_high="$(grep -c '"severity"[[:space:]]*:[[:space:]]*"high"' "$SPINE")"
+    echo "FAIL: lint_spine.py reported $n_high high-severity finding(s) in the architecture spine ($total total, $SPINE). It exits 0 by design and leaves the decision to its caller; this is that decision. An AD missing Binds/Prevents/Rule binds nothing, a reused or non-monotonic AD id breaks the ID stability every downstream join depends on, and an unfilled placeholder is an unratified decision." >&2
+    grep -E '"(category|detail)"' "$SPINE" | sed 's/^[[:space:]]*/    /' >&2
+    rc=1
+  elif [ "$total" -gt 0 ]; then
+    echo "  note  lint_spine.py reported $total low-severity finding(s) in $SPINE — recorded, not gating."
+    note=$((note+1))
+  fi
 fi
 
 # --- borrowed verdict: bmad-testarch-trace ------------------------------------
 if [ -n "$TRACE" ]; then
-  [ -f "$TRACE" ] || { echo "$PROG: DISARMED — --trace-verdict names an unreadable file: $TRACE" >&2; exit 2; }
-  if grep -qE '\bFAIL\b' "$TRACE"; then
-    echo "FAIL: the traceability gate decision in $TRACE is FAIL. Requirements are not covered by tests; the matrix names which." >&2
-    rc=1
-  elif grep -qE '\b(CONCERNS|WAIVED)\b' "$TRACE"; then
-    echo "  note  traceability gate decision is CONCERNS/WAIVED — recorded, not dropped. Matrix: $TRACE"
-    note=$((note+1))
-  fi
+  [ -f "$TRACE" ] || { echo "$PROG: DISARMED — --trace-verdict names an unreadable file: $TRACE. bmad-testarch-trace writes gate-decision.json only when the gate was evaluated AND produced PASS/CONCERNS/FAIL/WAIVED; its absence therefore means the gate did NOT evaluate, which is not the same as passing." >&2; exit 2; }
+  # READ THE `gate_status` KEY, NOT THE WHOLE FILE. gate-decision.json also carries
+  # `p0_status`, `p1_status`, `overall_status` and a prose `rationale`, any of which
+  # can contain the token FAIL while the gate decision is CONCERNS. A whole-file grep
+  # for FAIL therefore fails a gate the tool passed.
+  gs="$(sed -n 's/.*"gate_status"[[:space:]]*:[[:space:]]*"\([A-Z_]*\)".*/\1/p' "$TRACE" | head -1)"
+  case "${gs:-}" in
+    FAIL)
+      echo "FAIL: the traceability gate decision in $TRACE is FAIL. Requirements are not covered by tests; the matrix names which." >&2
+      rc=1 ;;
+    CONCERNS|WAIVED)
+      echo "  note  traceability gate_status is $gs — recorded, not dropped. Matrix: $TRACE"
+      note=$((note+1)) ;;
+    PASS) ;;
+    *)
+      # Covers a missing/renamed key and NOT_EVALUATED, which the tool deliberately
+      # excludes from this file. A trace that did not evaluate reads exactly like a
+      # trace that passed, so it cannot be allowed to exit 0.
+      echo "$PROG: DISARMED — $TRACE carries no readable \"gate_status\" (found '${gs:-<none>}'). Either the gate was not evaluated or the key was renamed; both would otherwise be indistinguishable from a PASS." >&2
+      exit 2 ;;
+  esac
 fi
 
 if [ "$rc" -eq 0 ]; then

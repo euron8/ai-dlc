@@ -49,7 +49,7 @@ want 0 "OVER-FIRE CONTROL: a healthy spec set passes every join" \
 want 1 "join (1): a locked requirement citing no capability FAILS" \
   --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
 
-want 1 "join (2): a capability absent from the FR Coverage Map FAILS" \
+want 1 "join (2): a capability no FR entry cites FAILS" \
   --spec "$R/ok" --prd "$R/prd-missing-cap.md"
 
 want 1 "join (3): a story citing an undefined CAP FAILS" \
@@ -61,22 +61,47 @@ want 1 "a story with no capabilities: field FAILS (the field IS the link)" \
 want 2 "DISARM: a zero-capability kernel exits 2, never 0" \
   --spec "$R/no-caps" --prd "$R/prd-ok.md"
 
-want 2 "DISARM: a PRD with no FR Coverage Map exits 2, never 0" \
-  --spec "$R/ok" --prd "$R/prd-no-map.md"
+want 2 "DISARM: a PRD with no FR identifiers exits 2, never 0" \
+  --spec "$R/ok" --prd "$R/prd-no-fr.md"
 
-want 1 "borrowed verdict: lint_spine ad_fields findings FAIL the gate" \
+# OVER-FIRE PIN. The CAP citation lives on the FR ENTRY, never in BMAD's FR Coverage
+# Map — whose template emits `FR1: Epic 1 - <desc>` with no capability token at all.
+# The first version of join (2) required one there and would have failed every
+# capability against a correct map: a hard false positive on every planning gate.
+want 0 "PIN: BMAD's literal FR-Coverage-Map format (no CAP token) still PASSES" \
+  --spec "$R/ok" --prd "$R/prd-real-map.md" --story "$R/story-ok.md"
+
+# REAL lint_spine.py envelopes. Severity comes from the script: any `high` fails,
+# `low` is reported. `ad_id` ("id reused" / "non-monotonic") is in the bad payload and
+# was IGNORED by the first version, which hand-listed two of the four categories --
+# while ID stability is the premise every join here rests on.
+want 1 "borrowed verdict: high-severity lint_spine findings FAIL the gate" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/spine-bad.json"
+
+want 0 "low-severity-only lint findings are RECORDED, not gating" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/spine-low.json"
+
+want 2 "DISARM: a file that is not a lint_spine envelope exits 2, never 0" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/story-ok.md"
 
 want 0 "OVER-FIRE CONTROL: a clean lint_spine JSON passes" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine-lint "$R/spine-ok.json"
 
-want 1 "borrowed verdict: a trace decision of FAIL fails the gate" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-fail.txt"
+want 1 "borrowed verdict: gate_status FAIL fails the gate" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-fail.json"
 
-want 0 "a trace decision of CONCERNS passes" \
-  --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-concerns.txt"
+# FALSE-POSITIVE PIN. gate_status is CONCERNS while p1_status is FAIL, in the same
+# file. A whole-file grep for FAIL fails a gate the tool passed.
+want 0 "PIN: gate_status CONCERNS with p1_status FAIL does NOT fail the gate" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-concerns.json"
 
-if bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-concerns.txt" 2>&1 | grep -q 'note'; then
+want 0 "gate_status PASS passes" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-pass.json"
+
+want 2 "DISARM: a trace file with no gate_status exits 2, never 0 (NOT_EVALUATED)" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-notevaluated.json"
+
+if bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --trace-verdict "$R/trace-concerns.json" 2>&1 | grep -q 'note'; then
   ok "CONCERNS is RECORDED with the matrix cited, not dropped"
 else
   bad "a CONCERNS trace verdict passed with no note — the concern is silently discarded"

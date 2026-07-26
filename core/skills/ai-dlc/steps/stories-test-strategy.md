@@ -420,10 +420,16 @@ strategy. Steps 2–3 below otherwise proceed.
 1a. `/bmad-testarch-trace` — generate the requirements-to-tests traceability
    matrix and its quality gate decision (PASS / CONCERNS / FAIL / WAIVED).
    This closes the last leg of the chain, `AC → test`, against the same
-   `CAP-<n>` IDs the spec and the PRD carry. Record the matrix path; pass the
-   decision to gate-validation Check 30 via `--trace-verdict`. **The decision
-   is advisory until that check reads it** — a `FAIL` there fails the gate, and
-   `CONCERNS`/`WAIVED` are recorded with the matrix cited rather than dropped.
+   `CAP-<n>` IDs the spec and the PRD carry. It writes `gate-decision.json`
+   carrying `gate_status` in `{PASS, CONCERNS, FAIL, WAIVED}`; pass that FILE to
+   gate-validation Check 30 via `--trace-verdict`. **The decision is advisory
+   until that check reads it** — `FAIL` fails the gate, `CONCERNS`/`WAIVED` are
+   recorded with the matrix cited rather than dropped.
+
+   `gate-decision.json` is written ONLY when the gate was evaluated and reached one
+   of those four values. A `NOT_EVALUATED` run produces no such file, so its absence
+   means the gate did not evaluate — Check 30 treats that as DISARMED, never as a
+   pass. Do not synthesise the file to get past the gate.
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no

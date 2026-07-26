@@ -17,6 +17,71 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.2] — 2026-07-26
+
+### Fixed — three invented input formats, audited against ground truth
+
+Asked what else was invented rather than verified. Everything Check 30 reads from
+another tool was, and all three were wrong.
+
+**1. The `FR Coverage Map` requirement could not have passed.** v0.169.0 mandated
+that every capability appear in it and failed the gate otherwise. The authoritative
+template (`bmad-create-epics-and-stories/steps/step-02-design-epics.md`) emits:
+
+```
+### FR Coverage Map
+
+FR1: Epic 1 - [Brief description]
+FR2: Epic 1 - [Brief description]
+```
+
+FR-to-EPIC. **No capability token anywhere.** So the join would have failed every
+capability against a perfectly correct map — a hard false positive on every planning
+gate. Worse, a paraphrase had already reported the format correctly as `FR1: Epic 1`;
+the `(CAP-1)` was invented here on top of accurate data.
+
+The citation belongs on the PRD's FR ENTRY, which ai-dlc authors and can therefore
+mandate. FR-to-epic coverage is `bmad-check-implementation-readiness` step 03's job
+and is not restated.
+
+**2. `lint_spine.py`'s key is `category`, and there are four values, not two.**
+The check hand-listed `ad_fields` and `placeholder`, ignoring `ad_id` and
+`version_pin` — and `ad_id` is *"id reused"* / *"non-monotonic; ids must ascend and
+never renumber"*, which is precisely the ID-stability failure every join here rests
+on. It now reads the published envelope (`total_findings`, `severity`) instead of a
+hand-list that goes stale the moment BMAD adds a fifth category. Severity comes from
+the script: `high` fails, `low` is recorded, because its low class is *"possible
+unfilled template token (verify)"* and failing a gate on a maybe is how a live check
+earns a blanket waiver.
+
+**3. The trace verdict is `gate_status` in `gate-decision.json`, and grepping the
+file fails a gate the tool passed.** The same file carries `p0_status`, `p1_status`,
+`overall_status` and a prose `rationale` — a `p1_status: "FAIL"` alongside
+`gate_status: "CONCERNS"` tripped the old whole-file grep. There is also a fifth
+value, `NOT_EVALUATED`, deliberately excluded from that file: its absence means the
+gate did not evaluate, which the old code would have read as clean. Both are now
+DISARM.
+
+### Fixed — fixture payloads that pinned invented shapes
+
+Every borrowed-verdict payload in `spec-join-integrity` was a shape that exists
+nowhere: `{"class": "ad_fields"}` with no envelope, and `Gate decision: FAIL` as
+prose. They passed, and they pinned the wrong thing — which is why none of the three
+defects above was visible. All payloads are now real captured output, plus three
+false-positive pins:
+
+- BMAD's literal `FR1: Epic 1 - [Brief description]` map must still PASS
+- `gate_status: CONCERNS` with `p1_status: FAIL` must NOT fail
+- a trace file with no `gate_status` must DISARM, never exit 0
+
+**An invented fixture shape is worse than no fixture.** Capture the real producer's
+output before writing a predicate against it.
+
+Verified: `lint_spine.py` run on clean, high-severity and low-only spines;
+`bmad-create-epics-and-stories` and `bmad-testarch-trace` step files read for their
+literal emitted formats. 24 assertions in `spec-join-integrity`, three mutants
+proven.
+
 ## [0.169.1] — 2026-07-26
 
 ### Fixed — Check 30 read the spec's own PASS as evidence the join held
