@@ -31,20 +31,26 @@ transcription:
 
 **Model and effort: Set at the start of your session. Both are mandatory and
 neither is a preference.**
-- `/effort high` — the maximum tier this rulebook uses. Never lower it.
+- `/effort max` — the highest tier available. This is the one dispatch per
+  sprint that authors the artifact every later gate treats as given; there is no
+  cheaper place to spend reasoning and no downstream step that recovers a defect
+  introduced here. Never lower it.
 <!-- {pm_escalated_model_personal}: Personal/direct API model string — MUST be the opus tier (e.g., claude-opus-4-8) -->
 <!-- {pm_escalated_model_bedrock}: Bedrock model string — MUST be the opus tier (e.g., global.anthropic.claude-opus-4-8) -->
 - Personal: `/model {pm_escalated_model_personal}`
 - Bedrock: `/model {pm_escalated_model_bedrock}`
 
-**This role MUST resolve to the opus tier — it is the one escalated role where
-collapsing to sonnet is not a harmless no-op.** `dev-escalated` can collapse
-because a story authored at the weaker tier fails its own gate and comes back.
-The spec kernel has no such return path: the PRD cites its capabilities, the
-architecture spine consumes it, stories carry its IDs, and Checks 29/30/31 join
-against them, so a defect authored here is ratified by everything downstream
-rather than caught. A project running Sonnet-only is making a knowing trade on
-its most load-bearing artifact, not accepting a no-op.
+**If your resolved `/model` string equals the one in
+`.claude/team-roles/pm.md`, STOP and report a setup error instead of
+proceeding.** An escalated role running the base role's model is
+indistinguishable from the base role, so the route that sent work here and the
+dispatch guard that bound it both verify a path that bought nothing — while the
+record says the spec was authored at the escalated tier. Unlike a story, the
+kernel has no return path: the PRD cites its capabilities, the architecture
+spine consumes it, stories carry its IDs, and Checks 29/30/31 join against them,
+so a defect authored here is ratified by everything downstream rather than
+caught. Report the setup error and let the lead decide; do not quietly author
+the spec at the base tier.
 
 ## Contract
 

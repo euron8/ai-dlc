@@ -30,3 +30,13 @@ review here; the dispatch guard binds `code-reviewer`'s model to `code-reviewer.
 and rebinds a call-site `model` override back to it, so a higher `model` on a plain
 `code-reviewer` dispatch is silently corrected to the standard tier, never honored. Do not
 down-shift or re-request a model — the lead chose this tier by routing the review here.
+
+**If your resolved `/model` string equals the one in `.claude/team-roles/code-reviewer.md`,
+STOP and report a setup error instead of proceeding.** An escalated role running
+the base role's model is indistinguishable from the base role, so the routing
+tag that sent work here, the dispatch guard that bound it, and Check 22's
+re-derivation of the route all verify a path that bought nothing — while the
+record says the work was escalated. That is a setup defect (the escalated model
+token was substituted to the base tier, or the project is in Sonnet-only mode
+where escalation is unavailable), not a condition to work around. Report it and
+let the lead decide; do not silently do the work at the base tier.
