@@ -214,7 +214,7 @@ Before starting any task, read these files in order:
           is repo-bloat that no later gate catches.
 - When a story requires a validation evaluation (`/bmad-party-mode`,
   `/bmad-advanced-elicitation`, `/bmad-review-adversarial-general`,
-  `/bmad-validate-prd`, or the native `ai-dlc-adversary-review` convergence
+  `/bmad-prd`, or the native `ai-dlc-adversary-review` convergence
   review), the artifact produced MUST carry a
   `SKILL_INVOCATION_PROVENANCE v1` block (schema in SKILL.md Rule 3).
   Producing validation-shaped output without the real independent subagent

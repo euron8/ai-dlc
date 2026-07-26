@@ -81,15 +81,25 @@ if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then
 fi
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
+#    The glob set below is the consumer image of the distribution hook's set, one
+#    entry per class after the core/ -> consumer mapping. validate-enforcement-map.sh
+#    asserts the two agree; a class present there and absent here is a class of
+#    shipped script that reaches every consumer unchecked. That already happened:
+#    core validators moved to scripts/ai-dlc/ and this glob was not followed, so no
+#    shipped validator -- and no part of the update engine that delivers the fix --
+#    was syntax-checked on any consumer.
+# SYNTAX_GLOB_BEGIN
 syntax_all() {
   local rc=0 f
-  for f in scripts/*.sh .claude/hooks/*.sh .githooks/*; do
+  for f in scripts/*.sh scripts/ai-dlc/*.sh .claude/hooks/*.sh \
+           .claude/skills/ai-dlc-update/reconcile/*.sh .githooks/*; do
     [ -f "$f" ] || continue
     bash -n "$f" 2>/dev/null || { printf '   syntax error: %s\n' "$f"; rc=1; }
   done
   return $rc
 }
-step "shell syntax (scripts and hooks)" syntax_all
+# SYNTAX_GLOB_END
+step "shell syntax (every shipped script and hook)" syntax_all
 
 # 5. Fixtures are adversarial self-tests for the gate checks. A fixture never driven is
 #    a green light nobody earned.

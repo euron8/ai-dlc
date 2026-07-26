@@ -140,6 +140,58 @@ non-discriminating costs one fixture. Remove this standard if a static
 analyzer proves per-test discrimination automatically, or if Check 19
 is extended to cover every story's unit/integration fixtures.
 
+**AC header form.** Every acceptance criterion MUST open with a header of
+the form `- **AC<n> (<tags>).**` or `- **AC<n> — <title>.**`, where `<n>` is
+a decimal ordinal optionally suffixed with one lowercase letter (`AC1`,
+`AC4a`). One AC per header. The header carries the AC; every following
+line up to the next AC header or the next markdown heading belongs to it.
+
+A single declared form is what lets Check 31 read acceptance criteria
+without guessing. A story that declares acceptance criteria and presents
+none in this form FAILS Check 31 as DISARMED — an AC the checker cannot
+read is not an AC that passed.
+
+**Falsifiable-predicate mandate.** An acceptance criterion MUST NOT state
+its verification predicate with a qualifier that names no bounded set.
+The terms below are FORBIDDEN in acceptance-criterion text — each names a
+standard no verifier can fail, so an AC carrying one is green on sight:
+
+<!-- AC_UNBOUNDED_TERMS v1 -->
+exhaustive, exhaustively, comprehensive, comprehensively, definitively,
+thoroughly, adequately, sufficiently, appropriately, robustly,
+as needed, as appropriate, where appropriate, all relevant, if necessary
+<!-- AC_UNBOUNDED_TERMS_END -->
+
+Replace the term with the set it stands for: the enumerated members,
+their count, and an assertion that the OBSERVED set EQUALS that
+enumeration. Two constructions do NOT satisfy this mandate: a set the AC
+describes but does not list, and a count the AC states but does not tie
+to named members.
+
+An AC whose set cannot be enumerated at authoring time carries
+`falsifiability_waiver: <what is unbounded, and why it cannot be
+enumerated>` on its own line inside that AC. Check 31 prints every
+waiver it reads; a waiver suppresses the FAIL, never the report.
+
+Run `scripts/ai-dlc/validate-ac-falsifiability.sh <story-file>` at
+authoring time — it is the same enforcer Check 31 runs, and a term
+rewritten here costs one word where the same term costs a story gate.
+
+**Prior-evidence citation.** An AC that consumes a value, fixture,
+baseline, or measurement produced BEFORE this story MUST cite it as
+`prior_evidence: <repo-relative-path>[:<anchor>]`. Naming the producing
+story, sprint, or measurement in prose is NOT a citation: prose names a
+claim, a path names a retrievable artifact.
+
+**Minimum-mechanism contract (Rule 26c).** This mandate catches an AC
+whose predicate has no failing case, so the gate reading it records PASS
+for a verification never performed, and an AC citing prior evidence that
+is not retrievable at verification time. False-positive cost: an AC using
+a forbidden term over a set it does enumerate costs one word rewritten; a
+`prior_evidence:` typo costs one path correction. Remove this mandate when
+Check 3a's adjudicator is required to construct and record a concrete
+failing case per AC, which subsumes both halves.
+
 ### Layered AC Verification Accounting
 
 Story acceptance criteria MUST be verifiable at exactly one
@@ -216,6 +268,16 @@ stories with clear acceptance criteria.
 
 ### 2a. Propagate Locked Requirements to Stories (Rule 13)
 
+**Every story MUST carry a `capabilities:` frontmatter field** listing the
+`CAP-<n>` identifiers it delivers, e.g. `capabilities: [CAP-3, CAP-7]`.
+That field is the only mechanical link from a story to the spec; without it
+the story's place in the chain
+`LOCKED_REQUIREMENTS → CAP-<n> → FR-<n> → AC → test` is prose.
+Gate-validation Check 30 FAILS a story missing the field, and FAILS one
+citing a `CAP-<n>` that `SPEC.md` does not define — capability IDs are never
+renumbered, so a dangling reference is a typo or a stale copy, never a
+renumbering.
+
 For each story created, propagate the relevant locked requirements from
 the PRD's `LOCKED_REQUIREMENTS` block into the story file. Each story
 gets its own `LOCKED_REQUIREMENTS` block containing only the requirements
@@ -244,6 +306,20 @@ distinguish two citation forms — they are NOT interchangeable:
 Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
 "for full text" — the PRD's LR entries are §2a-propagated, and the
 brief remains the byte-verbatim source of record.
+
+**The spec layer does not add an anchor target.** `full_text_source` still
+resolves to the product brief and nothing else. Locked-requirement text
+originates in the brief at `discovery.md` §4a; the spec is DERIVED from it, so
+a spec artifact is a downstream restatement — the same category as `prd.md`,
+which is already forbidden here. Cite the spec with `requires_context:` when a
+dev needs it loaded.
+
+`SPEC.md` is the worst possible anchor: `bmad-spec` is its sole writer and
+re-renders it from `.memlog.md` on every run, so an anchor there holds until
+the next derive and then either reports a drift that never happened or passes
+against reworded text. `validate-locked-anchor.sh` already refuses any
+`full_text_source` that is not the source of record, so this needs no new
+rule — it is stated here only so nobody adds one.
 
 **Category error to avoid.** Context/tool thresholds (e.g. the ctx
 `INTENT_SEARCH_THRESHOLD`, which auto-indexes tool output above ~5KB)
@@ -330,7 +406,7 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 ### 5. Test Strategy
 
 **Intensity gate for carry-over-single.** When
-`validation_intensity == carry-over-single`, skip `/bmad-agent-tea-tea`
+`validation_intensity == carry-over-single`, skip `/bmad-testarch-test-design`
 (step 1 below) and derive the test strategy directly from the story
 acceptance criteria. Test strategy for ≤2 already-scoped stories is
 covered by the story validation cycle; the TEA sub-skill adds overhead
@@ -339,8 +415,15 @@ strategy. Steps 2–3 below otherwise proceed.
 
 **Execute back-to-back without pausing:**
 
-1. `/bmad-agent-tea-tea` then select test strategy — risk-based test
+1. `/bmad-testarch-test-design` then select test strategy — risk-based test
    strategy for the sprint
+1a. `/bmad-testarch-trace` — generate the requirements-to-tests traceability
+   matrix and its quality gate decision (PASS / CONCERNS / FAIL / WAIVED).
+   This closes the last leg of the chain, `AC → test`, against the same
+   `CAP-<n>` IDs the spec and the PRD carry. Record the matrix path; pass the
+   decision to gate-validation Check 30 via `--trace-verdict`. **The decision
+   is advisory until that check reads it** — a `FAIL` there fails the gate, and
+   `CONCERNS`/`WAIVED` are recorded with the matrix cited rather than dropped.
 2. Tea quality gates — define quality gates and release criteria
 3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no

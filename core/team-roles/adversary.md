@@ -18,7 +18,7 @@ have nothing to defend.
   invoke NO skill.** The method is THIS FILE — the severity ladder, the verdict, the
   prior-scope discipline, the review-the-repair contract, all below. You stamp
   `skill: ai-dlc-adversary-review` in the provenance block.
-- **Named sub-skill** (`/bmad-validate-prd`, `/bmad-advanced-elicitation`, or a
+- **Named sub-skill** (`/bmad-prd`, `/bmad-advanced-elicitation`, or a
   ONE-SHOT `/bmad-review-adversarial-general` sweep). The dispatch names it; you
   invoke it via the Skill tool and it supplies the method.
 

@@ -443,6 +443,102 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/route-defect-classification]
 
+  - id: "28"
+    title: Spec-layer adoption is declared
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-spec-adoption.sh
+    call_sites:
+      - site: gate-validation.md Check 28
+        posture: FAILS the gate on exit 2 (PENDING) or exit 1 (malformed)
+        why: the alternative — skipping the spec checks whenever no spec artifact is
+          present — cannot be told apart from the failure it masks. A project that
+          never adopts, one that adopted and quietly stopped, and one with a perfect
+          spec all print the same nothing. The floor turns the skip into a token in
+          the gate log and the absence into a HARD_BLOCK.
+      - site: core/git-hooks/pre-push (--report)
+        posture: prints, never blocks
+        why: an undeclared floor is visible on every push without gating anyone
+    ci_workflow: ~
+    fixtures: [tests/fixtures/spec-adoption-floor]
+
+  - id: "29"
+    title: Spec kernel integrity — Spec Law re-graded, EARS success fields
+    gate_types: [planning]
+    adjudication: llm   # a fresh gate-adjudicator re-grades; teeth are Check 26
+    hard_block: true
+    enforcer: []        # no script can judge whether an intent describes WHAT or HOW
+    call_sites:
+      - site: gate-validation.md Check 29
+        posture: FAILS the planning gate (adopted via Check 26)
+        why: BMAD's Self-Validate is run by the agent that authored the spec, and a
+          law graded by its own author is a law with no enforcer. The clause that
+          carries the weight is the EARS form on each capability's success field: a
+          success signal naming a config value instead of an observable response is
+          how a config-delta requirement passed discovery, research, architecture
+          and three gates with no acceptance criterion able to catch its inertness.
+    ci_workflow: ~
+    fixtures: []        # llm-adjudicated; no fixture can stand in for the judgement
+
+  - id: "30"
+    title: Spec join integrity — LR -> CAP -> FR -> story
+    gate_types: [story]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-spec-join.sh
+    call_sites:
+      - site: gate-validation.md Check 30
+        posture: FAILS the gate (exit 0 required; exit 2 is a FAIL, not a skip)
+        why: the chain's middle joins were hand-typed prose arrows nothing read, so a
+          locked requirement could stop being mentioned with every downstream
+          artifact staying internally consistent. It also DECIDES two verdicts BMAD
+          produces and never acts on — lint_spine.py exits 0 by design and leaves the
+          call to its caller, and a testarch-trace decision of FAIL is otherwise just
+          a line in a report.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/spec-join-integrity]
+
+  - id: "31"
+    title: Acceptance-criterion falsifiability
+    gate_types: [story]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-ac-falsifiability.sh
+    call_sites:
+      - site: gate-validation.md Check 31
+        posture: FAILS the gate (exit 0 required)
+        why: Check 3a asks whether the ACs COVER the requirement and never reads
+          whether an individual AC states a predicate a verifier can fail. An AC can
+          cover every element of its requirement and assert nothing.
+      - site: stories-test-strategy.md (Discriminating-AC Authoring Standard)
+        posture: advisory — declares the forbidden terms and the AC header form
+        why: the term list lives in exactly one place and the validator reads it from
+          there; a second copy drifts and a drifted copy under-fires silently
+    ci_workflow: ~
+    fixtures: [tests/fixtures/check-31-ac-falsifiability]
+
+  - id: "32"
+    title: Every BMAD invocation resolves to a file that exists
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-bmad-invocations.sh
+    call_sites:
+      - site: gate-validation.md Check 32
+        posture: FAILS the gate (exit 0 required; deprecations are reported only)
+        why: BMAD ships dead loader shims beside live self-contained skills under
+          names differing by one word, so a directory-existence check passes on a
+          skill that loads nothing and the lead reports running a workflow that never
+          ran. Four such call sites were live in this rulebook when the check was
+          written.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/bmad-invocation-resolve]
+
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
     gate_types: [universal]

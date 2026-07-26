@@ -502,6 +502,17 @@ This determines the **model strategy mode**:
   Effort levels (`high` for planning roles) compensate partially for
   the less capable model. The pipeline still works but planning phases
   may be less thorough.
+  **The escalated roles are UNAVAILABLE in this mode, not collapsed.** An
+  escalated role file whose model resolves to its base role's is a role
+  that reads as escalated and behaves identically to the unescalated one:
+  the routing tag routes, the dispatch guard binds, Check 22 re-derives
+  the route, and every one of those verifies a path that bought nothing.
+  So in Sonnet-only mode `escalate_model: true` and
+  `protected_path_editor`-style escalation tags MUST NOT be authored, and
+  `discovery.md` §4b's spec derivation runs on the standard `pm`. Record
+  that in CLAUDE.md as a stated limitation of the mode. Silently
+  collapsing the tier is the one thing not to do — it converts an absent
+  capability into an invisible one.
 
 Step 0 does NOT absorb model strings from archived team role files
 (they are ai-dlc-owned). Always present the standard defaults below
@@ -543,9 +554,14 @@ After confirmation, replace in these files. Two model strings drive
 the balanced default: the **opus-tier** string (Lead, Architect) and
 the **sonnet-tier** string (PM, Code Reviewer, Dev, QA). Effort —
 not model — separates PM/Code Reviewer (`high`) from Dev/QA
-(`medium`); effort lives in the role files. For Sonnet-only mode, ALL
-model variables (including opus-tier roles) get the sonnet bedrock
-string.
+(`medium`); effort lives in the role files.
+
+For Sonnet-only mode, all model variables get the sonnet bedrock string
+**except the escalated roles' — those are left unsubstituted and the mode is
+recorded as not supporting escalation.** Substituting them to sonnet would
+make every escalated role byte-equivalent in behaviour to its base while the
+rulebook, the routing tags and Check 22 all continue to treat the route as
+meaningful.
 
 **Substitute in the `/model` directive lines ONLY.** Each token below occurs
 TWICE in its role file: once inside the `<!-- {token}: … -->` declaration
@@ -567,8 +583,11 @@ remaining witness.
 
 **`.claude/team-roles/code-reviewer-escalated.md`:** (the standard Code Reviewer
 contract on a stronger model, for reviews the lead routes to the escalated tier —
-capital-path or high-blast-radius diffs — opus-tier, like the architect; in Sonnet-only
-mode this collapses to the sonnet string and escalation becomes a harmless no-op)
+capital-path or high-blast-radius diffs — opus-tier, like the architect. **MUST
+resolve strictly stronger than `code-reviewer.md`.** In Sonnet-only mode leave it
+unsubstituted and do not route reviews to the escalated tier; substituting it to
+sonnet would leave a role that reads as escalated and reviews identically to the
+standard one)
 - `{reviewer_escalated_model_personal}` -> opus-tier model personal string
 - `{reviewer_escalated_model_bedrock}` -> opus-tier model bedrock string
 
@@ -583,10 +602,27 @@ mode this collapses to the sonnet string and escalation becomes a harmless no-op
 
 **`.claude/team-roles/dev-escalated.md`:** (the standard Dev contract on a
 stronger model, for stories tagged `escalate_model: true` — opus-tier, like the
-architect; in Sonnet-only mode this collapses to the sonnet string with every
-other role, and escalation becomes a harmless no-op)
+architect. **MUST resolve strictly stronger than `dev.md`.** In Sonnet-only mode
+leave it unsubstituted and do not tag stories `escalate_model: true`;
+substituting it to sonnet leaves a role that reads as escalated and implements
+identically to the standard Dev, which is what makes the routing tag, the
+dispatch guard binding and Check 22's re-derivation all verify a route that
+bought nothing)
 - `{dev_escalated_model_personal}` -> opus-tier model personal string
 - `{dev_escalated_model_bedrock}` -> opus-tier model bedrock string
+
+**`.claude/team-roles/pm-escalated.md`:** (the standard PM contract on a
+stronger model, for the `discovery.md` §4b spec derivation — opus-tier, like the
+architect, at `/effort high`. It is one dispatch per sprint. **Unlike
+`dev-escalated`, collapsing this one to the sonnet string is NOT a harmless
+no-op:** a story authored at the weaker tier fails its own gate and returns,
+whereas the spec kernel is what the PRD, the architecture spine, every story's
+IDs and Checks 29/30/31 all join against — a defect authored there is ratified
+downstream rather than caught. Sonnet-only is a knowing trade on the most
+load-bearing artifact in the pipeline, so substitute the opus string here even
+when the rest of the roster is sonnet)
+- `{pm_escalated_model_personal}` -> opus-tier model personal string
+- `{pm_escalated_model_bedrock}` -> opus-tier model bedrock string
 
 **`.claude/team-roles/qa.md`:**
 - `{qa_model_personal}` -> sonnet-tier model personal string

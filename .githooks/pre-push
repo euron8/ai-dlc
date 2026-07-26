@@ -83,6 +83,10 @@ run_fixtures() {
 step "fixture suite" run_fixtures
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
+#    validate-enforcement-map.sh maps this glob set through map_consumer() and
+#    asserts it equals the set in core/git-hooks/pre-push. Add a class here and the
+#    consumer hook fails until it carries the class too.
+# SYNTAX_GLOB_BEGIN
 syntax_all() {
   local rc=0 f
   for f in scripts/*.sh core/scripts/*.sh core/hooks/*.sh \
@@ -92,6 +96,7 @@ syntax_all() {
   done
   return $rc
 }
+# SYNTAX_GLOB_END
 step "shell syntax (every shipped script and hook)" syntax_all
 
 if [ "$fail" -ne 0 ]; then

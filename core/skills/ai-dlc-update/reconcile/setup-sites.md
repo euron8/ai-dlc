@@ -68,6 +68,7 @@ core_manifest:
   - core/fixtures/askuserquestion-citation/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
+  - core/fixtures/bmad-invocation-resolve/**
   - core/fixtures/check-15-bypass/**
   - core/fixtures/check-17-bypass/**
   - core/fixtures/check-17-counts/**
@@ -75,6 +76,7 @@ core_manifest:
   - core/fixtures/check-23-draft-stamps/**
   - core/fixtures/check-24-adversarial-convergence/**
   - core/fixtures/check-25-steering-conduct/**
+  - core/fixtures/check-31-ac-falsifiability/**
   - core/fixtures/check-3b-locked-anchor/**
   - core/fixtures/check-h1-recursion/**
   - core/fixtures/check-manifest-bypass/**
@@ -117,6 +119,8 @@ core_manifest:
   - core/fixtures/shadowed-local-validators/**
   - core/fixtures/snapshot-evidence-cell/**
   - core/fixtures/snapshot-section-schema/**
+  - core/fixtures/spec-adoption-floor/**
+  - core/fixtures/spec-join-integrity/**
   - core/fixtures/sprint-status-lifecycle/**
   - core/fixtures/story-provenance/**
   - core/fixtures/subagent-probe/**
@@ -206,6 +210,15 @@ sites:
     match: '^- Personal: `/model (.+)`$'
   - id: dev-escalated-model-bedrock
     file: core/team-roles/dev-escalated.md
+    shape: single-line
+    match: '^- Bedrock: `/model (.+)`$'
+
+  - id: pm-escalated-model-personal
+    file: core/team-roles/pm-escalated.md
+    shape: single-line
+    match: '^- Personal: `/model (.+)`$'
+  - id: pm-escalated-model-bedrock
+    file: core/team-roles/pm-escalated.md
     shape: single-line
     match: '^- Bedrock: `/model (.+)`$'
 

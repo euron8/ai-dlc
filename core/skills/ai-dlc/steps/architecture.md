@@ -16,7 +16,7 @@ full validation cycle.
 
 If `planning_offload: on` (default) AND the variant reads existing code or
 architecture (feature, brownfield-a, brownfield-c — NOT greenfield /
-brownfield-b, which author from scratch via `/bmad-create-architecture`),
+brownfield-b, which author from scratch via `/bmad-architecture`),
 do NOT read the codebase or existing architecture inline. Spawn an `analyst`
 subagent (Agent tool, bound to `.claude/team-roles/analyst.md` per SKILL.md
 Rule 19 — both bindings: `model` and the standing role-contract Read line)
@@ -36,8 +36,26 @@ Read the PRD and product brief from `_bmad-output/planning-artifacts/`.
 
 ### 2. Architecture Creation or Update
 
-- For **greenfield/brownfield-b**: invoke `/bmad-create-architecture` —
-  full system design, tech decisions, ADRs
+**Invoke `/bmad-architecture` for EVERY variant that reaches this step**, not
+only greenfield/brownfield-b. It takes the spec package as its richest input,
+produces `ARCHITECTURE-SPINE.md` as a lean spine of invariants, and carries
+`AD-<n>` decision IDs each bearing `Binds` / `Prevents` / `Rule`. It also
+loads a parent spine's `AD`s as binding and read-only, so a new `AD` that
+contradicts or weakens an inherited one is surfaced as a conflict rather than
+applied as a local override. Adopt the spine as a spec companion, keeping
+`AD` IDs stable.
+
+`bmad-architecture` ships `scripts/lint_spine.py`, which emits JSON findings
+for unfilled placeholders, duplicate or non-monotonic `AD` IDs, an `AD`
+missing Binds/Prevents/Rule, and an unpinned stack version — and **exits 0
+unconditionally, by design, leaving the decision to its caller.** Pass its
+JSON to gate-validation Check 30 via `--spine-lint`; that check is the
+caller that decides. Do not re-implement the linter.
+
+The per-variant guidance below governs the CONTENT of the design, not
+whether the workflow runs:
+
+- For **greenfield/brownfield-b**: full system design, tech decisions, ADRs
 - For **feature**: Assess whether existing architecture supports this
   feature as-is. If yes, document the integration approach as an addendum.
   If no, update the architecture doc with changes needed. Use ADRs for
@@ -243,8 +261,15 @@ ADRs.
 
 ### 3. Solutioning Gate
 
-Invoke `/bmad-check-implementation-readiness` style check — validate
-design coherence against PRD. Fix any misalignment found.
+Invoke `/bmad-check-implementation-readiness` — validate design coherence
+against the PRD. Fix any misalignment found.
+
+**Invoke it, do not approximate it.** Its step 03 IS an epic-coverage
+validation whose stated purpose is requirements traceability: it checks each
+PRD functional requirement against epic coverage and identifies the FRs no
+epic covers. An inline "style check" re-derives that by judgement and reaches
+a different answer every run. Its findings are advisory on their own —
+gate-validation Check 30 is what makes an uncovered requirement fail.
 
 ### 4. Validation Cycle (Rule 8)
 

@@ -27,10 +27,10 @@ against the finding set; it does not apply them inline.
 ### 2. Backfill Missing BMAD Artifacts
 
 For each missing artifact identified in the gap analysis:
-- Product brief (if missing): invoke `/bmad-create-product-brief` grounded
+- Product brief (if missing): invoke `/bmad-product-brief` grounded
   in codebase analysis
-- PRD (if missing): invoke `/bmad-create-prd` reverse-engineered from code
-- Architecture doc (if missing): invoke `/bmad-create-architecture` from
+- PRD (if missing): invoke `/bmad-prd` reverse-engineered from code
+- Architecture doc (if missing): invoke `/bmad-architecture` from
   AS-IS code
 
 ### 3. Validation Cycle

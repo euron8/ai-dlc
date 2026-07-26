@@ -6,6 +6,11 @@
 # tree is to give it a mutated tree to sit in. core/ + scripts/ is ~1.4 MB / 138 files;
 # copying it costs milliseconds and keeps every mutation off the real repo.
 #
+# `.githooks/` is staged too: I30 compares the distribution hook's syntax glob against
+# the consumer hook's, and a tree missing one end makes I30 fail closed -- which reads
+# here as "the pristine tree does not pass" and takes every assertion below with it.
+# Anything the validator READS has to be in the seed, not just what it mutates.
+#
 # Prints the temp root on stdout. Caller owns cleanup.
 set -euo pipefail
 
@@ -19,7 +24,8 @@ DIST="$(cd "$HERE/../../.." && pwd)"
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/enforcement-map-sites.XXXXXX")"
 mkdir -p "$ROOT"
-cp -R "$DIST/core"    "$ROOT/core"
-cp -R "$DIST/scripts" "$ROOT/scripts"
+cp -R "$DIST/core"     "$ROOT/core"
+cp -R "$DIST/scripts"  "$ROOT/scripts"
+cp -R "$DIST/.githooks" "$ROOT/.githooks"
 
 printf '%s\n' "$ROOT"

@@ -60,8 +60,8 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24, 27                                          |
-| story          | 3a, 3b, 5, 17, 24                                               |
+| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32                              |
+| story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
 | sprint-review  | 18, 21                                                          |
 | retro          | 8, 9, 17, core-layer-immutability                               |
@@ -1782,6 +1782,171 @@ cost: one clarifying question, or one `n-a` annotation when the operator already
 dispositioned the item. Removal condition: retire when routing is no longer
 LLM-judged from free-text input — i.e., when the variant is derived from a
 structured intake the operator fills in directly.
+
+### 28. Spec-layer adoption is declared (all planning gates).
+<!-- CHECK_LOADED: 28 -->
+
+**Check.** Run `scripts/ai-dlc/validate-spec-adoption.sh --verdict <sprint_id>`.
+
+- Exit 0 printing `IN-FORCE` — Checks 29, 30 and 31 are in scope this sprint.
+- Exit 0 printing `SKIPPED-PRE-ADOPTION` — Checks 29, 30 and 31 report that same
+  token and do not run. **Record the token in the gate log.**
+- Exit 2 (`PENDING`) — the gate FAILS. Escalate as Rule 12 HARD_BLOCK once; the
+  operator declares the floor with `--declare <sprint>`.
+- Exit 1 — the declaration exists and is malformed. The gate FAILS.
+
+**A missing declaration is never a pass.** A scope clause that skipped the spec
+checks whenever no spec artifact was present would be indistinguishable from the
+failure it masks: a project that never adopts, a project that adopted and quietly
+stopped, and a project with a perfect spec all produce the same silence. The floor
+replaces silence with a token. This is the same posture Check 16 takes on an absent
+`setup-sites.md` — never treat an absent declaration as a blanket pass.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: spec checks that cannot fire,
+reporting nothing in a way that reads as passing. False-positive cost: one operator
+declaration, once per project. Removal condition: retire when no supported
+consumer predates the spec layer.
+
+### 29. Spec kernel integrity (planning gates, spec layer in force).
+<!-- CHECK_LOADED: 29 -->
+
+**Scope.** Skip unless Check 28 reported `IN-FORCE`; on
+`SKIPPED-PRE-ADOPTION` report that token and move on.
+
+**Check.** Read `_bmad-output/specs/spec-s<N>/SPEC.md` and re-grade it against
+BMAD's Spec Law in a fresh `gate-adjudicator` subagent (Rule 20). Read the
+`.memlog.md` verdict entries but do NOT adopt them: BMAD's Self-Validate is run by
+the agent that authored the spec, and a law graded by its own author is a law with
+no enforcer. Re-grade:
+
+1. Each capability has both `intent` and `success`.
+2. Intents describe WHAT, not HOW. Implementation prescription belongs in a
+   companion.
+3. Constraints actually bend a design decision. A constraint that rules nothing out
+   is decoration.
+4. At least one explicit non-goal.
+5. Every capability's `success` field is in EARS form — one of
+   `THE <system> SHALL <response>`; `WHILE <state>, THE <system> SHALL …`;
+   `WHEN <trigger>, THE <system> SHALL …`; `WHERE <feature>, THE <system> SHALL …`;
+   `IF <trigger>, THEN THE <system> SHALL …`. A `success` field that names a
+   configuration value, a flag, or a file edit instead of an observable response
+   FAILS: it states a mechanism, and no gate downstream can catch a mechanism that
+   was set and did nothing.
+6. Capability IDs are stable — no `CAP-<n>` reused or renumbered against the
+   memlog.
+8. Lean prose.
+
+**Gate FAILS** on any unmet clause. Remediation: re-run `bmad-spec` with the
+correction as input so the kernel is re-derived from the memlog. Do NOT hand-edit
+`SPEC.md` — bmad-spec is its single writer and overwrites external edits on the
+next derive.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a capability whose success
+signal cannot be tested, graded acceptable by the agent that wrote it — the shape
+that let a config-delta requirement pass discovery, research, architecture and
+three gates with no acceptance criterion able to catch its inertness.
+False-positive cost: one adjudicator round-trip per planning gate. Removal
+condition: retire when BMAD's Self-Validate runs in a process the authoring agent
+does not control.
+
+### 30. Spec join integrity (story gates, spec layer in force).
+<!-- CHECK_LOADED: 30 -->
+
+**Scope.** Story-level gates only, and only for stories whose **creation** sprint
+is at or after the Check 28 floor. A story authored before the floor and completed
+after it is out of scope — binding to the gate's sprint instead would
+retroactively spec-require a story written before the layer existed. Report
+`SKIPPED-PRE-ADOPTION s<story-sprint> < s<floor>` for those.
+
+**Check.** Run `scripts/ai-dlc/validate-spec-join.sh --spec <spec-folder>
+--prd <prd> --story <each in-scope story>`, passing `--spine-lint` with
+`lint_spine.py`'s JSON output and `--trace-verdict` with the
+`bmad-testarch-trace` gate decision. Exit 0 required.
+
+The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` reaches an
+FR in the PRD's `FR Coverage Map`; every story `capabilities:` entry resolves to a
+capability `SPEC.md` defines. The `LR → CAP` leg reads the memlog, which is
+append-only and never reordered; `SPEC.md` is only read for the capability set,
+never as an anchor, because it is re-rendered on every derive. Byte anchoring of
+requirement TEXT stays Check 3b's job against the product brief — the spec adds
+no anchor target.
+
+**Both borrowed verdicts are decided here, not observed.** `lint_spine.py` exits 0
+unconditionally and leaves the call to its caller; a non-empty `ad_fields` or
+`placeholder` finding set FAILS. A `bmad-testarch-trace` decision of `FAIL` FAILS;
+`CONCERNS` and `WAIVED` are recorded in the gate log with the matrix path cited.
+
+**Exit 2 is a FAIL, not a skip** — a zero-capability kernel, an absent
+`FR Coverage Map`, or an unreadable input closes every join vacuously.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a requirement that reaches no
+capability (a silent drop that leaves every downstream artifact internally
+consistent), a definition re-transcribed per story instead of cited once, and a
+BMAD finding that nothing acted on. False-positive cost: one `capabilities:`
+frontmatter line per story. Removal condition: retire when BMAD makes
+`lint_spine.py` and `epic-coverage-validation` blocking on their own.
+
+### 31. Acceptance-criterion falsifiability (story gates, spec layer in force).
+<!-- CHECK_LOADED: 31 -->
+
+**Scope.** As Check 30 — story gates, creation sprint at or after the floor.
+
+**Check.** Run `scripts/ai-dlc/validate-ac-falsifiability.sh <each in-scope
+story>`; exit 0 required. Per acceptance criterion it asserts that no term from the
+`AC_UNBOUNDED_TERMS` block in `stories-test-strategy.md` appears unless that AC
+carries a `falsifiability_waiver:` line, and that every `prior_evidence:` citation
+resolves to a path on disk and to a literal in that file when an anchor is given.
+
+**Complements Check 3a, does not duplicate it.** 3a asks whether the ACs COVER the
+requirement; it never reads whether an individual AC states a predicate a verifier
+can fail. An AC can cover every element of its requirement and assert nothing.
+
+**One list, not two.** The script reads the term list out of the step file between
+the `AC_UNBOUNDED_TERMS` sentinels and carries no fallback copy. Exit 2 when the
+list is unreadable or parses to zero terms — a zero-term scan reports every story
+clean and prints the same shape of line as a full one.
+
+**Exit 2 also fires on a story that declares acceptance criteria and presents none
+in the mandated header form.** That is a FAIL. An AC the checker cannot read is not
+an AC that passed.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: an AC whose predicate has no
+failing case, so a gate reading it records PASS for a verification never performed;
+and an AC citing prior evidence that is not retrievable at verification time.
+False-positive cost: an AC using a forbidden term over a set it does enumerate
+costs one word rewritten. Removal condition: retire when Check 3a's adjudicator is
+required to construct and record a concrete failing case per AC, which subsumes
+both clauses.
+
+### 32. Every BMAD invocation resolves (all planning gates).
+<!-- CHECK_LOADED: 32 -->
+
+**Check.** Run `scripts/ai-dlc/validate-bmad-invocations.sh`; exit 0 required. For
+every `/bmad-*` call site in the installed rulebook it asserts the skill directory
+exists AND that any `LOAD the FULL <path>` target inside its `SKILL.md` resolves.
+
+**A directory-existence check is not enough, and that is the whole reason this
+exists.** BMAD ships dead loader shims beside live self-contained skills under
+names that differ by one word. A shim's directory exists, its `SKILL.md` exists,
+and its only instruction points into a module layout BMAD abandoned — so the
+pipeline invokes a name that resolves as a skill and loads nothing, while the
+working equivalent sits beside it. Resolution is against `.claude/skills` by name;
+a consumer can carry a second, stale skills tree whose same-named loaders point at
+abandoned paths, and reading that one inverts every verdict.
+
+A skill whose `SKILL.md` announces itself DEPRECATED is **reported, not failed** —
+it resolves today and is a dangling name on some future release, so the deadline
+must be visible without blocking a working pipeline.
+
+**Exit 2 is a FAIL** — no skills root, or zero enumerated call sites. A scan that
+found no call sites prints the same clean line as one that found them all healthy.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a step file invoking a BMAD
+name that does not exist, or one that resolves and loads nothing. Both let the lead
+report having run a workflow that never ran. False-positive cost: none observed —
+the check reads names the rulebook already commits to. Removal condition: retire
+when BMAD publishes a machine-readable manifest of live skill names that the pull
+can diff against.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

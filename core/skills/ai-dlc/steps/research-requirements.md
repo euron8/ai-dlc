@@ -42,7 +42,18 @@ if research surfaces new constraints or opportunities.
 
 ### 2. PRD Creation
 
-- For **greenfield/brownfield-b**: invoke `/bmad-create-prd` — full PRD
+Read `_bmad-output/specs/spec-s<N>-<slug>/SPEC.md` first — it is the
+machine contract `bmad-prd` consumes, produced at `discovery.md` §4b.
+
+**Every functional requirement MUST cite the capability it realises**, as
+`FR-<n> (CAP-<m>)`. The `FR Coverage Map` that `/bmad-create-epics-and-stories`
+emits carries the same IDs. `CAP-<m>` is `bmad-spec`-owned and never reused or
+renumbered, so this is a join a script can close — unlike the `←` arrow, which
+is a character. Gate-validation Check 30 FAILS on a capability that reaches no
+FR: a capability with no functional requirement behind it is specified and
+unplanned, so it reaches no epic, no story and no test.
+
+- For **greenfield/brownfield-b**: invoke `/bmad-prd` — full PRD
   with personas, metrics, risks
 - For **feature/brownfield-a/c**: UPDATE the existing PRD per Rule 25(a)
   — integrate the new scope's requirements into the current-state
@@ -66,7 +77,7 @@ but does not create new locked WHAT requirements.
 
 ### 3. PRD Validation
 
-Invoke `/bmad-validate-prd` — structured completeness check. Fix all
+Invoke `/bmad-prd` — structured completeness check. Fix all
 gaps found.
 
 ### 4. Validation Cycle (Rule 8)

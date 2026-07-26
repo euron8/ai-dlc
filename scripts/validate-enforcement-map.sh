@@ -1303,10 +1303,57 @@ else
   fi
 fi
 
+# --- I30: the two pre-push syntax globs are one set, mapped ---------------------
+# A shipped script with a syntax error is a gate that cannot run at all, so both hooks
+# run `bash -n` over every class of shipped script. The two lists are the same set
+# expressed in two layouts, and nothing compared them: core validators moved to
+# scripts/ai-dlc/ in v0.126.0, the distribution glob followed, the consumer glob did
+# not. For four releases no shipped core validator -- and no part of the update engine
+# that would deliver the fix -- was syntax-checked on any consumer, while the step
+# printed the same green line either way.
+#
+# DERIVE the consumer set from the distribution set through the same map_consumer()
+# apply.sh uses, and compare. A hand-kept pair is the bug; the pair is derivable.
+syn_globs() { # <hook file> -> one glob per line, from the sentinel-bounded block
+  # Join backslash continuations FIRST. A line-at-a-time reader drops every entry
+  # after the first wrap, and it drops them from BOTH hooks alike -- so the compare
+  # succeeds on two equally-truncated sets and reports agreement it never tested.
+  # That is the exact vacuity this invariant is here to prevent, so it must not be
+  # the way this invariant is implemented.
+  sed -n '/# SYNTAX_GLOB_BEGIN/,/# SYNTAX_GLOB_END/p' "$1" \
+    | awk '{ if (sub(/\\$/,"")) { printf "%s", $0 } else { print } }' \
+    | sed -n 's/.*for f in \(.*\); *do.*/\1/p' \
+    | tr -s ' \t' '\n' | grep -E '\*' | sort -u
+}
+PP_DIST="$REPO_ROOT/.githooks/pre-push"
+PP_CONS="$REPO_ROOT/core/git-hooks/pre-push"
+if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
+  err "I30 could not read one of the pre-push hooks (dist='$PP_DIST' consumer='$PP_CONS'). With one end missing this invariant compares nothing and prints the same line as a pass."
+else
+  syn_dist="$(syn_globs "$PP_DIST")"
+  syn_cons="$(syn_globs "$PP_CONS")"
+  if [ -z "$syn_dist" ] || [ -z "$syn_cons" ]; then
+    err "I30 parsed ZERO globs out of the syntax_all() block in $( [ -z "$syn_dist" ] && echo '.githooks/pre-push' || echo 'core/git-hooks/pre-push' ). The SYNTAX_GLOB_BEGIN/END sentinels or the \`for f in\` shape changed. An empty set compares equal to an empty set, so this invariant fails closed rather than reporting agreement it never checked."
+  else
+    # map_consumer(), same rules as reconcile/preclassify.sh:66-75.
+    syn_expect="$(printf '%s\n' "$syn_dist" | sed -E '
+      s@^core/scripts/@scripts/ai-dlc/@;
+      s@^core/fixtures/@tests/fixtures/@;
+      s@^core/ci-templates/@.github/workflows/@;
+      s@^core/git-hooks/@.githooks/@;
+      s@^core/@.claude/@' | sort -u)"
+    if [ "$syn_expect" != "$syn_cons" ]; then
+      only_dist="$(comm -23 <(printf '%s\n' "$syn_expect") <(printf '%s\n' "$syn_cons") | tr '\n' ' ')"
+      only_cons="$(comm -13 <(printf '%s\n' "$syn_expect") <(printf '%s\n' "$syn_cons") | tr '\n' ' ')"
+      err "I30 the pre-push syntax globs have forked. Classes the distribution checks but no consumer does:${only_dist:- <none>}. Classes only the consumer checks:${only_cons:- <none>}. A class missing from the consumer hook is a class of shipped script that reaches every consumer with no syntax check, and the step prints the same green line as a full scan. Update core/git-hooks/pre-push's SYNTAX_GLOB block to the mapped image of the distribution's."
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30)."
   exit 0
 fi
 exit 1
