@@ -65,9 +65,12 @@ want 2 "DISARM: a PRD with no FR identifiers exits 2, never 0" \
   --spec "$R/ok" --prd "$R/prd-no-fr.md"
 
 # OVER-FIRE PIN. The CAP citation lives on the FR ENTRY, never in BMAD's FR Coverage
-# Map — whose template emits `FR1: Epic 1 - <desc>` with no capability token at all.
-# The first version of join (2) required one there and would have failed every
-# capability against a correct map: a hard false positive on every planning gate.
+# Map. The strings `CAP` and `LR-` appear NOWHERE in bmad-create-epics-and-stories,
+# and its instructed output is literally `FR1: Epic 1 - [Brief description]`. One
+# observed run emitted `FR-S300-1 (CAP-1): ...`, but that was the author's discretion,
+# not the tool's contract -- so the map's content is non-deterministic and a check
+# reading it would pass or fail on who wrote the map. This pin is what keeps join (2)
+# independent of it.
 want 0 "PIN: BMAD's literal FR-Coverage-Map format (no CAP token) still PASSES" \
   --spec "$R/ok" --prd "$R/prd-real-map.md" --story "$R/story-ok.md"
 

@@ -263,7 +263,37 @@ PASS/FAIL/SKIP per check; the AC must target PASS specifically.
 ### 2. Epics and Stories
 
 Invoke `/bmad-create-epics-and-stories` — break work into prioritized
-stories with clear acceptance criteria.
+stories with clear acceptance criteria. Four things MUST be supplied explicitly;
+none of them can be left to the skill's own resolution:
+
+- **The PRD path, named.** Its discovery globs are `{planning_artifacts}/*prd*.md`
+  and `{planning_artifacts}/*prd*/index.md` — non-recursive, and in a mature
+  consumer the first matches dozens of files (`prd.md`,
+  `s<N>-prd-adversarial-p1.md`, `review-consolidation-prd.md`, …) with no
+  disambiguation rule. Name the file.
+- **A sprint-scoped output path.** Its default is a single fixed
+  `{planning_artifacts}/epics.md`, and no step checks whether that file exists.
+  Writing there overwrites the previous sprint's epics silently. Direct it to
+  `{planning_artifacts}/s<N>-epics/epics.md`.
+- **The spec package and the architecture spine, by path.** Its step 1 lists
+  `architecture.md` as a required prerequisite and mines it for additional
+  requirements; `SPEC.md` and the spine appear in none of its search patterns, so a
+  project carrying a spec layer cannot satisfy that prerequisite as written.
+- **A facilitator, not a fire-and-forget dispatch.** Every one of its step files
+  opens with "NEVER generate content without user input" and "YOU ARE A
+  FACILITATOR, not a content generator", and it halts at nine interactive menus. It
+  has no headless mode and no flag that relaxes this. The lead drives it and answers
+  its gates; do NOT dispatch it and walk away expecting a finished artifact. This is
+  the opposite of `bmad-spec`, whose default invocation IS headless.
+
+**Its `FR Coverage Map` is NOT a traceability surface.** The strings `CAP` and
+`LR-` appear NOWHERE in that skill — not in `SKILL.md`, not in `customize.toml`,
+not in either template, not in any step file. Its instructed output is literally
+`FR1: Epic 1 - [Brief description]`, which drops both the capability and the
+locked-requirement linkage. Whether a run preserves richer FR labels is the
+author's discretion, not the skill's behaviour. Never build a check on that map:
+gate-validation Check 30 reads the capability citation off `prd.md`'s own FR
+entries, which ai-dlc authors and can therefore mandate.
 
 - For **feature**: create stories for the new feature ONLY. Include
   migration/refactoring stories if architecture needs changes.

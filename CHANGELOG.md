@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.4] — 2026-07-26
+
+### Corrected — v0.169.3's correction was itself wrong
+
+v0.169.3 said the `FR Coverage Map` "propagates the FR label from the PRD verbatim",
+and used that to walk back v0.169.2's claim. There is no propagation mechanism. The
+strings `CAP` and `LR-` appear **nowhere** in `bmad-create-epics-and-stories` — not in
+`SKILL.md`, not in `customize.toml`, not in either template, not in any of its four
+step files. Its instructed output is literally:
+
+```
+FR1: Epic 1 - [Brief description]
+```
+
+The observed run emitted `FR-S300-1 (CAP-1): Epic 1 - …`, and **that was the
+authoring agent's discretion, not the tool's behaviour.** I verified one run's output
+and attributed the output's properties to the producer. One run is not a contract.
+
+So the map's content is non-deterministic: a check reading it passes or fails
+depending on who wrote the map. That is a stronger reason to keep join (2) off it than
+either previous release gave, and the over-fire pin is what encodes the independence.
+v0.169.2's fix was right; both of its rationales were partly wrong, and so was
+v0.169.3's.
+
+### Fixed — four unsafe assumptions in the epics invocation
+
+Running the workflow surfaced four things the step file must supply and previously
+left to the skill:
+
+- **Its default output path is destructive.** `{planning_artifacts}/epics.md`, one
+  fixed filename, and no step checks whether it exists. A real 14,620-byte `epics.md`
+  sits at that path in the reference consumer. Following the skill literally
+  overwrites the previous sprint's epics silently. Output is now sprint-scoped.
+- **The PRD is undiscoverable by its own globs.** `{planning_artifacts}/*prd*.md` is
+  non-recursive and matches dozens of files in a mature consumer, with no
+  disambiguation rule. The path is now named explicitly.
+- **Its `architecture.md` prerequisite is unsatisfiable under a spec layer.** Step 1
+  requires it and mines it for additional requirements; `SPEC.md` and the spine appear
+  in none of its search patterns. Both are now passed by path.
+- **It is NOT headless-safe.** Every step file opens with "NEVER generate content
+  without user input" and "YOU ARE A FACILITATOR, not a content generator", and it
+  halts at nine interactive menus with no flag that relaxes them. The lead drives it
+  and answers its gates. This is the opposite of `bmad-spec`, whose default
+  invocation IS headless — so "invoke a BMAD workflow" is not one uniform contract,
+  and the step file now says which is which.
+
+### Noted — traps for any future predicate over the epics document
+
+Recorded because they are the next thing a check would get wrong: step-02 specifies
+Epic List entries as `### Epic 1: [Title]` while the template's detail section is
+`## Epic {{N}}: {{epic_title_N}}`, so a compliant document contains the same epic
+title at two heading levels with colliding slugs. And the template has no AC
+numbering or delimiter — a multi-AC story is blank-line-separated Given/When/Then
+blocks, so counting acceptance criteria means counting `**Given**` occurrences.
+
 ## [0.169.3] — 2026-07-26
 
 ### Fixed — Check 31 silently passed BMAD's real acceptance-criteria format

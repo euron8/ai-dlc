@@ -1868,8 +1868,11 @@ The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` is boun
 an architecture decision (`- **Binds:**` in the spine, where `all` binds every
 capability) — a capability no AD governs was never designed; every `CAP-<n>` is cited by
 a functional-requirement entry in `prd.md` (**not** in BMAD's `FR Coverage Map`,
-whose template emits an FR-to-epic mapping carrying no capability token — requiring
-one there fails a correct map, and FR-to-epic coverage is
+which is not a traceability surface at all: the strings `CAP` and `LR-` appear
+nowhere in that skill, and its instructed output is literally
+`FR1: Epic 1 - [Brief description]`. Whether a given run preserves a richer FR label
+is the author's discretion, not the tool's contract, so a check reading that map is
+non-deterministic by construction. FR-to-epic coverage is
 `bmad-check-implementation-readiness` step 03's job); every story `capabilities:`
 entry resolves to a
 capability `SPEC.md` defines. The `LR → CAP` leg reads the memlog, which is
