@@ -40,17 +40,17 @@ neither is a preference.**
 - Personal: `/model {pm_escalated_model_personal}`
 - Bedrock: `/model {pm_escalated_model_bedrock}`
 
-**If your resolved `/model` string equals the one in
-`.claude/team-roles/pm.md`, STOP and report a setup error instead of
-proceeding.** An escalated role running the base role's model is
-indistinguishable from the base role, so the route that sent work here and the
-dispatch guard that bound it both verify a path that bought nothing — while the
-record says the spec was authored at the escalated tier. Unlike a story, the
-kernel has no return path: the PRD cites its capabilities, the architecture
-spine consumes it, stories carry its IDs, and Checks 29/30/31 join against them,
-so a defect authored here is ratified by everything downstream rather than
-caught. Report the setup error and let the lead decide; do not quietly author
-the spec at the base tier.
+The declarations above are the contract, and the dispatch guard binds them from
+this file — a call-site model override is rebound to this file's value, because a
+conditional model is a conditional role, not a parameter. Run at the tier this
+file declares. Do not down-shift, do not re-request a model, and do not weigh
+"standard vs. more capable": the lead made that choice by routing spec derivation
+here.
+
+The tier is not a nicety. Unlike a story, the kernel has no return path — the PRD
+cites its capabilities, the architecture spine consumes it, stories carry its
+IDs, and Checks 29/30/31 join against them — so a defect authored here is
+ratified by everything downstream rather than caught.
 
 ## Contract
 
@@ -60,11 +60,6 @@ removes nothing from the PM contract except the session-setup declarations
 (model and effort) above. There is no second copy of the PM rules here on
 purpose: `pm.md` is the single source of truth for how a PM teammate behaves,
 and this role is that same teammate running on a stronger model.
-
-Do not down-shift or re-request a model. The lead bound your tier by routing
-spec derivation here, and the dispatch guard enforces it — a call-site model
-override is rebound to this file's value, because a conditional model is a
-conditional role, not a parameter.
 
 `bmad-spec` is the SOLE writer of `SPEC.md`. It re-derives the kernel from
 `.memlog.md` on every run, so anything you edit directly in `SPEC.md` is
