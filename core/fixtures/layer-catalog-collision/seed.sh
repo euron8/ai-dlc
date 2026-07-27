@@ -163,4 +163,54 @@ reason: one line, block closed
 A well-formed override body.
 GOOD
 
+# --- the RULE namespace: a second catalog, colliding the same way --------------
+# Core numbers its RULES and its CHECKS independently, and both render into the
+# merged rulebook. Note core's `Rule 24` and gate-validation's `### 24.` here: the
+# two namespaces share the integer 24 on purpose, so a detector that folded them
+# together would report a collision between a rule and a check.
+cat > "$SKILL/SKILL.md" <<'CORESKILL'
+---
+name: ai-dlc
+description: synthetic core rulebook for the layer-catalog-collision fixture
+---
+
+# Synthetic SKILL
+
+### Rule 8 -- Run the validation cycle per declared intensity
+Core's rule 8.
+
+### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
+Shares the integer 24 with gate-validation's CHECK 24, and is a different thing.
+
+### Rule 29 -- Steering budget: the operator must always be able to reach you
+Core's rule 29.
+
+### Rule 30 -- The spec is BMAD's; the enforcement is ours
+Core's rule 30.
+CORESKILL
+
+cat > "$SKILL/extensions/steps-domain/rules.md" <<'EXTRULES'
+---
+kind: step-domain
+hooks: SKILL.md
+id: rules
+push_candidate: true
+---
+
+## Rule 29 -- Parallel independent-scope sub-task dispatch (split-dispatch pattern)
+Same number as core, ENTIRELY different rule -> a COLLISION. "Rule 29" in a gate
+log now has two referents.
+
+## Rule 30 [ext:rules] -- Lead states no fact it did not observe this session
+Already carries the catalog label. This is the RESOLVED state and must be silent,
+or the remedy the detector prescribes can never clear the detector.
+
+## Rule 8 -- Run the validation cycle per declared intensity
+Same number AND same title as core -> a RESTATEMENT (Rule 27(c)), not a collision.
+
+## Rule 44 -- Consumer-only rule with no core counterpart
+Core defines no rule 44. Extension-only numbers are the normal case and must be
+silent, or every consumer rule reports.
+EXTRULES
+
 printf '%s\n' "$ROOT"

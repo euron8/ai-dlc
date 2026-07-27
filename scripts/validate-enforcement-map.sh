@@ -445,6 +445,25 @@ elif [ "$ba_drift" != "$ba_lint" ]; then
   err "the bold-anchor rule has forked between layer-drift.sh and validate-layer-entries.sh. One classifies the pull and the other lints authoring and gates CI; a rule that differs between them means the two disagree about what a section IS, and the operator believes whichever they happened to run. Make bold_anchors_of_file() byte-identical."
 fi
 
+# --- I34: ONE rule grammar. The SAME split as I15, in the RULE namespace. -----
+# `validate-layer-entries.sh` (W4) REPORTS an extension rule number colliding with core's;
+# `relabel-extension-checks.sh` FIXES it by writing the `[ext:<id>]` label. Two programs,
+# one grammar. If the reporter's is wider, it names a collision the fixer cannot rewrite and
+# the operator is handed a remedy that does not run — which is how the CHECK label went
+# unadopted for three releases and is exactly the failure I15 was added for.
+#
+# Separate from I15 on purpose. ANCHOR_RE matches `### 24.` and terminates on `[.—]`; a rule
+# heading is `### Rule 29 -- Steering budget` and has no terminator, so ANCHOR_RE matches
+# 0 of core's 30 rules. Folding the word `Rule` into ANCHOR_RE would merge `Rule 29` and
+# check `29` into one id and start joining two unrelated catalogs by integer.
+rg_lint="$(sed -n 's/^RULE_RE=//p' "$REPO_ROOT/core/scripts/validate-layer-entries.sh" | head -1)"
+rg_relabel="$(sed -n 's/^RULE_RE=//p' "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" | head -1)"
+if [ -z "$rg_lint" ] || [ -z "$rg_relabel" ]; then
+  err "I34 cannot find a RULE_RE definition in validate-layer-entries.sh and/or relabel-extension-checks.sh. The check that binds the two rule grammars just went vacuous — it must locate both or fail loudly, never pass by finding nothing."
+elif [ "$rg_lint" != "$rg_relabel" ]; then
+  err "the rule grammar has forked: validate-layer-entries.sh defines RULE_RE=$rg_lint but relabel-extension-checks.sh defines RULE_RE=$rg_relabel. The linter REPORTS rule-number collisions and relabel FIXES them; a narrower grammar in either means a reported collision no tool can resolve. Make them byte-identical."
+fi
+
 # --- I25: the core-path derivation is ONE rule, in two places, byte-identical --
 # `hooks/ai-dlc-core-guard.sh` decides at EDIT time whether a path is core (and
 # denies the write). `scripts/core-paths.sh` answers the same question for callers
@@ -1479,7 +1498,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34)."
   exit 0
 fi
 exit 1
