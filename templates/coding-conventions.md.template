@@ -30,6 +30,15 @@ load this file.
   required:** Log the grep command and its output in the story file under
   "Rename Verification". Zero matches required. Gate validation will check
   for this section.
+- Any verification whose result is an ABSENCE must run a control in the same
+  step that is required to return a NON-ZERO result. A search that finds
+  nothing establishes that the search ran, not that the thing is gone: a
+  case-sensitivity slip, a mistyped path, a glob-declared list grepped for one
+  member, or an over-broad exclusion all return the same clean zero. **Evidence
+  required:** wherever an absence is claimed — a rename verification, a "no
+  remaining callers" check, a "not present upstream" finding — log BOTH the
+  absence command and its control, with both outputs. An unaccompanied zero is
+  not evidence and must not be recorded as one.
 - Commit messages follow conventional commits with scope: `feat(scope):`,
   `fix(scope):`, `docs(scope):`, `test(scope):`. Always include the scope
   parenthetical.

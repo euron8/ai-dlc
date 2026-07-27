@@ -1087,7 +1087,7 @@ EOF
   fi
 fi
 
-# --- I31b/I32: a Check 17 skill PIN names the skill its own step file invokes ---
+# --- I32: a Check 17 skill PIN names the skill its own step file invokes -------
 # THE DEFECT. Check 17's arms pin a provenance block to a skill NAME, and the step file that
 # runs the evaluation names the skill it INVOKES. Two files, one fact, nothing comparing them.
 # v0.169.0 repointed `research-requirements.md` §3 from `/bmad-validate-prd` to `/bmad-prd` and
