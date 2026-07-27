@@ -964,6 +964,20 @@ gate's primary artifact.
   invented, copied stale, or edited after the fact FAILS here even though it
   passes the shape validator. Use the SAME `--series` prefix Check 24 takes.
 
+- **Bug-fix story readiness gate (bug-investigation):** run
+  `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill
+  bmad-review-adversarial-general`, then the CROSS-CHECK
+  `scripts/ai-dlc/stamp-story-provenance.sh --terminal
+  _bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md --profile
+  bug-story-provenance --check <story-file>`; exit 0 required for both.
+  The bug variant's §4 review is a ONE-SHOT, so the block carries NO `verdict`
+  and cites the bmad skill rather than the native one — which is why it needs its
+  own arm and its own profile. `--profile bug-story-provenance` is not optional:
+  the default profile pins `ai-dlc-adversary-review` and demands
+  `EXIT_CONDITION_MET`, so it refuses every bug story by construction. Check 24
+  self-skips this gate for the same reason (a one-shot stamps no verdict); the
+  provenance obligation does not go away with it.
+
 **PASS:** all required provenance scripts exit 0. **FAIL:** any
 script reports a missing block, malformed field, unknown skill,
 `mode: solo` on any block, missing transcript file (retro
@@ -1481,16 +1495,28 @@ carrying an adversarial self-test ships that fixture, and that the fixture
 is reachable from the check without a hand-maintained list.
 
 **The check → fixture set is DERIVED, never enumerated here.** It is the
-`fixtures:` bindings in `enforcement-map.yaml` — read them, do not restate
-them in this file. This is the same single-source discipline the
+union of TWO `fixtures:` binding sources — read them, do not restate
+them in this file:
+
+1. `enforcement-map.yaml`, for core's own checks;
+2. the `fixtures:` frontmatter of every active `kind: check` entry under
+   `extensions/`, for the consumer's (`extensions/README.md`, entry
+   contract). The map is upstream-owned and carries no row for a consumer
+   check, so without this source a consumer that ships an adversarial
+   fixture with its check has nowhere to bind it, and H1 reports on core's
+   checks while silently covering none of theirs. `ai-dlc-update` reports
+   `EXTENSION-FIXTURE-UNBOUND` for a binding that resolves to no directory,
+   so a declared-but-absent fixture is loud rather than counted.
+
+This is the same single-source discipline the
 manifest-completeness pass below applies to the `GATE_MANIFEST` universal
 row. A restated copy is what this check exists to prevent: the enumeration
 that stood here listed seven checks while the map bound eleven, so Checks
 2, 2a, 25 and 26 shipped fixtures that H1 could not see, and the omission
 read exactly like coverage.
 
-**Check.** For each check with a non-empty `fixtures:` binding in
-`enforcement-map.yaml`, confirm both:
+**Check.** For each check with a non-empty `fixtures:` binding in either
+source, confirm both:
 
 (i) each bound fixture directory exists, with a `README.md` describing the
 bypass scenario and a `seed.sh` reproducing it idempotently — or, where a

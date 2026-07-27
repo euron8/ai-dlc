@@ -154,11 +154,22 @@ prose is itself generated rather than composed.
    Diff `base→theirs` restricted to **the MACHINERY set** — read
    `reconcile/setup-sites.md`'s `machinery:` list (the manifest, `git-hooks/pre-push`,
    hooks, `scripts/ai-dlc/*`, schemas, session-driver, templates, and the `ai-dlc-setup` /
-   `ai-dlc-update` subtrees) — **plus the fixtures that cover it**: every
-   `core/fixtures/<dir>/` whose `*.sh` names any machinery path, EXCLUDING any dir carrying
-   a `.dist-only` marker (never shipped, so it cannot run on a consumer). Derive both sets
-   rather than enumerating either here, and grep `seed.sh` as well as `run.sh` (a fixture
-   commonly resolves the tooling path in its seed, so a run.sh-only derivation misses it).
+   `ai-dlc-update` subtrees) — **plus the fixtures that cover THE CHANGED PATHS**: every
+   `core/fixtures/<dir>/` whose `*.sh` names one of the machinery paths **this diff actually
+   touched**, EXCLUDING any dir carrying a `.dist-only` marker (never shipped, so it cannot
+   run on a consumer). Derive both sets rather than enumerating either here, and grep
+   `seed.sh` as well as `run.sh` (a fixture commonly resolves the tooling path in its seed,
+   so a run.sh-only derivation misses it).
+
+   **Against the CHANGED paths, not the whole machinery list — the difference is two orders
+   of magnitude.** `machinery:` carries `core/scripts/ai-dlc/*`, which the substitution below
+   turns into *every distribution script*; and a fixture's whole job is to invoke a validator,
+   so naming a `core/scripts/…` path is the norm. Measured at 0.168.1: **45 of 66** shippable
+   fixtures name one, so a whole-list reading demands 45 fixture runs to gate a one-script
+   change and is indistinguishable from "run the entire suite." The changed-paths reading
+   yields the one covering fixture, which is what the step means and what makes the write
+   instruction below — "the covering fixtures, never the derived set per directory" — a
+   distinction the reader can act on rather than a contradiction.
 
    **One entry is CONSUMER-shaped; translate it and match dist-to-dist.** `machinery:`
    entries carry a `core/` prefix and are otherwise consumer-shaped, which matters for
@@ -801,8 +812,17 @@ prose is itself generated rather than composed.
      one nobody can ever retire.
      If the delta merely **duplicates an existing override**, do not register a second
      one: revert core and say which override already carries it.
-     If it is a **hook**, `register-drift.sh` refuses by design — the layer system has
-     no override grain for hooks. Check the row's status before you conclude anything:
+     `register-drift.sh` refuses by design on **two** classes, and both refusals are
+     structural rather than a missing case. If it is a **hook**, the layer system has no
+     override grain for hooks. If it is **`skills/ai-dlc-setup/*` or `schemas/*`**, the
+     same is true for a different reason: overrides shadow a HEADING inside the ai-dlc
+     skill, and a second core skill and schema data have no heading to shadow. Both are
+     `scan`-marked, so the pull DOES report them and hands you this command — which then
+     refuses. `validate-enforcement-map.sh` I31 binds the two lists so a newly scan-marked
+     subtree cannot reach an unnamed refusal. In both cases the dispositions are: keep the
+     consumer's version (accept per-entry, and it re-reports every pull), or upstream it.
+     Reverting destroys the divergence; say so before anyone chooses it.
+     Check the row's status before you conclude anything:
      if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
      so, and let the operator keep it (it will report every pull) or upstream it. Do not
      paper over it.

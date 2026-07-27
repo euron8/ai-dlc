@@ -79,4 +79,30 @@ mkdir -p "$ROOT/unconverged/stories"
 mk_pass "$ROOT/unconverged/s1-stories-adversarial-p1.md" EXIT_CONDITION_NOT_MET "$REAL_TID"
 mk_story_plain "$ROOT/unconverged/stories/story-1.md"
 
+# --- oneshot: the BUG variant. A one-shot review stamps no verdict and cites the bmad skill,
+#     so it needs `--profile bug-story-provenance`. Three passes here, and the two decoys are
+#     the point: `with-verdict` is a convergence pass wearing the one-shot skill name, and the
+#     converged/ pass above is the reverse. Each must be refused by the door it is not for.
+mkdir -p "$ROOT/oneshot/stories"
+mk_oneshot() { # $1 file  $2 extra-lines
+  cat > "$1" <<EOF
+# bug-fix one-shot cynical sweep
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: bmad-review-adversarial-general
+invoked_at: 2026-01-02T05:06:07Z
+tool_use_id: $REAL_TID
+mode: subagent
+lead_role: bug-investigation.md
+artifact: $(basename "$1")
+findings_critical: 0
+findings_major: 2
+findings_minor: 3
+${2}SKILL_INVOCATION_PROVENANCE_END -->
+EOF
+}
+mk_oneshot "$ROOT/oneshot/s1-bug-fix-oneshot.md" ""
+mk_oneshot "$ROOT/oneshot/s1-bug-fix-oneshot-with-verdict.md" "verdict: EXIT_CONDITION_MET
+"
+mk_story_plain "$ROOT/oneshot/stories/story-bug-1.md"
+
 echo "$ROOT"

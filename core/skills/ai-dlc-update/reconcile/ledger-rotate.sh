@@ -102,7 +102,14 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" "$(le
   END { flush() }
 ' "$LEDGER"
 
-n_move="$(grep -c . "$TMPD/moved-names" 2>/dev/null || echo 0)"
+# NO `|| echo 0` FALLBACK, and none is needed: `moved-names` is pre-created above, so the only
+# question is whether it is empty. `grep -c` PRINTS `0` on no match and ALSO exits 1, so a
+# fallback fires on exactly the case it was meant to cover and makes this the two-line string
+# `0\n0`. `[ "$n_move" -eq 0 ]` below then errors with `integer expression expected` and
+# evaluates FALSE, so the nothing-to-rotate early exit never fires on the nothing-to-rotate
+# case — the report contradicts itself and `--apply` creates a header-only archive the run had
+# no reason to write.
+n_move="$(grep -c . "$TMPD/moved-names")"
 l_all="$(wc -l < "$LEDGER" | tr -d ' ')"
 l_keep="$(wc -l < "$TMPD/keep" | tr -d ' ')"
 l_move="$(wc -l < "$TMPD/move" | tr -d ' ')"

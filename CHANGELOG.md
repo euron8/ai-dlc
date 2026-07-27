@@ -17,6 +17,327 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.172.0] — 2026-07-26
+
+### Added — `fixtures:` on an extension entry, so a consumer check's fixture can reach H1
+
+Filed by the graph consumer as `PC-S300-EXTENSION-CHECKS-CANNOT-BIND-A-FIXTURE-TO-CORE-H1`.
+
+H1's coverage set was rewritten to be DERIVED from `enforcement-map.yaml`'s `fixtures:`
+bindings, for a good reason it states outright: the enumeration it replaced listed seven
+checks while the map bound eleven, so four fixtures existed that H1 could not see and *"the
+omission read exactly like coverage."*
+
+That fix is correct for core's checks and closes nothing for a consumer's. Rule 27 invites a
+consumer to add gate checks via `extensions/`, and a serious consumer ships adversarial
+fixtures with them — with no way to bind them: the map is upstream-owned and carries no row
+for a consumer check, and editing it is unregisterable core drift the next `apply` overwrites
+(`register-drift.sh` refuses it: *"An override anchors to a heading, so this cannot be
+registered as one"*). The reference consumer had five checks shipping driven fixtures, none
+bound, none verified — compensating with a hand-maintained enumeration inside its extension,
+which is the exact practice H1's rewrite exists to end.
+
+The entry contract gains an optional `fixtures:` field on `kind: check` entries, and H1's
+derived set is now the union of two binding sources: the map for core's checks, the extension
+frontmatter for the consumer's. Neither is enumerated in the check body — I24 still fails the
+build on a fixture path restated there.
+
+**`EXTENSION-FIXTURE-UNBOUND` ships with it, and that is not optional.** The binding IS the
+mechanism, so a `fixtures:` value naming no directory would make H1 report coverage that does
+not exist — the same failure shape as the deleted enumeration, one layer out. `layer-drift.sh`
+now reports a dangling binding, level-triggered like `ORPHANED-RELOCATED`: it is a state of the
+consumer tree, so a pull that changes nothing there still reports it. The fixture asserts both
+directions, because the precision side is what keeps a detector switched on — a binding whose
+directory exists must stay silent.
+
+**Deliberately deferred, and said out loud rather than implied.** The entry also asks for
+`EXTENSION-RESTATES-DERIVED-SET` (an extension hand-enumerating a set core declares derived)
+and `EXTENSION-REFERENCES-DELETED-CORE-TEXT` (an extension citing a core construct `theirs` no
+longer carries). Both are new level-triggered detectors with their own false-positive surfaces,
+and neither is required for the binding above to be honest — only `EXTENSION-FIXTURE-UNBOUND`
+is, which is why it shipped here. They want their own arc.
+
+## [0.171.3] — 2026-07-26
+
+### Fixed — one dead SHA from sprint 136 failed every retro from S298 onward
+
+Filed by the graph consumer as `PC-S298-CYCLE-COMMITS-UNSCOPED-FULL-HISTORY-SCAN`.
+
+`validate-cycle-commits.sh` validates every `## Sprint N — <artifact>` section in
+`validation-cycle-log.md`, not just the sprint being validated. Its `MERGED (prior sprint)`
+carve-out is what normally lets old sections pass — but it requires **every** row SHA to
+still resolve in the repo. A squash-history rewrite, or a log row written before the
+SHA-citation convention existed, leaves a dead SHA the carve-out cannot fire on, so the row
+falls through to `FAIL (<3 commits)` **with no path back**: nothing a future sprint does can
+make a dead SHA live again short of hand-editing 150-sprint-old log rows.
+
+Measured on the reference consumer: five sections from sprints 136–155 failed the S298 retro,
+all `0 commits, 0/N SHA hits`, none related to the sprint under validation. And because
+`validate-mandatory-rules.sh` Check 2 reports this script's process-wide exit code as the
+retro's own verdict, a retro could not tell *"my sprint skipped its cycles"* from *"some
+sprint 160 ago has a dead SHA"* — both rendered as one opaque `VALIDATE-MANDATORY-RULES:
+FAIL`. Distinguishing them required running the validator standalone and reading the
+per-artifact table by hand, which is exactly what the wrapper exists to avoid.
+
+A prior sprint's cycle integrity is locked in by merged trunk history either way; what is lost
+is the ability to RE-verify it here. That is a different fact from a skipped cycle, so it now
+has its own name — `UNVERIFIABLE (history rewritten)` — and does not fail the run.
+
+**The sprint under validation is never exempted**, and which sprint that is comes from the
+data: the retro branch names it, any branch may carry `sprint-<N>`, and otherwise it is the
+highest-numbered section in the log, which is the current one by construction.
+
+**The exemption is said out loud.** A skipped row nobody can see reads as a check that scanned
+everything and found nothing, so the run names each skipped section and states that the
+current sprint is never exempted this way.
+
+Four fixture assertions: the prior-sprint row passes as `UNVERIFIABLE`, the skip is named in
+the output, the **current** sprint with the same dead SHAs still FAILS (on a non-retro branch,
+deliberately — on a retro branch an older SQUASHED carve-out would have made that assertion
+pass for an unrelated reason), and a mutant that removes the prior-sprint test restores the
+old failure.
+
+## [0.171.2] — 2026-07-26
+
+### Fixed — step 2's derived fixture set was two-thirds of the suite, and step 2 knew it
+
+Filed by the graph consumer as `PC-S303-DERIVED-FIXTURE-SET-IS-MOST-OF-THE-SUITE`.
+
+Step 2 derived the self-update slice as the machinery diff plus "every `core/fixtures/<dir>/`
+whose `*.sh` names any machinery path". `machinery:` carries `core/scripts/ai-dlc/*`, which
+the same step tells the reader to translate to `core/scripts/*` — every distribution script —
+and a fixture's whole job is to invoke a validator. Measured at 0.168.1: **45 of 66**
+shippable fixtures name one. So "run the derived fixtures and require green before the push"
+was indistinguishable from "run the whole suite," and it contradicted the write instruction
+twenty lines later, which says to write `tests/fixtures/<dir>/` "for the covering fixtures —
+never the derived set per directory." With the derived set at 45 dirs those cannot both be
+meant, and the reader had to guess which.
+
+The derivation now runs against the machinery paths **this diff actually touched**, which on
+a one-script pull yields exactly one covering fixture — the step's own stated rationale ("a
+fixture's subject is always machinery"), and the reading under which the write instruction
+becomes a distinction rather than a contradiction.
+
+### Fixed — the drift scan restated its own exclusion list, and the copy was wrong
+
+Filed as `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES`. **The entry's premise
+is refuted** — the exclusions are documented and mechanically bound, by I12, whose `fixtures`
+row already records the exact measurement the entry re-derives. But the entry is evidence of a
+real defect one layer down, which is why it was filed at all.
+
+`unregistered-drift.sh`'s scan-set comment carried its own copy of the exclusion list, naming
+`scripts/`, `session-driver/`, `ci-templates/`, `git-hooks/` and `skills/ai-dlc-update` — and
+omitting `core/fixtures`, the one subtree where the reference consumer actually carries edited
+files. A reader of that file alone concluded the fixture gap was an oversight and filed it.
+Two homes for one list; the unbound copy is the one that misleads. The comment now points at
+I12 as the single authority instead of restating it.
+
+## [0.171.1] — 2026-07-26
+
+### Fixed — a prose mention of the close vocabulary deleted live ledger entries
+
+Filed by the graph consumer as `PC-S301-RETAINED-COPY-NEVER-CLOSES`, and the measured damage
+is larger than the entry claims.
+
+`ledger-reverify.sh` anchored its `^verify:` predicate to line-leading structure, with a
+comment explaining exactly why: *"the ledger is prose that DISCUSSES receipts as well as
+carrying them."* The close predicate one line above it — `/ADOPTED UPSTREAM|WITHDRAWN/` —
+never got the same treatment, and its failure is silent in the worse direction: a swallowed
+entry produces **no row at all**, not a wrong one.
+
+Measured on the reference consumer's live ledger, four entries with working receipts were
+invisible:
+
+| entry | what closed it |
+|---|---|
+| `PC-S296-LEDGER-REVERIFY-LAST-MATCH-WINS` | its own prose describing this bug class |
+| `PC-S298-SETUP-NEVER-INSTRUCTS-REMEDIATOR-MODEL-FILL` | "…and annotate `ADOPTED UPSTREAM (v…)`" |
+| `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | a blockquote of this tool's own output |
+| a `validate-provenance-block.sh` layer entry | a bold sentence naming the sentinel |
+
+An entry filing a defect *against the close vocabulary* could not describe its own subject
+without deleting itself.
+
+**The discriminator is line-leading structure, not the presence of the words.** An annotation
+opens its line — bare, or opening a bold span, optionally behind the `<br>` the entry bodies
+use to force a newline. A mention sits inside a sentence. Derived from every occurrence on the
+reference consumer: all seven real closes match (including `**BOTH ADOPTED UPSTREAM (verified
+…)**` and `<br>**ANGLE-BRACKET SKIP ADOPTED UPSTREAM (v…)**`, where words precede the marker
+inside the bold span), and all four mentions fail. An entry LINE keeps closing on a marker
+anywhere in it — the withdrawal lives in the heading, and the fork-retirement records are
+bullets whose titles end `→ ADOPTED UPSTREAM (v…)`.
+
+**And the retained copy now closes.** When a withdrawal supersedes an entry, the honest
+convention keeps the original text under a heading carrying `(original text, retained for the
+record)`. That copy carries no marker of its own, so it re-reported `HAND-REVIEW` forever,
+asking an operator to adjudicate a defect already retracted as false. The heading shape now
+closes it.
+
+Verified as a differential against the live ledger that produced the finding: 47 rows → 50.
+Exactly the four predicted entries became visible and exactly one — the retained copy — went
+quiet. The fixture asserts all three shapes plus a mutation that restores the unanchored
+predicate, and that mutation must swallow the prose entry **and nothing else**: an anchor that
+also drops a real close would be a different bug wearing the same green.
+
+One authoring note, recorded because it cost a run: the awk program is a single-quoted shell
+string, so an apostrophe in a comment inside it ends the quote. The first draft of this block
+had one.
+
+## [0.171.0] — 2026-07-26
+
+### Added — I31: every scan-marked core subtree has a disposition, not just a report
+
+Filed by the graph consumer as `PC-S300-NO-OVERRIDE-GRAIN-FOR-A-SECOND-SKILL`, and it is
+broader than filed.
+
+I12 makes a core subtree REPORTABLE. It says nothing about what the operator does next, and
+`HARD-UNREGISTERED-CORE-DRIFT` hands them exactly one command — `register-drift.sh`. That
+script recognised `skills/ai-dlc/*` and `team-roles/*`, named a refusal for `hooks/*`, and
+dropped everything else into `unrecognized core path`. Measured: I12 marks **two** further
+subtrees `scan` — `skills/ai-dlc-setup` and `schemas` — and both landed in that catch-all.
+So a consumer with deliberate divergence in either was told to run a command that answers
+with what reads as a typo, on a path the report itself supplied, and the pull re-reported
+`HARD-` on every subsequent run with no sanctioned disposition at all.
+
+Both refusals are structural, and now both say so. Overrides live at
+`.claude/skills/ai-dlc/overrides/` and each shadows a HEADING inside the ai-dlc skill; a
+second core skill and schema data have no heading to shadow. The refusal names the two real
+dispositions (accept per-entry, or upstream it) and states plainly that reverting destroys
+the divergence — the option a terse message lets an operator take by default.
+
+**The second list is bound to the first.** New invariant `I31` derives I12's `scan` set and
+`register-drift.sh`'s case labels and requires every scan-marked subtree to be either
+registerable or named in a no-grain refusal. A hand copy of one list beside the other is the
+same rot one file over; this is the shape I12 itself already uses. `SKILL.md` step 7
+documents the second refusal beside the hook one.
+
+Two fixture assertions, because a derived check has two ways to die: removing the no-grain
+case must FAIL I31 by name, and an unparseable `case` block must fail it *loudly* rather
+than bind an empty set and pass — "nothing to compare" must never read as "everything is
+disposed."
+
+## [0.170.0] — 2026-07-26
+
+### Added — the bug variant can finally stamp story provenance, and Check 17 asks it to
+
+Filed by the graph consumer as `PC-S298-BUG-INVESTIGATION-MISSING-PROVENANCE-STAMP`. Two
+consecutive bug-variant stories shipped with no `SKILL_INVOCATION_PROVENANCE` block; the
+feature variant has enforced one for releases.
+
+**The filed remedy — "add the same `stamp-story-provenance.sh --series` call
+`stories-test-strategy.md` makes" — cannot work, and finding out why is the fix.** That
+writer resolves the terminal pass from a convergence SERIES, pins
+`skill: ai-dlc-adversary-review`, and refuses anything whose verdict is not
+`EXIT_CONDITION_MET`. `bug-investigation.md` §4 is a ONE-SHOT
+`/bmad-review-adversarial-general`: no series, no verdict — core says so itself, since Check
+24 self-skips `bug-investigation` by name for exactly that reason. So the writer refused
+every bug story by construction, and nothing else wrote a block. The obligation had no
+owner, the same shape as 0.169.5's finding.
+
+**A second profile, not a second writer.** `schemas/provenance-block.json` gains
+`bug-story-provenance`: same envelope, same per-story fields, pinned to
+`bmad-review-adversarial-general`, and carrying no `verdict` anywhere in its lists.
+`stamp-story-provenance.sh` gains `--profile <name>` (default `story-provenance`, so every
+existing call is unchanged) and **derives the verdict rule from the profile rather than
+from the flag**:
+
+- profile with `verdict` batch-invariant → demand `EXIT_CONDITION_MET` (today's behaviour,
+  byte-identical);
+- profile without it → REFUSE a terminal pass that carries a verdict at all.
+
+So neither door opens the other. A convergence pass cannot be laundered onto a story
+through the one-shot door with its verdict silently discarded, and a third profile cannot
+inherit the wrong rule by accident.
+
+`bug-investigation.md` §4 now dispatches ONE `adversary` to a canonical output path that
+deliberately avoids the `-adversarial-p<M>` suffix (Check 24 globs that prefix, and a
+verdict-less pass swept into a series fails rung A), then stamps the story from it. Check 17
+gains a **bug-fix story readiness** arm requiring both the shape validator and the
+`--check` cross-check.
+
+The fixture gained seven assertions and a schema mutant. The mutant is worth recording: the
+first version dropped `verdict` from the convergence profile expecting the guard to go
+quiet, and it did not — it flipped to the one-shot rule and refused for a different reason.
+The assertion only became a real kill once it demanded a positive outcome (an unconverged
+pass actually reaching a stamp) instead of the mere absence of the old message, with an
+unmutated control proving the harness itself was not the thing doing the refusing.
+
+## [0.169.7] — 2026-07-26
+
+### Fixed — the mechanical region emitted shell escapes into markdown
+
+Filed by the graph consumer as `PC-S302-EMIT-REPORT-EMITS-LITERAL-BACKSLASHES-INTO-THE-MECHANICAL-REGION`.
+
+`emit-report.sh` rendered the region's first content line with
+
+```
+printf '\n_base_ \`%s\` → _theirs_ \`%s\`.\n' "$BASE" "$THEIRS"
+```
+
+The string is **single**-quoted, where a backslash before a backtick is not an escape — it
+is a literal backslash. Confirmed by byte inspection rather than by reading the source:
+
+```
+… | sed -n '3p' | od -c
+→ _  b  a  s  e  _     \  `  f  7  0  5  1  2  e  \  `     → …
+```
+
+The region is specified to be pasted verbatim into a markdown report, where `` \` `` is an
+escaped backtick — so the one line naming the two shas the whole report is about rendered
+with literal backslashes instead of as inline code.
+
+**The byte-match is what made it stick.** `--verify` compares the report's region against a
+fresh render, so a consumer who wrote correct markdown got
+`FAIL: the report's 'reconcile-mechanical' region is STALE or HAND-EDITED` and was pushed
+back to the malformed text. The gate was behaving as designed; the render was wrong, and
+fixing it at the gate would have been the wrong layer.
+
+Consumer-visible: a report generated before this release now fails `--verify` until it is
+re-rendered, which is the intended direction.
+
+The fixture gained the assertion the region never had — no literal backslash-backtick on
+the sha line — plus a mutant that re-escapes inside the single quotes, rendered from a copy
+of the whole `reconcile/` directory so the mutant's helper lookups resolve exactly as the
+real script's do and a missing helper cannot masquerade as a kill.
+
+## [0.169.6] — 2026-07-26
+
+### Fixed — `ledger-rotate.sh`'s nothing-to-rotate guard has never fired
+
+Filed by the graph consumer as `PC-S302-LEDGER-ROTATE-ZERO-CASE-GUARD-IS-DEAD`, and
+reproduced here before being fixed.
+
+`grep -c` prints `0` on no match **and** exits 1. The entry count was written
+`grep -c . "$TMPD/moved-names" 2>/dev/null || echo 0`, so on the ordinary case — a ledger
+with nothing newly closed — the fallback fired on exactly the case it appears to cover and
+`n_move` became the two-line string `0\n0`. The `-eq 0` early exit below it then errored
+with `integer expression expected` and evaluated FALSE, so the run fell through it every
+time:
+
+```
+ledger-rotate.sh ledger.md
+→ ledger-rotate.sh: line 117: [: 0
+  0: integer expression expected
+  ledger-rotate: 0
+  0 closed entries would move (0 of 9 lines, leaving 9).
+```
+
+The report contradicted itself, and `--apply` took the write path: on a consumer with no
+archive yet, it created a header-only archive file the run had no reason to write. No
+content was ever lost — the line-accounting refusal above it holds `keep` to the whole
+ledger when nothing moved — so severity is low, but the guard meant to make this a clean
+no-op was inoperative.
+
+The fallback is now gone rather than replaced. `moved-names` is pre-created, so the only
+question is whether it is empty, and `grep -c` answers that on stdout without any help.
+
+The fixture's idempotency assertion could not see this: the broken form printed
+`0 closed entries would move`, which contains the substring that check greps for. The new
+assertion tests what actually separates a fired guard from a fall-through — the early-exit
+line, a clean stderr, and an archive that was never created — and a mutant restoring the
+fallback proves it load-bearing, with an unmutated control in the same directory so a
+harness failure cannot score as a kill.
+
 ## [0.169.5] — 2026-07-26
 
 ### Fixed — the FR capability citation was an obligation nobody could satisfy

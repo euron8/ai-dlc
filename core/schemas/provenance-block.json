@@ -289,6 +289,62 @@
         "findings_minor",
         "verdict"
       ]
+    },
+    "bug-story-provenance": {
+      "$comment": [
+        "The one-shot residue stamped onto a BUG-FIX story, required by Check 17's bug-fix",
+        "story-readiness gate. Same writer, same envelope, same per-story fields as",
+        "story-provenance — it differs in exactly two ways, and both follow from the bug variant",
+        "running a ONE-SHOT rather than a convergence cycle.",
+        "",
+        "(1) `pin.skill` is bmad-review-adversarial-general, the evaluation steps/bug-investigation.md",
+        "actually dispatches. (2) `verdict` is absent from every list here. A one-shot stamps NO",
+        "verdict — team-roles/adversary.md says so, and gate-validation.md Check 24 self-skips",
+        "bug-investigation by name for the same reason — so demanding EXIT_CONDITION_MET here would",
+        "be demanding a field the producer is forbidden to write. The writer reads that absence as",
+        "the profile's instruction: with no `verdict` in batch_invariant it REFUSES a terminal pass",
+        "that carries one at all, so a convergence pass can never be laundered through this profile,",
+        "and the convergence door keeps its own EXIT_CONDITION_MET guard unchanged.",
+        "",
+        "Without this profile the bug variant had no path to a block at all: the writer pinned the",
+        "convergence skill and required a verdict, so it refused every bug story, and nothing else",
+        "wrote one. Two consecutive bug-variant stories shipped with no provenance."
+      ],
+      "title": "a one-shot review residue stamped onto a bug-fix story file",
+      "pin": {
+        "skill": "bmad-review-adversarial-general",
+        "mode": "subagent"
+      },
+      "require": [
+        "artifact",
+        "artifact_sha"
+      ],
+      "batch_invariant": [
+        "skill",
+        "invoked_at",
+        "tool_use_id",
+        "mode",
+        "lead_role",
+        "findings_critical",
+        "findings_major",
+        "findings_minor"
+      ],
+      "per_story": [
+        "artifact",
+        "artifact_sha"
+      ],
+      "fields": [
+        "skill",
+        "invoked_at",
+        "tool_use_id",
+        "mode",
+        "lead_role",
+        "artifact",
+        "artifact_sha",
+        "findings_critical",
+        "findings_major",
+        "findings_minor"
+      ]
     }
   },
   "rules": {

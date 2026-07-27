@@ -177,6 +177,44 @@ receipt would report STILL-LIVE forever, because no upstream change can make a d
 never existed stop existing. A finished entry must not ask for a verdict on the next pull.
 
 verify: manual
+
+---
+
+## PC-FIXTURE-PROSE-MENTIONS-THE-VOCABULARY — an OPEN entry that has to name the close markers
+
+This entry is OPEN. Its body explains the convention, which means quoting it: close only once
+the grep is non-zero, and annotate `ADOPTED UPSTREAM (vX.Y.Z, verified <date>)` then. It also
+quotes the tool's own output, the way a defect report against the tool must:
+
+> `theirs:$path now CONTAINS "$sub" — upstream absorbed this at $TV. … annotate 'ADOPTED UPSTREAM
+> (v$TV, verified <date>)'`
+
+and notes in passing that the sentinel was ADOPTED UPSTREAM in v0.135.0 as narrative prose.
+None of that is an annotation. An unanchored close predicate read all three as one and deleted
+this entry from the report — no row at all, which is worse than a wrong row.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-BOLD-ANNOTATION-WITH-A-PREFIX — a real close whose bold span opens with words
+
+**BOTH ADOPTED UPSTREAM (verified for the fixture) — this section is now empty.** The marker is
+not the first thing on the line, but the bold span that carries it is, which is what an
+annotation looks like and a mention does not.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-WITHDRAWN (original text, retained for the record) — the copy a withdrawal supersedes
+
+Retaining the original text of a withdrawn entry is the honest thing to do: the withdrawal is
+only legible beside what it withdraws. But this copy carries no close marker of its own — the
+withdrawal lives in the superseding entry's heading — so it re-reported forever, asking an
+operator to adjudicate a defect that was already retracted as false.
+
+verify: manual
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

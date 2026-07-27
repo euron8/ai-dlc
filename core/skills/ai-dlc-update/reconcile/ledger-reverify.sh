@@ -306,6 +306,17 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 # output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
 # instead DROP such an entry, and the reference consumer has a live one.
 awk -v DASH=' — ' "$(ledger_entry_awk)"'
+  # An ENTRY LINE closes its own entry two ways. A marker anywhere on it is one: the withdrawal
+  # lives in the heading (`## PC-FOO — **WITHDRAWN …**`) and the fork-retirement records are
+  # bullets whose title ends `→ ADOPTED UPSTREAM (v…)`. The retained-copy parenthetical is the
+  # other: when a withdrawn entry is superseded, the honest convention keeps its original text
+  # under a heading carrying `(original text, retained for the record)` — and that copy carries
+  # no marker of its own, so it re-reported HAND-REVIEW forever, asking an operator to adjudicate
+  # a defect that was retracted as false. The withdrawal marker closes the superseder; this
+  # closes the copy it supersedes.
+  function entry_line_closes(s) {
+    return (s ~ /ADOPTED UPSTREAM|WITHDRAWN/) || (s ~ /\(original text, retained for the record\)/)
+  }
   function flush(){
     if (has_verify && !closed && label != "")
       printf "%s\t%s\n", label, directive
@@ -319,6 +330,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/,"",l)
       gsub(/`/,"",l); label=l
+      if (entry_line_closes($0)) closed=1
       next
     }
     if (shape == "heading") {
@@ -327,6 +339,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       p=index(l, DASH); if (p > 0) l=substr(l, 1, p-1)
       sub(/[[:space:]]+$/,"",l)
       gsub(/`/,"",l); label=l
+      if (entry_line_closes($0)) closed=1
       next
     }
   }
@@ -343,7 +356,29 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # `**ADOPTED UPSTREAM (v`, and lib.sh records that the two differ deliberately. A withdrawn
   # entry therefore stops emitting a row but is not auto-archived: the silent-skip direction,
   # which that same note names as the safe one of the two. Rotating a withdrawal is a hand call.
-  /ADOPTED UPSTREAM|WITHDRAWN/ { closed=1 }
+  #
+  # ANCHORED, for the same reason `^verify:` below is — and this predicate needed it MORE, because
+  # its failure is silent in the worse direction. Unanchored, a PROSE MENTION of the vocabulary
+  # closed a live entry, and the operator saw no row at all rather than a wrong one. Measured on
+  # the reference consumer: FOUR entries with live receipts were invisible — three closed by a
+  # sentence that quotes the marker while explaining when to write it (`… and annotate
+  # `ADOPTED UPSTREAM (v…)` once the grep is non-zero`), one by a blockquote of the output this
+  # very file emits. An entry that documents the close vocabulary could not describe its own
+  # subject without deleting itself.
+  # (No apostrophes below this point: the awk program is a single-quoted shell string, and one
+  # in a comment ends it — which is exactly how the first draft of this block failed to parse.)
+  #
+  # THE DISCRIMINATOR IS LINE-LEADING STRUCTURE, not the presence of the words. An annotation is
+  # written at the start of its line — bare, or opening a bold span, optionally behind the `<br>`
+  # the entry bodies use to force a newline. A mention sits inside a sentence. Derived from every
+  # occurrence on the reference consumer: seven real closes (`**ADOPTED UPSTREAM (v…`,
+  # `**BOTH ADOPTED UPSTREAM (verified …`, `<br>**ANGLE-BRACKET SKIP ADOPTED UPSTREAM (v…`, a bare
+  # line-start form, and the withdrawal) all match; all four mentions fail. Entry lines are handled
+  # in the branch above, where the marker legitimately sits mid-line after the title.
+  #
+  # `[^`]*` between the bold opener and the marker is defence in depth: an annotation never quotes
+  # itself, so a code span before the words is a mention even when the bold happens to lead.
+  /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*(\*\*[^`]*)?(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }
   # ANCHORED to the start of the line. The ledger is prose that DISCUSSES receipts as well as
   # carrying them, and an unanchored match treated both alike: "explicitly NO verify: field"
   # in a sentence registered as a directive. The scalar is last-match-wins, so a prose mention

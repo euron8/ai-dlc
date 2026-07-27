@@ -58,7 +58,13 @@ none_or() { if [ -n "$1" ]; then printf '%s\n' "$1"; else echo "none"; fi; }
 
 render() {
   echo "<!-- BEGIN GENERATED: reconcile-mechanical — rendered by reconcile/emit-report.sh; do not hand-edit -->"
-  printf '\n_base_ \`%s\` → _theirs_ \`%s\`.\n' "$BASE" "$THEIRS"
+  # SINGLE-quoted: a backslash before a backtick is NOT an escape here, it is a literal
+  # backslash, and this region is specified to be pasted VERBATIM into a markdown report —
+  # where `\`` renders as an escaped backtick, so the one line naming the two shas showed
+  # them wrapped in literal backslashes instead of as inline code. `--verify` byte-matches
+  # the region against a fresh render, so a consumer who wrote correct markdown got a FAIL
+  # and was pushed back to the malformed text.
+  printf '\n_base_ `%s` → _theirs_ `%s`.\n' "$BASE" "$THEIRS"
 
   local pc ud ld hb rl del classify
   pc="$(bash "$SELF/preclassify.sh" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null || true)"

@@ -104,5 +104,109 @@ U="$ROOT/unconverged"
 expect "unconverged: refuse to stamp" 1 "not EXIT_CONDITION_MET" \
   bash "$WRITER" --series "$U/s1-stories-adversarial" "$U/stories/story-1.md"
 
+O="$ROOT/oneshot"
+
+# --- The bug variant. A ONE-SHOT stamps no verdict and cites the bmad skill, so the default
+# profile refuses it by construction and nothing else writes a block onto a bug story. Two
+# consecutive bug-variant stories shipped with none. Assertions 12-17 are the two doors and the
+# proof that neither opens the other.
+
+# 12. THE DEFECT: the default profile cannot stamp a bug story at all.
+expect "oneshot: default profile refuses the bmad skill" 1 "expected 'ai-dlc-adversary-review'" \
+  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" "$O/stories/story-bug-1.md"
+
+# 13. --check before the stamp is DRIFT (a bug story with no block is not silently fine).
+expect "oneshot: --check pre-stamp = DRIFT" 1 "DRIFT" \
+  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
+    "$O/stories/story-bug-1.md"
+
+# 14. Stamp with the bug profile. The summary must NOT print a bare `None` where the verdict
+#     would be: a field the producer is forbidden to write reads as a parse failure otherwise.
+expect "oneshot: stamp under the bug profile" 0 "one-shot, no verdict" \
+  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance \
+    "$O/stories/story-bug-1.md"
+
+# 15. --check now passes, and the block cites the skill Check 17's bug arm requires.
+expect "oneshot: --check post-stamp = OK" 0 "OK" \
+  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile bug-story-provenance --check \
+    "$O/stories/story-bug-1.md"
+ASSERTIONS=$((ASSERTIONS + 1))
+if grep -q '^skill: bmad-review-adversarial-general$' "$O/stories/story-bug-1.md" \
+   && ! grep -q '^verdict:' "$O/stories/story-bug-1.md"; then
+  printf '  ok    %-46s\n' "oneshot: block cites the bmad skill, no verdict"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-46s\n' "oneshot: block cites the bmad skill, no verdict"
+fi
+
+# 16. THE REVERSE DOOR. A convergence pass carrying the one-shot's skill name must still be
+#     refused by the one-shot profile — on the VERDICT rule, not the skill pin. Without this the
+#     bug profile would be a hole through which an unconverged cycle reaches a story with its
+#     verdict silently dropped.
+expect "oneshot: verdict-bearing pass refused" 1 "must carry no verdict" \
+  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot-with-verdict.md" --profile bug-story-provenance \
+    "$O/stories/story-bug-1.md"
+
+# 17. An unknown profile is a usage error, not a silent fall-back to the default.
+expect "unknown profile is refused (exit 2)" 2 "is not a profile in the schema" \
+  bash "$WRITER" --terminal "$O/s1-bug-fix-oneshot.md" --profile no-such-profile \
+    "$O/stories/story-bug-1.md"
+
+# 18. MUTATION — the verdict rule is DERIVED from the profile, so deleting `verdict` from the
+#     CONVERGENCE profile's batch_invariant must turn assertion 11 (refuse-unconverged) into a
+#     pass-through. Mutating the SCHEMA rather than the script is the point: it proves the guard
+#     reads the profile and is not a constant the script happens to agree with.
+SCHEMA_SRC="$(dirname "$WRITER")/../schemas/provenance-block.json"
+[ -f "$SCHEMA_SRC" ] || SCHEMA_SRC="$(dirname "$WRITER")/../../schemas/provenance-block.json"
+MUTROOT="$ROOT/mut"; mkdir -p "$MUTROOT/scripts" "$MUTROOT/schemas"
+cp "$WRITER" "$MUTROOT/scripts/stamp-story-provenance.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if [ ! -f "$SCHEMA_SRC" ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: schema not found beside the writer"
+else
+  # The subject: a CONVERGENCE pass (right skill) carrying NO verdict at all, and a fresh story.
+  # Under the real schema `verdict` is batch-invariant, so its absence is not EXIT_CONDITION_MET
+  # and the writer refuses. Under the mutant the profile has become a one-shot profile, no verdict
+  # is present to object to, and the stamp goes through — which is the derived behaviour under test.
+  grep -v '^verdict:' "$C/s1-stories-adversarial-p2.md" > "$MUTROOT/noverdict-p1.md"
+  mk_mut_story() { printf '# Story mut\n\n## Acceptance Criteria\n- AC(a): thing.\n' > "$MUTROOT/story-mut.md"; }
+  mut_run() { # -> the writer's output, resolving the schema from $MUTROOT/schemas/
+    mk_mut_story
+    bash "$MUTROOT/scripts/stamp-story-provenance.sh" \
+      --terminal "$MUTROOT/noverdict-p1.md" "$MUTROOT/story-mut.md" 2>&1
+  }
+  # CONTROL — the same writer, the same tree, the UNMUTATED schema. It must still refuse, or the
+  # harness itself is what kills the guard and the mutant below proves nothing.
+  cp "$SCHEMA_SRC" "$MUTROOT/schemas/provenance-block.json"
+  ctl="$(mut_run)"
+  # MUTANT — drop `verdict` from the CONVERGENCE profile's batch_invariant and nothing else.
+  python3 - "$SCHEMA_SRC" "$MUTROOT/schemas/provenance-block.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+p = s["profiles"]["story-provenance"]
+p["batch_invariant"] = [f for f in p["batch_invariant"] if f != "verdict"]
+json.dump(s, open(sys.argv[2], "w"), indent=2)
+PY
+  mut="$(mut_run)"
+
+  if ! printf '%s' "$ctl" | grep -qF "not EXIT_CONDITION_MET"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "FIXTURE BROKEN: control run does not refuse"
+    printf '        out: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-160)"
+  elif printf '%s' "$mut" | grep -qF "not EXIT_CONDITION_MET"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "mutation: schema mutant had no effect"
+  elif ! printf '%s' "$mut" | grep -qF "stamped 1 of 1"; then
+    # Absence of the refusal is not a kill on its own — the run could have died for an unrelated
+    # reason. The kill is the guard letting an UNCONVERGED pass through to a real stamp.
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-46s\n' "mutation: mutant neither refused nor stamped"
+    printf '        out: %s\n' "$(printf '%s' "$mut" | tr '\n' ' ' | cut -c1-160)"
+  else
+    printf '  ok    %-46s\n' "mutation: dropping verdict from the profile disarms the guard"
+  fi
+fi
+
 echo "  ---- $ASSERTIONS assertions, $FAILURES failing ----"
 [ "$FAILURES" -eq 0 ]

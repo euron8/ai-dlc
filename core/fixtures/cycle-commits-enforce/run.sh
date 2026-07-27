@@ -143,6 +143,91 @@ else
   echo "  note  validate-mandatory-rules.sh absent — delegation assertions skipped"
 fi
 
+# --- 6. A PRIOR sprint's unreachable SHAs must not fail every future retro -----
+# The MERGED (prior sprint) carve-out needs EVERY row SHA to resolve in the repo. A squash-
+# history rewrite, or a log row written before the SHA-citation convention, leaves a dead SHA
+# the carve-out cannot fire on — so the row fell through to `FAIL (<N commits)` with no path
+# back short of hand-editing a 150-sprint-old log. Check 2 reports this script's process-wide
+# exit code as the retro's own verdict, so every future sprint inherited somebody else's dead
+# history as its own opaque FAIL.
+write_log 3
+{
+  printf '\n## Sprint 136 — retro\n\n'
+  printf '| # | Cycle | Notes | SHA |\n'
+  printf '|---|-------|-------|-----|\n'
+  printf '| 1 | party-mode cycle 1 | note | `deadbee` |\n'
+  printf '| 2 | adversarial-review pass 1 | note | `deadbef` |\n'
+  printf '| 3 | party-mode cycle 2 | note | `deadbf0` |\n'
+} >> "$WORK/$LOG"
+bash "$VALIDATOR" ai-dlc/retro/sprint-900 >"$WORK/out.txt" 2>&1
+rc=$?
+if [ "$rc" = "0" ] && grep -q 'UNVERIFIABLE (history rewritten)' "$WORK/out.txt" \
+   && grep -q 'RESULT: PASS' "$WORK/out.txt"; then
+  ok "a prior sprint's unreachable SHAs report UNVERIFIABLE and do not fail the current sprint"
+else
+  bad "a prior sprint's dead SHAs still fail the run (rc=$rc)"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# The exemption must be SAID, not swallowed: a skip nobody can see reads as a check that
+# scanned everything and found nothing.
+if grep -q 'NOTE: 1 prior-sprint section(s) UNVERIFIABLE' "$WORK/out.txt"; then
+  ok "the skipped section is named in the output, not silently dropped"
+else
+  bad "the UNVERIFIABLE exemption was applied without saying so"
+fi
+
+# --- 7. THE CURRENT sprint is never exempted this way -------------------------
+# Without this, assertion 6 would read as a blanket amnesty for any dead SHA, and the check it
+# is supposed to preserve — "MY sprint skipped its cycles" — would be gone.
+#
+# A NON-retro branch, deliberately: on a retro branch the current sprint's planning artifacts
+# are already skipped as SQUASHED by an older carve-out, which would make this assertion pass
+# for a reason that has nothing to do with the one under test.
+git checkout -q -b ai-dlc/story/sprint-900
+{
+  printf '## Sprint 900 — brief\n\n'
+  printf '| # | Cycle | Notes | SHA |\n'
+  printf '|---|-------|-------|-----|\n'
+  printf '| 1 | party-mode cycle 1 | note | `deadbee` |\n'
+  printf '| 2 | adversarial-review pass 1 | note | `deadbef` |\n'
+  printf '| 3 | party-mode cycle 2 | note | `deadbf0` |\n'
+} > "$WORK/$LOG"
+bash "$VALIDATOR" ai-dlc/story/sprint-900 >"$WORK/out.txt" 2>&1
+rc=$?
+if [ "$rc" = "1" ] && ! grep -q 'UNVERIFIABLE' "$WORK/out.txt"; then
+  ok "the sprint UNDER VALIDATION with dead SHAs still FAILS (the exemption is not an amnesty)"
+else
+  bad "the current sprint was exempted as UNVERIFIABLE (rc=$rc) — the check it preserves is gone"
+  sed 's/^/        /' "$WORK/out.txt"
+fi
+git checkout -q ai-dlc/retro/sprint-900
+
+# --- 8. MUTATION: remove the prior-sprint test and assertion 6's input must FAIL again --
+# The exemption keys on `sprint_n != current_sprint_n`. Flip that to never-true and the dead
+# prior-sprint SHAs go back to failing the run, which is the state the consumer measured.
+MUT2="$WORK/mutant-scope.sh"
+sed 's/if str(sprint_n) != str(current_sprint_n):/if False:/' "$VALIDATOR" > "$MUT2" || exit 2
+write_log 3
+{
+  printf '\n## Sprint 136 — retro\n\n'
+  printf '| # | Cycle | Notes | SHA |\n'
+  printf '|---|-------|-------|-----|\n'
+  printf '| 1 | party-mode cycle 1 | note | `deadbee` |\n'
+  printf '| 2 | adversarial-review pass 1 | note | `deadbef` |\n'
+  printf '| 3 | party-mode cycle 2 | note | `deadbf0` |\n'
+} >> "$WORK/$LOG"
+if cmp -s "$VALIDATOR" "$MUT2"; then
+  bad "MUTATION: the scope predicate was rewritten — assertion 6 is unproven until this sed is updated"
+else
+  bash "$MUT2" ai-dlc/retro/sprint-900 >"$WORK/mut2.txt" 2>&1
+  if [ "$?" = "1" ] && ! grep -q 'UNVERIFIABLE' "$WORK/mut2.txt"; then
+    ok "MUTATION: without the prior-sprint test, dead SHAs fail the run again (assertion 6 is real)"
+  else
+    bad "MUTATION: the run still passed without the prior-sprint test — assertion 6 is vacuous"
+    sed 's/^/        /' "$WORK/mut2.txt"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "cycle-commits-enforce: PASS"

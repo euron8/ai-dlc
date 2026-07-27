@@ -105,10 +105,41 @@ push_candidate: false
 Domain addition that must be re-read whenever alpha.md moves.
 MD
 
+# Two `kind: check` extension entries that declare a `fixtures:` binding -- the field that puts
+# a CONSUMER check's adversarial fixture into core H1's derived coverage set. One binding
+# resolves; one does not. The binding IS the mechanism, so a dangling one makes H1 report
+# coverage that does not exist, and only the second must be reported.
+mkdir -p "$CONSUMER/.claude/skills/ai-dlc/extensions/checks" \
+         "$CONSUMER/tests/fixtures/check-present-bypass"
+: > "$CONSUMER/tests/fixtures/check-present-bypass/seed.sh"
+cat > "$CONSUMER/.claude/skills/ai-dlc/extensions/checks/check-bound.md" <<'MD'
+---
+kind: check
+hooks: steps/alpha.md
+id: check-bound
+push_candidate: false
+fixtures: check-present-bypass
+---
+
+A consumer check whose fixture directory exists.
+MD
+cat > "$CONSUMER/.claude/skills/ai-dlc/extensions/checks/check-dangling.md" <<'MD'
+---
+kind: check
+hooks: steps/alpha.md
+id: check-dangling
+push_candidate: false
+fixtures: tests/fixtures/check-never-written
+---
+
+A consumer check whose fixture directory was never written.
+MD
+
 cat > "$WORK/env.sh" <<ENV
 RECONCILE="$RECONCILE"
 APPLY="$RECONCILE/apply.sh"
 DRIFT="$RECONCILE/unregistered-drift.sh"
+LAYER="$RECONCILE/layer-drift.sh"
 DIST="$DIST"
 BASE="$BASE"
 THEIRS="$THEIRS"

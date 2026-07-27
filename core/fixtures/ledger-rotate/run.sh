@@ -107,6 +107,55 @@ else
   bad "FIXTURE BROKEN — could not build the mutant; the guard assertion below is vacuous"
 fi
 
+# --- Assertion 7: the nothing-to-rotate guard FIRES on the nothing-to-rotate case -------
+# Assertion 5 cannot see this. The broken form printed `ledger-rotate: 0` + newline +
+# `0 closed entries would move (…)`, which CONTAINS the substring the idempotency check
+# greps for — so that check passed while the guard beside it was inoperative. What separates
+# a fired guard from a fall-through is the early-exit line, a clean stderr, and an archive
+# the run never had a reason to create.
+mkdir -p "$WORK/noop"
+printf '# Push-candidate ledger\n\n## PC-OPEN-ONLY — nothing in this file is closed\n\nBody.\n' \
+  > "$WORK/noop/push-candidate-ledger.md"
+
+noop_guard_holds() { # <rotate-script> -> 0 iff the no-op guard fired cleanly
+  local rot="$1" dir out rc
+  dir="$WORK/noop-run"
+  rm -rf "$dir"; mkdir -p "$dir"
+  cp "$WORK/noop/push-candidate-ledger.md" "$dir/push-candidate-ledger.md"
+  out="$(bash "$rot" "$dir/push-candidate-ledger.md" --apply 2>"$dir/stderr")"
+  rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  printf '%s' "$out" | grep -q 'nothing to rotate' || return 1
+  grep -q 'integer expression expected' "$dir/stderr" && return 1
+  [ -f "$dir/push-candidate-ledger.archive.md" ] && return 1
+  return 0
+}
+
+if noop_guard_holds "$ROT"; then
+  ok "nothing to rotate: exits early, writes no archive, no 'integer expression expected'"
+else
+  bad "the nothing-to-rotate guard did not fire — the run fell through to the write path"
+fi
+
+# --- Assertion 8: MUTATION — restore the `|| echo 0` fallback; the guard must die --------
+# `grep -c` PRINTS 0 on no match and ALSO exits 1, so the fallback fires on exactly the case
+# it looks like it covers and makes n_move the two-line string `0\n0`.
+MUTD="$WORK/mut-noop"; mkdir -p "$MUTD"
+cp "$(dirname "$ROT")/lib.sh" "$MUTD/lib.sh" 2>/dev/null
+cp "$ROT" "$MUTD/control.sh"
+sed 's@n_move="$(grep -c . "$TMPD/moved-names")"@n_move="$(grep -c . "$TMPD/moved-names" 2>/dev/null || echo 0)"@' \
+  "$ROT" > "$MUTD/mutant.sh"
+
+if ! noop_guard_holds "$MUTD/control.sh"; then
+  bad "FIXTURE BROKEN — an UNMUTATED copy in the mutant directory already fails the guard, so assertion 8 would score a false pass"
+elif cmp -s "$ROT" "$MUTD/mutant.sh"; then
+  bad "FIXTURE BROKEN — the mutation matched nothing, so assertion 7 is unproven"
+elif noop_guard_holds "$MUTD/mutant.sh"; then
+  bad "the guard still 'fires' with the fallback restored — assertion 7 is vacuous"
+else
+  ok "mutation: restoring '|| echo 0' kills the no-op guard (assertion 7 is load-bearing)"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "ledger-rotate: PASS"

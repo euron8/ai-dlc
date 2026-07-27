@@ -85,7 +85,8 @@ Create a bug-fix story in `_bmad-output/planning-artifacts/stories/`:
 
 ### 4. Validation
 
-`/bmad-review-adversarial-general` — review the fix approach.
+Dispatch ONE `adversary` (Agent tool, bound to `.claude/team-roles/adversary.md`
+per SKILL.md Rule 19) to run `/bmad-review-adversarial-general` on the fix story.
 **ONE-SHOT — the bmad skill is correct here and stays** (no loop, no verdict, no
 counted exit condition; the skill's ≥10 floor buys a cynical sweep and costs
 nothing). The native `adversary` review is for CONVERGENCE cycles only.
@@ -94,7 +95,28 @@ nothing). The native `adversary` review is for CONVERGENCE cycles only.
 - Is test coverage sufficient?
 - **Source fidelity pass:** Does the story address the specific issue
   described? Does the fix approach match what was requested?
+
+It writes findings to `_bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md`
+carrying a `SKILL_INVOCATION_PROVENANCE v1` block with
+`skill: bmad-review-adversarial-general`, `mode: subagent`, and the three
+`findings_*` counts — and **no `verdict`**, which a one-shot never stamps. The
+path must not carry an `-adversarial-p<M>` suffix: Check 24 globs that prefix and
+a verdict-less pass swept into a series fails rung A.
+
 Apply all improvements. Append changelog to the story.
+
+**Then stamp the story — MECHANICALLY, never by hand.** Check 17's bug-fix
+story-readiness gate requires a `SKILL_INVOCATION_PROVENANCE` block on the story
+itself, and nothing else writes one. Run:
+
+`scripts/ai-dlc/stamp-story-provenance.sh --terminal
+_bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md --profile
+bug-story-provenance <story-file>`
+
+`--profile bug-story-provenance` is load-bearing: the default profile pins the
+convergence skill and demands `verdict: EXIT_CONDITION_MET`, so it refuses every
+bug story by construction. You author nothing; the gate's `--check` re-derives
+the same block and fails on any drift.
 
 ### 5. Sprint Setup
 
