@@ -107,12 +107,37 @@ control from the same tree.
 
 ### Migration
 
-`ai-dlc-update` overwrites role files from upstream, and `settings-merge.sh`
-provisions `aiDlcModels` from the template. A consumer whose live strings match the
-shipped defaults converges with no action. **A consumer that re-tiered a role, or runs
-on Bedrock, must set the values in `aiDlcModels` after the pull** — the pull cannot
-read them out of the role files it is replacing. Check the report for any role whose
-key resolves differently than the string it previously pinned.
+Every role file lands in `BOTH-CHANGED->CLASSIFY`: upstream restructured the block
+and the consumer's copy carries substituted strings. Most of those are not real
+semantic merges — the consumer's only delta was the model strings, which stopped
+being consumer-owned in that file. Split the set before merging anything:
+
+```sh
+for f in .claude/team-roles/*.md; do
+  n=$(diff <(git -C <dist> show <base>:core/team-roles/$(basename "$f") \
+              | grep -vE '^- (Personal|Bedrock): `/model|^<!-- \{[a-z_]*model') \
+           <(grep -vE '^- (Personal|Bedrock): `/model|^<!-- \{[a-z_]*model' "$f") \
+      | grep -c '^[<>]')
+  printf '%-30s %s\n' "$(basename "$f")" "$n"
+done
+```
+
+A `0` means the model lines were the whole delta — take theirs, no merge. Anything
+non-zero is a genuine consumer change (typically the `## Ownership` block, which is
+still a declared site) and needs the usual semantic merge. On the reference consumer
+that split was 10 take-theirs and 3 merges.
+
+Then set `aiDlcModels` values from the strings the role files previously pinned.
+`settings-merge.sh` provisions the shipped defaults; it cannot read the old strings
+out of the files it is replacing. A consumer already on those defaults converges with
+no action. **A consumer that re-tiered a role, or runs on Bedrock, must set the values
+itself** — and a re-tiered role additionally needs its `- Model:` key changed, which
+is now a rulebook edit routed through an override rather than a masked site.
+
+Consumer `overrides/` and `extensions/` are not rewritten by the pull and may still
+reference the retired `- Personal:`/`- Bedrock:` line shape. The new
+`reconcile/retired-layer-contract.sh` step reports them; on the reference consumer it
+found two.
 
 ## [0.173.2] — 2026-07-27
 
