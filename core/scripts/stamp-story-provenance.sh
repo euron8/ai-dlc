@@ -50,6 +50,7 @@ SERIES=""
 TOOL_USE_ID=""
 CHECK_ONLY="no"
 PROFILE_NAME="story-provenance"
+PRINT_SCHEMA="no"
 STORIES=()
 
 while [[ $# -gt 0 ]]; do
@@ -59,6 +60,13 @@ while [[ $# -gt 0 ]]; do
         --profile)  PROFILE_NAME="${2:-}"; shift 2 ;;
         --tool-use-id) TOOL_USE_ID="${2:-}"; shift 2 ;;
         --check)    CHECK_ONLY="yes"; shift ;;
+        # Print the schema this writer WOULD load, then exit. Diagnostic, and the reason it
+        # exists: the install mapping splits the writer from the schema — core/scripts/<x> lands
+        # at <root>/scripts/ai-dlc/<x> while core/schemas/ lands at <root>/.claude/schemas/ — so
+        # "walk up from the writer" is right in the distribution and wrong on every consumer.
+        # A caller that needs the schema path must not re-derive it; the chain below is the one
+        # home for that answer, and a second copy is a resolver fork waiting to happen.
+        --print-schema) PRINT_SCHEMA="yes"; shift ;;
         --) shift; while [[ $# -gt 0 ]]; do STORIES+=("$1"); shift; done ;;
         -*) echo "ERROR: unknown argument: $1" >&2; exit 2 ;;
         *)  STORIES+=("$1"); shift ;;
@@ -83,11 +91,13 @@ if [[ -n "$SERIES" && -z "$TERMINAL" ]]; then
     fi
 fi
 
-if [[ -z "$TERMINAL" || ${#STORIES[@]} -eq 0 ]]; then
-    echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--profile <name>] [--check] <story-file>..." >&2
-    exit 2
+if [[ "$PRINT_SCHEMA" != "yes" ]]; then
+    if [[ -z "$TERMINAL" || ${#STORIES[@]} -eq 0 ]]; then
+        echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--profile <name>] [--check] <story-file>... | --print-schema" >&2
+        exit 2
+    fi
+    [[ -f "$TERMINAL" ]] || { echo "ERROR: terminal pass file not found: $TERMINAL" >&2; exit 1; }
 fi
-[[ -f "$TERMINAL" ]] || { echo "ERROR: terminal pass file not found: $TERMINAL" >&2; exit 1; }
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
 # Resolve the project root by walking UP for a marker, never by a fixed number of
@@ -129,6 +139,11 @@ if [ -z "$SCHEMA" ]; then
     echo "FAIL: schemas/provenance-block.json not found. The schema is the source of truth;" >&2
     echo "      this writer has no built-in copy and will not guess. Reinstall ai-dlc." >&2
     exit 1
+fi
+
+if [[ "$PRINT_SCHEMA" == "yes" ]]; then
+    printf '%s\n' "$SCHEMA"
+    exit 0
 fi
 
 python3 - "$SCHEMA" "$TERMINAL" "$CHECK_ONLY" "$TOOL_USE_ID" "$PROFILE_NAME" "${STORIES[@]}" <<'PYEOF'

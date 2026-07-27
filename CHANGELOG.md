@@ -17,6 +17,112 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.173.0] — 2026-07-27
+
+### Fixed — Check 17's PRD pin named a skill the step stopped invoking, and I put it there
+
+`v0.169.0` repointed `research-requirements.md` §3 from `/bmad-validate-prd` to `/bmad-prd`
+and left Check 17's PRD arm pinning `--require-skill bmad-validate-prd`. A correctly-executed
+run stamps `skill: bmad-prd`; the pin demanded the other name; `--require-skill` had no notion
+that the two are the same evaluation, so it failed on `no block cites it`. Three minors, no
+check said anything — a pin and an invocation look identical when each file is read alone.
+
+Surfaced by the graph consumer's reconcile report, which found the consumer-layer copies of
+the same text. The copies are a symptom; the fork is in core.
+
+**What the ground truth changed about the diagnosis.** The first reading was that this was an
+obligation with no owner — nothing writes a provenance block onto `prd.md`. Measuring the real
+artifact refuted it: the reference consumer's `prd.md` carries three blocks, its
+`planning-artifacts/` carry **72** citing `bmad-validate-prd`, and `_bmad-output/` carries
+**74**, across 30+ sprints. The block has always been written. The defect is narrower and
+entirely mine: two files naming one skill, and only one of them updated.
+
+Measured rather than argued, with the validator as it shipped before this change:
+
+```
+validate-provenance-block.sh prd.md --require-skill bmad-validate-prd   # block cites bmad-prd
+→ FAIL  --require-skill bmad-validate-prd was specified, but no block cites it
+        (blocks cite: ['bmad-prd'])
+control, same file, matching pin  → PASS
+same file, this release           → PASS
+```
+
+**Repointing alone would have been a second defect.** `bmad-validate-prd` is not retired — BMAD
+consolidated it into `bmad-prd`'s `validate` intent and ships it as a deprecated shim that
+forwards there, to be removed in v7. Every one of those 74 blocks is a correct record of a
+correct run, and a bare repoint would fail all of them. So the supersession is now DATA:
+`superseded_skills` in `schemas/provenance-block.json` maps `bmad-validate-prd` → `bmad-prd`,
+and `--require-skill` accepts either name in either direction — a pin on the current name takes
+a historical block, and a consumer override still pinning the old name takes a current one.
+Verified against the real 347 KB `prd.md`: PASS under both pins.
+
+This is deliberately **not** merged with the existing retired-pin diagnostic, and the schema
+says why. `bmad-review-adversarial-general` is live and correct for the one-shot sweeps in
+`bug-investigation`, `sprint-review` and `stories-test-strategy` §5; only the *pin* is wrong,
+and only where a convergence review ran. An alias entry there would make that diagnostic
+unreachable.
+
+### Added — I32: a Check 17 skill pin names the skill its own step file invokes
+
+The fork was invisible because nothing joined the two files. I32 parses Check 17's arms, maps
+each arm's parenthetical to a step file (basenames derived from the tree, never a second list),
+and requires the step to name the pinned skill or a superseded name for it.
+
+**Scoped to `bmad-*` pins, on a derivable ground rather than an exemption.** The native
+`ai-dlc-*` reviews are invoked by no step file *by design* — `team-roles/adversary.md` states
+that a convergence review "invoke[s] NO skill" — so the story-readiness arm's
+`ai-dlc-adversary-review` appears in zero step files and always will. Measured before the check
+was written: a literal-invocation join over all arms would have fired on it.
+
+Four mutations, three of them in fixtures: repointing an arm at a skill its step never invokes
+FAILS by name; stripping the pinned skill from the bug-fix arm's step file FAILS; and breaking
+the arm grammar fires the non-vacuity guard, because every other I32 guard runs inside the
+per-arm loop and would otherwise scan nothing and report clean.
+
+`check-17-bypass` gains the rename matrix — historical block against the current pin, current
+block against an old pin, and an unrelated skill that must still FAIL, since without that third
+case the first two would also pass against a pin that accepted anything.
+
+### Fixed — a fixture located the schema by walking up from the writer, so it was red on every consumer
+
+Filed by the graph consumer as
+`PC-S304-STORY-PROVENANCE-FIXTURE-RESOLVES-SCHEMA-RELATIVE-TO-WRITER`, against `0.172.0` — a
+defect this batch introduced two releases earlier.
+
+`story-provenance/run.sh`'s mutation assertion located the schema as
+`$(dirname "$WRITER")/../schemas/…`, with a `../../` fallback. Both hold only where the writer
+and the schema share a parent — true in `core/`, false in every consumer, because the install
+mapping splits them: `core/scripts/<x>` → `<root>/scripts/ai-dlc/<x>` while `core/schemas/` →
+`<root>/.claude/schemas/`. Reproduced on a consumer-shaped tree: `19 assertions, 1 failing`,
+`FIXTURE BROKEN: schema not found beside the writer`, against `19 assertions, 0 failing` here.
+
+**Not cosmetic.** SKILL.md step 2 requires the derived fixtures green BEFORE the push and says
+a red one stops the self-update rather than being sorted out later. No consumer could satisfy
+this assertion, so the stop was permanent and the operator-gated rulebook reconcile behind it
+could not run either.
+
+**Fixed by deleting the derivation, not by adding a fourth candidate.** The writer already
+resolves the schema through a chain whose third candidate *is* the consumer path — it was
+never confused; the fixture kept a private second copy of an answer the writer owns.
+`stamp-story-provenance.sh` gains `--print-schema`, and the fixture asks. Verified green in
+both layouts: 19/19 in the distribution and 19/19 on a consumer-shaped tree.
+
+### Added — I33: a fixture never reaches a core subtree by walking up from a resolved script
+
+The class, not the instance. A fixture green here and red on every consumer is invisible
+upstream, and step 2 turns it into a permanent stop.
+
+**Measured before it was written**, which is the only reason it is a check and not a lint
+nobody can keep green: after the fix the pattern occurs **zero** times across every
+`core/fixtures/**/*.sh`, and the established house pattern already exists — root the chain at
+the fixture's own self-location and name both layouts (`check-17-counts` does), or ask the tool
+that owns the path.
+
+Two assertions: reintroducing the walk FAILS I33 by name, and an emptied fixture tree fires the
+non-vacuity guard, because a grep over nothing reports clean. The assertion that mutates the
+fixture has to **compose** the offending path rather than spell it, or it would flag itself —
+the same self-reference trap the ledger's close vocabulary hit in `0.171.1`.
+
 ## [0.172.0] — 2026-07-26
 
 ### Added — `fixtures:` on an extension entry, so a consumer check's fixture can reach H1

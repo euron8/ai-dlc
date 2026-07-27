@@ -173,6 +173,59 @@ else
   fails=$((fails + 1))
 fi
 
+# ---- V10: an UPSTREAM RENAME must not invalidate what was stamped before it ----
+# `bmad-validate-prd` was consolidated into `bmad-prd`'s validate intent and now ships as a
+# deprecated shim. Repointing Check 17's PRD pin to the current name would, on its own, fail
+# every PRD stamped before the rename — 74 such blocks on the reference consumer, each a
+# correct record of a correct run. The schema's `superseded_skills` records that the two names
+# denote ONE evaluation, and the pin accepts either, in both directions.
+#
+# Deliberately distinct from V9 above. That is a WRONG PIN, diagnosed; this is the SAME
+# evaluation under two release names, accepted. Conflating them would make the retired-pin
+# diagnostic unreachable, so both assertions live here side by side.
+V10D="$WORK/_bmad-output/planning-artifacts"
+mk_prd_block() { # $1 file  $2 skill
+  cat > "$1" <<EOF
+# PRD (V10 rename case)
+
+<!-- SKILL_INVOCATION_PROVENANCE v1
+skill: $2
+invoked_at: 2026-01-02T03:04:05Z
+tool_use_id: toolu_FIXTUREaaaaaaaa
+mode: subagent
+lead_role: pm
+artifact: $(basename "$1")
+findings_critical: 0
+findings_major: 1
+findings_minor: 2
+SKILL_INVOCATION_PROVENANCE_END -->
+EOF
+}
+mk_prd_block "$V10D/v10-old-prd.md" bmad-validate-prd
+mk_prd_block "$V10D/v10-new-prd.md" bmad-prd
+mk_prd_block "$V10D/v10-other-prd.md" bmad-party-mode
+
+if bash "$PROV" "$V10D/v10-old-prd.md" --require-skill bmad-prd >/dev/null 2>&1; then
+  note "ok" "v10-old-prd.md" "a block stamped before the rename satisfies a pin on the current name"
+else
+  note "BAD" "v10-old-prd.md" "repointing the pin invalidated every PRD stamped before the rename"
+  fails=$((fails + 1))
+fi
+if bash "$PROV" "$V10D/v10-new-prd.md" --require-skill bmad-validate-prd >/dev/null 2>&1; then
+  note "ok" "v10-new-prd.md" "a consumer override still pinning the old name accepts a current block"
+else
+  note "BAD" "v10-new-prd.md" "a consumer whose override pins the old name fails on a correct run"
+  fails=$((fails + 1))
+fi
+# THE PRECISION SIDE. Without it the two assertions above would also pass against a pin that
+# accepted anything, and the pin would be decoration.
+if bash "$PROV" "$V10D/v10-other-prd.md" --require-skill bmad-prd >/dev/null 2>&1; then
+  note "BAD" "v10-other-prd.md" "an UNRELATED skill satisfied the pin — the acceptance is blanket, not a rename"
+  fails=$((fails + 1))
+else
+  note "ok" "v10-other-prd.md" "an unrelated skill still fails the pin (the acceptance is the rename, not everything)"
+fi
+
 # ---- V5 must then FAIL the heavyweight validator on the SHA -------------------
 # validate-retro-evidence.sh resolves the cited SHA against git, so the fixture
 # needs a real repo with a real retro branch and a real committed transcript.

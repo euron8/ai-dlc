@@ -1087,6 +1087,100 @@ EOF
   fi
 fi
 
+# --- I31b/I32: a Check 17 skill PIN names the skill its own step file invokes ---
+# THE DEFECT. Check 17's arms pin a provenance block to a skill NAME, and the step file that
+# runs the evaluation names the skill it INVOKES. Two files, one fact, nothing comparing them.
+# v0.169.0 repointed `research-requirements.md` §3 from `/bmad-validate-prd` to `/bmad-prd` and
+# left the arm pinning the old name, so the gate would have failed on a correctly-executed run
+# — and nothing said so for three minors, because a pin and an invocation look identical when
+# read one file at a time.
+#
+# SCOPED TO `bmad-*` PINS, on a stated and derivable ground. The native `ai-dlc-*` reviews are
+# invoked by NO step file by design — team-roles/adversary.md is explicit that a convergence
+# review "invoke[s] NO skill", so the story-readiness arm's `ai-dlc-adversary-review` appears in
+# zero step files and always would. Measured before this check was written; a literal-invocation
+# join over all arms would have fired on it. A prefix is the rule, not a hand-listed exemption.
+GV="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+PB_SCHEMA="$REPO_ROOT/core/schemas/provenance-block.json"
+if [ -f "$GV" ] && [ -f "$PB_SCHEMA" ]; then
+  # Arms of Check 17, one per line: "<parenthetical>|<required skill>". Multi-line arms are
+  # joined first — `--require-skill` routinely wraps onto the next line.
+  arms="$(awk '/<!-- CHECK_LOADED: 17 -->/{on=1} /<!-- CHECK_LOADED: 18 -->/{on=0}
+    on && /^- \*\*/ { if (buf != "") print buf; buf=$0; next }
+    on && buf != ""  { buf = buf " " $0 }
+    END { if (buf != "") print buf }' "$GV" \
+    | sed -nE 's/^- \*\*[^(]*\(([^)]*)\).*--require-skill[[:space:]]+`?([A-Za-z0-9._-]+)`?.*$/\1|\2/p')"
+  # Step-file basenames, DERIVED from the tree — never a second list to keep in sync.
+  step_names="$(cd "$REPO_ROOT/core/skills/ai-dlc/steps" 2>/dev/null && ls *.md 2>/dev/null | sed 's/\.md$//')"
+  n_bmad_arms=0
+  while IFS='|' read -r hint skill; do
+    [ -n "$skill" ] || continue
+    case "$skill" in bmad-*) ;; *) continue ;; esac
+    n_bmad_arms=$((n_bmad_arms + 1))
+    step=""
+    for s in $step_names; do
+      case "$hint" in *"$s"*) [ ${#s} -gt ${#step} ] && step="$s" ;; esac
+    done
+    if [ -z "$step" ]; then
+      err "I32: Check 17's arm '($hint)' pins '$skill' but its parenthetical names no step file under core/skills/ai-dlc/steps/. The arm has to say which step runs the evaluation, or the pin cannot be joined to anything."
+      continue
+    fi
+    # The step may name the pinned skill or any name the schema records as the same evaluation
+    # under a different release's name.
+    accepted="$skill $(python3 - "$PB_SCHEMA" "$skill" <<'PY' 2>/dev/null
+import json, sys
+sup = {k: v for k, v in json.load(open(sys.argv[1])).get("superseded_skills", {}).items() if not k.startswith("$")}
+want = sys.argv[2]
+print(" ".join(sorted({v for k, v in sup.items() if k == want} | {k for k, v in sup.items() if v == want})))
+PY
+)"
+    hit=0
+    for a in $accepted; do
+      grep -q -- "$a" "$REPO_ROOT/core/skills/ai-dlc/steps/$step.md" 2>/dev/null && hit=1 && break
+    done
+    [ "$hit" -eq 1 ] || err "I32: Check 17's '$hint' arm pins --require-skill '$skill', but steps/$step.md never names it (nor any superseded name for it). The gate then fails a correctly-executed run: the step invokes one skill and the pin demands another. Repoint whichever is stale — they are one fact in two files."
+  done <<EOF
+$arms
+EOF
+  # NON-VACUITY. Every guard above runs inside the loop, so an arm regex that stops matching
+  # scans nothing and reports clean — which is the failure this whole check exists to end.
+  [ "$n_bmad_arms" -gt 0 ] \
+    || err "I32 matched no bmad-* skill pin in Check 17 at all. Either every arm lost its --require-skill, or the arm grammar changed and this check now compares nothing. 'Nothing to compare' must not read as 'the pins agree'."
+fi
+
+# --- I33: a fixture never reaches a core subtree by walking up from a RESOLVED script --
+# THE DEFECT. `core/fixtures/story-provenance/run.sh` located the schema as
+# `$(dirname "$WRITER")/../schemas/...`. That holds in the distribution, where the writer and
+# the schema share a parent, and fails on EVERY consumer, where the install mapping splits
+# them: core/scripts/<x> -> <root>/scripts/ai-dlc/<x> while core/schemas/ -> <root>/.claude/
+# schemas/. The fixture was green here and red there, and because step 2 requires the derived
+# fixtures green BEFORE the push, that red was a permanent stop on the consumer's self-update.
+#
+# The house pattern is already established and is not this: root the chain at the FIXTURE's own
+# self-location and name both layouts explicitly (check-17-counts does), or ask the tool that
+# owns the path (`stamp-story-provenance.sh --print-schema`). What must not happen is a second,
+# private derivation hanging off a path some other resolver produced.
+#
+# MEASURED BEFORE WRITING: after the fix, this pattern occurs ZERO times across every
+# core/fixtures/**/*.sh. The false-positive set is empty today, which is the only reason this
+# is a check rather than a lint nobody can keep green. The subtree list is DERIVED from ls core/.
+fx_walk_hits=""
+fx_sh_count=0
+if [ -d "$REPO_ROOT/core/fixtures" ]; then
+  fx_sh_count="$(find "$REPO_ROOT/core/fixtures" -name '*.sh' -type f 2>/dev/null | wc -l | tr -d ' ')"
+  for sub in $(ls -d "$REPO_ROOT"/core/*/ 2>/dev/null | sed 's|.*/core/||; s|/$||'); do
+    [ "$sub" = "fixtures" ] && continue
+    hits="$(grep -rlE "dirname \"\\\$[A-Za-z_][A-Za-z0-9_]*\"\)(/\.\.)+/$sub/" \
+      "$REPO_ROOT/core/fixtures" --include='*.sh' 2>/dev/null || true)"
+    [ -n "$hits" ] && fx_walk_hits="$fx_walk_hits $(echo $hits | sed "s|$REPO_ROOT/||g")"
+  done
+  if [ "$fx_sh_count" -eq 0 ]; then
+    err "I33 found no *.sh under core/fixtures/ to scan. A scan over nothing reports clean, which is the shape this check exists to end."
+  elif [ -n "$fx_walk_hits" ]; then
+    err "I33: these fixtures reach a core subtree by walking up from a path another resolver produced:$fx_walk_hits. That parent-sharing holds in core/ and is broken by the install mapping on every consumer, so the fixture goes green here and red there — and step 2 turns a red derived fixture into a permanent stop on the self-update. Root the chain at the fixture's own self-location and name both layouts, or ask the tool that owns the path."
+  fi
+fi
+
 # --- I20: every fixture is DRIVEN, or declares in writing that it cannot be -----
 # core/git-hooks/pre-push runs the fixture suite as
 #
@@ -1377,7 +1471,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33)."
   exit 0
 fi
 exit 1
