@@ -280,4 +280,36 @@ cat > "$ROOT/spine-cap1only.md" <<'SPINE1'
 - **Rule:** one core resolver maps routing config to a venue decision
 SPINE1
 
+
+# --- REAL bmad-prd FR SHAPE -----------------------------------------------------
+# bmad-prd renders each requirement as an H4 HEADING, numbered globally
+# `#### FR-<n>: <short capability name>` -- not a list item, not sprint-scoped -- and
+# carries NO capability or locked-requirement token: `CAP-`, `LR-` and `SPEC.md` have
+# ZERO occurrences anywhere in that skill, and it instructs "skip traceability
+# matrices". So a PRD it authors can never satisfy join (2) on its own; the PM adds the
+# citation in a second pass, and these two payloads pin both sides of that.
+cat > "$ROOT/prd-bmad-raw.md" <<'PRDRAW'
+# PRD
+
+## Features and Functional Requirements
+
+### Gated-path routing
+
+#### FR-1: Gated-path leg routes through the swap router
+
+The gated rebalance leg reaches its counterparty through the swap router.
+
+#### FR-2: Executed leg reports its venue
+
+The venue that executed a leg is readable off the leg.
+
+#### FR-3: Young position survives the sweeper
+
+A position held fewer than 43200 blocks is left unswept.
+PRDRAW
+sed -e 's/^#### FR-1:/#### FR-1 (CAP-1):/' \
+    -e 's/^#### FR-2:/#### FR-2 (CAP-1):/' \
+    -e 's/^#### FR-3:/#### FR-3 (CAP-2):/' \
+    "$ROOT/prd-bmad-raw.md" > "$ROOT/prd-bmad-enriched.md"
+
 printf '%s\n' "$ROOT"

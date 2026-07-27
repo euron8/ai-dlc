@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.5] — 2026-07-26
+
+### Fixed — the FR capability citation was an obligation nobody could satisfy
+
+`bmad-prd` was the last producer ai-dlc invokes whose output no check had been run
+against. Running it closed the audit, and it found an unassigned obligation.
+
+`research-requirements.md` mandated that every functional requirement cite the
+capability it realises. `bmad-prd` authors that file and **cannot** do it: `CAP-`,
+`LR-` and `SPEC.md` have ZERO occurrences anywhere in the skill, its template renders
+each requirement as an H4 heading numbered globally — `#### FR-<n>: {short capability
+name}` — and it explicitly instructs "skip traceability matrices". The run confirmed
+all of it, and logged the conclusion itself: *"no CAP-N or LR-S300-N token is carried
+onto any FR entry."*
+
+So Check 30 would have failed every capability on a correctly-authored PRD, with no
+step telling anyone how to fix it. The obligation is now assigned: after `bmad-prd`
+returns, the PM walks each FR entry and adds the `(CAP-<m>)` token from the spec
+kernel, as part of authoring the PRD rather than as optional enrichment.
+
+Verified against the real 22 KB PRD: raw output produces one FAIL per capability
+(rc=1), and the same PRD with `(CAP-n)` added to its H4 headings passes (rc=0). Both
+sides are pinned as fixture payloads.
+
+One shape fact worth recording: a single capability legitimately splits across
+several FRs — the run mapped CAP-1 to both FR-1 and FR-2 — so join (2) requires at
+least one citing FR per capability and never a one-to-one mapping.
+
+### Fixed — the validate intent is now named, not inferred
+
+`bmad-prd` detects create / update / validate from the conversation. Step 3 said
+"invoke `/bmad-prd` — structured completeness check" and left the intent to
+inference, on a call that must not re-author the PRD. It now names the **validate**
+intent, and records that the headless validate path always writes both
+`validation-report.html` and `validation-report.md` regardless of finding count and
+returns `"offer_to_update": true` — a return value, not an instruction to hand it the
+update.
+
+### Closed — every producer ai-dlc invokes has now been run
+
+Five producers, five wrong assumptions, all found by running the tool rather than
+reading it:
+
+| producer | what the assumption got wrong |
+|---|---|
+| `bmad-spec` | its Self-Validate `(event)` verdict was read as evidence the join held |
+| `lint_spine.py` | key is `category`, four values not two; `ad_id` ignored |
+| `bmad-testarch-trace` | decision is `gate_status`; a file grep fails a gate it passed |
+| `bmad-create-epics-and-stories` | AC format is unnumbered Given/When/Then; Check 31 passed it silently |
+| `bmad-prd` | FR entries carry no capability token and cannot |
+
+Every one of them passed its fixture beforehand, because every fixture payload was a
+shape invented here rather than captured. `spec-join-integrity` now carries 28
+assertions over real captured output from four of the five, plus three proven mutants.
+
 ## [0.169.4] — 2026-07-26
 
 ### Corrected — v0.169.3's correction was itself wrong

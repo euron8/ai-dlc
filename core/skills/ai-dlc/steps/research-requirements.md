@@ -55,6 +55,15 @@ entry, alongside the existing locked-requirement arrow:
 `CAP-<m>` is `bmad-spec`-owned and never reused or renumbered, so this is a join a
 script can close — unlike the `←` arrow, which is a character.
 
+**`bmad-prd` cannot add this citation, so the PM adds it in a second pass.** The
+strings `CAP-`, `LR-` and `SPEC.md` have ZERO occurrences anywhere in that skill, its
+template numbers requirements globally as `#### FR-1: {short capability name}`, and it
+explicitly instructs "skip traceability matrices". So a PRD it authors will never carry
+the citation. After `bmad-prd` returns, walk each FR entry and add the `(CAP-<m>)`
+token, resolving it from the spec kernel. Treat that as part of authoring the PRD, not
+an optional enrichment: gate-validation Check 30 FAILS on a capability no FR cites, and
+the pass that adds the tokens is the only thing that can make it pass.
+
 The citation belongs on the FR entry and **NOT** in the `FR Coverage Map`. That map
 is `/bmad-create-epics-and-stories`' artifact and its template emits
 `FR1: Epic 1 - <description>` — an FR-to-epic mapping that carries no capability
@@ -89,8 +98,15 @@ but does not create new locked WHAT requirements.
 
 ### 3. PRD Validation
 
-Invoke `/bmad-prd` — structured completeness check. Fix all
-gaps found.
+Invoke `/bmad-prd` with the **validate** intent — structured completeness check
+against its own rubric. Fix all gaps found.
+
+It detects create / update / validate from the conversation, so say which you
+want rather than relying on inference: this call must not re-author the PRD. Under
+the headless contract the validate intent always writes both
+`validation-report.html` and `validation-report.md` into the run folder regardless
+of finding count, and returns `"offer_to_update": true` — read the report, do not
+treat the returned offer as an instruction to hand it the update.
 
 ### 4. Validation Cycle (Rule 8)
 

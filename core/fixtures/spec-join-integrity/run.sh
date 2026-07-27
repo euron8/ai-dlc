@@ -128,6 +128,16 @@ want 1 "PIN: a severed capability entry FAILS even though the (event) verdict st
 want 2 "DISARM: no (capability) entries at all exits 2, never 0" \
   --spec "$R/real-untyped" --prd "$R/prd-real.md" --story "$R/story-real.md"
 
+# --- real bmad-prd FR shape, both sides of the PM enrichment pass ---------------
+# Raw bmad-prd output cannot satisfy join (2): H4-heading FRs with no CAP token, from a
+# skill that has no capability concept at all. The check must CATCH that rather than
+# excuse it, and must pass once the citations are added to the heading lines.
+want 1 "raw bmad-prd output (H4 FRs, no CAP token) FAILS join (2)" \
+  --spec "$R/ok" --prd "$R/prd-bmad-raw.md"
+
+want 0 "the same PRD with (CAP-n) added to its H4 FR headings PASSES" \
+  --spec "$R/ok" --prd "$R/prd-bmad-enriched.md"
+
 # --- (2a) the CAP -> AD join, against bmad-architecture's real spine shape ------
 want 0 "OVER-FIRE CONTROL: a spine whose AD binds 'all' covers every capability" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/spine-all.md"
