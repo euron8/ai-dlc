@@ -66,6 +66,20 @@ EXT_DIR="$SKILL_DIR/extensions"
 ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
 core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
 
+# RULE numbers are a SECOND namespace and need their own grammar: a rule heading
+# (`### Rule 29 -- Steering budget`) carries no `[.—]` terminator, so ANCHOR_RE
+# above matches none of the 30 rules in core's SKILL.md — verified, 0 of 30. That
+# is why this pass exists separately rather than as a widened ANCHOR_RE: teaching
+# the check grammar the word `Rule` would fold `Rule 29` and check `29` into one
+# id and start relabelling across two unrelated catalogs.
+#
+# Byte-identical to `RULE_RE` in `core/scripts/validate-layer-entries.sh`, which
+# REPORTS what this FIXES. Invariant I34 in validate-enforcement-map.sh asserts it:
+# a narrower grammar here means the linter names a collision this tool cannot see,
+# and the operator is handed a remedy that does not run.
+RULE_RE='^#{2,4}[[:space:]]+Rule[[:space:]]+([0-9]+[a-z]*)[[:space:]]*(\[[^]]*\][[:space:]]*)?(--|—|:)'
+core_rule_stream() { grep -oE "$RULE_RE" | sed -E 's/^#+[[:space:]]+Rule[[:space:]]+//; s/[^0-9a-z].*$//' | grep -E '.'; }
+
 fm() { sed -n '/^---$/,/^---$/p' "$1" | sed -n "s/^$2:[[:space:]]*//p" | head -1; }
 
 found=0
@@ -89,17 +103,31 @@ while IFS= read -r ext; do
   # (present today) and, when given, theirs (what the pull will add). The union is what makes a
   # pull-introduced collision visible during the dry-run instead of only after the write.
   core_file="$SKILL_DIR/$hooks"
-  nums_installed=""
-  [ -f "$core_file" ] && nums_installed="$(core_num_stream < "$core_file")"
-  nums_theirs=""
+  theirs_blob=""
   if [ -n "$DIST" ] && [ -n "$THEIRS" ]; then
     tp="core/skills/ai-dlc/${hooks}"
     if git -C "$DIST" cat-file -e "${THEIRS}:${tp}" 2>/dev/null; then
-      nums_theirs="$(git -C "$DIST" show "${THEIRS}:${tp}" | core_num_stream)"
+      theirs_blob="$(git -C "$DIST" show "${THEIRS}:${tp}")"
     fi
   fi
+
+  nums_installed=""
+  [ -f "$core_file" ] && nums_installed="$(core_num_stream < "$core_file")"
+  nums_theirs=""
+  [ -n "$theirs_blob" ] && nums_theirs="$(printf '%s\n' "$theirs_blob" | core_num_stream)"
   core_nums="$(printf '%s\n%s\n' "$nums_installed" "$nums_theirs" | grep -E '.' | sort -u)"
-  [ -n "$core_nums" ] || continue
+
+  rules_installed=""
+  [ -f "$core_file" ] && rules_installed="$(core_rule_stream < "$core_file")"
+  rules_theirs=""
+  [ -n "$theirs_blob" ] && rules_theirs="$(printf '%s\n' "$theirs_blob" | core_rule_stream)"
+  core_rules="$(printf '%s\n%s\n' "$rules_installed" "$rules_theirs" | grep -E '.' | sort -u)"
+
+  # NOT `[ -n "$core_nums" ] || continue`. Core's SKILL.md defines 30 rules and ZERO
+  # check anchors, so gating both passes on the check set skipped every SKILL.md-hooking
+  # entry — which is exactly where every rule collision lives. The gate has to admit an
+  # entry that collides in either namespace, or the rule pass can never fire.
+  [ -n "$core_nums" ] || [ -n "$core_rules" ] || continue
 
   while IFS= read -r n; do
     [ -n "$n" ] || continue
@@ -128,6 +156,33 @@ while IFS= read -r ext; do
       applied=$((applied+1))
     fi
   done <<< "$core_nums"
+
+  # --- the same rewrite, one namespace over -------------------------------------
+  # The label goes BEFORE the separator (`## Rule 29 [ext:id] -- Title`), not after
+  # the number-terminator as in the check form — a rule heading has no terminator to
+  # put it after. Same discipline either way: INSERT into the matched prefix and
+  # carry everything right of it through untouched, so an em-dash or a `:` separator
+  # survives the rewrite.
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    rule_at="^#{2,4}[[:space:]]+Rule[[:space:]]+${n}[[:space:]]*"
+    hd="$(grep -nE "${rule_at}(--|—|:)" "$ext" | grep -v '\[ext:' | grep -v '\[core\]' | head -1)"
+    [ -n "$hd" ] || continue
+
+    lineno="${hd%%:*}"
+    text="${hd#*:}"
+    new="$(printf '%s' "$text" | sed -E "s|(${rule_at})|\1[ext:${id}] |")"
+
+    found=$((found+1))
+    printf '%s:%s\n  -  %s\n  +  %s\n' "${ext#$CONSUMER/}" "$lineno" "$text" "$new"
+
+    if [ "$APPLY" = "--apply" ]; then
+      tmp="$(mktemp)"
+      awk -v ln="$lineno" -v repl="$new" 'NR==ln { print repl; next } { print }' "$ext" > "$tmp"
+      mv "$tmp" "$ext"
+      applied=$((applied+1))
+    fi
+  done <<< "$core_rules"
 done < <(find "$EXT_DIR" -name '*.md' -type f | sort)
 
 echo ""
@@ -136,9 +191,9 @@ if [ "$found" -eq 0 ]; then
   exit 0
 fi
 if [ "$APPLY" = "--apply" ]; then
-  echo "relabel-extension-checks: labelled ${applied} colliding check heading(s)."
+  echo "relabel-extension-checks: labelled ${applied} colliding heading(s)."
   exit 0
 fi
-echo "relabel-extension-checks: ${found} colliding check heading(s) need the [ext:<id>] label."
+echo "relabel-extension-checks: ${found} colliding heading(s) need the [ext:<id>] label."
 echo "  Re-run with --apply to write them. The integer never moves; only the label is added."
 exit 1

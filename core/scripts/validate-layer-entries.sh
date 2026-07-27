@@ -55,6 +55,20 @@
 #        steps), so per-target resolution false-positives. Anchor collection
 #        includes `**7a-post. ...**` bold anchors, not just `### 7a-post.`
 #        headings — an override defines one that way.
+#     W4 extension defines a RULE number its hooked core file also defines with a
+#        different title. Exactly W1/E6's defect one namespace over: extensions are
+#        additive, so `## Rule 29 -- <consumer thing>` and core's `### Rule 29 --
+#        Steering budget` render into one merged rulebook, and "Rule 29" in a gate
+#        log, retro finding or dispatch brief has two referents. E6 could never see
+#        it: rule headings carry no `[.—]` terminator and the anchor grammar above
+#        deliberately matches only check/step ids, so a rule number never reached
+#        the collision arm at all. Measured on the reference consumer before
+#        shipping: EIGHT live collisions, zero false positives — and six of the
+#        eight are BELOW core's highest rule number, so this is not a
+#        grew-past-the-ceiling problem, it starts the moment an extension numbers
+#        anything. WARN for the same reason W1 is: eight ERRORs on first contact is
+#        a linter that gets switched off, and a consumer must never be unable to
+#        take a security fix because its own rule catalog needs relabelling.
 #
 # Rule 26(c) contract — catches: a layer entry silently duplicating, restricting,
 # or shadowing a core rule upstream has since changed. False-positive cost: one
@@ -191,6 +205,54 @@ heading_title() { # heading_title <file> <anchor>
 heading_labelled() { # heading_labelled <file> <anchor>
   awk -v a="$2" '
     $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+      print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
+    }' "$1" 2>/dev/null
+}
+
+# --- RULE numbers: a SECOND namespace, deliberately not folded into the above ---
+#
+# `defined_anchors` matches `### 24.` and `### Check 24.` and nothing else -- the
+# id shape is narrow on purpose, and the terminating `.` is load-bearing there. A
+# rule heading is `### Rule 29 -- Steering budget`: no terminator, and `Rule` is a
+# word the anchor grammar must never learn, or `Rule 29` and check `29` become one
+# id and the collision arm starts joining two unrelated catalogs. So rules get
+# their own extractor, and the two namespaces stay apart.
+#
+# The optional `[...]` before the separator is the catalog LABEL. It has to be part
+# of the pattern rather than stripped afterwards: a labelled heading is the resolved
+# state, and a matcher that cannot see the label cannot recognise the fix it asked
+# for -- the same defect `heading_labelled` above exists to record.
+#
+# This regex is a KNOWN drifting pair with `reconcile/relabel-extension-checks.sh`,
+# which rewrites exactly the headings this reports. Invariant I34 in
+# validate-enforcement-map.sh asserts the two `RULE_RE=` lines byte-identical: a
+# detector that finds a heading the rewriter cannot rewrite would report a defect
+# with no remedy, forever.
+RULE_RE='^#{2,4}[[:space:]]+Rule[[:space:]]+([0-9]+[a-z]*)[[:space:]]*(\[[^]]*\][[:space:]]*)?(--|—|:)'
+
+defined_rules() { # defined_rules <file> -> rule numbers, one per line
+  [ -f "$1" ] || return 0
+  grep -Eho "$RULE_RE" "$1" 2>/dev/null \
+    | sed -E 's/^#+[[:space:]]+Rule[[:space:]]+//; s/[^0-9a-z].*$//' \
+    | grep -E '.' | sort -u
+}
+
+rule_title() { # rule_title <file> <n>
+  awk -v a="$2" '
+    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s);
+                     gsub(/^ +| +$/,"",s); return s }
+    $0 ~ ("^#{2,4}[ \t]+Rule[ \t]+" a "[ \t]*(\\[[^]]*\\][ \t]*)?(--|—|:)") {
+      h=$0; sub(/^#+[ \t]+Rule[ \t]+/,"",h)
+      sub("^" a "[ \t]*","",h)
+      gsub(/\[ext:[A-Za-z0-9_.-]+\][ \t]*/, "", h); gsub(/\[core\][ \t]*/, "", h)
+      sub(/^(--|—|:)[ \t]*/,"",h)
+      print nrm(h); exit
+    }' "$1" 2>/dev/null
+}
+
+rule_labelled() { # rule_labelled <file> <n>
+  awk -v a="$2" '
+    $0 ~ ("^#{2,4}[ \t]+Rule[ \t]+" a "[ \t]*(\\[[^]]*\\][ \t]*)?(--|—|:)") {
       print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
     }' "$1" 2>/dev/null
 }
@@ -369,6 +431,33 @@ while IFS= read -r f; do
       warn "$(rel "$f"): RESTATES core section '$a.' (\"${t_core:-$a}\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core section — the copy cannot drift-check against the original, so it forks silently and then contradicts it. If this entry only ADDS to the core check, hook it without redefining the number; if it RESTRICTS core, it is an override wearing extension frontmatter and belongs in overrides/ with a base_sha."
     fi
   done < <(defined_anchors "$f")
+
+  # W4 — the same collision in the RULE namespace. See the header note.
+  #
+  # Never ERROR. A rule number does not reach the durable audit record the way a
+  # check number does (E6's stated reason for erroring), and the remedy is a
+  # relabelling of the consumer's own catalog — blocking a pull on it would mean a
+  # consumer cannot take a fix until it has renamed its own rules.
+  core_rules="$(defined_rules "$core_path")"
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    printf '%s\n' "$core_rules" | grep -Fxq -- "$n" || continue
+
+    r_ext="$(rule_title "$f" "$n")"
+    r_core="$(rule_title "$core_path" "$n")"
+    # No title on either side means nothing to split collision from restatement on.
+    # Reporting anyway would be a bare number with no evidence in the message.
+    if [ -z "$r_ext" ] || [ -z "$r_core" ]; then continue; fi
+
+    if same_title "$r_ext" "$r_core"; then
+      warn "$(rel "$f"): RESTATES core 'Rule $n' (\"$r_core\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core rule — the copy cannot drift-check against the original, so it forks silently and then contradicts it."
+      continue
+    fi
+    # A labelled heading is the RESOLVED state — same contract as heading_labelled.
+    if [ "$(rule_labelled "$f" "$n")" = yes ]; then continue; fi
+
+    warn "$(rel "$f"): RULE NUMBER COLLISION on 'Rule $n' — this defines \"$r_ext\" while core '$hooks' defines \"$r_core\" at the same number. Extensions are ADDITIVE, so both render into one merged rulebook under one integer and a bare \"Rule $n\" in a gate log, retro finding or dispatch brief has two referents. Give this rule a catalog-labelled heading (\"## Rule $n [ext:$id] -- …\") per the Consumer-catalog crosswalk; the integer never moves. \`reconcile/relabel-extension-checks.sh --apply\` writes it."
+  done < <(defined_rules "$f")
 
   # W2 — a restriction in an additive layer is a mis-filed override.
   if grep -Eqi 'only[^.]{0,60}(are|is) valid|is NOT subject to|are the only valid' "$f"; then

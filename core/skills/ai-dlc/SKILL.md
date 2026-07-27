@@ -1166,6 +1166,14 @@ legible. Enforced by `scripts/ai-dlc/validate-layer-entries.sh` (E6) and, at pul
 `EXTENSION-CHECK-NUMBER-COLLISION` in the reconcile report. Full convention:
 `steps/gate-validation.md`, "Consumer-catalog crosswalk".
 
+This binds every numbered section an extension defines, not only checks. An extension's
+`## Rule <n>` and core's `### Rule <n>` render into one merged rulebook under one integer,
+and "Rule 29" in a gate log, retro finding or dispatch brief then has two referents. Label
+it the same way, before the separator: `## Rule <n> [ext:<id>] -- <title>`. The integer never
+moves. Reported by `validate-layer-entries.sh` (W4) as a WARN, never an ERROR -- a consumer
+must not be unable to take a fix because its own rule catalog needs relabelling -- and
+written by `reconcile/relabel-extension-checks.sh --apply`.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or
 false-conflicts against it; and, per

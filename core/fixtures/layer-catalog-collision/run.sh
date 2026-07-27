@@ -187,6 +187,83 @@ for spec in "$LINTER|same_title|validate-layer-entries.sh" "$DRIFT|same_section|
   fi
 done
 
+# --- Part 4: the RULE namespace (W4) ------------------------------------------
+#
+# The check-number collision has had a detector since v0.49.0. Rule numbers have
+# exactly the same property -- extensions are additive, so an extension's
+# `## Rule 29` and core's `### Rule 29` render into one merged rulebook under one
+# integer -- and had none, because the anchor grammar the collision arm uses
+# matches only ids terminated by `[.—]` and a rule heading has no terminator.
+# Measured on the reference consumer when W4 was written: EIGHT live collisions,
+# reported by nothing.
+
+RELABEL="$(pick "${3:-}" "$HERE/../../skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
+                         "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
+                         "$HERE/../../../core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh")"
+
+printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 29'" \
+  && ok "Rule 29 = COLLISION (core: steering budget / ext: split-dispatch)" \
+  || bad "Rule 29 not reported — a bare 'Rule 29' in a gate log has two referents and nothing says so"
+
+printf '%s' "$out" | grep -q "^WARN.*RULE NUMBER COLLISION on 'Rule 29'" \
+  && ok "  and it is a WARN, never an ERROR (a consumer must not be blocked from taking a fix)" \
+  || bad "  but the rule collision is an ERROR — eight on first contact is a linter that gets switched off"
+
+# The remedy must silence the message. Asserted directly, because a detector whose
+# own prescribed fix does not clear it is the defect heading_labelled was added for.
+printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 30'" \
+  && bad "the ALREADY-LABELLED 'Rule 30 [ext:rules]' still reports — the fix the message asks for cannot clear the message" \
+  || ok "a labelled rule heading is the resolved state and is silent"
+
+printf '%s' "$out" | grep -q "RESTATES core 'Rule 8'" \
+  && ok "Rule 8 = RESTATEMENT (same number AND same title), not a collision" \
+  || bad "Rule 8 misclassified — same number and same title is a Rule 27(c) restatement"
+
+printf '%s' "$out" | grep -q "COLLISION on 'Rule 8'" \
+  && bad "Rule 8 reported as a collision as well as a restatement — the split on title is not happening" \
+  || ok "  and it is not ALSO reported as a collision"
+
+printf '%s' "$out" | grep -q "'Rule 44'" \
+  && bad "extension-only 'Rule 44' flagged — core defines no rule 44, so every consumer rule would report" \
+  || ok "extension-only rule 44 correctly silent"
+
+# NAMESPACE SEPARATION, and it can fail. Core defines `Rule 24` in SKILL.md and
+# check `24.` in gate-validation.md. A grammar that learned the word `Rule` would
+# fold them into one id and start joining a rule to a check by integer.
+printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 24'" \
+  && bad "'Rule 24' reported although no extension defines it — the rule grammar is matching core's CHECK 24, i.e. the two catalogs have merged" \
+  || ok "core's Rule 24 and core's check 24 stay separate catalogs"
+
+# --- Part 4b: the reporter and the rewriter agree on what a rule heading is ----
+# I34 binds their RULE_RE textually. This binds them BEHAVIOURALLY, on a real
+# input: the linter reports Rule 29, and applying the relabeller must make the
+# linter stop reporting it. A detector that names a heading the rewriter cannot
+# see hands the operator a remedy that does not run.
+if [ -z "$RELABEL" ]; then
+  bad "FIXTURE BROKEN — cannot locate relabel-extension-checks.sh; Part 4b would pass by not running"
+else
+  rel_out="$(bash "$RELABEL" "$ROOT" 2>&1)"
+  printf '%s' "$rel_out" | grep -q '^  +  ## Rule 29 \[ext:rules\] -- ' \
+    && ok "the relabeller writes '## Rule 29 [ext:rules] -- …' (label before the separator, integer unmoved)" \
+    || bad "the relabeller cannot rewrite the heading the linter reports — the prescribed remedy does not run"
+
+  printf '%s' "$rel_out" | grep -q 'Rule 44' \
+    && bad "the relabeller would rewrite the extension-only 'Rule 44' — it relabels headings core does not define" \
+    || ok "  and leaves the extension-only rule 44 alone"
+
+  bash "$RELABEL" "$ROOT" --apply >/dev/null 2>&1
+  after="$(bash "$LINTER" "$ROOT" 2>&1)"
+  if printf '%s' "$after" | grep -q "RULE NUMBER COLLISION"; then
+    bad "applying the relabeller did not clear the collision report — reporter and rewriter disagree about the heading"
+  else
+    ok "applying the relabeller clears every rule collision (remedy closes its own report)"
+  fi
+  # And the control: the apply must not have silenced the linter wholesale.
+  printf '%s' "$after" | grep -q "RESTATES core section '5\.'" \
+    && ok "  and the unrelated check-side findings survive the apply (the linter still runs)" \
+    || bad "  but the check-side findings vanished too — the 'cleared' result above is a dead linter, not a fix"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "layer-catalog-collision: PASS"; exit 0; fi
 echo "layer-catalog-collision: $fails assertion(s) FAILED" >&2

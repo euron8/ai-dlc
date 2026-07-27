@@ -17,6 +17,60 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.178.0] — 2026-07-27
+
+### Added — rule numbers collide exactly like check numbers, and nothing looked
+
+`EXTENSION-CHECK-NUMBER-COLLISION` exists because extensions are additive: an extension's
+`### 24.` and core's `### 24.` render into ONE merged list under ONE integer, and the bare
+`Check 24` the lead writes into the gate log stops having a referent.
+
+Extension **rules** have exactly the same property. An extension's `## Rule 29` and core's
+`### Rule 29` render into one merged rulebook, and "Rule 29" in a gate log, retro finding or
+dispatch brief then has two referents. Nothing reported it. `overrides/` entries are anchored
+by `shadows: <file>#<id>` and so are covered; an extension that *defines* a rule is anchored
+only by `hooks:` at file grain.
+
+The collision arm could never have seen it. Its anchor grammar terminates an id on `[.—]`,
+and a rule heading has no terminator — `ANCHOR_RE` matches **0 of core's 30 rules**. The
+number never reached the join.
+
+**Measured on the reference consumer before shipping: eight live collisions, zero false
+positives** — rules 13, 16, 19, 20, 24, 25, 29 and 30. Six of the eight sit BELOW core's
+highest rule number, so this is not a grew-past-the-ceiling problem; it starts the moment an
+extension numbers anything. The full 0.176.0 pull — every detector, `hard-blockers.sh` clean,
+`validate-layer-entries.sh` 0 errors / 0 warnings — reported none of them.
+
+- **W4** in `validate-layer-entries.sh`: an extension defining a rule number its hooked core
+  file also defines with a different title. Same number and same title is a Rule 27(c)
+  RESTATEMENT and says so instead. A heading already carrying `[ext:<id>]` or `[core]` is
+  silent — the labelled form is the resolved state, and a detector its own prescribed remedy
+  cannot clear trains the operator to stop reading it.
+- **WARN, never ERROR.** A rule number does not reach the durable audit record the way a
+  check number does, which is E6's stated reason for erroring; and eight ERRORs on first
+  contact is a linter that gets switched off. A consumer must not be unable to take a
+  security fix because its own rule catalog needs relabelling.
+- **The doer ships with the detector.** `reconcile/relabel-extension-checks.sh` gains a rule
+  pass writing `## Rule <n> [ext:<id>] -- <title>`; the integer never moves. That script's own
+  header records why: v0.49.0 shipped the check-label detector with no rewriter, and across
+  three releases the reference consumer adopted the label on exactly zero of its checks.
+- **Invariant I34** binds the two `RULE_RE` definitions byte-identical, the same split I15
+  binds for `ANCHOR_RE`. A reporter wider than the rewriter names a collision no tool can
+  resolve. It errors on divergence AND on failing to locate either copy, so it cannot pass by
+  finding nothing.
+
+Deliberately a SECOND grammar rather than a widened `ANCHOR_RE`: teaching the check grammar
+the word `Rule` would fold `Rule 29` and check `29` into one id and start joining two
+unrelated catalogs by integer. The fixture asserts that separation directly.
+
+Rule 27(d)'s heading already said "numbered sections" while its body was check-only; the body
+now covers rules and names both mechanisms.
+
+Found while building this: `relabel-extension-checks.sh` gated both passes on the check-number
+set being non-empty. Core's `SKILL.md` defines 30 rules and ZERO check anchors, so that gate
+skipped every `SKILL.md`-hooking entry — which is exactly where every rule collision lives. The
+rule pass could not have fired.
+
 ## [0.177.0] — 2026-07-27
 
 ### Fixed — the gate-manifest resolve read core, on a consumer whose manifest is an override
