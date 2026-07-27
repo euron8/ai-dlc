@@ -17,6 +17,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.170.0] — 2026-07-26
+
+### Added — the bug variant can finally stamp story provenance, and Check 17 asks it to
+
+Filed by the graph consumer as `PC-S298-BUG-INVESTIGATION-MISSING-PROVENANCE-STAMP`. Two
+consecutive bug-variant stories shipped with no `SKILL_INVOCATION_PROVENANCE` block; the
+feature variant has enforced one for releases.
+
+**The filed remedy — "add the same `stamp-story-provenance.sh --series` call
+`stories-test-strategy.md` makes" — cannot work, and finding out why is the fix.** That
+writer resolves the terminal pass from a convergence SERIES, pins
+`skill: ai-dlc-adversary-review`, and refuses anything whose verdict is not
+`EXIT_CONDITION_MET`. `bug-investigation.md` §4 is a ONE-SHOT
+`/bmad-review-adversarial-general`: no series, no verdict — core says so itself, since Check
+24 self-skips `bug-investigation` by name for exactly that reason. So the writer refused
+every bug story by construction, and nothing else wrote a block. The obligation had no
+owner, the same shape as 0.169.5's finding.
+
+**A second profile, not a second writer.** `schemas/provenance-block.json` gains
+`bug-story-provenance`: same envelope, same per-story fields, pinned to
+`bmad-review-adversarial-general`, and carrying no `verdict` anywhere in its lists.
+`stamp-story-provenance.sh` gains `--profile <name>` (default `story-provenance`, so every
+existing call is unchanged) and **derives the verdict rule from the profile rather than
+from the flag**:
+
+- profile with `verdict` batch-invariant → demand `EXIT_CONDITION_MET` (today's behaviour,
+  byte-identical);
+- profile without it → REFUSE a terminal pass that carries a verdict at all.
+
+So neither door opens the other. A convergence pass cannot be laundered onto a story
+through the one-shot door with its verdict silently discarded, and a third profile cannot
+inherit the wrong rule by accident.
+
+`bug-investigation.md` §4 now dispatches ONE `adversary` to a canonical output path that
+deliberately avoids the `-adversarial-p<M>` suffix (Check 24 globs that prefix, and a
+verdict-less pass swept into a series fails rung A), then stamps the story from it. Check 17
+gains a **bug-fix story readiness** arm requiring both the shape validator and the
+`--check` cross-check.
+
+The fixture gained seven assertions and a schema mutant. The mutant is worth recording: the
+first version dropped `verdict` from the convergence profile expecting the guard to go
+quiet, and it did not — it flipped to the one-shot rule and refused for a different reason.
+The assertion only became a real kill once it demanded a positive outcome (an unconverged
+pass actually reaching a stamp) instead of the mere absence of the old message, with an
+unmutated control proving the harness itself was not the thing doing the refusing.
+
 ## [0.169.7] — 2026-07-26
 
 ### Fixed — the mechanical region emitted shell escapes into markdown

@@ -964,6 +964,20 @@ gate's primary artifact.
   invented, copied stale, or edited after the fact FAILS here even though it
   passes the shape validator. Use the SAME `--series` prefix Check 24 takes.
 
+- **Bug-fix story readiness gate (bug-investigation):** run
+  `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill
+  bmad-review-adversarial-general`, then the CROSS-CHECK
+  `scripts/ai-dlc/stamp-story-provenance.sh --terminal
+  _bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md --profile
+  bug-story-provenance --check <story-file>`; exit 0 required for both.
+  The bug variant's §4 review is a ONE-SHOT, so the block carries NO `verdict`
+  and cites the bmad skill rather than the native one — which is why it needs its
+  own arm and its own profile. `--profile bug-story-provenance` is not optional:
+  the default profile pins `ai-dlc-adversary-review` and demands
+  `EXIT_CONDITION_MET`, so it refuses every bug story by construction. Check 24
+  self-skips this gate for the same reason (a one-shot stamps no verdict); the
+  provenance obligation does not go away with it.
+
 **PASS:** all required provenance scripts exit 0. **FAIL:** any
 script reports a missing block, malformed field, unknown skill,
 `mode: solo` on any block, missing transcript file (retro

@@ -30,16 +30,33 @@
 
 set -u
 
+# --profile selects which schema profile governs the stamp. Two ship:
+#
+#   story-provenance      (default) the CONVERGENCE cycle's terminal-pass residue. Pinned to
+#                         ai-dlc-adversary-review, and `verdict` is batch-invariant, so the
+#                         EXIT_CONDITION_MET guard below applies exactly as it always has.
+#   bug-story-provenance  the ONE-SHOT residue for a bug-fix story. Pinned to
+#                         bmad-review-adversarial-general, and carries NO `verdict` — a one-shot
+#                         stamps none (team-roles/adversary.md; Check 24 self-skips
+#                         bug-investigation for the same reason), so requiring EXIT_CONDITION_MET
+#                         would demand a field the producer is forbidden to write.
+#
+# The guard is DERIVED from the profile, never from a flag: a profile whose batch_invariant
+# carries `verdict` demands EXIT_CONDITION_MET, and one that does not REFUSES a terminal pass
+# carrying a verdict at all. So neither door can be used to enter the other, and adding a third
+# profile cannot silently inherit the wrong rule.
 TERMINAL=""
 SERIES=""
 TOOL_USE_ID=""
 CHECK_ONLY="no"
+PROFILE_NAME="story-provenance"
 STORIES=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --terminal) TERMINAL="${2:-}"; shift 2 ;;
         --series)   SERIES="${2:-}"; shift 2 ;;
+        --profile)  PROFILE_NAME="${2:-}"; shift 2 ;;
         --tool-use-id) TOOL_USE_ID="${2:-}"; shift 2 ;;
         --check)    CHECK_ONLY="yes"; shift ;;
         --) shift; while [[ $# -gt 0 ]]; do STORIES+=("$1"); shift; done ;;
@@ -67,7 +84,7 @@ if [[ -n "$SERIES" && -z "$TERMINAL" ]]; then
 fi
 
 if [[ -z "$TERMINAL" || ${#STORIES[@]} -eq 0 ]]; then
-    echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--check] <story-file>..." >&2
+    echo "usage: ./scripts/ai-dlc/stamp-story-provenance.sh (--terminal <pass-file> | --series <prefix>) [--profile <name>] [--check] <story-file>..." >&2
     exit 2
 fi
 [[ -f "$TERMINAL" ]] || { echo "ERROR: terminal pass file not found: $TERMINAL" >&2; exit 1; }
@@ -114,7 +131,7 @@ if [ -z "$SCHEMA" ]; then
     exit 1
 fi
 
-python3 - "$SCHEMA" "$TERMINAL" "$CHECK_ONLY" "$TOOL_USE_ID" "${STORIES[@]}" <<'PYEOF'
+python3 - "$SCHEMA" "$TERMINAL" "$CHECK_ONLY" "$TOOL_USE_ID" "$PROFILE_NAME" "${STORIES[@]}" <<'PYEOF'
 import hashlib
 import json
 import re
@@ -124,14 +141,19 @@ schema_path = sys.argv[1]
 terminal_path = sys.argv[2]
 check_only = sys.argv[3] == "yes"
 tool_use_id_override = sys.argv[4] or None
-story_paths = sys.argv[5:]
+profile_name = sys.argv[5]
+story_paths = sys.argv[6:]
 
 with open(schema_path, "r", encoding="utf-8") as fh:
     S = json.load(fh)
 
 ENV = S["envelope"]
 OPEN, CLOSE, MARKER = ENV["open"], ENV["close"], ENV["marker"]
-PROFILE = S["profiles"]["story-provenance"]
+if profile_name not in S["profiles"] or profile_name.startswith("$"):
+    known = ", ".join(k for k in S["profiles"] if not k.startswith("$"))
+    print(f"FAIL: --profile '{profile_name}' is not a profile in the schema. Known: {known}.", file=sys.stderr)
+    sys.exit(2)
+PROFILE = S["profiles"][profile_name]
 ORDER = PROFILE["fields"]
 PIN = PROFILE.get("pin", {})
 REQUIRE = set(PROFILE.get("require", []))
@@ -188,11 +210,26 @@ if tfields is None:
 if tfields.get("skill") != PIN["skill"]:
     print(f"FAIL: terminal pass cites skill '{tfields.get('skill')}', expected '{PIN['skill']}'.", file=sys.stderr)
     sys.exit(1)
-if tfields.get("verdict") != "EXIT_CONDITION_MET":
+# The verdict rule is DERIVED from the profile, not from a flag — see the --profile comment
+# above. A profile carrying `verdict` in batch_invariant is a CONVERGENCE profile and demands
+# EXIT_CONDITION_MET. A profile without it is a ONE-SHOT profile, where a verdict is a field the
+# producer is forbidden to write, so a terminal pass carrying one is the WRONG pass: refuse it
+# rather than drop the field, or a convergence pass could be laundered onto a story through the
+# one-shot door with its verdict silently discarded.
+if "verdict" in PROFILE.get("batch_invariant", []):
+    if tfields.get("verdict") != "EXIT_CONDITION_MET":
+        print(
+            f"FAIL: terminal pass verdict is '{tfields.get('verdict')}', not EXIT_CONDITION_MET. "
+            f"Refusing to stamp: a story residue must notarize a CONVERGED cycle. Run more passes "
+            f"(or resolve the hard block) until the terminal pass is EXIT_CONDITION_MET, then re-stamp.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+elif tfields.get("verdict"):
     print(
-        f"FAIL: terminal pass verdict is '{tfields.get('verdict')}', not EXIT_CONDITION_MET. "
-        f"Refusing to stamp: a story residue must notarize a CONVERGED cycle. Run more passes "
-        f"(or resolve the hard block) until the terminal pass is EXIT_CONDITION_MET, then re-stamp.",
+        f"FAIL: profile '{profile_name}' is a ONE-SHOT profile and its terminal pass must carry no "
+        f"verdict, but this one stamps '{tfields.get('verdict')}'. A verdict means a CONVERGENCE "
+        f"pass was passed to the one-shot door; stamp it with the convergence profile instead.",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -304,7 +341,10 @@ if check_only:
 
 print(
     f"STAMP-STORY-PROVENANCE: stamped {len(wrote)} of {len(story_paths)} story file(s) "
-    f"from {terminal_path} (verdict {tfields.get('verdict')}); "
+    # A one-shot profile has no verdict, and printing Python's `None` there reads as a field
+    # that failed to parse rather than one that correctly does not exist.
+    f"from {terminal_path} "
+    f"({'verdict ' + tfields['verdict'] if tfields.get('verdict') else 'one-shot, no verdict'}); "
     f"{len(story_paths) - len(wrote)} already current."
 )
 for w in wrote:
