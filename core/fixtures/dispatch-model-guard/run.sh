@@ -59,6 +59,36 @@ expect_untouched() {
     || bad "$3 → hook emitted '$out', expected NOTHING (it must not inject or force-approve here)"
 }
 
+# The prompt the guard hands back, for effort assertions.
+newprompt() { raw "$1" "$2" | jq -r '.hookSpecificOutput.updatedInput.prompt // ""' 2>/dev/null; }
+expect_effort() {  # expect_effort <root> <json> <level> <label>
+  local got; got="$(newprompt "$1" "$2" | grep -oE '/effort [a-z]+' | head -1)"
+  [ "$got" = "/effort $3" ] \
+    && ok "$4 -> prompt carries \`/effort $3\`" \
+    || bad "$4 -> expected \`/effort $3\` appended to the prompt, got '${got:-<none>}'"
+}
+expect_model_kept() { # expect_model_kept <root> <json> <label>
+  # The guard emitted (to append effort) but did NOT rewrite `model`. Distinguishes
+  # "left the model alone" from "emitted nothing", which stopped being the same thing
+  # once effort became a second, independent trigger.
+  local m; m="$(raw "$1" "$2" | jq -r '.hookSpecificOutput.updatedInput.model // "<unset>"' 2>/dev/null)"
+  local want; want="$(printf '%s' "$2" | jq -r '.tool_input.model // "<unset>"')"
+  [ "$m" = "$want" ] \
+    && ok "$3 -> model left as '$want'" \
+    || bad "$3 -> model was rewritten to '$m', expected it left as '$want'"
+}
+expect_no_model() { # expect_no_model <root> <json> <label>
+  raw "$1" "$2" | jq -e '.hookSpecificOutput.updatedInput | has("model") | not' >/dev/null 2>&1 \
+    && ok "$3 -> no model bound" \
+    || bad "$3 -> a model was bound where none is configured"
+}
+expect_no_effort() { # expect_no_effort <root> <json> <label>
+  local got; got="$(newprompt "$1" "$2" | grep -oE '/effort [a-z]+' | head -1)"
+  [ -z "$got" ] \
+    && ok "$3 -> no effort directive appended" \
+    || bad "$3 -> an effort directive was appended ('$got') where none should be"
+}
+
 echo "dispatch-model-guard"
 
 # --- 1. gate-adjudicator with NO model param -> SET opus ---------------------
@@ -93,36 +123,47 @@ expect_set "$CONSUMER" "$(mkjson Agent remediator sonnet)" opus \
   "remediator explicitly requested sonnet against an opus pin (the real S291 defect)"
 
 # --- 4. correct tier -> UNTOUCHED (happy path keeps its approval posture) ----
-expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" \
-  "gate-adjudicator requested opus against an opus pin"
-expect_untouched "$CONSUMER" "$(mkjson Agent analyst sonnet)" \
-  "analyst requested sonnet against a sonnet pin"
+# The call is still AMENDED — effort has to be appended — but the model is left alone.
+# Model and effort are independent triggers; either can fire without the other.
+expect_model_kept "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" \
+  "gate-adjudicator requested opus against an opus config"
+expect_model_kept "$CONSUMER" "$(mkjson Agent analyst sonnet)" \
+  "analyst requested sonnet against a sonnet config"
 
 # --- 5. a request CARRYING the key matches ----------------------------------
 # The key is `opus`; a full model string containing it is the same model -> untouched.
 # The tolerance is bounded by the DECLARED key, not by a hardcoded tier table.
-expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator 'claude-opus-5[1m]')" \
-  "full model string carrying the pinned key (key compare, not a tier guess)"
+expect_model_kept "$CONSUMER" "$(mkjson Agent gate-adjudicator 'claude-opus-5[1m]')" \
+  "full model string carrying the configured key (key compare, not a tier guess)"
 
 # --- 6. unpinned role -> UNTOUCHED (fail-open: tea/sm/ux/cis declare nothing)-
-expect_untouched "$CONSUMER" "$(mkjson Agent tea opus)" \
-  "unpinned role (tea.md) — fail-open, declares no pin"
+# No model param, so an absent `model` in updatedInput proves the guard bound none —
+# with a param present it would be the CALLER's value surviving, which proves nothing.
+expect_no_model "$CONSUMER" "$(mkjson Agent tea)" \
+  "tea configures an effort but no model"
+expect_model_kept "$CONSUMER" "$(mkjson Agent tea opus)" \
+  "tea with an explicit model: the guard has no configured value to correct it to"
 
-# --- 7. key not defined in aiDlcModels -> UNTOUCHED (fail-open) -------------
-# architect.md names `ghostkey`, which the seeded settings.json does not define.
-# An unresolvable key must bind NOTHING rather than bind a guess.
-expect_untouched "$CONSUMER" "$(mkjson Agent architect sonnet)" \
-  "role naming a key absent from aiDlcModels — fail-open"
+# --- 7. model key not defined in aiDlcModels -> NO MODEL BOUND (fail-open) ---
+# architect's entry names `ghostkey`, which aiDlcModels does not define. The model must
+# not be bound. Its EFFORT is still valid and still binds — proof the two resolve
+# independently, so one broken half cannot silently take the other down with it.
+expect_no_model "$CONSUMER" "$(mkjson Agent architect)" \
+  "role whose configured model key is absent from aiDlcModels — no model bound"
+expect_model_kept "$CONSUMER" "$(mkjson Agent architect sonnet)" \
+  "and an explicitly wrong model is NOT corrected against an unresolvable key"
+expect_effort "$CONSUMER" "$(mkjson Agent architect sonnet)" high \
+  "the same role's valid effort still binds (the two resolve independently)"
 
 # --- 8. the Ollama prose line is not a pin; the `- Model:` key binds ---------
-expect_untouched "$CONSUMER" "$(mkjson Agent dev sonnet)" \
-  "dev.md real sonnet pin: a sonnet request is left untouched"
+expect_model_kept "$CONSUMER" "$(mkjson Agent dev sonnet)" \
+  "dev configured sonnet: a sonnet request is left alone"
 expect_set "$CONSUMER" "$(mkjson Agent dev opus)" sonnet \
   "dev.md opus request is corrected to the pinned sonnet (prose /model line is not the pin)"
 
 # --- 8b. dev-escalated: model escalation is a ROLE, and its pin is bound ------
-expect_untouched "$CONSUMER" "$(mkjson Agent dev-escalated opus)" \
-  "dev-escalated requested opus against its opus pin (escalation happy path)"
+expect_model_kept "$CONSUMER" "$(mkjson Agent dev-escalated opus)" \
+  "dev-escalated requested opus against its opus config (escalation happy path)"
 expect_set "$CONSUMER" "$(mkjson Agent dev-escalated sonnet)" opus \
   "dev-escalated requested sonnet against its opus pin → corrected to opus (the escalation slip)"
 expect_set "$CONSUMER" "$(mkjson Agent dev-escalated)" opus \
@@ -157,14 +198,52 @@ expect_untouched "$CONSUMER" "$(mkjson Agent nonexistent-role)" \
 expect_set "$CONSUMER" "$(mkjson Task remediator)" opus \
   "Task-tool dispatch is policed like Agent"
 
-# --- 14. FIXTURE STALENESS: the real core role files must still parse -------
-REAL_PIN="$(grep -oE '^- Model: `[A-Za-z0-9_-]+`' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null | head -1)"
-[ -n "$REAL_PIN" ] && ok "real core gate-adjudicator.md still carries a parseable '- Model:' key" \
-  || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md has no '- Model: \`<key>\`' line — the guard would silently stop binding"
+# --- 13b. EFFORT is bound too, from the same config entry -------------------
+# The Agent tool has no `effort` parameter, so the guard appends a `/effort` directive
+# to the dispatch PROMPT. Without this the config would be authoritative for model and
+# merely advisory for effort, and a teammate would have to read settings.json to learn
+# its own effort — the compliance hope this release exists to remove.
+expect_effort "$CONSUMER" "$(mkjson Agent gate-adjudicator)" high \
+  "gate-adjudicator (config says high)"
+expect_effort "$CONSUMER" "$(mkjson Agent dev)" medium \
+  "dev (config says medium)"
 
-REAL_PIN="$(grep -oE '^- Model: `[A-Za-z0-9_-]+`' "$SRC_ROLES/dev-escalated.md" 2>/dev/null | head -1)"
-[ -n "$REAL_PIN" ] && ok "real core dev-escalated.md still carries a parseable '- Model:' key" \
-  || bad "FIXTURE STALE: core/team-roles/dev-escalated.md has no '- Model: \`<key>\`' line — the guard would silently stop binding the escalated role"
+# A role with an effort and NO model — the party-persona shape. Before this release it
+# got no binding at all; now its effort is bound even though its model is not.
+expect_effort "$CONSUMER" "$(mkjson Agent tea)" high \
+  "tea has an effort but no model"
+raw "$CONSUMER" "$(mkjson Agent tea)" | jq -e '.hookSpecificOutput.updatedInput | has("model") | not' >/dev/null 2>&1 \
+  && ok "tea gets no model bound (it configures none) while still getting its effort" \
+  || bad "a model was bound for tea, which configures none — the guard is inventing one"
+
+# An unrecognised effort level is DROPPED, never injected. Injecting it would instruct
+# a teammate to run a slash command that does not exist.
+expect_no_effort "$CONSUMER" "$(mkjson Agent badeffort)" \
+  "a role configured with an invalid effort level"
+
+# --- 13c. IDEMPOTENCE: a well-formed dispatch keeps its approval posture -----
+# The guard emits `allow` to carry `updatedInput`. If it emitted on every dispatch it
+# would change the approval posture of calls it has nothing to correct, so a call that
+# already carries the right model AND the effort directive must produce NO decision.
+IDEM="$(jq -nc --arg p "contract is .claude/team-roles/gate-adjudicator.md
+
+Run \`/effort high\` as your FIRST action, before reading your role file." \
+  '{tool_name:"Agent",tool_input:{model:"opus",prompt:$p,name:"t"}}')"
+expect_untouched "$CONSUMER" "$IDEM" \
+  "a dispatch already carrying the configured model AND effort"
+
+# --- 13d. a role with no config entry -> UNTOUCHED (fail-open) --------------
+expect_untouched "$CONSUMER" "$(mkjson Agent nocfg)" \
+  "role file with no aiDlcRoles entry — fail-open, binds nothing"
+
+# --- 14. FIXTURE STALENESS: the real core role files must still parse -------
+REAL_PTR="$(grep -c 'aiDlcRoles\.' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null)"; REAL_PTR="${REAL_PTR:-0}"
+[ "$REAL_PTR" -gt 0 ] && ok "real core gate-adjudicator.md points at its aiDlcRoles entry" \
+  || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md no longer names aiDlcRoles — the role file and the config have been decoupled without updating this fixture"
+
+REAL_PIN="$(grep -c '^- Model: \|^- `/effort ' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null)"; REAL_PIN="${REAL_PIN:-0}"
+[ "$REAL_PIN" -eq 0 ] && ok "real core role files state no model or effort of their own (config owns both)" \
+  || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md has grown a '- Model:' or '- /effort' line back. Two sources for one value is the drift this release removed; the guard reads only the config, so an in-file value would be silently ignored."
 
 # --- SPAWN LEDGER (v0.158.0) --------------------------------------------------
 # Check 22 reads this file instead of a table the lead writes about itself. The

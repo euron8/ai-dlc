@@ -1170,16 +1170,16 @@ mis-dispatched cannot vouch for its own dispatch. Filter to this sprint
 Rule 19:
 
 - **(a) model.** `model_bound` — the value the guard actually bound, not a
-  self-report — matches the key the role file's `- Model:` line names.
+  self-report — matches `aiDlcRoles.<role>.model` in settings.json.
   `model_requested` sits beside it so a corrected dispatch stays visible as a
   correction; a `model_requested` that disagrees with `model_bound` is a Rule
   19(a) slip the guard caught, and is reported in the gate log but does not FAIL
   this check — the teammate ran on the key its role names.
 
-  Compare the binding against the declaration only. Do not evaluate the key,
-  the string `aiDlcModels` maps it to, or how an escalated role's values
-  compare to its base role's. Per Rule 19(a) those are operator config, and
-  an equal or lower escalated value is not a finding.
+  Compare the binding against the config only. Do not evaluate the key, the
+  string `aiDlcModels` maps it to, the effort, or how an escalated role's
+  values compare to its base role's. Per Rule 19(a) those are operator
+  config, and an equal or lower escalated value is not a finding.
 - **(b) role contract.** `role_contract_cited` is `true`. `false` means the
   dispatch named its role only via `subagent_type` and carried no Rule 19(b)
   contract line — the guard bound the model anyway, but the contract citation

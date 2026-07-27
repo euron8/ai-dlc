@@ -480,10 +480,20 @@ After confirmation, proceed to Step 2.
 ## STEP 2: Model Strings
 
 Every teammate's model comes from ONE place: the `aiDlcModels` block in
-`.claude/settings.json`. A role file names a KEY (`- Model: `opus``); this block
-maps that key to the model string this project can actually reach. Role files
-carry no model string and no substitution token — there is nothing to fill in
-them, and nothing for a later pull to mask.
+`.claude/settings.json`. Two blocks: `aiDlcRoles` says what each role runs as,
+and `aiDlcModels` maps a model key to the string this project can actually reach.
+Role files state neither — there is nothing to fill in them, and nothing for a
+later pull to mask.
+
+```json
+"aiDlcRoles": {
+  "code-reviewer": { "model": "opus",   "effort": "high" },
+  "dev":           { "model": "sonnet", "effort": "medium" }
+}
+```
+
+Changing what a role runs on is a one-line edit here. It touches no core file, so
+it is not divergence and needs no override.
 
 Ask the user:
 

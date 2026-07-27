@@ -15,7 +15,8 @@
 #                      caveman), then append the template's blocks. Event-key
 #                      set is the union of consumer's and template's.
 #   2. enabledPlugins— additive only, user wins on conflict. Never removed.
-#   2b. aiDlcModels  — additive only, user wins on conflict. Same shape as
+#   2b. aiDlcModels / aiDlcRoles
+#                    — additive only, user wins on conflict. Same shape as
 #                      enabledPlugins, and load-bearing for the same reason in
 #                      reverse: the VALUES are consumer config (which model
 #                      string this project can reach) and must survive every
@@ -156,10 +157,17 @@ if ! printf '%s' "$BASE_JSON" | jq \
 
     $u
     | .enabledPlugins = (($t.enabledPlugins // {}) + ($u.enabledPlugins // {}))
-    # Guarded so a tree where NEITHER side declares the block is left alone,
-    # rather than gaining an empty `aiDlcModels: {}` that reads like config.
+    # Guarded so a tree where NEITHER side declares a block is left alone, rather
+    # than gaining an empty `{}` that reads like config.
+    #
+    # aiDlcRoles merges at the ROLE level, not per field: a consumer entry replaces
+    # the shipped one whole. Merging per field would let an upstream default for
+    # `effort` reappear inside an entry the consumer had deliberately rewritten, and
+    # the model and effort of a role are one decision.
     | ((($t.aiDlcModels // {}) + ($u.aiDlcModels // {}))) as $models
+    | ((($t.aiDlcRoles  // {}) + ($u.aiDlcRoles  // {}))) as $roles
     | if ($models | length) > 0 then .aiDlcModels = $models else . end
+    | if ($roles  | length) > 0 then .aiDlcRoles  = $roles  else . end
     | .hooks = (
         $events
         | map(. as $e | (($uh[$e] // []) | strip_ai_dlc) + ($th[$e] // []) | {($e): .})

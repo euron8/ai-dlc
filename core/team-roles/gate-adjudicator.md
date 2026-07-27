@@ -21,10 +21,9 @@ the check, read the artifacts, cite the evidence, decide.
 everything else. You do not edit the artifacts under review, run no repair, and touch no
 production file, gate log, or snapshot.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.gate-adjudicator` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Contract
 

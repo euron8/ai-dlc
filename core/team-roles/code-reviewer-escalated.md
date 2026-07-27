@@ -9,10 +9,9 @@ operating contract is the standard Code Reviewer role in full; the ONLY delta is
 model key and effort in the session-setup block below. What that key resolves to is
 operator config — do not evaluate it, and do not compare it to the standard role's.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.code-reviewer-escalated` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Contract
 

@@ -199,8 +199,8 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
       # `{dev_escalated_model_*}` from protected-path-editor — nearest-equivalent roles on
       # the same tier — because a role arriving with an unfilled model token would dispatch
       # against a literal `{token}`, and there was no other source for it. Role files now
-      # name a KEY that ships concrete (`- Model: `opus``) and `aiDlcModels` in the
-      # consumer's settings.json holds the string, so a new role arrives already resolvable
+      # state neither a model nor an effort — `aiDlcRoles` in the consumer's
+      # settings.json does, so a new role arrives already resolvable
       # and the guess has nothing left to guess. The hazard is gone rather than relocated:
       # a key the consumer's block does not define is caught upstream by I22, and at
       # dispatch the guard fails open rather than binding a literal.

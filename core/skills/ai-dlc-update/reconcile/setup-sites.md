@@ -201,31 +201,24 @@ sites:
 
 Documented so a future author doesn't add them:
 
-- **The `- Model:` key line in `core/team-roles/*.md`.** A role file names a
-  KEY; the consumer's `aiDlcModels` block in `.claude/settings.json` maps that
-  key to a model string. The key is rulebook prose and is core-owned like any
-  other line in the file. The string is consumer config in `settings.json`,
-  which reconciles through `template-sites.md` as a `json-merge` whose
-  `aiDlcModels` merge is additive with the consumer winning on conflict — so a
-  consumer's model strings survive a pull by construction, with no
-  mask/reinject step. Do not add a site for the `- Model:` line: a consumer
-  changing which key a role names is real, classifiable rulebook divergence,
-  exactly like `/effort` below.
+- **Model and effort in `core/team-roles/*.md`.** Role files state neither.
+  `aiDlcRoles.<role>` in the consumer's `.claude/settings.json` states both, and
+  `aiDlcModels` maps a model key to a string. Both blocks reconcile through
+  `template-sites.md` as a `json-merge`, additive with the consumer winning on
+  conflict, so a consumer's values survive a pull by construction with no
+  mask/reinject step. There is nothing in a role file to declare as a site.
 - **A model-strategy span in `ai-dlc-setup/SKILL.md` STEP 2.** STEP 2 carries
   no consumer-specific choice — the operator's model decision is which string
   each `aiDlcModels` key holds, and that lives in `settings.json`. Do not
   declare a heading-block over STEP 2.
 
-- **`- \`/effort <level>\`` in every team-role file.** Ships concrete since
-  before the first tagged release — there has never been an `{effort}`
-  template token. A
-  consumer changing this value is real, classifiable rulebook divergence
-  (most likely `domain-local`), never a setup-fill restore target.
+- **Effort.** It lives in `aiDlcRoles.<role>.effort`, alongside the model, and
+  reconciles with it as consumer config. No role file states one.
 - **The party-persona role files (`tea.md`, `ux.md`, `sm.md`, `cis.md`).** By
   design these name no model at all — they are spawned by the external
   `/bmad-party-mode` sub-skill, which controls their model, so an ai-dlc key
-  there would be inert. They have no `- Model:` line, and the dispatch guard
-  fails open on them deliberately. Do not add sites for them.
+  there would be inert. Their `aiDlcRoles` entries carry an effort and no model,
+  so the guard binds the effort and leaves the model alone. Nothing to declare.
 - **`{running_digest_command}` / `{function_verification_command}`** in
   `steps/deploy-validate.md`. These look identical to `{deploy_command}` /
   `{smoke_test_command}` (same `<!-- {token}: ... -->` comment shape) but

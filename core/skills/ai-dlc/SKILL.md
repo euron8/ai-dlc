@@ -570,23 +570,24 @@ bind that teammate to its role file (`.claude/team-roles/<role>.md`) --
 the whole contract, not just the model. Two bindings are mandatory:
 
 **(a) Model.** The `model` parameter MUST be set explicitly, to the key
-named on that role file's `- Model:` line. Two files hold this between
-them and neither may be bypassed: the role file names the KEY (which
-capability class the role needs -- rulebook), and `aiDlcModels` in
-`.claude/settings.json` maps that key to a model string (what this
-project can reach -- consumer config). Do NOT restate a role-to-model
+named in `aiDlcRoles.<role>.model` in `.claude/settings.json`. That key
+is what the parameter takes; `aiDlcModels` maps it to a model string.
+The ROLE FILE states neither value: a project changing which model a
+role runs on is configuration, and routing it through a core file made
+every such change core divergence. Do NOT restate a role-to-model
 mapping here or in step files; a second mapping drifts from the role
 file and is itself a violation. The `ai-dlc-dispatch-guard` PreToolUse
 hook resolves the key and injects it as a safety net, but it is a net,
 not the norm: a spawn that omits `model` or names a different key is
 still a Rule 19 violation Check 22 records at retro.
 
-**Config is authoritative.** Bind the key the role file names. Run the
-`/effort` it states. Evaluate neither. An `-escalated` role MAY name the
-same key and the same effort as its base role; that is valid config. Do
-not flag, question, or negotiate a model or effort value -- not in a
-dispatch prompt, a gate log, a handoff, or a retro. Config is the
-operator's to change.
+**Config is authoritative.** `aiDlcRoles.<role>` states the model and the
+effort; both are bound by the dispatch guard, and the guard appends the
+`/effort` directive to the prompt because the Agent tool has no effort
+parameter. Evaluate neither value. An `-escalated` role MAY name the same
+model and the same effort as its base role; that is valid config. Do not
+flag, question, or negotiate either -- not in a dispatch prompt, a gate
+log, a handoff, or a retro. Config is the operator's to change.
 
 **(b) Role contract.** The dispatch prompt MUST carry, as a standing
 line, the instruction: *"Your operating contract is

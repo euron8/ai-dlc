@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.175.0] — 2026-07-27
+
+### Changed — a role's model AND effort come from config, not from its role file
+
+`0.174.0` moved model *strings* to config but left the role file naming a model key
+and stating its own `/effort`. That was half a step: changing what a role runs on
+still meant editing a core file, which for a consumer is core divergence needing an
+override. Both values now live in one place.
+
+```json
+"aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5[1m]" },
+"aiDlcRoles": {
+  "code-reviewer": { "model": "opus",   "effort": "high" },
+  "dev":           { "model": "sonnet", "effort": "medium" }
+}
+```
+
+A role file now states neither. It carries a pointer at its config entry and nothing
+else. Retuning a role is a one-line edit to `settings.json` — no core file touched, no
+divergence, no override.
+
+**`code-reviewer` now defaults to `opus`.** It was sonnet-tier.
+
+### Changed — the guard binds effort too
+
+The Agent tool has a `model` parameter but no `effort` one, so effort cannot be bound
+the same way. The guard appends a `/effort <level>` directive to the dispatch prompt —
+the only channel reaching the subagent. Without it, config would be authoritative for
+the model and merely advisory for effort, and a teammate would have to read
+settings.json to learn its own.
+
+Model and effort are **independent triggers**: either can fire alone. A role with an
+effort and no model (the `/bmad-party-mode` personas: `cis`, `sm`, `tea`, `ux`) gets
+its effort bound and its model left alone — those roles previously got no binding at
+all. A role whose model key does not resolve still gets its valid effort.
+
+The guard is **idempotent**: a dispatch already carrying the configured model and the
+effort directive produces no decision, so a well-formed call keeps whatever approval
+posture it would otherwise have. Without that check the guard would emit on every
+dispatch and quietly change the posture of calls it has nothing to correct.
+
+`effort_bound` joins the spawn ledger. An effort outside
+`low`/`medium`/`high`/`xhigh`/`max` is dropped rather than injected — it would
+instruct a teammate to run a command that does not exist.
+
+### Changed — I22/I22b follow the config
+
+- **I22** — every role file has an `aiDlcRoles` entry; every entry's `model` (where it
+  has one) resolves in `aiDlcModels`; every `effort` is a legal level. The guard fails
+  open on all three, so each would otherwise be silent.
+- **I22b** — the `.aiDlc*` block names are read **out of the hook** and must exist in
+  the shipped template. Rename either end and every lookup returns empty, the guard
+  fails open, and every role dispatches unbound with the suite still green.
+
+Six mutants, one unmutated control: a missing entry, an unresolvable model key, an
+illegal effort, a template block rename, an unregistered new role file, and a
+hook-only rename that isolates I22b with the template untouched.
+
+### Migration
+
+`settings-merge.sh` merges `aiDlcRoles` at the **role level** — a consumer entry
+replaces the shipped one whole, rather than per field, because the model and effort of
+a role are one decision. Consumer entries survive; new upstream roles arrive.
+
+A consumer that had raised a role's effort via an override (`team-roles__<role>__effort`)
+should move that value into its `aiDlcRoles` entry and retire the override: the role
+file no longer contains an effort line for an override to shadow, and
+`reconcile/retired-layer-contract.sh` reports the stale anchor.
+
 ## [0.174.0] — 2026-07-27
 
 ### Changed — model strings move to one consumer-owned config block

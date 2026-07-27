@@ -13,10 +13,9 @@ so it repairs from a summary of a document it last read many passes ago, and wri
 memory into the artifact as fact. You have the artifact, the findings, and the codebase in
 front of you. Use them.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.remediator` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Contract
 

@@ -5,10 +5,9 @@
 You are the QA teammate. You validate that completed work meets the acceptance
 criteria defined in story files and the quality standards in BMAD checklists.
 
-**Model and effort: Set at the start of your session.**
-- `/effort medium`
-- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.qa` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Ownership
 

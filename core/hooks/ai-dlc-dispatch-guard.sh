@@ -58,30 +58,34 @@
 #   `.claude/team-roles/` dir. The distribution repo (no stamp; roles live under
 #   core/team-roles/) is a no-op.
 #
-#   SET iff the dispatch BINDS a role file that DECLARES a model key AND the
-#   requested model does not carry that key — or no model was requested at all
-#   (D2: absence is not neutral, it inherits). In that case the guard injects
-#   `model` = the key via `updatedInput` and returns `allow`, so the teammate
-#   runs on the named model first-time. Everything else exits 0 unchanged.
+#   SET when the dispatch binds a role whose config needs applying. TWO INDEPENDENT
+#   TRIGGERS: the requested model does not carry the configured key (or no model was
+#   requested at all — D2: absence is not neutral, it inherits), and/or the prompt
+#   does not already carry the configured effort directive. Either fires alone. When
+#   neither does, the hook exits 0 with no decision, so a well-formed dispatch keeps
+#   whatever approval posture it would otherwise have — that idempotence is what
+#   stops the guard from emitting on every call and quietly changing the posture of
+#   dispatches it has nothing to correct.
 #   (Through v0.79.0 this path DENIED and made the caller re-dispatch; PreToolUse
 #   `updatedInput` lets the guard correct the call instead of rejecting it, which
 #   removes the round trip and the dependence on the caller's recall.)
 #
-#   TWO FILES, ONE SOURCE OF TRUTH. The role file names a KEY (`- Model: `opus``);
-#   the consumer's `aiDlcModels` block in `.claude/settings.json` maps that key to
-#   a model string. The split is deliberate: which capability class a role needs
-#   is a rulebook decision that ships with the role file, while which string this
-#   project can actually reach is consumer config that varies by provider. It is
-#   also forced by the tool surface — the Agent tool's `model` parameter is an
-#   ENUM (`opus`/`sonnet`/`haiku`/`fable`) and rejects `claude-opus-5[1m]`, so the
-#   guard must inject the key; the teammate types the string at `/model`. A
-#   Bedrock consumer changes only the value, so the binding still holds.
+#   ONE SOURCE OF TRUTH: `aiDlcRoles.<role>` in the consumer's settings.json,
+#   which states both the model and the effort. The ROLE FILE states neither. A
+#   project changing what a role runs on is configuration; routing it through a
+#   core file made every such change core divergence needing an override, which is
+#   the friction this removes.
 #
-#   Before v0.174.0 the role file carried both a Personal and a Bedrock model
-#   string and this hook reduced them to a tier by substring match (`*opus*`,
-#   `*sonnet*`, else fail open). That match could not see haiku, fable, or any
-#   future name, and every string was a masked setup-substitution site. Resolving
-#   a declared key removes the guess and the 26 sites with it.
+#   `model` is a KEY into `aiDlcModels`, not a string, because the Agent tool's
+#   `model` parameter is an ENUM (`opus`/`sonnet`/`haiku`/`fable`) and rejects
+#   `claude-opus-5[1m]`. The guard injects the key; the value it maps to is what a
+#   teammate would type at `/model`. A Bedrock consumer changes only the value.
+#
+#   `effort` has NO tool parameter, so it cannot be bound the same way. The guard
+#   appends a `/effort <level>` directive to the dispatch PROMPT — the only channel
+#   that reaches the subagent. Without that, config would be authoritative for the
+#   model and merely advisory for effort, and a teammate would have to read
+#   settings.json to learn its own effort.
 #
 #   FAIL-OPEN on any ambiguity: no prompt, no role binding, unreadable or unpinned
 #   role file, an unreadable/invalid settings.json, a missing `aiDlcModels` block,
@@ -90,14 +94,11 @@
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only, and only ever ADD/CORRECT the model — never deny.
 #
-#   KNOWN GAP, deliberate: `cis.md`, `sm.md`, `tea.md`, `ux.md` declare no key,
-#   so D1 stays open for them (fail-open — a role file that declares nothing
-#   cannot bind anything). They are spawned by `/bmad-party-mode`, which controls
-#   their model. Closing it is now a one-line `- Model:` addition per file rather
-#   than four setup placeholders and eight manifest entries, but it remains a
-#   separate decision: the party personas are not ai-dlc's to pin.
-#   Every critical role (gate-adjudicator, adversary, remediator, architect,
-#   protected-path-editor) IS pinned and IS covered.
+#   PARTY PERSONAS: `cis`, `sm`, `tea`, `ux` configure an effort and no model —
+#   they are spawned by `/bmad-party-mode`, which controls their model. Their
+#   effort binds like any other role's; their model is left alone. A missing model
+#   is a normal configured state here, not an error, which is why the two resolve
+#   independently rather than one gating the other.
 #
 # INSTALL: wired by templates/settings.json.template (PreToolUse matcher
 #   "Agent|Task"); upserted by reconcile/settings-merge.sh on pull.
@@ -164,40 +165,53 @@ ROLE_FILE="$ROLES_DIR/$ROLE.md"
 ROLE_FILE_READABLE=true
 [ -r "$ROLE_FILE" ] || ROLE_FILE_READABLE=false
 
-# The pin line is the `- Model: \`<key>\`` row. `<key>` names an entry in the
-# consumer's `aiDlcModels` block, NOT a model string: the key is what the Agent
-# tool's `model` parameter accepts (it is an enum — `opus`/`sonnet`/`haiku`/
-# `fable` — and rejects a full string like `claude-opus-5[1m]`), while the value
-# it maps to is the string the teammate types at `/model`. One map, both jobs.
+# The role's model and effort come from `aiDlcRoles.<role>` in the consumer's
+# settings.json. The ROLE FILE declares neither: a project changing which model a
+# role runs on is configuration, and forcing it through a core file made every such
+# change core divergence needing an override. The role file names the role; the
+# config says what that role runs as.
 #
-# Anchor on `^- Model: ` specifically. dev.md carries a prose line mentioning
-# `/model` with no key at all, and role bodies discuss models in passing, so a
-# blind `grep -m1 model` reads the wrong line.
-#
-# This replaces the pre-v0.174.0 shape: two `- Personal:`/`- Bedrock:` lines
-# carrying substituted model strings, reduced to a tier by substring match
-# (`*opus*`→opus, `*sonnet*`→sonnet, else fail-open). That match silently gave
-# up on haiku, fable, and any future model name; resolving a declared key
-# removes the guess.
-PIN_KEY="$(grep -oE '^- Model: `[A-Za-z0-9_-]+`' "$ROLE_FILE" 2>/dev/null \
-  | head -1 | sed -E 's#^- Model: `##; s#`$##')"
-
-# The key must resolve in the consumer's settings. An unresolvable key is the
-# same class of hazard the old unrecognised-tier branch covered — we cannot say
-# what was intended — so it fails open rather than binding a guess. Resolution
-# also proves the block exists: a consumer whose settings predate `aiDlcModels`
-# gets no binding rather than a wrong one.
+# `model` is a KEY into `aiDlcModels`, not a model string. The Agent tool's `model`
+# parameter is an enum (`opus`/`sonnet`/`haiku`/`fable`) and rejects a full string
+# like `claude-opus-5[1m]`, so the guard injects the KEY; the value it maps to is
+# what a teammate would type at `/model`. Resolving the key here also proves the
+# consumer's config is coherent before anything is bound.
 SETTINGS="$PROJECT_DIR/.claude/settings.json"
+PIN_KEY=""
 PIN_MODEL=""
-if [ -n "$PIN_KEY" ] && [ -r "$SETTINGS" ]; then
-  PIN_MODEL="$(jq -r --arg k "$PIN_KEY" \
+PIN_EFFORT=""
+if [ -r "$SETTINGS" ]; then
+  PIN_KEY="$(jq -r --arg r "$ROLE" '.aiDlcRoles[$r].model // empty' "$SETTINGS" 2>/dev/null || true)"
+  PIN_EFFORT="$(jq -r --arg r "$ROLE" '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null || true)"
+  [ -n "$PIN_KEY" ] && PIN_MODEL="$(jq -r --arg k "$PIN_KEY" \
     '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null || true)"
 fi
 
-# EXPECT is the value the guard will bind: the KEY, because that is what the
-# Agent tool accepts. It is set only when the key resolved to a real string.
+# Effort is validated against the documented vocabulary rather than passed through.
+# It is injected into the dispatch PROMPT (the Agent tool has no `effort` parameter),
+# so a malformed value would become an instruction to run a slash command that does
+# not exist. An unrecognised level is dropped, not repaired.
+case "$PIN_EFFORT" in
+  low|medium|high|xhigh|max) ;;
+  *) PIN_EFFORT="" ;;
+esac
+
+# EXPECT is the value the guard binds as `model`: the KEY, because that is what the
+# Agent tool accepts. Set only when the key resolved to a real string.
 EXPECT=""
 [ -n "$PIN_MODEL" ] && EXPECT="$PIN_KEY"
+
+# A request MATCHES when it is the key itself, or a model string containing it
+# (`claude-opus-5[1m]` against key `opus`). The tolerance is bounded by the
+# CONFIGURED key rather than a hardcoded tier table, so it cannot drift.
+matches_pin() {
+  [ -n "$EXPECT" ] || return 1
+  case "$1" in
+    "$EXPECT")   return 0 ;;
+    *"$EXPECT"*) return 0 ;;
+    *)           return 1 ;;
+  esac
+}
 
 REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
 
@@ -278,6 +292,7 @@ jq -nc \
    --arg tier "${EXPECT:-}" \
    --arg req "${REQUESTED:-}" \
    --arg bound "$SPAWN_BOUND" \
+   --arg effort "${PIN_EFFORT:-}" \
    --argjson cited "$ROLE_CONTRACT_CITED" \
    --argjson readable "$ROLE_FILE_READABLE" '{
      v: 1, ts: $ts,
@@ -288,21 +303,43 @@ jq -nc \
      tier_pinned: (if $tier == "" then null else $tier end),
      model_requested: (if $req == "" then null else $req end),
      model_bound: $bound,
+     effort_bound: (if $effort == "" then null else $effort end),
      role_contract_cited: $cited,
      role_file_readable: $readable
    }' >> "$SPAWN_LEDGER" 2>/dev/null || true
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
-[ -n "$PIN_KEY" ] || exit 0         # role declares no model — nothing to bind
-[ -n "$EXPECT" ] || exit 0          # key did not resolve in aiDlcModels — fail open
 
-# ALREADY CORRECT: the request names the pinned key, or a model string containing it. Allow
-# unchanged — exit 0 with no decision, so the dispatch keeps whatever approval posture it would
-# otherwise have.
-if matches_pin "$REQUESTED"; then
-  exit 0
+# TWO THINGS CAN NEED SETTING, and a role may need either, both, or neither.
+#
+# MODEL is bound as the Agent tool's `model` parameter. Unresolvable config — no
+# `aiDlcRoles` entry, no `model` in it, or a key absent from `aiDlcModels` — leaves it
+# unbound rather than guessing. The party personas (cis/sm/tea/ux) legitimately have an
+# effort but no model, so a missing model is a normal state, not an error.
+NEEDS_MODEL=false
+if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
+  NEEDS_MODEL=true
 fi
+
+# EFFORT has no tool parameter, so it is appended to the dispatch PROMPT, which is the
+# only channel that reaches the subagent. Skipped when the caller already carried the
+# directive: that keeps the guard IDEMPOTENT, so a well-formed dispatch emits no
+# decision at all and keeps whatever approval posture it would otherwise have. Without
+# that check the guard would emit on every dispatch and quietly change the posture of
+# calls it has nothing to correct.
+EFFORT_LINE=""
+NEEDS_EFFORT=false
+if [ -n "$PIN_EFFORT" ]; then
+  EFFORT_LINE="Run \`/effort ${PIN_EFFORT}\` as your FIRST action, before reading your role file."
+  case "$PROMPT" in
+    *"/effort ${PIN_EFFORT}"*) : ;;
+    *) NEEDS_EFFORT=true ;;
+  esac
+fi
+
+# Nothing to set — exit 0 with no decision.
+[ "$NEEDS_MODEL" = true ] || [ "$NEEDS_EFFORT" = true ] || exit 0
 
 # OTHERWISE the model is ABSENT, a WRONG key, or a value that does not carry the pinned key —
 # none of which is what the role file pins. SET it, do not deny it. This is the v0.79.x flip:
@@ -319,17 +356,40 @@ fi
 # ONLY to carry `updatedInput`; a dispatch that was already correct never reaches here, so its
 # approval posture is untouched. If jq cannot build the corrected input, FAIL OPEN (exit 0) rather
 # than emit a broken decision.
-set_model() {
-  local note reason ctx updated
-  if [ -z "$REQUESTED" ]; then
-    note="no \`model\` param was passed"
-  else
-    note="\`model: \"$REQUESTED\"\` did not carry the pinned key \`${EXPECT}\`"
-  fi
-  reason="AI/DLC dispatch guard: bound \`team-roles/${ROLE}.md\` to \`${EXPECT}\` (${PIN_MODEL}) — ${note}. The role file names the model key and \`aiDlcModels\` in .claude/settings.json maps it to a string; together they are the single source of truth for a teammate's model. Set \`model\` to \"${EXPECT}\" so this teammate runs on the model its role names. First-time-correct, with nothing required in the caller's context. If the role's model is genuinely wrong, change the \`- Model:\` key in ${ROLE}.md, or what that key maps to in \`aiDlcModels\`."
-  ctx="dispatch-guard: model bound to ${EXPECT} (${PIN_MODEL}) from team-roles/${ROLE}.md (requested: ${REQUESTED:-<absent>}). The role file names the key, aiDlcModels maps it — not the call site."
-  updated="$(printf '%s' "$INPUT" | jq -c --arg m "$EXPECT" '.tool_input + {model: $m}' 2>/dev/null)"
+emit() {
+  local note reason ctx updated newprompt jqargs
+  updated="$(printf '%s' "$INPUT" | jq -c '.tool_input' 2>/dev/null)"
   [ -n "$updated" ] || exit 0
+
+  note=""
+  if [ "$NEEDS_MODEL" = true ]; then
+    if [ -z "$REQUESTED" ]; then
+      note="no \`model\` param was passed"
+    else
+      note="\`model: \"$REQUESTED\"\` did not carry the configured key \`${EXPECT}\`"
+    fi
+    updated="$(printf '%s' "$updated" | jq -c --arg m "$EXPECT" '. + {model: $m}' 2>/dev/null)"
+    [ -n "$updated" ] || exit 0
+  fi
+
+  if [ "$NEEDS_EFFORT" = true ]; then
+    # APPENDED, never prepended. implementation.md's dispatch-prompt cache discipline
+    # keeps a byte-identical shared block at the FRONT of every prompt; adding to the
+    # tail leaves that prefix intact.
+    newprompt="$(printf '%s\n\n%s' "$PROMPT" "$EFFORT_LINE")"
+    updated="$(printf '%s' "$updated" | jq -c --arg p "$newprompt" '. + {prompt: $p}' 2>/dev/null)"
+    [ -n "$updated" ] || exit 0
+  fi
+
+  reason="AI/DLC dispatch guard: bound \`${ROLE}\` from \`aiDlcRoles.${ROLE}\` in .claude/settings.json."
+  [ "$NEEDS_MODEL" = true ] && reason="${reason} Set \`model\` to \"${EXPECT}\" (${PIN_MODEL}) — ${note}."
+  [ "$NEEDS_EFFORT" = true ] && reason="${reason} Appended the \`/effort ${PIN_EFFORT}\` directive to the prompt, because the Agent tool has no effort parameter and the config is the only source for it."
+  reason="${reason} Config is authoritative for both; a call site does not override it. To change either value, edit that config entry."
+
+  ctx="dispatch-guard: ${ROLE} bound from aiDlcRoles.${ROLE}"
+  [ "$NEEDS_MODEL" = true ] && ctx="${ctx} — model=${EXPECT} (${PIN_MODEL}), requested: ${REQUESTED:-<absent>}"
+  [ "$NEEDS_EFFORT" = true ] && ctx="${ctx} — effort=${PIN_EFFORT} appended to the prompt"
+
   jq -n --arg reason "$reason" --arg ctx "$ctx" --argjson ui "$updated" '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
@@ -341,4 +401,4 @@ set_model() {
   }'
   exit 0
 }
-set_model
+emit

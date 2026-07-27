@@ -46,10 +46,9 @@ manufactured finding there is an edit to a correct artifact, and the edit is whe
 new defects come from — the same failure the convergence loop excluded this skill
 to avoid.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.adversary` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Contract
 
