@@ -80,6 +80,7 @@ kind: check | step-domain | role
 hooks: steps/gate-validation.md        # the core file/step this augments
 id: <stable-id>                        # e.g. exec-health-floor, check-financial-display
 push_candidate: false                  # true = generalizable; feeds the ai-dlc-update push-mine / absorption arc
+fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 ---
 
 <the additive rule / check / step body>
@@ -98,6 +99,21 @@ The Rule 27 loader and `ai-dlc-update`'s §7v hooks-existence check both map
 the value the same way core files map to consumer files. A naive
 skill-relative join would look for `.claude/skills/ai-dlc/team-roles/<role>.md`
 and wrongly report every role hook missing.
+
+**`fixtures:` — how a consumer check's fixture reaches H1.** Optional, `kind: check` only.
+A comma- or space-separated list of fixture directories under `tests/fixtures/` (the
+`tests/fixtures/` prefix may be written or omitted). Core H1 derives its coverage set from
+`enforcement-map.yaml`'s `fixtures:` bindings — and that map is upstream-owned and carries no
+row for a consumer check, so before this field a consumer that shipped an adversarial fixture
+with its check had **no way to bind it**: editing the map is unregisterable core drift the
+next `apply` overwrites, and the alternative was a hand-maintained enumeration inside the
+extension, which is the exact practice H1's rewrite exists to end. Declaring it here puts the
+fixture in the set H1 reads.
+
+The binding is the whole mechanism, so a dangling one is worse than none: it makes H1 report
+coverage that does not exist. `ai-dlc-update` reports `EXTENSION-FIXTURE-UNBOUND` for a
+`fixtures:` value that is not a directory in the consumer tree, level-triggered — it is a
+state of your tree, so a pull that changes nothing here still reports it.
 
 - **Additive only.** An extension ADDS behavior; it never edits a core rule. To
   *change* an existing core rule, use `overrides/` instead.

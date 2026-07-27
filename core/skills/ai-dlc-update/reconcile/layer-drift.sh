@@ -47,6 +47,12 @@
 #   OVERRIDE-ANCHOR-UNRESOLVED       anchor not found in theirs (upstream restructured)
 #   OVERRIDE-OK                      shadowed section unchanged
 #   EXTENSION-HOOK-MISSING           hooks: target absent in theirs
+#   EXTENSION-FIXTURE-UNBOUND        an entry declares `fixtures:` naming a directory this
+#                                    consumer does not have. That binding is what puts a
+#                                    consumer check's fixture into core H1's DERIVED set, so
+#                                    a dangling one makes H1 report coverage it does not have
+#                                    — the same shape as the hand-typed enumeration H1 deleted.
+#                                    Level-triggered: a state of the tree, not an event.
 #   EXTENSION-RETIRE-CANDIDATE       theirs' core file NEWLY defines a section this
 #                                    extension also defines, matched by TITLE (at the
 #                                    same number or a different one) -> upstream
@@ -351,6 +357,18 @@ while IFS= read -r f; do
   cp="$(dist_path "$hooks")"
 
   have "$THEIRS" "$cp" || { emit EXTENSION-HOOK-MISSING "$entry" "$hooks" "hooks target absent at $THEIRS"; continue; }
+
+  # A `fixtures:` binding is how a consumer check's adversarial fixture reaches core H1's
+  # DERIVED set. The binding is the whole mechanism, so a binding that points at nothing is
+  # H1 reporting coverage it does not have — the exact failure H1's own enumeration was
+  # deleted to end, reintroduced one layer out. LEVEL-TRIGGERED, like ORPHANED-RELOCATED: it
+  # is a state of the consumer tree, so a pull that changes nothing here must still report it.
+  for fx in $(fm "$f" fixtures | tr ',' ' '); do
+    [ -n "$fx" ] || continue
+    case "$fx" in tests/fixtures/*) ;; *) fx="tests/fixtures/$fx" ;; esac
+    [ -d "$CONSUMER/$fx" ] || emit EXTENSION-FIXTURE-UNBOUND "$entry" "$hooks" \
+      "declares fixtures: $fx, which is not a directory in this consumer. H1 derives its coverage set from these bindings, so a dangling one reads exactly like coverage."
+  done
 
   # Catalog reconciliation between this extension and the core file it hooks.
   #

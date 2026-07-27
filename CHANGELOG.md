@@ -17,6 +17,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.172.0] — 2026-07-26
+
+### Added — `fixtures:` on an extension entry, so a consumer check's fixture can reach H1
+
+Filed by the graph consumer as `PC-S300-EXTENSION-CHECKS-CANNOT-BIND-A-FIXTURE-TO-CORE-H1`.
+
+H1's coverage set was rewritten to be DERIVED from `enforcement-map.yaml`'s `fixtures:`
+bindings, for a good reason it states outright: the enumeration it replaced listed seven
+checks while the map bound eleven, so four fixtures existed that H1 could not see and *"the
+omission read exactly like coverage."*
+
+That fix is correct for core's checks and closes nothing for a consumer's. Rule 27 invites a
+consumer to add gate checks via `extensions/`, and a serious consumer ships adversarial
+fixtures with them — with no way to bind them: the map is upstream-owned and carries no row
+for a consumer check, and editing it is unregisterable core drift the next `apply` overwrites
+(`register-drift.sh` refuses it: *"An override anchors to a heading, so this cannot be
+registered as one"*). The reference consumer had five checks shipping driven fixtures, none
+bound, none verified — compensating with a hand-maintained enumeration inside its extension,
+which is the exact practice H1's rewrite exists to end.
+
+The entry contract gains an optional `fixtures:` field on `kind: check` entries, and H1's
+derived set is now the union of two binding sources: the map for core's checks, the extension
+frontmatter for the consumer's. Neither is enumerated in the check body — I24 still fails the
+build on a fixture path restated there.
+
+**`EXTENSION-FIXTURE-UNBOUND` ships with it, and that is not optional.** The binding IS the
+mechanism, so a `fixtures:` value naming no directory would make H1 report coverage that does
+not exist — the same failure shape as the deleted enumeration, one layer out. `layer-drift.sh`
+now reports a dangling binding, level-triggered like `ORPHANED-RELOCATED`: it is a state of the
+consumer tree, so a pull that changes nothing there still reports it. The fixture asserts both
+directions, because the precision side is what keeps a detector switched on — a binding whose
+directory exists must stay silent.
+
+**Deliberately deferred, and said out loud rather than implied.** The entry also asks for
+`EXTENSION-RESTATES-DERIVED-SET` (an extension hand-enumerating a set core declares derived)
+and `EXTENSION-REFERENCES-DELETED-CORE-TEXT` (an extension citing a core construct `theirs` no
+longer carries). Both are new level-triggered detectors with their own false-positive surfaces,
+and neither is required for the binding above to be honest — only `EXTENSION-FIXTURE-UNBOUND`
+is, which is why it shipped here. They want their own arc.
+
 ## [0.171.3] — 2026-07-26
 
 ### Fixed — one dead SHA from sprint 136 failed every retro from S298 onward

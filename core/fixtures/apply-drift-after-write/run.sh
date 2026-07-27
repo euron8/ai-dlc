@@ -170,6 +170,26 @@ else
 fi
 rm -rf "$W2"
 
+# --- EXTENSION-FIXTURE-UNBOUND — a declared binding that resolves to nothing ---------
+# `fixtures:` is how a CONSUMER check's adversarial fixture reaches core H1's derived coverage
+# set; before it there was no binding path at all, so a consumer shipping fixtures with its
+# checks had them silently uncovered. The binding IS the mechanism, which makes a dangling one
+# strictly worse than none: H1 then reports coverage that does not exist — the same shape as
+# the hand-typed enumeration H1's rewrite deleted, one layer out.
+LD="$(bash "$LAYER" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+if printf '%s\n' "$LD" | grep -q 'EXTENSION-FIXTURE-UNBOUND.*check-dangling'; then
+  ok "a fixtures: binding naming no directory is reported EXTENSION-FIXTURE-UNBOUND"
+else
+  bad "a dangling fixtures: binding was not reported — H1 would count it as coverage: $(printf '%s\n' "$LD" | tr '\n' '|' | cut -c1-200)"
+fi
+# THE PRECISION SIDE, and it is the one that keeps the detector switched on. A check that
+# fires on a binding that DOES resolve makes every correctly-bound consumer fixture a finding.
+if printf '%s\n' "$LD" | grep -q 'EXTENSION-FIXTURE-UNBOUND.*check-bound'; then
+  bad "the detector fired on a binding whose directory exists — a check with false positives is a check the operator turns off"
+else
+  ok "a fixtures: binding whose directory exists is silent (the bare name resolves under tests/fixtures/)"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "apply-drift-after-write: PASS"; exit 0; fi
 echo "apply-drift-after-write: $fails assertion(s) FAILED" >&2

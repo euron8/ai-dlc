@@ -1495,16 +1495,28 @@ carrying an adversarial self-test ships that fixture, and that the fixture
 is reachable from the check without a hand-maintained list.
 
 **The check → fixture set is DERIVED, never enumerated here.** It is the
-`fixtures:` bindings in `enforcement-map.yaml` — read them, do not restate
-them in this file. This is the same single-source discipline the
+union of TWO `fixtures:` binding sources — read them, do not restate
+them in this file:
+
+1. `enforcement-map.yaml`, for core's own checks;
+2. the `fixtures:` frontmatter of every active `kind: check` entry under
+   `extensions/`, for the consumer's (`extensions/README.md`, entry
+   contract). The map is upstream-owned and carries no row for a consumer
+   check, so without this source a consumer that ships an adversarial
+   fixture with its check has nowhere to bind it, and H1 reports on core's
+   checks while silently covering none of theirs. `ai-dlc-update` reports
+   `EXTENSION-FIXTURE-UNBOUND` for a binding that resolves to no directory,
+   so a declared-but-absent fixture is loud rather than counted.
+
+This is the same single-source discipline the
 manifest-completeness pass below applies to the `GATE_MANIFEST` universal
 row. A restated copy is what this check exists to prevent: the enumeration
 that stood here listed seven checks while the map bound eleven, so Checks
 2, 2a, 25 and 26 shipped fixtures that H1 could not see, and the omission
 read exactly like coverage.
 
-**Check.** For each check with a non-empty `fixtures:` binding in
-`enforcement-map.yaml`, confirm both:
+**Check.** For each check with a non-empty `fixtures:` binding in either
+source, confirm both:
 
 (i) each bound fixture directory exists, with a `README.md` describing the
 bypass scenario and a `seed.sh` reproducing it idempotently — or, where a
