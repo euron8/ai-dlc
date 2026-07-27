@@ -30,11 +30,11 @@ Each spawn MUST bind the FULL role contract, not just the model
 (SKILL.md Rule 19):
 
 **(a) Model.** Every Agent tool invocation MUST include the `model`
-parameter, set to the key named on that role file's `- Model:` line
-(`.claude/team-roles/<role>.md`) — do NOT hardcode a role-to-model table
-here. The key is what the parameter takes; `aiDlcModels` in
-`.claude/settings.json` maps it to the model string. Omitted `model`
-inherits from the parent conversation and bypasses the role contract.
+parameter, set to `aiDlcRoles.<role>.model` in `.claude/settings.json` —
+do NOT hardcode a role-to-model table here. That key is what the parameter
+takes; `aiDlcModels` maps it to the model string. The role file states no
+model of its own. Omitted `model` inherits from the parent conversation
+and bypasses the role contract.
 
 **(b) Role contract.** Every dispatch prompt MUST carry the standing
 line — byte-identical across dispatches, in the shared block (see

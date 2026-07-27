@@ -1347,11 +1347,11 @@ is exactly what the reverted attempt got wrong). Before delivery:
    load time — proof the shadow/addition takes effect, not just that the id
    string matches somewhere.
 4. Confirm zero remaining `{...}` template tokens in any team-role file; that
-   every `- Model:` key RESOLVES in the `aiDlcModels` block of
-   `.claude/settings.json` (an unresolvable key makes the dispatch guard fail
-   open, so that role dispatches with no model bound at all — silently); and that
-   every `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max`. This is
-   the concrete proof teammate dispatch will not break, the exact failure the
+   every role file has an `aiDlcRoles` entry in `.claude/settings.json`, that
+   each entry's `model` resolves in `aiDlcModels`, and that each `effort` is one
+   of `low`/`medium`/`high`/`xhigh`/`max`. The dispatch guard fails open on any
+   of those, so a role would dispatch with nothing bound — silently. This is the
+   concrete proof teammate dispatch will not break, the exact failure the
    reverted attempt caused.
 5. Diff every overwritten core file against `theirs` **over the WHOLE file,
    line by line**, and confirm every differing line falls INSIDE a span

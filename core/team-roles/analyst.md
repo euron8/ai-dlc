@@ -9,10 +9,9 @@ gathering) so that the raw exploration never enters the lead's context.
 You read widely, distill, and write the result to a file. You return almost
 nothing to the lead.
 
-**Model and effort: Set at the start of your session.**
-- `/effort medium`
-- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.analyst` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Contract
 

@@ -94,23 +94,22 @@ d="$(decision "$NOSTAMP" "$(mkjson Edit "$NOSTAMP/.claude/skills/ai-dlc/steps/ga
 [ "$d" = allow ] && ok "Edit to core in an unstamped tree (distribution) → allow (no-op)" \
   || bad "the hook fired '$d' in an unstamped tree, expected allow — it must no-op in the distribution"
 
-# --- Assertion 6: a role's `- Model:` key line is RULEBOOK → DENY -----------
-# This assertion INVERTED in v0.174.0, and the inversion is the point. A role file used to
-# carry `- Personal: \`/model <string>\`` — a declared single-line setup site, so filling it
-# was allowed. Model strings now live in the consumer-owned `aiDlcModels` block in
-# settings.json, and the role file names a KEY instead. That key is a rulebook decision
-# (which capability class the role needs), not consumer config, so it is NOT a declared site
-# and an in-place edit must be denied and routed to an override like any other core line.
+# --- Assertion 6: a role's config POINTER is rulebook -> DENY ---------------
+# Role files state no model and no effort; `aiDlcRoles.<role>` in settings.json does.
+# What remains in the file is the line telling the teammate WHERE to look, and that is
+# rulebook: a consumer editing it to point somewhere else would silently redirect
+# dispatch. settings.json is not core, so the consumer changes values there freely —
+# this asserts the pointer to it cannot be rewritten in place.
 #
-# Asserting the deny is what keeps the retirement honest: if someone re-adds a site for the
-# `- Model:` line, this fires. A consumer that genuinely wants a different model changes what
-# the key MAPS TO in settings.json — which no core guard sees, because settings.json is not
-# core.
-MODEL_LINE="$(grep -m1 '^- Model: `' "$CONSUMER/.claude/team-roles/architect.md" || true)"
-[ -n "$MODEL_LINE" ] || bad "FIXTURE STALE: architect.md has no '- Model: \`<key>\`' line"
-d="$(decision "$CONSUMER" "$(mkjson Edit "$CONSUMER/.claude/team-roles/architect.md" "$MODEL_LINE")")"
-[ "$d" = deny ] && ok "Edit to a role's '- Model:' key line → deny (rulebook, not a declared config site)" \
-  || bad "a role model-key edit classified '$d', expected deny — a setup site for the model line has come back, or the region check is exempting the whole file"
+# This assertion has inverted twice as the design moved, which is the point of keeping
+# it: it used to allow an Edit here, because the model string on this line was a
+# declared setup site. There is no such site now, and asserting the deny is what would
+# catch one being re-added.
+PTR_LINE="$(grep -m1 'aiDlcRoles\.' "$CONSUMER/.claude/team-roles/architect.md" || true)"
+[ -n "$PTR_LINE" ] || bad "FIXTURE STALE: architect.md carries no aiDlcRoles pointer line"
+d="$(decision "$CONSUMER" "$(mkjson Edit "$CONSUMER/.claude/team-roles/architect.md" "$PTR_LINE")")"
+[ "$d" = deny ] && ok "Edit to a role's aiDlcRoles pointer line → deny (rulebook, not a config site)" \
+  || bad "a role pointer edit classified '$d', expected deny — a setup site for the model/effort region has come back, or the region check exempts the whole file"
 
 # --- Assertion 7: edit OUTSIDE the config regions of the SAME file → DENY ----
 # A Responsibilities line in architect.md is rulebook, not a declared site.

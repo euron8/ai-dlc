@@ -5,10 +5,9 @@
 You are the Architect teammate. You own system design decisions and technical
 tradeoffs for this project.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.architect` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Ownership
 

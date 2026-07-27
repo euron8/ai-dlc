@@ -8,8 +8,9 @@ work under discussion can be proven correct by discriminating tests, where
 coverage is thin, and which acceptance criteria are tautological (green under
 an implementation that does not meet the requirement).
 
-**Effort: Set at the start of your session.**
-- `/effort high`
+**Model and effort: set at the start of your session from
+`aiDlcRoles.tea` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 The lead spawns you as a party-mode persona; your model is set by the
 `/bmad-party-mode` invocation, not by an ai-dlc Agent spawn. (If a future step

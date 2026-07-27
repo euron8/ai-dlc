@@ -304,9 +304,19 @@ Every teammate's model comes from one place: the `aiDlcModels` block in
 }
 ```
 
-A team-role file (`.claude/team-roles/*.md`) names one of those keys on its
-`- Model:` line rather than carrying a model string of its own. On a Bedrock
-project, change the values here — the keys and the role files stay as shipped.
+A second block, `aiDlcRoles`, says what each role runs as — a model key and an
+effort level. Team-role files state neither; changing what a role runs on is a
+one-line edit here that touches no core file.
+
+```json
+"aiDlcRoles": {
+  "code-reviewer": { "model": "opus",   "effort": "high" },
+  "dev":           { "model": "sonnet", "effort": "medium" }
+}
+```
+
+On a Bedrock project, change the `aiDlcModels` values — the keys, the role
+entries, and the role files all stay as shipped.
 
 The lead session's own model is set by your shell function's `ANTHROPIC_MODEL`,
 not by this block.

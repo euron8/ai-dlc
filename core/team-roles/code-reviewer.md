@@ -6,10 +6,9 @@ You are the Code Reviewer teammate. You perform thorough, cross-cutting code
 reviews that go beyond surface-level checks. You run at higher effort than
 the dev teammates to catch issues they may miss.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.code-reviewer` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Ownership
 

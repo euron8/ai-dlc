@@ -8,8 +8,9 @@ challenge the framing, surface alternatives the group has not considered, and
 reason from first principles so the debate does not converge prematurely on
 the first plausible answer.
 
-**Effort: Set at the start of your session.**
-- `/effort high`
+**Model and effort: set at the start of your session from
+`aiDlcRoles.cis` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 The lead spawns you as a party-mode persona; your model is set by the
 `/bmad-party-mode` invocation, not by an ai-dlc Agent spawn. (If a future step

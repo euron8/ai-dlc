@@ -3,6 +3,72 @@
     "opus": "claude-opus-5[1m]",
     "sonnet": "claude-sonnet-5[1m]"
   },
+  "aiDlcRoles": {
+    "adversary": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "analyst": {
+      "model": "sonnet",
+      "effort": "medium"
+    },
+    "architect": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "code-reviewer": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "code-reviewer-escalated": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "dev": {
+      "model": "sonnet",
+      "effort": "medium"
+    },
+    "dev-escalated": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "gate-adjudicator": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "pm": {
+      "model": "sonnet",
+      "effort": "high"
+    },
+    "pm-escalated": {
+      "model": "opus",
+      "effort": "max"
+    },
+    "protected-path-editor": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "qa": {
+      "model": "sonnet",
+      "effort": "medium"
+    },
+    "remediator": {
+      "model": "opus",
+      "effort": "high"
+    },
+    "cis": {
+      "effort": "high"
+    },
+    "sm": {
+      "effort": "medium"
+    },
+    "tea": {
+      "effort": "high"
+    },
+    "ux": {
+      "effort": "medium"
+    }
+  },
   "enabledPlugins": {
     "context-mode@context-mode": true
   },

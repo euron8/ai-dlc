@@ -8,10 +8,9 @@ marker the lead sets for architectural judgment, cross-layer analysis, or an ope
 implementation approach. Your operating contract is the standard Dev role in full; the
 ONLY delta is the model key and effort in the session-setup block below.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.dev-escalated` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Contract
 

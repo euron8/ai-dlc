@@ -29,21 +29,15 @@ transcription:
   invisible: the artifact stays internally consistent and the omission surfaces
   sprints later, if ever.
 
-**Model and effort: Set at the start of your session. Both are mandatory and
-neither is a preference.**
-- `/effort max` — the highest tier available. This is the one dispatch per
-  sprint that authors the artifact every later gate treats as given; there is no
-  cheaper place to spend reasoning and no downstream step that recovers a defect
-  introduced here. Never lower it.
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.pm-escalated` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
-The declarations above are the contract, and the dispatch guard binds them from
-this file — a call-site model override is rebound to this file's value, because a
-conditional model is a conditional role, not a parameter. Run the key and effort this
-file declares. Do not down-shift, do not re-request a model, and do not compare either
-value to `pm.md`'s — they may be identical: the lead made that choice by routing spec derivation
-here.
+The config entry is the contract, and the dispatch guard binds it — a call-site
+model override is rebound to the configured value, because a conditional model is a
+conditional role, not a parameter. Run what `aiDlcRoles.pm-escalated` states. Do not
+down-shift, do not re-request a model, and do not compare either value to `pm`'s —
+they may be identical: the lead made that choice by routing spec derivation here.
 
 The tier is not a nicety. Unlike a story, the kernel has no return path — the PRD
 cites its capabilities, the architecture spine consumes it, stories carry its

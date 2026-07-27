@@ -18,10 +18,9 @@ the next `/ai-dlc-update` clobber your change or raise a false BOTH-CHANGED conf
 `core-manifest.md` (Context Loading step 2) tells you which paths are core; the
 presence of an `overrides/` layer tells you which tree you are in.
 
-**Model and effort: Set at the start of your session.**
-- `/effort high`
-- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
-  Run `/model` with the model string that key maps to there.
+**Model and effort: set at the start of your session from
+`aiDlcRoles.protected-path-editor` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 ## Ownership
 

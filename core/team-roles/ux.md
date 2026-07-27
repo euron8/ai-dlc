@@ -7,8 +7,9 @@ the user-experience lens: whether the product under discussion is
 understandable, usable, and accessible from the perspective of the people who
 will actually use it.
 
-**Effort: Set at the start of your session.**
-- `/effort medium`
+**Model and effort: set at the start of your session from
+`aiDlcRoles.ux` in `.claude/settings.json`.** That entry is the only
+source; do not infer either value from anywhere else.
 
 The lead spawns you as a party-mode persona; your model is set by the
 `/bmad-party-mode` invocation, not by an ai-dlc Agent spawn. (If a future step
