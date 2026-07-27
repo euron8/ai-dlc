@@ -416,9 +416,10 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
   - Locked Decisions (empty)
   - In-Flight Teammates (empty table, header row only:
     `agent | role | deliverable | dispatched-at | status`; rows are added
-    at dispatch as `in-flight`, become `idle-reusable` at join if the
+    at dispatch as `in-flight`, become `delivered-reachable` at join if the
     teammate may still be messaged, and are deleted — never struck — once
-    it will not be)
+    it will not be. What a message to a reachable teammate may carry is
+    bounded by Rule 28)
   - Context Reminders (initialized here; the `ai-dlc-context-sensor.sh`
     hook owns runtime firing and dedupe in its own sidecar, and Check 14
     reconciles these fields from it at each gate):

@@ -444,7 +444,7 @@ Teammates row.** Failure caught: the lead cannot address a dispatched
 teammate, reads that as teammate *death*, and re-dispatches work still
 running or already delivered. False-positive
 cost: one table row per dispatch, written in a snapshot update the lead
-already runs; deleted at join, or held as `idle-reusable` while the
+already runs; deleted at join, or held as `delivered-reachable` while the
 teammate can still be messaged. Removal condition: retire once the harness
 gives the lead a handle that both survives compaction and is valid for
 the spawn shape it used.

@@ -17,6 +17,106 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.176.0] — 2026-07-27
+
+### Added — Rule 28 bounds what a message to a resident teammate may carry
+
+The rulebook named `Agent`, `TaskCreate`/`TaskOutput` and the bounded file-wait beat
+as its dispatch and join primitives, and never once named `SendMessage` — the tool
+the pipeline actually uses to reach a teammate that is still resident. Nothing said
+where legitimate reuse ended.
+
+Worse, the rulebook advertised reuse and bounded it by nothing. The In-Flight
+Teammates roster carried a status literally named `idle-reusable`, defined in four
+core files by LIVENESS alone — "still alive and you may message it again" — while
+`gate-validation.md` says in the same section that it "records only whether the lead
+can still reach it". A lead choosing between a fresh spawn and a resident teammate
+under token pressure had a status token inviting the second and no rule bounding it.
+
+Rule 28 now states the boundary. `SendMessage` reaches a resident teammate; it does
+not create a context. That teammate's original brief and every prior exchange remain
+in its context and OUTRANK anything sent later, so a message may carry only content
+additive to and consistent with the brief it was dispatched under — a fold-in before
+the deliverable lands, a crash-recovery resolution, an answer to its own question, a
+gate verdict on its own work. Two things it may never carry:
+
+- **Retracted or narrowed scope** → `TaskStop` plus ONE fresh self-contained
+  dispatch. This is not hypothetical. The reference consumer recorded it as S287-FF4:
+  the lead dispatched a dev with a three-cause brief, then sent two `SendMessage`
+  corrections cutting one cause and its lineage tests. The dev built the ORIGINAL
+  brief — its test file still pinned the retracted values — and the withdrawn scope
+  came back as work product on a financial path.
+- **New or scope-distinct work, however small** → a fresh `Agent` dispatch,
+  regardless of how many resident teammates exist. Resident-teammate count is a
+  `TaskStop` cleanup concern, never a dispatch-routing input.
+
+### Changed — `idle-reusable` → `delivered-reachable`, and the token is now enforced
+
+The status token stated the wrong thing and nothing held its spelling: it lived in
+prose in four core files and in one remediation string, with no mechanism. It now
+states the fact the column exists to carry — it delivered, you can still reach it —
+and carries no invitation. Reachability bounds WHETHER the lead can message a
+teammate; Rule 28 bounds WHAT that message may say.
+
+`validate-artifact-budget.sh` gains a fourth independent verdict closing the status
+column to those two tokens. Separate from the struck-row verdict deliberately: the
+remedies are opposites — `struck row` says DELETE the row, `unknown status` says KEEP
+it and relabel — and merged into one verdict a lead deletes the row it was meant to
+fix. A struck row is exempt from the status scan for the same reason, and because
+struck rows carry a dash in the status cell, without that exemption the two checks
+would be entangled and neither would prove anything alone.
+
+Two measurements shaped the check and are pinned as fixtures so neither can be
+silently reverted:
+
+- **Leading token, not the whole cell**, delimited by whitespace, comma OR semicolon.
+  The reference consumer's live rows are `in-flight, retrying Write`, `in-flight,
+  since 2026-07-27T21:12:41Z`, and `in-flight (VERIFY pass, ...)`. An equality check
+  fails all three; a punctuation-only split still failed the third.
+- **The header declares the column.** Four of the consumer's 150 archived snapshots
+  predate the five-column row and declare no status column at all; their last cell is
+  a timestamp or a deliverable. The scan arms only after a header row whose last cell
+  is `status` — derived from the table, not a fitted exception list.
+
+Measured across all 151 of that consumer's snapshots after both fixes: **zero**
+firings. `core/fixtures/inflight-row-shape` covers both checks, and each mutant is
+verified to kill only its own assertions.
+
+### Not shipped — four candidate transcript checks, measured and rejected
+
+The obvious enforcer is a transcript scan flagging a `SendMessage` that carries
+scope-distinct content. Four predicates were measured against **373 `SendMessage`
+calls across 356 reference-consumer transcripts** (joined to the originating `Agent`
+dispatch for 358 of them, by agent name):
+
+| Predicate | Fires |
+|---|---|
+| message names a path absent from the dispatch prompt | 156/373 — 42% |
+| message shares no path with the dispatch prompt | 97/358 — 27% |
+| retraction language (`do not`, `no longer`, `instead of`, …) | 210/373 — 56% |
+| new-task lexical marker (`new task`, `additionally`, …) | 0/358 — **cannot fire** |
+
+Every sampled hit in the first three was legitimate: gate verdicts, crash-recovery
+pickup, deliverable-path corrections, operator fold-ins, and constraints of the form
+`Do NOT commit _bmad-output/**`. The fourth cannot fail, which reads exactly like a
+check that passed. None ships. The idle-reuse anti-pattern is unmeasured in that
+corpus; only the retraction failure has a confirmed incident, and the rule addresses
+both. Rule 28 binds through the mechanism it already had — the lead-conduct retro
+finding — and the affordance that invited the failure is removed rather than policed.
+
+### Note — corrections to push candidate `PC-S299-SENDMESSAGE-IDLE-TEAMMATE-SCOPE-DRIFT`
+
+The entry's substance is confirmed and shipped. Two corrections for the operator
+closing it:
+
+- Its receipt states that `SendMessage` appears in zero files including "every
+  `team-roles/` file". Four role files name it — `dev`, `qa`, `code-reviewer`,
+  `protected-path-editor` — in the teammate→lead direction. `team-roles/` is not
+  under `.claude/skills/ai-dlc/`, so the grep was right and its stated scope was not.
+- Its fix shape would permit `SendMessage` to "continue, **correct**, or extend the
+  SAME deliverable path". S287-FF4 is that exact move failing. The boundary shipped is
+  additive-vs-retractive, not same-path-vs-different-path.
+
 ## [0.175.0] — 2026-07-27
 
 ### Changed — a role's model AND effort come from config, not from its role file

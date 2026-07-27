@@ -378,6 +378,83 @@ check_inflight_rows() {
       done
 }
 
+# -----------------------------------------------------------------------------
+# IN-FLIGHT TEAMMATES: THE STATUS TOKEN IS A CLOSED SET OF TWO.
+#
+# The column carries one of two facts and no third: the teammate has not
+# delivered (`in-flight`), or it has delivered and the lead can still reach it
+# (`delivered-reachable`). A row that will not be reached again is DELETED, so
+# there is no token for it. An unrecognised token means the row no longer says
+# which of the two it is, and the section's whole purpose is to say exactly that.
+#
+# LEADING TOKEN, NOT THE WHOLE CELL. Measured on the reference consumer's live
+# snapshot: its status cells are `in-flight, retrying Write`, `in-flight, since
+# 2026-07-27T21:12:41Z`, and `in-flight (VERIFY pass, resolves_divergence: ...)`.
+# An equality check would have failed every one of them on the day it shipped.
+# The delimiter is whitespace OR a comma OR a semicolon, because the observed
+# rows use all three -- an earlier draft split on punctuation only and still
+# failed the live file. The trailing qualifier is a lead's own note and is priced
+# by the byte budget, like every other byte in the section. This mirrors the
+# PREFIX decision `is_canonical_section` already takes for section headings.
+#
+# THE HEADER DECLARES THE COLUMN, AND NOTHING IS CHECKED WITHOUT IT. Measured
+# across the reference consumer's 151 snapshots (1 live, 150 archived): four
+# archives predate the current five-column row and declare
+# `| teammate | deliverable | dispatched-at | state |` or a four-column table
+# with no status at all. Their last cell is a deliverable or a timestamp, and
+# indicting it would be the check reading a column that does not exist. So the
+# scan arms only after a header row whose last cell is `status`, which is the
+# table declaring it has one. This is derived from the table itself, not a
+# fitted exception list.
+#
+# A closed set is legitimate here because it bounds NAMES, never CONTENT: the
+# two tokens are defined by gate-validation.md and _gate-procedures.md, and this
+# is the mechanism that keeps a renamed token from drifting back.
+#
+# The excluded rows are enumerated rather than pattern-guessed, because each is
+# a real line the section carries and none of them is a violation: the header
+# row (last cell `status`), the alignment separator (last cell `---` or `:---:`),
+# any line that is not a pipe row at all (the section's prose, and the `(none)`
+# body), and a row with too few cells to have a status column.
+#
+# A STRUCK ROW IS EXEMPT, and that is not leniency. check_inflight_rows already
+# indicts it, and its remedy is DELETE THE ROW while this one's is RELABEL IT.
+# Firing both at one row hands the lead two contradictory instructions, and it
+# entangles the two checks: struck rows historically carry a dash in the status
+# cell, so without this line every struck-row assertion would also be a status
+# assertion and neither would prove anything on its own.
+# -----------------------------------------------------------------------------
+check_inflight_status() {
+  awk '
+    /^## In-Flight Teammates/ { f=1; declared=0; next }
+    /^## /                    { f=0 }
+    !f                        { next }
+    !/^[[:space:]]*\|/        { next }        # prose, "(none)", blank lines
+    /~~/                      { next }        # struck row: check_inflight_rows owns it
+    {
+      row = $0
+      sub(/^[[:space:]]*\|/, "", row)
+      sub(/\|[[:space:]]*$/, "", row)
+      n = split(row, cell, "|")
+      if (n < 2) next                          # too few columns to carry a status
+      s = cell[n]
+      gsub(/`/, "", s)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      if (s == "status") { declared = 1; next } # the header declares the column
+      if (!declared) next                      # no status column: nothing to check
+      if (s ~ /^:?-+:?$/) next                 # alignment separator
+      tok = s
+      sub(/[[:space:],;].*$/, "", tok)         # keep the leading token only
+      if (tok == "in-flight") next
+      if (tok == "delivered-reachable") next
+      print
+    }' "$1" 2>/dev/null \
+    | while IFS= read -r line; do
+        printf 'INFLIGHT  %-30s unknown status: %s\n' "$2" "$(printf '%s' "$line" | cut -c1-70)" \
+          >> "$STATUS_FILE"
+      done
+}
+
 env_override() {
   # prd.md -> AI_DLC_BUDGET_PRD_MD
   local key
@@ -517,6 +594,7 @@ trap 'rm -rf "$TMPROOT"' EXIT
 BREACH_FILE="$TMPROOT/breach"
 SCHEMA_FILE="$TMPROOT/schema"
 INFLIGHT_FILE="$TMPROOT/inflight"
+STATUS_FILE="$TMPROOT/inflight-status"
 
 say "bytes/token divisor : ${BPT} (calibrated with validate-reattach-budget.sh; under-counts 5-11% on this population)"
 say "project root        : ${ROOT}"
@@ -604,6 +682,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
     if [ "$name" = "pipeline-snapshot.md" ]; then
       check_snapshot_sections "$f" "$rel"
       check_inflight_rows "$f" "$rel"
+      check_inflight_status "$f" "$rel"
     fi
 
     if [ "$tokens" -gt "$ceiling" ]; then
@@ -711,13 +790,47 @@ if [ -s "$INFLIGHT_FILE" ]; then
 
       A teammate that has delivered but is still alive and re-messageable is not
       history and does not need a strikethrough to say so: give its row
-      `status: idle-reusable`. That is what the column is for. Striking the row
-      instead keeps every byte, keeps growing, and loses the one fact the section
-      exists to carry -- who is actually outstanding.
+      `status: delivered-reachable`. That is what the column is for. Striking the
+      row instead keeps every byte, keeps growing, and loses the one fact the
+      section exists to carry -- who is actually outstanding.
 EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
 rm -f "$INFLIGHT_FILE"
+
+# A FOURTH independent verdict, and separate for the same reason again: an
+# unrecognised status token is not a struck row, and the remedy is the opposite
+# one. `struck row` says DELETE the row; `unknown status` says KEEP the row and
+# say which of the two states it is in. Merged into one verdict, a lead reading
+# the struck-row remediation would delete a row it was supposed to relabel.
+if [ -s "$STATUS_FILE" ]; then
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ]; then
+    echo "WARN: In-Flight Teammates carries row(s) with an unrecognised status."
+  else
+    echo "FAIL: In-Flight Teammates carries row(s) with an unrecognised status." >&2
+  fi
+  cat "$STATUS_FILE" >&2
+  cat >&2 <<'EOF'
+
+      The status column is a closed set of two, and the leading token of the cell
+      must be one of them:
+
+        in-flight            -- dispatched, has not delivered yet
+        delivered-reachable  -- delivered, and the lead can still message it
+
+      A teammate that will not be messaged again has no token: DELETE its row.
+      A trailing note after a comma is allowed and priced by the byte budget
+      (`in-flight, retrying Write`); only the leading token is checked.
+
+      gate-validation.md defines the column, _gate-procedures.md step 3
+      reconciles it, and Rule 28 bounds what a message to a reachable teammate
+      may carry -- additive to its original brief, never a retraction and never
+      a scope-distinct new task.
+EOF
+  [ "$WARN_ONLY" -eq 1 ] || RC=1
+fi
+rm -f "$STATUS_FILE"
 
 # -----------------------------------------------------------------------------
 # A FOURTH verdict: COVERAGE. Everything above measures artifacts this table

@@ -33,8 +33,8 @@ When a step file says "run sub-step snapshot update", execute:
    path | dispatched-at | status`, `status: in-flight`) — the deliverable
    path is COPIED FROM THE BRIEF, which Rule 20 requires to name it, never
    invented here to fill the cell. When a deliverable is consumed, set that
-   row's `status` to `idle-reusable` if the teammate is still alive and you
-   may message it again, and **DELETE** the row outright once you will not.
+   row's `status` to `delivered-reachable` if the teammate is still alive and
+   you may message it again, and **DELETE** the row outright once you will not.
    Rows only — no prose, no struck-through history; `status` is how a row
    says it has delivered. This section must be written **at
    dispatch**, not only at the transition that follows it — a teammate
