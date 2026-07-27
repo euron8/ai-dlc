@@ -154,6 +154,24 @@ if is_retro_branch:
     if rm:
         retro_sprint_n = rm.group(1)
 
+# ---- Which sprint is UNDER VALIDATION ---------------------------------------
+# Needed to tell "my sprint's cycle commits are missing" from "some sprint 160 ago has a dead
+# SHA". Both used to render as the same opaque FAIL, and Check 2 reports this script's
+# process-wide exit code as the retro's own verdict, so a single retro could not distinguish
+# them without running this standalone and reading the per-artifact table by hand.
+#
+# DERIVED, in falling order of directness: the retro branch names its sprint; any branch may
+# carry `sprint-<N>`; otherwise the newest section in the log is the one being worked on. The
+# fallback is data, not a guess — the log grows a section per sprint and the highest number is
+# the current one by construction.
+current_sprint_n = retro_sprint_n
+if current_sprint_n is None:
+    bm = re.search(r'sprint-(\d+)', branch)
+    if bm:
+        current_sprint_n = bm.group(1)
+if current_sprint_n is None and artifacts:
+    current_sprint_n = str(max(int(a["sprint"]) for a in artifacts.values()))
+
 # ---- Build commit-based counts per artifact --------------------------------
 # Pattern: "Sprint N <artifact_key>: <cycle>"
 # Normalization:
@@ -236,6 +254,7 @@ for line in commits:
 
 # ---- Output table and check PASS/FAIL conditions ---------------------------
 fail = False
+unverifiable = []
 print()
 print(f"{'ARTIFACT':<42} | {'COMMITS':>7} | {'LOG ROWS':>8} | {'SHA CHECK':>10} | MATCH")
 print("-" * 90)
@@ -274,6 +293,25 @@ for fk in sorted(artifacts.keys()):
             disp = f"Sprint {sprint_n} {label}"
             print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | {match}")
             continue
+        # THE SAME SHAPE, ONE SHA SHORT. Zero commits on this branch and enough log rows, but
+        # at least one row SHA is no longer an object in the repo — a squash-history rewrite,
+        # or a log row written before the SHA-citation convention existed. The MERGED carve-out
+        # above requires every SHA to resolve, so it cannot fire, and the row fell through to
+        # `FAIL (<N commits)` with NO PATH BACK: nothing a future sprint does can make a dead
+        # SHA live again short of hand-editing 150-sprint-old rows. Measured on the reference
+        # consumer: five sections from sprints 136-155 failed every retro from S298 onward,
+        # none of them related to the sprint being validated.
+        #
+        # A prior sprint's cycle integrity is locked in by the merged trunk history either way;
+        # what is lost is only the ability to RE-verify it here. That is a different fact from
+        # "this sprint skipped its cycles", so it gets its own name and does not fail the run.
+        # The CURRENT sprint is never exempted — see below.
+        if str(sprint_n) != str(current_sprint_n):
+            match = "UNVERIFIABLE (history rewritten)"
+            disp = f"Sprint {sprint_n} {label}"
+            unverifiable.append(disp)
+            print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | {match}")
+            continue
 
     if log_rows < min_cycles:
         match = f"FAIL (<{min_cycles} log rows)"
@@ -303,6 +341,14 @@ for fk in sorted(artifacts.keys()):
     print(f"{disp:<42} | {cycles:>7} | {log_rows:>8} | {sha_status:>10} | {match}")
 
 print()
+# NAMED, NOT SWALLOWED. An exemption nobody can see is indistinguishable from a check that
+# scanned nothing, so say which rows were skipped and why — the operator can then tell a quiet
+# run from a run that quietly stopped looking.
+if unverifiable:
+    print(f"NOTE: {len(unverifiable)} prior-sprint section(s) UNVERIFIABLE (row SHAs no longer "
+          f"in this repo; their cycle integrity is locked in by merged trunk history, and "
+          f"re-verification here is what was lost): {', '.join(unverifiable)}")
+    print(f"      Sprint {current_sprint_n} is under validation and is never exempted this way.")
 if fail:
     print(f"RESULT: FAIL -- one or more artifacts have <{min_cycles} cycles or mismatch.",
           file=sys.stderr)

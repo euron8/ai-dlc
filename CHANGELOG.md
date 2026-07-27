@@ -17,6 +17,46 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.171.3] — 2026-07-26
+
+### Fixed — one dead SHA from sprint 136 failed every retro from S298 onward
+
+Filed by the graph consumer as `PC-S298-CYCLE-COMMITS-UNSCOPED-FULL-HISTORY-SCAN`.
+
+`validate-cycle-commits.sh` validates every `## Sprint N — <artifact>` section in
+`validation-cycle-log.md`, not just the sprint being validated. Its `MERGED (prior sprint)`
+carve-out is what normally lets old sections pass — but it requires **every** row SHA to
+still resolve in the repo. A squash-history rewrite, or a log row written before the
+SHA-citation convention existed, leaves a dead SHA the carve-out cannot fire on, so the row
+falls through to `FAIL (<3 commits)` **with no path back**: nothing a future sprint does can
+make a dead SHA live again short of hand-editing 150-sprint-old log rows.
+
+Measured on the reference consumer: five sections from sprints 136–155 failed the S298 retro,
+all `0 commits, 0/N SHA hits`, none related to the sprint under validation. And because
+`validate-mandatory-rules.sh` Check 2 reports this script's process-wide exit code as the
+retro's own verdict, a retro could not tell *"my sprint skipped its cycles"* from *"some
+sprint 160 ago has a dead SHA"* — both rendered as one opaque `VALIDATE-MANDATORY-RULES:
+FAIL`. Distinguishing them required running the validator standalone and reading the
+per-artifact table by hand, which is exactly what the wrapper exists to avoid.
+
+A prior sprint's cycle integrity is locked in by merged trunk history either way; what is lost
+is the ability to RE-verify it here. That is a different fact from a skipped cycle, so it now
+has its own name — `UNVERIFIABLE (history rewritten)` — and does not fail the run.
+
+**The sprint under validation is never exempted**, and which sprint that is comes from the
+data: the retro branch names it, any branch may carry `sprint-<N>`, and otherwise it is the
+highest-numbered section in the log, which is the current one by construction.
+
+**The exemption is said out loud.** A skipped row nobody can see reads as a check that scanned
+everything and found nothing, so the run names each skipped section and states that the
+current sprint is never exempted this way.
+
+Four fixture assertions: the prior-sprint row passes as `UNVERIFIABLE`, the skip is named in
+the output, the **current** sprint with the same dead SHAs still FAILS (on a non-retro branch,
+deliberately — on a retro branch an older SQUASHED carve-out would have made that assertion
+pass for an unrelated reason), and a mutant that removes the prior-sprint test restores the
+old failure.
+
 ## [0.171.2] — 2026-07-26
 
 ### Fixed — step 2's derived fixture set was two-thirds of the suite, and step 2 knew it
