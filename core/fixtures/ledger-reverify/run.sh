@@ -281,6 +281,46 @@ else
   printf '  FAIL  %-22s emitted output on a missing ledger\n' "no-ledger"
 fi
 
+# --- THE CLOSE PREDICATE IS ANCHORED, like the verify: predicate beside it -------------
+# Unanchored, a PROSE MENTION of the vocabulary closed a live entry, and the failure was silent
+# in the worse direction: no row at all rather than a wrong one. Measured on the reference
+# consumer, four entries with live receipts were invisible. The discriminator is line-leading
+# STRUCTURE — an annotation opens its line (bare, or opening a bold span, optionally behind the
+# <br> the entry bodies use); a mention sits inside a sentence.
+row_is "PROSE-MENTIONS-THE-VOCABULARY" STILL-LIVE \
+  "an OPEN entry quoting the close markers in prose, a blockquote and a code span still reports"
+row_is "BOLD-ANNOTATION-WITH-A-PREFIX" ABSENT \
+  "a real annotation whose bold span opens with words before the marker still closes"
+row_is "retained for the record" ABSENT \
+  "the copy a withdrawal supersedes carries no marker of its own and must not re-report forever"
+
+# MUTATION — restore the unanchored predicate. The prose entry must vanish, and it must be the
+# ONLY thing that changes: an anchor that also drops a real close is a different bug.
+MUTD="$(dirname "$DIST")/mut-closer"
+rm -rf "$MUTD"; mkdir -p "$MUTD"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTD/" 2>/dev/null
+sed 's@^  /\^\[ \\t\]\*(<br\[ \\t\]\*\\/?\[ \\t\]\*>)?\[ \\t\]\*(\\\*\\\*\[^`\]\*)?(ADOPTED UPSTREAM|WITHDRAWN)/ { closed=1 }@  /ADOPTED UPSTREAM|WITHDRAWN/ { closed=1 }@' \
+  "$CLOSER" > "$MUTD/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTD/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the anchor assertions above are unproven\n' "mutation"
+else
+  mut_out="$(bash "$MUTD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  mut_prose="$(printf '%s\n' "$mut_out" | awk -F'\t' '$2 ~ /PROSE-MENTIONS-THE-VOCABULARY/ {print $1; exit}')"
+  mut_bold="$(printf '%s\n' "$mut_out" | awk -F'\t' '$2 ~ /BOLD-ANNOTATION-WITH-A-PREFIX/ {print $1; exit}')"
+  if [ -n "$mut_prose" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the unanchored predicate did NOT swallow the prose entry — the assertion above is vacuous\n' "mutation"
+  elif [ -n "$mut_bold" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also un-closed a REAL annotation, so it is not a clean mutation of the anchor alone\n' "mutation"
+  else
+    printf '  ok    %-22s unanchoring swallows the prose entry and nothing else\n' "mutation"
+  fi
+fi
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

@@ -17,6 +17,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.171.1] — 2026-07-26
+
+### Fixed — a prose mention of the close vocabulary deleted live ledger entries
+
+Filed by the graph consumer as `PC-S301-RETAINED-COPY-NEVER-CLOSES`, and the measured damage
+is larger than the entry claims.
+
+`ledger-reverify.sh` anchored its `^verify:` predicate to line-leading structure, with a
+comment explaining exactly why: *"the ledger is prose that DISCUSSES receipts as well as
+carrying them."* The close predicate one line above it — `/ADOPTED UPSTREAM|WITHDRAWN/` —
+never got the same treatment, and its failure is silent in the worse direction: a swallowed
+entry produces **no row at all**, not a wrong one.
+
+Measured on the reference consumer's live ledger, four entries with working receipts were
+invisible:
+
+| entry | what closed it |
+|---|---|
+| `PC-S296-LEDGER-REVERIFY-LAST-MATCH-WINS` | its own prose describing this bug class |
+| `PC-S298-SETUP-NEVER-INSTRUCTS-REMEDIATOR-MODEL-FILL` | "…and annotate `ADOPTED UPSTREAM (v…)`" |
+| `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION` | a blockquote of this tool's own output |
+| a `validate-provenance-block.sh` layer entry | a bold sentence naming the sentinel |
+
+An entry filing a defect *against the close vocabulary* could not describe its own subject
+without deleting itself.
+
+**The discriminator is line-leading structure, not the presence of the words.** An annotation
+opens its line — bare, or opening a bold span, optionally behind the `<br>` the entry bodies
+use to force a newline. A mention sits inside a sentence. Derived from every occurrence on the
+reference consumer: all seven real closes match (including `**BOTH ADOPTED UPSTREAM (verified
+…)**` and `<br>**ANGLE-BRACKET SKIP ADOPTED UPSTREAM (v…)**`, where words precede the marker
+inside the bold span), and all four mentions fail. An entry LINE keeps closing on a marker
+anywhere in it — the withdrawal lives in the heading, and the fork-retirement records are
+bullets whose titles end `→ ADOPTED UPSTREAM (v…)`.
+
+**And the retained copy now closes.** When a withdrawal supersedes an entry, the honest
+convention keeps the original text under a heading carrying `(original text, retained for the
+record)`. That copy carries no marker of its own, so it re-reported `HAND-REVIEW` forever,
+asking an operator to adjudicate a defect already retracted as false. The heading shape now
+closes it.
+
+Verified as a differential against the live ledger that produced the finding: 47 rows → 50.
+Exactly the four predicted entries became visible and exactly one — the retained copy — went
+quiet. The fixture asserts all three shapes plus a mutation that restores the unanchored
+predicate, and that mutation must swallow the prose entry **and nothing else**: an anchor that
+also drops a real close would be a different bug wearing the same green.
+
+One authoring note, recorded because it cost a run: the awk program is a single-quoted shell
+string, so an apostrophe in a comment inside it ends the quote. The first draft of this block
+had one.
+
 ## [0.171.0] — 2026-07-26
 
 ### Added — I31: every scan-marked core subtree has a disposition, not just a report
