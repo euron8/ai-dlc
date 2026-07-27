@@ -11,10 +11,8 @@ nothing to the lead.
 
 **Model and effort: Set at the start of your session.**
 - `/effort medium`
-<!-- {analyst_model_personal}: Personal/direct API model string (e.g., claude-sonnet-4-6) -->
-<!-- {analyst_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-sonnet-4-6) -->
-- Personal: `/model {analyst_model_personal}`
-- Bedrock: `/model {analyst_model_bedrock}`
+- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 
 ## Contract
 

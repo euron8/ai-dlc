@@ -477,7 +477,13 @@ After confirmation, proceed to Step 2.
 
 ---
 
-## STEP 2: API Tier and Model Strings
+## STEP 2: Model Strings
+
+Every teammate's model comes from ONE place: the `aiDlcModels` block in
+`.claude/settings.json`. A role file names a KEY (`- Model: `opus``); this block
+maps that key to the model string this project can actually reach. Role files
+carry no model string and no substitution token — there is nothing to fill in
+them, and nothing for a later pull to mask.
 
 Ask the user:
 
@@ -486,233 +492,52 @@ Ask the user:
 > 2. **AWS Bedrock**
 > 3. **Both** — Configure both, switch per session
 
-**If the user selects Bedrock (option 2 or 3), ask a follow-up:**
+The answer decides only what the values look like. The shipped block is:
 
-> **Which models do you have access to on Bedrock?**
-> 1. **Opus and Sonnet** — Balanced model strategy (opus for orchestration and design, sonnet for everything else)
-> 2. **Sonnet only** — All roles use Sonnet (effort levels compensate for planning depth)
-
-This determines the **model strategy mode**:
-- **Balanced** (Personal, or Bedrock with Opus+Sonnet): Lead and
-  Architect use opus; PM, Code Reviewer, Dev, and QA use sonnet.
-  PM and Code Reviewer run at `high` effort to preserve planning and
-  review depth on the sonnet tier; opus is reserved for the two roles
-  with the highest reasoning leverage (orchestration and system design).
-- **Sonnet-only** (Bedrock with Sonnet only): ALL roles use sonnet.
-  Effort levels (`high` for planning roles) compensate partially for
-  the less capable model. The pipeline still works but planning phases
-  may be less thorough.
-  **The escalated roles are UNAVAILABLE in this mode, not collapsed.** An
-  escalated role file whose model resolves to its base role's is a role
-  that reads as escalated and behaves identically to the unescalated one:
-  the routing tag routes, the dispatch guard binds, Check 22 re-derives
-  the route, and every one of those verifies a path that bought nothing.
-  So in Sonnet-only mode `escalate_model: true` and
-  `protected_path_editor`-style escalation tags MUST NOT be authored, and
-  `discovery.md` §4b's spec derivation runs on the standard `pm`. Record
-  that in CLAUDE.md as a stated limitation of the mode. Silently
-  collapsing the tier is the one thing not to do — it converts an absent
-  capability into an invisible one.
-
-Step 0 does NOT absorb model strings from archived team role files
-(they are ai-dlc-owned). Always present the standard defaults below
-and let the user override if they want different models.
-
-Based on the answer, determine the model strings. Use these defaults
-unless the user specifies different models:
-
-**Balanced model strategy (default):**
-
-| Role           | Personal                    | Bedrock                                  | Effort |
-|----------------|-----------------------------|------------------------------------------|--------|
-| Lead           | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      | high   |
-| Architect      | claude-opus-4-6[1m]         | global.anthropic.claude-opus-4-6-v1      | high   |
-| PM             | claude-sonnet-4-6[1m]       | global.anthropic.claude-sonnet-4-6       | high   |
-| Code Reviewer  | claude-sonnet-4-6[1m]       | global.anthropic.claude-sonnet-4-6       | high   |
-| Dev            | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
-| QA             | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
-| Analyst        | claude-sonnet-4-6           | global.anthropic.claude-sonnet-4-6       | medium |
-
-**Sonnet-only model strategy:**
-
-| Role           | Bedrock                                  | Effort |
-|----------------|------------------------------------------|--------|
-| Lead           | global.anthropic.claude-sonnet-4-6       | high   |
-| PM             | global.anthropic.claude-sonnet-4-6       | high   |
-| Architect      | global.anthropic.claude-sonnet-4-6       | high   |
-| Code Reviewer  | global.anthropic.claude-sonnet-4-6       | high   |
-| Dev            | global.anthropic.claude-sonnet-4-6       | medium |
-| QA             | global.anthropic.claude-sonnet-4-6       | medium |
-| Analyst        | global.anthropic.claude-sonnet-4-6       | medium |
-
-Ask: "Do you want to use a local model (e.g., Ollama) for dev teammates
-on well-scoped stories? If yes, what model string?" (Default: skip)
-
-Present the applicable model assignment table and ask for confirmation.
-
-After confirmation, replace in these files. Two model strings drive
-the balanced default: the **opus-tier** string (Lead, Architect) and
-the **sonnet-tier** string (PM, Code Reviewer, Dev, QA). Effort —
-not model — separates PM/Code Reviewer (`high`) from Dev/QA
-(`medium`); effort lives in the role files.
-
-For Sonnet-only mode, all model variables get the sonnet bedrock string
-**except the escalated roles' — those are left unsubstituted and the mode is
-recorded as not supporting escalation.** Substituting them to sonnet would
-make every escalated role byte-equivalent in behaviour to its base while the
-rulebook, the routing tags and Check 22 all continue to treat the route as
-meaningful.
-
-**Substitute in the `/model` directive lines ONLY.** Each token below occurs
-TWICE in its role file: once inside the `<!-- {token}: … -->` declaration
-comment, and once in the `- Personal:` / `- Bedrock:` `` `/model …` `` line
-under it. Replace it in the `- Personal:` / `- Bedrock:` lines and leave the
-declaration comment byte-identical. A global find-replace over the file
-consumes the comment too, and that comment is the only in-file record that the
-line below it is a substitution site — once it is gone, a filled site is
-indistinguishable from ordinary prose and `reconcile/setup-sites.md` is the sole
-remaining witness.
-
-**`.claude/team-roles/architect.md`:**
-- `{architect_model_personal}` -> opus-tier model personal string
-- `{architect_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/code-reviewer.md`:**
-- `{reviewer_model_personal}` -> sonnet-tier model personal string
-- `{reviewer_model_bedrock}` -> sonnet-tier model bedrock string
-
-**`.claude/team-roles/code-reviewer-escalated.md`:** (the standard Code Reviewer
-contract on a stronger model, for reviews the lead routes to the escalated tier —
-capital-path or high-blast-radius diffs — opus-tier, like the architect. **MUST
-resolve strictly stronger than `code-reviewer.md`.** In Sonnet-only mode leave it
-unsubstituted and do not route reviews to the escalated tier; substituting it to
-sonnet would leave a role that reads as escalated and reviews identically to the
-standard one)
-- `{reviewer_escalated_model_personal}` -> opus-tier model personal string
-- `{reviewer_escalated_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/pm.md`:**
-- `{pm_model_personal}` -> sonnet-tier model personal string
-- `{pm_model_bedrock}` -> sonnet-tier model bedrock string
-
-**`.claude/team-roles/dev.md`:**
-- `{dev_model_personal}` -> sonnet-tier model personal string
-- `{dev_model_bedrock}` -> sonnet-tier model bedrock string
-- `{dev_model_local}` -> local model string (or remove the line if N/A)
-
-**`.claude/team-roles/dev-escalated.md`:** (the standard Dev contract on a
-stronger model, for stories tagged `escalate_model: true` — opus-tier, like the
-architect. **MUST resolve strictly stronger than `dev.md`.** In Sonnet-only mode
-leave it unsubstituted and do not tag stories `escalate_model: true`;
-substituting it to sonnet leaves a role that reads as escalated and implements
-identically to the standard Dev, which is what makes the routing tag, the
-dispatch guard binding and Check 22's re-derivation all verify a route that
-bought nothing)
-- `{dev_escalated_model_personal}` -> opus-tier model personal string
-- `{dev_escalated_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/pm-escalated.md`:** (the standard PM contract on a
-stronger model, for the `discovery.md` §4b spec derivation — opus-tier, like the
-architect, at `/effort high`. It is one dispatch per sprint. **Unlike
-`dev-escalated`, collapsing this one to the sonnet string is NOT a harmless
-no-op:** a story authored at the weaker tier fails its own gate and returns,
-whereas the spec kernel is what the PRD, the architecture spine, every story's
-IDs and Checks 29/30/31 all join against — a defect authored there is ratified
-downstream rather than caught. Sonnet-only is a knowing trade on the most
-load-bearing artifact in the pipeline, so substitute the opus string here even
-when the rest of the roster is sonnet)
-- `{pm_escalated_model_personal}` -> opus-tier model personal string
-- `{pm_escalated_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/qa.md`:**
-- `{qa_model_personal}` -> sonnet-tier model personal string
-- `{qa_model_bedrock}` -> sonnet-tier model bedrock string
-
-**`.claude/team-roles/analyst.md`:**
-- `{analyst_model_personal}` -> sonnet-tier model personal string
-- `{analyst_model_bedrock}` -> sonnet-tier model bedrock string
-
-**`.claude/team-roles/adversary.md`:** (independent adversarial validation of
-planning artifacts — opus-tier, high effort, like the architect: deep open-ended
-reasoning about plan soundness, and a missed planning flaw compounds downstream)
-- `{adversary_model_personal}` -> opus-tier model personal string
-- `{adversary_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/gate-adjudicator.md`:** (evaluates the escalated
-read-and-compare gate checks in a fresh context so the lead can run on a
-cheaper model — opus-tier, high effort: this is the judgment the lead is
-offloading, and a fresh Opus beats a saturated one)
-- `{gate_adjudicator_model_personal}` -> opus-tier model personal string
-- `{gate_adjudicator_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/remediator.md`:** (authors the repair for an adversarial
-finding — opus-tier, high effort: a repair writes a NEW claim about the code,
-and an unverified one costs a full extra pass)
-- `{remediator_model_personal}` -> opus-tier model personal string
-- `{remediator_model_bedrock}` -> opus-tier model bedrock string
-
-**`.claude/team-roles/protected-path-editor.md`:** (edits the rulebook —
-opus-tier, like the architect)
-- `{ppe_model_personal}` -> opus-tier model personal string
-- `{ppe_model_bedrock}` -> opus-tier model bedrock string
-
-The party-persona role files (`tea.md`, `ux.md`, `sm.md`, `cis.md`) carry
-NO model placeholder — they are spawned by `/bmad-party-mode`, which
-controls their model. Nothing to substitute in them.
-
-**`QUICKSTART.md`:**
-- `{lead_model}` -> opus-tier model personal string
-- `{lead_model_bedrock}` -> opus-tier model bedrock string
-- `{lead_model_string}` -> opus-tier model string for the user's primary tier
-- `{pm_model}` -> sonnet-tier model personal string
-- `{pm_model_bedrock}` -> sonnet-tier model bedrock string
-- `{architect_model}` -> opus-tier model personal string
-- `{architect_model_bedrock}` -> opus-tier model bedrock string
-- `{reviewer_model}` -> sonnet-tier model personal string
-- `{reviewer_model_bedrock}` -> sonnet-tier model bedrock string
-- `{dev_model}` -> sonnet-tier model personal string
-- `{dev_model_bedrock}` -> sonnet-tier model bedrock string
-- `{qa_model}` -> sonnet-tier model personal string
-- `{qa_model_bedrock}` -> sonnet-tier model bedrock string
-- `{analyst_model}` -> sonnet-tier model personal string
-- `{analyst_model_bedrock}` -> sonnet-tier model bedrock string
-
-**`CLAUDE.md` Model Strategy table:**
-
-If **Sonnet-only mode**, update the model strategy table to reflect
-that all roles use sonnet:
-
-```markdown
-| Role          | Model  | Effort | Rationale                                              |
-|---------------|--------|--------|--------------------------------------------------------|
-| Lead          | sonnet | high   | Orchestration, validation cycles, gate checks          |
-| PM            | sonnet | high   | Requirements elicitation and edge-case analysis        |
-| Architect     | sonnet | high   | System design, tradeoff evaluation, ADRs               |
-| Dev           | sonnet | medium | Implementation is high-volume, well-scoped by stories  |
-| QA            | sonnet | medium | Test validation is pattern-matching against criteria   |
-| Code Reviewer | sonnet | high   | Cross-cutting review needs architectural context       |
-| Analyst       | sonnet | medium | Read-only planning exploration; offloads lead reads    |
+```json
+"aiDlcModels": {
+  "opus": "claude-opus-5[1m]",
+  "sonnet": "claude-sonnet-5[1m]"
+}
 ```
 
-If **balanced model strategy**, leave the default table (opus for Lead
-and Architect, sonnet for PM, Code Reviewer, Dev, and QA) unchanged.
+- **Personal** — leave the defaults, or substitute the model strings the user
+  prefers.
+- **Bedrock** — replace both values with the user's Bedrock strings, e.g.
+  `"opus": "global.anthropic.claude-opus-4-6-v1"` and
+  `"sonnet": "global.anthropic.claude-sonnet-4-6"`. **Change the values, never
+  the keys** (see below).
+- **Both** — set the values to whichever provider the user launches with most
+  often; switching is a one-line edit.
 
-**Sonnet-only mode — update CLAUDE.md prose references:**
+Present the block and ask for confirmation before writing it.
 
-If Sonnet-only mode was selected, also update any hardcoded model tier
-references in `CLAUDE.md` to avoid misleading the agent. Under the
-balanced default only Lead and Architect run on opus, so Sonnet-only
-just flips those two:
+**The keys are not free-form.** A key is what the dispatch guard injects as the
+Agent tool's `model` parameter, and that parameter is an enum — `opus`,
+`sonnet`, `haiku`, `fable`. A key outside that set cannot be dispatched. The
+value is the string a teammate types at `/model` and is free-form. Renaming a
+key without updating every role file that names it makes the guard fail open for
+those roles, so prefer adding a key over renaming one.
 
-- In the Workflow phase table, replace any remaining `opus` with
-  `sonnet` in the Model column, and `opus lead, sonnet dev` with
-  `sonnet lead, sonnet dev`
-- Any prose naming the lead or architect tier as `opus`
-  (e.g. `Lead (opus)`, `Architect (opus)`) → `sonnet, high effort`
+**Adding a capability class.** A consumer who wants, say, the escalated roles on
+a stronger model than the standard ones adds a key here and points those role
+files at it. Nothing in the rulebook forces an escalated role above its base —
+`dev-escalated.md` names whatever key the project gives it, and pointing it at
+the same key as `dev.md` is a valid (if pointless) configuration. That is a
+deliberate consumer decision, not a default.
 
-These are prose references, not template variables. Use find-and-replace
-to update them. This ensures the agent's instructions match its actual
-model capabilities.
+**A project with no opus access** maps both keys to its sonnet string. Role
+files are untouched. Escalated roles then resolve to the same string as their
+base roles — valid config, bound without comment. Record it in CLAUDE.md if the
+team needs to know; nothing at runtime checks it.
+
+**A local model (Ollama)** is not configured here. `dev.md` documents it as a
+launch-time choice: the lead starts that teammate with the local model on the
+command line, and no `/model` switch is involved.
+
+Step 0 does NOT absorb model strings from archived team role files (they are
+ai-dlc-owned). Always present the shipped defaults above and let the user
+override them.
 
 Context thresholds and auto-handoff mode are no longer template
 variables in CLAUDE.md. They live in SKILL.md Handoff Protocol

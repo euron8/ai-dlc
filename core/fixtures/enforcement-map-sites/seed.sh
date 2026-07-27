@@ -24,8 +24,13 @@ DIST="$(cd "$HERE/../../.." && pwd)"
 
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/enforcement-map-sites.XXXXXX")"
 mkdir -p "$ROOT"
-cp -R "$DIST/core"     "$ROOT/core"
-cp -R "$DIST/scripts"  "$ROOT/scripts"
+cp -R "$DIST/core"      "$ROOT/core"
+cp -R "$DIST/scripts"   "$ROOT/scripts"
 cp -R "$DIST/.githooks" "$ROOT/.githooks"
+# templates/ is part of the tree the validator reads, not decoration: I22 joins
+# every role file's model key against templates/settings.json.template's
+# aiDlcModels block. Omit it and I22's own cannot-find-the-file guard fires on
+# the PRISTINE seed, which assertion 0 correctly reports as a broken fixture.
+cp -R "$DIST/templates" "$ROOT/templates"
 
 printf '%s\n' "$ROOT"

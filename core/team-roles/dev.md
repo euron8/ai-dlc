@@ -7,11 +7,8 @@ assigned story files and the architecture document.
 
 **Model and effort: Set at the start of your session.**
 - `/effort medium`
-<!-- {dev_model_personal}: Personal/direct API model string (e.g., claude-sonnet-4-6) -->
-<!-- {dev_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-sonnet-4-6) -->
-<!-- {dev_model_local}: Local model string if using Ollama (e.g., qwen2.5-coder:32b-16k) -->
-- Personal: `/model {dev_model_personal}`
-- Bedrock: `/model {dev_model_bedrock}`
+- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 - Local (Ollama): Lead launches you with the local model at the command line
   (no `/model` switch needed; the model is set at launch)
 

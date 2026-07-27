@@ -6,8 +6,8 @@
 #
 # WHAT IT RESOLVES MECHANICALLY (writes to the consumer; the caller wraps this in a branch+commit):
 #   - pure applies        UPSTREAM-ONLY / UPSTREAM-ONLY-ADD core files overwritten from theirs
-#   - token substitution  a new SETUP-TOKENS file's {*_model_*} filled from the nearest-equivalent
-#                         existing role (gate-adjudicator <- adversary; same opus tier), no prompt
+#   - token substitution  a new SETUP-TOKENS file is applied from theirs; model config no longer
+#                         flows through tokens (role files name an aiDlcModels key), so no fill
 #   - drift refile        a known in-place core-list drift refiled to its consumer-extension point
 #                         (provenance-block.json known_skills -> extensions/known-skills.json) and
 #                         the core file reverted — the "migrate the drift" chore, automated
@@ -194,33 +194,21 @@ while IFS="$(printf '\t')" read -r kind path cons bucket; do
       overwrite_from_theirs "$rel" && say RESOLVED pure-apply "$rel" \
         || { say DECISION unmapped-path "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1)); } ;;
     *SETUP-TOKENS*)
+      # A NEW role file no longer needs a model fill. Until v0.174.0 this block guessed
+      # `{gate_adjudicator_model_*}` from the consumer's adversary role and
+      # `{dev_escalated_model_*}` from protected-path-editor — nearest-equivalent roles on
+      # the same tier — because a role arriving with an unfilled model token would dispatch
+      # against a literal `{token}`, and there was no other source for it. Role files now
+      # name a KEY that ships concrete (`- Model: `opus``) and `aiDlcModels` in the
+      # consumer's settings.json holds the string, so a new role arrives already resolvable
+      # and the guess has nothing left to guess. The hazard is gone rather than relocated:
+      # a key the consumer's block does not define is caught upstream by I22, and at
+      # dispatch the guard fails open rather than binding a literal.
       if overwrite_from_theirs "$rel"; then
         cons="$(consumer_path "$rel")"
-        # Fill {gate_adjudicator_model_*} from the consumer's adversary role (same opus tier).
-        adv="$CONSUMER/.claude/team-roles/adversary.md"
-        if [ -f "$adv" ]; then
-          p="$(sed -nE 's/^- Personal: `\/model (.+)`$/\1/p' "$adv" | head -1)"
-          b="$(sed -nE 's/^- Bedrock: `\/model (.+)`$/\1/p' "$adv" | head -1)"
-          [ -n "$p" ] && sed -i.bak "s|{gate_adjudicator_model_personal}|$p|g" "$cons"
-          [ -n "$b" ] && sed -i.bak "s|{gate_adjudicator_model_bedrock}|$b|g" "$cons"
-          rm -f "$cons.bak"
-        fi
-        # Fill {dev_escalated_model_*} from the consumer's protected-path-editor role (same opus
-        # tier). dev-escalated is the standard Dev contract on a stronger model; ppe is the
-        # nearest existing role that already pins the escalated tier the consumer chose.
-        ppe="$CONSUMER/.claude/team-roles/protected-path-editor.md"
-        if [ -f "$ppe" ]; then
-          p="$(sed -nE 's/^- Personal: `\/model (.+)`$/\1/p' "$ppe" | head -1)"
-          b="$(sed -nE 's/^- Bedrock: `\/model (.+)`$/\1/p' "$ppe" | head -1)"
-          [ -n "$p" ] && sed -i.bak "s|{dev_escalated_model_personal}|$p|g" "$cons"
-          [ -n "$b" ] && sed -i.bak "s|{dev_escalated_model_bedrock}|$b|g" "$cons"
-          rm -f "$cons.bak"
-        fi
-        if grep -q '{[a-z_]*_model_[a-z]*}' "$cons" 2>/dev/null; then
-          say DECISION setup-token "$rel" "a {*_model_*} token had no default source"
-        else
-          say RESOLVED token-substitute "$rel"
-        fi
+        # Residual NON-model setup tokens ({ownership_paths}, {deploy_command}, ...) are
+        # filled by ai-dlc-setup, not here; they are expected to survive an apply.
+        say RESOLVED token-substitute "$rel"
       else
         say DECISION unmapped-path "$rel" "no consumer path mapping"; mech_fail=$((mech_fail+1))
       fi ;;

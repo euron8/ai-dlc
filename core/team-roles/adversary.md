@@ -48,10 +48,8 @@ to avoid.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`
-<!-- {adversary_model_personal}: Personal/direct API model string (e.g., claude-opus-4-8) -->
-<!-- {adversary_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-opus-4-8) -->
-- Personal: `/model {adversary_model_personal}`
-- Bedrock: `/model {adversary_model_bedrock}`
+- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 
 ## Contract
 

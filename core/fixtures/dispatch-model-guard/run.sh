@@ -98,20 +98,23 @@ expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator opus)" \
 expect_untouched "$CONSUMER" "$(mkjson Agent analyst sonnet)" \
   "analyst requested sonnet against a sonnet pin"
 
-# --- 5. tier compare, not string compare ------------------------------------
-# The pin is `claude-opus-4-8[1m]`; a request of the full string is the same TIER -> untouched.
-expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator 'claude-opus-4-8[1m]')" \
-  "full model string matching the pin's tier (tier compare, not string)"
+# --- 5. a request CARRYING the key matches ----------------------------------
+# The key is `opus`; a full model string containing it is the same model -> untouched.
+# The tolerance is bounded by the DECLARED key, not by a hardcoded tier table.
+expect_untouched "$CONSUMER" "$(mkjson Agent gate-adjudicator 'claude-opus-5[1m]')" \
+  "full model string carrying the pinned key (key compare, not a tier guess)"
 
 # --- 6. unpinned role -> UNTOUCHED (fail-open: tea/sm/ux/cis declare nothing)-
 expect_untouched "$CONSUMER" "$(mkjson Agent tea opus)" \
   "unpinned role (tea.md) — fail-open, declares no pin"
 
-# --- 7. pins disagreeing on tier -> UNTOUCHED (ambiguous intent, fail-open) --
+# --- 7. key not defined in aiDlcModels -> UNTOUCHED (fail-open) -------------
+# architect.md names `ghostkey`, which the seeded settings.json does not define.
+# An unresolvable key must bind NOTHING rather than bind a guess.
 expect_untouched "$CONSUMER" "$(mkjson Agent architect sonnet)" \
-  "role whose Personal/Bedrock pins disagree on tier — fail-open"
+  "role naming a key absent from aiDlcModels — fail-open"
 
-# --- 8. prose '/model' mention is not a pin; the real pin binds --------------
+# --- 8. the Ollama prose line is not a pin; the `- Model:` key binds ---------
 expect_untouched "$CONSUMER" "$(mkjson Agent dev sonnet)" \
   "dev.md real sonnet pin: a sonnet request is left untouched"
 expect_set "$CONSUMER" "$(mkjson Agent dev opus)" sonnet \
@@ -137,6 +140,15 @@ expect_untouched "$CONSUMER" "$(jq -nc '{tool_name:"Edit",tool_input:{file_path:
 expect_untouched "$NOSTAMP" "$(mkjson Agent gate-adjudicator)" \
   "unstamped tree (not a layered consumer)"
 
+# --- 11b. no aiDlcModels block at all -> total no-op ------------------------
+# A consumer whose settings.json predates the block (or was hand-trimmed) has no
+# resolvable key for ANY role. The guard must bind nothing rather than fall back
+# to a guess — this is the branch that makes a missing block safe to ship into.
+expect_untouched "$NOMODELS" "$(mkjson Agent gate-adjudicator)" \
+  "consumer settings.json carries no aiDlcModels block — fail-open"
+expect_untouched "$NOMODELS" "$(mkjson Agent gate-adjudicator sonnet)" \
+  "no aiDlcModels block, explicit wrong model — still fail-open, never a guess"
+
 # --- 12. unknown role file -> UNTOUCHED (fail-open) ------------------------
 expect_untouched "$CONSUMER" "$(mkjson Agent nonexistent-role)" \
   "unreadable/unknown role file — fail-open"
@@ -146,13 +158,13 @@ expect_set "$CONSUMER" "$(mkjson Task remediator)" opus \
   "Task-tool dispatch is policed like Agent"
 
 # --- 14. FIXTURE STALENESS: the real core role files must still parse -------
-REAL_PIN="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null | head -1)"
-[ -n "$REAL_PIN" ] && ok "real core gate-adjudicator.md still carries a parseable pin line" \
-  || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md has no '- Personal/Bedrock: \`/model ...\`' line — the guard would silently stop binding"
+REAL_PIN="$(grep -oE '^- Model: `[A-Za-z0-9_-]+`' "$SRC_ROLES/gate-adjudicator.md" 2>/dev/null | head -1)"
+[ -n "$REAL_PIN" ] && ok "real core gate-adjudicator.md still carries a parseable '- Model:' key" \
+  || bad "FIXTURE STALE: core/team-roles/gate-adjudicator.md has no '- Model: \`<key>\`' line — the guard would silently stop binding"
 
-REAL_PIN="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$SRC_ROLES/dev-escalated.md" 2>/dev/null | head -1)"
-[ -n "$REAL_PIN" ] && ok "real core dev-escalated.md still carries a parseable pin line" \
-  || bad "FIXTURE STALE: core/team-roles/dev-escalated.md has no '- Personal/Bedrock: \`/model ...\`' line — the guard would silently stop binding the escalated tier"
+REAL_PIN="$(grep -oE '^- Model: `[A-Za-z0-9_-]+`' "$SRC_ROLES/dev-escalated.md" 2>/dev/null | head -1)"
+[ -n "$REAL_PIN" ] && ok "real core dev-escalated.md still carries a parseable '- Model:' key" \
+  || bad "FIXTURE STALE: core/team-roles/dev-escalated.md has no '- Model: \`<key>\`' line — the guard would silently stop binding the escalated role"
 
 # --- SPAWN LEDGER (v0.158.0) --------------------------------------------------
 # Check 22 reads this file instead of a table the lead writes about itself. The

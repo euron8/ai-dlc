@@ -58,35 +58,44 @@
 #   `.claude/team-roles/` dir. The distribution repo (no stamp; roles live under
 #   core/team-roles/) is a no-op.
 #
-#   SET iff the dispatch BINDS a role file that DECLARES a model pin AND the
-#   requested model's TIER disagrees with the pin's tier — or no model was
-#   requested at all (D2: absence is not neutral, it inherits). In that case the
-#   guard injects `model` = the pin's tier via `updatedInput` and returns `allow`,
-#   so the teammate runs on the pinned tier first-time. Everything else exits 0
-#   unchanged. (Through v0.79.0 this path DENIED and made the caller re-dispatch;
-#   PreToolUse `updatedInput` lets the guard correct the call instead of rejecting
-#   it, which removes the round trip and the dependence on the caller's recall.)
+#   SET iff the dispatch BINDS a role file that DECLARES a model key AND the
+#   requested model does not carry that key — or no model was requested at all
+#   (D2: absence is not neutral, it inherits). In that case the guard injects
+#   `model` = the key via `updatedInput` and returns `allow`, so the teammate
+#   runs on the named model first-time. Everything else exits 0 unchanged.
+#   (Through v0.79.0 this path DENIED and made the caller re-dispatch; PreToolUse
+#   `updatedInput` lets the guard correct the call instead of rejecting it, which
+#   removes the round trip and the dependence on the caller's recall.)
 #
-#   Compared by TIER (opus|sonnet), never by string. A role file carries BOTH a
-#   Personal and a Bedrock pin (`claude-opus-4-8[1m]` / `global.anthropic.-
-#   claude-opus-4-6-v1`) and the `model` param is an alias (`opus`/`sonnet`), so
-#   string equality would treat every correct dispatch as a mismatch and rewrite
-#   it needlessly. Tier also makes ai-dlc-setup's Sonnet-only mode work by
-#   construction: there the pins RENDER to sonnet, so the guard follows the role
-#   file rather than a hardcoded expectation.
+#   TWO FILES, ONE SOURCE OF TRUTH. The role file names a KEY (`- Model: `opus``);
+#   the consumer's `aiDlcModels` block in `.claude/settings.json` maps that key to
+#   a model string. The split is deliberate: which capability class a role needs
+#   is a rulebook decision that ships with the role file, while which string this
+#   project can actually reach is consumer config that varies by provider. It is
+#   also forced by the tool surface — the Agent tool's `model` parameter is an
+#   ENUM (`opus`/`sonnet`/`haiku`/`fable`) and rejects `claude-opus-5[1m]`, so the
+#   guard must inject the key; the teammate types the string at `/model`. A
+#   Bedrock consumer changes only the value, so the binding still holds.
 #
-#   FAIL-OPEN on any ambiguity: no prompt, no role binding, unreadable or
-#   unpinned role file, a role whose Personal and Bedrock pins disagree on tier,
-#   an unrecognised tier, unparseable input, or a `tool_input` jq cannot amend.
+#   Before v0.174.0 the role file carried both a Personal and a Bedrock model
+#   string and this hook reduced them to a tier by substring match (`*opus*`,
+#   `*sonnet*`, else fail open). That match could not see haiku, fable, or any
+#   future name, and every string was a masked setup-substitution site. Resolving
+#   a declared key removes the guess and the 26 sites with it.
+#
+#   FAIL-OPEN on any ambiguity: no prompt, no role binding, unreadable or unpinned
+#   role file, an unreadable/invalid settings.json, a missing `aiDlcModels` block,
+#   a key absent from it, unparseable input, or a `tool_input` jq cannot amend.
 #   A false correction would silently mis-bind a teammate's model, so fail-open
 #   (exit 0, no change) is the safe direction; the teeth are precise and
 #   positive-match only, and only ever ADD/CORRECT the model — never deny.
 #
-#   KNOWN GAP, deliberate: `cis.md`, `sm.md`, `tea.md`, `ux.md` declare no pin,
+#   KNOWN GAP, deliberate: `cis.md`, `sm.md`, `tea.md`, `ux.md` declare no key,
 #   so D1 stays open for them (fail-open — a role file that declares nothing
-#   cannot bind anything). Closing it means new `{*_model_personal}` setup
-#   placeholders and a new setup-site, which is a separate release: the
-#   model-strategy region is exactly the v0.63.0 unregistered-drift surface.
+#   cannot bind anything). They are spawned by `/bmad-party-mode`, which controls
+#   their model. Closing it is now a one-line `- Model:` addition per file rather
+#   than four setup placeholders and eight manifest entries, but it remains a
+#   separate decision: the party personas are not ai-dlc's to pin.
 #   Every critical role (gate-adjudicator, adversary, remediator, architect,
 #   protected-path-editor) IS pinned and IS covered.
 #
@@ -155,37 +164,54 @@ ROLE_FILE="$ROLES_DIR/$ROLE.md"
 ROLE_FILE_READABLE=true
 [ -r "$ROLE_FILE" ] || ROLE_FILE_READABLE=false
 
-# tier <model-string> -> opus | sonnet | (empty)
-tier() {
-  case "$1" in
-    *opus*)   echo opus ;;
-    *sonnet*) echo sonnet ;;
-    *)        echo "" ;;
-  esac
-}
+# The pin line is the `- Model: \`<key>\`` row. `<key>` names an entry in the
+# consumer's `aiDlcModels` block, NOT a model string: the key is what the Agent
+# tool's `model` parameter accepts (it is an enum — `opus`/`sonnet`/`haiku`/
+# `fable` — and rejects a full string like `claude-opus-5[1m]`), while the value
+# it maps to is the string the teammate types at `/model`. One map, both jobs.
+#
+# Anchor on `^- Model: ` specifically. dev.md carries a prose line mentioning
+# `/model` with no key at all, and role bodies discuss models in passing, so a
+# blind `grep -m1 model` reads the wrong line.
+#
+# This replaces the pre-v0.174.0 shape: two `- Personal:`/`- Bedrock:` lines
+# carrying substituted model strings, reduced to a tier by substring match
+# (`*opus*`→opus, `*sonnet*`→sonnet, else fail-open). That match silently gave
+# up on haiku, fable, and any future model name; resolving a declared key
+# removes the guess.
+PIN_KEY="$(grep -oE '^- Model: `[A-Za-z0-9_-]+`' "$ROLE_FILE" 2>/dev/null \
+  | head -1 | sed -E 's#^- Model: `##; s#`$##')"
 
-# The pin lines are the `- Personal:`/`- Bedrock:` rows carrying a `/model`
-# directive. Anchor on those: the same model string also appears in the
-# placeholder COMMENT directly above them, which setup may have filled in or
-# mangled, and dev.md has a prose line mentioning `/model` with no model string
-# at all. A blind `grep -m1 model` reads the wrong line.
-PINS="$(grep -oE '^- (Personal|Bedrock): `/model [^`]+`' "$ROLE_FILE" 2>/dev/null \
-  | sed -E 's#^.*`/model ##; s#`$##')"
+# The key must resolve in the consumer's settings. An unresolvable key is the
+# same class of hazard the old unrecognised-tier branch covered — we cannot say
+# what was intended — so it fails open rather than binding a guess. Resolution
+# also proves the block exists: a consumer whose settings predate `aiDlcModels`
+# gets no binding rather than a wrong one.
+SETTINGS="$PROJECT_DIR/.claude/settings.json"
+PIN_MODEL=""
+if [ -n "$PIN_KEY" ] && [ -r "$SETTINGS" ]; then
+  PIN_MODEL="$(jq -r --arg k "$PIN_KEY" \
+    '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null || true)"
+fi
 
-# Every declared pin must agree on tier, else we cannot say what was intended.
+# EXPECT is the value the guard will bind: the KEY, because that is what the
+# Agent tool accepts. It is set only when the key resolved to a real string.
 EXPECT=""
-while IFS= read -r p; do
-  [ -n "$p" ] || continue
-  t="$(tier "$p")"
-  [ -n "$t" ] || { EXPECT=""; break; }          # unrecognised tier -> fail-open
-  if [ -z "$EXPECT" ]; then EXPECT="$t"
-  elif [ "$EXPECT" != "$t" ]; then EXPECT=""; break; fi   # disagree -> fail-open
-done <<EOF
-$PINS
-EOF
+[ -n "$PIN_MODEL" ] && EXPECT="$PIN_KEY"
 
 REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
-GOT="$(tier "$REQUESTED")"
+
+# A request MATCHES when it is the key itself, or a model string containing it
+# (`claude-opus-5[1m]` against key `opus`). The tolerance is bounded by the
+# DECLARED key rather than a hardcoded tier table, so it cannot drift.
+matches_pin() {
+  [ -n "$EXPECT" ] || return 1
+  case "$1" in
+    "$EXPECT")   return 0 ;;
+    *"$EXPECT"*) return 0 ;;
+    *)           return 1 ;;
+  esac
+}
 
 # --- SPAWN LEDGER --------------------------------------------------------------
 # PURE INSTRUMENTATION, written at DISPATCH time. Nothing below bounds, denies or
@@ -226,7 +252,7 @@ SPAWN_SNAPSHOT="${SPAWN_STATE_DIR}/pipeline-snapshot.md"
 # to correct it, otherwise whatever was requested. `inherit` names the documented
 # no-param case (the Agent tool inherits, and the record cannot say what that
 # resolved to) so the field is never silently empty.
-if [ -n "$EXPECT" ] && [ "$GOT" != "$EXPECT" ]; then
+if [ -n "$EXPECT" ] && ! matches_pin "$REQUESTED"; then
   SPAWN_BOUND="$EXPECT"
 elif [ -n "$REQUESTED" ]; then
   SPAWN_BOUND="$REQUESTED"
@@ -236,7 +262,11 @@ fi
 
 SPAWN_NAME="$(printf '%s' "$INPUT" | jq -r '.tool_input.name // .tool_input.subagent_type // empty' 2>/dev/null || true)"
 SPAWN_SPRINT="$(sed -n 's/^- \*\*sprint_id:\*\* *\([0-9][0-9]*\).*/\1/p' "$SPAWN_SNAPSHOT" 2>/dev/null | head -1 || true)"
-SPAWN_PINS="$(printf '%s' "$PINS" | tr '\n' ' ' | sed 's/ *$//')"
+# `model_pinned` carries the RESOLVED string so the ledger stays as informative
+# as it was when the role file held the string itself; `tier_pinned` carries the
+# key. Both fields keep their names — Check 22 reads neither, but a renamed field
+# would silently orphan any consumer report that does.
+SPAWN_PINS="$PIN_MODEL"
 
 mkdir -p "$SPAWN_STATE_DIR" 2>/dev/null || true
 jq -nc \
@@ -264,18 +294,18 @@ jq -nc \
 # --- end SPAWN LEDGER ---------------------------------------------------------
 
 [ "$ROLE_FILE_READABLE" = true ] || exit 0   # recorded above; never correct blind
-[ -n "$PINS" ] || exit 0            # role declares no model — nothing to bind
-[ -n "$EXPECT" ] || exit 0
+[ -n "$PIN_KEY" ] || exit 0         # role declares no model — nothing to bind
+[ -n "$EXPECT" ] || exit 0          # key did not resolve in aiDlcModels — fail open
 
-# ALREADY CORRECT: the requested tier IS the pinned tier. Allow unchanged — exit 0 with no
-# decision, so the dispatch keeps whatever approval posture it would otherwise have. (Tier compare,
-# not string: `opus` and `claude-opus-4-8[1m]` are the same tier.)
-if [ "$GOT" = "$EXPECT" ]; then
+# ALREADY CORRECT: the request names the pinned key, or a model string containing it. Allow
+# unchanged — exit 0 with no decision, so the dispatch keeps whatever approval posture it would
+# otherwise have.
+if matches_pin "$REQUESTED"; then
   exit 0
 fi
 
-# OTHERWISE the model is ABSENT, a WRONG tier, or an unpoliced value (haiku/fable/inherit/garbage)
-# — none of which is the tier the role file pins. SET it, do not deny it. This is the v0.79.x flip:
+# OTHERWISE the model is ABSENT, a WRONG key, or a value that does not carry the pinned key —
+# none of which is what the role file pins. SET it, do not deny it. This is the v0.79.x flip:
 # the guard used to DENY here and make the lead re-dispatch, which cost a round trip AND depended on
 # the lead recalling Rule 19(a) — and the failure that motivated this was a no-param spawn on a
 # RESUMED session, exactly where that recall is weakest. Now the guard binds the model itself, from
@@ -294,10 +324,10 @@ set_model() {
   if [ -z "$REQUESTED" ]; then
     note="no \`model\` param was passed"
   else
-    note="\`model: \"$REQUESTED\"\` (tier ${GOT:-unrecognised}) did not match the pin"
+    note="\`model: \"$REQUESTED\"\` did not carry the pinned key \`${EXPECT}\`"
   fi
-  reason="AI/DLC dispatch guard: bound \`team-roles/${ROLE}.md\` to its ${EXPECT}-tier model — ${note}. Set \`model\` to \"${EXPECT}\" from the role file, the single source of truth for a teammate's model, so this teammate runs on the tier its role pins. First-time-correct, with nothing required in the caller's context. If the role's model is genuinely wrong, change the pin in ${ROLE}.md."
-  ctx="dispatch-guard: model bound to ${EXPECT} from team-roles/${ROLE}.md (requested: ${REQUESTED:-<absent>}). The role file, not the call site, is the source of truth for a teammate's model."
+  reason="AI/DLC dispatch guard: bound \`team-roles/${ROLE}.md\` to \`${EXPECT}\` (${PIN_MODEL}) — ${note}. The role file names the model key and \`aiDlcModels\` in .claude/settings.json maps it to a string; together they are the single source of truth for a teammate's model. Set \`model\` to \"${EXPECT}\" so this teammate runs on the model its role names. First-time-correct, with nothing required in the caller's context. If the role's model is genuinely wrong, change the \`- Model:\` key in ${ROLE}.md, or what that key maps to in \`aiDlcModels\`."
+  ctx="dispatch-guard: model bound to ${EXPECT} (${PIN_MODEL}) from team-roles/${ROLE}.md (requested: ${REQUESTED:-<absent>}). The role file names the key, aiDlcModels maps it — not the call site."
   updated="$(printf '%s' "$INPUT" | jq -c --arg m "$EXPECT" '.tool_input + {model: $m}' 2>/dev/null)"
   [ -n "$updated" ] || exit 0
   jq -n --arg reason "$reason" --arg ctx "$ctx" --argjson ui "$updated" '{

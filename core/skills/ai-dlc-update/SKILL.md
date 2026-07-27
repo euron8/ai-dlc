@@ -1024,7 +1024,7 @@ prose is itself generated rather than composed.
      reinject and mask/reinject is the WRONG tool. Substitute the declared sites from
      the operator's answer (step 7), then rewrite the file.
 
-   Do not deliver a tree that dispatches a teammate with `/model {x_model_personal}`.
+   Do not deliver a tree that dispatches a teammate against an unfilled `{token}`.
 
    Exclude `<!-- ... -->` doc comments — those legitimately carry the token text
    and MUST survive from `theirs` (per the mask/reinject transform, the doc
@@ -1039,10 +1039,14 @@ prose is itself generated rather than composed.
    while `setup-sites.md` went untouched for nine minor versions, so the manifest
    did not declare that role's model sites at all. The first
    consumer pull to touch that file would have overwritten a live
-   `/model claude-opus-4-8[1m]` with `/model {adversary_model_personal}` and broken
+   a live opus model string with that role's unfilled placeholder and broken
    every adversary dispatch — with nothing in the run to catch it. A manifest is a
    hand-maintained list and WILL go stale again; this gate is what makes the next
    staleness loud instead of silent.
+
+   Role files carry no model string, so no model site can be omitted from the
+   manifest. This gate covers the sites that remain — ownership paths and
+   deploy/smoke commands.
 
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
@@ -1325,9 +1329,11 @@ is exactly what the reverted attempt got wrong). Before delivery:
    precedence (`overrides > extensions > core`) would actually produce at
    load time — proof the shadow/addition takes effect, not just that the id
    string matches somewhere.
-4. Confirm zero remaining `{...}` template tokens in any team-role file, and
-   that every `/model` line holds a real (non-placeholder) string and every
-   `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max` — this is
+4. Confirm zero remaining `{...}` template tokens in any team-role file; that
+   every `- Model:` key RESOLVES in the `aiDlcModels` block of
+   `.claude/settings.json` (an unresolvable key makes the dispatch guard fail
+   open, so that role dispatches with no model bound at all — silently); and that
+   every `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max`. This is
    the concrete proof teammate dispatch will not break, the exact failure the
    reverted attempt caused.
 5. Diff every overwritten core file against `theirs` **over the WHOLE file,

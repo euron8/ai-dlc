@@ -20,10 +20,8 @@ presence of an `overrides/` layer tells you which tree you are in.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`
-<!-- {ppe_model_personal}: Personal/direct API model string (e.g., claude-opus-4-8) -->
-<!-- {ppe_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-opus-4-8) -->
-- Personal: `/model {ppe_model_personal}`
-- Bedrock: `/model {ppe_model_bedrock}`
+- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 
 ## Ownership
 

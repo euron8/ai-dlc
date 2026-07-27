@@ -8,10 +8,8 @@ the dev teammates to catch issues they may miss.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`
-<!-- {reviewer_model_personal}: Personal/direct API model string (e.g., claude-sonnet-4-6[1m]) -->
-<!-- {reviewer_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-sonnet-4-6) -->
-- Personal: `/model {reviewer_model_personal}`
-- Bedrock: `/model {reviewer_model_bedrock}`
+- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 
 ## Ownership
 

@@ -4,8 +4,11 @@
 # THE DEFECT THIS EXISTS TO CATCH. ai-dlc-setup/SKILL.md is overwrite-on-pull core, but it was
 # outside the drift detector's scan — so an in-place edit there fell to the both-changed
 # classifier, whose default is keep-ours, silently perpetuating the drift the layer system
-# forbids. The fix scans it AND exempts the declared STEP 2 model-strategy config region. This
-# proves both halves: a config edit (STEP 2) is exempt; an edit to the rest of the wizard is HARD.
+# forbids. The fix scans it AND exempts the declared heading-block config regions. This proves
+# both halves: an edit inside a declared region is exempt; an edit outside it is HARD.
+#
+# Retargeted in v0.174.0 from `setup-model-strategy` (retired — model strings moved to the
+# consumer-owned aiDlcModels block) to `dev-ownership-paths`. Same machinery, live site.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -35,25 +38,25 @@ s="$(status_of)"
 [ "$s" = "CORE-OK" ] && ok "byte-identical consumer → CORE-OK" \
   || { bad "FIXTURE BROKEN — clean consumer is '$s', not CORE-OK; negatives below are meaningless"; echo; echo "setup-config-drift: FIXTURE BROKEN" >&2; exit 2; }
 
-# --- Assertion 1: STEP 2 config edit is EXEMPT (not drift) -------------------
-# Rewrite the strategy line inside STEP 2 — a real per-project config choice.
-sed 's/- Full: opus for planning roles, sonnet for implementation./- Balanced: opus for lead+architect only, sonnet elsewhere./' "$BASECONTENT" > "$CF"
+# --- Assertion 1: declared-region config edit is EXEMPT (not drift) ----------
+# Rewrite an ownership path inside `## Ownership` — a real per-project config choice.
+sed 's|- `src/` (application source code)|- `lib/` (this project keeps its source here)|' "$BASECONTENT" > "$CF"
 if ! cmp -s "$BASECONTENT" "$CF"; then
   s="$(status_of)"
-  [ "$s" = "CORE-TEMPLATE-SUBSTITUTED" ] && ok "an edit inside STEP 2 (model strategy) → CORE-TEMPLATE-SUBSTITUTED (declared config, exempt)" \
-    || bad "a STEP 2 config edit classified '$s', expected CORE-TEMPLATE-SUBSTITUTED — the config region is not being exempted"
+  [ "$s" = "CORE-TEMPLATE-SUBSTITUTED" ] && ok "an edit inside ## Ownership → CORE-TEMPLATE-SUBSTITUTED (declared config, exempt)" \
+    || bad "an ownership-paths edit classified '$s', expected CORE-TEMPLATE-SUBSTITUTED — the config region is not being exempted"
 else
-  bad "FIXTURE STALE: the STEP 2 strategy line did not change (base text drifted)"
+  bad "FIXTURE STALE: the ownership-paths line did not change (base text drifted)"
 fi
 
-# --- Assertion 2: an edit OUTSIDE STEP 2 is HARD drift -----------------------
+# --- Assertion 2: an edit OUTSIDE the declared region is HARD drift ----------
 sed 's/Fixed rulebook prose./Fixed rulebook prose EDITED IN PLACE by the consumer./' "$BASECONTENT" > "$CF"
 if ! cmp -s "$BASECONTENT" "$CF"; then
   s="$(status_of)"
-  [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an in-place edit to STEP 5 (rulebook prose) → HARD-UNREGISTERED-CORE-DRIFT (blocks apply)" \
+  [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an in-place edit to ## Responsibilities (rulebook prose) → HARD-UNREGISTERED-CORE-DRIFT (blocks apply)" \
     || bad "a non-config in-place edit classified '$s', expected HARD-UNREGISTERED-CORE-DRIFT — the drift gate is not firing outside the config region"
 else
-  bad "FIXTURE STALE: the STEP 5 line did not change"
+  bad "FIXTURE STALE: the ## Responsibilities line did not change"
 fi
 
 # --- Assertion 3: RESTORE → CORE-OK -----------------------------------------
@@ -71,32 +74,32 @@ s="$(status_of "$SCHEMA_REL")"
   || bad "a schema edit classified '$s', expected HARD — core/schemas/ is not being scanned"
 git -C "$DIST" show "$BASE:core/$SCHEMA_REL" > "$SCF"   # restore
 
-# --- Assertion 4: the STEP 2 site is actually DECLARED ----------------------
+# --- Assertion 4: the site is actually DECLARED -----------------------------
 SITES="$(dirname "$SCRIPT")/setup-sites.md"
-if grep -q "id: setup-model-strategy" "$SITES" && grep -q "'## STEP 2: API Tier and Model Strings'" "$SITES"; then
-  ok "setup-sites.md declares the setup-model-strategy heading-block site"
+if grep -q "id: dev-ownership-paths" "$SITES" && grep -q "heading: '## Ownership'" "$SITES"; then
+  ok "setup-sites.md declares the dev-ownership-paths heading-block site"
 else
-  bad "setup-sites.md does not declare the STEP 2 config site — the exemption above rests on nothing"
+  bad "setup-sites.md does not declare the ownership config site — the exemption above rests on nothing"
 fi
 
-# --- Assertion 5: the substitution INSTRUCTIONS are NOT exempt ---------------
-# The span used to run to `## STEP 3`, which swallowed the substitution instructions that
-# follow the operator's choice — which files to open, which tokens to fill. Those are rulebook
-# prose. Consequence, measured on the reference consumer: the `dev-escalated` / `analyst` /
-# `remediator` model-fill blocks are present upstream and absent there, and neither reader
-# ever said so.
+# --- Assertion 5: content PAST the terminator is NOT exempt ------------------
+# A heading-block span is bounded at `next_heading`, exclusive. If the bound is wrong — or is
+# silently widened — everything after it inherits the exemption, and rulebook prose the
+# consumer edited in place stops being reported. That is not hypothetical: the retired
+# `setup-model-strategy` site was originally bounded on the next STEP heading and swallowed
+# ~140 lines of instructions, so upstream could add a block no layered consumer ever received.
 #
 # The edited line deliberately carries NO {token}. The token arm of the exemption is
 # independent of the span and exempts any hunk whose base side holds one, so a `{token}` row
 # proves nothing about the boundary — it would read as exempt under either declaration. Only a
-# token-free instruction line isolates the span.
-sed 's|Substitute in the /model directive lines ONLY|EDITED IN PLACE by the consumer|' "$BASECONTENT" > "$CF"
+# token-free line past the terminator isolates the span.
+sed 's|More fixed rulebook prose, after the terminator.|EDITED IN PLACE by the consumer.|' "$BASECONTENT" > "$CF"
 if ! cmp -s "$BASECONTENT" "$CF"; then
   s="$(status_of)"
-  [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an edit to a substitution INSTRUCTION row → HARD-UNREGISTERED-CORE-DRIFT (outside the narrowed span)" \
-    || bad "a substitution-instruction edit classified '$s', expected HARD-UNREGISTERED-CORE-DRIFT — the span still swallows the wizard's fill instructions, so upstream can add a role's model-fill block and no layered consumer receives it"
+  [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an edit past the terminator → HARD-UNREGISTERED-CORE-DRIFT (outside the bounded span)" \
+    || bad "an edit past the terminator classified '$s', expected HARD-UNREGISTERED-CORE-DRIFT — the span is reaching beyond next_heading and exempting rulebook prose"
 else
-  bad "FIXTURE STALE: the substitution row did not change (seed text drifted)"
+  bad "FIXTURE STALE: the post-terminator row did not change (seed text drifted)"
 fi
 git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
 
@@ -108,14 +111,14 @@ git -C "$DIST" show "$BASE:core/$REL" > "$CF"   # restore
 # to, so an interrupted run cannot leave the distribution dirty.
 ENGINE="$WORK/engine"
 mkdir -p "$ENGINE" && cp "$(dirname "$SCRIPT")/"* "$ENGINE/" 2>/dev/null
-sed "s|next_heading: '\*\*\`.claude/team-roles/architect.md\`:\*\*'|next_heading: '## NO SUCH TERMINATOR EXISTS'|" \
+sed "s|next_heading: '## Responsibilities'|next_heading: '## NO SUCH TERMINATOR EXISTS'|" \
   "$SITES" > "$ENGINE/setup-sites.md"
 if ! cmp -s "$SITES" "$ENGINE/setup-sites.md"; then
-  sed 's/- Full: opus for planning roles, sonnet for implementation./- Balanced: opus for lead+architect only, sonnet elsewhere./' "$BASECONTENT" > "$CF"
+  sed 's|- `src/` (application source code)|- `lib/` (this project keeps its source here)|' "$BASECONTENT" > "$CF"
   s="$(bash "$ENGINE/unregistered-drift.sh" "$DIST" "$BASE" "$CONSUMER" 2>/dev/null \
         | awk -F'\t' -v f="$REL" '$2==f {print $1; exit}')"
   [ "$s" = "HARD-UNREGISTERED-CORE-DRIFT" ] && ok "an unresolvable terminator withholds the exemption (fail-closed), never widens the span to EOF" \
-    || bad "with an unresolvable terminator the STEP 2 edit classified '$s' — the span is being widened to EOF again, which exempts the whole rest of the file on one stale anchor"
+    || bad "with an unresolvable terminator the config edit classified '$s' — the span is being widened to EOF again, which exempts the whole rest of the file on one stale anchor"
 else
   bad "FIXTURE STALE: could not build the broken-terminator mutant — setup-sites.md's next_heading is not the expected line"
 fi
