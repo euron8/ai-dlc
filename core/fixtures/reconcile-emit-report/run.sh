@@ -170,6 +170,39 @@ else
   bad "the vacuous-predicate cause did not reach the report"
 fi
 
+# --- Assertion: the sha line is markdown, not shell-escaped markdown ----------
+# The region is specified to be pasted VERBATIM into a markdown report, so a literal
+# backslash before a backtick renders as an escaped backtick — the shas show wrapped in two
+# backslashes instead of as inline code, on the one line the whole report is about. And
+# because --verify byte-matches the region against a fresh render, a consumer who writes
+# correct markdown gets a FAIL and is pushed back to the malformed text.
+base_line="$(grep -m1 '^_base_ ' "$REGION")"
+if [ -z "$base_line" ]; then
+  bad "FIXTURE BROKEN — the region has no '_base_' line, so the assertion below tests nothing"
+elif printf '%s' "$base_line" | grep -q '\\`'; then
+  bad "the region's sha line carries literal backslash-backticks: $base_line"
+else
+  ok "the region's _base_/_theirs_ line wraps both shas in real backticks (renders as inline code)"
+fi
+
+# --- Assertion: MUTATION — restore the escapes inside the single quotes --------
+# Rendered from a COPY of the whole reconcile dir, so the mutant's helper lookups resolve
+# exactly as the real script's do and a missing helper cannot masquerade as a kill.
+MUTR="$WORK/mut-reconcile"
+rm -rf "$MUTR"; cp -R "$(dirname "$EMIT")" "$MUTR"
+sha_line_of() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep -m1 '^_base_ '; }
+sed 's@_base_ `%s` → _theirs_ `%s`.@_base_ \\`%s\\` → _theirs_ \\`%s\\`.@' "$EMIT" > "$MUTR/mutant-emit.sh"
+
+if printf '%s' "$(sha_line_of "$MUTR/emit-report.sh")" | grep -q '\\`'; then
+  bad "FIXTURE BROKEN — an UNMUTATED copy in the mutant directory already emits backslashes, so the mutation below would score a false kill"
+elif cmp -s "$EMIT" "$MUTR/mutant-emit.sh"; then
+  bad "FIXTURE BROKEN — the mutation matched nothing, so the assertion above is unproven"
+elif printf '%s' "$(sha_line_of "$MUTR/mutant-emit.sh")" | grep -q '\\`'; then
+  ok "mutation: re-escaping inside the single quotes puts literal backslashes back (the assertion above is load-bearing)"
+else
+  bad "the mutant emitted no backslashes — the assertion above cannot fail and is vacuous"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "reconcile-emit-report: PASS"; exit 0; fi
 echo "reconcile-emit-report: $fails assertion(s) FAILED" >&2

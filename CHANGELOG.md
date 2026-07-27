@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.7] — 2026-07-26
+
+### Fixed — the mechanical region emitted shell escapes into markdown
+
+Filed by the graph consumer as `PC-S302-EMIT-REPORT-EMITS-LITERAL-BACKSLASHES-INTO-THE-MECHANICAL-REGION`.
+
+`emit-report.sh` rendered the region's first content line with
+
+```
+printf '\n_base_ \`%s\` → _theirs_ \`%s\`.\n' "$BASE" "$THEIRS"
+```
+
+The string is **single**-quoted, where a backslash before a backtick is not an escape — it
+is a literal backslash. Confirmed by byte inspection rather than by reading the source:
+
+```
+… | sed -n '3p' | od -c
+→ _  b  a  s  e  _     \  `  f  7  0  5  1  2  e  \  `     → …
+```
+
+The region is specified to be pasted verbatim into a markdown report, where `` \` `` is an
+escaped backtick — so the one line naming the two shas the whole report is about rendered
+with literal backslashes instead of as inline code.
+
+**The byte-match is what made it stick.** `--verify` compares the report's region against a
+fresh render, so a consumer who wrote correct markdown got
+`FAIL: the report's 'reconcile-mechanical' region is STALE or HAND-EDITED` and was pushed
+back to the malformed text. The gate was behaving as designed; the render was wrong, and
+fixing it at the gate would have been the wrong layer.
+
+Consumer-visible: a report generated before this release now fails `--verify` until it is
+re-rendered, which is the intended direction.
+
+The fixture gained the assertion the region never had — no literal backslash-backtick on
+the sha line — plus a mutant that re-escapes inside the single quotes, rendered from a copy
+of the whole `reconcile/` directory so the mutant's helper lookups resolve exactly as the
+real script's do and a missing helper cannot masquerade as a kill.
+
 ## [0.169.6] — 2026-07-26
 
 ### Fixed — `ledger-rotate.sh`'s nothing-to-rotate guard has never fired
