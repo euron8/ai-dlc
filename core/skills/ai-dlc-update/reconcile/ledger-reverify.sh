@@ -136,7 +136,10 @@ DIST="${1:?usage: ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <the
 BASE="${2:?}"
 CONSUMER="${3:?}"
 THEIRS="${4:?}"
-LEDGER="${5:-$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md}"
+# ONE HOME for the conventional in-tree ledger path: it is both the default subject and the
+# fallback the reachability exclusion derives from when arg 5 points somewhere else.
+LEDGER_DEFAULT="$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+LEDGER="${5:-$LEDGER_DEFAULT}"
 
 # A consumer that never filed a candidate has no ledger and nothing to re-verify.
 [ -f "$LEDGER" ] || exit 0
@@ -230,8 +233,45 @@ theirs_basename_matches() {
 #     and "Check 3 and Check 4 real enforcers" as the canonical errors, so documenting the
 #     defect would mask the defect. Only this file is excluded, not the updater directory:
 #     entries proposing fixes TO the updater are real and must stay decidable.
-LEDGER_TOP="${LEDGER#"$CONSUMER"/}"; LEDGER_TOP="${LEDGER_TOP%%/*}"
+# THE STRIP IS PATH ARITHMETIC, NOT STRING SURGERY, AND AN EMPTY RESULT MEANS *NO EXCLUSION*.
+#
+# This was `${LEDGER#"$CONSUMER"/}` piped through `%%/*` — a literal prefix strip that silently
+# yields "" whenever the two arguments are not spelled identically. Measured, four ordinary
+# invocations produced "": a ledger outside the consumer tree (arg 5 pointing at /tmp), a
+# consumer arg with a trailing slash, a doubled slash, and a `/./` in the path produced ".".
+#
+# An empty or "." value is not a harmless no-op. It becomes the pathspec `:(exclude)`, which
+# excludes the WHOLE TREE, so `git grep` finds nothing and exits 1 — NOT 128. consumer_reachable
+# therefore returns 1 (a real "absent"), not 2 (undecidable), and every entry whose substring is
+# absent at both refs is reported `unfalsifiable predicate: … absent from the consumer's own
+# tracked tree`. A wrong input manufactures a confident finding, and the undecidable branch that
+# exists for exactly this case is unreachable. Observed on the reference consumer: one entry
+# reported unfalsifiable via arg 5 and STILL-LIVE via the default path, same refs, same ledger.
+#
+# So: resolve both sides to physical absolute paths and ask whether one contains the other.
+#
+# AND WHEN THE SUBJECT IS OUT OF TREE, FALL BACK TO THE CONVENTIONAL PATH — do not drop the
+# exclusion. Passing arg 5 a copy under /tmp does not remove the consumer's OWN ledger from the
+# tree, and that copy quotes every predicate verbatim, so scanning it would make EVERY predicate
+# read reachable and the unfalsifiable check would go silently vacuous. Trading the false
+# accusation for a false all-clear is the worse half of the same bug. `$LEDGER_DEFAULT` is the
+# same expression the subject defaults to, so the two never drift.
 SELF_BASE="${0##*/}"
+ledger_top_dir() { # <path> -> its top-level dir relative to the consumer root, or "" if outside
+  local _p="$1" _root _abs
+  [ -n "$_p" ] || return 0
+  _root="$(git -C "$CONSUMER" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ -n "$_root" ] || return 0
+  _root="$(cd "$_root" 2>/dev/null && pwd -P)" || return 0
+  case "$_p" in /*) _abs="$_p" ;; *) _abs="$CONSUMER/$_p" ;; esac
+  _abs="$(cd "$(dirname "$_abs")" 2>/dev/null && pwd -P)/$(basename "$_abs")" || return 0
+  case "$_abs" in
+    "$_root"/*) _abs="${_abs#"$_root"/}"; printf '%s' "${_abs%%/*}" ;;
+    *)          : ;;
+  esac
+}
+LEDGER_TOP="$(ledger_top_dir "$LEDGER")"
+[ -n "$LEDGER_TOP" ] || LEDGER_TOP="$(ledger_top_dir "$LEDGER_DEFAULT")"
 
 # THE SCAN IS `git grep`, NOT A FILE LIST PIPED INTO xargs.
 #
@@ -265,8 +305,16 @@ consumer_reachable() {
   consumer_scannable || return 2
   while IFS= read -r _one; do
     [ -n "$_one" ] || continue
-    git -C "$CONSUMER" grep -qF -e "$_one" -- \
-      ":(exclude)$LEDGER_TOP" ":(exclude)*/$SELF_BASE" >/dev/null 2>&1
+    # NEVER emit a bare `:(exclude)`. Empty means the ledger is outside the tree, so there is
+    # nothing of its to exclude — passing the empty pathspec would exclude everything and turn
+    # this scan into a machine for false "absent" verdicts.
+    if [ -n "$LEDGER_TOP" ]; then
+      git -C "$CONSUMER" grep -qF -e "$_one" -- \
+        ":(exclude)$LEDGER_TOP" ":(exclude)*/$SELF_BASE" >/dev/null 2>&1
+    else
+      git -C "$CONSUMER" grep -qF -e "$_one" -- \
+        ":(exclude)*/$SELF_BASE" >/dev/null 2>&1
+    fi
     case "$?" in
       0) : ;;
       1) return 1 ;;

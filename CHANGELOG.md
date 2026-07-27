@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.173.1] — 2026-07-27
+
+### Fixed — a ledger path spelled differently made the closer accuse every entry
+
+Found by using the tool, not by reading it: the same ledger, the same refs, two invocations,
+two verdicts.
+
+```
+ledger-reverify.sh … a705e55 /tmp/copy-of-the-ledger.md
+→ NEEDS-REVIEW  PC-…  unfalsifiable predicate: "overrides" is absent at base, at theirs,
+                      AND from the consumer's own tracked tree
+ledger-reverify.sh … a705e55
+→ STILL-LIVE    PC-…  theirs:core/scripts/validate-gate-manifest.sh still lacks "overrides"
+```
+
+The reachability scan excludes the ledger's own top-level directory, because the ledger quotes
+every predicate verbatim and would otherwise make them all look reachable. That directory was
+derived by literal prefix strip — `${LEDGER#"$CONSUMER"/}` then `%%/*` — which silently yields
+`""` whenever the two arguments are not spelled identically. **Four ordinary invocations
+produce it**: arg 5 pointing outside the tree, a consumer argument with a trailing slash, a
+doubled slash, and a `/./` in the path (which yields `"."`).
+
+**An empty value is not a harmless no-op — it is the pathspec `:(exclude)`, which excludes the
+whole tree.** `git grep` then exits **1**, not 128, so `consumer_reachable` returns "absent"
+rather than "undecidable", and every entry whose substring is absent at both refs is accused of
+being unfalsifiable. The undecidable branch that exists for exactly this case is unreachable,
+and a malformed input manufactures a confident finding in the work-generating direction.
+
+Three parts, and each is load-bearing:
+
+1. the strip is now path arithmetic — both sides resolved to physical absolute paths, then a
+   containment test;
+2. when the subject ledger is genuinely outside the tree, it falls back to the conventional
+   in-tree path (one home, shared with the default for arg 5). Dropping the exclusion instead
+   would trade the false accusation for a false all-clear: the consumer's own ledger is still
+   sitting in the tree quoting every predicate, so the check would go silently vacuous — the
+   worse half of the same bug;
+3. the call site never emits a bare `:(exclude)`.
+
+Verified across five invocation shapes: the full verdict multiset is now identical, where two
+of them previously diverged.
+
+**The mutant needed all three reverted, and finding that out is the point.** The first draft
+reverted only the derivation and came out green — the fallback repaired it. The second reverted
+derivation and fallback and also came out green — the call-site guard repaired it. A partial
+revert of a layered fix produces a mutant that proves the layer you left in place. The fixture
+now asserts all three edits landed before trusting the verdict, and pairs the kill with an
+unmutated control run from the same directory.
+
+Two further fixture hazards this surfaced, both now handled: the new assertions run against a
+**fresh seed**, because earlier assertions in that file deliberately `rm -rf` the consumer's
+`.git` and every later reachability verdict would otherwise degrade to "NOT checked"; and the
+mutant runs from a copy of the whole `reconcile/` directory, since a lone copy dies sourcing
+`lib.sh` and emits nothing — which would have scored as a kill.
+
 ## [0.173.0] — 2026-07-27
 
 ### Fixed — Check 17's PRD pin named a skill the step stopped invoking, and I put it there
