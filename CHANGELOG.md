@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.169.6] — 2026-07-26
+
+### Fixed — `ledger-rotate.sh`'s nothing-to-rotate guard has never fired
+
+Filed by the graph consumer as `PC-S302-LEDGER-ROTATE-ZERO-CASE-GUARD-IS-DEAD`, and
+reproduced here before being fixed.
+
+`grep -c` prints `0` on no match **and** exits 1. The entry count was written
+`grep -c . "$TMPD/moved-names" 2>/dev/null || echo 0`, so on the ordinary case — a ledger
+with nothing newly closed — the fallback fired on exactly the case it appears to cover and
+`n_move` became the two-line string `0\n0`. The `-eq 0` early exit below it then errored
+with `integer expression expected` and evaluated FALSE, so the run fell through it every
+time:
+
+```
+ledger-rotate.sh ledger.md
+→ ledger-rotate.sh: line 117: [: 0
+  0: integer expression expected
+  ledger-rotate: 0
+  0 closed entries would move (0 of 9 lines, leaving 9).
+```
+
+The report contradicted itself, and `--apply` took the write path: on a consumer with no
+archive yet, it created a header-only archive file the run had no reason to write. No
+content was ever lost — the line-accounting refusal above it holds `keep` to the whole
+ledger when nothing moved — so severity is low, but the guard meant to make this a clean
+no-op was inoperative.
+
+The fallback is now gone rather than replaced. `moved-names` is pre-created, so the only
+question is whether it is empty, and `grep -c` answers that on stdout without any help.
+
+The fixture's idempotency assertion could not see this: the broken form printed
+`0 closed entries would move`, which contains the substring that check greps for. The new
+assertion tests what actually separates a fired guard from a fall-through — the early-exit
+line, a clean stderr, and an archive that was never created — and a mutant restoring the
+fallback proves it load-bearing, with an unmutated control in the same directory so a
+harness failure cannot score as a kill.
+
 ## [0.169.5] — 2026-07-26
 
 ### Fixed — the FR capability citation was an obligation nobody could satisfy
