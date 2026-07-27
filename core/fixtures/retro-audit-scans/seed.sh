@@ -25,7 +25,12 @@ fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/retro-audit-scans.XXXXXX")" || exit 2
 P="$WORK/proj"
+# The layer dirs exist and are EMPTY in the clean corpus. That is the unlayered
+# state, and assertion 24 asserts the resolve is byte-identical to a pure-core one
+# there — an empty layer dir must not change the answer, or every layered
+# assertion below is reading a difference the layers did not cause.
 mkdir -p "$P/.claude/skills/ai-dlc/steps" "$P/.claude/skills/ai-dlc/extensions" \
+         "$P/.claude/skills/ai-dlc/overrides" \
          "$P/.claude/team-roles" "$P/docs"
 
 # --- A CLEAN corpus. Every assertion mutates a copy of this. -----------------
