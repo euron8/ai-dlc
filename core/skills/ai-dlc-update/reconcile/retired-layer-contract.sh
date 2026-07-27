@@ -17,11 +17,12 @@
 # parses — and the layer is what the teammate actually reads.
 #
 # MEASURED on the reference consumer at the release that moved role-file model
-# strings into the consumer's `aiDlcModels` settings block. Six layer files
-# referenced the retired `- Personal:`/`- Bedrock:` `/model` line shape: a
-# consumer-authored `tea` role carrying two of them live, two `/effort` overrides
-# whose prose explained which sibling model lines they did NOT cover, and two
-# extensions restating a per-role model table. None was reported by anything.
+# strings into the consumer's `aiDlcModels` settings block. Of its 36 layer files,
+# 2 carried the retired `- <Label>: \`/model` shape and both are true findings: a
+# consumer-authored `tea` role with two live pin lines, and an extension embedding
+# a grep for that shape plus a stale per-role table of its captured output. Neither
+# was reported by anything. Two further overrides paraphrase the shape in prose and
+# are deliberately NOT flagged — see the limits stated below.
 #
 # WHAT COUNTS AS A CONTRACT SHAPE
 # A LABELLED DIRECTIVE — `- <Label>: \`/<directive>` — which is how the rulebook
@@ -29,6 +30,14 @@
 # placeholders. Both are unambiguous to extract and both are contracts something
 # downstream parses. Deliberately NOT bare words or headings: widening this would
 # flag every reworded sentence and drown the finding.
+#
+# The label is matched ANYWHERE on the line, not just at its start, and tolerates a
+# backslash-escaped backtick. Both forms are load-bearing: a layer file that embeds a
+# `grep` for a core line indents its captured output, and one that quotes the pattern
+# inside a fenced command escapes the backtick. Anchoring on `^- ` missed exactly that
+# file on the reference consumer — an extension carrying both the retired grep pattern
+# and a stale per-role table of its output. Measured against all 36 of that consumer's
+# layer files, the unanchored form matches 2 and both are true findings.
 #
 # DERIVED, NEVER HAND-LISTED. The retired set is computed as
 #   (shapes in BASE's core rulebook) MINUS (shapes in THEIRS's core rulebook)
@@ -71,8 +80,8 @@ rulebook_globs() {
 # `{<token>}` setup placeholders.
 shapes_of() {   # shapes_of <body>
   printf '%s\n' "$1" \
-    | { grep -oE '^- [A-Z][A-Za-z-]*: `/[a-z][a-z-]*' || true; } \
-    | sed -E 's/^- ([A-Za-z-]*): `\/(.*)$/\1:\/\2/' \
+    | { grep -oE -- '- [A-Z][A-Za-z-]*: \\?`/[a-z][a-z-]*' || true; } \
+    | sed -E 's/^- ([A-Za-z-]*): \\?`\/(.*)$/\1:\/\2/' \
     | sort -u
 }
 tokens_of() {

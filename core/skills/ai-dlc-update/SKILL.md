@@ -319,6 +319,23 @@ prose is itself generated rather than composed.
    token list on the worklist item itself, so the obligation arrives with the work.
    Note what it does NOT catch: a consumer path upstream never had (there is no
    retirement to detect). A clean result is not proof the merge is semantically whole.
+3a-iii. **Retired contract shapes in consumer layer files** (cheap, deterministic
+   — no agents): run `reconcile/retired-layer-contract.sh <dist-repo> <base-sha>
+   <theirs-ref> <consumer-root>`. `retired-tokens.sh` above scans only `CLASSIFY`
+   core files, so `overrides/` and `extensions/` are outside every bucket and no
+   detector opens them. A layer file that shadows, quotes, or restates a core
+   construct upstream retired therefore survives the pull unreported, and the layer
+   is what the teammate reads.
+   Output is `RETIRED-LAYER-CONTRACT<TAB><layer-path><TAB><shape>`. Each row is a
+   layer file to re-read against `theirs`: either re-point it at the replacement
+   construct, or record in the report why the stale reference is harmless.
+   **This does NOT block the apply** — a layer file is consumer-owned and the pull
+   does not rewrite it. It is a worklist item, and it is owed before the pull counts
+   as done.
+   Note what it does NOT catch: a shape the consumer invented that core never had,
+   and a layer file that paraphrases a retired construct without using its literal
+   shape. A clean result is not proof every layer file survived the release.
+
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
    <consumer-root> --templates`. The `core/` reconcile above never sees

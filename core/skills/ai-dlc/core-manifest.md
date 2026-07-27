@@ -171,6 +171,7 @@ core_manifest:
   - fixtures/relocation-preclassify/**
   - fixtures/resume-whole-read/**
   - fixtures/retired-contract-token/**
+  - fixtures/retired-layer-contract/**
   - fixtures/retro-audit-scans/**
   - fixtures/route-defect-classification/**
   - fixtures/setup-config-drift/**
