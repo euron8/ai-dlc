@@ -17,6 +17,39 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.171.0] — 2026-07-26
+
+### Added — I31: every scan-marked core subtree has a disposition, not just a report
+
+Filed by the graph consumer as `PC-S300-NO-OVERRIDE-GRAIN-FOR-A-SECOND-SKILL`, and it is
+broader than filed.
+
+I12 makes a core subtree REPORTABLE. It says nothing about what the operator does next, and
+`HARD-UNREGISTERED-CORE-DRIFT` hands them exactly one command — `register-drift.sh`. That
+script recognised `skills/ai-dlc/*` and `team-roles/*`, named a refusal for `hooks/*`, and
+dropped everything else into `unrecognized core path`. Measured: I12 marks **two** further
+subtrees `scan` — `skills/ai-dlc-setup` and `schemas` — and both landed in that catch-all.
+So a consumer with deliberate divergence in either was told to run a command that answers
+with what reads as a typo, on a path the report itself supplied, and the pull re-reported
+`HARD-` on every subsequent run with no sanctioned disposition at all.
+
+Both refusals are structural, and now both say so. Overrides live at
+`.claude/skills/ai-dlc/overrides/` and each shadows a HEADING inside the ai-dlc skill; a
+second core skill and schema data have no heading to shadow. The refusal names the two real
+dispositions (accept per-entry, or upstream it) and states plainly that reverting destroys
+the divergence — the option a terse message lets an operator take by default.
+
+**The second list is bound to the first.** New invariant `I31` derives I12's `scan` set and
+`register-drift.sh`'s case labels and requires every scan-marked subtree to be either
+registerable or named in a no-grain refusal. A hand copy of one list beside the other is the
+same rot one file over; this is the shape I12 itself already uses. `SKILL.md` step 7
+documents the second refusal beside the hook one.
+
+Two fixture assertions, because a derived check has two ways to die: removing the no-grain
+case must FAIL I31 by name, and an unparseable `case` block must fail it *loudly* rather
+than bind an empty set and pass — "nothing to compare" must never read as "everything is
+disposed."
+
 ## [0.170.0] — 2026-07-26
 
 ### Added — the bug variant can finally stamp story provenance, and Check 17 asks it to

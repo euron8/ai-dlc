@@ -801,8 +801,17 @@ prose is itself generated rather than composed.
      one nobody can ever retire.
      If the delta merely **duplicates an existing override**, do not register a second
      one: revert core and say which override already carries it.
-     If it is a **hook**, `register-drift.sh` refuses by design — the layer system has
-     no override grain for hooks. Check the row's status before you conclude anything:
+     `register-drift.sh` refuses by design on **two** classes, and both refusals are
+     structural rather than a missing case. If it is a **hook**, the layer system has no
+     override grain for hooks. If it is **`skills/ai-dlc-setup/*` or `schemas/*`**, the
+     same is true for a different reason: overrides shadow a HEADING inside the ai-dlc
+     skill, and a second core skill and schema data have no heading to shadow. Both are
+     `scan`-marked, so the pull DOES report them and hands you this command — which then
+     refuses. `validate-enforcement-map.sh` I31 binds the two lists so a newly scan-marked
+     subtree cannot reach an unnamed refusal. In both cases the dispositions are: keep the
+     consumer's version (accept per-entry, and it re-reports every pull), or upstream it.
+     Reverting destroys the divergence; say so before anyone chooses it.
+     Check the row's status before you conclude anything:
      if it is `HARD-CORE-DRIFT-ABSORBED`, the disposition below applies. Otherwise say
      so, and let the operator keep it (it will report every pull) or upstream it. Do not
      paper over it.

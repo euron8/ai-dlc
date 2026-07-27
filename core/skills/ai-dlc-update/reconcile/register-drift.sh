@@ -40,6 +40,29 @@ case "$REL" in
     echo "  If upstream has ALREADY absorbed it, unregistered-drift.sh reports" >&2
     echo "  HARD-CORE-DRIFT-ABSORBED and the remedy is a REVERT, not an override." >&2
     exit 2 ;;
+  # THE SECOND NO-GRAIN CASE, and it needs its own name for the same reason hooks does.
+  # Overrides live at `.claude/skills/ai-dlc/overrides/` and every one of them shadows a heading
+  # in a file inside THAT skill. `ai-dlc-setup` is a second skill and `schemas/` is data with no
+  # headings, so neither has anything to shadow. Both are `scan`-marked in I12, so
+  # unregistered-drift.sh DOES report them and the report hands the operator the register-drift
+  # command below — which used to answer `unrecognized core path`, a message that reads like a
+  # typo in the path rather than a structural refusal, on a path the report itself supplied.
+  #
+  # This list is not free: validate-enforcement-map.sh I31 requires every I12 `scan` subtree to
+  # be either registerable above or named here, so a new scan-marked subtree fails the build
+  # until someone decides which it is.
+  schemas/*|skills/ai-dlc-setup/*)
+    echo "register-drift: $REL has NO OVERRIDE GRAIN. The layer system's overrides live at" >&2
+    echo "  .claude/skills/ai-dlc/overrides/ and each one shadows a HEADING inside the ai-dlc" >&2
+    echo "  skill. A second core skill (ai-dlc-setup) and schema data have no heading to shadow," >&2
+    echo "  so there is nothing to refile into. This is structural, not a missing case." >&2
+    echo "  Two dispositions, and both are real: keep the consumer's version (accept per-entry —" >&2
+    echo "  it re-reports HARD- on every pull, which is the honest cost), or take the change" >&2
+    echo "  upstream so the divergence disappears. Reverting destroys the divergence; say so" >&2
+    echo "  before anyone chooses it." >&2
+    echo "  If upstream has ALREADY absorbed it, unregistered-drift.sh reports" >&2
+    echo "  HARD-CORE-DRIFT-ABSORBED and the remedy is a REVERT, not an override." >&2
+    exit 2 ;;
   *) echo "register-drift: unrecognized core path: $REL" >&2; exit 2 ;;
 esac
 

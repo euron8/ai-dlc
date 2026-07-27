@@ -285,6 +285,46 @@ else
   bad "FIXTURE STALE: reconcile/lib.sh no longer defines helpers in the '<name>() {' form I21 derives from"
 fi
 
+# --- Assertion 13: I31 SCAN SET HAS A DISPOSITION -----------------------------
+# I12 makes a subtree REPORTABLE; it says nothing about what the operator does next, and the
+# report hands them exactly one command. `skills/ai-dlc-setup` and `schemas` were both
+# scan-marked and both fell to register-drift.sh's `unrecognized core path` — a message that
+# reads like a typo in a path the report itself supplied. Drop the named no-grain refusal and
+# I31 must name the subtrees left without a disposition.
+RD_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
+if grep -q '^  schemas/\*|skills/ai-dlc-setup/\*)' "$RD_F"; then
+  sed -i.bak 's@^  schemas/\*|skills/ai-dlc-setup/\*)@  never-matches-a-real-path/*)@' "$RD_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I31: these core subtrees are I12 'scan'"; then
+    ok "removing register-drift's no-grain refusal FAILS I31 (a scan-marked subtree cannot reach an unnamed refusal)"
+  else
+    bad "removing the no-grain refusal did NOT fail I31 — a scan-marked subtree can be reported with no sanctioned disposition again"
+  fi
+  restore
+  RD_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
+else
+  bad "FIXTURE STALE: register-drift.sh no longer carries the schemas/ai-dlc-setup no-grain case"
+fi
+
+# --- Assertion 14: I31 NON-VACUITY --------------------------------------------
+# I31 derives register-drift's side by parsing its `case` labels. If that parse yields nothing
+# — the case block moved, or its formatting changed — the comparison binds an empty set and
+# EVERY scan subtree reads as undisposed, or worse, the check quietly passes. It must say so.
+if grep -q '^case "\$REL" in' "$RD_F"; then
+  # Remove the parse's opening anchor. Everything after it is untouched, so the case labels are
+  # still there on disk and only the DERIVATION goes blind — which is the vacuity being tested.
+  grep -v '^case "\$REL" in' "$RD_F" > "$RD_F.tmp" && mv "$RD_F.tmp" "$RD_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I31: could not parse any case label"; then
+    ok "an unparseable case block FAILS I31 loudly (it cannot pass by comparing against nothing)"
+  else
+    bad "an unparseable case block did NOT fail I31 — the check goes vacuous exactly when register-drift's dispositions become unreadable"
+  fi
+  restore
+else
+  bad "FIXTURE STALE: register-drift.sh no longer opens with 'case \"\$REL\" in'"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

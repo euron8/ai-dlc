@@ -1061,6 +1061,30 @@ EOF
   extra_scan="$(comm -13 <(printf '%s\n' "$scan_policy") <(printf '%s\n' "$ud_scanned"))"
   [ -n "$miss_scan" ]  && err "I12: policy marks these core subtrees 'scan' but unregistered-drift.sh does NOT scan them: $(echo $miss_scan). A scan-marked dir the tool skips is a silent-drift hole."
   [ -n "$extra_scan" ] && err "I12: unregistered-drift.sh scans these but the policy does not mark them 'scan': $(echo $extra_scan). Add a 'scan' row or drop them from the ls-tree."
+
+  # --- I31: every scan-marked subtree has a DISPOSITION in register-drift.sh -----
+  # I12 above makes a scan-marked subtree REPORTABLE. It says nothing about what the operator
+  # does next, and the report hands them exactly one command: register-drift.sh. That script
+  # recognised `skills/ai-dlc/*` and `team-roles/*`, named a refusal for `hooks/*`, and dropped
+  # everything else into `unrecognized core path` — a message that reads like a typo in a path
+  # the REPORT ITSELF supplied. Measured: `skills/ai-dlc-setup` and `schemas` are both scan-marked
+  # and both landed there, so a consumer with deliberate divergence in either had no sanctioned
+  # disposition at all, and the pull re-reported HARD- forever.
+  #
+  # So bind the second list to the first. The case labels are DERIVED from the script — a hand
+  # copy of them here would be the same rot one file over.
+  RD="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
+  if [ -f "$RD" ]; then
+    rd_disposed="$(awk '/^case "\$REL" in/{f=1; next} f && /^esac/{exit} f' "$RD" \
+      | grep -oE '^[[:space:]]*[a-z][A-Za-z0-9_./*|-]*\)' \
+      | tr -d ' )' | tr '|' '\n' | sed 's#/\*$##' | grep -v '^\*$' | sort -u)"
+    if [ -z "$rd_disposed" ]; then
+      err "I31: could not parse any case label out of register-drift.sh — the check below would pass on nothing. Fix the parse, do not delete the check."
+    else
+      no_disp="$(comm -23 <(printf '%s\n' "$scan_policy") <(printf '%s\n' "$rd_disposed"))"
+      [ -n "$no_disp" ] && err "I31: these core subtrees are I12 'scan' (so unregistered-drift.sh REPORTS them and the report hands the operator register-drift.sh) but register-drift.sh has no case for them: $(echo $no_disp). They fall to 'unrecognized core path', which reads as a bad path rather than a structural refusal. Give each one a registering case or a NAMED no-grain refusal."
+    fi
+  fi
 fi
 
 # --- I20: every fixture is DRIVEN, or declares in writing that it cannot be -----
