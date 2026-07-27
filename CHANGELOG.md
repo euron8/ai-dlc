@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.173.2] — 2026-07-27
+
+### Added — the controlled-absence rule, written down once instead of re-learned
+
+**One of the two files here is distributed; the other is not.** The consumer-facing
+change is a single rule in `templates/coding-conventions.md.template`, which
+`install.sh` copies to `docs/coding-conventions.md`. The new root `CLAUDE.md` governs
+authoring *this* repo and reaches no consumer.
+
+The rule, in the template's existing **Evidence required** idiom:
+
+> Any verification whose result is an ABSENCE must run a control in the same step that
+> is required to return a NON-ZERO result. A search that finds nothing establishes that
+> the search ran, not that the thing is gone.
+
+It is written from five measured failures in one arc, three of them in this repo and
+two in the reference consumer, every one a confident absence claim built on an
+uncontrolled zero:
+
+| the zero | why it was wrong |
+|---|---|
+| `git cat-file -e "$r:core/…"` | zsh `:c` is a history modifier — the ref became `f70512eore/…` |
+| `git show "$H:tests/…"` | same class, `:t` this time; a README read as 0 lines |
+| `grep -c v8` against upstream | the banner is `V8`; case-sensitive |
+| `grep bug-investigation core-manifest.md` | the manifest declares `steps/*.md` by glob and names no step file, so 0 is 0 for every step |
+| `git grep -- ":(exclude)"` | an empty pathspec excludes the whole tree and exits **1, not 128** |
+
+The last one is `0.173.1` itself: code that trusted a `1` from `git grep` without asking
+which kind of `1` it was.
+
+`CLAUDE.md` additionally records what had been folklore — a check that cannot fire reads
+exactly like one that passed; build mutants as copies and revert **every** layer of a
+layered fix; verify path-touching changes on an installer-built tree, not only in
+`core/`; measure a check's false-positive set before shipping it. Roughly a dozen files
+already state the first of those locally, in the header of whichever guard learned it.
+Those stay where they are — each explains its own guard — and `CLAUDE.md` carries the
+general form rather than absorbing them.
+
+Nothing is mechanized here, deliberately. A lint for uncontrolled greps has an unmeasured
+false-positive surface, and every failure above happened in ad-hoc shell during
+investigation rather than in committed code, so a repo check would not have fired on a
+single one of them.
+
+### Fixed — the I32 section marker read `I31b/I32`
+
+A dual label introduced with the invariant in `0.173.0`. Every emitted string and the
+summary line say `I32`; only the section comment disagreed.
+
 ## [0.173.1] — 2026-07-27
 
 ### Fixed — a ledger path spelled differently made the closer accuse every entry
