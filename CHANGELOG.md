@@ -17,6 +17,41 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.171.2] — 2026-07-26
+
+### Fixed — step 2's derived fixture set was two-thirds of the suite, and step 2 knew it
+
+Filed by the graph consumer as `PC-S303-DERIVED-FIXTURE-SET-IS-MOST-OF-THE-SUITE`.
+
+Step 2 derived the self-update slice as the machinery diff plus "every `core/fixtures/<dir>/`
+whose `*.sh` names any machinery path". `machinery:` carries `core/scripts/ai-dlc/*`, which
+the same step tells the reader to translate to `core/scripts/*` — every distribution script —
+and a fixture's whole job is to invoke a validator. Measured at 0.168.1: **45 of 66**
+shippable fixtures name one. So "run the derived fixtures and require green before the push"
+was indistinguishable from "run the whole suite," and it contradicted the write instruction
+twenty lines later, which says to write `tests/fixtures/<dir>/` "for the covering fixtures —
+never the derived set per directory." With the derived set at 45 dirs those cannot both be
+meant, and the reader had to guess which.
+
+The derivation now runs against the machinery paths **this diff actually touched**, which on
+a one-script pull yields exactly one covering fixture — the step's own stated rationale ("a
+fixture's subject is always machinery"), and the reading under which the write instruction
+becomes a distinction rather than a contradiction.
+
+### Fixed — the drift scan restated its own exclusion list, and the copy was wrong
+
+Filed as `PC-S303-UNREGISTERED-DRIFT-SCANS-FIVE-OF-TEN-CORE-SUBTREES`. **The entry's premise
+is refuted** — the exclusions are documented and mechanically bound, by I12, whose `fixtures`
+row already records the exact measurement the entry re-derives. But the entry is evidence of a
+real defect one layer down, which is why it was filed at all.
+
+`unregistered-drift.sh`'s scan-set comment carried its own copy of the exclusion list, naming
+`scripts/`, `session-driver/`, `ci-templates/`, `git-hooks/` and `skills/ai-dlc-update` — and
+omitting `core/fixtures`, the one subtree where the reference consumer actually carries edited
+files. A reader of that file alone concluded the fixture gap was an oversight and filed it.
+Two homes for one list; the unbound copy is the one that misleads. The comment now points at
+I12 as the single authority instead of restating it.
+
 ## [0.171.1] — 2026-07-26
 
 ### Fixed — a prose mention of the close vocabulary deleted live ledger entries

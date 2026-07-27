@@ -258,11 +258,19 @@ is_unregistered() {
 }
 
 # Scan set. Prose/schema core a consumer could edit and silently drift — overwrite-on-pull, so
-# an in-place edit is lost without a word. Deliberately NOT machinery (scripts/, session-driver/,
-# ci-templates/, git-hooks/: an edit breaks LOUDLY, not silently) and NOT skills/ai-dlc-update
-# (self-update owns it, step 2). This set is BOUND by validate-enforcement-map.sh I12 to a
-# reviewed per-subtree policy, so a new core dir cannot silently escape the scan the way
-# ai-dlc-setup/ and schemas/ each did in turn.
+# an in-place edit is lost without a word.
+#
+# WHAT IS EXCLUDED, AND WHY, IS NOT RESTATED HERE. `validate-enforcement-map.sh` I12 holds a
+# reviewed row for EVERY core subtree — `scan`, or `exempt:<reason>` — and binds this ls-tree to
+# the `scan` rows, so a new core dir cannot silently escape the scan the way ai-dlc-setup/ and
+# schemas/ each did in turn. Read the exclusions there.
+#
+# This comment used to carry its own copy of the exclusion list, and the copy was already wrong:
+# it named scripts/, session-driver/, ci-templates/, git-hooks/ and skills/ai-dlc-update, and
+# omitted core/fixtures — the one subtree where the reference consumer actually carried edited
+# files. A reader of this file alone therefore concluded the fixture gap was an oversight and
+# filed it as a defect, when I12 had reviewed and exempted it with a stated reason. Two homes for
+# one list, and the unbound copy is the one that misleads.
 git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
       core/skills/ai-dlc core/skills/ai-dlc-setup core/team-roles core/hooks core/schemas 2>/dev/null \
   | grep -E '\.(md|sh|json)$' \
