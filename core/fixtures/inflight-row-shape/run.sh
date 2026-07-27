@@ -26,8 +26,19 @@
 # them and the violations. Assertion 3 pins that decision: prose alone must NOT
 # fail, or the rule silently became the one that was rejected.
 #
+# THE SECOND DEFECT: THE STATUS TOKEN ITSELF (assertions 4b-4e, 5b).
+#
+# The column was `in-flight` or `idle-reusable`, and nothing anywhere enforced
+# either spelling -- the token lived in prose in four core files and in a
+# remediation string here. `idle-reusable` also named the wrong thing: the
+# section, by gate-validation.md's own words, "records only whether the lead can
+# still reach it", while the token advertised REUSE and bounded it by nothing.
+# Rule 28 now bounds what a message to a reachable teammate may carry, and the
+# token was renamed to `delivered-reachable` to state the fact rather than invite
+# the reuse. A rename with no mechanism drifts back, so the set is closed here.
+#
 # The snapshots below are deliberately TINY. Every red must come from the In-Flight
-# check, never from the byte budget. Assertion 5 proves it.
+# checks, never from the byte budget. Assertions 5 and 5b prove it.
 
 set -uo pipefail
 
@@ -83,14 +94,14 @@ HEADER='| agent | role | deliverable | dispatched-at | status |
 
 echo "inflight-row-shape"
 
-# --- 1. Live and idle-reusable rows both pass ----------------------------------
+# --- 1. Both status tokens pass ------------------------------------------------
 # The state the column exists to express. A teammate that has delivered but is
 # still reachable is a row, not history -- and must not need a strikethrough to
 # say so, or the whole change is decorative.
 seed "$HEADER
 | \`dev-s296-story-2\` | \`dev\` | docs/reviews/x.md | 2026-07-22 | in-flight |
-| \`qa-s296-story-1\` | \`qa\` | docs/reviews/y.md | 2026-07-22 | idle-reusable |"
-expect 0 "in-flight and idle-reusable rows both pass"
+| \`qa-s296-story-1\` | \`qa\` | docs/reviews/y.md | 2026-07-22 | delivered-reachable |"
+expect 0 "in-flight and delivered-reachable rows both pass"
 
 # --- 2. A STRUCK ROW IS REFUSED, AND NAMED -------------------------------------
 # The bare assertion is "exit 1". The one that matters is that the output names
@@ -133,6 +144,77 @@ expect 0 "prose without a struck row still passes (the rejected prose-cap stays 
 seed "$HEADER"
 expect 0 "an empty table passes"
 
+# --- 4b. AN UNRECOGNISED STATUS TOKEN IS REFUSED, AND NAMED --------------------
+# The column is a closed set of two. `idle-reusable` is the token the set was
+# renamed AWAY from, so this doubles as the migration signal: a consumer whose
+# snapshot still carries it is told, by the check, exactly which row to relabel.
+seed "$HEADER
+| \`qa-s296-story-1\` | \`qa\` | docs/reviews/y.md | 2026-07-22 | idle-reusable |"
+expect 1 "an unrecognised status token is refused"
+if grep -q 'qa-s296-story-1' "$WORK/out.txt"; then
+  ok "  and the offending row is named in the output"
+else
+  bad "  the offending row is NOT named -- lead cannot act on this verdict"
+fi
+# Its own verdict, not the struck-row one. They route to OPPOSITE remedies:
+# `struck row` says delete, `unknown status` says keep and relabel. Folded
+# together, a lead deletes the row it was supposed to fix.
+if grep -q 'unrecognised status' "$WORK/out.txt" && ! grep -q 'struck-through row' "$WORK/out.txt"; then
+  ok "  and it is a separate verdict from the struck-row check"
+else
+  bad "  folded into the struck-row verdict -- opposite remedy for the lead"
+fi
+
+# --- 4c. A TRAILING NOTE AFTER THE TOKEN PASSES --------------------------------
+# Pins the measured PREFIX decision. The reference consumer's live snapshot
+# carries `in-flight, retrying Write` and `in-flight, since <ts>`; an equality
+# check would have failed two of its three real rows on the day it shipped. If
+# this assertion ever goes red, the check was silently tightened to equality.
+seed "$HEADER
+| \`a-1\` | \`analyst\` | docs/x.md | 2026-07-22 | in-flight, retrying Write |
+| \`a-2\` | \`analyst\` | docs/y.md | 2026-07-22 | delivered-reachable, appending |"
+expect 0 "a trailing note after the status token still passes"
+
+# The delimiter is whitespace too, not only punctuation. This exact shape is what
+# the live reference snapshot carries, and it is what a comma-only split failed
+# during development -- the measurement caught it, so it is pinned here.
+seed "$HEADER
+| \`a-3\` | \`adversary\` | docs/z.md | 2026-07-22 | in-flight (VERIFY pass, \`resolves: x.md\`) |"
+expect 0 "a space-delimited trailing note still passes"
+
+# --- 4d-legacy. A TABLE THAT DECLARES NO STATUS COLUMN IS NOT CHECKED ----------
+# Measured across the reference consumer's 151 snapshots: four archives predate
+# the five-column row and declare `| teammate | deliverable | dispatched-at |
+# state |`. Their last cell is a timestamp or a deliverable, and indicting it
+# would be the check reading a column that does not exist. The scan arms on the
+# header declaring `status`, which is derived from the table, not an exception
+# list. If this goes red, the check started inventing a column.
+seed "| teammate | deliverable | dispatched-at | state |
+|---|---|---|---|
+| \`analyst-s295\` | docs/x.md | 2026-07-21T12:50Z | delivered |"
+expect 0 "a legacy table with no status column raises no status finding"
+
+# --- 4d. THE EMPTY-TABLE FORM route.md CREATES PASSES ---------------------------
+# Assertion 4 already covers this for the struck check; it is repeated here
+# because the status check parses cells the struck check never looked at, and the
+# header row's own last cell is the literal word `status`. A check that indicts
+# the schema route.md writes is a check no consumer can start a pipeline with.
+seed "$HEADER"
+expect 0 "the header+separator form carries no status finding"
+
+# --- 4e. A STRUCK ROW RAISES EXACTLY ONE VERDICT -------------------------------
+# Struck rows carry a dash in the status cell, so without the strikethrough
+# exemption every struck-row assertion above would ALSO be a status assertion and
+# neither would prove anything alone. This is the isolation check for that.
+seed "$HEADER
+| ~~\`dev-s296-story-1\`~~ | \`dev-escalated\` | DELIVERED + CONSUMED | 2026-07-22 | — |"
+run_validator >/dev/null
+if grep -q 'unrecognised status' "$WORK/out.txt"; then
+  bad "  a struck row also tripped the status check -- the two checks are entangled"
+else
+  ok "a struck row raises the struck verdict only, not the status one"
+fi
+
 # --- 5. THE MUTATION TEST — prove assertion 2's red came from the new code ------
 # Remove the In-Flight call from a COPY and re-run assertion 2's input. If it
 # still fails, something else was producing the red.
@@ -150,6 +232,35 @@ if [ "$mutant_status" = "0" ]; then
   ok "MUTATION: removing the In-Flight check makes assertion 2 go green"
 else
   bad "MUTATION: assertion 2 still fails (exit $mutant_status) without the check -- it proves nothing"
+fi
+
+# --- 5b. THE MUTATION TEST for the status check --------------------------------
+# Same shape, built as a COPY with a matched-nothing guard. The CONTROL below is
+# not optional: a lone script copy that dies for its own reasons emits nothing
+# and exits non-zero, which is indistinguishable from the check firing, so the
+# unmutated copy has to be shown alive on the same input first.
+CONTROL="$WORK/control.sh"
+cp "$VALIDATOR" "$CONTROL" || exit 2
+SMUTANT="$WORK/mutant-status.sh"
+sed '/check_inflight_status "\$f" "\$rel"/d' "$VALIDATOR" > "$SMUTANT" || exit 2
+if cmp -s "$VALIDATOR" "$SMUTANT"; then
+  echo "FIXTURE ERROR: status mutation matched nothing -- the call site was renamed" >&2
+  echo "  update the sed pattern in assertion 5b to match the real call" >&2
+  exit 2
+fi
+seed "$HEADER
+| \`qa-s296-story-1\` | \`qa\` | docs/reviews/y.md | 2026-07-22 | idle-reusable |"
+control_status="$(run_validator "$CONTROL")"
+if [ "$control_status" = "1" ]; then
+  ok "CONTROL: an unmutated copy still refuses the unrecognised token"
+else
+  bad "CONTROL: unmutated copy exited $control_status -- the copy is broken, 5b proves nothing"
+fi
+smutant_status="$(run_validator "$SMUTANT")"
+if [ "$smutant_status" = "0" ]; then
+  ok "MUTATION: removing the status check makes assertion 4b go green"
+else
+  bad "MUTATION: assertion 4b still fails (exit $smutant_status) without the check -- it proves nothing"
 fi
 
 # --- 6. Strikethrough OUTSIDE the section is not this check's business ---------

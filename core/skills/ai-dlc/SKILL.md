@@ -1221,11 +1221,31 @@ lead-conduct retro finding, even when the lead could have done it
 faster alone. The point is not speed; it is keeping production work in
 subagent context and the lead in orchestration (Rule 23).
 
+**`SendMessage` reaches a resident teammate; it does not create a context.**
+A teammate you can still message is NOT a blank slate: its original dispatch
+brief and every prior exchange remain in its context and OUTRANK anything sent
+later. So `SendMessage` carries only content that is ADDITIVE AND CONSISTENT
+with the brief that teammate was dispatched under -- a fold-in arriving before
+the deliverable lands, a crash-recovery resolution, an answer to the teammate's
+own question, a gate verdict on its own work. Two things it may never carry:
+
+- **Retracted or narrowed scope.** A patch message cannot displace the original
+  brief; the teammate builds what the brief said. Scope reduction is `TaskStop`
+  plus ONE fresh self-contained dispatch stating the out-of-scope list.
+- **New or scope-distinct work, however small.** That is a fresh `Agent`
+  dispatch, regardless of how many resident teammates already exist. Resident-
+  teammate count is a `TaskStop` cleanup concern, never a dispatch-routing
+  input.
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: the lead absorbing
 delegable work inline, saturating its context and collapsing the
-production/orchestration boundary. False-positive cost: an occasional
-dispatch of work the lead could have done in one turn -- paid in one
-orchestration round, recovered in context headroom. Removal condition:
+production/orchestration boundary -- and its mirror, the lead RECYCLING a
+resident teammate for work that never belonged to it, which reintroduces an
+unrelated brief and exchange history into a deliverable that was supposed to
+start clean, and reports back with no signal that it did. False-positive cost:
+an occasional dispatch of work the lead could have done in one turn, or one
+extra spawn where a message would have been reused -- paid in one orchestration
+round, recovered in context headroom. Removal condition:
 retire once the harness structurally prevents the lead from taking
 non-orchestration actions.
 
@@ -1239,7 +1259,9 @@ window equals the duration of the in-flight foreground call.
 
 `Agent` is the only unbounded foreground primitive you control. `Bash` and
 `TaskOutput` are capped by the harness at 10 minutes; `AskUserQuestion` is the
-operator's own think-time. A blocking `Agent` call is therefore the one way you
+operator's own think-time. (`SendMessage` is not a dispatch primitive at all --
+it reaches a teammate `Agent` already spawned, under the scope bound Rule 28
+sets. It never substitutes for a spawn.) A blocking `Agent` call is therefore the one way you
 can hold a human's message hostage -- and before this rule, ai-dlc *mandated*
 it. Measured across 278 consumer sessions: 355 foreground `Agent` calls blocked
 longer than 2 minutes, the worst for **36 minutes**.
