@@ -323,9 +323,14 @@ missing check never fires. Run:
 
     scripts/ai-dlc/validate-gate-manifest.sh
 
-It derives both directions from the manifest and hard-codes no check ID.
-MISSING and ORPHAN must both be empty. Exit 2 means the resolve could not be
-performed (no anchors, no rows, no `universal` row) and is never a pass.
+It derives both directions from the manifest and hard-codes no check ID. It
+resolves the RENDERED manifest, not core's: an `overrides/` entry shadowing the
+manifest section supplies the table, and `extensions/` entries hooking this file
+supply anchors. MISSING and ORPHAN must both be empty, and the `manifest source:`
+line must name the layer the table actually came from. Exit 2 means the resolve
+could not be performed (no anchors, no rows, no `universal` row, two overrides
+each carrying a table, or an override that shadows the section away) and is never
+a pass.
 
 ### Empirical gate validation
 
@@ -552,7 +557,7 @@ largest single writing cost for its least-read content.
 |-------|---------|----------|
 | `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
 | `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling |
-| `validate-gate-manifest.sh` | PASS / FAIL | exit code + the MISSING/ORPHAN lines |
+| `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN lines |
 | `validate-artifact-budget.sh --warn-only` | CLEAN / BREACH | exit code + each breached artifact, or "within budgets" |
 | `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |
 

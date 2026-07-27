@@ -348,6 +348,146 @@ rc="$(rc_of "$MANIFEST" "$GV")"
   && ok "a file with no CHECK_LOADED anchors -> exit 2" \
   || bad "a file with no anchors exited $rc instead of refusing to resolve"
 
+# ============ validate-gate-manifest.sh, THROUGH THE RULE 27 LAYERS ==========
+#
+# Assertions 13-18 all drive a PURE-CORE tree, and every one of them passes
+# against the pre-v0.177.0 script that read core and nothing else. That is the
+# defect: on a consumer whose manifest lives in an `overrides/` entry, the table
+# this script resolved was not the table the lead loaded, and the resolve reported
+# PASS on it. The cases below are the ones a core-only reader cannot answer.
+
+LAYERS=".claude/skills/ai-dlc"
+
+# The override's `shadows:` anchor must name the section heading the manifest
+# sits under IN THE SEEDED CORPUS (`# Gate validation`) — the join is derived from
+# the file, so a fixture that hard-codes core's real heading would test nothing.
+ovr() { # <basename> <shadows-value>; body on stdin
+  mkdir -p "$WORK/t/$LAYERS/overrides"
+  { printf -- '---\nshadows: %s\nbase_sha: abc1234\nreason: fixture entry\n---\n\n' "$2"
+    cat; } > "$WORK/t/$LAYERS/overrides/$1"
+}
+ext() { # <basename> <hooks-value>; body on stdin
+  mkdir -p "$WORK/t/$LAYERS/extensions"
+  { printf -- '---\nkind: check\nhooks: %s\nid: %s\n---\n\n' "$2" "${1%.md}"
+    cat; } > "$WORK/t/$LAYERS/extensions/$1"
+}
+# The override table core does not have: `34` joins the retro row.
+ovr_manifest() {
+  ovr manifest.md 'steps/gate-validation.md#Gate validation' <<'EOF'
+# Gate validation — CONSUMER OVERRIDE
+
+<!-- GATE_MANIFEST v1
+| gate type | checks |
+|-----------|--------|
+| universal | 1, 2 |
+| retro     | 3, 34 |
+GATE_MANIFEST_END -->
+EOF
+}
+
+# --- Assertion 19: the OVERRIDE's table is the one resolved ------------------
+fresh
+ovr_manifest
+ext check-34.md 'steps/gate-validation.md' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "0" ] && has 'manifest source: overrides/manifest.md' "$out"; then
+  ok "an overrides/ entry shadowing the manifest section supplies the table -> exit 0, attributed"
+else
+  bad "the resolve did not use the override's table (rc=$rc) — it validated a table nobody loads"
+fi
+has 'anchor sources: core(3) + extensions(1) + overrides(0) = 4 unique' "$out" \
+  && ok "  and the extension's anchor is in the pool" \
+  || bad "  but the extension's anchor was not counted — 34 would report MISSING"
+
+# --- Assertion 20: the SAME tree, minus the extension's anchor -> MISSING ----
+# Binds 19 to that exact anchor. Without this, 19 passes for any reason that
+# happens to produce exit 0.
+fresh
+ovr_manifest
+ext check-34.md 'steps/gate-validation.md' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+EOF
+E="$WORK/t/$LAYERS/extensions/check-34.md"
+cp "$E" "$E.pre"
+grep -v '^<!-- CHECK_LOADED: 34 -->$' "$E.pre" > "$E"
+if cmp -s "$E" "$E.pre"; then
+  bad "assertion 20's mutation matched nothing — the case below is vacuous"
+else
+  rm -f "$E.pre"
+  out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+  if [ "$rc" = "1" ] && has 'MISSING (manifest id, no anchor): 34' "$out"; then
+    ok "override claims 34, no layer defines its anchor -> MISSING 34, exit 1"
+  else
+    bad "a claimed-but-unloadable check exited $rc — the exact S305 consumer failure"
+  fi
+fi
+
+# --- Assertion 21: an extension anchor no rendered row claims -> ORPHAN ------
+fresh
+ovr_manifest
+ext check-34.md 'steps/gate-validation.md' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+
+### 35. Unclaimed
+<!-- CHECK_LOADED: 35 -->
+EOF
+out="$(manifest)"
+has 'ORPHAN  (anchor, no manifest claim): 35' "$out" \
+  && ok "an extension check no rendered row claims -> ORPHAN 35" \
+  || bad "an unloadable extension check went undetected in the anchor->manifest direction"
+
+# --- Assertion 22: two shadowing tables -> exit 2, FOR THAT REASON -----------
+# Asserted on the reason: picking one silently would make every PASS above
+# unattributable, and a bare exit-2 assertion cannot tell that apart from 23.
+fresh
+ovr_manifest
+ovr second.md 'steps/gate-validation.md' <<'EOF'
+<!-- GATE_MANIFEST v1
+| gate type | checks |
+|-----------|--------|
+| universal | 1 |
+GATE_MANIFEST_END -->
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "2" ] && has 'two or more overrides/ entries each carry a' "$out"; then
+  ok "two overrides each carrying a manifest -> exit 2, reason 'undecidable'"
+else
+  bad "an undecidable effective table exited $rc / wrong reason"
+fi
+
+# --- Assertion 23: the section shadowed AWAY -> exit 2, FOR THAT REASON ------
+fresh
+ovr gone.md 'steps/gate-validation.md#Gate validation' <<'EOF'
+# Gate validation — CONSUMER OVERRIDE
+
+This consumer replaced the section with prose and no table.
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "2" ] && has 'replaces the manifest section' "$out"; then
+  ok "an override that shadows the section away -> exit 2, not core's table"
+else
+  bad "the rendered document has no manifest at all and the scan exited $rc"
+fi
+
+# --- Assertion 24: UNMUTATED CONTROL — empty layer dirs change nothing -------
+# Without this, every assertion above is consistent with a script that reports
+# something different the moment `overrides/` merely EXISTS, and the seeded corpus
+# creates it empty.
+fresh
+layered="$(manifest)"
+rm -rf "${WORK:?}/t/$LAYERS/overrides" "${WORK:?}/t/$LAYERS/extensions"
+unlayered="$(manifest)"
+if [ "$layered" = "$unlayered" ] && has 'manifest source: core' "$layered"; then
+  ok "empty layer dirs resolve byte-identically to no layer dirs, source 'core'"
+else
+  bad "an EMPTY overrides/ or extensions/ changed the resolve — the layered assertions above measure the wrong thing"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "retro-audit-scans: PASS"; exit 0; fi
 echo "retro-audit-scans: $fails assertion(s) FAILED" >&2

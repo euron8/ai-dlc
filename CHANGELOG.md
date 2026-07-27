@@ -17,6 +17,58 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.177.0] — 2026-07-27
+
+### Fixed — the gate-manifest resolve read core, on a consumer whose manifest is an override
+
+`validate-gate-manifest.sh` two-way-resolves `GATE_MANIFEST` rows against
+`<!-- CHECK_LOADED: <id> -->` anchors, and its own header states the stakes: a manifest
+ID with no matching anchor "silently mis-slices a gate: the gate runs, reports PASS, and
+the missing check never fires."
+
+It only ever read core. Under Rule 27 an `overrides/` entry shadowing the manifest
+section REPLACES that table at load time, so on a layered consumer the table the pipeline
+uses was unvalidated and the table this script checked was one nobody reads. That is not
+a weaker form of the guarantee above — it is the exact failure the guarantee describes,
+produced by the guard against it.
+
+It had a live victim. On the reference consumer an override added `34` to the
+`implementation` row; `34` is defined in `extensions/checks/` and carried no anchor
+anywhere. Every gate that should have loaded that consumer's protected-core-path guard
+passed without it, while this script printed `PASS — both directions resolve` against a
+core manifest that never mentions `34`.
+
+The resolve now runs against the rendered manifest:
+
+- the table comes from the `overrides/` entry that shadows the manifest section, else core;
+- the anchor pool is core ∪ `extensions/` entries hooking this file ∪ `overrides/` entries
+  shadowing it;
+- two overrides each carrying a table, or an override that shadows the section away
+  leaving no table at all, exit 2 — the effective table is undecidable or absent, and
+  falling back to core's would validate a table nobody loads;
+- two new output lines, `manifest source:` and `anchor sources:`, so a PASS names what it
+  resolved. An unattributable PASS was how this stayed invisible.
+
+The section heading an override has to name is read back out of the core file rather than
+spelled here, so the join cannot drift from what core actually writes. The layer dirs are
+found by stripping `steps/<file>` off the resolved path, never by counting `..` from the
+script's own location — `install.sh` moves `core/skills/ai-dlc/` as one subtree, so the
+layer dirs are siblings of `steps/` in both layouts (invariant I33).
+
+Measured before shipping: on the reference consumer the layered resolve reports 42 ids,
+42 anchors, MISSING none, ORPHAN none — the false-positive set is empty, not merely small.
+Against a core-only anchor pool the same manifest reports `MISSING: 34`, which is what
+makes the extension half of the union load-bearing rather than decorative.
+
+Known residual, stated in the file: the anchor pool is a UNION, so an override that
+shadows a CHECK section and drops that check's anchor stays invisible — core's copy
+survives in the pool. Closing that needs section-level rendering through precedence.
+
+`core/fixtures/retro-audit-scans/` gains assertions 19–24, including an unmutated control
+that an EMPTY `overrides/`/`extensions/` resolves byte-identically to no layer dirs at
+all. That control caught a real defect during development: a `layers:` status line that
+varied with a directory's mere existence made two identical resolves compare unequal.
+
 ## [0.176.0] — 2026-07-27
 
 ### Added — Rule 28 bounds what a message to a resident teammate may carry
