@@ -140,7 +140,7 @@ Dispatch ONE `pm-escalated` subagent, bound per Rule 19 (model +
 role-contract line), to invoke `bmad-spec` **headless** with the product brief
 and its `LOCKED_REQUIREMENTS` block as input and slug `s<N>-<sprint-slug>`.
 
-**The escalated tier, not standard `pm`.** The kernel is the one artifact every
+**The escalated route, not standard `pm`.** The kernel is the one artifact every
 later step reads — the PRD cites its capabilities, the architecture spine takes
 it as input, stories carry its IDs, and Checks 29/30/31 join against them — so a
 defect authored here is ratified downstream, not caught. The EARS restatement is

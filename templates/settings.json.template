@@ -1,4 +1,8 @@
 {
+  "aiDlcModels": {
+    "opus": "claude-opus-5[1m]",
+    "sonnet": "claude-sonnet-5[1m]"
+  },
   "enabledPlugins": {
     "context-mode@context-mode": true
   },

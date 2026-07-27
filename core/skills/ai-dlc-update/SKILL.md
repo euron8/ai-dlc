@@ -319,6 +319,23 @@ prose is itself generated rather than composed.
    token list on the worklist item itself, so the obligation arrives with the work.
    Note what it does NOT catch: a consumer path upstream never had (there is no
    retirement to detect). A clean result is not proof the merge is semantically whole.
+3a-iii. **Retired contract shapes in consumer layer files** (cheap, deterministic
+   — no agents): run `reconcile/retired-layer-contract.sh <dist-repo> <base-sha>
+   <theirs-ref> <consumer-root>`. `retired-tokens.sh` above scans only `CLASSIFY`
+   core files, so `overrides/` and `extensions/` are outside every bucket and no
+   detector opens them. A layer file that shadows, quotes, or restates a core
+   construct upstream retired therefore survives the pull unreported, and the layer
+   is what the teammate reads.
+   Output is `RETIRED-LAYER-CONTRACT<TAB><layer-path><TAB><shape>`. Each row is a
+   layer file to re-read against `theirs`: either re-point it at the replacement
+   construct, or record in the report why the stale reference is harmless.
+   **This does NOT block the apply** — a layer file is consumer-owned and the pull
+   does not rewrite it. It is a worklist item, and it is owed before the pull counts
+   as done.
+   Note what it does NOT catch: a shape the consumer invented that core never had,
+   and a layer file that paraphrases a retired construct without using its literal
+   shape. A clean result is not proof every layer file survived the release.
+
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
    <consumer-root> --templates`. The `core/` reconcile above never sees
@@ -1024,7 +1041,7 @@ prose is itself generated rather than composed.
      reinject and mask/reinject is the WRONG tool. Substitute the declared sites from
      the operator's answer (step 7), then rewrite the file.
 
-   Do not deliver a tree that dispatches a teammate with `/model {x_model_personal}`.
+   Do not deliver a tree that dispatches a teammate against an unfilled `{token}`.
 
    Exclude `<!-- ... -->` doc comments — those legitimately carry the token text
    and MUST survive from `theirs` (per the mask/reinject transform, the doc
@@ -1039,10 +1056,14 @@ prose is itself generated rather than composed.
    while `setup-sites.md` went untouched for nine minor versions, so the manifest
    did not declare that role's model sites at all. The first
    consumer pull to touch that file would have overwritten a live
-   `/model claude-opus-4-8[1m]` with `/model {adversary_model_personal}` and broken
+   a live opus model string with that role's unfilled placeholder and broken
    every adversary dispatch — with nothing in the run to catch it. A manifest is a
    hand-maintained list and WILL go stale again; this gate is what makes the next
    staleness loud instead of silent.
+
+   Role files carry no model string, so no model site can be omitted from the
+   manifest. This gate covers the sites that remain — ownership paths and
+   deploy/smoke commands.
 
    - Re-stamp the rulebook base: set `version`/`commit` = `<theirs-version>` /
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
@@ -1325,9 +1346,11 @@ is exactly what the reverted attempt got wrong). Before delivery:
    precedence (`overrides > extensions > core`) would actually produce at
    load time — proof the shadow/addition takes effect, not just that the id
    string matches somewhere.
-4. Confirm zero remaining `{...}` template tokens in any team-role file, and
-   that every `/model` line holds a real (non-placeholder) string and every
-   `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max` — this is
+4. Confirm zero remaining `{...}` template tokens in any team-role file; that
+   every `- Model:` key RESOLVES in the `aiDlcModels` block of
+   `.claude/settings.json` (an unresolvable key makes the dispatch guard fail
+   open, so that role dispatches with no model bound at all — silently); and that
+   every `/effort` line holds one of `low`/`medium`/`high`/`xhigh`/`max`. This is
    the concrete proof teammate dispatch will not break, the exact failure the
    reverted attempt caused.
 5. Diff every overwritten core file against `theirs` **over the WHOLE file,

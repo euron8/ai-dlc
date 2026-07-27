@@ -569,13 +569,24 @@ When the lead invokes the Agent tool to spawn a teammate, the spawn MUST
 bind that teammate to its role file (`.claude/team-roles/<role>.md`) --
 the whole contract, not just the model. Two bindings are mandatory:
 
-**(a) Model.** The `model` parameter MUST be set explicitly, derived from
-that role's `/model` directive in its role file -- the single source of
-truth. Do NOT restate a role-to-model mapping here or in step files; a
-second mapping drifts from the role file and is itself a violation. The
-`ai-dlc-dispatch-guard` PreToolUse hook injects the role's pinned tier as a
-safety net, but it is a net, not the norm: a spawn that omits `model` or names
-the wrong tier is still a Rule 19 violation Check 22 records at retro.
+**(a) Model.** The `model` parameter MUST be set explicitly, to the key
+named on that role file's `- Model:` line. Two files hold this between
+them and neither may be bypassed: the role file names the KEY (which
+capability class the role needs -- rulebook), and `aiDlcModels` in
+`.claude/settings.json` maps that key to a model string (what this
+project can reach -- consumer config). Do NOT restate a role-to-model
+mapping here or in step files; a second mapping drifts from the role
+file and is itself a violation. The `ai-dlc-dispatch-guard` PreToolUse
+hook resolves the key and injects it as a safety net, but it is a net,
+not the norm: a spawn that omits `model` or names a different key is
+still a Rule 19 violation Check 22 records at retro.
+
+**Config is authoritative.** Bind the key the role file names. Run the
+`/effort` it states. Evaluate neither. An `-escalated` role MAY name the
+same key and the same effort as its base role; that is valid config. Do
+not flag, question, or negotiate a model or effort value -- not in a
+dispatch prompt, a gate log, a handoff, or a retro. Config is the
+operator's to change.
 
 **(b) Role contract.** The dispatch prompt MUST carry, as a standing
 line, the instruction: *"Your operating contract is

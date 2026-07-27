@@ -1277,55 +1277,92 @@ else
   fi
 fi
 
-# --- I22: every model-token role file is a declared setup-substitution site.
+# --- I22: every model key a role file names is one the shipped config defines.
 #
-# `reconcile/setup-sites.md` is the SINGLE SOURCE OF TRUTH for "this looks like core
-# divergence but is actually consumer config". A `{*_model_*}` token that is not listed
-# there is not masked during the core-overwrite step, so a pull that touches the file
-# writes the placeholder back over the consumer's live `/model` string. The role then
-# dispatches against a literal `{reviewer_escalated_model_personal}` and the failure
-# surfaces far from the pull that caused it.
+# Replaces the pre-v0.174.0 I22/I22b pair. Those joined role-file `{*_model_*}`
+# tokens to `setup-sites.md` and to ai-dlc-setup's fill instructions, because a
+# token that was not masked got overwritten by a pull and a token nobody filled
+# stayed literal. Both hazards are gone with the tokens: a role file now names a
+# KEY and `aiDlcModels` in settings.json holds the string, and settings.json
+# reconciles by additive json-merge with the consumer winning on conflict, so a
+# consumer's model strings survive a pull by construction.
 #
-# This has now shipped TWICE, and the first time it did the damage. `adversary.md`
-# carried a model token from v0.30.0 (3727f68) and was not declared a site until
-# v0.47.0 (e86cd9e) — seventeen versions, and that commit's own title is "the
-# reconcile blanked the config it exists to preserve". Then v0.84.0 added
-# `code-reviewer-escalated.md` carrying two tokens, wired it into ai-dlc-setup
-# STEP 2, and again never added the manifest entries — caught only because a
-# consumer's pull happened to preserve its live values and it reported the gap.
+# The hazard that replaces them is a DANGLING KEY. A role file naming a key the
+# shipped `aiDlcModels` does not define means every consumer installing fresh
+# gets a role whose key does not resolve — and `ai-dlc-dispatch-guard.sh` fails
+# OPEN on an unresolvable key, so that role dispatches with no model bound at
+# all, silently, through the guard's open door. That is the same failure I22b
+# existed to prevent, in its new form.
 #
-# The manifest's authoring rule says every entry MUST trace to a "Files to replace in"
-# directive in ai-dlc-setup/SKILL.md. That rule is one-directional: it stops entries
-# being invented, but nothing walked the other way and asked whether a file carrying a
-# token had an entry. A hand-maintained list is the recurring bug here (I8's site table,
-# I12's scan set), so DERIVE the subject set from the tokens on disk.
-#
-# Direction matters: a file with a token and no entry is the data-loss bug. A file with
-# an entry and no token is harmless (a stale entry simply never matches), so this asserts
-# one containment, not set equality.
-SITES_MD="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/setup-sites.md"
-if [ ! -f "$SITES_MD" ]; then
-  err "I22 cannot find core/skills/ai-dlc-update/reconcile/setup-sites.md. The check that keeps every model token maskable just went vacuous — it must locate the manifest or fail loudly, never pass by finding nothing to compare."
+# Both sides are DERIVED — the keys off the role files on disk, the defined keys
+# out of the shipped template — because a hand-maintained list is this repo's
+# recurring bug (I8's site table, I12's scan set, and I22's own two escapes).
+SETTINGS_TMPL="$REPO_ROOT/templates/settings.json.template"
+if [ ! -f "$SETTINGS_TMPL" ]; then
+  err "I22 cannot find templates/settings.json.template. The check that keeps every role's model key resolvable just went vacuous — it must locate the shipped config or fail loudly, never pass by finding nothing to compare."
 else
-  # NOT-sites carve-out: the party-persona roles are spawned by /bmad-party-mode, which
-  # controls their model, so an ai-dlc token there would be inert. Derived from the
-  # manifest's own "Explicitly NOT sites" section rather than restated here.
-  not_sites="$(sed -n '/^## Explicitly NOT sites/,$p' "$SITES_MD" | grep -oE '`[a-z-]+\.md`' | tr -d '`' | sort -u)"
-  declared="$(grep -oE 'core/team-roles/[a-z-]+\.md' "$SITES_MD" | sort -u)"
-  tokened="$(grep -rlE '\{[a-z_]*model[a-z_]*\}' "$REPO_ROOT"/core/team-roles/*.md 2>/dev/null | sed "s|^$REPO_ROOT/||" | sort -u)"
-  if [ -z "$tokened" ]; then
-    err "I22 found no {*_model_*} tokens in core/team-roles/. Either the token form changed or the role files were emptied; either way this assertion is now testing nothing and would pass against a tree whose every model site is unlisted."
+  # Keys named by role files, and keys the shipped config defines.
+  role_keys="$(grep -hoE '^- Model: `[A-Za-z0-9_-]+`' "$REPO_ROOT"/core/team-roles/*.md 2>/dev/null \
+               | sed -E 's#^- Model: `##; s#`$##' | sort -u)"
+  defined_keys="$(jq -r '.aiDlcModels // {} | keys[]' "$SETTINGS_TMPL" 2>/dev/null | sort -u)"
+
+  if [ -z "$role_keys" ]; then
+    err "I22 found no '- Model: \`<key>\`' lines in core/team-roles/. Either the pin form changed or the role files were emptied; either way this assertion is now testing nothing and would pass against a tree whose every role names a key that does not exist."
+  elif [ -z "$defined_keys" ]; then
+    err "I22 templates/settings.json.template defines no aiDlcModels keys. Every role file's key is dangling, and ai-dlc-dispatch-guard.sh fails open on an unresolvable key — so every teammate would dispatch with no model bound. Restore the block."
   else
-    for tf in $tokened; do
-      tbase="$(basename "$tf")"
-      printf '%s\n' "$not_sites" | grep -qx "$tbase" && continue
-      if ! printf '%s\n' "$declared" | grep -qx "$tf"; then
-        err "I22 $tf carries a {*_model_*} token but setup-sites.md declares no site for it. On the next pull that touches this file the mask/reinject step will not know the token is consumer config, so it overwrites the consumer's live /model string with the placeholder and the role dispatches against a literal token. This is the adversary.md nine-version gap and the code-reviewer-escalated.md gap. Add the site entries, or list the file under 'Explicitly NOT sites' with the reason it carries an inert token."
-      fi
+    for k in $role_keys; do
+      printf '%s\n' "$defined_keys" | grep -qx "$k" \
+        || err "I22 core/team-roles/ names the model key '$k' but templates/settings.json.template's aiDlcModels does not define it. A consumer installing fresh gets a role whose key does not resolve; ai-dlc-dispatch-guard.sh then takes its fail-open branch and that role dispatches with NO model bound, silently. Add the key to the template, or point the role file at a key that exists."
     done
   fi
 fi
 
+# --- I22b: the role files' pin shape is the one the dispatch guard parses ------
+# I22 checks that a key RESOLVES. Nothing checked that the guard can still FIND
+# it. The guard extracts the key with one anchored regex; if the role files'
+# line shape drifts from that anchor — a reworded prefix, a different quoting —
+# the guard matches nothing, falls through its `[ -n "$PIN_KEY" ] || exit 0`
+# branch, and every role dispatches unbound. Nothing would fail: the hook exits
+# 0, the ledger records a null pin, and the suite stays green. That is exactly
+# this repo's recurring check-cannot-fire shape, so the two are bound here.
+#
+# The pattern is READ OUT OF THE HOOK, never restated, so the join cannot drift.
+DG_HOOK="$REPO_ROOT/core/hooks/ai-dlc-dispatch-guard.sh"
+if [ ! -f "$DG_HOOK" ]; then
+  err "I22b cannot find core/hooks/ai-dlc-dispatch-guard.sh."
+else
+  pin_re="$(sed -n "s/^PIN_KEY=\"\$(grep -oE '\(.*\)' \"\$ROLE_FILE\".*/\1/p" "$DG_HOOK" | head -1)"
+  if [ -z "$pin_re" ]; then
+    err "I22b could not extract the pin regex from ai-dlc-dispatch-guard.sh. The guard's PIN_KEY line changed shape, so this assertion can no longer read what the guard actually matches — it would pass without comparing anything. Re-derive it."
+  else
+    # The subject set must NOT be "files whose line already matches" — that is
+    # the vacuous form: a file whose line drifts simply leaves the set and the
+    # check passes. It is derived instead as "every role file the guard is meant
+    # to bind", i.e. all of them minus the ones the guard's own KNOWN GAP clause
+    # declares it deliberately does not bind (the /bmad-party-mode personas).
+    # That clause lives in the hook that owns the behaviour, so the exemption and
+    # the enforcement cannot drift apart.
+    exempt="$(sed -n '/KNOWN GAP, deliberate:/,/declare no key/p' "$DG_HOOK" \
+              | grep -oE '`[a-z][a-z-]*\.md`' | tr -d '`' | sort -u)"
+    if [ -z "$exempt" ]; then
+      err "I22b could not read the guard's KNOWN GAP exemption list. Without it every role file looks like it must be pinned, or none does — either way this assertion is comparing against a set it did not derive. Re-anchor it on the hook's KNOWN GAP clause."
+    fi
+    subject=""
+    for rf in "$REPO_ROOT"/core/team-roles/*.md; do
+      printf '%s\n' "$exempt" | grep -qx "$(basename "$rf")" && continue
+      subject="$subject $rf"
+    done
+    if [ -z "$subject" ]; then
+      err "I22b derived an empty subject set from core/team-roles/. Either the directory is empty or the exemption list swallowed every file; this assertion is now testing nothing."
+    else
+      for rf in $subject; do
+        grep -qE "$pin_re" "$rf" \
+          || err "I22b $(basename "$rf") has no line matching ai-dlc-dispatch-guard.sh's own pin regex ($pin_re). The guard finds no key, takes its fail-open branch, and dispatches that role with NO model bound — silently, with the suite green. Either restore the '- Model: \`<key>\`' line, change the guard's regex to match the new shape, or add the file to the guard's KNOWN GAP clause with the reason it is unpinned."
+      done
+    fi
+  fi
+fi
 # --- I24: H1's fixture set stays DERIVED, never restated in gate-validation.md --
 # H1 used to carry a hand-typed check->fixture enumeration. It listed 7 checks while
 # the map bound 11, so four checks shipped fixtures H1 could not see and the omission
@@ -1353,31 +1390,6 @@ else
     [ -d "$REPO_ROOT/core/fixtures/$fx" ] \
       || err "I24 enforcement-map.yaml binds fixture '$fx' but core/fixtures/$fx does not exist. H1 reads these bindings as its coverage set, so a dangling one is a check reporting coverage it does not have."
   done
-fi
-
-# --- I22b: every declared substitution TOKEN is one the setup skill instructs --
-# I22 joins role file -> setup-sites.md. Nothing joined either to the skill that
-# performs the fill, so a token could be shipped in a role file AND declared a
-# masked site AND never named in ai-dlc-setup's substitution list. A consumer
-# following setup verbatim is then left with a literal `{token}` in a live role
-# file. The dispatch guard tiers by substring, matches neither `*opus*` nor
-# `*sonnet*`, and takes its unrecognised-tier fail-open branch — so the role
-# dispatches with NO pin enforced, through the guard's open door rather than its
-# deny door. Derived from the role files, never hand-listed.
-SETUP_SKILL="$REPO_ROOT/core/skills/ai-dlc-setup/SKILL.md"
-if [ ! -f "$SETUP_SKILL" ]; then
-  err "I22b cannot run: core/skills/ai-dlc-setup/SKILL.md is missing."
-else
-  all_tokens="$(grep -ohE '\{[a-z_]*model[a-z_]*\}' "$REPO_ROOT"/core/team-roles/*.md 2>/dev/null \
-                | tr -d '{}' | sort -u)"
-  if [ -z "$all_tokens" ]; then
-    err "I22b found no {*_model_*} tokens in core/team-roles/. Either the token form changed or the role files were emptied; either way this assertion is now testing nothing."
-  else
-    for tok in $all_tokens; do
-      grep -qF -- "$tok" "$SETUP_SKILL" \
-        || err "I22b core/team-roles/ ships the token {$tok} but ai-dlc-setup/SKILL.md never instructs anyone to fill it. A consumer running setup verbatim keeps the literal token in a live role file; ai-dlc-dispatch-guard.sh then matches no tier and takes its fail-open branch, so that role dispatches with no model pin enforced at all. Add the substitution block."
-    done
-  fi
 fi
 
 # --- I23: every SHIPPED rule-prose file is in the audit corpus -----------------
@@ -1471,7 +1483,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every model token a declared setup site (I22) that setup instructs (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role's model key defined by the shipped aiDlcModels (I22) and parseable by the dispatch guard's own regex (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33)."
   exit 0
 fi
 exit 1

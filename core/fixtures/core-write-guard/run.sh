@@ -94,13 +94,23 @@ d="$(decision "$NOSTAMP" "$(mkjson Edit "$NOSTAMP/.claude/skills/ai-dlc/steps/ga
 [ "$d" = allow ] && ok "Edit to core in an unstamped tree (distribution) → allow (no-op)" \
   || bad "the hook fired '$d' in an unstamped tree, expected allow — it must no-op in the distribution"
 
-# --- Assertion 6: /ai-dlc-setup single-line config fill → ALLOW -------------
-# Replacing the model-string line (a declared single-line site) is a setup fill, not drift.
-MODEL_LINE="$(grep -m1 '^- Personal: `/model' "$CONSUMER/.claude/team-roles/architect.md" || true)"
-[ -n "$MODEL_LINE" ] || bad "FIXTURE STALE: architect.md has no '- Personal: \`/model' line"
+# --- Assertion 6: a role's `- Model:` key line is RULEBOOK → DENY -----------
+# This assertion INVERTED in v0.174.0, and the inversion is the point. A role file used to
+# carry `- Personal: \`/model <string>\`` — a declared single-line setup site, so filling it
+# was allowed. Model strings now live in the consumer-owned `aiDlcModels` block in
+# settings.json, and the role file names a KEY instead. That key is a rulebook decision
+# (which capability class the role needs), not consumer config, so it is NOT a declared site
+# and an in-place edit must be denied and routed to an override like any other core line.
+#
+# Asserting the deny is what keeps the retirement honest: if someone re-adds a site for the
+# `- Model:` line, this fires. A consumer that genuinely wants a different model changes what
+# the key MAPS TO in settings.json — which no core guard sees, because settings.json is not
+# core.
+MODEL_LINE="$(grep -m1 '^- Model: `' "$CONSUMER/.claude/team-roles/architect.md" || true)"
+[ -n "$MODEL_LINE" ] || bad "FIXTURE STALE: architect.md has no '- Model: \`<key>\`' line"
 d="$(decision "$CONSUMER" "$(mkjson Edit "$CONSUMER/.claude/team-roles/architect.md" "$MODEL_LINE")")"
-[ "$d" = allow ] && ok "Edit filling a declared model-string site (team-role) → allow" \
-  || bad "a setup model-string fill classified '$d', expected allow — the config exemption is not applying"
+[ "$d" = deny ] && ok "Edit to a role's '- Model:' key line → deny (rulebook, not a declared config site)" \
+  || bad "a role model-key edit classified '$d', expected deny — a setup site for the model line has come back, or the region check is exempting the whole file"
 
 # --- Assertion 7: edit OUTSIDE the config regions of the SAME file → DENY ----
 # A Responsibilities line in architect.md is rulebook, not a declared site.

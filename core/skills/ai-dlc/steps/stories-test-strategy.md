@@ -59,9 +59,10 @@ Absent any routing tag, a story is dispatched to `dev` as usual.
 
 - `escalate_model: true` — routes per the map above to `dev-escalated`
   instead of `dev`. That role reads and follows `dev.md` in full — same
-  ownership boundaries and constraints — and differs ONLY in model tier.
-  Use it for a story that genuinely needs the more capable model; a
-  well-scoped story with a precise checklist stays on `dev`. The tag is
+  ownership boundaries and constraints — and differs ONLY in the model key
+  it names. Use it for a story whose difficulty warrants the escalated
+  route; a well-scoped story with a precise checklist stays on `dev`. What
+  the route resolves to is operator config; do not evaluate it. The tag is
   authored with the story (by PM/architect), not chosen at dispatch, so
   the routing is auditable from the persisted story file.
 

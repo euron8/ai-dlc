@@ -35,16 +35,14 @@ neither is a preference.**
   sprint that authors the artifact every later gate treats as given; there is no
   cheaper place to spend reasoning and no downstream step that recovers a defect
   introduced here. Never lower it.
-<!-- {pm_escalated_model_personal}: Personal/direct API model string — MUST be the opus tier (e.g., claude-opus-4-8) -->
-<!-- {pm_escalated_model_bedrock}: Bedrock model string — MUST be the opus tier (e.g., global.anthropic.claude-opus-4-8) -->
-- Personal: `/model {pm_escalated_model_personal}`
-- Bedrock: `/model {pm_escalated_model_bedrock}`
+- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 
 The declarations above are the contract, and the dispatch guard binds them from
 this file — a call-site model override is rebound to this file's value, because a
-conditional model is a conditional role, not a parameter. Run at the tier this
-file declares. Do not down-shift, do not re-request a model, and do not weigh
-"standard vs. more capable": the lead made that choice by routing spec derivation
+conditional model is a conditional role, not a parameter. Run the key and effort this
+file declares. Do not down-shift, do not re-request a model, and do not compare either
+value to `pm.md`'s — they may be identical: the lead made that choice by routing spec derivation
 here.
 
 The tier is not a nicety. Unlike a story, the kernel has no return path — the PRD
@@ -59,7 +57,7 @@ responsibilities, constraints, and escalation. This role adds nothing to and
 removes nothing from the PM contract except the session-setup declarations
 (model and effort) above. There is no second copy of the PM rules here on
 purpose: `pm.md` is the single source of truth for how a PM teammate behaves,
-and this role is that same teammate running on a stronger model.
+and this role is that same teammate on the key this file names.
 
 `bmad-spec` is the SOLE writer of `SPEC.md`. It re-derives the kernel from
 `.memlog.md` on every run, so anything you edit directly in `SPEC.md` is

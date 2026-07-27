@@ -15,8 +15,9 @@ exception. `ai-dlc-update` never reads pipeline files; the pipeline may read
 this file.
 
 **Authoring rule.** Every entry below MUST trace to an explicit "Files to
-replace in" directive in `ai-dlc-setup/SKILL.md` STEP 2 (models), STEP 3
-(deploy/smoke commands), or STEP 4 (ownership paths). Do NOT add an entry
+replace in" directive in `ai-dlc-setup/SKILL.md` STEP 3 (deploy/smoke commands)
+or STEP 4 (ownership paths). Model strings are not sites — they live in the
+consumer's `aiDlcModels` settings block, which reconciles as a `json-merge`. Do NOT add an entry
 just because a `{token}`-shaped HTML comment exists in a core file — several
 do without being wired into any setup STEP (see "Explicitly NOT sites"
 below). Re-derive this file whenever those STEPs change.
@@ -113,6 +114,7 @@ core_manifest:
   - core/fixtures/relocation-preclassify/**
   - core/fixtures/resume-whole-read/**
   - core/fixtures/retired-contract-token/**
+  - core/fixtures/retired-layer-contract/**
   - core/fixtures/retro-audit-scans/**
   - core/fixtures/route-defect-classification/**
   - core/fixtures/setup-config-drift/**
@@ -154,159 +156,17 @@ rulebook:
 
 ```yaml
 sites:
-  - id: architect-model-personal
-    file: core/team-roles/architect.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: architect-model-bedrock
-    file: core/team-roles/architect.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: reviewer-model-personal
-    file: core/team-roles/code-reviewer.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: reviewer-model-bedrock
-    file: core/team-roles/code-reviewer.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: reviewer-escalated-model-personal
-    file: core/team-roles/code-reviewer-escalated.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: reviewer-escalated-model-bedrock
-    file: core/team-roles/code-reviewer-escalated.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: pm-model-personal
-    file: core/team-roles/pm.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: pm-model-bedrock
-    file: core/team-roles/pm.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: dev-model-personal
-    file: core/team-roles/dev.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: dev-model-bedrock
-    file: core/team-roles/dev.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
   - id: dev-ownership-paths
     file: core/team-roles/dev.md
     shape: heading-block
     heading: '## Ownership'
     next_heading: '## Responsibilities'
 
-  - id: dev-escalated-model-personal
-    file: core/team-roles/dev-escalated.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: dev-escalated-model-bedrock
-    file: core/team-roles/dev-escalated.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: pm-escalated-model-personal
-    file: core/team-roles/pm-escalated.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: pm-escalated-model-bedrock
-    file: core/team-roles/pm-escalated.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: qa-model-personal
-    file: core/team-roles/qa.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: qa-model-bedrock
-    file: core/team-roles/qa.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
   - id: qa-ownership-paths
     file: core/team-roles/qa.md
     shape: heading-block
     heading: '## Ownership'
     next_heading: '## Responsibilities'
-
-  - id: analyst-model-personal
-    file: core/team-roles/analyst.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: analyst-model-bedrock
-    file: core/team-roles/analyst.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: adversary-model-personal
-    file: core/team-roles/adversary.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: adversary-model-bedrock
-    file: core/team-roles/adversary.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: gate-adjudicator-model-personal
-    file: core/team-roles/gate-adjudicator.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: gate-adjudicator-model-bedrock
-    file: core/team-roles/gate-adjudicator.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: remediator-model-personal
-    file: core/team-roles/remediator.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: remediator-model-bedrock
-    file: core/team-roles/remediator.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: ppe-model-personal
-    file: core/team-roles/protected-path-editor.md
-    shape: single-line
-    match: '^- Personal: `/model (.+)`$'
-  - id: ppe-model-bedrock
-    file: core/team-roles/protected-path-editor.md
-    shape: single-line
-    match: '^- Bedrock: `/model (.+)`$'
-
-  - id: setup-model-strategy
-    file: core/skills/ai-dlc-setup/SKILL.md
-    shape: heading-block
-    heading: '## STEP 2: API Tier and Model Strings'
-    next_heading: '**`.claude/team-roles/architect.md`:**'
-    anchor_context: >-
-      The operator's model-strategy CHOICE only — the strategy mode (Full /
-      Balanced / Sonnet-only), the Bedrock follow-up, and the tier-per-role
-      example table. This is per-project config the operator customises at
-      setup, not rulebook prose: a consumer choosing Balanced over the
-      shipped Full is a cost/capability decision, exactly like the model
-      strings it drives. Declaring the span exempts that choice from
-      in-place core drift at BOTH readers (the pull-time unregistered-drift
-      check and the retro-gate immutability check), while leaving the rest
-      of the setup wizard guarded. Bounded EXCLUSIVELY at the first
-      substitution row, not at the next STEP heading. Bounding it on `##
-      STEP 3` also swallowed the ~140 lines of substitution INSTRUCTIONS
-      that follow the choice — which files to open and which tokens to fill
-      — so upstream could add a role's model-fill block and no layered
-      consumer would ever receive it, with no signal at either reader. That
-      is not hypothetical: measured on the reference consumer, the
-      `dev-escalated` / `analyst` / `remediator` blocks and the
-      `{analyst_model}` rows are all present upstream and absent there. The
-      terminator is a bold row rather than a heading because STEP 2 carries
-      no sub-headings; it is matched as a whole line, and it must exist at
-      core@base or `exempt_ranges` cannot bound the span.
 
   - id: deploy-command
     file: core/skills/ai-dlc/steps/deploy-validate.md
@@ -341,25 +201,37 @@ sites:
 
 Documented so a future author doesn't add them:
 
+- **The `- Model:` key line in `core/team-roles/*.md`.** A role file names a
+  KEY; the consumer's `aiDlcModels` block in `.claude/settings.json` maps that
+  key to a model string. The key is rulebook prose and is core-owned like any
+  other line in the file. The string is consumer config in `settings.json`,
+  which reconciles through `template-sites.md` as a `json-merge` whose
+  `aiDlcModels` merge is additive with the consumer winning on conflict — so a
+  consumer's model strings survive a pull by construction, with no
+  mask/reinject step. Do not add a site for the `- Model:` line: a consumer
+  changing which key a role names is real, classifiable rulebook divergence,
+  exactly like `/effort` below.
+- **A model-strategy span in `ai-dlc-setup/SKILL.md` STEP 2.** STEP 2 carries
+  no consumer-specific choice — the operator's model decision is which string
+  each `aiDlcModels` key holds, and that lives in `settings.json`. Do not
+  declare a heading-block over STEP 2.
+
 - **`- \`/effort <level>\`` in every team-role file.** Ships concrete since
   before the first tagged release — there has never been an `{effort}`
   template token. A
   consumer changing this value is real, classifiable rulebook divergence
   (most likely `domain-local`), never a setup-fill restore target.
-- **`/model` in the party-persona role files (`tea.md`, `ux.md`, `sm.md`,
-  `cis.md`).** By design these carry NO model placeholder — they are spawned
-  by the external `/bmad-party-mode` sub-skill, which controls their model, so
-  an ai-dlc `{*_model_*}` token there would be inert. They have no `- Personal:
-  \`/model …\`` line to mask. Do not add sites for them. (`protected-path-editor.md`
-  IS directly Agent-spawned and DOES carry `{ppe_model_*}` sites, above.)
+- **The party-persona role files (`tea.md`, `ux.md`, `sm.md`, `cis.md`).** By
+  design these name no model at all — they are spawned by the external
+  `/bmad-party-mode` sub-skill, which controls their model, so an ai-dlc key
+  there would be inert. They have no `- Model:` line, and the dispatch guard
+  fails open on them deliberately. Do not add sites for them.
 - **`{running_digest_command}` / `{function_verification_command}`** in
   `steps/deploy-validate.md`. These look identical to `{deploy_command}` /
   `{smoke_test_command}` (same `<!-- {token}: ... -->` comment shape) but
   have zero hits in `ai-dlc-setup/SKILL.md`'s STEP 2/3/4 "Files to replace
   in" lists — they are not wired to any setup step. Ordinary content, not
   exemption sites.
-- **`{dev_model_local}`** in `core/team-roles/dev.md`. `ai-dlc-setup/SKILL.md`
-  STEP 2 references it ("`{dev_model_local}` -> local model string ... or
-  remove the line if N/A"), but `dev.md` itself has no live line containing
-  this token — it appears only inside the HTML doc comment. There is
-  nothing to mask; do not add a site for it.
+- **The local-model (Ollama) line in `core/team-roles/dev.md`.** It documents a
+  launch-time choice — the lead starts that teammate with the local model on the
+  command line — so there is no `/model` switch and no value to preserve.

@@ -15,10 +15,8 @@ front of you. Use them.
 
 **Model and effort: Set at the start of your session.**
 - `/effort high`
-<!-- {remediator_model_personal}: Personal/direct API model string (e.g., claude-opus-4-8) -->
-<!-- {remediator_model_bedrock}: Bedrock model string (e.g., global.anthropic.claude-opus-4-8) -->
-- Personal: `/model {remediator_model_personal}`
-- Bedrock: `/model {remediator_model_bedrock}`
+- Model: `opus` — a key in `aiDlcModels` (`.claude/settings.json`).
+  Run `/model` with the model string that key maps to there.
 
 ## Contract
 

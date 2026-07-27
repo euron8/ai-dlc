@@ -17,6 +17,128 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.174.0] — 2026-07-27
+
+### Changed — model strings move to one consumer-owned config block
+
+A team-role file no longer carries a model string. It names a **key**; the consumer's
+new `aiDlcModels` block in `.claude/settings.json` maps that key to the model string
+this project can actually reach.
+
+```json
+"aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5[1m]" }
+```
+
+```markdown
+- `/effort medium`
+- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
+```
+
+**Why the split falls where it does.** Which capability class a role needs is a
+rulebook decision and ships with the role file; which string reaches it is consumer
+config and varies by provider. It is also forced by the tool surface: the Agent tool's
+`model` parameter is an enum (`opus`/`sonnet`/`haiku`/`fable`) and rejects
+`claude-opus-5[1m]`, so the guard must inject the key while the teammate types the
+string at `/model`. One map does both jobs.
+
+**What this removes.** 13 role files × Personal + Bedrock = 26 substituted model
+strings, each one a masked setup-substitution site the update reconcile had to
+mask and reinject correctly on every pull:
+
+| | before | after |
+|---|---|---|
+| `setup-sites.md` entries | 32 | 5 |
+| `ai-dlc-setup/SKILL.md` STEP 2 | 237 lines, 27 tokens enumerated one by one | 66 lines, no tokens |
+| role files touched to add a role | 1 + 2 manifest entries + a fill block | 1 |
+
+The 26 sites are not relocated — they are unnecessary. `settings.json` reconciles as a
+`json-merge`, and `aiDlcModels` merges additively with the consumer winning on
+conflict (the shape `enabledPlugins` already used). A consumer's model strings
+therefore survive a pull **by construction**, while a key added upstream still
+arrives. That join has broken twice before by omission: `adversary.md` went 17
+versions with an undeclared site, and `code-reviewer-escalated.md` repeated it.
+
+**Sonnet-only stops being a mode.** It is both keys pointing at the same string. No
+wizard branch, no deliberately-unsubstituted tokens.
+
+**Escalation is no longer predetermined.** `dev-escalated.md` names whatever key the
+project gives it. Nothing forces it above `dev.md` — that is the config's call.
+
+### Changed — the dispatch guard resolves a key instead of guessing a tier
+
+`ai-dlc-dispatch-guard.sh` read two `/model` strings and reduced them to a tier by
+substring match (`*opus*`, `*sonnet*`, else fail open). That match could not see
+haiku, fable, or any future name. It now reads the declared key and resolves it
+through `aiDlcModels`. Same posture — positive-match only, never denies, fails open
+on ambiguity — with two new fail-open causes: no `aiDlcModels` block, and a key
+absent from it. `model_pinned` in the spawn ledger carries the resolved string.
+
+### Changed — I22/I22b replaced by a join that can fail
+
+The old pair joined role-file tokens to `setup-sites.md` and to the setup skill's fill
+instructions. With the tokens gone, both would have gone vacuous. They are replaced,
+not deleted:
+
+- **I22** — every model key a role file names must be defined in the shipped
+  `aiDlcModels`. A dangling key makes the guard fail open, so that role dispatches
+  with no model bound, silently.
+- **I22b** — every role file the guard is meant to bind must carry a line matching the
+  guard's **own** pin regex, read out of the hook rather than restated. Its subject set
+  is derived as *all role files minus the guard's declared KNOWN GAP exemptions* —
+  deliberately not "files that already match", which is the vacuous form: a file whose
+  line drifts would simply leave the set and the check would pass. The first draft had
+  exactly that bug and a mutant caught it.
+
+Both were mutation-tested: a dangling key, an emptied config block, a reworded role
+line, and a guard whose regex drifts each fail one assertion, against an unmutated
+control from the same tree.
+
+### Removed
+
+- `setup-model-strategy` site — STEP 2 no longer holds a consumer-specific span, and
+  its `next_heading` terminator (the first per-role substitution row) no longer exists.
+- The QUICKSTART model tables and their 15 tokens. Nothing read them, and the
+  reference consumer's copy had already drifted: it documented `claude-sonnet-4-6`
+  while its role files pinned `claude-sonnet-5[1m]`.
+- `apply.sh`'s model-token fill, which guessed a new role's model from a
+  nearest-equivalent role. A role now arrives with its key already concrete.
+- The `CLAUDE.md` Model Strategy instruction in setup STEP 2, whose target had not
+  existed in the template or the reference consumer for some time.
+
+### Migration
+
+Every role file lands in `BOTH-CHANGED->CLASSIFY`: upstream restructured the block
+and the consumer's copy carries substituted strings. Most of those are not real
+semantic merges — the consumer's only delta was the model strings, which stopped
+being consumer-owned in that file. Split the set before merging anything:
+
+```sh
+for f in .claude/team-roles/*.md; do
+  n=$(diff <(git -C <dist> show <base>:core/team-roles/$(basename "$f") \
+              | grep -vE '^- (Personal|Bedrock): `/model|^<!-- \{[a-z_]*model') \
+           <(grep -vE '^- (Personal|Bedrock): `/model|^<!-- \{[a-z_]*model' "$f") \
+      | grep -c '^[<>]')
+  printf '%-30s %s\n' "$(basename "$f")" "$n"
+done
+```
+
+A `0` means the model lines were the whole delta — take theirs, no merge. Anything
+non-zero is a genuine consumer change (typically the `## Ownership` block, which is
+still a declared site) and needs the usual semantic merge. On the reference consumer
+that split was 10 take-theirs and 3 merges.
+
+Then set `aiDlcModels` values from the strings the role files previously pinned.
+`settings-merge.sh` provisions the shipped defaults; it cannot read the old strings
+out of the files it is replacing. A consumer already on those defaults converges with
+no action. **A consumer that re-tiered a role, or runs on Bedrock, must set the values
+itself** — and a re-tiered role additionally needs its `- Model:` key changed, which
+is now a rulebook edit routed through an override rather than a masked site.
+
+Consumer `overrides/` and `extensions/` are not rewritten by the pull and may still
+reference the retired `- Personal:`/`- Bedrock:` line shape. The new
+`reconcile/retired-layer-contract.sh` step reports them; on the reference consumer it
+found two.
+
 ## [0.173.2] — 2026-07-27
 
 ### Added — the controlled-absence rule, written down once instead of re-learned

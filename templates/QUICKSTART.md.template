@@ -292,43 +292,34 @@ If you are not comfortable with blanket permissions, you can remove the
 flag and approve each action manually, but expect significant interruption
 to the autonomous flow.
 
-### Model Strings by Environment
+### Where Models Are Configured
 
-<!-- Update this table with your provider's model strings -->
+Every teammate's model comes from one place: the `aiDlcModels` block in
+`.claude/settings.json`. It maps a key to the model string this project uses.
 
-| Role    | Model   | Personal (Anthropic)  | Bedrock                                  |
-|---------|---------|----------------------|------------------------------------------|
-| Lead    | opus    | {lead_model}         | {lead_model_bedrock}                     |
-| Architect | opus  | {architect_model}    | {architect_model_bedrock}                |
-| PM      | sonnet  | {pm_model}           | {pm_model_bedrock}                       |
-| Code Reviewer | sonnet | {reviewer_model} | {reviewer_model_bedrock}                 |
-| Dev     | sonnet  | {dev_model}          | {dev_model_bedrock}                      |
-| QA      | sonnet  | {qa_model}           | {qa_model_bedrock}                       |
-| Analyst | sonnet  | {analyst_model}      | {analyst_model_bedrock}                  |
+```json
+"aiDlcModels": {
+  "opus": "claude-opus-5[1m]",
+  "sonnet": "claude-sonnet-5[1m]"
+}
+```
 
-### How Teammates Switch Models
+A team-role file (`.claude/team-roles/*.md`) names one of those keys on its
+`- Model:` line rather than carrying a model string of its own. On a Bedrock
+project, change the values here — the keys and the role files stay as shipped.
 
-The lead session launches as opus (set by your shell function). Teammates
-that need sonnet must switch after spawning using `/model` inside their
-session. The `/model` command is more reliable than the `--model` flag.
+The lead session's own model is set by your shell function's `ANTHROPIC_MODEL`,
+not by this block.
 
-Each team-role file (`.claude/team-roles/*.md`) includes a `/model`
-directive. The teammate runs it as their first action. The model string
-in the role file must match your environment.
+### How Teammates Get Their Model
 
----
+The `ai-dlc-dispatch-guard` hook binds it at spawn time: it reads the key from
+the role file, resolves it here, and sets the Agent tool's `model` parameter. A
+teammate does not have to remember to switch, and a call site cannot override
+the role's model.
 
-## Model Assignments
-
-| Role          | Model  | Why                                           |
-|---------------|--------|-----------------------------------------------|
-| Lead          | opus   | Long-context orchestration and coordination   |
-| Architect     | opus   | System design tradeoffs and ADRs              |
-| PM (high)     | sonnet | Requirements depth at high effort             |
-| Code Reviewer (high) | sonnet | Cross-cutting review at high effort    |
-| Dev (default) | sonnet | High-volume, well-scoped implementation       |
-| QA            | sonnet | Pattern-match against acceptance criteria     |
-| Analyst       | sonnet | Read-only planning exploration (offload)      |
+A teammate launched interactively rather than spawned runs `/model` with the
+string its key maps to, as its role file says.
 
 ---
 

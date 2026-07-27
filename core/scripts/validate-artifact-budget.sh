@@ -165,8 +165,9 @@ say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 #   1,000,000 and a comment telling a human "if that model line changes, THIS
 #   NUMBER CHANGES. Re-derive; do not inherit." Core cannot execute an
 #   instruction to a human, and the number is not core's to inherit: core ships
-#   team-roles/analyst.md as a TEMPLATE (`{analyst_model_personal}`) that setup
-#   fills per project. Shipping 1,000,000 to every consumer would hand a
+#   team-roles/analyst.md naming a model KEY, and the consumer's `aiDlcModels`
+#   block maps that key to whatever model this project runs -- so the window is a
+#   per-project fact core cannot know. Shipping 1,000,000 to every consumer would hand a
 #   200K-window analyst a pool 1.65x its entire context -- a fail-open at a
 #   HARD_BLOCK, on exactly the gate that exists to prevent the analyst blowing
 #   its window one step later.

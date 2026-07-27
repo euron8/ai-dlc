@@ -3,15 +3,19 @@
 # can prove unregistered-drift.sh distinguishes a declared setup-config region (exempt) from an
 # in-place edit to the rest of the setup wizard (HARD drift). Idempotent: fresh temp tree each call.
 #
-# The fake ai-dlc-setup/SKILL.md carries the REAL STEP 2 heading, the REAL terminator row
-# (`**`.claude/team-roles/architect.md`:**`) and a substitution row after it, so the REAL
-# setup-sites.md `setup-model-strategy` site applies to it — this tests the actual declaration,
-# not a stand-in. Rename those anchors and the fixture breaks loudly, exactly as the real site would.
+# The fake core file carries the REAL heading (`## Ownership`) and the REAL terminator
+# (`## Responsibilities`) of setup-sites.md's `dev-ownership-paths` site, so the ACTUAL
+# declaration applies to it — this tests the real manifest entry, not a stand-in. Rename
+# either anchor and the fixture breaks loudly, exactly as the real site would.
 #
-# The terminator is the first substitution row, NOT `## STEP 3`. Bounding the span on the next
-# STEP heading swallowed the substitution instructions between them, so upstream could add a
-# role's model-fill block and no layered consumer would ever receive it. STEP 3 stays in the
-# replica because the rows after the terminator must be provably OUTSIDE the exemption.
+# Retargeted in v0.174.0. It previously replicated `setup-model-strategy`, a heading-block
+# over ai-dlc-setup/SKILL.md STEP 2 that exempted the operator's model-strategy choice.
+# That site is retired: model strings moved to the consumer-owned `aiDlcModels` block in
+# settings.json, so STEP 2 no longer carries a consumer-specific span to exempt. The
+# machinery under test is unchanged — a declared heading-block region is exempt, everything
+# outside it is HARD drift, and an unresolvable terminator must fail CLOSED rather than
+# widen the span to EOF — so the fixture moves to a surviving heading-block site rather
+# than being deleted.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -32,35 +36,33 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/setup-config-drift.XXXXXX")" || exit 2
 DIST="$WORK/dist"
 CONSUMER="$WORK/consumer"
 STALE="$WORK/consumer-stale"
-REL="skills/ai-dlc-setup/SKILL.md"
-mkdir -p "$DIST/core/skills/ai-dlc-setup" "$CONSUMER/.claude/skills/ai-dlc-setup" \
+REL="team-roles/dev.md"
+mkdir -p "$DIST/core/team-roles" "$CONSUMER/.claude/team-roles" \
          "$DIST/core/schemas" "$CONSUMER/.claude/schemas"
 SCHEMA_REL="schemas/fixture-schema.json"
 
-cat > "$DIST/core/$REL" <<'SKILL'
-# ai-dlc-setup (fixture)
+cat > "$DIST/core/$REL" <<'ROLE'
+# Role: Developer (fixture)
 
-## STEP 2: API Tier and Model Strings
+**Model and effort: Set at the start of your session.**
+- `/effort medium`
+- Model: `sonnet` — a key in `aiDlcModels` (`.claude/settings.json`).
 
-Choose a model strategy for this project.
+## Ownership
 
-- Full: opus for planning roles, sonnet for implementation.
+Directories this teammate owns.
 
-**`.claude/team-roles/architect.md`:**
-- `{architect_model_personal}` -> opus-tier model personal string
+- `src/` (application source code)
 
-Substitute in the /model directive lines ONLY, and leave the declaration
-comment byte-identical.
-
-## STEP 3: Deployment Configuration
-
-Deployment guidance the operator fills at setup.
-
-## STEP 5: Operations Protocol
+## Responsibilities
 
 Fixed rulebook prose. A consumer MUST NOT edit this in place — it is
 upstream-owned and `apply` overwrites it.
-SKILL
+
+## Constraints
+
+More fixed rulebook prose, after the terminator.
+ROLE
 
 # A schema — an LLM-loaded, overwrite-on-pull core file with NO {token} and no config region, so
 # any consumer edit is silent drift the scan must flag HARD.
@@ -88,13 +90,13 @@ OLD_BODY="$(cat "$DIST/core/$REL")"
 # Upstream then rewrites STEP 2 substantially — the change a stale consumer never took.
 cat >> "$DIST/core/$REL" <<'LATER'
 
-## STEP 7: Prompt Cache TTL
+## Escalation Protocol
 
 Upstream added this section after the old release. A consumer frozen at the
 old release lacks it, and that absence is upstream's change, not the
 consumer's edit.
 
-## STEP 8: Validation Sweep
+## Handoff Notes
 
 Also added after the old release. Together these make the base-relative
 diff large while the ancestor-relative diff stays small.

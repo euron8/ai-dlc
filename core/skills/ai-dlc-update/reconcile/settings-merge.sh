@@ -15,6 +15,15 @@
 #                      caveman), then append the template's blocks. Event-key
 #                      set is the union of consumer's and template's.
 #   2. enabledPlugins— additive only, user wins on conflict. Never removed.
+#   2b. aiDlcModels  — additive only, user wins on conflict. Same shape as
+#                      enabledPlugins, and load-bearing for the same reason in
+#                      reverse: the VALUES are consumer config (which model
+#                      string this project can reach) and must survive every
+#                      pull, while a KEY added upstream — a new capability class
+#                      a new role names — must arrive. Additive-with-user-wins
+#                      is exactly that contract, and it is why `core/team-roles`
+#                      needs no setup-substitution sites at all: there is no
+#                      consumer-specific string left in a core file to mask.
 #   3. env.AI_DLC_MODEL_ROW
 #                    — PROVISION ONLY. Written when the key is absent AND the
 #                      template wires ai-dlc-context-sensor.sh AND a row was
@@ -147,6 +156,10 @@ if ! printf '%s' "$BASE_JSON" | jq \
 
     $u
     | .enabledPlugins = (($t.enabledPlugins // {}) + ($u.enabledPlugins // {}))
+    # Guarded so a tree where NEITHER side declares the block is left alone,
+    # rather than gaining an empty `aiDlcModels: {}` that reads like config.
+    | ((($t.aiDlcModels // {}) + ($u.aiDlcModels // {}))) as $models
+    | if ($models | length) > 0 then .aiDlcModels = $models else . end
     | .hooks = (
         $events
         | map(. as $e | (($uh[$e] // []) | strip_ai_dlc) + ($th[$e] // []) | {($e): .})
