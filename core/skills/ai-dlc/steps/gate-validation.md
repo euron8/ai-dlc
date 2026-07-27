@@ -941,7 +941,14 @@ gate's primary artifact.
 - **PRD gate (research-requirements phase):** run
   `scripts/ai-dlc/validate-provenance-block.sh
   _bmad-output/planning-artifacts/prd.md --require-skill
-  bmad-validate-prd`.
+  bmad-prd`.
+  `research-requirements.md` §3 invokes `/bmad-prd` with the **validate** intent, so
+  that is the name a correct run stamps. It pinned `bmad-validate-prd` until this
+  release — a fork introduced when §3 was repointed and this arm was not — and the
+  gate would have failed on a correctly-executed run. A PRD stamped before the
+  repoint still passes: BMAD's `bmad-validate-prd` is a deprecated shim that forwards
+  here, and the schema's `superseded_skills` records that, so the pin accepts either
+  name. I32 now joins each `bmad-*` pin to the step file that invokes it.
 - **Story readiness gate (stories-test-strategy):** run
   `scripts/ai-dlc/validate-provenance-block.sh <story-file>
   --require-skill ai-dlc-adversary-review` for each story.

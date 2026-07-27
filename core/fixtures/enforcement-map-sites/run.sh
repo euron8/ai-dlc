@@ -325,6 +325,87 @@ else
   bad "FIXTURE STALE: register-drift.sh no longer opens with 'case \"\$REL\" in'"
 fi
 
+# --- Assertion 15: I32 PIN vs INVOCATION --------------------------------------
+# Check 17's arms pin a provenance block to a skill NAME; the step file that runs the
+# evaluation names the skill it INVOKES. Two files, one fact, nothing comparing them —
+# v0.169.0 repointed research-requirements.md §3 to /bmad-prd and left the arm pinning the
+# old name, and no check said so for three minors. Repoint an arm at a bmad skill its own
+# step file does not name and I32 must catch it.
+GV_F="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+if grep -qE '^  bmad-prd`\.$' "$GV_F"; then
+  sed -i.bak 's/^  bmad-prd`\.$/  bmad-party-mode`./' "$GV_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I32: Check 17's 'research-requirements phase' arm"; then
+    ok "an arm pinning a skill its step file never invokes FAILS I32 (a pin and an invocation are one fact in two files)"
+  else
+    bad "repointing the PRD arm at an uninvoked skill did NOT fail I32 — the pin can fork from the step again"
+  fi
+  restore
+  GV_F="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+else
+  bad "FIXTURE STALE: Check 17's PRD arm no longer pins bmad-prd on its own line"
+fi
+
+# --- Assertion 16: I32 NON-VACUITY --------------------------------------------
+# Every I32 guard runs INSIDE the per-arm loop, so an arm grammar that stops matching scans
+# nothing and reports clean — which is precisely the shape this check exists to end. Break
+# the flag the arms are parsed on and the check must say it compared nothing.
+if grep -q -- '--require-skill' "$GV_F"; then
+  sed -i.bak 's/--require-skill/--require-SKILL/g' "$GV_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I32 matched no bmad-\* skill pin"; then
+    ok "an unparseable arm grammar FAILS I32 loudly ('nothing to compare' never reads as 'the pins agree')"
+  else
+    bad "breaking the arm grammar did NOT fail I32 — the check goes vacuous exactly when the arms become unreadable"
+  fi
+  restore
+else
+  bad "FIXTURE STALE: Check 17's arms no longer carry --require-skill"
+fi
+
+# --- Assertion 17: I33 FIXTURE PATH WALK --------------------------------------
+# A fixture that locates a core file by walking up from a path ANOTHER resolver produced is
+# green in the distribution and red on every consumer, because the install mapping splits the
+# subtrees (core/scripts -> scripts/ai-dlc, core/schemas -> .claude/schemas). Step 2 requires
+# the derived fixtures green BEFORE the push, so that red is a permanent stop on the
+# self-update — it shipped once and blocked a consumer's cycle. Reintroduce the walk and I33
+# must name the offending fixture.
+SP_F="$ROOT/core/fixtures/story-provenance/run.sh"
+# The walk is COMPOSED, never written literally. I33 greps for the pattern, so a fixture that
+# spelled its own mutant out would flag itself — the same self-reference trap the ledger's close
+# vocabulary hit. Split across the quote boundary, the two halves are not adjacent in THIS file
+# and are adjacent in the file it writes, which is the only place it matters.
+if grep -q -- '--print-schema' "$SP_F"; then
+  walk='$(dirname "$WRITER")/..'"/schemas/provenance-block.json"
+  sed -i.bak "s@^SCHEMA_SRC=.*\$@SCHEMA_SRC=\"$walk\"@" "$SP_F"
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I33: these fixtures reach a core subtree by walking up"; then
+    ok "a fixture walking up from a resolved script into another core subtree FAILS I33"
+  else
+    bad "the walk-up path was not caught by I33 — a fixture can go green here and red on every consumer again"
+  fi
+  restore
+  SP_F="$ROOT/core/fixtures/story-provenance/run.sh"
+else
+  bad "FIXTURE STALE: story-provenance/run.sh no longer resolves its schema via --print-schema"
+fi
+
+# --- Assertion 18: I33 NON-VACUITY --------------------------------------------
+# I33 greps a tree. Empty that tree and it finds nothing and reports clean — the exact reading
+# ("no hits" = "no defect") that the check exists to distinguish from a real pass.
+if [ -d "$ROOT/core/fixtures" ]; then
+  find "$ROOT/core/fixtures" -name '*.sh' -type f -delete 2>/dev/null
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I33 found no \*.sh under core/fixtures/"; then
+    ok "an empty fixture tree FAILS I33 loudly (a scan over nothing never reads as clean)"
+  else
+    bad "I33 reported clean over an empty fixture tree — 'no hits' is indistinguishable from 'no defect'"
+  fi
+  restore
+else
+  bad "FIXTURE STALE: the seed no longer copies core/fixtures/"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

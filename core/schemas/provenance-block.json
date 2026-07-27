@@ -41,6 +41,27 @@
     "bmad-prd",
     "ai-dlc-adversary-review"
   ],
+  "superseded_skills": {
+    "$comment": [
+      "UPSTREAM-RENAMED evaluations: <old name>: <name it now runs under>. The two names denote",
+      "the SAME evaluation, so `--require-skill` on either accepts a block citing the other, in",
+      "both directions. This exists so a pin can be repointed to the current name without",
+      "invalidating every artifact stamped before the rename — the historical block is not wrong,",
+      "it is what the pipeline correctly wrote at the time.",
+      "",
+      "bmad-validate-prd was consolidated into bmad-prd's `validate` intent and ships as a",
+      "deprecated shim that forwards there, to be removed in BMAD v7. The reference consumer",
+      "carries 74 blocks citing the old name under _bmad-output/ (72 of them in",
+      "planning-artifacts/) across 30+ sprints; every one is a correct record of a correct run.",
+      "",
+      "THIS IS NOT THE RETIRED-PIN RELATION, and conflating them would be the bug.",
+      "validate-provenance-block.sh separately diagnoses a pin on bmad-review-adversarial-general",
+      "where a CONVERGENCE review ran. That skill is not retired — it is live and correct for the",
+      "one-shot sweeps in bug-investigation, sprint-review, and stories-test-strategy §5. Only the",
+      "PIN is wrong, and only in that one position, so it is a diagnostic and not an alias."
+    ],
+    "bmad-validate-prd": "bmad-prd"
+  },
   "fields": [
     {
       "name": "skill",

@@ -156,14 +156,21 @@ expect "unknown profile is refused (exit 2)" 2 "is not a profile in the schema" 
 #     CONVERGENCE profile's batch_invariant must turn assertion 11 (refuse-unconverged) into a
 #     pass-through. Mutating the SCHEMA rather than the script is the point: it proves the guard
 #     reads the profile and is not a constant the script happens to agree with.
-SCHEMA_SRC="$(dirname "$WRITER")/../schemas/provenance-block.json"
-[ -f "$SCHEMA_SRC" ] || SCHEMA_SRC="$(dirname "$WRITER")/../../schemas/provenance-block.json"
+# ASK THE WRITER where its schema is; never walk up from it. The install mapping SPLITS the
+# two — core/scripts/<x> lands at <root>/scripts/ai-dlc/<x> while core/schemas/ lands at
+# <root>/.claude/schemas/ — so "../schemas" and "../../schemas" are both right in the
+# distribution and both wrong on every consumer. This fixture already resolves the WRITER
+# through a chain that names the consumer path; the schema lookup was a private second copy of
+# a derivation the writer owns, and it made the fixture red on every consumer while staying
+# green here. Step 2 requires the derived fixtures green BEFORE the push, so that red was a
+# permanent stop on the self-update, not a nuisance.
+SCHEMA_SRC="$(bash "$WRITER" --print-schema 2>/dev/null)"
 MUTROOT="$ROOT/mut"; mkdir -p "$MUTROOT/scripts" "$MUTROOT/schemas"
 cp "$WRITER" "$MUTROOT/scripts/stamp-story-provenance.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
 if [ ! -f "$SCHEMA_SRC" ]; then
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: schema not found beside the writer"
+  printf '  FAIL  %-46s\n' "FIXTURE BROKEN: writer --print-schema resolved nothing (got: ${SCHEMA_SRC:-<empty>})"
 else
   # The subject: a CONVERGENCE pass (right skill) carrying NO verdict at all, and a fresh story.
   # Under the real schema `verdict` is batch-invariant, so its absence is not EXIT_CONDITION_MET

@@ -375,7 +375,18 @@ for idx, raw_block in enumerate(blocks, start=1):
 
 if require_skill:
     cited = {f.get("skill") for _, f in [(i, parse_block(b)[0] or {}) for i, b in enumerate(blocks, 1)]}
-    if require_skill not in cited:
+    # An UPSTREAM RENAME does not invalidate the artifacts stamped before it. `superseded_skills`
+    # in the schema maps <old name> -> <name it now runs under> for evaluations that were renamed
+    # rather than replaced, and the pin accepts either name in either direction: a pin on the new
+    # name must accept a historical block, and a consumer whose override still pins the old one
+    # must not fail on a current block. The relation is DATA in the schema, not a branch here —
+    # the hardcoded special case below is what this replaces the general form of, and it is kept
+    # only because it is a different relation (see the schema's own note).
+    _sup = {k: v for k, v in S.get("superseded_skills", {}).items() if not k.startswith("$")}
+    accepted = {require_skill}
+    accepted |= {v for k, v in _sup.items() if k == require_skill}
+    accepted |= {k for k, v in _sup.items() if v == require_skill}
+    if not (accepted & cited):
         failures.append(
             f"--require-skill {require_skill} was specified, but no block cites it "
             f"(blocks cite: {sorted(s for s in cited if s)})"
