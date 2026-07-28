@@ -177,6 +177,7 @@ core_manifest:
   - fixtures/retired-layer-contract/**
   - fixtures/retro-audit-scans/**
   - fixtures/route-defect-classification/**
+  - fixtures/self-update-gate/**
   - fixtures/setup-config-drift/**
   - fixtures/shadowed-local-validators/**
   - fixtures/snapshot-evidence-cell/**

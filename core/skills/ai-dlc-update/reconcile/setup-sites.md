@@ -120,6 +120,7 @@ core_manifest:
   - core/fixtures/retired-layer-contract/**
   - core/fixtures/retro-audit-scans/**
   - core/fixtures/route-defect-classification/**
+  - core/fixtures/self-update-gate/**
   - core/fixtures/setup-config-drift/**
   - core/fixtures/shadowed-local-validators/**
   - core/fixtures/snapshot-evidence-cell/**

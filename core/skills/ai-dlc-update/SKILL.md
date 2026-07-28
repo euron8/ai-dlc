@@ -221,7 +221,29 @@ prose is itself generated rather than composed.
    `ALREADY-AT-THEIRS`. The slice is the sliced paths MINUS those.
 
    If the slice is EMPTY after that subtraction, say so in one line and continue to step 3.
-   If NON-EMPTY:
+
+   If NON-EMPTY, **first run `reconcile/self-update-gate.sh <dist> <base> <theirs> <consumer>`.**
+   The machinery slice includes `core/scripts/*`, and the consumer's own `.githooks/pre-push`
+   INVOKES several of those scripts — so this cycle can install a check that then fails the very
+   push it is making, on layer state that predates the pull and whose remedy is rulebook-side work
+   this step deliberately does not do. It does not deadlock (a failed push commits locally and does
+   not block the run), which is worse in one respect: it strands an orphaned local branch whose
+   push is permanently blocked and a `skill_version` advanced on a commit that will never merge.
+   Filed by the reference consumer as `PC-S308` after its operator hit it and derived the remedy by
+   hand.
+
+   - On `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED`: **do NOT cut the branch and do NOT push.**
+     Report the rows, and carry the machinery slice into the step-7 gated apply so machinery and
+     rulebook land on ONE branch — the operator fixes the layer state there, and that is the only
+     ordering in which the pre-push gate can go green. Advance `skill_version`/`skill_commit` with
+     that apply rather than here, and say in one line that step 2 deferred and why.
+   - On `SELF-UPDATE-OK`: proceed autonomously as below.
+
+   The gate's verdict is a DIFFERENTIAL — the incoming script and the consumer's current one, run
+   under identical conditions — so a script that merely fails to resolve from a temp path cannot
+   masquerade as a new finding and strand the slice for no reason.
+
+   If NON-EMPTY and the gate says OK:
    - **Run the self-update cycle autonomously:** cut a dedicated branch
      `ai-dlc-update/self-update-<theirs-version>-<ts>`, write from `theirs` **only the paths
      that diff names** — each at the consumer destination `map_consumer()` gives it, and
