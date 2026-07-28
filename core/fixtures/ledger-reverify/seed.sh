@@ -274,6 +274,41 @@ therefore the ONLY mechanical signal available for this shape, which is the case
 entries reporting HAND-REVIEW two pulls after upstream absorbed them.
 
 verify: manual
+
+---
+
+## PC-FIXTURE-SWALLOWED-BY-ANNOTATION — an entry an annotation truncates
+
+THE DEFECT. The entry-boundary rule opens a new entry on ANY line-leading `- **`, which is
+correct for a ledger whose entries are bullets and is what makes an ANNOTATION in the same
+shape indistinguishable from one. The lead-in below therefore ends THIS entry, and the
+receipt after it is attributed to the annotation instead. This entry goes silent.
+
+- **The derivation:** an annotation lead-in written the way an operator naturally writes one.
+  Its bold span ends in a colon, which is what separates a lead-in from an entry title.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-COLON-CONTROL — a real entry whose receipt is NOT captured
+
+THE CONTROL. Same section, same receipt shape, no annotation. It must report normally and must
+NOT be named as swallowed, or the assertion above passes for a detector that flags every entry.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+- **`a-real-entry.sh` → a prose-titled entry that legitimately carries a receipt**
+
+  THE SECOND CONTROL, and the measured false-positive class. A ledger may key an entry by prose
+  rather than by an id — 49 of the reference consumer's 52 bullets do — and such an entry carries
+  a receipt legitimately. An earlier predicate keyed on "receipt under a non-id label" and scored
+  SEVEN rows there, SIX of them entries of exactly this shape. Its bold span does not end in a
+  colon. It must stay SILENT.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
 LEDGER
 
 printf '%s %s %s %s\n' "$DIST" "$BASE" "$CONS" "$THEIRS"

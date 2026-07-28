@@ -683,4 +683,88 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
   esac
 done
 
+# ---------------------------------------------------------------------------
+# ENTRY-SWALLOWED — a bold-bullet annotation that became its own entry
+# ---------------------------------------------------------------------------
+# THE DEFECT. `ledger_entry_shape()` opens a new entry on ANY line-leading `- **`. That is
+# correct for a ledger whose entries are bullets, and it is what makes an ANNOTATION written in
+# the same shape indistinguishable from one. An operator who annotates an entry with
+# `- **Case 3 (…)** …` splits that entry in two: everything after the annotation, INCLUDING the
+# receipt, is attributed to a new entry labelled with the annotation prose, and the real entry
+# stops emitting any row under its own id. Nothing said so. The reference consumer hit this while
+# annotating an entry and two intermediate runs read clean.
+#
+# NOT A RE-KEYING OF THE ENTRY-SHAPE RULE. That remedy was considered and rejected: the bullet
+# arm is load-bearing for every ledger whose entries are bullets, which is most of them, and
+# narrowing it drops real entries. v0.171.1 recorded the same class one heuristic over -- a
+# swallowed entry produces no row at all -- and the answer there was the same: leave the parser,
+# ship the diagnostic.
+#
+# WHAT IS DETECTABLE, MEASURED, AND WHAT WAS REJECTED ON THE WAY. Two predicates were measured
+# against the reference consumer before this one shipped, and both are recorded because both read
+# as obviously right:
+#
+#   (1) "an entry that ends without emitting a row". UNSHIPPABLE: an entry with no `verify:` line
+#       legitimately emits nothing, and that is 58 entries there (15 id-shaped, 43 prose). It
+#       reports most of the ledger.
+#   (2) "a receipt attributed to a label that is not an entry id". Also unshippable, and this one
+#       had to be run against the real tool to find out: SEVEN rows, of which SIX are real entries
+#       that simply carry prose titles rather than id keys. A standalone probe scored it 1 of 1
+#       because the probe anchored `verify:` at column zero while the real receipt pattern
+#       tolerates the indentation every bullet-nested receipt actually has. The probe was stricter
+#       than the thing it was modelling, so it under-counted, and its clean result was an artefact.
+#
+# THE SIGNAL IS THE COLON. An annotation is written as a lead-in -- `- **The share:** the analyst
+# also reads ...` -- and an entry is written as a title. The bold span of a lead-in ends in a
+# colon; the bold span of a title does not. Measured across all 52 top-level bullets on the
+# reference consumer: THREE end in a colon, and those three are exactly the annotation sub-bullets
+# of one entry, each of which truncates it. The other 49 are real entries. FALSE POSITIVES: ZERO.
+#
+# The id-shape guard is kept as a second condition so that an entry legitimately keyed
+# `- **PC-FOO-BAR:**` cannot be reported for its punctuation alone.
+#
+# BULLETS ONLY. A heading ending in a colon is a section heading and is not this defect.
+#
+# A SEPARATE PASS, DELIBERATELY. It reuses the single-homed boundary rule but runs its own scan,
+# so a diagnostic added here cannot perturb the receipt parse above -- which is the parse this
+# entire tool exists to get right.
+# (No apostrophes anywhere below: the awk program is a single-quoted shell string.)
+awk -v DASH=' — ' "$(ledger_entry_awk)"'
+  # An id is upper-case, digits and hyphens, with at least one hyphen. A single word is not an id.
+  function idshape(s) {
+    sub(/[[:space:]]*\(.*\)[[:space:]]*$/, "", s)
+    return (s ~ /^[A-Z0-9-]+$/ && s ~ /-/)
+  }
+  function flush() {
+    if (label != "" && is_bullet && label ~ /:$/ && !idshape(label))
+      printf "%s\t%s\t%s\n", label, (hasv ? "CAPTURED" : "none"), (prev_id == "" ? "(no id-shaped entry above)" : prev_id)
+  }
+  {
+    shape = ledger_entry_shape($0)
+    if (shape != "") {
+      flush()
+      if (label != "" && idshape(label)) prev_id = label
+      l = $0
+      if (shape == "bullet") { sub(/^- \*\*/, "", l); sub(/\*\*.*/, "", l) }
+      else                   { sub(/^#+[ \t]*/, "", l) }
+      p = index(l, DASH); if (p > 0) l = substr(l, 1, p-1)
+      sub(/[[:space:]]+$/, "", l)
+      gsub(/`/, "", l)
+      label = l; hasv = 0; is_bullet = (shape == "bullet")
+      next
+    }
+    if ($0 ~ /^[ \t]*(<br[ \t]*\/?[ \t]*>)?[ \t]*[-*]?[ \t]*`?verify:/) hasv = 1
+  }
+  END { flush() }
+' "$LEDGER" 2>/dev/null \
+| while IFS="$(printf '\t')" read -r sw_label sw_cap sw_prev; do
+    [ -n "${sw_label:-}" ] || continue
+    if [ "$sw_cap" = CAPTURED ]; then
+      sw_harm="and it CAPTURED that entry's verify: receipt, so the entry now emits NO row under its own id — which reads exactly like an entry with nothing to report"
+    else
+      sw_harm="so everything below it is attributed to this annotation rather than to that entry"
+    fi
+    emit ENTRY-SWALLOWED "$sw_label" "this bullet is an annotation lead-in, not an entry title — its bold span ends in a colon and it is not an id. A line-leading '- **\u2026**' opens a NEW entry, so this line truncates the entry above it (nearest id-shaped entry above: ${sw_prev}) ${sw_harm}. Re-indent the annotation so it does not start a line, or drop the bold, then re-run and confirm the entry reports under its own id."
+  done
+
 exit 0   # classifier — the while-pipe's status is irrelevant; a close never blocks
