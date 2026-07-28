@@ -100,6 +100,7 @@ core_manifest:
   - core/fixtures/implementation-join-yield/**
   - core/fixtures/inflight-row-shape/**
   - core/fixtures/known-skills-extension/**
+  - core/fixtures/layer-anchor-declaration/**
   - core/fixtures/layer-catalog-collision/**
   - core/fixtures/layer-contract-conformance/**
   - core/fixtures/layer-readopt-gate/**

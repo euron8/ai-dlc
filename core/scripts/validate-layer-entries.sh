@@ -93,6 +93,16 @@ if [ ! -d "$SKILL_DIR" ]; then
   exit 2
 fi
 
+# ONE heading normalizer. nrm() was defined identically in two awk programs in this file
+# (heading_title and rule_title) and a third copy was about to be added for the anchor-arm check
+# below. Two copies of a grammar in one file is the restatement smell I26 names; three is a fork
+# waiting to happen, and this normalizer decides whether two headings are THE SAME heading — the
+# join every anchor check in this file rests on. It is CONCATENATED onto the front of each awk
+# program by adjacent-string quoting, so the remainder of each program stays single-quoted and
+# needs no escaping.
+NRM_FN='function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s);
+                         gsub(/^ +| +$/,"",s); return s }'
+
 # core/-relative layer target -> consumer path.
 # `team-roles/<role>.md` lives OUTSIDE the skill dir; everything else inside.
 resolve_target() {
@@ -100,6 +110,45 @@ resolve_target() {
     team-roles/*) printf '%s/.claude/%s' "$PROJECT_ROOT" "$1" ;;
     *)            printf '%s/%s' "$SKILL_DIR" "$1" ;;
   esac
+}
+
+# anchor_arm <core-file> <anchor> -> FORWARD | REVERSE:<the real heading> | NONE
+#
+# WHICH DIRECTION OF `span_of`'s CONTAINMENT RESOLVED THIS ANCHOR. reconcile/lib.sh matches a
+# heading against a `shadows:` anchor in EITHER direction: the heading contains the anchor
+# (forward), or the anchor contains the heading (reverse). Forward is the legitimate grain —
+# `SKILL.md#Rule 8` resolving to `### Rule 8 -- Run the validation cycle per declared intensity`
+# is a consumer naming a rule by its id and not restating its whole title.
+#
+# REVERSE IS NOT A GRAIN, IT IS A SILENT WIDENING. An anchor that CONTAINS the heading declares
+# something finer than a heading — a paragraph, a sub-clause, a renamed section — and the
+# resolver cannot address it, so it quietly resolves to the WHOLE section instead. The consumer
+# believes it shadowed a paragraph and has in fact shadowed everything under that heading.
+#
+# THE RESOLVER IS NOT CHANGED. lib.sh's reverse arm is load-bearing (readopt-override.sh names
+# one of these as the case an exact match kills, and lib.sh records a release where a stricter
+# resolver misfiled a consumer-renamed heading as an addition). Declaration is tightened;
+# resolution is left alone. That asymmetry is the whole point: a reverse-only declaration is
+# reported WITH the exact heading to substitute, so the fix is a copy-paste.
+#
+# SCOPE, STATED SO IT IS NOT MISTAKEN FOR MORE. This asks whether SOME heading forward-matches.
+# It does not resolve ambiguity — a short anchor can forward-match several headings and still
+# pass. Uniqueness is a different check with a different false-positive set, and folding it in
+# here is how the recorded short-title degeneracy (`same_section()`'s containment arm, five false
+# positives) would arrive in a new detector.
+anchor_arm() {
+  awk -v want="$2" "$NRM_FN"'
+    BEGIN { w = nrm(want); res = "NONE" }
+    /^#{2,6}[ \t]/ {
+      h = $0; sub(/^#+[ \t]+/, "", h); hn = nrm(h)
+      if (hn == "") next
+      if (index(hn, w) > 0) { print "FORWARD"; found = 1; exit }
+      # length > 3 mirrors lib.sh: a heading of three characters or fewer contains-matches
+      # almost anything, which is noise rather than a finding.
+      if (length(hn) > 3 && index(w, hn) > 0 && res == "NONE") res = "REVERSE:" h
+    }
+    END { if (!found) print res }
+  ' "$1"
 }
 
 fm() { # fm <file> <key> -- first frontmatter scalar, trimmed
@@ -182,9 +231,7 @@ defined_anchors() {
 # and the title can, which is exactly what the Consumer-catalog crosswalk rule has
 # always said (align by title/intent, never by number).
 heading_title() { # heading_title <file> <anchor>
-  awk -v a="$2" '
-    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s);
-                     gsub(/^ +| +$/,"",s); return s }
+  awk -v a="$2" "$NRM_FN"'
     $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
       sub("^" a "\\.[ \t]*","",h)
@@ -238,9 +285,7 @@ defined_rules() { # defined_rules <file> -> rule numbers, one per line
 }
 
 rule_title() { # rule_title <file> <n>
-  awk -v a="$2" '
-    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s);
-                     gsub(/^ +| +$/,"",s); return s }
+  awk -v a="$2" "$NRM_FN"'
     $0 ~ ("^#{2,4}[ \t]+Rule[ \t]+" a "[ \t]*(\\[[^]]*\\][ \t]*)?(--|—|:)") {
       h=$0; sub(/^#+[ \t]+Rule[ \t]+/,"",h)
       sub("^" a "[ \t]*","",h)
@@ -356,10 +401,51 @@ while IFS= read -r f; do
     err "$(rel "$f"): base_sha '$base_sha' is a CONSUMER commit (\"${subj}\") — it MUST be the DISTRIBUTION sha of the core rule when this override was authored. Override-drift detection is silently dead for this entry."
   fi
 
+  # E8 — `reason:` is required. The contract has always said so and nothing read the key:
+  # `grep -c reason` over both this validator and layer-drift.sh returned 0. An override is a
+  # deliberate divergence from upstream, and the reason is the only record of WHY that a future
+  # re-adoption can adjudicate against. Every entry on the reference consumer carries one, so
+  # this fires zero times there — which is exactly why the fixture mutant below exists.
+  [ -n "$(fm "$f" reason)" ] \
+    || err "$(rel "$f"): missing 'reason:' frontmatter. An override records why this consumer
+diverges from upstream; without it a later re-adoption has nothing to adjudicate the divergence against."
+
+  # E3 / E7 — EVERY comma-part of `shadows:`, file AND anchor.
+  #
+  # This read only the FIRST part and only its file: `${shadows%%#*}` discards the anchor and
+  # `sed 's/,.*//'` discards parts two onward. Measured on the reference consumer, one override
+  # declares five anchors and got one file check and ZERO anchor checks; another declares four.
+  # Nineteen anchor instances across twelve overrides were entirely unvalidated.
   if [ -n "$shadows" ]; then
-    tgt="$(printf '%s' "${shadows%%#*}" | tr -d ' ' | sed 's/,.*//')"
-    [ -z "$tgt" ] || [ -f "$(resolve_target "$tgt")" ] \
-      || err "$(rel "$f"): shadows target '$tgt' does not exist at $(resolve_target "$tgt")"
+    while IFS= read -r part; do
+      part="$(printf '%s' "$part" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+      [ -n "$part" ] || continue
+      tgt="${part%%#*}"; tgt="$(printf '%s' "$tgt" | sed -E 's/[[:space:]]+$//')"
+      anc="${part#*#}"; [ "$anc" = "$part" ] && anc=""
+      [ -n "$tgt" ] || continue
+      core_file="$(resolve_target "$tgt")"
+      if [ ! -f "$core_file" ]; then
+        err "$(rel "$f"): shadows target '$tgt' does not exist at $core_file"
+        continue
+      fi
+      [ -n "$anc" ] || continue
+      case "$(anchor_arm "$core_file" "$anc")" in
+        FORWARD) : ;;
+        REVERSE:*)
+          real="$(anchor_arm "$core_file" "$anc" | sed 's/^REVERSE://')"
+          err "$(rel "$f"): shadows anchor '$anc' is not a heading in $tgt — it CONTAINS the heading '$real'. It resolves only by the reverse arm of the containment match, which silently widens the shadow to that WHOLE section: you believe you shadowed a narrower span and you have shadowed everything under that heading. Write the anchor as '$real', or narrow the shadow to the sub-headings you actually rewrote."
+          ;;
+        *)
+          err "$(rel "$f"): shadows anchor '$anc' matches no heading in $tgt. The override shadows nothing, so its body never reaches the lead while every mechanical check reports green."
+          ;;
+      esac
+    # HERE-DOC, NOT A PIPE. `printf | tr | while` puts the loop body in a SUBSHELL, so every
+    # err() call incremented a counter in a child process and threw it away: the ERROR lines
+    # printed and the footer counted one of three, which is a validator that reports a violation
+    # and then exits zero. Loud and non-blocking is the worst of both.
+    done <<EOF
+$(printf '%s\n' "$shadows" | tr ',' '\n')
+EOF
   fi
 done < <(layer_files "$OVR_DIR")
 
@@ -376,6 +462,17 @@ while IFS= read -r f; do
 
   [ -n "$kind" ] || err "$(rel "$f"): missing 'kind:' frontmatter"
   [ -n "$id" ]   || err "$(rel "$f"): missing 'id:' frontmatter"
+  # E9 — `push_candidate:` is required, and must be a boolean. The contract declared this key
+  # and NOTHING read it: `grep -rl push_candidate` over the consumer's scripts, core/scripts and
+  # core/hooks matched zero files. It is the flag the push queue is drained from, so an entry
+  # without it is invisible to the absorption arc — the entry never becomes a push candidate and
+  # never gets retired either. Measured on the reference consumer: one entry of thirty-three.
+  pc="$(fm "$f" push_candidate)"
+  case "$pc" in
+    true|false) : ;;
+    "")  err "$(rel "$f"): missing 'push_candidate:' frontmatter. It is the flag the push queue is drained from, so an entry without it can never be offered upstream and never retired on absorption." ;;
+    *)   err "$(rel "$f"): push_candidate '$pc' is not true or false." ;;
+  esac
   if [ -z "$hooks" ]; then
     err "$(rel "$f"): missing 'hooks:' frontmatter"; continue
   fi
