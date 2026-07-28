@@ -17,6 +17,47 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.191.0] — 2026-07-28
+
+### Fixed — an ERROR-tier check was silently skipping part of its own subject set
+
+`E7` in `core/scripts/validate-layer-entries.sh` is the check that exists because an earlier draft
+validated only the FIRST comma-part of `shadows:`. Its own header records the damage: *"Nineteen
+anchor instances across twelve overrides were entirely unvalidated."*
+
+That fix handled multiple PARTS and not the file-INHERITING spelling. Both are in live use:
+
+```
+a.md#One, a.md#Two    file repeated per part — every part was checked
+a.md#One, #Two        file stated once — `${part%%#*}` is EMPTY for part two
+```
+
+For the second spelling the loop computed an empty target and hit `[ -n "$tgt" ] || continue`
+**before any anchor check ran**. Measured on the reference consumer by replaying the parse: one
+override declaring four anchors got **one checked and three skipped**. The repo's named defect
+class — a check that cannot fire reads exactly like one that passed — living inside the check
+written to end it.
+
+A part with no file of its own now inherits the last one that had one, which is what the resolver
+and `layer-drift.sh` already do; this brings the authoring check level with the pull-time reader
+rather than inventing a grain. A FIRST part with no file has nothing to inherit and is now an
+error: it named no target, so every file and anchor check on it was skipped in silence.
+
+**The reference consumer stays at 0 errors, and that is not evidence.** All 20 of its anchors
+forward-match, so the widening changes coverage without changing the verdict — which is why nobody
+noticed. What proves the fix fires is a differential run on a copy of the live tree: one of the
+three previously-skipped anchors was corrupted, the shipped-at-`d9605f5` validator reported **0
+errors** on it and the fixed one reported the anchor. False-positive set measured across every live
+`shadows:` value and the core fixtures: empty, byte-identical output before and after.
+
+`core/fixtures/layer-anchor-declaration/` gains two entries and two mutants. The inheriting entry's
+assertion quotes the ANCHOR arm's wording rather than the anchor text, because the target-less arm
+quotes the whole part — the first draft of that assertion passed against a reverted fix, and
+mutation 3 is what caught it.
+
+`LC-O3` and its prose home now state the inheritance rule instead of "names a file", which had
+become tighter than the mechanism it describes.
+
 ## [0.190.0] — 2026-07-28
 
 ### Added — I26 had no fixture, and it was found while making I26 faster

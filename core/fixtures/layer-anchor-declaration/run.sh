@@ -88,6 +88,18 @@ row "steps__retro__ghost.md"           "matches no heading" \
 row "steps__retro__multi.md"           "Empirical gate validation" \
   "every comma-part is validated, not just the first"
 
+# THE SECOND BLIND SPOT, inside the fix for the first. The per-part widening still computed the
+# target per part, so a part that inherits its file computed an EMPTY one and was skipped before
+# any anchor check ran. Measured on the reference consumer: 1 of 4 anchors checked, 3 skipped.
+# The wanted substring is the ANCHOR arm's wording, not the anchor text. The target-less arm below
+# quotes the whole part — `#No Such Inherited Heading` — so a bare anchor-text match is satisfied by
+# an entry that resolved no file at all, and the assertion would pass while the fix was reverted.
+# Mutation 3 caught exactly that.
+row "steps__retro__inherit.md"         "Inherited Heading' matches no heading in steps/retro.md" \
+  "a bare '#anchor' part inherits the file from the part before it and is still anchor-checked"
+row "steps__retro__orphan.md"          "names no target file" \
+  "a first part with no file has nothing to inherit, and silence there skips every check on the entry"
+
 row "SKILL__Rule-9.md"                 "missing 'reason:'" \
   "reason: was declared by the contract and read by nothing"
 row "no-flag.md"                       "missing 'push_candidate:'" \
@@ -174,6 +186,60 @@ else
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-26s the pipeline mutant counted correctly (%s lines, footer %s), so the guard is vacuous\n' "mutation-subshell" "$m2lines" "${m2count:-<none>}"
+  fi
+fi
+
+# --- MUTATION 3: stop carrying the target forward, restoring the inheriting-form skip -----
+# The honest revert is to make an inheriting part resolve to an EMPTY target again, which is what
+# `tgt="${part%%#*}"` produced for it before the carry-forward. It must lose the inherited anchor
+# and NOTHING else: `multi` (file repeated per part) and `orphan` (no file anywhere) are the two
+# neighbours this could take with it, and both are asserted to survive. A mutant that also
+# silenced them would be entangled and would prove none of the three.
+MUT3="$(dirname "$CONS")/mut-noinherit"
+rm -rf "$MUT3"; mkdir -p "$MUT3"
+awk '{ sub(/^        tgt="\$inherited_tgt"$/, "        tgt=\"\""); print }' "$VLE" > "$MUT3/vle.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$VLE" "$MUT3/vle.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-26s the mutation matched nothing, so the inheriting-form assertion is unproven\n' "mutation-noinherit"
+else
+  m3all="$(bash "$MUT3/vle.sh" "$CONS" 2>&1)"
+  m3="$(printf '%s\n' "$m3all" | grep -F 'steps__retro__inherit.md' | grep -cF "Inherited Heading' matches no heading in steps/retro.md" || true)"
+  m3keep="$(printf '%s\n' "$m3all" | grep -F 'steps__retro__multi.md' | grep -c '^ERROR' || true)"
+  m3orph="$(printf '%s\n' "$m3all" | grep -F 'steps__retro__orphan.md' | grep -c '^ERROR' || true)"
+  if [ "$m3" -eq 0 ] && [ "$m3keep" -gt 0 ] && [ "$m3orph" -gt 0 ]; then
+    printf '  ok    %-26s an inheriting part loses its anchor check, and only that\n' "mutation-noinherit"
+  elif [ "$m3" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-26s the mutant still anchor-checked the inherited part, so the assertion above is vacuous\n' "mutation-noinherit"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-26s the mutant also silenced a neighbour (multi=%s orphan=%s), so it is entangled\n' "mutation-noinherit" "$m3keep" "$m3orph"
+  fi
+fi
+
+# --- MUTATION 4: drop the no-inheritable-target diagnostic -------------------------------
+# Deleting only the err() leaves the `continue` in place, which is exactly the old behaviour: the
+# part is skipped and nobody is told. `inherit` must keep erroring, or the two arms are one arm.
+MUT4="$(dirname "$CONS")/mut-noorphan"
+rm -rf "$MUT4"; mkdir -p "$MUT4"
+awk '/names no target file/ { next } { print }' "$VLE" > "$MUT4/vle.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$VLE" "$MUT4/vle.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-26s the mutation matched nothing, so the orphan assertion is unproven\n' "mutation-noorphan"
+else
+  m4all="$(bash "$MUT4/vle.sh" "$CONS" 2>&1)"
+  m4="$(printf '%s\n' "$m4all" | grep -F 'steps__retro__orphan.md' | grep -c '^ERROR' || true)"
+  m4keep="$(printf '%s\n' "$m4all" | grep -F 'steps__retro__inherit.md' | grep -c '^ERROR' || true)"
+  if [ "$m4" -eq 0 ] && [ "$m4keep" -gt 0 ]; then
+    printf '  ok    %-26s a target-less first part disappears in silence, and only that\n' "mutation-noorphan"
+  elif [ "$m4" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-26s the mutant still reported the orphan, so the assertion above is vacuous\n' "mutation-noorphan"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-26s the mutant also silenced the inheriting entry, so it is entangled\n' "mutation-noorphan"
   fi
 fi
 
