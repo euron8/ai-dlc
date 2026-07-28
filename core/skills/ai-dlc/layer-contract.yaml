@@ -49,7 +49,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 3
+contract_version: 4
 
 clauses:
 
@@ -371,6 +371,28 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-CHECK-NUMBER-COLLISION
+
+  - id: LC-N5
+    subject: extension
+    level: WARN
+    since: 4
+    normative: >-
+      A consumer entry allocates its own check and rule numbers from the reserved band at 900
+      and above; core allocates below it. LC-N1 to LC-N4 are collision DETECTORS and they join
+      against the numbers core defines today, so a consumer allocating a number core has not
+      reached yet matches nothing and reports clean — until the release where core allocates it,
+      at which point the collision appears retroactively across every gate log, retro and
+      escalation already written. A partition makes that unrepresentable where a detector cannot
+      see it at all. Bare integers only: a suffixed id marks a position beside core's number and
+      an alphabetic id has no ordering in a numeric band, and a number core already defines is
+      LC-N1 to LC-N3's subject — an entry deliberately qualifying core's rule shares that integer
+      because the integer is its reference. Check numbers are scoped to `kind: check` for the
+      same reason LC-N1 is: a step number is a position in a procedure, not an allocation.
+      Report-only, and the remedy is a renumber plus a crosswalk row, never a catalog label —
+      the label resolves a collision that exists, the band prevents one that does not yet.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W5
 
   # --- cross-references into the rendered rulebook --------------------------------------
   - id: LC-R1

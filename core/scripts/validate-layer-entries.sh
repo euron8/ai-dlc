@@ -69,6 +69,64 @@
 #        anything. WARN for the same reason W1 is: eight ERRORs on first contact is
 #        a linter that gets switched off, and a consumer must never be unable to
 #        take a security fix because its own rule catalog needs relabelling.
+#     W5 extension ALLOCATES a check or rule number core has NOT allocated, below the
+#        reserved consumer band. This is the case E6 and W4 are structurally unable
+#        to see, and it is the one that decides whether they ever fire.
+#
+#        E6/W4 are collision detectors: they join the entry's number against the
+#        numbers core defines TODAY. A consumer numbering its own check 33 while
+#        core stops at 32 therefore matches nothing and reports clean — until the
+#        release where core allocates 33, at which point the collision appears
+#        retroactively across every gate log already written. The defect is created
+#        at authoring time and detected, if ever, by an unrelated party years later.
+#        A detector whose subject set is "numbers core has already taken" can never
+#        warn about the number an author is about to take.
+#
+#        So the fix is a PARTITION, not a better detector: core allocates below
+#        BAND_FLOOR, a consumer allocates at or above it, and the collision becomes
+#        unrepresentable rather than merely reported. The reserved floor is asserted
+#        against core's own catalogs by invariant I45 in validate-enforcement-map.sh,
+#        derived from `steps/gate-validation.md` and `SKILL.md` — without that arm
+#        this band is a promise core is free to break, which is a declaration with
+#        no mechanism.
+#
+#        SCOPE, and every exclusion below is load-bearing. The predicate fires only
+#        on a BARE INTEGER that core does not define:
+#          - Suffixed ids (`19b`, `2s`, `4a-bis`, `5c-table`) are excluded. A suffix
+#            is an explicit "insert beside core's N" marker; it has no expression in
+#            a numeric band and renumbering one to 919 would move it away from the
+#            section it exists to sit next to.
+#          - Alphabetic ids (`AP`, `VH`, `H1`) are excluded — a band is a numeric
+#            partition and cannot order them.
+#          - A number core DOES define is excluded, and this is the exclusion that
+#            keeps the check honest. An entry deliberately qualifying core's Rule 13
+#            shares that integer BECAUSE the integer is the reference; the reference
+#            consumer carries four such rules, each declaring itself a tightening of
+#            the core rule it names. Those are E6/W4's subject, resolved by the
+#            catalog label, and they must never be told to renumber.
+#          - Check numbers are scoped to `kind: check`, exactly as E6 is, and for
+#            the same stated reason: a step number is a POSITION in an ordered
+#            procedure, not an allocation from a namespace, so a step-domain entry
+#            hooking `steps/retro.md` at `### 4a-bis.` is placing text, not claiming
+#            an id. Renumbering it into the band would reorder the procedure.
+#        Rule numbers are not scoped by kind: SKILL.md's rulebook is one global
+#        namespace whatever kind of entry writes into it.
+#
+#        A catalog label does NOT silence this, and that is the one place W5 departs
+#        from E6/W4's "a labelled heading is the resolved state". The label resolves
+#        an EXISTING collision in the audit record; the band removes the need for a
+#        label at all. A labelled squatter is the expected state on first contact —
+#        labelling is what core previously told consumers to do — so reporting it is
+#        the migration signal, and suppressing it would hide the whole subject set
+#        behind the remedy for a different clause.
+#
+#        WARN, never ERROR. Measured on the reference consumer before shipping: FIVE
+#        live subjects (checks 33/34/35, rules 31/32), zero conforming entries
+#        reported. The remedy is renumbering, which rewrites the consumer's own
+#        durable audit key and needs a crosswalk row per number; blocking a pull on
+#        five of them would wedge a consumer out of taking a fix over its own
+#        catalog. Core is AT 32 checks and 30 rules, so `Rule 31` is literally the
+#        next integer core will allocate — the warning has a live detonation date.
 #
 # Rule 26(c) contract — catches: a layer entry silently duplicating, restricting,
 # or shadowing a core rule upstream has since changed. False-positive cost: one
@@ -309,6 +367,27 @@ rule_labelled() { # rule_labelled <file> <n>
     $0 ~ ("^#{2,4}[ \t]+Rule[ \t]+" a "[ \t]*(\\[[^]]*\\][ \t]*)?(--|—|:)") {
       print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
     }' "$1" 2>/dev/null
+}
+
+# --- the reserved consumer numbering band (W5) ---------------------------------
+#
+# ONE definition of the floor, here, because it is a two-sided partition: this file
+# holds the CONSUMER side (allocate at or above it) and I45 in
+# validate-enforcement-map.sh holds the CORE side (allocate below it). A second
+# spelling of the number would let the two halves drift apart, and a partition whose
+# halves disagree is worse than no partition — it would declare a range safe that
+# core is still allocating from.
+BAND_FLOOR=900
+
+# Is <n> an allocation this band governs? Bare integers only, and the exclusions are
+# in the header note above: a suffix marks a position beside core's N, and an alpha id
+# has no ordering in a numeric band. Returns 0 (true) for a governed, out-of-band
+# allocation.
+below_band() { # below_band <n>
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;                 # suffixed or alphabetic -> not governed
+  esac
+  [ "$1" -lt "$BAND_FLOOR" ]
 }
 
 # Do two normalized titles name the SAME check? Jaccard over significant tokens,
@@ -583,6 +662,41 @@ while IFS= read -r f; do
 
     warn "$(rel "$f"): RULE NUMBER COLLISION on 'Rule $n' — this defines \"$r_ext\" while core '$hooks' defines \"$r_core\" at the same number. Extensions are ADDITIVE, so both render into one merged rulebook under one integer and a bare \"Rule $n\" in a gate log, retro finding or dispatch brief has two referents. Give this rule a catalog-labelled heading (\"## Rule $n [ext:$id] -- …\") per the Consumer-catalog crosswalk; the integer never moves. \`reconcile/relabel-extension-checks.sh --apply\` writes it."
   done < <(defined_rules "$f")
+
+  # W5 — an allocation from core's range. See the header note for why this is a
+  # partition rather than a detector, and for every exclusion the predicate carries.
+  #
+  # THE TWO FILTERS BELOW ARE THE WHOLE CHECK, and each one has to be read in the
+  # right order. `below_band` rejects suffixed and alphabetic ids; the `grep -Fxq`
+  # against the core set rejects the deliberate qualifier, which shares core's
+  # integer precisely because that integer is its reference. What survives both is a
+  # number core has not taken, in the range core allocates from — an allocation that
+  # is not yet a collision and will become one without anybody editing the entry.
+  #
+  # `relabel-extension-checks.sh` CANNOT be offered as the remedy here, and the
+  # reason is structural rather than a matter of coverage: its rewrite loop iterates
+  # the numbers CORE defines and looks each one up in the entry. A number core does
+  # not define never enters that loop, so the relabeller is blind to W5's entire
+  # subject set by construction. Prescribing it would hand the operator a tool that
+  # exits "no unlabelled core-number collisions" on a tree full of findings.
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    below_band "$n" || continue
+    printf '%s\n' "$core_rules" | grep -Fxq -- "$n" && continue
+    warn "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to '9$n' or the next free number in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
+  done < <(defined_rules "$f")
+
+  # The check namespace, scoped to `kind: check` exactly as E6 is — a step number is
+  # a position in a procedure, not an allocation, and a band cannot reorder a
+  # procedure without breaking it.
+  if [ "$kind" = check ]; then
+    while IFS= read -r a; do
+      [ -n "$a" ] || continue
+      below_band "$a" || continue
+      printf '%s\n' "$core_anchors" | grep -Fxq -- "$a" && continue
+      warn "$(rel "$f"): CHECK OUT OF BAND — check '$a.' allocates from core's range. Core '$hooks' does not define check $a TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer checks are reserved at ${BAND_FLOOR} and above — renumber to '9$a' or the next free number in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Check $a\" your existing history already carries."
+    done < <(defined_anchors "$f")
+  fi
 
   # W2 — a restriction in an additive layer is a mis-filed override.
   if grep -Eqi 'only[^.]{0,60}(are|is) valid|is NOT subject to|are the only valid' "$f"; then

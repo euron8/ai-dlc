@@ -204,7 +204,17 @@ that gate logs are rotated cut-and-paste into archives, so a git date on a rotat
 is the rotation date, not the authorship date.
 
 Seed it from the `EXTENSION-CHECK-NUMBER-COLLISION` and `EXTENSION-RESTATES-CORE` rows
-of your next `/ai-dlc-update` report, then freeze it:
+of your next `/ai-dlc-update` report, then freeze it.
+
+**The band is what retires this table.** New checks and rules go at 900 and above
+(LC-N5), where core never allocates, so nothing you number from now on can ever need a
+crosswalk row. The table stays as the resolver for the numbers you allocated *before*
+the band — that history is in your gate logs permanently and no renumber can reach it.
+When you renumber an existing check into the band, keep its old row and add the new
+number to the `notes` column: the row is what makes a bare `Check 33` in a two-year-old
+retro still resolvable. Core does not check this table's completeness and deliberately
+does not claim to — it cannot see which numbers you have ever written into evidence, and
+a clause core cannot evaluate would be a rule with no mechanism behind it.
 
 | your number | label | title | resolves a bare `Check N` written before | notes |
 |---|---|---|---|---|
@@ -255,6 +265,19 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-N4]** WARN — an incoming release that creates a check-number collision is reported and you
   relabel your own catalog. Report-only by design: you must never be unable to take a security fix
   because your catalog needs relabelling.
+- **[LC-N5]** WARN — allocate your own check and rule numbers from the reserved band at **900 and
+  above**; core allocates below it. LC-N1..LC-N4 are collision DETECTORS: they join your number
+  against the numbers core defines *today*, so a number core has not reached yet matches nothing
+  and reports clean — until the release where core allocates it, and then the collision appears
+  retroactively across every gate log, retro and escalation already written against it. The band
+  makes that state unrepresentable where a detector could not see it at all. Bare integers only: a
+  suffixed id (`19b`, `4a-bis`) marks a position beside core's number, and an alphabetic id (`AP`)
+  has no ordering in a numeric band. A number core *already* defines is LC-N1..LC-N3's subject, not
+  this one — an entry deliberately qualifying core's Rule 13 shares that integer *because* the
+  integer is its reference, and must never be renumbered. Check numbers are scoped to
+  `kind: check`, exactly as LC-N1 is: a step number is a position in an ordered procedure, not an
+  allocation from a namespace. The remedy is a renumber plus a crosswalk row — **not** a catalog
+  label, which resolves a collision that exists rather than preventing one that does not yet.
 - **[LC-R1]** WARN — a `Step <n>` reference in a layer entry resolves to an anchor defined
   somewhere in the rendered rulebook: core plus your own layers.
 
