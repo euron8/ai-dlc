@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.192.0] — 2026-07-28
+
+### Added — two pull-time override statuses, and one reading of `shadows:` behind them
+
+**`OVERRIDE-LOOSE-ANCHOR`** — a `shadows:` anchor that resolves only by the REVERSE arm of the
+containment match. It names something finer than a heading, which the resolver cannot address, so
+it quietly resolves to the WHOLE section: the author believes they shadowed a paragraph and have
+shadowed everything under that heading. `E7` already errors on this — at AUTHORING time, in a
+validator the consumer runs and can skip. The pull cannot be skipped, and it reads the anchor
+against the incoming core rather than the copy on disk.
+
+**`OVERRIDE-DOUBLE-SHADOW`** — two entries declaring the same (file, normalised anchor). Each is
+well-formed alone; only the pair is the finding, which is why it is computed across entries.
+Precedence picks one body silently, so which one governs is an ordering accident neither entry
+declares, and every upstream commit touching the span invalidates BOTH `base_sha` stamps — so
+reconciling one of them looks complete. Filed under every participating entry, never just the
+first: a row under one leaves the other reading clean on the finding it is half of.
+
+Both are **report-only**, and for the double-shadow that is on the record: the one live instance is
+deliberate and self-documented — one of the two entries states in prose that it does not restate
+the other's body and names the file that does. An ERROR would fire on a case the consumer already
+reasoned about in writing.
+
+### Fixed — three readings of "what does this entry shadow", and five of "is this the same heading"
+
+The two tools that must agree about an anchor did not:
+
+| | reading |
+|---|---|
+| the authoring linter, before v0.191.0 | only the FIRST comma-part — nineteen anchor instances unvalidated |
+| the authoring linter, v0.191.0 | every part, file computed PER part — the inheriting spelling skipped, 1 of 4 anchors checked |
+| the pull classifier | ONE file for the whole entry, every anchor checked against it — `a.md#One, b.md#Two` resolved `Two` inside `a.md` |
+
+The third was latent: no live entry names two files. All three are now `shadow_parts()`, and
+`anchor_arm()` and the `nrm_awk` heading normalizer join it — the normalizer had **five**
+spellings across the two trees. **I40** binds all three byte-identically and fails the build on a
+fork or on a rename that would make it find nothing. Copies rather than a shared source for I25's
+reason and I29's: `core/scripts` must not depend on the update skill, and `ai-dlc-update` is
+confined to `reconcile/`, so neither may source the other's file.
+
+### Evidence
+
+Measured against the reference consumer at `170ff9d8c`, with controls:
+
+- **13 overrides, 20 anchors.** Both multi-anchor spellings live.
+- **LOOSE ANCHOR: 0 of 20.** Control: an anchor corrupted to the reverse form on a copy of that
+  tree reports LOOSE from the same run, so the zero is a real forward-match zero and not a dead
+  matcher.
+- **DOUBLE SHADOW: exactly one duplicate key** (`steps/retro.md#4a. Close-Out Sweep`), 2 rows.
+  False-positive set empty.
+- **Every pre-existing row is byte-identical before and after** the parser rewrite — the whole
+  diff against the shipped classifier is the two new rows.
+
+`I40` ships with both arms mutated in `enforcement-map-sites`: a one-copy change to the reverse
+arm's noise floor must FAIL it, and deleting a bound function must fail it LOUDLY rather than pass
+by finding nothing. `layer-readopt-gate` gains the two seeded instances, three controls (a
+forward-matching id-prefix anchor, a single-claimant anchor, and both statuses staying out of the
+`HARD-` set) and two mutants, each asserted to change exactly one status.
+
+### A trap worth recording
+
+The duplicate-key accumulator was first a temp file with an `EXIT` trap. Installing that trap made
+bash report `printf: write error: Broken pipe` from every `printf | grep -q` in the script — **90
+lines of stderr** on a classifier whose stderr an operator is meant to read, from pipelines the
+change never touched. Removing the trap took it to 0 with byte-identical rows. Separately, the
+per-anchor blob is read once into a variable and fed by here-string: `anchor_arm` exits its awk
+program on the first forward match, and piping `git show` into it closed the pipe under a
+still-writing producer.
+
 ## [0.191.0] — 2026-07-28
 
 ### Fixed — an ERROR-tier check was silently skipping part of its own subject set

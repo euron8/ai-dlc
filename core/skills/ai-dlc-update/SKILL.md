@@ -431,6 +431,21 @@ prose is itself generated rather than composed.
      remedies: restate the construct in the override, narrow `shadows:` to the
      sub-headings actually rewritten, or delegate to something outside the span.
      Left alone, every future change to that construct silently fails to arrive.
+   - `OVERRIDE-ASSERTS-SHADOW-SURVIVES` → the body states that the span it shadows
+     is unchanged and still governs. The sibling of the above and the same mechanism:
+     precedence replaces the WHOLE span, so that sentence is false about the entry's
+     own effect. **Report-only.** Remedy: narrow `shadows:`, or restate the surviving
+     text in the body.
+   - `OVERRIDE-LOOSE-ANCHOR` → a `shadows:` anchor resolves only by the REVERSE arm
+     of the containment match, so it names something finer than a heading and quietly
+     widens the shadow to the whole section. **Report-only.** The row names the exact
+     heading to substitute. E7 errors on this at authoring time; that validator is
+     consumer-run and skippable, and this pull is not.
+   - `OVERRIDE-DOUBLE-SHADOW` → two entries declare the same (file, anchor). Each is
+     well-formed alone; precedence picks one body silently, and every commit touching
+     the span invalidates BOTH stamps, so reconciling one looks complete.
+     **Report-only** — a deliberate split is allowed, but it has to be stated in the
+     bodies. Filed under EVERY participating entry, not just the first.
    - `EXTENSION-RETIRE-CANDIDATE` → upstream **absorbed** a section this extension
      defines: the titles agree (never merely the number — consumer gate-check numbers
      are a sanctioned separate namespace) and core did not carry it at `base`. The

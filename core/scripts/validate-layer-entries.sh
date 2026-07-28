@@ -100,8 +100,20 @@ fi
 # join every anchor check in this file rests on. It is CONCATENATED onto the front of each awk
 # program by adjacent-string quoting, so the remainder of each program stays single-quoted and
 # needs no escaping.
-NRM_FN='function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s);
-                         gsub(/^ +| +$/,"",s); return s }'
+#
+# ONE copy IN THIS FILE was not enough: reconcile/lib.sh's resolver carried a fourth spelling and
+# the pull-time classifier a fifth, so "the same heading" had two answers depending on which tool
+# the operator ran. `nrm_awk`, `anchor_arm` and `shadow_parts` below are byte-identical to
+# reconcile/lib.sh's and BOUND to them by I40. They are COPIES rather than a source for the
+# reason I25 records: core/scripts must not depend on the update skill, and I29 confines
+# ai-dlc-update to reconcile/ — so neither may source the other's file, and the binding is an
+# assertion instead. Change one, change both; the build fails otherwise.
+nrm_awk() {
+  cat <<'AWK'
+function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
+AWK
+}
+NRM_FN="$(nrm_awk)"
 
 # core/-relative layer target -> consumer path.
 # `team-roles/<role>.md` lives OUTSIDE the skill dir; everything else inside.
@@ -112,43 +124,40 @@ resolve_target() {
   esac
 }
 
-# anchor_arm <core-file> <anchor> -> FORWARD | REVERSE:<the real heading> | NONE
-#
-# WHICH DIRECTION OF `span_of`'s CONTAINMENT RESOLVED THIS ANCHOR. reconcile/lib.sh matches a
-# heading against a `shadows:` anchor in EITHER direction: the heading contains the anchor
-# (forward), or the anchor contains the heading (reverse). Forward is the legitimate grain —
-# `SKILL.md#Rule 8` resolving to `### Rule 8 -- Run the validation cycle per declared intensity`
-# is a consumer naming a rule by its id and not restating its whole title.
-#
-# REVERSE IS NOT A GRAIN, IT IS A SILENT WIDENING. An anchor that CONTAINS the heading declares
-# something finer than a heading — a paragraph, a sub-clause, a renamed section — and the
-# resolver cannot address it, so it quietly resolves to the WHOLE section instead. The consumer
-# believes it shadowed a paragraph and has in fact shadowed everything under that heading.
-#
-# THE RESOLVER IS NOT CHANGED. lib.sh's reverse arm is load-bearing (readopt-override.sh names
-# one of these as the case an exact match kills, and lib.sh records a release where a stricter
-# resolver misfiled a consumer-renamed heading as an addition). Declaration is tightened;
-# resolution is left alone. That asymmetry is the whole point: a reverse-only declaration is
-# reported WITH the exact heading to substitute, so the fix is a copy-paste.
-#
-# SCOPE, STATED SO IT IS NOT MISTAKEN FOR MORE. This asks whether SOME heading forward-matches.
-# It does not resolve ambiguity — a short anchor can forward-match several headings and still
-# pass. Uniqueness is a different check with a different false-positive set, and folding it in
-# here is how the recorded short-title degeneracy (`same_section()`'s containment arm, five false
-# positives) would arrive in a new detector.
-anchor_arm() {
-  awk -v want="$2" "$NRM_FN"'
+# The two anchor helpers below are byte-identical to reconcile/lib.sh's, bound by I40. Their
+# rationale lives THERE, at the single home, so that reading one copy does not teach a reader
+# something the other copy no longer does. Do not paraphrase it back into this file.
+anchor_arm() { # anchor_arm <anchor>  < stream  -> FORWARD | REVERSE:<heading> | NONE
+  awk -v want="$1" "$(nrm_awk)"'
     BEGIN { w = nrm(want); res = "NONE" }
     /^#{2,6}[ \t]/ {
       h = $0; sub(/^#+[ \t]+/, "", h); hn = nrm(h)
       if (hn == "") next
-      if (index(hn, w) > 0) { print "FORWARD"; found = 1; exit }
-      # length > 3 mirrors lib.sh: a heading of three characters or fewer contains-matches
-      # almost anything, which is noise rather than a finding.
-      if (length(hn) > 3 && index(w, hn) > 0 && res == "NONE") res = "REVERSE:" h
+      if (w != "" && index(hn, w) > 0) { print "FORWARD"; found = 1; exit }
+      # length > 3 mirrors span_of: a heading of three characters or fewer
+      # contains-matches almost anything, which is noise rather than a finding.
+      if (length(hn) > 3 && w != "" && index(w, hn) > 0 && res == "NONE") res = "REVERSE:" h
     }
     END { if (!found) print res }
-  ' "$1"
+  '
+}
+
+shadow_parts() { # shadow_parts <shadows-value>  -> one `<file>\t<anchor>` line per comma-part
+  awk -v s="$1" '
+    BEGIN {
+      n = split(s, p, ",")
+      for (i = 1; i <= n; i++) {
+        part = p[i]; gsub(/^[ \t]+|[ \t]+$/, "", part)
+        if (part == "") continue
+        h = index(part, "#")
+        if (h > 0) { f = substr(part, 1, h - 1); a = substr(part, h + 1) }
+        else       { f = part; a = "" }
+        gsub(/[ \t]+$/, "", f); gsub(/^[ \t]+|[ \t]+$/, "", a)
+        if (f != "") last = f; else f = last
+        print f "\t" a
+      }
+    }
+  ' < /dev/null
 }
 
 fm() { # fm <file> <key> -- first frontmatter scalar, trimmed
@@ -425,23 +434,21 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
   #                            `[ -n "$tgt" ]` skip below fired BEFORE any anchor check ran
   #
   # Measured on the reference consumer: one override declaring four anchors got ONE checked and
-  # THREE skipped. A part that names no file inherits the last one that did — which is what the
-  # resolver and layer-drift.sh already do, so this brings the authoring check level with the
-  # pull-time reader rather than inventing a grain.
+  # THREE skipped. A part that names no file inherits the last one that did. The reading itself
+  # now lives in shadow_parts() above — one grammar, bound to the pull classifier's by I40, so
+  # the two tools cannot disagree about what an entry shadows.
+  #
+  # SPLIT BY PARAMETER EXPANSION, NOT BY `IFS=<tab> read`. A tab is IFS WHITESPACE, so a leading
+  # one is absorbed rather than producing an empty first field — the target-less part `#Anchor`
+  # came back as target `Anchor` with no anchor, and the arm below reported a missing FILE named
+  # after the anchor. The empty field is the whole signal; it has to survive the read.
   if [ -n "$shadows" ]; then
-    inherited_tgt=""
-    while IFS= read -r part; do
-      part="$(printf '%s' "$part" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-      [ -n "$part" ] || continue
-      tgt="${part%%#*}"; tgt="$(printf '%s' "$tgt" | sed -E 's/[[:space:]]+$//')"
-      anc="${part#*#}"; [ "$anc" = "$part" ] && anc=""
-      if [ -n "$tgt" ]; then
-        inherited_tgt="$tgt"
-      else
-        tgt="$inherited_tgt"
-      fi
+    _tab="$(printf '\t')"
+    while IFS= read -r _pair; do
+      [ -n "$_pair" ] || continue
+      tgt="${_pair%%"$_tab"*}"; anc="${_pair#*"$_tab"}"
       if [ -z "$tgt" ]; then
-        err "$(rel "$f"): shadows part '$part' names no target file, and no earlier comma-part supplies one to inherit. A bare '#anchor' inherits the file from the part before it; as the FIRST part there is nothing to inherit, so this part shadows nothing and every file and anchor check on it is skipped in silence."
+        err "$(rel "$f"): shadows part '#$anc' names no target file, and no earlier comma-part supplies one to inherit. A bare '#anchor' inherits the file from the part before it; as the FIRST part there is nothing to inherit, so this part shadows nothing and every file and anchor check on it is skipped in silence."
         continue
       fi
       core_file="$(resolve_target "$tgt")"
@@ -450,10 +457,10 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
         continue
       fi
       [ -n "$anc" ] || continue
-      case "$(anchor_arm "$core_file" "$anc")" in
+      case "$(anchor_arm "$anc" < "$core_file")" in
         FORWARD) : ;;
         REVERSE:*)
-          real="$(anchor_arm "$core_file" "$anc" | sed 's/^REVERSE://')"
+          real="$(anchor_arm "$anc" < "$core_file" | sed 's/^REVERSE://')"
           err "$(rel "$f"): shadows anchor '$anc' is not a heading in $tgt — it CONTAINS the heading '$real'. It resolves only by the reverse arm of the containment match, which silently widens the shadow to that WHOLE section: you believe you shadowed a narrower span and you have shadowed everything under that heading. Write the anchor as '$real', or narrow the shadow to the sub-headings you actually rewrote."
           ;;
         *)
@@ -465,7 +472,7 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
     # printed and the footer counted one of three, which is a validator that reports a violation
     # and then exits zero. Loud and non-blocking is the worst of both.
     done <<EOF
-$(printf '%s\n' "$shadows" | tr ',' '\n')
+$(shadow_parts "$shadows")
 EOF
   fi
 done < <(layer_files "$OVR_DIR")

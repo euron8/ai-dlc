@@ -87,6 +87,14 @@ status that stops `apply`); **WARN** reports and never blocks.
   than a heading — a paragraph, a sub-clause, a renamed section — which the resolver cannot
   address, so it silently widens your shadow to that WHOLE section. The error names the exact
   heading to substitute.
+- **[LC-O12]** WARN — every `shadows:` anchor still FORWARD-matches at PULL time. LC-O11 asks the
+  same question at authoring time, in a validator you run and can skip; the pull cannot be
+  skipped, and it reads the anchor against the INCOMING core rather than the copy on disk.
+- **[LC-O13]** WARN — no two entries declare the same (target file, normalised anchor). Both
+  bodies claim that span and precedence picks one silently, so which one governs is an ordering
+  accident neither entry declares — and every upstream commit touching the span invalidates BOTH
+  `base_sha` stamps, so reconciling one of them looks complete. A deliberate split is allowed;
+  say so in the bodies.
 - **[LC-O9]** WARN — an override's body does not delegate to a construct defined inside a section
   it shadows. Precedence replaces that section at load time, including the delegation target, so
   it reads as a correct single-source delegation and behaves as a dropped one.

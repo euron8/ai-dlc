@@ -91,6 +91,13 @@ the shape that returns a false zero to any line-based predicate.
 
 The ordering guarantee and the retention window live here, in the paragraphs that entry
 silently drops.
+
+## Rule 17 -- Reserved For The Duplicate Pair
+
+Claimed by TWO override entries at once, and by nothing else in this fixture. Every other
+rule here is shadowed by an entry some later assertion writes, so a duplicate seeded on one
+of those counts a claimant the seed never declared -- which is exactly how the first draft
+of the double-shadow assertion read 3 rows where it wanted 2.
 EOF
 
 # NOTE the trailing unchanged section. The template tokens must NOT be the last
@@ -213,6 +220,13 @@ the shape that returns a false zero to any line-based predicate.
 
 The ordering guarantee and the retention window live here, in the paragraphs that entry
 silently drops.
+
+## Rule 17 -- Reserved For The Duplicate Pair
+
+Claimed by TWO override entries at once, and by nothing else in this fixture. Every other
+rule here is shadowed by an entry some later assertion writes, so a duplicate seeded on one
+of those counts a claimant the seed never declared -- which is exactly how the first draft
+of the double-shadow assertion read 3 rows where it wanted 2.
 EOF
 
 # THEIRS absorbs the consumer's hardening (the v0.55.0 handoff-guard case).
@@ -407,6 +421,58 @@ reason: consumer-specific gating; references a neighbouring rule that is untouch
 
 This consumer gates on the adversarial pass only. Rule 9 still applies unchanged, and the
 audit basis recorded below holds unchanged for this consumer.
+EOF
+
+# LOOSE ANCHOR — the anchor CONTAINS the heading rather than the other way round, so it
+# resolves only by the REVERSE arm and silently widens the shadow to the WHOLE of Rule 11.
+# E7 errors on this at authoring time; that validator is consumer-run and SKIPPABLE, and the
+# pull is not, which is the only reason the pull-time counterpart exists.
+#
+# NO COMMA IN THE ANCHOR. `shadows:` is comma-separated, so "…Shadow, second paragraph" would
+# parse as a second TARGET FILE named `second paragraph` and this entry would test the wrong
+# thing while still looking like a loose anchor to a reader.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-11-loose.md" <<EOF
+---
+shadows: SKILL.md#Rule 11 -- Outside The Shadow and its second paragraph
+base_sha: ${BASE}
+reason: consumer wants only the second paragraph; the anchor names something finer than a heading.
+---
+
+## Rule 11 -- Outside The Shadow (CONSUMER OVERRIDE)
+
+The consumer's replacement for one paragraph of Rule 11.
+EOF
+
+# DOUBLE SHADOW — two entries claiming ONE (file, anchor). Each is well-formed alone; only the
+# PAIR is the finding, which is why the check runs across entries after the loop. Rule 7 is
+# unchanged base..theirs, so both stay OVERRIDE-OK on the drift arm and the new status cannot be
+# mistaken for a drift row.
+#
+# Both bodies are deliberately plain: a backticked construct would also trip the delegation arm
+# and survival vocabulary would trip the assertion arm, and either would make one mutation fail
+# two assertions.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-7-dup-a.md" <<EOF
+---
+shadows: SKILL.md#Rule 17
+base_sha: ${BASE}
+reason: consumer narrows rule seven; the first of two entries claiming this anchor.
+---
+
+## Rule 7 -- Something Else (CONSUMER OVERRIDE A)
+
+The consumer's replacement text for rule seven.
+EOF
+
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-7-dup-b.md" <<EOF
+---
+shadows: SKILL.md#Rule 17
+base_sha: ${BASE}
+reason: consumer adds a second condition to rule seven; the second entry claiming this anchor.
+---
+
+## Rule 7 -- Something Else (CONSUMER OVERRIDE B)
+
+A second replacement text for rule seven, from a different entry.
 EOF
 
 # The consumer's IN-PLACE hook hardening — no override entry (hooks have no grain).
