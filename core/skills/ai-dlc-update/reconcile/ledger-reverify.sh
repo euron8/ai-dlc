@@ -109,6 +109,8 @@
 #         (arg order matches unregistered-drift.sh)
 # Output: TSV — STATUS<TAB>ENTRY<TAB>DETAIL
 #   CLOSE-CANDIDATE  upstream absorbed the entry; the operator confirms and annotates.
+#   NAMED-ABSORBED   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
+#                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
 #   NEEDS-REVIEW     the receipt itself is at fault. THREE causes, and the DETAIL names which:
@@ -173,6 +175,74 @@ absorbed_at() {
   [ -n "$_c" ] || { printf '%s' "$TV"; return; }
   _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
   [ -n "$_v" ] && printf '%s' "$_v" || printf '%s' "$TV"
+}
+
+# THE NAME IS THE THIRD SIGNAL, AND IT IS THE ONLY ONE THE WORDING CANNOT DEFEAT.
+#
+# Every predicate above tests the RECEIPT. That is exactly the wrong instrument when the
+# receipt is the thing at fault, because a receipt can be structurally incapable of ever
+# closing, and then the entry reports a confident verdict forever. Two shapes do it:
+#   - anchored on a token present BEFORE and AFTER the fix, so `theirs_has` never flips;
+#   - an INVERTED VERB — `theirs_has` naming the FIX text, so absorption reads as still-live.
+# And `verify: manual` has no mechanical predicate by design, so it reports HAND-REVIEW on
+# every pull until a human happens to look.
+#
+# But an upstream commit that lands a consumer's entry NAMES the entry's id in its message.
+# That token is not paraphrasable: it is the join key the ledger, the report and the §8.1
+# fan-in already use. So ask the history directly.
+#
+# MEASURED on the reference consumer, 51 heading labels / 37 id-shaped / 4 named:
+#   PC-S296-…-LAST-MATCH-WINS      absorbed v0.153.0; receipt anchors `directive=substr(`,
+#                                  present at both refs → STILL-LIVE forever
+#   PC-S297-…-PM-AC-PRECISION      absorbed; receipt is `theirs_has` on the FIX text (inverted)
+#   PC-S300-…-SECOND-SKILL         absorbed by the v0.172.0 drain; `verify: manual`
+#   PC-S303-…-FIVE-OF-TEN-SUBTREES absorbed by the v0.172.0 drain; `verify: manual`
+# All four TRUE POSITIVES; the other 33 id-shaped labels emit nothing, which is the control
+# that this is a discriminator and not a rubber stamp. Four of the four were invisible to
+# every other predicate in this file.
+#
+# EMITTED IN ADDITION TO THE RECEIPT'S VERDICT, NEVER INSTEAD OF IT. Replacing the row would
+# hide the fact that the receipt needs re-anchoring, and `STILL-LIVE` + `NAMED-ABSORBED` on one
+# entry is the highest-value pair this tool can print: it says the entry is absorbed AND its
+# receipt is wrong. Suppressing either half loses one of those two facts.
+#
+# IT SAYS "NAMES", NOT "ABSORBED", AND NEVER AUTO-CLOSES. A commit can name an id to record
+# that it was REJECTED, split, or superseded. The operator adjudicates; SKILL.md already
+# restricts closing to `CLOSE-CANDIDATE` rows, so this status is non-closable by construction.
+#
+# UNBOUNDED TO THEIRS — deliberately NOT `BASE..THEIRS` like absorbed_at() above. The two
+# searches answer different questions. A SUBSTRING can be removed and re-introduced, so
+# attributing it across all history would claim the wrong release; that is why absorbed_at is
+# bounded. An ID is written once, in the commit that lands the entry, and never re-added. Worse,
+# the measured absorptions above predate the pull's own base: bounding this to base..theirs
+# would fire the signal on exactly one pull and then go silent forever if the operator missed
+# that pull — turning the one un-defeatable signal into the easiest one to lose. The entry still
+# being OPEN is the delta; the name is the state.
+#
+# ID-SHAPE GUARD, NOT A BARE `--grep`. A label is whatever precedes the first " — ", and for a
+# malformed bullet that is its whole prose first line (see the extractor below, which keeps such
+# a label deliberately). Feeding prose to `--grep` matches unrelated commits by common words.
+# Measured: 37 of 51 labels are id-shaped; the 14 excluded are section headings
+# (`Open`, `Re-verification pass`, `push_candidate: true extensions (by source)`) and one
+# retained-copy heading — none of them an entry a commit could land.
+#
+# `tail -1`, NOT `--reverse | head -1`. git log is newest-first, so the last line is the FIRST
+# commit to name the id. The `head` form makes git the writer into a pipe a reader abandons
+# early — the SIGPIPE-under-pipefail defect this file's all_present() carried, and there is no
+# reason to re-import it for the sake of a flag.
+named_absorbed() { # <label> -> "<version> <short-sha>" if upstream's history names it, else ""
+  local _id="$1" _c _v
+  case "$_id" in
+    *[!A-Z0-9-]*|'') return 0 ;;              # not id-shaped: prose label, nothing to ask
+  esac
+  case "$_id" in
+    *-*) : ;;
+    *)   return 0 ;;                          # a single word is not an id
+  esac
+  _c="$(git -C "$DIST" log -F --grep="$_id" --format=%H "$THEIRS" 2>/dev/null | tail -1)"
+  [ -n "$_c" ] || return 0
+  _v="$(git -C "$DIST" show "${_c}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  printf '%s %s' "${_v:-unknown}" "$(git -C "$DIST" rev-parse --short "$_c" 2>/dev/null)"
 }
 
 # $1 = file content, $2 = newline-separated substrings. True iff EVERY one is present.
@@ -470,6 +540,16 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # directives on the reference consumer are written that way.
   verb_norm="$(printf '%s' "$verb" | sed -E 's/^[^A-Za-z_]+//; s/[^A-Za-z_]+$//')"
   note=""
+
+  # ASKED FOR EVERY OPEN ENTRY, INDEPENDENT OF THE VERB — including `manual`, which has no
+  # other mechanical signal at all. Additional to the receipt's verdict below, never a
+  # substitute for it: see THE NAME IS THE THIRD SIGNAL above for why losing either half
+  # loses a distinct fact.
+  na="$(named_absorbed "$label")"
+  if [ -n "$na" ]; then
+    na_v="${na%% *}"; na_c="${na##* }"
+    emit NAMED-ABSORBED "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see. Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
+  fi
 
   case "$verb_norm" in
     theirs_lacks|theirs_has)

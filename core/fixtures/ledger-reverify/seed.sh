@@ -35,6 +35,25 @@ SK="$DIST/core/skills/ai-dlc/SKILL.md"
 printf '#!/bin/sh\necho thing\n' > "$DIST/core/scripts/validate-thing.sh"
 printf '#!/bin/sh\necho thing\n' > "$DIST/core/skills/ai-dlc/validate-thing.sh"
 
+# --- pre-base: THE ABSORPTION COMMIT, DELIBERATELY BEFORE base ---
+#
+# `named_absorbed()` searches history reachable from THEIRS, not `BASE..THEIRS`, and this commit
+# is what makes that difference testable. On the reference consumer every measured absorption
+# predated the pull's own base, so a bounded search fires on exactly one pull and then goes
+# silent forever if the operator missed it. Placing the naming commit before base means a
+# mutant that re-bounds the search loses the row, and nothing else changes.
+#
+# The message also names Entry A's PROSE label verbatim. That is the id-shape guard's control:
+# a label is whatever precedes the first em dash, and for a bullet with no em dash that is its
+# whole bold title. Feeding prose to `git log --grep` matches by common words, so the guard must
+# refuse a label that is not id-shaped even when the history genuinely contains those words.
+printf '# SKILL\nrule one\n' > "$SK"
+printf '0.099.0\n' > "$DIST/VERSION"
+git -C "$DIST" add -A
+git -C "$DIST" commit -q -m 'feat(v0.099.0): land two consumer-filed entries' \
+  -m 'Absorbs PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK and PC-FIXTURE-NAMED-MANUAL.' \
+  -m 'Prose-guard control: this line says Entry A still lacked upstream. verbatim.'
+
 # --- base: neither marker present ---
 printf '# SKILL\nrule one\nrule two\n' > "$SK"
 printf '0.100.0\n' > "$DIST/VERSION"
@@ -213,6 +232,31 @@ Retaining the original text of a withdrawn entry is the honest thing to do: the 
 only legible beside what it withdraws. But this copy carries no close marker of its own — the
 withdrawal lives in the superseding entry's heading — so it re-reported forever, asking an
 operator to adjudicate a defect that was already retracted as false.
+
+verify: manual
+
+---
+
+## PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK — upstream landed it; the receipt cannot ever say so
+
+The pre-base commit NAMES this id, so upstream absorbed the entry. The receipt below is
+anchored on MARKER_A, which is absent at base AND at theirs, so it reports STILL-LIVE on
+every pull and will keep doing so after the absorption — the receipt is testing the wrong
+token, and no amount of re-running it will reveal that.
+
+Both rows must appear: STILL-LIVE from the receipt, NAMED-ABSORBED from the history. The pair
+IS the finding — one half says the entry is absorbed, the other says its receipt is wrong.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+
+---
+
+## PC-FIXTURE-NAMED-MANUAL — a manual entry upstream has already landed
+
+`verify: manual` declares that no mechanical predicate exists, so HAND-REVIEW is correct and
+permanent: the receipt can never close this entry, by design. The id in upstream's history is
+therefore the ONLY mechanical signal available for this shape, which is the case that left five
+entries reporting HAND-REVIEW two pulls after upstream absorbed them.
 
 verify: manual
 LEDGER
