@@ -564,6 +564,58 @@ $(awk '
 EOF
 fi
 
+# --- I39: the ledger status vocabulary is one set across emitter and rulebook --
+# THE STATE THIS MAKES UNREPRESENTABLE. `ledger-reverify.sh`'s statuses are a contract with
+# three readers that do not check each other: the operator following SKILL.md step 3f, the
+# report heading in emit-report.sh, and any consumer script grepping the TSV. Nothing joined
+# them. Renaming a status in the emitter alone left step 3f documenting a token no run can
+# produce and — the silent half — a status reaching an operator with no entry in the step that
+# tells them what to do with it. Both halves read exactly like a complete rename.
+#
+# MEASURED at v0.186.0, renaming the `NAMED-*` status: five statuses emitted, five documented,
+# the two sets equal, and the false-positive set of this predicate EMPTY. The bound matters —
+# the same bullet grammar over the WHOLE of SKILL.md matches 20 tokens, 15 of them other
+# detectors' statuses, so the reverse direction is scoped to step 3f's own span. Widening it
+# would need those detectors joined too, and their emission styles are not uniform (layer-drift
+# emits through variables), which is a zero waiting to happen in the extraction rather than a
+# finding. One script, one uniform `emit <LITERAL>` style, both directions.
+lr_file="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/ledger-reverify.sh"
+lr_skill="$REPO_ROOT/core/skills/ai-dlc-update/SKILL.md"
+if [ ! -f "$lr_file" ] || [ ! -f "$lr_skill" ]; then
+  err "I39 cannot find ledger-reverify.sh or its ai-dlc-update/SKILL.md. A scan over a missing file reads exactly like agreement; both are core_manifest machinery and must exist."
+else
+  lr_emitted="$(grep -oE '^[[:space:]]*emit [A-Z][A-Z0-9-]+' "$lr_file" | awk '{print $2}' | sort -u)"
+  lr_documented="$(awk '/^3f\. \*\*/{on=1} on && /^[0-9]+\. \*\*/{exit} on' "$lr_skill" \
+    | grep -oE '^[[:space:]]*- `[A-Z][A-Z0-9-]+` →' | grep -oE '[A-Z][A-Z0-9-]+' | sort -u)"
+  # Either side coming back empty is the failure this check exists to prevent, not a pass:
+  # an extraction that has stopped matching reports agreement between two empty sets.
+  if [ -z "$lr_emitted" ]; then
+    err "I39 found NO statuses in ledger-reverify.sh. Either the emitter no longer uses 'emit <STATUS>' or the script changed shape; a zero here silently retires the whole check."
+  elif [ -z "$lr_documented" ]; then
+    err "I39 found NO documented statuses in ai-dlc-update/SKILL.md step 3f. Either the step was renumbered or its bullet grammar changed; a zero here silently retires the whole check."
+  else
+    for st in $lr_emitted; do
+      printf '%s\n' "$lr_documented" | grep -qxF -- "$st" || \
+        err "I39: ledger-reverify.sh emits '$st' but SKILL.md step 3f never documents it. The operator is handed a verdict the step that governs the ledger does not explain, which is how a status reaches a pull with no stated handling."
+    done
+    for st in $lr_documented; do
+      printf '%s\n' "$lr_emitted" | grep -qxF -- "$st" || \
+        err "I39: SKILL.md step 3f documents '$st' but ledger-reverify.sh never emits it. The step describes a row no run can produce — an operator waiting on a signal that cannot arrive reads it as 'nothing to do'."
+    done
+    # The heading emit-report.sh renders is the third reader, and it names a SUBSET by design
+    # (the rows the operator acts on). A subset is checkable without hand-listing it: every
+    # status the heading names must be one the emitter still produces.
+    er_file="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/emit-report.sh"
+    if [ -f "$er_file" ]; then
+      for st in $(grep -oE 'Push-candidate ledger — [A-Z][A-Z0-9 /-]+' "$er_file" \
+                  | grep -oE '\b[A-Z][A-Z0-9-]*-[A-Z][A-Z0-9-]*\b' | sort -u); do
+        printf '%s\n' "$lr_emitted" | grep -qxF -- "$st" || \
+          err "I39: emit-report.sh's push-candidate heading names '$st', which ledger-reverify.sh does not emit. The report promises the operator a section that can never have rows in it."
+      done
+    fi
+  fi
+fi
+
 # --- I35: H1's fixture criterion states I20's contract, not a stricter one ----
 # H1 is LLM-read at every gate and had RESTATED this contract instead of stating the
 # property: it required a `README.md` and a `seed.sh` of every bound fixture, and
@@ -1641,7 +1693,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39)."
   exit 0
 fi
 exit 1

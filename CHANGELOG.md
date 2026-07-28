@@ -17,6 +17,70 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.186.0] — 2026-07-28
+
+### Changed — the ledger status named a verdict it cannot reach, and nothing joined it to the step that explains it
+
+The push-candidate ledger's `NAMED-*` status is renamed to **`NAMED-UPSTREAM`**.
+
+The old name asserted an **absorption**. The status cannot observe one: it observes that upstream's
+commit history mentions the entry's id, and a commit can name an id to record a rejection, a split,
+or a passing mention. Its own header said so — *"IT SAYS 'NAMES', NOT 'ABSORBED'"* — three lines
+below the sentence the name contradicts, and it still misled the author of the release that shipped
+it, who recorded **all four** live instances as absorbed. Adjudication afterwards found one
+absorption, one split, one passing mention, one explicit refutation. A token that fools its own
+author in its own release fools every operator after. The status is now named for what it observes,
+leaving the verdict where it belongs, with the operator.
+
+### Added — I39: the ledger status vocabulary is one set across its three readers
+
+The rename is the reason, not the change. `ledger-reverify.sh`'s statuses are a contract with three
+readers that did not check each other — the operator following `ai-dlc-update/SKILL.md` step 3f, the
+push-candidate heading `emit-report.sh` renders, and any consumer script grepping the TSV — and
+**nothing joined them**. Renaming a status in the emitter alone leaves step 3f documenting a token no
+run can produce, and, the silent half, leaves a status reaching an operator with no entry in the step
+that says what to do with it. Both halves read exactly like a complete rename, and every other check
+in this repo passes on them.
+
+New invariant **I39** in `scripts/validate-enforcement-map.sh` runs the join in both directions —
+every status `ledger-reverify.sh` emits is documented in step 3f, and every status step 3f documents
+is emitted — plus the one checkable direction on the report heading, which names a subset by design:
+every status it promises a section for must be one the emitter still produces. Both extractions carry
+a zero guard, because two empty sets are equal and an extraction that has stopped matching would
+otherwise report agreement.
+
+**Measured:** five statuses emitted, five documented, the sets equal, false-positive set **empty**.
+The bound is load-bearing — the same bullet grammar over the whole of `SKILL.md` matches 20 tokens,
+15 of them other detectors' statuses, so the reverse direction is scoped to step 3f's own span.
+Widening it to every reconcile detector would need their emission styles joined too, and those are
+not uniform (`layer-drift.sh` emits through variables), which is a silent zero waiting to happen in
+the extraction rather than a finding.
+
+New fixture `core/fixtures/ledger-status-vocabulary/` proves I39 fires: five single-arm mutants, each
+asserting a positive outcome **and** that the run produced exactly one failure line, so no assertion
+can be satisfied by another's failure; a sixth reproducing the actual defect — reverting only the
+`SKILL.md` half of this release's rename — and an unmutated control copy first, because each mutant is
+a fresh copy of the tracked tree and a copy that cannot come out clean would score every mutant as a
+kill it did not earn.
+
+### Note — two premises for this release were falsified before it was built
+
+Recorded because both read as facts and neither is:
+
+- **I36's reverse direction does not cover this rename.** It extracts codes only from the two
+  enforcers `layer-contract.yaml` declares, `validate-layer-entries.sh` and `layer-drift.sh`.
+  `ledger-reverify.sh` is not among them, no clause claims any ledger status, and the build stays
+  green through a half-done rename. That gap is what I39 exists to close.
+- **`retired-tokens.sh` reads no list to add the old token to.** It derives `$VAR/path`-shaped tokens
+  from the CLASSIFY bucket; a bare status token is neither that shape nor in that bucket. Its sibling
+  `retired-layer-contract.sh` derives from the `rulebook:` globs in `setup-sites.md`, which do not
+  include `ai-dlc-update/SKILL.md`, so it structurally cannot see the status vocabulary either.
+
+Reporting a **consumer** layer file still speaking the old token therefore has no mechanism here, and
+is deliberately not faked with one: covering it means widening `retired-layer-contract.sh`'s subject
+set, whose false-positive set across every shape it already extracts is unmeasured. Filed, not folded
+in. The reference consumer's three stale annotations are already assigned to the pull prompt.
+
 ## [0.185.0] — 2026-07-28
 
 ### Fixed — the autonomous self-update installed the validator that blocks its own push
