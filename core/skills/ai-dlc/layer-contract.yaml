@@ -1,0 +1,309 @@
+# LAYER_CONTRACT v1
+#
+# THE OPERATING CONTRACT A CONSUMER'S `overrides/` AND `extensions/` ENTRIES MUST HOLD.
+#
+# THE DEFECT THIS FILE EXISTS TO END. The contract was real and it was scattered: normative
+# clauses lived across `overrides/README.md`, `extensions/README.md`, `SKILL.md` Rule 27 and
+# `core-manifest.md`, with no single home, no version, and no verdict. Measured on the
+# reference consumer at v0.180.0: of the clauses those four files state, THIRTEEN were enforced
+# by `validate-layer-entries.sh` or `reconcile/layer-drift.sh`, seven elsewhere, four only
+# partially, and SEVENTEEN by nothing at all — three of those admitting it verbatim in their own
+# prose (`extensions/README.md` still carries "No scanner enforces it" and "this rule is
+# unenforced" at the restriction clause). Both reporters returned `0 error(s), 0 warning(s)`
+# and exit 0 on a tree carrying real violations. That is this repo's named defect class — a
+# check that cannot fire reads exactly like one that passed — applied to the contract itself.
+#
+# WHY A SEPARATE FILE AND NOT `enforcement-map.yaml`. That map is scoped to the gate-check
+# catalog, and I1/I2/I3 assert set-equality against `steps/gate-validation.md`'s CHECK_LOADED
+# anchors. A layer clause has no such anchor, so every clause added there is either an I1/I2
+# failure or an exemption, and each exemption weakens the invariant that keeps that file honest.
+# Same shape, same validator, different subject.
+#
+# WHY IT IS `machinery:` IN core-manifest.md. A consumer does not override the contract it is
+# held to. Precedent: `core-manifest.md` classifies itself as machinery for the same reason.
+#
+# THE BINDING IS ON A TOKEN THE ENFORCER ALREADY EMITS — `code:` is `E1`..`W4` for the
+# authoring-time validator, or the literal pull-time status string for the drift classifier.
+# Nothing was sprinkled into a script to make this join work. That matters twice: the join
+# cannot rot into a second vocabulary that has to be hand-synced, and I36 can run it in BOTH
+# directions, so a clause naming a code its enforcer does not emit fails the build AND a code
+# an enforcer emits that no clause claims fails the build. The seventeen-unenforced state and
+# its mirror, an undocumented status, both become unrepresentable.
+#
+# `level:` is what happens on violation.
+#   ERROR  mechanized, no false-positive path, BLOCKS. Authoring-time: non-zero exit, so the
+#          consumer's own pre-push refuses. Pull-time: the `HARD-` prefix blocks `apply`.
+#   WARN   mechanized, false-positive set measured and enumerated, NEVER blocks. The policy
+#          `validate-layer-entries.sh` states applies: a linter that errors dozens of times on
+#          first contact gets disabled, and then catches nothing.
+#
+# `since:` is the contract_version that introduced the clause. A clause NEVER retro-applies:
+# an entry declaring `conforms_to: N` is held only to clauses with `since <= N`. Upstream adds
+# clauses at a higher `since` and never rewrites a lower one, which is the same additive,
+# consumer-wins discipline that lets `aiDlcRoles` in settings.json reconcile with zero drift.
+# At contract_version 1 every clause is `since: 1` and every clause already had a live enforcer
+# before this file existed, so declaring the contract changes NO consumer's verdict by one byte.
+#
+# WHAT IS DELIBERATELY NOT HERE. The seventeen clauses with no enforcer are absent, not listed
+# as pending: I37 rejects a clause without a live enforcer, and `enforcement: pending` would be
+# the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
+# in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
+
+contract_version: 1
+
+clauses:
+
+  # --- overrides/: frontmatter and provenance -------------------------------------------
+  - id: LC-O1
+    subject: override
+    level: ERROR
+    since: 1
+    normative: >-
+      An override declares `shadows:` and `base_sha:`, and `base_sha` is 7-40 hex characters.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E1
+
+  - id: LC-O2
+    subject: override
+    level: ERROR
+    since: 1
+    normative: >-
+      `base_sha` is a DISTRIBUTION sha. A correct one never resolves in the consumer's own
+      repo; a consumer sha leaves drift detection silently dead for that entry.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E2
+
+  - id: LC-O3
+    subject: override
+    level: ERROR
+    since: 1
+    normative: >-
+      The file named by `shadows:` exists in core.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E3
+
+  - id: LC-O4
+    subject: override
+    level: ERROR
+    since: 1
+    normative: >-
+      `base_sha` resolves in the distribution. One that resolves in neither repo makes drift
+      undecidable rather than absent.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: HARD-OVERRIDE-BASE-UNRESOLVABLE
+
+  - id: LC-O5
+    subject: override
+    level: ERROR
+    since: 1
+    normative: >-
+      `base_sha` is not a consumer sha at pull time either. The authoring-time check and the
+      pull-time check are both required: the first is skippable, the second is not.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: HARD-OVERRIDE-BASE-CONSUMER-SHA
+
+  # --- overrides/: drift against the shadowed core text --------------------------------
+  - id: LC-O6
+    subject: override
+    level: ERROR
+    since: 1
+    normative: >-
+      When the shadowed core section's text changes between `base_sha` and the incoming ref,
+      the override is adjudicated before `apply` proceeds. The lead reads the override, not
+      core, so an unadjudicated drift is how a core fix lands while the consumer goes on
+      running the rule it replaced.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: HARD-OVERRIDE-DRIFT-SECTION
+
+  - id: LC-O7
+    subject: override
+    level: WARN
+    since: 1
+    normative: >-
+      A whole-file shadow whose file changed is surfaced for re-confirmation. The section
+      cannot be proven safe, so it is never silently skipped.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-DRIFT-FILE
+
+  - id: LC-O8
+    subject: override
+    level: WARN
+    since: 1
+    normative: >-
+      An anchor that no longer exists in the incoming ref is reported; upstream restructured
+      and the shadow now points at nothing.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-ANCHOR-UNRESOLVED
+
+  - id: LC-O9
+    subject: override
+    level: WARN
+    since: 1
+    normative: >-
+      An override's body does not delegate to a construct defined inside a section it shadows.
+      Precedence replaces that section at load time, including the delegation target, so it
+      reads as a correct single-source delegation and behaves as a dropped one.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-DELEGATES-INTO-SHADOW
+
+  # --- extensions/: frontmatter and hooks ----------------------------------------------
+  - id: LC-E1
+    subject: extension
+    level: ERROR
+    since: 1
+    normative: >-
+      An extension declares `kind:`, `hooks:` and `id:`.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E4
+
+  - id: LC-E2
+    subject: extension
+    level: ERROR
+    since: 1
+    normative: >-
+      The file named by `hooks:` exists in core, resolved by the `core/`-relative convention —
+      `team-roles/<role>.md` resolves outside the skill directory.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E5
+
+  - id: LC-E3
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      A `hooks:` target absent from the incoming ref is reported; the entry hooks onto
+      nothing.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-HOOK-MISSING
+
+  - id: LC-E4
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      When the hooked core file changes, the entry is re-read and its verdict recorded as
+      still-additive, contradicts-core, or retire. This re-read is the ONLY mechanism behind
+      the additive-only rule; skipped, that rule is unenforced.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-HOOK-DRIFT
+
+  # --- extensions/: additivity and retirement ------------------------------------------
+  - id: LC-E5
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      An extension does not restate a core section. A duplicate that predates the entry's own
+      base has been shipping unreported for some number of releases; retire it, or refile it
+      as an override with a `base_sha` if it hardens core.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-RESTATES-CORE
+
+  - id: LC-E6
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      When upstream absorbs an entry's content, the entry is DELETED. Matched by title, so
+      absorption under a different number is still caught. Upstream never writes this
+      directory, so it cannot remove the entry for the consumer, and an absorbed-but-kept
+      extension is the single most common way a layer rots.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-RETIRE-CANDIDATE
+
+  - id: LC-E7
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      A declared `fixtures:` value names a directory that exists in the consumer tree. The
+      binding is what puts a consumer check's fixture into core H1's derived set, so a dangling
+      one makes H1 report coverage that does not exist.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-FIXTURE-UNBOUND
+
+  - id: LC-E8
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      A closed enumeration of what core accepts is a RESTRICTION, not an addition, and belongs
+      in `overrides/` with a `base_sha`. Filed as an extension it carries no drift anchor, so
+      when core grows a third valid value the entry silently starts contradicting it.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W2
+
+  # --- the shared number namespace ------------------------------------------------------
+  - id: LC-N1
+    subject: extension
+    level: ERROR
+    since: 1
+    normative: >-
+      A consumer check does not redefine a core check NUMBER under a different title. The
+      integer renders into the same merged list as core's, so a bare `Check N` in the gate log
+      — the durable audit record — would have two referents.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E6
+
+  - id: LC-N2
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      A consumer entry does not define a section number its hooked core file also defines.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W1
+
+  - id: LC-N3
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      A consumer entry does not define a RULE number its hooked core file also defines under a
+      different title. Exactly the check-number defect one namespace over.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W4
+
+  - id: LC-N4
+    subject: extension
+    level: WARN
+    since: 1
+    normative: >-
+      An incoming release that creates a check-number collision is reported and the consumer
+      relabels its own catalog. Report-only by design: a consumer must never be unable to take
+      a security fix because its catalog needs relabelling.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-CHECK-NUMBER-COLLISION
+
+  # --- cross-references into the rendered rulebook --------------------------------------
+  - id: LC-R1
+    subject: any
+    level: WARN
+    since: 1
+    normative: >-
+      A `Step <n>` reference in a layer entry resolves to an anchor defined somewhere in the
+      rendered rulebook — core plus this consumer's own layers.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W3

@@ -17,6 +17,86 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.182.0] — 2026-07-28
+
+### Added — the consumer layer contract is one file, versioned, and it polices itself
+
+The clauses a consumer's `overrides/` and `extensions/` entries must hold were real and they were
+scattered: normative statements across `overrides/README.md`, `extensions/README.md`, `SKILL.md`
+Rule 27 and `core-manifest.md`, with no single home, no version, and no verdict.
+
+**Measured at v0.180.0 against the reference consumer: of the clauses those four files state, 13
+were enforced by `validate-layer-entries.sh` or `reconcile/layer-drift.sh`, 7 elsewhere, 4 only
+partially, and 17 by NOTHING at all** — three of them saying so in their own prose
+(`extensions/README.md` carried "No scanner enforces it" and "this rule is unenforced"). Both
+reporters returned `0 error(s), 0 warning(s)` and exit 0 on a tree carrying real violations. That
+is this repo's named defect class — a check that cannot fire reads exactly like one that passed —
+applied to the contract itself.
+
+New `core/skills/ai-dlc/layer-contract.yaml`, banner `LAYER_CONTRACT v1`, `contract_version: 1`,
+**22 clauses**. Classified `machinery:` in `core-manifest.md`: a consumer does not override the
+contract it is held to, the same reason `core-manifest.md` classifies itself that way. Verified
+core-resolving in an installed consumer tree via `core-paths.sh --is-core`, with a known-core and
+a known-non-core control.
+
+**The binding is on a token the enforcer already emits** — `E1`..`W4` for the authoring-time
+validator, or the literal pull-time status string for the drift classifier. Nothing was sprinkled
+into a script to make the join work, so there is no second vocabulary to hand-sync, and the join
+runs in BOTH directions. The clause set and the emitted vocabulary are one-to-one: all 10 E/W
+codes and all 12 finding statuses are claimed, with only the two `*-OK` clean states excluded by
+a derived suffix rule rather than a hand-list.
+
+Three new build invariants in `scripts/validate-enforcement-map.sh`:
+
+- **I36** — clause ⇔ enforcer, both ways. A clause naming a code its enforcer does not emit fails
+  the build, AND a code an enforcer emits that no clause claims fails the build. The reverse
+  direction is the one that catches drift: forward-only, a new status ships with no stated rule
+  behind it, which is how the 17-clause gap grew.
+- **I37** — no prose-only clause. A clause without a level, an enforcer and a code fails the
+  build, so the 17-unenforced state becomes unrepresentable. `enforcement: pending` is not a
+  permitted value: a placeholder is the same declaration-without-a-mechanism defect in a new file.
+- **I38** — every clause id appears in its declared `prose_home`, so the human-readable side and
+  the enforced side cannot silently diverge.
+
+**Both layer READMEs gain a `## Clauses (enforced)` section** in one uniform bold-led bullet form,
+carrying all 22 ids with their level. The prose above them is now explicitly rationale.
+
+Only 22 clauses ship, and only those that already had a live enforcer, so **this release changes no
+consumer's verdict by one byte.** The 17 unenforced clauses are deliberately absent rather than
+listed as pending — I37 rejects them — and arrive with their enforcers, one release at a time.
+Backlog, in the order their false-positive sets were measured: the `shadows:` ANCHOR (not just the
+file, and not just the first comma-part), `reason:` and `push_candidate:` presence, machinery-path
+shadowing, the reverse `fixtures:` direction, dangling cited paths, prose-heading restatement, and
+the restriction clause.
+
+### Measured — why I38 ships in one direction only
+
+The reverse direction (every normative sentence carries a clause id) has no sound predicate yet,
+and the numbers say so. A keyword scan (`MUST|NEVER|never|cannot|only`) over the two layer READMEs
+matches **26 lines against 10 real clauses**; the other 16 are rationale prose that happens to
+contain "never" or "cannot". The structural form is worse: the two files did not share one — all
+10 bold-led clause bullets were in `extensions/README.md` and `overrides/README.md` had **zero**,
+stating its clauses as prose paragraphs and section headings, so a structural predicate could not
+fire on half its subject. This release normalizes both files to the same bullet form, which is the
+precondition; the reverse predicate and its measured false-positive set follow separately rather
+than shipping as a lint with an unmeasured one.
+
+### Fixture
+
+`core/fixtures/layer-contract-conformance/` — I38 was observed firing 22 times while the contract
+was being landed, but I36 and I37 had never fired against real input, so their green was worth
+nothing. Four mutants, each a COPY guarded by `cmp -s`, each asserting a positive outcome, plus an
+**unmutated control that runs first**: if the real contract does not come out clean, every "the
+mutant fired" result is unattributable. That control earned its place immediately — it caught the
+new fixture directory failing I8 (fixture packaging bound in four places) before any mutant was
+believed.
+
+The mutant is the CONTRACT, not the validator: mutating the validator would test the assertion's
+wording rather than the join, and mutating the contract in place would leave the repo dirty if an
+assertion aborted. `AI_DLC_LAYER_CONTRACT` points the validator at a temp copy. It cannot be used
+to weaken the gate — I36's reverse direction requires every code the real enforcers emit to be
+claimed, so a stripped-down substitute fails louder, not quieter.
+
 ## [0.181.0] — 2026-07-28
 
 ### Added — the one adoption signal that cannot be defeated by wording is the one signal nothing read

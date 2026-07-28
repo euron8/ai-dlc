@@ -105,6 +105,7 @@ protects.
 ```yaml
 core_manifest:
   - core-manifest.md
+  - layer-contract.yaml
   - git-hooks/pre-push
   - SKILL.md
   - steps/*.md
@@ -157,6 +158,7 @@ core_manifest:
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
   - fixtures/layer-catalog-collision/**
+  - fixtures/layer-contract-conformance/**
   - fixtures/layer-readopt-gate/**
   - fixtures/ledger-reverify/**
   - fixtures/ledger-reverify-unfalsifiable/**
@@ -192,6 +194,7 @@ core_manifest:
 
 machinery:
   - core-manifest.md
+  - layer-contract.yaml
   - git-hooks/pre-push
   - templates/*.md
   - hooks/ai-dlc-*.sh
