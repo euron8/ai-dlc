@@ -109,6 +109,31 @@ reason: first anchor valid, second anchor reverse-only
 Replacement body spanning two anchors.
 EOF
 
+# FILE-INHERITING MULTI-ANCHOR, and the defect is again in part TWO. `multi` above repeats the
+# file on every part; this one states it once and lets the later parts inherit it. Both spellings
+# are live on the reference consumer, and only the repeated one survived the per-part widening:
+# `${part%%#*}` is EMPTY for a bare `#anchor`, so the emptiness skip fired BEFORE any anchor check
+# ran. Part one is deliberately VALID, so an entry-level reader still sees nothing wrong.
+cat > "$SK/overrides/steps__retro__inherit.md" <<'EOF'
+---
+shadows: steps/retro.md#4a. Close-Out Sweep, #No Such Inherited Heading
+base_sha: abc1234
+reason: file stated once, second anchor inherits it and matches nothing
+---
+Replacement body spanning two anchors, one file.
+EOF
+
+# NOTHING TO INHERIT: the FIRST part is a bare anchor, so no part ever names a file. Every file
+# and anchor check on this entry was skipped in silence — the same disappearance one step earlier.
+cat > "$SK/overrides/steps__retro__orphan.md" <<'EOF'
+---
+shadows: #Orphan Anchor With No File
+base_sha: abc1234
+reason: no comma-part names a target file
+---
+Replacement body with no resolvable target.
+EOF
+
 # MISSING `reason:` — the key the contract required and nothing read.
 cat > "$SK/overrides/SKILL__Rule-9.md" <<'EOF'
 ---

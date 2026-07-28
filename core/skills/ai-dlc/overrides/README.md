@@ -63,7 +63,11 @@ status that stops `apply`); **WARN** reports and never blocks.
   hex characters.
 - **[LC-O2]** ERROR — `base_sha` is a DISTRIBUTION sha. A correct one never resolves in your own
   repo; a consumer sha leaves drift detection silently dead for that entry.
-- **[LC-O3]** ERROR — the file named by `shadows:` exists in core.
+- **[LC-O3]** ERROR — the file named by `shadows:` exists in core. `shadows:` may list several
+  comma-parts, and a part that starts with `#` inherits the file from the part before it — so
+  `a.md#One, #Two` and `a.md#One, a.md#Two` are the same declaration. Every part is checked under
+  the file it resolves to. A FIRST part with no file has nothing to inherit and is an error: it
+  names no target, so no file or anchor check on it can run.
 - **[LC-O4]** ERROR — `base_sha` resolves in the distribution. One that resolves in neither repo
   makes drift undecidable rather than absent.
 - **[LC-O5]** ERROR — `base_sha` is not a consumer sha at pull time either. Both the

@@ -80,7 +80,9 @@ clauses:
     level: ERROR
     since: 1
     normative: >-
-      EVERY comma-part of `shadows:` names a file that exists in core — not just the first.
+      EVERY comma-part of `shadows:` resolves to a file that exists in core — not just the first.
+      A part beginning with `#` inherits the file from the part before it; a first part with no
+      file resolves to nothing and is an error.
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E3

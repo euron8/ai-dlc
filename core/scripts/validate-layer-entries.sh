@@ -416,13 +416,34 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
   # `sed 's/,.*//'` discards parts two onward. Measured on the reference consumer, one override
   # declares five anchors and got one file check and ZERO anchor checks; another declares four.
   # Nineteen anchor instances across twelve overrides were entirely unvalidated.
+  #
+  # THAT FIX HANDLED MULTIPLE PARTS AND NOT THE FILE-INHERITING SPELLING, so this ERROR-tier check
+  # went on silently skipping part of its own subject set. Both spellings are in live use:
+  #
+  #   a.md#One, a.md#Two    <- file repeated per part: every part was checked
+  #   a.md#One, #Two        <- file stated once: `${part%%#*}` is EMPTY for part two, and the
+  #                            `[ -n "$tgt" ]` skip below fired BEFORE any anchor check ran
+  #
+  # Measured on the reference consumer: one override declaring four anchors got ONE checked and
+  # THREE skipped. A part that names no file inherits the last one that did — which is what the
+  # resolver and layer-drift.sh already do, so this brings the authoring check level with the
+  # pull-time reader rather than inventing a grain.
   if [ -n "$shadows" ]; then
+    inherited_tgt=""
     while IFS= read -r part; do
       part="$(printf '%s' "$part" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
       [ -n "$part" ] || continue
       tgt="${part%%#*}"; tgt="$(printf '%s' "$tgt" | sed -E 's/[[:space:]]+$//')"
       anc="${part#*#}"; [ "$anc" = "$part" ] && anc=""
-      [ -n "$tgt" ] || continue
+      if [ -n "$tgt" ]; then
+        inherited_tgt="$tgt"
+      else
+        tgt="$inherited_tgt"
+      fi
+      if [ -z "$tgt" ]; then
+        err "$(rel "$f"): shadows part '$part' names no target file, and no earlier comma-part supplies one to inherit. A bare '#anchor' inherits the file from the part before it; as the FIRST part there is nothing to inherit, so this part shadows nothing and every file and anchor check on it is skipped in silence."
+        continue
+      fi
       core_file="$(resolve_target "$tgt")"
       if [ ! -f "$core_file" ]; then
         err "$(rel "$f"): shadows target '$tgt' does not exist at $core_file"
