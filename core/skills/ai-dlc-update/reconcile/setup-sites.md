@@ -48,6 +48,7 @@ the core file set changes:
 ```yaml
 core_manifest:
   - core/skills/ai-dlc/core-manifest.md
+  - core/skills/ai-dlc/layer-contract.yaml
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/SKILL.md
   - core/skills/ai-dlc/steps/*.md
@@ -100,6 +101,7 @@ core_manifest:
   - core/fixtures/inflight-row-shape/**
   - core/fixtures/known-skills-extension/**
   - core/fixtures/layer-catalog-collision/**
+  - core/fixtures/layer-contract-conformance/**
   - core/fixtures/layer-readopt-gate/**
   - core/fixtures/ledger-reverify/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
@@ -135,6 +137,7 @@ core_manifest:
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md
+  - core/skills/ai-dlc/layer-contract.yaml
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/templates/*.md
   - core/hooks/ai-dlc-*.sh

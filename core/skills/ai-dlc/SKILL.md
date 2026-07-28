@@ -1096,6 +1096,11 @@ contract is flagged by the retro rule-file audit (`retro.md` Step 4).
 The consumer rulebook is three layers. This rule is how a consumer
 self-improves *without* re-tangling core against upstream (spec §7).
 
+The clauses a layer entry must hold are declared in `layer-contract.yaml`
+(alongside this file), each bound to the enforcer that fires on it. Read it
+for the enforced set; the two layer `README.md` files carry the same clause
+ids with the rationale.
+
 **core** -- the upstream-owned file set declared in `core-manifest.md`
 (alongside this file). For a per-path answer, run
 `scripts/ai-dlc/core-paths.sh --is-core <path>` rather than matching globs by

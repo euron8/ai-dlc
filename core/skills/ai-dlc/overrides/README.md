@@ -51,6 +51,35 @@ Keep `base_sha` current whenever you revise an override.
 > `/ai-dlc-update` reports it as HARD and refuses to `apply` until it is fixed. This residual three-way
 is small but not zero — it is the price of deliberately diverging from a core rule.
 
+## Clauses (enforced)
+
+Every clause below is declared in `layer-contract.yaml`, bound to the enforcer that fires on it,
+and joined to this file by invariants I36-I38 — a clause with no live enforcer fails the
+distribution build, as does an enforcer status no clause claims. The prose above is the
+rationale; these are the rules. **ERROR** blocks (a non-zero validator exit, or a `HARD-`
+status that stops `apply`); **WARN** reports and never blocks.
+
+- **[LC-O1]** ERROR — an override declares `shadows:` and `base_sha:`, and `base_sha` is 7-40
+  hex characters.
+- **[LC-O2]** ERROR — `base_sha` is a DISTRIBUTION sha. A correct one never resolves in your own
+  repo; a consumer sha leaves drift detection silently dead for that entry.
+- **[LC-O3]** ERROR — the file named by `shadows:` exists in core.
+- **[LC-O4]** ERROR — `base_sha` resolves in the distribution. One that resolves in neither repo
+  makes drift undecidable rather than absent.
+- **[LC-O5]** ERROR — `base_sha` is not a consumer sha at pull time either. Both the
+  authoring-time and the pull-time check are required: the first is skippable, the second is not.
+- **[LC-O6]** ERROR — when the shadowed core section's text changes between `base_sha` and the
+  incoming ref, the override is adjudicated before `apply` proceeds. You read the override, not
+  core, so an unadjudicated drift is how a core fix lands while you go on running the rule it
+  replaced.
+- **[LC-O7]** WARN — a whole-file shadow whose file changed is surfaced for re-confirmation. The
+  section cannot be proven safe, so it is never silently skipped.
+- **[LC-O8]** WARN — an anchor that no longer exists in the incoming ref is reported; upstream
+  restructured and the shadow now points at nothing.
+- **[LC-O9]** WARN — an override's body does not delegate to a construct defined inside a section
+  it shadows. Precedence replaces that section at load time, including the delegation target, so
+  it reads as a correct single-source delegation and behaves as a dropped one.
+
 ## Authoring routing (§7.1 — enforced)
 
 The retro / rule-authoring loop MUST land a *change to an existing core rule*

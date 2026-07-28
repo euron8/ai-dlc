@@ -212,6 +212,49 @@ of your next `/ai-dlc-update` report, then freeze it:
 
 **Validate any entry you author or revise:** `scripts/ai-dlc/validate-layer-entries.sh`.
 
+## Clauses (enforced)
+
+Every clause below is declared in `layer-contract.yaml`, bound to the enforcer that fires on it,
+and joined to this file by invariants I36-I38 — a clause with no live enforcer fails the
+distribution build, as does an enforcer status no clause claims. The prose above is the
+rationale; these are the rules. **ERROR** blocks (a non-zero validator exit, or a `HARD-` status
+that stops `apply`); **WARN** reports and never blocks, because a linter that errors dozens of
+times on first contact gets disabled and then catches nothing.
+
+- **[LC-E1]** ERROR — an extension declares `kind:`, `hooks:` and `id:`.
+- **[LC-E2]** ERROR — the file named by `hooks:` exists in core, resolved by the `core/`-relative
+  convention: `team-roles/<role>.md` resolves OUTSIDE this skill directory.
+- **[LC-E3]** WARN — a `hooks:` target absent from the incoming ref is reported; the entry hooks
+  onto nothing.
+- **[LC-E4]** WARN — when the hooked core file changes, the entry is re-read and its verdict
+  recorded as still-additive, contradicts-core, or retire. That re-read is the ONLY mechanism
+  behind the additive-only rule; skipped, the rule is unenforced.
+- **[LC-E5]** WARN — an extension does not restate a core section. A duplicate predating the
+  entry's own base has been shipping unreported for some number of releases; retire it, or refile
+  it as an override with a `base_sha` if it hardens core.
+- **[LC-E6]** WARN — when upstream absorbs an entry's content, DELETE the entry. Matched by title,
+  so absorption under a different number is still caught. Upstream never writes this directory, so
+  it cannot remove the entry for you, and an absorbed-but-kept extension is the single most common
+  way a layer rots.
+- **[LC-E7]** WARN — a declared `fixtures:` value names a directory that exists in your tree. The
+  binding is what puts your check's fixture into core H1's derived set, so a dangling one makes H1
+  report coverage that does not exist.
+- **[LC-E8]** WARN — a closed enumeration of what core accepts is a RESTRICTION, not an addition,
+  and belongs in `overrides/` with a `base_sha`. Filed here it carries no drift anchor, so when
+  core grows a third valid value your entry silently starts contradicting it.
+- **[LC-N1]** ERROR — a consumer check does not redefine a core check NUMBER under a different
+  title. The integer renders into the same merged list as core's, so a bare `Check N` in the gate
+  log — the durable audit record — would have two referents.
+- **[LC-N2]** WARN — a consumer entry does not define a section number its hooked core file also
+  defines.
+- **[LC-N3]** WARN — a consumer entry does not define a RULE number its hooked core file also
+  defines under a different title. Exactly LC-N1's defect one namespace over.
+- **[LC-N4]** WARN — an incoming release that creates a check-number collision is reported and you
+  relabel your own catalog. Report-only by design: you must never be unable to take a security fix
+  because your catalog needs relabelling.
+- **[LC-R1]** WARN — a `Step <n>` reference in a layer entry resolves to an anchor defined
+  somewhere in the rendered rulebook: core plus your own layers.
+
 ## Authoring routing (§7.1 — enforced)
 
 The retro / rule-authoring loop MUST route a *new consumer-specific rule* here,

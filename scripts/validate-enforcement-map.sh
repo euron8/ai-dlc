@@ -445,6 +445,125 @@ elif [ "$ba_drift" != "$ba_lint" ]; then
   err "the bold-anchor rule has forked between layer-drift.sh and validate-layer-entries.sh. One classifies the pull and the other lints authoring and gates CI; a rule that differs between them means the two disagree about what a section IS, and the operator believes whichever they happened to run. Make bold_anchors_of_file() byte-identical."
 fi
 
+# --- I36/I37/I38: the layer contract is joined to its enforcers, both ways -----
+# THE STATE THESE MAKE UNREPRESENTABLE. Measured at v0.180.0: the consumer layer contract was
+# 41 clauses across four files, of which SEVENTEEN had no enforcer — three saying so in their
+# own prose. Both reporters returned 0 errors / 0 warnings on a tree carrying real violations.
+# A contract nothing can fail is this repo's named defect class one level up from a check.
+#
+# The join is on a token the enforcer ALREADY emits (`E1`..`W4`, or a literal pull-time status),
+# so nothing had to be sprinkled into a script to make it work and there is no second vocabulary
+# to hand-sync. That is what lets I36 run in BOTH directions.
+# PATH IS OVERRIDABLE so a fixture can mutate the CONTRACT without writing into the repo it is
+# validating. It cannot be used to weaken the gate: I36's reverse direction requires every code
+# the real enforcers emit to be claimed, so a stripped-down substitute fails louder than the
+# original, not quieter. The enforcers and prose homes are always resolved against $REPO_ROOT.
+lc_file="${AI_DLC_LAYER_CONTRACT:-$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml}"
+if [ ! -f "$lc_file" ]; then
+  err "I36 cannot find the layer contract at $lc_file. A scan over nothing reads exactly like agreement — the file is core_manifest machinery and must exist."
+else
+  # Parse the clause table. Three fields per clause; a clause missing any of them is I37's
+  # subject, not a parse error to swallow.
+  lc_ids="$(awk '/^  - id:/{print $3}' "$lc_file")"
+  lc_n="$(printf '%s\n' "$lc_ids" | grep -c . )"
+  if [ "$lc_n" -eq 0 ]; then
+    err "I36 read ZERO clauses out of layer-contract.yaml. The contract cannot be empty and a zero here would make I36/I37/I38 all pass vacuously — the exact shape they exist to forbid."
+  fi
+
+  # --- I37: no prose-only clause. A clause must name a level, an enforcer and a code. ---
+  # This is the invariant that keeps the seventeen-unenforced state out. `enforcement: pending`
+  # is not a permitted value anywhere, deliberately: a placeholder is the same
+  # declaration-without-a-mechanism defect wearing a new file's clothes.
+  lc_i37="$(awk '
+    /^  - id:/          { if (id != "") check(); id=$3; lvl=""; enf=""; code=""; next }
+    /^    level:/       { lvl=$2; next }
+    /^    enforcer:/    { enf=$2; next }
+    /^    code:/        { code=$2; next }
+    END                 { if (id != "") check() }
+    function check() {
+      if (lvl == "")  printf "%s has no level:; ", id
+      if (enf == "")  printf "%s has no enforcer:; ", id
+      if (code == "") printf "%s has no code:; ", id
+      if (lvl != "" && lvl != "ERROR" && lvl != "WARN")
+        printf "%s level %s is not ERROR or WARN; ", id, lvl
+    }
+  ' "$lc_file")"
+  if [ -n "$lc_i37" ]; then
+    err "I37: layer-contract.yaml carries a clause with no mechanism — $lc_i37 Every clause states level + enforcer + code, or it is prose pretending to be a rule, which is the state this contract was created to end. Ship the clause WITH its enforcer, or leave it in the CHANGELOG backlog until you have one."
+  fi
+
+  # --- I36 forward: every clause names a code its declared enforcer actually emits. ---
+  while IFS='|' read -r cid cenf ccode; do
+    [ -n "$cid" ] || continue
+    if [ ! -f "$REPO_ROOT/$cenf" ]; then
+      err "I36 $cid: declared enforcer '$cenf' does not exist. A clause bound to a missing script is unenforced with a citation, which reads better than nothing and is worth less."
+    elif ! grep -qF -- "$ccode" "$REPO_ROOT/$cenf"; then
+      err "I36 $cid: '$cenf' never emits the code '$ccode' this clause claims. The clause cannot fire, and a clause that cannot fire reads exactly like one that passed. Fix the code, or point the clause at the script that does emit it."
+    fi
+  done <<EOF
+$(awk '
+  /^  - id:/       { if (id != "") emit(); id=$3; enf=""; code="" ; next }
+  /^    enforcer:/ { enf=$2; next }
+  /^    code:/     { code=$2; next }
+  END              { if (id != "") emit() }
+  function emit() { if (enf != "" && code != "") printf "%s|%s|%s\n", id, enf, code }
+' "$lc_file")
+EOF
+
+  # --- I36 reverse: every code an enforcer emits is claimed by exactly one clause. ---
+  # THE DIRECTION THAT ACTUALLY CATCHES DRIFT. Forward-only, a new status could ship with no
+  # clause and the contract would still build green — which is how a status reaches an operator
+  # with no stated rule behind it, and how the seventeen-clause gap grew in the first place.
+  #
+  # The `*-OK` statuses are excluded by a DERIVED suffix rule, not a hand-list: an `-OK` row is
+  # a clean state, not a finding, so it has no clause to state. A hand-list of exceptions here
+  # would be the restated-enumeration defect I26 exists for.
+  lc_claimed="$(awk '/^    code:/{print $2}' "$lc_file" | sort -u)"
+  lc_declared_enf="$(awk '/^    enforcer:/{print $2}' "$lc_file" | sort -u)"
+  for enf in $lc_declared_enf; do
+    [ -f "$REPO_ROOT/$enf" ] || continue
+    case "$enf" in
+      *validate-layer-entries.sh) emitted="$(grep -oE '\b(E[1-9]|W[1-9])\b' "$REPO_ROOT/$enf" | sort -u)" ;;
+      *layer-drift.sh)            emitted="$(grep -oE '\b(HARD-[A-Z0-9-]+|OVERRIDE-[A-Z0-9-]+|EXTENSION-[A-Z0-9-]+)\b' "$REPO_ROOT/$enf" | sort -u | grep -v -- '-OK$')" ;;
+      *)                          emitted="" ;;
+    esac
+    if [ -z "$emitted" ]; then
+      err "I36 reverse: found NO codes in declared enforcer '$enf'. Either the extraction pattern no longer matches that script's vocabulary or the script changed shape; a zero here silently retires this whole direction of the join."
+    fi
+    for code in $emitted; do
+      if ! printf '%s\n' "$lc_claimed" | grep -qxF -- "$code"; then
+        err "I36 reverse: '$enf' emits '$code' but NO clause in layer-contract.yaml claims it. An operator can be handed that verdict with no stated rule behind it. Add the clause, or stop emitting the code."
+      fi
+    done
+  done
+
+  # --- I38 forward: every clause id appears in the prose home it declares. ---
+  # ONLY the forward direction ships at contract_version 1, and the reason is measured. The
+  # reverse direction — every normative sentence carries a clause id — has no sound predicate
+  # yet: a keyword scan (MUST|NEVER|never|cannot|only) over the two layer READMEs matches 26
+  # lines against 10 real clauses, and the structural form is worse, because the two files do
+  # not share one: all 10 bold-led clause bullets are in extensions/README.md and
+  # overrides/README.md has ZERO, stating its clauses as prose paragraphs and section headings.
+  # A structural predicate would therefore be unable to fire on half its subject. Normalising
+  # that prose is a separate change; until then the reverse direction would be a lint with an
+  # unmeasured false-positive set, which is the one this repo forbids shipping.
+  while IFS='|' read -r cid chome; do
+    [ -n "$cid" ] || continue
+    if [ ! -f "$REPO_ROOT/$chome" ]; then
+      err "I38 $cid: declared prose_home '$chome' does not exist."
+    elif ! grep -qF -- "$cid" "$REPO_ROOT/$chome"; then
+      err "I38 $cid: '$chome' never mentions '$cid'. The contract points a reader at prose that does not carry the clause, so the human-readable side and the enforced side have already diverged."
+    fi
+  done <<EOF
+$(awk '
+  /^  - id:/         { if (id != "") emit(); id=$3; home="" ; next }
+  /^    prose_home:/ { home=$2; next }
+  END                { if (id != "") emit() }
+  function emit() { if (home != "") printf "%s|%s\n", id, home }
+' "$lc_file")
+EOF
+fi
+
 # --- I35: H1's fixture criterion states I20's contract, not a stricter one ----
 # H1 is LLM-read at every gate and had RESTATED this contract instead of stating the
 # property: it required a `README.md` and a `seed.sh` of every bound fixture, and
@@ -1522,7 +1641,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38)."
   exit 0
 fi
 exit 1
