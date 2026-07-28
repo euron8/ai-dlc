@@ -17,6 +17,67 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.185.0] — 2026-07-28
+
+### Fixed — the autonomous self-update installed the validator that blocks its own push
+
+`PC-S308`, filed by the reference consumer's operator after hitting it mid-pull and deriving the
+remedy by hand.
+
+SKILL.md step 2 runs the machinery self-update **autonomously**: cut a branch, write the machinery
+slice, run the derived fixtures, push, open a PR, squash-auto-merge — no operator gate. The machinery
+slice includes `core/scripts/*`, and the consumer's own `.githooks/pre-push` **invokes four of those
+scripts**. So the cycle can install a check that then fails the very push it is making, on layer
+state that predates the pull and whose remedy is rulebook-side work the cycle deliberately does not
+do.
+
+It does not deadlock — SKILL.md says a failed push commits locally and does not block the run —
+which is worse in one respect: what it strands is an **orphaned local branch whose push is
+permanently blocked** and a `skill_version` advanced on a commit that will never merge.
+
+New `reconcile/self-update-gate.sh`, consulted BEFORE the branch is cut. On
+`SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED`, step 2 does not cut or push; the machinery slice is
+carried into the step-7 gated apply so machinery and rulebook land on one branch, which is the only
+ordering in which the pre-push gate can go green.
+
+**The gating set is derived, never listed.** Which scripts can block a push is a property of the
+consumer's pre-push hook, so it is read out of that hook. Hand-listing them would rot the moment the
+hook gains a step — and a hook gaining a step is exactly when this check matters most. Four are
+invoked as of v0.184.0; the gate names none of them.
+
+**The verdict is a differential, not an exit code.** Running an incoming script from a temp path can
+fail for reasons unrelated to its findings — a script that resolves its own location, a missing
+sibling. A bare non-zero would turn any of those into a confident defer, stranding the slice for no
+reason. Each gating script runs twice under identical conditions:
+
+| current | incoming | verdict |
+|---|---|---|
+| 0 | non-zero | `SELF-UPDATE-DEFER` — a genuinely new finding |
+| non-zero | non-zero | `SELF-UPDATE-UNDECIDED` — pre-existing or a harness artifact, **not** attributable to this pull |
+| — | 0 | `SELF-UPDATE-OK` |
+
+`UNDECIDED` is treated as a defer: acting autonomously on a failure nobody could attribute is the
+one thing this gate exists to prevent.
+
+**Verified against the real history, not only a fixture.** Run for the pull that stalled — graph at
+`0f9643c` → `46aa98a`, against that consumer's pre-fix layer via a worktree of its parent commit —
+the gate emits `SELF-UPDATE-DEFER validate-layer-entries.sh` with the exact remedy the operator
+reached by hand. Run for the current pull (`46aa98a` → `0c6ab57`) it emits `SELF-UPDATE-OK`, because
+v0.184.0 changed no `core/scripts/` path. The detector distinguishes the two real cases it exists to
+tell apart.
+
+### Fixture
+
+`core/fixtures/self-update-gate/` — three gating scripts producing the three verdicts by **different
+causes**, plus two controls that must produce no row at all: one changed-but-not-invoked (whose
+incoming version exits 1, so a gate deriving its set from the diff rather than the hook emits a
+spurious defer), and one invoked-but-unchanged.
+
+The mutant removes the differential and reads the incoming exit code alone. The pre-existing failure
+then reads as a defer — the false positive that strands a machinery slice — and the mutant is
+asserted to leave the *real* defer verdict intact, so it cannot pass by breaking both. Plus an
+unmutated control copy. 9 assertions, all green.
+
 ## [0.184.0] — 2026-07-28
 
 ### Fixed — the ledger closer read only the LAST receipt in an entry, and v0.181.0 recorded that defect as absorbed
