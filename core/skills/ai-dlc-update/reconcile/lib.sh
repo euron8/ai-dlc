@@ -41,14 +41,35 @@
 # a `norm()` its caller might not define, and normalization is idempotent
 # (post-norm text is lowercase alnum with single spaces, so re-running it is a
 # no-op), so a caller that pre-normalizes gets the same answer either way.
+# ---------------------------------------------------------------------------
+# nrm_awk — THE heading normalizer, as awk source. One copy.
+# ---------------------------------------------------------------------------
+# It decides whether two headings are THE SAME heading, which is the join every
+# anchor question in this repo rests on: span_of's containment, anchor_arm's
+# direction, layer-drift's duplicate-key detection, and the authoring linter's
+# per-anchor check. `norm()` below is its shell-side spelling.
+#
+# Emitted as awk source rather than a shell function for the same reason
+# `ledger_entry_awk` is: every call site is an awk program, and it is
+# CONCATENATED onto the front by adjacent-string quoting, so the remainder of
+# each program stays single-quoted and needs no escaping.
+#
+# This was three spellings — two in validate-layer-entries.sh's awk programs and
+# one inline in span_of below — and the whole point of a normalizer is that there
+# is exactly one answer to "is this the same heading".
+nrm_awk() {
+  cat <<'AWK'
+function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
+AWK
+}
+
 # span_of is THE matcher; section_of is a slice of it. Splitting them this way rather than
 # writing the predicate twice is the same decision the history above records: readopt-override
 # needs a section's LINE RANGE (to merge one anchor of a multi-anchor override in place and
 # leave the rest byte-untouched), everything else needs its TEXT. Two functions with two copies
 # of the matcher is how the v0.52.0 and v0.54.2 divergences happened. There is one copy.
 span_of() { # span_of <heading-text>  < stream   ->  "<start> <end>" 1-indexed inclusive, or nothing
-  awk -v want="$1" '
-    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
+  awk -v want="$1" "$(nrm_awk)"'
     BEGIN { w = nrm(want) }
     /^#{2,6}[ \t]/ {
       match($0, /^#+/); lvl = RLENGTH
@@ -79,6 +100,91 @@ section_of() { # section_of <heading-text>  < stream
 # normalization the resolver uses, or a heading that section_of matches can read
 # as unresolved to its own caller.
 norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '`*' | sed -E 's/[^a-z0-9]+/ /g; s/^ +| +$//g'; }
+
+# ---------------------------------------------------------------------------
+# anchor_arm — WHICH DIRECTION of span_of's containment resolved this anchor.
+# ---------------------------------------------------------------------------
+# span_of matches in EITHER direction: the heading contains the anchor (forward),
+# or the anchor contains the heading (reverse). Forward is the legitimate grain —
+# `SKILL.md#Rule 8` resolving to `### Rule 8 -- Run the validation cycle per
+# declared intensity` is a consumer naming a rule by its id, not restating a title.
+#
+# REVERSE IS NOT A GRAIN, IT IS A SILENT WIDENING. An anchor that CONTAINS the
+# heading declares something finer than a heading — a paragraph, a sub-clause, a
+# renamed section — which the resolver cannot address, so it quietly resolves to
+# the WHOLE section instead. The consumer believes it shadowed a paragraph and has
+# in fact shadowed everything under that heading.
+#
+# THE RESOLVER IS NOT CHANGED. span_of's reverse arm is load-bearing (v0.54.2
+# above records a release where a stricter resolver misfiled a consumer-renamed
+# heading as an addition). Declaration is tightened; resolution is left alone.
+# That asymmetry is the point: a reverse-only declaration is reported WITH the
+# exact heading to substitute, so the fix is a copy-paste.
+#
+# SCOPE, STATED SO IT IS NOT MISTAKEN FOR MORE. This asks whether SOME heading
+# forward-matches. It does not resolve ambiguity — a short anchor can forward-match
+# several headings and still pass. Uniqueness is a different check with a different
+# false-positive set, and folding it in here is how the recorded short-title
+# degeneracy (`same_section()`'s containment arm, five false positives) would
+# arrive in a new detector.
+#
+# Stdin, not a path, so ONE body serves both callers: the authoring linter reads a
+# file on disk and the pull classifier reads a `git show` stream.
+anchor_arm() { # anchor_arm <anchor>  < stream  -> FORWARD | REVERSE:<heading> | NONE
+  awk -v want="$1" "$(nrm_awk)"'
+    BEGIN { w = nrm(want); res = "NONE" }
+    /^#{2,6}[ \t]/ {
+      h = $0; sub(/^#+[ \t]+/, "", h); hn = nrm(h)
+      if (hn == "") next
+      if (w != "" && index(hn, w) > 0) { print "FORWARD"; found = 1; exit }
+      # length > 3 mirrors span_of: a heading of three characters or fewer
+      # contains-matches almost anything, which is noise rather than a finding.
+      if (length(hn) > 3 && w != "" && index(w, hn) > 0 && res == "NONE") res = "REVERSE:" h
+    }
+    END { if (!found) print res }
+  '
+}
+
+# ---------------------------------------------------------------------------
+# shadow_parts — WHAT AN OVERRIDE SHADOWS. One reading of `shadows:`.
+# ---------------------------------------------------------------------------
+# The authoring linter and the pull classifier must agree about which (file,
+# anchor) pairs an entry declares, or whichever the operator did not run is the
+# one that is wrong. They forked twice, both times silently:
+#
+#   the linter read only the FIRST comma-part, so nineteen anchor instances
+#   across twelve overrides were never validated (v0.16x);
+#   the linter then read every part but computed the file PER PART, so the
+#   file-inheriting spelling `a.md#One, #Two` skipped part two entirely before
+#   any anchor check ran — 1 of 4 anchors checked on the reference consumer
+#   (v0.191.0).
+#
+# The classifier had a third reading: ONE file for the whole entry (part one's)
+# with every anchor harvested and checked against it, so `a.md#One, b.md#Two`
+# would check `Two` against `a.md`. Latent only because no live entry names two
+# files. All three are now this function.
+#
+# A part with no file of its own INHERITS the last one that had one. A FIRST part
+# with no file emits an EMPTY file field: what to do about a part that names no
+# target is the caller's decision (the linter errors; the classifier reports it
+# unresolved), and burying that verdict here would give one of them the other's.
+shadow_parts() { # shadow_parts <shadows-value>  -> one `<file>\t<anchor>` line per comma-part
+  awk -v s="$1" '
+    BEGIN {
+      n = split(s, p, ",")
+      for (i = 1; i <= n; i++) {
+        part = p[i]; gsub(/^[ \t]+|[ \t]+$/, "", part)
+        if (part == "") continue
+        h = index(part, "#")
+        if (h > 0) { f = substr(part, 1, h - 1); a = substr(part, h + 1) }
+        else       { f = part; a = "" }
+        gsub(/[ \t]+$/, "", f); gsub(/^[ \t]+|[ \t]+$/, "", a)
+        if (f != "") last = f; else f = last
+        print f "\t" a
+      }
+    }
+  ' < /dev/null
+}
 
 # ---------------------------------------------------------------------------
 # ledger_entry_awk — THE push-candidate ledger's entry-boundary rule. One copy.

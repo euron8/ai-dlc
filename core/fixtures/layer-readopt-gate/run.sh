@@ -665,6 +665,64 @@ else
     ok "  and it is report-only, never a blocker"
   fi
 
+  # --- OVERRIDE-LOOSE-ANCHOR: the pull-time counterpart of E7 --------------------------
+  # E7 rejects an anchor that resolves only by the REVERSE arm at AUTHORING time. That
+  # validator is consumer-run and skippable; the pull is not, and an anchor finer than a
+  # heading silently widens the shadow to the whole section either way.
+  #
+  # NOT a "mirror of E7". Even now that both read `shadows:` through the same shadow_parts,
+  # E7 resolves against the consumer's on-disk core and this resolves against THEIRS — the
+  # incoming distribution — so they answer the same question about two different trees.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-11-loose\.md$')" | grep -qx OVERRIDE-LOOSE-ANCHOR; then
+    ok "an anchor that CONTAINS its heading is REPORTED at pull time"
+  else
+    bad "the loose anchor went undetected — the entry shadows the whole section while the operator believes it shadowed a paragraph"
+  fi
+
+  # CONTROL — the legitimate id-prefix grain, in the same vocabulary. `#Rule 8` naming
+  # `## Rule 8 -- Validation Depth` is a consumer naming a rule by its id, and it is what
+  # nearly every entry here does. If this fires, the arm has been inverted and every
+  # well-formed override in the consumer reports.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-8\.md$')" | grep -qx OVERRIDE-LOOSE-ANCHOR; then
+    bad "a FORWARD-matching id-prefix anchor was reported loose — the containment direction is inverted and every honest entry now fires"
+  else
+    ok "  and a FORWARD-matching id-prefix anchor stays silent"
+  fi
+
+  if printf '%s\n' "$(st_of 'SKILL__Rule-11-loose\.md$')" | grep -qx OVERRIDE-OK; then
+    ok "  and the entry is STILL OVERRIDE-OK on drift (two questions, two rows)"
+  else
+    bad "  but the loose status displaced the drift status — it would hide behind an OVERRIDE-OK"
+  fi
+
+  # --- OVERRIDE-DOUBLE-SHADOW: a finding that exists only ACROSS entries ---------------
+  # Each entry is individually well-formed. Precedence resolves the overlap silently, so
+  # which body governs is an ordering accident no entry declares, and every commit touching
+  # the span invalidates BOTH stamps while reconciling one looks complete.
+  ds_a="$(printf '%s\n' "$(st_of 'SKILL__Rule-7-dup-a\.md$')" | grep -cx OVERRIDE-DOUBLE-SHADOW || true)"
+  ds_b="$(printf '%s\n' "$(st_of 'SKILL__Rule-7-dup-b\.md$')" | grep -cx OVERRIDE-DOUBLE-SHADOW || true)"
+  if [ "$ds_a" -eq 1 ] && [ "$ds_b" -eq 1 ]; then
+    ok "two entries claiming one (file, anchor) are BOTH reported"
+  else
+    bad "double shadow filed under a=$ds_a b=$ds_b (want 1 and 1) — a row under only one of them leaves the other reading clean on the finding it is half of"
+  fi
+
+  # CONTROL — a single-claimant anchor. Without this the check could be counting every
+  # anchor as its own duplicate and both assertions above would still be green.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-13-survives\.md$')" | grep -qx OVERRIDE-DOUBLE-SHADOW; then
+    bad "a single-claimant anchor was reported as a double shadow — the key is collapsing entries that do not collide"
+  else
+    ok "  and an anchor only one entry claims stays silent"
+  fi
+
+  # Report-only, and the reason is on the record: the one live instance is DELIBERATE and
+  # says so in prose. An ERROR would fire on a case the consumer already reasoned about.
+  if printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}' | grep -qE 'LOOSE-ANCHOR|DOUBLE-SHADOW'; then
+    bad "a new pull-time status carries a HARD- prefix — it would block apply on a report-only finding"
+  else
+    ok "  and both new statuses are report-only, never blockers"
+  fi
+
   # --- MUTANTS: the two discriminators this predicate was MEASURED into ----------------
   # Both are the difference between a shippable check and the 5-of-13 keyword scan that was
   # rejected. Each is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome, and is aimed
@@ -682,6 +740,18 @@ else
     ok "  mutation control: an unmutated copy still reports both seeded claims"
   else
     bad "  mutation control: unmutated copy reported $ctl_n of 2 — a copy that cannot run scores as a kill"
+  fi
+
+  # The same control for the two new statuses. The mutants below assert an ABSENCE, and a
+  # copy that cannot run produces the same absence.
+  ctl_l="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
+           | awk -F'\t' '$1=="OVERRIDE-LOOSE-ANCHOR"{c++} END{print c+0}')"
+  ctl_d="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
+           | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
+  if [ "$ctl_l" -eq 1 ] && [ "$ctl_d" -eq 2 ]; then
+    ok "  mutation control: and the same copy reports 1 loose anchor and 2 double-shadow rows"
+  else
+    bad "  mutation control: unmutated copy reported loose=$ctl_l (want 1) double=$ctl_d (want 2)"
   fi
 
   # MUTANT 1 — drop the flattening. The wrapped entry must go silent and the single-line
@@ -713,6 +783,40 @@ else
       ok "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
     else
       bad "  mutation noun-set: the honest rest-of-the-FILE claim stayed silent even with \`file\` in the noun set, so the control above is vacuous"
+    fi
+  fi
+
+  # MUTANT 3 — delete the REVERSE arm, which is the whole loose-anchor predicate. The loose
+  # row must vanish and the double-shadow rows must NOT: they are computed from a different
+  # accumulator and a mutant that took both would prove neither.
+  awk '!/^      REVERSE:\*\) loose=/' "$DRIFT" > "$MUTD/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
+    bad "  mutation loose-arm: the mutation matched nothing, so the loose-anchor assertion is unproven"
+  else
+    m3="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    m3l="$(printf '%s\n' "$m3" | awk -F'\t' '$1=="OVERRIDE-LOOSE-ANCHOR"{c++} END{print c+0}')"
+    m3d="$(printf '%s\n' "$m3" | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
+    if [ "$m3l" -eq 0 ] && [ "$m3d" -eq 2 ]; then
+      ok "  mutation loose-arm: without the REVERSE arm the loose anchor goes silent, and only that"
+    else
+      bad "  mutation loose-arm: loose=$m3l (want 0) double=$m3d (want 2) — the assertion is vacuous or the two statuses are entangled"
+    fi
+  fi
+
+  # MUTANT 4 — require THREE claimants instead of two, which is the off-by-one a duplicate
+  # check is most likely to ship with. The double-shadow rows must vanish and the loose row
+  # must not.
+  sed 's/if (n\[key\] > 1)/if (n[key] > 2)/' "$DRIFT" > "$MUTD/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
+    bad "  mutation dup-threshold: the mutation matched nothing, so the double-shadow assertion is unproven"
+  else
+    m4="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    m4d="$(printf '%s\n' "$m4" | awk -F'\t' '$1=="OVERRIDE-DOUBLE-SHADOW"{c++} END{print c+0}')"
+    m4l="$(printf '%s\n' "$m4" | awk -F'\t' '$1=="OVERRIDE-LOOSE-ANCHOR"{c++} END{print c+0}')"
+    if [ "$m4d" -eq 0 ] && [ "$m4l" -eq 1 ]; then
+      ok "  mutation dup-threshold: raising the duplicate threshold silences the pair, and only that"
+    else
+      bad "  mutation dup-threshold: double=$m4d (want 0) loose=$m4l (want 1) — the assertion is vacuous or the two statuses are entangled"
     fi
   fi
 fi

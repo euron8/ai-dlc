@@ -195,6 +195,30 @@ clauses:
     enforcer: core/scripts/validate-layer-entries.sh
     code: E7
 
+  - id: LC-O12
+    subject: override
+    level: WARN
+    since: 3
+    normative: >-
+      Every `shadows:` anchor still FORWARD-matches at PULL time. LC-O11 asks this at authoring
+      time, in a validator the consumer runs and can skip; the pull cannot be skipped, and the
+      anchor is read against the INCOMING core rather than the one on disk.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-LOOSE-ANCHOR
+
+  - id: LC-O13
+    subject: override
+    level: WARN
+    since: 3
+    normative: >-
+      No two override entries declare the same (target file, normalised anchor). Precedence
+      resolves an overlap silently, so which body governs is an ordering accident no entry
+      declares, and every upstream commit touching that span invalidates both `base_sha` stamps.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-DOUBLE-SHADOW
+
   # --- extensions/: frontmatter and hooks ----------------------------------------------
   - id: LC-E1
     subject: extension

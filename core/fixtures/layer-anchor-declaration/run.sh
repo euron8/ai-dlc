@@ -135,7 +135,7 @@ fi
 MUT1="$(dirname "$CONS")/mut-firstpart"
 rm -rf "$MUT1"; mkdir -p "$MUT1"
 awk '
-  /^    while IFS= read -r part; do$/ {
+  /^    while IFS= read -r _pair; do$/ {
     print "    _seen_part=\"\""
     print
     print "      [ -z \"$_seen_part\" ] || continue"
@@ -168,7 +168,7 @@ fi
 MUT2="$(dirname "$CONS")/mut-subshell"
 rm -rf "$MUT2"; mkdir -p "$MUT2"
 awk '
-  /^    while IFS= read -r part; do$/ { print "    printf \"%s\\n\" \"$shadows\" | tr \",\" \"\\n\" | while IFS= read -r part; do"; inloop=1; next }
+  /^    while IFS= read -r _pair; do$/ { print "    shadow_parts \"$shadows\" | while IFS= read -r _pair; do"; inloop=1; next }
   inloop && /^    done <<EOF$/ { print "    done"; skip=2; inloop=0; next }
   skip > 0 { skip--; next }
   { print }
@@ -195,9 +195,13 @@ fi
 # and NOTHING else: `multi` (file repeated per part) and `orphan` (no file anywhere) are the two
 # neighbours this could take with it, and both are asserted to survive. A mutant that also
 # silenced them would be entangled and would prove none of the three.
+#
+# The carry-forward now lives in shadow_parts()'s awk, so that is where the mutation lands. That
+# function is BYTE-IDENTICAL to reconcile/lib.sh's under I40 — mutating the copy inside a throwaway
+# validator does not touch the binding, and I40 is what proves the other copy moved with it.
 MUT3="$(dirname "$CONS")/mut-noinherit"
 rm -rf "$MUT3"; mkdir -p "$MUT3"
-awk '{ sub(/^        tgt="\$inherited_tgt"$/, "        tgt=\"\""); print }' "$VLE" > "$MUT3/vle.sh"
+awk '{ sub(/^        if \(f != ""\) last = f; else f = last$/, "        if (f != \"\") last = f"); print }' "$VLE" > "$MUT3/vle.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
 if cmp -s "$VLE" "$MUT3/vle.sh"; then
   FAILURES=$((FAILURES + 1))

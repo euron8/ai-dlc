@@ -688,6 +688,38 @@ for cp_f in parse_manifest to_consumer_glob; do
   fi
 done
 
+# --- I40: ONE reading of an anchor, across the linter and the pull classifier ---
+# `core/scripts/validate-layer-entries.sh` ERRORs at authoring time on an anchor that resolves
+# only by the reverse containment arm; `reconcile/layer-drift.sh` reports the same shape at pull
+# time. They must agree about three things, and each disagreement has already shipped:
+#
+#   nrm_awk        is this the SAME heading? Three spellings existed — two awk copies in the
+#                  linter and one inline in lib.sh's span_of — of the normalizer that every
+#                  anchor join in the repo rests on.
+#   shadow_parts   WHAT does this entry shadow? The linter read only the first comma-part
+#                  (nineteen anchor instances unvalidated), then read every part but computed
+#                  the file per part (the file-inheriting spelling skipped entirely, 1 of 4
+#                  anchors checked); the classifier read ONE file for the whole entry and
+#                  checked every anchor against it.
+#   anchor_arm     WHICH DIRECTION resolved it? A narrower copy in either tool reports a loose
+#                  anchor the other calls fine, and the operator believes whichever they ran.
+#
+# COPIES rather than a source, for I25's reason and I29's: core/scripts must not depend on the
+# update skill, and I29 confines ai-dlc-update to reconcile/, so neither may source the other's
+# file. The duplication is only safe because this assertion exists.
+la_fn() { awk "/^$2\(\) \{/,/^\}/" "$1" 2>/dev/null; }
+LA_LINT="$REPO_ROOT/core/scripts/validate-layer-entries.sh"
+LA_LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+for la_f in nrm_awk anchor_arm shadow_parts; do
+  la_a="$(la_fn "$LA_LINT" "$la_f")"
+  la_b="$(la_fn "$LA_LIB" "$la_f")"
+  if [ -z "$la_a" ] || [ -z "$la_b" ]; then
+    err "I40 cannot find a ${la_f}() definition in validate-layer-entries.sh and/or reconcile/lib.sh. The check binding the authoring linter's anchor reading to the pull classifier's just went vacuous — it must locate both or fail loudly, never pass by finding nothing."
+  elif [ "$la_a" != "$la_b" ]; then
+    err "the anchor reading has forked between validate-layer-entries.sh and reconcile/lib.sh at ${la_f}(). The linter ERRORs at authoring time and the classifier reports at pull time; a copy that differs means the two disagree about what an entry shadows or about which heading an anchor names, and the operator believes whichever they happened to run. Make ${la_f}() byte-identical."
+  fi
+done
+
 # --- I29: ai-dlc-update names no helper that is not in reconcile/ ---------------
 # The skill's HARD CONSTRAINT is that it reads only its own reconcile/ files, which is why
 # setup-sites.md carries a duplicate manifest at all. A step that tells the reader to use a
@@ -1697,7 +1729,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40)."
   exit 0
 fi
 exit 1

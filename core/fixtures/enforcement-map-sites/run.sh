@@ -438,6 +438,51 @@ else
   restore
 fi
 
+# --- Assertion 20: I40 — the anchor reading cannot fork -----------------------
+# Three functions are byte-identical across `core/scripts/validate-layer-entries.sh` (ERRORs at
+# authoring time) and `reconcile/lib.sh` (reports at pull time). They are COPIES because neither
+# tree may source the other's file — I25's reason and I29's — so an assertion is the only thing
+# stopping the drift, and every one of the three has already forked once in this repo's history.
+#
+# TWO ARMS, because the vacuity arm is the one that matters: I40 LOCATES its subjects by awk
+# range, and a renamed or deleted function makes it find nothing. "Found nothing" and "found two
+# identical bodies" are the same green unless the check says so itself.
+LIBSH="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+if [ ! -f "$LIBSH" ]; then
+  bad "FIXTURE STALE: the seed no longer copies reconcile/lib.sh, so I40 has nothing to bind"
+else
+  cp "$LIBSH" "$LIBSH.orig"
+
+  # ARM 1 — FORK. `length(hn) > 3` is the reverse-arm noise floor shared with span_of. Nudging
+  # it in ONE copy is the exact shape of the divergence I40 exists to catch: both tools still
+  # run, both still report, and they disagree about which anchors are loose.
+  sed 's/if (length(hn) > 3 \&\& w != "" \&\& index(w, hn) > 0/if (length(hn) > 5 \&\& w != "" \&\& index(w, hn) > 0/' "$LIBSH.orig" > "$LIBSH"
+  if cmp -s "$LIBSH.orig" "$LIBSH"; then
+    bad "FIXTURE BROKEN: the I40 fork mutation matched nothing, so this assertion is unproven"
+  else
+    out="$(bash "$V" 2>&1)"
+    if printf '%s' "$out" | grep -q "the anchor reading has forked"; then
+      ok "a one-copy change to the anchor arm FAILS I40 (the linter and the pull classifier cannot disagree)"
+    else
+      bad "a forked anchor_arm() did NOT fail I40 — the two tools can now answer the same question differently and the operator believes whichever they ran"
+    fi
+  fi
+
+  # ARM 2 — VACUITY. Delete one subject outright. I40 must say it cannot find it, not pass.
+  awk 'BEGIN{s=0} /^shadow_parts\(\) \{/{s=1} s==0{print} /^\}/{if(s==1){s=2; next}}' "$LIBSH.orig" > "$LIBSH"
+  if cmp -s "$LIBSH.orig" "$LIBSH"; then
+    bad "FIXTURE BROKEN: the I40 deletion mutation matched nothing, so the vacuity assertion is unproven"
+  else
+    out="$(bash "$V" 2>&1)"
+    if printf '%s' "$out" | grep -q "I40 cannot find a shadow_parts() definition"; then
+      ok "a MISSING bound function FAILS I40 loudly (finding nothing never reads as agreement)"
+    else
+      bad "I40 reported clean with shadow_parts() deleted from one side — a rename silently retires the binding"
+    fi
+  fi
+  restore
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

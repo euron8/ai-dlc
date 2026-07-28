@@ -70,6 +70,24 @@
 #                                    careful authorship, which is why neither is visible.
 #                                    Report-only, and independent of any pull: true or false
 #                                    today, like its sibling.
+#   OVERRIDE-LOOSE-ANCHOR            a `shadows:` anchor resolves only by the REVERSE arm of
+#                                    the containment match — the anchor CONTAINS the heading —
+#                                    so it declares something finer than a heading and quietly
+#                                    resolves to the WHOLE section instead. E7 errors on this
+#                                    at authoring time; that validator is consumer-run and
+#                                    SKIPPABLE and the pull is not, which is the whole reason
+#                                    this exists. Report-only: resolution is unchanged and the
+#                                    entry renders, so what is wrong is the operator's belief
+#                                    about its extent, not the pull.
+#   OVERRIDE-DOUBLE-SHADOW           two entries declare the same (file, normalised anchor).
+#                                    Each is well-formed alone; only the PAIR is the finding,
+#                                    which is why it is computed across entries after the
+#                                    loop. Precedence resolves the overlap silently, so which
+#                                    body governs is an ordering accident no entry declares,
+#                                    and every commit touching the span invalidates BOTH
+#                                    stamps. Report-only: the one live instance is deliberate
+#                                    and says so in prose, and an ERROR would fire on a case
+#                                    the consumer already reasoned about in writing.
 #   OVERRIDE-DRIFT-FILE              anchor is not a locatable heading AND the file
 #                                    changed -> cannot prove the section is safe;
 #                                    surface for re-confirmation (never skip)
@@ -125,6 +143,20 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 . "$SELF/lib.sh" || { echo "layer-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
 
 emit() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
+
+TAB="$(printf '\t')"
+
+# Every (file, anchor) an override claims, accumulated across ALL entries for the duplicate check
+# after the loop. bash 3.2 ships on macOS and has no associative arrays; a plain accumulating
+# string is safe here only because nothing ever SEARCHES it -- it is handed whole to sort/awk,
+# which key on the full field. A substring test against a growing string is how a normalised key
+# that happens to be a prefix of another starts matching it.
+#
+# NOT A TEMP FILE WITH AN `EXIT` TRAP, and this cost a measurement to learn: installing the trap
+# made bash report `printf: write error: Broken pipe` from every `printf | grep -q` in this
+# script -- 90 lines of stderr on a classifier whose stderr an operator is meant to read, from
+# pipelines the change did not touch. Removing the trap took it to 0 with byte-identical rows.
+shadow_keys=""
 
 # core/-relative layer target -> path INSIDE the distribution tree.
 dist_path() {
@@ -380,24 +412,72 @@ while IFS= read -r f; do
   file_changed=no
   if ! git -C "$DIST" diff --quiet "$base_sha" "$THEIRS" -- "$cp" 2>/dev/null; then file_changed=yes; fi
 
-  # Evaluate every anchor in a possibly multi-anchor `shadows:` value.
-  ids="$(printf '%s' "$shadows" | tr ',' '\n' | sed -n 's/.*#//p' | sed 's/^ *//; s/ *$//')"
-  [ -n "$ids" ] || ids="__file__"
+  # Evaluate every (file, anchor) pair in a possibly multi-anchor `shadows:` value.
+  #
+  # THE FILE IS NOW PER PAIR. This read ONE file for the whole entry — part one's — and checked
+  # every harvested anchor against it, so `a.md#One, b.md#Two` resolved `Two` inside `a.md`.
+  # Latent only because no live entry names two files. `shadow_parts` is the one reading of
+  # `shadows:`, byte-identical to the authoring linter's under I40, and it also supplies the
+  # file-inheriting spelling (`a.md#One, #Two`) that the linter was skipping until v0.191.0.
+  #
+  # `tgt`/`cp`/`file_changed` above stay as the ENTRY-level values: they are what the emitted
+  # row's third column has always named, and what the base_sha provenance arm resolved against.
+  pairs="$(shadow_parts "$shadows")"
+  [ -n "$pairs" ] || pairs="$(printf '%s\t' "$tgt")"
 
   # A multi-anchor override must report EVERY affected anchor, not just the last
   # one examined. Accumulate per category and compose the detail after the loop:
   # a single-section message on an override shadowing eight sections invites the
   # operator to reconcile that one and silently drop the rest.
   worst=OVERRIDE-OK
-  drifted=""; unprovable=""; unresolved=""; whole_file=""; delegated=""
+  drifted=""; unprovable=""; unresolved=""; whole_file=""; delegated=""; loose=""
   ov_ticks="$(body_of "$f" | ticks_of)"
-  while IFS= read -r id; do
-    [ -n "$id" ] || continue
-    if [ "$id" = "__file__" ]; then
-      [ "$file_changed" = yes ] && { worst=OVERRIDE-DRIFT-FILE; whole_file="yes"; }
+  while IFS= read -r pair; do
+    [ -n "$pair" ] || continue
+    # Split by parameter expansion: a tab is IFS WHITESPACE, so `IFS=<tab> read a b` absorbs a
+    # leading one and a target-less part arrives as a target named after its own anchor.
+    a_tgt="${pair%%"$TAB"*}"; id="${pair#*"$TAB"}"
+    if [ -z "$a_tgt" ]; then
+      [ "$worst" = OVERRIDE-OK ] && worst=OVERRIDE-ANCHOR-UNRESOLVED
+      unresolved="${unresolved:+$unresolved, }#${id} (no target file: no earlier comma-part names one)"
       continue
     fi
-    s_theirs="$(git_show "$THEIRS" "$cp" | section_of "$id")"
+    a_cp="$(dist_path "$a_tgt")"
+    if ! have "$THEIRS" "$a_cp"; then
+      [ "$worst" = OVERRIDE-OK ] && worst=OVERRIDE-ANCHOR-UNRESOLVED
+      unresolved="${unresolved:+$unresolved, }#${id} (${a_tgt} absent at theirs)"
+      continue
+    fi
+    a_changed=no
+    git -C "$DIST" diff --quiet "$base_sha" "$THEIRS" -- "$a_cp" 2>/dev/null || a_changed=yes
+
+    # Record the (file, anchor) key for the cross-entry duplicate check below. Normalised on
+    # both halves, because `#4a. Close-Out Sweep` and `#4a Close-Out sweep` are one anchor to
+    # the resolver and must be one key here or the collision hides behind its own spelling.
+    shadow_keys="${shadow_keys}$(norm "$a_tgt")|$(norm "$id")${TAB}${entry}${TAB}${a_tgt}${id:+#$id}
+"
+
+    if [ -z "$id" ]; then
+      [ "$a_changed" = yes ] && { worst=OVERRIDE-DRIFT-FILE; whole_file="yes"; }
+      continue
+    fi
+
+    # HERE-STRING, NOT A PIPE, and the blob read ONCE. `anchor_arm` exits its awk program the
+    # moment it finds a forward match, which closes the pipe under a still-writing `git show`
+    # and printed a `write error: Broken pipe` per anchor to stderr — noise on a classifier
+    # whose stderr an operator is meant to read. It also re-ran `git show` three times per
+    # anchor on a 200+ line file.
+    a_text="$(git_show "$THEIRS" "$a_cp")"
+
+    # LOOSE ANCHOR — resolves only by the REVERSE arm of the containment match, so it silently
+    # widens the shadow to the whole section. The authoring linter errors on this (E7); the
+    # authoring linter is consumer-run and skippable, and the pull is not.
+    arm="$(anchor_arm "$id" <<< "$a_text")"
+    case "$arm" in
+      REVERSE:*) loose="${loose:+$loose; }#${id} -> '${arm#REVERSE:}'" ;;
+    esac
+
+    s_theirs="$(section_of "$id" <<< "$a_text")"
 
     # Does this override delegate INTO the section it replaces?  See the status
     # note in the header.  `s_theirs` is the exact text the override displaces, so
@@ -415,7 +495,7 @@ while IFS= read -r f; do
       fi
     fi
     if [ -z "$s_theirs" ]; then
-      if [ "$file_changed" = yes ]; then
+      if [ "$a_changed" = yes ]; then
         [ "$worst" = HARD-OVERRIDE-DRIFT-SECTION ] || worst=OVERRIDE-DRIFT-FILE
         unprovable="${unprovable:+$unprovable, }#$id"
       else
@@ -424,12 +504,12 @@ while IFS= read -r f; do
       fi
       continue
     fi
-    s_base="$(git_show "$base_sha" "$cp" | section_of "$id")"
+    s_base="$(git_show "$base_sha" "$a_cp" | section_of "$id")"
     if [ "$s_base" != "$s_theirs" ]; then
       worst=HARD-OVERRIDE-DRIFT-SECTION
       drifted="${drifted:+$drifted, }#$id"
     fi
-  done <<< "$ids"
+  done <<< "$pairs"
 
   # `emit` writes one tab-separated line, so the detail stays on one line.
   n_of() { printf '%s' "$1" | awk -F', ' '{print NF}'; }
@@ -463,7 +543,46 @@ while IFS= read -r f; do
     emit OVERRIDE-ASSERTS-SHADOW-SURVIVES "$entry" "$tgt" \
       "the body asserts that the section(s) it shadows are unchanged and still govern. Precedence is overrides > extensions > core, so at load time this entry replaces the WHOLE shadowed span -- if the body rewrites one paragraph of it and states the rest still governs, that sentence is false about this entry's own effect, and the dropped text is exactly what nobody will look for. Narrow shadows: to the sub-heading actually rewritten, or restate the surviving text in this body. Report-only -- an override shadowing a sub-heading may be describing the surrounding PARENT section correctly."
   fi
+
+  # The third separately-asked question: not whether upstream moved, but whether this entry's
+  # own DECLARATION addresses what its author meant. E7 asks it at authoring time and errors;
+  # that validator is consumer-run and skippable, and the pull is not.
+  [ -n "$loose" ] && emit OVERRIDE-LOOSE-ANCHOR "$entry" "$tgt" \
+    "anchor(s) that resolve only by the REVERSE arm of the containment match -- the anchor CONTAINS the heading rather than the heading containing the anchor: ${loose}. An anchor finer than a heading (a paragraph, a sub-clause, a renamed section) is not a grain the resolver can address, so it silently resolves to the WHOLE section instead: you believe you shadowed a narrower span and you have shadowed everything under that heading. Write the anchor as the heading named above, or narrow shadows: to the sub-headings actually rewritten. Report-only -- the resolution is unchanged and the entry still renders; what is wrong is what the operator believes it covers."
 done < <(layer_files "$OVR_DIR")
+
+# ---------------------------------------------------------------------------
+# OVERRIDE-DOUBLE-SHADOW — two entries claiming one (file, anchor)
+# ---------------------------------------------------------------------------
+# Asked ACROSS entries, which is why it cannot live in the loop above: each entry is individually
+# well-formed and only the pair is the finding. At load time both bodies claim the same span and
+# precedence resolves it silently, so which one wins is an ordering accident nobody declared.
+#
+# It also multiplies drift: every commit touching that span invalidates BOTH entries' stamps, and
+# an operator who reconciles one has reconciled half. Measured on the reference consumer, the one
+# live collision is the largest shadowed span it has.
+#
+# Report-only, and the reason is on the record: the live collision is DELIBERATE and
+# self-documented -- one of the two entries states in prose that it does not restate the other's
+# body and names the file that does. An ERROR would fire on a case the consumer already reasoned
+# about in writing.
+if [ -n "$shadow_keys" ]; then
+  # `sort -u` first: one entry declaring the same anchor twice is a different (and harmless)
+  # shape, and counting it as a collision with itself would be a false positive nothing could act
+  # on. The duplicate must be across two DIFFERENT entries.
+  printf '%s' "$shadow_keys" | sort -u | awk -F'\t' '
+    { if (k[$1]) { k[$1] = k[$1] ", " $2 } else { k[$1] = $2; lbl[$1] = $3 }; n[$1]++ }
+    END { for (key in n) if (n[key] > 1) printf "%s\t%s\t%d\n", lbl[key], k[key], n[key] }
+  ' | sort | while IFS="$TAB" read -r label entries cnt; do
+    # One row PER PARTICIPATING ENTRY: the report is read per entry, and a single row filed under
+    # one of the two leaves the other reading clean on the very finding it is half of.
+    printf '%s\n' "$entries" | tr ',' '\n' | sed 's/^ *//' | while IFS= read -r one; do
+      [ -n "$one" ] || continue
+      emit OVERRIDE-DOUBLE-SHADOW "$one" "${label%%#*}" \
+        "${cnt} override entries declare the same shadow target '${label}': ${entries}. At load time both bodies claim that span and precedence picks one silently, so which body governs is an ordering accident no entry declares. Every upstream commit touching the span also invalidates BOTH base_sha stamps, and reconciling one of them looks complete. Narrow one entry's shadows: to the sub-heading it actually rewrites, or merge the two. Report-only -- a deliberate split can be correct, but it has to be stated in the bodies."
+    done
+  done
+fi
 
 # ---------------------------------------------------------------------------
 # Extensions
