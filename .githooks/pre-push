@@ -68,19 +68,72 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 
 # 3. Every fixture is an adversarial self-test for one gate check. A fixture that is
 #    never driven is a green light nobody earned.
+#
+# RUN IN PARALLEL, AND THE REASON IS MEASURED. The suite is latency-bound, not
+# compute-bound: 458 seconds of work across 75 fixtures, almost all of it waiting on
+# `git init`/commit/mktemp in per-fixture sandboxes. Serially that is 7m06s of wall clock
+# on an idle 18-core machine. At 8 workers it is 2m34s.
+#
+# EIGHT, NOT MORE. -P16 measured 2m30s -- four seconds better -- because ONE fixture,
+# `enforcement-map-sites`, is 167s all by itself and sets a floor no amount of
+# parallelism beats. Workers past the knee buy nothing and add scheduler noise. The
+# knee moves if that fixture is ever split, so the count is a tunable and not a constant.
+FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-8}"
+
 run_fixtures() {
-  local rc=0 d
+  local rc=0 d b out n_expected n_actual verdict
+  out="$(mktemp -d)" || return 1
+
   for d in core/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
-    if bash "$d/run.sh" >/dev/null 2>&1; then
-      printf '   ok    %s\n' "$(basename "$d")"
-    else
-      printf '   FAIL  %s\n' "$(basename "$d")"; rc=1
+    printf '%s\n' "$d"
+  done > "$out/list"
+  n_expected="$(grep -c . "$out/list" 2>/dev/null || echo 0)"
+  if [ "$n_expected" -eq 0 ]; then
+    printf '   FAIL  no fixtures found -- an empty suite passes every assertion it never made\n'
+    rm -rf "$out"; return 1
+  fi
+
+  # Each worker records its verdict to a file named for its fixture. The verdict is read
+  # back from those FILES, not from xargs exit status, because that is what makes the
+  # completeness assertion below possible -- and because `xargs` collapses any number of
+  # failures into one exit code that cannot say WHICH.
+  AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
+    d="$1"; b="$(basename "$d")"
+    if bash "$d/run.sh" >/dev/null 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+    else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+  ' _ {} < "$out/list"
+
+  # Rendered in list order, so the output is deterministic and diffable across runs even
+  # though the work completed out of order.
+  n_actual=0
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    b="$(basename "$d")"
+    if [ ! -f "$out/$b" ]; then
+      printf '   FAIL  %s  (no verdict recorded)\n' "$b"; rc=1; continue
     fi
-  done
+    n_actual=$((n_actual + 1))
+    verdict="$(cat "$out/$b")"
+    if [ "$verdict" = ok ]; then printf '   ok    %s\n' "$b"
+    else                        printf '   FAIL  %s\n' "$b"; rc=1; fi
+  done < "$out/list"
+
+  # THE CONTROL PARALLELISM MAKES NECESSARY. Serially, a fixture that never ran could not
+  # print an `ok` -- the loop and the report were the same thing. With a worker pool they
+  # are not: a dropped job produces no verdict file, and a suite reporting 70 greens
+  # instead of 75 reads exactly like a suite that passed. This is the check-that-cannot-
+  # fire class one layer out, so the count is asserted rather than assumed.
+  if [ "$n_actual" -ne "$n_expected" ]; then
+    printf '   FAIL  %s of %s fixtures produced a verdict -- the pool dropped work, and a short green suite reads exactly like a passing one\n' \
+      "$n_actual" "$n_expected"
+    rc=1
+  fi
+
+  rm -rf "$out"
   return $rc
 }
-step "fixture suite" run_fixtures
+step "fixture suite (${FIXTURE_JOBS}-way)" run_fixtures
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    validate-enforcement-map.sh maps this glob set through map_consumer() and

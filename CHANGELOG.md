@@ -17,6 +17,44 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.188.0] — 2026-07-28
+
+### Changed — the pre-push fixture suite runs 8-way parallel: 7m06s → 2m34s
+
+The suite is **latency-bound, not compute-bound**, and nothing was exploiting that. Measured on an
+18-core machine: 458 seconds of work across 75 fixtures, run strictly serially at **0% CPU** — almost
+all of it waiting on `git init`, commits and `mktemp` inside per-fixture sandboxes. Every push in
+this repo paid 7 minutes for work that never used more than one core.
+
+| Workers | Wall clock |
+|---|---|
+| 1 (before) | **7m06s** |
+| 8 | **2m34s** |
+| 16 | 2m30s |
+
+**Eight, not more.** The extra workers buy four seconds, because one fixture —
+`enforcement-map-sites` at **167s, 36% of the whole suite** — sets a floor no amount of parallelism
+beats. Past the knee the pool only adds scheduler noise. The knee moves if that fixture is ever
+split, so the count is the tunable `AI_DLC_FIXTURE_JOBS`, not a constant.
+
+**The control parallelism makes necessary.** Serially, the loop and the report were the same thing:
+a fixture that never ran could not print an `ok`. With a worker pool they are different — a dropped
+job produces no verdict, and a suite reporting 70 greens instead of 75 reads exactly like a suite
+that passed. That is this repo's named defect class one layer out from a check, so the runner now
+**asserts the verdict count equals the fixture count** and fails loudly on a short suite. It also
+fails on an empty fixture list, because an empty suite passes every assertion it never made.
+
+Verdicts are written to per-fixture files and read back from there rather than taken from `xargs`'
+exit status, which collapses any number of failures into one code that cannot say *which*. Output is
+rendered in list order, so it stays deterministic and diffable even though the work completes out of
+order.
+
+Validated across **five full-suite parallel runs, zero failures** — races are intermittent, so one
+clean run is not evidence.
+
+Only the distribution's own gate changes. `core/git-hooks/pre-push` is the consumer's gate over its
+own `tests/fixtures/` and is a separate file by design.
+
 ## [0.187.0] — 2026-07-28
 
 ### Added — `OVERRIDE-ASSERTS-SHADOW-SURVIVES`: an override that tells the reader the text it deletes is still there
