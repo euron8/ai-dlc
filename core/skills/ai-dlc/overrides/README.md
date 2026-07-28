@@ -76,6 +76,13 @@ status that stops `apply`); **WARN** reports and never blocks.
   section cannot be proven safe, so it is never silently skipped.
 - **[LC-O8]** WARN — an anchor that no longer exists in the incoming ref is reported; upstream
   restructured and the shadow now points at nothing.
+- **[LC-O10]** ERROR — an override declares `reason:`. It is the only record of WHY you diverge,
+  and a later re-adoption has nothing to adjudicate the divergence against without it.
+- **[LC-O11]** ERROR — every `shadows:` anchor is a heading the target file FORWARD-matches (the
+  heading contains your anchor). An anchor that instead CONTAINS the heading declares a finer grain
+  than a heading — a paragraph, a sub-clause, a renamed section — which the resolver cannot
+  address, so it silently widens your shadow to that WHOLE section. The error names the exact
+  heading to substitute.
 - **[LC-O9]** WARN — an override's body does not delegate to a construct defined inside a section
   it shadows. Precedence replaces that section at load time, including the delegation target, so
   it reads as a correct single-source delegation and behaves as a dropped one.

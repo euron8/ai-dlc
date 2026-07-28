@@ -242,6 +242,9 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-E8]** WARN — a closed enumeration of what core accepts is a RESTRICTION, not an addition,
   and belongs in `overrides/` with a `base_sha`. Filed here it carries no drift anchor, so when
   core grows a third valid value your entry silently starts contradicting it.
+- **[LC-E9]** ERROR — an extension declares `push_candidate:` as `true` or `false`. It is the flag
+  the push queue is drained from, so an entry without it can never be offered upstream and never
+  retired on absorption.
 - **[LC-N1]** ERROR — a consumer check does not redefine a core check NUMBER under a different
   title. The integer renders into the same merged list as core's, so a bare `Check N` in the gate
   log — the durable audit record — would have two referents.

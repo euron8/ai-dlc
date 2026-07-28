@@ -157,6 +157,7 @@ core_manifest:
   - fixtures/implementation-join-yield/**
   - fixtures/inflight-row-shape/**
   - fixtures/known-skills-extension/**
+  - fixtures/layer-anchor-declaration/**
   - fixtures/layer-catalog-collision/**
   - fixtures/layer-contract-conformance/**
   - fixtures/layer-readopt-gate/**

@@ -49,7 +49,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 1
+contract_version: 2
 
 clauses:
 
@@ -80,7 +80,7 @@ clauses:
     level: ERROR
     since: 1
     normative: >-
-      The file named by `shadows:` exists in core.
+      EVERY comma-part of `shadows:` names a file that exists in core — not just the first.
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E3
@@ -155,6 +155,30 @@ clauses:
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-DELEGATES-INTO-SHADOW
 
+  - id: LC-O10
+    subject: override
+    level: ERROR
+    since: 2
+    normative: >-
+      An override declares `reason:`. It is the only record of WHY this consumer diverges, and a
+      later re-adoption has nothing to adjudicate the divergence against without it.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E8
+
+  - id: LC-O11
+    subject: override
+    level: ERROR
+    since: 2
+    normative: >-
+      Every `shadows:` anchor is a heading the target file FORWARD-matches — the heading contains
+      the anchor. An anchor that instead CONTAINS the heading declares a finer grain than a
+      heading, which the resolver cannot address, so it silently widens the shadow to that whole
+      section.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E7
+
   # --- extensions/: frontmatter and hooks ----------------------------------------------
   - id: LC-E1
     subject: extension
@@ -199,6 +223,18 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-HOOK-DRIFT
+
+  - id: LC-E9
+    subject: extension
+    level: ERROR
+    since: 2
+    normative: >-
+      An extension declares `push_candidate:` as `true` or `false`. It is the flag the push queue
+      is drained from, so an entry without it can never be offered upstream and never retired on
+      absorption.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E9
 
   # --- extensions/: additivity and retirement ------------------------------------------
   - id: LC-E5

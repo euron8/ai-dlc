@@ -17,6 +17,85 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.183.0] — 2026-07-28
+
+### Added — the layer contract's first ERROR tier, and every comma-part of `shadows:` is finally read
+
+`contract_version: 2`. Three clauses, all ERROR, all with a **measured-empty false-positive set**
+against the reference consumer's real 45 layer entries.
+
+**E7 / `LC-O11` — a `shadows:` anchor must FORWARD-match a heading.** `reconcile/lib.sh`'s
+`span_of` matches in either direction: the heading contains the anchor (forward), or the anchor
+contains the heading (reverse). Forward is the legitimate grain — `SKILL.md#Rule 8` naming
+`### Rule 8 -- Run the validation cycle per declared intensity` is a consumer citing a rule by id.
+**Reverse is not a grain, it is a silent widening:** an anchor that contains the heading declares
+something finer than a heading — a paragraph, a sub-clause, a renamed section — which the resolver
+cannot address, so it quietly resolves to the WHOLE section. The consumer believes it shadowed a
+paragraph and has shadowed everything under that heading.
+
+The RESOLVER is deliberately unchanged. `readopt-override.sh` names one of these as the case an
+exact match kills, and `lib.sh` records a release where a stricter resolver misfiled a
+consumer-renamed heading as an addition. **Declaration is tightened; resolution is left alone** —
+and the error names the exact heading to substitute, so the fix is a copy-paste.
+
+Measured: **2 of 19 anchor instances fire, both true positives, 17 silent.**
+`overrides/steps__retro__ci-gates-enforcement-surface.md` declares
+`retro.md#Empirical gate validation (the \`Enforcement:\` paragraph)` where core's heading is
+`### Empirical gate validation`; `overrides/team-roles__tea__consumer-drift.md` declares
+`tea.md#Escalation Protocol` where core says `## Escalation`.
+
+**E3 widened / `LC-O3` — EVERY comma-part of `shadows:`, file AND anchor.** The old code ran
+`${shadows%%#*}` then `sed 's/,.*//'`, so it checked the first part's FILE and nothing else. On the
+reference consumer one override declares five anchors and got one file check and **zero anchor
+checks**; another declares four. **Nineteen anchor instances across twelve overrides were entirely
+unvalidated.**
+
+**E8 / `LC-O10` — `reason:` is required.** The contract had always said so and `grep -c reason`
+over both this validator and `layer-drift.sh` returned **0**: nothing read the key. Fires 0 times
+on the reference consumer, which is exactly why the fixture carries a mutant for it.
+
+**E9 / `LC-E9` — `push_candidate:` is required and must be a boolean.** Declared by the contract
+and read by **no file anywhere**: `grep -rl push_candidate` over the consumer's scripts,
+`core/scripts` and `core/hooks` matched zero. It is the flag the push queue is drained from, so an
+entry without it can never be offered upstream and never retired on absorption. Measured: 1 of 33.
+
+Total on the reference consumer: **3 errors, 0 warnings, exit 1** — two anchors and one missing
+flag, each a one-line fix.
+
+### Fixed — two defects this release introduced and its own fixture caught
+
+- **The counter was lost to a subshell.** The new per-comma-part loop was written
+  `printf | tr | while`, and a pipeline runs its last stage in a SUBSHELL, so every `err()`
+  incremented `ERRORS` in a child process and discarded it. Three ERROR lines printed and the
+  footer said **one**: a validator that reports a real violation and then exits zero. Loud and
+  non-blocking is the worse of the two failure directions. Replaced with a here-doc redirect, and
+  `count-matches-lines` now asserts ERROR lines == footer count == non-zero exit.
+- **A mutant that was a byte-different no-op.** The first `mutation-firstpart` inserted a
+  `sed 's/,.*//'` on `$part` — but the value is already comma-split by then, so there was no comma
+  to strip and the mutant behaved identically to the original. **`cmp -s` passed it.** The fixture
+  caught it ("still caught part two"). `cmp -s` proves a mutation happened; only the assertion
+  proves it mutated the thing under test.
+
+### Changed — one heading normalizer, not three
+
+`nrm()` was defined identically in two awk programs inside `validate-layer-entries.sh`, and E7 was
+about to add a third. Two copies of a grammar in one file is the restatement smell I26 names;
+three is a fork waiting to happen — and this normalizer decides whether two headings are THE SAME
+heading, the join every anchor check in the file rests on. Extracted to one `NRM_FN` constant,
+concatenated onto each awk program by adjacent-string quoting so the rest of each program stays
+single-quoted and needs no escaping. `layer-catalog-collision` and `layer-readopt-gate` verified
+unchanged.
+
+### Fixture
+
+`core/fixtures/layer-anchor-declaration/` — 12 assertions. The differential: `SKILL__Rule-8.md`
+and `team-roles__tea__escalation.md` shadow by the same kind of anchor and must classify
+oppositely, and the only difference between them is which direction the containment resolves. A
+checker that accepts either direction calls both fine. Plus a multi-anchor entry whose FIRST part
+is valid and second is not — invisible to a first-part-only reader — an assertion that the error
+names the exact heading to substitute, two mutants (first-part-only read; the subshell pipeline),
+each asserted to break ONLY its own assertion, and an unmutated control copy.
+
 ## [0.182.0] — 2026-07-28
 
 ### Added — the consumer layer contract is one file, versioned, and it polices itself
