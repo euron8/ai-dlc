@@ -470,6 +470,60 @@ else
     err "I36 read ZERO clauses out of layer-contract.yaml. The contract cannot be empty and a zero here would make I36/I37/I38 all pass vacuously — the exact shape they exist to forbid."
   fi
 
+  # --- I41: a clause id is unique. ------------------------------------------------------
+  # HOW THIS SHIPPED. v0.187.0 added LC-O12 and v0.192.0 added a SECOND one, and the build
+  # stayed green through both. Every existing invariant keys on something else: I36 joins on
+  # `code:` (unique), I37 on the presence of three fields, I38 greps the prose home for the id
+  # as a SUBSTRING — so two clauses sharing an id satisfy I38 on one line of prose. The id was
+  # the one field nothing checked, which is why it was the one field that collided.
+  #
+  # It is not cosmetic. The id is the only handle a report, a CHANGELOG or an operator has for
+  # naming which clause fired, and `overrides/README.md` had carried both under one label since
+  # v0.192.0 — the reader-facing side of the contract had two different rules with one name. It
+  # is also the key row 11's disposition register is specified to use, per (entry, clause, digest).
+  #
+  # The collision hid because the file is NOT in numeric order: LC-O12 sat ABOVE LC-O10 and
+  # LC-O11, so an author appending after LC-O11 counted forward and landed on a taken number
+  # without it ever appearing adjacent. Ordering is not the fix; a mechanism is.
+  lc_dupes="$(printf '%s\n' "$lc_ids" | grep . | sort | uniq -d | tr '\n' ' ')"
+  if [ -n "$lc_dupes" ]; then
+    err "I41: layer-contract.yaml declares the same clause id more than once — ${lc_dupes% }. The id is the only name a report, a README or an operator has for a clause, so two clauses under one id make every citation of it ambiguous and let one clause satisfy I38 on the other's prose. Renumber the collision; the id space is append-only, so take the next free number rather than reordering the file."
+  fi
+
+  # --- I42: no clause is introduced at a contract_version the contract has not reached. --
+  # `since:` is the whole retro-application rule — an entry declaring `conforms_to: N` is held
+  # only to clauses with `since <= N` — and a clause with `since` ABOVE `contract_version` can
+  # never satisfy that for any conforming entry. It is a clause that cannot fire wearing a
+  # version number, which is this repo's named defect class at contract grain.
+  #
+  # MEASURED WHEN THIS WAS ADDED: contract_version was 2 while THREE clauses declared `since: 3`
+  # (both LC-O12s and LC-O13). v0.183.0 set the 2; v0.187.0 and v0.192.0 each wrote a 3 past it.
+  # Nothing read either field, so nothing objected — `conforms_to` has no reader anywhere in the
+  # tree to this day, and that gap is recorded separately. This invariant does not create the
+  # reader; it stops the declaration from drifting into a state no reader could ever honour.
+  #
+  # A missing `since:` or an unparseable `contract_version` is an ERROR, not a skip: either one
+  # would let this scan pass by finding nothing.
+  lc_cv="$(awk '/^contract_version:/{print $2; exit}' "$lc_file")"
+  case "$lc_cv" in
+    ''|*[!0-9]*)
+      err "I42 cannot read a numeric contract_version out of layer-contract.yaml (got '${lc_cv:-<none>}'). Every clause's since: is compared against it, so an unreadable value would retire this check silently rather than failing it." ;;
+    *)
+      lc_i42="$(awk -v cv="$lc_cv" '
+        /^  - id:/    { if (id != "") check(); id=$3; since=""; next }
+        /^    since:/ { since=$2; next }
+        END           { if (id != "") check() }
+        function check() {
+          if (since == "")                      printf "%s has no since:; ", id
+          else if (since ~ /[^0-9]/)            printf "%s since %s is not a number; ", id, since
+          else if (since + 0 > cv + 0)          printf "%s since %s > contract_version %s; ", id, since, cv
+        }
+      ' "$lc_file")"
+      if [ -n "$lc_i42" ]; then
+        err "I42: layer-contract.yaml carries a clause the contract's own version has not reached — $lc_i42 An entry declaring 'conforms_to: N' is held only to clauses with since <= N, so a clause above contract_version binds nobody. Bump contract_version in the same release that introduces the clause."
+      fi ;;
+  esac
+
   # --- I37: no prose-only clause. A clause must name a level, an enforcer and a code. ---
   # This is the invariant that keeps the seventeen-unenforced state out. `enforcement: pending`
   # is not a permitted value anywhere, deliberately: a placeholder is the same
@@ -538,7 +592,9 @@ EOF
   done
 
   # --- I38 forward: every clause id appears in the prose home it declares. ---
-  # ONLY the forward direction ships at contract_version 1, and the reason is measured. The
+  # ONLY the forward direction ships, and the reason is measured. (It was written when the
+  # contract was at version 1 and said so; the number was never updated across two bumps, which
+  # is a small instance of exactly what I42 now guards — do not restate a version in prose.) The
   # reverse direction — every normative sentence carries a clause id — has no sound predicate
   # yet: a keyword scan (MUST|NEVER|never|cannot|only) over the two layer READMEs matches 26
   # lines against 10 real clauses, and the structural form is worse, because the two files do
@@ -1729,7 +1785,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), and no clause is introduced above contract_version (I42)."
   exit 0
 fi
 exit 1

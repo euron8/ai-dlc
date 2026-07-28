@@ -17,6 +17,85 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.193.0] — 2026-07-28
+
+### Fixed — the layer contract had two clauses named `LC-O12`, and the build was green
+
+`v0.187.0` added `LC-O12` for `OVERRIDE-ASSERTS-SHADOW-SURVIVES`. `v0.192.0` added a **second**
+`LC-O12`, for `OVERRIDE-LOOSE-ANCHOR`. Five releases apart, both shipped, `validate-enforcement-map.sh`
+exited **0** the whole way, and `overrides/README.md` carried both under one bold label — the
+reader-facing side of the contract had two different rules with one name.
+
+Every invariant on that file keys on something else. `I36` joins on `code:`, which is unique.
+`I37` checks that three fields are present. `I38` greps the declared `prose_home` for the id as a
+**substring**, so two clauses sharing an id both pass on the surviving one's line — the invariant
+closest to the defect was the one structurally unable to see it. The id was the single field
+nothing checked, and it is the field a report, a CHANGELOG, an operator, and row 11's planned
+`(entry, clause, body-digest)` register all use as the handle.
+
+It hid because the file is **not in numeric order**: `LC-O12` sat above `LC-O10` and `LC-O11`, so
+an author appending after `LC-O11` counted forward and landed on a taken number without the two
+ever appearing near each other. Reordering the file is not the fix.
+
+`OVERRIDE-ASSERTS-SHADOW-SURVIVES` becomes **`LC-O14`**, keeping the anchor run `LC-O11` →
+`LC-O12` → `LC-O13` whose normative text cross-references itself. The renumber costs no consumer
+anything, and that was measured rather than assumed: the reference consumer's installed
+`overrides/README.md` carries **zero** occurrences of `LC-O12` — it is stamped `0.183.0` and the
+clause landed at `0.187.0` — against a control confirming it does cite `LC-O11`.
+
+### Fixed — three clauses were introduced at a contract version the contract had not reached
+
+`contract_version` was **2** while `LC-O12`, `LC-O13` and the clause now called `LC-O14` all
+declared `since: 3`. The file's own header states the rule those fields exist for: *an entry
+declaring `conforms_to: N` is held only to clauses with `since <= N`.* A clause above the contract
+version satisfies that for no conforming entry — it is a clause that cannot fire, wearing a version
+number. `v0.183.0` set the 2; `v0.187.0` and `v0.192.0` each wrote a 3 past it. `contract_version`
+is now **3**, which is additive and rewrites no clause's `since`.
+
+### Added — `I41` and `I42`
+
+**`I41`** — a clause id is unique. Set cardinality over the contract's own ids; it can fire on
+nothing but a genuine duplicate.
+
+**`I42`** — no clause declares a `since` above `contract_version`. A missing `since:` and an
+unparseable `contract_version` are each an ERROR rather than a skip, because either one would let
+the comparison pass by finding nothing.
+
+### Evidence
+
+Both invariants were run against the contract **as it shipped at `ee2cf37`**, recovered with
+`git show`, and both fired there; the fixed tree exits 0. That is the strongest available mutant,
+because it is not a mutant — it is the defect.
+
+Four new assertions in `core/fixtures/layer-contract-conformance/`, on top of the four already
+there, each a `cmp -s`-guarded copy asserting a positive outcome. Verified that **each fires
+exactly one invariant**, with the unmutated control clean, so no assertion is entangled:
+
+| mutant | fires | and only |
+|---|---|---|
+| fold `LC-O14` back onto `LC-O12` | `I41` | `I41` |
+| raise the first clause's `since` to `contract_version + 1` | `I42` | `I42` |
+| delete a clause's `since:` | `I42` | `I42` |
+| `contract_version: three` | `I42` | `I42` |
+
+The version mutant **raises a clause** rather than lowering `contract_version`, deliberately.
+Lowering it only fires while some clause happens to sit exactly at the current version, so a later
+release that bumps the version without adding a clause at it would turn the mutant into a
+byte-different no-op — the shape `cmp -s` passes because the bytes did change.
+
+`I42`'s three arms assert on their own **wording** (`> contract_version`, `has no since:`,
+`cannot read a numeric contract_version`), never on the shared token `I42`, which is the trap
+`v0.191.0` recorded: when two arms can both name the same string, an assertion on that string
+passes against a reverted fix.
+
+### Known-open
+
+`contract_version` and `conforms_to` have **no reader anywhere in the tree** — the only occurrence
+outside the contract is a comment in `validate-enforcement-map.sh` that still says "contract_version
+1". Control: the same search for `prose_home` returns three files that do read it. `I41`/`I42` keep
+the declaration internally coherent; they do not build the reader, and no consumer entry declares
+`conforms_to:` today.
+
 ## [0.192.0] — 2026-07-28
 
 ### Added — two pull-time override statuses, and one reading of `shadows:` behind them

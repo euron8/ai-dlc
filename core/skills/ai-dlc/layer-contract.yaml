@@ -49,7 +49,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 2
+contract_version: 3
 
 clauses:
 
@@ -157,7 +157,7 @@ clauses:
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-DELEGATES-INTO-SHADOW
 
-  - id: LC-O12
+  - id: LC-O14
     subject: override
     level: WARN
     since: 3
