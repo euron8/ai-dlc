@@ -505,6 +505,51 @@ else
   printf '  FAIL  %-22s unmutated copy emitted %s named rows, want 2 — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named"
 fi
 
+# --- ENTRY-SWALLOWED: a bold-bullet annotation that became its own entry -----------------
+# THE DEFECT. A line-leading `- **…**` annotation inside an entry opens a NEW entry, so it
+# truncates the one it annotates and captures its receipt. The real entry then emits no row
+# under its own id — a silent disappearance that reads exactly like an entry with nothing to
+# report. The reference consumer hit it while annotating an entry; two runs read clean.
+row_has "The derivation:" ENTRY-SWALLOWED \
+  "an annotation lead-in that opened its own entry is REPORTED, not silently obeyed"
+
+# It must name WHICH entry went dark, or the operator has a complaint and no subject.
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $3 ~ /PC-FIXTURE-SWALLOWED-BY-ANNOTATION/{f=1} END{exit !f}'; then
+  printf '  ok    %-22s names the entry it truncated, and that it captured the receipt\n' "swallowed-names-entry"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s reported a swallow without naming the entry that went silent\n' "swallowed-names-entry"
+fi
+
+# THE CONTROL SET, and both must be able to fail. Without them the assertion above is satisfied
+# by a detector that flags every entry, or every entry carrying a colon anywhere.
+row_lacks "PC-FIXTURE-COLON-CONTROL" ENTRY-SWALLOWED \
+  "a normal entry in the same section stays silent"
+row_lacks "a-real-entry.sh" ENTRY-SWALLOWED \
+  "a PROSE-titled entry legitimately carrying a receipt stays silent — the measured 6-of-7 false-positive class"
+
+# MUTATION — drop the colon discriminator. The prose-titled control must then be reported,
+# which is the exact false-positive set that killed the earlier predicate. Nothing else changes.
+MUTC="$(dirname "$DIST")/mut-colon"
+rm -rf "$MUTC"; mkdir -p "$MUTC"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTC/" 2>/dev/null
+sed 's@label ~ /:\$/ && !idshape(label)@!idshape(label)@' "$CLOSER" > "$MUTC/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTC/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the colon discriminator is unproven\n' "mutation-colon"
+else
+  mc_out="$(bash "$MUTC/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  if printf '%s\n' "$mc_out" | awk -F'\t' '$1=="ENTRY-SWALLOWED" && $2 ~ /a-real-entry/{f=1} END{exit !f}'; then
+    printf '  ok    %-22s without the colon test a prose-titled entry is falsely reported — it is load-bearing\n' "mutation-colon"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s dropping the colon test did NOT re-fire the prose entry, so the control above is vacuous\n' "mutation-colon"
+  fi
+fi
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

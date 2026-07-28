@@ -562,6 +562,16 @@ prose is itself generated rather than composed.
        `verify: manual` if the entry is a proposal nobody has built yet. **Never drain on
        this verdict.** A DETAIL reporting reachability NOT checked means unchecked, not
        clean.
+   - `ENTRY-SWALLOWED` → a line-leading `- **…**` **annotation** inside an entry body. The
+     entry-boundary rule opens a new entry on any such line, so the annotation truncates the
+     entry it was annotating: everything below it — **including the `verify:` receipt** — is
+     attributed to the annotation, and the real entry stops emitting any row under its own id.
+     A silent disappearance, and it reads exactly like an entry with nothing to report. The
+     signal is the colon: an annotation is a lead-in (`- **The share:** …`) and its bold span
+     ends in one, while an entry title does not. The DETAIL names the nearest id-shaped entry
+     above it and says whether a receipt was captured. **Fix the ledger, not the entry** —
+     re-indent the annotation so it does not start a line, or drop the bold, then re-run and
+     confirm the id reappears. Report-only; it never blocks.
    **Anchor a `theirs_lacks` receipt on a token upstream MUST use, never on predicted
    prose.** The substring for a fix that does not exist yet is a guess at wording upstream
    has not written, so it closes only if upstream happens to pick the same words. Anchor on a

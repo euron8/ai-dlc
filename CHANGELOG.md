@@ -17,6 +17,61 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.189.0] — 2026-07-28
+
+### Added — `ENTRY-SWALLOWED`: an annotation that deletes the entry it annotates
+
+`PC-S310`. The entry-boundary rule opens a new entry on **any** line-leading `- **`. That is
+correct for a ledger whose entries are bullets — most of them — and it is exactly what makes an
+**annotation** written in the same shape indistinguishable from an entry.
+
+So an operator who annotates an entry with `- **Case 3 (…)** …` splits it: everything below the
+annotation, **including the `verify:` receipt**, is attributed to a new entry labelled with the
+annotation's prose, and the real entry stops emitting any row under its own id. Nothing said so.
+The reference consumer hit this while annotating an entry and **two intermediate runs read clean**.
+
+**Not a re-keying of the entry-shape rule.** That remedy was considered and rejected: the bullet arm
+is load-bearing for every bullet-keyed ledger, and narrowing it drops real entries. v0.171.1
+recorded the same class one heuristic over — *a swallowed entry produces no row at all* — and the
+answer was the same then: leave the parser, ship the diagnostic.
+
+New report-only status in `reconcile/ledger-reverify.sh`, documented in `ai-dlc-update/SKILL.md`
+step 3f. **I39 — added in v0.186.0 — failed the build until that documentation existed**, which is
+the join from two releases ago doing its job on the first status added after it.
+
+### Measured — two predicates were rejected before this one, and the second needed a real run to kill
+
+| Predicate | Result |
+|---|---|
+| "an entry that ends without emitting a row" | **58 rows** on the reference consumer (15 id-shaped, 43 prose) — a missing `verify:` line is legitimate opt-out, so this reports most of the ledger |
+| "a receipt attributed to a label that is not an entry id" | **7 rows, 6 of them false** — real entries that carry prose titles rather than id keys |
+| **"a bullet whose bold span ends in a colon, and is not an id"** | **3 rows, all true, FP set zero** |
+
+The second rejection is the instructive one. A standalone probe scored it **1 of 1** and it looked
+shippable; running the **real tool** produced 7. The probe anchored `verify:` at column zero while
+the real receipt pattern tolerates the indentation every bullet-nested receipt actually has — so the
+probe was *stricter than the thing it was modelling*, under-counted, and its clean result was an
+artefact. A predicate is not measured until it has been measured **by the code that will ship it**.
+
+**The signal is the colon.** An annotation is written as a lead-in — `- **The share:** the analyst
+also reads …` — and an entry is written as a title. The bold span of a lead-in ends in a colon; the
+bold span of a title does not. Across all 52 top-level bullets on the reference consumer: three end
+in a colon, and those three are exactly the annotation sub-bullets of one entry. The other 49 are
+real entries.
+
+The DETAIL names the nearest id-shaped entry above and says whether a receipt was captured — a
+complaint with no subject is not actionable. On the reference consumer the captured one correctly
+names `PC-S295-RETRO-COLLAPSE-PAUSE-FLAG-AND-BOUNDED-JOIN` as the entry that went dark.
+
+Implemented as a **separate pass** that reuses the single-homed boundary rule but runs its own scan,
+so a diagnostic added here cannot perturb the receipt parse — the parse this whole tool exists to get
+right.
+
+Fixture: `core/fixtures/ledger-reverify/` gains a seeded swallowed entry, a same-section control that
+must stay silent, a **prose-titled entry carrying a receipt** (the measured 6-of-7 false-positive
+class), and a mutant that drops the colon test and must re-fire that prose entry — otherwise the
+control proves nothing.
+
 ## [0.188.0] — 2026-07-28
 
 ### Changed — the pre-push fixture suite runs 8-way parallel: 7m06s → 2m34s
