@@ -349,6 +349,67 @@ else
   fi
 fi
 
+# --- EVERY RECEIPT, NOT THE LAST ONE ---------------------------------------------------
+# `directive` was a scalar assigned inside a per-line awk rule, so a second line-leading `verify:`
+# silently overwrote the first. Measured on the reference consumer AFTER the fix: 2 entries carry
+# multiple receipts (one with two, one with four), so FOUR receipts were being discarded on every
+# pull. Their surviving verdicts happened to agree there, which is precisely how the defect went
+# unnoticed — the row was never wrong, the question was never asked.
+#
+# This pair disagrees on purpose: a close and a still-live in one entry. The scalar kept the close.
+row_has "PC-FIXTURE-TWO-RECEIPTS" STILL-LIVE \
+  "receipt 1 of 2 is genuinely live and must not be swallowed by the close that follows it"
+row_has "PC-FIXTURE-TWO-RECEIPTS" CLOSE-CANDIDATE \
+  "receipt 2 of 2 is a real close and must still report"
+
+# The ordinal has to be on the row, or two rows for one entry are unattributable.
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | grep -F 'PC-FIXTURE-TWO-RECEIPTS' | grep -q '\[receipt 1/2\]'; then
+  printf '  ok    %-22s rows carry their receipt ordinal\n' "receipt-ordinal"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s two rows for one entry with no ordinal to tell them apart\n' "receipt-ordinal"
+fi
+
+# A SINGLE-receipt entry must be byte-unchanged — no ordinal suffix. Otherwise the fix rewrites
+# every row in every consumer report to buy a two-entry improvement.
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | grep -F 'Entry A' | grep -q '\[receipt '; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s a single-receipt entry grew an ordinal suffix\n' "single-unchanged"
+else
+  printf '  ok    %-22s single-receipt rows unchanged (no suffix)\n' "single-unchanged"
+fi
+
+# MUTATION — restore the scalar handoff. The still-live half must vanish, and ONLY that.
+MUTS="$(dirname "$DIST")/mut-scalar"
+rm -rf "$MUTS"; mkdir -p "$MUTS"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTS/" 2>/dev/null
+awk '
+  /^    dn\+\+; dv\[dn\]=directive$/ { next }
+  /^      for \(di = 1; di <= dn; di\+\+\)$/ { skip=1; next }
+  skip { print "      printf \"%s\\t%s\\t%s\\n\", label, \"1/1\", directive"; skip=0; next }
+  { print }
+' "$CLOSER" > "$MUTS/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTS/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the accumulation assertions are unproven\n' "mutation-scalar"
+else
+  ms="$(bash "$MUTS/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  ms_live="$(printf '%s\n' "$ms" | awk -F'\t' '$2 ~ /TWO-RECEIPTS/ && $1 == "STILL-LIVE" {c++} END{print c+0}')"
+  ms_close="$(printf '%s\n' "$ms" | awk -F'\t' '$2 ~ /TWO-RECEIPTS/ && $1 == "CLOSE-CANDIDATE" {c++} END{print c+0}')"
+  if [ "$ms_live" -eq 0 ] && [ "$ms_close" -gt 0 ]; then
+    printf '  ok    %-22s the scalar handoff swallows the live receipt and keeps the close\n' "mutation-scalar"
+  elif [ "$ms_live" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant still emitted the live receipt, so the assertions above are vacuous\n' "mutation-scalar"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant lost BOTH rows, so it is not a clean mutation of the handoff alone\n' "mutation-scalar"
+  fi
+fi
+
 # --- THE NAME IS THE THIRD SIGNAL ------------------------------------------------------
 # Every predicate above tests the RECEIPT, which is the wrong instrument when the receipt is
 # what is broken. A receipt anchored on a token present at both refs, or an inverted verb, or
