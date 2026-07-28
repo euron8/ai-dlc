@@ -551,6 +551,65 @@ case "$st_theirs" in
   *)      bad "absorption downgraded out of HARD- — apply would silently delete the consumer's hook" ;;
 esac
 
+echo "== C3. an override that delegates INTO the section it shadows =="
+
+# Precedence is overrides > extensions > core, so a whole-section shadow deletes every
+# construct defined inside that section -- including one the override's own body points
+# the lead at. It reads as a correct single-source delegation and behaves as a dropped
+# one. Both real instances on the reference consumer were reported OVERRIDE-OK while
+# doing exactly this, which is why the two questions must be asked separately.
+DRIFT="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/layer-drift.sh" \
+              "$HERE/../../../core/skills/ai-dlc-update/reconcile/layer-drift.sh" \
+              "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/layer-drift.sh")"
+if [ -z "$DRIFT" ]; then
+  bad "FIXTURE BROKEN — cannot locate layer-drift.sh; C3 would pass by not running"
+else
+  ld_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
+  st_of() { printf '%s\n' "$ld_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
+
+  if printf '%s\n' "$(st_of 'SKILL__Rule-10\.md$')" | grep -qx OVERRIDE-DELEGATES-INTO-SHADOW; then
+    ok "an override naming a construct defined inside its own shadow is REPORTED"
+  else
+    bad "the delegation went undetected — every future change to that construct fails to arrive while every check reports green"
+  fi
+
+  # THE CONTROL, and it must be able to fail. Same shape, same file, delegating to a
+  # construct defined OUTSIDE the shadowed span. Without it the assertion above passes
+  # for a detector that flags every override carrying a backticked term.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-10-control\.md$')" | grep -qx OVERRIDE-DELEGATES-INTO-SHADOW; then
+    bad "an override delegating OUTSIDE its shadow was reported — the detector fires on every legitimate cross-section pointer"
+  else
+    ok "  and delegating to a construct outside the shadow stays silent"
+  fi
+
+  # It answers a DIFFERENT question than the drift arm. Both rows must appear for the
+  # same entry: folding this into `worst` would hide it behind an OVERRIDE-OK, which is
+  # precisely how both live instances stayed invisible.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-10\.md$')" | grep -qx OVERRIDE-OK; then
+    ok "  and the entry is STILL OVERRIDE-OK on drift (the two questions are independent)"
+  else
+    bad "  but the delegation status displaced the drift status — one entry, two questions, two rows"
+  fi
+
+  # THE MEASURED FALSE POSITIVE, and the only assertion that can catch its return.
+  # When the backticked term is in the ANCHOR heading itself, naming it is
+  # self-description, not delegation. Dropping the anchor-heading exclusion re-fires
+  # this (1 of 13 on the reference consumer) and every other assertion here stays green.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-12-anchor\.md$')" | grep -qx OVERRIDE-DELEGATES-INTO-SHADOW; then
+    bad "an override naming a term from the heading it OVERRIDES was reported — the anchor heading is not being excluded, and every self-describing override now fires"
+  else
+    ok "  and naming a term from the overridden heading itself stays silent"
+  fi
+
+  # Report-only. It must not block `apply`, or a consumer cannot take a security fix
+  # until it has restructured its own overrides.
+  if printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}' | grep -q DELEGATES; then
+    bad "OVERRIDE-DELEGATES-INTO-SHADOW carries a HARD- prefix — it would block apply"
+  else
+    ok "  and it is report-only, never a blocker"
+  fi
+fi
+
 rm -rf "$ROOT"
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-readopt-gate: PASS"; exit 0; fi

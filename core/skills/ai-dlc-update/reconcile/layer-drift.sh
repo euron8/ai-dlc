@@ -41,6 +41,23 @@
 #                                    EXTENSION-CHECK-NUMBER-COLLISION below, which is
 #                                    cosmetic, consumer-fixable, and must NOT block:
 #                                    this one changes the RULES THE LEAD OBEYS.
+#   OVERRIDE-DELEGATES-INTO-SHADOW   the override's BODY names a construct defined in a
+#                                    heading INSIDE a section it shadows. Precedence is
+#                                    overrides > extensions > core, so at load time the
+#                                    override replaces that section -- including the
+#                                    construct it is pointing the lead at. It reads as a
+#                                    correct single-source delegation and behaves as a
+#                                    dropped one. Every OTHER status here asks whether
+#                                    UPSTREAM moved; this asks whether the override can
+#                                    reach its own target, which is true or false today
+#                                    and independent of any pull. Report-only: the
+#                                    delegation is sometimes deliberate (the lead may be
+#                                    expected to open core), so this must not block, but
+#                                    it must be VISIBLE -- the reference consumer carried
+#                                    two of these while every mechanical check reported
+#                                    green, and the mechanism they broke is the one by
+#                                    which any future change to the delegated-to construct
+#                                    silently fails to arrive.
 #   OVERRIDE-DRIFT-FILE              anchor is not a locatable heading AND the file
 #                                    changed -> cannot prove the section is safe;
 #                                    surface for re-confirmation (never skip)
@@ -114,6 +131,25 @@ fm() { # fm <file> <key>
 }
 
 layer_files() { [ -d "$1" ] || return 0; find "$1" -type f -name '*.md' ! -name 'README.md' 2>/dev/null | sort; }
+
+# An entry's body — everything after the closing frontmatter `---`.
+#
+# awk, not `sed '1,/^---$/d'`: BSD sed rejects the multi-command form this needs, and
+# the failure mode is an EMPTY body, which makes every predicate below report a clean
+# zero. Measured during development: the first probe scanned 13 overrides, printed no
+# findings, and had in fact read nothing.
+body_of() {
+  awk 'NR==1 && $0=="---" { fm=1; next } fm && $0=="---" { fm=0; next } !fm' "$1"
+}
+
+# Backticked constructs in a stream, lowercased and deduped — the join key for
+# OVERRIDE-DELEGATES-INTO-SHADOW.
+#
+# Backticks, not heading TEXT. A delegation names the construct (`## Machine Audits`),
+# never the full title of the heading that defines it ("`## Machine Audits` — one table,
+# not five transcriptions"). Matching whole heading text found ZERO of the two real
+# instances; matching the backticked span found both with no false positives.
+ticks_of() { grep -o '`[^`]\{3,60\}`' | tr 'A-Z' 'a-z' | sort -u; }
 rel() { printf '%s' "${1#"$CONSUMER"/}"; }
 
 git_show() { git -C "$DIST" show "$1:$2" 2>/dev/null; }
@@ -298,7 +334,8 @@ while IFS= read -r f; do
   # a single-section message on an override shadowing eight sections invites the
   # operator to reconcile that one and silently drop the rest.
   worst=OVERRIDE-OK
-  drifted=""; unprovable=""; unresolved=""; whole_file=""
+  drifted=""; unprovable=""; unresolved=""; whole_file=""; delegated=""
+  ov_ticks="$(body_of "$f" | ticks_of)"
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     if [ "$id" = "__file__" ]; then
@@ -306,6 +343,22 @@ while IFS= read -r f; do
       continue
     fi
     s_theirs="$(git_show "$THEIRS" "$cp" | section_of "$id")"
+
+    # Does this override delegate INTO the section it replaces?  See the status
+    # note in the header.  `s_theirs` is the exact text the override displaces, so
+    # a construct named in a heading there is one the lead can no longer reach.
+    # Line 1 is the anchor heading itself and is dropped: an override naming the
+    # section it overrides is not a delegation, and leaving it in reported every
+    # entry whose anchor carries a backticked term (measured: 1 of 13, the sole
+    # false positive, and it went to zero when the heading was excluded).
+    if [ -n "$s_theirs" ] && [ -n "$ov_ticks" ]; then
+      inner="$(printf '%s\n' "$s_theirs" | awk 'NR>1 && /^#{2,6}[ \t]/' | ticks_of)"
+      if [ -n "$inner" ]; then
+        both="$(comm -12 <(printf '%s\n' "$ov_ticks") <(printf '%s\n' "$inner") | tr '\n' ' ')"
+        both="${both% }"
+        [ -n "$both" ] && delegated="${delegated:+$delegated; }#${id} -> ${both}"
+      fi
+    fi
     if [ -z "$s_theirs" ]; then
       if [ "$file_changed" = yes ]; then
         [ "$worst" = HARD-OVERRIDE-DRIFT-SECTION ] || worst=OVERRIDE-DRIFT-FILE
@@ -338,6 +391,14 @@ while IFS= read -r f; do
   fi
   [ -n "$detail" ] || detail="shadowed section(s) unchanged"
   emit "$worst" "$entry" "$tgt" "$detail"
+
+  # Reported SEPARATELY from `worst`, never folded into it: this is a different
+  # question. `worst` asks whether the shadowed section moved upstream; this asks
+  # whether the override's own body can still reach what it points at. An entry can
+  # be OVERRIDE-OK on every anchor and still delegate into its own shadow -- both
+  # of the real instances do exactly that.
+  [ -n "$delegated" ] && emit OVERRIDE-DELEGATES-INTO-SHADOW "$entry" "$tgt" \
+    "the body names construct(s) defined INSIDE the section(s) it replaces, so at load time (overrides > extensions > core) the delegation target is gone: ${delegated}. Every future upstream change to those constructs also fails to arrive here while every check stays green. Restate the construct in this override, narrow shadows: to the sub-headings actually rewritten, or delegate to something outside the shadowed span. Report-only -- delegating to a construct the lead is expected to open core for is sometimes deliberate."
 done < <(layer_files "$OVR_DIR")
 
 # ---------------------------------------------------------------------------
