@@ -17,6 +17,73 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.187.0] — 2026-07-28
+
+### Added — `OVERRIDE-ASSERTS-SHADOW-SURVIVES`: an override that tells the reader the text it deletes is still there
+
+`PC-S309`. The third failure mode in the shadowed-span family, and the one with no detector.
+
+`OVERRIDE-DELEGATES-INTO-SHADOW` (LC-O9) catches a body that **points at** a construct inside the
+span it shadows — precedence removes the target, and the delegation reads correct while behaving as
+a dropped one. This is the same mechanism with the opposite symptom: a body that **asserts the span
+survives**. An override that shadows a three-paragraph section, rewrites one paragraph, and states
+that the other two "are unchanged and still govern" is saying something false about *its own effect*.
+LC-O9 sends the reader after text that is gone; LC-O12 tells the reader the text is still there,
+which is why nobody goes looking for it.
+
+New report-only status in `reconcile/layer-drift.sh`, new clause **LC-O12** in `layer-contract.yaml`
+and `overrides/README.md`. `reconcile/hard-blockers.sh` needs no change — its `collect()` derives
+`HARD-*` from the status field, so a report-only status is outside the blocking set by construction.
+
+**Two live instances on the reference consumer, not one.** The known instance shadows all of
+`steps/retro.md#Empirical gate validation` while replacing one paragraph. Measuring the predicate
+surfaced a second of identical shape: an override shadowing `steps/gate-validation.md#14. Update
+pipeline snapshot.` whose body says *"This entry shadows the … clause of core Check 14, **and nothing
+else**. Every other part of Check 14 — the per-section refresh contract, the In-Flight Teammates
+rows-only rule, the routing record, the blank-deliverable failure, the budget-validator evidence
+cell — is core's and is unchanged."* `shadows:` names the section, so all of it is replaced and none
+of those five survive. Both entries report `OVERRIDE-OK` on the drift arm, which is why the status is
+emitted separately rather than folded into it.
+
+### Measured — the predicate, and the two discriminators it was measured into
+
+A bare survival-vocabulary scan (`unchanged` / `still governs` / `untouched` / `survives`) matches
+**5 of the consumer's 13 overrides with only 2 real** — the unshippable shape. The three false ones
+are each a claim about something *outside* the shadowed span, and they separate on one structural
+signal: **the noun the claim is about**.
+
+| Body text | Subject | Verdict |
+|---|---|---|
+| "the seven-precondition evaluation … apply unchanged" | another **file** | not a finding |
+| "a repair edits the artifact on UNCHANGED scope" | adjectival, no referent | not a finding |
+| "(Rule 5 fast-track still applies)" | a **different** named unit | not a finding |
+| "the audit basis recorded below holds unchanged" | the override's **own body** | not a finding |
+
+So the predicate requires a scope phrase whose noun is the shadowed grain — `section`, `check`,
+`rule`, `clause`. **False-positive set: zero across all 13.** This is also why the legitimate shape
+the grain warning names needs no carve-out: "the rest of the **file** is unchanged" is *true* for an
+override shadowing one section, and `file` is not in the noun set, so it cannot match. A structural
+exclusion, not a suppression list.
+
+**The body must be flattened before matching, and this is not a style choice.** Layer bodies are
+hard-wrapped at ~72 columns, so the claim splits across a newline — the second instance wraps between
+"Every other part of" and "Check 14". Every line-based grep for it returns **zero**, which reads
+exactly like the claim not being there. That false zero was measured during this work, on a probe
+written to be the *control* for a different question.
+
+The two discriminators each ship with a mutant in `core/fixtures/layer-readopt-gate/`: removing the
+flattening must silence the wrapped seeded claim **and not** the single-line one (they are separate
+entries so exactly one assertion is sensitive to it), and widening the noun set to include `file`
+must re-fire the honest rest-of-the-file claim. Plus an unmutated control copy, because a copy that
+cannot source `lib.sh` emits nothing and "no rows" would otherwise score as a kill for both.
+
+**Known limit, stated rather than hidden.** An override shadowing a *sub*-heading whose body
+correctly says the surrounding **parent** section is unchanged would match, because the noun is still
+`section`. No instance exists on the reference consumer, and the status is report-only, so the cost
+is one line an operator dismisses. Closing it means joining each named construct to the shadowed
+span's text at `base_sha` — both real instances name the constructs they claim survive, in an em-dash
+list — which is the strengthening path if that false positive is ever reported.
+
 ## [0.186.0] — 2026-07-28
 
 ### Changed — the ledger status named a verdict it cannot reach, and nothing joined it to the step that explains it

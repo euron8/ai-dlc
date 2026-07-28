@@ -608,6 +608,113 @@ else
   else
     ok "  and it is report-only, never a blocker"
   fi
+
+  # --- OVERRIDE-ASSERTS-SHADOW-SURVIVES, the sibling status ---------------------------
+  # Same mechanism as the delegation arm, opposite failure: that one points the lead at
+  # text precedence has removed, this one TELLS the lead the text is still there. Measured
+  # on the reference consumer: a bare survival-vocabulary scan matches 5 of 13 overrides
+  # with only 2 real; restricting the claim's noun to the shadowed grain takes the
+  # false-positive set to zero. The three controls below are those three false positives.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-13-survives\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+    ok "an override asserting its own shadowed span survives is REPORTED"
+  else
+    bad "the survival claim went undetected — the body states something false about its own effect and every check reports green"
+  fi
+
+  # THE WRAP, isolated in its own entry so exactly ONE assertion is sensitive to it. The
+  # claim splits across a newline between 'Every other part of' and 'Rule 16', where the
+  # real instance splits. A line-based predicate returns zero here, which reads identically
+  # to compliance. Nothing else in this file would notice the flattening being removed.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-16-wrapped\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+    ok "  and a claim WRAPPING across a newline is still found (the body is flattened)"
+  else
+    bad "  the wrapped claim was missed — a line-based scan reports a false zero on the real shape"
+  fi
+
+  # It answers a DIFFERENT question than the drift arm, same as its sibling. Both real
+  # instances were OVERRIDE-OK while making the claim.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-13-survives\.md$')" | grep -qx OVERRIDE-OK; then
+    ok "  and the entry is STILL OVERRIDE-OK on drift (two questions, two rows)"
+  else
+    bad "  but the survival status displaced the drift status — it would hide behind an OVERRIDE-OK"
+  fi
+
+  # CONTROL 1 — the shape the grain warning names as legitimate, and the reason the noun
+  # set excludes `file`. An override shadowing ONE section that says the rest of the FILE
+  # is unchanged is telling the truth, in the same vocabulary. Widening the predicate to
+  # any survival claim re-fires this and every other assertion here stays green.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-14-file-claim\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+    bad "an override correctly saying the rest of the FILE is unchanged was reported — the noun restriction is gone and every honest scoping sentence now fires"
+  else
+    ok "  and a true claim about the rest of the FILE stays silent"
+  fi
+
+  # CONTROL 2 — the measured false-positive class: survival vocabulary whose subject is a
+  # DIFFERENT named unit, plus a self-reference to the override's own body. Both shapes
+  # occur on the reference consumer and both must stay silent.
+  if printf '%s\n' "$(st_of 'SKILL__Rule-15-other-unit\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+    bad "an override whose survival claim names a DIFFERENT unit was reported — this is the 3-of-5 false-positive set returning"
+  else
+    ok "  and survival vocabulary about another unit stays silent"
+  fi
+
+  # Report-only, for the same reason as its sibling.
+  if printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}' | grep -q ASSERTS; then
+    bad "OVERRIDE-ASSERTS-SHADOW-SURVIVES carries a HARD- prefix — it would block apply"
+  else
+    ok "  and it is report-only, never a blocker"
+  fi
+
+  # --- MUTANTS: the two discriminators this predicate was MEASURED into ----------------
+  # Both are the difference between a shippable check and the 5-of-13 keyword scan that was
+  # rejected. Each is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome, and is aimed
+  # so that exactly one seeded entry changes verdict -- the others are the proof of that.
+  MUTD="$ROOT/mut"; rm -rf "$MUTD"; mkdir -p "$MUTD"
+  cp "$(dirname "$DRIFT")"/*.sh "$MUTD/" 2>/dev/null || true
+
+  # THE UNMUTATED CONTROL. Both mutants are copies into a fresh directory; a copy that
+  # cannot source lib.sh emits nothing, and "no rows" would otherwise score as a kill for
+  # both mutations below.
+  cp "$DRIFT" "$MUTD/layer-drift.sh"
+  ctl_n="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
+           | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES"{c++} END{print c+0}')"
+  if [ "$ctl_n" -eq 2 ]; then
+    ok "  mutation control: an unmutated copy still reports both seeded claims"
+  else
+    bad "  mutation control: unmutated copy reported $ctl_n of 2 — a copy that cannot run scores as a kill"
+  fi
+
+  # MUTANT 1 — drop the flattening. The wrapped entry must go silent and the single-line
+  # entry must NOT, or the two are entangled and the wrap assertion proves nothing.
+  sed "s@| tr '\\\\n' ' ' | tr -s ' ' \\\\@| tr -s ' ' \\\\@" "$DRIFT" > "$MUTD/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
+    bad "  mutation flatten: the mutation matched nothing, so the flattening assertion is unproven"
+  else
+    m1="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+    m1w="$(printf '%s\n' "$m1" | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES" && $2 ~ /Rule-16-wrapped/{c++} END{print c+0}')"
+    m1s="$(printf '%s\n' "$m1" | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES" && $2 ~ /Rule-13-survives/{c++} END{print c+0}')"
+    if [ "$m1w" -eq 0 ] && [ "$m1s" -eq 1 ]; then
+      ok "  mutation flatten: without it the WRAPPED claim vanishes and the single-line one does not"
+    else
+      bad "  mutation flatten: wrapped=$m1w (want 0) single-line=$m1s (want 1) — the flattening assertion is vacuous or the two entries are entangled"
+    fi
+  fi
+
+  # MUTANT 2 — widen the noun set to include `file`. The legitimate rest-of-the-FILE claim
+  # must start firing, and the two real claims must keep firing. This is the 3-of-5
+  # false-positive set returning, and it is the only assertion that can catch it.
+  sed 's@(section|check|rule|clause)@(section|check|rule|clause|file)@' "$DRIFT" > "$MUTD/layer-drift.sh"
+  if cmp -s "$DRIFT" "$MUTD/layer-drift.sh"; then
+    bad "  mutation noun-set: the mutation matched nothing, so the noun restriction is unproven"
+  else
+    m2="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
+          | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES"{print $2}')"
+    if printf '%s\n' "$m2" | grep -q 'Rule-14-file-claim'; then
+      ok "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
+    else
+      bad "  mutation noun-set: the honest rest-of-the-FILE claim stayed silent even with \`file\` in the noun set, so the control above is vacuous"
+    fi
+  fi
 fi
 
 rm -rf "$ROOT"

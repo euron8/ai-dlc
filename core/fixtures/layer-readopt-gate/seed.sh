@@ -63,6 +63,34 @@ The backticked term is in the ANCHOR heading itself, not in a construct nested
 under it. An override shadowing `#Rule 12` and naming `handoff_mode` is describing
 what it overrides, not delegating into it. This is the measured false positive
 (1 of 13 on the reference consumer) that the anchor-heading exclusion removes.
+
+## Rule 13 -- Escalation
+
+Multi-paragraph by design. An override shadowing `#Rule 13` replaces ALL of it, so a
+body that rewrites one paragraph and says the rest still governs is false about its
+own effect. Unchanged across the range, so the drift arm stays quiet and the survival
+claim is the only thing that can speak.
+
+The adjudication order, the freeze semantics, and the record format live here, in the
+paragraphs an override of this rule silently drops.
+
+## Rule 14 -- Budget
+
+Shadowed by an override whose survival claim is about the rest of the FILE, which is
+TRUE for a single-section shadow. The control for the noun restriction.
+
+## Rule 15 -- Gating
+
+Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and
+its own body. The control for the measured false-positive class.
+
+## Rule 16 -- Recording
+
+Multi-paragraph, shadowed by an override whose survival claim WRAPS across a newline --
+the shape that returns a false zero to any line-based predicate.
+
+The ordering guarantee and the retention window live here, in the paragraphs that entry
+silently drops.
 EOF
 
 # NOTE the trailing unchanged section. The template tokens must NOT be the last
@@ -157,6 +185,34 @@ The backticked term is in the ANCHOR heading itself, not in a construct nested
 under it. An override shadowing `#Rule 12` and naming `handoff_mode` is describing
 what it overrides, not delegating into it. This is the measured false positive
 (1 of 13 on the reference consumer) that the anchor-heading exclusion removes.
+
+## Rule 13 -- Escalation
+
+Multi-paragraph by design. An override shadowing `#Rule 13` replaces ALL of it, so a
+body that rewrites one paragraph and says the rest still governs is false about its
+own effect. Unchanged across the range, so the drift arm stays quiet and the survival
+claim is the only thing that can speak.
+
+The adjudication order, the freeze semantics, and the record format live here, in the
+paragraphs an override of this rule silently drops.
+
+## Rule 14 -- Budget
+
+Shadowed by an override whose survival claim is about the rest of the FILE, which is
+TRUE for a single-section shadow. The control for the noun restriction.
+
+## Rule 15 -- Gating
+
+Shadowed by an override whose survival vocabulary names a DIFFERENT unit (Rule 9) and
+its own body. The control for the measured false-positive class.
+
+## Rule 16 -- Recording
+
+Multi-paragraph, shadowed by an override whose survival claim WRAPS across a newline --
+the shape that returns a false zero to any line-based predicate.
+
+The ordering guarantee and the retention window live here, in the paragraphs that entry
+silently drops.
 EOF
 
 # THEIRS absorbs the consumer's hardening (the v0.55.0 handoff-guard case).
@@ -275,6 +331,82 @@ reason: consumer-specific handoff configuration.
 
 This consumer sets \`handoff_mode\` to always-on. Naming the term that appears in
 the heading being overridden is self-description, not a delegation into the shadow.
+EOF
+
+# --- OVERRIDE-ASSERTS-SHADOW-SURVIVES ------------------------------------------------
+# THE DEFECT. This body rewrites ONE paragraph of the section it shadows and states that the
+# rest of that section still governs. Precedence replaces the whole span, so the sentence is
+# false about the entry's own effect. Like the delegation pair above, this shadows an
+# UNCHANGED section and is therefore OVERRIDE-OK on the drift arm -- both of the real
+# instances were, which is why the question has to be asked separately.
+#
+# The claim sits entirely on ONE line here, so this entry stays reportable whether or not
+# the detector flattens. That keeps it independent of the wrap entry below -- otherwise one
+# mutation would fail two assertions and one of them would be vacuous.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-13-survives.md" <<EOF
+---
+shadows: SKILL.md#Rule 13
+base_sha: ${BASE}
+reason: consumer-specific escalation threshold; the rest of the rule is core's.
+---
+
+## Rule 13 -- Escalation (CONSUMER OVERRIDE)
+
+The escalation-threshold paragraph of Rule 13 is replaced for this consumer: escalate at
+three failures rather than two.
+
+The rest of the section is unchanged and still governs.
+EOF
+
+# THE WRAP, ISOLATED IN ITS OWN ENTRY. The claim splits across a newline between "Every
+# other part of" and "Rule 16", exactly where the reference consumer's second instance
+# splits. Layer bodies are hard-wrapped at ~72 columns, so a line-based predicate returns
+# ZERO on the real shape -- an absence indistinguishable from compliance. This entry is the
+# only thing that fails if the detector stops flattening the body.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-16-wrapped.md" <<EOF
+---
+shadows: SKILL.md#Rule 16
+base_sha: ${BASE}
+reason: consumer-specific record format; claim deliberately wrapped across a newline.
+---
+
+## Rule 16 -- Recording (CONSUMER OVERRIDE)
+
+The record-format paragraph of Rule 16 is replaced for this consumer. Every other part of
+Rule 16 — the ordering guarantee and the retention window — is core's and is unchanged.
+EOF
+
+# CONTROL 1 — the shape the grain warning names as LEGITIMATE. An override that shadows one
+# section and says the rest of the FILE is unchanged is telling the truth, and it uses the
+# same survival vocabulary. It must stay SILENT. Without this the noun restriction is
+# untested and could be widened to any survival claim with every assertion still green.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-14-file-claim.md" <<EOF
+---
+shadows: SKILL.md#Rule 14
+base_sha: ${BASE}
+reason: consumer-specific budget; scoped claim is about the rest of the FILE, which is true.
+---
+
+## Rule 14 -- Budget (CONSUMER OVERRIDE)
+
+This consumer raises the budget ceiling. The rest of the file is unchanged and still
+governs; only this rule is replaced.
+EOF
+
+# CONTROL 2 — survival vocabulary whose subject is a DIFFERENT named unit. This is the
+# measured false-positive class: on the reference consumer, "(Rule 5 fast-track still
+# applies)" inside an override of Rule 8. Must stay SILENT.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-15-other-unit.md" <<EOF
+---
+shadows: SKILL.md#Rule 15
+base_sha: ${BASE}
+reason: consumer-specific gating; references a neighbouring rule that is untouched.
+---
+
+## Rule 15 -- Gating (CONSUMER OVERRIDE)
+
+This consumer gates on the adversarial pass only. Rule 9 still applies unchanged, and the
+audit basis recorded below holds unchanged for this consumer.
 EOF
 
 # The consumer's IN-PLACE hook hardening — no override entry (hooks have no grain).

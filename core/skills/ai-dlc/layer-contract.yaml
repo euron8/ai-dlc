@@ -155,6 +155,20 @@ clauses:
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-DELEGATES-INTO-SHADOW
 
+  - id: LC-O12
+    subject: override
+    level: WARN
+    since: 3
+    normative: >-
+      An override's body does not assert that the section it shadows is unchanged or still
+      governs. Precedence replaces the whole shadowed span at load time, so a body that
+      rewrites part of it and states the rest survives is false about its own effect — and
+      unlike LC-O9 it does not point at the dropped text, it tells the reader the text is
+      still there.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-ASSERTS-SHADOW-SURVIVES
+
   - id: LC-O10
     subject: override
     level: ERROR

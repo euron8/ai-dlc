@@ -86,6 +86,13 @@ status that stops `apply`); **WARN** reports and never blocks.
 - **[LC-O9]** WARN — an override's body does not delegate to a construct defined inside a section
   it shadows. Precedence replaces that section at load time, including the delegation target, so
   it reads as a correct single-source delegation and behaves as a dropped one.
+- **[LC-O12]** WARN — an override's body does not assert that the section it shadows is unchanged
+  or still governs. Same mechanism as LC-O9, opposite failure: precedence replaces the WHOLE
+  shadowed span, so a body that rewrites one paragraph of a multi-paragraph section and states
+  that the rest still governs is false about its own effect. LC-O9 points the reader at text that
+  is gone; this one tells the reader the text is still there, which is why nobody goes looking for
+  it. The remedy is the same pair: narrow `shadows:` to the sub-heading actually rewritten, or
+  restate the surviving text in the override body.
 
 ## Authoring routing (§7.1 — enforced)
 

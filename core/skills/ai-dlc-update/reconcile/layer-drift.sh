@@ -58,6 +58,18 @@
 #                                    green, and the mechanism they broke is the one by
 #                                    which any future change to the delegated-to construct
 #                                    silently fails to arrive.
+#   OVERRIDE-ASSERTS-SHADOW-SURVIVES the override's BODY asserts that the section it
+#                                    shadows is UNCHANGED and still governs. The sibling of
+#                                    OVERRIDE-DELEGATES-INTO-SHADOW and the same mechanism:
+#                                    precedence replaces the whole section at load time, so
+#                                    a body that replaces one paragraph of a three-paragraph
+#                                    section and says the other two still govern is stating
+#                                    something FALSE ABOUT ITS OWN EFFECT. The delegation
+#                                    case points the lead at text that is gone; this one
+#                                    tells the lead the text is still there. Both read as
+#                                    careful authorship, which is why neither is visible.
+#                                    Report-only, and independent of any pull: true or false
+#                                    today, like its sibling.
 #   OVERRIDE-DRIFT-FILE              anchor is not a locatable heading AND the file
 #                                    changed -> cannot prove the section is safe;
 #                                    surface for re-confirmation (never skip)
@@ -259,6 +271,49 @@ heading_labelled_for() { # heading_labelled_for <anchor>  < stream
 # Consumer gate-validation check NUMBERS remain a sanctioned separate namespace
 # (core's "Consumer-catalog crosswalk"), so a bare number match is never evidence
 # of absorption on its own — the titles must agree too.
+# --- OVERRIDE-ASSERTS-SHADOW-SURVIVES -------------------------------------------------
+# THE BODY MUST BE FLATTENED BEFORE MATCHING, and this is not a style choice. Layer bodies
+# are hard-wrapped at ~72 columns, so the claim splits across a newline: the reference
+# consumer's second instance wraps between "Every other part of" and "Check 14". Every
+# line-based grep for it returns ZERO, which reads exactly like the claim not being there.
+# That false zero was measured while choosing this predicate, on a probe written to be the
+# CONTROL for a different question.
+#
+# WHAT DISCRIMINATES, MEASURED. A bare survival-vocabulary scan (unchanged / still governs /
+# untouched / survives) matches 5 of the reference consumer's 13 overrides and only 2 are
+# real -- the unshippable shape this repo forbids. The three false ones are each a claim
+# about something OUTSIDE the shadowed span, and they separate on ONE structural signal: the
+# noun the claim is about.
+#   - "the seven-precondition evaluation ... apply unchanged"    -> subject is another FILE
+#   - "a repair edits the artifact on UNCHANGED scope"           -> adjectival; no referent
+#   - "(Rule 5 fast-track still applies)"                        -> a DIFFERENT named unit
+#   - "the audit basis recorded below holds unchanged"           -> the override is own body
+# So the predicate requires a scope phrase whose noun is the SHADOWED GRAIN -- section,
+# check, rule, clause. That takes the false-positive set to ZERO across all 13, and it is
+# also why no separate carve-out is needed for the legitimate shape the grain warning names:
+# "the rest of the FILE is unchanged" is TRUE for an override shadowing one section, and
+# `file` is not in the noun set, so it cannot match. That is a structural exclusion, not a
+# suppression list.
+#
+# THE GAP IS PUNCTUATION-FREE (`[a-z0-9 ]{0,20}`) on purpose. Allowing punctuation lets the
+# phrase bleed across clause boundaries and join a scope word in one sentence to a noun in
+# the next, which is the same containment degeneracy same_section() records below.
+#
+# WHAT IT DOES NOT CATCH, STATED PLAINLY. An override shadowing a SUB-heading whose body
+# correctly says the surrounding PARENT section is unchanged would match, because the noun is
+# still `section`. No instance exists on the reference consumer, and the status is
+# report-only, so the cost is one line an operator dismisses. Closing it means joining each
+# named construct to the shadowed span's text at base_sha -- both real instances name the
+# constructs they claim survive, in an em-dash list -- which is the strengthening path if an
+# operator ever reports that false positive.
+SURVIVAL_SCOPE_RE='(surrounding|rest of the|remainder of the|every other part of|other parts of|rest of this)[ ]?[a-z0-9 ]{0,20}(section|check|rule|clause)'
+SURVIVAL_CLAIM_RE="unchanged|untouched|still governs?|still applies|still holds?|remains in force|survives?|is core's"
+asserts_shadow_survives() { # asserts_shadow_survives <body-text>  -> 0 if it makes the claim
+  printf '%s' "$1" | tr '\n' ' ' | tr -s ' ' \
+    | grep -oiE "$SURVIVAL_SCOPE_RE.{0,250}" \
+    | grep -qiE "$SURVIVAL_CLAIM_RE"
+}
+
 same_section() { # same_section <textA> <textB>
   [ -n "$1" ] && [ -n "$2" ] || return 1
   awk -v A="$1" -v B="$2" '
@@ -399,6 +454,15 @@ while IFS= read -r f; do
   # of the real instances do exactly that.
   [ -n "$delegated" ] && emit OVERRIDE-DELEGATES-INTO-SHADOW "$entry" "$tgt" \
     "the body names construct(s) defined INSIDE the section(s) it replaces, so at load time (overrides > extensions > core) the delegation target is gone: ${delegated}. Every future upstream change to those constructs also fails to arrive here while every check stays green. Restate the construct in this override, narrow shadows: to the sub-headings actually rewritten, or delegate to something outside the shadowed span. Report-only -- delegating to a construct the lead is expected to open core for is sometimes deliberate."
+
+  # The sibling question, asked separately for the same reason: `worst` asks whether upstream
+  # moved, and this asks whether the override's own body describes its own effect truthfully.
+  # An entry can be OVERRIDE-OK on every anchor and still assert that the span it deletes
+  # survives -- both real instances do exactly that.
+  if asserts_shadow_survives "$(body_of "$f")"; then
+    emit OVERRIDE-ASSERTS-SHADOW-SURVIVES "$entry" "$tgt" \
+      "the body asserts that the section(s) it shadows are unchanged and still govern. Precedence is overrides > extensions > core, so at load time this entry replaces the WHOLE shadowed span -- if the body rewrites one paragraph of it and states the rest still governs, that sentence is false about this entry's own effect, and the dropped text is exactly what nobody will look for. Narrow shadows: to the sub-heading actually rewritten, or restate the surviving text in this body. Report-only -- an override shadowing a sub-heading may be describing the surrounding PARENT section correctly."
+  fi
 done < <(layer_files "$OVR_DIR")
 
 # ---------------------------------------------------------------------------
