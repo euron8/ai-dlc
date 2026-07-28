@@ -60,6 +60,11 @@ fi
 [ -n "$ROOT" ] || { echo "ERROR: cannot resolve the consumer root; pass --root" >&2; exit 2; }
 
 [ -n "$LEDGER" ]    || LEDGER="${ROOT}/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
+# The consumer machinery home. DECLARED in setup-sites.md's `consumer_machinery_home:`,
+# not chosen here — this skill's HARD CONSTRAINT forbids reading core-manifest.md at
+# runtime, so the value is a copy, and `validate-enforcement-map.sh` I43 binds this literal
+# to every other spelling in both directions. It was five independent spellings joined by
+# nothing until v0.194.0. Do not edit it here alone; the build fails.
 [ -n "$LOCAL_DIR" ] || LOCAL_DIR="${ROOT}/scripts/ai-dlc-local"
 [ -n "$CORE_DIR" ]  || CORE_DIR="${ROOT}/scripts/ai-dlc"
 
@@ -93,11 +98,24 @@ closed_basenames="$(awk '
 
 while IFS= read -r base; do
   [ -n "$base" ] || continue
-  # A retire-candidate only if the fork exists AND it shadows a real core validator.
-  [ -f "${LOCAL_DIR}/${base}" ] || continue
-  [ -f "${CORE_DIR}/${base}" ]  || continue
-  emit RETIRE-CANDIDATE "scripts/ai-dlc-local/${base}" \
-    "its push-candidate ledger entry is CLOSED (ADOPTED UPSTREAM) — the divergence is now in core/scripts/${base}. Re-evaluate: diff the fork against stock core. Retire it if core covers your case, or narrow it to the still-divergent remainder. This is a SIGNAL; confirm before deleting."
+  # It must shadow a real core validator, or this is some unrelated `.sh` token from prose.
+  [ -f "${CORE_DIR}/${base}" ] || continue
+
+  # THE WHOLE HOME, not its top level. The home's internal layout is the CONSUMER's —
+  # core declares the directory and makes no claim about what is inside it. A flat
+  # `[ -f "$LOCAL_DIR/$base" ]` reported forks at the root and was blind to every one a
+  # consumer had filed under a subdirectory, which is the natural thing to do once the
+  # home holds more than a handful of scripts. A fork this could not see reads exactly
+  # like a home with no forks in it: the script exits 0 and prints nothing either way.
+  # Walking the tree needs no subdirectory list, and a list core cannot enforce would be
+  # one more restatement of a value that already has a home.
+  while IFS= read -r fork; do
+    [ -n "$fork" ] || continue
+    emit RETIRE-CANDIDATE "${fork#"${ROOT}"/}" \
+      "its push-candidate ledger entry is CLOSED (ADOPTED UPSTREAM) — the divergence is now in core/scripts/${base}. Re-evaluate: diff the fork against stock core. Retire it if core covers your case, or narrow it to the still-divergent remainder. This is a SIGNAL; confirm before deleting."
+  done <<FORKS
+$(find "$LOCAL_DIR" -type f -name "$base" 2>/dev/null | sort)
+FORKS
 done <<EOF
 $closed_basenames
 EOF

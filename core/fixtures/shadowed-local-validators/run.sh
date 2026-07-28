@@ -45,12 +45,21 @@ ADOPTED UPSTREAM (v0.130.0)
 ## PC-CLOSED-NOCORE — some-tool.sh: consumer-only tool
 Prose naming some-tool.sh.
 ADOPTED UPSTREAM (v0.130.0)
+
+## PC-CLOSED-SUB — validate-sub.sh: divergence
+Prose about core/scripts/validate-sub.sh.
+ADOPTED UPSTREAM (v0.130.0)
 LED
 
 # Forks the consumer carries.
 for f in validate-foo.sh validate-bar.sh some-tool.sh validate-orphan.sh; do : > "$WORK/local/$f"; done
+# A fork filed under a SUBDIRECTORY of the home. The home's internal layout is the
+# consumer's — core declares the directory and claims nothing about its shape — so this is
+# the ordinary way a consumer files a fork once the home holds more than a few scripts.
+mkdir -p "$WORK/local/lib"
+: > "$WORK/local/lib/validate-sub.sh"
 # Core validators (what a fork must shadow to count).
-for f in validate-foo.sh validate-bar.sh validate-nofork.sh validate-orphan.sh; do : > "$WORK/core/$f"; done
+for f in validate-foo.sh validate-bar.sh validate-nofork.sh validate-orphan.sh validate-sub.sh; do : > "$WORK/core/$f"; done
 
 run_warn() { # run_warn <script>
   bash "$1" --root "$WORK" --ledger "$WORK/ledger.md" \
@@ -61,7 +70,12 @@ OUT="$(run_warn "$SCRIPT")"
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
-has() { printf '%s\n' "$OUT" | grep -q "scripts/ai-dlc-local/$1"; }
+# The emitted path is the fork's REAL location, root-relative — here `local/…`, because
+# that is where --local-dir points. Until v0.194.0 the script fabricated the string
+# `scripts/ai-dlc-local/<basename>` no matter where --local-dir actually pointed or where
+# under it the fork sat, so the row named a path that need not exist. Keying this fixture on
+# the fabricated form is what let that ship: it asserted the constant, not the finding.
+has() { printf '%s\n' "$OUT" | grep -q "	local/$1	"; }
 
 echo "shadowed-local-validators:"
 
@@ -80,6 +94,10 @@ has "some-tool.sh" && bad "some-tool.sh flagged though it shadows no core valida
 # Orphan fork, no ledger entry -> not flagged.
 has "validate-orphan.sh" && bad "validate-orphan.sh flagged with no ledger entry" \
   || ok "fork with no ledger entry -> not flagged (orphan)"
+
+# A fork under a SUBDIRECTORY of the home -> flagged, at its real path.
+has "lib/validate-sub.sh" && ok "a fork in a subdirectory of the home -> RETIRE-CANDIDATE at its real path (sub)" \
+  || bad "validate-sub.sh not flagged — a fork filed below the home's top level is invisible, which reads exactly like a home with no forks in it"
 
 # Never blocks.
 run_warn "$SCRIPT" >/dev/null 2>&1
@@ -102,10 +120,37 @@ if [ "$CHG" != "CHANGED" ]; then
   bad "MUTATION matched nothing — the closed-gate in flush() was renamed"
 else
   MOUT="$(run_warn "$MUT")"
-  if printf '%s\n' "$MOUT" | grep -q "scripts/ai-dlc-local/validate-bar.sh"; then
+  if printf '%s\n' "$MOUT" | grep -q "	local/validate-bar.sh	"; then
     ok "MUTATION — dropping the CLOSED gate flags the OPEN bar fork too (the gate is load-bearing)"
   else
     bad "MUTATION — bar still not flagged without the CLOSED gate; the closed-only assertions prove nothing"
+  fi
+fi
+
+# MUTATION control 2: bound the home walk to its top level, the pre-v0.194.0 shape. The
+# subdirectory fork must then go unreported — proving the recursive walk is what finds it,
+# and that the assertion above is not passing on some other arm. Single-arm: `foo` at the
+# home's root stays flagged, so this cannot be confused with the fork-existence gate.
+MUT2="$WORK/mutant-depth.sh"
+CHG2="$(python3 - "$SCRIPT" "$MUT2" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+s = open(src, encoding="utf-8").read()
+s2 = s.replace('find "$LOCAL_DIR" -type f', 'find "$LOCAL_DIR" -maxdepth 1 -type f')
+open(dst, "w", encoding="utf-8").write(s2)
+print("CHANGED" if s2 != s else "UNCHANGED")
+PY
+)"
+if [ "$CHG2" != "CHANGED" ]; then
+  bad "MUTATION 2 matched nothing — the home walk is no longer a bare find over LOCAL_DIR"
+else
+  MOUT2="$(run_warn "$MUT2")"
+  if printf '%s\n' "$MOUT2" | grep -q "	local/lib/validate-sub.sh	"; then
+    bad "MUTATION 2 — the subdirectory fork is STILL reported with the walk bounded to depth 1; the assertion above proves nothing about recursion"
+  elif printf '%s\n' "$MOUT2" | grep -q "	local/validate-foo.sh	"; then
+    ok "MUTATION 2 — bounding the walk to the home's top level hides the subdirectory fork while the root-level one stays flagged (the recursion is load-bearing, and only it changed)"
+  else
+    bad "MUTATION 2 — bounding the walk silenced the ROOT-LEVEL fork too; the mutant broke more than recursion and its verdict is entangled"
   fi
 fi
 

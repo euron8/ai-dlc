@@ -88,6 +88,17 @@
 #                         v0.63.0, schemas/ this release) — a new core dir escaping the scan reads
 #                         exactly like a dir with no drift. Now a new subtree fails the build until
 #                         it is classified.
+#   I43 consumer machinery home is ONE string — the directory the core-guard tells an author
+#                         to put their own pipeline tooling in was hand-written in five shipped
+#                         surfaces and declared in none, joined by nothing. Both directions: no
+#                         core file names a scripts/ai-dlc* path other than core's own home and
+#                         the declared one, AND the guard's deny text still routes to the declared
+#                         home. A home no affordance points at is one no author finds.
+#   I44 core never writes the home — core-manifest.md and the guard both promise, in those
+#                         words, that core "never reads, never writes and never overwrites" it.
+#                         Nothing asserted it. Derived from install.sh/uninstall.sh's targets and
+#                         the core_manifest globs, with a positive control so a broken extractor
+#                         cannot report the same clean result as a correct one.
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -1297,6 +1308,91 @@ if [ "$cm" != "$ss" ]; then
   diff <(printf '%s\n' "$cm") <(printf '%s\n' "$ss") >&2 || true
 fi
 
+# --- I43: the consumer machinery home is ONE string across every surface -------
+# THE DEFECT. `scripts/ai-dlc-local/` was advertised in FIVE independent hand-written
+# spellings and declared in none: the core-guard's deny text routes an author there,
+# `reconcile/warn-shadowed-local-validators.sh` defaults `LOCAL_DIR` to it, two fixtures
+# write into it, and core-manifest.md said it in prose. Nothing compared them. This is
+# the affordance-is-the-defect shape -- the guard PROMISES a home, and the promise was
+# the only thing holding the value. A rename in any one surface leaves the guard routing
+# authors to a directory the reader never walks, and both halves stay green because each
+# is internally consistent.
+#
+# BOTH DIRECTIONS, and the reverse one is the one that matters:
+#   forward  no core file names a `scripts/ai-dlc*` path other than core's own
+#            `scripts/ai-dlc` and the declared home. Catches a rename or a second home.
+#   reverse  the declared home is actually named by the core-guard's deny text. A home
+#            no affordance routes to is one no author finds, so the declaration would be
+#            live, self-consistent, and reachable by nobody.
+#
+# The grammar is `scripts/ai-dlc[A-Za-z0-9_-]*` and its false-positive set over the whole
+# distribution is EMPTY: exactly two tokens exist, `scripts/ai-dlc` (458 occurrences) and
+# `scripts/ai-dlc-local` (14). Measured before this check was written, per CLAUDE.md.
+cmh_decl() { # <file> -> the declared home, trailing slash stripped
+  sed -n 's/^consumer_machinery_home:[ \t]*//p' "$1" | head -1 | sed 's#/*$##'
+}
+CMH="$(cmh_decl "$CORE_MANIFEST")"
+CMH_SS="$(cmh_decl "$SETUP_SITES")"
+CORE_SCRIPTS_HOME="$(printf '%s\n' "$cm" | grep -E '^scripts/[A-Za-z0-9_-]+/\*$' | sed 's#/\*$##' | head -1)"
+
+if [ -z "$CMH" ] || [ -z "$CMH_SS" ]; then
+  err "I43 could not read 'consumer_machinery_home:' from core-manifest.md and/or reconcile/setup-sites.md (got '${CMH:-<none>}' and '${CMH_SS:-<none>}'). Both copies are required: the core-guard routes authors to this path and reconcile/ cannot read core-manifest.md at runtime, so an absent declaration leaves the two ends bound by nothing while this check reports the same line as agreement."
+elif [ "$CMH" != "$CMH_SS" ]; then
+  err "I43 the consumer machinery home differs between its two declarations — core-manifest.md says '$CMH', reconcile/setup-sites.md says '$CMH_SS'. ai-dlc-update reads its own copy, everything else reads the manifest's, so the guard would route an author to one directory while the reader walks another."
+elif [ -z "$CORE_SCRIPTS_HOME" ]; then
+  err "I43 could not derive core's own scripts home from the core_manifest entries (expected one 'scripts/<dir>/*' glob). Without it the token scan below cannot tell core's directory from the consumer's, so every occurrence would read as a violation or none would."
+else
+  # Forward: every scripts/ai-dlc* token in a shipped core file is one of the two homes.
+  cmh_bad="$(grep -rhoE 'scripts/ai-dlc[A-Za-z0-9_-]*' \
+               "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" "$REPO_ROOT/.githooks" 2>/dev/null \
+             | sort -u | grep -vxF "$CORE_SCRIPTS_HOME" | grep -vxF "$CMH" || true)"
+  if [ -n "$cmh_bad" ]; then
+    err "I43 shipped core file(s) name a scripts/ai-dlc* path that is neither core's own '$CORE_SCRIPTS_HOME' nor the declared consumer machinery home '$CMH': $(echo $cmh_bad). Either the home was renamed in one surface and not the declaration, or a second home was invented. Both leave the core-guard routing authors somewhere no reader walks. Offending file(s):"
+    grep -rlE "$(printf '%s' "$cmh_bad" | paste -sd'|' -)" "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" "$REPO_ROOT/.githooks" 2>/dev/null >&2 || true
+  fi
+  # Zero guard on the forward scan: the grammar must still match core's own home
+  # somewhere, or an extraction that stopped matching would report a clean scan.
+  if ! grep -rqoE 'scripts/ai-dlc[A-Za-z0-9_-]*' "$REPO_ROOT/core" 2>/dev/null; then
+    err "I43's token scan matched NOTHING under core/, not even core's own '$CORE_SCRIPTS_HOME'. The grammar or the search root has moved, and an empty scan passes the forward arm exactly like a clean tree."
+  fi
+  # Reverse: the guard's deny text must route an author to the declared home.
+  CMH_GUARD="$REPO_ROOT/core/hooks/ai-dlc-core-guard.sh"
+  if [ ! -f "$CMH_GUARD" ]; then
+    err "I43 could not read the core-guard at $CMH_GUARD, so the reverse arm compared nothing. A missing guard is not a passing one."
+  elif ! grep -qF "$CMH" "$CMH_GUARD"; then
+    err "I43 the declared consumer machinery home '$CMH' appears nowhere in core/hooks/ai-dlc-core-guard.sh. The guard's deny text is the ONLY thing that routes an author to this directory when it refuses a write under core's own scripts home; a declared home nothing points at is an affordance no author ever finds, and it fails silently because the declaration itself stays internally consistent."
+  fi
+fi
+
+# --- I44: core never reads, never writes and never overwrites the home ---------
+# core-manifest.md and the guard's deny text BOTH make this promise in those words.
+# Nothing asserted it. A manifest entry or an install.sh target landing under the home
+# would make the promise false while every reader of the prose still believes it -- and
+# the consumer finds out when a pull clobbers a script it authored.
+#
+# Derived, not hand-listed: every literal `$PROJECT_ROOT/`-rooted path install.sh and
+# uninstall.sh name, plus every core_manifest entry mapped to consumer form.
+cmh_targets="$(grep -ohE '\$PROJECT_ROOT/[A-Za-z0-9_./$-]*' "$REPO_ROOT/scripts/install.sh" "$REPO_ROOT/scripts/uninstall.sh" 2>/dev/null \
+               | sed 's|^\$PROJECT_ROOT/||' | sort -u)"
+cmh_claims="$(printf '%s\n' "$cm" | sed -E '
+  s@^team-roles/@.claude/team-roles/@;
+  s@^hooks/@.claude/hooks/@;
+  s@^session-driver/@.claude/session-driver/@;
+  s@^schemas/@.claude/schemas/@;
+  s@^skills/@.claude/skills/@;
+  s@^fixtures/@tests/fixtures/@;
+  s@^git-hooks/@.githooks/@' | sort -u)"
+if [ -n "$CMH" ]; then
+  if [ -z "$cmh_targets" ]; then
+    err "I44 extracted ZERO \$PROJECT_ROOT-rooted targets from install.sh/uninstall.sh. An empty target set contains nothing under the home, so this invariant would pass on a tree that installs straight into it."
+  elif ! printf '%s\n' "$cmh_targets" | grep -q "^${CORE_SCRIPTS_HOME:-scripts/ai-dlc}"; then
+    err "I44's target extraction no longer sees core's own scripts home among install.sh's targets — the \$PROJECT_ROOT grammar has moved. Without that positive control a broken extractor reports the same clean result as a correct one."
+  else
+    cmh_hits="$(printf '%s\n%s\n' "$cmh_targets" "$cmh_claims" | sort -u | grep -E "^${CMH}(/|$)" || true)"
+    [ -n "$cmh_hits" ] && err "I44 core writes or claims path(s) under the consumer machinery home '$CMH': $(echo $cmh_hits). core-manifest.md and the core-guard's deny text both promise core 'never reads, never writes and never overwrites' this directory, and a consumer that believed the promise has its own script clobbered by the next pull. Move the path out of the home, or retract the promise in both places."
+  fi
+fi
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -1785,7 +1881,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), and no clause is introduced above contract_version (I42)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), and core writes nothing under it (I44)."
   exit 0
 fi
 exit 1
