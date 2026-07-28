@@ -17,6 +17,71 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.190.0] — 2026-07-28
+
+### Added — I26 had no fixture, and it was found while making I26 faster
+
+`I26` — core-layer-immutability keeps the core path set **derived**, never restated — is the
+invariant that exists because a restated list had silently stopped the retro backstop firing on
+**six core subtrees**. It has been enforced since it shipped and **nothing self-tested it**. The
+`enforcement-map-sites` fixture covers I8, I12, I15, I16, I17, I21, I31, I32 and I33; I26 appears
+in no fixture in the repo.
+
+That is the caveat that made the speedup below shippable rather than reckless: an optimisation to a
+check nothing self-tests is a change whose only evidence is that the output looked the same — the
+same standard the restated list itself passed for six releases.
+
+New assertion 19 plants exactly what I26 exists to reject: one line naming three derived manifest
+entries. A reference stands alone; a list puts them on one line, and that punctuation adjacency is
+the whole predicate. The entries come from the manifest the check derives from, so the mutation
+cannot rot against a hand-list. It is `cmp -s` guarded, asserts a positive grep for I26's own
+message, and **was verified to pass against the unmodified validator first**, so it tests I26's
+behaviour and not the rewrite.
+
+### Changed — the suite's dominant fixture drops 141s → 81s on a one-line change
+
+`enforcement-map-sites` was **36% of the entire fixture suite** and set a wall-clock floor no
+parallelism could beat. Profiled: **97.4% of its runtime is 20 serialized runs of
+`validate-enforcement-map.sh`** at ~6.9s each. It performs **zero git operations** — it is not part
+of the sandbox-setup cost the other fixtures pay.
+
+Inside the validator, one section dominates: **I26 at 41% of a 40-invariant run.** Its inner loop
+tests every manifest entry against every span line and spawned
+`printf '%s' "$cli_line" | grep -qF "$cli_e"` on each iteration — roughly **2,300 subprocesses per
+validator run, ~46,000 per fixture run**. `grep -F` is a literal substring match, which is exactly a
+`case` glob on a quoted variable, with no fork:
+
+```sh
+- printf '%s' "$cli_line" | grep -qF "$cli_e" && cli_n=$((cli_n+1))
++ case "$cli_line" in *"$cli_e"*) cli_n=$((cli_n+1)) ;; esac
+```
+
+**Measured, HEAD vs working tree, both run from a valid tree layout:** validator **6.58s → 3.74s
+(−43%)**, output **byte-identical**, same exit code. Fixture **141s → 81s** *while adding an
+assertion*. Full suite **2m34s → 1m34s**; end to end this session, **7m06s → 1m34s**.
+
+The measurement harness itself is worth recording: three separate attempts to time a patched copy
+returned nonsense (`rc=2`, 7ms) because `REPO_ROOT` derives from the script's own location, so a
+copy in a scratch directory resolves against the scratch directory and dies instantly. **A 7ms
+"speedup" is a script that did not run.** Every timing above comes from a full tracked-tree copy.
+
+### Rejected, each with the measurement that killed it
+
+- **Hoisting or caching the fixture's seed** — all 20 seeds total 2.1s, 1.5% of runtime. The full
+  re-copy is also what guarantees no mutation leaks between assertions.
+- **Batching several mutants into fewer validator runs** — breaks *a mutant must fail only its own
+  assertion* outright. With N simultaneous mutations, one assertion's message can be produced by
+  another's mutation and nothing can say which. Not safe at any speed.
+- **Chasing the second-tier hotspots** — after this fix the profile is flat: top section is I9 at
+  15%, the rest spread across ~40 invariants. Four rewrites of live enforcement logic for ~1.5s.
+- **Parallelism inside the fixture** — works, but puts ~19 concurrent processes inside one of eight
+  pool slots and needs its own completeness control, reinventing what the runner already provides.
+
+**Still open:** the fixture splits cleanly along the invariant boundary into nine independent
+fixtures — every assertion already re-seeds from scratch, and the split would additionally delete
+six hand-maintained path rebindings and resolve an existing entanglement where assertions 1 and 5
+are the same mutation firing two different messages. Filed, not folded in.
+
 ## [0.189.0] — 2026-07-28
 
 ### Added — `ENTRY-SWALLOWED`: an annotation that deletes the entry it annotates

@@ -406,6 +406,38 @@ else
   bad "FIXTURE STALE: the seed no longer copies core/fixtures/"
 fi
 
+# --- Assertion 19: I26 — the core set stays DERIVED, never restated -----------
+# I26 HAD NO FIXTURE AT ALL until v0.190.0, and it was found the way this repo usually finds
+# them: while making the invariant FASTER. An optimisation to a check nothing self-tests is a
+# change whose only evidence is that the output looked the same, which is the same standard the
+# restated list itself passed for six releases.
+#
+# The mutation plants exactly what I26 exists to reject: one line naming three derived manifest
+# entries, which is a LIST. A reference stands alone; a list puts them on one line, and that
+# punctuation adjacency is the whole predicate. The entries are taken from the manifest the
+# check derives from, so the mutation cannot go stale against a hand-list here.
+GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+if ! grep -q '<!-- CHECK_LOADED: core-layer-immutability -->' "$GV" 2>/dev/null; then
+  bad "FIXTURE STALE: gate-validation.md has no core-layer-immutability span to mutate"
+else
+  cp "$GV" "$GV.orig"
+  awk '{ print }
+       /<!-- CHECK_LOADED: core-layer-immutability -->/ {
+         print "The authoritative core paths are `team-roles/*.md`, `steps/*.md` and `templates/*.md`."
+       }' "$GV.orig" > "$GV"
+  if cmp -s "$GV.orig" "$GV"; then
+    bad "FIXTURE BROKEN: the I26 mutation matched nothing, so this assertion is unproven"
+  else
+    out="$(bash "$V" 2>&1)"
+    if printf '%s' "$out" | grep -q "restates the core path set"; then
+      ok "a line naming three manifest entries FAILS I26 (the derived set cannot be quietly replaced by a list)"
+    else
+      bad "a restated core path list did NOT fail I26 — the check that stopped six core subtrees being silently skipped is not firing"
+    fi
+  fi
+  restore
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

@@ -70,14 +70,16 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 #    never driven is a green light nobody earned.
 #
 # RUN IN PARALLEL, AND THE REASON IS MEASURED. The suite is latency-bound, not
-# compute-bound: 458 seconds of work across 75 fixtures, almost all of it waiting on
-# `git init`/commit/mktemp in per-fixture sandboxes. Serially that is 7m06s of wall clock
-# on an idle 18-core machine. At 8 workers it is 2m34s.
+# compute-bound: 458 seconds of work across the 75 driven fixtures, almost all of it waiting
+# on `git init`/commit/mktemp in per-fixture sandboxes. Serially that was 7m06s of wall clock
+# on an idle 18-core machine. At 8 workers it was 2m34s, and after v0.190.0 removed the
+# dominant pole it is ~1m34s.
 #
-# EIGHT, NOT MORE. -P16 measured 2m30s -- four seconds better -- because ONE fixture,
-# `enforcement-map-sites`, is 167s all by itself and sets a floor no amount of
-# parallelism beats. Workers past the knee buy nothing and add scheduler noise. The
-# knee moves if that fixture is ever split, so the count is a tunable and not a constant.
+# EIGHT, NOT MORE -- AS MEASURED, AND THE KNEE HAS SINCE MOVED. -P16 measured 2m30s against
+# -P8's 2m34s, four seconds, because ONE fixture (`enforcement-map-sites`) was 167s by itself
+# and set a floor no amount of parallelism beats. v0.190.0 cut that fixture to ~81s, so the
+# suite is closer to pool-bound now and a higher count may start paying again. Re-measure
+# before changing it: that is why this is the tunable AI_DLC_FIXTURE_JOBS and not a constant.
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-8}"
 
 run_fixtures() {
