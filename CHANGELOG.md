@@ -17,6 +17,83 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.195.0] — 2026-07-28
+
+### Added — every collision detector joins on numbers core has ALREADY taken
+
+`E6`, `W1`, `W4` and `EXTENSION-CHECK-NUMBER-COLLISION` all answer the same question: does this
+consumer number appear in core's catalog? That join has a blind spot it cannot be tuned out of.
+A consumer numbering its own check 33 while core stops at 32 matches nothing and reports clean —
+correctly, by every one of those rules — until the release where core allocates 33. Then the
+collision appears **retroactively**, across every gate log, retro and escalation already written
+against that integer, and a gate log is the durable audit record: it cannot be corrected after
+the fact. The defect is created at authoring time and detected, if ever, by an unrelated party
+several releases later.
+
+No better detector reaches it. The subject set "numbers core has already taken" cannot contain
+the number an author is about to take. So this ships a **partition** instead: core allocates
+below 900, a consumer allocates at 900 and above, and the collision stops being reportable
+because it stops being constructible.
+
+**`W5`** (clause **LC-N5**, `contract_version` 4) reports a consumer entry allocating a bare
+integer core has not defined, below the floor. **`I45`** holds core to the complement, derived by
+running `validate-layer-entries.sh`'s own `defined_anchors` and `defined_rules` against
+`steps/gate-validation.md` and `SKILL.md` rather than copying their grammars, and reading the
+floor from that file's `BAND_FLOOR` so the two halves cannot drift onto separate copies of one
+number. Without I45 the band is a promise to consumers with nothing holding core to it.
+
+Measured on the reference consumer before shipping: **five subjects** — checks 33/34/35 and rules
+31/32 — against a baseline of `0 error(s), 0 warning(s)`, so W5 adds exactly the findings nothing
+in the tree could previously see, and disturbs no existing one. Core is **at** 32 checks and 30
+rules, which makes `Rule 31` the next integer core allocates and gives the warning a live
+detonation date.
+
+**Report-only, and every exclusion is load-bearing.** The remedy is a renumber plus a crosswalk
+row, which rewrites the consumer's own durable audit key; blocking a pull on it would wedge a
+consumer out of taking a fix over its own catalog. The predicate fires on bare integers only: a
+suffixed id (`19b`, `4a-bis`) marks a position beside core's number and has no expression in a
+numeric band; an alphabetic id (`AP`, `H1`) has no ordering in one; a number core **already**
+defines is E6/W4's subject, and the reference consumer carries four rules that share core's
+integer *because* the integer is their reference, each declaring itself a tightening of the rule
+it names — telling those to renumber would break the only thing that makes them comprehensible.
+Check numbers are scoped to `kind: check` exactly as E6 is: a step number is a position in an
+ordered procedure, not an allocation, so a band would reorder a procedure it does not govern.
+
+A catalog label does **not** silence W5, and that is the one place it departs from E6/W4's "a
+labelled heading is the resolved state". The label resolves a collision that exists; the band
+prevents one that does not yet. A labelled squatter is the expected state on first contact,
+because labelling is what core previously told consumers to do — so reporting it is the migration
+signal.
+
+`core/fixtures/layer-catalog-collision/` gains Parts 5 and 6: the band's findings are asserted on
+subjects Parts 1 and 4 assert **clean**, so if those two sets ever merge, one of them has stopped
+testing anything. Four mutants remove one exclusion each and require a NEW finding naming the
+subject it protected. The suffix arm needed that most — its pristine assertion passes whether the
+exclusion is present or not, because without it the numeric comparison errors and reports nothing,
+which is indistinguishable from excluding it on purpose. Plus an unmutated control copy, since
+every assertion is "this subject is now reported" and a linter copy that dies on startup reports
+nothing at all. `enforcement-map-sites` gains three I45 arms; the fire arm is on the **rule** side
+because a `### 900.` heading in `gate-validation.md` also trips the CHECK_LOADED-anchor check and
+produces two failures, isolating neither.
+
+### Not shipped, and closed rather than deferred
+
+- **An ERROR on any consumer number below the band, and `RENUMBER-BAND --apply` with it.** Both
+  were scoped against a subject set that does not survive measurement. Of the reference consumer's
+  **51** numbered layer headings, **28** name a number core already defines — push candidates
+  staged against the core section they amend, and qualifiers that share core's integer as their
+  reference — and **16** are step positions in an ordered procedure. An ERROR over that set wedges
+  the consumer's pre-push on entries whose numbers are correct.
+- The tool was specified to ride `relabel-extension-checks.sh --apply`, which "already rewrites
+  consumer headings". It cannot: that script's rewrite loop iterates the numbers **core** defines
+  and looks each one up in the entry, so a number core does not define never enters the loop. It
+  is blind to W5's entire subject set by construction, and prescribing it would hand an operator a
+  tool that exits "no unlabelled core-number collisions" on a tree full of findings.
+- **A clause requiring a crosswalk row for every number the consumer has ever used.** Core cannot
+  see which numbers a consumer has written into evidence, so the clause has no evaluable predicate
+  and I37 would reject it. `extensions/README.md` states the duty and states plainly that core
+  does not check it, rather than declaring a rule with no mechanism behind it.
+
 ## [0.194.0] — 2026-07-28
 
 ### Fixed — the core-guard advertised a home in five spellings, and nothing declared it

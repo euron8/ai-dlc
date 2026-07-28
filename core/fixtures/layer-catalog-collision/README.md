@@ -23,8 +23,10 @@ A synthetic core file and a synthetic extension that hooks it:
 | 7 | Artifact consistency | *(absent)* | nothing — core-only |
 | 9 | Smoke test coverage for user-facing changes | *(absent)* | nothing (see the trap below) |
 | 24 | The adversarial cycle CONVERGED | Financial-display ground-truth live-verify | `CHECK-NUMBER-COLLISION` — same number, DIFFERENT check |
-| 30 | *(absent)* | Smoke test evidence (deploy-validate) | nothing — extension-only |
-| 33 | Test-strategy deliverable presence *(as core 21)* | Cross-story test-strategy deliverable presence | `RESTATES-CORE (renumbered)` — same check, DIFFERENT number |
+| 30 | *(absent)* | Smoke test evidence (deploy-validate) | `OUT OF BAND` only — no collision to report yet, which is the point |
+| 33 | Test-strategy deliverable presence *(as core 21)* | Cross-story test-strategy deliverable presence | `RESTATES-CORE (renumbered)` — same check, DIFFERENT number — plus `OUT OF BAND` |
+| 40b | *(absent)* | Suffixed allocation beside core's 40 | nothing — a suffix marks a position, not an allocation |
+| 933 | *(absent)* | In-band consumer allocation | nothing — the conformant state |
 
 ## The two blindnesses this fixture exists to catch
 
@@ -44,6 +46,28 @@ for the old `same_section()` rule (≥2 shared tokens of the first 4) to call th
 same section. Acting on that would emit a RETIRE-CANDIDATE for a live deploy-validate
 check on a financial system: a reporting tool turned into a data-loss bug. **The
 fixture FAILS if 30 is matched to 9.** A loose title match is worse than no title match.
+
+**3. The number nobody has taken yet.** Both blindnesses above are properties of a
+COLLISION detector, and a collision detector joins against the numbers core defines
+*today*. A consumer allocating check 33 while core stops at 32 therefore matches
+nothing and reports clean — correctly, by every rule above — until the release where
+core allocates 33, and then the collision appears retroactively across every gate log
+already written. The defect is created at authoring time and detected, if ever, by an
+unrelated party several releases later. No better detector reaches it: the subject set
+"numbers core has already taken" cannot contain the number an author is about to take.
+
+The fix is a partition rather than a detector. Core allocates below `BAND_FLOOR`, a
+consumer allocates at or above it, and the collision stops being reportable because it
+stops being constructible. Part 5 asserts the four exclusions that keep the band off
+the cases it must not govern — a suffixed id (`40b`) marks a position beside core's
+number, an alphabetic id has no ordering, a number core already defines belongs to the
+collision arms, and a step-domain step number is a position in a procedure. Part 6
+mutates each exclusion out and requires a NEW finding to appear, because the suffix
+exclusion in particular passes its own pristine assertion whether it is present or not.
+
+Core's half of the same partition is invariant **I45** in
+`scripts/validate-enforcement-map.sh`, tested by the `enforcement-map-sites` fixture.
+Without it the band is a promise to consumers with nothing holding core to it.
 
 ## Run
 

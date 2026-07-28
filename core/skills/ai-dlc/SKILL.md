@@ -1179,6 +1179,12 @@ moves. Reported by `validate-layer-entries.sh` (W4) as a WARN, never an ERROR --
 must not be unable to take a fix because its own rule catalog needs relabelling -- and
 written by `reconcile/relabel-extension-checks.sh --apply`.
 
+Allocate NEW consumer check and rule numbers from **900 and above**; core allocates below
+it. The label resolves a collision that already exists; the band prevents one that does
+not yet, and it is the only thing that reaches a number core has not allocated so far.
+Reported by `validate-layer-entries.sh` (W5); core is held to the complement by I45.
+Convention and the crosswalk it retires: `extensions/README.md` [LC-N5].
+
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or
 false-conflicts against it; and, per

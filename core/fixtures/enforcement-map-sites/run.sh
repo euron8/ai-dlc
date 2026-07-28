@@ -483,6 +483,84 @@ else
   restore
 fi
 
+# --- Assertion 21: I45 — core stays out of the reserved consumer band ---------
+# I45 is the CORE half of W5's partition, and it is the half a consumer cannot check.
+# W5 tells an author to renumber into the band at 900; the only thing that makes that
+# advice safe is core never allocating there. If I45 stops firing, nothing anywhere
+# notices until core ships the allocation, and by then the collision has landed
+# retroactively across gate logs that are the audit record.
+#
+# THREE ARMS, and the two vacuity arms are the load-bearing ones. I45 reports an
+# ABSENCE — "no core number is in the band" — so every way of finding nothing produces
+# its PASS. It reads its floor and its two catalog extractors out of
+# validate-layer-entries.sh, and a rename at either end returns empty rather than
+# wrong. Arm 1 proves it can fire; arms 2 and 3 prove that not-firing means something.
+#
+# Each arm asserts on its OWN message, never on the shared token "I45": the fire arm
+# and the vacuity arms would otherwise both match a grep for the invariant's name, and
+# an assertion two arms can satisfy is one that tests neither.
+SKB="$ROOT/core/skills/ai-dlc/SKILL.md"
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+
+# ARM 1 — FIRE, on the RULE side deliberately. The check side entangles: a `### 900.`
+# heading in gate-validation.md also trips the CHECK_LOADED-anchor arm, so it produces
+# two failures and neither one isolates I45. Measured, not assumed — 2 FAIL lines. The
+# rulebook has no such second reader, so this mutation fires exactly one assertion.
+#
+# It is also the arm with the live detonation date: core is AT Rule 30, so Rule 31 is
+# the next integer core allocates and the reference consumer already carries 31 and 32.
+cp "$SKB" "$SKB.orig"
+printf '\n### Rule 900 -- A core rule allocated inside the consumer band\n\nBody.\n' >> "$SKB"
+if cmp -s "$SKB.orig" "$SKB"; then
+  bad "FIXTURE BROKEN: the I45 fire mutation did not change SKILL.md, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "core allocates rule number(s) at or above the reserved consumer band"; then
+    ok "a core rule numbered 900 FAILS I45 (core cannot allocate from the range W5 tells consumers to move into)"
+  else
+    bad "core allocated Rule 900 and I45 stayed silent — the band is a promise to consumers with nothing holding core to it"
+  fi
+fi
+restore
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+
+# ARM 2 — VACUITY, the floor. Rename BAND_FLOOR and I45 can no longer say which
+# numbers are core's. Reporting nothing would be indistinguishable from a conforming
+# tree, and it would stay that way through every later release.
+cp "$VLE" "$VLE.orig"
+sed 's/^BAND_FLOOR=/BAND_CEILING=/' "$VLE.orig" > "$VLE"
+if cmp -s "$VLE.orig" "$VLE"; then
+  bad "FIXTURE BROKEN: the I45 floor mutation matched nothing, so the vacuity assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "could not read BAND_FLOOR"; then
+    ok "an unreadable BAND_FLOOR FAILS I45 loudly (a floor it cannot read would make every core number conforming)"
+  else
+    bad "I45 reported clean with BAND_FLOOR renamed — the invariant retires itself silently the moment the constant moves"
+  fi
+fi
+restore
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+
+# ARM 3 — VACUITY, the catalog. I45 runs the SHIPPING extractors rather than copies of
+# their grammars, which is what stops it answering differently from the check it
+# complements — but it also means a renamed extractor returns an empty catalog, and an
+# empty catalog contains nothing above the floor. That is I45's PASS reached by finding
+# nothing, which is this repo's named defect class sitting inside the invariant.
+cp "$VLE" "$VLE.orig"
+sed 's/^defined_anchors() {/defined_anchor_set() {/' "$VLE.orig" > "$VLE"
+if cmp -s "$VLE.orig" "$VLE"; then
+  bad "FIXTURE BROKEN: the I45 extractor mutation matched nothing, so the catalog vacuity assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "extracted ZERO check anchors"; then
+    ok "a renamed catalog extractor FAILS I45 loudly (an empty catalog never reads as a conforming one)"
+  else
+    bad "I45 reported clean with defined_anchors() renamed — it was scanning nothing and calling it agreement"
+  fi
+fi
+restore
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

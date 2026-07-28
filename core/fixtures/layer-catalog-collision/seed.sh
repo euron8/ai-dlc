@@ -72,6 +72,16 @@ Matching these two is the false-absorption regression this fixture guards.
 ### 33. Cross-story test-strategy deliverable presence (sprint-review gate only).
 Core absorbed this as its check 21 — same check, DIFFERENT number. Invisible to a
 number-keyed join, which is how it survived unreported.
+
+### 40b. Suffixed allocation beside core's 40.
+OUT OF BAND by integer but EXCLUDED from W5 by its suffix: `40b` marks a position
+next to core's 40, and a band cannot express "beside". Renumbering it to 940b would
+move it away from the thing it exists to sit next to. Silent.
+
+### 933. In-band consumer allocation (the conformant state).
+At or above the band floor, so W5 must be silent. This is the positive control for
+the whole check: without it, deleting the band arm outright would look identical to
+a passing run on the three assertions above.
 EXT
 
 # --- a core STEP file whose step numbers a prose list can shadow ---------------
@@ -209,8 +219,13 @@ or the remedy the detector prescribes can never clear the detector.
 Same number AND same title as core -> a RESTATEMENT (Rule 27(c)), not a collision.
 
 ## Rule 44 -- Consumer-only rule with no core counterpart
-Core defines no rule 44. Extension-only numbers are the normal case and must be
-silent, or every consumer rule reports.
+Core defines no rule 44, so it is silent for the COLLISION arm — that arm joins
+against the numbers core defines, and 44 is not one. It is exactly W5's subject for
+the same reason: core has not allocated 44 YET, and the day it does, this rule
+collides retroactively across every citation already written.
+
+## Rule 931 -- In-band consumer rule
+At or above the band floor, so both arms are silent. The rule-side positive control.
 EXTRULES
 
 printf '%s\n' "$ROOT"

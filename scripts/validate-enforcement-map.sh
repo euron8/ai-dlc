@@ -99,6 +99,18 @@
 #                         Nothing asserted it. Derived from install.sh/uninstall.sh's targets and
 #                         the core_manifest globs, with a positive control so a broken extractor
 #                         cannot report the same clean result as a correct one.
+#   I45 core allocates BELOW the reserved consumer band — the other half of W5's partition.
+#                         W5 tells a consumer its check and rule numbers live at BAND_FLOOR and
+#                         above; that is worth nothing unless core is held to the complement,
+#                         because the guarantee a consumer buys is "core will never allocate the
+#                         number you just took". Derived from steps/gate-validation.md's check
+#                         anchors and SKILL.md's rule headings using the SHIPPING grammars, never
+#                         hand-listed, with a zero guard on each extraction: an empty catalog
+#                         contains nothing above the floor and would pass this exactly like a
+#                         conforming one. The floor is READ from validate-layer-entries.sh rather
+#                         than restated, so the two halves of the partition cannot drift apart —
+#                         a second spelling of 900 could declare a range safe that core is still
+#                         allocating from.
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -1393,6 +1405,62 @@ if [ -n "$CMH" ]; then
   fi
 fi
 
+# --- I45: core allocates below the reserved consumer band ----------------------
+# The complement of W5. A consumer that renumbers its catalog into the band has bought
+# exactly one guarantee — that core will never allocate the number it just took — and
+# that guarantee is this check. Without it the band is a declaration with no mechanism,
+# and the failure mode is the worst kind: it is invisible until core ships the
+# allocation, at which point the collision it was supposed to prevent appears
+# retroactively across every gate log the consumer has ever written.
+#
+# EVERYTHING HERE IS DERIVED, and the catalogs are read by RUNNING the shipping
+# extractors rather than by copying their regexes. `defined_anchors` and
+# `defined_rules` are lifted out of validate-layer-entries.sh and executed against
+# core's own catalogs, so this invariant cannot answer a question the checker would
+# answer differently — which is the failure a copied grammar produces and the one
+# I26 exists for. The floor is read from the same file's BAND_FLOOR assignment. A
+# partition whose halves disagree is worse than none: it publishes a range as
+# reserved while core is still allocating from it.
+vle="$REPO_ROOT/core/scripts/validate-layer-entries.sh"
+if [ ! -f "$vle" ]; then
+  err "I45 cannot find validate-layer-entries.sh at $vle. The band floor and both catalog extractors are read from it, so its absence would retire this invariant while reporting nothing."
+else
+  band_floor="$(sed -n 's/^BAND_FLOOR=\([0-9][0-9]*\)$/\1/p' "$vle" | head -1)"
+  band_gv="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+  band_sk="$REPO_ROOT/core/skills/ai-dlc/SKILL.md"
+  # awk, not sed: BSD sed mis-parses the `{` in a `/^fn\(\) \{/` address. Same
+  # extraction the layer-catalog-collision fixture uses on this file's functions.
+  band_fn() { awk -v fn="$1" '$0 ~ "^" fn "\\(\\) \\{" {p=1} p {print} p && /^\}/ {exit}' "$vle"; }
+
+  if [ -z "$band_floor" ]; then
+    err "I45 could not read BAND_FLOOR out of core/scripts/validate-layer-entries.sh. The floor is the only thing that says which numbers are core's, so an unreadable one makes every core number conforming and this check vacuous."
+  elif [ ! -f "$band_gv" ] || [ ! -f "$band_sk" ]; then
+    err "I45 cannot find core's catalogs (steps/gate-validation.md and/or SKILL.md). A scan over a missing file reports the same clean result as a scan over a conforming one."
+  else
+    band_checks="$(bash -c "$(band_fn bold_anchors_of_file)
+$(band_fn defined_anchors)
+defined_anchors \"\$1\"" _ "$band_gv" 2>/dev/null)"
+    band_rules="$(bash -c "$(sed -n "/^RULE_RE='/p" "$vle")
+$(band_fn defined_rules)
+defined_rules \"\$1\"" _ "$band_sk" 2>/dev/null)"
+    # THE ZERO GUARD, one per catalog, and it is the reason this check is worth
+    # shipping rather than the scan below. Both grammars have drifted before —
+    # ANCHOR_RE was widened for `### H1.` in v0.49.0's era and RULE_RE matched 0 of
+    # 30 rules with the check grammar — and either extraction going empty produces
+    # "no core number is in the band", which is precisely this invariant's PASS.
+    if [ -z "$band_checks" ]; then
+      err "I45 extracted ZERO check anchors from steps/gate-validation.md. The grammar or the file has moved; an empty catalog has nothing above the band floor, so this reads exactly like a conforming core."
+    elif [ -z "$band_rules" ]; then
+      err "I45 extracted ZERO rule headings from SKILL.md. Same shape as the check arm above — an empty rulebook passes the band assertion by containing nothing."
+    else
+      band_bad_c="$(printf '%s\n' "$band_checks" | awk -v f="$band_floor" '/^[0-9]+$/ && $0+0 >= f+0' | tr '\n' ' ')"
+      band_bad_r="$(printf '%s\n' "$band_rules"  | awk -v f="$band_floor" '/^[0-9]+$/ && $0+0 >= f+0' | tr '\n' ' ')"
+      [ -n "$band_bad_c" ] && err "I45 core allocates check number(s) at or above the reserved consumer band floor ${band_floor}: ${band_bad_c% }. steps/gate-validation.md is core's catalog and everything from ${band_floor} up belongs to the consumer — W5 tells authors to renumber into that range, so a core allocation there recreates, upstream and for every consumer at once, the exact collision the band exists to make unrepresentable. Allocate below ${band_floor}."
+      [ -n "$band_bad_r" ] && err "I45 core allocates rule number(s) at or above the reserved consumer band floor ${band_floor}: ${band_bad_r% }. SKILL.md's rulebook is core's catalog and the band above ${band_floor} is the consumer's; a core rule there collides with every consumer that followed W5's advice, and it collides retroactively across rulebook citations already written. Allocate below ${band_floor}."
+    fi
+  fi
+fi
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -1881,7 +1949,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), and core writes nothing under it (I44)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), and core allocates no check or rule number inside the band reserved for the consumer (I45)."
   exit 0
 fi
 exit 1
