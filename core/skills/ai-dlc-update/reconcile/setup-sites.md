@@ -84,6 +84,7 @@ core_manifest:
   - core/fixtures/check-manifest-bypass/**
   - core/fixtures/check5-anchor-base/**
   - core/fixtures/ci-gates-resolution/**
+  - core/fixtures/consumer-machinery-home/**
   - core/fixtures/context-mode-protect/**
   - core/fixtures/context-sensor/**
   - core/fixtures/core-script-boundary/**
@@ -156,7 +157,17 @@ rulebook:
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
   - core/team-roles/*.md
+
+consumer_machinery_home: scripts/ai-dlc-local/
 ```
+
+`consumer_machinery_home:` carries NO `core/` prefix, unlike every entry above it.
+The entries above name distribution paths that this skill maps into consumer form;
+the home is a CONSUMER path already, identical in both layouts, and core never
+writes it — so there is nothing to map. It is duplicated here for the same reason
+the lists above are: this skill's HARD CONSTRAINT forbids reading pipeline files,
+so `warn-shadowed-local-validators.sh` cannot reach `core-manifest.md` at runtime.
+`validate-enforcement-map.sh` I43 binds the two copies and every other spelling.
 
 ## Sites
 

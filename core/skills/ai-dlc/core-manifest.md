@@ -71,8 +71,26 @@ never overwrites, and which the pre-push suite drives exactly the same way.
 
 **Consumer-authored ai-dlc scripts do not belong there.** A consumer's own
 pipeline tooling — snapshot resets, dormant-gate audits, sprint-entry sweeps —
-goes in `scripts/ai-dlc-local/`, which core never reads, never writes and never
-overwrites. The two directories differ by ownership, not by subject.
+goes in the **consumer machinery home**, which core never reads, never writes and
+never overwrites. The two directories differ by ownership, not by subject.
+
+**The home is DECLARED, as `consumer_machinery_home:` below, because it was
+advertised in five places and declared in none.** The core-guard names it in the
+deny text that routes an author there, `reconcile/warn-shadowed-local-validators.sh`
+defaults to it, two fixtures write into it, and this file said it in prose — five
+independent spellings of one path, joined by nothing. That is the shape I26 exists
+to catch: a value restated at each reader instead of derived from one home.
+`validate-enforcement-map.sh` **I43** now binds every spelling in both directions —
+a surface naming a different `scripts/ai-dlc*` path fails the build, and so does a
+declared home the guard's deny text never routes to, because a home no affordance
+points at is one no author finds. **I44** asserts the never-writes half: nothing
+`install.sh` copies, nothing `uninstall.sh` removes, and no `core_manifest:` entry
+resolves under it.
+
+The home's INTERNAL layout is the consumer's. Core makes no claim about which
+subdirectories exist inside it, and the one reader that walks it searches the whole
+tree rather than a declared subdirectory list — a list core cannot enforce is one
+more restatement.
 
 **Only the `ai-dlc-*` hooks are core.** The glob is `hooks/ai-dlc-*.sh`, not
 `hooks/*.sh`: a consumer may ship its OWN hooks alongside the core set. Those are
@@ -141,6 +159,7 @@ core_manifest:
   - fixtures/check-manifest-bypass/**
   - fixtures/check5-anchor-base/**
   - fixtures/ci-gates-resolution/**
+  - fixtures/consumer-machinery-home/**
   - fixtures/context-mode-protect/**
   - fixtures/context-sensor/**
   - fixtures/core-script-boundary/**
@@ -213,6 +232,8 @@ rulebook:
   - escalations.md
   - rule-authoring.md
   - team-roles/*.md
+
+consumer_machinery_home: scripts/ai-dlc-local/
 ```
 
 **Note on the second copy.** `ai-dlc-update`'s

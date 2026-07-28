@@ -17,6 +17,84 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.194.0] — 2026-07-28
+
+### Fixed — the core-guard advertised a home in five spellings, and nothing declared it
+
+When the guard refuses a `Write` under `scripts/ai-dlc/`, its deny text tells the author where
+their own pipeline tooling goes instead. That destination was written out by hand in **five
+shipped surfaces** — the guard's deny `reason`, its `additionalContext`, the `LOCAL_DIR` default
+in `reconcile/warn-shadowed-local-validators.sh`, two fixtures, and `core-manifest.md`'s prose —
+and declared as data in none. Nothing compared them.
+
+This is the affordance-is-the-defect shape. The guard **promises** the home; the promise was the
+only thing holding the value. Rename it in one surface and the guard keeps routing authors to a
+directory the reader never walks — and both halves stay green, because each is internally
+consistent with itself. The reader's failure mode is the quiet one: an absent directory is its
+documented no-op, so it exits 0 and prints nothing whether the home is empty or misspelled.
+
+`core-manifest.md` now carries **`consumer_machinery_home:`** as data, with the same duplicate in
+`reconcile/setup-sites.md` that `core_manifest:`, `machinery:` and `rulebook:` already have and
+for the same reason: `ai-dlc-update`'s HARD CONSTRAINT forbids reading pipeline files, so the
+reader cannot reach the manifest at runtime.
+
+**I43** binds every spelling, both ways. Forward: no shipped core file names a `scripts/ai-dlc*`
+path other than core's own home and the declared one. Reverse: the declared home still appears in
+the guard's deny text, because a home no affordance points at is one no author finds — a
+declaration can be live, self-consistent and reachable by nobody. The token grammar's
+false-positive set over the whole distribution is **empty**: exactly two spellings exist, measured
+before the check was written. The one cost is enumerated — prose under `core/`, `scripts/`,
+`templates/` or `.githooks/` may not spell a hypothetical third home, and the new fixture's own
+comments hit that twice while being written.
+
+**I44** asserts the other half of the promise. `core-manifest.md` and the guard both say, in those
+words, that core "never reads, never writes and never overwrites" the home; nothing checked it.
+Derived from install.sh's and uninstall.sh's `$PROJECT_ROOT`-rooted targets plus the
+`core_manifest:` globs, with a positive control — the extraction must still see core's own scripts
+home among those targets, or a broken extractor would report the same clean result as a correct one.
+
+### Fixed — the retire-candidate signal was blind below the home's top level
+
+`warn-shadowed-local-validators.sh` tested `[ -f "$LOCAL_DIR/$base" ]`, so a fork filed under any
+subdirectory of the home was invisible — and invisible here reads exactly like a home with no
+forks in it, because the script prints nothing and exits 0 either way. The home's internal layout
+is the **consumer's**: core declares the directory and claims nothing about its shape. It now
+walks the whole tree, which needs no subdirectory list; a list core cannot enforce would be one
+more restatement of a value that finally has a home.
+
+The emitted path is now the fork's real location. It used to be the fabricated string
+`scripts/ai-dlc-local/<basename>` regardless of where `--local-dir` pointed or where under it the
+fork sat, so the row named a path that need not exist — and `shadowed-local-validators`' assertions
+keyed on that constant, which is what let it ship. They key on the finding now.
+
+### Not shipped — four proposed ERROR clauses, refuted by measurement
+
+The consumer machinery home was scoped with four ERROR clauses resting on a predicate for "consumer
+ai-dlc machinery". Measured against the reference consumer, with controls, **no such predicate
+exists**, and the numbers are recorded here so the question is not reopened blind:
+
+- **Path scan.** `check-orphaned-fn.sh` (domain) and `check-protected-core-paths.sh` (ai-dlc) are
+  siblings in one directory with the same name shape and opposite classification. The
+  false-positive set is the consumer's entire domain toolchain — the argument `core-manifest.md`
+  already makes for core's own files, one tree over.
+- **Cited by a layer entry.** 46 entries cite **86** distinct executable spellings; **39 resolve to
+  no path at all** (bare basenames in prose), and the resolving 47 include product source —
+  `rebalancer/api.py`, `server/aggregator.py`, `web/src/utils/configSchema.js`.
+- **Consumer fixture directories.** 30 are consumer-owned (control: 73 of core's 75 shipped
+  fixtures present), 28 of them data-only, and the set is **mixed** product and ai-dlc with no
+  separating prefix. Relocating them also breaks the consumer's own `tests/fixtures/MANIFEST`
+  diff, its `fixture-hashes.lock`, four CI path triggers, and `core/git-hooks/pre-push`'s own glob.
+- **`fixtures:` declared by a layer entry.** **Zero** live subjects — a check that could not fire.
+- **Basename collides with a core script.** **Zero of 1003** consumer executables. Also vacuous.
+
+The one decidable clause — a consumer `settings.json` hook command outside the home — has **one**
+live subject, and `.claude/hooks/` is core-claimed by an `ai-dlc-*` prefix glob only, so a consumer
+hook beside it is already unambiguous and already safe from clobber. Measured value: none.
+
+`reconcile/layer-relocate.sh --apply` is deferred with them. A relocation tool needs a clause to
+trigger it, and the thing it would relocate has no predicate. What ships here is the declaration
+and the join — the part that was already advertised to every consumer with nothing behind it.
+
 ## [0.193.0] — 2026-07-28
 
 ### Fixed — the layer contract had two clauses named `LC-O12`, and the build was green
