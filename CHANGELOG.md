@@ -17,6 +17,64 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.180.0] — 2026-07-28
+
+### Added — an override can delegate into the section it shadows, and nothing looked
+
+Rule 27 precedence is `overrides > extensions > core`. An `overrides/` entry that
+shadows a whole section, while its body points the lead back AT a construct defined
+inside that same section, deletes its own delegation target at load time. It reads as
+a correct single-source delegation and behaves as a dropped one.
+
+Filed as `PC-S306` by the reference consumer during the 0.176.0 → 0.179.0 pull, found
+by post-apply rendered-pipeline verification — the only step that asks what the lead
+actually reads rather than what core contains.
+
+**Measured on that consumer: two instances, zero false positives across 13 overrides.**
+The filed entry named one; `overrides/steps__retro__pipeline-snapshot-ceiling.md:49`
+does the same thing and was not in the receipt. Both delegate to core's
+`## Machine Audits` table, which lives inside `retro.md` §4a — the section both of
+them shadow.
+
+Both were reported **`OVERRIDE-OK`** by every existing arm, correctly: those arms ask
+whether UPSTREAM moved. This asks whether the override can reach its own target, which
+is true or false today and independent of any pull. So the new status is emitted as a
+SEPARATE row beside `OVERRIDE-OK`, never folded into the `worst` accumulator — folding
+it in is exactly how both live instances stayed invisible.
+
+`OVERRIDE-DELEGATES-INTO-SHADOW` is **report-only**. Delegating to a construct the lead
+is expected to open core for is sometimes deliberate, and a consumer must not be unable
+to take a fix because its own overrides need restructuring. The message names the three
+remedies: restate the construct, narrow `shadows:` to the sub-headings actually
+rewritten, or delegate outside the span.
+
+Two design decisions, both measured rather than assumed:
+
+- **Backticked constructs, not heading text.** A delegation names the construct
+  (`` `## Machine Audits` ``), never the full title of the heading that defines it
+  ("`## Machine Audits` — one table, not five transcriptions"). Matching whole heading
+  text found **zero** of the two real instances; matching the backticked span found
+  both.
+- **The anchor heading itself is excluded.** An override naming a term from the heading
+  it overrides is self-describing, not delegating. Leaving it in produced the sole
+  false positive in the measurement (1 of 13), and excluding it took the set to zero.
+
+It lives in `reconcile/layer-drift.sh`, the home the filed entry proposed — here for a
+measured reason rather than deference. That script already sources `lib.sh` (so
+`section_of` is the one resolver, per I21) and already parses a multi-anchor `shadows:`
+value. `validate-layer-entries.sh`, the alternative, has **zero** span logic and would
+have needed a third copy of the resolver whose divergence I21 exists to prevent — and
+whose split has already shipped two defects.
+
+The status renders in the reconcile report automatically: `emit-report.sh` filters with
+a one-item deny-list, not an allow-list. Verified it appears, that `apply.sh`'s blocking
+filter does not pick it up, and that `hard-blockers.sh` stays clean.
+
+`ai-dlc-update`'s SKILL.md restates the status vocabulary for the operator in two
+places; both now carry the new status. Without that, the worklist enumeration
+(`OVERRIDE-DRIFT-*` / …) would have silently dropped it — the same restated-list drift
+v0.179.0 fixed in H1.
+
 ## [0.179.0] — 2026-07-27
 
 ### Fixed — H1 restated the fixture contract it cited, strictly tighter than the mechanism

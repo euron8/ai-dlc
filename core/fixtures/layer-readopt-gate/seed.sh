@@ -38,6 +38,31 @@ than review removes them; another pass only finds the next wave. STOP.
 ## Rule 9 -- Trailing
 
 Tail section.
+
+## Rule 10 -- Reporting
+
+Reporting rules for this pipeline.
+
+### `## Audit Ledger` — one table, not five transcriptions
+
+Every scan reports into ONE `## Audit Ledger` table. This sub-heading makes the
+construct a delegation target living INSIDE Rule 10: an override shadowing
+`#Rule 10` deletes it. Unchanged across the range, so the drift arm stays quiet
+and only OVERRIDE-DELEGATES-INTO-SHADOW can speak here.
+
+## Rule 11 -- Outside The Shadow
+
+### `## Escalation Log` — the control
+
+Defined OUTSIDE any shadowed section. An override may delegate here freely and the
+detector MUST stay silent, or it fires on every legitimate cross-section pointer.
+
+## Rule 12 -- Handoff (configurable via `handoff_mode`)
+
+The backticked term is in the ANCHOR heading itself, not in a construct nested
+under it. An override shadowing `#Rule 12` and naming `handoff_mode` is describing
+what it overrides, not delegating into it. This is the measured false positive
+(1 of 13 on the reference consumer) that the anchor-heading exclusion removes.
 EOF
 
 # NOTE the trailing unchanged section. The template tokens must NOT be the last
@@ -107,6 +132,31 @@ is injecting defects. CRITICALs in scope the sprint ADDED are NOT divergence.
 ## Rule 9 -- Trailing
 
 Tail section.
+
+## Rule 10 -- Reporting
+
+Reporting rules for this pipeline.
+
+### `## Audit Ledger` — one table, not five transcriptions
+
+Every scan reports into ONE `## Audit Ledger` table. This sub-heading makes the
+construct a delegation target living INSIDE Rule 10: an override shadowing
+`#Rule 10` deletes it. Unchanged across the range, so the drift arm stays quiet
+and only OVERRIDE-DELEGATES-INTO-SHADOW can speak here.
+
+## Rule 11 -- Outside The Shadow
+
+### `## Escalation Log` — the control
+
+Defined OUTSIDE any shadowed section. An override may delegate here freely and the
+detector MUST stay silent, or it fires on every legitimate cross-section pointer.
+
+## Rule 12 -- Handoff (configurable via `handoff_mode`)
+
+The backticked term is in the ANCHOR heading itself, not in a construct nested
+under it. An override shadowing `#Rule 12` and naming `handoff_mode` is describing
+what it overrides, not delegating into it. This is the measured false positive
+(1 of 13 on the reference consumer) that the anchor-heading exclusion removes.
 EOF
 
 # THEIRS absorbs the consumer's hardening (the v0.55.0 handoff-guard case).
@@ -173,6 +223,58 @@ Validation intensity by path: service/ and infra/ are FULL; scripts/ and docs/ a
 **Divergence is a HARD_BLOCK, not a reason for another pass.** If pass N+1
 reports more CRITICALs than pass N, the repair step is injecting defects faster
 than review removes them; another pass only finds the next wave. STOP.
+EOF
+
+# Two more overrides, for OVERRIDE-DELEGATES-INTO-SHADOW. Both shadow a section
+# that is UNCHANGED across the range, so both are OVERRIDE-OK on the drift arm --
+# which is the point: the two questions are independent, and the real consumer's
+# instances were both reported OVERRIDE-OK while delegating into their own shadow.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-10.md" <<EOF
+---
+shadows: SKILL.md#Rule 10
+base_sha: ${BASE}
+reason: consumer-specific reporting rules.
+---
+
+## Rule 10 -- Reporting (CONSUMER OVERRIDE)
+
+Consumer reporting rules. Record every verdict in core's \`## Audit Ledger\` table.
+
+That table is defined INSIDE Rule 10, which this entry replaces at load time, so
+the delegation cannot resolve. This entry MUST be reported.
+EOF
+
+# THE CONTROL. Same shape, same shadow, but it delegates to a construct defined
+# OUTSIDE the shadowed span. It must stay SILENT. Without this, the assertion
+# above passes for a detector that flags every override carrying a backtick.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-10-control.md" <<EOF
+---
+shadows: SKILL.md#Rule 9
+base_sha: ${BASE}
+reason: consumer-specific trailing section; delegates OUTSIDE its own shadow.
+---
+
+## Rule 9 -- Trailing (CONSUMER OVERRIDE)
+
+Consumer tail. Record every verdict in core's \`## Escalation Log\`, which is
+defined under Rule 11 — outside this entry's shadow — so it remains reachable.
+EOF
+
+# THE SECOND CONTROL — the measured false positive. The backticked term lives in the
+# ANCHOR heading itself, so naming it is self-description, not delegation. Must be
+# SILENT. Without this the anchor-heading exclusion is untested and can be deleted
+# with every assertion still green.
+cat > "$CONS/.claude/skills/ai-dlc/overrides/SKILL__Rule-12-anchor.md" <<EOF
+---
+shadows: SKILL.md#Rule 12
+base_sha: ${BASE}
+reason: consumer-specific handoff configuration.
+---
+
+## Rule 12 -- Handoff (CONSUMER OVERRIDE)
+
+This consumer sets \`handoff_mode\` to always-on. Naming the term that appears in
+the heading being overridden is self-description, not a delegation into the shadow.
 EOF
 
 # The consumer's IN-PLACE hook hardening — no override entry (hooks have no grain).

@@ -400,6 +400,15 @@ prose is itself generated rather than composed.
      changed, so the section cannot be *proven* safe. Surface for re-confirmation.
      Conservative on purpose — an unprovable section is never reported as OK.
    - `OVERRIDE-ANCHOR-UNRESOLVED` → upstream restructured the anchor away.
+   - `OVERRIDE-DELEGATES-INTO-SHADOW` → the override's body names a construct
+     defined INSIDE a section it shadows, so precedence deletes the delegation
+     target along with the section. **Report-only, never blocking** — pointing the
+     lead at core is sometimes deliberate. Every other status here asks whether
+     UPSTREAM moved; this one is true or false today, independent of any pull, so a
+     clean drift result says nothing about it. Record it and offer the three
+     remedies: restate the construct in the override, narrow `shadows:` to the
+     sub-headings actually rewritten, or delegate to something outside the span.
+     Left alone, every future change to that construct silently fails to arrive.
    - `EXTENSION-RETIRE-CANDIDATE` → upstream **absorbed** a section this extension
      defines: the titles agree (never merely the number — consumer gate-check numbers
      are a sanctioned separate namespace) and core did not carry it at `base`. The
@@ -614,6 +623,7 @@ prose is itself generated rather than composed.
    (e.g. "CLAUDE.md: remove Context-Mode Usage section") and, for any file
    that hit anchor-drift, its flag for adjudication — and, from step 3c, a
    **layer-drift list** (every `OVERRIDE-DRIFT-*` / `OVERRIDE-ANCHOR-UNRESOLVED` /
+   `OVERRIDE-DELEGATES-INTO-SHADOW` /
    `EXTENSION-HOOK-DRIFT` / `EXTENSION-CHECK-NUMBER-COLLISION` entry with its target
    and reason — a collision tagged `NEW-THIS-PULL` ALSO goes in the
    needs-confirmation list below, because this pull is what created it), a
