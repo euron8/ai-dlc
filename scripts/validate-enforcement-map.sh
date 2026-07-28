@@ -445,6 +445,30 @@ elif [ "$ba_drift" != "$ba_lint" ]; then
   err "the bold-anchor rule has forked between layer-drift.sh and validate-layer-entries.sh. One classifies the pull and the other lints authoring and gates CI; a rule that differs between them means the two disagree about what a section IS, and the operator believes whichever they happened to run. Make bold_anchors_of_file() byte-identical."
 fi
 
+# --- I35: H1's fixture criterion states I20's contract, not a stricter one ----
+# H1 is LLM-read at every gate and had RESTATED this contract instead of stating the
+# property: it required a `README.md` and a `seed.sh` of every bound fixture, and
+# attributed that to "the validate-enforcement-map.sh I20 contract". I20 requires
+# neither. It requires a DRIVER, falling back to a README that declares why one is
+# impossible. The restatement was strictly tighter than the mechanism it cited, and
+# core itself violates it: 44 of 73 fixtures ship no README and 26 no seed.sh, all of
+# them correct, all of them a gate FAIL under the old prose. A consumer hit it on two
+# core-owned fixtures it cannot edit, behind a P0 fix.
+#
+# The marker is the joinable part: H1 tells the reader which string declares the
+# exemption, and if I20's marker moves, H1 sends them looking for a string no README
+# carries and compliant fixtures start failing. Bind the two, same shape as I15/I18/I34.
+# The rest of the criterion is prose an LLM reads; this pins the one literal in it.
+em_marker="$(sed -n "s/^EXEMPT_MARKER='\(.*\)'$/\1/p" "$REPO_ROOT/scripts/validate-enforcement-map.sh" | head -1)"
+gv_file="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+if [ -z "$em_marker" ]; then
+  err "I35 cannot read EXEMPT_MARKER out of validate-enforcement-map.sh. The check binding H1's stated exemption marker to I20's just went vacuous — it must locate the marker or fail loudly, never pass by finding nothing."
+elif [ ! -f "$gv_file" ]; then
+  err "I35 cannot find gate-validation.md at $gv_file. A scan over nothing reads exactly like agreement."
+elif ! grep -qF -- "$em_marker" "$gv_file"; then
+  err "I35: H1 in gate-validation.md does not quote I20's exemption marker '$em_marker'. H1 is read by an LLM at every gate and tells it which declaration makes a driverless fixture legitimate; if that string does not match the one I20 enforces, H1 sends the reader looking for text no README carries and FAILs compliant fixtures. Quote the marker verbatim in H1's fixture criterion, or change both together."
+fi
+
 # --- I34: ONE rule grammar. The SAME split as I15, in the RULE namespace. -----
 # `validate-layer-entries.sh` (W4) REPORTS an extension rule number colliding with core's;
 # `relabel-extension-checks.sh` FIXES it by writing the `[ext:<id>]` label. Two programs,
@@ -1498,7 +1522,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35)."
   exit 0
 fi
 exit 1

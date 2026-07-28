@@ -17,6 +17,59 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.179.0] — 2026-07-27
+
+### Fixed — H1 restated the fixture contract it cited, strictly tighter than the mechanism
+
+H1's fixture criterion required every bound fixture to ship a `README.md` and a `seed.sh`,
+and attributed that to "the `validate-enforcement-map.sh` I20 contract."
+
+I20 requires neither. It requires a **driver** — a `run.sh` — falling back to a README that
+declares, with a specific marker, why no driver is possible. The property I20 protects is
+drivability: a fixture the suite skips is the only one that cannot fail. `README.md` and
+`seed.sh` are common and useful, and neither is evidence of anything on a fixture that
+already has a driver.
+
+The restatement was strictly tighter than the mechanism it named, and **core itself violates
+it**: of 73 fixtures, 44 ship no `README.md` and 26 no `seed.sh` — every one of them correct,
+and every one a gate FAIL under the old prose. Of the 32 fixtures bound in
+`enforcement-map.yaml`, **17 would fail the old criterion and 0 fail the corrected one**.
+I20's own subject set is exactly 2 fixtures, both of which carry the exemption declaration;
+I20 has been fully satisfied the whole time.
+
+Reported by the graph consumer mid-sprint: H1 failed a gate on `dispatch-model-guard` and
+`subagent-probe`, both bound to Check 22, both shipping a working `run.sh` and `seed.sh`,
+both core-owned and therefore not editable in place — a gate-blocking finding, with a P0 fix
+waiting behind it, against fixtures that were never non-compliant.
+
+Two further defects in the same paragraph:
+
+- It cited `validate-enforcement-map.sh` as the contract a CONSUMER must satisfy. That script
+  lives at the dev-repo root `scripts/`, not `core/scripts/`, so `install.sh` never ships it
+  — confirmed absent in the reference consumer. A consumer was told its PASS condition was
+  defined by a file it does not have and cannot run.
+- The **PASS** and **FAIL** clauses still demanded the check body cross-reference its fixture
+  path, which clause (ii) directly above them removes in bold ("Do NOT require the check body
+  to restate the fixture path… requiring it made (ii) fail for every check that correctly did
+  not carry one"). (ii) was fixed and the PASS/FAIL clauses were left behind.
+
+H1 now states the property — the fixture directory exists and is drivable, or declares why it
+cannot be — quotes I20's exemption marker verbatim so the reader knows what to look for, and
+says explicitly that a gate MUST NOT fail a driven fixture for lacking a README or a seed.
+
+**Invariant I35** binds H1's quoted marker to I20's `EXEMPT_MARKER`. H1 is LLM-read at every
+gate; if the marker moves and H1 is not updated, H1 sends the reader looking for a string no
+README carries and compliant fixtures start failing again. It errors on divergence AND on
+failing to locate either side, so it cannot pass by finding nothing.
+
+**A proposed second mechanism was measured and rejected.** A guard that no core rule file may
+cite a dist-only root `scripts/*.sh` would generalize the second defect, but the measured
+false-positive set is 8 of 9 sites: the other citations are descriptive rationale
+(`core-manifest.md`, `rule-authoring.md`, `carry-over-evaluation.md` explaining which
+invariant enforces what), not instructions a consumer must act on, and separating the two
+needs a hand-list — the shape that rots. Only the H1 site was prescriptive, and it is fixed
+directly.
+
 ## [0.178.0] — 2026-07-27
 
 ### Added — rule numbers collide exactly like check numbers, and nothing looked

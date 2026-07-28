@@ -1530,10 +1530,12 @@ read exactly like coverage.
 **Check.** For each check with a non-empty `fixtures:` binding in either
 source, confirm both:
 
-(i) each bound fixture directory exists, with a `README.md` describing the
-bypass scenario and a `seed.sh` reproducing it idempotently — or, where a
-fixture declares in its README that it cannot be driven, that declaration
-is present (the `validate-enforcement-map.sh` I20 contract);
+(i) each bound fixture directory exists and is DRIVABLE: it has a `run.sh`,
+or a `README.md` declaring — with the marker ``No `run.sh`, deliberately`` —
+why no driver is possible. A `README.md` and a `seed.sh` are common and
+useful, but neither is required of a fixture that already has a driver, and
+a gate MUST NOT fail one for lacking them. The property is drivability,
+because a fixture the suite skips is the only one that cannot fail;
 
 (ii) the binding resolves — the fixture path named in the map is the
 directory found on disk. **Do NOT require the check body to restate the
@@ -1571,11 +1573,11 @@ that declares `implementation` but loads only the planning slice
 (omitting Check 6/8/11); this manifest-completeness assertion MUST FAIL
 it. H2 (below) re-drives that fixture.
 
-**PASS:** every enumerated check's fixture exists with README.md +
-seed.sh, the check's body cites the fixture path, AND every
-manifest-required check for the declared gate type is loaded with no
-orphan anchors and a known gate type. **FAIL:** any enumerated check is
-missing its fixture or check-body cross-reference, OR any
+**PASS:** every enumerated check's fixture exists and is drivable per (i),
+its binding resolves per (ii), AND every manifest-required check for the
+declared gate type is loaded with no orphan anchors and a known gate type.
+**FAIL:** any enumerated check is missing its fixture, OR a bound fixture
+has neither a `run.sh` nor the undrivable declaration, OR any
 manifest-required check's `CHECK_LOADED` anchor is absent, OR an anchor
 matches no manifest row, OR the declared gate type is unknown.
 
