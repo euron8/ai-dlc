@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
-# Prove I36/I37/I38 can FAIL.
+# Prove I36/I37/I38/I41/I42 can FAIL.
 #
-# WHY THIS FIXTURE EXISTS. The three invariants pass on this repo, and they will pass on every
+# WHY THIS FIXTURE EXISTS. The invariants pass on this repo, and they will pass on every
 # well-formed tree — which is exactly the state this repo names as its recurring defect: a check
 # that cannot fire reads exactly like one that passed. I38 was observed firing 22 times while the
 # contract was being landed (the clause ids did not yet exist in the READMEs). I36 and I37 have
 # NEVER fired against real input, so without the mutants below their green is worth nothing.
+#
+# I41 AND I42 ARE THE COUNTEREXAMPLE TO THAT LAST SENTENCE, AND THEY ARRIVED LATE. Both fired on
+# the contract as it actually shipped: two clauses were declared `LC-O12` (v0.187.0, then again
+# v0.192.0) and three declared `since: 3` against `contract_version: 2`. The build was green
+# through all of it, because every invariant already here keys on something else — I36 on `code:`,
+# I37 on field presence, I38 on a SUBSTRING grep of the prose home that two clauses sharing an id
+# both satisfy. The mutants below re-create each defect one at a time.
 #
 # THE MUTANT IS THE CONTRACT, NOT THE VALIDATOR. Every other option was worse. Mutating
 # `validate-enforcement-map.sh` would test the assertion's wording rather than the join, and
@@ -123,6 +130,47 @@ mutant_fires "$TMP/i37.yaml" "I37" "i37-no-mechanism" \
 sed 's/^  - id: LC-R1$/  - id: LC-R9/' "$CONTRACT" > "$TMP/i38.yaml"
 mutant_fires "$TMP/i38.yaml" "I38 LC-R9" "i38-prose-home" \
   "the contract and the README have diverged, so the reader is pointed at a clause that is not there"
+
+# --- I41: two clauses under one id ----------------------------------------------------
+# THE DEFECT AS IT SHIPPED, re-created exactly: fold LC-O14 back onto LC-O12, which is what
+# v0.192.0 did by counting forward from LC-O11 in a file that is not in numeric order.
+#
+# This must fail I41 and NOTHING ELSE, which is why the fold is onto an id the prose home
+# already carries: I38 greps `overrides/README.md` for each id as a substring, so a collision
+# satisfies it on the surviving clause's line. That is the entanglement to avoid AND the reason
+# I38 could never have caught this.
+sed 's/^  - id: LC-O14$/  - id: LC-O12/' "$CONTRACT" > "$TMP/i41.yaml"
+mutant_fires "$TMP/i41.yaml" "I41" "i41-duplicate-id" \
+  "two clauses under one id make every citation of it ambiguous, and I38 passes on the other's prose"
+
+# --- I42 arm 1: a clause introduced above the contract's own version ------------------
+# Raise the FIRST clause's since to contract_version + 1 rather than lowering contract_version.
+# Lowering it would only fire if some clause happened to sit exactly at the current version, so a
+# later release that bumps the version without adding a clause at it would turn this mutant into
+# a byte-different no-op — the kind `cmp -s` passes because bytes DID change.
+awk '
+  /^contract_version:/ { cv = $2 + 1; print; next }
+  /^    since:/        { if (!done) { done = 1; printf "    since: %d\n", cv; next } }
+  { print }
+' "$CONTRACT" > "$TMP/i42-above.yaml"
+mutant_fires "$TMP/i42-above.yaml" "> contract_version" "i42-above-version" \
+  "a clause above contract_version binds no conforming entry — it cannot fire, wearing a version number"
+
+# --- I42 arm 2: a clause with no since: at all ----------------------------------------
+# The vacuity guard. Without it, dropping the field is how a clause exits I42's subject set
+# while still reading like a versioned rule. Asserted on THIS arm's wording, not on "I42" —
+# three arms can emit that string and an assertion on the shared token would pass against a
+# reverted fix.
+awk 'BEGIN{done=0} /^    since:/{ if(!done){done=1; next} } {print}' "$CONTRACT" > "$TMP/i42-missing.yaml"
+mutant_fires "$TMP/i42-missing.yaml" "has no since:" "i42-missing-since" \
+  "a clause with no since: silently leaves the comparison's subject set"
+
+# --- I42 arm 3: an unreadable contract_version ----------------------------------------
+# The other vacuity guard: every since: is compared against this one value, so an unparseable
+# one would retire the whole check while the build stayed green.
+sed 's/^contract_version: .*$/contract_version: three/' "$CONTRACT" > "$TMP/i42-unparseable.yaml"
+mutant_fires "$TMP/i42-unparseable.yaml" "cannot read a numeric contract_version" "i42-unparseable" \
+  "an unreadable version would make every since: comparison pass by finding nothing"
 
 echo
 if [ "$FAILURES" -gt 0 ]; then
