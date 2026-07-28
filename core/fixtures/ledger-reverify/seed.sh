@@ -237,6 +237,21 @@ verify: manual
 
 ---
 
+## PC-FIXTURE-TWO-RECEIPTS — one entry, two line-leading receipts that DISAGREE
+
+The strongest form of the last-match-wins defect: receipt one is genuinely still live (MARKER_A is
+absent at theirs) and receipt two is a real close (MARKER_B was absorbed). A scalar `directive`
+keeps only the LAST, so the entry reported CLOSE-CANDIDATE and the still-live half vanished with no
+row at all — a close hiding a live claim, which is the direction that drains an open entry.
+
+Both rows must appear, each tagged with its ordinal. An entry closes only when EVERY receipt closes,
+and printing them all is what makes that enforceable by a human rather than assumed.
+
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"
+verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+---
+
 ## PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK — upstream landed it; the receipt cannot ever say so
 
 The pre-base commit NAMES this id, so upstream absorbed the entry. The receipt below is

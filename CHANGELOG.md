@@ -17,6 +17,73 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.184.0] — 2026-07-28
+
+### Fixed — the ledger closer read only the LAST receipt in an entry, and v0.181.0 recorded that defect as absorbed
+
+Two defects, one subject, both found by the reference consumer's operator during the 0.180.0 →
+0.183.0 pull.
+
+**The bug.** `directive` in `reconcile/ledger-reverify.sh` was a plain scalar assigned inside a
+per-line awk rule, so an entry carrying two line-leading `verify:` lines had its first silently
+overwritten — **no row, no warning**, and the surviving verdict answering a question the operator
+never asked. That is the subject `PC-S296-LEDGER-REVERIFY-LAST-MATCH-WINS` names.
+
+Reproduced at v0.183.0 before changing anything: an entry with `theirs_has` (STILL-LIVE) followed by
+`theirs_lacks` on an absent token emitted **only the second row**, while the same entry carrying the
+first receipt alone emitted `STILL-LIVE`. One receipt vanished.
+
+**Measured on the reference consumer: 2 entries carry multiple receipts — one with two, one with
+four — so FOUR receipts were being discarded on every pull.** Their surviving verdicts happened to
+agree there, which is exactly how this went unnoticed: the row was never wrong, the question was
+never asked. 47 single-receipt rows are unchanged, the control.
+
+An entry now emits one row **per receipt**, tagged `[receipt n/m]`. A single-receipt entry is
+byte-identical to before — asserted, because a fix that rewrites every row in every consumer report
+to buy a two-entry improvement is not worth its own diff. **The aggregate rule is that an entry
+closes only when EVERY receipt closes**, and printing them all is what makes that enforceable by a
+human: a `CLOSE-CANDIDATE` row can no longer hide a `STILL-LIVE` one, and `ledger-rotate.sh` still
+archives only on an explicit `**ADOPTED UPSTREAM (v` annotation.
+
+**The wrong claim, which is the worse half.** v0.181.0 recorded `PC-S296` as *"absorbed v0.153.0"* —
+in the CHANGELOG **and** in a comment shipped inside `ledger-reverify.sh` itself. That is false. The
+v0.153.0 commit anchored the `verify:` match to a line start, closing the **prose-mention** arm of
+the same defect; the scalar assignment the entry actually names was never touched. The claim was
+reached by finding the anchoring plus a comment naming the entry — **a citation read as a fix**,
+which is the failure mode this repo's own rule ("a grep hit is not a finding — read the sentence")
+exists to prevent. Corrected in both places.
+
+### Fixed — `NAMED-ABSORBED` misled its own author in the release that shipped it
+
+v0.181.0's comment recorded all four named entries as *"absorbed"*. Adjudicated properly by the
+consumer's operator against upstream's history, the spread is: **one absorption (`PC-S300`), one
+split (`PC-S296`), one passing mention (`PC-S297`), and one explicit refutation (`PC-S303`)** — the
+last recorded in upstream's own commit body as *"the latter's premise refuted"*.
+
+The detector is not wrong: all four are true positives **as namings**, which is the only thing the
+status claims, and the 33 other id-shaped labels stay silent. What was wrong is the annotation of
+what the namings *meant* — written three lines below the sentence insisting **"IT SAYS 'NAMES', NOT
+'ABSORBED'"**, by the person who wrote that sentence. A token that misleads its own author on first
+contact will mislead every operator after it. The comment now states the adjudicated spread and
+instructs the reader to treat a row as "upstream's history mentions this id, nothing more" and go
+read the commit.
+
+### Fixture
+
+`core/fixtures/ledger-reverify/` gains `PC-FIXTURE-TWO-RECEIPTS` — two receipts that **disagree**,
+one genuinely live and one a real close, which is the damaging direction (the scalar kept the close
+and swallowed the live claim, so an open entry could be drained). Four new assertions: both rows
+present, the ordinal on the row, a single-receipt entry unchanged, and a mutant restoring the scalar
+handoff that must lose the live receipt **and only that**. 46 assertions, all green.
+
+### Note — an authoring hazard this release walked into
+
+The awk program in `ledger-reverify.sh` is a single-quoted shell string, and the file carries a
+warning three lines above where this change landed: *"No apostrophes below this point … one in a
+comment ends it."* The first draft of this fix wrote `PC-S296's` and `operator's` inside that block
+and failed to parse. The warning was right where it needed to be and was still walked past; leaving
+this note here because the next author will be equally sure they read it.
+
 ## [0.183.0] — 2026-07-28
 
 ### Added — the layer contract's first ERROR tier, and every comma-part of `shadows:` is finally read

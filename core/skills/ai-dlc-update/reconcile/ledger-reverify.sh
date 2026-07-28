@@ -146,7 +146,12 @@ LEDGER="${5:-$LEDGER_DEFAULT}"
 # A consumer that never filed a candidate has no ledger and nothing to re-verify.
 [ -f "$LEDGER" ] || exit 0
 
-emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
+# RSFX names WHICH receipt produced this row, and is empty for the single-receipt case so output
+# is byte-identical to before for every entry carrying one. Appended here rather than at each call
+# site: there are eight emit() calls across four verbs, and a suffix added to seven of them is a row
+# an operator cannot attribute.
+RSFX=""
+emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3$RSFX"; }
 
 theirs_show() { git -C "$DIST" show "${THEIRS}:$1" 2>/dev/null; }
 theirs_has_path() { git -C "$DIST" cat-file -e "${THEIRS}:$1" 2>/dev/null; }
@@ -192,14 +197,25 @@ absorbed_at() {
 # fan-in already use. So ask the history directly.
 #
 # MEASURED on the reference consumer, 51 heading labels / 37 id-shaped / 4 named:
-#   PC-S296-…-LAST-MATCH-WINS      absorbed v0.153.0; receipt anchors `directive=substr(`,
-#                                  present at both refs → STILL-LIVE forever
-#   PC-S297-…-PM-AC-PRECISION      absorbed; receipt is `theirs_has` on the FIX text (inverted)
+#   PC-S296-…-LAST-MATCH-WINS      NAMED at v0.153.0 and only PARTLY absorbed — that commit
+#                                  anchored the match to a line start, closing the prose-mention
+#                                  arm, while the entry's own subject (the scalar `directive=`)
+#                                  stayed live until the accumulation fix below. Its receipt
+#                                  anchors `directive=substr(`, present at both refs.
+#   PC-S297-…-PM-AC-PRECISION      NAMED, NOT absorbed — the commit names it in passing; the
+#                                  requirement is still absent from pm.md at theirs
 #   PC-S300-…-SECOND-SKILL         absorbed by the v0.172.0 drain; `verify: manual`
-#   PC-S303-…-FIVE-OF-TEN-SUBTREES absorbed by the v0.172.0 drain; `verify: manual`
-# All four TRUE POSITIVES; the other 33 id-shaped labels emit nothing, which is the control
-# that this is a discriminator and not a rubber stamp. Four of the four were invisible to
-# every other predicate in this file.
+#   PC-S303-…-FIVE-OF-TEN-SUBTREES NAMED to REFUTE it — the five-root scan set is a reviewed I12
+#                                  exemption, not an oversight; `verify: manual`
+# All four are TRUE POSITIVES **as namings**, which is all this status claims; the other 33
+# id-shaped labels emit nothing, the control that this discriminates rather than rubber-stamps. Four
+# of four were invisible to every other predicate here.
+#
+# ADJUDICATED AFTERWARDS, AND THE SPREAD IS THE WARNING: of the four, ONE was an absorption
+# (PC-S300), one a split, one a passing mention, one an explicit refutation. The author of this
+# status recorded all four as "absorbed" in the same release that shipped it — misled by the
+# status's own name, three lines below the sentence insisting it says NAMES and not ABSORBED. Read
+# a row here as "upstream's history mentions this id", nothing more, and go read the commit.
 #
 # EMITTED IN ADDITION TO THE RECEIPT'S VERDICT, NEVER INSTEAD OF IT. Replacing the row would
 # hide the fact that the receipt needs re-anchoring, and `STILL-LIVE` + `NAMED-ABSORBED` on one
@@ -435,10 +451,25 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
   function entry_line_closes(s) {
     return (s ~ /ADOPTED UPSTREAM|WITHDRAWN/) || (s ~ /\(original text, retained for the record\)/)
   }
+  # EVERY RECEIPT, NOT THE LAST ONE. `directive` was a scalar assigned inside a per-line rule, so
+  # an entry carrying two line-leading `verify:` lines had its first silently overwritten — no row,
+  # no warning, and the surviving verdict answering a question the operator did not ask. That is
+  # the subject PC-S296 names. v0.153.0 anchored the match to a line start, which closed the
+  # PROSE-MENTION arm of the same defect, and the entry was then wrongly recorded upstream as
+  # absorbed on that basis — a citation read as a fix. Reproduced at v0.183.0: an entry with
+  # `theirs_has` (STILL-LIVE) followed by `theirs_lacks` on an absent token emitted ONLY the second
+  # row, while the same entry carrying the first receipt alone emitted STILL-LIVE.
+  #
+  # An entry now emits one row PER receipt, tagged with its ordinal. THE AGGREGATE RULE IS THAT AN
+  # ENTRY CLOSES ONLY WHEN EVERY RECEIPT CLOSES, and printing them all is what enforces it: a
+  # CLOSE-CANDIDATE row can no longer hide a STILL-LIVE one, and ledger-rotate.sh archives only on
+  # an explicit `**ADOPTED UPSTREAM (v` annotation by the operator, so the close stays a human act taken
+  # with every row in view.
   function flush(){
     if (has_verify && !closed && label != "")
-      printf "%s\t%s\n", label, directive
-    has_verify=0; closed=0; directive=""; label=""
+      for (di = 1; di <= dn; di++)
+        printf "%s\t%s\t%s\n", label, di "/" dn, dv[di]
+    has_verify=0; closed=0; label=""; dn=0
   }
   {
     shape = ledger_entry_shape($0)
@@ -523,10 +554,17 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
     # NOTE no apostrophes in this block: the awk program is a single-quoted shell string.
     sub(/`+$/,"",directive)
     sub(/[[:space:]]+$/,"",directive)
+    # APPEND. The cleanups above still run on the scalar; only the handoff to flush() accumulates.
+    dn++; dv[dn]=directive
   }
   END { flush() }
-' "$LEDGER" | while IFS="$(printf '\t')" read -r label directive; do
+' "$LEDGER" | while IFS="$(printf '\t')" read -r label ord directive; do
   [ -n "$directive" ] || continue
+  # Empty suffix for a single-receipt entry, so those rows are unchanged.
+  case "$ord" in
+    1/1|"") RSFX="" ;;
+    *)      RSFX=" [receipt $ord]" ;;
+  esac
   verb="${directive%% *}"
   rest="${directive#"$verb"}"; rest="${rest# }"
   # Punctuation around the verb (a stray backtick from prose formatting, a period) is a
@@ -545,7 +583,10 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # other mechanical signal at all. Additional to the receipt's verdict below, never a
   # substitute for it: see THE NAME IS THE THIRD SIGNAL above for why losing either half
   # loses a distinct fact.
-  na="$(named_absorbed "$label")"
+  # ONE ROW PER ENTRY, not per receipt: the name is a property of the entry, and repeating it once
+  # per receipt would make a two-receipt entry read as two absorptions.
+  na=""
+  case "$ord" in 1/*|"") na="$(named_absorbed "$label")" ;; esac
   if [ -n "$na" ]; then
     na_v="${na%% *}"; na_c="${na##* }"
     emit NAMED-ABSORBED "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see. Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
