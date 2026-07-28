@@ -109,7 +109,7 @@
 #         (arg order matches unregistered-drift.sh)
 # Output: TSV — STATUS<TAB>ENTRY<TAB>DETAIL
 #   CLOSE-CANDIDATE  upstream absorbed the entry; the operator confirms and annotates.
-#   NAMED-ABSORBED   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
+#   NAMED-UPSTREAM   upstream's own history NAMES this entry's id. Emitted IN ADDITION to the
 #                    receipt's verdict, never instead of it — see THE NAME IS THE THIRD SIGNAL.
 #   STILL-LIVE       the entry still reproduces at theirs; stays open (filtered from the report).
 #   HAND-REVIEW      the entry declares `verify: manual` — no mechanical predicate by design.
@@ -213,12 +213,15 @@ absorbed_at() {
 #
 # ADJUDICATED AFTERWARDS, AND THE SPREAD IS THE WARNING: of the four, ONE was an absorption
 # (PC-S300), one a split, one a passing mention, one an explicit refutation. The author of this
-# status recorded all four as "absorbed" in the same release that shipped it — misled by the
-# status's own name, three lines below the sentence insisting it says NAMES and not ABSORBED. Read
-# a row here as "upstream's history mentions this id", nothing more, and go read the commit.
+# status recorded all four as absorbed in the same release that shipped it — misled by the verb
+# the status was originally named for, three lines below the sentence insisting it says NAMES.
+# That is why the status is named for what it observes, not for a verdict it cannot reach: the
+# original name asserted an outcome only the operator can determine, and it fooled its own author
+# before it reached a single operator. Read a row here as "upstream's history mentions this id",
+# nothing more, and go read the commit.
 #
 # EMITTED IN ADDITION TO THE RECEIPT'S VERDICT, NEVER INSTEAD OF IT. Replacing the row would
-# hide the fact that the receipt needs re-anchoring, and `STILL-LIVE` + `NAMED-ABSORBED` on one
+# hide the fact that the receipt needs re-anchoring, and `STILL-LIVE` + `NAMED-UPSTREAM` on one
 # entry is the highest-value pair this tool can print: it says the entry is absorbed AND its
 # receipt is wrong. Suppressing either half loses one of those two facts.
 #
@@ -589,7 +592,7 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
   case "$ord" in 1/*|"") na="$(named_absorbed "$label")" ;; esac
   if [ -n "$na" ]; then
     na_v="${na%% *}"; na_c="${na##* }"
-    emit NAMED-ABSORBED "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see. Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
+    emit NAMED-UPSTREAM "$label" "upstream's own history NAMES this entry's id at v$na_v ($na_c), which no receipt in this entry can see. Confirm whether that commit ABSORBED the entry or recorded a rejection/split; if it absorbed, annotate 'ADOPTED UPSTREAM (v$na_v, verified <date>)' and re-anchor or drop the stale receipt. Do NOT delete the entry."
   fi
 
   case "$verb_norm" in

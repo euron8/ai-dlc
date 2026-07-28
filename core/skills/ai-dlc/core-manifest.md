@@ -162,6 +162,7 @@ core_manifest:
   - fixtures/layer-contract-conformance/**
   - fixtures/layer-readopt-gate/**
   - fixtures/ledger-reverify/**
+  - fixtures/ledger-status-vocabulary/**
   - fixtures/ledger-reverify-unfalsifiable/**
   - fixtures/ledger-rotate/**
   - fixtures/mandatory-rules-clean-tree/**

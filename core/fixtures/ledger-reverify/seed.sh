@@ -259,7 +259,7 @@ anchored on MARKER_A, which is absent at base AND at theirs, so it reports STILL
 every pull and will keep doing so after the absorption — the receipt is testing the wrong
 token, and no amount of re-running it will reveal that.
 
-Both rows must appear: STILL-LIVE from the receipt, NAMED-ABSORBED from the history. The pair
+Both rows must appear: STILL-LIVE from the receipt, NAMED-UPSTREAM from the history. The pair
 IS the finding — one half says the entry is absorbed, the other says its receipt is wrong.
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_A"

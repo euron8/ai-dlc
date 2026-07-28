@@ -105,6 +105,7 @@ core_manifest:
   - core/fixtures/layer-contract-conformance/**
   - core/fixtures/layer-readopt-gate/**
   - core/fixtures/ledger-reverify/**
+  - core/fixtures/ledger-status-vocabulary/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
   - core/fixtures/ledger-rotate/**
   - core/fixtures/mandatory-rules-clean-tree/**
