@@ -514,6 +514,16 @@ prose is itself generated rather than composed.
      lose data). The operator confirms and annotates at step 8 — the tool never edits the
      ledger, exactly as `HARD-CORE-DRIFT-ABSORBED` never reverts a file itself.
    - `STILL-LIVE` → stays open, filtered from the report.
+   - `NAMED-ABSORBED` → upstream's own commit history NAMES this entry's id. Emitted **in
+     addition to** the receipt's verdict, never instead of it: a receipt can be structurally
+     incapable of ever closing (anchored on a token present at both refs, an inverted verb, or
+     `verify: manual`), and then re-running it forever produces a confident wrong answer. The
+     id is the one signal a rewording cannot defeat, because it is the join key the ledger, the
+     report and the §8.1 fan-in already use. `STILL-LIVE` + `NAMED-ABSORBED` on one entry is
+     the highest-value pair this tool prints: the entry is absorbed AND its receipt is wrong.
+     **Not closable** — step 8 closes `CLOSE-CANDIDATE` rows only, so this needs no exception.
+     Read it as "upstream named it", not "upstream took it": a commit can name an id to record
+     a rejection or a split. Confirm which, then re-anchor or drop the stale receipt.
    - `HAND-REVIEW` → the entry declares `verify: manual`. No mechanical predicate exists for
      it BY DESIGN; adjudicate the body against theirs. This is NOT an entry with no `verify:`
      line — that emits no row at all.

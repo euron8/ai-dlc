@@ -17,6 +17,57 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.181.0] — 2026-07-28
+
+### Added — the one adoption signal that cannot be defeated by wording is the one signal nothing read
+
+Every predicate in `reconcile/ledger-reverify.sh` tests a ledger entry's own `verify:`
+receipt. That is the wrong instrument when the receipt is what is broken, and a receipt can
+be structurally incapable of ever closing its entry:
+
+- anchored on a token present at BOTH base and theirs, so `theirs_has` never flips;
+- an INVERTED VERB — `theirs_has` naming the FIX text, so absorption reads as still-live;
+- `verify: manual`, which declares that no mechanical predicate exists at all.
+
+In each case re-running the receipt produces a confident wrong answer on every pull, forever.
+But an upstream commit that lands a consumer's entry NAMES that entry's id in its message, and
+the id is the join key the ledger, the report and the §8.1 fan-in already share — the one token
+neither side can reword. Nothing asked the history for it.
+
+New report-only status **`NAMED-ABSORBED`**, emitted **in addition to** the receipt's verdict
+and never instead of it. `STILL-LIVE` + `NAMED-ABSORBED` on one entry is the highest-value pair
+the tool prints: the entry is absorbed AND its receipt is wrong. Suppressing either half loses a
+distinct fact. It says *names*, not *absorbed* — a commit can name an id to record a rejection or
+a split — and it is non-closable by construction, because step 8 already closes
+`CLOSE-CANDIDATE` rows only.
+
+**Measured on the reference consumer: 51 heading labels, 37 id-shaped, 4 named — all four true
+positives, all four invisible to every other predicate in the file, and the other 33 id-shaped
+labels silent.** `PC-S296` (absorbed at v0.153.0, receipt anchored on `directive=substr(`, present
+at both refs), `PC-S297` (inverted verb on the fix text), and `PC-S300`/`PC-S303` (both
+`verify: manual`, both absorbed by the v0.172.0 drain). End-to-end A/B on that consumer's real
+ledger added exactly those 4 rows and changed none of the 34 `STILL-LIVE` or 11 `HAND-REVIEW`
+verdicts.
+
+Two design choices, each with the mutant that proves it load-bearing:
+
+- **The search is unbounded to theirs, deliberately unlike `absorbed_at()`'s `BASE..THEIRS`.**
+  A substring can be removed and re-introduced, so attributing one across all history claims the
+  wrong release; an id is written once and never re-added. Every measured absorption *predated*
+  the pull's own base, so bounding this search would fire the signal on exactly one pull and then
+  lose it forever if the operator missed that pull — turning the un-defeatable signal into the
+  easiest one to lose. The entry still being open is the delta; the name is the state.
+- **An id-shape guard, not a bare `--grep`.** A label is whatever precedes the first em dash, and
+  for a malformed bullet that is its whole prose title, which `--grep` then matches by common
+  words. 37 of 51 labels are id-shaped; the 14 excluded are section headings and one retained-copy
+  heading, none of them an entry a commit could land.
+
+`core/fixtures/ledger-reverify/` gains a pre-base absorption commit, two seeded entries, six
+assertions, and three mutants — the guard stripped (**both** layers: the first draft removed only
+the charset arm, came out green, and was proving the layer it had left in place), the search
+re-bounded, and an unmutated control copy in the same directory so a copy that cannot run cannot
+score as a kill. 41 assertions, all green.
+
 ## [0.180.0] — 2026-07-28
 
 ### Added — an override can delegate into the section it shadows, and nothing looked

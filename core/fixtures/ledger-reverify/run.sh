@@ -57,6 +57,34 @@ row_is() {
   fi
 }
 
+# NAMED-ABSORBED is an ADDITIONAL row, so an entry can now carry two. row_is() reports the
+# FIRST row for a label and is therefore the wrong instrument for a pair — it would silently
+# assert on whichever happened to print first. These two ask whether a specific (label, status)
+# pair is present or absent, independently of any other row the entry has.
+# $1 label-substring  $2 STATUS  $3 why
+row_has() {
+  local label="$1" want="$2" why="$3"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$want" '$2 ~ l && $1 == s {f=1} END{exit !f}'; then
+    printf '  ok    %-22s %s present  (%s)\n' "$label" "$want" "$why"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s %s MISSING  (%s)\n' "$label" "$want" "$why"
+    printf '%s\n' "$OUT" | sed 's/^/          | /'
+  fi
+}
+row_lacks() {
+  local label="$1" bad="$2" why="$3"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if printf '%s\n' "$OUT" | awk -F'\t' -v l="$label" -v s="$bad" '$2 ~ l && $1 == s {f=1} END{exit !f}'; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s %s present but must not be  (%s)\n' "$label" "$bad" "$why"
+    printf '%s\n' "$OUT" | sed 's/^/          | /'
+  else
+    printf '  ok    %-22s no %s  (%s)\n' "$label" "$bad" "$why"
+  fi
+}
+
 echo "ledger-reverify fixture"
 echo
 
@@ -319,6 +347,101 @@ else
   else
     printf '  ok    %-22s unanchoring swallows the prose entry and nothing else\n' "mutation"
   fi
+fi
+
+# --- THE NAME IS THE THIRD SIGNAL ------------------------------------------------------
+# Every predicate above tests the RECEIPT, which is the wrong instrument when the receipt is
+# what is broken. A receipt anchored on a token present at both refs, or an inverted verb, or
+# `verify: manual`, can never close its entry no matter how many pulls run it. The entry id in
+# upstream's own commit message is the one signal a rewording cannot defeat.
+#
+# Measured on the reference consumer: 51 heading labels, 37 id-shaped, 4 named — all four true
+# positives, each invisible to every other predicate in this file, and 33 id-shaped labels
+# silent. That 33 is the control that this discriminates rather than rubber-stamps.
+row_has "PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK" NAMED-ABSORBED \
+  "upstream's history names the id -> the absorption is visible even though the receipt cannot see it"
+row_has "PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK" STILL-LIVE \
+  "the receipt's own verdict still prints — the pair IS the finding, and suppressing either half loses a fact"
+row_has "PC-FIXTURE-NAMED-MANUAL" NAMED-ABSORBED \
+  "fires for verify: manual, the shape with no other mechanical signal at all"
+row_has "PC-FIXTURE-NAMED-MANUAL" HAND-REVIEW \
+  "manual is still a declaration, not downgraded by the extra row"
+
+# THE CONTROLS. An id-shaped label upstream never named must stay silent, or the row means
+# nothing; and a PROSE label must stay silent even though the pre-base commit quotes it verbatim.
+row_lacks "PC-FIXTURE-HEADING-ABSORBED" NAMED-ABSORBED \
+  "id-shaped but never named upstream -> silent, so the signal is a discriminator"
+row_lacks "Entry A" NAMED-ABSORBED \
+  "prose label quoted verbatim in the history -> the id-shape guard refuses to join on words"
+
+# MUTATION 2 — drop the id-shape guard. Entry A's prose label then matches the pre-base commit
+# that quotes it, and a wall of word-matched rows is exactly the lint an operator switches off.
+#
+# BOTH LAYERS GO. The guard is two conditions — the label contains only [A-Z0-9-], and it
+# contains at least one hyphen — and stripping either alone leaves the other still rejecting a
+# prose label. The first draft of this mutant removed only the charset arm, came out green, and
+# was therefore proving the layer it had left in place rather than the guard.
+MUTG="$(dirname "$DIST")/mut-guard"
+rm -rf "$MUTG"; mkdir -p "$MUTG"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTG/" 2>/dev/null
+sed -e '/not id-shaped: prose label/d' -e '/a single word is not an id/d' \
+  "$CLOSER" > "$MUTG/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTG/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the id-shape guard assertion is unproven\n' "mutation-guard"
+else
+  mg_out="$(bash "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  if printf '%s\n' "$mg_out" | awk -F'\t' '$2 ~ /Entry A/ && $1 == "NAMED-ABSORBED" {f=1} END{exit !f}'; then
+    printf '  ok    %-22s without the guard a prose label word-matches — the guard is load-bearing\n' "mutation-guard"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s guardless closer did NOT match the prose label, so row_lacks above is vacuous\n' "mutation-guard"
+  fi
+fi
+
+# MUTATION 3 — re-bound the search to BASE..THEIRS. The naming commit is before base, so the
+# row disappears: the unbounded search is the whole reason the signal survives past its pull.
+MUTB="$(dirname "$DIST")/mut-bound"
+rm -rf "$MUTB"; mkdir -p "$MUTB"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTB/" 2>/dev/null
+sed 's@--grep="$_id" --format=%H "$THEIRS"@--grep="$_id" --format=%H "${BASE}..${THEIRS}"@' \
+  "$CLOSER" > "$MUTB/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTB/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the unbounded-search assertion is unproven\n' "mutation-bound"
+else
+  mb_out="$(bash "$MUTB/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  mb_named="$(printf '%s\n' "$mb_out" | awk -F'\t' '$1 == "NAMED-ABSORBED" {c++} END{print c+0}')"
+  mb_still="$(printf '%s\n' "$mb_out" | awk -F'\t' '$2 ~ /PC-FIXTURE-NAMED-BUT-RECEIPT-STUCK/ && $1 == "STILL-LIVE" {f=1} END{print f+0}')"
+  if [ "$mb_named" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s bounding to base..theirs still found %s named row(s) — the assertions above are vacuous\n' "mutation-bound" "$mb_named"
+  elif [ "$mb_still" -ne 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also lost the receipt verdict, so it is not a clean mutation of the search bound alone\n' "mutation-bound"
+  else
+    printf '  ok    %-22s bounding the search loses the pre-base absorption and nothing else\n' "mutation-bound"
+  fi
+fi
+
+# THE UNMUTATED CONTROL. Both mutants are copies into a fresh directory; if a copy cannot even
+# source lib.sh it emits nothing, and "no rows" would otherwise score as a kill for BOTH of the
+# assertions above. This copy is byte-identical to the detector, so it must behave identically.
+ASSERTIONS=$((ASSERTIONS + 1))
+CTLD="$(dirname "$DIST")/ctl-closer"
+rm -rf "$CTLD"; mkdir -p "$CTLD"
+cp "$(dirname "$CLOSER")"/*.sh "$CTLD/" 2>/dev/null
+cp "$CLOSER" "$CTLD/ledger-reverify.sh"
+ctl_named="$(bash "$CTLD/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1 | awk -F'\t' '$1 == "NAMED-ABSORBED" {c++} END{print c+0}')"
+if [ "$ctl_named" -eq 2 ]; then
+  printf '  ok    %-22s unmutated copy in the same directory emits both named rows (harness is sound)\n' "mutation-control"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s unmutated copy emitted %s named rows, want 2 — a copy that cannot run scores as a kill\n' "mutation-control" "$ctl_named"
 fi
 
 echo
