@@ -162,7 +162,10 @@ def render_verdict(S, profile_name):
 # and the set of legal profile names. The two invariants below run over every kind.
 KINDS = [
     {
-        "slug": "provenance-block",
+        # From the schema, not restated here: validate-provenance-block.sh --strays cuts these
+        # same regions out before deciding whether a party-mode block is a stray, and a second
+        # spelling of the slug would break its carve-out silently. See region_slug's comment.
+        "slug": P["region_slug"],
         "source": "provenance-block.json",
         "marker": P["envelope"]["marker"],
         "schema": P,

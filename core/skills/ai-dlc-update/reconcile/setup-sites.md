@@ -132,6 +132,7 @@ core_manifest:
   - core/fixtures/spec-join-integrity/**
   - core/fixtures/sprint-status-lifecycle/**
   - core/fixtures/story-provenance/**
+  - core/fixtures/stray-party-mode-provenance/**
   - core/fixtures/subagent-probe/**
   - core/fixtures/taught-schema/**
   - core/fixtures/validate-mandatory-rules-revive/**

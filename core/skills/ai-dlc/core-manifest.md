@@ -207,6 +207,7 @@ core_manifest:
   - fixtures/spec-join-integrity/**
   - fixtures/sprint-status-lifecycle/**
   - fixtures/story-provenance/**
+  - fixtures/stray-party-mode-provenance/**
   - fixtures/subagent-probe/**
   - fixtures/taught-schema/**
   - fixtures/validate-mandatory-rules-revive/**

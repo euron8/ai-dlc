@@ -17,6 +17,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.198.0] — 2026-07-28
+
+### Added — a party-mode block can be moved somewhere nothing looks, and now something does
+
+`validate-provenance-block.sh --strays` scans a whole tree for a provenance block citing a
+party-mode skill in a file with no pipeline-validation purpose. It runs in both pre-push
+hooks — the consumer's over its own tree, the distribution's over this one.
+
+**The gap is structural, not an oversight.** Every other reader of
+`SKILL_INVOCATION_PROVENANCE` is handed ONE artifact by a gate that has already decided the
+artifact is in scope, and the scope rule deliberately forgives historical informational
+blocks so an ever-growing artifact tree does not brick every future sprint. A retro
+party-mode block RELOCATED into a service file — the shape that evades the retro's
+transcript-SHA match — is invisible to all of them *because* the file it moved to is never
+in anyone's scope. No scope-bounded reader can be widened into this one; the subject had to
+be the tree.
+
+**Everything the scan looks for comes from `schemas/provenance-block.json`**: the subject
+vocabulary (`stray_scan.party_mode_skills`), the legitimate homes, the directories the
+candidate grep skips, and — via the new top-level `region_slug` — the generated-region
+markers. Each declared home is a path AI/DLC itself writes or names: `_bmad-output/**`,
+`docs/retro/**`, `docs/reviews/**`, the architecture doc and its Rule 25(a) archive
+counterpart, and the two fixture homes, where forged blocks ARE the test data.
+An empty `party_mode_skills` is refused rather than run — a scan with nothing to look for
+reports PASS on every tree there is.
+
+Consumers extend the homes through the additive `extensions/known-skills.json` that already
+carries `known_skills`, under a new `party_mode_homes` key, with the same fail-closed rule:
+a broken layer file is an error, never a silent degrade to the core-only list. Only two
+pattern forms are accepted (`<dir>/**` and an exact path); anything else is an error rather
+than a quiet non-match, because a home that matches nothing turns the scan into one that
+cannot fire.
+
+**Measured against the reference consumer at `170ff9d8c` with the shipping code, in a
+worktree at that sha.** 889 files carry the envelope; the core homes alone leave **5**
+findings, all under `scripts/tests/**` (a consumer test-harness tree), and a one-line
+`party_mode_homes` closes all five. The false-positive set is enumerated and empty after
+extension. On this repo: 30 envelope-bearing files, **zero** findings, and the two that
+carry a party-mode value are exempt for reasons the fixture proves are load-bearing — the
+one rendered taught example (generated-region carve-out) and `check-17-bypass`'s five
+deliberate forgeries (fixture home). Candidate discovery is a single `grep -rlI`, so the
+consumer tree scans in 0.8s.
+
+### Fixed — the region marker had to agree with the renderer, and nothing said so
+
+`sync-taught-schema.sh` WRITES the `<!-- BEGIN GENERATED: … -->` regions; the stray scan
+CUTS them out before judging. The slug is now a schema key both READ, and **I48** asserts
+neither reintroduces a literal. Its failure mode is what earns it a check: a second spelling
+stops the carve-out matching, this repo's own `steps/retro.md` reports as a forgery, and an
+operator turns off a scan that is working perfectly.
+
+**I48's first mutant passed, and the arm was the reason.** Reverting the renderer to a
+literal left the word `region_slug` in the comment explaining why the key exists, which
+satisfied a bare `grep`. The arm now requires the `["region_slug"]` subscript. An arm a
+comment can satisfy is not an arm.
+
+### Notes — row 10 arm 1 is refuted, measured rather than assumed
+
+The absorption program's first listed arm — `audit-rule-exercise.sh` into
+`audit-rule-files.sh --exercise` — **has no core subject set.** Core defines no anchored
+per-rule emission grammar (6 rule-id-shaped strings exist in `core/`, all prose citations
+in comments; control: 66 `Rule 26` hits from the same corpus) and no gate-log corpus
+enumerator (control: 5 core scripts read gate-log files, each with its own glob). The
+consumer script's own header states it was split out because it is "this project-specific
+audit" and core's implementation had no bash-callable seam — the reason was domain
+specificity, not a missing flag. "Split out of X" was read as "belongs in X".
+
+Fixture `core/fixtures/stray-party-mode-provenance/`: 14 assertions, 4 mutants (region
+marker drift, trailing-comment rule, a removed home, an emptied vocabulary), each proven to
+change exactly one verdict against an unmutated control copy of both the script and the
+schema.
+
 ## [0.197.0] — 2026-07-28
 
 ### Added — a check can say which gates load it, and one that no gate loads is reported
