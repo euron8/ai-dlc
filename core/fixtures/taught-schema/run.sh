@@ -69,6 +69,61 @@ done
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# ---------------------------------------------------------------------------------------
+# EVERYTHING BELOW RUNS AGAINST A COPY. THE FIXTURE DOES NOT WRITE INTO THE TREE IT TESTS.
+#
+# THE DEFECT THIS REPLACES, measured 2026-07-29. Three of this fixture's assertions mutate
+# the package to prove a check fires: V4b strips the forbidden list out of the schema, V5
+# drops a hand-written probe into team-roles/, V6 edits the schema again. Every one of those
+# writes landed in the LIVE tree and was undone a few lines later. Under the 16-way suite
+# that is a writer racing fifteen readers:
+#
+#   cp: core/team-roles/zz-taught-schema-fixture-probe.md: No such file or directory
+#
+# -- `enforcement-map-sites`' seed enumerating team-roles/ and then finding the probe gone,
+# which under `set -e` kills the seed and reports FIXTURE BROKEN on whichever of its 31
+# assertions happened to be seeding at that instant. Observed on three different assertions
+# in three rounds, which is why it never looked like one reproducible defect.
+#
+# The schema window is the worse half and produced no error at all: for the length of two
+# assertions the real provenance-block.json is missing its forbidden list, and any fixture
+# reading it in that window adjudicates against a schema no release ever shipped.
+#
+# Copying is cheap here -- scripts/, schemas/, skills/ and team-roles/, not the fixtures
+# tree -- and `sync-taught-schema.sh` resolves its root SCRIPT-RELATIVE first, so the copy's
+# own validator sees the copy and nothing else. Verified: with this in place the branch runs
+# 5 of 5 clean where it was 3 of 5 red.
+PKG="$TMP/pkg"
+if [ "$SCRIPTS" = "$UP2/scripts" ]; then
+    # distribution: core/ is the package
+    mkdir -p "$PKG/core"
+    for d in scripts schemas skills team-roles; do
+        [ -d "$UP2/$d" ] && cp -R "$UP2/$d" "$PKG/core/$d"
+    done
+    SCRIPTS="$PKG/core/scripts"
+    SCHEMA="$PKG/core/schemas/provenance-block.json"
+    ROLE="$PKG/core/team-roles/adversary.md"
+else
+    # consumer: scripts/ai-dlc/ beside .claude/{schemas,skills,team-roles}
+    mkdir -p "$PKG/root/.claude" "$PKG/root/scripts"
+    cp -R "$SCRIPTS" "$PKG/root/scripts/$(basename "$SCRIPTS")"
+    for d in schemas skills team-roles; do
+        [ -d "$UP3/.claude/$d" ] && cp -R "$UP3/.claude/$d" "$PKG/root/.claude/$d"
+    done
+    SCRIPTS="$PKG/root/scripts/$(basename "$SCRIPTS")"
+    SCHEMA="$PKG/root/.claude/schemas/provenance-block.json"
+    ROLE="$PKG/root/.claude/team-roles/adversary.md"
+fi
+VALIDATOR="$SCRIPTS/validate-provenance-block.sh"
+SYNC="$SCRIPTS/sync-taught-schema.sh"
+
+# The copy is re-checked rather than assumed. A partial copy would let every assertion below
+# fail for a reason that has nothing to do with what it tests, and a MISSING schema makes
+# `--check` exit non-zero -- which V5 scores as its own success.
+for f in "$VALIDATOR" "$SYNC" "$SCHEMA" "$ROLE"; do
+    [ -e "$f" ] || { echo "FIXTURE BROKEN: the sandbox copy is missing $f" >&2; exit 2; }
+done
+
 PASS=0
 FAIL=0
 ok()   { PASS=$((PASS+1)); printf '  ok    %s\n' "$1"; }

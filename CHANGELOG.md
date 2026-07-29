@@ -17,6 +17,182 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.208.0] — 2026-07-29
+
+### Fixed — a fixture was writing into the repository it tests, and it is what §9's intermittent-red class has been
+
+`core/fixtures/taught-schema/run.sh` proves three of its checks fire by mutating the package:
+V4b strips the forbidden list out of `provenance-block.json`, V5 drops a hand-written probe into
+`core/team-roles/`, V6 edits the schema again. **Every one of those writes landed in the live tree**
+and was undone a few lines later.
+
+Under the 16-way suite that is one writer racing fifteen readers. The error is unambiguous once
+you can see it:
+
+```
+cp: core/team-roles/zz-taught-schema-fixture-probe.md: No such file or directory
+```
+
+— `enforcement-map-sites`' seed enumerating `team-roles/`, then finding the probe gone. Under
+`set -e` that kills the seed, and the fixture reports `FIXTURE BROKEN` on **whichever of its 31
+assertions happened to be seeding at that instant**. Observed on `A12`, `A09` and `A10` across
+three rounds, which is precisely why it never looked like one reproducible defect and why
+"it passes standalone" was true every time.
+
+**Measured, with the control that decides it.** Five full-suite rounds each, same machine, same
+`-P16`:
+
+| Tree | Result |
+|---|---|
+| unmodified `main` (clone, with `.git`) | **5 of 5 clean** |
+| this branch before the fix | **3 of 5 red**, `enforcement-map-sites`, different assertion each time |
+| this branch after the fix | **5 of 5 clean, 85/85** |
+
+The first control attempt was invalid and worth recording: a `git archive` copy has no `.git`, so
+`ledger-status-vocabulary` fails there **deterministically** and the tree cannot answer any
+question about intermittency.
+
+**The schema window is the worse half and produced no error at all.** For the length of two
+assertions the real `provenance-block.json` is missing its forbidden list. Any fixture reading it
+in that window adjudicates against a schema no release ever shipped — silently, with no `cp` to
+complain.
+
+**The fix:** the fixture now copies `scripts/`, `schemas/`, `skills/` and `team-roles/` into its
+sandbox and runs the copy's own validator. `sync-taught-schema.sh` resolves its root
+**script-relative first**, so the copy sees only the copy. All 8 assertions still pass — including
+its three internal mutants, which is what shows they still fire — in 0.45s. This ships to
+consumers too: the same fixture was writing into every consumer's tree on every push.
+
+**No enforcer, and that is stated rather than implied.** A grep cannot tell a sandbox `$ROOT` from
+the real one — measured, the false-positive set is most of the seed corpus — and a before/after
+tree comparison cannot see a transient write that is cleaned up, which is exactly this one. What
+*is* now guarded is the half that survives: after a green run the pre-push recomputes the content
+key and **refuses to record it** if the suite changed the tree, naming both keys. Proven by a probe
+fixture that dirties `team-roles/`.
+
+### Added — the fixture suite stops re-deriving 85 identical verdicts over a tree it already ran on, and the exclusion set that makes that possible was decided by mutating every path in it
+
+`.githooks/pre-push` now skips the fixture suite when `scripts/suite-content-key.sh` reports the
+same content key as the last fully green run. **~50s → 0.3s on a push that changed nothing the
+suite reads.**
+
+**This is a check that did not run, and the release treats it as one.** Every other route on this
+row bought time by doing the same work faster. This one buys it by not doing the work, which is a
+different and more dangerous class: a cached green and an earned green are the same three
+characters on a terminal. What separates them here is that the key covers a **superset** of the
+suite's inputs, so a false skip needs a sha256 collision rather than merely an oversight.
+
+#### The handoff's premise was wrong, and the correction is the whole design
+
+The row that scoped this said the trees to key on were **`core/`, `scripts/`, `.githooks/`,
+`templates/`**, "declared in the seeds". Derived against the tree instead:
+
+- Those four are the seed list of **one fixture** — `enforcement-map-sites/seed.sh` — generalised
+  to the whole suite. Fixtures also reach `$ROOT/.claude`.
+- **`ledger-status-vocabulary` builds its subject tree from `git ls-files`**, so it copies *every
+  tracked file*, `docs/` and `CHANGELOG.md` included. The paths the row wanted to exclude are
+  inside a fixture's own input tree.
+
+So the key is not an include-list at all. It covers **everything except a short declared exclusion
+set**, which is the opposite polarity and the reason it is safe: a new top-level directory is
+covered the moment it appears, and coverage can only be lost by writing a new line into `EXCLUDE`.
+An include-list loses coverage by omission, silently, which is the defect class this repo is named
+for.
+
+#### The exclusion set was measured, not argued
+
+`.git`, `CHANGELOG.md`, `VERSION`, `docs/`. Method: a faithful `tar` copy of the repository
+**including `.git`** as the control, and a second copy with the **content of every excluded path
+overwritten** — not appended to — guarded by `diff -rq` (46 paths differed, so no no-op mutation
+could pass as a landed one). Both ran the full suite at `-P16`.
+
+- **Verdicts identical, 84/84 on both sides.**
+- Three fixtures differed on stdout — `apply-restamp-theirs`, `layer-readopt-gate`,
+  `wait-stale-deliverable`. **A second run of the CONTROL against itself reproduced exactly those
+  three**, so they are sandbox git shas and elapsed seconds, not an effect of the mutation. Without
+  that second control the three read as kills.
+- **The control earned its place before any of that.** An earlier round copied the tree *without*
+  `.git` and `ledger-status-vocabulary` went red — which looks exactly like a mutation kill and is
+  not one. That is how the tracked-path set got into the key.
+
+Git-ignored paths are outside the key, and that boundary is **derived from the repository's own
+`.gitignore`** rather than restated. It has to be: `.claude/` and `_bmad-output/` are ignored
+precisely because hooks and fixtures **write into them while the suite runs**, so a key covering
+them would differ from itself across the very run it keys, and no push could ever hit.
+
+#### What the key hashes, and why each component is there
+
+Listing (**directories included** — several invariants fire on a directory with no rows, so a new
+empty directory is an input a contents hash cannot see), contents, the **executable bit** (v0.70.1
+shipped a guard installed inert because a copy carried bytes and not mode), **symlink targets**,
+the **tracked-path set** (a file added under `docs/` changes what `ledger-status-vocabulary`
+copies, even though its contents are excluded), the **fixture set**, and the identity, hash and
+`--version` of the 15 external tools the suite shells out to.
+
+Its zero guard is **derived, not a constant**: the walk must reach at least every tracked file
+outside the exclusion set. A key over a truncated walk is perfectly stable — stable for the wrong
+reason — and a magic number is wrong in both directions, failing a small tree that is correct and
+passing a large one that lost half its walk.
+
+#### Four properties that keep a cached green from reading like an earned one
+
+1. A hit **announces itself**, prints its key, and prints what the key covers.
+2. The final summary line reads `all gates green -- FIXTURE SUITE SKIPPED`, so no run claims a
+   clean sweep while hiding that its largest gate did not execute.
+3. **Every failure path runs the suite** — key script error, empty key, missing or malformed
+   record, changed fixture count. The skip needs everything to line up; the full run is the default.
+4. `AI_DLC_FIXTURE_NO_SKIP=1` forces it.
+
+The record lives in `.git/`, never in the working tree. A record inside the tree would be hashed by
+the key it stores, so writing it would invalidate it and no push could ever hit — **I55 arm 4**.
+
+#### `I55`, four arms, false-positive set measured empty
+
+Exclusions must be **bare top-level names** (the filter is exact string equality against a
+top-level listing, so `docs/analysis` or a glob excludes *nothing* while reading like an exclusion
+that took effect); `.git` must stay excluded; **no fixture may reach an excluded path at the
+distribution root**; and the record must live under `.git/`. Arm 3's subject set is
+`core/fixtures/` rather than the whole tree **and that is measured, not lazy** —
+`validate-artifact-budget.sh` and `validate-ci-gates.sh` both name `"$ROOT/docs"`, but their `ROOT`
+is the consumer project they are pointed at, a sandbox in every fixture that drives them, so a
+wider scan reports **4 false positives**. Against `core/fixtures/` the FP set is **empty**, with a
+control of **172** matches for an included path under the identical grammar.
+
+**Arm 3 fired on this release's own fixture on its first run** — the v0.194.0 trap, where a scan
+covering `core/fixtures/` reports the mutation literal that exists to test it. The probe is now
+assembled at runtime and no line spells it out.
+
+#### Evidence
+
+- `core/fixtures/suite-content-key/` (`.dist-only`, 3.7s) — 12 assertions in both directions.
+  **Five mutants against the key script, each killed by exactly one assertion**, unmutated control
+  clean before and after: drop directories from the listing → the empty-directory assertion alone;
+  drop the exec, symlink or tracked component → that component's assertion alone; un-exclude
+  `CHANGELOG.md` → the excluded-content assertion alone. The empty-directory probe sits under
+  `scripts/`, **not** `core/fixtures/`, because the fixture-set component would otherwise catch it
+  twice and the assertion could not attribute the catch.
+- `enforcement-map-sites` Assertion 30 — one mutant per I55 arm, each asserted on its **own
+  wording** rather than the shared token `I55` (row 4's recorded trap). Knock-out control: each of
+  the four `err` calls disabled in turn made **exactly one** assertion red, with the unmutated
+  control at zero.
+- End to end on a copy: first push runs the suite and records; second **skips**; a `VERSION` bump
+  still skips; an edit under `core/fixtures/` runs it; `AI_DLC_FIXTURE_NO_SKIP=1` runs it.
+
+#### The hit rate is the one number that could not be measured before shipping, and the instrument ships with it
+
+`main` is squash-merged, so its history records releases and not the pushes inside them — which is
+exactly where the repeat runs happen. The release-granularity proxy is **2 of the last 80 commits**
+(control: 0 of 80 with an empty exclusion set). The inner-loop rate is higher and unknown, so the
+hook now appends one line per decision to `.git/ai-dlc-suite-key.log`:
+`awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c`.
+
+#### Found while building it
+
+`git check-ignore` **exits 1 when nothing in its input was ignored** — an ordinary tree. Under
+`pipefail` that status became the pipeline's, and the first draft read a clean small tree as a
+failed walk and refused to emit a key at all. The repo's standing "never read `$?` after a pipe"
+rule, one layer out from where it usually bites.
+
 ## [0.207.0] — 2026-07-29
 
 ### Fixed — 300 shipped checks were written so that they stop firing once their input outgrows the pipe buffer, and say nothing about it

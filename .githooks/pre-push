@@ -162,7 +162,128 @@ run_fixtures() {
   rm -rf "$out"
   return $rc
 }
-step "fixture suite (${FIXTURE_JOBS}-way)" run_fixtures
+
+# THE SUITE DOES NOT RE-RUN OVER A TREE IT ALREADY RAN OVER.
+#
+# ~50s of the operator's inner loop was being spent re-deriving 84 identical
+# verdicts on pushes that changed CHANGELOG.md, VERSION or docs/ and nothing else.
+# `scripts/suite-content-key.sh` hashes a SUPERSET of everything the suite can
+# read -- listings, contents, exec bits, symlink targets, the tracked-path set,
+# the fixture set and the external tools -- and a hit means the suite already ran
+# over byte-identical inputs. Read that script's header for the exclusion set and
+# the mutation measurement behind it; I55 keeps the exclusions honest.
+#
+# THIS IS THE CHECK-THAT-CANNOT-FIRE SHAPE AND IT IS TREATED AS ONE. Four
+# consequences, all deliberate:
+#
+#   1. A hit ANNOUNCES ITSELF, names its key, and prints what the key covers. A
+#      cached green that looked like an ordinary green would be the defect.
+#   2. The final summary line says the suite was skipped, so no run reports "all
+#      gates green" while hiding that its largest gate did not execute.
+#   3. Every failure path -- key script errors, empty key, unreadable record,
+#      malformed record, a changed fixture count -- runs the suite. The skip is
+#      the exceptional branch and it needs everything to line up; the full run is
+#      what happens by default.
+#   4. AI_DLC_FIXTURE_NO_SKIP=1 forces the run, on the record, for an operator who
+#      wants the suite regardless.
+#
+# The record lives in .git/, NOT in the working tree, and that is load-bearing: a
+# record inside the tree would be hashed by the key it stores, so writing it would
+# invalidate it and no push could ever hit.
+KEY_RECORD=".git/ai-dlc-suite-key"
+
+# THE HIT RATE IS THE ONE NUMBER THIS CHANGE COULD NOT MEASURE BEFORE SHIPPING.
+# main is squash-merged, so its history records releases and not the pushes inside
+# them, which is exactly where the repeat runs happen. The release-granularity
+# proxy is 2 of the last 60 commits; the inner-loop rate is higher and unknown.
+# So the instrument ships with the change: one line per decision, countable with
+#   awk '{print $2}' .git/ai-dlc-suite-key.log | sort | uniq -c
+KEY_LOG=".git/ai-dlc-suite-key.log"
+key_log() { printf '%s %s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:-none}" >> "$KEY_LOG" 2>/dev/null || true; }
+
+fixture_suite_step() {
+  local key cached_key cached_n cached_when n_now record
+
+  # Counted the way run_fixtures counts, so the number in the announce is the
+  # number the last green run actually reported. `ls -d core/fixtures/*/` would be
+  # three higher -- it includes the data-only directories that carry no run.sh --
+  # and an announce saying "87 of 87" beside a suite that prints 84 verdicts is a
+  # discrepancy an operator has to go and resolve before they can trust the skip.
+  n_now="$(for d in core/fixtures/*/; do [ -f "$d/run.sh" ] && printf 'x\n'; done | wc -l | tr -d ' ')"
+
+  if [ -n "${AI_DLC_FIXTURE_NO_SKIP:-}" ]; then
+    printf '   (content-key skip disabled by AI_DLC_FIXTURE_NO_SKIP)\n'
+    key="$(bash scripts/suite-content-key.sh 2>/dev/null)" || key=""
+    key_log FORCED "$key"
+  elif ! key="$(bash scripts/suite-content-key.sh 2>/dev/null)" || [ -z "$key" ]; then
+    printf '   (content key unavailable -- running the suite)\n'
+    key=""
+    key_log UNAVAILABLE
+  elif [ ! -r "$KEY_RECORD" ]; then
+    printf '   (no prior green run recorded for this clone -- running the suite)\n'
+    key_log MISS "$key"
+  else
+    record="$(cat "$KEY_RECORD" 2>/dev/null)"
+    cached_key="$(printf '%s\n' "$record" | awk 'NR==1{print $1}')"
+    cached_n="$(printf '%s\n'   "$record" | awk 'NR==1{print $2}')"
+    cached_when="$(printf '%s\n' "$record" | awk 'NR==1{print $3}')"
+    if [ "$cached_key" = "$key" ] && [ -n "$cached_n" ] && [ "$cached_n" = "$n_now" ]; then
+      printf '   SKIPPED -- this exact tree already passed the whole suite.\n'
+      printf '     key          %s\n' "$key"
+      printf '     last green   %s of %s fixtures at %s\n' "$cached_n" "$n_now" "${cached_when:-unknown}"
+      bash scripts/suite-content-key.sh --summary 2>/dev/null | sed 's/^/     /'
+      printf '     force a run with AI_DLC_FIXTURE_NO_SKIP=1\n'
+      SUITE_SKIPPED=1
+      key_log HIT "$key"
+      return 0
+    fi
+    if [ -n "$cached_n" ] && [ "$cached_n" != "$n_now" ]; then
+      printf '   (fixture count moved %s -> %s -- running the suite)\n' "$cached_n" "$n_now"
+    else
+      printf '   (content key changed -- running the suite)\n'
+    fi
+    key_log MISS "$key"
+  fi
+
+  run_fixtures || return 1
+
+  # Recorded only after a full green run. A partial or red suite leaves the prior
+  # record in place rather than blessing the tree that just failed.
+  #
+  # AND ONLY IF THE SUITE LEFT THE TREE AS IT FOUND IT. A fixture is supposed to do
+  # all of its work in a sandbox; one that writes into the repository under test is
+  # a writer racing the fifteen readers beside it, and v0.208.0 shipped a fix for
+  # exactly that -- `taught-schema` was dropping a probe into core/team-roles/ and
+  # transiently stripping the real provenance schema, which killed
+  # `enforcement-map-sites`' seed on whichever assertion happened to be copying.
+  #
+  # This catches the half of that class that SURVIVES the run: a fixture that
+  # changes the tree and does not put it back. Recording the pre-run key then would
+  # bless a tree that no longer exists. It does NOT catch a transient write that is
+  # cleaned up -- that needs filesystem watching, and no cheap sound mechanism for
+  # it exists; a grep over the fixtures cannot tell a sandbox $ROOT from the real
+  # one (measured: the false-positive set is most of the seed corpus).
+  if [ -n "$key" ] && [ "${n_now:-0}" -gt 0 ]; then
+    local key_after
+    key_after="$(bash scripts/suite-content-key.sh 2>/dev/null)" || key_after=""
+    if [ -z "$key_after" ]; then
+      printf '   (content key unavailable after the run -- not recording)\n'
+    elif [ "$key_after" != "$key" ]; then
+      printf '   NOT RECORDING: the suite CHANGED the tree it just tested.\n'
+      printf '     before %s\n     after  %s\n' "$key" "$key_after"
+      printf '     A fixture wrote into the repository instead of its own sandbox. The verdicts\n'
+      printf '     above were taken against a tree that no longer exists, and recording this key\n'
+      printf '     would let a later push skip on evidence from a different tree. Find the writer;\n'
+      printf '     `git status` names it. The suite still PASSED -- this only refuses the cache.\n'
+    else
+      printf '%s %s %s\n' "$key" "$n_now" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$KEY_RECORD" 2>/dev/null || true
+    fi
+  fi
+  return 0
+}
+
+SUITE_SKIPPED=0
+step "fixture suite (${FIXTURE_JOBS}-way)" fixture_suite_step
 
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    validate-enforcement-map.sh maps this glob set through map_consumer() and
@@ -184,5 +305,9 @@ step "shell syntax (every shipped script and hook)" syntax_all
 if [ "$fail" -ne 0 ]; then
   printf '\npre-push: BLOCKED. Fix the above, or `git push --no-verify` on the record.\n\n'
   exit 1
+fi
+if [ "$SUITE_SKIPPED" -ne 0 ]; then
+  printf '\npre-push: all gates green -- FIXTURE SUITE SKIPPED on an unchanged content key.\n\n'
+  exit 0
 fi
 printf '\npre-push: all gates green.\n\n'

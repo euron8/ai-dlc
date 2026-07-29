@@ -2453,10 +2453,105 @@ Under pipefail the pipeline reports the WRITER's status, so once the value passe
   fi
 fi
 
+# --- I55: what the suite's content key does NOT cover stays uncovered ----------
+# The pre-push hook skips the fixture suite when a content key over the tree is
+# unchanged since the last fully green run. That is a check that did not run, and
+# a check that did not run reads exactly like one that passed -- so the one thing
+# holding it up is that the key covers a SUPERSET of the suite's inputs. It does
+# that by including everything except a short declared exclusion set, measured at
+# authoring time by overwriting every excluded path and showing all 84 verdicts
+# unchanged.
+#
+# A measurement taken once decays. This is the durable half: it fails the build if
+# the declaration drifts from the tree, or if a fixture starts reaching for an
+# excluded path at the DISTRIBUTION root -- which is the move that would turn an
+# excluded path into a suite input without anyone re-taking the measurement.
+#
+# Arm 3's subject set is core/fixtures/ and not the whole tree, and that is
+# deliberate rather than lazy. `core/scripts/validate-artifact-budget.sh` and
+# `validate-ci-gates.sh` both name "$ROOT/docs", but their ROOT is the CONSUMER
+# project they are pointed at, which in every fixture that drives them is a
+# sandbox; scanning them would report 4 false positives. The fixtures are where a
+# subject set is chosen, so that is where the grammar reads. FP set measured
+# EMPTY at authoring time against a control of 172 matches for an INCLUDED path
+# under the identical grammar.
+#
+# WHAT ARM 3 DOES NOT SEE, stated rather than implied: a fixture that hands the
+# distribution root to a shipped validator as a project argument, without naming
+# an excluded path itself. None exists today. The release says so too.
+i55_key_script="$REPO_ROOT/scripts/suite-content-key.sh"
+i55_hook="$REPO_ROOT/.githooks/pre-push"
+if [ ! -f "$i55_key_script" ]; then
+  err "I55 cannot find scripts/suite-content-key.sh. The pre-push hook skips the whole fixture suite on that script's verdict; with the script gone the hook falls back to a full run, but this invariant is then guarding a declaration that no longer exists and would pass over any exclusion set at all. Restore it, or retire I55 and the skip together."
+elif [ ! -f "$i55_hook" ]; then
+  err "I55 cannot find .githooks/pre-push, the one consumer of the content key. Restore it, or retire I55."
+else
+  i55_excl="$(sed -n '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/p' "$i55_key_script" \
+              | sed -n 's/^\([A-Za-z._][A-Za-z0-9._/-]*\)$/\1/p')"
+  i55_n="$(printf '%s\n' "$i55_excl" | grep -c .)"
+  if [ "$i55_n" -eq 0 ]; then
+    err "I55 parsed ZERO entries out of suite-content-key.sh's EXCLUDE block. Every arm below then compares against an empty set and reports agreement it never computed -- and an empty exclusion set is indistinguishable here from a correct one. Fails closed: fix the markers or the grammar."
+  else
+    # Arm 1: every exclusion is a bare TOP-LEVEL name. suite-content-key.sh filters
+    # by exact string equality against `ls -A`, so `docs/analysis` or `*.md` matches
+    # no entry and excludes nothing -- while reading, to the author and to every
+    # reviewer after them, exactly like an exclusion that took effect. That is this
+    # repo's named defect class inside the declaration that the rest of I55 guards.
+    # Deliberately tree-independent: this invariant also runs inside seeded fixture
+    # trees that carry no docs/ or .git, where an existence test would fire on the
+    # pristine seed and take every other assertion with it.
+    i55_shape=""
+    while IFS= read -r e; do
+      [ -n "$e" ] || continue
+      case "$e" in
+        */*|*'*'*|*'?'*|*'['*) i55_shape="${i55_shape} $e" ;;
+      esac
+    done <<<"$i55_excl"
+    [ -n "$i55_shape" ] && err "I55 suite-content-key.sh excludes entr(ies) that are not bare top-level names:${i55_shape}. That filter compares each entry for exact string equality against a top-level listing, so a path with a slash or a glob matches nothing and excludes nothing -- the declaration reads as coverage removed and removes none. Name the top-level entry, or teach the filter the shape you meant."
+
+    # Arm 2: .git must stay excluded. Not a fidelity matter -- the opposite. The
+    # object store changes on every commit, so including it makes the key miss
+    # every time and the machinery becomes 0.3s of dead weight nobody notices.
+    grep -qx '\.git' <<<"$i55_excl" || err "I55 suite-content-key.sh no longer excludes .git. The object store changes on every commit, so the key can never match a previous run and the suite skip is now unreachable code that still prints. Re-exclude it; the one thing inside .git the suite reads -- the tracked path set -- is already folded in as the key's 'tracked' component."
+
+    # Arm 3: no fixture reaches an excluded path at the DISTRIBUTION root.
+    i55_roots='(REPO_ROOT|ROOT|D_ROOT|C_ROOT)'
+    i55_ctl="$(grep -rhoE '\$\{?'"$i55_roots"'\}?/core([/"]|$)' "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | grep -c .)"
+    if [ "${i55_ctl:-0}" -lt 10 ]; then
+      err "I55 arm 3's control found only ${i55_ctl:-0} reference(s) to an INCLUDED path under the same grammar it uses to report an absence. It is about to report that no fixture names an excluded path at the distribution root; over a corpus this grammar cannot read, that zero is a broken matcher and not a finding. Fails closed."
+    else
+      i55_reach=""
+      while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        [ "$e" = ".git" ] && continue
+        i55_hit="$(grep -rHnoE '\$\{?'"$i55_roots"'\}?/'"$(printf '%s' "$e" | sed 's/\./\\./g')"'([/"'"'"' ]|$)' \
+                   "$REPO_ROOT"/core/fixtures/*/*.sh 2>/dev/null | sed "s@^${REPO_ROOT}/@@")"
+        [ -n "$i55_hit" ] && i55_reach="${i55_reach}
+${i55_hit}"
+      done <<<"$i55_excl"
+      [ -n "$i55_reach" ] && err "I55 fixture(s) reach a content-key-EXCLUDED path at the distribution root:${i55_reach}
+The pre-push hook skips the entire fixture suite when the key is unchanged, and the key does not hash those paths -- so a fixture reading one is a fixture whose input can change without the suite ever re-running. Either stop reading it, or delete its line from suite-content-key.sh's EXCLUDE block and re-take the mutation measurement recorded in that script's header."
+    fi
+
+    # Arm 4: the record lives outside the working tree. A record inside it would
+    # be hashed by the key it stores, so writing it would invalidate it and no
+    # push could ever hit -- the machinery would run forever and never pay.
+    i55_rec="$(sed -n 's/^KEY_RECORD="\(.*\)"$/\1/p' "$i55_hook" | head -1)"
+    if [ -z "$i55_rec" ]; then
+      err "I55 cannot read KEY_RECORD out of .githooks/pre-push. It must locate the record path or fail loudly, never pass by comparing two empty strings."
+    else
+      case "$i55_rec" in
+        .git/*) : ;;
+        *) err "I55 .githooks/pre-push stores the suite content key at '$i55_rec', inside the working tree. suite-content-key.sh hashes the working tree, so the record is part of its own key: writing it changes the key it just recorded, every push misses, and the skip is machinery that can never fire. Put it under .git/." ;;
+      esac
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), and the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55)."
   exit 0
 fi
 exit 1
