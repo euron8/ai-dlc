@@ -17,6 +17,107 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.213.0] — 2026-07-29
+
+### Added — a third severity, `level: ADJUDICATED`, and the first behavioural reader `level:` has ever had; five of the six things the plan said to build were refuted by measurement before any of them was written
+
+**The friction, measured on the pull this shipped for rather than quoted.** `extensions/README.md`
+states the additive-only restriction and then says of it, verbatim, "No scanner enforces it" and
+"this rule is unenforced" — because the re-read that would enforce it is a judgement, and the only
+home a judgement had was `WARN`. A `WARN` reprints the same row every pull with no way to say "this
+one was read", so the worklist gets cleared rather than read. Running `layer-drift.sh` at
+`0.183.0 → main` against the reference consumer: **17 of its 33 extension entries carry that row.**
+
+**What shipped.** `level: ADJUDICATED` — candidate set mechanized, verdict human, recorded once per
+subject state. `reconcile/layer-drift.sh` derives the adjudicable code set from `layer-contract.yaml`
+**at `theirs`** and emits `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) for every such row with no
+verdict in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`; a `HARD-` status blocks
+`apply` through the existing `hard-blockers.sh` filter, so the blocking half needed no new plumbing.
+`HARD-REGISTER-CONTRADICTION` (**LC-A2**) reports two verdicts under one key where the later declares
+no `supersedes` plus `reason`. `LC-E4` and `LC-E14` move to the new level; `contract_version` is **7**.
+New schema `core/schemas/layer-adjudication-register.json`, new fixture
+`core/fixtures/layer-adjudication-tier/`, new invariant **I58**.
+
+**`level:` had no behavioural reader for six contract versions.** I37 checked the field was present;
+nothing read what it said. That is why the duty is sited in `emit()` and keyed off the contract rather
+than switched on at the two drift call sites: a per-call-site opt-in is a hand-list wearing control
+flow, and a future clause moved to the level whose call site was not also edited would carry the level
+and none of the duty. Migrating a clause is now a one-line edit to the contract and no script change —
+asserted, not claimed: the fixture flips the seeded clause to `WARN` and watches the blocking row
+disappear while the candidate row stays.
+
+**I58, and why it runs the reader instead of grepping it.** A tier whose reader goes inert is silent by
+construction: the classifier still emits every row it emitted before and the blocking half simply never
+appears, and no other check asserts the ABSENCE of a row. So I58 joins the declaration to the reader by
+invoking the reader's own new `--adjudicated-codes` mode, and then **mutates the level token in a copy
+of the contract published as a dangling commit** and asserts the answer goes empty. Both arms were
+proven against their own mutants with an unmutated control: renaming the reader's token fires the
+declared-vs-read arm; a reader hard-coded to return the right set for the wrong reason passes that arm
+and is caught only by the probe.
+
+**FIVE OF THE ROW'S OWN PREMISES WERE WRONG, and they are recorded because each was checked before it
+was built on.**
+
+1. *"Recorded once per `(entry, clause, body-digest)`."* The entry's body is the wrong key for the
+   clause that pays. `EXTENSION-HOOK-DRIFT` is an event on the **hooked core file** across
+   `base..theirs`; the entry need not move for a recorded verdict to go stale. Keyed on the entry body
+   alone, a verdict made against one core text silently clears every later change to it — the
+   "permanent exemption wearing an adjudication's clothes" the row's own mutant triple was written to
+   catch, produced by the row's own key. The digest covers the entry **and** the target at `theirs`.
+2. *"Reuse the ledger's entry shape so `ledger-reverify.sh` and `ledger-rotate.sh` work on it
+   unchanged."* The ledger's entry boundary is the line-leading `- **Bold**` grammar whose silent
+   entry-swallowing **this same program shipped a diagnostic for in v0.189.0**. A blocking register on
+   that grammar unblocks on a formatting slip. Neither tool's semantics reach an adjudication either:
+   `ledger-reverify`'s `verify:` verbs test upstream absorption, and `ledger-rotate` closes on
+   `**ADOPTED UPSTREAM (v`. The register is JSONL, precedent `spawn-ledger.jsonl`.
+3. *"Add a `REGISTER-CONTRADICTION` arm to `hard-blockers.sh`."* That file's own header says the
+   blocking list is **rendered from the detectors** precisely so an LLM summary cannot drop a line; a
+   detector inside the renderer contradicts it. The arm is in `layer-drift.sh` and `hard-blockers.sh`
+   picks it up through the `HARD-` filter it already has, unchanged.
+4. *"Clauses to move, in descending row count: the restriction clause, then `EXTENSION-HOOK-DRIFT`,
+   retirement duty, `OVERRIDE-DELEGATES-INTO-SHADOW`."* The first two are **the same mechanism** —
+   LC-E4's own normative text says the re-read "is the ONLY mechanism behind the additive-only rule".
+   And the ordering is inverted: measured on the actual pull, `EXTENSION-HOOK-DRIFT` is **17**,
+   `OVERRIDE-DELEGATES-INTO-SHADOW` is **2**, and `EXTENSION-RETIRE-CANDIDATE` is **0**. Only the
+   re-read duty migrates here. `OVERRIDE-DELEGATES-INTO-SHADOW` deliberately does not: its two live
+   rows are a consumer decision already deferred to a sprint, and blocking on it would wedge the final
+   pull on a question the consumer has already answered in writing.
+5. *"6 of 9 blocker adjudications re-litigating a file another already covered — `ai-dlc-setup/SKILL.md`
+   three times in five hours."* There are exactly 9 such files and the shape is real, but the count is
+   wrong in both terms: **four** name that file, not three, across **4h26m**, and they are 4 of 9, not
+   6. The repetition is worse than stated and the fraction is milder. All nine are keyed per RUN; the
+   register is keyed per SUBJECT, which is the actual fix.
+
+**`silent once recorded` did not ship, and the reason is the repo's own defect class.** Suppressing the
+candidate row once adjudicated would leave `LC-E4`'s declared `code:` emitted by nothing — I36's forward
+grep would still pass on the string surviving in a comment, and the clause would be unfalsifiable. The
+candidate row still prints; what disappears is the blocking row. The fixture asserts this directly.
+
+**I54 caught a bug in this release's own code**, which is the sweep from v0.207.0 paying for itself:
+`printf '%s\n' "$ADJ_CODES" | grep -qxF` is the shape that answers "not found" on a match once the value
+clears the pipe buffer. Here a match means "this row is adjudicable", so the tier would have gone
+silently inert at scale. A second instance in the same function — `jq | grep -q` — is invisible to I54's
+grammar (the writer is not a shell variable) and was fixed alongside; that one's failure direction was a
+blocking row for a consumer who **had** recorded the verdict.
+
+**Measured against the reference consumer at `0.183.0 → main`, with controls.** 52 rows before, 69
+after: **17 `HARD-LAYER-ADJUDICATION-MISSING`, one per `EXTENSION-HOOK-DRIFT`**, and the 52
+pre-existing rows **byte-identical** before and after (`cmp -s`). The triple was run end to end on a
+COPY of the consumer, which is never written to: no register → 17 blocking; one verdict recorded → 16;
+that entry's body **+1 byte** → 17 again, and it is that entry that re-blocks.
+
+**Fixture:** 12 assertions, 5 single-arm mutants (path-keyed digest, hard-coded vocabulary, hard-coded
+adjudicable set, contradiction ignoring `supersedes`, suppressed candidate row), each killing **exactly
+one** assertion, plus an unmutated control copy taken from the same directory — the copy is of the whole
+`reconcile/` tree because a lone copy of `layer-drift.sh` dies sourcing `lib.sh` and emits nothing,
+which scores as a kill for every mutant at once (v0.196.0's recorded trap). The first run of that
+harness produced **two** failures from one mutation: Part 4b's precondition was inheriting Part 3's
+state, so every part now re-derives its digest from a cleared register. Two failures mean the assertions
+are entangled and one of them is measuring the other.
+
+**Consequence for the final pull, stated plainly:** it now requires **17 recorded adjudications** before
+`apply` will run. That is the point of the row and it is the cost of it.
+
 ## [0.212.0] — 2026-07-29
 
 ### Changed — the join that ends the "mechanical predicate, `enforcer: []`" class, and the paragraph scoping it was wrong in both directions: five of its nine subjects were a join that could not see a dispatcher, and one of its declared false positives was the only real defect in the catalog

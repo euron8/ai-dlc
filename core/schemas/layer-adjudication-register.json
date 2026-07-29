@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "layer-adjudication-register.json",
+  "title": "Layer conformance adjudication register",
+  "description": "One JSON object per line in _bmad-output/ai-dlc-update/layer-adjudication-register.jsonl. A record is the operator's verdict on ONE row of a layer-contract clause at `level: ADJUDICATED`, keyed by the SUBJECT DIGEST that row fired on rather than by the entry's path. Keying by path would let one verdict clear every future change to the same entry, which is a permanent exemption wearing an adjudication's clothes; keying by the subject state means the duty re-fires the moment either side of the comparison moves. `reconcile/layer-drift.sh` is the single home of the digest computation and prints the digest in the blocking row, so the operator copies a value rather than deriving one. THE VERDICT VOCABULARY LIVES ONCE, in properties.verdict.enum below, ONE VALUE PER LINE: layer-drift.sh reads that array to decide whether a record satisfies the duty, and it does not restate it. The one-per-line layout is load-bearing for that reader — keep it.",
+
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["clause", "entry", "subject_digest", "verdict", "recorded_utc", "reason"],
+  "properties": {
+    "clause": {
+      "type": "string",
+      "pattern": "^LC-[A-Z]+[0-9]+$",
+      "description": "The layer-contract clause id this verdict answers, e.g. LC-E4."
+    },
+    "entry": {
+      "type": "string",
+      "description": "Consumer-relative path of the layer entry the row named, exactly as layer-drift.sh prints it in field 2."
+    },
+    "subject_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Copied verbatim from the blocking row. Covers the entry file's content AND the hooked core file's content at the incoming ref, so it moves when either does."
+    },
+    "verdict": {
+      "description": "A record whose verdict is outside this enum does not satisfy the duty. Otherwise any string would clear a blocking row and the adjudication would be a formality a typo passes.",
+      "type": "string",
+      "enum": [
+        "still-additive",
+        "contradicts-core",
+        "retire"
+      ]
+    },
+    "recorded_utc": {
+      "type": "string",
+      "description": "ISO-8601 UTC instant the verdict was recorded."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why. An adjudication with no stated reason is indistinguishable from a batch-clear, which is the failure mode this register exists to make visible."
+    },
+    "supersedes": {
+      "type": "string",
+      "description": "Required only when this record states a DIFFERENT verdict from an earlier record under the same key. Names what it overturns. Without it, two records under one key are a HARD-REGISTER-CONTRADICTION: the register would answer a lookup with whichever record happened to be read last, so LC-A1's blocking half would depend on file order."
+    }
+  }
+}

@@ -142,8 +142,24 @@
 
 set -uo pipefail
 
-[ $# -eq 4 ] || { echo "usage: layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>" >&2; exit 2; }
-DIST="$1"; BASE="$2"; THEIRS="$3"; CONSUMER="$4"
+# MODES
+#   layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
+#       classify. The only mode a pull runs.
+#   layer-drift.sh --adjudicated-codes <dist-repo> <theirs-ref>
+#       print, one per line, the clause CODES this script will hold to the layer conformance
+#       adjudication — derived from layer-contract.yaml at <theirs-ref> by the same grammar the
+#       classifier uses, because it IS that grammar and not a copy of it. Exists so I58 can join
+#       the reader against the declaration by RUNNING the reader: a restated extraction in the
+#       invariant would agree with itself while the shipped one had gone inert. Exit 0 with no
+#       output is a legitimate answer (no clause sits at that level).
+MODE=classify
+if [ "${1:-}" = "--adjudicated-codes" ]; then
+  [ $# -eq 3 ] || { echo "usage: layer-drift.sh --adjudicated-codes <dist-repo> <theirs-ref>" >&2; exit 2; }
+  MODE=codes; DIST="$2"; THEIRS="$3"; BASE=""; CONSUMER=""
+else
+  [ $# -eq 4 ] || { echo "usage: layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>" >&2; exit 2; }
+  DIST="$1"; BASE="$2"; THEIRS="$3"; CONSUMER="$4"
+fi
 
 SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
@@ -156,7 +172,12 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=lib.sh
 . "$SELF/lib.sh" || { echo "layer-drift: cannot source $SELF/lib.sh" >&2; exit 1; }
 
-emit() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
+# emit() is also where the layer conformance adjudication is applied — see the ADJUDICATION
+# block below for why the duty lives HERE and not at the two drift call sites.
+emit() {
+  printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"
+  adj_check "$1" "$2" "$3"
+}
 
 TAB="$(printf '\t')"
 
@@ -212,6 +233,150 @@ rel() { printf '%s' "${1#"$CONSUMER"/}"; }
 
 git_show() { git -C "$DIST" show "$1:$2" 2>/dev/null; }
 have()     { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; }
+
+# ---------------------------------------------------------------------------
+# THE LAYER CONFORMANCE ADJUDICATION
+#
+# A clause at `level: ADJUDICATED` has a mechanized candidate set and a HUMAN verdict. This
+# block is the enforcement: every row whose status is such a clause's code must have a verdict
+# recorded in the consumer's register under the subject digest it fired on, or the pull blocks.
+#
+# WHY THE DUTY LIVES IN emit() AND NOT AT THE DRIFT CALL SITES. A per-call-site opt-in is a
+# hand-list wearing control flow: a future clause moved to ADJUDICATED whose call site was not
+# also edited would carry the level and none of the duty, and a clause that cannot fire reads
+# exactly like one that passed. Sited here, the level in the contract is the ONLY thing that
+# decides, so migrating a clause is a one-line edit to that file and no edit to this script.
+#
+# WHY THE SUBJECT IS THE WHOLE TARGET FILE, INCLUDING AT ANCHOR GRAIN. emit() knows the entry
+# and the target path and nothing else; deriving a finer subject would need the call site to
+# hand one over, which is the opt-in this siting exists to avoid. File grain therefore over-
+# fires for LC-E14 relative to the span it narrowed to. That asymmetry is deliberate and it is
+# the safe one: an extra re-fire costs one adjudication, and the failure it forecloses is a
+# stale verdict silently inherited across a core change — the direction this repo has shipped
+# wrong before (see EXTENSION-ANCHOR-MISSING's own header, one narrowing over).
+#
+# THE DIGEST IS COMPUTED HERE AND NOWHERE ELSE, and it is PRINTED in the blocking row. The
+# operator copies a value; nobody re-derives one. A digest an operator can compute two ways is
+# a digest that will be computed two ways.
+ADJ_REGISTER="$CONSUMER/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+ADJ_SCHEMA_REL="core/schemas/layer-adjudication-register.json"
+ADJ_CONTRACT_REL="core/skills/ai-dlc/layer-contract.yaml"
+
+# The ADJUDICATED code set, DERIVED from the contract at THEIRS — the version being pulled is
+# the version the consumer is held to. `level:` precedes `code:` in every clause, which is what
+# lets one pass carry the level forward onto the code it belongs to.
+ADJ_CODES="$(git_show "$THEIRS" "$ADJ_CONTRACT_REL" | awk '
+  /^  - id:/       { lvl=""; next }
+  /^    level:/    { lvl=$2; next }
+  /^    code:/     { if (lvl == "ADJUDICATED") print $2; next }
+')"
+
+# The verdict vocabulary, read from the schema's own `verdict` enum rather than restated. A
+# record whose verdict is outside it does not satisfy the duty: otherwise any string clears a
+# blocking row and the adjudication is a formality a typo passes.
+#
+# The FIRST draft of this extractor kept only tokens containing a hyphen, which silently dropped
+# `retire` — two of three values survived and every probe still looked like it worked. Hence the
+# emptiness guard below, and hence reading the enum the schema already validates against instead
+# of a second array beside it.
+# The anchor is the PROPERTY (`"verdict": {`), not the token: `"verdict"` also appears in the
+# schema's `required` array, and anchoring on the bare token would start the scan at whichever
+# of the two came first in the file.
+ADJ_VERDICTS="$(git_show "$THEIRS" "$ADJ_SCHEMA_REL" | awk '
+  /"verdict"[[:space:]]*:[[:space:]]*\{/ { inv=1; next }
+  inv && /"enum"[[:space:]]*:/           { f=1; next }
+  f && /\]/                              { exit }
+  f                                      { gsub(/[^a-z-]/, ""); if ($0 != "") print }
+')"
+
+if [ "$MODE" = codes ]; then
+  [ -z "$ADJ_CODES" ] || printf '%s\n' "$ADJ_CODES"
+  exit 0
+fi
+
+adj_active() { [ -n "$ADJ_CODES" ]; }
+
+# A vocabulary that came back empty while clauses sit at ADJUDICATED means the extraction broke,
+# not that there are no verdicts. Left silent it would reject every record and read as a consumer
+# who had adjudicated nothing — a broken reader wearing an unadjudicated tree's clothes.
+if adj_active && [ -z "$ADJ_VERDICTS" ]; then
+  echo "layer-drift: the verdict vocabulary could not be read out of ${ADJ_SCHEMA_REL} at ${THEIRS}, while layer-contract.yaml carries clauses at level ADJUDICATED. Every record would be rejected and the tree would report as wholly unadjudicated. Fix the schema's verdict enum or this extractor; do not read the resulting rows as findings." >&2
+  exit 1
+fi
+
+# Does this status name a clause at ADJUDICATED? Whole-line match: a substring test would let
+# one code that is a prefix of another inherit its level.
+adj_is_adjudicated() { adj_active && grep -qxF -- "$1" <<<"$ADJ_CODES"; }
+
+# (entry file at the consumer) + (target file at THEIRS). Either moving moves the digest.
+adj_digest() { # $1 entry (consumer-relative), $2 core-relative target
+  local ef tb
+  ef="$(git -C "$DIST" hash-object "$CONSUMER/$1" 2>/dev/null)"
+  tb="$(git -C "$DIST" rev-parse "$THEIRS:$(dist_path "$2")" 2>/dev/null)"
+  [ -n "$ef" ] && [ -n "$tb" ] || return 1
+  printf '%s\n%s\n' "$ef" "$tb" | git -C "$DIST" hash-object --stdin
+}
+
+# jq is already a reconcile dependency (preclassify.sh, settings-merge.sh). Its ABSENCE must be
+# loud: a register that cannot be read is not a register with nothing in it, and answering the
+# second way round would turn a missing tool into a silent blanket exemption.
+# NOT A PIPELINE INTO `grep -q`, and I54's message is the reason even though its grammar does
+# not reach this shape: under `pipefail` a reader that stops at its first match SIGPIPEs the
+# writer, and the pipeline then reports the WRITER's status — so a MATCH answers non-zero once
+# the value clears the pipe buffer. Here a match means "adjudicated", so the failure direction
+# would be a blocking row on a consumer who had recorded the verdict. Both sides are read into
+# variables first and the test is a here-string.
+adj_lookup() { # $1 digest -> 0 if a record with a vocabulary verdict exists
+  [ -f "$ADJ_REGISTER" ] || return 1
+  command -v jq >/dev/null 2>&1 || return 2
+  local found
+  found="$(jq -r --arg d "$1" 'select(.subject_digest == $d) | .verdict' "$ADJ_REGISTER" 2>/dev/null)"
+  [ -n "$found" ] || return 1
+  grep -qxF -f <(printf '%s\n' "$ADJ_VERDICTS") <<<"$found"
+}
+
+adj_check() { # $1 status, $2 entry, $3 target
+  adj_is_adjudicated "$1" || return 0
+  case "$3" in ''|'?') return 0 ;; esac
+  local d rc
+  d="$(adj_digest "$2" "$3")" || {
+    emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
+      "row '$1' is a clause at level ADJUDICATED, but its subject digest could not be computed (entry or target unreadable), so no recorded verdict can be matched against it. This blocks rather than passes: an unkeyable row is the one case where 'no record found' and 'nothing to look up' are indistinguishable."
+    return 0
+  }
+  adj_lookup "$d"; rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
+         "row '$1' needs a recorded verdict and jq is not on PATH, so ${ADJ_REGISTER#"$CONSUMER"/} cannot be read. A register that cannot be read is not an empty one." ;;
+    *) emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
+         "row '$1' is the layer conformance adjudication: its candidate set is mechanized and its verdict is yours. Record one line in ${ADJ_REGISTER#"$CONSUMER"/} with subject_digest ${d} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves — it is not an exemption for the path." ;;
+  esac
+}
+
+# The raw printer, for rows adj_check itself emits: routing those back through emit() would
+# recurse, and a blocking row is never itself adjudicable.
+emit_raw() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
+
+# A contradiction is a property of the REGISTER, not of a row, so it is checked once. Records
+# are compared in FILE ORDER: the later of two differing verdicts under one key is the one that
+# must declare what it overturns.
+adj_register_contradictions() {
+  adj_active || return 0
+  [ -f "$ADJ_REGISTER" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  jq -r '[(.clause // ""), (.entry // ""), (.subject_digest // ""), (.verdict // ""), (.supersedes // ""), (.reason // "")] | @tsv' \
+    "$ADJ_REGISTER" 2>/dev/null \
+  | awk -F'\t' -v OFS='\t' '
+      { key = $1 "\x01" $2 "\x01" $3 }
+      seen[key] && prev[key] != $4 && ($5 == "" || $6 == "") {
+        print "HARD-REGISTER-CONTRADICTION", $2, $1,
+          "the register states two different verdicts under one key (" prev[key] " then " $4 ") and the later record declares no supersedes plus reason. Undeclared, a lookup answers with whichever record is read and the blocking half of this tier depends on file order. Retraction is available; declare it."
+      }
+      { seen[key] = 1; prev[key] = $4 }
+    '
+}
+adj_register_contradictions
 
 # Section anchors a markdown STREAM defines: `### 5c. T` headings + `**7a-post. T**`
 # bold anchors (a layer entry may define 7a-post the bold way; see

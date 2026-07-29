@@ -473,7 +473,16 @@ prose is itself generated rather than composed.
      security fix because its own catalog needs relabelling.
    - `EXTENSION-HOOK-DRIFT` → the hooked core file changed. Extensions have no
      section anchor (`hooks:` is file-grain), so this is the strongest statement
-     available: re-read the entry against the new core text.
+     available: re-read the entry against the new core text. Its clause is at
+     `level: ADJUDICATED`, so the re-read must be RECORDED — see the two statuses below
+     and step 7.
+   - `HARD-LAYER-ADJUDICATION-MISSING` → a row of a clause at `level: ADJUDICATED` has no
+     recorded verdict in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`
+     under the `subject_digest` the row carries. **Blocks `apply`.** The remedy is to make
+     the judgement and write it down, not to widen anything. Step 7 has the record shape.
+   - `HARD-REGISTER-CONTRADICTION` → that register states two different verdicts under one
+     key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
+     because a lookup would otherwise answer with whichever record was read last.
    - `EXTENSION-HOOK-MISSING`, `OVERRIDE-OK`, `EXTENSION-OK` → as named.
 
 3d. **Unregistered core drift — the layer system's blind spot.** `layer-drift.sh`
@@ -959,11 +968,30 @@ prose is itself generated rather than composed.
    the only base against which "consumer edits vs base" means what these status names claim.
    `CORE-AT-THEIRS` rows are the tell that the base was stale.
 
-   **Dispose of every `WORKLIST extension-reread` row.** `apply.sh` emits one per
-   `EXTENSION-HOOK-DRIFT`: the core file the extension hooks changed, and an extension has
-   no section anchor, so nothing can locate what to re-merge. Read the entry against the new
-   core text and record a verdict per entry — **still-additive**, **contradicts-core**, or
-   **retire**. The run is not clean while one is outstanding.
+   **Dispose of every `WORKLIST extension-reread` row — this is *the layer conformance
+   adjudication*.** `apply.sh` emits one per `EXTENSION-HOOK-DRIFT`: the core file the extension
+   hooks changed, and an extension has no section anchor, so nothing can locate what to
+   re-merge. Read the entry against the new core text and record a verdict per entry —
+   **still-additive**, **contradicts-core**, or **retire**.
+
+   **Recording is now the mechanism, not a note to self.** `layer-contract.yaml` carries these
+   clauses at `level: ADJUDICATED`: the candidate set is mechanized and the verdict is yours.
+   `layer-drift.sh` emits `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) for every such row with
+   no recorded verdict, and a `HARD-` status blocks `apply`. Write one JSON object per line into
+   `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`, shape in
+   `.claude/schemas/layer-adjudication-register.json`, copying `subject_digest` **verbatim from
+   the blocking row**:
+
+   ```json
+   {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it"}
+   ```
+
+   The digest covers the entry AND the core file it hooks at `theirs`, so a verdict is spent the
+   next time either one moves. It is a record of a reading, not an exemption for a path — which
+   is why the register is keyed per SUBJECT and never per run. Changing your mind is allowed and
+   has to be declared: a second record under one key stating a different verdict needs
+   `supersedes` and a `reason`, or it is `HARD-REGISTER-CONTRADICTION` (**LC-A2**), because
+   otherwise a lookup answers with whichever record happened to be read last.
 
    `contradicts-core` is the verdict `layer-drift.sh` cannot reach on its own. It emits
    `EXTENSION-RESTATES-CORE` when an extension COPIES a core section, but an extension that

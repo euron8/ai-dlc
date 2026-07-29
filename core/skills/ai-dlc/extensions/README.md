@@ -152,11 +152,18 @@ state of your tree, so a pull that changes nothing here still reports it.
   - **Where this rule is checked.** At the pull, per entry: `EXTENSION-HOOK-DRIFT`
     becomes a `WORKLIST extension-reread` row whose verdict is one of
     still-additive / contradicts-core / retire (`ai-dlc-update/SKILL.md` step 7).
-    No scanner enforces it. `EXTENSION-RESTATES-CORE` catches an entry that COPIES
-    a core section; an entry that asserts the opposite in its own words copies
-    nothing and matches nothing, and an extension has no `base_sha` to compute a
-    contradiction against. The re-read is the whole mechanism — if it is skipped,
-    this rule is unenforced.
+    No scanner decides it, and none can: `EXTENSION-RESTATES-CORE` catches an entry
+    that COPIES a core section, but an entry asserting the opposite in its own words
+    copies nothing and matches nothing, and an extension has no `base_sha` to compute
+    a contradiction against. The re-read is the whole mechanism.
+
+    **What IS enforced is that the re-read happened.** LC-E4 and LC-E14 sit at
+    `level: ADJUDICATED`: the candidate set is mechanized and the verdict is human,
+    and LC-A1 blocks `apply` for any such row with no verdict recorded against the
+    subject digest it fired on. Skipping the re-read is a blocked pull, not a
+    silent one. Recording a verdict is still a judgement; nothing here guesses it
+    for you, and a report-only row would leave the worklist something an operator
+    clears rather than reads.
   - **Never restate a core section.** Same heading, or the same step number with
     the same title, means the rendered file defines it twice and a "Step 5c"
     reference becomes ambiguous. An extension's body is *added* to core, not merged
