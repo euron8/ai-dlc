@@ -192,7 +192,7 @@ release, with the merge sha. `—` = not started.
 | 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | ✅ **CLOSED** — validated 2026-07-29 (all four merge shas ancestors of main with an orphan-commit control, CHANGELOG `## [x]` headings present for all four with a `9.999.0` control, checks 16/18/22 all carrying a non-empty `enforcer:` against a `Check 1 → enforcer: []` control, I57 named in `validate-enforcement-map.sh`'s OK line and carrying liveness/narrowness/discriminator arms in `enforcement-map-sites`, both validators exit 0). Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — the prior-sprint SHA resolution was already programmed inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. Check 22 ✅ `d3f0e36` (#294) v0.211.0 — **three for three**: the comparison was already programmed in `ai-dlc-dispatch-guard.sh`, which is where `model_bound` gets its value, and a PreToolUse hook cannot run at a gate. The join ✅ `3b3fbcd` (#295) v0.212.0 — **I57**, and re-deriving the discriminator was the right call: **the paragraph below was wrong in BOTH directions.** Five of its nine "false positives" were artifacts of a join that could not see a dispatcher or a `non_catalog_units` call site, and one of the six it declared a false positive was the **only real defect in the catalog**. **ROW 10b IS CLOSED — all three subjects bound and the class ended by a join.** |
 | ⏹ | **SESSION BOUNDARY** | |
 | 11 | ADJUDICATED tier + disposition register | ✅ `e675aed` (#296) v0.213.0 — **shipped, and FIVE of the row's six stated design choices were refuted by measurement before any of them was written**, §7.11 |
-| 12 | Regenerate the final pull prompt (§8) | — |
+| 12 | Regenerate the final pull prompt (§8) | ✅ **`docs/reviews/graph-pull-0.213.0-operator-handoff.md`** — revision 3, and a **different KIND of document**: a multi-session handoff with a progress ledger, not a copy/paste prompt. All six tallies re-derived with controls; **five probes answered falsely first**, §8's note below. **THE PROGRAM IS COMPLETE — all 12 rows closed.** |
 
 Rows 4 and 5 were one row until 2026-07-28; E7's defect was found while scoping it and is split out
 because an ERROR-tier check silently skipping its own subject set outranks adding report-only
@@ -1928,7 +1928,58 @@ irreducible FPs** in another; **the two disagree, so re-measure before writing i
 
 ---
 
-## 8. Final step — regenerate the pull prompt
+## 8. Final step — regenerate the pull prompt — DONE
+
+**SHIPPED as `docs/reviews/graph-pull-0.213.0-operator-handoff.md`** (revision 3, 2026-07-29).
+**Every bullet below was carried into it**, plus the v0.213.0 adjudication duty, which was recorded
+in §7.11 and **appeared nowhere in this section** — a `grep -c 'layer-adjudication|LC-A1'` over §8's
+span returned 0. Executed as literally written, row 12 would have shipped a prompt missing the
+largest new blocking obligation in the program.
+
+**It is a different KIND of artifact from revisions 1 and 2, at the operator's direction.** Those
+were single-session prompts with four report-back pauses. Revision 3 has this file's shape — progress
+ledger, `⏹ SESSION BOUNDARY` markers, `[V]`/`[R]` tags, a stop condition per tally, and a
+do-not-re-litigate section — because the pull's judgement load grew from **3 required fixes to 45
+per-item decisions** (17 adjudications + 28 fixture declarations) across three gates that wedge the
+push. The reasoning: a 45-judgement single-session prompt produces exactly the failure §8 already
+warned about, where the fast route through a per-item judgement is to batch-apply the permissive
+option.
+
+**ALL SIX TALLIES RE-DERIVED with the shipping code from a pinned worktree [V].** graph had not
+moved — the freeze held — but the *distribution* had by 8 releases, so every dist↔consumer join was
+stale even though the consumer was not.
+
+| Tally | §8 said | Re-measured | |
+|---|---|---|---|
+| adjudications (LC-A1) | *absent* | **17** | the gap above |
+| `W5` warnings | 5 | **5** (33/34/35, 31/32) | confirmed |
+| `UNLOADABLE` | 4: 19b 2s 33 35 | **same** | confirmed |
+| fixture drivability | 103/73/2/28 | **same** | confirmed |
+| strays | 5 → 889 | **5 → 893** | subject confirmed, carrier count moved |
+| Check 5 `check-stories` | PASS 2/2/0 | **same** | confirmed |
+
+**FIVE PROBES ANSWERED FALSELY BEFORE THE RIGHT INVOCATION, and all five are now §4 of revision 3.**
+This is the "a zero is not a finding" rule earning its place five times in one afternoon:
+
+1. `validate-gate-manifest.sh <root>` — wants a **FILE**; exited 2 and a grep read **0 UNLOADABLE**.
+2. `validate-fixture-drivability.sh <root>` — wants `--dir`; exited 2, read as no findings.
+3. `--strays <root>` — takes **paths**, and derives the project root from **its own script
+   location**, ignoring cwd. Reported **397** findings against a true **5**.
+4. `--strays` against graph's installed copy — that copy contains `strays` **zero** times. **The mode
+   arrives WITH the pull**, so it is unmeasurable pre-apply except via a staged copy.
+5. `grep 'W5'` — the token **never appears in the message text**. 5 warnings existed; the grep said 0.
+
+**And one of revision 2's expectations INVERTS.** It expected `validate-layer-entries.sh` to exit **1**
+with three `ERROR` lines and called that "the expected, correct outcome" — true for 0.183.0, whose
+ERROR tier was new with three live subjects. **Those three were fixed in that pull.** At 0.213.0 the
+correct outcome is **exit 0** with the 5 `W5` warnings. A prompt reusing revision 2's expectation
+would read a clean tree as a failure and a real failure as clean.
+
+**Verified before committing:** every `core/` path revision 3 cites exists at `3490997` (with a bogus
+path as control), and row 2's three commands were run **verbatim against real graph** and reproduced
+their stated tallies. graph's tracked source was never written to — all mutation testing ran on a copy.
+
+**The original bullet list follows, kept as the record of what was carried forward.**
 
 Revision 2 lives at `docs/reviews/graph-pull-0.183.0-operator-prompt.md`. **Do not reuse it.**
 Write a revision 3 for `0.183.0 → <final main sha>`, and carry these forward — each was a defect in
