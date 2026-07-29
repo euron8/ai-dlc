@@ -47,7 +47,61 @@
     "sprint_re": "^sprint:[ \\t]*([0-9]+)[ \\t]*(?:#.*)?$",
     "status_re": "^status:[ \\t]*([^#\\s]+)[ \\t]*(?:#.*)?$",
     "housekeeping_re": "^sprint_([0-9]+)_housekeeping:[ \\t]*(?:#.*)?$",
-    "stories_re": "^stories:[ \\t]*(?:#.*)?$"
+    "stories_re": "^stories:[ \\t]*(?:#.*)?$",
+    "story_key_re": "^([ \\t]+)([^ \\t#][^:]*?):[ \\t]*(?:#.*)?$",
+    "story_field_re": "^([ \\t]+)([A-Za-z_][A-Za-z0-9_]*):[ \\t]*(.*?)[ \\t]*$"
+  },
+
+  "$story_grammar_comment": [
+    "THE STORY-ENTRY GRAMMAR IS DELIBERATELY INDENT-RELATIVE AND ID-BLIND, and both halves are",
+    "there because the reference consumer's three attempts at this check each went VACUOUSLY GREEN",
+    "on the half it fixed the other way.",
+    "",
+    "ID-BLIND. A story entry is ANY key of the `stories:` mapping. There is no id pattern here on",
+    "purpose: the consumer's validator globs `story-<N>-*` and its live corpus is named",
+    "`story-S<N>-*` and `s<N>-<M>`, so its discovery loop matched zero files and it reported",
+    "'checked 0 story files' as a success line. A pattern that matches only one naming convention",
+    "IS the vacuous-green defect; the mapping key is the id, whatever it is spelled.",
+    "",
+    "INDENT-RELATIVE. Entry keys sit at whatever indent the file's first entry uses, and fields sit",
+    "deeper than that. Pinning two literal indents would make a two-space file and a four-space file",
+    "disagree about whether a document has any stories at all -- the same class of silent zero.",
+    "A key line carries nothing after the colon; a field line carries a value. Lines deeper than the",
+    "field indent (block-scalar continuations, the long `note:` values real trees carry) are never",
+    "read as keys.",
+    "",
+    "The COUNT is part of the contract. `sprint-status.sh check-stories` prints how many entries it",
+    "parsed and how many comparisons it made, and exits non-zero on zero -- see $story_check_comment."
+  ],
+
+  "$story_check_comment": [
+    "The mechanical half of gate-validation.md Check 5 ('Story status consistency?'), which stated",
+    "'Run: Read both files, compare status values programmatically' while core shipped no program.",
+    "",
+    "The join: for every entry of the current sprint's `stories:` mapping, in each canonical copy",
+    "that exists, the entry's `status:` MUST equal the status in the story FILE that entry names.",
+    "Story-file status is read from YAML frontmatter first and from the `**Status:**` body header",
+    "only when the file carries no frontmatter block -- both spellings are live in a real corpus",
+    "(measured over the reference consumer's 988 story files: 343 carry a frontmatter `status:`,",
+    "726 carry a `**Status:**` header, 109 carry both, 28 carry neither).",
+    "The body header's value is taken up to its first sentence break because real entries continue",
+    "into prose ('done (all 3 gates green)'); the frontmatter value is compared verbatim.",
+    "",
+    "An entry whose file cannot be resolved, or whose file yields no status at all, is a FINDING and",
+    "never a skip. Skipping is how the consumer's version reported success on a corpus it could not",
+    "read."
+  ],
+
+  "story_entry_fields": {
+    "status": { "required": true, "desc": "the story's status; MUST equal the status in the story file this entry names (Check 5)" },
+    "file": { "required": false, "desc": "path to the story file, relative to the canonical's own directory. Absent -> the entry key is globbed against stories_dir." }
+  },
+
+  "story_file": {
+    "stories_dir": "_bmad-output/planning-artifacts/stories",
+    "frontmatter_status_re": "^status:[ \\t]*(.*?)[ \\t]*$",
+    "header_status_re": "^[ \\t]*(?:[-*][ \\t]+)?\\*\\*[Ss]tatus:\\*\\*[ \\t]*(.*?)[ \\t]*$",
+    "header_value_cut": "[(\\u2014\\u2192.,;]"
   },
 
   "$fields_comment": [

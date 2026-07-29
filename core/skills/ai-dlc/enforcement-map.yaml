@@ -140,7 +140,20 @@ checks:
     title: Story status consistency?
     gate_types: [story, implementation]
     adjudication: llm
-    enforcer: []
+    enforcer:
+      - core/scripts/sprint-status.sh
+    call_sites:
+      - site: gate-validation.md Check 5
+        posture: FAILS the gate on exit 1; exit 4 is the non-vacuity sub-clause
+        why: the check's own text said "compare status values programmatically"
+          and core shipped no program, so the comparison was performed by hand
+          at every gate. The three consumer-authored versions of it each went
+          vacuously green at least once — a story-id glob that matched none of
+          the corpus, a field set compared zero times, a body-header grammar
+          the story files no longer used — and each printed its zero beside a
+          success line. The script decides the comparison and reports the
+          COUNT; the adjudication stays llm because the non-vacuity sub-clause
+          is scoped by gate type, which the script cannot see.
     ci_workflow: ~
 
   - id: "6"
