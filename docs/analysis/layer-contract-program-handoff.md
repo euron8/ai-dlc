@@ -189,7 +189,7 @@ release, with the merge sha. `—` = not started.
 | ⏹ | **SESSION BOUNDARY** | |
 | 10a | **wall-clock reduction across the whole distribution — by any route, not only parallelism** — operator-requested 2026-07-29, §7.10a | ✅ **ROW CLOSED.** `92aa72f` (#288) v0.205.0: **208s → 124s**. `bd0bf65` (#289) v0.206.0: **124.9s → 72.0s (−43%)** — and it **REFUTED this row's own next-two-poles ordering**: serial duration is the wrong statistic for a pooled suite. `8eaf896` (#290) v0.207.0: `wait-stale-deliverable` **52s → 9s, suite 72s → 50s**, plus the **300-site early-exit-reader class** the release leads on (**I54**). ✅ `8344631` (#291) v0.208.0: the content-keyed suite skip — **~50s → 0.3s on a push that changed only CHANGELOG/VERSION/docs** — and **§9 IS NOW CAUSALLY EXPLAINED AND FIXED**: a fixture was writing into the repository it tests. See §7.10a |
 | ⏹ | **SESSION BOUNDARY** | |
-| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | — |
+| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Checks 18 and 22 remain, then the join that closes the class. §7.10b carries the ordering, which is now a MEASURED constraint rather than a preference |
 | ⏹ | **SESSION BOUNDARY** | |
 | 11 | ADJUDICATED tier + disposition register | — |
 | 12 | Regenerate the final pull prompt (§8) | — |
@@ -1665,6 +1665,52 @@ from "which checks could be automated" — that is a survey, and the four rows t
 on subagent surveys all had to be re-derived. Start from the join above, widen the corpus to
 `SKILL.md`'s rules and the step files, and measure the discriminator's false-positive set
 before writing a single check.
+
+**SHIPPED: Check 16 — `564c5d2` (#292) v0.209.0.** The join above was re-derived before building
+and reproduced: **27** rows with `enforcer: []`, **10** named-but-not-enforcer pairs, control
+non-empty. Two pairs the starting measurement did not list turned up (Check 17's
+`stamp-story-provenance.sh` and `sync-taught-schema.sh`, both producers rather than predicates —
+the same false-positive shape as `verdict.sh`).
+
+**Check 16 was the strongest subject in the catalog and the reason is worth carrying.** Its body
+published its predicate as literal machinery — a marker regex, an item regex, a backlog-status
+regex, a digit-only `file:line` regex, and a density rule given as an exact shell pipeline — and
+its row said nothing enforced it, at `gate_types: [universal]`. **And the program already existed**:
+`check-15-bypass/run.sh` implemented all four elements inline because there was nothing to call,
+and its own header said what that was worth ("It proves the FIXTURE's claim, not the ADJUDICATOR's
+behaviour"). So the release was not "write a program" — it was **move a program that was already
+written into the place it can ship from**, and point the fixture at it. Expect that shape again:
+where a check's predicate is fully mechanical, someone has usually already coded it somewhere that
+cannot run at a gate.
+
+Mutating the relocated program immediately found **two arms of Check 16 that could not fire** —
+element 4's length floor had no variant separating it from the density floor, and the density body
+was being taken from the length regex's match. Neither was visible while the elements lived in a
+fixture that asserted only what it already believed.
+
+**THE ORDERING IS NOW MEASURED, not preferred.** The obvious closer for this row is an invariant
+binding "a check whose body tells the lead to RUN a `scripts/ai-dlc/` validator" to "its row lists
+that validator as an enforcer" — CLAUDE.md's prohibitions-need-mechanisms, and it would end the
+class rather than one instance. The discriminator that separates the real subjects from the six
+false positives is the imperative/exit-code form (`**Check.** Run/Invoke`, `- Run:`, a numbered
+condition asserting `exits 0`) as against a mention of a producer or a remedy. **But that invariant
+FAILS THE BUILD the moment it ships, because Checks 18 and 22 are still unbound.** It cannot land
+before them. Do 18, then 22, then the join — and derive the discriminator's false-positive set
+again at that point rather than trusting this paragraph.
+
+**The two remaining subjects, unexamined, with what the join says about each:**
+
+- **Check 18** — `**Check.** First run \`validate-audit-anchors.sh --entries\`… A non-zero exit
+  FAILS this check CLOSED.` An imperative with an exit-code posture and no enforcer. Note its
+  second mention (`--render`) is producer-mandate prose, NOT a predicate — one check contributes
+  both a subject and a false positive, which is why the discriminator has to be per-mention.
+  Its per-category verdicts come from consumer-supplied audit scripts, so the mechanizable part
+  is the `--entries` gate and the prior-sprint SHA resolution, not the whole check.
+- **Check 22** — numbered clearing condition 3 is `validate-escalation-resolution.sh … exits 0`,
+  the same invocation Check 2a makes, and **Check 2a's row binds that validator while Check 22's
+  does not**. The comparison against `aiDlcRoles` and the `role_file_readable` arm are mechanical;
+  clearing condition 4 (the entry states a remediation and names its artifact) is genuinely
+  adjudicated. Expect a partial bind, not a whole-check one.
 
 **Two constraints.**
 
