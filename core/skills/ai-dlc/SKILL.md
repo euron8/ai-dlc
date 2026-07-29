@@ -1127,10 +1127,18 @@ them as additional active rules/checks/steps; if `overrides/` exists, Read each
 entry and let it shadow the named core rule/check for this run. **Precedence:
 overrides > extensions > core.** Absent or empty layers = pure core, identical
 to a fresh install. See `extensions/README.md` and `overrides/README.md` for the
-entry contracts. An entry's `hooks:`/`shadows:` path is `core/`-relative:
+entry contracts. An entry's `hooks:`/`shadows:`/`extends:` path is `core/`-relative:
 `steps/<x>.md` and `SKILL.md` live under this skill dir, but `team-roles/<role>.md`
 resolves to `.claude/team-roles/<role>.md` (outside the skill dir) — map it the
 same way, not skill-relative.
+
+An extension entry whose `kind:` is **`qualifier`** does not render as its own
+section. It renders INSIDE the core section its `extends: <file>#<anchor>` names,
+at the end of that section for `position: append` or immediately after the heading
+for `position: prepend`, and it qualifies core's prose there rather than replacing
+it. Core's text in that section stays in force — a qualifier adds, it never
+deletes; an entry that needs to change what core says is an override. The other
+kinds (`check`, `step-domain`, `role`) render as their own sections, as before.
 
 **(a) `base_sha` provenance (normative).** An override's `base_sha` MUST be the
 **distribution** sha of the core rule when the override was authored. A value that

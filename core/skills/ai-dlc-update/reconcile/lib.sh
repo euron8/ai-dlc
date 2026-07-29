@@ -187,6 +187,38 @@ shadow_parts() { # shadow_parts <shadows-value>  -> one `<file>\t<anchor>` line 
 }
 
 # ---------------------------------------------------------------------------
+# unquote — strip ONE matched pair of surrounding quotes from a frontmatter value.
+# ---------------------------------------------------------------------------
+# `fm()` is a line reader, not a YAML parser: it hands back everything after the
+# key, quotes included. For every key that existed before `extends:` that was
+# harmless, because none of their values need quoting.
+#
+# `extends:` does. Its whole point is a value that may begin with `#`, and an
+# UNQUOTED `#` opens a YAML comment — so `extends: #Rule 8` is, to any real YAML
+# reader, an empty value followed by a comment. The spelling an author must write
+# is therefore the quoted one, and a reader that does not strip the quotes sees
+# the file part of `'#Rule 8'` as a lone apostrophe and reports that the anchor
+# lives in a file called `'`. That is not hypothetical: it is what this repo's
+# own fixture reported the first time it ran.
+#
+# Shared for I40's reason rather than copied for convenience. The authoring linter
+# ERRORs on an unresolvable `extends:` and the pull classifier narrows drift with
+# it; if they disagreed about whether `'#X'` names the anchor `#X` or the anchor
+# `X'`, one of them would be quietly watching a span that does not exist, and the
+# operator would believe whichever they happened to run.
+#
+# ONE pair, and only when both ends match. A value that merely ENDS in a quote is
+# left alone: guessing at unbalanced quotes would silently rewrite an anchor whose
+# heading really does contain one.
+unquote() { # unquote <value>
+  case "$1" in
+    "'"*"'") printf '%s' "${1#\'}" | sed "s/'\$//" ;;
+    '"'*'"') printf '%s' "${1#\"}" | sed 's/"$//' ;;
+    *)       printf '%s' "$1" ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # ledger_entry_awk — THE push-candidate ledger's entry-boundary rule. One copy.
 # ---------------------------------------------------------------------------
 # `ledger-reverify.sh` decides which lines belong to which entry; `ledger-rotate.sh` decides

@@ -17,6 +17,106 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.196.0] — 2026-07-28
+
+### Added — an extension can declare WHICH SECTION it augments, and drift narrows to it
+
+Until now an extension's drift subject was the whole file it hooks: any change anywhere in
+`steps/gate-validation.md` put every entry hooked to it on the operator's re-read worklist.
+Measured across the reference consumer's 33 entries and the **full** history of the 17 core
+files they hook: **1421 (entry, commit) drift events at file grain against an expected 133 at
+anchor grain.** Nine of every ten re-reads are a change to a part of the file the entry never
+referred to, and a worklist that is 91% noise is one the operator learns to clear rather than
+read. `EXTENSION-HOOK-DRIFT`'s own message said so outright — *"extensions have no section
+anchor"*.
+
+`extends: <file>#<anchor>` is the declaration of the finer subject, optional on every kind.
+When present, `layer-drift.sh` compares that anchor's SPAN across the range instead of the
+file, and emits `EXTENSION-ANCHOR-DRIFT` only when the span itself moved.
+
+**The narrowing is guarded against inventing silence.** Narrowing a check is how a loud true
+report becomes a quiet false one: an anchor that stops resolving upstream — core renamed the
+heading, or absorbed the section away — makes a span-vs-span comparison compare empty against
+empty, and the natural failure is to report clean forever. `EXTENSION-ANCHOR-MISSING` is that
+case, deliberately its own LOUD status rather than folded into `EXTENSION-OK`. The fixture's
+`m2` mutant is the proof: with the guard removed, a vanished anchor stops being reported.
+
+### Added — `kind: qualifier`, the grain for rendering INSIDE a core section
+
+`extensions/README.md` conceded there was *"no grain for that today (`overrides/` gets you
+there only by replacing the whole section verbatim, and then you carry `base_sha` drift on
+prose you never meant to change)"*. That cost is measurable on the reference consumer:
+**376 of 1126 significant override body lines (33%) are byte-identical to the core span they
+shadow**, and one override spends **132 lines** to add a single integer to one table cell.
+
+A `kind: qualifier` entry declares `extends:` and `position: append|prepend`, renders within
+the core section it names, and carries **no `base_sha` obligation on prose it does not
+restate**. Two positions only: a literal-prose anchor would be a third anchor resolver, and
+`reconcile/lib.sh` records two shipped defects caused by duplicate resolvers.
+
+**This is also the prerequisite for ever tightening `LC-N5` to ERROR**, which v0.195.0 recorded
+as blocked: four of the reference consumer's rules share core's integer *because* the integer is
+their reference, and nothing let an entry say so. Not tightened here — the declaration exists
+now, the subject set has not been re-derived against it.
+
+### Added — `kind:` is a closed vocabulary (`E10`)
+
+`kind:` only had to be PRESENT. `kind: qualifer` — or any other typo — was accepted in silence
+and routed nowhere by the Rule 27 loader: an entry that reads as active and governs no run.
+The enum is `check | step-domain | role | qualifier`, and its false-positive set on the tree it
+was written against is **empty** (the reference consumer's 33 entries use exactly `step-domain`
+21, `role` 8, `check` 4). **I46** joins the enum to the entry contract in `extensions/README.md`
+both ways, because a hand-synced vocabulary is not a single source: add a kind to the enum and
+forget the prose and the grain exists with nothing telling anyone to use it; document one the
+enum lacks and the README instructs authors to write an entry the linter fails the build on.
+
+### Fixed — the layer-contract code namespace was capped at one digit, silently
+
+`I36`'s reverse direction extracted enforcer codes with `\b(E[1-9]|W[1-9])\b`, which **cannot
+match `E10`**: the trailing word boundary needs a non-word character and `0` is a word
+character. `E1..E9` were all allocated by v0.195.0, so the very next error code would have been
+invisible to the reverse join — the clause claiming it satisfying the FORWARD direction, the
+build staying green, and the one direction that actually catches an unclaimed code simply not
+covering it. Widened to two digits; verified a no-op on the tree that shipped it.
+
+### Fixed — `extends:` must be quoted to be valid YAML, and the readers now agree about it
+
+A bare `#` opens a YAML comment, so `extends: #Rule 8` is an empty value to any real YAML
+reader and the spelling authors must write is the quoted one. `fm()` is a line reader, not a
+parser: unstripped, the file part of `'#Rule 8'` is a lone apostrophe, and the linter reports
+that the anchor lives in a file called `'`. That is not hypothetical — it is what this
+release's own fixture reported on its first run. `unquote()` is shared between
+`validate-layer-entries.sh` and `reconcile/lib.sh` and added to **I40**'s byte-identity loop,
+for I40's stated reason: if the two disagreed about whether `'#X'` names `#X` or `X'`, one of
+them would be watching a span that does not exist and the operator would believe whichever
+they ran.
+
+### Contract
+
+`contract_version` **5**. Six clauses: `LC-E10`..`LC-E13` (ERROR, authoring) and `LC-E14`/
+`LC-E15` (WARN, pull). Ids taken by reading the whole id set rather than counting on from the
+insertion point — v0.193.0 shipped two clauses under `LC-O12` doing the latter in a file that
+is not in numeric order.
+
+### Effect on the reference consumer: NONE, and that is checked
+
+No graph entry declares `extends:`, so all **52** classifier rows keep the same status, entry
+and target — verified byte-identical on the status/entry/target columns against the shipped
+classifier over the same range. The only textual delta is `EXTENSION-HOOK-DRIFT`'s message,
+which no longer claims extensions *have* no section anchor. Behaviour was demonstrated instead
+by differential on a `cmp -s`-guarded COPY of graph's tree: the same entry reports
+`EXTENSION-HOOK-DRIFT` unanchored, `EXTENSION-OK` anchored to a section the range left alone,
+`EXTENSION-ANCHOR-DRIFT` anchored to the section that moved, and `EXTENSION-ANCHOR-MISSING` on
+an anchor core no longer defines — with a sibling entry left unanchored in the same run still
+reporting file-grain drift as the control.
+
+Fixture `core/fixtures/layer-qualifier-grain/` — 6 mutants, each single-arm, plus unmutated
+control copies of BOTH scripts and a clean-tree discrimination control. Two harness defects it
+caught on itself are recorded in its own comments: a lone copy of `layer-drift.sh` dies sourcing
+`lib.sh` and emits nothing, which scores as a kill for every mutant at once; and two
+`grep -q` pipelines against one producer reported a false ENTANGLEMENT, which is the standing
+"never read `$?` after a pipe" rule inside a fixture.
+
 ## [0.195.0] — 2026-07-28
 
 ### Added — every collision detector joins on numbers core has ALREADY taken

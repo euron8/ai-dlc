@@ -122,9 +122,23 @@
 #                                    block a pull (a consumer must never be unable to
 #                                    take a security fix because its own catalog needs
 #                                    relabelling). Tagged NEW-THIS-PULL / PRE-EXISTING.
-#   EXTENSION-HOOK-DRIFT             hooked core file changed base..theirs
-#                                    (file-grain: extensions carry no finer anchor)
-#   EXTENSION-OK                     hooked core file unchanged
+#   EXTENSION-HOOK-DRIFT             hooked core file changed base..theirs, and the
+#                                    entry declares no `extends:` anchor -> its drift
+#                                    subject is the whole FILE. 1421 (entry, commit)
+#                                    events on the reference consumer against 133 at
+#                                    anchor grain; the other 91% is the cost of not
+#                                    declaring one.
+#   EXTENSION-ANCHOR-DRIFT           the entry DOES declare `extends:`, and that span
+#                                    changed base..theirs. The same re-read duty,
+#                                    narrowed to the section the entry named.
+#   EXTENSION-ANCHOR-MISSING         `extends:` resolves to no heading at theirs ->
+#                                    upstream renamed or absorbed the section away.
+#                                    LOUD and deliberately not folded into -OK: a
+#                                    span that resolves to nothing compares empty
+#                                    against empty, so the natural failure of the
+#                                    narrowing is silence on a real change.
+#   EXTENSION-OK                     hooked core file unchanged, OR it changed and the
+#                                    declared `extends:` span did not
 
 set -uo pipefail
 
@@ -698,9 +712,62 @@ while IFS= read -r f; do
     done <<< "$ext_anchors"
   fi
 
+  # --- drift, at whichever grain the entry declared --------------------------
+  #
+  # An entry that declares only `hooks:` has a FILE as its drift subject, so any
+  # change anywhere in that file lands on the operator's re-read worklist. That is
+  # not a conservative default, it is a loud one: measured over the reference
+  # consumer's 33 entries and the full history of the 17 core files they hook,
+  # file grain produces 1421 (entry, commit) drift events against an expected 133
+  # at anchor grain. Nine of every ten re-reads are a change to a part of the file
+  # the entry never referred to, and a worklist that is 91% noise is one the
+  # operator learns to clear rather than read.
+  #
+  # `extends:` is the consumer's declaration of the finer subject, so when it is
+  # present the comparison is the ANCHOR'S SPAN rather than the file.
+  #
+  # THE NARROWING MUST NOT BE ABLE TO INVENT SILENCE. Narrowing a check is how a
+  # loud true report becomes a quiet false one: if the anchor stops resolving
+  # upstream — core renamed the heading, or absorbed the section away — then a
+  # span-vs-span comparison has nothing to compare and the natural failure is to
+  # report clean. That is this repo's named defect class arriving through the door
+  # marked "improvement". So a span that does not resolve at THEIRS is its own
+  # LOUD status, and it is deliberately not folded into EXTENSION-OK.
+  #
+  # `shadow_parts` and `section_of` are lib.sh's, byte-identical to the authoring
+  # linter's under I40 — the linter's E11 and this arm must agree about which span
+  # an entry declares, or whichever the operator did not run is the one that is
+  # wrong.
+  extends="$(unquote "$(fm "$f" extends)")"
+  ext_anc=""
+  if [ -n "$extends" ]; then
+    ext_line="$(shadow_parts "$extends" | head -1)"
+    ext_file="$(printf '%s' "$ext_line" | cut -f1)"
+    ext_anc="$(printf '%s' "$ext_line" | cut -f2)"
+    [ -n "$ext_file" ] || ext_file="$hooks"
+    # A mismatch is E11's ERROR at authoring time. Here it only means the anchor
+    # names a file this loop is not looking at, so narrowing would watch the wrong
+    # span: fall back to file grain rather than report on a span nothing declared.
+    [ "$ext_file" = "$hooks" ] || ext_anc=""
+  fi
+
   if git -C "$DIST" diff --quiet "$BASE" "$THEIRS" -- "$cp" 2>/dev/null; then
     emit EXTENSION-OK "$entry" "$hooks" "hooked core file unchanged"
+  elif [ -n "$ext_anc" ]; then
+    ext_new="$(git_show "$THEIRS" "$cp" | section_of "$ext_anc")"
+    if [ -z "$ext_new" ]; then
+      emit EXTENSION-ANCHOR-MISSING "$entry" "$hooks" \
+        "declares extends: '${ext_anc}', which resolves to NO heading in '$hooks' at ${THEIRS}. Upstream renamed or removed the section this entry augments, so there is no longer a span to narrow drift to — and an anchor that resolves to nothing would otherwise compare empty against empty and report clean forever. Re-anchor extends: to the heading that replaced it, or retire the entry if the section was absorbed away."
+    else
+      ext_old="$(git_show "$BASE" "$cp" | section_of "$ext_anc")"
+      if [ "$ext_old" = "$ext_new" ]; then
+        emit EXTENSION-OK "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} but the declared extends: span '${ext_anc}' did not"
+      else
+        emit EXTENSION-ANCHOR-DRIFT "$entry" "$hooks" \
+          "the declared extends: span '${ext_anc}' in '$hooks' changed ${BASE}..${THEIRS} — re-read this entry against the new core text for that section. This is the file-grain re-read narrowed to the span the entry actually declared; everything else that moved in this file is not this entry's business."
+      fi
+    fi
   else
-    emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} — extensions have no section anchor; re-read this entry against the new core text"
+    emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
   fi
 done < <(layer_files "$EXT_DIR")
