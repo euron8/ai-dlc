@@ -17,6 +17,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.202.0] — 2026-07-29
+
+### Added — the consumer's fixture suite skipped 28 of its own 29 directories and printed nothing
+
+`core/git-hooks/pre-push` runs the consumer's fixture suite as
+
+```
+for d in tests/fixtures/*/; do
+  [ -f "$d/run.sh" ] || continue
+```
+
+directly beneath the comment *"a fixture never driven is a green light nobody earned."*
+It prints `ok <name>` for what it ran and **nothing at all** for what it skipped, so a
+directory with no driver is indistinguishable from one that passed — the exact hole
+`validate-enforcement-map.sh`'s **I20** exists to close.
+
+I20 does close it, and its own header says where it stops: *"this validator is a dev-repo
+gate (not installed, not called by pre-push), so I20 binds fixtures where they are
+AUTHORED."* **H1** in `gate-validation.md` states the same criterion for the consumer, but
+only over fixtures a `kind: check` entry BINDS with a `fixtures:` key — and on the reference
+consumer that binding set is **empty**, so H1's consumer arm has no live subject. Between a
+dev-repo gate that says it stops at authoring and a gate-time check with nothing to read,
+the consumer's own fixture directories were covered by nothing.
+
+**Measured on the reference consumer at `170ff9d8c`, with the shipping code: 103 fixture
+directories — 73 driven, 2 declared undrivable, 28 undeclared.** Of the 29 that consumer
+authored itself, **28 have no driver**, and every one of them has been skipped on every push
+since it was written. The false-positive set is **empty**: the 2 that pass by declaration are
+core's own `check-h1-recursion` and `check-manifest-bypass`, which `install.sh` copies into
+every consumer tree with their READMEs intact — the positive control that the exemption
+survives installation. The distribution's own `core/fixtures/` passes the same script
+unchanged (83 directories, 81 driven, 2 declared), which is the second control.
+
+**`scripts/ai-dlc/validate-fixture-drivability.sh`** states I20's contract on the side where
+consumers write fixtures, not one clause tighter: a fixture is drivable when it has a
+`run.sh`, or a `README.md` declaring — with the marker it shares with I20 — why no driver is
+possible. A `README.md` and a `seed.sh` are common and useful; neither is required of a
+fixture that already has a driver, and this script does not fail one for lacking them. Wired
+into `core/git-hooks/pre-push` ahead of the suite, so the accounting is stated whether or not
+a driver later fails — and **under the same mid-pull guard**, because `/ai-dlc-update` writes
+core one file at a time and a tree with `.claude/.ai-dlc-applying` up can hold a core fixture
+directory whose `run.sh` has not been written yet. Reporting that would name a core file the
+consumer did not write and cannot fix, which is the failure mode the guard's own comment
+describes one step down. Both paths verified on a tree built by `scripts/install.sh`.
+
+**No new grammar, and that is the finding about the arm.** The remedy for a directory whose
+driver lives elsewhere — a harness under `scripts/`, an entry in a local CI script — is a
+`run.sh` that delegates to it. Two lines, no core change, and the harness joins the push
+suite instead of depending on a hand-maintained trigger list. The "consumer-registrable
+harness entry point" this release was scoped to add **already exists**: `run.sh` is the
+entry point and it may delegate. What was missing was never the seam; it was anything at
+all telling the consumer their directory is being skipped.
+
+**I52** binds the exemption marker across I20 and the shipped validator. This is not
+tidiness: the shipped script runs in every consumer's pre-push over `tests/fixtures/`, which
+is where `install.sh` puts CORE's fixtures, and core's two driverless ones pass **only** by
+carrying that marker. A diverged marker does not fail the author who moved it — it fails
+every consumer's next push, on core files they did not write and cannot fix. Same blast
+radius as I48's region slug, same remedy. Both arms proven to fire (`enforcement-map-sites`
+Assertion 25): a reworded marker, and an unreadable one, where two empty strings would
+otherwise compare equal and report an agreement never computed.
+
+Fixture `core/fixtures/fixture-drivability/` — six assertions and two mutants, each mutant a
+`cmp -s`-guarded copy asserting a positive outcome and isolating **one** branch (the mutant
+that silences the no-README arm must leave the marker arm reporting, and the reverse), plus
+an unmutated control copy from the same directory, plus the empty-subject-set arm: a run that
+judged nothing says so rather than exiting 0 in silence.
+
+**Consumer impact, stated plainly.** The reference consumer's first push after adopting this
+release reports 28 findings. Each wants one of two one-line declarations, and which one is a
+per-directory judgement — roughly half have a real external driver and want the delegating
+`run.sh`; the rest are evidence for LLM-read gate checks and want the honest exemption.
+Declaring the exemption over a fixture that HAS a driver is a false statement this script
+cannot detect and will accept.
+
 ## [0.201.0] — 2026-07-29
 
 ### Added — retro Step 5b licenses one commit straight to `main` and defined nothing about it

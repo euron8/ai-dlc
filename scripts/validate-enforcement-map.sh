@@ -731,6 +731,35 @@ elif ! grep -qF -- "$em_marker" "$gv_file"; then
   err "I35: H1 in gate-validation.md does not quote I20's exemption marker '$em_marker'. H1 is read by an LLM at every gate and tells it which declaration makes a driverless fixture legitimate; if that string does not match the one I20 enforces, H1 sends the reader looking for text no README carries and FAILs compliant fixtures. Quote the marker verbatim in H1's fixture criterion, or change both together."
 fi
 
+# --- I52: the drivability exemption marker is ONE string, and the second reader
+#          of it runs on every consumer over a tree containing CORE's fixtures ---
+# I35 binds H1's quoted marker to I20's because a diverged marker sends an LLM looking
+# for text no README carries. I52 binds the SHIPPED validator's copy for a harder
+# reason: `validate-fixture-drivability.sh` is installed and wired into the consumer's
+# pre-push, and it judges `tests/fixtures/` — which is where install.sh puts CORE's
+# fixtures. Two of those (check-h1-recursion, check-manifest-bypass) are legitimately
+# driverless and pass only by carrying this marker in their READMEs. If the two strings
+# diverge, every consumer's next push FAILS on core files they did not write, cannot
+# fix, and did not change. Same blast radius as I48's region slug, same remedy: derive
+# the marker from one home and compare, never restate it in prose.
+#
+# The guards are separate on purpose. An unreadable marker on either side must ERROR,
+# not skip: a comparison of two empty strings succeeds, and this join's whole value is
+# that it cannot pass by finding nothing.
+fd_script="$REPO_ROOT/core/scripts/validate-fixture-drivability.sh"
+if [ ! -f "$fd_script" ]; then
+  err "I52 cannot find validate-fixture-drivability.sh at $fd_script. The shipped reader of I20's exemption marker is gone or renamed, so the binding that keeps core's own driverless fixtures passing on every consumer's push is now vacuous. Restore the path, or retire I52 in the same change."
+else
+  fd_marker="$(sed -n "s/^EXEMPT_MARKER='\(.*\)'$/\1/p" "$fd_script" | head -1)"
+  if [ -z "$em_marker" ]; then
+    err "I52 cannot read EXEMPT_MARKER out of validate-enforcement-map.sh (I20's home). It must locate the marker or fail loudly, never pass by comparing two empty strings."
+  elif [ -z "$fd_marker" ]; then
+    err "I52 cannot read EXEMPT_MARKER out of validate-fixture-drivability.sh. It must locate the marker or fail loudly, never pass by comparing two empty strings."
+  elif [ "$em_marker" != "$fd_marker" ]; then
+    err "I52: the drivability exemption marker differs between I20 ('$em_marker') and the shipped validate-fixture-drivability.sh ('$fd_marker'). That script runs in every consumer's pre-push over tests/fixtures/, where install.sh puts core's own fixtures; core ships two that are driverless and legitimate, and they pass ONLY by carrying I20's marker. A diverged marker fails every consumer's next push on core files they did not write. Change both together."
+  fi
+fi
+
 # --- I34: ONE rule grammar. The SAME split as I15, in the RULE namespace. -----
 # `validate-layer-entries.sh` (W4) REPORTS an extension rule number colliding with core's;
 # `relabel-extension-checks.sh` FIXES it by writing the `[ext:<id>]` label. Two programs,
@@ -2204,7 +2233,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), and the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), and the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52)."
   exit 0
 fi
 exit 1

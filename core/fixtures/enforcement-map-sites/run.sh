@@ -820,6 +820,50 @@ else
 fi
 mv "$RTR.orig" "$RTR"
 
+# --- Assertion 25: I52 — the drivability exemption marker cannot fork ----------
+# `validate-fixture-drivability.sh` is SHIPPED and wired into the consumer's pre-push,
+# and it judges tests/fixtures/ — where install.sh puts CORE's fixtures. Two of core's
+# are legitimately driverless and pass only by carrying I20's marker in their READMEs.
+# A diverged marker therefore does not fail the author who moved it; it fails every
+# consumer's next push, on core files they did not write. That is why the join exists
+# and why its arms assert on their own wording rather than on the exit status.
+FDS="$ROOT/core/scripts/validate-fixture-drivability.sh"
+
+# ARM 1 — DIVERGENCE. The realistic shape: the marker is reworded in one home. Asserted
+# on the GHOST text, not on the word "differs", so the vacuity arm below cannot satisfy it.
+ghost_m="No \`driver.sh\`"", deliberately"
+cp "$FDS" "$FDS.orig"
+sed "s@^EXEMPT_MARKER='.*'\$@EXEMPT_MARKER='${ghost_m}'@" "$FDS.orig" > "$FDS"
+if cmp -s "$FDS.orig" "$FDS"; then
+  bad "FIXTURE BROKEN: the I52 divergence mutation matched nothing, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -qF "$ghost_m"; then
+    ok "a reworded marker in the shipped validator FAILS I52 (core's two driverless fixtures would fail every consumer's push)"
+  else
+    bad "the shipped validator's exemption marker diverged from I20's and I52 stayed silent — core's own fixtures would start failing consumers who changed nothing"
+  fi
+fi
+mv "$FDS.orig" "$FDS"
+
+# ARM 2 — VACUITY. I52 compares two EXTRACTED strings, and the extraction is a sed over a
+# line shape. Break the shape and both sides can come back empty, where `!=` is false and
+# the join reports an agreement it never computed. Asserted on I52's own read-failure
+# wording, which names the file it could not read — arm 1's message never contains it.
+cp "$FDS" "$FDS.orig"
+sed "s@^EXEMPT_MARKER=.*\$@EXEMPT_MARKER=\"whatever\"@" "$FDS.orig" > "$FDS"
+if cmp -s "$FDS.orig" "$FDS"; then
+  bad "FIXTURE BROKEN: the I52 vacuity mutation matched nothing, so the zero guard is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "cannot read EXEMPT_MARKER out of validate-fixture-drivability.sh"; then
+    ok "an unreadable marker in the shipped validator FAILS I52 loudly (two empty strings compare equal, and that is not agreement)"
+  else
+    bad "I52 could not extract the shipped validator's marker and passed anyway — it compared nothing against nothing"
+  fi
+fi
+mv "$FDS.orig" "$FDS"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2
