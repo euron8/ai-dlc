@@ -191,7 +191,7 @@ release, with the merge sha. `—` = not started.
 | ⏹ | **SESSION BOUNDARY** | |
 | 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | ✅ **CLOSED** — validated 2026-07-29 (all four merge shas ancestors of main with an orphan-commit control, CHANGELOG `## [x]` headings present for all four with a `9.999.0` control, checks 16/18/22 all carrying a non-empty `enforcer:` against a `Check 1 → enforcer: []` control, I57 named in `validate-enforcement-map.sh`'s OK line and carrying liveness/narrowness/discriminator arms in `enforcement-map-sites`, both validators exit 0). Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — the prior-sprint SHA resolution was already programmed inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. Check 22 ✅ `d3f0e36` (#294) v0.211.0 — **three for three**: the comparison was already programmed in `ai-dlc-dispatch-guard.sh`, which is where `model_bound` gets its value, and a PreToolUse hook cannot run at a gate. The join ✅ `3b3fbcd` (#295) v0.212.0 — **I57**, and re-deriving the discriminator was the right call: **the paragraph below was wrong in BOTH directions.** Five of its nine "false positives" were artifacts of a join that could not see a dispatcher or a `non_catalog_units` call site, and one of the six it declared a false positive was the **only real defect in the catalog**. **ROW 10b IS CLOSED — all three subjects bound and the class ended by a join.** |
 | ⏹ | **SESSION BOUNDARY** | |
-| 11 | ADJUDICATED tier + disposition register | — |
+| 11 | ADJUDICATED tier + disposition register | ✅ `e675aed` (#296) v0.213.0 — **shipped, and FIVE of the row's six stated design choices were refuted by measurement before any of them was written**, §7.11 |
 | 12 | Regenerate the final pull prompt (§8) | — |
 
 Rows 4 and 5 were one row until 2026-07-28; E7's defect was found while scoping it and is split out
@@ -1851,7 +1851,54 @@ to any binding.
 
 ### ⏹ SESSION BOUNDARY
 
-### 11. ADJUDICATED tier + disposition register
+### 11. ADJUDICATED tier + disposition register — SHIPPED v0.213.0
+
+**SHIPPED — `e675aed` (#296).** `level: ADJUDICATED` is real and `level:` has a behavioural reader
+for the first time: `layer-drift.sh` derives the adjudicable code set from `layer-contract.yaml` at
+THEIRS, so migrating a clause is a one-line contract edit and no script change. **LC-A1**
+(`HARD-LAYER-ADJUDICATION-MISSING`) blocks any adjudicable row with no verdict recorded in
+`_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`; **LC-A2**
+(`HARD-REGISTER-CONTRADICTION`) reports two verdicts under one key where the later declares no
+`supersedes` plus `reason`. LC-E4 and LC-E14 migrated; `contract_version` **7**. New schema
+`core/schemas/layer-adjudication-register.json`, fixture `core/fixtures/layer-adjudication-tier/`
+(12 assertions, 5 single-arm mutants, unmutated control), invariant **I58**.
+
+**FIVE OF THIS ROW'S SIX STATED DESIGN CHOICES WERE REFUTED, each checked before it was built on.**
+
+| The row said | Measured |
+|---|---|
+| key on `(entry, clause, body-digest)` | The drift event is on the **core** file across `base..theirs`; the entry need not move for a verdict to go stale. The row's own key produces the exact "permanent exemption wearing an adjudication's clothes" its own mutant triple was written to catch. Digest covers entry **and** target at `theirs` |
+| reuse the ledger's entry shape so `ledger-reverify`/`ledger-rotate` work unchanged | The ledger's boundary is the `- **Bold**` grammar whose silent entry-swallowing **this program shipped a diagnostic for in v0.189.0**. A blocking register on it unblocks on a formatting slip. Neither tool's semantics reach an adjudication. JSONL, precedent `spawn-ledger.jsonl` |
+| add a `REGISTER-CONTRADICTION` arm to `hard-blockers.sh` | That file's own header says the list is **rendered from the detectors** so an LLM summary cannot drop a line. The arm is in `layer-drift.sh`; the existing `HARD-` filter picks it up unchanged |
+| move the restriction clause, then `EXTENSION-HOOK-DRIFT`, retirement duty, `OVERRIDE-DELEGATES-INTO-SHADOW`, in descending row count | The first two are **one mechanism** — LC-E4's normative says the re-read "is the ONLY mechanism behind the additive-only rule". Order inverted: **17 / 2 / 0** rows measured on the actual pull |
+| "6 of 9 blocker adjudications … three times in five hours" **[R]** | Nine files exist and the SHAPE holds, but **four** name that subject across **4h26m**, and they are **4 of 9**. Repetition worse, fraction milder |
+
+**`silent once recorded` did not ship, and the reason generalises.** Suppressing the candidate row
+once adjudicated leaves LC-E4's declared `code:` emitted by nothing — I36's forward grep still
+passes on the string surviving in a comment, and the clause becomes unfalsifiable. The candidate
+row still prints; only the blocking row disappears.
+
+**Two things worth carrying forward.** (i) **I54 caught a bug in this release's own code** —
+`printf '%s\n' "$VAR" | grep -q` answers "not found" on a MATCH once the value clears the pipe
+buffer, and here a match means "adjudicable", so the tier would have gone silently inert at scale.
+A second instance in the same function, `jq | grep -q`, is **invisible to I54's grammar** because
+the writer is not a shell variable — if that class is ever swept again, widen the grammar past the
+`printf "$VAR" |` shape. (ii) The mutation harness's first run produced **two** failures from one
+mutation: a later part's precondition was inheriting an earlier part's state through a threaded
+`$DIG`. Every part now re-derives from a cleared register. Two failures mean the assertions are
+entangled and one is measuring the other.
+
+**What row 12 inherits, and it is a cost, not a footnote: the final pull now requires SEVENTEEN
+recorded adjudications before `apply` will run.** Measured at `0.183.0 → main` with the shipping
+code: 52 rows before, 69 after, 17 `HARD-LAYER-ADJUDICATION-MISSING`, one per
+`EXTENSION-HOOK-DRIFT`, and every pre-existing row byte-identical (`cmp -s`). §8 must state the
+register's path, the record shape, and that the `subject_digest` is **copied from the row** and
+never re-derived — with the stop condition that an 18th blocking row, or one whose status is not
+`HARD-LAYER-ADJUDICATION-MISSING`, means the tree moved and this tally is stale. **Declaring
+`extends:` on an entry does NOT buy an exemption** — LC-E14 migrated too, which is why it moved
+despite having zero live rows.
+
+**The ORIGINAL scoping block follows.**
 
 **Why.** ERROR and WARN are the only severities, so a clause needing judgement can only be a WARN,
 and a WARN reprints every pull forever. That is the friction: `EXTENSION-HOOK-DRIFT` on 31 of 76
