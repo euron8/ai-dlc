@@ -189,7 +189,7 @@ release, with the merge sha. `—` = not started.
 | ⏹ | **SESSION BOUNDARY** | |
 | 10a | **wall-clock reduction across the whole distribution — by any route, not only parallelism** — operator-requested 2026-07-29, §7.10a | ✅ **ROW CLOSED.** `92aa72f` (#288) v0.205.0: **208s → 124s**. `bd0bf65` (#289) v0.206.0: **124.9s → 72.0s (−43%)** — and it **REFUTED this row's own next-two-poles ordering**: serial duration is the wrong statistic for a pooled suite. `8eaf896` (#290) v0.207.0: `wait-stale-deliverable` **52s → 9s, suite 72s → 50s**, plus the **300-site early-exit-reader class** the release leads on (**I54**). ✅ `8344631` (#291) v0.208.0: the content-keyed suite skip — **~50s → 0.3s on a push that changed only CHANGELOG/VERSION/docs** — and **§9 IS NOW CAUSALLY EXPLAINED AND FIXED**: a fixture was writing into the repository it tests. See §7.10a |
 | ⏹ | **SESSION BOUNDARY** | |
-| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — the prior-sprint SHA resolution was already programmed inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. Check 22 ✅ `d3f0e36` (#294) v0.211.0 — **three for three**: the comparison was already programmed in `ai-dlc-dispatch-guard.sh`, which is where `model_bound` gets its value, and a PreToolUse hook cannot run at a gate. **ALL THREE SUBJECTS ARE BOUND. Only the join remains** — and §7.10b's own note says to re-derive the discriminator's false-positive set at this point rather than trusting the paragraph |
+| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — the prior-sprint SHA resolution was already programmed inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. Check 22 ✅ `d3f0e36` (#294) v0.211.0 — **three for three**: the comparison was already programmed in `ai-dlc-dispatch-guard.sh`, which is where `model_bound` gets its value, and a PreToolUse hook cannot run at a gate. The join ✅ `3b3fbcd` (#295) v0.212.0 — **I57**, and re-deriving the discriminator was the right call: **the paragraph below was wrong in BOTH directions.** Five of its nine "false positives" were artifacts of a join that could not see a dispatcher or a `non_catalog_units` call site, and one of the six it declared a false positive was the **only real defect in the catalog**. **ROW 10b IS CLOSED — all three subjects bound and the class ended by a join.** |
 | ⏹ | **SESSION BOUNDARY** | |
 | 11 | ADJUDICATED tier + disposition register | — |
 | 12 | Regenerate the final pull prompt (§8) | — |
@@ -1784,6 +1784,49 @@ is the one with a live history. Carry the ordering into any future byte-identity
 shifted every later field one place left and the loop compared the citation flag as a model name.
 Any TSV read in this repo needs non-empty fields — `validate-escalation-resolution.sh`'s
 `__MISSING__` is the same workaround, arrived at independently.
+
+**SHIPPED: the join — `3b3fbcd` (#295) v0.212.0. ROW 10b IS CLOSED.** `I57`: every
+`scripts/ai-dlc/<validator>` a check body cites in a sentence asserting that its exit code
+decides the gate must be bound to that check in the map — on the check's own row, or on a
+`non_catalog_units:` row whose `call_sites:` names it. Fixture `enforcement-map-sites`
+assertion 32: five single-arm mutants plus an unmutated control from the same seed, verified
+as a clean diagonal.
+
+**RE-DERIVING THE DISCRIMINATOR WAS THE RIGHT CALL, AND THE PARAGRAPH ABOVE ("What the join
+now faces") WAS WRONG IN BOTH DIRECTIONS.** It said the set was 9 pairs and that with Check
+22 bound *every one* was a false positive to reject. Measured with the shipping grammars:
+
+- **Five were never pairs.** `verdict.sh` is a **DISPATCHER** — `verdict.sh <validator>
+  [args]` — so a basename join reads the wrapper and misses the enforcer Checks 2 and 26
+  bind correctly. And a `non_catalog_units:` row can bind a validator while naming the check
+  as a `call_sites:` site, which is how the `artifact-budget` unit binds Checks 14 and 15.
+  Both bindings are real and reviewable. **The count was of a set the join could not read.**
+- **One of the "false positives" was the ONLY real defect in the catalog.** Check 17's two
+  story-readiness arms each run `stamp-story-provenance.sh … --check` and each say **"exit 0
+  required"**, and the check's own PASS line is "all required provenance scripts exit 0". The
+  paragraph filed it as a producer because the script's PRIMARY mode is a writer. `--check`
+  re-runs the writer without writing; it is a predicate. Bound as the
+  `story-provenance-cross-check` unit, not on Check 17's row — that row's other call site is
+  `retro.md`, which never invokes it, and **W2 asserts every enforcer at every site**. W2
+  caught the wrong home on the first run.
+
+**The discriminator the paragraph proposed was also refuted.** It named the *imperative* form
+(`**Check.** Run/Invoke`, `- Run:`). Every false positive cites imperatively too — the remedy
+in Check 25 and the legend in Check 16 both do. What separates them is the **exit-code
+POSTURE** ("exit 0 required", "this check FAILS") as against a code **LEGEND** (`exit 0 =
+dropped, exit 1 = consumer-owned`). Measured: **35 citations in check bodies, 12 predicates,
+false-positive set EMPTY.**
+
+**Carry the shape, not the numbers.** Twice now in this row a stated subject set was of the
+WRONG SET (row 7 recorded the same lesson). Here the cause was specific and worth naming: the
+join was written against the CITATION, and two shipped indirections — a dispatcher wrapper and
+a binding one row over — sit between a citation and what it actually names. **Before counting a
+join's subjects, ask what sits between the two sides of it.**
+
+**The live subject set is now empty, so the check carries its own control:** two probes built
+at runtime, one in the shape it catches (must select) and one carrying a legend (must not),
+plus zero guards on both extractions and a fail-closed path when no posture citation resolves
+to any binding.
 
 **The ORIGINAL scoping block follows.**
 
