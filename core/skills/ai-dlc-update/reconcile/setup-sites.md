@@ -88,6 +88,7 @@ core_manifest:
   - core/fixtures/layer-qualifier-grain/**
   - core/fixtures/context-mode-protect/**
   - core/fixtures/context-sensor/**
+  - core/fixtures/core-paths-audit-diff/**
   - core/fixtures/core-script-boundary/**
   - core/fixtures/core-write-guard/**
   - core/fixtures/cycle-commits-enforce/**
