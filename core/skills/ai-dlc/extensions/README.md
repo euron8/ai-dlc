@@ -305,6 +305,20 @@ times on first contact gets disabled and then catches nothing.
   to nothing compares empty against empty, so an unreported one would answer *clean* for every
   future change to a section your entry still claims to augment — the narrowing turning a true loud
   report into a false quiet one. Re-anchor it, or retire the entry.
+- **[LC-E16]** ERROR — `gate_types:` is declared only on a `kind: check` entry. Only a check is
+  loaded from a `GATE_MANIFEST` row, so on any other kind nothing reads the key and it states a
+  loading rule that never happens.
+- **[LC-E17]** ERROR — a check you DEFINE as a heading is loadable: it carries a
+  `<!-- CHECK_LOADED: <id> -->` anchor and is claimed, either by a rendered manifest row or by
+  this entry's `gate_types:`. A check with neither an anchor nor a claim is not MISSING (that
+  needs a row) and not an ORPHAN (that needs an anchor), so it falls between the two directions
+  of the manifest resolve: the resolve prints PASS and the check has never run at any gate. The
+  reference consumer accumulated FOUR in this state, twice having hand-remediated the same thing
+  one check at a time.
+- **[LC-E18]** ERROR — a `gate_types:` declaration resolves. The entry hooks the file carrying the
+  manifest, it carries at least one anchor to file under the declared types, and every type it
+  names is a row in the rendered manifest. Declared against a type, a file or an anchor set that
+  does not exist, the key reads as a registration and performs none.
 - **[LC-N1]** ERROR — a consumer check does not redefine a core check NUMBER under a different
   title. The integer renders into the same merged list as core's, so a bare `Check N` in the gate
   log — the durable audit record — would have two referents.

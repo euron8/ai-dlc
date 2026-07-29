@@ -112,6 +112,21 @@ awk '
 mutant_fires "$TMP/i36-reverse.yaml" "I36 reverse" "i36-reverse" \
   "layer-drift.sh still emits the status, so dropping its clause must fail the build"
 
+# --- I36 reverse, SECOND enforcer: the extraction arm for a new vocabulary -------------
+# A code vocabulary reaches the reverse join only through a `case` arm naming its script.
+# Without one the arm falls to `*) emitted=""`, and the zero guard reports "found NO codes"
+# — a DIFFERENT sentence. So this asserts on the emitted-code wording, not on "I36 reverse":
+# an assertion on the shared prefix would pass against a build where the arm was never added
+# and GM1/GM2 were simply invisible to this direction, which is the state it exists to catch.
+awk '
+  /^  - id: LC-E17$/ { skip=1; next }
+  skip && /^  - id: /   { skip=0 }
+  skip && /^clauses:/   { skip=0 }
+  !skip
+' "$CONTRACT" > "$TMP/i36-reverse-gm.yaml"
+mutant_fires "$TMP/i36-reverse-gm.yaml" "emits 'GM1'" "i36-reverse-gm" \
+  "validate-gate-manifest.sh still emits GM1, so dropping its clause must fail the build rather than reporting an unreadable vocabulary"
+
 # --- I37: a clause with no mechanism --------------------------------------------------
 # The exact state the contract was created to end: 17 clauses that read as rules and could not
 # fail anything. Removing one clause's enforcer must be rejected, not tolerated as incomplete.

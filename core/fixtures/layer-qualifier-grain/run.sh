@@ -97,6 +97,7 @@ assert_msg "E12 rejects a qualifier missing extends:"            "requires 'exte
 assert_msg "E12 rejects a qualifier missing position:"           "requires 'position:'"
 assert_msg "E12 rejects position: on a non-qualifier"            "does not render inside a core section"
 assert_msg "E13 rejects a position outside append|prepend"       "is not 'append' or 'prepend'"
+assert_msg "E14 rejects gate_types: on a kind no row loads"      "Only a check is loaded from a GATE_MANIFEST row"
 
 # --- Part 3: THE DISCRIMINATION CONTROL ---------------------------------------
 # Every arm above is an "it fired" assertion, and all of them are satisfied by a

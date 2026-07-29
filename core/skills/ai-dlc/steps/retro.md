@@ -557,7 +557,7 @@ largest single writing cost for its least-read content.
 |-------|---------|----------|
 | `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
 | `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling |
-| `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN lines |
+| `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN/UNLOADABLE lines |
 | `validate-artifact-budget.sh --warn-only` | CLEAN / BREACH | exit code + each breached artifact, or "within budgets" |
 | `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |
 

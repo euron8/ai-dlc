@@ -561,6 +561,57 @@ else
 fi
 restore
 
+# --- Assertion 22: I47 — the check-heading grammar cannot fork ----------------
+# CHECK_HEAD_RE decides what counts as a check DEFINITION, and two tools reach
+# opposite verdicts if it forks. The linter uses it to harvest the ids a layer
+# entry allocates; the manifest resolver uses it to report a definition that never
+# became loadable (GM1). GM1's whole subject is checks that NOTHING else reports —
+# neither MISSING (needs a row) nor ORPHAN (needs an anchor) — so a narrowed copy
+# in the resolver restores exactly the silence GM1 was written to end, with a green
+# build and no other symptom anywhere.
+#
+# TWO ARMS, and the second is the load-bearing one for the same reason I45's are:
+# I47 reports an absence, so a rename at either end makes it find nothing and pass.
+# Each asserts on its OWN message — "has forked" vs "could not find" — because a
+# grep for "I47" is satisfied by both and would test neither.
+VGM="$ROOT/core/scripts/validate-gate-manifest.sh"
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+
+# ARM 1 — FORK. Narrow the resolver's copy to headings of two or more digits. That
+# is a real regression shape rather than a nonsense one: it still matches, still
+# looks like the grammar, and silently drops every single-digit check definition.
+cp "$VGM" "$VGM.orig"
+sed "s/^CHECK_HEAD_RE='.*\$/CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9][0-9]+[a-z-]*\\\\.'/" "$VGM.orig" > "$VGM"
+if cmp -s "$VGM.orig" "$VGM"; then
+  bad "FIXTURE BROKEN: the I47 fork mutation matched nothing, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "the check-heading grammar has forked"; then
+    ok "a narrowed CHECK_HEAD_RE in the resolver FAILS I47 (a definition one tool sees and the other cannot)"
+  else
+    bad "the two copies of the check-heading grammar diverged and I47 stayed silent — GM1's subject set can shrink with the build green"
+  fi
+fi
+restore
+VGM="$ROOT/core/scripts/validate-gate-manifest.sh"
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+
+# ARM 2 — VACUITY. Rename the assignment in the linter and I47 locates one side of
+# the join. Comparing against nothing is its PASS.
+cp "$VLE" "$VLE.orig"
+sed "s/^CHECK_HEAD_RE=/CHECK_HEADING_RE=/" "$VLE.orig" > "$VLE"
+if cmp -s "$VLE.orig" "$VLE"; then
+  bad "FIXTURE BROKEN: the I47 vacuity mutation matched nothing, so the second arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "could not find a CHECK_HEAD_RE= assignment"; then
+    ok "a renamed CHECK_HEAD_RE FAILS I47 loudly (a join that cannot locate a side never passes by comparing nothing)"
+  else
+    bad "I47 reported clean with the assignment renamed — it was comparing nothing and calling it agreement"
+  fi
+fi
+restore
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

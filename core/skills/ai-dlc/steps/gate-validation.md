@@ -82,6 +82,23 @@ runs at every gate is claimed by that row and is not an orphan; there is
 no second set to consult, and no way to be claimed by a set the rule
 cannot read.
 
+**Extension checks (Rule 27).** An `extensions/checks/` entry that hooks
+this file may declare `gate_types:` in its frontmatter — one or more of
+the types above, comma-separated. Its checks load at those types exactly
+as if their IDs appeared in those rows, and the rows above stay core's.
+Read the declaration when you load the layer and merge it into the set
+you load for the declared gate type. This is the ONLY way a consumer
+registers a check without an `overrides/` entry shadowing this whole
+section, which is a shadow that carries the section's entire `base_sha`
+drift in order to add one integer to one row.
+
+A check DEFINED in an extension but carrying no
+`<!-- CHECK_LOADED: <id> -->` anchor and named by no row — neither core's
+nor a `gate_types:` declaration — never loads at any gate. It is not an
+orphan (an orphan has an anchor) and it is not a missing id (that needs a
+row), so it is invisible to the rule above; `validate-gate-manifest.sh`
+reports it.
+
 **Correctness rule (do not over-slice).** When a check's firing gate is
 uncertain, include its ID in every candidate type's row: over-inclusion
 is safe (the check self-skips), under-inclusion silently drops a check a

@@ -49,7 +49,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 5
+contract_version: 6
 
 clauses:
 
@@ -354,6 +354,45 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-ANCHOR-MISSING
+
+  - id: LC-E16
+    subject: extension
+    level: ERROR
+    since: 6
+    normative: >-
+      `gate_types:` is declared only on a `kind: check` entry. Only a check is loaded from a
+      GATE_MANIFEST row, so on any other kind nothing reads the key and it states a loading
+      rule that never happens.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E14
+
+  - id: LC-E17
+    subject: extension
+    level: ERROR
+    since: 6
+    normative: >-
+      A check an extension DEFINES as a heading is loadable: it carries a `CHECK_LOADED`
+      anchor and is claimed, either by a rendered manifest row or by its entry's `gate_types:`.
+      A check with neither an anchor nor a claim is not MISSING and not an ORPHAN, so it falls
+      through both directions of the manifest resolve and every gate passes without ever
+      running it.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-gate-manifest.sh
+    code: GM1
+
+  - id: LC-E18
+    subject: extension
+    level: ERROR
+    since: 6
+    normative: >-
+      A `gate_types:` declaration resolves: the entry hooks the file carrying the manifest, it
+      carries at least one `CHECK_LOADED` anchor to file under the declared types, and every
+      type it names is a row in the rendered manifest. Any of the three failing means the entry
+      reads as a registration and performs none.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-gate-manifest.sh
+    code: GM2
 
   # --- extensions/: additivity and retirement ------------------------------------------
   - id: LC-E5
