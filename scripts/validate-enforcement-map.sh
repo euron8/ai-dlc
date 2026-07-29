@@ -1628,6 +1628,36 @@ else
   fi
 fi
 
+# --- I50: every scripts/ai-dlc/<script> a shipped file names is one core actually ships ---
+#
+# I49 binds the MODES of one resolver. This is the same join one level out, over every
+# validator core tells an agent to run: `scripts/ai-dlc/<x>.sh` is a string typed into a
+# role file, a step file or an enforcement-map row, and install.sh DERIVES that directory
+# from `core/scripts/` — so a citation naming a file core does not ship resolves to
+# nothing in every consumer tree. The agent following that paragraph runs a command that
+# is not there, and "the validator did not report anything" is what a clean run looks
+# like. This repo's named defect class, reached through a filename instead of a flag.
+#
+# ONE DIRECTION ONLY, and the reason is measured: `validate-cycle-commits.sh` ships and no
+# shipped file names it by path. A shipped-but-uncited validator is reached through the
+# gate catalog, a hook, or another script, so the reverse arm would fail on a fact this
+# invariant has no business resolving — the same call I49 makes about `--list`.
+#
+# core/fixtures/ is excluded, and that exclusion is load-bearing rather than tidy: the
+# fixtures write 13 deliberately-nonexistent `scripts/ai-dlc/` paths, because inventing a
+# validator that is not there is exactly what several of them test. templates/ IS in the
+# corpus — it is installed into the consumer's tree, so a dead citation there is dead in
+# the same place, for the same reader.
+i50_have="$(ls "$REPO_ROOT/core/scripts" 2>/dev/null | sed 's@^@scripts/ai-dlc/@' | sort -u)"
+i50_cited="$(grep -rhoE 'scripts/ai-dlc/[A-Za-z0-9_.-]+\.(sh|js)' \
+  "$REPO_ROOT/core" "$REPO_ROOT/templates" 2>/dev/null --exclude-dir=fixtures | sort -u)"
+if [ -z "$i50_have" ] || [ -z "$i50_cited" ]; then
+  err "I50 derived an EMPTY set: $(printf '%s' "$i50_have" | grep -c .) script(s) under core/scripts/, $(printf '%s' "$i50_cited" | grep -c .) citation(s) across core/ and templates/. Every citation is a member of a set that contains everything, so this fails closed rather than reporting an agreement it never computed."
+else
+  i50_ghost="$(comm -23 <(printf '%s\n' "$i50_cited") <(printf '%s\n' "$i50_have") | tr '\n' ' ')"
+  [ -n "$i50_ghost" ] && err "I50 shipped file(s) tell an agent to run validator(s) core does not ship: ${i50_ghost}. install.sh writes scripts/ai-dlc/ from core/scripts/, so that path exists in no consumer tree; the command fails to start, and a validator that never ran reports exactly what a validator that found nothing reports."
+fi
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -2116,7 +2146,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), and every core-paths.sh mode a rule file names is one the script dispatches and documents (I49)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), and every scripts/ai-dlc/ validator a shipped file names is one core ships (I50)."
   exit 0
 fi
 exit 1

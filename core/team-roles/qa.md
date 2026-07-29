@@ -75,7 +75,10 @@ For each completed task, verify:
   satisfy without the behavior under test — is non-discriminating. REJECT a
   discriminator AC that is green-only with no demonstrated RED, or that REDs
   only via an unrelated assertion (e.g. a value band) rather than the
-  behavior under test. Catches a green-only discriminator that never
+  behavior under test. Replay the claim rather than reading it:
+  `scripts/ai-dlc/validate-mutation-red.sh <file> <line> '<mutated line>'
+  <test-cmd...>` re-runs the committed anchor and exits 1 when the named test
+  survives the mutation. Catches a green-only discriminator that never
   exercises the claimed behavior; false positive is a pure-constant-output
   AC with no possible degenerate impl (name the exemption); remove when
   discriminator ACs carry RED evidence by convention upstream.

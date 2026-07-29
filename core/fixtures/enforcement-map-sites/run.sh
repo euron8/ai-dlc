@@ -685,6 +685,76 @@ else
 fi
 restore
 
+# --- Assertion 24: I50 — a validator named in prose is a validator core ships --
+# install.sh DERIVES scripts/ai-dlc/ from core/scripts/, so a citation naming a file core
+# does not ship resolves to nothing in every consumer tree. The agent told to run it gets
+# a command that fails to start, and no report — which is what a clean run looks like.
+#
+# THREE ARMS. The two ghost arms differ by which half of the corpus they mutate and each
+# asserts on ITS OWN ghost NAME, never on the shared message: an arm that greps only for
+# "does not ship" would be satisfied by the other arm's mutation and would prove nothing
+# about the corpus boundary it exists to hold.
+#
+# Both ghost names are ASSEMBLED at runtime. I50 excludes core/fixtures/ because thirteen
+# fixtures deliberately name validators that do not exist, and an assertion that leans on
+# that exclusion to hold its own text goes red the day the exclusion is reconsidered.
+DEV="$ROOT/core/team-roles/dev.md"
+TPL="$ROOT/templates/audit-anchors.md.template"
+
+# ARM 1 — GHOST IN A ROLE FILE. The realistic shape: a validator is renamed and the
+# paragraph that tells the dev to run it keeps the old filename.
+ghost_a="validate-mutation""-gone.sh"
+cp "$DEV" "$DEV.orig"
+sed "s@scripts/ai-dlc/validate-mutation-red\\.sh@scripts/ai-dlc/${ghost_a}@" "$DEV.orig" > "$DEV"
+if cmp -s "$DEV.orig" "$DEV"; then
+  bad "FIXTURE BROKEN: the I50 role-file ghost mutation matched nothing, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "$ghost_a"; then
+    ok "a role file naming a validator core does not ship FAILS I50 (the command does not exist in any consumer tree)"
+  else
+    bad "a role file told an agent to run a validator core does not ship and I50 stayed silent — the command that never ran reports what a clean run reports"
+  fi
+fi
+# Restoring the one mutated file, rather than re-seeding the whole tree: each `restore`
+# copies ~1.4 MB and this fixture is already the suite's wall-clock floor. The mutation is
+# one file plus its own .orig, so moving it back leaves the seed pristine.
+mv "$DEV.orig" "$DEV"
+
+# ARM 2 — GHOST IN A TEMPLATE. templates/ is installed into the consumer's tree, so a dead
+# citation there is dead in the same place for the same reader. This arm exists because the
+# corpus boundary is the part of I50 that can narrow silently: drop templates/ from the
+# grep and arm 1 still passes.
+ghost_b="validate-audit""-vanished.sh"
+cp "$TPL" "$TPL.orig"
+sed "/RENDERED from it by/s@scripts/ai-dlc/validate-audit-anchors\\.sh@scripts/ai-dlc/${ghost_b}@" "$TPL.orig" > "$TPL"
+if cmp -s "$TPL.orig" "$TPL"; then
+  bad "FIXTURE BROKEN: the I50 template ghost mutation matched nothing, so the second arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "$ghost_b"; then
+    ok "a consumer-installed template naming a validator core does not ship FAILS I50 (templates/ is inside the corpus)"
+  else
+    bad "a template cited a validator core does not ship and I50 reported clean — half its corpus is outside what it reads"
+  fi
+fi
+mv "$TPL.orig" "$TPL"
+
+# ARM 3 — VACUITY. I50 reports an ABSENCE (nothing cited that is not shipped). With the
+# shipped set empty every citation is a ghost, and without the zero guard `comm` compares
+# against nothing and reports an agreement it never computed. Other invariants also error
+# in this run — core/scripts/ is where several of them read from — which is why the
+# assertion is on I50's own EMPTY-set wording and not on the validator's exit status.
+mv "$ROOT/core/scripts" "$ROOT/core/scripts.hidden"
+out="$(bash "$V" 2>&1)"
+mv "$ROOT/core/scripts.hidden" "$ROOT/core/scripts"
+if printf '%s' "$out" | grep -q "I50 derived an EMPTY set"; then
+  ok "an empty shipped-validator set FAILS I50 loudly (an empty set contains nothing, so every citation would be a ghost and the join must refuse)"
+else
+  bad "the shipped-validator set was empty and I50 did not say so — it was comparing citations against nothing"
+fi
+# The mv back above is the restore: this arm moved a directory and moved it home again.
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2
