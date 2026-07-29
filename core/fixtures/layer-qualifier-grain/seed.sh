@@ -230,6 +230,15 @@ id: position-on-step
 push_candidate: false
 position: append"
 
+# E14 — gate_types: on a kind nothing loads from a GATE_MANIFEST row. Seeded on a
+# DIFFERENT kind from position-on-step above, so a linter arm that keyed on the kind
+# rather than on the key would fail one of the two.
+bad_ext gate-types-on-role "kind: role
+hooks: team-roles/dev.md
+id: gate-types-on-role
+push_candidate: false
+gate_types: retro"
+
 # E13 — a position outside the two-value vocabulary.
 bad_ext position-bad "kind: qualifier
 hooks: steps/demo.md

@@ -17,6 +17,92 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.197.0] — 2026-07-28
+
+### Added — a check can say which gates load it, and one that no gate loads is reported
+
+An `extensions/checks/` entry hooking `steps/gate-validation.md` may declare
+`gate_types:` in its frontmatter. Its checks then load at those gate types as if their
+ids sat in those `GATE_MANIFEST` rows, and the rows stay core's. Clauses **LC-E16**
+(`gate_types:` only on `kind: check`, code `E14`), **LC-E17** (a defined check is
+loadable, code `GM1`) and **LC-E18** (a `gate_types:` declaration resolves, code `GM2`);
+`contract_version` **6**.
+
+**The key name is the one `enforcement-map.yaml` already uses per check** — `gate_types:
+[universal]`, read by `validate-gate-adjudication.sh` as `gate_type in check.gate_types`.
+Same question, same answer, so a synonym would have been a second spelling of a live key;
+both the bare and the flow-list form parse. `fm()` anchors at index 1 and the map's copies
+are indented, so the two never read each other.
+
+### Fixed — the state that fell between both arms of the manifest resolve
+
+`validate-gate-manifest.sh` two-way-resolves manifest ids against `CHECK_LOADED` anchors:
+an id with no anchor is MISSING, an anchor no row claims is an ORPHAN. **A check DEFINED
+only as a heading has neither**, so it was in neither set, and the resolve printed
+`MISSING none / ORPHAN none / PASS` while the check had never run at any gate. That is the
+failure the script's own header opens with — *"the gate runs, reports PASS, and the missing
+check never fires"* — reached by a route the two-way resolve could not represent.
+
+Measured on the reference consumer at `170ff9d8c`, with controls: **four** checks in that
+state — `19b`, `2s`, `35`, and the retired tombstone `33` — each with a real Scope line,
+against a baseline of `MISSING none / ORPHAN none / PASS`. False-positive set **empty**:
+every one is genuinely unanchored and named by no row, and the two controls (`34`, `2a`)
+come back anchored and claimed. The consumer had already hand-remediated this same state
+twice, for Check 25 and Check 2a, each time by adding one integer to one row — the
+remediation that does not generalise, which is why four more accumulated behind it.
+
+**What GM1 cannot see, stated rather than implied.** `CHECK_HEAD_RE` is numeric, so an
+alphabetic check id is outside the subject set; the reference consumer has two (`Check AP`,
+`Check VH`), both live, both unloadable, neither reportable. Widening the grammar is bound
+to `relabel-extension-checks.sh` by I34, and a detector that finds a heading the rewriter
+cannot rewrite reports a defect with no remedy. That widening is its own change.
+
+### Changed — the manifest override stops being the only way to register a check
+
+Before `gate_types:`, the sole route to making an extension's check loadable was an
+`overrides/` entry shadowing the whole `Gate-type manifest` section, because a row was the
+only place an id could be claimed. On the reference consumer that shadow is **133 lines
+carrying the section's entire `base_sha` drift to add one integer to one row** — and its
+own first line reads *"Identical to core, with **one change**"* while it drops twelve lines
+of core prose, including the canonical gate-type enum a gate declares from. Not drift:
+both paragraphs were already in core at the override's own `base_sha`. v0.187.0's
+`OVERRIDE-ASSERTS-SHADOW-SURVIVES` cannot see it, because that predicate requires a scope
+phrase (`rest of the section`) and this is an *identity* claim.
+
+Demonstrated on a `cmp -s`-guarded copy of the consumer: with the override deleted and
+`gate_types: implementation` declared on the extension, the resolve reports `manifest
+source: core`, `extension gate_types: 34->implementation`, `MISSING none / ORPHAN none` —
+Check 34 stays loadable with the shadow gone, and core's gate-type enum returns to the
+rendered document.
+
+**The loader prose lands inside the section that override shadows**, so a consumer running
+one sees it only on retirement — which the drift report already surfaces.
+
+### Added — invariants
+
+- **I47** — `CHECK_HEAD_RE` byte-identical across `validate-layer-entries.sh` and
+  `validate-gate-manifest.sh`. One decides which ids a layer entry allocates, the other
+  which definition never became loadable; a narrowed copy in the resolver shrinks GM1's
+  subject set in silence, and GM1's subject is checks nothing else reports.
+- **I36** gained a code-extraction arm for `validate-gate-manifest.sh`, `GM[1-9][0-9]?` —
+  two digits from the first release that allocates one, rather than after the ninth.
+- **I45** now injects the `CHECK_HEAD_RE=` assignment alongside the extractor it lifts.
+  Hoisting the grammar out of `defined_anchors()` left the lifted copy greping for the
+  empty string and harvesting nothing, which is I45's PASS. Its zero guard caught it.
+
+### Fixtures
+
+`retro-audit-scans` assertions 24–30 (GM1 fires and is bound to the heading by its own
+mutant; `gate_types:` claims a check against core's table and is bound to the key by its
+own mutant; all three GM2 arms, each asserted on its own wording), with the unmutated
+control still last. `layer-qualifier-grain` gains the E14 arm, seeded on a different kind
+from the `position:` arm so an implementation keying on the kind rather than the key fails
+one of the two. `layer-contract-conformance` gains the I36-reverse mutant for the new
+enforcer, asserted on `emits 'GM1'` rather than the shared `I36 reverse` prefix — without
+the case arm the zero guard emits a different sentence, and an assertion on the prefix
+would pass against a build where the vocabulary was never wired. `enforcement-map-sites`
+assertion 22 covers I47's fork and vacuity arms.
+
 ## [0.196.0] — 2026-07-28
 
 ### Added — an extension can declare WHICH SECTION it augments, and drift narrows to it

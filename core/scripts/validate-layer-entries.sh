@@ -292,9 +292,17 @@ bold_anchors_of_file() {
       print id
     }' "$1" 2>/dev/null
 }
+# The check-HEADING grammar, ONE definition. `validate-gate-manifest.sh` carries this
+# same assignment byte-identically and I46 asserts it, because that script has to find a
+# consumer check heading that never became a `CHECK_LOADED` anchor — the state in which a
+# check is neither MISSING (no manifest row names it) nor ORPHAN (no anchor exists), so
+# it falls through both directions of the two-way resolve and reports as nothing at all.
+# A second spelling of this pattern is exactly how the five-spelling normalizer in I40's
+# header came to exist, and the terminating `.` here is as load-bearing as it is below.
+CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\.'
 defined_anchors() {
   [ -f "$1" ] || return 0
-  { grep -Eho '^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\.' "$1" 2>/dev/null \
+  { grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null \
       | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/\.$//'
     bold_anchors_of_file "$1"
   } | sort -u
@@ -678,6 +686,27 @@ while IFS= read -r f; do
     [ -n "$position" ] || err "$(rel "$f"): kind 'qualifier' requires 'position:'. The loader has to place this body relative to the core prose it qualifies; undeclared, two readers of the merged section can order it differently and the rendered rulebook stops being one document."
   elif [ -n "$position" ]; then
     err "$(rel "$f"): position '$position' is declared on kind '$kind', which does not render inside a core section. Nothing reads the key here, so it states a placement that never happens. Use kind 'qualifier' if that is what this entry does."
+  fi
+
+  # --- E14 — `gate_types:` is a CHECK's key. --------------------------------------
+  # Same silent-no-op class as the `position:` arm above, one field over: only a check
+  # is loaded from a GATE_MANIFEST row, so on a role or a step-domain entry nothing
+  # reads the key and it declares a loading rule that never happens.
+  #
+  # The name is deliberately the one `enforcement-map.yaml` already uses per check
+  # (`gate_types: [universal]`, read by validate-gate-adjudication.sh as
+  # `gate_type in check.gate_types`). Same question, same answer, so a second spelling
+  # would be a synonym for a live key — the `position:`/`disposition:` collision one
+  # release back is what that costs. `fm()` anchors at index 1 and the map's copies are
+  # indented four spaces, so the two never read each other.
+  #
+  # WHAT THIS ARM DOES NOT DECIDE. Whether the declared types exist, whether the entry
+  # anchors anything, and whether it hooks the file carrying the manifest are all
+  # questions about the RENDERED manifest, which only validate-gate-manifest.sh holds.
+  # Answering them here would need a second GATE_MANIFEST grammar (I26).
+  gate_types="$(unquote "$(fm "$f" gate_types)")"
+  if [ -n "$gate_types" ] && [ "$kind" != check ]; then
+    err "$(rel "$f"): gate_types '$gate_types' is declared on kind '$kind'. Only a check is loaded from a GATE_MANIFEST row, so on this kind nothing reads the key and it states a loading rule that never happens. Use kind 'check' if this entry defines gate checks."
   fi
 
   if [ -n "$position" ]; then

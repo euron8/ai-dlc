@@ -611,6 +611,9 @@ EOF
       # why it had to be done before the codes existed rather than after.
       *validate-layer-entries.sh) emitted="$(grep -oE '\b(E[1-9][0-9]?|W[1-9][0-9]?)\b' "$REPO_ROOT/$enf" | sort -u)" ;;
       *layer-drift.sh)            emitted="$(grep -oE '\b(HARD-[A-Z0-9-]+|OVERRIDE-[A-Z0-9-]+|EXTENSION-[A-Z0-9-]+)\b' "$REPO_ROOT/$enf" | sort -u | grep -v -- '-OK$')" ;;
+      # TWO DIGITS from the first release that allocates one, not after the ninth —
+      # the `E[1-9]` lesson one vocabulary over, applied before it can cost anything.
+      *validate-gate-manifest.sh) emitted="$(grep -oE '\bGM[1-9][0-9]?\b' "$REPO_ROOT/$enf" | sort -u)" ;;
       *)                          emitted="" ;;
     esac
     if [ -z "$emitted" ]; then
@@ -1449,7 +1452,13 @@ else
   elif [ ! -f "$band_gv" ] || [ ! -f "$band_sk" ]; then
     err "I45 cannot find core's catalogs (steps/gate-validation.md and/or SKILL.md). A scan over a missing file reports the same clean result as a scan over a conforming one."
   else
-    band_checks="$(bash -c "$(band_fn bold_anchors_of_file)
+    # The CHECK_HEAD_RE assignment travels with the function, exactly as RULE_RE does
+    # below: the grammar was hoisted out of defined_anchors so validate-gate-manifest.sh
+    # could carry the same string (I47), and a lifted function whose pattern variable is
+    # unset greps for the empty string and harvests NOTHING — which is this invariant's
+    # PASS. The zero guard caught precisely that when the hoist landed.
+    band_checks="$(bash -c "$(sed -n "/^CHECK_HEAD_RE='/p" "$vle")
+$(band_fn bold_anchors_of_file)
 $(band_fn defined_anchors)
 defined_anchors \"\$1\"" _ "$band_gv" 2>/dev/null)"
     band_rules="$(bash -c "$(sed -n "/^RULE_RE='/p" "$vle")
@@ -1504,6 +1513,32 @@ else
     lk_only_prose="$(comm -13 <(printf '%s\n' "$lk_enum") <(printf '%s\n' "$lk_prose") | tr '\n' ' ')"
     [ -n "$lk_only_enum" ]  && err "I46: validate-layer-entries.sh accepts kind(s) extensions/README.md never documents — ${lk_only_enum% }. A grain the linter allows and the entry contract omits is one no author is told exists, so it ships as dead vocabulary. Document it in the entry contract, or drop it from LAYER_KINDS."
     [ -n "$lk_only_prose" ] && err "I46: extensions/README.md documents kind(s) validate-layer-entries.sh rejects — ${lk_only_prose% }. The entry contract is instructing authors to write an entry E10 fails the build on. Add it to LAYER_KINDS, or stop documenting it."
+  fi
+fi
+
+# --- I47: ONE check-heading grammar, across the linter and the manifest resolver ---
+#
+# `CHECK_HEAD_RE` decides what counts as a check DEFINITION. Two tools need it and they
+# reach opposite verdicts if it forks: validate-layer-entries.sh harvests the ids a layer
+# entry allocates (E6/W1/W5), and validate-gate-manifest.sh reports a definition that
+# never became loadable (GM1). A narrower copy in the resolver silently shrinks GM1's
+# subject set — and GM1's whole subject is checks nothing else reports, so the shrinkage
+# would restore the exact silence it was written to end, with the build green.
+#
+# I40's reason for byte-identical COPIES rather than a shared source applies unchanged:
+# the resolver is bash+python and python's `re` has no `[[:space:]]`, so the grammar
+# lives in the bash half of both files precisely so it CAN be the same string.
+ch_lint="$REPO_ROOT/core/scripts/validate-layer-entries.sh"
+ch_man="$REPO_ROOT/core/scripts/validate-gate-manifest.sh"
+if [ ! -f "$ch_lint" ] || [ ! -f "$ch_man" ]; then
+  err "I47 cannot find validate-layer-entries.sh and/or validate-gate-manifest.sh. It binds the check-heading grammar across the two; a missing side would make the join pass by comparing nothing."
+else
+  ch_a="$(grep -n '^CHECK_HEAD_RE=' "$ch_lint")"
+  ch_b="$(grep -n '^CHECK_HEAD_RE=' "$ch_man")"
+  if [ -z "$ch_a" ] || [ -z "$ch_b" ]; then
+    err "I47 could not find a CHECK_HEAD_RE= assignment in validate-layer-entries.sh and/or validate-gate-manifest.sh. That assignment is what both tools call a check definition; failing to locate one makes this join vacuous while both keep running against whatever they do use."
+  elif [ "${ch_a#*:}" != "${ch_b#*:}" ]; then
+    err "I47: the check-heading grammar has forked between validate-layer-entries.sh and validate-gate-manifest.sh. One decides which check ids a layer entry allocates, the other which defined check never became loadable — a copy that differs means a heading one tool treats as a check definition the other cannot see, and GM1's subject set shrinks in silence. Make the CHECK_HEAD_RE= line byte-identical."
   fi
 fi
 
@@ -1995,7 +2030,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), and the extension kind vocabulary is one set across the linter's enum and the entry contract (I46)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), and the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47)."
   exit 0
 fi
 exit 1

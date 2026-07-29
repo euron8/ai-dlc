@@ -366,9 +366,11 @@ ovr() { # <basename> <shadows-value>; body on stdin
   { printf -- '---\nshadows: %s\nbase_sha: abc1234\nreason: fixture entry\n---\n\n' "$2"
     cat; } > "$WORK/t/$LAYERS/overrides/$1"
 }
-ext() { # <basename> <hooks-value>; body on stdin
+ext() { # <basename> <hooks-value> [<extra-frontmatter-line>]; body on stdin
   mkdir -p "$WORK/t/$LAYERS/extensions"
-  { printf -- '---\nkind: check\nhooks: %s\nid: %s\n---\n\n' "$2" "${1%.md}"
+  { printf -- '---\nkind: check\nhooks: %s\nid: %s\n' "$2" "${1%.md}"
+    if [ -n "${3:-}" ]; then printf -- '%s\n' "$3"; fi
+    printf -- '---\n\n'
     cat; } > "$WORK/t/$LAYERS/extensions/$1"
 }
 # The override table core does not have: `34` joins the retro row.
@@ -474,7 +476,138 @@ else
   bad "the rendered document has no manifest at all and the scan exited $rc"
 fi
 
-# --- Assertion 24: UNMUTATED CONTROL — empty layer dirs change nothing -------
+# ============ gate_types: AND THE CHECK THAT FALLS BETWEEN BOTH ARMS =========
+#
+# Assertions 14/15 cover a manifest id with no anchor (MISSING) and an anchor no
+# row claims (ORPHAN). A check DEFINED only as a heading has NEITHER, so it is in
+# neither set and the resolve reports PASS. Measured on the reference consumer at
+# 0.196.0: four such checks (`19b`, `2s`, `35`, and the retired tombstone `33`),
+# each with a real Scope line, none of which had ever run — while this script
+# printed `MISSING none / ORPHAN none / PASS`.
+
+# --- Assertion 24: a heading with no anchor and no row -> UNLOADABLE ----------
+fresh
+ovr_manifest
+ext check-34.md 'steps/gate-validation.md' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+
+### 35. Defined and unreachable
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "1" ] && has 'UNLOADABLE (check heading, no anchor and no row): 35' "$out"; then
+  ok "a check defined as a heading with no anchor and no row -> UNLOADABLE 35, exit 1"
+else
+  bad "a check that can never load exited $rc and was reported by neither MISSING nor ORPHAN"
+fi
+has 'MISSING (manifest id, no anchor): none' "$out" \
+  && ok "  and it is NOT reported as MISSING — that arm needs a manifest row" \
+  || bad "  but MISSING also fired, so assertion 24 cannot say which arm caught it"
+
+# --- Assertion 25: the SAME tree, minus that heading -> silent ----------------
+# Binds 24 to the heading itself. Without it, 24 passes for any reason producing
+# exit 1, and the ORPHAN arm one assertion up already produces exit 1.
+fresh
+ovr_manifest
+ext check-34.md 'steps/gate-validation.md' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+
+### 35. Defined and unreachable
+EOF
+E="$WORK/t/$LAYERS/extensions/check-34.md"
+cp "$E" "$E.pre"
+grep -v '^### 35\. Defined and unreachable$' "$E.pre" > "$E"
+if cmp -s "$E" "$E.pre"; then
+  bad "assertion 25's mutation matched nothing — assertion 24 is unproven"
+else
+  rm -f "$E.pre"
+  out="$(manifest)"
+  has 'UNLOADABLE (check heading, no anchor and no row): none' "$out" \
+    && ok "removing the heading clears UNLOADABLE — 24 is bound to that heading" \
+    || bad "UNLOADABLE still fires with the heading gone, so 24 proved something else"
+fi
+
+# --- Assertion 26: gate_types: claims the check with NO override -------------
+# THE POINT OF THE KEY. Core's table, no shadowing entry, and the extension's
+# check is still claimed — which is what makes the reference consumer's 130-line
+# manifest override deletable rather than re-authorable.
+fresh
+ext check-34.md 'steps/gate-validation.md' 'gate_types: retro' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "0" ] && has 'manifest source: core' "$out" && has 'extension gate_types: 34->retro' "$out"; then
+  ok "gate_types: claims an extension check against CORE's table -> exit 0, attributed"
+else
+  bad "gate_types: did not register the check (rc=$rc) — the override stays the only route"
+fi
+has 'ORPHAN  (anchor, no manifest claim): none' "$out" \
+  && ok "  and the anchor is no longer an orphan" \
+  || bad "  but the anchor still reports as an orphan, so the claim did not land"
+
+# --- Assertion 27: the SAME tree, minus the declaration -> ORPHAN ------------
+# Binds 26 to `gate_types:` and not to the mere absence of an override.
+fresh
+ext check-34.md 'steps/gate-validation.md' 'gate_types: retro' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+EOF
+E="$WORK/t/$LAYERS/extensions/check-34.md"
+cp "$E" "$E.pre"
+grep -v '^gate_types: retro$' "$E.pre" > "$E"
+if cmp -s "$E" "$E.pre"; then
+  bad "assertion 27's mutation matched nothing — assertion 26 is unproven"
+else
+  rm -f "$E.pre"
+  out="$(manifest)"
+  has 'ORPHAN  (anchor, no manifest claim): 34' "$out" \
+    && ok "dropping gate_types: returns the check to ORPHAN — 26 is bound to the key" \
+    || bad "the check stayed claimed without gate_types:, so 26 proved nothing"
+fi
+
+# --- Assertion 28: a gate type the rendered manifest has no row for ----------
+# Asserted on THIS arm's wording. Three arms emit the GM2 preamble, and an
+# assertion on the shared sentence would pass against any of the other two.
+fresh
+ext check-34.md 'steps/gate-validation.md' 'gate_types: nosuchtype' <<'EOF'
+### 34. Protected core paths
+<!-- CHECK_LOADED: 34 -->
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "2" ] && has 'which the rendered manifest has no row for' "$out"; then
+  ok "gate_types: naming a type with no row -> exit 2, reason 'no row for'"
+else
+  bad "a check filed under a nonexistent gate type exited $rc — it would never load"
+fi
+
+# --- Assertion 29: a declaration with no anchor to file ----------------------
+fresh
+ext check-34.md 'steps/gate-validation.md' 'gate_types: retro' <<'EOF'
+### 34. Protected core paths
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "2" ] && has 'carries no' "$out" && has 'claims loading for nothing' "$out"; then
+  ok "gate_types: with no CHECK_LOADED anchor -> exit 2, reason 'claims loading for nothing'"
+else
+  bad "a declaration with no check id to file exited $rc"
+fi
+
+# --- Assertion 30: a declaration on an entry hooking another file ------------
+fresh
+ext elsewhere.md 'steps/retro.md' 'gate_types: retro' <<'EOF'
+### 41. Somewhere else entirely
+<!-- CHECK_LOADED: 41 -->
+EOF
+out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
+if [ "$rc" = "2" ] && has "not 'steps/gate-validation.md'" "$out"; then
+  ok "gate_types: on an entry hooking another file -> exit 2, reason 'not this file'"
+else
+  bad "a declaration against a file carrying no manifest exited $rc"
+fi
+
+# --- Assertion 31: UNMUTATED CONTROL — empty layer dirs change nothing -------
 # Without this, every assertion above is consistent with a script that reports
 # something different the moment `overrides/` merely EXISTS, and the seeded corpus
 # creates it empty.
