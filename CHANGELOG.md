@@ -17,6 +17,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.200.0] — 2026-07-28
+
+### Added — core demanded a mutation-RED capture in four rule files and shipped no way to take one
+
+`scripts/ai-dlc/validate-mutation-red.sh <target-file> <line-number> <replacement-line>
+<test-cmd...>` replays a claimed mutation-red anchor: it runs the named test, mutates the real
+source at that line, runs it again, restores the file and verifies the restore. `dev.md`'s
+"Mutation self-check", `qa.md`'s discriminator HARD GATE and `code-reviewer.md`'s
+RED-under-mutation clause now name it; each cites the command and none of them restates the
+procedure.
+
+**Why it earns a release.** Those three role files plus `gate-validation.md`'s Gate-2 wiring
+citation all require a committed RED run against the REAL source under test, and until now the
+mutation, the two runs, the restore and the write-up were a paragraph an agent performed by
+hand and a reviewer graded by reading. Measured: of core's 31 shipped validators, **zero**
+mention mutation at all; the 16 core files that do are prose (six role files, six step files,
+the enforcement map, a template). Control: 42 core files mention provenance, so the search
+ran. "Ran it, trust me" and a real kill produced the same paragraph.
+
+**The absorbed script graded three unmutated files as failed anchors.** The reference consumer
+wrote this detector for its Check 35 and rewrote the line with `sed "<n>s@.*@<repl>@"`. Run
+against a line past the end of the file, against a replacement identical to the line it
+replaces, and against a replacement containing `@`, it changed nothing at all and printed
+"claimed anchor is unproven" for all three — an accusation against a test that was never put
+under test. Reproduced here with a positive control (a genuine kill PASSes from the same
+harness). That is this repo's named class with the polarity flipped: the check could not fire,
+and its silence was rendered as a finding.
+
+So the verdict is **split four ways** and the split is the delta: **0** proven, **1** the
+mutation landed and the test survived it, **2** nothing was mutated so nothing was disproved,
+**3** the restore did not verify and the tree is still mutated. The rewrite is `awk` with the
+replacement passed through the environment — never `sed`, whose delimiter and `&` are live in
+the replacement, and never `awk -v`, which expands `\n` and `\t`.
+
+**Verdict-compatible with what it absorbs, measured on the consumer's own subjects.** graph's
+three-case non-vacuity fixture for Check 35 — unreachable anchor FAILs, reachable
+value-asserting anchor PASSes, coverage-only degenerate FAILs — passes unchanged when driven
+against this script. Control: an always-exit-0 stub in the same position turns that fixture
+red on its first case, so the green run is the script's and not the harness's.
+
+**The absorption table named the wrong absorber.** It paired this consumer script with
+`validate-audit-anchors.sh` — the audit-anchors housekeeping schema reader, two different
+things both called "anchor". The handoff's own warning to verify the absorber before the arm
+held: the real absorber did not exist, and core's version of this mechanism was its prose.
+
+**I50** binds the citations: every `scripts/ai-dlc/<validator>` path a shipped file names is
+one core ships. `install.sh` DERIVES that directory from `core/scripts/`, so a citation naming
+a file core does not ship resolves to nothing in every consumer tree — the agent runs a command
+that is not there, and a validator that never ran reports what a validator that found nothing
+reports. Subject set at ship time: **31 citations** across `core/` and `templates/`, **zero**
+ghosts. One direction only, and the reason is measured: `validate-cycle-commits.sh` ships and
+no shipped file names it by path, so "every shipped validator is cited" would fail on a fact
+this invariant has no business resolving. `core/fixtures/` is excluded because thirteen
+fixtures deliberately name validators that do not exist.
+
+Fixtures: `core/fixtures/mutation-red-replay/` — eight assertions over the four exit classes,
+a byte-identical-restore check across all six replays, three mutants (both no-op guards
+removed together, because either alone leaves the other exiting 2 and the mutant comes out
+green proving the layer left in place; the restore verification removed; the rewrite done by
+`sed` as the absorbed script did it) and an unmutated control copy. `enforcement-map-sites`
+Assertion 24 — three I50 arms, each asserting on its own ghost NAME rather than the shared
+message, so the arm that holds `templates/` inside the corpus cannot be satisfied by the arm
+that holds `core/`.
+
+**What this does NOT do.** It does not extract the claim: turning this into a mechanical gate
+check means parsing `file:line` + named-test pairs out of a Dev Agent Record, which is a
+grammar nobody has measured. The reviewer still types the arguments the record states. The
+stale-bytecode guard (`PYTHONDONTWRITEBYTECODE` plus the `__pycache__` clear) is carried from
+the absorbed script and is **not** exercised by the fixture — reproducing a reused `.pyc`
+needs a mutation whose size and mtime match the original by construction, which is a race, not
+a fixture. The fixture says so in its own header rather than implying coverage.
+
 ## [0.199.0] — 2026-07-28
 
 ### Added — the backstop against an in-place core edit was a paragraph, and is now a command

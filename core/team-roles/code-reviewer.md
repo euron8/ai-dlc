@@ -414,6 +414,13 @@ discriminator AC with no committed red-run artifact, is a **Critical**
 discriminating-fixture finding. A test green against current code that
 cannot demonstrate its RED proves nothing.
 
+Verify that evidence by replaying it, not by reading it:
+`scripts/ai-dlc/validate-mutation-red.sh <file> <line> '<mutated line>'
+<test-cmd...>` with the same mutation the record describes. Exit 1 is the
+finding above; exit 2 means the claim was never testable as written (no such
+line, or a replacement identical to the line it replaces) and the record has
+to be corrected before it can be graded either way.
+
 ### Gate-1 Review File Not Persisted To Disk = Gate-1 Not APPROVED
 
 A gate-1 verdict is NOT APPROVED until the review file (a) exists on a

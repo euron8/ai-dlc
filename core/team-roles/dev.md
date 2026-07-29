@@ -198,6 +198,13 @@ Before starting any task, read these files in order:
           exit, the real assertion failure, and a byte-identical-restore
           `git diff` — as gate-1 evidence. A "ran it, trust me" claim without
           the committed capture is gate-1-incomplete (no self-attestation).
+          Run it as `scripts/ai-dlc/validate-mutation-red.sh <file> <line>
+          '<mutated line>' <test-cmd...>`: it applies the mutation, runs the
+          named test before and after, restores byte-identical and verifies
+          the restore, and prints the capture to commit. **0** proven, **1**
+          unproven (the test stayed GREEN under a real mutation), **2**
+          nothing was mutated — a no-op replay is not a failed one — **3**
+          the restore did not verify and the tree is still mutated.
     - [ ] **Naming-implies-behavior assertion.** A method whose name asserts a
           behavior (`batched`/`bulk`/`atomic`/`chunked`/…) MUST be proven by
           `mock.call_count` / `call_args` on an N≥2 fixture, never by a

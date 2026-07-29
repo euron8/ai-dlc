@@ -187,6 +187,7 @@ core_manifest:
   - fixtures/ledger-reverify-unfalsifiable/**
   - fixtures/ledger-rotate/**
   - fixtures/mandatory-rules-clean-tree/**
+  - fixtures/mutation-red-replay/**
   - fixtures/pause-hook-origin/**
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**
