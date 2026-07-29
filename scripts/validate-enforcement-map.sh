@@ -2588,10 +2588,203 @@ else
   done
 fi
 
+# --- I57: a check that tells the lead an exit code decides it names its enforcer ---
+# The row-10b class, generalised. Three releases (v0.209.0 Check 16, v0.210.0 Check 18,
+# v0.211.0 Check 22) each found the same defect one instance at a time: a check whose own
+# body publishes a MECHANICAL predicate -- run this validator, exit 0 required -- while its
+# enforcement-map row says nothing enforces it. The map is the one artifact that answers
+# "what actually enforces this check", so an unbound predicate is a check the efficacy audit
+# reads as adjudicated prose and the operator reads as a paragraph to re-perform at every
+# gate. This ends the class instead of the next instance.
+#
+# The SUBJECT is not "a check that mentions a validator". Naming a validator is not being
+# enforced by it, and the map has three legitimate ways to name one that is not the
+# predicate: `reads:` (a delegation the bound script makes internally), a producer the check
+# describes, and the remedy a check offers on FAIL. Measured over gate-validation.md at
+# v0.211.0, 35 citations sit inside check bodies and only 12 are predicates.
+#
+# THE DISCRIMINATOR IS THE FORM OF THE SENTENCE, NOT THE CITATION. A predicate asserts that
+# an exit code binds the gate -- "exit 0 required", "this check FAILS", "Check 15 FAILS" --
+# where a delegation publishes a code LEGEND ("exit 0 = dropped, exit 1 = consumer-owned")
+# and a remedy sits under an On-FAIL heading. Both non-predicate forms cite a validator in
+# an imperative sentence, so an imperative-verb scan does not separate them; the exit-code
+# POSTURE does. Measured false-positive set: EMPTY. 12 selected, 10 already bound, 2 real
+# (both stamp-story-provenance.sh --check at Check 17, bound in the same release).
+#
+# TWO RESOLUTIONS THE NAIVE JOIN GETS WRONG, and each produced phantom findings before it
+# was added. (i) `verdict.sh` is a DISPATCHER -- `verdict.sh <validator> [args]` -- so the
+# citation's basename is the wrapper and the enforcer is its first argument; without this,
+# Checks 2 and 26 report unbound while their rows bind the dispatched validator correctly.
+# (ii) A `non_catalog_units:` row can bind a validator and name the check as a `call_sites:`
+# site, which is how the artifact-budget unit binds Checks 14 and 15; the binding is real and
+# reviewable, just not on the check's own row. Five of the eight pairs a basename-only join
+# reports are these two shapes, not defects.
+i57_awk='
+function base(p) { sub(/^.*\//, "", p); return p }
+{ line[NR] = $0 }
+END {
+  cur = ""
+  for (i = 1; i <= NR; i++) {
+    if (line[i] ~ /^<!-- CHECK_LOADED: [^ ]+ -->/) {
+      id = line[i]; sub(/^<!-- CHECK_LOADED: /, "", id); sub(/ -->.*$/, "", id)
+      if (id != "<id>") cur = id
+      owner[i] = ""
+      continue
+    }
+    owner[i] = cur
+  }
+  for (i = 1; i <= NR; i++) {
+    if (owner[i] == "") continue
+    n = 0
+    t = line[i]
+    while (match(t, /scripts\/ai-dlc\/verdict\.sh[ \t]+[A-Za-z0-9._-]+/)) {
+      m = substr(t, RSTART, RLENGTH); sub(/^scripts\/ai-dlc\/verdict\.sh[ \t]+/, "", m)
+      if (m !~ /\.sh$/) m = m ".sh"
+      names[++n] = m
+      t = substr(t, RSTART + RLENGTH)
+    }
+    t = line[i]
+    while (match(t, /scripts\/ai-dlc\/[A-Za-z0-9._-]+\.sh/)) {
+      m = base(substr(t, RSTART, RLENGTH))
+      if (m != "verdict.sh") names[++n] = m
+      t = substr(t, RSTART + RLENGTH)
+    }
+    if (n == 0) continue
+    a = i; b = i
+    while (a > 1) {
+      if (line[a-1] ~ /^[ \t]*$/) {
+        if (a-2 >= 1 && (line[a-2] ~ /^    / || line[a] ~ /^    /)) { a--; continue }
+        break
+      }
+      a--
+    }
+    while (b < NR) {
+      if (line[b+1] ~ /^[ \t]*$/) {
+        if (b+2 <= NR && (line[b+2] ~ /^    / || line[b] ~ /^    /)) { b++; continue }
+        break
+      }
+      b++
+    }
+    posture = 0
+    for (j = a; j <= b; j++)
+      if (line[j] ~ /exits?[ ]+[0-9][ ]+required/ || line[j] ~ /[Cc]heck([ ]+[0-9A-Za-z]+)?[ ]+FAILS/)
+        posture = 1
+    if (posture) for (k = 1; k <= n; k++) print owner[i] "\t" names[k]
+    for (k = 1; k <= n; k++) delete names[k]
+  }
+}'
+
+# The binding side: OWN rows come from the check itself, SITE rows from a
+# non_catalog_units enforcer whose call_sites names a gate-validation.md check.
+i57_map_awk='
+function base(p) { sub(/^.*\//, "", p); return p }
+function flush(  ne, ns, ii, jj, ea, sa, cid, s) {
+  if (id == "") return
+  ne = split(enf, ea, "\n")
+  if (blk == "c") {
+    for (ii = 1; ii <= ne; ii++) if (ea[ii] != "") print "OWN\t" id "\t" base(ea[ii])
+  } else {
+    ns = split(sites, sa, "\n")
+    for (ii = 1; ii <= ne; ii++) {
+      if (ea[ii] == "") continue
+      for (jj = 1; jj <= ns; jj++) {
+        s = sa[jj]
+        if (s !~ /gate-validation\.md/) continue
+        cid = s
+        sub(/^.*gate-validation\.md[ \t]+/, "", cid)
+        sub(/^[Cc]heck[ \t]+/, "", cid)
+        sub(/[^0-9A-Za-z-].*$/, "", cid)
+        if (cid != "") print "SITE\t" cid "\t" base(ea[ii])
+      }
+    }
+  }
+  enf = ""; sites = ""
+}
+/^checks:/            { flush(); blk = "c"; id = ""; fld = ""; next }
+/^non_catalog_units:/ { flush(); blk = "n"; id = ""; fld = ""; next }
+blk == "" { next }
+/^  - id:/ {
+  flush()
+  id = $0; sub(/^  - id:[ \t]*/, "", id); gsub(/"/, "", id); sub(/[ \t]*#.*$/, "", id)
+  fld = ""
+  next
+}
+/^    [a-z_]+:/ {
+  fld = $0; sub(/:.*$/, "", fld); gsub(/[ \t]/, "", fld)
+  v = $0; sub(/^    [a-z_]+:[ \t]*/, "", v); sub(/[ \t]+#.*$/, "", v); gsub(/"/, "", v)
+  if (fld == "enforcer" && v != "" && v !~ /^\[/) enf = enf v "\n"
+  next
+}
+/^      - site:/ {
+  if (fld == "call_sites") { v = $0; sub(/^      - site:[ \t]*/, "", v); sites = sites v "\n" }
+  next
+}
+/^      - / {
+  if (fld == "enforcer") { v = $0; sub(/^      - /, "", v); sub(/[ \t]+#.*$/, "", v); gsub(/"/, "", v); enf = enf v "\n" }
+  next
+}
+END { flush() }'
+
+i57_sel="$(awk "$i57_awk" "$GV" | sort -u)"
+i57_bind="$(awk "$i57_map_awk" "$MAP" | sort -u)"
+i57_nsel="$(printf '%s\n' "$i57_sel" | grep -c . )"
+i57_nbind="$(printf '%s\n' "$i57_bind" | grep -c . )"
+
+# Grammar liveness, proved against a probe rather than against the corpus: a corpus with
+# nothing to find and a grammar that can find nothing print the same clean line. The probe
+# paths are ASSEMBLED so this file carries no literal citation of its own -- I50 scans a
+# different corpus today, and a scan that later widens onto this one must not read the
+# probe as a real citation.
+i57_dir="scripts/ai-dlc"
+i57_probe="$(printf '%s\n' \
+  '<!-- CHECK_LOADED: probe -->' \
+  "- **Check.** Run \`${i57_dir}/validate-i57-probe-positive.sh <arg>\`; exit 0 required." \
+  '' \
+  "- The bound script consults \`${i57_dir}/validate-i57-probe-negative.sh --mode x\` first:" \
+  '  exit 0 = out of scope, exit 1 = in scope.')"
+i57_probe_out="$(printf '%s\n' "$i57_probe" | awk "$i57_awk")"
+case "$i57_probe_out" in
+  *validate-i57-probe-positive.sh*) : ;;
+  *) err "I57's selection grammar did not fire on a probe written in the exact shape it exists to catch -- a check body naming a validator with 'exit 0 required' beside it. Every tree passes this invariant now, including one full of the defect. Fix the grammar or retire I57; do not leave it printing a clean line." ;;
+esac
+case "$i57_probe_out" in
+  *validate-i57-probe-negative.sh*) err "I57's selection grammar fired on a probe carrying an exit-code LEGEND ('exit 0 = out of scope') rather than an exit-code REQUIREMENT. That is the form Check 16 uses to describe a delegation validate-stub-audit.sh makes internally, and it is correctly carried under reads:. As written the grammar reports a false positive on it. Narrow it back to a posture that binds the gate." ;;
+esac
+
+if [ "$i57_nsel" -eq 0 ] || [ "$i57_nbind" -eq 0 ]; then
+  err "I57 derived an EMPTY set: ${i57_nsel} exit-code-posture citation(s) in ${GV##*/}, ${i57_nbind} enforcer binding(s) in ${MAP##*/}. It reports an ABSENCE -- that no check states a mechanical predicate its row leaves unbound -- and over an empty corpus that absence is a broken extractor, not a finding. Fails closed."
+else
+  i57_unbound=""
+  i57_ctl=0
+  while IFS="$(printf '\t')" read -r i57_cid i57_scr; do
+    [ -z "$i57_cid" ] && continue
+    if grep -qxF "OWN	${i57_cid}	${i57_scr}" <<<"$i57_bind" \
+    || grep -qxF "SITE	${i57_cid}	${i57_scr}" <<<"$i57_bind"; then
+      i57_ctl=$((i57_ctl + 1))
+    else
+      case "
+$i57_unbound" in
+        *"
+  Check ${i57_cid}: ${i57_scr}"*) : ;;
+        *) i57_unbound="${i57_unbound}
+  Check ${i57_cid}: ${i57_scr}" ;;
+      esac
+    fi
+  done <<EOF
+$i57_sel
+EOF
+  if [ "$i57_ctl" -eq 0 ]; then
+    err "I57's control is empty: of ${i57_nsel} exit-code-posture citation(s), NOT ONE resolved to a binding in the enforcement map. A correct tree has many; zero means the binding extractor stopped reading the map, and every check is about to be reported as unbound. Fails closed rather than printing a wall of findings it did not compute."
+  elif [ -n "$i57_unbound" ]; then
+    err "check(s) whose own body makes a validator's exit code decide the gate, while the enforcement map binds nothing to them:${i57_unbound}
+The map is the one artifact that answers 'what actually enforces this check'. A row reading \`enforcer: []\` under a body that says 'exit 0 required' tells the efficacy audit the check is adjudicated prose and tells the operator to re-perform a mechanical comparison by reading a paragraph at every gate -- which is exactly the state Checks 16, 18 and 22 shipped in until v0.209.0-v0.211.0. Bind it on the check's row, or on a non_catalog_units row whose call_sites names this check. If the citation is NOT the predicate -- a producer, or the remedy offered on FAIL -- then the check's own wording is wrong, because it currently states an exit code that binds the gate."
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), and the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57)."
   exit 0
 fi
 exit 1
