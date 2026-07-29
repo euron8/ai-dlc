@@ -42,6 +42,7 @@
 #   - scripts/ai-dlc/validate-retro-evidence.sh  (Check 1)
 #   - scripts/validate-cycle-commits.sh   (Check 2)
 #   - scripts/validate-retro-prereq.sh    (Check 4)
+#   - scripts/ai-dlc/validate-audit-anchors.sh   (Check 5 — --prior-sprint-sha)
 
 set -u
 
@@ -254,20 +255,36 @@ STORIES_DIR="_bmad-output/planning-artifacts/stories"
 # unresolvable SHA — e.g. the first sprint), SKIP loudly: an undeterminable change set is
 # "cannot check", not "no evidence". Core SKIPs here where a deploy-target-specific consumer
 # may fail-close; gate-validation Check 9 is the primary visual-verification gate regardless.
+#
+# The resolution itself is DELEGATED, not restated. It used to be an awk here keyed on
+# `$1=="-" && $2=="sprint:"` — a second grammar over an artifact whose reader is
+# validate-audit-anchors.sh, and the copy that could never reach the gate that states the same
+# predicate (gate-validation Check 18 told the lead to resolve this by reading the file). One home:
+# `--prior-sprint-sha <file> <current-sprint-n>`, which does the minus-one, prints the resolved
+# commit on stdout and its cause on stderr. The POSTURE stays this script's: a non-zero there is a
+# loud SKIP here and a fail-closed at Check 18, for the reason above.
 AUDIT_ANCHORS="_bmad-output/audit-anchors.md"
 PRIOR_SPRINT=$((SPRINT_N - 1))
 CHECK5_BASE=""
 CHECK5_ANCHOR_ERR=""
-if [ ! -f "$AUDIT_ANCHORS" ]; then
+AUDIT_ANCHORS_SH="${SCRIPT_DIR}/validate-audit-anchors.sh"
+if [ ! -f "$AUDIT_ANCHORS_SH" ]; then
+  CHECK5_ANCHOR_ERR="validate-audit-anchors.sh not found at ${AUDIT_ANCHORS_SH} — it owns the resolution"
+elif [ ! -f "$AUDIT_ANCHORS" ]; then
   CHECK5_ANCHOR_ERR="audit-anchors.md not found at ${AUDIT_ANCHORS}"
 else
-  PRIOR_ANCHOR_RAW=$(awk -v s="$PRIOR_SPRINT" '$1=="-" && $2=="sprint:" && $3==s {f=1; next} f && $1=="sha:" {print $2; exit}' "$AUDIT_ANCHORS")
-  if [ -z "$PRIOR_ANCHOR_RAW" ]; then
-    CHECK5_ANCHOR_ERR="no audit-anchor entry for prior sprint ${PRIOR_SPRINT} in ${AUDIT_ANCHORS}"
-  else
-    CHECK5_BASE=$(git rev-parse --verify -q "${PRIOR_ANCHOR_RAW}^{commit}" 2>/dev/null || true)
-    [ -z "$CHECK5_BASE" ] && CHECK5_ANCHOR_ERR="prior-sprint (${PRIOR_SPRINT}) audit-anchor '${PRIOR_ANCHOR_RAW}' does not resolve to a commit"
+  # stdout is the SHA and stderr is the reasoning, so they are captured apart — merging them would
+  # put the resolver's own OK line into the base ref. No EXIT trap: installing one in a script that
+  # pipes turned silent SIGPIPEs into pages of `write error: Broken pipe` from untouched pipelines.
+  C5_ERRF="$(mktemp "${TMPDIR:-/tmp}/aidlc-check5.XXXXXX" 2>/dev/null || printf '%s' "${TMPDIR:-/tmp}/aidlc-check5.$$")"
+  CHECK5_BASE="$(bash "$AUDIT_ANCHORS_SH" --prior-sprint-sha "$AUDIT_ANCHORS" "$SPRINT_N" 2>"$C5_ERRF")"
+  C5_RC=$?
+  if [ "$C5_RC" -ne 0 ] || [ -z "$CHECK5_BASE" ]; then
+    CHECK5_BASE=""
+    CHECK5_ANCHOR_ERR="$(head -3 "$C5_ERRF" 2>/dev/null | tr '\n' ' ')"
+    [ -n "$CHECK5_ANCHOR_ERR" ] || CHECK5_ANCHOR_ERR="validate-audit-anchors.sh --prior-sprint-sha exited ${C5_RC} for prior sprint ${PRIOR_SPRINT} without a message"
   fi
+  rm -f "$C5_ERRF"
 fi
 
 if [ -z "$CHECK5_BASE" ]; then

@@ -290,8 +290,30 @@ checks:
     title: Per-class test-debt audit
     gate_types: [sprint-review]
     adjudication: project   # runs project-supplied per-class audit scripts
-    enforcer: []
+    enforcer:
+      - core/scripts/validate-audit-anchors.sh
+    call_sites:
+      - site: gate-validation.md Check 18 (--entries)
+        posture: FAILS the gate CLOSED on any non-zero. A malformed entry is a schema
+          regression, not a clean file.
+      - site: gate-validation.md Check 18 (--prior-sprint-sha)
+        posture: FAILS the gate CLOSED on exit 1, which names one of four causes; exit
+          2 is a malformed invocation and is fixed, not adjudicated. Exit 0 prints the
+          audit base every per-class audit script is then run --since.
+        why: the check published this half as a mechanical predicate -- "resolve
+          <prior_sprint_sha> from the most recent prior sprint entry (current sprint
+          number minus one); if absent the gate FAILS CLOSED" -- and carried no
+          enforcer, so an agent subtracted one and read a file at every sprint-review
+          gate. The resolution had already been programmed as a second entry grammar
+          inline in validate-mandatory-rules.sh's Check 5, a copy no gate could reach;
+          --prior-sprint-sha is now its single home and that caller calls it. The
+          adjudication stays project: this binds the audit WINDOW, while the per-class
+          verdicts still come from consumer-supplied audit scripts core cannot see.
+    reads:
+      - _bmad-output/audit-anchors.md     # the entries, and the prior sprint's anchor
+      - core/schemas/audit-anchors.json   # the entry field specs and the header region label
     ci_workflow: ~
+    fixtures: [tests/fixtures/check5-anchor-base, tests/fixtures/audit-anchors-schema]
 
   - id: "19"
     title: Self-reflexive Gate 2 self-discrimination map application
