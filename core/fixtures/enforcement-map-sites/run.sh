@@ -39,35 +39,60 @@ if [ ! -f "$HERE/../../../scripts/validate-enforcement-map.sh" ]; then
   exit 0
 fi
 
-ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
-trap 'rm -rf "$ROOT"' EXIT
-
-V="$ROOT/scripts/validate-enforcement-map.sh"
-PRECLASS="$ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
-INSTALL="$ROOT/scripts/install.sh"
+# ONE TREE PER ASSERTION, IN ONE PROCESS PER ASSERTION, AND THE REASON IS WALL CLOCK.
+# Every assertion here mutates a pristine copy of the distribution and runs
+# `validate-enforcement-map.sh` over it. There are 42 of those runs at ~2.5s each, and run
+# end to end they made this fixture the entire critical path of the 8-way pre-push suite:
+# measured 2026-07-29, it started at t=5s and finished at t=124.9s in a 124.9s suite, while
+# the next-longest unit finished at t=85s with 40s to spare. The suite's wall clock WAS
+# this file.
+#
+# Nothing about that is a property of the assertions. Each one already re-seeded a pristine
+# tree before it ran (the old `restore`), so no assertion could see another's mutation --
+# they were independent and merely happened to be written in a row. So each is now a
+# function, each runs in its own process against its own seed, and the driver at the foot
+# of this file runs them through a worker pool.
+#
+# WHAT THIS MUST NOT COST: fidelity. Same subject set, same mutations, same predicates,
+# same messages, same order in the output. The proof is a byte-identical differential of
+# this file's whole stdout against the serial version, plus the knock-out control described
+# at the driver.
+#
+# THE CONTROL STAYS SERIAL AND STAYS FIRST. Assertion 0 asserts the PRISTINE tree passes;
+# without it every "it failed as expected" below is a false pass against a validator that
+# is simply broken. Running it concurrently with the assertions it licenses would report
+# them in an order where that licence had not yet been established.
+seed_tree() {
+  ROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: seed failed" >&2; exit 2; }
+  V="$ROOT/scripts/validate-enforcement-map.sh"
+  PRECLASS="$ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"
+  INSTALL="$ROOT/scripts/install.sh"
+}
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-# Restore the seed to pristine between mutations.
-restore() { rm -rf "$ROOT/core" "$ROOT/scripts"; local d; d="$(bash "$HERE/seed.sh")"; rm -rf "$ROOT"; ROOT="$d"; V="$ROOT/scripts/validate-enforcement-map.sh"; PRECLASS="$ROOT/core/skills/ai-dlc-update/reconcile/preclassify.sh"; INSTALL="$ROOT/scripts/install.sh"; }
-
-echo "enforcement-map-sites:"
+# Restore the seed to pristine between the ARMS of one assertion. Several assertions mutate
+# the tree two or three times and need a clean one between arms; that is all this is for
+# now. It no longer runs between assertions -- each gets its own tree at entry.
+restore() { local old="$ROOT"; seed_tree; rm -rf "$old"; }
 
 # --- Assertion 0: SANITY ------------------------------------------------------
 # The pristine tree must PASS. If it does not, the validator is erroring for some reason
 # of its own and every "it failed as expected" below is a false pass.
+A00_sanity() {
 if bash "$V" >/dev/null 2>&1; then
   ok "pristine distribution tree passes (the negatives below mean something)"
 else
   bad "FIXTURE BROKEN — the pristine tree does not pass validate-enforcement-map.sh. Every assertion below would be a false pass."
-  echo; echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2; exit 2
 fi
+}
 
 # --- Assertion 1: COMPLETENESS ------------------------------------------------
 # A new core/<dir>/ with no row must be an ERROR, not a silent fall-through to the
 # `core/*` catch-all. This is the one that would have caught git-hooks.
+A01_i8_completeness() {
 mkdir -p "$ROOT/core/brand-new-subtree"
 echo 'x' > "$ROOT/core/brand-new-subtree/thing.sh"
 out="$(bash "$V" 2>&1)"
@@ -77,10 +102,12 @@ else
   bad "a new core/ subtree with no site row did NOT fail — I8 is hand-listed again, and the next core/<dir>/ ships to a path nothing reads"
 fi
 restore
+}
 
 # --- Assertion 2: AGREEMENT ---------------------------------------------------
 # Delete map_consumer()'s git-hooks case and I8 must catch it. This replays the exact
 # v0.55.1 state of the tree: install.sh writes .githooks/, the pull writes .claude/git-hooks/.
+A02_i8_agreement() {
 grep -q 'core/git-hooks/\*)' "$PRECLASS" || bad "FIXTURE STALE: preclassify.sh has no core/git-hooks/ case to remove"
 sed -i.bak '/core\/git-hooks\/\*)/d' "$PRECLASS"
 out="$(bash "$V" 2>&1)"
@@ -90,11 +117,13 @@ else
   bad "map_consumer() with no git-hooks case did NOT fail — the pre-push gate would ship to .claude/git-hooks/ again"
 fi
 restore
+}
 
 # --- Assertion 3: INSTALLER BINDING -------------------------------------------
 # A row is only true if install.sh really writes there. Remove the .githooks write and the
 # row must stop being satisfiable — otherwise the table could be kept "green" by asserting
 # a destination the installer abandoned.
+A03_i8_installer_binding() {
 grep -q 'PROJECT_ROOT/.githooks' "$INSTALL" || bad "FIXTURE STALE: install.sh has no .githooks write to remove"
 sed -i.bak 's|"\$PROJECT_ROOT/\.githooks|"$PROJECT_ROOT/.githooks-REMOVED|g' "$INSTALL"
 out="$(bash "$V" 2>&1)"
@@ -104,11 +133,13 @@ else
   bad "install.sh dropping .githooks did NOT fail — I8's table can assert a destination nothing writes"
 fi
 restore
+}
 
 # --- Assertion 4: I12 SCAN-MATCH ----------------------------------------------
 # unregistered-drift.sh's scan set is bound to I12's per-subtree policy. Drop a scan-marked
 # subtree from the tool's ls-tree and I12 must catch the divergence — this is what stops the
 # scan set silently rotting the way ai-dlc-setup/ and schemas/ did.
+A04_i12_scan_match() {
 UD="$ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
 if grep -q 'core/hooks core/schemas' "$UD"; then
   sed -i.bak 's| core/hooks core/schemas | core/hooks |' "$UD"
@@ -122,9 +153,11 @@ if grep -q 'core/hooks core/schemas' "$UD"; then
 else
   bad "FIXTURE STALE: unregistered-drift.sh no longer scans 'core/hooks core/schemas'"
 fi
+}
 
 # --- Assertion 5: I12 COMPLETENESS --------------------------------------------
 # A new core/<dir>/ with no policy row must FAIL — a new subtree cannot silently escape the scan.
+A05_i12_completeness() {
 mkdir -p "$ROOT/core/brand-new-subtree"
 echo 'x' > "$ROOT/core/brand-new-subtree/thing.md"
 out="$(bash "$V" 2>&1)"
@@ -134,12 +167,14 @@ else
   bad "a new core/ subtree with no I12 policy row did NOT fail — the scan set is hand-listed again"
 fi
 restore
+}
 
 # --- Assertion 6: I15 GRAMMAR FORK --------------------------------------------
 # layer-drift.sh REPORTS a heading-number collision; relabel-extension-checks.sh FIXES it.
 # relabel shipped the narrower grammar for ~20 versions, so core's real `### H1.` yielded no
 # anchor and a collision on it was unrelabellable — the operator was told to relabel with a
 # tool that could not see the heading. Narrow one copy and I15 must catch the fork.
+A06_i15_grammar_fork() {
 RELABEL="$ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
 if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   sed -i.bak "s|^ANCHOR_RE=.*|ANCHOR_RE='^#{2,4} [0-9]+[a-z]*\\\\.'|" "$RELABEL"
@@ -154,10 +189,17 @@ if grep -q '^ANCHOR_RE=' "$RELABEL"; then
 else
   bad "FIXTURE STALE: relabel-extension-checks.sh no longer defines ANCHOR_RE"
 fi
+}
 
 # --- Assertion 7: I15 NON-VACUITY ---------------------------------------------
 # I15 greps both files for ANCHOR_RE. If a definition simply vanishes, the check must say so
 # rather than find nothing and pass — "no definitions to compare" must never read as "equal".
+A07_i15_non_vacuity() {
+# Bound here rather than inherited: when this file ran as one long script the name was
+# still set from the assertion above. Each assertion now runs in its own process against
+# its own tree, so an inherited path would be an unset variable under `set -u`.
+RELABEL="$ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
+
 if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   sed -i.bak '/^ANCHOR_RE=/d' "$RELABEL"
   out="$(bash "$V" 2>&1)"
@@ -168,6 +210,7 @@ if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   fi
   restore
 fi
+}
 
 # --- Assertion 7b: I17 THE WRITER ---------------------------------------------
 # map_consumer() only CLASSIFIES. reconcile/apply.sh is what actually PLACES files on a pull,
@@ -175,6 +218,7 @@ fi
 # omitted session-driver, ci-templates and git-hooks, which therefore never applied while the
 # same run re-stamped .ai-dlc-version anyway. Give apply.sh a private table again and I17
 # must catch it, exactly as I8 catches map_consumer drifting.
+A08_i17_the_writer() {
 APPLY_F="$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 if grep -q '^consumer_path() {' "$APPLY_F"; then
   python3 - "$APPLY_F" <<'PY'
@@ -200,11 +244,13 @@ PY
 else
   bad "FIXTURE STALE: apply.sh no longer defines consumer_path()"
 fi
+}
 
 # --- Assertion 8: I16 DEAD PROSE PATH -----------------------------------------
 # The real bug: Check 19 cited `core/team-roles/code-reviewer.md`, a path that exists in the
 # distribution and at NO consumer. install.sh maps core/<x> -> .claude/<x>, but that moves
 # FILES, not the paths written inside them. Plant one and I16 must fire.
+A09_i16_dead_prose_path() {
 printf '\nSee `core/team-roles/dev.md` for the map.\n' >> "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 out="$(bash "$V" 2>&1)"
 if printf '%s' "$out" | grep -q "runtime-pipeline prose cites a distribution path"; then
@@ -213,12 +259,14 @@ else
   bad "a core/-prefixed prose path did NOT fail I16 — installed core can cite the distribution's layout again, and one dead link already cost a live gate rule"
 fi
 restore
+}
 
 # --- Assertion 9: I16 PRECISION -----------------------------------------------
 # The other side of the same check, and the one that keeps it usable. The word "core" is
 # everywhere in this rulebook ("core rule", "core catalog", "core-path wiring"), and the
 # update machinery cites `core/...` paths BY DESIGN — comparing distribution to consumer is
 # its whole job. If I16 flags either, it gets switched off and stops catching the real thing.
+A10_i16_precision() {
 printf '\nThe core rule lives in the core catalog; core-path wiring is a core concern.\n' \
   >> "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 printf '\nDiff base->theirs restricted to `core/skills/ai-dlc-update/**` and `core/team-roles/dev.md`.\n' \
@@ -230,6 +278,7 @@ else
   ok "I16 ignores the English word 'core' and ai-dlc-update's by-design core/ paths (precise enough to stay on)"
 fi
 restore
+}
 
 # --- Assertion 10: I21 FOURTH COPY --------------------------------------------
 # `section_of()` shipped divergent twice (v0.52.0 weaker, v0.54.2 stricter), and both
@@ -237,6 +286,7 @@ restore
 # v0.90.0 collapsed the three copies into lib.sh — that fixed the INSTANCES. The HOLE is
 # that nothing stopped a fourth file inlining its own, and a private resolver fails
 # silently: the tool reports a confident verdict computed from a different section.
+A11_i21_fourth_copy() {
 RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 APPLY_F="$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 printf '\nsection_of() { echo private; }\n' >> "$APPLY_F"
@@ -248,11 +298,13 @@ else
 fi
 restore
 RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+}
 
 # --- Assertion 11: I21 UNSOURCED CALL -----------------------------------------
 # The other direction. A classifier that calls section_of() without sourcing lib.sh gets
 # an EMPTY section back on a consumer's pull, and an empty section reads as "no drift"
 # rather than as an error — the same shape as the v0.52.0 cleared block.
+A12_i21_unsourced_call() {
 REG_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
 if grep -q '^\. "\$SELF/lib\.sh"' "$REG_F"; then
   sed -i.bak '/^\. "\$SELF\/lib\.sh"/d' "$REG_F"
@@ -267,11 +319,18 @@ if grep -q '^\. "\$SELF/lib\.sh"' "$REG_F"; then
 else
   bad "FIXTURE STALE: register-drift.sh no longer sources lib.sh at the expected anchor"
 fi
+}
 
 # --- Assertion 12: I21 NON-VACUITY --------------------------------------------
 # I21 derives the helper set from lib.sh's own definitions. If those stop matching — the
 # library emptied, or its definition form changed — the check must say so rather than bind
 # an empty set and pass. "Nothing to compare" must never read as "no second copy exists".
+A13_i21_non_vacuity() {
+# Bound here rather than inherited: when this file ran as one long script the name was
+# still set from the assertion above. Each assertion now runs in its own process against
+# its own tree, so an inherited path would be an unset variable under `set -u`.
+RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
+
 if grep -qE '^[a-z_]+\(\) \{' "$RLIB_F"; then
   grep -vE '^[a-z_]+\(\) \{' "$RLIB_F" > "$RLIB_F.tmp" && mv "$RLIB_F.tmp" "$RLIB_F"
   out="$(bash "$V" 2>&1)"
@@ -284,6 +343,7 @@ if grep -qE '^[a-z_]+\(\) \{' "$RLIB_F"; then
 else
   bad "FIXTURE STALE: reconcile/lib.sh no longer defines helpers in the '<name>() {' form I21 derives from"
 fi
+}
 
 # --- Assertion 13: I31 SCAN SET HAS A DISPOSITION -----------------------------
 # I12 makes a subtree REPORTABLE; it says nothing about what the operator does next, and the
@@ -291,6 +351,7 @@ fi
 # scan-marked and both fell to register-drift.sh's `unrecognized core path` — a message that
 # reads like a typo in a path the report itself supplied. Drop the named no-grain refusal and
 # I31 must name the subtrees left without a disposition.
+A14_i31_disposition() {
 RD_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
 if grep -q '^  schemas/\*|skills/ai-dlc-setup/\*)' "$RD_F"; then
   sed -i.bak 's@^  schemas/\*|skills/ai-dlc-setup/\*)@  never-matches-a-real-path/*)@' "$RD_F"
@@ -305,11 +366,18 @@ if grep -q '^  schemas/\*|skills/ai-dlc-setup/\*)' "$RD_F"; then
 else
   bad "FIXTURE STALE: register-drift.sh no longer carries the schemas/ai-dlc-setup no-grain case"
 fi
+}
 
 # --- Assertion 14: I31 NON-VACUITY --------------------------------------------
 # I31 derives register-drift's side by parsing its `case` labels. If that parse yields nothing
 # — the case block moved, or its formatting changed — the comparison binds an empty set and
 # EVERY scan subtree reads as undisposed, or worse, the check quietly passes. It must say so.
+A15_i31_non_vacuity() {
+# Bound here rather than inherited: when this file ran as one long script the name was
+# still set from the assertion above. Each assertion now runs in its own process against
+# its own tree, so an inherited path would be an unset variable under `set -u`.
+RD_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
+
 if grep -q '^case "\$REL" in' "$RD_F"; then
   # Remove the parse's opening anchor. Everything after it is untouched, so the case labels are
   # still there on disk and only the DERIVATION goes blind — which is the vacuity being tested.
@@ -324,6 +392,7 @@ if grep -q '^case "\$REL" in' "$RD_F"; then
 else
   bad "FIXTURE STALE: register-drift.sh no longer opens with 'case \"\$REL\" in'"
 fi
+}
 
 # --- Assertion 15: I32 PIN vs INVOCATION --------------------------------------
 # Check 17's arms pin a provenance block to a skill NAME; the step file that runs the
@@ -331,6 +400,7 @@ fi
 # v0.169.0 repointed research-requirements.md §3 to /bmad-prd and left the arm pinning the
 # old name, and no check said so for three minors. Repoint an arm at a bmad skill its own
 # step file does not name and I32 must catch it.
+A16_i32_pin_vs_invocation() {
 GV_F="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 if grep -qE '^  bmad-prd`\.$' "$GV_F"; then
   sed -i.bak 's/^  bmad-prd`\.$/  bmad-party-mode`./' "$GV_F"
@@ -345,11 +415,18 @@ if grep -qE '^  bmad-prd`\.$' "$GV_F"; then
 else
   bad "FIXTURE STALE: Check 17's PRD arm no longer pins bmad-prd on its own line"
 fi
+}
 
 # --- Assertion 16: I32 NON-VACUITY --------------------------------------------
 # Every I32 guard runs INSIDE the per-arm loop, so an arm grammar that stops matching scans
 # nothing and reports clean — which is precisely the shape this check exists to end. Break
 # the flag the arms are parsed on and the check must say it compared nothing.
+A17_i32_non_vacuity() {
+# Bound here rather than inherited: when this file ran as one long script the name was
+# still set from the assertion above. Each assertion now runs in its own process against
+# its own tree, so an inherited path would be an unset variable under `set -u`.
+GV_F="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+
 if grep -q -- '--require-skill' "$GV_F"; then
   sed -i.bak 's/--require-skill/--require-SKILL/g' "$GV_F"
   out="$(bash "$V" 2>&1)"
@@ -362,6 +439,7 @@ if grep -q -- '--require-skill' "$GV_F"; then
 else
   bad "FIXTURE STALE: Check 17's arms no longer carry --require-skill"
 fi
+}
 
 # --- Assertion 17: I33 FIXTURE PATH WALK --------------------------------------
 # A fixture that locates a core file by walking up from a path ANOTHER resolver produced is
@@ -370,6 +448,7 @@ fi
 # the derived fixtures green BEFORE the push, so that red is a permanent stop on the
 # self-update — it shipped once and blocked a consumer's cycle. Reintroduce the walk and I33
 # must name the offending fixture.
+A18_i33_fixture_path_walk() {
 SP_F="$ROOT/core/fixtures/story-provenance/run.sh"
 # The walk is COMPOSED, never written literally. I33 greps for the pattern, so a fixture that
 # spelled its own mutant out would flag itself — the same self-reference trap the ledger's close
@@ -389,10 +468,12 @@ if grep -q -- '--print-schema' "$SP_F"; then
 else
   bad "FIXTURE STALE: story-provenance/run.sh no longer resolves its schema via --print-schema"
 fi
+}
 
 # --- Assertion 18: I33 NON-VACUITY --------------------------------------------
 # I33 greps a tree. Empty that tree and it finds nothing and reports clean — the exact reading
 # ("no hits" = "no defect") that the check exists to distinguish from a real pass.
+A19_i33_non_vacuity() {
 if [ -d "$ROOT/core/fixtures" ]; then
   find "$ROOT/core/fixtures" -name '*.sh' -type f -delete 2>/dev/null
   out="$(bash "$V" 2>&1)"
@@ -405,6 +486,7 @@ if [ -d "$ROOT/core/fixtures" ]; then
 else
   bad "FIXTURE STALE: the seed no longer copies core/fixtures/"
 fi
+}
 
 # --- Assertion 19: I26 — the core set stays DERIVED, never restated -----------
 # I26 HAD NO FIXTURE AT ALL until v0.190.0, and it was found the way this repo usually finds
@@ -416,6 +498,7 @@ fi
 # entries, which is a LIST. A reference stands alone; a list puts them on one line, and that
 # punctuation adjacency is the whole predicate. The entries are taken from the manifest the
 # check derives from, so the mutation cannot go stale against a hand-list here.
+A20_i26_derived_core_set() {
 GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 if ! grep -q '<!-- CHECK_LOADED: core-layer-immutability -->' "$GV" 2>/dev/null; then
   bad "FIXTURE STALE: gate-validation.md has no core-layer-immutability span to mutate"
@@ -437,6 +520,7 @@ else
   fi
   restore
 fi
+}
 
 # --- Assertion 20: I40 — the anchor reading cannot fork -----------------------
 # Three functions are byte-identical across `core/scripts/validate-layer-entries.sh` (ERRORs at
@@ -447,6 +531,7 @@ fi
 # TWO ARMS, because the vacuity arm is the one that matters: I40 LOCATES its subjects by awk
 # range, and a renamed or deleted function makes it find nothing. "Found nothing" and "found two
 # identical bodies" are the same green unless the check says so itself.
+A21_i40_anchor_reading() {
 LIBSH="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 if [ ! -f "$LIBSH" ]; then
   bad "FIXTURE STALE: the seed no longer copies reconcile/lib.sh, so I40 has nothing to bind"
@@ -482,6 +567,7 @@ else
   fi
   restore
 fi
+}
 
 # --- Assertion 21: I45 — core stays out of the reserved consumer band ---------
 # I45 is the CORE half of W5's partition, and it is the half a consumer cannot check.
@@ -499,6 +585,7 @@ fi
 # Each arm asserts on its OWN message, never on the shared token "I45": the fire arm
 # and the vacuity arms would otherwise both match a grep for the invariant's name, and
 # an assertion two arms can satisfy is one that tests neither.
+A22_i45_reserved_band() {
 SKB="$ROOT/core/skills/ai-dlc/SKILL.md"
 VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 
@@ -560,6 +647,7 @@ else
   fi
 fi
 restore
+}
 
 # --- Assertion 22: I47 — the check-heading grammar cannot fork ----------------
 # CHECK_HEAD_RE decides what counts as a check DEFINITION, and two tools reach
@@ -574,6 +662,7 @@ restore
 # I47 reports an absence, so a rename at either end makes it find nothing and pass.
 # Each asserts on its OWN message — "has forked" vs "could not find" — because a
 # grep for "I47" is satisfied by both and would test neither.
+A23_i47_check_heading() {
 VGM="$ROOT/core/scripts/validate-gate-manifest.sh"
 VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 
@@ -611,6 +700,7 @@ else
   fi
 fi
 restore
+}
 
 # --- Assertion 23: I49 — a mode named in prose is a mode the script dispatches --
 # Three of core's enforcement surfaces reach `core-paths.sh` through a STRING typed into a
@@ -622,6 +712,7 @@ restore
 # THREE ARMS, each asserting on its OWN message. A grep for "I49" is satisfied by all three
 # and would test none of them — row 4's recorded trap, where two arms quoting one string let
 # an assertion pass against a reverted fix.
+A24_i49_resolver_modes() {
 CP="$ROOT/core/scripts/core-paths.sh"
 GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 
@@ -684,6 +775,7 @@ else
   fi
 fi
 restore
+}
 
 # --- Assertion 24: I50 — a validator named in prose is a validator core ships --
 # install.sh DERIVES scripts/ai-dlc/ from core/scripts/, so a citation naming a file core
@@ -698,6 +790,7 @@ restore
 # Both ghost names are ASSEMBLED at runtime. I50 excludes core/fixtures/ because thirteen
 # fixtures deliberately name validators that do not exist, and an assertion that leans on
 # that exclusion to hold its own text goes red the day the exclusion is reconsidered.
+A25_i50_shipped_validators() {
 DEV="$ROOT/core/team-roles/dev.md"
 TPL="$ROOT/templates/audit-anchors.md.template"
 
@@ -754,6 +847,7 @@ else
   bad "the shipped-validator set was empty and I50 did not say so — it was comparing citations against nothing"
 fi
 # The mv back above is the restore: this arm moved a directory and moved it home again.
+}
 
 # --- Assertion 22: I51 — the licensed commit has one subject in two files ------
 # Step 5b is the ONE place this pipeline writes to the trunk outside a PR, and the subject
@@ -765,6 +859,7 @@ fi
 #
 # THREE ARMS, each asserting its OWN wording. All three would match a grep for "I51", so an
 # assertion on the invariant's name is one that tests none of them.
+A26_i51_licensed_commit() {
 AAJ="$ROOT/core/schemas/audit-anchors.json"
 RTR="$ROOT/core/skills/ai-dlc/steps/retro.md"
 
@@ -819,6 +914,7 @@ else
   fi
 fi
 mv "$RTR.orig" "$RTR"
+}
 
 # --- Assertion 25: I52 — the drivability exemption marker cannot fork ----------
 # `validate-fixture-drivability.sh` is SHIPPED and wired into the consumer's pre-push,
@@ -827,6 +923,7 @@ mv "$RTR.orig" "$RTR"
 # A diverged marker therefore does not fail the author who moved it; it fails every
 # consumer's next push, on core files they did not write. That is why the join exists
 # and why its arms assert on their own wording rather than on the exit status.
+A27_i52_exemption_marker() {
 FDS="$ROOT/core/scripts/validate-fixture-drivability.sh"
 
 # ARM 1 — DIVERGENCE. The realistic shape: the marker is reworded in one home. Asserted
@@ -863,6 +960,7 @@ else
   fi
 fi
 mv "$FDS.orig" "$FDS"
+}
 
 # --- Assertion 26: I53 — a mode one core script asks another for is one it dispatches --
 # `core-paths.sh --audit-diff` decides whether the operator authorized an in-place core edit
@@ -872,6 +970,7 @@ mv "$FDS.orig" "$FDS"
 # and the backstop starts FAILing consumers whose trees are clean.
 #
 # Three arms, each on its OWN wording — I49's arrangement, and row 4's recorded trap is why.
+A28_i53_escalation_modes() {
 ESR="$ROOT/core/scripts/validate-escalation-resolution.sh"
 CPS="$ROOT/core/scripts/core-paths.sh"
 
@@ -924,6 +1023,96 @@ else
   fi
 fi
 mv "$ESR.orig" "$ESR"
+}
+
+# ---------------------------------------------------------------------------
+# THE DRIVER
+# ---------------------------------------------------------------------------
+# `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
+# tree. It is the unit the pool schedules and it is also how a human runs a single
+# assertion while working on it.
+if [ "${1:-}" = "--run-one" ]; then
+  FN="${2:-}"
+  declare -F "$FN" >/dev/null 2>&1 || {
+    echo "FIXTURE ERROR: --run-one needs an assertion function name; '$FN' is not one" >&2
+    exit 2
+  }
+  seed_tree
+  trap 'rm -rf "$ROOT"' EXIT
+  "$FN"
+  [ "$fails" -eq 0 ] || exit 1
+  exit 0
+fi
+
+# THE ASSERTION LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order. A
+# hand-written list here would be this fixture's own subject defect one level out: an
+# assertion dropped from the list runs nothing and prints nothing, and a suite reporting 28
+# greens instead of 29 reads exactly like a suite that passed. The zero guard is the same
+# argument -- a naming grammar that stops matching yields an empty list, and an empty list
+# passes every assertion it never made.
+NAMES="$(grep -oE '^A[0-9]{2}_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
+N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
+if [ "$N_LISTED" -lt 10 ]; then
+  echo "FIXTURE ERROR: derived $N_LISTED assertion(s) from this file — the A<nn>_ naming grammar moved" >&2
+  exit 2
+fi
+
+echo "enforcement-map-sites:"
+
+OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$OUT"' EXIT
+SELF="$HERE/$(basename "$0")"
+
+# The control, first and alone. Its verdict licenses every assertion after it, so a failure
+# here stops the run rather than reporting 28 unattributable kills.
+CTL="$(printf '%s\n' "$NAMES" | head -1)"
+bash "$SELF" --run-one "$CTL" > "$OUT/$CTL" 2>"$OUT/$CTL.err"
+ctl_rc=$?
+cat "$OUT/$CTL"
+if [ "$ctl_rc" -ne 0 ]; then
+  [ -s "$OUT/$CTL.err" ] && cat "$OUT/$CTL.err" >&2
+  echo
+  echo "enforcement-map-sites: 1 assertion(s) FAILED" >&2
+  exit 2
+fi
+
+# EIGHT, and it is a fixed number rather than a tunable on purpose: this pool nests inside
+# the pre-push suite's own pool, so a knob here multiplies against a knob there and the
+# product is what lands on the machine. Eight against 18 cores leaves headroom for the
+# seven sibling fixtures the suite runs beside this one.
+JOBS=8
+printf '%s\n' "$NAMES" | tail -n +2 > "$OUT/list"
+AI_DLC_EMS_SELF="$SELF" AI_DLC_EMS_OUT="$OUT" \
+  xargs -P "$JOBS" -I{} bash -c '
+    n="$1"
+    bash "$AI_DLC_EMS_SELF" --run-one "$n" \
+      > "$AI_DLC_EMS_OUT/$n" 2> "$AI_DLC_EMS_OUT/$n.err"
+    printf %s $? > "$AI_DLC_EMS_OUT/$n.rc"
+  ' _ {} < "$OUT/list"
+
+# Rendered in SOURCE order, never completion order, so the output is byte-comparable
+# against the serial version and diffable across runs.
+#
+# A MISSING VERDICT IS A FAILURE, not a gap. Serially, an assertion that never ran could
+# not print an `ok` -- the loop and the report were the same thing. With a pool they are
+# not, and a dropped job is silent. So the verdict file's absence is asserted, and a worker
+# that exited nonzero without printing a FAIL line (a crash, a failed seed) is charged one
+# rather than counted as clean.
+while IFS= read -r n; do
+  [ -n "$n" ] || continue
+  if [ ! -f "$OUT/$n.rc" ]; then
+    printf '  FAIL  %s produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one\n' "$n"
+    fails=$((fails + 1))
+    continue
+  fi
+  cat "$OUT/$n"
+  [ -s "$OUT/$n.err" ] && cat "$OUT/$n.err" >&2
+  if [ "$(cat "$OUT/$n.rc")" != "0" ]; then
+    c="$(grep -c '^  FAIL' "$OUT/$n" || true)"
+    [ "$c" -gt 0 ] || { printf '  FAIL  %s exited nonzero without an assertion line — the assertion did not run to a verdict\n' "$n"; c=1; }
+    fails=$((fails + c))
+  fi
+done < "$OUT/list"
 
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi

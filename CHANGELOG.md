@@ -17,6 +17,171 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.206.0] — 2026-07-29
+
+### Changed — the suite's wall clock was one fixture running 42 independent assertions in a row, and the handoff's own next-two-poles ordering was refuted by measuring which unit is on the critical path
+
+v0.205.0 cut `core/fixtures/enforcement-map-sites/` from 194.3s to 107s and the suite from
+208s to 124s. The handoff then named the next two releases by **serial duration**:
+`wait-stale-deliverable` at 51.9s, then `layer-contract-conformance` at 45.6s. Serial
+duration is the wrong statistic for a pooled suite, and both figures were re-derived here
+before anything was built.
+
+**The suite was instrumented to record a start and end timestamp per fixture, so the
+critical path is derivable rather than inferred.** Measured on an idle 18-core machine at
+the shipping `-P8`:
+
+| Unit | Duration | Starts | Ends | In a 124.9s suite |
+|---|---|---|---|---|
+| `enforcement-map-sites` | 120.0s | 5.0s | **124.9s** | **the entire critical path** |
+| `wait-stale-deliverable` | 49.5s | 35.4s | 84.9s | 40s of slack |
+| `layer-contract-conformance` | 33.7s | 9.0s | 42.7s | 82s of slack |
+
+**The suite's wall clock was `enforcement-map-sites`' start time plus its duration, and
+nothing else.** Both units the handoff queued had finished with the suite still running:
+shipping either would have moved the number by zero. `layer-contract-conformance` was
+**24.8s** measured on its own — v0.205.0's validator work had already halved it, and the
+45.6s the row carried was stale in the same direction as everything else that row quoted.
+
+**What that ordering got right, and it is the reason both stay queued:** a unit with slack
+today is the critical path tomorrow, and here tomorrow arrived in the same release. With
+`enforcement-map-sites` fixed, `wait-stale-deliverable` became the pole immediately — at
+`-P24` it starts at t=10.8s and is still running when every other unit has finished. **An
+optimisation is not refuted by having no wall-clock gain today; it is deferred by having a
+larger one available first.** The measurement decides the order, not the list.
+
+**The fixture was not slow. It was serial.** Its 29 assertions each mutate a pristine copy
+of the distribution and run `validate-enforcement-map.sh` over it — 42 runs at ~2.5s. Every
+one of them already re-seeded a pristine tree before it ran, so no assertion could observe
+another's mutation: they were independent and merely written in a row. Each is now a
+function; each runs in its own process against its own seed; a pool at the foot of the file
+schedules them. **107s -> 25s.**
+
+**Nothing about the assertions changed.** Same subject set, same mutations, same predicates,
+same messages, same order in the output. Four things were needed to make that true and each
+is in the file:
+
+- Four assertions read a path bound by the assertion above them (`RELABEL`, `RLIB_F`,
+  `RD_F`, `GV_F`). In one process that inheritance worked by accident; in separate
+  processes it is an unset variable under `set -u`. Each now binds its own.
+- The assertion list is **derived from the file's own function definitions**, in source
+  order, with a zero guard. A hand-written list would be this fixture's own subject defect
+  one level out — an assertion dropped from it runs nothing, prints nothing, and 28 greens
+  read exactly like 29.
+- **A missing verdict is a failure, not a gap.** Serially, an assertion that never ran could
+  not print an `ok`; the loop and the report were the same thing. With a pool they are not.
+- The control stays **serial and first**. Assertion 0 licenses every assertion after it, so
+  a failing control stops the run rather than reporting 28 unattributable kills.
+
+### Changed — `AI_DLC_FIXTURE_JOBS` default 8 -> 16, re-measured because the floor it was chosen against is gone
+
+The hook has said **EIGHT, NOT MORE -- AS MEASURED** for four releases, on a measurement
+that was correct when taken: `-P16` gave 2m30s against `-P8`'s 2m34s, because one fixture
+set a floor no pool size beats. That is the right reading of a floor-bound suite and the
+wrong constant to keep once the floor moves. Re-measured over the full 83 with the fixture
+above parallel:
+
+| | | | |
+|---|---|---|---|
+| `-P8` **95.5s** | `-P12` **80.4s** | `-P16` **72.0s** | `-P24` **64.2s** |
+
+83/83 verdicts at every one. It is still falling at 24 because the remaining pole sleeps
+rather than computes, so this is not the CPU knee — but `-P24` nearly doubled individual
+units through contention (a 25s fixture took 47.6s), and this suite has a known
+intermittent-red class that correlates with concurrency and cold caches. Past 16 the run
+gets faster by making every unit slower, which is how a timing-sensitive assertion starts
+failing for reasons unrelated to what it tests. **The number is measured on one machine,
+which is why it stays a tunable and not a constant.**
+
+**Suite: 124.9s instrumented, 125.8-130.9s over five baseline rounds -> 70.8-72.8s over five
+rounds at the shipping configuration (−43%).**
+
+### Evidence — a green run proves a green run stayed green, which is not the question
+
+The question when a harness is rewritten is whether it can still REPORT. Three parts, the
+shape v0.205.0 established:
+
+1. **A byte-identical differential of the whole fixture's stdout**, serial version against
+   parallel, both run against a real tree. The serial baseline ran from a `git worktree` at
+   `HEAD` rather than from an edited copy in place, so the tree under test is not the tree
+   being edited. **Zero divergence across all 29 assertions, and empty stderr from both.**
+   That is also the proof that every assertion still FIRES: each one's `ok` line is its
+   mutation having produced the invariant's message, and all 29 are unchanged.
+2. **A five-case mutation battery on the driver**, each mutant a COPY in a separate
+   worktree, each guarded by `cmp -s`, each asserting a positive outcome, with an
+   **unmutated control from the same directory** — a copy that simply dies produces no
+   output, and no output otherwise scores as a kill for every mutant at once. An assertion
+   regressing is reported once and counted once (rc 1); a dropped verdict fails loudly; an
+   empty derived list fails loudly; a failing control stops the run with zero `ok` lines
+   (rc 2); a worker that dies before printing is charged rather than counted clean.
+3. **Five consecutive full-suite runs at the shipping configuration** — 83 verdicts, zero
+   failures, 70.8s to 72.8s — because raising the pool size is exactly the change the known
+   intermittent-red class will be blamed for, and one green run is not an answer to an
+   intermittent.
+
+The battery's fourth case was wrong when first written and was caught rather than shipped:
+it broke the control by passing the validator an unknown flag, which the validator ignores
+before exiting 0. `cmp -s` passed it because the bytes did change — the byte-different
+no-op this repo has now recorded three times. Re-aimed at the validator's PATH, it fires.
+
+**THE INTERMITTENT CLASS APPEARED DURING THIS WORK AND IS REPORTED RATHER THAN OMITTED.** An
+earlier five-round set at `-P8` on this branch went red twice: once on
+`core/fixtures/apply-drift-refile/`, once on `core/fixtures/layer-readopt-gate/` — the two
+fixtures already recorded as this class, and no others. Cleared by the route that entry
+prescribes, not by re-running until green:
+
+- **Unmodified `main` at `92aa72f`, five rounds at `-P8`: 83/83, zero failures**, 125.8s to
+  130.9s. The class did not reproduce on the baseline in this window either, so these runs
+  bound the rate rather than attribute it.
+- **This release cannot reach either fixture.** Every path it touches — `.githooks/pre-push`,
+  `enforcement-map-sites`, `AI_DLC_FIXTURE_JOBS`, `CHANGELOG.md` — returns **zero** hits
+  inside both fixture directories. Control, from the same grep over the same two directories:
+  `layer-drift` returns 22 and `run.sh` returns 6, so the search runs.
+- **Both pass standalone**; `layer-readopt-gate` also failed a standalone run taken while ten
+  concurrent suite rounds were in flight, and passed 3/3 once the machine was idle. That is a
+  data point for the open entry: the correlation is with LOAD, not only with a cold cache, and
+  a standalone run is not the control it was taken to be.
+- **Five rounds at the shipping `-P16`: 83/83, zero failures.**
+
+The honest reading is that the rate is low enough that ten rounds cannot separate the two
+configurations, and that raising the pool is a plausible aggravator of a defect it did not
+introduce. Recorded here so the next release that trips it inherits the measurement instead
+of the argument.
+
+### Note — what this does NOT do
+
+`wait-stale-deliverable` is now the critical path at ~52s and is the next release on this
+row. It is **sleep-bound rather than fork-bound**, so no pool size touches it and the fix is
+inside the fixture: its 14 cases are independent and each waits out a beat quantum in turn.
+Its assertions carry wall-clock bounds (`ELAPSED -le 1` for "returned without sleeping"),
+so unlike the fixture above it cannot be parallelised on a differential alone — a
+contention-inflated beat would trip a real assertion for a reason that has nothing to do
+with what it tests. That needs repeated-run evidence, which is a release, not a footnote.
+
+**It is queued, not declined.** A unit with slack today is the critical path tomorrow, and
+this release is the demonstration: `wait-stale-deliverable` had 40s of slack when the work
+started and was the pole before it finished. Ordering by measured impact is not a licence to
+drop what is currently second.
+
+The consumer's `core/git-hooks/pre-push` still runs its fixture suite serially. Unchanged
+deliberately: the reference consumer has 5 driven fixtures against the distribution's 83, so
+a pool there would add a completeness control and a nesting hazard to buy nothing measurable
+— and nothing here has measured a consumer tree.
+
+**A content-keyed skip is the other route on this row and it is not ruled out.** The suite
+re-runs in full on a push that changed only `CHANGELOG.md`, `VERSION` or `docs/` — files no
+fixture reads. The four trees the seeds copy (`core/`, `scripts/`, `.githooks/`,
+`templates/`) are DECLARED in the seeds rather than inferred, so a single suite-level key over
+them is derivable rather than hand-listed, which is what makes this different from the
+narrowing this row rules out. The conditions it has to meet are known and are the release:
+the key must cover **listings, not only contents** (several invariants fire on a directory
+that has no row, so a new empty directory is an input), it must cover the **interpreter and
+tool versions** that decide behaviour with no file changing, a hit must **announce itself and
+name its key** so a green is never silently unearned, and it must refuse a hit when the
+fixture set itself changed. **The hit rate is the one number not yet measured**, and `main`'s
+history cannot supply it: it is squash-merged, so it records releases and not the pushes
+inside them, which is where the repeat runs actually happen.
+
 ## [0.205.0] — 2026-07-29
 
 ### Changed — the distribution's own gate spent 42% of its wall clock in one fixture, re-forking a grep per item over corpora it could read once
