@@ -202,25 +202,37 @@ gt_lookup="$(awk '
   }
   END { if (id != "") print id"\t"gt }
 ' "$MAP")"
+# Leading newline so the first entry is reachable by the same `\n<id><TAB>` probe as the rest.
+gt_nl="
+$gt_lookup"
 
 # Each manifest row: | <type> | <id, id, ...> |. Skip header + separator rows.
 while IFS= read -r row; do
   case "$row" in
     *"Gate type"*|*"---"*) continue ;;
   esac
-  gtype="$(printf '%s' "$row" | awk -F'|' '{gsub(/ /,"",$2); print $2}')"
-  ids="$(printf '%s' "$row" | awk -F'|' '{print $3}')"
+  # Field split and lookup done in the shell: the row is `| <type> | <ids> | ...` and
+  # gt_lookup is `<id><TAB><csv>` lines, so awk/tr/grep/cut per row and per id bought
+  # nothing but forks. Same fields, same comma split, same whitespace stripping.
+  gtype="${row#*|}"; gtype="${gtype%%|*}"; gtype="${gtype// /}"
+  ids="${row#*|}"; ids="${ids#*|}"; ids="${ids%%|*}"
   [ -z "$gtype" ] && continue
   # split ids on comma
   oldIFS="$IFS"; IFS=','
   for cid in $ids; do
-    cid="$(printf '%s' "$cid" | tr -d ' ')"
+    cid="${cid// /}"
     [ -z "$cid" ] && continue
-    entry="$(printf '%s\n' "$gt_lookup" | grep -E "^${cid}"$'\t' || true)"
+    entry=""
+    case "$gt_nl" in
+      *"
+$cid	"*) entry="${gt_nl#*"
+$cid	"}"; entry="${entry%%
+*}"; entry="$cid	$entry" ;;
+    esac
     if [ -z "$entry" ]; then
       err "GATE_MANIFEST names check $cid ($gtype) but the map has no such entry"
     else
-      csv="$(printf '%s' "$entry" | cut -f2)"
+      csv="${entry#*	}"
       case ",$csv," in
         *",$gtype,"*) : ;;
         *) err "map entry $cid omits gate_type '$gtype' that GATE_MANIFEST requires (has: $csv)" ;;
@@ -361,12 +373,17 @@ ghost_entry="$(comm -13 <(printf '%s\n' "$shippable") <(printf '%s\n' "$cm_fixtu
 # AUTHORED, which is the same defect this file has now shipped three fixes for.
 #
 # So: any fixture that drives a hook must scrub AI_DLC_* first. Asserted, not trusted.
-for d in "$REPO_ROOT"/core/fixtures/*/; do
-  [ -f "$d/run.sh" ] || continue
-  grep -qE 'hooks/ai-dlc|\$HOOK' "$d/run.sh" || continue          # not a hook fixture
-  grep -qE 'unset "\$_v"|env -u AI_DLC' "$d/run.sh" \
-    || err "fixture '$(basename "$d")' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
-done
+# Two greps over the whole set rather than two per fixture: `-l` lists the hook-driving
+# fixtures, `-L` lists those of them that do NOT scrub. Both preserve argument order, so the
+# reported set and its order are what the per-file loop produced.
+hook_fx="$(grep -lE 'hooks/ai-dlc|\$HOOK' "$REPO_ROOT"/core/fixtures/*/run.sh 2>/dev/null)"
+if [ -n "$hook_fx" ]; then
+  while IFS= read -r r; do
+    [ -n "$r" ] || continue
+    d="${r%/run.sh}"
+    err "fixture '${d##*/}' invokes a hook but never scrubs ambient AI_DLC_* env. A consumer that tunes any of the hooks' AI_DLC_* variables in settings.json will fail this fixture — and its pre-push gate will then block every push — against a hook that is behaving correctly. Scrub the env at the top of run.sh."
+  done < <(printf '%s\n' "$hook_fx" | tr '\n' '\0' | xargs -0 grep -LE 'unset "\$_v"|env -u AI_DLC' 2>/dev/null)
+fi
 
 # --- I13: every shipped hook is REGISTERED. install.sh copies core/hooks/*.sh by GLOB, so a
 # new hook always reaches the consumer's .claude/hooks/ — but it only ever RUNS if
@@ -1048,12 +1065,15 @@ fi
 # correct in the distribution. This bit eight fixtures at once (the distribution takes the
 # other branch, so it never exercised the buggy one — the distribution is not a consumer).
 # Assert both cd-depths are three, so the next copy-paste cannot re-introduce it.
-for d in "$REPO_ROOT"/core/fixtures/*/; do
-  s="$d/seed.sh"; [ -f "$s" ] || continue
-  while IFS= read -r depth; do
-    [ "$depth" = "../../.." ] || err "fixture '$(basename "$d")' seed resolves a repo-root var with depth '\$HERE/$depth' — must be '\$HERE/../../..' (three dirs below root, matching BOTH core/fixtures/<name>/ and tests/fixtures/<name>/). A shallower depth passes in the distribution and fails in every consumer's pre-push."
-  done < <(grep -oE '[DC]_ROOT="\$\(cd "\$HERE/(\.\./)*\.\.' "$s" | sed -E 's#.*\$HERE/##')
-done
+# ONE grep over every seed, not a grep+sed pair per fixture. `-H` keeps the filename so the
+# error can still name its fixture, and grep walks its arguments in glob order and each file
+# in line order -- the same traversal the per-file loop made, so the findings and their order
+# are unchanged.
+while IFS= read -r hit; do
+  [ -n "$hit" ] || continue
+  s="${hit%%:*}"; depth="${hit#*\$HERE/}"
+  [ "$depth" = "../../.." ] || { d="${s%/seed.sh}"; err "fixture '${d##*/}' seed resolves a repo-root var with depth '\$HERE/$depth' — must be '\$HERE/../../..' (three dirs below root, matching BOTH core/fixtures/<name>/ and tests/fixtures/<name>/). A shallower depth passes in the distribution and fails in every consumer's pre-push."; }
+done < <(grep -oHE '[DC]_ROOT="\$\(cd "\$HERE/(\.\./)*\.\.' "$REPO_ROOT"/core/fixtures/*/seed.sh 2>/dev/null)
 
 # --- Audit-anchors template is BOUND to its canonical schema. The housekeeping schema used to
 # live in two places (this template + each project's live header) with nothing comparing them;
@@ -1273,16 +1293,34 @@ done
 # Scope: `adjudication: script` only. An `llm` check is adjudicated by the lead
 # READING gate-validation.md, so that file is inherently its call site; demanding
 # a call_sites list there would be ceremony.
-sites_of() { # sites_of <block> -> the file token of each site:, one per line
-  printf '%s' "$1" | awk '
-    /^    call_sites:/ {f=1; next}
-    f && /^    [a-z_]+:/ {f=0}
-    f && /^      - site:/ { v=$0; sub(/^      - site:[ ]*/,"",v); print v }
-  '
-}
-enforcers_of() {
-  printf '%s' "$1" | grep -oE '^      - core/(scripts|hooks)/[A-Za-z0-9._-]+' | sed -E 's#^      - ##'
-}
+# ONE pass over the map, emitting a tagged stream, instead of re-awking the whole file
+# once per check id and then forking sites_of()/enforcers_of() on each block. The three
+# extractions below are the same three grammars the per-block helpers used, transcribed
+# unchanged; what changes is that the map is read once rather than 41 times.
+#
+#   A<TAB>id<TAB>adjudication       first `    adjudication:` in the block
+#   S<TAB>id<TAB>site               each `      - site:` inside `    call_sites:`
+#   E<TAB>id<TAB>enforcer           each `      - core/(scripts|hooks)/...` line
+#
+# Emission order is the map's own order, so the ids, their enforcers and their sites are
+# still visited in the sequence the old nested loops visited them and the errors below
+# come out in the same order.
+map_stream="$(awk '
+  /^checks:/ { inck = 1 }
+  inck && /^  - id:/ {
+    id = $0; sub(/^  - id:[ ]*/, "", id); gsub(/"/, "", id); adj = ""; cs = 0; next
+  }
+  !inck { next }
+  /^    call_sites:/ { cs = 1; next }
+  cs && /^    [a-z_]+:/ { cs = 0 }
+  cs && /^      - site:/ { v = $0; sub(/^      - site:[ ]*/, "", v); print "S\t" id "\t" v }
+  /^    adjudication: [a-z]/ {
+    if (adj == "") { a = $0; sub(/^    adjudication: /, "", a); sub(/[^a-z].*$/, "", a); adj = a; print "A\t" id "\t" adj }
+  }
+  match($0, /^      - core\/(scripts|hooks)\/[A-Za-z0-9._-]+/) {
+    e = substr($0, RSTART, RLENGTH); sub(/^      - /, "", e); print "E\t" id "\t" e
+  }
+' "$MAP")"
 
 # Resolve a site's leading file token to a real path under the skill.
 resolve_site_file() {
@@ -1294,22 +1332,16 @@ resolve_site_file() {
   esac
 }
 
-while IFS= read -r blk_id; do
-  [ -n "$blk_id" ] || continue
-  block="$(awk -v want="$blk_id" '
-    $0 ~ "^  - id: \"?" want "\"?$" {f=1; print; next}
-    f && /^  - id: / {f=0}
-    f {print}
-  ' "$MAP")"
-  adj="$(printf '%s' "$block" | sed -nE 's/^    adjudication: ([a-z]+).*/\1/p' | head -1)"
-  [ "$adj" = "script" ] || continue
-
-  sites="$(sites_of "$block")"
+w2_cache=""
+i9_entry() { # i9_entry <id> <adjudication> ; reads $sites and $enfs
+  local blk_id="$1" adj="$2"
+  [ -n "$blk_id" ] || return 0
+  [ "$adj" = "script" ] || return 0
 
   # W1 -- a script enforcer with no declared call site.
   if [ -z "$sites" ]; then
     err "enforcement-map entry '$blk_id' is adjudication:script but declares NO call_sites. Its enforcer may be invoked from nowhere and nothing would notice — this is exactly how validate-steering-budget.sh came to guard 11 live violations from zero gates. Declare where it runs, with a posture."
-    continue
+    return 0
   fi
 
   # W2 -- a declared call site must at least NAME the enforcer in the file it
@@ -1332,8 +1364,9 @@ while IFS= read -r blk_id; do
   # Accept the bare form (`scripts/validate-X.sh`) and the verdict.sh wrapper
   # (`verdict.sh validate-X`), which is how gate-validation.md legitimately invokes
   # artifact-budget -- a basename-only grep misses the wrapped call entirely.
-  for enf in $(enforcers_of "$block"); do
-    base="$(basename "$enf")"
+  local enf base stem site f hit
+  for enf in $enfs; do
+    base="${enf##*/}"
     stem="${base%.sh}"
     case "$enf" in core/hooks/*) continue ;; esac   # hooks are wired in settings, not step files
     while IFS= read -r site; do
@@ -1344,16 +1377,44 @@ while IFS= read -r blk_id; do
         err "entry '$blk_id' names call site '$site', but $f does not exist"
         continue
       fi
-      if ! grep -qE "(${base}|verdict\.sh ${stem}\b)" "$f"; then
-        err "entry '$blk_id' declares call site '$site', but $(basename "$f") never mentions ${base} (nor 'verdict.sh ${stem}'). The site is fictional: the file it names has never heard of the enforcer."
+      # The same (file, enforcer) pair recurs across entries -- gate-validation.md is the
+      # site for most of the catalog -- so the answer is remembered rather than re-grepped.
+      # The predicate is unchanged; only the number of times it is evaluated is. The cache
+      # is keyed on both halves, so it cannot answer for a pair it was not asked about.
+      case "$w2_cache" in
+        *"|$f|$base|y|"*) hit=y ;;
+        *"|$f|$base|n|"*) hit=n ;;
+        *) if grep -qE "(${base}|verdict\.sh ${stem}\b)" "$f"; then hit=y; else hit=n; fi
+           w2_cache="$w2_cache|$f|$base|$hit|" ;;
+      esac
+      if [ "$hit" = n ]; then
+        err "entry '$blk_id' declares call site '$site', but ${f##*/} never mentions ${base} (nor 'verdict.sh ${stem}'). The site is fictional: the file it names has never heard of the enforcer."
       fi
     done <<SITES
 $sites
 SITES
   done
-done <<IDS
-$(awk '/^checks:/{c=1} c && /^  - id:/ { v=$0; sub(/^  - id:[ ]*/,"",v); gsub(/"/,"",v); print v }' "$MAP")
-IDS
+}
+
+# Walk the tagged stream once, flushing each id's accumulated block when the id changes.
+cur=""; cur_adj=""; sites=""; enfs=""
+while IFS="$(printf '\t')" read -r i9_tag i9_id i9_val; do
+  [ -n "$i9_tag" ] || continue
+  if [ "$i9_id" != "$cur" ]; then
+    [ -n "$cur" ] && i9_entry "$cur" "$cur_adj"
+    cur="$i9_id"; cur_adj=""; sites=""; enfs=""
+  fi
+  case "$i9_tag" in
+    A) cur_adj="$i9_val" ;;
+    S) sites="${sites:+$sites
+}$i9_val" ;;
+    E) enfs="${enfs:+$enfs
+}$i9_val" ;;
+  esac
+done <<STREAM
+$map_stream
+STREAM
+[ -n "$cur" ] && i9_entry "$cur" "$cur_adj"
 
 # --- I5: core_manifest copies in sync (prefix-normalized) --------------------
 # norm_core_manifest() is defined above I8, which needs it too. One definition.
@@ -2053,6 +2114,12 @@ else
   if [ -z "$lib_fns" ]; then
     err "I21 found no function definitions in reconcile/lib.sh. Either the library was emptied or its definition form changed; either way the no-second-copy assertion is now testing nothing and would pass against a tree with four resolvers in it."
   else
+    # ONE awk pass per file, not two greps per (file, helper) pair. The predicates are
+    # transcribed unchanged — same comment stripping, same two regexes, same
+    # define-beats-call precedence — and the reporting loop below still walks lib_fns in
+    # lib.sh's own order inside the glob's file order, so the messages and the sequence
+    # they appear in are identical. This is a fork count, not a subject set: on today's
+    # tree the old shape forked ~600 greps here.
     for f in "$REPO_ROOT"/core/skills/ai-dlc-update/reconcile/*.sh; do
       [ -f "$f" ] || continue
       fbase="$(basename "$f")"
@@ -2060,16 +2127,36 @@ else
       # Comment lines are stripped: every classifier documents WHY it sources lib.sh,
       # and a check that reads its own documentation as a violation is a check that
       # gets switched off.
-      fcode="$(grep -v '^[[:space:]]*#' "$f")"
+      # Space-joined, not newline-joined: BSD awk rejects a literal newline inside a -v
+      # value, and the failure is 144 lines of parse noise on stderr rather than a wrong
+      # answer -- but a check whose helper set arrives empty would report nothing at all.
+      seen="$(awk -v fns="$(printf '%s ' $lib_fns)" '
+        BEGIN { n = split(fns, F, " ") }
+        /^[[:space:]]*#/ { next }
+        {
+          if ($0 ~ /lib\.sh/) srcs = 1
+          for (i = 1; i <= n; i++) {
+            if (F[i] == "") continue
+            if ($0 ~ "^[[:space:]]*" F[i] "\\(\\)[[:space:]]*\\{") D[F[i]] = 1
+            else if ($0 ~ "(^|[^a-zA-Z0-9_])" F[i] "([^a-zA-Z0-9_]|$)") C[F[i]] = 1
+          }
+        }
+        END {
+          print "SOURCES\t" (srcs ? 1 : 0)
+          for (i = 1; i <= n; i++) if (F[i] != "") print F[i] "\t" (D[F[i]] ? 1 : 0) "\t" (C[F[i]] ? 1 : 0)
+        }
+      ' "$f")"
       sources_lib=0
-      printf '%s\n' "$fcode" | grep -q 'lib\.sh' && sources_lib=1
+      case "$seen" in SOURCES$'\t'1*) sources_lib=1 ;; esac
       for fn in $lib_fns; do
-        if printf '%s\n' "$fcode" | grep -qE "^[[:space:]]*${fn}\(\)[[:space:]]*\{"; then
-          err "I21 reconcile/$fbase defines its own ${fn}(), but reconcile/lib.sh is its ONE home. A private copy is exactly the shape that shipped divergent resolvers in v0.52.0 and v0.54.2: each tool reports a confident verdict computed from a different section, and no run compares them. Delete the local definition and source lib.sh."
-        elif [ "$sources_lib" -eq 0 ] \
-          && printf '%s\n' "$fcode" | grep -qE "(^|[^a-zA-Z0-9_])${fn}([^a-zA-Z0-9_]|\$)"; then
-          err "I21 reconcile/$fbase calls ${fn}() but never sources reconcile/lib.sh. The call resolves to nothing at runtime, and these scripts run on a consumer's pull — where the resulting empty section reads as 'no drift' rather than as an error. Add: . \"\$SELF/lib.sh\""
-        fi
+        row="${seen#*$'\n'"$fn"$'\t'}"; row="${row%%$'\n'*}"
+        case "$row" in
+          1*)
+            err "I21 reconcile/$fbase defines its own ${fn}(), but reconcile/lib.sh is its ONE home. A private copy is exactly the shape that shipped divergent resolvers in v0.52.0 and v0.54.2: each tool reports a confident verdict computed from a different section, and no run compares them. Delete the local definition and source lib.sh." ;;
+          0$'\t'1)
+            [ "$sources_lib" -eq 0 ] \
+              && err "I21 reconcile/$fbase calls ${fn}() but never sources reconcile/lib.sh. The call resolves to nothing at runtime, and these scripts run on a consumer's pull — where the resulting empty section reads as 'no drift' rather than as an error. Add: . \"\$SELF/lib.sh\"" ;;
+        esac
       done
     done
   fi
@@ -2090,6 +2177,16 @@ fi
 # Both sides are DERIVED — role files off disk, entries out of the shipped template —
 # because a hand-maintained list is this repo's recurring bug (I8's site table, I12's
 # scan set, and I22's own two earlier escapes).
+attr_of() { # attr_of <newline-prefixed "key<TAB>model<TAB>effort" rows> <key> <2|3>
+  local rows="$1" key="$2" n="$3" row
+  case "$rows" in *"
+$key	"*) ;; *) return 0 ;; esac
+  row="${rows#*"
+$key	"}"; row="${row%%
+*}"
+  if [ "$n" = 2 ]; then printf '%s' "${row%%	*}"; else printf '%s' "${row#*	}"; fi
+}
+
 SETTINGS_TMPL="$REPO_ROOT/templates/settings.json.template"
 if [ ! -f "$SETTINGS_TMPL" ]; then
   err "I22 cannot find templates/settings.json.template. The check that keeps every role's model and effort resolvable just went vacuous — it must locate the shipped config or fail loudly, never pass by finding nothing to compare."
@@ -2111,18 +2208,31 @@ else
     done
     # Every entry's model (when it has one — the party personas legitimately have an
     # effort and no model) must be a key aiDlcModels defines.
+    #
+    # One jq for the whole block instead of one per role, and the membership test moved
+    # into the shell. Same two fields off the same file; the loops below still walk
+    # `declared` (jq's sorted key order) so the errors keep their order.
+    role_attrs="
+$(jq -r '.aiDlcRoles // {} | to_entries[] | "\(.key)\t\(.value.model // "")\t\(.value.effort // "")"' "$SETTINGS_TMPL" 2>/dev/null)"
+    model_nl="
+$model_keys
+"
     for r in $declared; do
-      k="$(jq -r --arg r "$r" '.aiDlcRoles[$r].model // empty' "$SETTINGS_TMPL" 2>/dev/null)"
+      k="$(attr_of "$role_attrs" "$r" 2)"
       [ -n "$k" ] || continue
-      printf '%s\n' "$model_keys" | grep -qx "$k" \
-        || err "I22 aiDlcRoles.$r names model key '$k' but aiDlcModels does not define it. The key does not resolve, so ai-dlc-dispatch-guard.sh binds no model for that role and takes its fail-open branch. Add the key, or point the role at one that exists."
+      case "$model_nl" in
+        *"
+$k
+"*) ;;
+        *) err "I22 aiDlcRoles.$r names model key '$k' but aiDlcModels does not define it. The key does not resolve, so ai-dlc-dispatch-guard.sh binds no model for that role and takes its fail-open branch. Add the key, or point the role at one that exists." ;;
+      esac
     done
     # Effort is injected into the dispatch prompt as a `/effort <level>` directive, so
     # an unrecognised level would instruct a teammate to run a command that does not
     # exist. The guard drops one rather than passing it through; catch it here instead
     # of shipping a value that is silently ignored.
     for r in $declared; do
-      e="$(jq -r --arg r "$r" '.aiDlcRoles[$r].effort // empty' "$SETTINGS_TMPL" 2>/dev/null)"
+      e="$(attr_of "$role_attrs" "$r" 3)"
       [ -n "$e" ] || continue
       case "$e" in
         low|medium|high|xhigh|max) ;;
@@ -2206,20 +2316,34 @@ else
                     core/skills/ai-dlc/overrides/*.md core/team-roles/*.md \
                     core/skills/ai-dlc-setup/SKILL.md core/skills/ai-dlc-update/SKILL.md \
                     core/skills/ai-dlc-update/reconcile/*.md patterns/*.md 2>/dev/null | sort -u)"
+    # install.sh and the corpus list are read ONCE and matched in the shell. `grep -qF`
+    # is a fixed-string containment test and so is bash's `*"$s"*`; `grep -qx` against a
+    # path is a whole-line match. Same two questions, ~300 fewer forks over today's corpus.
+    install_txt="$(cat "$INSTALL_SH")"
+    corpus_nl="
+$corpus_list
+"
     unshipped=""
     for rp in $rule_prose; do
-      base="$(basename "$rp")"; dir="$(dirname "$rp")"
+      base="${rp##*/}"; dir="${rp%/*}"
       # A skill-root file is matched by basename only: every skill-root path shares
       # the `core/skills/ai-dlc/` prefix, so a directory match there would call the
       # whole directory shipped and the check would assert nothing.
       if [ "$dir" = "core/skills/ai-dlc" ]; then
-        grep -qF -- "$base" "$INSTALL_SH" || { unshipped="$unshipped $rp"; continue; }
+        case "$install_txt" in *"$base"*) ;; *) unshipped="$unshipped $rp"; continue ;; esac
       else
-        grep -qF -- "$dir/" "$INSTALL_SH" || grep -qF -- "$base" "$INSTALL_SH" \
-          || { unshipped="$unshipped $rp"; continue; }
+        case "$install_txt" in
+          *"$dir/"*) ;;
+          *"$base"*) ;;
+          *) unshipped="$unshipped $rp"; continue ;;
+        esac
       fi
-      printf '%s\n' "$corpus_list" | grep -qx -- "$rp" \
-        || err "I23 $rp is installed into every consumer but is absent from the audit-rule-files.sh corpus. Rule 18 and rule-authoring.md are unenforced over it, and the audit reports CLEAN having never opened it. Add it to the corpus builder."
+      case "$corpus_nl" in
+        *"
+$rp
+"*) ;;
+        *) err "I23 $rp is installed into every consumer but is absent from the audit-rule-files.sh corpus. Rule 18 and rule-authoring.md are unenforced over it, and the audit reports CLEAN having never opened it. Add it to the corpus builder." ;;
+      esac
     done
     for rp in $unshipped; do
       echo "  note: $rp is a rule-prose file that install.sh never ships; it is correctly outside the audit corpus." >&2
