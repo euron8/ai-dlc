@@ -600,7 +600,16 @@ EOF
   for enf in $lc_declared_enf; do
     [ -f "$REPO_ROOT/$enf" ] || continue
     case "$enf" in
-      *validate-layer-entries.sh) emitted="$(grep -oE '\b(E[1-9]|W[1-9])\b' "$REPO_ROOT/$enf" | sort -u)" ;;
+      # TWO DIGITS, and the second one is not cosmetic. `E[1-9]` cannot match `E10`:
+      # the trailing `\b` needs a non-word character and the `0` is a word character,
+      # so the code is skipped in silence. E1..E9 were ALL allocated by v0.195.0, so
+      # the very next error code this file gained would have been invisible to the
+      # reverse join — the clause claiming it would satisfy the FORWARD direction,
+      # the build would stay green, and the one direction that actually catches an
+      # unclaimed code would simply not cover it. Widening is a no-op on the tree that
+      # shipped it (verified: identical extraction before and after), which is exactly
+      # why it had to be done before the codes existed rather than after.
+      *validate-layer-entries.sh) emitted="$(grep -oE '\b(E[1-9][0-9]?|W[1-9][0-9]?)\b' "$REPO_ROOT/$enf" | sort -u)" ;;
       *layer-drift.sh)            emitted="$(grep -oE '\b(HARD-[A-Z0-9-]+|OVERRIDE-[A-Z0-9-]+|EXTENSION-[A-Z0-9-]+)\b' "$REPO_ROOT/$enf" | sort -u | grep -v -- '-OK$')" ;;
       *)                          emitted="" ;;
     esac
@@ -782,6 +791,9 @@ done
 #                  checked every anchor against it.
 #   anchor_arm     WHICH DIRECTION resolved it? A narrower copy in either tool reports a loose
 #                  anchor the other calls fine, and the operator believes whichever they ran.
+#   unquote        is `'#X'` the anchor `#X` or the anchor `X'`? `extends:` must be quoted to be
+#                  valid YAML (a bare `#` opens a comment), so every reader of it strips quotes
+#                  or resolves against a span that does not exist.
 #
 # COPIES rather than a source, for I25's reason and I29's: core/scripts must not depend on the
 # update skill, and I29 confines ai-dlc-update to reconcile/, so neither may source the other's
@@ -789,7 +801,7 @@ done
 la_fn() { awk "/^$2\(\) \{/,/^\}/" "$1" 2>/dev/null; }
 LA_LINT="$REPO_ROOT/core/scripts/validate-layer-entries.sh"
 LA_LIB="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
-for la_f in nrm_awk anchor_arm shadow_parts; do
+for la_f in nrm_awk anchor_arm shadow_parts unquote; do
   la_a="$(la_fn "$LA_LINT" "$la_f")"
   la_b="$(la_fn "$LA_LIB" "$la_f")"
   if [ -z "$la_a" ] || [ -z "$la_b" ]; then
@@ -1461,6 +1473,40 @@ defined_rules \"\$1\"" _ "$band_sk" 2>/dev/null)"
   fi
 fi
 
+# --- I46: the extension kind vocabulary is one set --------------------------------
+#
+# `LAYER_KINDS` in validate-layer-entries.sh is what E10 REJECTS against; the entry
+# contract in extensions/README.md is what an author READS. Two copies of a closed
+# vocabulary, and the failure is asymmetric in the worst direction: add a kind to the
+# enum and forget the prose, and the grain exists with nothing telling anyone to use
+# it; document a kind the enum does not carry, and the README instructs authors to
+# write an entry the linter ERRORs on. Neither shows up in a test run of either file.
+#
+# This is I39's shape one vocabulary over, and the same reason: a hand-synced list is
+# not a single source. Both sides are DERIVED — the enum from its shell assignment, the
+# prose from the fenced `kind:` line in the entry contract — so neither can be
+# satisfied by restating the other somewhere convenient.
+lk_lint="$REPO_ROOT/core/scripts/validate-layer-entries.sh"
+lk_doc="$REPO_ROOT/core/skills/ai-dlc/extensions/README.md"
+if [ ! -f "$lk_lint" ] || [ ! -f "$lk_doc" ]; then
+  err "I46 cannot find validate-layer-entries.sh and/or extensions/README.md. It joins the kind vocabulary across the two; a missing side would make the join pass by comparing nothing."
+else
+  # The enum, as the script defines it.
+  lk_enum="$(sed -n "s/^LAYER_KINDS='\([^']*\)'.*/\1/p" "$lk_lint" | tr ' ' '\n' | grep -v '^$' | sort -u)"
+  # The prose, from the `kind: a | b | c` line inside the entry contract's fence.
+  lk_prose="$(sed -n 's/^kind:[[:space:]]*\(.*[|].*\)$/\1/p' "$lk_doc" | head -1 | tr '|' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort -u)"
+  if [ -z "$lk_enum" ]; then
+    err "I46 could not read LAYER_KINDS out of core/scripts/validate-layer-entries.sh. That assignment is the set E10 rejects against, so an unreadable one makes this join vacuous while E10 keeps running."
+  elif [ -z "$lk_prose" ]; then
+    err "I46 could not read a 'kind: a | b | c' line out of extensions/README.md's entry contract. The prose side of the vocabulary is what authors read; extracting nothing from it compares the enum against an empty set, which is this invariant's PASS."
+  else
+    lk_only_enum="$(comm -23 <(printf '%s\n' "$lk_enum") <(printf '%s\n' "$lk_prose") | tr '\n' ' ')"
+    lk_only_prose="$(comm -13 <(printf '%s\n' "$lk_enum") <(printf '%s\n' "$lk_prose") | tr '\n' ' ')"
+    [ -n "$lk_only_enum" ]  && err "I46: validate-layer-entries.sh accepts kind(s) extensions/README.md never documents — ${lk_only_enum% }. A grain the linter allows and the entry contract omits is one no author is told exists, so it ships as dead vocabulary. Document it in the entry contract, or drop it from LAYER_KINDS."
+    [ -n "$lk_only_prose" ] && err "I46: extensions/README.md documents kind(s) validate-layer-entries.sh rejects — ${lk_only_prose% }. The entry contract is instructing authors to write an entry E10 fails the build on. Add it to LAYER_KINDS, or stop documenting it."
+  fi
+fi
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -1949,7 +1995,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), and core allocates no check or rule number inside the band reserved for the consumer (I45)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), and the extension kind vocabulary is one set across the linter's enum and the entry contract (I46)."
   exit 0
 fi
 exit 1

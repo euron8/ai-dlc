@@ -49,7 +49,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 4
+contract_version: 5
 
 clauses:
 
@@ -275,6 +275,85 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E9
+
+  # --- extensions/: the qualifier grain (contract_version 5) ----------------------------
+  # Ids taken by reading the WHOLE id set, not by counting on from the clause above this
+  # insertion point — that is precisely how v0.193.0 shipped two clauses under LC-O12,
+  # in a file that is not in numeric order.
+  - id: LC-E10
+    subject: extension
+    level: ERROR
+    since: 5
+    normative: >-
+      An extension's `kind:` is one of `check`, `step-domain`, `role`, `qualifier`. Rule 27's
+      loader routes an entry by its kind, so an unrecognised one is read by nothing: the entry
+      sits in the layer directory looking active and governs no run.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E10
+
+  - id: LC-E11
+    subject: extension
+    level: ERROR
+    since: 5
+    normative: >-
+      An `extends:` value names exactly one anchor, in the file the entry hooks, and that anchor
+      resolves to a heading by the FORWARD containment arm. A reverse-only match silently widens
+      the declared span to the whole enclosing section, so an entry would report narrowed drift
+      while the classifier watched everything under that heading.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E11
+
+  - id: LC-E12
+    subject: extension
+    level: ERROR
+    since: 5
+    normative: >-
+      A `kind: qualifier` entry declares both `extends:` and `position:`, and no other kind
+      declares `position:`. A qualifier renders inside a core section, so without the anchor there
+      is nothing to render into and nothing to drift-check; on any other kind the key states a
+      placement no loader performs.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E12
+
+  - id: LC-E13
+    subject: extension
+    level: ERROR
+    since: 5
+    normative: >-
+      A `position:` value is `append` or `prepend`. Two positions is the whole vocabulary: a
+      literal-prose anchor would be a third anchor resolver, and `reconcile/lib.sh` records two
+      shipped defects caused by duplicate resolvers.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E13
+
+  - id: LC-E14
+    subject: extension
+    level: WARN
+    since: 5
+    normative: >-
+      When an entry declares `extends:` and that span changes, the entry is re-read against the
+      new core text. This is LC-E4's duty at the grain the entry declared rather than at file
+      grain, and it is the same verdict set.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-ANCHOR-DRIFT
+
+  - id: LC-E15
+    subject: extension
+    level: WARN
+    since: 5
+    normative: >-
+      An `extends:` anchor that resolves to no heading in the incoming ref is reported. Upstream
+      renamed or absorbed the section away, and a span that resolves to nothing compares empty
+      against empty: unreported, the narrowing would answer clean for every future change to a
+      section the entry still claims to augment.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-ANCHOR-MISSING
 
   # --- extensions/: additivity and retirement ------------------------------------------
   - id: LC-E5

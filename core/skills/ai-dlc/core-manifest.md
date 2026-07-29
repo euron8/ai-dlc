@@ -160,6 +160,7 @@ core_manifest:
   - fixtures/check5-anchor-base/**
   - fixtures/ci-gates-resolution/**
   - fixtures/consumer-machinery-home/**
+  - fixtures/layer-qualifier-grain/**
   - fixtures/context-mode-protect/**
   - fixtures/context-sensor/**
   - fixtures/core-script-boundary/**

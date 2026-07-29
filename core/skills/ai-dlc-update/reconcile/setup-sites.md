@@ -85,6 +85,7 @@ core_manifest:
   - core/fixtures/check5-anchor-base/**
   - core/fixtures/ci-gates-resolution/**
   - core/fixtures/consumer-machinery-home/**
+  - core/fixtures/layer-qualifier-grain/**
   - core/fixtures/context-mode-protect/**
   - core/fixtures/context-sensor/**
   - core/fixtures/core-script-boundary/**

@@ -200,6 +200,14 @@ anchor_arm() { # anchor_arm <anchor>  < stream  -> FORWARD | REVERSE:<heading> |
   '
 }
 
+unquote() { # unquote <value>
+  case "$1" in
+    "'"*"'") printf '%s' "${1#\'}" | sed "s/'\$//" ;;
+    '"'*'"') printf '%s' "${1#\"}" | sed 's/"$//' ;;
+    *)       printf '%s' "$1" ;;
+  esac
+}
+
 shadow_parts() { # shadow_parts <shadows-value>  -> one `<file>\t<anchor>` line per comma-part
   awk -v s="$1" '
     BEGIN {
@@ -378,6 +386,21 @@ rule_labelled() { # rule_labelled <file> <n>
 # halves disagree is worse than no partition — it would declare a range safe that
 # core is still allocating from.
 BAND_FLOOR=900
+
+# --- the extension kind vocabulary (E10) ---------------------------------------
+#
+# ONE definition, here, for the same reason BAND_FLOOR is one definition: the set is
+# restated in `extensions/README.md`'s entry contract, which is the prose an author
+# actually reads, and I46 in validate-enforcement-map.sh joins the two so the copy
+# cannot rot into a different set. Before this list existed `kind:` only had to be
+# PRESENT, so `kind: qualifer` — or any other typo — was accepted in silence and then
+# routed nowhere by the Rule 27 loader: an entry that reads as active and governs
+# nothing, which is the check-cannot-fire defect wearing an author's typo.
+#
+# Measured before shipping: the reference consumer's thirty-three entries use exactly
+# `step-domain` (21), `role` (8) and `check` (4), so the enum's false-positive set on
+# the tree it was written against is EMPTY. `qualifier` is added by this release.
+LAYER_KINDS='check step-domain role qualifier'
 
 # Is <n> an allocation this band governs? Bare integers only, and the exclusions are
 # in the header note above: a suffix marks a position beside core's N, and an alpha id
@@ -587,6 +610,81 @@ while IFS= read -r f; do
   core_path="$(resolve_target "$hooks")"
   if [ ! -f "$core_path" ]; then
     err "$(rel "$f"): hooks target '$hooks' does not exist at $core_path"; continue
+  fi
+
+  # --- E10 — `kind:` names a grain the loader routes. ----------------------------
+  # See LAYER_KINDS for why the set is defined once and what its false-positive set
+  # measured. Checked AFTER the hooks arm so a single entry missing both keys reports
+  # the missing hook first; an unknown kind on an entry that hooks nothing is noise.
+  if [ -n "$kind" ] && ! printf '%s\n' $LAYER_KINDS | grep -Fxq -- "$kind"; then
+    err "$(rel "$f"): kind '$kind' is not one of: $LAYER_KINDS. Rule 27's loader routes an entry by its kind, so an unrecognised one is read by nothing — the entry sits in the layer directory looking active and governs no run. If this is a new grain, it needs a loader that reads it before it needs a file that declares it."
+  fi
+
+  # --- E11/E12/E13 — the qualifier grain: `extends:` and `position:`. ------------
+  #
+  # WHAT THIS IS FOR. An extension hooks a FILE, so `EXTENSION-HOOK-DRIFT` fires on
+  # any change anywhere in it. Measured across the reference consumer's 33 entries
+  # and the full history of the 17 core files they hook: 1421 (entry, commit) drift
+  # events at file grain against an expected 133 at anchor grain — 91% of what the
+  # operator re-reads every pull is a change to a part of the file the entry never
+  # referred to. `extends:` is the declaration that lets the classifier narrow it.
+  #
+  # `fm()` matches at index 1, which is what keeps `position:` from reading a body's
+  # `disposition:` — that token is live in core (`team-roles/code-reviewer.md`,
+  # `team-roles/remediator.md`, `steps/gate-validation.md`) and an unanchored grammar
+  # for this key matches 8 of its 9 occurrences in core. Any future reader of this key
+  # anchors the same way or inherits that false-positive set.
+  extends="$(unquote "$(fm "$f" extends)")"
+  position="$(unquote "$(fm "$f" position)")"
+
+  if [ -n "$extends" ]; then
+    # Parsed by shadow_parts — the SAME reading `shadows:` gets, bound byte-identical
+    # across this file and reconcile/lib.sh by I40. A second parser for a second
+    # anchor-bearing key is how the three readings I40's header records came to exist.
+    ext_pairs="$(shadow_parts "$extends")"
+    ext_n="$(printf '%s\n' "$ext_pairs" | grep -c .)"
+    if [ "$ext_n" -ne 1 ]; then
+      err "$(rel "$f"): extends: declares $ext_n anchors ('$extends'); exactly one is allowed. The whole point of the key is to give this entry ONE drift subject — two anchors mean two spans, and a drift row could no longer say which one moved without re-introducing the file-grain report it replaces."
+    else
+      ext_file="$(printf '%s' "$ext_pairs" | cut -f1)"
+      ext_anc="$(printf '%s' "$ext_pairs" | cut -f2)"
+      # A bare `#Anchor` inherits the hooked file: shadow_parts emits an empty file
+      # field for a first part that names none, and that is the intended spelling.
+      [ -n "$ext_file" ] || ext_file="$hooks"
+      if [ "$ext_file" != "$hooks" ]; then
+        err "$(rel "$f"): extends: names '$ext_file' but hooks: names '$hooks'. The anchor must live in the file this entry hooks, or the narrowed drift check would watch one file while the entry augments another — a green row for a section nothing here refers to."
+      elif [ -z "$ext_anc" ]; then
+        err "$(rel "$f"): extends: '$extends' carries no '#anchor'. Without one it declares the same file grain hooks: already declares, so it narrows nothing while reading as though it did."
+      else
+        case "$(anchor_arm "$ext_anc" < "$core_path")" in
+          FORWARD) : ;;
+          REVERSE:*)
+            ext_real="$(anchor_arm "$ext_anc" < "$core_path" | sed 's/^REVERSE://')"
+            err "$(rel "$f"): extends: anchor '$ext_anc' is not a heading in $hooks — it CONTAINS the heading '$ext_real'. It resolves only by the reverse arm of the containment match, which silently WIDENS the span to that whole section: you would believe drift was narrowed to a paragraph while the classifier watched everything under that heading. Write the anchor as '$ext_real'."
+            ;;
+          *)
+            err "$(rel "$f"): extends: anchor '$ext_anc' matches no heading in $hooks. The narrowed drift check has no span to watch, so this entry would report clean through every upstream change to the section it augments."
+            ;;
+        esac
+      fi
+    fi
+  fi
+
+  # `position:` is meaningful only where something renders INSIDE a core section.
+  # On any other kind it is a key the loader never reads, which is the same silent
+  # no-op E10 exists to stop one field over.
+  if [ "$kind" = qualifier ]; then
+    [ -n "$extends" ]  || err "$(rel "$f"): kind 'qualifier' requires 'extends:'. A qualifier renders inside a core section, so without the anchor naming that section there is nothing for the loader to render into and nothing for the pull to drift-check."
+    [ -n "$position" ] || err "$(rel "$f"): kind 'qualifier' requires 'position:'. The loader has to place this body relative to the core prose it qualifies; undeclared, two readers of the merged section can order it differently and the rendered rulebook stops being one document."
+  elif [ -n "$position" ]; then
+    err "$(rel "$f"): position '$position' is declared on kind '$kind', which does not render inside a core section. Nothing reads the key here, so it states a placement that never happens. Use kind 'qualifier' if that is what this entry does."
+  fi
+
+  if [ -n "$position" ]; then
+    case "$position" in
+      append|prepend) : ;;
+      *) err "$(rel "$f"): position '$position' is not 'append' or 'prepend'. Two positions is the whole vocabulary on purpose: a literal-prose anchor would be a THIRD anchor resolver in this repo, and reconcile/lib.sh's header records two shipped defects caused by duplicate resolvers." ;;
+    esac
   fi
 
   # E6 / W1 — extension defines a section number its hooked core file also defines.

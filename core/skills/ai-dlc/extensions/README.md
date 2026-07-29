@@ -76,15 +76,42 @@ the pipeline so the layer loader (SKILL.md Rule 27) can activate it:
 
 ```markdown
 ---
-kind: check | step-domain | role
+kind: check | step-domain | role | qualifier
 hooks: steps/gate-validation.md        # the core file/step this augments
 id: <stable-id>                        # e.g. exec-health-floor, check-financial-display
 push_candidate: false                  # true = generalizable; feeds the ai-dlc-update push-mine / absorption arc
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
+extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
+position: append                       # `kind: qualifier` ONLY — append | prepend
 ---
 
 <the additive rule / check / step body>
 ```
+
+**`extends:` — narrow your drift to the section you actually meant.** Optional on every kind.
+Without it, your drift subject is the whole hooked FILE, so any change anywhere in it puts this
+entry on the re-read worklist. Measured across the reference consumer's 33 entries and the full
+history of the 17 core files they hook: **1421 (entry, commit) drift events at file grain against
+an expected 133 at anchor grain.** Nine of every ten re-reads are a change to a part of the file
+your entry never referred to, and a worklist that is 91% noise is one you learn to clear rather
+than read. Declaring the anchor is what buys the other 91% back.
+
+Write it `#Anchor` to mean "in the file I already hook", or `file.md#Anchor` — the file part, if
+present, must be the one `hooks:` names. Exactly one anchor: two would mean two spans, and a drift
+row could no longer say which one moved. The anchor must name a heading FORWARD (the heading
+contains your anchor), not the reverse — see LC-E11.
+
+**`kind: qualifier` — render INSIDE a core section.** The other kinds are additive at file scope:
+they render as their own section. A qualifier renders *within* the core section `extends:` names,
+at `position: append` or `prepend`, and it carries **no `base_sha` obligation on prose it does not
+restate** — which is the whole point. Before this grain existed, a consumer that only wanted to
+qualify a core section had to shadow all of it verbatim in `overrides/` and then carry `base_sha`
+drift on prose it never meant to change. On the reference consumer that cost **376 of 1126
+significant override body lines (33%) byte-identical to the core span they shadow**, and one
+override spends **132 lines** to add a single integer to one table cell.
+
+A qualifier is still additive — it does not delete or contradict core's prose, it adds to it. If
+you need to *change* what core says, that is still `overrides/` with a `base_sha`.
 
 **`hooks:` path convention.** The value is written `core/`-relative (the same
 convention `reconcile/setup-sites.md` and `preclassify.sh` use), NOT relative
@@ -150,11 +177,11 @@ state of your tree, so a pull that changes nothing here still reports it.
     The labelled form renders as its own section, so the reference stays
     unambiguous and `/ai-dlc-update` stops reporting `EXTENSION-RESTATES-CORE`
     against it on every pull. What it does NOT do is render the rule *inside*
-    core's section; there is no grain for that today (`overrides/` gets you there
-    only by replacing the whole section verbatim, and then you carry `base_sha`
-    drift on prose you never meant to change). If that placement matters for your
-    entry, raise it upstream as a push candidate rather than reaching for an
-    override.
+    core's section. If that placement is what you want, that is `kind: qualifier`
+    with `extends:` and `position:` — see the entry contract above. Reaching for
+    an override to get it means replacing the whole section verbatim and then
+    carrying `base_sha` drift on prose you never meant to change, which is the
+    cost the qualifier grain exists to remove.
 - **Label your catalog (Rule 27(d)) — `kind: check` entries.** Your check numbers are
   your own namespace, but they render into the SAME merged list as core's, under the
   SAME integers. So say which catalog a check belongs to, in the heading and in the
@@ -255,6 +282,29 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-E9]** ERROR — an extension declares `push_candidate:` as `true` or `false`. It is the flag
   the push queue is drained from, so an entry without it can never be offered upstream and never
   retired on absorption.
+- **[LC-E10]** ERROR — `kind:` is one of `check`, `step-domain`, `role`, `qualifier`. The Rule 27
+  loader routes an entry by its kind, so an unrecognised one — a typo included — is read by
+  nothing: the entry sits here looking active and governs no run.
+- **[LC-E11]** ERROR — an `extends:` value names exactly one anchor, in the file this entry hooks,
+  and that anchor resolves to a heading by the FORWARD containment arm. One anchor, because the
+  key exists to give the entry ONE drift subject. Forward, because a reverse-only match (your
+  anchor CONTAINS the heading) silently widens the span to that whole section, and you would read
+  a narrowed drift row while the classifier watched everything under the heading.
+- **[LC-E12]** ERROR — a `kind: qualifier` entry declares both `extends:` and `position:`, and no
+  other kind declares `position:`. A qualifier renders inside a core section: without the anchor
+  there is nothing to render into, and on any other kind the key states a placement no loader
+  performs.
+- **[LC-E13]** ERROR — `position:` is `append` or `prepend`. Two positions is the whole vocabulary
+  on purpose; a literal-prose anchor would be a third anchor resolver, and `reconcile/lib.sh`
+  records two shipped defects caused by duplicate resolvers.
+- **[LC-E14]** WARN — when a declared `extends:` span changes, the entry is re-read against the new
+  core text. This is LC-E4's duty at the grain you declared instead of at file grain, with the same
+  verdict set.
+- **[LC-E15]** WARN — an `extends:` anchor that resolves to no heading in the incoming ref is
+  reported: upstream renamed the section or absorbed it away. Loud on purpose. A span that resolves
+  to nothing compares empty against empty, so an unreported one would answer *clean* for every
+  future change to a section your entry still claims to augment — the narrowing turning a true loud
+  report into a false quiet one. Re-anchor it, or retire the entry.
 - **[LC-N1]** ERROR — a consumer check does not redefine a core check NUMBER under a different
   title. The integer renders into the same merged list as core's, so a bare `Check N` in the gate
   log — the durable audit record — would have two referents.
