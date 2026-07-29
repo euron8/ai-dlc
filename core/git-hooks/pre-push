@@ -144,6 +144,20 @@ step "shell syntax (every shipped script and hook)" syntax_all
 
 # 5. Fixtures are adversarial self-tests for the gate checks. A fixture never driven is
 #    a green light nobody earned.
+#
+#    AND THE LOOP BELOW IS WHERE THEY GO UNEARNED. `[ -f "$d/run.sh" ] || continue` prints
+#    nothing for what it skips, so a directory with no driver reads exactly like one that
+#    passed. The distribution catches that where fixtures are AUTHORED (I20 in
+#    validate-enforcement-map.sh, a dev-repo gate that says so in its own header) and H1
+#    catches it at gate time for fixtures a `kind: check` entry BINDS — which on the
+#    reference consumer is none. Between the two, a consumer's own fixture directory was
+#    covered by nothing. `drivability` below is that cover. It runs BEFORE the suite so the
+#    accounting is stated whether or not a driver later fails, and — like the suite — it is
+#    UNDER the mid-pull guard: /ai-dlc-update writes core one file at a time, so a tree with
+#    the marker up can hold a core fixture directory whose run.sh has not been written yet,
+#    and reporting that would name a core file the consumer did not write and cannot fix.
+drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
+
 run_fixtures() {
   local rc=0 d
   for d in tests/fixtures/*/; do
@@ -182,6 +196,8 @@ MSG
 if [ -f .claude/.ai-dlc-applying ]; then
   step "fixture suite" applying_guard
 elif [ -d tests/fixtures ]; then
+  [ -f scripts/ai-dlc/validate-fixture-drivability.sh ] &&
+    step "fixture drivability (a skipped fixture reads like one that passed)" drivability
   step "fixture suite" run_fixtures
 fi
 

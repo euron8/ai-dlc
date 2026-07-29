@@ -110,6 +110,7 @@ core_manifest:
   - core/fixtures/ledger-reverify/**
   - core/fixtures/ledger-status-vocabulary/**
   - core/fixtures/ledger-reverify-unfalsifiable/**
+  - core/fixtures/fixture-drivability/**
   - core/fixtures/ledger-rotate/**
   - core/fixtures/mandatory-rules-clean-tree/**
   - core/fixtures/mutation-red-replay/**
