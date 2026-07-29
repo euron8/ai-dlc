@@ -578,8 +578,8 @@ else
       if (lvl == "")  printf "%s has no level:; ", id
       if (enf == "")  printf "%s has no enforcer:; ", id
       if (code == "") printf "%s has no code:; ", id
-      if (lvl != "" && lvl != "ERROR" && lvl != "WARN")
-        printf "%s level %s is not ERROR or WARN; ", id, lvl
+      if (lvl != "" && lvl != "ERROR" && lvl != "WARN" && lvl != "ADJUDICATED")
+        printf "%s level %s is not ERROR, WARN or ADJUDICATED; ", id, lvl
     }
   ' "$lc_file")"
   if [ -n "$lc_i37" ]; then
@@ -670,6 +670,70 @@ $(awk '
   function emit() { if (home != "") printf "%s|%s\n", id, home }
 ' "$lc_file")
 EOF
+
+  # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
+  # on it, PROVEN BY RUNNING THE ENFORCER rather than by grepping it. ---
+  #
+  # `level:` was declared for six contract versions with NO behavioural reader anywhere in the
+  # tree: I37 checked it was present and nothing checked what it did. v0.213.0 gave it one —
+  # `reconcile/layer-drift.sh` derives its adjudicable code set from this file — and that is
+  # exactly the shape that goes inert without a sound. Rename the token on either side, break
+  # the reader's awk, point it at the wrong path, and every ADJUDICATED clause quietly degrades
+  # to a WARN with extra prose: the classifier still runs, still emits every row it emitted
+  # before, and the blocking half simply never appears. Nothing else in the build would notice,
+  # because there is no row whose ABSENCE any other check asserts.
+  #
+  # So this joins the two sides by running the reader's own `--adjudicated-codes` mode against
+  # the same ref the declaration is read from. A restated extraction here would agree with
+  # itself while the shipped one had stopped resolving — the defect it exists to catch.
+  #
+  # BOTH REFS ARE HEAD, deliberately. Reading the declaration from the worktree and the reader's
+  # answer from a ref makes every uncommitted contract edit a false positive, which is the shape
+  # an operator turns off. The join is about grammar agreement, not about staged content, and
+  # pre-push runs it against the commits actually being pushed.
+  lc_rel="core/skills/ai-dlc/layer-contract.yaml"
+  lc_drift="core/skills/ai-dlc-update/reconcile/layer-drift.sh"
+  if [ "$lc_file" = "$REPO_ROOT/$lc_rel" ] && git -C "$REPO_ROOT" cat-file -e "HEAD:$lc_rel" 2>/dev/null; then
+    lc_adj_declared="$(git -C "$REPO_ROOT" show "HEAD:$lc_rel" | awk '
+      /^  - id:/    { lvl=""; next }
+      /^    level:/ { lvl=$2; next }
+      /^    code:/  { if (lvl == "ADJUDICATED") print $2; next }
+    ' | sort)"
+    lc_adj_read="$(bash "$REPO_ROOT/$lc_drift" --adjudicated-codes "$REPO_ROOT" HEAD 2>/dev/null | sort)"
+
+    if [ "$lc_adj_declared" != "$lc_adj_read" ]; then
+      err "I58: layer-contract.yaml declares $(printf '%s' "$lc_adj_declared" | grep -c .) clause code(s) at level ADJUDICATED [$(printf '%s' "$lc_adj_declared" | tr '\n' ' ')] but layer-drift.sh's own --adjudicated-codes reader answers with [$(printf '%s' "$lc_adj_read" | tr '\n' ' ')]. The level is declared and not acted on, so every clause at it degrades to a WARN with extra prose and no blocking row ever appears."
+    elif [ -z "$lc_adj_declared" ]; then
+      echo "  note: I58 — 0 clauses at level ADJUDICATED, so the reader has no subject. This is an affirmative zero, not a pass: the negative probe below still runs." >&2
+    fi
+
+    # THE NEGATIVE PROBE. Everything above is satisfied by a reader that returns the right set
+    # for the wrong reason — including one that hard-codes it. Mutate the LEVEL TOKEN in a copy
+    # of the contract, publish that copy as a throwaway commit (a dangling object; nothing is
+    # written to any ref), and re-ask. A reader keying on the token answers empty. A reader that
+    # answers the same thing is not reading the level at all.
+    lc_probe_tmp="$(mktemp -d)"
+    git -C "$REPO_ROOT" show "HEAD:$lc_rel" | sed 's/^\(    level:\) ADJUDICATED$/\1 ADJUDICATEDX/' > "$lc_probe_tmp/c.yaml"
+    if git -C "$REPO_ROOT" show "HEAD:$lc_rel" | cmp -s - "$lc_probe_tmp/c.yaml"; then
+      err "I58 negative probe: the level-token mutation matched nothing in layer-contract.yaml, so the probe never mutated anything and its silence proves nothing about the reader."
+    else
+      lc_probe_blob="$(git -C "$REPO_ROOT" hash-object -w "$lc_probe_tmp/c.yaml")"
+      lc_probe_idx="$lc_probe_tmp/index"
+      GIT_INDEX_FILE="$lc_probe_idx" git -C "$REPO_ROOT" read-tree HEAD 2>/dev/null
+      GIT_INDEX_FILE="$lc_probe_idx" git -C "$REPO_ROOT" update-index --cacheinfo "100644,$lc_probe_blob,$lc_rel" 2>/dev/null
+      lc_probe_tree="$(GIT_INDEX_FILE="$lc_probe_idx" git -C "$REPO_ROOT" write-tree 2>/dev/null)"
+      lc_probe_commit="$(git -C "$REPO_ROOT" commit-tree "$lc_probe_tree" -m "I58 probe" </dev/null 2>/dev/null)"
+      if [ -z "$lc_probe_commit" ]; then
+        err "I58 negative probe: could not build the probe commit, so the reader's dependence on the level token is UNPROVEN. Do not read the clean result above as coverage."
+      else
+        lc_probe_read="$(bash "$REPO_ROOT/$lc_drift" --adjudicated-codes "$REPO_ROOT" "$lc_probe_commit" 2>/dev/null)"
+        if [ -n "$lc_probe_read" ]; then
+          err "I58 negative probe: the level token was mutated to ADJUDICATEDX and layer-drift.sh still reports [$(printf '%s' "$lc_probe_read" | tr '\n' ' ')] as adjudicable. Its set is not derived from the contract's level field, so moving a clause between levels there changes nothing about what blocks."
+        fi
+      fi
+    fi
+    rm -rf "$lc_probe_tmp"
+  fi
 fi
 
 # --- I39: the ledger status vocabulary is one set across emitter and rulebook --
@@ -2784,7 +2848,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58)."
   exit 0
 fi
 exit 1

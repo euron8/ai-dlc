@@ -36,6 +36,29 @@
 #   WARN   mechanized, false-positive set measured and enumerated, NEVER blocks. The policy
 #          `validate-layer-entries.sh` states applies: a linter that errors dozens of times on
 #          first contact gets disabled, and then catches nothing.
+#   ADJUDICATED
+#          candidate set mechanized, VERDICT HUMAN. The clause's own code fires exactly as a
+#          WARN does; what the level adds is a recorded-verdict duty, enforced by LC-A1 against
+#          `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`. Unrecorded BLOCKS;
+#          recorded costs one extra row and no decision. THE RITUAL NAME, used verbatim wherever
+#          this is described: *the layer conformance adjudication*.
+#
+#          WHY A THIRD LEVEL AND NOT A FOURTH STATUS. Some clauses cannot be decided by a
+#          predicate and must not therefore go unenforced. `extensions/README.md` states the
+#          additive-only restriction and then says of it, in its own prose, "No scanner enforces
+#          it" and "this rule is unenforced" — because the re-read that WOULD enforce it is a
+#          judgement. Before this level the only home for such a clause was WARN, which reprints
+#          the same row every pull with no way to say "this one was looked at", so the operator
+#          learns to clear the worklist rather than read it. Measured on the reference consumer
+#          at the pull this level shipped for: SEVENTEEN of thirty-three extension entries carry
+#          that row.
+#
+#          THE LEVEL IS READ, NOT DECLARED. `reconcile/layer-drift.sh` derives the ADJUDICATED
+#          code set from THIS FILE at THEIRS and applies the duty to exactly those rows. Moving a
+#          clause to this level is a one-line edit here and no script change, and there is no
+#          hand-list of adjudicable statuses anywhere to drift from it. Until this level existed
+#          `level:` had NO behavioural reader in the tree — it was checked for presence by I37
+#          and read by nothing.
 #
 # `since:` is the contract_version that introduced the clause. A clause NEVER retro-applies:
 # an entry declaring `conforms_to: N` is held only to clauses with `since <= N`. Upstream adds
@@ -49,7 +72,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 6
+contract_version: 7
 
 clauses:
 
@@ -254,7 +277,7 @@ clauses:
 
   - id: LC-E4
     subject: extension
-    level: WARN
+    level: ADJUDICATED
     since: 1
     normative: >-
       When the hooked core file changes, the entry is re-read and its verdict recorded as
@@ -332,7 +355,7 @@ clauses:
 
   - id: LC-E14
     subject: extension
-    level: WARN
+    level: ADJUDICATED
     since: 5
     normative: >-
       When an entry declares `extends:` and that span changes, the entry is re-read against the
@@ -523,3 +546,38 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W3
+
+  # --- the layer conformance adjudication -----------------------------------------------
+  #
+  # These two are the MECHANISM of `level: ADJUDICATED`, not clauses about a consumer's
+  # authoring. They are stated as clauses anyway, and deliberately: the codes below are emitted
+  # by a declared enforcer, so I36's reverse direction requires a clause to claim each one, and
+  # an unclaimed code is precisely the "an operator is handed a verdict with no stated rule
+  # behind it" state that direction exists to make unrepresentable.
+  - id: LC-A1
+    subject: any
+    level: ERROR
+    since: 7
+    normative: >-
+      Every row of a clause at `level: ADJUDICATED` has a verdict recorded in
+      `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl` under the subject digest
+      that row fired on. Unrecorded blocks `apply`. The record is keyed by the SUBJECT STATE, so
+      a later pull that moves either the entry or the core text it hooks re-fires the duty
+      rather than inheriting the old verdict — a record keyed by path alone would be a permanent
+      exemption wearing an adjudication's clothes.
+    prose_home: core/skills/ai-dlc-update/SKILL.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: HARD-LAYER-ADJUDICATION-MISSING
+
+  - id: LC-A2
+    subject: any
+    level: ERROR
+    since: 7
+    normative: >-
+      Two register records under one key do not state different verdicts unless the later one
+      declares `supersedes` and a `reason`. Retraction stays available; it has to be declared.
+      Undeclared, the register answers a lookup with whichever record happens to be read, and
+      the blocking half of LC-A1 then depends on file order.
+    prose_home: core/skills/ai-dlc-update/SKILL.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: HARD-REGISTER-CONTRADICTION
