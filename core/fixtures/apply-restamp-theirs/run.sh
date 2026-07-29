@@ -194,7 +194,7 @@ if [ ! -f "$APPLYING" ]; then
 else
   bad "the in-flight marker survived a CLEAN apply — every subsequent push blocks on a consistent tree"
 fi
-if printf '%s\n' "$out" | grep -q 'RESOLVED.*consistent'; then
+if grep -q 'RESOLVED.*consistent' <<<"$out"; then
   ok "  and the report says so, rather than clearing it silently"
 else
   bad "  the report does not record the tree becoming consistent"
@@ -214,7 +214,7 @@ W2="$WORK/consumer2"
 mkdir -p "$W2/.claude/session-driver" "$W2/tests/fixtures" || exit 2
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$W2/.claude/.ai-dlc-version"
 out6="$(bash "$APPLY2" "$DIST" "$BASE" "$W2" "$THEIRS" 2>&1)"
-if printf '%s\n' "$out6" | grep -q 'restamp-withheld'; then
+if grep -q 'restamp-withheld' <<<"$out6"; then
   if [ -f "$W2/.claude/.ai-dlc-applying" ]; then
     ok "a withheld re-stamp LEAVES the marker — the suite stays blocked on a partial tree"
   else
@@ -239,14 +239,14 @@ mkdir -p "$PP/.claude" "$PP/tests/fixtures/x" || exit 2
 printf '#!/usr/bin/env bash\nexit 0\n' > "$PP/tests/fixtures/x/run.sh"
 : > "$PP/.claude/.ai-dlc-applying"
 pp_out="$(cd "$PP" && bash "$PREPUSH" </dev/null 2>&1)"; pp_rc=$?
-if printf '%s\n' "$pp_out" | grep -q 'ai-dlc-applying' && [ "$pp_rc" -ne 0 ]; then
+if grep -q 'ai-dlc-applying' <<<"$pp_out" && [ "$pp_rc" -ne 0 ]; then
   ok "pre-push REFUSES the fixture suite while the marker exists, and names the file"
 else
   bad "pre-push ran the suite on a mid-pull tree (rc=$pp_rc) — the marker is written but nothing reads it"
 fi
 rm -f "$PP/.claude/.ai-dlc-applying"
 pp_out2="$(cd "$PP" && bash "$PREPUSH" </dev/null 2>&1)"
-if ! printf '%s\n' "$pp_out2" | grep -q 'ai-dlc-applying'; then
+if ! grep -q 'ai-dlc-applying' <<<"$pp_out2"; then
   ok "  control: with no marker the suite runs normally (the guard is not always-on)"
 else
   bad "  the guard fires with no marker present — it would block every push forever"

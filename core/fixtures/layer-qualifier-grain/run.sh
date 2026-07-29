@@ -85,7 +85,7 @@ esac
 # --- Part 2: the authoring arms fire, one message each ------------------------
 BAD_OUT="$(bash "$LINTER" "$BAD" 2>&1)"
 assert_msg() { # assert_msg <label> <grep-pattern>
-  printf '%s' "$BAD_OUT" | grep -q "$2" && ok "$1" || bad "$1 — no message matching /$2/"
+  grep -q "$2" <<<"$BAD_OUT" && ok "$1" || bad "$1 — no message matching /$2/"
 }
 assert_msg "E10 rejects a kind the loader routes nowhere"        "kind 'qualifer' is not one of"
 assert_msg "E11 rejects an anchor matching no heading"           "anchor 'No Such Heading Anywhere' matches no heading"
@@ -103,7 +103,7 @@ assert_msg "E14 rejects gate_types: on a kind no row loads"      "Only a check i
 # Every arm above is an "it fired" assertion, and all of them are satisfied by a
 # linter that errors on every entry. The clean tree is what says otherwise.
 GOOD_OUT="$(bash "$LINTER" "$CONS" 2>&1)"
-if printf '%s' "$GOOD_OUT" | grep -q '^ERROR'; then
+if grep -q '^ERROR' <<<"$GOOD_OUT"; then
   bad "the CLEAN consumer drew errors — the new arms fire on well-formed entries, so every Part 2 assertion above is consistent with a linter that simply rejects everything:
 $(printf '%s' "$GOOD_OUT" | grep '^ERROR' | sed 's/^/        /')"
 else

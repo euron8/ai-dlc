@@ -36,11 +36,11 @@ else
 fi
 
 # --- Assertion 1: a LIVE retired line in an override is flagged ----------------
-printf '%s\n' "$OUT" | grep -q 'overrides/team-roles__tea__consumer.md.*Personal:/model' \
+grep -q 'overrides/team-roles__tea__consumer.md.*Personal:/model' <<<"$OUT" \
   && ok "an override carrying the retired shape on a live line is flagged" \
   || bad "the live retired line in the tea override was NOT flagged — the detector misses the plainest case"
 
-printf '%s\n' "$OUT" | grep -q 'overrides/team-roles__tea__consumer.md.*Bedrock:/model' \
+grep -q 'overrides/team-roles__tea__consumer.md.*Bedrock:/model' <<<"$OUT" \
   && ok "both retired labels are reported, not just the first" \
   || bad "only one of the two retired labels was reported"
 
@@ -48,19 +48,19 @@ printf '%s\n' "$OUT" | grep -q 'overrides/team-roles__tea__consumer.md.*Bedrock:
 # The matcher must not anchor at line start. An extension that greps core and pastes the
 # captured output indents it; one that quotes the pattern in a fence escapes the
 # backtick. Anchoring on '^- ' missed exactly this file on the reference consumer.
-printf '%s\n' "$OUT" | grep -q 'extensions/steps-domain/bug-investigation-push.md.*Personal:/model' \
+grep -q 'extensions/steps-domain/bug-investigation-push.md.*Personal:/model' <<<"$OUT" \
   && ok "an indented / backslash-escaped occurrence is flagged (matcher is not line-anchored)" \
   || bad "the indented+escaped occurrence was NOT flagged — the matcher is anchored again and misses embedded greps"
 
 # --- Assertion 3: a PARAPHRASE is not flagged ---------------------------------
 # The documented limit. Asserting it keeps the matcher from widening into every
 # reworded sentence, which would drown the finding it exists to surface.
-printf '%s\n' "$OUT" | grep -q 'team-roles__analyst__effort.md' \
+grep -q 'team-roles__analyst__effort.md' <<<"$OUT" \
   && bad "a paraphrase with no literal shape was flagged — the matcher has widened into prose" \
   || ok "a prose paraphrase carrying no literal shape is NOT flagged (stated limit holds)"
 
 # --- Assertion 4: an unrelated layer file is not flagged ----------------------
-printf '%s\n' "$OUT" | grep -q 'retro-domain.md' \
+grep -q 'retro-domain.md' <<<"$OUT" \
   && bad "a layer file with no core-contract reference was flagged" \
   || ok "a layer file referencing no core contract is not flagged"
 
@@ -74,7 +74,7 @@ NOOP="$(bash "$SCRIPT" "$DIST" "$THEIRS" "$THEIRS" "$CONSUMER" 2>/dev/null)"
 # 'no shapes found' and 'nothing was retired' are the same empty output. If the rulebook
 # cannot be read the detector must say so, or it passes vacuously on every release.
 ERRTXT="$(bash "$SCRIPT" "$DIST" deadbeefdeadbeefdeadbeef "$THEIRS" "$CONSUMER" 2>&1 >/dev/null)"
-printf '%s' "$ERRTXT" | grep -q 'refusing to report clean' \
+grep -q 'refusing to report clean' <<<"$ERRTXT" \
   && ok "an unreadable base warns loudly instead of reporting clean" \
   || bad "an unreadable base produced no warning — the detector would pass vacuously whenever the rulebook cannot be read"
 

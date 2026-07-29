@@ -312,7 +312,7 @@ has 'MISSING (manifest id, no anchor): 99' "$out" \
 # --- Assertion 15: an anchor no row claims -> ORPHAN ------------------------
 fresh
 printf '\n### 4. Fourth\n<!-- CHECK_LOADED: 4 -->\n' >> "$WORK/t/$GV"
-printf '%s' "$(manifest)" | grep -q 'ORPHAN  (anchor, no manifest claim): 4' \
+grep -q 'ORPHAN  (anchor, no manifest claim): 4' <<<"$(manifest)" \
   && ok "an anchor no manifest row claims -> ORPHAN 4" \
   || bad "drift in the anchor->manifest direction went undetected"
 
@@ -324,7 +324,7 @@ printf '%s' "$(manifest)" | grep -q 'ORPHAN  (anchor, no manifest claim): 4' \
 fresh
 perl -0pi -e 's/\| universal \| 1, 2 \|\n\| retro     \| 3 \|\n//' "$WORK/t/$GV"
 out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
-if [ "$rc" = "2" ] && printf '%s' "$out" | grep -q 'parsed zero rows'; then
+if [ "$rc" = "2" ] && grep -q 'parsed zero rows' <<<"$out"; then
   ok "manifest with zero rows -> exit 2, reason 'parsed zero rows'"
 else
   bad "zero-row manifest exited $rc / wrong reason — it can pass by comparing nothing"
@@ -334,7 +334,7 @@ fi
 fresh
 perl -0pi -e 's/\| universal \| 1, 2 \|\n//' "$WORK/t/$GV"
 out="$(manifest)"; rc="$(rc_of "$MANIFEST" "$GV")"
-if [ "$rc" = "2" ] && printf '%s' "$out" | grep -q "no 'universal' row"; then
+if [ "$rc" = "2" ] && grep -q "no 'universal' row" <<<"$out"; then
   ok "manifest with rows but no universal row -> exit 2, reason 'no universal row'"
 else
   bad "a manifest missing its always-loaded set exited $rc / wrong reason"

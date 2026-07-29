@@ -70,7 +70,7 @@ expect_says() {
   ASSERTIONS=$((ASSERTIONS + 1))
   out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" 2>&1)"
   for want in "$@"; do
-    printf '%s' "$out" | grep -qF -- "$want" || missing="$missing
+    grep -qF -- "$want" <<<"$out" || missing="$missing
             missing: \"$want\""
   done
   if [ -z "$missing" ]; then

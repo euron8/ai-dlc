@@ -17,6 +17,220 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.207.0] — 2026-07-29
+
+### Fixed — 300 shipped checks were written so that they stop firing once their input outgrows the pipe buffer, and say nothing about it
+
+`grep -q` exits at its first match. Under `set -o pipefail` the pipeline's status is the last
+non-zero one, so a writer that still had bytes to push takes EPIPE and **its** status becomes
+the pipeline's answer. A test written as "write this variable, ask grep whether the pattern is
+in it" therefore answers **not found on input that contains the pattern**.
+
+**Measured, not argued.** With the match near the start of a 2 MB value: **300 of 300 runs
+reported NOT-FOUND**. The identical test reading the value as a here-string reported found
+**300 of 300**. Control, in the same harness: a token genuinely absent reported not-found
+300/300 under both forms, so the harness can say "no".
+
+**It is a size threshold, not a race, and that is worse.** Swept across input sizes on an idle
+18-core machine: correct at 1K, 4K, 8K, 16K and 32K; **wrong at 64K and above, 0 of 100 at
+every size past it.** The boundary is the pipe buffer. Re-run under 24 concurrent pipe-churning
+workers the boundary **did not move** (32K correct, 64K wrong, idle and loaded alike). So this
+is not a flake that shows up occasionally — once a value grows past the buffer the check is
+switched off *permanently*, and the run looks exactly like a green one.
+
+**Which direction the bug points decides how bad it is.** In a positive assertion
+(`if match; then ok`) it is a false FAIL — noise someone chases. In a **negative** assertion
+(`if match; then the tree is bad`) it is a false **PASS**: this repo's named defect class, a
+check that cannot fire reading exactly like one that passed, with no symptom at all.
+
+**Scope, derived with a control rather than grepped for.** 300 sites across 55 shipped files.
+The first extraction found 63 files; the discovery expression matched the literal `grep -q` and
+so could not see `grep -Eq` or `grep -Fxq`, and it missed
+`core/scripts/validate-layer-entries.sh` — the ERROR-tier authoring linter. The corrected
+expression finds 64. **The count depends on the extraction, which is why both are stated here.**
+Of the 300, **250 sit in 38 files that set `pipefail`** and were live; **44 in 17 files that do
+not** and were latent — `set -u` alone leaves the pipeline reporting grep's status, which is
+correct. All 300 are converted, because a file gains `pipefail` in one line.
+
+**Every site now reads the value as a here-string**, which has no pipe and therefore no EPIPE.
+
+**Fidelity, which is the whole question for a 300-site mechanical rewrite.** A here-string
+appends a newline; `printf '%s\n'` and `echo` already emit one, so those 163 sites are
+byte-identical by construction. The 137 `printf '%s'` sites differ by exactly one trailing
+**empty** line, and only when the value is empty or already newline-terminated — which can
+change a verdict only if the pattern **matches an empty line**. Every pattern was run against
+one empty line with its own site's grep flags: **0 of 115 statically-resolvable patterns match
+empty** (control: an empty-matching pattern IS detected by that harness). The remaining 22 are
+built from a shell variable and were adjudicated individually — every one carries a literal
+prefix, a length floor (`^[0-9a-f]{7,40}$`), or a variable proven non-empty at its assignment.
+
+**Proof, and a byte-identical differential alone would not have been one.** All 83 fixtures'
+stdout and stderr were captured before and after. **79 identical.** Three differ only in values
+proven run-nondeterministic by capturing the **unchanged** tree twice (run-time git shas,
+elapsed seconds). The fourth, `h2-attest-scripts-dir`, was **identical** across two unchanged
+runs — so nondeterminism did not explain it: it content-hashes three fixture directories and the
+sweep edited one of them, and its assertion tests the digest's **shape**, with no pinned value
+anywhere in the tree.
+
+**The differential also caught two real breakages, which is what it is for.**
+`check-31-ac-falsifiability` and `layer-catalog-collision` each drive a `sed` mutation that
+quotes the shipped line it targets; the sweep rewrote those lines and both fixtures reported
+*"mutation matched nothing"* — the `cmp -s` guards doing exactly their job. Both mutation
+programs are updated to the new text.
+
+### Added — `I54`, so the idiom cannot come back, plus a fixture that demonstrates the false pass rather than asserting it
+
+**`I54`** (`scripts/validate-enforcement-map.sh`) fails the build on a builtin writing a shell
+variable into a reader that stops at its first match. The subject set is deliberately narrow:
+`cmd | grep -q` is safe whenever `cmd` is short-lived and is everywhere, and a blanket ban would
+be the unmeasured lint `CLAUDE.md` warns about. Run against the pre-sweep tree it reports **280
+lines** (300 sites; 16 lines carry more than one); against the swept tree, **nothing** — the
+false-positive set is empty by measurement, not by assertion.
+
+**I54 carries two probes of its own** and refuses rather than reporting a clean tree: one of the
+banned shape, which its grammar must match, and one of the permitted shape, which it must not.
+A scan that matches nothing prints the same line as a tree with no defect, so a grammar that has
+stopped matching its own subject has to say so.
+
+**Its subject set is walked from `REPO_ROOT`, not asked of git.** `git ls-files` answers empty
+inside the seeded fixture trees this validator runs in, which would have tripped the zero guard
+on every assertion in `enforcement-map-sites` rather than on a defect. A walk also sees a script
+that is written but not yet added — which is exactly when this idiom gets introduced.
+
+**NEW `core/fixtures/early-exit-reader/`** (`.dist-only`; its subject is bash and this repo's
+own idiom, not anything `install.sh` ships). Four cells over two generated checkers that differ
+only in how the value reaches the reader, with the same **negative** polarity a real check has:
+
+- the converted form **reports** the violation in a 200 KB input — the positive outcome;
+- the banned form scores **the same input** as clean — the false pass, demonstrated;
+- control: both are silent on a large **clean** input, so that silence is about the input and
+  not a checker that never speaks;
+- control: both **do** report on a small violating input, so the cause is the size and not a
+  broken generator.
+
+If a future platform stops reproducing this, cell two goes red and says so in its own failure
+text, naming retirement of I54 as the remedy. It runs in **0.09s**.
+
+**Four assertions added to `core/fixtures/enforcement-map-sites/` (A29)**: the ban fires and
+names the file; the permitted shape does not fire; a grammar that stops matching its own probe
+fails loudly; a grammar widened to match ordinary pipelines fails loudly. Each fails only its
+own assertion.
+
+**Two traps this work paid for, both already recorded in this repo and both hit again.** The
+over-width mutation first *added an alternative* to the writer group — bytes changed, `cmp -s`
+passed, and the grammar was not widened at all; the **assertion** caught it, not the guard.
+And every literal of the banned shape in both fixtures is **assembled at runtime**, because
+I54's scan covers `core/fixtures/` and a fixture spelling the shape out is reported by the
+invariant it exists to justify.
+
+### Note — this does NOT close §9's intermittent-red class, and the evidence points away from it
+
+The handoff recorded this as *"almost certainly"* the cause of `layer-readopt-gate` and
+`apply-drift-refile` failing intermittently under the pooled suite, and instructed that it be
+tested first. **Tested, it does not carry the explanation.**
+
+- The intermittency needed a threshold that moves with load. **It does not** — 32K correct and
+  64K wrong, idle and at 24-way load alike.
+- Every converted site was **instrumented on a copy of the tree** to log the byte length it
+  actually reads, over a full 16-way suite run: 287 of the 300 sites (the other 13 read a
+  non-simple expression), 8,399 observations. **Exactly one observation reached the 64 KiB
+  buffer** — `reconcile/ledger-reverify.sh:290` at 226,919 bytes — and that site was **already a
+  here-string** and untouched by this sweep. The largest *converted* site observed is
+  `enforcement-map-sites:481` at **23,061 bytes**, a third of the threshold.
+- A/B over 6 alternating rounds of 10 concurrent copies of `layer-readopt-gate`, in two fixed
+  trees: **before 2/60 failed, after 0/60.** Suggestive and no more — 2 events is not a rate,
+  and no failing copy carried `write error: Broken pipe` on stderr.
+
+So the sweep fixes a real and measured defect class that was, under the suite's *current*
+workloads, **latent rather than firing**. §9 stays open. What has changed is that the most
+plausible hypothesis has been measured and mostly excluded, which is worth more to whoever
+picks it up than the guess was.
+
+### Changed — the second pole was sleep-bound, and the reason it was deferred was an untested assertion about it
+
+v0.206.0 removed the suite's one-fixture floor and left `wait-stale-deliverable` as the
+critical path at ~52s. That release deferred it, and the stated reason was that its assertions
+carry wall-clock bounds — `ELAPSED -le 1` for "returned without sleeping", `-ge 6` for a
+quantum honoured — so a contention-inflated beat would trip a real assertion for a reason
+unrelated to what it tests. **That was reasoning, not measurement. It was never built and
+never run.** Built and run, it does not hold.
+
+The fixture is **sleep-bound, not fork-bound**: nearly every case waits out a beat quantum to
+prove the beat actually slept. Its cases were already independent — `seed.sh` gives each its
+own tree and its header says why (the counter and the join sidecar are keyed by the target
+path STRING, so two cases sharing a state dir would share state). They were independent and
+merely written in a row. Each is now a function in its own process, run through a pool.
+
+**52s -> 9s. Output identical**, with the elapsed-second values that appear inside four
+messages masked — those are the only bytes that vary run to run, and they vary in the serial
+version too.
+
+**A sleeping worker is not a busy worker**, which is what makes this safe to nest inside the
+suite's own pool: these workers wait on a clock, not on a core. Measured rather than assumed —
+see the pool table below, where the flake rate did not move.
+
+**The six mutation programs now live in one `mutant_expr` table.** Case 21 re-runs every one of
+them against the flagless path, and when all cases shared a process it could reach for whatever
+the case above had left in `$MUTDIR`. In separate processes each case builds what it needs, and
+a second copy of those six sed programs would be a fork — the defect half this fixture's own
+subject exists to catch.
+
+### Changed — `AI_DLC_FIXTURE_JOBS` stays at 16, and now on a measurement rather than an argument
+
+v0.206.0 stopped at 16 on a contention argument, having measured wall clock but never the flake
+rate above it. Measured: four rounds at each of 16, 20, 24 and 32, on a quiescent tree.
+
+| | | | |
+|---|---|---|---|
+| `-P16` **50.0-53.9s** | `-P20` **49.9-50.7s** | `-P24` **49.8-54.8s** | `-P32` **50.6-53.2s** |
+
+**Flat above 16.** 83/83 verdicts in 15 of 16 rounds; the one exception was `-P24` on
+`apply-drift-refile`, the known intermittent class and no other fixture. One `-P24` round
+recorded 1642s and is discarded rather than averaged in: the machine suspended mid-run, which a
+wall-clock measurement cannot distinguish from work and a verdict count can — it returned 83/83
+with zero failures.
+
+Sixteen is therefore kept, and the reason has changed. It is no longer "beyond this contention
+costs more than it buys"; it is that **the suite is no longer parallelism-bound at all.**
+
+**Suite: 72.0s -> 50.0s (−31%). Cumulative over v0.205.0-v0.207.0: 208s -> 50s (−76%).**
+
+### Note — the profile is now flat, which changes what the next release has to be
+
+There is no pole left. At `-P16` the six longest units run 34.5s to 45.9s and all start within
+6s of t=0: `layer-contract-conformance` 45.9s, `enforcement-map-derivations` 43.9s,
+`enforcement-map-sites` 41.9s, `ledger-status-vocabulary` 40.7s, `consumer-machinery-home`
+39.8s, `layer-readopt-gate` 34.5s. Serial total **488s** against a 50s wall on 18 cores.
+
+Serial total went **up** (425s -> 488s) while wall clock went down. That is the signature of a
+suite that has become contention-bound: every unit is now slower because they genuinely compete,
+rather than one unit being slow while the others idle. **No further scheduling change can help.
+The next lever is doing less work, not spreading it wider** — which is the content-keyed skip
+recorded in the handoff as this row's remaining item.
+
+### Evidence
+
+1. **Differential**, serial from a `git worktree` at `main` against parallel, run twice — once
+   on the first draft and once after the two defects below were fixed. Identical both times.
+2. **A five-case driver battery**, each mutant a COPY guarded by `cmp -s`, each asserting a
+   positive outcome, with an unmutated control from the same directory.
+3. **Sixteen full-suite rounds** across four pool sizes, above.
+
+**The battery found two real defects, and neither would have been found by review.**
+
+- **`mutant_expr` printed its program instead of setting a variable.** `e="$(mutant_expr X)"`
+  runs it in a subshell, so its `exit 2` on an unregistered name killed only that subshell. The
+  caller got an empty program, `sed ''` copied the file unchanged, and the `cmp -s` guard
+  reported *"matched nothing — the code it targets was renamed"*: a true sentence about the
+  wrong thing, turning a typo in a mutation NAME into a report of a renamed SUBJECT. **This
+  file's own header documents that exact trap, three lines above the function that reintroduced
+  it.** It now sets `$MUT_EXPR`, as `mutant` beside it already did.
+- **Routing a case through a worker collapsed exit 2 into exit 1.** `FIXTURE BROKEN` and `an
+  assertion regressed` are different answers and this fixture has always used exit 2 for the
+  first; the parent saw a nonzero rc, charged one assertion and exited 1 — reporting a
+  regression where the truth is that nothing was tested. **`enforcement-map-sites` shipped with
+  the same regression in v0.206.0 and is fixed here too**, found by the same battery.
+
 ## [0.206.0] — 2026-07-29
 
 ### Changed — the suite's wall clock was one fixture running 42 independent assertions in a row, and the handoff's own next-two-poles ordering was refuted by measuring which unit is on the critical path

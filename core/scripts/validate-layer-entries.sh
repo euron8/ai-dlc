@@ -513,7 +513,7 @@ while IFS= read -r f; do
 
   if [ -z "$base_sha" ]; then
     err "$(rel "$f"): missing 'base_sha:' — override-drift cannot be computed for this entry"
-  elif ! printf '%s' "$base_sha" | grep -Eq '^[0-9a-f]{7,40}$'; then
+  elif ! grep -Eq '^[0-9a-f]{7,40}$' <<<"$base_sha"; then
     err "$(rel "$f"): base_sha '$base_sha' is not a 7-40 char hex sha"
   elif git -C "$PROJECT_ROOT" rev-parse -q --verify "${base_sha}^{commit}" >/dev/null 2>&1; then
     subj="$(git -C "$PROJECT_ROOT" log -1 --format='%s' "$base_sha" 2>/dev/null | cut -c1-46)"
@@ -739,7 +739,7 @@ while IFS= read -r f; do
   core_anchors="$(defined_anchors "$core_path")"
   while IFS= read -r a; do
     [ -n "$a" ] || continue
-    printf '%s\n' "$core_anchors" | grep -Fxq -- "$a" || continue
+    grep -Fxq -- "$a" <<<"$core_anchors" || continue
 
     t_ext="$(heading_title "$f" "$a")"
     t_core="$(heading_title "$core_path" "$a")"
@@ -772,7 +772,7 @@ while IFS= read -r f; do
   core_rules="$(defined_rules "$core_path")"
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    printf '%s\n' "$core_rules" | grep -Fxq -- "$n" || continue
+    grep -Fxq -- "$n" <<<"$core_rules" || continue
 
     r_ext="$(rule_title "$f" "$n")"
     r_core="$(rule_title "$core_path" "$n")"
@@ -809,7 +809,7 @@ while IFS= read -r f; do
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     below_band "$n" || continue
-    printf '%s\n' "$core_rules" | grep -Fxq -- "$n" && continue
+    grep -Fxq -- "$n" <<<"$core_rules" && continue
     warn "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to '9$n' or the next free number in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
   done < <(defined_rules "$f")
 
@@ -820,7 +820,7 @@ while IFS= read -r f; do
     while IFS= read -r a; do
       [ -n "$a" ] || continue
       below_band "$a" || continue
-      printf '%s\n' "$core_anchors" | grep -Fxq -- "$a" && continue
+      grep -Fxq -- "$a" <<<"$core_anchors" && continue
       warn "$(rel "$f"): CHECK OUT OF BAND — check '$a.' allocates from core's range. Core '$hooks' does not define check $a TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer checks are reserved at ${BAND_FLOOR} and above — renumber to '9$a' or the next free number in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Check $a\" your existing history already carries."
     done < <(defined_anchors "$f")
   fi
@@ -849,7 +849,7 @@ while IFS= read -r f; do
   [ -n "$f" ] || continue
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
-    printf '%s\n' "$GLOBAL_STEP_ANCHORS" | grep -Fxq -- "$ref" && continue
+    grep -Fxq -- "$ref" <<<"$GLOBAL_STEP_ANCHORS" && continue
     warn "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
   done < <(grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Step[ -]//' | sort -u)
 done <<< "$all_files"

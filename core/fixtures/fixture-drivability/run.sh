@@ -52,7 +52,7 @@ echo "fixture-drivability:"
 # every "it failed as expected" below is a false pass — a script that dies on startup
 # emits nothing and scores as a kill for every negative assertion at once.
 out="$(bash "$SCRIPT" --dir "$FX" 2>&1)"; rc=$?
-if printf '%s' "$out" | grep -q 'fixture directories : 5'; then
+if grep -q 'fixture directories : 5' <<<"$out"; then
   ok "the seed presents 5 directories and the loose MANIFEST file is not counted as one"
 else
   bad "FIXTURE BROKEN — the script did not report the seeded directory count; every assertion below would be a false pass"
@@ -61,7 +61,7 @@ fi
 
 # --- Assertion 1: THE BARE HOLE FAILS AND IS NAMED ----------------------------
 # `delta` has no run.sh and no README. This is the state the push hook skips silently.
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q "fixture 'delta' has neither a run.sh nor a README.md"; then
+if [ "$rc" -ne 0 ] && grep -q "fixture 'delta' has neither a run.sh nor a README.md" <<<"$out"; then
   ok "a directory with no driver and no README FAILS and is named"
 else
   bad "a directory with no driver and no README did not fail by name — the push hook would skip it and say nothing"
@@ -71,7 +71,7 @@ fi
 # `echo` has a README that says something else. Asserted on the SECOND message, not on
 # the word "FAIL", so assertion 1's mutation cannot satisfy this one: the two arms report
 # different authoring mistakes and a check that collapsed them would still pass one.
-if printf '%s' "$out" | grep -q "fixture 'echo' has no run.sh and its README.md does not declare the exemption"; then
+if grep -q "fixture 'echo' has no run.sh and its README.md does not declare the exemption" <<<"$out"; then
   ok "a README that does not declare the exemption FAILS in its own words"
 else
   bad "a README with no exemption declaration was accepted, or reported in the bare-hole arm's words"
@@ -80,7 +80,7 @@ fi
 # --- Assertion 3: THE EXEMPTION STILL PASSES ----------------------------------
 # The state core's own two driverless fixtures are in. This arm is the one whose
 # regression is invisible to the distribution and expensive to every consumer.
-if printf '%s' "$out" | grep -q 'declared undrivable: 1' && ! printf '%s' "$out" | grep -q "fixture 'charlie'"; then
+if grep -q 'declared undrivable: 1' <<<"$out" && ! grep -q "fixture 'charlie'" <<<"$out"; then
   ok "a README carrying the exemption marker passes (core ships two fixtures that depend on this)"
 else
   bad "the declared exemption did not pass — core's own driverless fixtures would fail every consumer's push"
@@ -101,7 +101,7 @@ fi
 # run that judged everything and found it well.
 mkdir -p "$WORK/empty"
 out_e="$(bash "$SCRIPT" --dir "$WORK/empty" 2>&1)"
-if printf '%s' "$out_e" | grep -q 'no fixture directories'; then
+if grep -q 'no fixture directories' <<<"$out_e"; then
   ok "a run over an empty subject set says so rather than exiting 0 in silence"
 else
   bad "a run over an empty subject set produced no statement that it judged nothing"
@@ -136,7 +136,7 @@ fi
 # near-miss branch, is left in place, so this must NOT silence 'echo'.
 if mp="$(mutate m1 's@^    undeclared+=("$name")@    :@')"; then
   out_m="$(bash "$mp" --dir "$FX" 2>&1)"
-  if ! printf '%s' "$out_m" | grep -q "fixture 'delta'" && printf '%s' "$out_m" | grep -q "fixture 'echo'"; then
+  if ! grep -q "fixture 'delta'" <<<"$out_m" && grep -q "fixture 'echo'" <<<"$out_m"; then
     ok "MUTANT 1: with the no-README branch removed, 'delta' goes silent and 'echo' still reports — the branch is load-bearing and unentangled"
   else
     bad "MUTANT 1 did not isolate the no-README branch (either 'delta' still reported, or 'echo' fell silent with it)"
@@ -147,7 +147,7 @@ fi
 # 'delta' must still report: this arm and mutant 1's are different branches.
 if mp="$(mutate m2 's@if grep -qF -- "$EXEMPT_MARKER" "${d}README.md"; then@if true; then@')"; then
   out_m="$(bash "$mp" --dir "$FX" 2>&1)"
-  if ! printf '%s' "$out_m" | grep -q "fixture 'echo'" && printf '%s' "$out_m" | grep -q "fixture 'delta'"; then
+  if ! grep -q "fixture 'echo'" <<<"$out_m" && grep -q "fixture 'delta'" <<<"$out_m"; then
     ok "MUTANT 2: with the marker test always true, 'echo' goes silent and 'delta' still reports — the marker is what makes the exemption a declaration"
   else
     bad "MUTANT 2 did not isolate the marker test (either 'echo' still reported, or 'delta' fell silent with it)"

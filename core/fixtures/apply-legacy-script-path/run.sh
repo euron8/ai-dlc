@@ -123,7 +123,7 @@ fi
 
 # --- 1. The identical leftovers are reported, as ONE row -----------------------
 # One closed question per row is the report contract; N identical files is one call.
-if printf '%s' "$OUT" | grep -q 'relocate-move'; then
+if grep -q 'relocate-move' <<<"$OUT"; then
   ok "an identical leftover at the old path is moved and reported"
 else
   bad "the identical leftover was NOT moved/reported -- the consumer keeps a silent duplicate"
@@ -135,7 +135,7 @@ fi
 # So an edit at the old path is a boundary violation the new layout prevents, not a
 # call the operator owes an answer to. It is reported as done, in the same row as
 # every other moved copy, and never as a DECISION.
-if printf '%s' "$OUT" | grep -q 'DECISION.*legacy-script'; then
+if grep -q 'DECISION.*legacy-script' <<<"$OUT"; then
   bad "an edited leftover was raised as a DECISION -- it is overwrite-on-pull, not a call to make"
   printf '%s\n' "$OUT" | grep -i legacy | sed 's/^/        /'
 else
@@ -165,7 +165,7 @@ fi
 
 # --- 4. The consumer's OWN script is never mentioned ---------------------------
 # The boundary must be silent on everything that is not ours, or it gets ignored.
-if printf '%s' "$OUT" | grep -q 'audit-dormant-gates'; then
+if grep -q 'audit-dormant-gates' <<<"$OUT"; then
   bad "a consumer-owned script was reported -- the boundary is indicting their tooling"
 else
   ok "the consumer's own script is not mentioned"
@@ -190,13 +190,13 @@ fi
 chmod -x "$CONSUMER/scripts/ai-dlc/validate-untouched.sh"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 OUT2="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-if printf '%s' "$OUT2" | grep -q 'not-executable.*validate-untouched\.sh'; then
+if grep -q 'not-executable.*validate-untouched\.sh' <<<"$OUT2"; then
   ok "  a non-executable shipped-755 file is reported by name"
 else
   bad "  a non-executable validator was NOT reported -- inert and green, the v0.70.1 signature"
   printf '%s\n' "$OUT2" | sed 's/^/        /'
 fi
-if printf '%s' "$OUT2" | grep -q 'restamp-withheld'; then
+if grep -q 'restamp-withheld' <<<"$OUT2"; then
   ok "  and the re-stamp is withheld"
 else
   bad "  the re-stamp was written over a tree with an inert validator"
@@ -251,12 +251,12 @@ printf '# no core_manifest block here\n' > "$RECON/setup-sites.md"
 rm -rf "$CONSUMER/scripts/ai-dlc"
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 OUT4="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-if printf '%s' "$OUT4" | grep -q 'manifest-unreadable'; then
+if grep -q 'manifest-unreadable' <<<"$OUT4"; then
   ok "an unreadable manifest is reported, not treated as an empty relocation set"
 else
   bad "an unreadable manifest relocated nothing SILENTLY -- the check-that-cannot-fire, one layer down"
 fi
-if printf '%s' "$OUT4" | grep -q 'restamp-withheld'; then
+if grep -q 'restamp-withheld' <<<"$OUT4"; then
   ok "  and the re-stamp is withheld"
 else
   bad "  the re-stamp was written over a tree nothing was relocated into"
@@ -281,7 +281,7 @@ bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
 rm -f "$CONSUMER/scripts/ai-dlc/validate-untouched.sh"   # a half-landed migration
 printf 'version: 1.0.0\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
 OUT5="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-if printf '%s' "$OUT5" | grep -q 'declared-missing.*validate-untouched\.sh'; then
+if grep -q 'declared-missing.*validate-untouched\.sh' <<<"$OUT5"; then
   ok "a declared validator missing from the new location is caught by name"
 else
   # It may legitimately have been re-placed by the relocation loop; that is also a
@@ -312,7 +312,7 @@ else
   bad "the second run altered the tree -- not idempotent"
   diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | sed 's/^/        /'
 fi
-if printf '%s' "$OUT6" | grep -qE 'relocate|legacy-script|declared-'; then
+if grep -qE 'relocate|legacy-script|declared-' <<<"$OUT6"; then
   bad "  the steady state still emits relocation rows -- the operator learns to skim them"
   printf '%s\n' "$OUT6" | grep -E 'relocate|legacy-script|declared-' | sed 's/^/        /'
 else
@@ -332,7 +332,7 @@ rm -rf "$CONSUMER/scripts/ai-dlc"
 cp "$DIST/core/scripts/validate-edited.sh" "$CONSUMER/scripts/validate-edited.sh"
 printf '# LOCAL EDIT\n' >> "$CONSUMER/scripts/validate-edited.sh"
 MOUT="$(bash "$MUTANT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-if printf '%s' "$MOUT" | grep -q 'legacy-script'; then
+if grep -q 'legacy-script' <<<"$MOUT"; then
   bad "MUTATION: legacy rows still emitted without the loop -- assertions 1-2 prove nothing"
 else
   ok "MUTATION: disabling the legacy loop removes both rows"
@@ -391,7 +391,7 @@ if [ -f "$CONSUMER/scripts/ai-dlc/validate-undeclared.sh" ]; then
 else
   bad "  validate-undeclared.sh was not carried -- the glob is not claiming the whole directory"
 fi
-if printf '%s' "$OUT7" | grep -q 'manifest-unreadable'; then
+if grep -q 'manifest-unreadable' <<<"$OUT7"; then
   bad "  the shipped glob form was reported unreadable -- manifest_dests cannot parse what ships"
 else
   ok "  and no manifest-unreadable row is raised for the form that actually ships"

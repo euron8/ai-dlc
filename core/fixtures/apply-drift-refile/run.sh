@@ -35,7 +35,7 @@ fi
 MANIFEST="$(bash "$APPLY" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
 
 # --- Assertion 1: manifest reports the refile as RESOLVED --------------------
-printf '%s\n' "$MANIFEST" | grep -q "drift-refile" && ok "manifest: RESOLVED drift-refile (not handed to the operator)" \
+grep -q "drift-refile" <<<"$MANIFEST" && ok "manifest: RESOLVED drift-refile (not handed to the operator)" \
   || bad "manifest did not report a drift-refile"
 
 # --- Assertion 2: the extension now registers the skill ----------------------
@@ -69,7 +69,7 @@ else
 fi
 
 # --- Assertion 6: the manifest must not report a mapping failure --------------
-if printf '%s\n' "$MANIFEST" | grep -q "unmapped-path"; then
+if grep -q "unmapped-path" <<<"$MANIFEST"; then
   bad "apply.sh emitted DECISION unmapped-path — it cannot resolve a path preclassify mapped and install.sh writes: $(printf '%s\n' "$MANIFEST" | grep unmapped-path | head -1)"
 else
   ok "no DECISION unmapped-path — the mapper is total, so nothing silently falls through"
@@ -99,7 +99,7 @@ else
   MUT_OUT="$(bash "$MUTDIR/apply.sh" "$M_DIST" "$M_BASE" "$M_CONSUMER" "$M_THEIRS" 2>/dev/null)"
   if grep -q "version: 9.9.9" "$M_STAMP"; then
     bad "with the mapper broken, the stamp STILL advanced to 9.9.9 — the tree now claims a version it does not have"
-  elif ! printf '%s\n' "$MUT_OUT" | grep -q "restamp-withheld"; then
+  elif ! grep -q "restamp-withheld" <<<"$MUT_OUT"; then
     bad "mutant: stamp correctly withheld but apply.sh said nothing — a silent withhold is its own trap"
   elif grep -q 'driver v2' "$M_DRIVER"; then
     bad "FIXTURE BROKEN — the mutant applied the driver anyway, so the withhold above was not caused by a mapping failure"
@@ -116,7 +116,7 @@ rm -rf "$W2"
 printf 'version: 0.0.1\ncommit: %s\n' "$BASE" > "$STAMP"
 LONE="$WORK/lone/apply.sh"; mkdir -p "$WORK/lone"; cp "$APPLY" "$LONE"
 LONE_OUT="$(bash "$LONE" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"; lone_rc=$?
-if [ "$lone_rc" -ne 0 ] && printf '%s' "$LONE_OUT" | grep -q "could not load map_consumer" && ! grep -q "9.9.9" "$STAMP"; then
+if [ "$lone_rc" -ne 0 ] && grep -q "could not load map_consumer" <<<"$LONE_OUT" && ! grep -q "9.9.9" "$STAMP"; then
   ok "apply.sh with no map_consumer to load refuses loudly and leaves the stamp alone (it never guesses a path)"
 else
   bad "apply.sh with no map_consumer did NOT fail closed (rc=$lone_rc) — it either guessed consumer paths or stamped anyway"
@@ -129,7 +129,7 @@ fi
 UD="$(dirname "$APPLY")/unregistered-drift.sh"
 LONE_UD="$WORK/lone/unregistered-drift.sh"; cp "$UD" "$LONE_UD"
 UD_OUT="$(bash "$LONE_UD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-if printf '%s\n' "$UD_OUT" | grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE'; then
+if grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE' <<<"$UD_OUT"; then
   ok "unregistered-drift.sh with no map_consumer to load emits a HARD row (an unrunnable scan never reads as clean)"
 else
   bad "unregistered-drift.sh with no map_consumer printed no HARD row: $(printf '%s' "$UD_OUT" | tr '\n' '|' | cut -c1-200)"
@@ -138,7 +138,7 @@ fi
 # --- Assertion 9b: ANTI-VACUITY — the scan is alive when the sibling is there -
 # Without this, 9 passes on a script that is broken for every input.
 UD_OK="$(bash "$UD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>&1)"
-if [ -n "$UD_OK" ] && ! printf '%s\n' "$UD_OK" | grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE'; then
+if [ -n "$UD_OK" ] && ! grep -q '^HARD-DRIFT-SCAN-UNAVAILABLE' <<<"$UD_OK"; then
   ok "with preclassify.sh beside it the same script scans and reports — the HARD row is the mapper, not a dead script"
 else
   bad "the scan produced no usable rows with preclassify.sh present, so assertion 9 proves nothing: $(printf '%s' "$UD_OK" | tr '\n' '|' | cut -c1-200)"

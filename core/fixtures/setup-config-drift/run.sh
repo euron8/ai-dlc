@@ -144,7 +144,7 @@ ASSERT_STALE="$(bash "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t'
 # The DETAIL must carry both numbers. The disposition turns on their RATIO, and an operator
 # who sees only the base-relative one adjudicates a fork that is not there.
 D="$(bash "$SCRIPT" "$DIST" "$BASE" "$STALE" 2>/dev/null | awk -F'\t' -v f="$REL" '$2==f {print $3; exit}')"
-if printf '%s' "$D" | grep -q 'differs from core@.* by [0-9]* lines, but from .* by only [0-9]*'; then
+if grep -q 'differs from core@.* by [0-9]* lines, but from .* by only [0-9]*' <<<"$D"; then
   ok "the row states both distances — against base AND against the ancestor it is really anchored at"
 else
   bad "the HARD-CORE-BEHIND detail does not carry both distances; the operator cannot see that the base-relative number is mostly upstream's own change"

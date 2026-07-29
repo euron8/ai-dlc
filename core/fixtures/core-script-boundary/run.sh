@@ -144,8 +144,8 @@ expect allow "scripts/ai-dlc/not-in-manifest.sh" \
 # machinery, so the generic text is actively wrong advice here -- it would send a
 # consumer to build a shadow entry that nothing reads.
 reason="$(guard_out Edit scripts/ai-dlc/verdict.sh | jq -r '.hookSpecificOutput.permissionDecisionReason')"
-if printf '%s' "$reason" | grep -q 'CORE validator' \
-   && printf '%s' "$reason" | grep -q 'ai-dlc-local'; then
+if grep -q 'CORE validator' <<<"$reason" \
+   && grep -q 'ai-dlc-local' <<<"$reason"; then
   ok "the deny names it a validator and points consumer scripts at scripts/ai-dlc-local/"
 else
   bad "the deny fell through to the generic overrides/extensions text -- wrong advice for machinery"

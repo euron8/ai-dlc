@@ -39,19 +39,19 @@ echo "layer-catalog-collision:"
 # --- Part 1: the linter classifies the same-number states ---------------------
 out="$(bash "$LINTER" "$ROOT" 2>&1)"
 
-printf '%s' "$out" | grep -q "NUMBER COLLISION on '24\.'" \
+grep -q "NUMBER COLLISION on '24\.'" <<<"$out" \
   && ok "24 = COLLISION (core: adversarial convergence / ext: financial-display)" \
   || bad "24 not reported as a collision — a bare 'Check 24' in the gate log has no referent"
 
-printf '%s' "$out" | grep -q "^ERROR.*COLLISION on '24\.'" \
+grep -q "^ERROR.*COLLISION on '24\.'" <<<"$out" \
   && ok "the collision is an ERROR, not a warning (it reaches the durable audit record)" \
   || bad "the collision is only a warning — a warning nobody reads is how this survived"
 
-printf '%s' "$out" | grep -q "RESTATES core section '5\.'" \
+grep -q "RESTATES core section '5\.'" <<<"$out" \
   && ok "5 = RESTATEMENT (same number AND same title), not a collision" \
   || bad "5 misclassified — same number and same title is a restatement"
 
-printf '%s' "$out" | grep -q "'7\.'" \
+grep -q "'7\.'" <<<"$out" \
   && bad "core-only check 7 flagged — the detector is comparing the wrong sets" \
   || ok "core-only check 7 correctly silent"
 
@@ -62,7 +62,7 @@ printf '%s' "$out" | grep -q "'7\.'" \
 # `### 1. [ext:prose]`") cannot be applied to a list item. A detector that cannot
 # be silenced by following its own advice trains the operator to stop reading it.
 for n in 1 2; do
-  printf '%s' "$out" | grep -q "COLLISION on '$n\.'" \
+  grep -q "COLLISION on '$n\.'" <<<"$out" \
     && bad "bold prose list item '**$n. …**' read as a section anchor — it collides with core step $n, and the fix the message asks for cannot be applied to a sentence" \
     || ok "bold prose list item '**$n. …**' correctly not an anchor"
 done
@@ -73,7 +73,7 @@ done
 # anchor was extracted — the assertion goes silent the moment the arm is cut too
 # deep. Without this, "no findings" would score as a pass for a detector that had
 # simply stopped looking.
-printf '%s' "$out" | grep -q "COLLISION on '7a-post\.'" \
+grep -q "COLLISION on '7a-post\.'" <<<"$out" \
   && ok "bold anchor '**7a-post. …**' still extracted (collides with core's 7a-post, as it must)" \
   || bad "bold anchor '**7a-post. …**' no longer extracted — the tolerance was cut too deep, re-opening the miss it was added for"
 
@@ -82,13 +82,13 @@ printf '%s' "$out" | grep -q "COLLISION on '7a-post\.'" \
 # whose `---` never closes yields its shadows/base_sha and satisfies every other
 # check. Nothing asked whether the block CLOSED, so the shape linted clean while the
 # body it was supposed to carry sat inside the YAML.
-printf '%s' "$out" | grep -q "unterminated\.md: frontmatter opens with '---' but never closes" \
+grep -q "unterminated\.md: frontmatter opens with '---' but never closes" <<<"$out" \
   && ok "unterminated frontmatter is an ERROR (the body is not a body)" \
   || bad "unterminated frontmatter accepted — the entry lints clean while its '### …' body parses as a YAML comment"
 
 # NB: match the full basename — "terminated.md" is a substring of "unterminated.md",
 # so a looser pattern reports the trap as the control and always fails.
-printf '%s' "$out" | grep -q "steps__retro__terminated\.md: frontmatter opens" \
+grep -q "steps__retro__terminated\.md: frontmatter opens" <<<"$out" \
   && bad "the well-formed override was flagged too — the check fires on every entry, not the broken one" \
   || ok "the well-formed override stays silent (the check discriminates)"
 
@@ -201,25 +201,25 @@ RELABEL="$(pick "${3:-}" "$HERE/../../skills/ai-dlc-update/reconcile/relabel-ext
                          "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh" \
                          "$HERE/../../../core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh")"
 
-printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 29'" \
+grep -q "RULE NUMBER COLLISION on 'Rule 29'" <<<"$out" \
   && ok "Rule 29 = COLLISION (core: steering budget / ext: split-dispatch)" \
   || bad "Rule 29 not reported — a bare 'Rule 29' in a gate log has two referents and nothing says so"
 
-printf '%s' "$out" | grep -q "^WARN.*RULE NUMBER COLLISION on 'Rule 29'" \
+grep -q "^WARN.*RULE NUMBER COLLISION on 'Rule 29'" <<<"$out" \
   && ok "  and it is a WARN, never an ERROR (a consumer must not be blocked from taking a fix)" \
   || bad "  but the rule collision is an ERROR — eight on first contact is a linter that gets switched off"
 
 # The remedy must silence the message. Asserted directly, because a detector whose
 # own prescribed fix does not clear it is the defect heading_labelled was added for.
-printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 30'" \
+grep -q "RULE NUMBER COLLISION on 'Rule 30'" <<<"$out" \
   && bad "the ALREADY-LABELLED 'Rule 30 [ext:rules]' still reports — the fix the message asks for cannot clear the message" \
   || ok "a labelled rule heading is the resolved state and is silent"
 
-printf '%s' "$out" | grep -q "RESTATES core 'Rule 8'" \
+grep -q "RESTATES core 'Rule 8'" <<<"$out" \
   && ok "Rule 8 = RESTATEMENT (same number AND same title), not a collision" \
   || bad "Rule 8 misclassified — same number and same title is a Rule 27(c) restatement"
 
-printf '%s' "$out" | grep -q "COLLISION on 'Rule 8'" \
+grep -q "COLLISION on 'Rule 8'" <<<"$out" \
   && bad "Rule 8 reported as a collision as well as a restatement — the split on title is not happening" \
   || ok "  and it is not ALSO reported as a collision"
 
@@ -229,14 +229,14 @@ printf '%s' "$out" | grep -q "COLLISION on 'Rule 8'" \
 # have failed pointing at the collision detector, which is not what changed. Two arms
 # naming one string is row 4's recorded trap; assert on the wording that distinguishes
 # them.
-printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 44'" \
+grep -q "RULE NUMBER COLLISION on 'Rule 44'" <<<"$out" \
   && bad "extension-only 'Rule 44' flagged as a COLLISION — core defines no rule 44, so every consumer rule would report" \
   || ok "extension-only rule 44 correctly silent for the collision arm"
 
 # NAMESPACE SEPARATION, and it can fail. Core defines `Rule 24` in SKILL.md and
 # check `24.` in gate-validation.md. A grammar that learned the word `Rule` would
 # fold them into one id and start joining a rule to a check by integer.
-printf '%s' "$out" | grep -q "RULE NUMBER COLLISION on 'Rule 24'" \
+grep -q "RULE NUMBER COLLISION on 'Rule 24'" <<<"$out" \
   && bad "'Rule 24' reported although no extension defines it — the rule grammar is matching core's CHECK 24, i.e. the two catalogs have merged" \
   || ok "core's Rule 24 and core's check 24 stay separate catalogs"
 
@@ -249,23 +249,23 @@ if [ -z "$RELABEL" ]; then
   bad "FIXTURE BROKEN — cannot locate relabel-extension-checks.sh; Part 4b would pass by not running"
 else
   rel_out="$(bash "$RELABEL" "$ROOT" 2>&1)"
-  printf '%s' "$rel_out" | grep -q '^  +  ## Rule 29 \[ext:rules\] -- ' \
+  grep -q '^  +  ## Rule 29 \[ext:rules\] -- ' <<<"$rel_out" \
     && ok "the relabeller writes '## Rule 29 [ext:rules] -- …' (label before the separator, integer unmoved)" \
     || bad "the relabeller cannot rewrite the heading the linter reports — the prescribed remedy does not run"
 
-  printf '%s' "$rel_out" | grep -q 'Rule 44' \
+  grep -q 'Rule 44' <<<"$rel_out" \
     && bad "the relabeller would rewrite the extension-only 'Rule 44' — it relabels headings core does not define" \
     || ok "  and leaves the extension-only rule 44 alone"
 
   bash "$RELABEL" "$ROOT" --apply >/dev/null 2>&1
   after="$(bash "$LINTER" "$ROOT" 2>&1)"
-  if printf '%s' "$after" | grep -q "RULE NUMBER COLLISION"; then
+  if grep -q "RULE NUMBER COLLISION" <<<"$after"; then
     bad "applying the relabeller did not clear the collision report — reporter and rewriter disagree about the heading"
   else
     ok "applying the relabeller clears every rule collision (remedy closes its own report)"
   fi
   # And the control: the apply must not have silenced the linter wholesale.
-  printf '%s' "$after" | grep -q "RESTATES core section '5\.'" \
+  grep -q "RESTATES core section '5\.'" <<<"$after" \
     && ok "  and the unrelated check-side findings survive the apply (the linter still runs)" \
     || bad "  but the check-side findings vanished too — the 'cleared' result above is a dead linter, not a fix"
 fi
@@ -286,34 +286,34 @@ fi
 
 # The check side. 30 and 33 are extension-only integers below the floor.
 for n in 30 33; do
-  printf '%s' "$out" | grep -q "CHECK OUT OF BAND — check '$n\.'" \
+  grep -q "CHECK OUT OF BAND — check '$n\.'" <<<"$out" \
     && ok "check $n = OUT OF BAND (core does not define it and it is below the floor)" \
     || bad "check $n not reported out of band — an allocation from core's range is invisible until core takes the number, and then it is too late to fix the gate logs"
 done
 
 # The rule side, one namespace over.
-printf '%s' "$out" | grep -q "RULE OUT OF BAND — 'Rule 44'" \
+grep -q "RULE OUT OF BAND — 'Rule 44'" <<<"$out" \
   && ok "Rule 44 = OUT OF BAND (the same allocation defect in the rule namespace)" \
   || bad "Rule 44 not reported out of band — core is free to allocate 44 and the collision would land retroactively"
 
 # WARN, never ERROR. The remedy rewrites the consumer's own durable audit key and
 # needs a crosswalk row per number; blocking a pull on it would wedge a consumer out
 # of taking a fix over its own catalog.
-printf '%s' "$out" | grep -q "^WARN.*CHECK OUT OF BAND" \
+grep -q "^WARN.*CHECK OUT OF BAND" <<<"$out" \
   && ok "  and the band finding is a WARN (a renumber is not a precondition for taking a fix)" \
   || bad "  but the band finding is an ERROR — five on first contact is a linter that gets switched off"
 
 # THE POSITIVE CONTROLS. Each one fails if the arm is widened, and together they are
 # what stops "no findings" from scoring as a pass for a check that stopped looking.
-printf '%s' "$out" | grep -q "OUT OF BAND.*'933\.'" \
+grep -q "OUT OF BAND.*'933\.'" <<<"$out" \
   && bad "the IN-BAND check 933 was reported — the band arm fires on conformant entries, so following its own advice cannot clear it" \
   || ok "in-band check 933 correctly silent (the remedy clears the message)"
 
-printf '%s' "$out" | grep -q "OUT OF BAND.*'Rule 931'" \
+grep -q "OUT OF BAND.*'Rule 931'" <<<"$out" \
   && bad "the IN-BAND 'Rule 931' was reported — same defect one namespace over" \
   || ok "in-band Rule 931 correctly silent"
 
-printf '%s' "$out" | grep -q "OUT OF BAND.*'40b\.'" \
+grep -q "OUT OF BAND.*'40b\.'" <<<"$out" \
   && bad "the SUFFIXED '40b' was reported — a suffix marks a position beside core's 40 and has no expression in a numeric band; renumbering it to 940b would move it away from the section it exists to sit next to" \
   || ok "suffixed check 40b correctly excluded (a suffix is a position, not an allocation)"
 
@@ -322,11 +322,11 @@ printf '%s' "$out" | grep -q "OUT OF BAND.*'40b\.'" \
 # core rule shares that integer BECAUSE the integer is its reference. Telling it to
 # renumber would break the only thing that makes it comprehensible.
 for n in 5 24; do
-  printf '%s' "$out" | grep -q "OUT OF BAND — check '$n\.'" \
+  grep -q "OUT OF BAND — check '$n\.'" <<<"$out" \
     && bad "check $n reported out of band although CORE defines it — the band arm is not excluding core's own numbers, so every deliberate qualifier is told to renumber away from its own reference" \
     || ok "check $n (core-defined) correctly excluded from the band arm"
 done
-printf '%s' "$out" | grep -q "OUT OF BAND — 'Rule \(8\|29\|30\)'" \
+grep -q "OUT OF BAND — 'Rule \(8\|29\|30\)'" <<<"$out" \
   && bad "a core-defined rule number was reported out of band — the exclusion that protects a deliberate qualifier is gone" \
   || ok "core-defined rules 8/29/30 correctly excluded from the band arm"
 
@@ -334,7 +334,7 @@ printf '%s' "$out" | grep -q "OUT OF BAND — 'Rule \(8\|29\|30\)'" \
 # retro that has no step 0. That is an extension-only integer below the floor and it
 # must stay silent: a step number is a POSITION in an ordered procedure, not an
 # allocation, and renumbering it to 900 would render it at the end of the procedure.
-printf '%s' "$out" | grep -q "CHECK OUT OF BAND — check '0\.'" \
+grep -q "CHECK OUT OF BAND — check '0\.'" <<<"$out" \
   && bad "a step-domain entry's step '0.' was reported out of band — the check arm is not scoped to kind: check, so the band would reorder a procedure it does not govern" \
   || ok "step-domain step '0.' correctly outside the check band's scope"
 
@@ -396,7 +396,7 @@ mutant "dropping the suffix exclusion makes '40b' report (so excluding it is a d
   "The exclusion is unfalsifiable as written: without it the numeric comparison ERRORS on a suffixed id and reports nothing, which is indistinguishable from excluding it on purpose."
 
 mutant "dropping the core-set exclusion makes core's own check '5' report (so a deliberate qualifier is protected by a live arm)" \
-  's#printf .%s\\n. "$core_anchors" . grep -Fxq -- "$a" && continue#:#' \
+  's#grep -Fxq -- "$a" <<<"$core_anchors" && continue#:#' \
   "check '5.'" \
   "This is the exclusion that keeps an entry qualifying a core check from being told to renumber away from the very integer that is its reference. Core's 24 reports alongside 5 — the same arm, one more subject."
 

@@ -107,7 +107,7 @@ fires() {
   out="$(bash "$V" 2>&1)"; rc=$?
   if [ "$rc" -eq 0 ]; then
     bad "$label — the validator still EXITED 0 on the mutated tree"
-  elif printf '%s' "$out" | grep -qF "$want"; then
+  elif grep -qF "$want" <<<"$out"; then
     ok "$label"
   else
     bad "$label — the validator failed, but not with its own message. Expected to see: $want"

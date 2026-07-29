@@ -22,7 +22,7 @@ echo "reconcile-blocking-list:"
 
 # --- Assertion 0: SANITY — print mode renders the blocker ---------------------
 out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if printf '%s' "$out" | grep -qF "$DRIFT_REL" && printf '%s' "$out" | grep -q "HARD-UNREGISTERED-CORE-DRIFT"; then
+if grep -qF "$DRIFT_REL" <<<"$out" && grep -q "HARD-UNREGISTERED-CORE-DRIFT" <<<"$out"; then
   ok "print mode renders the HARD blocker ($DRIFT_REL) from the detectors"
 else
   bad "FIXTURE BROKEN — print mode did not render the in-place drift; negatives below are meaningless"
@@ -42,7 +42,7 @@ bash "$HB" --check "$REPORT_GOOD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/nu
 # --- Assertion 3: no drift → print says 0, --check passes any report ----------
 git -C "$DIST" show "$BASE:core/$DRIFT_REL" > "$CONSUMER/.claude/$DRIFT_REL"   # revert consumer edit
 out="$(bash "$HB" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if printf '%s' "$out" | grep -q "0 HARD blockers"; then
+if grep -q "0 HARD blockers" <<<"$out"; then
   bash "$HB" --check "$REPORT_BAD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" >/dev/null 2>&1
   [ $? -eq 0 ] && ok "with no drift: print says '0 HARD blockers' and --check passes any report" \
     || bad "no-drift --check did not pass"

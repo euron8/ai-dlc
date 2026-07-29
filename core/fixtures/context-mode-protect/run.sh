@@ -146,7 +146,7 @@ expect deny "$LAYERED" "$(jb 'cat docs/architecture.md')" \
 expect deny "$BROKEN" "$(jf _bmad-output/planning-artifacts/prd.md)" \
   "malformed layer file → deny even an unprotected path (fail closed)"
 OUTB="$(raw "$BROKEN" "$(jf _bmad-output/planning-artifacts/prd.md)")"
-printf '%s' "$OUTB" | grep -q 'protected-paths.json' \
+grep -q 'protected-paths.json' <<<"$OUTB" \
   && ok "fail-closed deny names the file to fix" \
   || bad "fail-closed deny does not name protected-paths.json — a refusal with no route gets the hook turned off"
 

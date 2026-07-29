@@ -327,7 +327,7 @@ DIST_ONLY="$(cd "$REPO_ROOT/core/fixtures" 2>/dev/null && for d in */; do
   [ -f "${d}.dist-only" ] && printf '%s\n' "${d%/}"
 done | sort -u)"
 for f in $DIST_ONLY; do
-  printf '%s\n' "$in_install" | grep -qx "$f" && err "fixture '$f' carries a .dist-only marker but install.sh ships it. Either delete the marker or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
+  grep -qx "$f" <<<"$in_install" && err "fixture '$f' carries a .dist-only marker but install.sh ships it. Either delete the marker or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
   [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' carries a .dist-only marker but does not exist in core/fixtures/ — stale marker."
 done
 
@@ -637,7 +637,7 @@ EOF
       err "I36 reverse: found NO codes in declared enforcer '$enf'. Either the extraction pattern no longer matches that script's vocabulary or the script changed shape; a zero here silently retires this whole direction of the join."
     fi
     for code in $emitted; do
-      if ! printf '%s\n' "$lc_claimed" | grep -qxF -- "$code"; then
+      if ! grep -qxF -- "$code" <<<"$lc_claimed"; then
         err "I36 reverse: '$enf' emits '$code' but NO clause in layer-contract.yaml claims it. An operator can be handed that verdict with no stated rule behind it. Add the clause, or stop emitting the code."
       fi
     done
@@ -703,11 +703,11 @@ else
     err "I39 found NO documented statuses in ai-dlc-update/SKILL.md step 3f. Either the step was renumbered or its bullet grammar changed; a zero here silently retires the whole check."
   else
     for st in $lr_emitted; do
-      printf '%s\n' "$lr_documented" | grep -qxF -- "$st" || \
+      grep -qxF -- "$st" <<<"$lr_documented" || \
         err "I39: ledger-reverify.sh emits '$st' but SKILL.md step 3f never documents it. The operator is handed a verdict the step that governs the ledger does not explain, which is how a status reaches a pull with no stated handling."
     done
     for st in $lr_documented; do
-      printf '%s\n' "$lr_emitted" | grep -qxF -- "$st" || \
+      grep -qxF -- "$st" <<<"$lr_emitted" || \
         err "I39: SKILL.md step 3f documents '$st' but ledger-reverify.sh never emits it. The step describes a row no run can produce — an operator waiting on a signal that cannot arrive reads it as 'nothing to do'."
     done
     # The heading emit-report.sh renders is the third reader, and it names a SUBSET by design
@@ -717,7 +717,7 @@ else
     if [ -f "$er_file" ]; then
       for st in $(grep -oE 'Push-candidate ledger — [A-Z][A-Z0-9 /-]+' "$er_file" \
                   | grep -oE '\b[A-Z][A-Z0-9-]*-[A-Z][A-Z0-9-]*\b' | sort -u); do
-        printf '%s\n' "$lr_emitted" | grep -qxF -- "$st" || \
+        grep -qxF -- "$st" <<<"$lr_emitted" || \
           err "I39: emit-report.sh's push-candidate heading names '$st', which ledger-reverify.sh does not emit. The report promises the operator a section that can never have rows in it."
       done
     fi
@@ -973,7 +973,7 @@ CLI_SPAN="$(awk '/<!-- CHECK_LOADED: core-layer-immutability -->/{on=1} on{print
   "$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md" 2>/dev/null)"
 if [ -z "$CLI_SPAN" ]; then
   err "I26 could not isolate the core-layer-immutability span in gate-validation.md. A span that does not resolve scans nothing and reports clean."
-elif ! printf '%s\n' "$CLI_SPAN" | grep -q 'core-paths.sh --is-core'; then
+elif ! grep -q 'core-paths.sh --is-core' <<<"$CLI_SPAN"; then
   err "I26 the core-layer-immutability check body does not invoke \`core-paths.sh --is-core\`. It must DERIVE the core set from the same resolver the edit-time guard reads, not decide for itself which paths are core — a body that answers that question on its own is the restated list this invariant exists to prevent."
 else
   # Entries derived from the manifest, never hand-listed here. Fixtures are excluded:
@@ -1229,7 +1229,7 @@ SITES
   for d in "$REPO_ROOT"/core/*/; do
     [ -d "$d" ] || continue
     cdir="$(basename "$d")"
-    printf '%s\n' "$SITES_TABLE" | grep -q "^${cdir}|" || err "core/${cdir}/ has no destination row in I8's site table. map_consumer()'s \`core/*\` catch-all will file it under '.claude/${cdir}/' — add a row stating where install.sh actually writes it (or '.claude/${cdir}' if the catch-all is right). This is the check core/git-hooks/ slipped past by being absent."
+    grep -q "^${cdir}|" <<<"$SITES_TABLE" || err "core/${cdir}/ has no destination row in I8's site table. map_consumer()'s \`core/*\` catch-all will file it under '.claude/${cdir}/' — add a row stating where install.sh actually writes it (or '.claude/${cdir}' if the catch-all is right). This is the check core/git-hooks/ slipped past by being absent."
   done
   # (b) Agreement + (c) installer binding.
   while IFS='|' read -r cdir dest; do
@@ -1502,7 +1502,7 @@ cmh_claims="$(printf '%s\n' "$cm" | sed -E '
 if [ -n "$CMH" ]; then
   if [ -z "$cmh_targets" ]; then
     err "I44 extracted ZERO \$PROJECT_ROOT-rooted targets from install.sh/uninstall.sh. An empty target set contains nothing under the home, so this invariant would pass on a tree that installs straight into it."
-  elif ! printf '%s\n' "$cmh_targets" | grep -q "^${CORE_SCRIPTS_HOME:-scripts/ai-dlc}"; then
+  elif ! grep -q "^${CORE_SCRIPTS_HOME:-scripts/ai-dlc}" <<<"$cmh_targets"; then
     err "I44's target extraction no longer sees core's own scripts home among install.sh's targets — the \$PROJECT_ROOT grammar has moved. Without that positive control a broken extractor reports the same clean result as a correct one."
   else
     cmh_hits="$(printf '%s\n%s\n' "$cmh_targets" "$cmh_claims" | sort -u | grep -E "^${CMH}(/|$)" || true)"
@@ -1902,7 +1902,7 @@ POL
   # COMPLETENESS — every unit on disk is classified.
   while IFS= read -r u; do
     [ -n "$u" ] || continue
-    printf '%s\n' "$DRIFT_POLICY" | grep -q "^${u}|" \
+    grep -q "^${u}|" <<<"$DRIFT_POLICY" \
       || err "core/${u}/ has no drift-scan policy row in validate-enforcement-map.sh I12. Classify it 'scan' (prose/schema a consumer could silently drift) or 'exempt:<reason>' (machinery / self-updated). This is the guard that stops the unregistered-drift scan set rotting the way ai-dlc-setup/ and schemas/ did."
   done <<EOF
 $ud_units
@@ -2203,7 +2203,7 @@ else
     err "I22 templates/settings.json.template declares no aiDlcModels keys, so no role's model can resolve. Restore the block."
   else
     for r in $role_files; do
-      printf '%s\n' "$declared" | grep -qx "$r" \
+      grep -qx "$r" <<<"$declared" \
         || err "I22 core/team-roles/$r.md ships but templates/settings.json.template has no aiDlcRoles entry for '$r'. A consumer installing fresh gets a role with no model and no effort; the dispatch guard fails open and that teammate runs on whatever it inherits. Add the entry."
     done
     # Every entry's model (when it has one — the party personas legitimately have an
@@ -2398,10 +2398,65 @@ else
   fi
 fi
 
+# --- I54: no shell variable is written into an EARLY-EXITING reader ------------
+# `grep -q` stops at its first match. Under `set -o pipefail` the pipeline's status
+# is then the WRITER's, and a writer that still had bytes to push gets EPIPE and
+# exits non-zero -- so the `if` takes the branch for "not found" on input where the
+# pattern WAS found. Measured on this machine: with the match near the start of a
+# 64 KiB input, 300 of 300 runs reported not-found; the same test reading the value
+# as a here-string reported found 300 of 300. The threshold is the pipe buffer and
+# it does not move under load (32 KiB correct, 64 KiB wrong, idle and at -P24
+# alike), so this is a size trap rather than a race -- which is worse, because a
+# value that grows past the buffer switches the check off permanently and silently.
+#
+# In a POSITIVE assertion this shows up as a puzzling FAIL, which someone chases.
+# In a NEGATIVE one -- match means the tree is bad -- it is a permanent PASS, which
+# is this repo's named defect class with no symptom at all.
+#
+# The remedy has no pipe: read the value as a here-string. There is no legitimate
+# reason to prefer the pipe here, and no `#!/bin/sh` script in this tree, so `<<<`
+# is always available. The subject set is deliberately NARROW: a builtin writing a
+# shell variable. `cmd | grep -q` is fine when cmd is short-lived, and banning it
+# outright would be the unmeasured lint CLAUDE.md warns about.
+#
+# The grammar is assembled from fragments and the messages DESCRIBE the shape
+# rather than reproducing it. This scan covers core/fixtures/, so a literal here
+# -- or in the fixture that proves this fires -- would report itself.
+# Walked from REPO_ROOT rather than asked of git, for the same reason every other
+# invariant here resolves that way: this script runs inside seeded fixture trees
+# that are not repositories, and `git ls-files` answers EMPTY there -- which would
+# trip the zero guard below on every assertion in enforcement-map-sites rather
+# than on a real defect. A walk also sees a script that is written but not yet
+# added, which is exactly when this idiom gets introduced.
+i54_files="$(find "$REPO_ROOT" -name .git -prune -o -type f -name '*.sh' -print 2>/dev/null)"
+i54_n="$(printf '%s\n' "$i54_files" | grep -c .)"
+i54_fmt="'%""s'"
+i54_re="(printf[[:space:]]+${i54_fmt%\'}(\\\\n)?'|echo)[[:space:]]+\"[^\"]*\"[[:space:]]*[|][[:space:]]*grep[[:space:]]+-[A-Za-z]*q"
+# A grammar that matches nothing reads exactly like a clean tree, so it is tested
+# against a probe of the banned shape and a probe of the permitted one, both built
+# here, before its verdict on the tree is believed.
+i54_probe_bad="if printf ${i54_fmt} \"\$v\" | grep -q TOKEN; then"
+i54_probe_ok='git log --oneline | grep -q TOKEN'
+if [ "$i54_n" -eq 0 ]; then
+  err "I54 enumerated ZERO tracked .sh files under $REPO_ROOT. It reports an ABSENCE -- that no shipped script writes a variable into an early-exiting reader -- and an absence over an empty corpus is not a finding. Fails closed."
+elif ! grep -qE "$i54_re" <<<"$i54_probe_bad"; then
+  err "I54's grammar no longer matches the shape it bans, tested against a probe built in this script. Every tree passes it now, including one full of the defect. Fix the grammar or retire the invariant; do not leave it printing a clean line."
+elif grep -qE "$i54_re" <<<"$i54_probe_ok"; then
+  err "I54's grammar matches an ordinary command piped into grep -q, which is permitted and common. As written it would report a false positive on nearly every script in the tree. Narrow it back to a builtin writing a shell variable."
+else
+  i54_hits="$(printf '%s\n' "$i54_files" | tr '\n' '\0' | xargs -0 grep -nE "$i54_re" 2>/dev/null | sed "s@^${REPO_ROOT}/@@")"
+  if [ -n "$i54_hits" ]; then
+    i54_c="$(printf '%s\n' "$i54_hits" | grep -c .)"
+    err "I54 found ${i54_c} site(s) writing a shell variable into a grep that stops at its first match, across ${i54_n} tracked shell files:
+$(printf '%s\n' "$i54_hits" | cut -c1-160)
+Under pipefail the pipeline reports the WRITER's status, so once the value passes the pipe buffer (64 KiB here) the test answers 'not found' on input that contains the pattern -- permanently, not intermittently. Where a match means the tree is BAD, that is a check that can no longer fire and a suite that goes green without looking. Read the value as a here-string instead: the redirect goes at the end of the grep command and the pipe disappears. Every one of these was converted in v0.207.0; a new one means the idiom came back."
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), and every escalation-citation mode one core script invokes on another is dispatched and documented there (I53)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54)."
   exit 0
 fi
 exit 1

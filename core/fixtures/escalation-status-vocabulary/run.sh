@@ -35,7 +35,7 @@ fi
 
 # --- Assertion 2: THE DEFECT — out-of-vocabulary tokens FAIL -----------------
 OUT="$(bash "$VALIDATOR" "$DRIFT" "$SPEC_SRC" 2>&1)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s\n' "$OUT" | grep -q "FILED" && printf '%s\n' "$OUT" | grep -q "OPEN"; then
+if [ "$rc" -eq 1 ] && grep -q "FILED" <<<"$OUT" && grep -q "OPEN" <<<"$OUT"; then
   ok "drifted entries FAIL (rc=1) and both offending tokens are named"
 else
   bad "out-of-vocabulary entries did not fail as expected (rc=$rc): $(printf '%s' "$OUT" | head -2 | tr '\n' ' ')"
@@ -44,7 +44,7 @@ fi
 # --- Assertion 3: the count is exact, not approximate ------------------------
 # 3 entries, 2 of them bad. A validator that reports "some" rather than which is not
 # actionable, and one that over-counts is a validator nobody will keep enabled.
-if printf '%s\n' "$OUT" | grep -q "FAIL: 2 of 3 escalation entries"; then
+if grep -q "FAIL: 2 of 3 escalation entries" <<<"$OUT"; then
   ok "reports exactly 2 of 3 entries out of vocabulary"
 else
   bad "wrong count: $(printf '%s\n' "$OUT" | grep 'of .* escalation entries' | head -1)"
@@ -96,7 +96,7 @@ LONE="$WORK/lone"; mkdir -p "$LONE"
 cp "$VALIDATOR" "$LONE/validate-escalation-status-vocabulary.sh"
 LONE_OUT="$(cd "$LONE" && CLAUDE_PROJECT_DIR="$LONE" bash ./validate-escalation-status-vocabulary.sh "$DRIFT" 2>&1)"
 lone_rc=$?
-if [ "$lone_rc" -eq 2 ] && printf '%s' "$LONE_OUT" | grep -q "will not guess"; then
+if [ "$lone_rc" -eq 2 ] && grep -q "will not guess" <<<"$LONE_OUT"; then
   ok "with escalations.md unreachable the check REFUSES (rc=2) instead of passing"
 else
   bad "severed from its vocabulary source the check returned rc=$lone_rc — it guessed a built-in set or reported clean"

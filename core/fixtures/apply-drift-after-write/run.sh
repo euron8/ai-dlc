@@ -31,11 +31,11 @@ echo "apply-drift-after-write:"
 # --- Assertion 0: SANITY — the pull really is clean before the run ------------
 # Everything below is meaningless if the seed shipped a consumer that HAD drift.
 PRE="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if printf '%s\n' "$PRE" | grep -q '^HARD-'; then
+if grep -q '^HARD-' <<<"$PRE"; then
   bad "FIXTURE BROKEN — the consumer carries drift before apply.sh runs: $(printf '%s\n' "$PRE" | grep '^HARD-' | head -1)"
   echo; echo "apply-drift-after-write: FIXTURE BROKEN" >&2; exit 2
 fi
-if printf '%s\n' "$PRE" | grep -qc 'CORE-OK.*alpha.md' >/dev/null && printf '%s\n' "$PRE" | grep -q 'CORE-OK.*beta.md'; then
+if grep -qc 'CORE-OK.*alpha.md' >/dev/null <<<"$PRE" && grep -q 'CORE-OK.*beta.md' <<<"$PRE"; then
   ok "before: both core files byte-identical to BASE — zero consumer drift, nothing to decide"
 else
   bad "FIXTURE BROKEN — the detector did not see the seeded files at all (scan set changed?)"
@@ -61,7 +61,7 @@ else
 fi
 
 # --- Assertion 2: THE FIX — a clean pull produces no drift decision -----------
-if printf '%s\n' "$MANIFEST" | grep -q 'DECISION[[:space:]]*drift'; then
+if grep -q 'DECISION[[:space:]]*drift' <<<"$MANIFEST"; then
   bad "apply.sh reported ITS OWN WRITE as consumer drift on a clean pull: $(printf '%s\n' "$MANIFEST" | grep 'DECISION.*drift' | head -1)"
 else
   ok "no DECISION drift on a clean pull — the drift set was measured before phase 1 wrote"
@@ -73,7 +73,7 @@ fi
 # consulted it — a stated actor of nobody and a stated deadline of never. Measured on the
 # reference consumer: four entries flagged, listed in the report's own "what apply would do",
 # then not executed, two pulls running. A WORKLIST row is the weakest thing with an owner.
-if printf '%s\n' "$MANIFEST" | grep -q 'WORKLIST[[:space:]]*extension-reread.*alpha-domain'; then
+if grep -q 'WORKLIST[[:space:]]*extension-reread.*alpha-domain' <<<"$MANIFEST"; then
   ok "EXTENSION-HOOK-DRIFT reached the manifest as WORKLIST extension-reread"
 else
   bad "the hooked-core-changed obligation produced no work item: $(printf '%s\n' "$MANIFEST" | tr '\n' '|')"
@@ -83,7 +83,7 @@ fi
 # require the row to EXIST first -- a plain "no HARD row" test passes loudest when the row
 # is missing entirely, which is the failure above, not this one.
 EXTROW="$(printf '%s\n' "$MANIFEST" | grep 'extension-reread' || true)"
-if [ -n "$EXTROW" ] && ! printf '%s\n' "$EXTROW" | grep -q 'HARD-'; then
+if [ -n "$EXTROW" ] && ! grep -q 'HARD-' <<<"$EXTROW"; then
   ok "extension-reread is work, not a blocker"
 elif [ -z "$EXTROW" ]; then
   bad "no extension-reread row at all — cannot assert it is non-blocking"
@@ -102,8 +102,8 @@ fi
 # Defence 2 subsumes defence 1 for this scenario: run post-write against BASE now and the
 # hazard rows do not appear at all. That is why assertion 4's mutant must knock out BOTH.
 POST="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if printf '%s\n' "$POST" | grep -q 'CORE-AT-THEIRS.*alpha.md' \
-   && printf '%s\n' "$POST" | grep -q 'CORE-AT-THEIRS.*beta.md'; then
+if grep -q 'CORE-AT-THEIRS.*alpha.md' <<<"$POST" \
+   && grep -q 'CORE-AT-THEIRS.*beta.md' <<<"$POST"; then
   ok "post-write against a STALE base: both files read CORE-AT-THEIRS, not drift"
 else
   bad "the stale-base guard did not fire post-write. Got: $(printf '%s\n' "$POST" | tr '\n' '|')"
@@ -125,8 +125,8 @@ if [ "$(grep -c 'CORE-AT-THEIRS' "$NOGUARD")" -gt 1 ]; then
   bad "FIXTURE STALE: could not strip the CORE-AT-THEIRS guard — unregistered-drift.sh was reshaped"
 else
   RAW="$(bash "$NOGUARD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-  if printf '%s\n' "$RAW" | grep -q 'HARD-CORE-DRIFT-ABSORBED.*alpha.md' \
-     && printf '%s\n' "$RAW" | grep -q 'HARD-UNREGISTERED-CORE-DRIFT.*beta.md' \
+  if grep -q 'HARD-CORE-DRIFT-ABSORBED.*alpha.md' <<<"$RAW" \
+     && grep -q 'HARD-UNREGISTERED-CORE-DRIFT.*beta.md' <<<"$RAW" \
      && printf '%s\n' "$RAW" | grep 'alpha.md' | grep -q 'a revert DELETES text'; then
     ok "guard removed: BOTH hazard rows return, absorbed one still carrying the ready revert — the guard is what suppresses them"
   else
@@ -162,7 +162,7 @@ else
   MUT_OUT="$(bash "$MUTDIR/apply.sh" "$M_DIST" "$M_BASE" "$M_CONSUMER" "$M_THEIRS" 2>/dev/null)"
   if [ "$(printf '%s\n' "$MUT_OUT" | grep -c 'RESOLVED.*pure-apply')" -ne 2 ]; then
     bad "FIXTURE BROKEN — the mutant did not apply both files, so any drift row below would have a different cause"
-  elif printf '%s\n' "$MUT_OUT" | grep -q 'DECISION[[:space:]]*drift.*beta.md'; then
+  elif grep -q 'DECISION[[:space:]]*drift.*beta.md' <<<"$MUT_OUT"; then
     ok "mutant: measuring after the write turns a clean pull into 'refile-as-override or revert' — the fixture can fail"
   else
     bad "MUTANT DID NOT FAIL — with the capture back below phase 1, apply.sh still reported no drift. This fixture cannot detect the defect it exists for."
@@ -177,14 +177,14 @@ rm -rf "$W2"
 # strictly worse than none: H1 then reports coverage that does not exist — the same shape as
 # the hand-typed enumeration H1's rewrite deleted, one layer out.
 LD="$(bash "$LAYER" "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
-if printf '%s\n' "$LD" | grep -q 'EXTENSION-FIXTURE-UNBOUND.*check-dangling'; then
+if grep -q 'EXTENSION-FIXTURE-UNBOUND.*check-dangling' <<<"$LD"; then
   ok "a fixtures: binding naming no directory is reported EXTENSION-FIXTURE-UNBOUND"
 else
   bad "a dangling fixtures: binding was not reported — H1 would count it as coverage: $(printf '%s\n' "$LD" | tr '\n' '|' | cut -c1-200)"
 fi
 # THE PRECISION SIDE, and it is the one that keeps the detector switched on. A check that
 # fires on a binding that DOES resolve makes every correctly-bound consumer fixture a finding.
-if printf '%s\n' "$LD" | grep -q 'EXTENSION-FIXTURE-UNBOUND.*check-bound'; then
+if grep -q 'EXTENSION-FIXTURE-UNBOUND.*check-bound' <<<"$LD"; then
   bad "the detector fired on a binding whose directory exists — a check with false positives is a check the operator turns off"
 else
   ok "a fixtures: binding whose directory exists is silent (the bare name resolves under tests/fixtures/)"

@@ -82,7 +82,7 @@ echo "trunk-push-bound: shipped code"
 
 # --- Assertion 1: the licensed commit lands ----------------------------------------
 push "$V" "$C_OK" "$C_BASE"
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "1 commit(s) judged"; then
+if [ "$RC" -eq 0 ] && grep -q "1 commit(s) judged" <<<"$OUT"; then
   ok "the Step 5b backfill commit passes, and the run states how many commits it judged"
 else
   bad "the licensed commit did not pass cleanly (rc=$RC): $OUT"
@@ -90,7 +90,7 @@ fi
 
 # --- Assertion 2: that path, rewritten alone, under any other subject ---------------
 push "$V" "$C_BARE" "$C_OK"
-if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q "under a subject Step 5b does not license"; then
+if [ "$RC" -ne 0 ] && grep -q "under a subject Step 5b does not license" <<<"$OUT"; then
   ok "rewriting the anchors file alone under an unlicensed subject is REJECTED"
 else
   bad "an unlicensed direct-to-trunk rewrite of the anchors file was allowed (rc=$RC)"
@@ -100,7 +100,7 @@ fi
 # Clause (c): a backfill that also carries source is not a backfill. Without this, the
 # subject becomes a password for pushing arbitrary code straight to the trunk.
 push "$V" "$C_SMUG" "$C_BARE"
-if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q "claims the Step 5b backfill subject while touching"; then
+if [ "$RC" -ne 0 ] && grep -q "claims the Step 5b backfill subject while touching" <<<"$OUT"; then
   ok "a commit claiming the licensed subject while carrying other paths is REJECTED"
 else
   bad "the licensed subject smuggled a source file onto the trunk (rc=$RC)"
@@ -119,7 +119,7 @@ fi
 
 # --- Assertion 5: another ref is not the trunk --------------------------------------
 push "$V" "$C_BARE" "$C_OK" "refs/heads/feat/x"
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "does not target"; then
+if [ "$RC" -eq 0 ] && grep -q "does not target" <<<"$OUT"; then
   ok "a push to a non-trunk ref says so in its own words (the same commit arm 2 rejects)"
 else
   bad "a non-trunk push was judged as if it were the trunk (rc=$RC)"
@@ -132,8 +132,8 @@ fi
 # sys.stdin inside a `python3 - <<PY` heredoc, so it read the heredoc's leftovers --
 # nothing -- in all nine cases it was tested against.
 OUT="$(printf '' | AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" bash "$V" --trunk-push 2>&1)"; RC=$?
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "NO REF LINES ON STDIN" \
-   && ! printf '%s' "$OUT" | grep -q "PASS"; then
+if [ "$RC" -eq 0 ] && grep -q "NO REF LINES ON STDIN" <<<"$OUT" \
+   && ! grep -q "PASS" <<<"$OUT"; then
   ok "reading no refs reports that it judged nothing, in wording no passing run emits"
 else
   bad "a run that judged nothing was indistinguishable from a clean push: $OUT"
@@ -143,7 +143,7 @@ fi
 # The absorbed consumer script takes range="$local_sha" here, which is every ancestor:
 # the first push of a trunk lists the entire history and cannot land. Core will not.
 push "$V" "$C_RETRO" "$ZERO"
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "creating the remote ref"; then
+if [ "$RC" -eq 0 ] && grep -q "creating the remote ref" <<<"$OUT"; then
   ok "creating the remote ref judges no delta (the absorbed script judged every ancestor and blocked the push)"
 else
   bad "creating the trunk ref was judged against the whole history (rc=$RC): $OUT"
@@ -152,7 +152,7 @@ fi
 # --- Assertion 8: the trunk name is a tunable, not a literal ------------------------
 OUT="$(printf 'refs/heads/main %s refs/heads/main %s\n' "$C_BARE" "$C_OK" \
       | AI_DLC_TRUNK=develop AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" bash "$V" --trunk-push 2>&1)"; RC=$?
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "develop"; then
+if [ "$RC" -eq 0 ] && grep -q "develop" <<<"$OUT"; then
   ok "AI_DLC_TRUNK repoints the trunk (the same tunable validate-cycle-commits.sh reads)"
 else
   bad "AI_DLC_TRUNK was ignored and 'main' was judged regardless (rc=$RC)"
@@ -171,7 +171,7 @@ echo "trunk-push-bound: mutants"
 # mutant at once. This is the arm that catches that before any mutant is believed.
 CTL="$MUT/control.sh"; cp "$V" "$CTL"
 push "$CTL" "$C_OK" "$C_BASE"
-if [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "1 commit(s) judged"; then
+if [ "$RC" -eq 0 ] && grep -q "1 commit(s) judged" <<<"$OUT"; then
   ok "CONTROL: an unmutated copy in the mutant directory still passes assertion 1"
 else
   bad "CONTROL: the unmutated copy does not work from $MUT (rc=$RC) — every mutant below is unproven: $OUT"
@@ -215,7 +215,7 @@ fi
 # disarmed wiring apart from a clean push, and both exit 0.
 if mutate m3 's@    if not refs:@    if False:@'; then
   OUT="$(printf '' | AI_DLC_AUDIT_ANCHORS_SCHEMA="$S" bash "$M" --trunk-push 2>&1)"
-  if printf '%s' "$OUT" | grep -q "PASS" && ! printf '%s' "$OUT" | grep -q "NO REF LINES"; then
+  if grep -q "PASS" <<<"$OUT" && ! grep -q "NO REF LINES" <<<"$OUT"; then
     ok "M3: without the empty-read branch a run that judged nothing reports a pass — assertion 6 dies"
   else
     bad "M3: the empty-read branch was removed and the output did not change: $OUT"
@@ -225,7 +225,7 @@ fi
 # M4 — restore the absorbed script's ref-creation behaviour.
 if mutate m4 's@        if remote_sha == ZERO:@        if False:@'; then
   push "$M" "$C_RETRO" "$ZERO"
-  if ! printf '%s' "$OUT" | grep -q "creating the remote ref"; then
+  if ! grep -q "creating the remote ref" <<<"$OUT"; then
     ok "M4: without the ref-creation branch the first push of a trunk is no longer exempt — assertion 7 dies"
   else
     bad "M4: the ref-creation branch was removed and the note survived: $OUT"

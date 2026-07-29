@@ -71,7 +71,7 @@ echo "check5-anchor-base"
 # --- 1. web changed (anchor base) + NO visual evidence -> Check 5 FIRES and FAILs ---
 write_gatelog "deploy completed"
 L="$(check5_line "$WORK/bin/validate-mandatory-rules.sh")"
-if echo "$L" | grep -qi 'CHECK 5: FAIL'; then
+if grep -qi 'CHECK 5: FAIL' <<<"$L"; then
   ok "fires and FAILs on a web/** change with no visual evidence (main..HEAD would have SKIPped)"
 else
   bad "Check 5 did not fire+FAIL — got: ${L:-<no CHECK 5 line>}"
@@ -80,7 +80,7 @@ fi
 # --- 2. web changed + USER-CONFIRMED -> Check 5 PASS --------------------------
 write_gatelog "USER-CONFIRMED visual verification captured"
 L="$(check5_line "$WORK/bin/validate-mandatory-rules.sh")"
-if echo "$L" | grep -qi 'CHECK 5: PASS'; then
+if grep -qi 'CHECK 5: PASS' <<<"$L"; then
   ok "PASSes with USER-CONFIRMED evidence in the sprint gate-log section"
 else
   bad "Check 5 did not PASS with evidence — got: ${L:-<no CHECK 5 line>}"
@@ -97,7 +97,7 @@ if cmp -s "$WORK/bin/validate-mandatory-rules.sh" "$MUTANT"; then
 fi
 write_gatelog "deploy completed"   # no evidence: under the anchor base this FAILs
 L="$(check5_line "$MUTANT")"
-if echo "$L" | grep -qi 'CHECK 5: SKIP'; then
+if grep -qi 'CHECK 5: SKIP' <<<"$L"; then
   ok "MUTATION: reverting the base to main..HEAD makes Check 5 SKIP (the anchor base is what fires it)"
 else
   bad "MUTATION: Check 5 did not SKIP on main..HEAD — got: ${L:-<no CHECK 5 line>}"

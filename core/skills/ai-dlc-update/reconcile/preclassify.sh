@@ -115,7 +115,7 @@ opted_out() { # opted_out <consumer-path> -> 0 if this file must be skipped
 # model strings / ownership paths / deploy commands.
 SETUP_SITED_PATHS="$(awk '/^[ \t]*file:[ \t]*core\//{sub(/^[ \t]*file:[ \t]*/,""); print}' \
   "$(dirname "$0")/setup-sites.md" 2>/dev/null | sort -u)"
-setup_sited() { printf '%s\n' "$SETUP_SITED_PATHS" | grep -qxF "$1"; }
+setup_sited() { grep -qxF "$1" <<<"$SETUP_SITED_PATHS"; }
 
 blob_hash() { git -C "$DIST" rev-parse -q --verify "$1:$2" 2>/dev/null || echo MISSING; }
 file_hash() { local f="$CONS/$1"; [ -f "$f" ] && git -C "$DIST" hash-object "$f" 2>/dev/null || echo MISSING; }

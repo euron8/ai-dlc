@@ -51,7 +51,7 @@ prd()      { ( cd "$REPO" && git show "$1:_bmad-output/planning-artifacts/prd.md
 # assert MATCH/NOMATCH of a pattern against stdin-producing command
 expect() { # expect <want:yes|no> <label> <pattern> <text>
   local want="$1" label="$2" pat="$3" text="$4" got
-  if printf '%s\n' "$text" | grep -qE "$pat"; then got=yes; else got=no; fi
+  if grep -qE "$pat" <<<"$text"; then got=yes; else got=no; fi
   if [ "$got" = "$want" ]; then
     note "ok" "$label" "$( [ "$want" = yes ] && echo matched || echo "did not match" ) (as required)"
   else

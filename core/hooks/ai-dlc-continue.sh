@@ -185,8 +185,8 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   # context): those are discussion, not a request, and a bare-substring regex fires on
   # every one of them and spams the operator with a spurious resume prompt. The second
   # grep excludes any message that IS a resume prompt or talks ABOUT the mechanism.
-  if echo "$LAST_USER" | grep -qiE 'hand[ -]off (this|it|to|the (sprint|pipeline|work|session))|hand(ing)? (this|it) off|\b(do|create|prepare|need|want|start|begin|let'\''s|please) (a |an |the )?hand[ -]?off\b|^[[:space:]]*hand[ -]?off[[:space:]]*$|continue in a (new|fresh) session|pick (this|it) up in a (new|fresh) session' \
-     && ! echo "$LAST_USER" | grep -qiE '/ai-dlc|acknowledge handoff|handoff (resume|guard|prompt|protocol)|resume prompt|pipeline control'; then
+  if grep -qiE 'hand[ -]off (this|it|to|the (sprint|pipeline|work|session))|hand(ing)? (this|it) off|\b(do|create|prepare|need|want|start|begin|let'\''s|please) (a |an |the )?hand[ -]?off\b|^[[:space:]]*hand[ -]?off[[:space:]]*$|continue in a (new|fresh) session|pick (this|it) up in a (new|fresh) session' <<<"$LAST_USER" \
+     && ! grep -qiE '/ai-dlc|acknowledge handoff|handoff (resume|guard|prompt|protocol)|resume prompt|pipeline control' <<<"$LAST_USER"; then
 
     RESUME_OK=$(printf '%s' "$LAST_ASST" | awk '
       /^[[:space:]]*-{4,}[[:space:]]*$/ { marks++; if (marks==1){opened=1;sawcmd=0} else if (marks>=2 && sawcmd){ok=1}; next }

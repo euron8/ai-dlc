@@ -98,7 +98,7 @@ V6_RC=$?
 if [ "$V6_RC" -eq 0 ]; then
   note "BAD" "s999...-p2.md (V6 solo)" "PASSED — a solo convergence review is unpoliced"
   fails=$((fails + 1))
-elif printf '%s' "$V6_ERR" | grep -q 'not in the known set'; then
+elif grep -q 'not in the known set' <<<"$V6_ERR"; then
   note "BAD" "s999...-p2.md (V6 solo)" "rejected as an UNKNOWN SKILL, not as solo"
   echo
   echo "      'ai-dlc-adversary-review' is missing from KNOWN_SKILLS. The block failed," >&2
@@ -106,7 +106,7 @@ elif printf '%s' "$V6_ERR" | grep -q 'not in the known set'; then
   echo "      17's only teeth are disarmed for every convergence pass, and the exit code" >&2
   echo "      looks identical to a healthy reject." >&2
   fails=$((fails + 1))
-elif printf '%s' "$V6_ERR" | grep -qi 'mode: solo'; then
+elif grep -qi 'mode: solo' <<<"$V6_ERR"; then
   note "ok" "s999...-p2.md (V6 solo)" "rejected by the Rule 20 solo rung (the right one)"
 else
   note "BAD" "s999...-p2.md (V6 solo)" "rejected for an unexpected reason"
@@ -135,7 +135,7 @@ V8_ERR="$(bash "$PROV" "$V8" 2>&1)"
 if [ $? -eq 0 ]; then
   note "BAD" "s999...-p4.md (V8 solo)" "PASSED — solo is unpoliced without a skill field"
   fails=$((fails + 1))
-elif printf '%s' "$V8_ERR" | grep -qi 'mode: solo'; then
+elif grep -qi 'mode: solo' <<<"$V8_ERR"; then
   note "ok" "s999...-p4.md (V8 solo)" "rejected AS SOLO even with no skill: field"
 else
   note "BAD" "s999...-p4.md (V8 solo)" "rejected, but NOT on the solo rung"
@@ -157,7 +157,7 @@ V9_ERR="$(bash "$PROV" "$V9" --require-skill bmad-review-adversarial-general 2>&
 if [ $? -eq 0 ]; then
   note "BAD" "s999-story-1.md (V9 pin)" "PASSED — a retired pin certified a story it never checked"
   fails=$((fails + 1))
-elif printf '%s' "$V9_ERR" | grep -q 'RETIRED PIN'; then
+elif grep -q 'RETIRED PIN' <<<"$V9_ERR"; then
   note "ok" "s999-story-1.md (V9 pin)" "names the retired pin and the repair"
 else
   note "BAD" "s999-story-1.md (V9 pin)" "fails, but does not name the retired pin"
@@ -289,7 +289,7 @@ else
     git branch -D ai-dlc/retro/sprint-999
   ) >/dev/null 2>&1
   NEW_OUT="$( cd "$CLONE" && bash "$EVID" ai-dlc/retro/sprint-999 999 2>&1 )"
-  if printf '%s\n' "$NEW_OUT" | grep -Eq 'transcript committed.*: OK'; then
+  if grep -Eq 'transcript committed.*: OK' <<<"$NEW_OUT"; then
     note "ok" "sprint-999 (origin-only)" "retro branch resolves via origin/<name> (ls-tree found the transcript)"
   else
     note "BAD" "sprint-999 (origin-only)" "the origin-only branch did NOT resolve — the CI-checkout bug is back"
@@ -299,7 +299,7 @@ else
   # Fail-fast: a branch that resolves NEITHER locally NOR as origin/ must fail
   # immediately, naming both refs it tried — not die opaquely in merge-base later.
   FF_OUT="$( cd "$CLONE" && bash "$EVID" no-such-retro-branch 999 2>&1 )"
-  if printf '%s\n' "$FF_OUT" | grep -Eq 'not found — tried: no-such-retro-branch, origin/no-such-retro-branch'; then
+  if grep -Eq 'not found — tried: no-such-retro-branch, origin/no-such-retro-branch' <<<"$FF_OUT"; then
     note "ok" "fail-fast" "an unresolvable branch fails fast, naming both refs tried"
   else
     note "BAD" "fail-fast" "an unresolvable branch did not fail-fast naming both refs"
@@ -317,7 +317,7 @@ else
     fails=$((fails + 1))
   else
     MUT_OUT="$( cd "$CLONE" && bash "$MUT" ai-dlc/retro/sprint-999 999 2>&1 )"
-    if printf '%s\n' "$MUT_OUT" | grep -Eq 'transcript committed.*: FAIL'; then
+    if grep -Eq 'transcript committed.*: FAIL' <<<"$MUT_OUT"; then
       note "ok" "sprint-999 (origin-only)" "MUTATION — without resolution the origin-only branch is unresolved (ls-tree FAIL)"
     else
       note "BAD" "sprint-999 (origin-only)" "MUTATION — the branch resolved with resolution disabled; the assertion proves nothing"

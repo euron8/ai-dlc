@@ -53,7 +53,7 @@ says() {
   local c="$1" t="$2"; shift 2; N=$((N + 1))
   local out miss=""
   out="$(bash "$VALIDATOR" --series "$ROOT/$c/s-adversarial-p" --transcript "$ROOT/$t" 2>&1)"
-  local w; for w in "$@"; do printf '%s' "$out" | grep -qF -- "$w" || miss="$miss [$w]"; done
+  local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
   if [ -z "$miss" ]; then printf '  ok   %-30s message names the cause\n' "$c(msg)"
   else FAIL=$((FAIL + 1)); printf '  FAIL %-30s missing:%s\n' "$c(msg)" "$miss"; fi
 }
@@ -80,7 +80,7 @@ logs() {
   local c="$1" mark="$2"; N=$((N + 1))
   local err
   err="$(bash "$VALIDATOR" --series "$ROOT/$c/s-adversarial-p" --cycle-state 2>&1 >/dev/null)"
-  if printf '%s' "$err" | grep -qF -- "$mark"; then printf '  ok   %-30s logs %s\n' "$c" "$mark"
+  if grep -qF -- "$mark" <<<"$err"; then printf '  ok   %-30s logs %s\n' "$c" "$mark"
   else FAIL=$((FAIL + 1)); printf '  FAIL %-30s did NOT log %s\n' "$c" "$mark"; fi
 }
 

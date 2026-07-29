@@ -123,7 +123,7 @@ fi
 write_log 3
 if [ -f "$VMR" ]; then
   VOUT="$(bash "$VMR" 900 2>/dev/null || true)"
-  if echo "$VOUT" | grep -q 'CHECK 2: PASS'; then
+  if grep -q 'CHECK 2: PASS' <<<"$VOUT"; then
     ok "mandatory-rules Check 2 delegates to the validator and PASSes with a log present"
   else
     bad "Check 2 did not engage the validator with a log present"
@@ -133,7 +133,7 @@ if [ -f "$VMR" ]; then
 # --- 5. Check 2 SKIPs (never fails) when the producer is absent ---------------
   rm -f "$WORK/$LOG"
   VOUT="$(bash "$VMR" 900 2>/dev/null || true)"
-  if echo "$VOUT" | grep -q 'CHECK 2: SKIP'; then
+  if grep -q 'CHECK 2: SKIP' <<<"$VOUT"; then
     ok "mandatory-rules Check 2 SKIPs when no validation-cycle-log.md (log-keyed opt-in)"
   else
     bad "Check 2 did not SKIP on a missing log"

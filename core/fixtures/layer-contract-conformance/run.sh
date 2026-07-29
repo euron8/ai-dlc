@@ -66,7 +66,7 @@ mutant_fires() {
     return
   fi
   out="$(run_with "$file")"
-  if printf '%s\n' "$out" | grep -q "$want"; then
+  if grep -q "$want" <<<"$out"; then
     printf '  ok    %-18s %s fires  (%s)\n' "$label" "$want" "$why"
   else
     FAILURES=$((FAILURES + 1))

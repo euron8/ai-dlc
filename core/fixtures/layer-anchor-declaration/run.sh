@@ -52,7 +52,7 @@ row() {
       printf '  FAIL  %-26s errored but must not  (%s)\n' "$ent" "$why"
       printf '%s\n' "$got" | sed 's/^/          | /'
     fi
-  elif printf '%s\n' "$got" | grep -qF "$want"; then
+  elif grep -qF "$want" <<<"$got"; then
     printf '  ok    %-26s %s  (%s)\n' "$ent" "$want" "$why"
   else
     FAILURES=$((FAILURES + 1))

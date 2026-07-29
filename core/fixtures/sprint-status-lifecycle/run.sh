@@ -216,7 +216,7 @@ stories:
     file: stories/story-291-1.md
     status: done'
   cs_run "$T"
-  if [ "$CS_RC" -eq 0 ] && printf '%s' "$CS_OUT" | grep -q 'PASS — 1 comparison(s)'; then
+  if [ "$CS_RC" -eq 0 ] && grep -q 'PASS — 1 comparison(s)' <<<"$CS_OUT"; then
     echo "A13 PASS"; else echo "A13 FAIL"; fi
 
   # A14 — a mismatch is REPORTED, not absorbed.
@@ -229,7 +229,7 @@ stories:
     file: stories/story-291-1.md
     status: done'
   cs_run "$T"
-  if [ "$CS_RC" -eq 1 ] && printf '%s' "$CS_OUT" | grep -q 'STATUS MISMATCH'; then
+  if [ "$CS_RC" -eq 1 ] && grep -q 'STATUS MISMATCH' <<<"$CS_OUT"; then
     echo "A14 PASS"; else echo "A14 FAIL"; fi
 
   # A15 — a story file with NO frontmatter is read through its `**Status:**` header and COUNTED.
@@ -244,7 +244,7 @@ stories:
     file: stories/story-291-1.md
     status: done'
   cs_run "$T"
-  if [ "$CS_RC" -eq 0 ] && printf '%s' "$CS_OUT" | grep -q 'PASS — 1 comparison(s)'; then
+  if [ "$CS_RC" -eq 0 ] && grep -q 'PASS — 1 comparison(s)' <<<"$CS_OUT"; then
     echo "A15 PASS"; else echo "A15 FAIL"; fi
 
   # A16 — THE VACUITY FLOOR. A canonical with no `stories:` key compared nothing, and that is its
@@ -265,7 +265,7 @@ stories:
   # populated at stories-test-strategy. A MAPPING keyed by story id
   # (story-291-<M>:), never a list — a list form matches no reader.'
   cs_run "$T"
-  if ! printf '%s' "$CS_OUT" | grep -q 'FINDING'; then echo "A17 PASS"; else echo "A17 FAIL"; fi
+  if ! grep -q 'FINDING' <<<"$CS_OUT"; then echo "A17 PASS"; else echo "A17 FAIL"; fi
 
   # A18 — the LIST form. The reference consumer ran a whole sprint on it: its tool compared ZERO
   # fields and reported success, because a list matches no key grammar.
@@ -277,7 +277,7 @@ stories:
   - id: story-291-1
     status: done'
   cs_run "$T"
-  if [ "$CS_RC" -eq 1 ] && printf '%s' "$CS_OUT" | grep -q 'LIST form'; then
+  if [ "$CS_RC" -eq 1 ] && grep -q 'LIST form' <<<"$CS_OUT"; then
     echo "A18 PASS"; else echo "A18 FAIL"; fi
 
   # A19 — an entry naming a story file that is not there is a FINDING. Skipping it is how a
@@ -290,7 +290,7 @@ stories:
     file: stories/story-291-1.md
     status: done'
   cs_run "$T"
-  if [ "$CS_RC" -eq 1 ] && printf '%s' "$CS_OUT" | grep -q 'names no readable story file'; then
+  if [ "$CS_RC" -eq 1 ] && grep -q 'names no readable story file' <<<"$CS_OUT"; then
     echo "A19 PASS"; else echo "A19 FAIL"; fi
 
   # A20 — two entries under one id: whichever a reader takes, the other is unenforced.
@@ -306,7 +306,7 @@ stories:
     file: stories/story-291-1.md
     status: review'
   cs_run "$T"
-  if [ "$CS_RC" -eq 1 ] && printf '%s' "$CS_OUT" | grep -q 'duplicate story key'; then
+  if [ "$CS_RC" -eq 1 ] && grep -q 'duplicate story key' <<<"$CS_OUT"; then
     echo "A20 PASS"; else echo "A20 FAIL"; fi
 
   # A21 — the two canonical copies are BOTH authoritative for an entry. Disagreement between them
@@ -327,7 +327,7 @@ stories:
     file: stories/story-291-1.md
     status: review'
   cs_run "$T"
-  if [ "$CS_RC" -eq 1 ] && printf '%s' "$CS_OUT" | grep -q 'canonical copies disagree'; then
+  if [ "$CS_RC" -eq 1 ] && grep -q 'canonical copies disagree' <<<"$CS_OUT"; then
     echo "A21 PASS"; else echo "A21 FAIL"; fi
 
   # A22 — id-prefix collision. `story-291-1` must never resolve to `story-291-10-...`; a `<id>*`
@@ -342,7 +342,7 @@ stories:
   story-291-1:
     status: done'
   cs_run "$T"
-  if ! printf '%s' "$CS_OUT" | grep -q 'story-291-10'; then echo "A22 PASS"; else echo "A22 FAIL"; fi
+  if ! grep -q 'story-291-10' <<<"$CS_OUT"; then echo "A22 PASS"; else echo "A22 FAIL"; fi
 }
 
 echo

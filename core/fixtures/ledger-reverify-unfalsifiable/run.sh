@@ -62,7 +62,7 @@ git -C "$CONSUMER" -c user.email=f@f -c user.name=f commit -qm mutate >/dev/null
 # A missing input is not evidence of a bad predicate. It must say so, not accuse.
 rm -rf "$CONSUMER/.git"
 out="$(bash "$RV" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
-if printf '%s' "$out" | grep -q "STILL-LIVE.*PC-BAD" && printf '%s' "$out" | grep -q "NOT checked"; then
+if grep -q "STILL-LIVE.*PC-BAD" <<<"$out" && grep -q "NOT checked" <<<"$out"; then
   ok "no tracked file list → STILL-LIVE + 'reachability NOT checked' (undecidable says so)"
 else
   bad "undecidable path did not degrade safely: $(printf '%s' "$out" | awk -F'\t' '{print $1}' | tr '\n' ' ')"
