@@ -17,6 +17,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.199.0] — 2026-07-28
+
+### Added — the backstop against an in-place core edit was a paragraph, and is now a command
+
+`core-paths.sh --audit-diff <base-ref> [<head-ref>]` classifies a git range against the core
+manifest and reports every core file edited in place by a commit that is not an
+`/ai-dlc-update` reconcile. The core-layer-immutability gate check now runs it and pastes the
+output into the gate log; the paragraph it used to be is still there, describing what the
+mode does.
+
+**Why it earns a release.** That check calls itself "the BACKSTOP for whatever reached disk
+anyway — a shell write, a `git push --no-verify`, or a consumer without the hook wired." The
+`ai-dlc-core-guard.sh` PreToolUse hook is the primary enforcement and it is an executable that
+denies keystrokes. The backstop behind it was an instruction to an agent to run a loop by
+hand. `CLAUDE.md`'s own rule is that a prohibition with no mechanism is a suggestion, and this
+is the prohibition that keeps a consumer's core tree pullable at all.
+
+**The derivation is not re-invented.** The mode runs the same glob set `--is-core` builds from
+`core-manifest.md`, in the same script, so the keystroke guard, the gate check and this audit
+cannot disagree about what core is. I25 already binds `parse_manifest()` and
+`to_consumer_glob()` byte-identically across the resolver and the guard; a new MODE calls that
+derivation and touches neither function.
+
+**Four things the mode adds over a hand-run loop, each of which fails silently in the passing
+direction if it is dropped:**
+
+- **The manifest is resolved at `<base-ref>`, not from the working tree.** A diff that shrinks
+  `core-manifest.md` to un-claim the file it edits would otherwise define its own scope.
+- **The activation rule is evaluated, and a tree it does not cover says `DORMANT`.** In the
+  distribution source repo core lives under `core/`, no consumer-relative glob can match
+  anything, and "no core path touched" would be a false clean in the one tree where every path
+  is core.
+- **The reconcile exemption is derived from the subject convention `ai-dlc-update/SKILL.md`
+  itself writes.** Without it every pull FAILs its own consumer, which is how a working check
+  gets switched off.
+- **A finding exits 1.** Printing the finding while returning success is the whole class.
+
+`PASS (with citation)` reports that an `Operator authorization:` line EXISTS in the working
+tree's `docs/escalations/pending.md` — it cannot tell whether the citation covers these
+touches, and says so in its own output rather than letting an exit code read as adjudication.
+The two carve-outs the gate check applies on top (override coverage, setup-substitution line
+regions) stay with the adjudicator.
+
+**Measured on the reference consumer at `170ff9d8c`, 60 first-parent ranges on `main`:** 47
+clean, 6 cleared by the reconcile exemption, 4 cleared by an operator citation, 3 `DORMANT`
+(pre-layer-split), **0 FAIL, 0 unexplained**. The FAIL arm was proven on that same tree rather
+than only in a fixture: on a `cmp -s`-guarded worktree copy with the citation line stripped,
+the range reports four in-place core edits — `.claude/hooks/ai-dlc-dispatch-guard.sh`,
+`ai-dlc-setup/SKILL.md`, `ai-dlc-update/SKILL.md` and `reconcile/apply.sh` — from one
+`fix(s299-1):` commit.
+
+### Added — I49: a resolver mode named in prose is one the script actually dispatches
+
+Three enforcement surfaces reach `core-paths.sh` through a string typed into a rule file that
+an **agent** follows: the gate check body, `SKILL.md` Rule 27, and the protected-path-editor
+role. A mode the dispatch does not accept prints `usage:` and exits **2** — and 2 is this
+resolver's "cannot determine what core is", so a typo in a paragraph and an unreadable
+manifest arrive at the caller as the same answer, with the recoverable one wearing the
+irrecoverable one's clothes.
+
+I49 joins the modes the dispatch accepts (bounded by `MODE_DISPATCH_BEGIN`/`END`) to the modes
+core's rule files cite, and separately asserts every dispatched mode appears in `usage()`.
+Both extractions carry a zero guard. The reverse direction is deliberately **not** "every mode
+has a caller": `--list` has none today and is a shipped interface, so that arm would fail on a
+fact this invariant has no business resolving.
+
+Its citation corpus excludes `core/fixtures/`, this validator, and `core-paths.sh` itself.
+Those three are measured, not anticipated — the first two turned the pristine tree red while
+the invariant was being written, the same shape v0.194.0 recorded for the machinery-home scan
+firing on its own fixture. The fixture arm assembles its ghost spelling at runtime anyway, so
+it does not lean on an exclusion it does not test.
+
+### Fixtures
+
+`core/fixtures/core-paths-audit-diff/` builds a synthetic layered consumer with one branch per
+reachable verdict: seven assertions and four single-arm mutants (base-ref manifest resolution,
+the activation rule, the reconcile exemption, the FAIL arm's exit code), each with an
+entanglement check against a range it must not affect, behind an unmutated control copy that
+reproduces all five verdicts first. `enforcement-map-sites` gains Assertion 23, three I49 arms
+each asserting on its own message — ghost mode, undocumented mode, and the vacuity case where
+an empty dispatched set would make `comm` report agreement it never computed.
+
 ## [0.198.0] — 2026-07-28
 
 ### Added — a party-mode block can be moved somewhere nothing looks, and now something does

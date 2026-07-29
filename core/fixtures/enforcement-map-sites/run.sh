@@ -612,6 +612,79 @@ else
 fi
 restore
 
+# --- Assertion 23: I49 — a mode named in prose is a mode the script dispatches --
+# Three of core's enforcement surfaces reach `core-paths.sh` through a STRING typed into a
+# rule file an AGENT follows. A mode that does not exist prints usage and exits 2, and 2 is
+# this resolver's "cannot determine what core is" — so a typo in a paragraph and an
+# unreadable manifest arrive at the gate as the same answer, and the recoverable one wears
+# the irrecoverable one's clothes.
+#
+# THREE ARMS, each asserting on its OWN message. A grep for "I49" is satisfied by all three
+# and would test none of them — row 4's recorded trap, where two arms quoting one string let
+# an assertion pass against a reverted fix.
+CP="$ROOT/core/scripts/core-paths.sh"
+GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+
+# ARM 1 — GHOST MODE. The gate check body names a mode one character off. This is the
+# realistic shape: a rename lands in the script and the paragraph keeps the old spelling.
+#
+# The ghost spelling is ASSEMBLED, never written out. I49 excludes core/fixtures/ from its
+# citation corpus for exactly this reason, and a fixture that leans on that exclusion to
+# hold its own text would go red the day the exclusion is reconsidered — for a reason with
+# nothing to do with what it tests.
+ghost="--audit-diff""s"
+cp "$GV" "$GV.orig"
+sed "s@core-paths\\.sh --audit-diff@core-paths.sh ${ghost}@" "$GV.orig" > "$GV"
+if cmp -s "$GV.orig" "$GV"; then
+  bad "FIXTURE BROKEN: the I49 ghost-mode mutation matched nothing, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "mode(s) the script does not dispatch"; then
+    ok "a rule file naming a core-paths.sh mode the dispatch rejects FAILS I49 (the call would exit 2, which the caller reads as 'cannot determine')"
+  else
+    bad "the gate check body named a nonexistent resolver mode and I49 stayed silent — a typo in a paragraph now reports as an unreadable manifest"
+  fi
+fi
+restore
+CP="$ROOT/core/scripts/core-paths.sh"
+GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+
+# ARM 2 — UNDOCUMENTED MODE. Drop a mode from usage(). The callers are prose, updated by
+# whoever read the usage text, so a mode missing from it is a mode no rename can reach.
+cp "$CP" "$CP.orig"
+grep -v 'core-paths.sh --list \[<manifest>\]" >&2' "$CP.orig" > "$CP"
+if cmp -s "$CP.orig" "$CP"; then
+  bad "FIXTURE BROKEN: the I49 undocumented-mode mutation matched nothing, so the second arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "its own usage() never names"; then
+    ok "a dispatched mode missing from usage() FAILS I49 (a mode no operator can discover)"
+  else
+    bad "a mode vanished from usage() and I49 reported clean — the discoverable set and the dispatched set can now diverge"
+  fi
+fi
+restore
+CP="$ROOT/core/scripts/core-paths.sh"
+GV="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+
+# ARM 3 — VACUITY. Rename the sentinel the dispatch extraction is bounded by. I49 reports an
+# ABSENCE (nothing cited that is not dispatched), and an empty dispatched set makes every
+# citation a ghost — or, without the zero guard, makes `comm` compare against nothing and
+# report agreement it never computed.
+cp "$CP" "$CP.orig"
+sed 's@# MODE_DISPATCH_BEGIN@# MODE_TABLE_BEGIN@' "$CP.orig" > "$CP"
+if cmp -s "$CP.orig" "$CP"; then
+  bad "FIXTURE BROKEN: the I49 vacuity mutation matched nothing, so the third arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "parsed ZERO modes"; then
+    ok "a renamed dispatch sentinel FAILS I49 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
+  else
+    bad "the dispatch extraction found nothing and I49 did not say so — it was comparing against an empty set and calling it agreement"
+  fi
+fi
+restore
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

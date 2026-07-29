@@ -1583,6 +1583,51 @@ else
   fi
 fi
 
+# --- I49: every core-paths.sh MODE a rule file tells someone to run actually exists ---
+#
+# `core-paths.sh` is the one resolver three different enforcement surfaces agree through, and
+# every one of them reaches it by a STRING typed into prose: the gate check body, SKILL.md
+# Rule 27, the protected-path-editor role. Those callers are agents following a paragraph, not
+# code a linter type-checks. A mode named in prose that the dispatch does not accept prints
+# `usage:` and exits 2 — and 2 is this script's "cannot determine", so the instruction being
+# WRONG and the manifest being UNREADABLE arrive at the caller as the same answer.
+#
+# The reverse direction is deliberately NOT "every mode has a caller": `--list` has none today
+# and is a shipped interface, so that arm would fail on a fact this invariant has no business
+# resolving. It is "every mode the dispatch accepts is in usage()" instead — a hidden mode is
+# one no operator can find and no rename can reach.
+cpm_f="$REPO_ROOT/core/scripts/core-paths.sh"
+if [ ! -f "$cpm_f" ]; then
+  err "I49 cannot find core/scripts/core-paths.sh. It binds the modes that script dispatches to the modes core's rule files tell an agent to run; with the script gone the join compares nothing and passes."
+else
+  # The dispatch arm, bounded by its own sentinels so the extraction cannot drift onto some
+  # other `case` in the file.
+  cpm_modes="$(awk '/# MODE_DISPATCH_BEGIN/{on=1} on{print} /# MODE_DISPATCH_END/{exit}' "$cpm_f" \
+    | sed -nE 's@^[[:space:]]*(--[a-z-]+([|]--[a-z-]+)*)\).*@\1@p' | tr '|' '\n' | sort -u)"
+  # Every mode spelling cited anywhere in core/ or scripts/, minus three subjects that are
+  # not CALLERS. Each exclusion was measured, not anticipated — the first two turned the
+  # pristine tree red while this invariant was being written, which is the same shape
+  # v0.194.0 recorded for the machinery-home scan firing on its own fixture:
+  #   - `core/fixtures/`  — its job is to write the wrong spelling down on purpose;
+  #   - this file         — it quotes mode names inside error prose and inside the grep
+  #                         flags below, and it never calls the resolver;
+  #   - `core-paths.sh`   — a script documenting itself is not a caller, and counting it
+  #                         would make the forward arm vacuous by construction.
+  cpm_skip="--exclude-dir=fixtures"
+  cpm_cited="$(grep -rhoE 'core-paths\.sh --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" 2>/dev/null \
+    $cpm_skip --exclude=core-paths.sh --exclude="$(basename "$0")" \
+    | sed -E 's@^core-paths\.sh @@' | sort -u)"
+  cpm_usage="$(sed -nE 's@^[[:space:]]*echo "(usage: )?[[:space:]]*core-paths\.sh (--[a-z-]+).*@\2@p' "$cpm_f" | sort -u)"
+  if [ -z "$cpm_modes" ] || [ -z "$cpm_cited" ] || [ -z "$cpm_usage" ]; then
+    err "I49 parsed ZERO modes out of core-paths.sh's dispatch ($(printf '%s' "$cpm_modes" | grep -c . ) found), out of the rule files that cite it ($(printf '%s' "$cpm_cited" | grep -c . ) found), and/or out of its usage() text ($(printf '%s' "$cpm_usage" | grep -c . ) found). An empty set is a subset of everything, so this fails closed rather than reporting agreement it never computed."
+  else
+    cpm_ghost="$(comm -23 <(printf '%s\n' "$cpm_cited") <(printf '%s\n' "$cpm_modes") | tr '\n' ' ')"
+    [ -n "$cpm_ghost" ] && err "I49 core rule files tell a caller to run core-paths.sh mode(s) the script does not dispatch: ${cpm_ghost}. That call prints usage and exits 2 — which this resolver defines as 'cannot determine what core is', so a wrong instruction and an unreadable manifest reach the gate as the same answer, and the one that is a typo reads as the one that is a real refusal."
+    cpm_undoc="$(comm -23 <(printf '%s\n' "$cpm_modes") <(printf '%s\n' "$cpm_usage") | tr '\n' ' ')"
+    [ -n "$cpm_undoc" ] && err "I49 core-paths.sh dispatches mode(s) its own usage() never names: ${cpm_undoc}. A mode no usage line mentions is one an operator cannot discover and a rename cannot reach — the callers are prose, and prose is updated by whoever read the usage text."
+  fi
+fi
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -2071,7 +2116,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), and the generated-region name is read from the schema by both its writer and the stray scan (I48)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), and every core-paths.sh mode a rule file names is one the script dispatches and documents (I49)."
   exit 0
 fi
 exit 1

@@ -1688,11 +1688,31 @@ are exempt: the check reports PASS (dormant) there. This is the §10
 activation-ordering rule — the guard can only fire once a clean core/layer split
 exists.
 
-**Check.** Compute the sprint diff against the branch base:
-`git diff --name-only <sprint-base>..HEAD`. For each changed path, ask
-`scripts/ai-dlc/core-paths.sh --is-core <path>`: exit 0 = core and in scope,
-exit 1 = not core, **exit 2 = could not determine, which is NOT a pass** — the
-path stays in scope and the gate log records that the resolver could not answer.
+**Check.** Run the mechanical pass first and paste its output into the gate log:
+
+```
+scripts/ai-dlc/core-paths.sh --audit-diff <sprint-base> HEAD
+```
+
+Exit 0 = no core path edited in place, or every touching commit is a recognized
+`chore(ai-dlc-update):` reconcile, or an operator-authorization citation is
+present. Exit 1 = a core path edited by a non-reconcile commit with no citation.
+Exit 2 = the core set could not be resolved, which is **not** a pass. A `DORMANT`
+line means the activation rule below did not hold at `<sprint-base>`; it is not
+evidence that no core file was edited.
+
+That mode does exactly what the paragraph below describes, which is why it exists:
+this check called itself the backstop while being adjudicated by an agent reading a
+paragraph. Its findings are the input to the adjudication, not a substitute for it —
+the two carve-outs (override coverage and setup-substitution sites) are yours to
+apply on top, and a `PASS (with citation)` only reports that a citation EXISTS.
+
+Internally it computes the sprint diff against the branch base,
+`git diff --name-only <sprint-base>..HEAD`, and asks
+`scripts/ai-dlc/core-paths.sh --is-core <path>` for each changed path: exit 0 =
+core and in scope, exit 1 = not core, **exit 2 = could not determine, which is NOT
+a pass** — the path stays in scope and the gate log records that the resolver could
+not answer.
 
 Do not hand-list the core set here. `core-paths.sh` derives it from
 `core-manifest.md` (fallback `reconcile/setup-sites.md`), the same source the

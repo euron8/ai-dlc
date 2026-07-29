@@ -163,6 +163,7 @@ core_manifest:
   - fixtures/layer-qualifier-grain/**
   - fixtures/context-mode-protect/**
   - fixtures/context-sensor/**
+  - fixtures/core-paths-audit-diff/**
   - fixtures/core-script-boundary/**
   - fixtures/core-write-guard/**
   - fixtures/cycle-commits-enforce/**

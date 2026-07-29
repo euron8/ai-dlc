@@ -25,6 +25,7 @@ set -uo pipefail
 # usage:
 #   core-paths.sh --is-core <project-relative-path> [<manifest>]
 #   core-paths.sh --list [<manifest>]
+#   core-paths.sh --audit-diff <base-ref> [<head-ref>]
 #
 # exit (--is-core):
 #   0 = the path IS core-manifest-owned
@@ -34,6 +35,39 @@ set -uo pipefail
 #       and a caller that cannot tell them apart will exempt the whole tree.
 #
 # exit (--list): 0 with one consumer-relative glob per line, 2 if unparseable.
+#
+# --audit-diff: THE BACKSTOP, AS AN EXECUTABLE. The core-layer-immutability check
+# in `steps/gate-validation.md` states the whole procedure in prose -- diff the
+# sprint range, ask `--is-core` per path, exempt the recognized cases -- and calls
+# itself "the BACKSTOP for whatever reached disk anyway: a shell write, a
+# `git push --no-verify`, or a consumer without the hook wired." Every word of it
+# was adjudicated by an agent reading the paragraph. A prohibition whose only
+# backstop is prose is a suggestion (CLAUDE.md), and this one guards the rule that
+# keeps a consumer's core tree pullable at all. The derivation is not re-invented:
+# the mode runs the SAME glob set the two arms above build, so the keystroke guard,
+# the gate check and this audit cannot disagree about what core is.
+#
+# THE MANIFEST IS RESOLVED AT <base-ref>, NOT FROM THE WORKING TREE. A diff that
+# shrinks `core-manifest.md` in order to move its own edit out of the core set is
+# classified against the manifest as it stood BEFORE that diff. Reading the working
+# tree would let the diff under audit define its own scope.
+#
+# exit (--audit-diff):
+#   0 = no core path touched in range, or every commit touching one is a recognized
+#       `chore(ai-dlc-update):` reconcile commit, or an operator-authorization
+#       citation is present -- or the tree is DORMANT (see below)
+#   1 = a core path is touched by a non-reconcile commit with no citation
+#   2 = the core set could not be resolved, so nothing was classified. Fail-closed,
+#       for the same reason --is-core exits 2: an empty result from a scan that did
+#       not run is not a clean tree.
+#
+# DORMANT IS NOT A PASS, AND IT SAYS SO. The gate check is "active only on a layered
+# consumer" -- a `.claude/.ai-dlc-version` stamp plus the `overrides/` and
+# `extensions/` layer dirs. In the distribution source repo core lives at `core/`,
+# no consumer-relative glob can match anything, and a silent "no core path touched"
+# would be a false clean in the one tree where every path IS core. So the activation
+# condition is evaluated at <base-ref> and a dormant run prints DORMANT and the
+# reason it is dormant, rather than the word every caller reads as coverage.
 #
 # The path set is DERIVED from core-manifest.md (fallback: setup-sites.md's
 # I5-synced copy). Nothing is hand-listed here.
@@ -51,6 +85,7 @@ set -uo pipefail
 usage() {
   echo "usage: core-paths.sh --is-core <path> [<manifest>]" >&2
   echo "       core-paths.sh --list [<manifest>]" >&2
+  echo "       core-paths.sh --audit-diff <base-ref> [<head-ref>]" >&2
 }
 
 # --- BEGIN SHARED WITH hooks/ai-dlc-core-guard.sh (byte-identical; I20) -------
@@ -86,19 +121,85 @@ to_consumer_glob() {  # <manifest entry> -> consumer-relative glob
 }
 # --- END SHARED WITH hooks/ai-dlc-core-guard.sh -------------------------------
 
+# MODE_DISPATCH_BEGIN
 MODE="${1:-}"
 case "$MODE" in
-  --is-core|--list) ;;
+  --is-core|--list|--audit-diff) ;;
   *) usage; exit 2 ;;
 esac
+# MODE_DISPATCH_END
 
 TARGET=""
+BASE_REF=""
+HEAD_REF=""
 if [ "$MODE" = "--is-core" ]; then
   TARGET="${2:-}"
   [ -n "$TARGET" ] || { usage; exit 2; }
   EXPLICIT="${3:-}"
+elif [ "$MODE" = "--audit-diff" ]; then
+  BASE_REF="${2:-}"
+  [ -n "$BASE_REF" ] || { usage; exit 2; }
+  HEAD_REF="${3:-HEAD}"
+  EXPLICIT=""
 else
   EXPLICIT="${2:-}"
+fi
+
+# --- --audit-diff pre-flight: git, activation, and the base-ref manifest --------
+AUDIT_TMP=""
+AUDIT_SRC=""
+AUDIT_ROOT=""
+cleanup() { [ -n "$AUDIT_TMP" ] && rm -f "$AUDIT_TMP"; return 0; }
+if [ "$MODE" = "--audit-diff" ]; then
+  AUDIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || AUDIT_ROOT=""
+  [ -n "$AUDIT_ROOT" ] || {
+    echo "core-paths: FAIL -- --audit-diff needs a git repository (none here)." >&2
+    echo "  Refusing to answer: an audit that could not read history has classified nothing." >&2
+    exit 2
+  }
+  for r in "$BASE_REF" "$HEAD_REF"; do
+    git rev-parse --verify "${r}^{commit}" >/dev/null 2>&1 || {
+      echo "core-paths: FAIL -- ref not resolvable: ${r}" >&2
+      exit 2
+    }
+  done
+
+  # ACTIVATION, evaluated at <base-ref>, mirroring the gate check's own condition:
+  # a version stamp AND both layer directories. Absent any of the three this is not
+  # a layered consumer and no consumer-relative glob can match -- which would render
+  # as a clean scan rather than as "did not apply here".
+  dormant_why=""
+  git cat-file -e "${BASE_REF}:.claude/.ai-dlc-version" 2>/dev/null \
+    || dormant_why="no .claude/.ai-dlc-version stamp"
+  for d in overrides extensions; do
+    [ -n "$dormant_why" ] && break
+    [ -n "$(git ls-tree -d --name-only "${BASE_REF}" ".claude/skills/ai-dlc/${d}" 2>/dev/null)" ] \
+      || dormant_why="no .claude/skills/ai-dlc/${d}/ layer directory"
+  done
+  if [ -n "$dormant_why" ]; then
+    echo "DORMANT: not a layered consumer at ${BASE_REF} (${dormant_why})."
+    echo "  Nothing was classified. This is the gate check's own activation rule; a"
+    echo "  distribution checkout and a pre-layer-split consumer both land here, and"
+    echo "  neither is evidence that no core file was edited."
+    exit 0
+  fi
+
+  # The manifest as of BASE_REF. Fall back to the working tree only if the base has
+  # none, and say so -- answering from the diff's own manifest is the hole this closes.
+  trap cleanup EXIT
+  AUDIT_TMP="$(mktemp)" || { echo "core-paths: FAIL -- mktemp" >&2; exit 2; }
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if git show "${BASE_REF}:${c}" > "$AUDIT_TMP" 2>/dev/null && [ -s "$AUDIT_TMP" ]; then
+      EXPLICIT="$AUDIT_TMP"; AUDIT_SRC="${BASE_REF}:${c}"; break
+    fi
+  done <<EOF
+.claude/skills/ai-dlc/core-manifest.md
+.claude/skills/ai-dlc-update/reconcile/setup-sites.md
+EOF
+  if [ -z "$EXPLICIT" ]; then
+    echo "NOTE: no core-manifest at ${BASE_REF}; classifying against the working-tree manifest."
+  fi
 fi
 
 # Manifest resolution. An explicit argument wins; otherwise try the consumer
@@ -147,6 +248,91 @@ EOF
 if [ "$MODE" = "--list" ]; then
   printf '%s' "$CORE_GLOBS"
   exit 0
+fi
+
+# --- --audit-diff: classify a range against that glob set ---------------------
+if [ "$MODE" = "--audit-diff" ]; then
+  # `...` for the file set (what this range CHANGED, against the merge base) and
+  # `..` for the commits (what this range CONTAINS). The two spellings answer
+  # different questions and a single one for both mis-attributes either the paths
+  # or the commit that touched them.
+  CHANGED="$(git diff --name-only "${BASE_REF}...${HEAD_REF}" 2>/dev/null || true)"
+  echo "core set: ${AUDIT_SRC:-working tree}"
+  if [ -z "$CHANGED" ]; then
+    echo "N/A: no diff in range ${BASE_REF}...${HEAD_REF}"
+    exit 0
+  fi
+
+  TOUCHED=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    rel="${p#./}"
+    while IFS= read -r g; do
+      [ -n "$g" ] || continue
+      # shellcheck disable=SC2254
+      case "$rel" in
+        $g) TOUCHED="${TOUCHED}${rel}
+"; break ;;
+      esac
+    done <<EOG
+$CORE_GLOBS
+EOG
+  done <<EOF
+$CHANGED
+EOF
+
+  if [ -z "$TOUCHED" ]; then
+    echo "PASS: no core path touched in ${BASE_REF}...${HEAD_REF}"
+    exit 0
+  fi
+
+  # A pull EDITS core in place -- that is what /ai-dlc-update is for -- so the
+  # reconcile commit is the one legitimate author of a core edit. Recognized by
+  # the subject convention `ai-dlc-update/SKILL.md` itself writes, and checked
+  # BEFORE the citation fallback so a routine pull never needs an escalation.
+  OFFENDERS=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    while IFS= read -r sha; do
+      [ -n "$sha" ] || continue
+      subj="$(git log -1 --format='%s' "$sha" 2>/dev/null)"
+      case "$subj" in
+        'chore(ai-dlc-update):'*) ;;
+        *) OFFENDERS="${OFFENDERS}  ${sha} ${p} :: ${subj}
+" ;;
+      esac
+    done <<EOG
+$(git log --format='%H' "${BASE_REF}..${HEAD_REF}" -- "$p" 2>/dev/null)
+EOG
+  done <<EOF
+$TOUCHED
+EOF
+
+  if [ -z "$OFFENDERS" ]; then
+    echo "PASS: core path(s) touched, every touching commit is an /ai-dlc-update reconcile:"
+    printf '%s' "$TOUCHED" | sed 's/^/  /'
+    exit 0
+  fi
+
+  # The operator's escape hatch. PRESENCE only: this cannot tell whether the
+  # citation covers THIS touch, and says so rather than letting a caller read the
+  # exit code as adjudication.
+  ESC="${AUDIT_ROOT}/docs/escalations/pending.md"
+  if [ -f "$ESC" ] && grep -q 'Operator authorization:' "$ESC"; then
+    echo "PASS (with citation): core path(s) touched by non-reconcile commit(s), and an"
+    echo "  'Operator authorization:' line exists in the WORKING TREE's"
+    echo "  docs/escalations/pending.md -- the working tree and not <head-ref>, because at a"
+    echo "  live gate the operator has usually not committed the citation yet. A sweep over"
+    echo "  historical ranges therefore reads today's citations against yesterday's diffs."
+    echo "  This mode detects PRESENCE only -- whether the citation covers these touches is"
+    echo "  the adjudicator's call, not this exit code's:"
+    printf '%s' "$OFFENDERS"
+    exit 0
+  fi
+
+  echo "FAIL: core path(s) edited in place by non-reconcile commit(s), no operator-authorization citation:"
+  printf '%s' "$OFFENDERS"
+  exit 1
 fi
 
 # Normalise the probe the same way the guard does: strip a leading ./ so
