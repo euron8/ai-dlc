@@ -189,7 +189,7 @@ release, with the merge sha. `—` = not started.
 | ⏹ | **SESSION BOUNDARY** | |
 | 10a | **wall-clock reduction across the whole distribution — by any route, not only parallelism** — operator-requested 2026-07-29, §7.10a | ✅ **ROW CLOSED.** `92aa72f` (#288) v0.205.0: **208s → 124s**. `bd0bf65` (#289) v0.206.0: **124.9s → 72.0s (−43%)** — and it **REFUTED this row's own next-two-poles ordering**: serial duration is the wrong statistic for a pooled suite. `8eaf896` (#290) v0.207.0: `wait-stale-deliverable` **52s → 9s, suite 72s → 50s**, plus the **300-site early-exit-reader class** the release leads on (**I54**). ✅ `8344631` (#291) v0.208.0: the content-keyed suite skip — **~50s → 0.3s on a push that changed only CHANGELOG/VERSION/docs** — and **§9 IS NOW CAUSALLY EXPLAINED AND FIXED**: a fixture was writing into the repository it tests. See §7.10a |
 | ⏹ | **SESSION BOUNDARY** | |
-| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — **the same shape twice running**: the prior-sprint SHA resolution was already programmed as a second entry grammar inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. **Check 22 is the last subject**, then the join that closes the class. §7.10b carries the ordering, which is now a MEASURED constraint rather than a preference |
+| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — the prior-sprint SHA resolution was already programmed inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. Check 22 ✅ `d3f0e36` (#294) v0.211.0 — **three for three**: the comparison was already programmed in `ai-dlc-dispatch-guard.sh`, which is where `model_bound` gets its value, and a PreToolUse hook cannot run at a gate. **ALL THREE SUBJECTS ARE BOUND. Only the join remains** — and §7.10b's own note says to re-derive the discriminator's false-positive set at this point rather than trusting the paragraph |
 | ⏹ | **SESSION BOUNDARY** | |
 | 11 | ADJUDICATED tier + disposition register | — |
 | 12 | Regenerate the final pull prompt (§8) | — |
@@ -1696,8 +1696,20 @@ false positives is the imperative/exit-code form (`**Check.** Run/Invoke`, `- Ru
 condition asserting `exits 0`) as against a mention of a producer or a remedy. **But that invariant
 FAILS THE BUILD the moment it ships, because Checks 18 and 22 are still unbound.** It cannot land
 before them. Do 18, then 22, then the join — and derive the discriminator's false-positive set
-again at that point rather than trusting this paragraph. **Check 18 is done as of v0.210.0; only
-Check 22 stands between here and the join.**
+again at that point rather than trusting this paragraph. **Checks 16, 18 and 22 are all bound as
+of v0.211.0. THE JOIN IS THE NEXT AND LAST THING IN THIS ROW.**
+
+**What the join now faces, measured at v0.211.0 and not before.** The named-but-not-enforcer set
+is **9 pairs**, and with Check 22 bound **every one of them is a false positive** the discriminator
+must reject: `verdict.sh` in Checks 2/14/15/26 (the helper that WRITES the verdict),
+`stamp-story-provenance.sh` and `sync-taught-schema.sh` in Check 17 (producers),
+`wait-for-deliverable.sh` in Check 25 (the remedy offered on FAIL), and `core-paths.sh` in Check
+16 (a delegation INSIDE `validate-stub-audit.sh`, correctly carried under `reads:`). That last one
+is the shape the discriminator most easily gets wrong, and it is also how Check 22's own
+`validate-escalation-resolution.sh` was mis-filed: **`reads:` and `enforcer:` are not
+distinguishable by the citation, only by the FORM of the sentence citing it** — an imperative with
+an exit-code posture versus a mention of what a bound script consults. Measure that separation
+against all 9 before writing the invariant.
 
 **SHIPPED: Check 18 — v0.210.0.** The join was re-derived again before building and reproduced with
 the expected drift: **25** rows with `enforcer: []` (27 at the starting measurement, minus the two
@@ -1737,7 +1749,43 @@ scenario file chosen so that the mutated term is NOT what distinguishes it.
 instance of a shape `I49` and `I53` each cover once by name, and the generalisation's
 false-positive set was measured and is not empty.
 
-**The one remaining subject, with what the join says about it:**
+**SHIPPED: Check 22 — `d3f0e36` (#294) v0.211.0.** The join was re-derived a third time and
+reproduced with the expected drift: **24** rows at `enforcer: []` (25 at v0.210.0, minus Check
+18), **9** named-but-not-enforcer pairs, control **17** non-empty. The scoping below held
+exactly — a partial bind, with clearing arm 4 and story routing left adjudicated and the check
+body now SAYING the validator does not decide them rather than implying whole-check coverage.
+
+**Three for three on "the program already existed in a copy no gate could reach."**
+`ai-dlc-dispatch-guard.sh` resolves the pin and applies the match tolerance at PreToolUse — it
+is where `model_bound` gets its value — and a PreToolUse hook cannot run at a gate, so the gate
+restated the hook's rule in prose. `pin_key()` and `matches_pin()` are now shared byte-identically
+and **I56** binds them.
+
+**And the restatement had a restatement inside it.** The guard carried **two definitions of
+`matches_pin()`**, verbatim apart from one word of comment, the first shadowed and dead. This is
+not a tidiness finding: an I25-shaped awk-range extraction concatenates both spans, so the
+duplicate would not have forked the rule — it would have silently disabled the byte-identity
+check written to catch a fork. **I56 counts definitions BEFORE it compares them**, and that arm
+is the one with a live history. Carry the ordering into any future byte-identity binding.
+
+**Three mutant lessons, all from this release's own seven:**
+
+- **`|| false ||` is not a mutation of `|| {`.** `||` short-circuits on SUCCESS, so the block
+  stayed reachable on exactly the input that reaches it — a byte-different no-op `cmp -s` passed.
+  `|| true ||` is the spelling that removes the block.
+- **A sentinel mutation must land on the branch the scenario takes.** Mutating
+  `if . == "" then "__NONE__"` changed bytes and nothing else against a value that is JSON null.
+- **A mutant that moves EIGHT arms is a broken mutant, not a strong kill.** The per-arm battery
+  is what separates the three cases; a bare "the fixture went red" would have scored all three
+  as proof.
+
+**One defect the fixture found in the shipping code before it shipped:** TAB is an IFS
+*whitespace* character, so `read` collapses a run of them. A row with a null `model_requested`
+shifted every later field one place left and the loop compared the citation flag as a model name.
+Any TSV read in this repo needs non-empty fields — `validate-escalation-resolution.sh`'s
+`__MISSING__` is the same workaround, arrived at independently.
+
+**The ORIGINAL scoping block follows.**
 
 - **Check 22** — numbered clearing condition 3 is `validate-escalation-resolution.sh … exits 0`,
   the same invocation Check 2a makes, and **Check 2a's row binds that validator while Check 22's
