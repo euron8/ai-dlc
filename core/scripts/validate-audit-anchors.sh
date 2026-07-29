@@ -17,6 +17,20 @@
 #   validate-audit-anchors.sh --check <file>      # fail if <file>'s header region is missing/stale
 #   validate-audit-anchors.sh --entries <file>    # validate ONLY the entries (skip the header)
 #   validate-audit-anchors.sh <file>              # validate entries AND the header region
+#   validate-audit-anchors.sh --trunk-push        # pre-push: bound the Step 5b backfill commit
+#
+# `--trunk-push` reads git's pre-push protocol on stdin and is the ONLY reader of the commit
+# `retro.md` Step 5b licenses. Step 5b cannot route that commit through a PR — the retro-PR merge
+# SHA is not knowable until the retro PR has merged — so it tells the lead to push straight to the
+# trunk. Core wrote that licence and, until now, defined nothing about what it licenses. The bound
+# is declared in the schema's `backfill_commit` block; this mode is what reads it. Trunk name from
+# AI_DLC_TRUNK (default `main`), the same tunable validate-cycle-commits.sh takes.
+#
+# It bounds the licensed commit; it does not police the trunk. A commit that claims the Step 5b
+# subject may touch only the declared path; a commit that rewrites that path alone must claim the
+# subject. Everything else on a trunk push is core's business to leave alone — core states no
+# branch policy, and the schema's own $fields_comment records what a linter that errors on real
+# data on first contact costs.
 #
 # `--entries` is the CONSUMER-side check (gate-validation Check 18): it enforces the entry shape a
 # reader depends on without requiring the header region, so a consumer whose file predates this
@@ -82,24 +96,35 @@ fi
 
 MODE="validate"; FILE=""
 case "${1:-}" in
-  --render)  MODE="render" ;;
-  --check)   MODE="check";   FILE="${2:-}" ;;
-  --entries) MODE="entries"; FILE="${2:-}" ;;
-  "" )       echo "usage: validate-audit-anchors.sh --render | --check <file> | --entries <file> | <file>" >&2; exit 2 ;;
+  --render)     MODE="render" ;;
+  --check)      MODE="check";   FILE="${2:-}" ;;
+  --entries)    MODE="entries"; FILE="${2:-}" ;;
+  --trunk-push) MODE="trunk-push" ;;
+  "" )       echo "usage: validate-audit-anchors.sh --render | --check <file> | --entries <file> | --trunk-push | <file>" >&2; exit 2 ;;
   --*)       echo "validate-audit-anchors: unknown option '$1'" >&2; exit 2 ;;
   *)         MODE="validate"; FILE="$1" ;;
 esac
-if [ "$MODE" != "render" ] && [ -z "$FILE" ]; then
-  echo "usage: validate-audit-anchors.sh --render | --check <file> | <file>" >&2; exit 2
-fi
-if [ "$MODE" != "render" ] && [ ! -r "$FILE" ]; then
-  echo "validate-audit-anchors: FAIL — cannot read '$FILE'" >&2; exit 1
-fi
+case "$MODE" in render|trunk-push) ;; *)
+  if [ -z "$FILE" ]; then
+    echo "usage: validate-audit-anchors.sh --render | --check <file> | <file>" >&2; exit 2
+  fi
+  if [ ! -r "$FILE" ]; then
+    echo "validate-audit-anchors: FAIL — cannot read '$FILE'" >&2; exit 1
+  fi ;;
+esac
 
 command -v python3 >/dev/null 2>&1 || { echo "validate-audit-anchors: FAIL — python3 required" >&2; exit 1; }
 
-MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" python3 - <<'PY'
-import json, os, re, sys
+# The analysis below is fed to python3 ON STDIN (`python3 - <<PY`), so the ref protocol has to be
+# drained HERE or the mode reads the heredoc's leftovers — which is to say nothing at all, every
+# time, on every push. Carried in an accumulating variable rather than a temp file: installing an
+# EXIT trap in a reconcile-adjacent script once turned silent SIGPIPEs into 90 lines of
+# `printf: write error: Broken pipe` from pipelines the change never touched.
+REFS=""
+[ "$MODE" = "trunk-push" ] && REFS="$(cat)"
+
+MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" TRUNK="${AI_DLC_TRUNK:-main}" REFS="$REFS" python3 - <<'PY'
+import json, os, re, subprocess, sys
 
 mode   = os.environ["MODE"]
 schema_path = os.environ["SCHEMA"]
@@ -126,6 +151,103 @@ def render():
 
 if mode == "render":
     sys.stdout.write(render())
+    sys.exit(0)
+
+# --- trunk-push: bound the one direct-to-trunk commit Step 5b licenses -----------------------
+# Reads git's pre-push protocol on stdin ("<local ref> <local sha> <remote ref> <remote sha>").
+# EVERY outcome states what it decided. A run that judged nothing says so in its own words and
+# never borrows the passing wording — a mode wired somewhere stdin does not reach would otherwise
+# report exactly what a clean push reports, which is this repo's named defect class.
+if mode == "trunk-push":
+    ZERO = "0" * 40
+    trunk = os.environ.get("TRUNK", "main")
+    trunk_ref = f"refs/heads/{trunk}"
+    try:
+        bc = schema["backfill_commit"]
+        subject_pat = bc["subject_pattern"]
+        allowed = set(bc["paths"])
+        example = bc.get("subject_example", "")
+        assert isinstance(subject_pat, str) and allowed
+        re.compile(subject_pat)
+    except Exception as e:
+        sys.stderr.write(f"validate-audit-anchors: FAIL — schema {schema_path} has no usable "
+                         f"'backfill_commit' block: {e}\n")
+        sys.exit(1)
+
+    def git(*args):
+        r = subprocess.run(["git", *args], capture_output=True, text=True)
+        return r.returncode, r.stdout
+
+    refs = [ln.split() for ln in os.environ.get("REFS", "").splitlines() if ln.strip()]
+    if not refs:
+        # Not a pass. Say which question went unasked, in wording no passing run emits.
+        print(f"--trunk-push: NO REF LINES ON STDIN — nothing was judged. This mode reads git's "
+              f"pre-push protocol; reaching it with empty stdin means the caller is not a pre-push "
+              f"hook (or the hook consumed stdin before this arm).")
+        sys.exit(0)
+
+    judged, findings, notes = 0, [], []
+    for parts in refs:
+        if len(parts) < 4:
+            continue
+        _local_ref, local_sha, remote_ref, remote_sha = parts[0], parts[1], parts[2], parts[3]
+        if remote_ref != trunk_ref:
+            continue
+        if local_sha == ZERO:
+            notes.append(f"{trunk}: branch deletion — no commits to judge")
+            continue
+        if remote_sha == ZERO:
+            # graph's own guard takes the whole history here and blocks a first push of the
+            # trunk outright. Core will not: with no remote tip there is no delta, and judging
+            # every ancestor makes a fresh consumer's first push unlandable.
+            notes.append(f"{trunk}: creating the remote ref — no prior tip, so there is no "
+                         f"delta to judge (core does not judge the whole history here)")
+            continue
+        rc, _ = git("cat-file", "-e", f"{remote_sha}^{{commit}}")
+        if rc != 0:
+            notes.append(f"{trunk}: remote tip {remote_sha[:9]} is not present locally — "
+                         f"range unjudgeable; fetch and re-push")
+            continue
+        rc, out = git("log", "--format=%H", f"{remote_sha}..{local_sha}")
+        if rc != 0:
+            notes.append(f"{trunk}: cannot walk {remote_sha[:9]}..{local_sha[:9]}")
+            continue
+        for sha in out.split():
+            judged += 1
+            _, subj = git("log", "-1", "--format=%s", sha)
+            subj = subj.strip()
+            _, names = git("diff-tree", "--no-commit-id", "--name-only", "-r", sha)
+            paths = {p for p in names.split("\n") if p.strip()}
+            claims = re.match(subject_pat, subj) is not None
+            only_licensed = paths == allowed
+            if claims and not only_licensed:
+                extra = sorted(paths - allowed)
+                findings.append(
+                    f"  {sha[:9]} claims the Step 5b backfill subject while touching "
+                    f"{len(extra)} path(s) outside it: {', '.join(extra[:4])}"
+                    f"{' …' if len(extra) > 4 else ''}")
+            elif only_licensed and not claims:
+                findings.append(
+                    f"  {sha[:9]} rewrites {', '.join(sorted(allowed))} alone on a direct push "
+                    f"to {trunk}, under a subject Step 5b does not license: \"{subj}\"")
+
+    for n in notes:
+        print(f"--trunk-push: {n}")
+    if findings:
+        sys.stderr.write(
+            f"validate-audit-anchors: FAIL — {len(findings)} commit(s) on the push to '{trunk}' "
+            f"fall outside the one direct-to-trunk commit retro.md Step 5b licenses:\n")
+        for f_ in findings:
+            sys.stderr.write(f_ + "\n")
+        sys.stderr.write(
+            f"  The licensed commit edits {', '.join(sorted(allowed))} and nothing else, under:\n"
+            f"    {example}\n"
+            f"  Everything else reaches '{trunk}' through a PR (retro.md Step 6d).\n")
+        sys.exit(1)
+    if not judged and not notes:
+        print(f"--trunk-push: PASS — this push does not target '{trunk}'")
+    else:
+        print(f"--trunk-push: PASS — {judged} commit(s) judged on the push to '{trunk}'")
     sys.exit(0)
 
 # --- locate the generated region -------------------------------------------------------------

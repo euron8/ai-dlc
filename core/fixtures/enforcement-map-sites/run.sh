@@ -755,6 +755,71 @@ else
 fi
 # The mv back above is the restore: this arm moved a directory and moved it home again.
 
+# --- Assertion 22: I51 — the licensed commit has one subject in two files ------
+# Step 5b is the ONE place this pipeline writes to the trunk outside a PR, and the subject
+# it tells the lead to type is matched at push time by a regex in the schema. The two are
+# not derivable from each other by equality — one is a template with <N>/<PR>, the other a
+# regex — so the join fills the template and matches it, exactly as the lead and then the
+# matcher do. Drift here surfaces at the worst possible moment: the retro PR has already
+# merged, the SHA is only knowable now, and the one commit that carries it will not land.
+#
+# THREE ARMS, each asserting its OWN wording. All three would match a grep for "I51", so an
+# assertion on the invariant's name is one that tests none of them.
+AAJ="$ROOT/core/schemas/audit-anchors.json"
+RTR="$ROOT/core/skills/ai-dlc/steps/retro.md"
+
+# ARM 1 — PROSE DRIFTS FROM THE MATCHER. The template still parses (it keeps the
+# chore(s<N>) opening the extractor keys on), so this reaches the comparison rather than
+# the vacuity arm. That distinction is the whole point of having arm 3 as well.
+cp "$RTR" "$RTR.orig"
+sed 's@SHA after retro PR #<PR> merge@SHA for retro PR #<PR>@' "$RTR.orig" > "$RTR"
+if cmp -s "$RTR.orig" "$RTR"; then
+  bad "FIXTURE BROKEN: the I51 template mutation matched nothing, so the prose-drift arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "tells the lead to write a subject the shipped matcher rejects"; then
+    ok "a Step 5b template the schema regex rejects FAILS I51 (a lead following the step file would write an unlandable commit)"
+  else
+    bad "the step file and the push-time matcher disagreed on the licensed subject and I51 reported clean"
+  fi
+fi
+mv "$RTR.orig" "$RTR"
+
+# ARM 2 — THE REMEDY CONTRADICTS THE RULE. --trunk-push prints subject_example as the fix
+# on every rejection. An example its own pattern rejects sends the consumer round the loop
+# a second time, which is worse than no example at all.
+cp "$AAJ" "$AAJ.orig"
+sed 's@"subject_example": "chore(s299)@"subject_example": "chore(S299)@' "$AAJ.orig" > "$AAJ"
+if cmp -s "$AAJ.orig" "$AAJ"; then
+  bad "FIXTURE BROKEN: the I51 example mutation matched nothing, so the remedy arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "subject_example does not match backfill_commit.subject_pattern"; then
+    ok "an example its own pattern rejects FAILS I51 (the rejection message would hand the consumer a subject the same run refuses)"
+  else
+    bad "backfill_commit carried an example its own pattern rejects and I51 reported clean"
+  fi
+fi
+mv "$AAJ.orig" "$AAJ"
+
+# ARM 3 — VACUITY. I51 reports an ABSENCE (no disagreement). Both sides are EXTRACTED —
+# one by a JSON key, one by a regex over prose — and prose is the side that moves. Delete
+# the template and there is nothing to disagree with, which is indistinguishable from
+# agreement unless the derivation refuses. This arm is why the ZERO branch exists.
+cp "$RTR" "$RTR.orig"
+sed '/chore(s<N>): backfill audit-anchor SHA/d' "$RTR.orig" > "$RTR"
+if cmp -s "$RTR.orig" "$RTR"; then
+  bad "FIXTURE BROKEN: the I51 vacuity mutation matched nothing, so the zero guard is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "I51 could not derive both sides"; then
+    ok "a retro.md with no subject template FAILS I51 loudly (nothing to compare must not read as the two agreeing)"
+  else
+    bad "the prose side of I51 vanished and the invariant reported agreement it never computed"
+  fi
+fi
+mv "$RTR.orig" "$RTR"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

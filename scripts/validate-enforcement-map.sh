@@ -1658,6 +1658,64 @@ else
   [ -n "$i50_ghost" ] && err "I50 shipped file(s) tell an agent to run validator(s) core does not ship: ${i50_ghost}. install.sh writes scripts/ai-dlc/ from core/scripts/, so that path exists in no consumer tree; the command fails to start, and a validator that never ran reports exactly what a validator that found nothing reports."
 fi
 
+# --- I51: the one commit Step 5b licenses has ONE subject across the schema and the step file ---
+#
+# Two copies of a commit subject, and they are read by different readers at different times:
+# `retro.md` Step 5b is what the LEAD types, `backfill_commit.subject_pattern` is what
+# --trunk-push MATCHES at push time. Drift between them does not fail loudly — it fails at the
+# moment the lead has already written the commit and cannot land it, on the one push in the
+# sprint that has no PR to fall back to, with the retro already merged.
+#
+# The prose carries a template (`<N>`, `<PR>`); the schema carries a regex. Neither is derivable
+# from the other by string equality, so the join FILLS the template and matches it — which is
+# exactly what the lead does by hand, and what the matcher then sees.
+i51_out="$(python3 - "$REPO_ROOT" <<'PY'
+import json, os, re, sys
+root = sys.argv[1]
+try:
+    bc  = json.load(open(os.path.join(root, "core/schemas/audit-anchors.json")))["backfill_commit"]
+    pat = bc["subject_pattern"]; ex = bc.get("subject_example", "")
+except Exception as e:
+    print(f"ZERO the schema has no readable backfill_commit block ({e})"); raise SystemExit(0)
+if not pat or not ex:
+    print("ZERO backfill_commit is missing subject_pattern or subject_example"); raise SystemExit(0)
+try:
+    prose = open(os.path.join(root, "core/skills/ai-dlc/steps/retro.md")).read()
+except Exception as e:
+    print(f"ZERO cannot read retro.md ({e})"); raise SystemExit(0)
+# The delimiter is a backtick, spelled \x60 throughout. A literal one here is still seen by
+# the command substitution this heredoc sits inside and closes nothing, which surfaces as a
+# syntax error two hundred lines away with no relation to this block. For the same reason
+# there is no apostrophe anywhere in this heredoc: one opens a quote that swallows the rest.
+#
+# Keyed on "backfill", NOT on the chore(s<N>) prefix: retro.md carries a SECOND commit
+# template under that same prefix (gate-log rotation, Step 6f). Keying on the shared prefix
+# picked whichever appeared first in the file, so deleting the backfill template selected
+# the rotation one and the vacuity case came back as an ordinary mismatch. Exactly one
+# template may match; two would make the comparison depend on file order again.
+found = re.findall("\x60(chore\\(s<N>\\): backfill[^\x60]*)\x60", prose)
+if len(found) != 1:
+    print(f"ZERO retro.md carries {len(found)} backfill subject templates in backticks, expected exactly 1")
+    raise SystemExit(0)
+tmpl   = found[0]
+filled = tmpl.replace("<N>", "299").replace("<PR>", "828")
+if not re.match(pat, filled):
+    print(f"TEMPLATE {tmpl}")
+if not re.match(pat, ex):
+    print(f"EXAMPLE {ex}")
+PY
+)"
+case "$i51_out" in
+  ZERO*)
+    err "I51 could not derive both sides: ${i51_out#ZERO }. The subject the lead types and the subject --trunk-push matches are then compared by nothing, and this fails closed rather than reporting an agreement it never computed." ;;
+  *TEMPLATE*)
+    err "I51 retro.md Step 5b tells the lead to write a subject the shipped matcher rejects: $(printf '%s' "$i51_out" | sed -n 's/^TEMPLATE //p'). A lead who follows the step file to the letter writes a commit --trunk-push refuses, on the one push in the sprint with no PR route around it. Reconcile the template with backfill_commit.subject_pattern." ;;
+esac
+case "$i51_out" in
+  *EXAMPLE*)
+    err "I51 backfill_commit.subject_example does not match backfill_commit.subject_pattern in the same block: $(printf '%s' "$i51_out" | sed -n 's/^EXAMPLE //p'). --trunk-push prints that example as the remedy on every rejection, so a consumer told to copy it writes a commit the same run just refused." ;;
+esac
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -2146,7 +2204,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), and every scripts/ai-dlc/ validator a shipped file names is one core ships (I50)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), and the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51)."
   exit 0
 fi
 exit 1
