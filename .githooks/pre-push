@@ -79,17 +79,35 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 #    never driven is a green light nobody earned.
 #
 # RUN IN PARALLEL, AND THE REASON IS MEASURED. The suite is latency-bound, not
-# compute-bound: 458 seconds of work across the 75 driven fixtures, almost all of it waiting
-# on `git init`/commit/mktemp in per-fixture sandboxes. Serially that was 7m06s of wall clock
-# on an idle 18-core machine. At 8 workers it was 2m34s, and after v0.190.0 removed the
-# dominant pole it is ~1m34s.
+# compute-bound: most of its work is waiting on `git init`/commit/mktemp in per-fixture
+# sandboxes. Serially it was 7m06s of wall clock on an idle 18-core machine; 8 workers took
+# it to 2m34s.
 #
-# EIGHT, NOT MORE -- AS MEASURED, AND THE KNEE HAS SINCE MOVED. -P16 measured 2m30s against
-# -P8's 2m34s, four seconds, because ONE fixture (`enforcement-map-sites`) was 167s by itself
-# and set a floor no amount of parallelism beats. v0.190.0 cut that fixture to ~81s, so the
-# suite is closer to pool-bound now and a higher count may start paying again. Re-measure
-# before changing it: that is why this is the tunable AI_DLC_FIXTURE_JOBS and not a constant.
-FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-8}"
+# SIXTEEN, AND THE KNEE MOVED BECAUSE THE FLOOR DID. For four releases this said EIGHT, NOT
+# MORE, on a measurement that was true when it was taken: -P16 gave 2m30s against -P8's
+# 2m34s, four seconds, because ONE fixture set a floor no pool size beats. That was the
+# right reading of a floor-bound suite and the wrong constant to keep once the floor moved.
+# `enforcement-map-sites` was 194s in v0.204.0, 107s after v0.205.0, and 25s once it started
+# running its own assertions through a pool. Re-measured on the same idle 18-core machine
+# with that fixture parallel, over the full 83:
+#
+#     -P8  95.5s     -P12  80.4s     -P16  72.0s     -P24  64.2s      (83/83 verdicts each)
+#
+# It is still falling at 24 because the remaining pole sleeps rather than computes, so this
+# is not the CPU knee. Sixteen is where the measurement stops buying more than it costs:
+# -P24 nearly doubled some units' individual durations through contention (a 25s fixture
+# took 47.6s), and this suite has a known intermittent-red class that correlates with
+# concurrency and cold caches. Beyond 16 the run gets faster by making every unit slower,
+# which is how a timing-sensitive assertion starts failing for reasons that have nothing to
+# do with what it tests.
+#
+# The remaining pole is `wait-stale-deliverable` at ~52s: at -P24 it starts at t=10.8s and
+# is still running when everything else has finished. It is sleep-bound rather than
+# fork-bound, so no pool size touches it -- the fix is inside that fixture.
+#
+# THE NUMBER IS MEASURED ON ONE MACHINE. That is why it stays the tunable
+# AI_DLC_FIXTURE_JOBS: on a smaller box, re-measure rather than inherit this.
+FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
 
 run_fixtures() {
   local rc=0 d b out n_expected n_actual verdict
