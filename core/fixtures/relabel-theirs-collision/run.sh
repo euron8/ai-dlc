@@ -33,7 +33,7 @@ fi
 # so they surface without --theirs. Asserting a blanket "clean" here would fail for the
 # right reason and hide the wrong one.
 out="$(bash "$SCRIPT" "$CONSUMER" 2>&1)"
-if printf '%s' "$out" | grep -q '\[ext:mydomain\]'; then
+if grep -q '\[ext:mydomain\]' <<<"$out"; then
   bad "plain dry-run (no --theirs) already previews the 26 relabel — the NEW-THIS-PULL reproduction is off"
 else
   ok "plain dry-run (no --theirs) does not see the pull-created 26 collision — reproduces the blind spot"
@@ -41,7 +41,7 @@ fi
 
 # --- Assertion 2: WITH --theirs, the dry-run PREVIEWS the collision (exit 1) ----------
 out="$(bash "$SCRIPT" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>&1)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '\[ext:mydomain\]'; then
+if [ "$rc" -eq 1 ] && grep -q '\[ext:mydomain\]' <<<"$out"; then
   ok "dry-run with --theirs previews the relabel to '[ext:mydomain]' and flags work outstanding (exit 1)"
 else
   bad "dry-run with --theirs did NOT preview the collision (rc=$rc) — theirs union not working"
@@ -55,7 +55,7 @@ else
   bad "--apply did not write the expected labelled heading"
 fi
 out="$(bash "$SCRIPT" "$CONSUMER" --dist "$DIST" --theirs "$THEIRS" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q "no unlabelled core-number collisions"; then
+if [ "$rc" -eq 0 ] && grep -q "no unlabelled core-number collisions" <<<"$out"; then
   ok "re-run after --apply is clean (exit 0) — the relabel is idempotent"
 else
   bad "re-run after --apply still reports work (rc=$rc)"

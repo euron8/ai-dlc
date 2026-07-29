@@ -39,7 +39,7 @@ says() {
   local f="$1" sp="$2" t="$3"; shift 3; N=$((N + 1))
   local out miss=""
   out="$(bash "$VALIDATOR" --escalations "$ROOT/$f" --sprint "$sp" --transcript "$ROOT/$t" 2>&1)"
-  local w; for w in "$@"; do printf '%s' "$out" | grep -qF -- "$w" || miss="$miss [$w]"; done
+  local w; for w in "$@"; do grep -qF -- "$w" <<<"$out" || miss="$miss [$w]"; done
   if [ -z "$miss" ]; then printf '  ok   %-22s message names the cause\n' "$f(msg)"
   else FAIL=$((FAIL + 1)); printf '  FAIL %-22s missing:%s\n' "$f(msg)" "$miss"; fi
 }

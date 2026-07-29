@@ -55,7 +55,7 @@ verify "$REPORT_STALE"
 # The bucket list alone names the file; it says nothing about which side holds what. That
 # claim used to live only in LLM prose, and on the 0.106.1 -> 0.113.1 pull it came out
 # INVERTED, taking the recommended action down with it.
-if printf '%s\n' "$ORIENT" | grep -q 'templates/classes.md'; then
+if grep -q 'templates/classes.md' <<<"$ORIENT"; then
   ok "the BOTH-ADDED file gets an orientation block in the rendered region"
 else
   bad "no orientation block for the CLASSIFY file — which side holds what is unstated again"
@@ -73,14 +73,14 @@ fi
 # --- Assertion 6: a truncated side never reads as complete --------------------
 # The sample is capped. A cap that does not say so turns a partial list into an apparent
 # full one — and the resolution is written from it.
-if printf '%s\n' "$ORIENT" | grep -qE 'ONLY IN (THEIRS|OURS) \([0-9]+, complete\)|suppressed'; then
+if grep -qE 'ONLY IN (THEIRS|OURS) \([0-9]+, complete\)|suppressed' <<<"$ORIENT"; then
   ok "every sample states whether it is complete or how many lines were suppressed"
 else
   bad "the orientation sample is neither marked complete nor reports a suppressed count — a truncated side reads as the whole side"
 fi
 
 # --- Assertion 7: the escape hatch is present ---------------------------------
-if printf '%s\n' "$ORIENT" | grep -q "full: diff "; then
+if grep -q "full: diff " <<<"$ORIENT"; then
   ok "each file carries a full-diff command, so a truncated sample is never the only source"
 else
   bad "no full-diff command emitted — a suppressed tail would be unreachable from the report"
@@ -143,7 +143,7 @@ fi
 # against a `none` section, and a fixture that reports PASS on a section it never rendered is
 # the defect it is supposed to catch, wearing the fixture's own badge.
 LSEC="$(awk '/Push-candidate ledger —/{f=1;next} f&&/^\*\*/{f=0} f' "$REGION")"
-if printf '%s\n' "$LSEC" | grep -q 'PC-FIXTURE-EMIT-'; then
+if grep -q 'PC-FIXTURE-EMIT-' <<<"$LSEC"; then
   ok "the ledger section renders real rows (positive control — every ledger assertion below depends on it)"
 else
   bad "FIXTURE VACUOUS — the ledger section is empty or 'none'; the assertions below would pass on nothing"
@@ -151,7 +151,7 @@ else
 fi
 
 # The name column is a join key back into the ledger. Whole id, not a prefix.
-if printf '%s\n' "$LSEC" | grep -qF 'PC-FIXTURE-EMIT-UNKNOWN-VERB (a parenthetical this long pushes the pre-dash text past seventy characters)'; then
+if grep -qF 'PC-FIXTURE-EMIT-UNKNOWN-VERB (a parenthetical this long pushes the pre-dash text past seventy characters)' <<<"$LSEC"; then
   ok "a ledger row names the whole entry, not a clipped prefix"
 else
   bad "the ledger row's name is clipped — a truncated name cannot be grepped back into the ledger"
@@ -159,12 +159,12 @@ fi
 
 # THE ROW MUST SAY WHY. `NEEDS-REVIEW` alone sends the operator back to a tool they must re-run.
 # Both named causes, because they are emitted from different branches.
-if printf '%s\n' "$LSEC" | grep -q 'unresolved: unknown verify verb'; then
+if grep -q 'unresolved: unknown verify verb' <<<"$LSEC"; then
   ok "a NEEDS-REVIEW row carries its cause (unresolved)"
 else
   bad "a NEEDS-REVIEW row reached the report naming no cause — the operator must re-run the tool to learn anything"
 fi
-if printf '%s\n' "$LSEC" | grep -q 'vacuous predicate:'; then
+if grep -q 'vacuous predicate:' <<<"$LSEC"; then
   ok "a NEEDS-REVIEW row carries its cause (vacuous)"
 else
   bad "the vacuous-predicate cause did not reach the report"
@@ -179,7 +179,7 @@ fi
 base_line="$(grep -m1 '^_base_ ' "$REGION")"
 if [ -z "$base_line" ]; then
   bad "FIXTURE BROKEN — the region has no '_base_' line, so the assertion below tests nothing"
-elif printf '%s' "$base_line" | grep -q '\\`'; then
+elif grep -q '\\`' <<<"$base_line"; then
   bad "the region's sha line carries literal backslash-backticks: $base_line"
 else
   ok "the region's _base_/_theirs_ line wraps both shas in real backticks (renders as inline code)"

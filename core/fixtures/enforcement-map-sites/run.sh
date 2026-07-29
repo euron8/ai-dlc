@@ -70,6 +70,7 @@ seed_tree() {
 }
 
 fails=0
+broken=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
@@ -96,7 +97,7 @@ A01_i8_completeness() {
 mkdir -p "$ROOT/core/brand-new-subtree"
 echo 'x' > "$ROOT/core/brand-new-subtree/thing.sh"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "core/brand-new-subtree/ has no destination row"; then
+if grep -q "core/brand-new-subtree/ has no destination row" <<<"$out"; then
   ok "a new core/ subtree with no site row FAILS (the catch-all can no longer swallow one silently)"
 else
   bad "a new core/ subtree with no site row did NOT fail — I8 is hand-listed again, and the next core/<dir>/ ships to a path nothing reads"
@@ -111,7 +112,7 @@ A02_i8_agreement() {
 grep -q 'core/git-hooks/\*)' "$PRECLASS" || bad "FIXTURE STALE: preclassify.sh has no core/git-hooks/ case to remove"
 sed -i.bak '/core\/git-hooks\/\*)/d' "$PRECLASS"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "disagree on where core/git-hooks/ goes"; then
+if grep -q "disagree on where core/git-hooks/ goes" <<<"$out"; then
   ok "map_consumer() losing its git-hooks case FAILS (the v0.53.0 regression cannot return)"
 else
   bad "map_consumer() with no git-hooks case did NOT fail — the pre-push gate would ship to .claude/git-hooks/ again"
@@ -127,7 +128,7 @@ A03_i8_installer_binding() {
 grep -q 'PROJECT_ROOT/.githooks' "$INSTALL" || bad "FIXTURE STALE: install.sh has no .githooks write to remove"
 sed -i.bak 's|"\$PROJECT_ROOT/\.githooks|"$PROJECT_ROOT/.githooks-REMOVED|g' "$INSTALL"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "install.sh never writes"; then
+if grep -q "install.sh never writes" <<<"$out"; then
   ok "a site row whose destination install.sh abandoned FAILS (the table is bound to the installer, not to itself)"
 else
   bad "install.sh dropping .githooks did NOT fail — I8's table can assert a destination nothing writes"
@@ -144,7 +145,7 @@ UD="$ROOT/core/skills/ai-dlc-update/reconcile/unregistered-drift.sh"
 if grep -q 'core/hooks core/schemas' "$UD"; then
   sed -i.bak 's| core/hooks core/schemas | core/hooks |' "$UD"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I12:.*does NOT scan them: schemas"; then
+  if grep -q "I12:.*does NOT scan them: schemas" <<<"$out"; then
     ok "unregistered-drift.sh dropping core/schemas from its scan FAILS I12 (the scan set is bound, not hand-listed)"
   else
     bad "dropping core/schemas from the scan did NOT fail I12 — the scan set can rot silently again"
@@ -161,7 +162,7 @@ A05_i12_completeness() {
 mkdir -p "$ROOT/core/brand-new-subtree"
 echo 'x' > "$ROOT/core/brand-new-subtree/thing.md"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "core/brand-new-subtree/ has no drift-scan policy row"; then
+if grep -q "core/brand-new-subtree/ has no drift-scan policy row" <<<"$out"; then
   ok "a new core/ subtree with no I12 policy row FAILS (a new dir must be classified scan/exempt before it can ship)"
 else
   bad "a new core/ subtree with no I12 policy row did NOT fail — the scan set is hand-listed again"
@@ -179,7 +180,7 @@ RELABEL="$ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
 if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   sed -i.bak "s|^ANCHOR_RE=.*|ANCHOR_RE='^#{2,4} [0-9]+[a-z]*\\\\.'|" "$RELABEL"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "the anchor grammar has forked"; then
+  if grep -q "the anchor grammar has forked" <<<"$out"; then
     ok "narrowing relabel's ANCHOR_RE FAILS I15 (the reporter and the fixer cannot drift apart)"
   else
     bad "narrowing relabel's ANCHOR_RE did NOT fail I15 — the two grammars can fork again and H1-style collisions go unrelabellable"
@@ -203,7 +204,7 @@ RELABEL="$ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
 if grep -q '^ANCHOR_RE=' "$RELABEL"; then
   sed -i.bak '/^ANCHOR_RE=/d' "$RELABEL"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I15 cannot find an ANCHOR_RE definition"; then
+  if grep -q "I15 cannot find an ANCHOR_RE definition" <<<"$out"; then
     ok "deleting an ANCHOR_RE definition FAILS I15 loudly (it cannot pass by comparing nothing)"
   else
     bad "deleting an ANCHOR_RE definition did NOT fail I15 — the check goes vacuous exactly when the grammar is missing"
@@ -235,7 +236,7 @@ s = re.sub(r'^consumer_path\(\) \{.*?^\}', mutant, s, count=1, flags=re.S | re.M
 open(p, 'w').write(s)
 PY
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "sends core/session-driver/ to"; then
+  if grep -q "sends core/session-driver/ to" <<<"$out"; then
     ok "apply.sh regrowing a private path table FAILS I17 (the pull's WRITER is bound to the installer, not just the classifier)"
   else
     bad "apply.sh with a hand-listed table missing session-driver did NOT fail I17 — a subtree can silently not apply while the run re-stamps, and the consumer's stamp claims a version its tree lacks"
@@ -253,7 +254,7 @@ fi
 A09_i16_dead_prose_path() {
 printf '\nSee `core/team-roles/dev.md` for the map.\n' >> "$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "runtime-pipeline prose cites a distribution path"; then
+if grep -q "runtime-pipeline prose cites a distribution path" <<<"$out"; then
   ok "a core/-prefixed prose path in a runtime step file FAILS I16 (installed core cannot ship a dead citation)"
 else
   bad "a core/-prefixed prose path did NOT fail I16 — installed core can cite the distribution's layout again, and one dead link already cost a live gate rule"
@@ -272,7 +273,7 @@ printf '\nThe core rule lives in the core catalog; core-path wiring is a core co
 printf '\nDiff base->theirs restricted to `core/skills/ai-dlc-update/**` and `core/team-roles/dev.md`.\n' \
   >> "$ROOT/core/skills/ai-dlc-update/SKILL.md"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "runtime-pipeline prose cites a distribution path"; then
+if grep -q "runtime-pipeline prose cites a distribution path" <<<"$out"; then
   bad "I16 fired on the English word 'core' or on ai-dlc-update's by-design core/ citations — a check with false positives is a check the operator turns off"
 else
   ok "I16 ignores the English word 'core' and ai-dlc-update's by-design core/ paths (precise enough to stay on)"
@@ -291,7 +292,7 @@ RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 APPLY_F="$ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 printf '\nsection_of() { echo private; }\n' >> "$APPLY_F"
 out="$(bash "$V" 2>&1)"
-if printf '%s' "$out" | grep -q "I21 reconcile/apply.sh defines its own section_of()"; then
+if grep -q "I21 reconcile/apply.sh defines its own section_of()" <<<"$out"; then
   ok "a fourth inline section_of() FAILS I21 (the resolver cannot fork a third time)"
 else
   bad "a fourth inline section_of() did NOT fail I21 — the divergence that shipped in v0.52.0 and v0.54.2 can return, and nothing compares the copies"
@@ -309,7 +310,7 @@ REG_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
 if grep -q '^\. "\$SELF/lib\.sh"' "$REG_F"; then
   sed -i.bak '/^\. "\$SELF\/lib\.sh"/d' "$REG_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I21 reconcile/register-drift.sh calls section_of() but never sources"; then
+  if grep -q "I21 reconcile/register-drift.sh calls section_of() but never sources" <<<"$out"; then
     ok "a classifier that drops its lib.sh source FAILS I21 (a call that resolves to nothing cannot ship)"
   else
     bad "register-drift.sh dropping its lib.sh source did NOT fail I21 — section_of() resolves to nothing on a real pull and the empty section reads as 'no drift'"
@@ -334,7 +335,7 @@ RLIB_F="$ROOT/core/skills/ai-dlc-update/reconcile/lib.sh"
 if grep -qE '^[a-z_]+\(\) \{' "$RLIB_F"; then
   grep -vE '^[a-z_]+\(\) \{' "$RLIB_F" > "$RLIB_F.tmp" && mv "$RLIB_F.tmp" "$RLIB_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I21 found no function definitions"; then
+  if grep -q "I21 found no function definitions" <<<"$out"; then
     ok "lib.sh losing its definitions FAILS I21 loudly (it cannot pass by binding an empty helper set)"
   else
     bad "emptying lib.sh did NOT fail I21 — the check goes vacuous exactly when the single home stops being one"
@@ -356,7 +357,7 @@ RD_F="$ROOT/core/skills/ai-dlc-update/reconcile/register-drift.sh"
 if grep -q '^  schemas/\*|skills/ai-dlc-setup/\*)' "$RD_F"; then
   sed -i.bak 's@^  schemas/\*|skills/ai-dlc-setup/\*)@  never-matches-a-real-path/*)@' "$RD_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I31: these core subtrees are I12 'scan'"; then
+  if grep -q "I31: these core subtrees are I12 'scan'" <<<"$out"; then
     ok "removing register-drift's no-grain refusal FAILS I31 (a scan-marked subtree cannot reach an unnamed refusal)"
   else
     bad "removing the no-grain refusal did NOT fail I31 — a scan-marked subtree can be reported with no sanctioned disposition again"
@@ -383,7 +384,7 @@ if grep -q '^case "\$REL" in' "$RD_F"; then
   # still there on disk and only the DERIVATION goes blind — which is the vacuity being tested.
   grep -v '^case "\$REL" in' "$RD_F" > "$RD_F.tmp" && mv "$RD_F.tmp" "$RD_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I31: could not parse any case label"; then
+  if grep -q "I31: could not parse any case label" <<<"$out"; then
     ok "an unparseable case block FAILS I31 loudly (it cannot pass by comparing against nothing)"
   else
     bad "an unparseable case block did NOT fail I31 — the check goes vacuous exactly when register-drift's dispositions become unreadable"
@@ -405,7 +406,7 @@ GV_F="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 if grep -qE '^  bmad-prd`\.$' "$GV_F"; then
   sed -i.bak 's/^  bmad-prd`\.$/  bmad-party-mode`./' "$GV_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I32: Check 17's 'research-requirements phase' arm"; then
+  if grep -q "I32: Check 17's 'research-requirements phase' arm" <<<"$out"; then
     ok "an arm pinning a skill its step file never invokes FAILS I32 (a pin and an invocation are one fact in two files)"
   else
     bad "repointing the PRD arm at an uninvoked skill did NOT fail I32 — the pin can fork from the step again"
@@ -430,7 +431,7 @@ GV_F="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
 if grep -q -- '--require-skill' "$GV_F"; then
   sed -i.bak 's/--require-skill/--require-SKILL/g' "$GV_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I32 matched no bmad-\* skill pin"; then
+  if grep -q "I32 matched no bmad-\* skill pin" <<<"$out"; then
     ok "an unparseable arm grammar FAILS I32 loudly ('nothing to compare' never reads as 'the pins agree')"
   else
     bad "breaking the arm grammar did NOT fail I32 — the check goes vacuous exactly when the arms become unreadable"
@@ -458,7 +459,7 @@ if grep -q -- '--print-schema' "$SP_F"; then
   walk='$(dirname "$WRITER")/..'"/schemas/provenance-block.json"
   sed -i.bak "s@^SCHEMA_SRC=.*\$@SCHEMA_SRC=\"$walk\"@" "$SP_F"
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I33: these fixtures reach a core subtree by walking up"; then
+  if grep -q "I33: these fixtures reach a core subtree by walking up" <<<"$out"; then
     ok "a fixture walking up from a resolved script into another core subtree FAILS I33"
   else
     bad "the walk-up path was not caught by I33 — a fixture can go green here and red on every consumer again"
@@ -477,7 +478,7 @@ A19_i33_non_vacuity() {
 if [ -d "$ROOT/core/fixtures" ]; then
   find "$ROOT/core/fixtures" -name '*.sh' -type f -delete 2>/dev/null
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I33 found no \*.sh under core/fixtures/"; then
+  if grep -q "I33 found no \*.sh under core/fixtures/" <<<"$out"; then
     ok "an empty fixture tree FAILS I33 loudly (a scan over nothing never reads as clean)"
   else
     bad "I33 reported clean over an empty fixture tree — 'no hits' is indistinguishable from 'no defect'"
@@ -512,7 +513,7 @@ else
     bad "FIXTURE BROKEN: the I26 mutation matched nothing, so this assertion is unproven"
   else
     out="$(bash "$V" 2>&1)"
-    if printf '%s' "$out" | grep -q "restates the core path set"; then
+    if grep -q "restates the core path set" <<<"$out"; then
       ok "a line naming three manifest entries FAILS I26 (the derived set cannot be quietly replaced by a list)"
     else
       bad "a restated core path list did NOT fail I26 — the check that stopped six core subtrees being silently skipped is not firing"
@@ -546,7 +547,7 @@ else
     bad "FIXTURE BROKEN: the I40 fork mutation matched nothing, so this assertion is unproven"
   else
     out="$(bash "$V" 2>&1)"
-    if printf '%s' "$out" | grep -q "the anchor reading has forked"; then
+    if grep -q "the anchor reading has forked" <<<"$out"; then
       ok "a one-copy change to the anchor arm FAILS I40 (the linter and the pull classifier cannot disagree)"
     else
       bad "a forked anchor_arm() did NOT fail I40 — the two tools can now answer the same question differently and the operator believes whichever they ran"
@@ -559,7 +560,7 @@ else
     bad "FIXTURE BROKEN: the I40 deletion mutation matched nothing, so the vacuity assertion is unproven"
   else
     out="$(bash "$V" 2>&1)"
-    if printf '%s' "$out" | grep -q "I40 cannot find a shadow_parts() definition"; then
+    if grep -q "I40 cannot find a shadow_parts() definition" <<<"$out"; then
       ok "a MISSING bound function FAILS I40 loudly (finding nothing never reads as agreement)"
     else
       bad "I40 reported clean with shadow_parts() deleted from one side — a rename silently retires the binding"
@@ -602,7 +603,7 @@ if cmp -s "$SKB.orig" "$SKB"; then
   bad "FIXTURE BROKEN: the I45 fire mutation did not change SKILL.md, so this assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "core allocates rule number(s) at or above the reserved consumer band"; then
+  if grep -q "core allocates rule number(s) at or above the reserved consumer band" <<<"$out"; then
     ok "a core rule numbered 900 FAILS I45 (core cannot allocate from the range W5 tells consumers to move into)"
   else
     bad "core allocated Rule 900 and I45 stayed silent — the band is a promise to consumers with nothing holding core to it"
@@ -620,7 +621,7 @@ if cmp -s "$VLE.orig" "$VLE"; then
   bad "FIXTURE BROKEN: the I45 floor mutation matched nothing, so the vacuity assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "could not read BAND_FLOOR"; then
+  if grep -q "could not read BAND_FLOOR" <<<"$out"; then
     ok "an unreadable BAND_FLOOR FAILS I45 loudly (a floor it cannot read would make every core number conforming)"
   else
     bad "I45 reported clean with BAND_FLOOR renamed — the invariant retires itself silently the moment the constant moves"
@@ -640,7 +641,7 @@ if cmp -s "$VLE.orig" "$VLE"; then
   bad "FIXTURE BROKEN: the I45 extractor mutation matched nothing, so the catalog vacuity assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "extracted ZERO check anchors"; then
+  if grep -q "extracted ZERO check anchors" <<<"$out"; then
     ok "a renamed catalog extractor FAILS I45 loudly (an empty catalog never reads as a conforming one)"
   else
     bad "I45 reported clean with defined_anchors() renamed — it was scanning nothing and calling it agreement"
@@ -675,7 +676,7 @@ if cmp -s "$VGM.orig" "$VGM"; then
   bad "FIXTURE BROKEN: the I47 fork mutation matched nothing, so this assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "the check-heading grammar has forked"; then
+  if grep -q "the check-heading grammar has forked" <<<"$out"; then
     ok "a narrowed CHECK_HEAD_RE in the resolver FAILS I47 (a definition one tool sees and the other cannot)"
   else
     bad "the two copies of the check-heading grammar diverged and I47 stayed silent — GM1's subject set can shrink with the build green"
@@ -693,7 +694,7 @@ if cmp -s "$VLE.orig" "$VLE"; then
   bad "FIXTURE BROKEN: the I47 vacuity mutation matched nothing, so the second arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "could not find a CHECK_HEAD_RE= assignment"; then
+  if grep -q "could not find a CHECK_HEAD_RE= assignment" <<<"$out"; then
     ok "a renamed CHECK_HEAD_RE FAILS I47 loudly (a join that cannot locate a side never passes by comparing nothing)"
   else
     bad "I47 reported clean with the assignment renamed — it was comparing nothing and calling it agreement"
@@ -730,7 +731,7 @@ if cmp -s "$GV.orig" "$GV"; then
   bad "FIXTURE BROKEN: the I49 ghost-mode mutation matched nothing, so this assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "mode(s) the script does not dispatch"; then
+  if grep -q "mode(s) the script does not dispatch" <<<"$out"; then
     ok "a rule file naming a core-paths.sh mode the dispatch rejects FAILS I49 (the call would exit 2, which the caller reads as 'cannot determine')"
   else
     bad "the gate check body named a nonexistent resolver mode and I49 stayed silent — a typo in a paragraph now reports as an unreadable manifest"
@@ -748,7 +749,7 @@ if cmp -s "$CP.orig" "$CP"; then
   bad "FIXTURE BROKEN: the I49 undocumented-mode mutation matched nothing, so the second arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "its own usage() never names"; then
+  if grep -q "its own usage() never names" <<<"$out"; then
     ok "a dispatched mode missing from usage() FAILS I49 (a mode no operator can discover)"
   else
     bad "a mode vanished from usage() and I49 reported clean — the discoverable set and the dispatched set can now diverge"
@@ -768,7 +769,7 @@ if cmp -s "$CP.orig" "$CP"; then
   bad "FIXTURE BROKEN: the I49 vacuity mutation matched nothing, so the third arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "parsed ZERO modes"; then
+  if grep -q "parsed ZERO modes" <<<"$out"; then
     ok "a renamed dispatch sentinel FAILS I49 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
   else
     bad "the dispatch extraction found nothing and I49 did not say so — it was comparing against an empty set and calling it agreement"
@@ -803,7 +804,7 @@ if cmp -s "$DEV.orig" "$DEV"; then
   bad "FIXTURE BROKEN: the I50 role-file ghost mutation matched nothing, so this assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "$ghost_a"; then
+  if grep -q "$ghost_a" <<<"$out"; then
     ok "a role file naming a validator core does not ship FAILS I50 (the command does not exist in any consumer tree)"
   else
     bad "a role file told an agent to run a validator core does not ship and I50 stayed silent — the command that never ran reports what a clean run reports"
@@ -825,7 +826,7 @@ if cmp -s "$TPL.orig" "$TPL"; then
   bad "FIXTURE BROKEN: the I50 template ghost mutation matched nothing, so the second arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "$ghost_b"; then
+  if grep -q "$ghost_b" <<<"$out"; then
     ok "a consumer-installed template naming a validator core does not ship FAILS I50 (templates/ is inside the corpus)"
   else
     bad "a template cited a validator core does not ship and I50 reported clean — half its corpus is outside what it reads"
@@ -841,7 +842,7 @@ mv "$TPL.orig" "$TPL"
 mv "$ROOT/core/scripts" "$ROOT/core/scripts.hidden"
 out="$(bash "$V" 2>&1)"
 mv "$ROOT/core/scripts.hidden" "$ROOT/core/scripts"
-if printf '%s' "$out" | grep -q "I50 derived an EMPTY set"; then
+if grep -q "I50 derived an EMPTY set" <<<"$out"; then
   ok "an empty shipped-validator set FAILS I50 loudly (an empty set contains nothing, so every citation would be a ghost and the join must refuse)"
 else
   bad "the shipped-validator set was empty and I50 did not say so — it was comparing citations against nothing"
@@ -872,7 +873,7 @@ if cmp -s "$RTR.orig" "$RTR"; then
   bad "FIXTURE BROKEN: the I51 template mutation matched nothing, so the prose-drift arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "tells the lead to write a subject the shipped matcher rejects"; then
+  if grep -q "tells the lead to write a subject the shipped matcher rejects" <<<"$out"; then
     ok "a Step 5b template the schema regex rejects FAILS I51 (a lead following the step file would write an unlandable commit)"
   else
     bad "the step file and the push-time matcher disagreed on the licensed subject and I51 reported clean"
@@ -889,7 +890,7 @@ if cmp -s "$AAJ.orig" "$AAJ"; then
   bad "FIXTURE BROKEN: the I51 example mutation matched nothing, so the remedy arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "subject_example does not match backfill_commit.subject_pattern"; then
+  if grep -q "subject_example does not match backfill_commit.subject_pattern" <<<"$out"; then
     ok "an example its own pattern rejects FAILS I51 (the rejection message would hand the consumer a subject the same run refuses)"
   else
     bad "backfill_commit carried an example its own pattern rejects and I51 reported clean"
@@ -907,7 +908,7 @@ if cmp -s "$RTR.orig" "$RTR"; then
   bad "FIXTURE BROKEN: the I51 vacuity mutation matched nothing, so the zero guard is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "I51 could not derive both sides"; then
+  if grep -q "I51 could not derive both sides" <<<"$out"; then
     ok "a retro.md with no subject template FAILS I51 loudly (nothing to compare must not read as the two agreeing)"
   else
     bad "the prose side of I51 vanished and the invariant reported agreement it never computed"
@@ -935,7 +936,7 @@ if cmp -s "$FDS.orig" "$FDS"; then
   bad "FIXTURE BROKEN: the I52 divergence mutation matched nothing, so this assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -qF "$ghost_m"; then
+  if grep -qF "$ghost_m" <<<"$out"; then
     ok "a reworded marker in the shipped validator FAILS I52 (core's two driverless fixtures would fail every consumer's push)"
   else
     bad "the shipped validator's exemption marker diverged from I20's and I52 stayed silent — core's own fixtures would start failing consumers who changed nothing"
@@ -953,7 +954,7 @@ if cmp -s "$FDS.orig" "$FDS"; then
   bad "FIXTURE BROKEN: the I52 vacuity mutation matched nothing, so the zero guard is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "cannot read EXEMPT_MARKER out of validate-fixture-drivability.sh"; then
+  if grep -q "cannot read EXEMPT_MARKER out of validate-fixture-drivability.sh" <<<"$out"; then
     ok "an unreadable marker in the shipped validator FAILS I52 loudly (two empty strings compare equal, and that is not agreement)"
   else
     bad "I52 could not extract the shipped validator's marker and passed anyway — it compared nothing against nothing"
@@ -984,7 +985,7 @@ if cmp -s "$CPS.orig" "$CPS"; then
   bad "FIXTURE BROKEN: the I53 ghost-mode mutation matched nothing, so this assertion is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "mode(s) it does not dispatch"; then
+  if grep -q "mode(s) it does not dispatch" <<<"$out"; then
     ok "one core script invoking a mode the other does not dispatch FAILS I53 (the call exits 2, and the citation arm reads that as 'no operator citation')"
   else
     bad "core-paths.sh called an escalation mode that does not exist and I53 stayed silent — the core-layer-immutability backstop would FAIL trees that are clean"
@@ -1000,7 +1001,7 @@ if cmp -s "$ESR.orig" "$ESR"; then
   bad "FIXTURE BROKEN: the I53 undocumented-mode mutation matched nothing, so the second arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "its own USAGE block never names"; then
+  if grep -q "its own USAGE block never names" <<<"$out"; then
     ok "a dispatched escalation mode missing from the USAGE block FAILS I53 (a mode no operator can discover)"
   else
     bad "a mode vanished from the USAGE block and I53 reported clean — the discoverable set and the dispatched set can now diverge"
@@ -1016,13 +1017,90 @@ if cmp -s "$ESR.orig" "$ESR"; then
   bad "FIXTURE BROKEN: the I53 vacuity mutation matched nothing, so the third arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if printf '%s' "$out" | grep -q "parsed ZERO modes out of validate-escalation-resolution.sh"; then
+  if grep -q "parsed ZERO modes out of validate-escalation-resolution.sh" <<<"$out"; then
     ok "a renamed dispatch sentinel FAILS I53 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
   else
     bad "the escalation dispatch extraction found nothing and I53 did not say so — it was comparing against an empty set and calling it agreement"
   fi
 fi
 mv "$ESR.orig" "$ESR"
+}
+
+A29_i54_early_exit_reader() {
+# I54 bans writing a shell variable into a reader that stops at its first match. Under
+# pipefail such a pipeline reports the WRITER's status, and a writer that still had bytes
+# to push has taken EPIPE -- so the test answers "not found" on input containing the
+# pattern. Where a match means the tree is BAD that is a permanent, silent pass.
+#
+# EVERY LITERAL OF THE BANNED SHAPE IS ASSEMBLED AT RUNTIME. I54's scan covers
+# core/fixtures/, so a fixture that spelled the shape out would be reported by the very
+# invariant it exists to test -- the trap v0.194.0 paid for twice. `$_g` below is the
+# reader; nothing on any line here forms the pattern I54 matches.
+_g="gre""p -q"
+I54_TGT="core/fixtures/ledger-rotate/run.sh"
+
+# ARM 1 — THE BAN FIRES, and names the file. The injected line is inert (guarded by a
+# false test) because I54 reads text and must not need the code to run; a realistic site
+# is a line in a real script, not a scratch file no manifest knows about.
+printf '\nif false; then\n  printf %s "$_i54" | %s I54_SENTINEL_ALPHA\nfi\n' "'%s'" "$_g" >> "$ROOT/$I54_TGT"
+out="$(bash "$V" 2>&1)"
+if grep -qF "$I54_TGT" <<<"$out" && grep -q 'I54 found' <<<"$out"; then
+  ok "a variable written into a first-match reader FAILS I54, naming the file (under pipefail that test answers 'not found' on input that contains the pattern)"
+else
+  bad "the banned reader idiom was reintroduced and I54 stayed silent — the check that keeps a negative assertion able to fire is itself unable to fire"
+fi
+
+# ARM 2 — NO FALSE POSITIVE ON THE PERMITTED SHAPE. An ordinary command piped into the
+# same reader is safe and ubiquitous; a blanket ban would be the unmeasured lint
+# CLAUDE.md warns about. Asserted on I54 being SILENT about this file, with arm 1's
+# injection removed first so the two cannot be confused.
+git -C "$ROOT" checkout -- "$I54_TGT" 2>/dev/null || sed -i.bak '/I54_SENTINEL_ALPHA/,+1d' "$ROOT/$I54_TGT"
+printf '\nif false; then\n  git log --oneline | %s I54_SENTINEL_BETA\nfi\n' "$_g" >> "$ROOT/$I54_TGT"
+out="$(bash "$V" 2>&1)"
+if grep -q 'I54 found' <<<"$out"; then
+  bad "I54 reported an ordinary command piped into a first-match reader — that shape is permitted, and a check with that false-positive set is one the operator switches off"
+else
+  ok "an ordinary command piped into the same reader does NOT fail I54 (the subject set is a builtin writing a variable, not every pipe)"
+fi
+
+# ARM 3 — VACUITY. I54 reports an ABSENCE, so a grammar that matches nothing prints the
+# same clean line as a tree with no defect. It carries a probe of the banned shape and
+# must refuse when its own grammar stops matching it. Asserted on that refusal's wording,
+# which arm 1's message never contains.
+cp "$V" "$V.orig"
+sed 's@\[|\]\[\[:space:\]\]\*grep@[|][[:space:]]*NOSUCHREADER@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I54 grammar mutation matched nothing, so the vacuity guard is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "grammar no longer matches the shape it bans" <<<"$out"; then
+    ok "a grammar that stops matching its own probe FAILS I54 loudly (a scan that matches nothing reads exactly like a clean tree)"
+  else
+    bad "I54's grammar was broken and it reported a clean tree — it was scanning for a shape it could no longer match"
+  fi
+fi
+mv "$V.orig" "$V"
+
+# ARM 4 — OVER-WIDTH. The opposite failure: a grammar loose enough to match any pipe
+# would fire on nearly every script. I54 carries a probe of the PERMITTED shape too and
+# must refuse when it starts matching that. Asserted on its own distinct wording.
+cp "$V" "$V.orig"
+# The realistic over-width is a "simplification": drop the writer and its quoted
+# argument and keep only the pipe-into-reader tail. A mutation that merely adds an
+# alternative to the writer group changes bytes without widening anything -- cmp -s
+# passes it and the assertion below is what catches it, which is the recorded trap.
+sed 's@^i54_re=".*\[|\]@i54_re="[|]@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I54 over-width mutation matched nothing, so the false-positive guard is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "matches an ordinary command piped into" <<<"$out"; then
+    ok "a grammar that starts matching the permitted shape FAILS I54 loudly (a check nobody can leave on enforces nothing)"
+  else
+    bad "I54's grammar was widened to match ordinary pipelines and it did not object — its false-positive set is unguarded"
+  fi
+fi
+mv "$V.orig" "$V"
 }
 
 # ---------------------------------------------------------------------------
@@ -1107,7 +1185,14 @@ while IFS= read -r n; do
   fi
   cat "$OUT/$n"
   [ -s "$OUT/$n.err" ] && cat "$OUT/$n.err" >&2
-  if [ "$(cat "$OUT/$n.rc")" != "0" ]; then
+  wrc="$(cat "$OUT/$n.rc")"
+  # 2 IS NOT 1. `FIXTURE BROKEN` (a failed seed, an unbuildable mutant) and `an assertion
+  # regressed` are different answers, and this file has always used exit 2 for the first.
+  # Routing an assertion through a worker would otherwise collapse them: the parent sees a
+  # nonzero rc, charges one assertion and exits 1 — reporting a regression where the truth is
+  # that nothing was tested.
+  if [ "$wrc" = "2" ]; then broken=1; fi
+  if [ "$wrc" != "0" ]; then
     c="$(grep -c '^  FAIL' "$OUT/$n" || true)"
     [ "$c" -gt 0 ] || { printf '  FAIL  %s exited nonzero without an assertion line — the assertion did not run to a verdict\n' "$n"; c=1; }
     fails=$((fails + c))
@@ -1115,6 +1200,10 @@ while IFS= read -r n; do
 done < "$OUT/list"
 
 echo
+if [ "$broken" -ne 0 ]; then
+  echo "enforcement-map-sites: FIXTURE BROKEN — an assertion could not run to a verdict" >&2
+  exit 2
+fi
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2
 exit 1

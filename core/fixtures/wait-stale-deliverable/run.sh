@@ -40,6 +40,7 @@ SEED="$HERE/seed.sh"
 [ -f "$SEED" ] || { echo "FIXTURE ERROR: cannot locate seed.sh" >&2; exit 2; }
 
 fails=0
+broken=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
@@ -50,9 +51,24 @@ bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 # Output goes to a file rather than command substitution: `OUT="$(beat ...)"` would
 # run the function in a subshell, so the RC it sets would never reach the caller and
 # every exit-code assertion would read a stale value.
-BEATOUT="$(mktemp)"
-MUTDIR="$(mktemp -d 2>/dev/null || mktemp -d -t wait-mutants)"
-trap 'rm -f "$BEATOUT"; rm -rf "$MUTDIR"' EXIT
+# ONE PROCESS PER CASE, AND THE REASON IS WALL CLOCK. This fixture is SLEEP-bound: nearly
+# every case below waits out a beat quantum to prove the beat actually slept, and run end to
+# end that is ~52s of a suite whose next-longest unit is a third of it. The cases are already
+# independent -- seed.sh gives each its OWN tree, and its header says why (the counter and the
+# join sidecar are keyed by the target path STRING, so two cases sharing a state dir would
+# share state). They were independent and merely written in a row. Each is now a function run
+# in its own process, and the driver at the foot of this file runs them through a pool.
+#
+# A SLEEPING CASE IS NOT A BUSY CASE, which is what makes this safe to nest inside the
+# suite's own pool: these workers are waiting on a clock, not competing for a core.
+# The wall-clock ASSERTIONS are the risk instead -- `ELAPSED -le 1` for "returned without
+# sleeping", `-ge 6` for a quantum honoured -- so this cannot be proven by a differential
+# alone. It needs repeated runs at the shipping pool size, and that evidence is the release.
+setup_tmp() {
+  BEATOUT="$(mktemp)"
+  MUTDIR="$(mktemp -d 2>/dev/null || mktemp -d -t wait-mutants)"
+  trap 'rm -f "$BEATOUT"; rm -rf "$MUTDIR"' EXIT
+}
 beat_with() { # <subject> <work> [extra args...] -> writes $BEATOUT; sets RC and OUT
   local subj="$1" w="$2"; shift 2
   ( cd "$w" && env AI_DLC_WAIT_BEAT_SECS=4 \
@@ -93,9 +109,36 @@ beat() { local w="$1"; shift; beat_with "$SUBJ" "$w" "$@"; }
 # every name on a single `local` before assigning any of them, so `local a=$1 b=$a`
 # leaves b empty (and trips `set -u`).
 MUT=""
-mutant() { # <name> <sed-expr> -> sets $MUT to the mutant's path
+# THE SIX MUTATIONS LIVE HERE, ONCE. Case 21 re-runs every one of them against the FLAGLESS
+# path, so when each case ran in the same process it could reach for whatever the case above
+# had left in $MUTDIR. Each case now runs in its own process and builds what it needs, and a
+# second copy of these six sed programs would be a fork -- the defect half this fixture's
+# subject exists to catch. One home, two readers.
+#
+# SETS $MUT_EXPR RATHER THAN PRINTING IT, for the reason `mutant` below already records and
+# this function was written ignoring: `e="$(mutant_expr X)"` runs it in a SUBSHELL, so its
+# `exit 2` on an unregistered name kills only that subshell. The caller then gets an EMPTY
+# program, `sed ''` copies the file unchanged, and the `cmp -s` guard reports "matched
+# nothing -- the code it targets was renamed", which is a true sentence about the wrong
+# thing: a typo in a mutation NAME would read as a renamed SUBJECT. Caught by the driver
+# battery, not by review.
+MUT_EXPR=""
+mutant_expr() { # <name> -> sets $MUT_EXPR to the sed program that removes that ONE mechanism
+  case "$1" in
+    grant-cap)               MUT_EXPR='s/ \&\& \[ "\$g" -lt "\$MAX_BEATS" \]//' ;;
+    unprune-wait-beats)      MUT_EXPR='s/-o -name \.wait-beats/-o -name .no-such-name/' ;;
+    unexclude-beat-inflight) MUT_EXPR="s/! -name '\.beat-inflight' //" ;;
+    state-dir-guard)         MUT_EXPR='s/^  SD_ABS="\$(abs_of "\$STATE_DIR")"$/  SD_ABS=""/' ;;
+    path-exists-check)       MUT_EXPR='s/\[ -e "\$1" \] ||/[ 1 ] ||/' ;;
+    progress-sampling)       MUT_EXPR='/progressed_since "\$pg" \&\& PROGRESSED=1/d' ;;
+    *) echo "FIXTURE ERROR: no mutation registered for '$1'" >&2; exit 2 ;;
+  esac
+}
+mutant() { # <name> -> sets $MUT to the mutant's path
   local name="$1"
-  local expr="$2"
+  local expr
+  mutant_expr "$name"
+  expr="$MUT_EXPR"
   local m="$MUTDIR/$name.sh"
   sed "$expr" "$SUBJ" > "$m" || { echo "FIXTURE ERROR: sed failed for mutant '$name'" >&2; exit 2; }
   if cmp -s "$SUBJ" "$m"; then
@@ -106,9 +149,8 @@ mutant() { # <name> <sed-expr> -> sets $MUT to the mutant's path
   MUT="$m"
 }
 
-echo "wait-stale-deliverable:"
-
 # --- 1. the headline: a file from a prior sprint is not this join's answer ------
+C01_stale() {
 W="$( bash "$SEED" stale )"
 beat "$W"
 if [ "$RC" -eq 0 ]; then ok "stale: rc 0 (beat complete) — waiting is not a failure"
@@ -136,11 +178,13 @@ case "$OUT" in
   *) bad "stale: no BEAT COMPLETE summary naming the counts" ;;
 esac
 rm -rf "$W"
+}
 
 # --- 2. the yield the predicate fix must restore -------------------------------
 # The marker is removed by an EXIT trap, so it only exists mid-beat: background the
 # subject and poll. `kill -0` catches an exit that never wrote it at all, which is
 # precisely the pre-fix behaviour.
+C02_stale_marker() {
 W="$( bash "$SEED" stale-marker )"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
@@ -158,8 +202,10 @@ if [ -f "$W/_bmad-output/.beat-inflight" ]; then
   bad "stale-marker: marker survived the beat — a dead beat would authorize a silent stall"
 else ok "stale-marker: marker cleared on exit"; fi
 rm -rf "$W"
+}
 
 # --- 3. the teammate's real write, landing mid-beat -----------------------------
+C03_arrives_mid_beat() {
 W="$( bash "$SEED" arrives-mid-beat )"
 ( sleep 2; printf 'the actual answer for this sprint\n' > "$W/deliv.md" ) &
 WRITER=$!
@@ -175,6 +221,7 @@ else bad "arrives-mid-beat: rc $RC, no DELIVERED line — a genuine delivery was
 if [ "$ELAPSED" -ge 2 ]; then ok "arrives-mid-beat: beat actually slept (${ELAPSED}s) — predicates agree"
 else bad "arrives-mid-beat: returned in ${ELAPSED}s — poll loop and sweep disagree on delivery"; fi
 rm -rf "$W"
+}
 
 # --- 4. a rounded-UP dispatch stamp must not become an unmeetable threshold -----
 # MUTATION NOTE: this case reds only when BOTH guards in join_of are removed --
@@ -182,6 +229,7 @@ rm -rf "$W"
 # "$now_" ]` (never above now). Either alone defeats a future stamp, so mutating one
 # leaves the case green. That is redundancy, not vacuity: verified by removing both,
 # which reds it. Do not conclude this assertion is dead from a single-line mutation.
+C04_since_clamp() {
 W="$( bash "$SEED" since-clamp )"
 FUT=$(( $(date +%s) + 600 ))
 ( sleep 2; printf 'the actual answer for this sprint\n' > "$W/deliv.md" ) &
@@ -192,8 +240,10 @@ if [ "$RC" -eq 0 ] && grep -q '^DELIVERED' "$BEATOUT"; then
   ok "since-clamp: a 10-minute-future --since still accepts the real write"
 else bad "since-clamp: no DELIVERED line — --since was trusted past now, threshold unsatisfiable"; fi
 rm -rf "$W"
+}
 
 # --- 5. --since may pull the threshold EARLIER (the post-compaction join) -------
+C05_since_earlier() {
 W="$( bash "$SEED" since-earlier )"
 beat "$W"
 if [ "$RC" -eq 0 ] && grep -q '^WAITING' "$BEATOUT" && ! grep -q '^DELIVERED' "$BEATOUT"; then
@@ -209,8 +259,10 @@ else bad "since-earlier: no DELIVERED line — --since could not move the thresh
 if [ "$ELAPSED" -le 1 ]; then ok "since-earlier: returned without sleeping"
 else bad "since-earlier: slept ${ELAPSED}s on an already-satisfied join"; fi
 rm -rf "$W"
+}
 
 # --- 6. regression guards -------------------------------------------------------
+C06_regression_guards() {
 W="$( bash "$SEED" exhausted )"
 beat "$W"
 # The ONE state that still exits nonzero. Nonzero is now reserved for "needs a
@@ -234,12 +286,14 @@ case "$OUT" in
   *)                       ok  "absent: no spurious NOTE" ;;
 esac
 rm -rf "$W"
+}
 
 # --- 7. the counter is scoped to the bound it was counted against ---------------
 # `counter-bound-reset` and `exhausted` are the same tree with one byte different:
 # `.bound`. That byte is the whole mechanism, and the pair is what makes each
 # assertion non-vacuous — deleting the self-heal reds ONLY this case, and a
 # self-heal that wiped unconditionally would red ONLY `exhausted`.
+C07_counter_bound_reset() {
 W="$( bash "$SEED" counter-bound-reset )"
 beat "$W"
 if [ "$RC" -eq 0 ] && ! grep -q '^NON-DELIVERY' "$BEATOUT"; then
@@ -249,12 +303,14 @@ if [ "$(cat "$W/_bmad-output/.wait-beats/.bound" 2>/dev/null)" = "6" ]; then
   ok "counter-bound-reset: .bound rewritten to the active bound"
 else bad "counter-bound-reset: .bound not rewritten — the wipe repeats on every call, so no join can ever accumulate beats"; fi
 rm -rf "$W"
+}
 
 # --- 8. the beat quantum is NOT the steering budget ------------------------------
 # One env var carried both meanings until v0.167.0: the FOREGROUND gag bound
 # (validate-steering-budget.sh Check A) and this BACKGROUNDED beat's sleep. The
 # merge is invisible in normal operation — both are just "a number of seconds" —
 # so it is asserted from both sides. Forward: the quantum alone decides the sleep.
+C08_knob_split_forward() {
 W="$( bash "$SEED" knob-split-forward )"
 START="$(date +%s)"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=3 AI_DLC_STEERING_BUDGET=30 \
@@ -266,10 +322,12 @@ if [ "$ELAPSED" -le 10 ]; then
   ok "knob-split-forward: quantum 3s honoured (${ELAPSED}s) with STEERING_BUDGET=30 ignored"
 else bad "knob-split-forward: slept ${ELAPSED}s — the beat is reading AI_DLC_STEERING_BUDGET again"; fi
 rm -rf "$W"
+}
 
 # Reverse: the steering budget cannot SHORTEN the beat either. Without this arm an
 # alias in the other direction (STEERING_BUDGET winning when both are set) still
 # passes the forward case whenever the budget happens to be the smaller number.
+C09_knob_split_reverse() {
 W="$( bash "$SEED" knob-split-reverse )"
 START="$(date +%s)"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=8 AI_DLC_STEERING_BUDGET=3 \
@@ -281,6 +339,7 @@ if [ "$ELAPSED" -ge 6 ]; then
   ok "knob-split-reverse: quantum 8s honoured (${ELAPSED}s) with STEERING_BUDGET=3 ignored"
 else bad "knob-split-reverse: returned in ${ELAPSED}s — AI_DLC_STEERING_BUDGET is truncating the beat"; fi
 rm -rf "$W"
+}
 
 # --- 9. the marker is a LEASE, not the beat's end time ---------------------------
 # Stop-hook Check 2b authorizes the lead's yield for as long as `.beat-inflight`
@@ -289,6 +348,7 @@ rm -rf "$W"
 # quantum with nothing alive to re-invoke the lead — a dead window that grows with
 # the quantum, which is exactly what raising it to 600s would have multiplied.
 # Re-stamped every poll, the lease expires ~3 polls after the beat dies.
+C10_marker_goes_stale() {
 W="$( bash "$SEED" marker-goes-stale )"
 ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=60 AI_DLC_WAIT_POLL_SECS=1 \
                  AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
@@ -315,6 +375,7 @@ case "$LEASE" in
     fi ;;
 esac
 rm -rf "$W"
+}
 
 # --- 10. an exhausted sequence with evidence of work is EXTENDED, not declared ---
 # The clock says the teammate is dead; the filesystem says it wrote a file during
@@ -323,6 +384,7 @@ rm -rf "$W"
 # The message alone is not the assertion: `.grants` is checked, because a subject
 # that printed PROGRESS and exhausted anyway would still re-dispatch a live
 # teammate while reading as fixed.
+C11_progress_extends() {
 W="$( bash "$SEED" progress-extends )"
 KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
 beat "$W" --progress-path wt
@@ -338,12 +400,19 @@ else bad "progress-extends: .grants not 1 — an uncounted extension is an unbou
 rm -rf "$W"
 
 # The mutation proof for cases 10-13 is section 14, which RUNS it.
+}
 
 # --- 11. ...but the extension is BOUNDED. This is the case that keeps Check C ----
 # true. Same evidence of work as case 10, every grant already spent. If this ever
 # goes green-with-rc-0 the join can be held open forever by a teammate that writes
 # and never delivers, and SKILL.md's Rule 26(c) claim that this script "can commit
 # neither" failure becomes false with nothing to say so.
+C12_progress_bounded() {
+# Bound here rather than inherited: case 10 computed it when this file ran as one
+# long script. Each case now runs in its own process, so an inherited name is an
+# unset variable under `set -u`.
+KEY="$( printf '%s' deliv.md | cksum | tr -d ' \t' | cut -c1-16 )"
+
 W="$( bash "$SEED" progress-bounded )"
 beat "$W" --progress-path wt
 if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
@@ -357,12 +426,14 @@ if [ "$(cat "$W/_bmad-output/.wait-beats/${KEY}.grants" 2>/dev/null)" = "6" ]; t
   ok "progress-bounded: grant counter held at the cap"
 else bad "progress-bounded: grant counter moved past the cap"; fi
 rm -rf "$W"
+}
 
 # --- 12. machinery heartbeats in the watched tree are not evidence of work -------
 # A teammate worktree carries its own `_bmad-output/`. Its `.wait-beats/` counters
 # and `.beat-inflight` keep ticking whether or not the teammate is alive, and they
 # are NOT this run's state dir, so the argument guard in case 13 cannot see them.
 # Only the prune can. Without it, pointing at a worktree grants forever.
+C13_progress_ignores_own_state() {
 W="$( bash "$SEED" progress-ignores-own-state )"
 beat "$W" --progress-path wt
 if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
@@ -372,12 +443,14 @@ if grep -q '^PROGRESS' "$BEATOUT"; then
   bad "progress-ignores-own-state: granted on .beat-inflight/.wait-beats churn alone"
 else ok "progress-ignores-own-state: no PROGRESS line"; fi
 rm -rf "$W"
+}
 
 # --- 13. the two ways this check could silently never fire ----------------------
 # Both are argument errors, not runtime behaviour, because both produce a subject
 # that runs clean forever while enforcing nothing. The CONTROL matters as much as
 # the rejections: a subject that refused every --progress-path would satisfy the
 # three exit-64 assertions and be entirely useless.
+C14_progress_guards() {
 W="$( bash "$SEED" progress-guards )"
 guard() { ( cd "$W" && env AI_DLC_WAIT_BEAT_SECS=4 AI_DLC_WAIT_POLL_SECS=1 \
                            AI_DLC_WAIT_MARGIN_SECS=1 AI_DLC_MAX_WAIT_BEATS=6 \
@@ -395,6 +468,7 @@ if [ "$(guard wt)" != "64" ]; then
   ok "progress-guards: CONTROL — a real worktree path is accepted"
 else bad "progress-guards: every --progress-path is rejected; the flag does nothing"; fi
 rm -rf "$W"
+}
 
 # --- 14. the mutation proof, executed ------------------------------------------
 # Each mutant removes ONE mechanism and asserts the subject then does the WRONG
@@ -406,7 +480,8 @@ rm -rf "$W"
 # mark deliberately. See the seed file -- without that, `progressed_since` has
 # nothing to compare against on its first call and every mutant looks equally dead.
 
-mutant grant-cap 's/ \&\& \[ "\$g" -lt "\$MAX_BEATS" \]//'
+C15_mut_grant_cap() {
+mutant grant-cap
 M="$MUT"
 W="$( bash "$SEED" progress-bounded )"
 beat_with "$M" "$W" --progress-path wt
@@ -414,10 +489,12 @@ if [ "$RC" -eq 0 ]; then
   ok "MUTANT grant-cap: without the cap a spent-grant join keeps extending — an unbounded wait"
 else bad "MUTANT grant-cap: still rc $RC with the cap removed; the cap is not what bounds the extension"; fi
 rm -rf "$W"
+}
 
 # Two prunes, mutated separately. Lumping them proves only that ONE of the two is
 # load-bearing, and the seed ticks both `.wait-beats/<key>` and `.beat-inflight`.
-mutant unprune-wait-beats 's/-o -name \.wait-beats/-o -name .no-such-name/'
+C16_mut_unprune_wait_beats() {
+mutant unprune-wait-beats
 M="$MUT"
 W="$( bash "$SEED" progress-ignores-own-state )"
 beat_with "$M" "$W" --progress-path wt
@@ -425,8 +502,10 @@ if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
   ok "MUTANT unprune-wait-beats: a teammate's own beat counters then read as work"
 else bad "MUTANT unprune-wait-beats: rc $RC without the .wait-beats prune; the prune is not what excludes them"; fi
 rm -rf "$W"
+}
 
-mutant unexclude-beat-inflight "s/! -name '\.beat-inflight' //"
+C17_mut_unexclude_beat_inflight() {
+mutant unexclude-beat-inflight
 M="$MUT"
 W="$( bash "$SEED" progress-ignores-own-state )"
 beat_with "$M" "$W" --progress-path wt
@@ -434,10 +513,12 @@ if [ "$RC" -eq 0 ] && grep -q '^PROGRESS' "$BEATOUT"; then
   ok "MUTANT unexclude-beat-inflight: a heartbeat marker then reads as work"
 else bad "MUTANT unexclude-beat-inflight: rc $RC without the exclusion; it is not what excludes the marker"; fi
 rm -rf "$W"
+}
 
 # Neutering SD_ABS rather than the comparison: the guard reads `[ -n "$SD_ABS" ]`,
 # so an unresolvable state dir disables it wholesale. One line, unambiguously aimed.
-mutant state-dir-guard 's/^  SD_ABS="\$(abs_of "\$STATE_DIR")"$/  SD_ABS=""/'
+C18_mut_state_dir_guard() {
+mutant state-dir-guard
 M="$MUT"
 W="$( bash "$SEED" progress-guards )"
 beat_with "$M" "$W" --progress-path _bmad-output
@@ -447,8 +528,10 @@ if [ "$RC" -eq 0 ]; then
   ok "MUTANT state-dir-guard: _bmad-output is then accepted — progress becomes permanently true"
 else bad "MUTANT state-dir-guard: rc $RC, expected a normal beat; the guard is not what rejects it"; fi
 rm -rf "$W"
+}
 
-mutant path-exists-check 's/\[ -e "\$1" \] ||/[ 1 ] ||/'
+C19_mut_path_exists_check() {
+mutant path-exists-check
 M="$MUT"
 W="$( bash "$SEED" progress-guards )"
 beat_with "$M" "$W" --progress-path no-such-dir
@@ -456,8 +539,10 @@ if [ "$RC" -eq 0 ]; then
   ok "MUTANT path-exists-check: a typo'd path is then accepted and grants nothing, forever"
 else bad "MUTANT path-exists-check: rc $RC, expected a normal beat; the check is not what rejects it"; fi
 rm -rf "$W"
+}
 
-mutant progress-sampling '/progressed_since "\$pg" \&\& PROGRESSED=1/d'
+C20_mut_progress_sampling() {
+mutant progress-sampling
 M="$MUT"
 W="$( bash "$SEED" progress-extends )"
 beat_with "$M" "$W" --progress-path wt
@@ -465,21 +550,101 @@ if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
   ok "MUTANT progress-sampling: a demonstrably working teammate is declared non-delivered"
 else bad "MUTANT progress-sampling: rc $RC without sampling; the grant is reachable by some other route"; fi
 rm -rf "$W"
+}
 
 # The other half of the claim: none of the six changes the FLAGLESS path. Asserted
 # rather than described, because "strictly additive" is exactly the sort of promise
 # that quietly stops being true. `exhausted` is the case with the most to lose --
 # it is the one state that still exits nonzero.
+C21_mut_flagless_path() {
 for mname in grant-cap unprune-wait-beats unexclude-beat-inflight state-dir-guard \
              path-exists-check progress-sampling; do
+  mutant "$mname"
   W="$( bash "$SEED" exhausted )"
-  beat_with "$MUTDIR/$mname.sh" "$W"
+  beat_with "$MUT" "$W"
   if [ "$RC" -eq 1 ] && grep -q '^NON-DELIVERY' "$BEATOUT"; then
     ok "MUTANT $mname: the flagless path is untouched (exhausted still rc 1)"
   else bad "MUTANT $mname: rc $RC on a flagless join — this mutant reaches code the default path uses"; fi
   rm -rf "$W"
 done
+}
 
+# ---------------------------------------------------------------------------
+# THE DRIVER
+# ---------------------------------------------------------------------------
+# `--run-one <case>` is one case, in one process, with its own temp state. It is the unit the
+# pool schedules and it is how a human runs a single case while working on it.
+if [ "${1:-}" = "--run-one" ]; then
+  FN="${2:-}"
+  declare -F "$FN" >/dev/null 2>&1 || {
+    echo "FIXTURE ERROR: --run-one needs a case function name; '$FN' is not one" >&2
+    exit 2
+  }
+  setup_tmp
+  echo "wait-stale-deliverable:"   >/dev/null   # the header belongs to the parent, not here
+  "$FN"
+  [ "$fails" -eq 0 ] || exit 1
+  exit 0
+fi
+
+# THE CASE LIST IS DERIVED FROM THIS FILE'S OWN DEFINITIONS, in source order, with a zero
+# guard. A hand-written list would be the defect this fixture's own subject is about: a case
+# dropped from it runs nothing, prints nothing, and 20 greens read exactly like 21.
+NAMES="$(grep -oE '^C[0-9]{2}_[a-z0-9_]+\(\) \{' "$0" | sed 's/() {$//')"
+N_LISTED="$(printf '%s\n' "$NAMES" | grep -c . || true)"
+if [ "$N_LISTED" -lt 10 ]; then
+  echo "FIXTURE ERROR: derived $N_LISTED case(s) from this file — the C<nn>_ naming grammar moved" >&2
+  exit 2
+fi
+
+echo "wait-stale-deliverable:"
+
+OUT="$(mktemp -d)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
+trap 'rm -rf "$OUT"' EXIT
+SELF="$HERE/$(basename "$0")"
+
+# EIGHT. This pool nests inside the pre-push suite's, so a knob here would multiply against a
+# knob there; the cases sleep rather than compute, so eight of them cost about one core.
+JOBS=8
+printf '%s\n' "$NAMES" > "$OUT/list"
+AI_DLC_WS_SELF="$SELF" AI_DLC_WS_OUT="$OUT" \
+  xargs -P "$JOBS" -I{} bash -c '
+    n="$1"
+    bash "$AI_DLC_WS_SELF" --run-one "$n" > "$AI_DLC_WS_OUT/$n" 2> "$AI_DLC_WS_OUT/$n.err"
+    printf %s $? > "$AI_DLC_WS_OUT/$n.rc"
+  ' _ {} < "$OUT/list"
+
+# Rendered in SOURCE order, never completion order, so the output is byte-comparable against
+# the serial version. A MISSING VERDICT IS A FAILURE: serially a case that never ran could not
+# print an `ok`, because the loop and the report were the same thing. With a pool they are not,
+# and a case that exits nonzero having printed nothing would add zero to the count -- which is
+# what a clean case adds.
+while IFS= read -r n; do
+  [ -n "$n" ] || continue
+  if [ ! -f "$OUT/$n.rc" ]; then
+    printf '  FAIL  %s produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one\n' "$n"
+    fails=$((fails + 1))
+    continue
+  fi
+  cat "$OUT/$n"
+  [ -s "$OUT/$n.err" ] && cat "$OUT/$n.err" >&2
+  wrc="$(cat "$OUT/$n.rc")"
+  # 2 IS NOT 1. `FIXTURE BROKEN` and `an assertion regressed` are different answers, and this
+  # file's helpers have always used exit 2 for the first. Running a case in a worker would
+  # otherwise collapse them: the parent would see a nonzero rc, charge one assertion, and exit
+  # 1 — reporting a regression where the truth is that nothing was tested.
+  if [ "$wrc" = "2" ]; then broken=1; fi
+  if [ "$wrc" != "0" ]; then
+    c="$(grep -c '^  FAIL' "$OUT/$n" || true)"
+    [ "$c" -gt 0 ] || { printf '  FAIL  %s exited nonzero without an assertion line — the case did not run to a verdict\n' "$n"; c=1; }
+    fails=$((fails + c))
+  fi
+done < "$OUT/list"
+
+if [ "$broken" -ne 0 ]; then
+  echo "wait-stale-deliverable: FIXTURE BROKEN — a case could not run to a verdict" >&2
+  exit 2
+fi
 if [ "$fails" -eq 0 ]; then
   echo "wait-stale-deliverable: PASS"
   exit 0

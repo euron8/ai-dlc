@@ -170,11 +170,11 @@ for story in "${FILES[@]}"; do
     checked=$((checked+1))
 
     waived=0
-    printf '%s\n' "$body" | grep -qE '^[[:space:]]*falsifiability_waiver:[[:space:]]*[^[:space:]]' && waived=1
+    grep -qE '^[[:space:]]*falsifiability_waiver:[[:space:]]*[^[:space:]]' <<<"$body" && waived=1
 
     while IFS= read -r term; do
       [ -n "$term" ] || continue
-      if printf '%s\n' "$body" | grep -qiE "(^|[^[:alnum:]_])${term}([^[:alnum:]_]|\$)"; then
+      if grep -qiE "(^|[^[:alnum:]_])${term}([^[:alnum:]_]|\$)" <<<"$body"; then
         if [ "$waived" -eq 1 ]; then
           wtext="$(printf '%s\n' "$body" | sed -n 's/^[[:space:]]*falsifiability_waiver:[[:space:]]*//p' | head -1)"
           echo "  waiver  $story $ac_id '$term' — $wtext"

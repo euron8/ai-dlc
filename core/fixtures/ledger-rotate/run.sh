@@ -93,7 +93,7 @@ fi
 
 # --- Assertion 5: IDEMPOTENT -----------------------------------------------------------
 second="$(bash "$ROT" "$LEDGER" --apply 2>&1)"
-printf '%s' "$second" | grep -q '0 closed entries' \
+grep -q '0 closed entries' <<<"$second" \
   && ok "second run is a no-op (0 closed entries — rotation is idempotent)" \
   || bad "second run moved something: not idempotent — $second"
 
@@ -125,7 +125,7 @@ noop_guard_holds() { # <rotate-script> -> 0 iff the no-op guard fired cleanly
   out="$(bash "$rot" "$dir/push-candidate-ledger.md" --apply 2>"$dir/stderr")"
   rc=$?
   [ "$rc" -eq 0 ] || return 1
-  printf '%s' "$out" | grep -q 'nothing to rotate' || return 1
+  grep -q 'nothing to rotate' <<<"$out" || return 1
   grep -q 'integer expression expected' "$dir/stderr" && return 1
   [ -f "$dir/push-candidate-ledger.archive.md" ] && return 1
   return 0

@@ -555,7 +555,7 @@ EOF
     exit 1
   fi
 
-  if printf '%s' "$ROW" | grep -q 'PASS' && [ "$CITED" -gt "$CEILING" ]; then
+  if grep -q 'PASS' <<<"$ROW" && [ "$CITED" -gt "$CEILING" ]; then
     echo "FAIL: the last Check 14 row claims PASS while citing ${CITED} tok, past the ${CEILING} ceiling (budget ${SNAP_BUDGET} + ${GRACE_PCT}% grace)." >&2
     echo "      A row cannot cite a breaching measurement and call itself passing." >&2
     exit 1
@@ -872,7 +872,7 @@ if [ -n "$STEPS_DIR" ] && [ -z "$ONLY" ]; then
       # `sprint-<N>.md`, `story-{id}.md` and friends name a CLASS, not a file.
       case "$name" in *'<'*|*'>'*|*'{'*|*'}'*|*'*'*|*'$'*) continue ;; esac
       is_archive "$name" && continue
-      printf '%s\n' "$BUDGETS" | grep -q "^${name}|" && continue
+      grep -q "^${name}|" <<<"$BUDGETS" && continue
       pooled=0
       for w in $WHOLE_READ_SET; do [ "$w" = "$name" ] && pooled=1; done
       [ "$pooled" -eq 1 ] && continue

@@ -129,7 +129,7 @@ mutate() { # <name> <sed-expr> <payload> <label>
   fi
 }
 
-mutate term-off 's/if printf .%s\\n. "\$body" | grep -qiE "(\^|\[\^\[:alnum:\]_\])\${term}(\[\^\[:alnum:\]_\]|\\\$)"; then/if false; then/' \
+mutate term-off 's/if grep -qiE "(\^|\[\^\[:alnum:\]_\])\${term}(\[\^\[:alnum:\]_\]|\\\$)" <<<"\$body"; then/if false; then/' \
   bad-unbounded.md "MUTATION: neutering the term check turns bad-unbounded green (the term ban is what fails it)"
 
 # Neuter the EXISTENCE TEST, not the loop that drives it. Emptying the candidate

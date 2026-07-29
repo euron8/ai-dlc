@@ -41,7 +41,7 @@ expect() {
   out="$("$@" 2>&1)"; got=$?
   local ok=1
   [ "$got" -eq "$want" ] || ok=0
-  if [ -n "$needle" ] && ! printf '%s' "$out" | grep -qF "$needle"; then ok=0; fi
+  if [ -n "$needle" ] && ! grep -qF "$needle" <<<"$out"; then ok=0; fi
   if [ "$ok" -eq 1 ]; then
     printf '  ok    %-46s exit=%s\n' "$label" "$got"
   else
@@ -197,14 +197,14 @@ json.dump(s, open(sys.argv[2], "w"), indent=2)
 PY
   mut="$(mut_run)"
 
-  if ! printf '%s' "$ctl" | grep -qF "not EXIT_CONDITION_MET"; then
+  if ! grep -qF "not EXIT_CONDITION_MET" <<<"$ctl"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-46s\n' "FIXTURE BROKEN: control run does not refuse"
     printf '        out: %s\n' "$(printf '%s' "$ctl" | tr '\n' ' ' | cut -c1-160)"
-  elif printf '%s' "$mut" | grep -qF "not EXIT_CONDITION_MET"; then
+  elif grep -qF "not EXIT_CONDITION_MET" <<<"$mut"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-46s\n' "mutation: schema mutant had no effect"
-  elif ! printf '%s' "$mut" | grep -qF "stamped 1 of 1"; then
+  elif ! grep -qF "stamped 1 of 1" <<<"$mut"; then
     # Absence of the refusal is not a kill on its own — the run could have died for an unrelated
     # reason. The kill is the guard letting an UNCONVERGED pass through to a real stamp.
     FAILURES=$((FAILURES + 1))

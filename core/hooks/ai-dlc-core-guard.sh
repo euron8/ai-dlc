@@ -265,7 +265,7 @@ OLD="$(old_strings)"
 while IFS= read -r line; do
   stripped="${line//[$' \t']/}"
   [ -z "$stripped" ] && continue  # blank / whitespace-only context line
-  if ! printf '%s\n' "$EDITABLE" | grep -qxF -- "$line"; then
+  if ! grep -qxF -- "$line" <<<"$EDITABLE"; then
     route_and_deny                # a replaced line is core rulebook, outside every site
   fi
 done <<< "$OLD"

@@ -93,7 +93,7 @@ mutant_fires() {
   fi
   out="$(bash "$work/scripts/validate-enforcement-map.sh" 2>&1)"
   n="$(printf '%s\n' "$out" | grep -c '^FAIL:' || true)"
-  if ! printf '%s\n' "$out" | grep -qF "$want"; then
+  if ! grep -qF "$want" <<<"$out"; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-20s I39 did NOT fire  (%s)\n' "$label" "$why"
     printf '%s\n' "$out" | grep '^FAIL:' | sed 's/^/          | /' | head -3
@@ -158,8 +158,8 @@ if cmp -s "$BASE/$SK" "$work/$SK"; then
 else
   out="$(bash "$work/scripts/validate-enforcement-map.sh" 2>&1)"
   fwd=0; rev=0
-  printf '%s\n' "$out" | grep -qF "emits 'NAMED-UPSTREAM' but SKILL.md step 3f never documents it" && fwd=1
-  printf '%s\n' "$out" | grep -qF "documents 'NAMED-ABSORBED' but ledger-reverify.sh never emits it" && rev=1
+  grep -qF "emits 'NAMED-UPSTREAM' but SKILL.md step 3f never documents it" <<<"$out" && fwd=1
+  grep -qF "documents 'NAMED-ABSORBED' but ledger-reverify.sh never emits it" <<<"$out" && rev=1
   if [ "$fwd" -eq 1 ] && [ "$rev" -eq 1 ]; then
     printf '  ok    %-20s both directions fire and name both tokens  (the half-done rename is rejected)\n' "half-rename"
   else

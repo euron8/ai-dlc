@@ -61,7 +61,7 @@ HEADING="$(sed -n '/^## Review Document Template/,/^```$/p' "$ROLE" \
   exit 2
 }
 
-matches() { printf '%s\n' "$2" | grep -qiE "$1"; }
+matches() { grep -qiE "$1" <<<"$2"; }
 
 # --- Assertion 1: THE JOIN --------------------------------------------------
 # The whole point. The pattern the gate mandates must match the heading the template emits.

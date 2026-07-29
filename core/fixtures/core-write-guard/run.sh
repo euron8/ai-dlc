@@ -64,7 +64,7 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$CORE" "Fixed rulebook prose.")")"
 
 # --- Assertion 1b: the deny ROUTES (names overrides/ and extensions/) --------
 OUT1="$(raw "$CONSUMER" "$(mkjson Edit "$CORE" "Fixed rulebook prose.")")"
-if printf '%s' "$OUT1" | grep -q 'overrides/' && printf '%s' "$OUT1" | grep -q 'extensions/'; then
+if grep -q 'overrides/' <<<"$OUT1" && grep -q 'extensions/' <<<"$OUT1"; then
   ok "deny message routes the author to overrides/ and extensions/"
 else
   bad "deny message does not name overrides/ + extensions/ — a refusal without a route gets the hook turned off"
@@ -160,9 +160,9 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$CONSUMER_HOOK" 'consumer body')")"
 # A hook has no overrides/extensions grain; the message must say so and point at the
 # hook's AI_DLC_* tunables / upstream, not send the author to a layer that cannot hold it.
 OUTH="$(raw "$CONSUMER" "$(mkjson Edit "$HOOKF" 'touch $PAUSE_FLAG')")"
-if printf '%s' "$OUTH" | grep -q 'machinery' \
-   && printf '%s' "$OUTH" | grep -q 'AI_DLC_' \
-   && ! printf '%s' "$OUTH" | grep -q 'Route it to the layer instead'; then
+if grep -q 'machinery' <<<"$OUTH" \
+   && grep -q 'AI_DLC_' <<<"$OUTH" \
+   && ! grep -q 'Route it to the layer instead' <<<"$OUTH"; then
   ok "hook deny gives machinery/AI_DLC_ advice, not overrides/extensions routing"
 else
   bad "hook deny gave layer-routing advice — a hook cannot go in overrides/ or extensions/"
@@ -206,9 +206,9 @@ d="$(decision "$CONSUMER" "$(mkjson Edit "$OWNFIX" 'consumer fixture body')")"
 # is the assertion's input, or the reader tidies the file and vacates the test.
 if [ "$CLAIMED" = 1 ]; then
   OUTF="$(raw "$CONSUMER" "$(mkjson Edit "$COREFIX" '# TODO reword this marker')")"
-  if printf '%s' "$OUTF" | grep -q 'TEST DATA' \
-     && printf '%s' "$OUTF" | grep -q 'VACATE' \
-     && ! printf '%s' "$OUTF" | grep -q 'Route it to the layer instead'; then
+  if grep -q 'TEST DATA' <<<"$OUTF" \
+     && grep -q 'VACATE' <<<"$OUTF" \
+     && ! grep -q 'Route it to the layer instead' <<<"$OUTF"; then
     ok "fixture deny warns the content IS the assertion's input, not layer routing"
   else
     bad "fixture deny gave layer-routing or generic advice — a seed cannot go in overrides/"

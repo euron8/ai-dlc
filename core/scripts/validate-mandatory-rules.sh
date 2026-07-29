@@ -201,7 +201,7 @@ else
   fi
 
   # Always print PASS/FAIL for Check 3 regardless of housekeeping presence
-  if ! echo "$FAILURE_MSGS" | grep -q "Check3_ENVELOPE"; then
+  if ! grep -q "Check3_ENVELOPE" <<<"$FAILURE_MSGS"; then
     echo "  CHECK 3: PASS"
   else
     echo "  CHECK 3: FAIL"
@@ -291,10 +291,10 @@ else
       echo "  CHECK 5: SKIP (could not isolate Sprint ${SPRINT_N} section in gate-log.md — consumer-defined format)"
     else
       VISUAL_OK=0
-      if echo "$SPRINT_SECTION" | grep -qi 'USER-CONFIRMED'; then
+      if grep -qi 'USER-CONFIRMED' <<<"$SPRINT_SECTION"; then
         VISUAL_OK=1
       fi
-      if echo "$SPRINT_SECTION" | grep -qi 'playwright'; then
+      if grep -qi 'playwright' <<<"$SPRINT_SECTION"; then
         VISUAL_OK=1
       fi
 
@@ -344,7 +344,7 @@ if [ -d "$STORIES_DIR" ]; then
     DEV_AGENT_SECTION=$(awk '/^## Dev Agent Record/{found=1; next} found && /^## [A-Za-z]/{exit} found{print}' "$story_file" 2>/dev/null)
 
     # Check for literal substring "lead (self-executed" only in the Dev Agent Record section
-    if echo "$DEV_AGENT_SECTION" | grep -q 'lead (self-executed' 2>/dev/null; then
+    if grep -q 'lead (self-executed' 2>/dev/null <<<"$DEV_AGENT_SECTION"; then
       # Check if there's a waiver in escalations file using BOTH filename and display format
       WAIVER_FOUND=0
       if [ -f "$ESCALATIONS_FILE" ]; then
@@ -353,7 +353,7 @@ if [ -d "$STORIES_DIR" ]; then
         if grep -qE "${story_id}|${display_id}" "$ESCALATIONS_FILE" 2>/dev/null; then
           # Check if the entry containing story_id also has DECIDED_AUTONOMOUSLY or HARD_BLOCK
           STORY_CONTEXT=$(grep -E -A 5 "${story_id}|${display_id}" "$ESCALATIONS_FILE" 2>/dev/null)
-          if echo "$STORY_CONTEXT" | grep -q 'DECIDED_AUTONOMOUSLY\|HARD_BLOCK'; then
+          if grep -q 'DECIDED_AUTONOMOUSLY\|HARD_BLOCK' <<<"$STORY_CONTEXT"; then
             WAIVER_FOUND=1
           fi
         fi

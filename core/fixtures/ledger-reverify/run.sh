@@ -158,9 +158,9 @@ row_is "PC-FIXTURE-WITHDRAWN"        ABSENT          "premise was false -> finis
 # naming the truth are different strings here. With base->theirs adjacent they would not be.
 ASSERTIONS=$((ASSERTIONS + 1))
 brow="$(printf '%s\n' "$OUT" | awk -F'\t' '$2 ~ /Entry B/ {print $3; exit}')"
-if printf '%s' "$brow" | grep -q 'absorbed this at 0\.101\.0'; then
+if grep -q 'absorbed this at 0\.101\.0' <<<"$brow"; then
   printf '  ok    %-22s names 0.101.0  (the version that absorbed it, not theirs 0.102.0)\n' "absorbing-version"
-elif printf '%s' "$brow" | grep -q 'absorbed this at 0\.102\.0'; then
+elif grep -q 'absorbed this at 0\.102\.0' <<<"$brow"; then
   FAILURES=$((FAILURES + 1))
   printf '  FAIL  %-22s names theirs 0.102.0 — the tip, not the absorbing release; this string is copied into a permanent ledger annotation\n' "absorbing-version"
 else

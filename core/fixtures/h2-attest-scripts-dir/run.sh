@@ -136,7 +136,7 @@ echo ""
 # --- D. the fixture set resolves at all, in a consumer --------------------------
 DIG_OUT="$( cd "$WORK" && bash "$SUT" --digest 2>&1 )"
 DIG_RC=$?
-if [ "$DIG_RC" -eq 0 ] && printf '%s' "$DIG_OUT" | grep -qE '^[0-9a-f]{16}$'; then
+if [ "$DIG_RC" -eq 0 ] && grep -qE '^[0-9a-f]{16}$' <<<"$DIG_OUT"; then
   ok "--digest resolves tests/fixtures/ in a consumer ($DIG_OUT)"
 else
   bad "--digest failed in a consumer tree (rc=$DIG_RC)"
@@ -188,7 +188,7 @@ else
     bad "MUTATION: the pre-relocation derivation PASSED — this tree is not a faithful consumer"
     echo "        Bare scripts/ or core/scripts/ must hold no core validator, or the guess" >&2
     echo "        lands on a real one and the regression is invisible here." >&2
-  elif printf '%s\n' "$MUT_OUT" | grep -q 'cannot locate validate-provenance-block.sh'; then
+  elif grep -q 'cannot locate validate-provenance-block.sh' <<<"$MUT_OUT"; then
     ok "MUTATION: the pre-relocation derivation fails exactly as it did in the consumer"
   else
     bad "MUTATION: the derivation failed, but not on validator location (rc=$MUT_RC)"

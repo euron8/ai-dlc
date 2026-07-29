@@ -53,7 +53,7 @@ echo "mutation-red-replay:"
 # Every negative below would score a false pass against a script that is simply broken
 # and refusing everything.
 replay "$VALIDATOR" 2 "$MUTATED" "$WORK/disc.sh"
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^PROVEN:'; then
+if [ "$rc" -eq 0 ] && grep -q '^PROVEN:' <<<"$out"; then
   ok "a real mutation that kills the named test exits 0 (the negatives below mean something)"
 else
   bad "FIXTURE BROKEN — a genuine mutation kill did not report PROVEN (exit $rc). Every assertion below would be a false pass."
@@ -64,7 +64,7 @@ fi
 # The test executes the mutated line and never asserts on its value. This is the one
 # outcome that IS a finding about the test.
 replay "$VALIDATOR" 2 "$MUTATED" "$WORK/nondisc.sh"
-[ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'stayed GREEN under a real mutation' \
+[ "$rc" -eq 1 ] && grep -q 'stayed GREEN under a real mutation' <<<"$out" \
   && ok "a test that runs the mutated line without asserting on its value exits 1 (UNPROVEN)" \
   || bad "the coverage-only degenerate did not report UNPROVEN at exit 1 (exit $rc) — the one verdict that is a finding about the test"
 
@@ -77,13 +77,13 @@ replay "$VALIDATOR" 2 "value() { printf '42\n'; }" "$WORK/disc.sh"
 
 # --- Assertion 3: a line past the end of the file is UNEVALUABLE, exit 2 -----
 replay "$VALIDATOR" 99 "$MUTATED" "$WORK/disc.sh"
-[ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'cannot be mutated' \
+[ "$rc" -eq 2 ] && grep -q 'cannot be mutated' <<<"$out" \
   && ok "a line-number past the end of the file exits 2 (the rewrite had nothing to reach)" \
   || bad "a line-number past EOF exited $rc — a file the script never touched was graded"
 
 # --- Assertion 4: a baseline that is already RED is UNEVALUABLE, exit 2 ------
 replay "$VALIDATOR" 2 "$MUTATED" "$WORK/red.sh"
-[ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q 'not GREEN before the mutation' \
+[ "$rc" -eq 2 ] && grep -q 'not GREEN before the mutation' <<<"$out" \
   && ok "a named test that is RED before the mutation exits 2 (there is no GREEN -> RED transition to read)" \
   || bad "a RED baseline exited $rc — a transition was reported off a run that never started GREEN"
 

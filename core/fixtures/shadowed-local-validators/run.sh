@@ -75,7 +75,7 @@ bad() { printf '  FAIL  %s\n' "$1" >&2; fails=$((fails+1)); }
 # `scripts/ai-dlc-local/<basename>` no matter where --local-dir actually pointed or where
 # under it the fork sat, so the row named a path that need not exist. Keying this fixture on
 # the fabricated form is what let that ship: it asserted the constant, not the finding.
-has() { printf '%s\n' "$OUT" | grep -q "	local/$1	"; }
+has() { grep -q "	local/$1	" <<<"$OUT"; }
 
 echo "shadowed-local-validators:"
 
@@ -120,7 +120,7 @@ if [ "$CHG" != "CHANGED" ]; then
   bad "MUTATION matched nothing — the closed-gate in flush() was renamed"
 else
   MOUT="$(run_warn "$MUT")"
-  if printf '%s\n' "$MOUT" | grep -q "	local/validate-bar.sh	"; then
+  if grep -q "	local/validate-bar.sh	" <<<"$MOUT"; then
     ok "MUTATION — dropping the CLOSED gate flags the OPEN bar fork too (the gate is load-bearing)"
   else
     bad "MUTATION — bar still not flagged without the CLOSED gate; the closed-only assertions prove nothing"
@@ -145,9 +145,9 @@ if [ "$CHG2" != "CHANGED" ]; then
   bad "MUTATION 2 matched nothing — the home walk is no longer a bare find over LOCAL_DIR"
 else
   MOUT2="$(run_warn "$MUT2")"
-  if printf '%s\n' "$MOUT2" | grep -q "	local/lib/validate-sub.sh	"; then
+  if grep -q "	local/lib/validate-sub.sh	" <<<"$MOUT2"; then
     bad "MUTATION 2 — the subdirectory fork is STILL reported with the walk bounded to depth 1; the assertion above proves nothing about recursion"
-  elif printf '%s\n' "$MOUT2" | grep -q "	local/validate-foo.sh	"; then
+  elif grep -q "	local/validate-foo.sh	" <<<"$MOUT2"; then
     ok "MUTATION 2 — bounding the walk to the home's top level hides the subdirectory fork while the root-level one stays flagged (the recursion is load-bearing, and only it changed)"
   else
     bad "MUTATION 2 — bounding the walk silenced the ROOT-LEVEL fork too; the mutant broke more than recursion and its verdict is entangled"

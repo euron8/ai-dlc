@@ -54,7 +54,7 @@ USAGE="$(grep -m1 'usage: settings-merge.sh' "$MERGE" || true)"
 [ -n "$USAGE" ] || { echo "FIXTURE STALE: settings-merge.sh has no usage line" >&2; exit 2; }
 missing=""
 for flag in --consumer --template; do
-  printf '%s' "$USAGE" | grep -qF -- "$flag" || missing="$missing $flag"
+  grep -qF -- "$flag" <<<"$USAGE" || missing="$missing $flag"
 done
 [ -z "$missing" ] || { echo "FIXTURE STALE: usage line lost$missing" >&2; exit 2; }
 
@@ -64,7 +64,7 @@ bare=0
 while read -r ln; do
   [ -n "$ln" ] || continue
   win="$(sed -n "${ln},$((ln + 4))p" "$SKILL")"
-  printf '%s' "$win" | grep -qF -- '--consumer' && printf '%s' "$win" | grep -qF -- '--template' \
+  grep -qF -- '--consumer' <<<"$win" && grep -qF -- '--template' <<<"$win" \
     || bare=$((bare + 1))
 done <<EOF
 $(grep -n 'settings-merge\.sh' "$SKILL" | grep -v 'settings-merge\.sh`' | cut -d: -f1)
@@ -85,8 +85,8 @@ refpath=0
 while read -r ln; do
   [ -n "$ln" ] || continue
   win="$(sed -n "${ln},$((ln + 4))p" "$SKILL")"
-  printf '%s' "$win" | grep -qF -- '--template' \
-    && printf '%s' "$win" | grep -qE '<theirs>/[A-Za-z_.-]*templates?/' \
+  grep -qF -- '--template' <<<"$win" \
+    && grep -qE '<theirs>/[A-Za-z_.-]*templates?/' <<<"$win" \
     && refpath=$((refpath + 1))
 done <<EOF
 $(grep -n 'settings-merge\.sh' "$SKILL" | grep -v 'settings-merge\.sh`' | cut -d: -f1)
@@ -103,7 +103,7 @@ if [ -n "$TMPL" ]; then
   printf '{"permissions":{"allow":[]}}\n' > "$WORK/settings.json"
   out="$(bash "$MERGE" --consumer "$WORK/settings.json" --template "$TMPL" --check 2>&1)"
   rc=$?
-  if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'model_row_needed='; then
+  if [ "$rc" -eq 0 ] && grep -q 'model_row_needed=' <<<"$out"; then
     ok "the documented form runs and reports model_row_needed (--check writes nothing)"
   else
     bad "the documented --check form did not run cleanly (rc=$rc): $(printf '%s' "$out" | head -1)"

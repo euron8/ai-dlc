@@ -140,7 +140,7 @@ n=0
 while IFS="$(printf '\t')" read -r header status; do
   [ -n "${status:-}" ] || continue
   n=$((n + 1))
-  if ! printf '%s\n' "$VOCAB" | grep -qx "$status"; then
+  if ! grep -qx "$status" <<<"$VOCAB"; then
     bad=$((bad + 1))
     echo "FAIL: out-of-vocabulary status '$status'" >&2
     echo "      entry: $header" >&2

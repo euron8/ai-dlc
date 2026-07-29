@@ -153,7 +153,7 @@ if [ -z "$FR_LINES" ]; then
   exit 2
 fi
 for cap in $CAPS; do
-  if ! printf '%s\n' "$FR_LINES" | grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"; then
+  if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$FR_LINES"; then
     echo "FAIL: $cap is defined in SPEC.md but no functional requirement in $PRD cites it. A capability with no FR behind it is specified and unplanned — it reaches no epic, no story and no test. Add the citation to the FR entry, in the form research-requirements.md mandates." >&2
     rc=1
   fi
@@ -171,7 +171,7 @@ if [ "${#STORIES[@]}" -gt 0 ]; then
     fi
     for r in $refs; do
       case "$r" in CAP-*) ;; *) continue ;; esac
-      if ! printf '%s\n' "$CAPS" | grep -qx -- "$r"; then
+      if ! grep -qx -- "$r" <<<"$CAPS"; then
         echo "FAIL: $s cites '$r' and $KERNEL defines no such capability. A story pointing at an ID that does not exist is a story nobody can trace, and CAP-<n> is never renumbered — so this is a typo or a stale reference, not a renumbering." >&2
         rc=1
       fi
@@ -195,11 +195,11 @@ if [ -n "$SPINE_MD" ]; then
     echo "$PROG: DISARMED — $SPINE_MD contains no '- **Binds:**' entries, so no AD declares what it governs. Either this is not an ARCHITECTURE-SPINE.md or the AD entry shape changed; both would close this join against an empty set." >&2
     exit 2
   fi
-  if printf '%s\n' "$BINDS" | grep -qiE '\*\*Binds:\*\*[[:space:]]*all\b'; then
+  if grep -qiE '\*\*Binds:\*\*[[:space:]]*all\b' <<<"$BINDS"; then
     :   # a spine-wide AD binds every capability
   else
     for cap in $CAPS; do
-      if ! printf '%s\n' "$BINDS" | grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"; then
+      if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$BINDS"; then
         echo "FAIL: $cap is defined in SPEC.md but no architecture decision in $SPINE_MD binds it. A capability no AD governs was never designed — it reaches implementation with no invariant constraining how." >&2
         rc=1
       fi
@@ -230,7 +230,7 @@ if [ -n "$SPINE" ]; then
     echo "$PROG: DISARMED — $SPINE carries no \"total_findings\" key, so it is not a lint_spine.py envelope. Exiting 2 rather than reporting a clean spine: a file this script cannot parse is not a file with no findings." >&2
     exit 2
   fi
-  if printf '%s\n' "$sev" | grep -qx high; then
+  if grep -qx high <<<"$sev"; then
     n_high="$(grep -c '"severity"[[:space:]]*:[[:space:]]*"high"' "$SPINE")"
     echo "FAIL: lint_spine.py reported $n_high high-severity finding(s) in the architecture spine ($total total, $SPINE). It exits 0 by design and leaves the decision to its caller; this is that decision. An AD missing Binds/Prevents/Rule binds nothing, a reused or non-monotonic AD id breaks the ID stability every downstream join depends on, and an unfilled placeholder is an unratified decision." >&2
     grep -E '"(category|detail)"' "$SPINE" | sed 's/^[[:space:]]*/    /' >&2

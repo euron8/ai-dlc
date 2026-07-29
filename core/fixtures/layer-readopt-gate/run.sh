@@ -68,7 +68,7 @@ bad()  { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 echo "== A. the stale-core-text gate fires on the real shape =="
 
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --check 2>&1)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'STALE-CORE-TEXT'; then
+if [ "$rc" -eq 1 ] && grep -q 'STALE-CORE-TEXT' <<<"$out"; then
   ok "--check RED: override body carries core text theirs no longer has"
 else
   bad "--check did NOT fire on an override copying a superseded core clause (rc=$rc)"
@@ -76,7 +76,7 @@ else
 fi
 
 # The gate must name the actual superseded sentence, not merely exit 1.
-if printf '%s' "$out" | grep -q 'more CRITICALs than pass N'; then
+if grep -q 'more CRITICALs than pass N' <<<"$out"; then
   ok "--check names the superseded clause verbatim"
 else
   bad "--check fired but did not identify the stale line"
@@ -88,7 +88,7 @@ before_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$OVR" | head -1)"
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
 after_sha="$(sed -n 's/^base_sha:[[:space:]]*//p' "$OVR" | head -1)"
 
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'REFUSED'; then
+if [ "$rc" -ne 0 ] && grep -q 'REFUSED' <<<"$out"; then
   ok "--stamp readopt REFUSED while superseded text remains"
 else
   bad "--stamp readopt SUCCEEDED on a stale body -- the block can be cleared by doing nothing (rc=$rc)"
@@ -101,7 +101,7 @@ fi
 
 echo "== B2. reaffirm without a note is REFUSED =="
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp reaffirm 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'REQUIRES --note'; then
+if [ "$rc" -ne 0 ] && grep -q 'REQUIRES --note' <<<"$out"; then
   ok "--stamp reaffirm demands a recorded reason"
 else
   bad "--stamp reaffirm accepted with no note -- an unrecorded decision (rc=$rc)"
@@ -207,13 +207,13 @@ reason: |
 Body.
 EOF
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
-if printf '%s' "$out" | grep -q 'UNIQUE-BLOCK-SENTINEL'; then
+if grep -q 'UNIQUE-BLOCK-SENTINEL' <<<"$out"; then
   ok "the dossier renders a block-scalar reason's text"
 else
   bad "the dossier did NOT render the block-scalar reason — step 7's readopt decision turns on a field the operator cannot see"
   printf '%s\n' "$out" | sed -n '/WHY THIS OVERRIDE EXISTS/,+3p' | sed 's/^/        /'
 fi
-if printf '%s' "$out" | grep -q 'continuation line that must also survive'; then
+if grep -q 'continuation line that must also survive' <<<"$out"; then
   ok "the block's continuation lines render too (not just line 1)"
 else
   bad "the dossier rendered only the block's first line — a 99-line reason still reads as a one-liner"
@@ -228,7 +228,7 @@ reason: UNIQUE-INLINE-SENTINEL a single-line reason.
 Body.
 EOF
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$BL" 2>&1)"
-if printf '%s' "$out" | grep -q 'UNIQUE-INLINE-SENTINEL'; then
+if grep -q 'UNIQUE-INLINE-SENTINEL' <<<"$out"; then
   ok "an INLINE reason still renders (the block reader did not break the common path)"
 else
   bad "the inline reason stopped rendering — fixing the block form broke the single-line form"
@@ -259,7 +259,7 @@ than review removes them; another pass only finds the next wave. STOP.
 EOF
 
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --merge 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'MERGED'; then
+if [ "$rc" -eq 0 ] && grep -q 'MERGED' <<<"$out"; then
   ok "--merge applied upstream's change with no hand edit"
 else
   bad "--merge failed (rc=$rc): $out"
@@ -325,7 +325,7 @@ if [ "$rc" -eq 0 ]; then
 else
   bad "--merge still refuses a multi-anchor override (rc=$rc): $out"
 fi
-if printf '%s' "$out" | grep -q '1 merged, 2 unchanged, 0 conflicted'; then
+if grep -q '1 merged, 2 unchanged, 0 conflicted' <<<"$out"; then
   ok "only the anchor that drifted was merged (1 merged, 2 unchanged)"
 else
   bad "expected '1 merged, 2 unchanged, 0 conflicted', got: $out"
@@ -394,7 +394,7 @@ echo "== C1. a stamp cannot outrun an unresolved CONFLICT =="
 
 printf '\n<<<<<<< override (yours)\nfoo\n=======\nbar\n>>>>>>> core\n' >> "$OVR"
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$OVR" --stamp readopt 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'conflict markers'; then
+if [ "$rc" -ne 0 ] && grep -q 'conflict markers' <<<"$out"; then
   ok "--stamp readopt REFUSED while conflict markers remain"
 else
   bad "--stamp readopt shipped <<<<<<< into the rulebook the lead reads (rc=$rc)"
@@ -419,14 +419,14 @@ Body that copies nothing and can be proven safe by nobody.
 EOF
 
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$GHOST" --check 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'UNDECIDABLE'; then
+if [ "$rc" -ne 0 ] && grep -q 'UNDECIDABLE' <<<"$out"; then
   ok "--check on an unresolvable anchor: UNDECIDABLE, not 'clean'"
 else
   bad "--check reported an unresolvable anchor as clean (rc=$rc) -- a check that cannot fail"
 fi
 
 out="$(bash "$READOPT" "$DIST" "$THEIRS" "$CONS" "$GHOST" --stamp readopt 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'REFUSED'; then
+if [ "$rc" -ne 0 ] && grep -q 'REFUSED' <<<"$out"; then
   ok "--stamp readopt REFUSED on an unresolvable anchor"
 else
   bad "--stamp readopt cleared a HARD block via a vacuous test (rc=$rc)"
@@ -567,7 +567,7 @@ else
   ld_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
   st_of() { printf '%s\n' "$ld_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
 
-  if printf '%s\n' "$(st_of 'SKILL__Rule-10\.md$')" | grep -qx OVERRIDE-DELEGATES-INTO-SHADOW; then
+  if grep -qx OVERRIDE-DELEGATES-INTO-SHADOW <<<"$(st_of 'SKILL__Rule-10\.md$')"; then
     ok "an override naming a construct defined inside its own shadow is REPORTED"
   else
     bad "the delegation went undetected — every future change to that construct fails to arrive while every check reports green"
@@ -576,7 +576,7 @@ else
   # THE CONTROL, and it must be able to fail. Same shape, same file, delegating to a
   # construct defined OUTSIDE the shadowed span. Without it the assertion above passes
   # for a detector that flags every override carrying a backticked term.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-10-control\.md$')" | grep -qx OVERRIDE-DELEGATES-INTO-SHADOW; then
+  if grep -qx OVERRIDE-DELEGATES-INTO-SHADOW <<<"$(st_of 'SKILL__Rule-10-control\.md$')"; then
     bad "an override delegating OUTSIDE its shadow was reported — the detector fires on every legitimate cross-section pointer"
   else
     ok "  and delegating to a construct outside the shadow stays silent"
@@ -585,7 +585,7 @@ else
   # It answers a DIFFERENT question than the drift arm. Both rows must appear for the
   # same entry: folding this into `worst` would hide it behind an OVERRIDE-OK, which is
   # precisely how both live instances stayed invisible.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-10\.md$')" | grep -qx OVERRIDE-OK; then
+  if grep -qx OVERRIDE-OK <<<"$(st_of 'SKILL__Rule-10\.md$')"; then
     ok "  and the entry is STILL OVERRIDE-OK on drift (the two questions are independent)"
   else
     bad "  but the delegation status displaced the drift status — one entry, two questions, two rows"
@@ -595,7 +595,7 @@ else
   # When the backticked term is in the ANCHOR heading itself, naming it is
   # self-description, not delegation. Dropping the anchor-heading exclusion re-fires
   # this (1 of 13 on the reference consumer) and every other assertion here stays green.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-12-anchor\.md$')" | grep -qx OVERRIDE-DELEGATES-INTO-SHADOW; then
+  if grep -qx OVERRIDE-DELEGATES-INTO-SHADOW <<<"$(st_of 'SKILL__Rule-12-anchor\.md$')"; then
     bad "an override naming a term from the heading it OVERRIDES was reported — the anchor heading is not being excluded, and every self-describing override now fires"
   else
     ok "  and naming a term from the overridden heading itself stays silent"
@@ -615,7 +615,7 @@ else
   # on the reference consumer: a bare survival-vocabulary scan matches 5 of 13 overrides
   # with only 2 real; restricting the claim's noun to the shadowed grain takes the
   # false-positive set to zero. The three controls below are those three false positives.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-13-survives\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+  if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-13-survives\.md$')"; then
     ok "an override asserting its own shadowed span survives is REPORTED"
   else
     bad "the survival claim went undetected — the body states something false about its own effect and every check reports green"
@@ -625,7 +625,7 @@ else
   # claim splits across a newline between 'Every other part of' and 'Rule 16', where the
   # real instance splits. A line-based predicate returns zero here, which reads identically
   # to compliance. Nothing else in this file would notice the flattening being removed.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-16-wrapped\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+  if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-16-wrapped\.md$')"; then
     ok "  and a claim WRAPPING across a newline is still found (the body is flattened)"
   else
     bad "  the wrapped claim was missed — a line-based scan reports a false zero on the real shape"
@@ -633,7 +633,7 @@ else
 
   # It answers a DIFFERENT question than the drift arm, same as its sibling. Both real
   # instances were OVERRIDE-OK while making the claim.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-13-survives\.md$')" | grep -qx OVERRIDE-OK; then
+  if grep -qx OVERRIDE-OK <<<"$(st_of 'SKILL__Rule-13-survives\.md$')"; then
     ok "  and the entry is STILL OVERRIDE-OK on drift (two questions, two rows)"
   else
     bad "  but the survival status displaced the drift status — it would hide behind an OVERRIDE-OK"
@@ -643,7 +643,7 @@ else
   # set excludes `file`. An override shadowing ONE section that says the rest of the FILE
   # is unchanged is telling the truth, in the same vocabulary. Widening the predicate to
   # any survival claim re-fires this and every other assertion here stays green.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-14-file-claim\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+  if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-14-file-claim\.md$')"; then
     bad "an override correctly saying the rest of the FILE is unchanged was reported — the noun restriction is gone and every honest scoping sentence now fires"
   else
     ok "  and a true claim about the rest of the FILE stays silent"
@@ -652,7 +652,7 @@ else
   # CONTROL 2 — the measured false-positive class: survival vocabulary whose subject is a
   # DIFFERENT named unit, plus a self-reference to the override's own body. Both shapes
   # occur on the reference consumer and both must stay silent.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-15-other-unit\.md$')" | grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES; then
+  if grep -qx OVERRIDE-ASSERTS-SHADOW-SURVIVES <<<"$(st_of 'SKILL__Rule-15-other-unit\.md$')"; then
     bad "an override whose survival claim names a DIFFERENT unit was reported — this is the 3-of-5 false-positive set returning"
   else
     ok "  and survival vocabulary about another unit stays silent"
@@ -673,7 +673,7 @@ else
   # NOT a "mirror of E7". Even now that both read `shadows:` through the same shadow_parts,
   # E7 resolves against the consumer's on-disk core and this resolves against THEIRS — the
   # incoming distribution — so they answer the same question about two different trees.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-11-loose\.md$')" | grep -qx OVERRIDE-LOOSE-ANCHOR; then
+  if grep -qx OVERRIDE-LOOSE-ANCHOR <<<"$(st_of 'SKILL__Rule-11-loose\.md$')"; then
     ok "an anchor that CONTAINS its heading is REPORTED at pull time"
   else
     bad "the loose anchor went undetected — the entry shadows the whole section while the operator believes it shadowed a paragraph"
@@ -683,13 +683,13 @@ else
   # `## Rule 8 -- Validation Depth` is a consumer naming a rule by its id, and it is what
   # nearly every entry here does. If this fires, the arm has been inverted and every
   # well-formed override in the consumer reports.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-8\.md$')" | grep -qx OVERRIDE-LOOSE-ANCHOR; then
+  if grep -qx OVERRIDE-LOOSE-ANCHOR <<<"$(st_of 'SKILL__Rule-8\.md$')"; then
     bad "a FORWARD-matching id-prefix anchor was reported loose — the containment direction is inverted and every honest entry now fires"
   else
     ok "  and a FORWARD-matching id-prefix anchor stays silent"
   fi
 
-  if printf '%s\n' "$(st_of 'SKILL__Rule-11-loose\.md$')" | grep -qx OVERRIDE-OK; then
+  if grep -qx OVERRIDE-OK <<<"$(st_of 'SKILL__Rule-11-loose\.md$')"; then
     ok "  and the entry is STILL OVERRIDE-OK on drift (two questions, two rows)"
   else
     bad "  but the loose status displaced the drift status — it would hide behind an OVERRIDE-OK"
@@ -709,7 +709,7 @@ else
 
   # CONTROL — a single-claimant anchor. Without this the check could be counting every
   # anchor as its own duplicate and both assertions above would still be green.
-  if printf '%s\n' "$(st_of 'SKILL__Rule-13-survives\.md$')" | grep -qx OVERRIDE-DOUBLE-SHADOW; then
+  if grep -qx OVERRIDE-DOUBLE-SHADOW <<<"$(st_of 'SKILL__Rule-13-survives\.md$')"; then
     bad "a single-claimant anchor was reported as a double shadow — the key is collapsing entries that do not collide"
   else
     ok "  and an anchor only one entry claims stays silent"
@@ -779,7 +779,7 @@ else
   else
     m2="$(bash "$MUTD/layer-drift.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null \
           | awk -F'\t' '$1=="OVERRIDE-ASSERTS-SHADOW-SURVIVES"{print $2}')"
-    if printf '%s\n' "$m2" | grep -q 'Rule-14-file-claim'; then
+    if grep -q 'Rule-14-file-claim' <<<"$m2"; then
       ok "  mutation noun-set: widening it to \`file\` re-fires the true claim — the restriction is load-bearing"
     else
       bad "  mutation noun-set: the honest rest-of-the-FILE claim stayed silent even with \`file\` in the noun set, so the control above is vacuous"

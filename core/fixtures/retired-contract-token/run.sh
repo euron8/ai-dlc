@@ -91,7 +91,7 @@ printf 'x\n' >> "$ROOT/.chan"
 pool_report() { printf 'OVER\n' >> "$ROOT/.chan"; }
 OURS
 out="$(run_detect)"
-if printf '%s' "$out" | grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan'; then
+if grep -q 'RETIRED-CONTRACT-TOKEN.*\$ROOT/\.chan' <<<"$out"; then
   ok "a retired contract the consumer still references is caught"
 else
   bad "the severed contract was NOT caught -- detector is inert"
@@ -162,7 +162,7 @@ out="$(bash "$MUTANT" "$DIST" "$BASE_SHA" "$THEIRS_SHA" "$CONS" 2>/dev/null)"
 # that mention look like a live use, so the token reads as still-in-use, `retired`
 # comes back empty, and a real severed contract reports nothing. A detector muted
 # by the release note explaining the very change it is meant to police.
-if printf '%s' "$out" | grep -q 'RETIRED-CONTRACT-TOKEN'; then
+if grep -q 'RETIRED-CONTRACT-TOKEN' <<<"$out"; then
   bad "MUTATION: the comment strip is inert -- assertions 1-3 prove nothing"
 else
   ok "MUTATION: without the strip, THEIRS' own doc-comment masks a real severed contract"

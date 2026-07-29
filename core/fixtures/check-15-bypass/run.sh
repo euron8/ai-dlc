@@ -103,19 +103,19 @@ audit_file() {
     dec="$(printf '%s\n' "$block" | decomment)"
 
     # element 1 — a numbered carry-over item reference
-    printf '%s\n' "$block" | grep -qE "$E1_ITEM" || { echo "element1-item-ref"; return; }
+    grep -qE "$E1_ITEM" <<<"$block" || { echo "element1-item-ref"; return; }
 
     # element 2 — that item is OPEN or IN SPRINT in the backlog
     item="$(printf '%s\n' "$block" | grep -oE "$E1_ITEM" | head -1 | grep -oE '[0-9]+')"
     backlog_line="$(grep -E "^- Item ${item}[^0-9]" "$BACKLOG" || true)"
-    printf '%s\n' "$backlog_line" | grep -qE '^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)' \
+    grep -qE '^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)' <<<"$backlog_line" \
       || { echo "element2-item-open"; return; }
 
     # element 3 — a file:line reference
-    printf '%s\n' "$block" | grep -qE "$E3_FILE_LINE" || { echo "element3-file-line"; return; }
+    grep -qE "$E3_FILE_LINE" <<<"$block" || { echo "element3-file-line"; return; }
 
     # element 4 — deferral-reason length floor AND non-whitespace density
-    printf '%s\n' "$dec" | grep -qE "$E4_REASON" || { echo "element4-reason"; return; }
+    grep -qE "$E4_REASON" <<<"$dec" || { echo "element4-reason"; return; }
     reason="$(printf '%s\n' "$dec" | sed -nE 's/^deferral-reason:[[:space:]]+//p' | head -1)"
     density="$(printf '%s' "$reason" | tr -d '[:space:]' | wc -c | tr -d ' ')"
     [ "$density" -ge "$DENSITY_MIN" ] || { echo "element4-reason"; return; }

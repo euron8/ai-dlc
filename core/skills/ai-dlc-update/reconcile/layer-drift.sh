@@ -660,10 +660,10 @@ while IFS= read -r f; do
       t_ext="$(heading_text_for "$a" < "$f")"
       [ -n "$t_ext" ] || continue
 
-      if printf '%s\n' "$theirs_anchors" | grep -Fxq -- "$a"; then
+      if grep -Fxq -- "$a" <<<"$theirs_anchors"; then
         # -- same NUMBER upstream. Title decides which defect this is.
         t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$a")"
-        if printf '%s\n' "$base_anchors" | grep -Fxq -- "$a"; then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi
+        if grep -Fxq -- "$a" <<<"$base_anchors"; then tag=PRE-EXISTING; else tag=NEW-THIS-PULL; fi
 
         if same_section "$t_ext" "$t_up"; then
           if [ "$tag" = NEW-THIS-PULL ]; then
@@ -700,7 +700,7 @@ while IFS= read -r f; do
         [ -n "$b" ] || continue
         t_up="$(printf '%s' "$theirs_blob" | heading_text_for "$b")"
         same_section "$t_ext" "$t_up" || continue
-        if printf '%s\n' "$base_anchors" | grep -Fxq -- "$b"; then
+        if grep -Fxq -- "$b" <<<"$base_anchors"; then
           emit EXTENSION-RESTATES-CORE "$entry" "$hooks" \
             "PRE-EXISTING (renumbered): this entry's '$a. $t_ext' IS core's '$b. $t_up'. Upstream absorbed it under a DIFFERENT number, so a number-keyed retirement signal could never fire and the duplicate has been carried silently ever since. Retire it, or refile as an override if it hardens core."
         else

@@ -37,23 +37,23 @@ bash "$SS" close --evidence "fixture: PR merged, deploy green, smoke pass" --roo
 
 OUT="$(cd "$P" && bash "$VMR" 900 2>/dev/null)"
 
-echo "$OUT" | grep -q 'CHECK 2: SKIP' \
+grep -q 'CHECK 2: SKIP' <<<"$OUT" \
   && ok "Check 2 SKIPs when no validation-cycle-log.md (per-artifact-changelog model)" \
   || bad "Check 2 did not SKIP — the no-log gate regressed"
-echo "$OUT" | grep -q 'CHECK 4: SKIP' \
+grep -q 'CHECK 4: SKIP' <<<"$OUT" \
   && ok "Check 4 SKIPs when its consumer-provided sibling is absent (un-poison)" \
   || bad "Check 4 did not SKIP"
-echo "$OUT" | grep -q 'CHECK 5: SKIP' \
+grep -q 'CHECK 5: SKIP' <<<"$OUT" \
   && ok "Check 5 SKIPs (no audit-anchors.md — diff base unresolvable on this clean tree)" \
   || bad "Check 5 did not SKIP"
-echo "$OUT" | grep -q 'CHECK 3: PASS' \
+grep -q 'CHECK 3: PASS' <<<"$OUT" \
   && ok "Check 3 PASSes on a closed envelope (close wrote the housekeeping block)" \
   || bad "Check 3 did not PASS on a closed envelope"
 
 # MUTANT: un-close the envelope -> Check 3 must FAIL (proves it is not vacuous).
 sed 's/^status: done/status: in_progress/' "$IMPL_YAML" > "$IMPL_YAML.tmp" && mv "$IMPL_YAML.tmp" "$IMPL_YAML"
 MUT="$(cd "$P" && bash "$VMR" 900 2>/dev/null)"
-echo "$MUT" | grep -q 'CHECK 3: FAIL' \
+grep -q 'CHECK 3: FAIL' <<<"$MUT" \
   && ok "MUTANT: an un-closed envelope FAILS Check 3 (enforcement is real, not vacuous)" \
   || bad "MUTANT: Check 3 did not FAIL on an un-closed envelope"
 
