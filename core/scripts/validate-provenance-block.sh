@@ -2,6 +2,16 @@
 # validate-provenance-block.sh — the READER of SKILL_INVOCATION_PROVENANCE v1.
 #
 # Usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
+#        ./scripts/ai-dlc/validate-provenance-block.sh --strays [<path>...]
+#
+# TWO SCOPES, and the second one exists because the first cannot reach it. The default mode is
+# handed ONE artifact by a gate that already decided the artifact is in scope, and the scope rule
+# forgives historical INFORMATIONAL blocks so an ever-growing tree does not brick every sprint.
+# `--strays` is the corpus-wide floor under that carve-out: a block citing a party-mode skill in a
+# file with no pipeline-validation purpose is the relocated-forgery shape, and it is invisible to
+# every scope-bounded reader precisely because the file it moved to is never in anyone's scope.
+# The party-mode skill list, the legitimate homes, and the generated-region carve-out all come
+# from the schema's `stray_scan` block; none of them is written here.
 #
 # THE SCHEMA IS NOT IN THIS FILE. It is in schemas/provenance-block.json, which this script
 # LOADS: the envelope, the field list, the enums, the patterns, and the cross-field rules all
@@ -29,31 +39,48 @@
 
 set -u
 
-ARTIFACT_PATH="${1:-}"
+USAGE="usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]
+       ./scripts/ai-dlc/validate-provenance-block.sh --strays [<path>...]"
+
+MODE="artifact"
+ARTIFACT_PATH=""
 REQUIRE_SKILL=""
+STRAY_PATHS=()
 
-shift || true
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --require-skill)
-            REQUIRE_SKILL="$2"
-            shift 2
-            ;;
-        *)
-            echo "ERROR: unknown argument: $1" >&2
-            exit 2
-            ;;
-    esac
-done
+if [[ "${1:-}" == "--strays" ]]; then
+    MODE="strays"
+    shift
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --*) echo "ERROR: unknown argument: $1" >&2; echo "$USAGE" >&2; exit 2 ;;
+            *)   STRAY_PATHS+=("$1"); shift ;;
+        esac
+    done
+else
+    ARTIFACT_PATH="${1:-}"
+    shift || true
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --require-skill)
+                REQUIRE_SKILL="$2"
+                shift 2
+                ;;
+            *)
+                echo "ERROR: unknown argument: $1" >&2
+                exit 2
+                ;;
+        esac
+    done
 
-if [[ -z "$ARTIFACT_PATH" ]]; then
-    echo "usage: ./scripts/ai-dlc/validate-provenance-block.sh <artifact-path> [--require-skill <skill-name>]" >&2
-    exit 2
-fi
+    if [[ -z "$ARTIFACT_PATH" ]]; then
+        echo "$USAGE" >&2
+        exit 2
+    fi
 
-if [[ ! -f "$ARTIFACT_PATH" ]]; then
-    echo "ERROR: artifact not found: $ARTIFACT_PATH" >&2
-    exit 1
+    if [[ ! -f "$ARTIFACT_PATH" ]]; then
+        echo "ERROR: artifact not found: $ARTIFACT_PATH" >&2
+        exit 1
+    fi
 fi
 
 # --- AI_DLC_ROOT ------------------------------------------------------------
@@ -122,6 +149,201 @@ else
 fi
 # A nonexistent path is "no extension"; a present-but-malformed one fails closed in python.
 [ -n "$KNOWN_SKILLS_EXT" ] && [ ! -f "$KNOWN_SKILLS_EXT" ] && KNOWN_SKILLS_EXT=""
+
+# --- --strays: the corpus-wide floor ----------------------------------------
+# Candidate discovery is `grep -rlI` and not a Python walk on purpose: the reference consumer's
+# tree carries the envelope marker in 889 files and the scan runs in a pre-push hook, where a
+# per-file read in Python costs seconds the operator pays on every push. grep narrows the corpus;
+# Python decides. The marker and the exclude list both come from the schema — a scan whose corpus
+# is written here would be the second copy this whole schema design exists to remove.
+if [ "$MODE" = "strays" ]; then
+    if [ ! -d "$PB_ROOT" ]; then
+        echo "FAIL: --strays could not resolve the project root (looked from $PB_SCRIPT_DIR)." >&2
+        echo "      A corpus scan with no corpus reports PASS on everything; refusing to." >&2
+        exit 2
+    fi
+    cd "$PB_ROOT" || exit 2
+
+    STRAY_MARKER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["envelope"]["marker"])' "$SCHEMA")" || exit 2
+    [ -n "$STRAY_MARKER" ] || { echo "FAIL: schema envelope.marker is empty." >&2; exit 2; }
+
+    GREP_ARGS=()
+    while IFS= read -r _d; do
+        [ -n "$_d" ] && GREP_ARGS+=("--exclude-dir=$_d")
+    done < <(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["stray_scan"]["scan_exclude_dirs"]))' "$SCHEMA")
+
+    # No paths given = the whole tree. `.` keeps every hit repo-relative, which is what the
+    # homes are judged against; an absolute scan root would make every path miss every home.
+    [ ${#STRAY_PATHS[@]} -gt 0 ] || STRAY_PATHS=(".")
+
+    STRAY_CANDIDATES=()
+    while IFS= read -r _f; do
+        [ -n "$_f" ] && STRAY_CANDIDATES+=("$_f")
+    done < <(grep -rlI "${GREP_ARGS[@]}" -- "$STRAY_MARKER" "${STRAY_PATHS[@]}" 2>/dev/null)
+
+    # An EXPLICIT path list means the caller chose the subjects, so a home exclusion still
+    # applies but the fixture-home exclusion does not — that is how a test points the scanner at
+    # a crafted stray under a fixture directory and gets an answer instead of a shrug.
+    STRAY_DEFAULT=0
+    [ "${STRAY_PATHS[0]}" = "." ] && [ ${#STRAY_PATHS[@]} -eq 1 ] && STRAY_DEFAULT=1
+
+    python3 - "$SCHEMA" "$KNOWN_SKILLS_EXT" "$STRAY_DEFAULT" ${STRAY_CANDIDATES[@]+"${STRAY_CANDIDATES[@]}"} <<'PYSTRAY'
+import json
+import re
+import sys
+
+schema_path, ext_path, default_scan = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+candidates = sys.argv[4:]
+
+with open(schema_path, "r", encoding="utf-8") as fh:
+    S = json.load(fh)
+
+try:
+    CFG = S["stray_scan"]
+    SKILLS = [s for s in CFG["party_mode_skills"] if s]
+    HOMES = list(CFG["homes"])
+    # Built from the schema's region_slug, never restated: sync-taught-schema.sh WRITES the
+    # regions from that same key. A second spelling here would stop cutting the taught example
+    # out, and core's own rendered retro-party-mode example would report as a forgery.
+    GEN_OPEN = "BEGIN GENERATED: " + S["region_slug"] + "/"
+    GEN_CLOSE = "END GENERATED: " + S["region_slug"]
+    FIXTURE_HOMES = [h for h in HOMES if "fixtures/" in h]
+except (KeyError, TypeError) as exc:
+    print(f"FAIL: schema stray_scan block is missing or malformed ({exc}).", file=sys.stderr)
+    sys.exit(2)
+
+if not SKILLS:
+    # A scan with an empty subject vocabulary reports PASS on every tree there is.
+    print("FAIL: schema stray_scan.party_mode_skills is empty; the scan would be vacuous.", file=sys.stderr)
+    sys.exit(2)
+
+# Consumer-extension point, the SAME additive file known_skills uses and the same fail-closed
+# rule: a broken layer file must not degrade to the core-only list, because then a consumer's
+# legitimate ceremony home would read as a stray and the operator would turn the scan off.
+if ext_path:
+    try:
+        with open(ext_path, "r", encoding="utf-8") as fh:
+            ext = json.load(fh)
+    except (ValueError, OSError) as exc:
+        print(
+            f"FAIL: known_skills extension {ext_path} is present but not parseable JSON ({exc}). "
+            f"--strays reads `party_mode_homes` from it. Fix or remove it.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    extra_homes = ext.get("party_mode_homes") if isinstance(ext, dict) else None
+    if extra_homes is not None:
+        if not isinstance(extra_homes, list) or not all(
+            isinstance(h, str) and h.strip() for h in extra_homes
+        ):
+            print(
+                f"FAIL: {ext_path}: `party_mode_homes` must be a list of non-empty path patterns.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        HOMES.extend(extra_homes)
+        FIXTURE_HOMES.extend(h for h in extra_homes if "fixtures/" in h)
+
+
+def match_home(rel, pattern):
+    """Two forms only, and anything else is an error rather than a silent non-match.
+
+    A general glob engine here would accept patterns whose semantics nobody measured, and a
+    home that quietly matches nothing turns this scan into one that cannot fire."""
+    if pattern.endswith("/**"):
+        prefix = pattern[:-2]
+        return rel.startswith(prefix)
+    if "*" in pattern:
+        raise ValueError(pattern)
+    return rel == pattern
+
+
+def in_any(rel, patterns):
+    for p in patterns:
+        try:
+            if match_home(rel, p):
+                return True
+        except ValueError as bad:
+            print(
+                f"FAIL: unsupported home pattern {bad.args[0]!r}. "
+                f"Use '<dir>/**' or an exact file path.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+    return False
+
+
+strays = []
+for path in candidates:
+    rel = path[2:] if path.startswith("./") else path
+    if in_any(rel, HOMES if default_scan else [h for h in HOMES if h not in FIXTURE_HOMES]):
+        continue
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            content = fh.read()
+    except OSError as exc:
+        print(f"FAIL: cannot read {rel} ({exc}).", file=sys.stderr)
+        sys.exit(2)
+
+    # Strip every generated region before looking. Those spans ARE the schema, rendered by
+    # sync-taught-schema.sh; the retro-party-mode profile pins `skill:` to a bare party-mode
+    # literal, so without this the one taught example in core reads as a forgery. I48 binds this
+    # marker pair to the renderer's.
+    scanned, cut = [], False
+    for line in content.splitlines():
+        if GEN_OPEN in line:
+            cut = True
+        elif GEN_CLOSE in line:
+            cut = False
+        elif not cut:
+            scanned.append(line)
+
+    hit = None
+    inblk = False
+    for line in scanned:
+        if S["envelope"]["marker"] in line:
+            inblk = True
+            continue
+        if "SKILL_INVOCATION_PROVENANCE_END" in line:
+            inblk = False
+            continue
+        if not inblk:
+            continue
+        stripped = line.strip()
+        if not stripped.startswith("skill:"):
+            continue
+        # The SAME trailing-comment rule the full parser applies (schema.parser.comments),
+        # spelled the same way. A stricter reading here would miss every block copied from a
+        # taught example, which carries its teaching in inline comments — and a forger copies
+        # what they were shown. The generated-region cut above is what keeps the taught
+        # example itself from reading as the forgery.
+        value = re.sub(r"\s+#.*$", "", stripped.split(":", 1)[1]).strip()
+        if value in SKILLS:
+            hit = value
+            break
+    if hit:
+        strays.append((rel, hit))
+
+for rel, skill in strays:
+    print(
+        f"STRAY PARTY-MODE PROVENANCE: {rel} [skill:{skill}] [reason:out-of-place-party-mode]",
+        file=sys.stderr,
+    )
+
+if strays:
+    homes = ", ".join(h for h in HOMES if "fixtures/" not in h)
+    print(
+        f"--strays: FAIL ({len(strays)} out-of-place party-mode block(s)). A file with no "
+        f"pipeline-validation purpose is not a home for one; the homes are: {homes}.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+print(f"--strays: PASS (no out-of-place party-mode blocks; {len(candidates)} file(s) carried the envelope)")
+PYSTRAY
+    exit $?
+fi
+# --- end --strays -----------------------------------------------------------
 
 # shellcheck source=/dev/null
 [ -r "${PB_SCRIPT_DIR}/lib/meta-gate.sh" ] && . "${PB_SCRIPT_DIR}/lib/meta-gate.sh"

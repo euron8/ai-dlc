@@ -20,6 +20,19 @@
     "Do not hand-write a provenance example anywhere. Render it."
   ],
   "schema_id": "SKILL_INVOCATION_PROVENANCE v1",
+  "$region_slug_comment": [
+    "The generated-region name, declared once, the way audit-anchors.json declares `region_label`.",
+    "sync-taught-schema.sh WRITES `<!-- BEGIN GENERATED: <slug>/<profile> … -->` regions from it;",
+    "validate-provenance-block.sh --strays READS them, to cut the taught example out before asking",
+    "whether a party-mode block is a forgery. Those two had to agree, and a restated literal in",
+    "either would drift silently in the worst direction: the reader's carve-out stops matching, the",
+    "one legitimately-rendered example in core reads as a stray, and the operator turns off a scan",
+    "that is working correctly. Both READ this key; validate-enforcement-map.sh I48 asserts they do.",
+    "",
+    "The verdict kind sync-taught-schema.sh also renders carries its own slug; no reader of this",
+    "schema builds a region name for anything but the provenance block."
+  ],
+  "region_slug": "provenance-block",
   "envelope": {
     "$comment": "The delimiters are load-bearing. A ``` code fence is not a provenance block: nothing parses it.",
     "open": "<!-- SKILL_INVOCATION_PROVENANCE v1",
@@ -61,6 +74,68 @@
       "PIN is wrong, and only in that one position, so it is a diagnostic and not an alias."
     ],
     "bmad-validate-prd": "bmad-prd"
+  },
+  "stray_scan": {
+    "$comment": [
+      "THE CORPUS-WIDE FLOOR, read by validate-provenance-block.sh --strays. Every other reader",
+      "of this schema is handed ONE artifact path by a gate that already decided the artifact is",
+      "in scope. That is deliberate: the current-scope rule exists so an ever-growing artifact",
+      "tree does not brick every future sprint on a historical block. But the carve-out is bounded",
+      "to INFORMATIONAL blocks. A block citing a party-mode skill sitting in a file with no",
+      "pipeline-validation purpose is the relocated-forgery shape — a retro party-mode block moved",
+      "somewhere the retro's own transcript-SHA match will never look at it — and no scope-bounded",
+      "reader can see it, because the file it moved to is never in anyone's scope.",
+      "",
+      "WHAT THIS IS NOT. sync-taught-schema.sh's invariant 2 also finds provenance blocks outside",
+      "a generated region, and it is NOT this check one directory over. Its corpus is skills/ +",
+      "team-roles/ (the agent-read docs) and its grammar is fenced examples only; it asks whether a",
+      "TAUGHT example was hand-written. A block in server/, scripts/ or docs/ is outside both its",
+      "corpus and its question. The two overlap on exactly one file class — an agent-read doc",
+      "carrying a fenced party-mode example — and there the generated-region carve-out below is the",
+      "same span sync-taught-schema.sh renders, bound byte-for-byte by I48.",
+      "",
+      "`homes` is judged against the file's ACTUAL repo-relative path, so a fixture that merely",
+      "SIMULATES a home path is still scanned. Consumers extend it, never edit it: see",
+      "`party_mode_homes` in extensions/known-skills.json."
+    ],
+    "party_mode_skills": [
+      "bmad-party-mode"
+    ],
+    "scan_exclude_dirs": [
+      ".git",
+      "node_modules",
+      "worktrees"
+    ],
+    "$scan_exclude_comment": [
+      "Directories the candidate grep never descends into. These are NOT homes — nothing in them",
+      "is legitimate, they are simply not the repo: packfiles, vendored dependencies, and the",
+      "agent worktree cache, each of which can hold a full copy of the tree and turn one scan",
+      "into N. Keep this list to things that cannot author a block; a directory added here",
+      "because it currently reports a finding is an exemption wearing a performance argument."
+    ],
+    "homes": [
+      "_bmad-output/**",
+      "docs/retro/**",
+      "docs/reviews/**",
+      "docs/architecture.md",
+      "docs/architecture-history.md",
+      "tests/fixtures/**",
+      "core/fixtures/**",
+      ".claude/fixtures/**"
+    ],
+    "$homes_comment": [
+      "Each entry is a path AI/DLC itself declares, not a guess about a consumer's layout:",
+      "  _bmad-output/**          every pipeline ceremony's artifact tree (core writes it)",
+      "  docs/retro/**            the retro document's home (steps/retro.md)",
+      "  docs/reviews/**          adversarial + sprint-review output",
+      "  docs/architecture*.md    the architecture doc and its Rule 25(a) archive counterpart,",
+      "                           into which superseded sections relocate VERBATIM, block included",
+      "  tests/fixtures/**        the consumer fixture home ai-dlc-core-guard.sh's deny text names",
+      "  core/fixtures/**         the distribution's own fixture home",
+      "  .claude/fixtures/**      the same, as installed",
+      "A fixture home is a home because forged blocks ARE the test data — core/fixtures/",
+      "check-17-bypass embeds five of them on purpose to assert the forgery floor holds."
+    ]
   },
   "fields": [
     {

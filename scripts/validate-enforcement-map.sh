@@ -1542,6 +1542,47 @@ else
   fi
 fi
 
+# --- I48: the generated-region name is READ by both its writer and its reader ---
+#
+# `sync-taught-schema.sh` WRITES `<!-- BEGIN GENERATED: <slug>/<profile> … -->` regions; the
+# `--strays` scan in `validate-provenance-block.sh` CUTS those same regions out before deciding
+# whether a party-mode block is a relocated forgery. The one legitimately-rendered party-mode
+# example in the whole distribution sits inside one, so the two agreeing about the slug is what
+# separates "the taught example" from "a forgery".
+#
+# I25 and I47 bind two copies byte-identically because their subject cannot be a shared source.
+# This one can: the slug is a schema key. So the assertion is not that two strings match — it is
+# that neither side reintroduces a literal, which is the only way they could disagree again. The
+# drift's failure mode is the reason it earns a check rather than a comment: the carve-out stops
+# matching, core's own retro.md reports as a forgery, and an operator turns off a scan that is
+# working perfectly.
+rs_schema="$REPO_ROOT/core/schemas/provenance-block.json"
+rs_writer="$REPO_ROOT/core/scripts/sync-taught-schema.sh"
+rs_reader="$REPO_ROOT/core/scripts/validate-provenance-block.sh"
+if [ ! -f "$rs_schema" ] || [ ! -f "$rs_writer" ] || [ ! -f "$rs_reader" ]; then
+  err "I48 cannot find provenance-block.json, sync-taught-schema.sh and/or validate-provenance-block.sh. It binds the generated-region name across the schema that declares it and the two scripts that build it; a missing side would make the join pass by comparing nothing."
+else
+  rs_slug="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["region_slug"])' "$rs_schema" 2>/dev/null)"
+  if [ -z "$rs_slug" ]; then
+    err "I48: core/schemas/provenance-block.json declares no region_slug. Both the renderer and the stray scan build the generated-region markers from that key; with it gone each falls back to whatever it hard-codes, and the two can diverge without either failing."
+  else
+    for rs_f in "$rs_writer" "$rs_reader"; do
+      # The SUBSCRIPT, not the name. A bare `region_slug` is satisfied by the sentence in this
+      # file's own comment explaining why the key exists — measured, not hypothesised: the first
+      # mutant here reverted the renderer to a literal and passed, because the comment left
+      # behind still said the word. An arm a comment can satisfy is not an arm.
+      if ! grep -qF '["region_slug"]' "$rs_f"; then
+        err "I48: $(basename "$rs_f") no longer reads the schema's region_slug (no [\"region_slug\"] subscript). It builds a generated-region marker from a literal instead, and the renderer and the --strays carve-out can now name different regions. When they do, the one taught party-mode example in core reports as a forgery and the scan gets turned off. Read region_slug from the schema."
+      fi
+      # And the literal must not come back beside it. A file that reads the key AND hard-codes
+      # the old name is the half-done change that reads exactly like a finished one.
+      if grep -n "GENERATED: ${rs_slug}" "$rs_f" | grep -qv '^[0-9]*:[[:space:]]*#'; then
+        err "I48: $(basename "$rs_f") hard-codes the region name 'GENERATED: ${rs_slug}' outside a comment. That is the second spelling this key exists to prevent — build the marker from region_slug."
+      fi
+    done
+  fi
+fi
+
 # I5b lived here until v0.160.0: it asserted the manifest's 27 enumerated validators
 # equalled `ls core/scripts/`. The manifest now claims `scripts/ai-dlc/*`, so the
 # direction that mattered -- a validator added upstream with no manifest entry, hence
@@ -2030,7 +2071,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), and the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), and the generated-region name is read from the schema by both its writer and the stray scan (I48)."
   exit 0
 fi
 exit 1

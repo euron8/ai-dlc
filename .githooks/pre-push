@@ -41,6 +41,15 @@ step "taught schema == read schema (provenance examples derive from schemas/)" \
 step "enforcement-map integrity (I1-I11)" \
   bash scripts/validate-enforcement-map.sh
 
+# 1a. The same corpus-wide party-mode floor the consumer hook runs, over the DISTRIBUTION's own
+#     tree. It is here for a reason beyond symmetry: this tree holds the two files the check has
+#     to get right — the one rendered taught example (exempt only because the generated-region
+#     carve-out works) and the fixture that embeds five forged blocks on purpose (exempt only
+#     because a fixture directory is a declared home). A change that breaks either exemption goes
+#     red here, on the machine that made it, instead of on a consumer's next push.
+step "stray party-mode provenance (distribution tree)" \
+  bash core/scripts/validate-provenance-block.sh --strays
+
 # 1b. A core/ pointer at a dev-repo docs/ spec that install never ships is dead in every
 #     consumer tree — resolves for a maintainer, 404s for a consumer. Derived, no hand-list.
 step "no dead doc refs (core/ cites no unshipped dev-repo doc)" \

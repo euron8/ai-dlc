@@ -68,6 +68,19 @@ if [ -f scripts/ai-dlc/sync-taught-schema.sh ]; then
     bash scripts/ai-dlc/sync-taught-schema.sh --check
 fi
 
+# 3a. The corpus-wide floor under the current-scope carve-out. Every gate-time reader of a
+#     provenance block is handed ONE artifact it was already told is in scope, and the scope rule
+#     deliberately forgives historical informational blocks so an ever-growing artifact tree does
+#     not brick every future sprint. A party-mode block RELOCATED into a file with no
+#     pipeline-validation purpose — the shape that evades the retro's transcript-SHA match — is
+#     therefore invisible to all of them, not by oversight but by construction: the file it moved
+#     to is never in anyone's scope. This is the only reader whose subject is the tree.
+#     Decidable from disk, which is why it belongs here and not at a gate.
+if [ -f scripts/ai-dlc/validate-provenance-block.sh ]; then
+  step "stray party-mode provenance (no forged block outside a ceremony home)" \
+    bash scripts/ai-dlc/validate-provenance-block.sh --strays
+fi
+
 # 3b. Rule 27 makes `extensions/` and `overrides/` the ONLY rule files a consumer may
 #     author — and they are inside the rule-file audit's corpus. Nothing else in this
 #     hook reads them for style: validate-layer-entries.sh checks frontmatter validity,
