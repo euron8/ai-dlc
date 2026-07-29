@@ -1032,10 +1032,16 @@ canonical schema (`.claude/schemas/audit-anchors.json`). A non-zero exit FAILS
 this check CLOSED (a malformed entry is a schema regression, not a clean file).
 `--entries` deliberately does NOT require the rendered header — a consumer whose
 file predates this schema is not wedged here; its next retro (Step 5b) re-seeds
-and full-validates the header. Then resolve `<prior_sprint_sha>` from the most
-recent prior sprint entry (current sprint number minus one). If absent, gate
-FAILS CLOSED with explicit message — silent skip on missing audit-anchor is
-forbidden.
+and full-validates the header. Then resolve the audit base with
+`scripts/ai-dlc/validate-audit-anchors.sh --prior-sprint-sha
+_bmad-output/audit-anchors.md <current-sprint-number>` — it does the minus-one,
+finds that entry, resolves its `sha` to a commit and prints it on stdout as
+`<prior_sprint_sha>`. Do not read the file and decide this by eye: every term is
+decidable and the exit code IS the verdict. Non-zero FAILS this check CLOSED, on
+stderr naming which cause fired (no entries, no entry for the prior sprint, a
+`sha` still on its PENDING placeholder, or one resolving to no commit here);
+silent skip on a missing audit-anchor is forbidden. Exit 2 is a malformed
+invocation, NOT a missing anchor — fix the argument and re-run.
 
 For each per-class test category audit applicable to the current
 sprint (categories defined by the project), run

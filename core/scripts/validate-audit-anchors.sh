@@ -18,6 +18,8 @@
 #   validate-audit-anchors.sh --entries <file>    # validate ONLY the entries (skip the header)
 #   validate-audit-anchors.sh <file>              # validate entries AND the header region
 #   validate-audit-anchors.sh --trunk-push        # pre-push: bound the Step 5b backfill commit
+#   validate-audit-anchors.sh --prior-sprint-sha <file> <current-sprint-n>
+#                                                 # print the sprint N-1 anchor, resolved to a commit
 #
 # `--trunk-push` reads git's pre-push protocol on stdin and is the ONLY reader of the commit
 # `retro.md` Step 5b licenses. Step 5b cannot route that commit through a PR — the retro-PR merge
@@ -37,9 +39,29 @@
 # schema is not wedged before its next retro re-seeds the header. `<file>` (full) is the
 # PRODUCER-side check (retro Step 5c), run right after the header is re-seeded.
 #
+# `--prior-sprint-sha` is the OTHER half of Check 18, and it is here because the check published a
+# mechanical predicate and shipped no program for it: "resolve <prior_sprint_sha> from the most
+# recent prior sprint entry (current sprint number minus one); if absent the gate FAILS CLOSED."
+# Every term in that sentence is decidable — subtract one, find that entry, resolve its `sha` — and
+# it was nonetheless performed by an agent reading a paragraph at every sprint-review gate. The
+# resolution had in fact already been PROGRAMMED, as a second entry grammar inline in
+# validate-mandatory-rules.sh's Check 5 (an awk that keyed on `$1=="-" && $2=="sprint:"`), which is
+# a copy that could never reach a gate. This mode is the single home; that caller now calls it.
+#
+# It takes the CURRENT sprint number and does the minus-one itself: the subtraction is part of the
+# predicate the check states, so leaving it to the caller leaves one term to infer. It prints the
+# resolved commit on stdout and its reasoning on stderr, so a caller can capture the SHA cleanly.
+#
+# POSTURE IS THE CALLER'S. This mode reports a cause and exits non-zero; it does not decide whether
+# that is fatal. Check 18 FAILS CLOSED on it (a sprint-review gate with no audit window has nothing
+# to audit). validate-mandatory-rules.sh Check 5 SKIPS loudly on the same non-zero, for the reason
+# recorded there: an undeterminable change set is "cannot check", not "no evidence". One resolver,
+# two documented postures, and neither is silent.
+#
 # Exit codes:
 #   0  — the requested checks pass
-#   1  — header drifted/missing, an entry is malformed, or the schema is unreadable (fail-closed)
+#   1  — header drifted/missing, an entry is malformed, or the schema is unreadable (fail-closed);
+#         for --prior-sprint-sha, the prior-sprint anchor did not resolve (cause named on stderr)
 #   2  — usage error
 #
 # Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — hence JSON, and a line parser for
@@ -94,19 +116,30 @@ else
   exit 1
 fi
 
-MODE="validate"; FILE=""
+USAGE="usage: validate-audit-anchors.sh --render | --check <file> | --entries <file> | --trunk-push | --prior-sprint-sha <file> <current-sprint-n> | <file>"
+MODE="validate"; FILE=""; SPRINT=""
 case "${1:-}" in
   --render)     MODE="render" ;;
   --check)      MODE="check";   FILE="${2:-}" ;;
   --entries)    MODE="entries"; FILE="${2:-}" ;;
   --trunk-push) MODE="trunk-push" ;;
-  "" )       echo "usage: validate-audit-anchors.sh --render | --check <file> | --entries <file> | --trunk-push | <file>" >&2; exit 2 ;;
+  --prior-sprint-sha) MODE="prior-sprint-sha"; FILE="${2:-}"; SPRINT="${3:-}" ;;
+  "" )       echo "$USAGE" >&2; exit 2 ;;
   --*)       echo "validate-audit-anchors: unknown option '$1'" >&2; exit 2 ;;
   *)         MODE="validate"; FILE="$1" ;;
 esac
+# The sprint number is validated HERE, as a usage error, so a caller that fumbled the argument gets
+# exit 2 and never gets exit 1 — which Check 18 reads as "the anchor is missing" and fails the gate
+# on. A wrong argument and an absent anchor are different findings and must not share an exit code.
+if [ "$MODE" = "prior-sprint-sha" ]; then
+  case "$SPRINT" in
+    ''|*[!0-9]*) echo "validate-audit-anchors: --prior-sprint-sha needs <current-sprint-n> as a positive integer (got: '${SPRINT}')" >&2; exit 2 ;;
+  esac
+  [ "$SPRINT" -ge 1 ] 2>/dev/null || { echo "validate-audit-anchors: --prior-sprint-sha needs <current-sprint-n> >= 1 (got: '${SPRINT}')" >&2; exit 2; }
+fi
 case "$MODE" in render|trunk-push) ;; *)
   if [ -z "$FILE" ]; then
-    echo "usage: validate-audit-anchors.sh --render | --check <file> | <file>" >&2; exit 2
+    echo "$USAGE" >&2; exit 2
   fi
   if [ ! -r "$FILE" ]; then
     echo "validate-audit-anchors: FAIL — cannot read '$FILE'" >&2; exit 1
@@ -123,7 +156,7 @@ command -v python3 >/dev/null 2>&1 || { echo "validate-audit-anchors: FAIL — p
 REFS=""
 [ "$MODE" = "trunk-push" ] && REFS="$(cat)"
 
-MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" TRUNK="${AI_DLC_TRUNK:-main}" REFS="$REFS" python3 - <<'PY'
+MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" TRUNK="${AI_DLC_TRUNK:-main}" REFS="$REFS" SPRINT="$SPRINT" python3 - <<'PY'
 import json, os, re, subprocess, sys
 
 mode   = os.environ["MODE"]
@@ -307,6 +340,60 @@ for raw in body.splitlines():
 if cur is not None:
     entries.append(cur)
 
+# --- prior-sprint-sha: resolve the anchor Check 18 opens its audit window on ------------------
+# Reuses the entry parser above rather than adding a grammar. The one it replaces was an awk in
+# validate-mandatory-rules.sh keyed on `$1=="-" && $2=="sprint:"`; that spelling could not see a
+# fenced list, could not skip the GENERATED header, and was the second reader of one artifact.
+#
+# EVERY OUTCOME NAMES ITSELF AND ITS COUNTS. The four failure causes are distinct sentences, and a
+# resolution says how many entries it scanned and how many matched — a resolver that found its
+# answer in an empty file would otherwise report exactly what a real resolution reports.
+if mode == "prior-sprint-sha":
+    current = int(os.environ["SPRINT"])
+    prior   = current - 1
+
+    def fail(msg):
+        sys.stderr.write(f"validate-audit-anchors: FAIL — --prior-sprint-sha ({file_path}, "
+                         f"sprint {current} -> prior {prior}): {msg}\n")
+        sys.exit(1)
+
+    scanned = len(entries)
+    if scanned == 0:
+        fail(f"no entries at all in the file — nothing to resolve. Step 5b of the prior sprint's "
+             f"retro appends the entry this gate opens its audit window on.")
+    matches = [e for e in entries if e.get("sprint", "") == str(prior)]
+    if not matches:
+        seen = ", ".join(e.get("sprint", "?") for e in entries[-6:])
+        fail(f"no entry for sprint {prior} among the {scanned} scanned "
+             f"(last sprints seen: {seen}). Silent skip on a missing audit-anchor is forbidden.")
+    if len(matches) > 1:
+        sys.stderr.write(f"validate-audit-anchors: NOTE — {len(matches)} entries declare "
+                         f"sprint {prior}; taking the last one appended.\n")
+    raw = matches[-1].get("sha", "")
+    if not raw:
+        fail(f"the sprint {prior} entry has no 'sha'.")
+    # PENDING is called out on its own because it is a different situation with a different
+    # remedy: the prior retro's PR has not merged, so the SHA is not knowable yet. Decided by the
+    # value, not by git, so the message is right even where the repo could not answer either way.
+    if "PENDING" in raw.upper():
+        fail(f"the sprint {prior} entry's sha is still the placeholder '{raw}'. The prior retro's "
+             f"PR has not been merged and backfilled (retro.md Step 5b).")
+    try:
+        r = subprocess.run(["git", "rev-parse", "--verify", "-q", f"{raw}^{{commit}}"],
+                           capture_output=True, text=True)
+        resolved = r.stdout.strip()
+        rc = r.returncode
+    except OSError as e:
+        fail(f"git is not runnable here ({e}), so '{raw}' could not be resolved. "
+             f"This mode answers a question about a repository and will not guess without one.")
+    if rc != 0 or not resolved:
+        fail(f"the sprint {prior} entry's sha '{raw}' does not resolve to a commit in the "
+             f"repository this ran in ({os.getcwd()}).")
+    sys.stderr.write(f"validate-audit-anchors: --prior-sprint-sha OK — scanned {scanned} entr"
+                     f"{'y' if scanned == 1 else 'ies'}, sprint {prior} -> {resolved}\n")
+    print(resolved)
+    sys.exit(0)
+
 errors = []
 if not entries:
     errors.append("no entries found below the header (expected at least the bootstrap entry)")
@@ -329,5 +416,9 @@ if errors:
         sys.stderr.write(f"  - {msg}\n")
     sys.exit(1)
 
+# Say what was validated. A pass that names no count is indistinguishable from a pass that
+# compared nothing, and the empty-entry case above is the only thing standing between the two.
+print(f"validate-audit-anchors: {mode} PASS — {len(entries)} "
+      f"entr{'y' if len(entries) == 1 else 'ies'} validated in {file_path}")
 sys.exit(0)
 PY

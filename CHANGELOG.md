@@ -17,6 +17,80 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.210.0] — 2026-07-29
+
+### Changed — Check 18 told the lead to subtract one and read a file, and the subtraction was already programmed in a copy no gate could reach
+
+Check 18 (per-class test-debt audit) opens its audit window on the prior sprint's retro-PR merge
+SHA, and it published how to find it as a fully decidable sentence: *"resolve `<prior_sprint_sha>`
+from the most recent prior sprint entry (current sprint number minus one). If absent, gate FAILS
+CLOSED with explicit message — silent skip on missing audit-anchor is forbidden."* Subtract one,
+find that entry, resolve its `sha`. Its `enforcement-map.yaml` row carried `enforcer: []`, so an
+agent performed all three by reading a paragraph at every sprint-review gate — and the check's
+first half, `validate-audit-anchors.sh --entries`, was an imperative with an exit-code posture that
+the same empty row left unbound.
+
+The resolution had already been programmed. `validate-mandatory-rules.sh`'s Check 5 resolves the
+same anchor to get its diff base, with its own inline awk keyed on `$1=="-" && $2=="sprint:"` — a
+second entry grammar over an artifact whose reader is `validate-audit-anchors.sh`, in a copy that
+can only ever run at retro time and never at the gate that states the predicate. That awk could not
+see a fenced list and did not skip the GENERATED header; the file's real reader handles both. This
+is the shape v0.209.0 found one release ago and it is worth stating as the expectation: where a
+check's predicate is fully mechanical, someone has usually already coded it somewhere that cannot
+run at a gate.
+
+`scripts/ai-dlc/validate-audit-anchors.sh --prior-sprint-sha <file> <current-sprint-n>` is now that
+resolution's single home. It takes the CURRENT sprint number and does the minus-one itself — the
+subtraction is a term of the predicate, so leaving it to the caller leaves one term to infer. It
+prints the resolved commit on stdout and its reasoning on stderr, so a caller captures the SHA
+cleanly, and it reports what it scanned: a resolution that found its answer in an empty file would
+otherwise print exactly what a real one prints.
+
+**The four failure causes are four sentences, not one.** No entries at all; no entry for the prior
+sprint; a `sha` still on its PENDING placeholder (the prior retro has not merged — a different
+situation with a different remedy, decided on the value so the message is right even where git
+could not answer); a value resolving to no commit here. All four exit 1 and would all match a grep
+for `FAIL`, which is why each is asserted on its own wording rather than on the shared token.
+
+**Posture belongs to the caller, and both are documented.** Check 18 FAILS CLOSED on a non-zero: a
+sprint-review gate with no audit window has nothing to audit. `validate-mandatory-rules.sh` Check 5
+SKIPS loudly on the same non-zero, for the reason recorded there since it shipped — an
+undeterminable change set is "cannot check", not "no evidence". One resolver, two postures, neither
+silent. A fumbled argument exits **2**, never 1: a caller that reads exit 1 as "the anchor is
+missing" would fail a clean gate on a typo, and the `usagesplit` mutant is that separation's proof.
+
+`--entries` and full `validate` now report their entry count for the same reason `--prior-sprint-sha`
+does.
+
+**Fixture.** `core/fixtures/check5-anchor-base/` is the anchor's one home and now covers both its
+callers: 12 assertions where there were 3. The three original Check 5 arms are unchanged and now
+run *through* the resolver, which is what makes the two callers one behaviour instead of two; a
+fourth asserts the delegation is real by removing the resolver and requiring Check 5 to SKIP naming
+it, because a "delegation" that quietly kept a local awk would have passed the first three
+untouched. Five mutants against a `cmp -s`-guarded copy, each scored by a five-arm battery so that
+each moves **exactly one** arm, plus an unmutated control copied into the mutant directory first.
+Each arm gets its own scenario file: reusing one made the off-by-one mutant fail three arms at
+once, which is entanglement, and two of those three assertions were vacuous. Verified on a tree
+built by running `scripts/install.sh` into an empty directory, in both layouts.
+
+**The adjudication stays `project`.** This binds the audit WINDOW; the per-class verdicts still
+come from consumer-supplied audit scripts core cannot see. Per the Check 2 / Check 5 precedent, a
+mechanical enforcer does not imply a tier change, and `adjudication` is the gate-adjudicator
+escalation predicate — flipping it would change routing for a reason a mechanization release does
+not have.
+
+**Measured and NOT shipped.** `validate-mandatory-rules.sh` invoking `validate-audit-anchors.sh
+--prior-sprint-sha` is the third instance of a shape two hand-written invariants each cover once
+(**I49** for `core-paths.sh`, **I53** for `validate-escalation-resolution.sh`): a mode one core
+script asks another for, which must be dispatched and documented there. The generalisation was
+derived over all of `core/scripts/` — **31 (script, mode) pairs cited across 15 targets** — and its
+false-positive set is **not empty**: 8 misses, most of them the detector's own grammar (`--exclude`
+harvested from a `git` pathspec and from a grep flag, `--mode` from prose, and dispatch forms that
+are not `case` arms). An unmeasured lint is one the operator turns off, so it is recorded as open
+rather than half-shipped. The specific harm I53 names is in any case structurally absent here: a
+renamed mode yields exit 2, which both call sites now treat explicitly as a malformed invocation
+rather than as a missing anchor.
+
 ## [0.209.0] — 2026-07-29
 
 ### Changed — Check 16 published four regexes and shipped no program, and the program already existed inside its own fixture
