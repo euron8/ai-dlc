@@ -17,6 +17,113 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.205.0] — 2026-07-29
+
+### Changed — the distribution's own gate spent 42% of its wall clock in one fixture, re-forking a grep per item over corpora it could read once
+
+The pre-push suite is what the operator waits in, several times per release. **Profiled
+per unit rather than in aggregate, because the recorded lesson from the last round of this
+work is that one fixture set the floor and an average could not see it. It still does.**
+
+Measured on an idle 18-core machine, every fixture timed individually and serially:
+
+| | |
+|---|---|
+| Fixtures driven | **83** (was 82; this release adds one) |
+| Serial cost of the whole suite | **464.8s** |
+| `core/fixtures/enforcement-map-sites/` alone | **194.3s — 42% of it** |
+| 8-way suite, before | **208s** |
+| 8-way suite, after | **124s (−40%)** |
+
+The handoff this work is driven from quoted that fixture at "roughly 81s of a ~94s suite".
+Both numbers were stale by more than 2x — v0.197.0, v0.199.0, v0.201.0 and v0.202.0 each
+added assertions to it, and the validator it drives grew to 52 invariants over the same
+period. **Neither figure was re-derived before being quoted, and the suite had meanwhile
+become floor-bound on the one unit the note described as already fixed.**
+
+The cause is not the fixture. `enforcement-map-sites` invokes
+`scripts/validate-enforcement-map.sh` **42 times** against 25 mutated trees, and that
+validator took **5.05s** per run — 1.7s of user time against 2.7s of system time, which is
+a profile of process creation, not of work. Six of its invariants evaluated their predicate
+by forking `grep`, `awk`, `sed`, `jq` or `basename` **once per item**:
+
+| Invariant | Old shape | Forks on today's tree |
+|---|---|---|
+| I21 reconcile helpers single-homed | two greps per (script, helper) pair | ~600 |
+| I9 every enforcer declares its call sites | re-awk the whole map once per check id, then per site | ~90 |
+| I23 shipped rule prose is in the audit corpus | two greps into `install.sh` per file | ~300 |
+| I3 GATE_MANIFEST vs map gate_types | two awks per row, one grep per id | ~85 |
+| I22 every role resolves to a model | one `jq` per role, twice over | ~28 |
+| I10 fixture hermeticity | two greps per fixture | ~166 |
+| fixture root-resolution depth | a grep+sed pair per seed | ~166 |
+
+Each now reads its corpus **once** and evaluates the same predicate in the shell or in a
+single `awk` pass. **The predicates, the subject sets and the traversal order are
+transcribed unchanged** — the loops still walk the same globs in the same order, so the
+findings and the sequence they print in are the same. Validator: **5.05s -> 2.47s**.
+Fixture: **194.3s -> 107s**.
+
+**Nothing here narrows a scan, samples, caches across runs, or skips on unchanged input.**
+That was the constraint on this work and it is the one that decides it: speed taken out of
+coverage is the check-that-cannot-fire defect with a stopwatch attached. The one memo added
+is keyed on both halves of its question (I9 remembers a `(site file, enforcer)` verdict it
+has already computed **within a single run**) and so cannot answer for a pair it was not
+asked about.
+
+### Added — `core/fixtures/enforcement-map-derivations/`, because six of the seven rewritten invariants had no assertion anywhere in the tree
+
+Byte-identical output on a passing tree proves the edit did not break a green run. It
+proves nothing about whether a check still FIRES, and that is the whole question here: a
+rewrite that quietly emptied any one of these subject sets would print the same green line.
+
+`enforcement-map-sites` asserts I8, I12, I15-I17, I21, I26, I31-I33, I40, I45, I47,
+I49-I53. **Of the seven units this release rewrote, exactly one — I21 — was covered by it.**
+The other six were live, correct, and guarded by nothing.
+
+Evidence gathered before the change, in three parts:
+
+1. **A differential against the pre-change copy** across all 26 of `enforcement-map-sites`'
+   assertions — the edited validator and the baseline run over the same mutated tree at
+   every one, with paths normalised. **Zero divergence** in output or exit status. The
+   harness was proven able to report one first: a deliberate one-line change to I21 made it
+   name the difference and turned the fixture red.
+2. **A seven-case mutation battery** — one mutation per rewritten unit, each requiring the
+   baseline to fire, the edited copy to fire, and the two outputs to be byte-identical,
+   with an unmutated control tree that must come back clean from both. Two of its own
+   assertions were vacuous when first written and were caught rather than shipped: `RC` was
+   assigned inside a command substitution, so the exit-status comparison had been reading a
+   variable the subshell could never write back, and one mutation dropped a corpus entry
+   that was outside the set the invariant examines.
+3. **A knock-out control** — each of the seven `err` calls disabled in turn. **Every one
+   turned exactly one assertion red, and it was its own.** Two failures would have meant
+   the assertions were entangled and one of them vacuous.
+
+(2) does not survive the merge — it compares against a copy of the file as it was. So it
+ships in the shape that does: mutate the tree, require the message. The new fixture carries
+the eight cases, each mutating a fresh copy of the seed, each asserting a **positive**
+outcome rather than the absence of an old failure, each guarded by `cmp -s` so a mutation
+that matched nothing cannot pass as one, plus assertion 0's unmutated control.
+
+It is a **second** fixture rather than eight more assertions on the existing one, for two
+reasons. It runs concurrently in the 8-way pool, so it adds **21s of work and no wall
+clock** where folding it in would have added 21s directly to the suite's floor. And it is
+`.dist-only`, like the fixture it sits beside — its subject is not shipped to consumers —
+which is why it needs no row in `install.sh`, `uninstall.sh`, `core-manifest.md` or
+`setup-sites.md`.
+
+Its I10 case assembles the hook path from two fragments at runtime. Spelling it in one
+piece would make I10 — whose subject set is `core/fixtures/*/run.sh`, this file included —
+fire on the fixture that tests it, on every push. That is the trap v0.194.0 recorded after
+paying for it twice.
+
+### Note — the two numbers this release did NOT act on
+
+`wait-stale-deliverable` (**51.9s**) and `layer-contract-conformance` (**45.6s**) are the
+next two poles and both are untouched here. They are real, they are measured, and neither
+has been diagnosed — a fixture that is slow because it *waits* is a different problem from
+one that is slow because it forks, and the fidelity constraint bites differently on each.
+They are recorded so the next release starts from a measurement rather than a guess.
+
 ## [0.204.0] — 2026-07-29
 
 ### Fixed — the operator's escape hatch from the core-edit backstop was a string search, and a sentence saying no citation exists satisfied it
