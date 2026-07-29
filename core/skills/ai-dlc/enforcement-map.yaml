@@ -242,7 +242,25 @@ checks:
     title: Stub audit (hot-path files) content verification
     gate_types: [universal]
     adjudication: llm
-    enforcer: []
+    enforcer:
+      - core/scripts/validate-stub-audit.sh
+    call_sites:
+      - site: gate-validation.md Check 16
+        posture: FAILS the gate on exit 1 and on exit 2; exit 4 is the non-vacuity
+          sub-clause
+        why: every element of this check was published as a literal regex -- a marker
+          grep, an item-reference regex, a backlog-status regex, a digit-only file:line
+          regex, and a length floor beside a density rule given as an exact shell
+          pipeline -- and the row carried no enforcer, so an agent performed that
+          entirely mechanical comparison by reading a paragraph at every universal
+          gate whose changed set touched a hot-path file. The elements had in fact
+          already been programmed, inside the fixture's own driver as a restatement of
+          them; its header said what that was worth ("It proves the FIXTURE's claim,
+          not the ADJUDICATOR's behaviour"). The script is now their single home and
+          the fixture drives it. The adjudication stays llm: the script decides the
+          elements and reports the COUNT, while whether an empty subject set is
+          legitimate at this gate depends on the changed_files derivation, which the
+          script cannot see.
     reads:
       - core/scripts/core-paths.sh        # --is-core: drops upstream-owned paths from scope
       - core/skills/ai-dlc/core-manifest.md

@@ -875,15 +875,40 @@ hot-path file. Hot-path extensions: `.py`, `.ts`, `.tsx`, `.js`,
 `.sh`, `.sql`. Hot-path paths: `.github/workflows/**.yml` (directly
 invoked by GitHub Actions).
 
-**Upstream-owned files are OUT of scope.** Drop from `changed_files`
-every path for which `scripts/ai-dlc/core-paths.sh --is-core <path>`
-exits 0 (exit 1 = consumer-owned, stays in scope; **exit 2 = could not
-determine, which is NOT an exemption** — the path stays in scope and
-the gate log records that the resolver could not answer). Exempt paths
-are excluded from the marker grep entirely, so they can neither pass nor
-fail this check; the gate log names each one it dropped.
+**Check.** Run `scripts/ai-dlc/validate-stub-audit.sh` over the gate's
+`changed_files` set — as arguments, or `--changed-from <sprint-base>`.
+Do NOT re-derive the elements by hand: read its exit code and its counts.
 
-The four elements below are unsatisfiable on a core file, in both
+- `0` — audited ≥1 in-scope file, no finding. **PASS.**
+- `1` — **FAIL.** Each finding names the offending `file:line` and the
+  element that rejected it.
+- `2` — it could not decide: no resolver beside it, or a stub match needed
+  the backlog and no backlog file exists. **FAILS the gate CLOSED.**
+- `4` — **it audited NOTHING.** No path given was an in-scope hot-path
+  file. Not a pass: either this check should not have loaded at this gate,
+  or the `changed_files` set is wrong. Say which in the gate log.
+
+The script requires FOUR elements in each stub match's comment block
+(preceding 5 lines + the matched line): an `Item N` carry-over reference;
+that item OPEN or IN SPRINT in
+`_bmad-output/planning-artifacts/carry-over-backlog.md`; a `file:line`
+reference with DIGITS after the colon; and a `deferral-reason:` clearing
+both a length floor and a non-whitespace-density floor. **The regexes are
+the script's, not this paragraph's** — it is their one home, and
+`tests/fixtures/check-15-bypass` drives it rather than restating it.
+
+**Record the command, its exit code and its counts line in the gate-log
+entry**, along with every path the run reported as dropped or as
+resolver-undetermined. A verdict without the counts cannot be told apart
+from one that audited nothing.
+
+**Upstream-owned files are OUT of scope**, and the script drops them
+BEFORE the elements run: `scripts/ai-dlc/core-paths.sh --is-core <path>`
+exit 0 = dropped, exit 1 = consumer-owned and audited, **exit 2 = could
+not determine, which is NOT an exemption** — the path stays in scope and
+the run reports that the resolver could not answer.
+
+The four elements are unsatisfiable on a core file, in both
 directions: element 1 demands an `Item N` resolvable in the CONSUMER's
 `carry-over-backlog.md`, and `ai-dlc-core-guard.sh` DENIES the in-place
 edit that would add one — there is no `overrides/` shadow and no
@@ -902,35 +927,8 @@ the edit-time guard reads; `validate-enforcement-map.sh` I25 asserts the
 two derivations are byte-identical, so a file the guard protects cannot
 be audited here as consumer-authored.
 
-**Check.** Grep changed hot-path files for stub markers (regex
-`(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)`).
-For each match, verify FOUR elements in the match's surrounding
-comment block (preceding 5 lines + the matched line):
-
-1. **Numbered carry-over item reference.** Regex `Item [0-9]+`
-   matches somewhere in the comment block.
-2. **OPEN or IN-SPRINT status.** Lookup the referenced item number
-   in `_bmad-output/planning-artifacts/carry-over-backlog.md`;
-   matching line must match regex
-   `^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)`. CLOSED or absent
-   items fail this element.
-3. **`file:line` reference.** Regex `(^|\s)\S+:[0-9]+(\s|$)` —
-   path token + colon + 1+ digits. Digit-only; rejects `file:FIXME`.
-4. **Deferral-reason line with min-content + density.** Strip each
-   line's leading comment prefix (`#`/`//`/`--`, plus optional
-   space) before matching: the block under inspection is source
-   comments, so an unstripped `^` anchor matches nothing. Primary
-   regex: `^deferral-reason:\s+\S.{19,}` (at least one non-
-   whitespace char after `deferral-reason:\s+`, then 19+ more chars
-   of any kind). Secondary density check: the reason body
-   (everything after `deferral-reason:\s+`) must contain ≥10
-   non-whitespace characters, computed via
-   `<reason> | tr -d '[:space:]' | wc -c`. Defeats `X` + padding
-   bypass.
-
-**PASS:** every stub match satisfies all four elements. **FAIL:**
-any stub match missing any element. FAIL output names the
-offending `file:line` and the specific missing element(s).
+**PASS:** exit 0. **FAIL:** exit 1, exit 2, or an exit 4 the gate log
+does not account for.
 
 ### 17. Skill-invocation provenance (retro gate + sub-skill-gated gates).
 <!-- CHECK_LOADED: 17 -->

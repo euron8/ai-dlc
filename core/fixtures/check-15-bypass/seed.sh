@@ -24,15 +24,16 @@
 #   V3  no-file-line     — carries no path:digits reference at all         (element 3)
 #   V4  reason-padding   — `deferral-reason: X` + padding: clears the 19+  (element 4,
 #                          length rule but not the >=10 non-whitespace density rule)
+#   V12 reason-short     — a reason over the density floor, under the length     (element 4)
 #   V5  honest           — the positive control. Satisfies all four.
 #
 # V5 is what makes this fixture able to fail. Without it, an element check mutated to
 # reject everything would still look correct: all four adversaries would be rejected and
 # the fixture would report success.
 #
-# Check 16 is `adjudication: llm` in enforcement-map.yaml with `enforcer: []` — there is
-# no validator script to drive, so run.sh evaluates the check's OWN PUBLISHED REGEXES
-# against this seed. See run.sh's header for the limits of what that proves.
+# `scripts/ai-dlc/validate-stub-audit.sh` is the elements' one home and run.sh drives it,
+# so this seed is exercised by the code that ships. See run.sh's header for the limit
+# that remains.
 #
 # Usage: seed.sh [OUT_DIR]   (prints the seeded tree path on stdout)
 
@@ -115,6 +116,20 @@ def retire_ack_shim():
     # Carry-over Item 7 — see src/ack.py:12
     # deferral-reason: the ack shim cannot be removed until the queue
     #   driver pin lands and the consumers redeploy.
+    raise NotImplementedError  # stub
+EOF
+
+# ---- V12: a reason that clears the DENSITY floor but not the LENGTH floor -----
+# Element 4 has two independent floors: `^deferral-reason:\s+\S.{19,}` (a body of at
+# least 20 characters) AND >=10 non-whitespace characters in that body. V2 is under both
+# and V4 is under density only, so until this variant existed NO seeded case separated
+# them: deleting the length floor left every variant landing on density, the fixture
+# stayed green, and one of the two published floors was untestable. This body is 16
+# characters, 14 of them non-whitespace — density passes, length rejects.
+cat > "$TREE/src/v12_reason_short.py" <<'EOF'
+def trim_ack_window():
+    # Carry-over Item 12 — see src/ack.py:31
+    # deferral-reason: needs a resample
     raise NotImplementedError  # stub
 EOF
 

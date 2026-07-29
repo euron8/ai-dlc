@@ -3,41 +3,34 @@
 # variant, WHICH element rejects it. Exit 0 = each adversary fails on its intended
 # element and the honest control passes all four.
 #
-# WHAT THIS DOES NOT PROVE. Check 16 is `adjudication: llm` with `enforcer: []` — there
-# is no validator script to drive, unlike check-17-bypass whose run.sh calls the real
-# `validate-provenance-block.sh`. So this driver evaluates the check's OWN PUBLISHED
-# ELEMENT REGEXES (gate-validation.md, `CHECK_LOADED: 16`) against the seed. It proves
-# the FIXTURE's claim, not the ADJUDICATOR's behaviour: an LLM that ignores the
-# published elements is not detected here and cannot be, from a script. Saying so is
-# the point — a driver that implied otherwise would be a worse lie than the echo it
-# replaces.
+# WHAT THIS DRIVES, AND WHAT CHANGED. This ran against a RESTATEMENT for its whole life:
+# Check 16 carried `enforcer: []`, so there was no validator to call and this driver
+# re-implemented the check's published element regexes inline. Its own header said what
+# that was worth — "It proves the FIXTURE's claim, not the ADJUDICATOR's behaviour." A
+# grammar spelled twice drifts, and the copy that cannot ship is the one that stays
+# green. `scripts/ai-dlc/validate-stub-audit.sh` is now the elements' single home and
+# this driver calls it, so the code under test and the code that ships are the same
+# bytes. The limit that remains is narrower and unavoidable: an adjudicator that
+# ignores the script's verdict is still not detectable from a script.
 #
-# WHY ASSERT THE ELEMENT AND NOT THE VERDICT. All five variants would be "rejected" by
+# WHY ASSERT THE ELEMENT AND NOT THE VERDICT. All the adversaries would be "rejected" by
 # a check that rejected everything. Asserting only pass/fail passes on that bug. Each
 # adversary here is built to satisfy every element but one, so the driver can name the
 # element that fired — and the honest control (V5) is the mutant-detector that goes red
 # if any element is broken into always-rejecting.
 #
-# COMMENT-PREFIX STRIPPING. Element 4's regex is `^`-anchored but the text it inspects
-# is a COMMENT BLOCK, where every line carries a `#`/`//`/`--` prefix — so the anchor
-# matches nothing until the prefix is stripped. The check body now says to strip it;
-# `decomment()` below is that step. This fixture is what surfaced the omission: the
-# anchor had been unmatchable-as-written for the life of the check, invisible because
-# an LLM adjudicator strips the prefix without being told to.
+# THREE ASSERTIONS THAT ARE NOT ABOUT THE ELEMENTS, and are deliberately independent of
+# them so no element mutation can flip one: the VACUITY FLOOR (a run that audits nothing
+# must not report a pass), the FINDING EXIT (a rejection must reach the caller as a
+# non-zero status), and the COUNTS (a verdict that does not say what it looked at cannot
+# be told apart from one that looked at nothing). All three are what a script inherits
+# from the agent it replaces.
 #
 # Usage: run.sh
 
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-
-# --- the check's published regexes, quoted from gate-validation.md CHECK_LOADED: 16
-STUB_MARKER='(stub|TODO|FIXME|wired later|Phase [0-9]|NotImplementedError)'
-E1_ITEM='Item [0-9]+'
-E3_FILE_LINE='(^|[[:space:]])[^[:space:]]+:[0-9]+([[:space:]]|$)'
-E4_REASON='^deferral-reason:[[:space:]]+[^[:space:]].{19,}'
-CONTEXT_LINES=5           # "preceding 5 lines + the matched line"
-DENSITY_MIN=10            # ">=10 non-whitespace characters" in the reason body
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -49,94 +42,76 @@ BACKLOG="$TREE/_bmad-output/planning-artifacts/carry-over-backlog.md"
 fails=0
 note() { printf '  %-6s %-30s %s\n' "$1" "$2" "$3"; }
 
-# --- the scope filter: upstream-owned paths are dropped before the marker grep.
-# Resolve the real core-paths.sh by walking UP for either layout, same as seed.sh.
-RESOLVER=""
+# Resolve the validator by walking UP from THIS FILE for either layout, naming both
+# rather than counting `..`: the fixture runs from the distribution (`core/scripts/`)
+# and from a consumer (`scripts/ai-dlc/`), and rooting the chain anywhere but its own
+# self-location is the parent-sharing the install mapping breaks (I33).
+AUDIT=""
 d="$HERE"
 while [ "$d" != "/" ]; do
-  if [ -x "$d/core/scripts/core-paths.sh" ]; then RESOLVER="$d/core/scripts/core-paths.sh"; break
-  elif [ -x "$d/scripts/ai-dlc/core-paths.sh" ]; then RESOLVER="$d/scripts/ai-dlc/core-paths.sh"; break; fi
+  if [ -x "$d/core/scripts/validate-stub-audit.sh" ]; then AUDIT="$d/core/scripts/validate-stub-audit.sh"; break
+  elif [ -x "$d/scripts/ai-dlc/validate-stub-audit.sh" ]; then AUDIT="$d/scripts/ai-dlc/validate-stub-audit.sh"; break; fi
   d="$(dirname "$d")"
 done
-# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. `core-paths.sh` reaches a consumer on the pull
-# that carries this file, and may land later in the same pull. "Resolver not installed" is
-# NOT "exemption broken", and treating it as a hard error deadlocked the reference consumer:
-# ai-dlc-update's self-update requires its derived fixtures green, so failing here blocked
-# the very cycle that installs the resolver.
+
+# A CORE FIXTURE SHIPS AHEAD OF ITS SUBJECT. The validator reaches a consumer on the pull
+# that carries this file and may land later in the same pull. "Validator not installed" is
+# NOT "check broken", and treating it as a hard error deadlocks the reference consumer:
+# ai-dlc-update's self-update requires its derived fixtures green, so failing here blocks
+# the very cycle that installs the validator.
 #
-# In the DISTRIBUTION the resolver is always present, so its absence stays a hard exit 2 and
-# upstream can never go green without running the scope filter. Only a consumer skips, and
-# only the four ownership variants that need it (V8/V9/V10/V11) — every other variant is
-# unaffected and still runs.
+# In the DISTRIBUTION it is always present, so its absence stays a hard exit 2 and upstream
+# can never go green without running the real thing. Only a consumer skips.
 IS_DIST=0; [ -d "$HERE/../../../core/skills/ai-dlc" ] && IS_DIST=1
-SKIP_OWNERSHIP=0
-if [ -z "$RESOLVER" ]; then
+if [ -z "$AUDIT" ]; then
   if [ "$IS_DIST" = 1 ]; then
-    echo "FAIL: no core-paths.sh found walking up from $HERE — in the distribution the scope filter MUST be evaluable, and passing without it would report the exemption as working when it was never run." >&2
+    echo "FAIL: no validate-stub-audit.sh found walking up from $HERE — in the distribution the check MUST be evaluable, and passing without it would report the elements as working when they were never run." >&2
     exit 2
   fi
-  SKIP_OWNERSHIP=1
+  echo "SKIP  check-15-bypass: validate-stub-audit.sh is not installed in this consumer yet;"
+  echo "      it lands with this same pull. Nothing was asserted."
+  exit 0
 fi
 
-# in_scope <tree-relative-path> -> 0 in scope, 1 exempt (upstream-owned).
-# Exit 2 from the resolver is NOT an exemption: the path stays in scope, per the
-# check body ("could not determine ... the path stays in scope").
-in_scope() {
-  local rel="$1" rc
-  ( cd "$TREE" && bash "$RESOLVER" --is-core "$rel" >/dev/null 2>&1 )
-  rc=$?
-  [ "$rc" -eq 0 ] && return 1
-  return 0
-}
+# audit <path>... -> sets OUT to the validator's combined output and RC to its exit code.
+# NOT a printing function called through `$( )`: a command substitution runs in a
+# SUBSHELL, so an exit code assigned inside it never reaches the caller and every variant
+# reads as 0 — a driver that cannot fail, in the fixture written to prove one can.
+OUT=""; RC=0
+audit() { OUT="$(bash "$AUDIT" --root "$TREE" "$@" 2>&1)"; RC=$?; }
 
-# Strip a leading comment prefix so the ^-anchored element-4 regex can see the key.
-decomment() { sed -E 's/^[[:space:]]*(#+|\/\/|--)[[:space:]]?//'; }
-
-# audit_file <path> -> prints the name of the FIRST failing element, or "ok"
-audit_file() {
-  local f="$1" nlines n start block dec item backlog_line reason density
-  nlines="$(wc -l < "$f")"
-  for (( n = 1; n <= nlines; n++ )); do
-    sed -n "${n}p" "$f" | grep -qE "$STUB_MARKER" || continue
-    start=$(( n - CONTEXT_LINES )); [ "$start" -lt 1 ] && start=1
-    block="$(sed -n "${start},${n}p" "$f")"
-    dec="$(printf '%s\n' "$block" | decomment)"
-
-    # element 1 — a numbered carry-over item reference
-    grep -qE "$E1_ITEM" <<<"$block" || { echo "element1-item-ref"; return; }
-
-    # element 2 — that item is OPEN or IN SPRINT in the backlog
-    item="$(printf '%s\n' "$block" | grep -oE "$E1_ITEM" | head -1 | grep -oE '[0-9]+')"
-    backlog_line="$(grep -E "^- Item ${item}[^0-9]" "$BACKLOG" || true)"
-    grep -qE '^- Item [0-9]+.*(OPEN|IN SPRINT [0-9]+)' <<<"$backlog_line" \
-      || { echo "element2-item-open"; return; }
-
-    # element 3 — a file:line reference
-    grep -qE "$E3_FILE_LINE" <<<"$block" || { echo "element3-file-line"; return; }
-
-    # element 4 — deferral-reason length floor AND non-whitespace density
-    grep -qE "$E4_REASON" <<<"$dec" || { echo "element4-reason"; return; }
-    reason="$(printf '%s\n' "$dec" | sed -nE 's/^deferral-reason:[[:space:]]+//p' | head -1)"
-    density="$(printf '%s' "$reason" | tr -d '[:space:]' | wc -c | tr -d ' ')"
-    [ "$density" -ge "$DENSITY_MIN" ] || { echo "element4-reason"; return; }
-  done
-  echo "ok"
-}
-
-expect() { # expect <tree-relative-path> <want-element-or-ok|exempt-upstream> <label>
-  local got
-  if in_scope "$1"; then got="$(audit_file "$TREE/$1")"; else got="exempt-upstream"; fi
-  if [ "$got" = "$2" ]; then
-    if [ "$2" = "ok" ]; then note "ok" "$3" "passes all four elements"
-    elif [ "$2" = "exempt-upstream" ]; then note "ok" "$3" "dropped from scope — upstream-owned"
-    else note "ok" "$3" "rejected on $got"; fi
+# expect <tree-relative-path> <want-element-token|ok|exempt-upstream> <label>
+#
+# CLASSIFIED ON THE VALIDATOR'S PER-PATH LINES, NEVER ON ITS EXIT CODE, and each variant
+# is audited alongside the honest control so the run always has something in scope. Both
+# choices exist to keep these assertions independent of the three below: read as an exit
+# code, a single exempt path yields 4 (audited nothing) and a single clean path yields 0,
+# so a mutation to the EXIT MAPPING alone would flip the ownership variants as well as
+# the vacuity floor — three failures for one defect, which is the entanglement that makes
+# two of the three vacuous. The exit mapping gets its own assertions instead.
+expect() {
+  local want="$2" out got
+  audit "$1" src/v5_honest.py; out="$OUT"
+  case "$out" in
+    *"EXEMPT $1 "*) got="exempt-upstream" ;;
+    *"FINDING $1:"*)
+      got="$(sed -nE "s@^FINDING $1:[0-9]+ ([a-z0-9-]+) .*@\1@p" <<<"$out" | head -1)"
+      [ -n "$got" ] || got="rejected-without-naming-an-element" ;;
+    *) got="ok" ;;
+  esac
+  if [ "$got" = "$want" ]; then
+    case "$want" in
+      ok)              note "ok" "$3" "passes all four elements" ;;
+      exempt-upstream) note "ok" "$3" "dropped from scope — upstream-owned" ;;
+      *)               note "ok" "$3" "rejected on $got" ;;
+    esac
   else
-    note "BAD" "$3" "wanted '$2', got '$got'"
+    note "BAD" "$3" "wanted '$want', got '$got'"
     fails=$((fails + 1))
   fi
 }
 
-echo "check-15-bypass: evaluating Check 16's published elements against the seed"
+echo "check-15-bypass: driving validate-stub-audit.sh against the seed"
 echo
 
 expect src/v1_item_absent.py    element2-item-open "V1 item-absent"
@@ -145,19 +120,19 @@ expect src/v3_no_file_line.sh   element3-file-line "V3 no-file-line"
 expect src/v4_reason_padding.py element4-reason    "V4 reason-padding"
 expect src/v6_file_no_digits.py element3-file-line "V6 file-no-digits"
 expect src/v7_item_closed.py    element2-item-open "V7 item-closed"
+# Element 4's two floors are independent. V4 is under density only; V12 is under length
+# only. Without the pair, deleting either floor leaves every variant landing on the
+# other and the fixture stays green with one published floor untested.
+expect src/v12_reason_short.py  element4-reason    "V12 reason-short"
 
 # The positive control. Break any element into always-rejecting and this goes red;
-# without it, all four adversaries would still be "correctly" rejected.
+# without it, all the adversaries would still be "correctly" rejected.
 expect src/v5_honest.py         ok                 "V5 honest control"
 
 # The exemption pair. V8 satisfies zero elements and must NEVER reach the elements
 # at all; V9 satisfies zero elements at a core-ADJACENT path and must reach them.
 # Drop the exemption and V8 flips to element1-item-ref. Widen it to all of
 # `.claude/` and V9 flips to exempt-upstream — a consumer stub going unaudited.
-if [ "$SKIP_OWNERSHIP" = 1 ]; then
-  printf '  SKIP   V8/V9/V10/V11 ownership pairs -- core-paths.sh is not installed in this\n'
-  printf '         consumer yet; the resolver lands with this same pull. Every other variant ran.\n'
-else
 expect .claude/skills/ai-dlc-update/reconcile/apply.sh \
                                 exempt-upstream    "V8 upstream-owned"
 expect .claude/hooks/my-own-hook.sh \
@@ -174,17 +149,57 @@ expect tests/fixtures/check-15-bypass/seed.sh \
                                 exempt-upstream    "V10 core fixture"
 expect tests/fixtures/check-15-bypass-local/seed.sh \
                                 element1-item-ref  "V11 consumer fixture (control)"
+
+# --- THE EXIT MAPPING, in two independent assertions. Both drive the audited-nothing
+# case through a NON-HOT-PATH file rather than through an exempt one, so neither touches
+# the ownership resolve and no exemption mutation can reach them.
+#
+# 1. A set that audits nothing must not report a pass. "Audited and found nothing" and
+# "audited nothing" are the two states every vacuously-green implementation of a gate
+# check has collapsed into one.
+audit _bmad-output/planning-artifacts/carry-over-backlog.md; out="$OUT"
+case "$RC:$out" in
+  4:*AUDITED\ NOTHING*) note "ok" "vacuity floor" "a set with nothing in scope exits 4, not 0" ;;
+  *) note "BAD" "vacuity floor" "a set with nothing in scope reported exit $RC without an AUDITED NOTHING verdict"
+     fails=$((fails + 1)) ;;
+esac
+
+# 2. A finding must reach the caller as a non-zero exit. The per-variant assertions above
+# read the report lines and would all still pass if every exit code were 0.
+audit src/v1_item_absent.py; out="$OUT"
+if [ "$RC" -eq 1 ]; then
+  note "ok" "finding exits 1" "a rejected file exits 1"
+else
+  note "BAD" "finding exits 1" "a rejected file exited $RC"
+  fails=$((fails + 1))
+fi
+
+# --- THE COUNTS. Independent of the elements (it asserts what the run LOOKED AT, never
+# what it found) and of the exemption (neither path is core, so the dropped count is 0
+# either way). A verdict with no counts cannot be told apart from one that compared
+# nothing, which is the whole reason this check stopped being a paragraph.
+audit _bmad-output/planning-artifacts/carry-over-backlog.md src/v5_honest.py; out="$OUT"
+# Here-string, never a pipe: `grep -q` stops at its first match and a builtin still
+# pushing bytes takes EPIPE, so under pipefail the branch inverts on large input (I54).
+if grep -qE '^validate-stub-audit: 2 path\(s\) given, 1 hot-path, [0-9]+ dropped upstream-owned, [0-9]+ resolver-undetermined \(in scope\), 1 audited,' <<<"$out"; then
+  note "ok" "counts reported" "2 given / 1 hot-path / 1 audited"
+else
+  note "BAD" "counts reported" "the counts line did not report 2 given, 1 hot-path, 1 audited"
+  fails=$((fails + 1))
 fi
 
 echo
 if [ "$fails" -eq 0 ]; then
-  echo "PASS  check-15-bypass: 11 variants correct. Each adversary is rejected on its"
-  echo "      intended element (absent item, short reason, no file:line, padded reason,"
-  echo "      digitless file ref, CLOSED item), the honest stub satisfies all four, and"
-  echo "      both ownership pairs discriminate: the upstream-owned file and the core"
-  echo "      fixture are dropped from scope while their consumer-owned neighbours at"
-  echo "      adjacent paths are still audited."
+  echo "PASS  check-15-bypass: 12 variants correct against the shipping validator. Each"
+  echo "      adversary is rejected on its intended element — absent item, CLOSED item, no"
+  echo "      file:line, digitless file ref, and element 4's two floors separately (a"
+  echo "      padded reason under density, a short reason under length) — the honest stub"
+  echo "      satisfies all four, and both ownership pairs discriminate: the upstream-owned"
+  echo "      file and the core fixture are dropped from scope while their consumer-owned"
+  echo "      neighbours at adjacent paths are still audited. The three non-element"
+  echo "      assertions hold too: the exit mapping separates audited-nothing from clean"
+  echo "      and from a finding, and the run reports what it looked at."
   exit 0
 fi
-echo "FAIL  check-15-bypass: $fails variant(s) audited wrong." >&2
+echo "FAIL  check-15-bypass: $fails assertion(s) wrong." >&2
 exit 1

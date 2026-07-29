@@ -14,6 +14,7 @@ so the driver can assert *which* element rejects it:
 | V4 | padding-only reason — clears the 19+ length rule, fails density | 4 (reason) |
 | V6 | `src/pool.py:FIXME` — a file ref with no digits after the colon | 3 (file:line) |
 | V7 | cites `Item 7`, which is CLOSED | 2 (item OPEN/IN SPRINT) |
+| V12 | a 16-char reason: clears the density floor, under the length floor | 4 (reason) |
 | V5 | honest stub — the positive control | none; passes all four |
 | V8 | upstream-owned `reconcile/apply.sh` — bare `Phase 3` marker | none; **dropped from scope** |
 | V9 | consumer-owned `.claude/hooks/my-own-hook.sh` — same bare marker | 1 (item ref) |
@@ -26,6 +27,13 @@ and the fixture would report success. V6 and V7 exist because a mutation run
 showed the original four did not cover element 3's digit-only rule or element
 2's CLOSED case — a loosened element 3 and a CLOSED-accepting element 2 both
 passed the fixture unchanged.
+
+**V4 and V12 are element 4's pair**, and the same mutation run added V12 for
+the same reason. Element 4 has two independent floors — a 20-character length
+and a ≥10 non-whitespace density — and every earlier variant was under BOTH,
+so deleting either left the other catching all of them and the fixture stayed
+green with one published floor untestable. V4 is under density only; V12 is
+under length only. Each floor now has a mutant that flips exactly one variant.
 
 **V8/V9 are a pair, and neither means anything alone.** They cover the
 upstream-owned exemption: Check 16 drops core-manifest paths before the marker
@@ -68,13 +76,24 @@ the manifest edit and this fixture are atomic by construction.
 
 `run.sh` drives it and asserts the element-per-variant matrix.
 
-**What the driver does not prove.** Check 16 is `adjudication: llm` with
-`enforcer: []` — no validator script exists to call, unlike `check-17-bypass`,
-whose driver invokes the real `validate-provenance-block.sh`. So `run.sh`
-evaluates the check's own published element regexes against the seed. That
-tests this fixture's claim — the seeded stubs really do exhibit the bypasses,
-and the published elements catch them — not the adjudicator's behaviour. An
-LLM that ignores the published elements is not detected here, and cannot be
-from a script.
+**What the driver runs, and what changed.** It used to run a RESTATEMENT.
+Check 16 carried `enforcer: []`, so there was no validator to call and `run.sh`
+re-implemented the published element regexes inline — proving this fixture's
+claim rather than the shipping path's, which its header said outright. The
+elements now live in `scripts/ai-dlc/validate-stub-audit.sh` and this driver
+calls it, so the code under test and the code that ships are the same bytes.
+
+Three assertions are deliberately NOT about the elements, so no element
+mutation can flip one: an all-out-of-scope set must exit **4**, not 0
+(`AUDITED NOTHING` — the state every vacuously-green gate check has collapsed
+into a pass); a finding must reach the caller as exit **1**; and the run must
+report what it LOOKED AT. Both the vacuity and the counts assertions drive the
+audited-nothing case through a non-hot-path file rather than an exempt one, so
+neither touches the ownership resolve — otherwise a single exemption mutation
+flips three assertions and two of them are vacuous.
+
+**What the driver still does not prove.** Check 16 stays `adjudication: llm`.
+An adjudicator that ignores the script's verdict is not detected here, and
+cannot be from a script.
 
 Run `seed.sh` to reproduce idempotently; `run.sh` to assert.
