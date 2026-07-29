@@ -189,7 +189,7 @@ release, with the merge sha. `—` = not started.
 | ⏹ | **SESSION BOUNDARY** | |
 | 10a | **wall-clock reduction across the whole distribution — by any route, not only parallelism** — operator-requested 2026-07-29, §7.10a | ✅ **ROW CLOSED.** `92aa72f` (#288) v0.205.0: **208s → 124s**. `bd0bf65` (#289) v0.206.0: **124.9s → 72.0s (−43%)** — and it **REFUTED this row's own next-two-poles ordering**: serial duration is the wrong statistic for a pooled suite. `8eaf896` (#290) v0.207.0: `wait-stale-deliverable` **52s → 9s, suite 72s → 50s**, plus the **300-site early-exit-reader class** the release leads on (**I54**). ✅ `8344631` (#291) v0.208.0: the content-keyed suite skip — **~50s → 0.3s on a push that changed only CHANGELOG/VERSION/docs** — and **§9 IS NOW CAUSALLY EXPLAINED AND FIXED**: a fixture was writing into the repository it tests. See §7.10a |
 | ⏹ | **SESSION BOUNDARY** | |
-| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Checks 18 and 22 remain, then the join that closes the class. §7.10b carries the ordering, which is now a MEASURED constraint rather than a preference |
+| 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | **IN PROGRESS.** Check 16 ✅ `564c5d2` (#292) v0.209.0 — the program **already existed inside the check's own fixture** as a restatement. Check 18 ✅ `bd714f8` (#293) v0.210.0 — **the same shape twice running**: the prior-sprint SHA resolution was already programmed as a second entry grammar inline in `validate-mandatory-rules.sh`, in a copy no gate could reach. **Check 22 is the last subject**, then the join that closes the class. §7.10b carries the ordering, which is now a MEASURED constraint rather than a preference |
 | ⏹ | **SESSION BOUNDARY** | |
 | 11 | ADJUDICATED tier + disposition register | — |
 | 12 | Regenerate the final pull prompt (§8) | — |
@@ -1696,16 +1696,49 @@ false positives is the imperative/exit-code form (`**Check.** Run/Invoke`, `- Ru
 condition asserting `exits 0`) as against a mention of a producer or a remedy. **But that invariant
 FAILS THE BUILD the moment it ships, because Checks 18 and 22 are still unbound.** It cannot land
 before them. Do 18, then 22, then the join — and derive the discriminator's false-positive set
-again at that point rather than trusting this paragraph.
+again at that point rather than trusting this paragraph. **Check 18 is done as of v0.210.0; only
+Check 22 stands between here and the join.**
 
-**The two remaining subjects, unexamined, with what the join says about each:**
+**SHIPPED: Check 18 — v0.210.0.** The join was re-derived again before building and reproduced with
+the expected drift: **25** rows with `enforcer: []` (27 at the starting measurement, minus the two
+this row and v0.204.0 have since bound), **10** named-but-not-enforcer pairs, control **13**
+non-empty. The scoping above held exactly — the `--render` mention is producer-mandate prose, the
+per-category verdicts stay consumer-owned, and the mechanizable part was the `--entries` gate plus
+the prior-sprint SHA resolution.
 
-- **Check 18** — `**Check.** First run \`validate-audit-anchors.sh --entries\`… A non-zero exit
-  FAILS this check CLOSED.` An imperative with an exit-code posture and no enforcer. Note its
-  second mention (`--render`) is producer-mandate prose, NOT a predicate — one check contributes
-  both a subject and a false positive, which is why the discriminator has to be per-mention.
-  Its per-category verdicts come from consumer-supplied audit scripts, so the mechanizable part
-  is the `--entries` gate and the prior-sprint SHA resolution, not the whole check.
+**And the v0.209.0 expectation held too, which now makes it two for two: the program already
+existed in a copy that could not reach a gate.** `validate-mandatory-rules.sh`'s Check 5 resolves
+the same anchor for its diff base, with an inline awk keyed on `$1=="-" && $2=="sprint:"` — a
+second entry grammar over an artifact whose reader is `validate-audit-anchors.sh`, and one that
+could not see a fenced list or skip the GENERATED header. `--prior-sprint-sha <file>
+<current-sprint-n>` is now the single home and that caller calls it. **Expect this shape at Check
+22 as well: look for the restatement before deciding to write a program.**
+
+**Three things worth carrying into Check 22 and the join.**
+
+- **Take the CURRENT sprint number and do the minus-one inside the script.** The subtraction is a
+  term of the stated predicate; leaving it to the caller leaves one term to infer, which is the
+  thing the row exists to remove.
+- **Posture is the caller's, and both callers must say theirs.** Check 18 FAILS CLOSED on a
+  non-zero; mandatory-rules SKIPS loudly on the same non-zero, for the reason recorded there. One
+  resolver, two documented postures. Check 22 shares its validator with Check 2a the same way — do
+  not assume the postures match just because the invocation does.
+- **A malformed invocation must not share an exit code with a real finding.** `--prior-sprint-sha`
+  exits **2** on a bad argument and **1** on an unresolved anchor, because a caller reading exit 1
+  as "the anchor is missing" would fail a clean gate on a typo. One of the five mutants is exactly
+  that separation.
+
+**A fixture trap this release hit, and it is the row-4 trap one level out.** Four failure causes
+that all exit 1 were first scored against one shared scenario file, so the off-by-one mutant failed
+three arms at once — entanglement, with two of the three assertions vacuous. Each arm needs a
+scenario file chosen so that the mutated term is NOT what distinguishes it.
+
+**Left open, measured** (now §9): the cross-script mode join. Delegating created the **third**
+instance of a shape `I49` and `I53` each cover once by name, and the generalisation's
+false-positive set was measured and is not empty.
+
+**The one remaining subject, with what the join says about it:**
+
 - **Check 22** — numbered clearing condition 3 is `validate-escalation-resolution.sh … exits 0`,
   the same invocation Check 2a makes, and **Check 2a's row binds that validator while Check 22's
   does not**. The comparison against `aiDlcRoles` and the `role_file_readable` arm are mechanical;
@@ -1921,6 +1954,21 @@ an earlier revision, found by a real run:
 
 ## 9. Known-open, deliberately out of scope
 
+- **The cross-script mode join is hand-listed twice and now has a third instance** — opened by
+  v0.210.0. `I49` binds the modes of `core-paths.sh`; `I53` binds the modes of
+  `validate-escalation-resolution.sh`; both assert that a mode one core script asks another for is
+  one the target dispatches AND documents in its usage block. v0.210.0's
+  `validate-mandatory-rules.sh` → `validate-audit-anchors.sh --prior-sprint-sha` is the third, and
+  `CLAUDE.md` says to derive both sides of a join rather than hand-list either. **The generalisation
+  was derived and MEASURED before deciding not to ship it: 31 (script, mode) pairs across 15 targets
+  in `core/scripts/`, false-positive set NOT empty — 8 misses, most of them the derivation's own
+  grammar** (`--exclude` harvested from a `git` pathspec and from a grep flag, `--mode` from prose,
+  and dispatch forms that are not `case` arms). Whoever picks this up starts by fixing the
+  extractor, not by writing the invariant: the citation regex has to reject a flag that merely
+  follows a filename, and the dispatch side has to see every form the 15 targets actually use.
+  The harm I53 names is structurally absent at the new site — a renamed mode yields exit 2, which
+  both call sites treat explicitly as a malformed invocation rather than as a missing anchor — so
+  this is a completeness gap, not a live hole.
 - **`enforcement-map.yaml` is copied by `install.sh` but appears nowhere in `core-manifest.md`** — an
   unmanifested core file, so consumer edits to it are not drift-scanned **[V]**. Pre-existing; file
   it rather than folding it into a release.
