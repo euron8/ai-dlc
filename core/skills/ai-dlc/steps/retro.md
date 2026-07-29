@@ -711,6 +711,17 @@ retro-PR-merge SHA placeholder. The merge SHA is unknown until the
 retro PR merges; lead writes the entry with sprint + closed_at fields
 and updates the SHA in a follow-on commit on `main` after merge.
 
+That follow-on commit is the ONE commit this pipeline pushes to `main`
+outside a PR. It edits `_bmad-output/audit-anchors.md` and nothing else,
+and its subject MUST be:
+
+`chore(s<N>): backfill audit-anchor SHA after retro PR #<PR> merge`
+
+`scripts/ai-dlc/validate-audit-anchors.sh --trunk-push` runs in the
+pre-push hook and rejects the push if that commit carries any other path,
+or if a commit rewrites `audit-anchors.md` alone under any other subject.
+Fold anything else into the retro PR.
+
 The schema is canonical in `.claude/schemas/audit-anchors.json` — NOT the live
 header or the template. Re-seed the header first: replace the file's
 `BEGIN GENERATED: audit-anchors-schema … END GENERATED` region with the output

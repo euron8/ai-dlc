@@ -11,11 +11,14 @@
 # distribution. A gate hosted in a service we do not run is a gate we do not control.
 # This runs on the machine doing the pushing: no runner, no network, no third party.
 #
-# WHAT IT DOES NOT DO. It runs only TREE-LEVEL checks — ones decidable from the files
-# on disk. Gate-time validators (provenance, retro evidence, adversarial convergence,
-# steering budget) need live pipeline state and belong at their gates, not here.
-# Putting them in a push hook would make them fire on every unrelated service commit,
-# and a gate that fires on everything gets turned off.
+# WHAT IT DOES NOT DO. It runs LOCALLY DECIDABLE checks only. Gate-time validators
+# (provenance, retro evidence, adversarial convergence, steering budget) need live pipeline
+# state and belong at their gates, not here. Putting them in a push hook would make them
+# fire on every unrelated service commit, and a gate that fires on everything gets turned off.
+# This line read "only TREE-LEVEL checks — ones decidable from the files on disk" until
+# arm 0, which judges the commits being pushed. That was the right boundary described by the
+# wrong measure: the ref protocol arrives on stdin and needs no more pipeline state than a
+# file does. Everything here is still decidable on this machine with no gate and no network.
 #
 # ENABLE (once per clone, and NOT before your layer entries are clean — see below):
 #     git config core.hooksPath .githooks
@@ -33,11 +36,36 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
+# git hands a pre-push hook the ref protocol ON STDIN, and it can be read once. Drain it HERE,
+# before any step runs, because a later step that reads stdin would leave arm 0 judging nothing —
+# and arm 0 judging nothing looks exactly like arm 0 finding nothing wrong.
+# `[ -t 0 ]` guards the other direction: this file is run by hand during development, and an
+# unguarded `cat` would hang on a terminal forever. On a terminal REFS stays empty and arm 0 says
+# so in its own words rather than reporting a pass it did not earn.
+PUSH_REFS=""
+[ -t 0 ] || PUSH_REFS="$(cat)"
+
 fail=0
 step() {
   printf '\n── %s\n' "$1"; shift
   if "$@"; then printf '   PASS\n'; else printf '   FAIL\n'; fail=1; fi
 }
+
+# 0. THE ONLY ARM HERE THAT JUDGES THE PUSH RATHER THAN THE TREE, and the header's "only
+#    TREE-LEVEL checks" line is written to admit it. The distinction that line was drawing is
+#    between what is decidable locally and what needs live pipeline state; the ref protocol is
+#    the former — it arrives on stdin, costs nothing, and needs no gate.
+#    WHAT IT IS FOR. retro.md Step 5b cannot route one commit through a PR: the retro-PR merge
+#    SHA is not knowable until that PR has merged, so Step 5b tells the lead to push the SHA
+#    straight to the trunk. That sentence is a standing licence to write to `main` outside the
+#    PR route, and core shipped it with nothing defining what it licenses — no subject, no path
+#    bound, no reader. On the reference consumer it has been exercised 106 times.
+#    It bounds that commit; it does not police the trunk. See the schema's
+#    `$backfill_commit_comment` for what is deliberately left alone and why.
+trunk_push() { printf '%s' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }
+if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then
+  step "trunk push (the Step 5b backfill commit is the only one licensed)" trunk_push
+fi
 
 # 1. Rule 27 layer hygiene. Overrides carry a resolvable `base_sha`; extension checks
 #    do not collide with a core check NUMBER (a bare "Check N" in a gate log has no

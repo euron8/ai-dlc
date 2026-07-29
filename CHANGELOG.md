@@ -17,7 +17,72 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.200.0] — 2026-07-28
+## [0.201.0] — 2026-07-29
+
+### Added — retro Step 5b licenses one commit straight to `main` and defined nothing about it
+
+Step 5b cannot route one commit through a PR. The retro-PR merge SHA is not knowable
+until that PR has merged, so the step tells the lead to write the entry with a
+placeholder and then update it "in a follow-on commit on `main` after merge". That
+sentence is a standing licence to write to the trunk outside the PR route, and core
+shipped it with **no subject, no path bound, and no reader**. On the reference consumer
+the licence has been exercised **106 times**, every one unexamined by anything core ships.
+
+Nothing core ships was ref-aware at all: neither pre-push hook read git's pre-push
+protocol (control: both are ~165 lines of other checks).
+
+- **`schemas/audit-anchors.json` gains `backfill_commit`** — the subject pattern, an
+  example, and the complete path set the licensed commit may touch. One definition, in
+  the file that already declares itself the single definition for this artifact. The
+  rendered header region is **byte-identical** before and after, so no consumer's
+  `--check` drifts.
+- **`validate-audit-anchors.sh --trunk-push`** reads the pre-push protocol and judges
+  commits landing on the trunk (`AI_DLC_TRUNK`, default `main` — the tunable
+  `validate-cycle-commits.sh` already takes).
+- **Wired into `core/git-hooks/pre-push` as arm 0**, the first arm there that judges the
+  push rather than the tree. The header's "only TREE-LEVEL checks" line is rewritten to
+  say what it was actually drawing: locally decidable, no gate, no network. Not wired
+  into the distribution's own hook — this repo has no `_bmad-output/` and never runs
+  Step 5b, so the arm could not fire there.
+- **`retro.md` Step 5b now states the subject** it enforces, and **I51** binds the prose
+  template to the schema regex by filling `<N>`/`<PR>` and matching — the same two steps
+  the lead and then the matcher perform.
+
+**It bounds the licence; it does not police the trunk.** A commit claiming the licensed
+subject may touch only the licensed path; a commit rewriting that path alone must claim
+the subject. Everything else on a trunk push is left alone: core states no branch policy,
+and this schema's own `$fields_comment` records what a linter erroring on real data on
+first contact costs.
+
+**FP set measured empty on the reference consumer's full history**, replayed with the
+shipping code over all **237** commits touching `audit-anchors.md` on `main`: 236 PASS,
+1 FAIL. The one FAIL is the true-positive shape — an anchors-only rewrite under an
+unlicensed subject — and it arrived via PR, so no trunk-push guard would have seen it.
+All 106 sanctioned backfills and all 130 ordinary retro merges pass.
+
+**The absorbed script's own defect is fixed here.** On ref creation the consumer's guard
+takes `range="$local_sha"`, which is every ancestor: the first push of a trunk lists the
+whole history and cannot land. Core exempts it and says so.
+
+### Fixed
+
+- **I51's join keyed on a prefix two unrelated templates share.** `retro.md` carries a
+  second `chore(s<N>):` template (gate-log rotation, Step 6f), so deleting the backfill
+  template selected the rotation one and the vacuity case came back as an ordinary
+  mismatch. Keyed on the distinguishing text now, and exactly one match is required.
+  Found by the fixture's vacuity arm, which is the arm that exists for this.
+
+### Notes
+
+- `core/fixtures/trunk-push-bound/` — 8 behaviour assertions, an unmutated control
+  copied from the mutant directory first, and 5 mutants each failing only its own
+  assertion. The load-bearing one is assertion 4: an ordinary commit touching the
+  anchors file among others is **not** judged. A check that blocked every direct push
+  would pass the three rejection arms and be wrong.
+- The `--trunk-push` mode originally read `sys.stdin` from inside a `python3 - <<PY`
+  heredoc, so it read the heredoc's leftovers — nothing — in all nine cases it was tested
+  against. The explicit no-refs branch is what surfaced it; a silent pass there would
+  have shipped a check that cannot fire. That branch is now asserted on its wording.
 
 ### Added — core demanded a mutation-RED capture in four rule files and shipped no way to take one
 
