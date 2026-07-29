@@ -410,10 +410,17 @@ a story inlines — to satisfy a tooling constraint.
 <!-- CHECK_LOADED: 5 -->
 
 - For every story in the current sprint, verify:
-  - Story file `Status:` header value
-  - Corresponding entry in `sprint-status.yaml`
+  - The story file's status (frontmatter `status:`, or the `**Status:**`
+    header for a file with no frontmatter)
+  - Corresponding entry in `sprint-status.yaml`, in **each** canonical copy
   - These MUST match exactly.
-- Run: Read both files, compare status values programmatically.
+- Run: `scripts/ai-dlc/sprint-status.sh check-stories`. Do NOT re-derive the
+  comparison by hand — read its exit code and its counts:
+  - `0` — compared ≥1 story, no finding. PASS.
+  - `1` — one or more findings, each printed. **Gate FAILS.**
+  - `3` — the two canonical copies disagree on `sprint:`. HARD_BLOCK.
+  - `4` — **it compared NOTHING** (no canonical, or no `stories:` key). This
+    is never a pass. Apply the non-vacuity sub-clause below.
 - **Gate FAILS** if any story has mismatched status between the two files.
   Fix the mismatch before proceeding.
 - **Non-vacuous assertion (implementation gates only).** At Phase 4+
@@ -421,16 +428,22 @@ a story inlines — to satisfy a tooling constraint.
   current sprint. If zero stories are found at an implementation gate,
   Check 5 FAILS — a sprint with no stories cannot pass status
   consistency. Planning-phase gates (where stories are not yet created)
-  are exempt from this sub-clause.
+  are exempt from this sub-clause. Exit 4 is exactly this state, and it is
+  the state every hand-run and consumer-authored version of this check has
+  at some point reported as clean.
 - **Duplicate parent-key drift check.** Every parent key in
   `sprint-status.yaml` (e.g., `sprint-<N>-<name>:`) MUST be
   uniquely-rooted. Multiple parent keys with the same name produced
   by parallel worktree commits is a structural drift mode that this
   check catches at the parent level (per-story drift is caught
   above). Gate FAILS if duplicate parent keys are detected; lead
-  consolidates under a single parent before gate-pass.
-- **Evidence:** Log the comparison results in the gate log entry.
-  List each story ID and its status in both files.
+  consolidates under a single parent before gate-pass. Duplicate story keys
+  *inside* one `stories:` mapping are reported by `check-stories`; the
+  parent-key form above is yours to read.
+- **Evidence:** Log the comparison results in the gate log entry — the
+  command, its exit code, and its **counts** line (entries parsed and
+  comparisons made). A verdict without the counts cannot be told apart from
+  one recorded over a corpus the tool never read.
 
 ### 6. Production integrity tests exist? (Implementation gates only)
 <!-- CHECK_LOADED: 6 -->

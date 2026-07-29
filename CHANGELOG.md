@@ -17,6 +17,90 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.203.0] — 2026-07-29
+
+### Added — Check 5 said "compare status values programmatically" and core shipped no program
+
+`steps/gate-validation.md` Check 5, *Story status consistency?*, has always carried the
+line **"Run: Read both files, compare status values programmatically."**
+`enforcement-map.yaml` carried `enforcer: []` for it. There was no program: the comparison
+was performed by hand at every story and implementation gate, while `dev.md` (*"Mismatched
+status between the story file and sprint-status.yaml is a gate blocker that QA will
+reject"*), `qa.md`, `code-reviewer.md`, `implementation.md` and `retro.md` (*"this sweep is
+the last guard against drift"*) all restated the duty. Measured against core's tree: **zero
+core scripts read a story file's status** (control — three read story files, for the Dev
+Agent Record and the locked anchor).
+
+`sprint-status.sh check-stories` is that program. For every entry of the current sprint's
+`stories:` mapping, in **each** canonical copy, the entry's `status:` must equal the status
+in the story file it names.
+
+**The count is part of the contract, and that is the whole point.** The reference consumer
+wrote the executable core described — three times — and **each version went vacuously green
+at least once**, by its own pipeline record: one globbed `story-<N>-*` at a corpus named
+`story-S<N>-*` and printed *"checked 0 story files"* beside its success line; one compared
+**zero** derivable fields for a whole sprint and reported clean; one read a `**Status:**`
+block its story files no longer carried. So:
+
+- `check-stories` prints how many entries it parsed and how many comparisons it made, and
+  Check 5's evidence clause now requires that line in the gate log — *a verdict without the
+  counts cannot be told apart from one recorded over a corpus the tool never read*;
+- **"compared nothing" is its own exit code (4)**, never folded into 0. Check 5's prose maps
+  it: from Phase 4 on it FAILS the gate (its non-vacuity sub-clause), before stories exist it
+  is that clause's stated planning exemption;
+- the story-entry grammar is **id-blind and indent-relative** — an entry is any key of the
+  mapping, whatever it is spelled. A pattern that matches one naming convention IS the
+  vacuous-green defect;
+- a story file is read through frontmatter `status:` **and** through the `**Status:**` header
+  for files carrying no frontmatter. Measured over the reference consumer's 988 story files:
+  343 frontmatter, 726 header, 109 both, 28 neither. A reader that knows one spelling silently
+  skips most of the corpus;
+- an entry that cannot be resolved, cannot be read, or yields no status is a **finding**,
+  never a skip.
+
+**Measured on the reference consumer's real history with the shipping code, not in a
+fixture.** Every commit touching either canonical — **1019 states**, each materialized with
+`git archive` and driven through `check-stories --root`. At **HEAD (`170ff9d8c`) the tree is
+clean**: 2 comparisons across both copies, 0 findings, exit 0. Over the 40 states since the
+canonicals were rewritten into the mapping grammar the schema declares: **33 clean, 6 with
+findings, 1 compared-nothing**, and all six findings are true positives.
+
+**The best of the six is the one the consumer already tried to fix.** Commit `0ed93f50e` is
+titled *"fix(s290): story-290-1 status left at review despite Phase 1 deploy+PVC
+confirmation"*. It rewrote `status:` in **four** sprint-status yaml files and did not touch
+the story file, whose frontmatter still reads `review` — at that commit, and today, five
+sprints later. `git log -S'status: done'` over that story file returns nothing (control:
+`-S'status: review'` returns the commit that set it). The drift the fix was written for
+survived the fix, on the side nothing was reading.
+
+The earlier eras of that history are noisier — 382 of 1019 states carry a finding — because
+graph's canonicals predate this grammar entirely (a `development_status:` flat map, story
+files under a different root, entry keys under four naming conventions). Those states are
+past and are not a bill; they are evidence the predicate fires on real data.
+
+`adjudication` stays **`llm`**, following Check 2's precedent: the script decides the
+comparison, the gate-adjudicator still reads the check, because the non-vacuity sub-clause is
+scoped by gate type and the script cannot see the gate type. No routing changes.
+
+**Fixture:** `core/fixtures/sprint-status-lifecycle/` Part 2 — 10 assertions, **9 mutants**
+built as copies with a `cmp -s` guard, each failing **exactly** its own assertion, plus an
+unmutated control copy beside them. The control earned its place on the first run: one
+assertion's setup was wrong, so it failed on the shipping tool, eight mutants reported
+"entangled" for reasons unrelated to their mutations, and the ninth mutant came back **green**
+because the assertion it was supposed to break was already failing.
+
+**Not wired into either pre-push hook, deliberately.** The check needs a live `_bmad-output/`
+sprint tree; this repository has none, so a hook arm here would be a check that cannot fire.
+
+**Re-classification, recorded rather than assumed.** The program's ledger listed
+`validate-story-status-consistency.sh` under "9 real core gaps, not absorbed". It is not a
+gap: core defines the check, names it by number, and states its predicate in five files —
+what core lacked was the enforcer. That script's `yq`-dependent three-way join and the
+`--check` arm of `generate-sprint-status.py` are now both covered for status. Neither tool's
+**write** side is absorbed, and core does not propose to: rewriting a consumer's yaml is not
+core's business, and `schemas/sprint-status.json` already records why that particular
+rewriter cannot be trusted with it.
+
 ## [0.202.0] — 2026-07-29
 
 ### Added — the consumer's fixture suite skipped 28 of its own 29 directories and printed nothing
