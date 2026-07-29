@@ -17,6 +17,74 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.204.0] — 2026-07-29
+
+### Fixed — the operator's escape hatch from the core-edit backstop was a string search, and a sentence saying no citation exists satisfied it
+
+`core-paths.sh --audit-diff` is the executable behind the `core-layer-immutability` check —
+the backstop that catches an in-place core edit when the keystroke guard did not see it. It
+FAILs on a core path touched by a non-reconcile commit, unless the operator authorized the
+edit. Deciding whether they did was `grep -q 'Operator authorization:'` over the whole of
+`docs/escalations/pending.md`.
+
+That is a second definition of "the operator authorized this", living beside the one
+`escalations.md` states and `validate-escalation-resolution.sh` enforces. Two definitions of
+one predicate drift, and this one had, in every direction at once. **Measured on the reference
+consumer at `170ff9d8c`: of the 8 lines that satisfy that grep, one sits in the file preamble
+and belongs to no entry, three are prose discussing the convention — one of them the sentence
+"No `Operator authorization:` citation exists or is required for this status" — and of the
+four real fields, one is on a `DECIDED_AUTONOMOUSLY` entry, which `escalations.md` defines as
+the lead's own call and exempts from citing anyone.** The negation of the thing satisfied the
+check for the thing.
+
+The arm now ASKS the script that owns the grammar:
+`validate-escalation-resolution.sh --any-authorized <pending.md>`, a new mode that answers the
+one question a caller with no transcript can answer — does this file carry a citation shaped
+like a citation, on an entry the **operator** dispositioned? What it deliberately does NOT do
+is unchanged: it still cannot tell whether a real citation covers these touches, and still
+says so in its own output rather than letting the exit code read as adjudication.
+
+**The differential, on the reference consumer's own escalations file rather than in a
+fixture.** With graph's real `pending.md`, before and after agree: exit 0,
+`AUTHORIZED: 2 of 3 RESOLVED/OVERRIDDEN entr(ies)` (the third quotes an operator message of 10
+characters, under the ≥12 floor `escalations.md` sets — a pre-existing rejection by core's own
+rule, not a new one). With the three field citations removed and the four non-citations left in
+place, **the shipped code exits 0 and prints `PASS (with citation)`; this release exits 1.**
+Control: the shipped code with `pending.md` absent entirely exits 1, so the 0 above came from
+the citation arm and not from another path.
+
+**The grammar change is shared, and its false-positive set is empty and measured.** The label
+now has to OPEN its line — a field is the thing at the start of its own line, beside
+`**Status:**` — which is a tightening of the entry parser both modes use. Run across 23 sprints
+of graph's `pending.md`, the existing `--escalations/--sprint` gate mode's output is
+byte-identical before and after, with a control showing entries were in scope (S299 produced a
+real FAIL line, not "nothing to check").
+
+**I53** binds the delegation: every mode one core script invokes on
+`validate-escalation-resolution.sh` is one it dispatches, and every mode it dispatches is named
+in its USAGE block. Delegation only beats restatement while the mode on the other side is real
+— an unknown argument exits 2, and the citation arm reads any non-zero as "no citation", so a
+rename would turn the backstop into a FAIL on trees that are clean. The call names the delegate
+in full rather than through a variable, so the spelling the invariant joins on is the one the
+code actually runs; an assembled call is one the join cannot see, and the invariant would then
+be guarding the prose that describes the call instead of the call.
+
+### Fixed — the check that calls itself the backstop was registered as having no enforcer
+
+`enforcement-map.yaml` carried `enforcer: []` for `core-layer-immutability` while
+`gate-validation.md` told the lead to run `core-paths.sh --audit-diff <sprint-base> HEAD` and
+paste its output into the gate log, and spelled out its exit codes. v0.199.0 shipped the
+executable and never bound it. That row is how "which catalog checks have a live machine
+enforcer" is answered — the question this file exists for — and it answered wrong about the
+check guarding the rule that keeps a consumer's core tree pullable at all. **This is the same
+defect v0.203.0 fixed for Check 5, one release later and one check over.**
+
+The row now binds the enforcer, records the call site and its posture, and binds
+`tests/fixtures/core-paths-audit-diff` — which existed, installs to consumers, and was
+invisible to H1 because nothing declared it. `adjudication` stays `llm`: the two carve-outs the
+check applies on top, override coverage and declared setup-substitution line regions, are
+judgement the mode does not make.
+
 ## [0.203.0] — 2026-07-29
 
 ### Added — Check 5 said "compare status values programmatically" and core shipped no program

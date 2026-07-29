@@ -587,13 +587,27 @@ checks:
   - id: core-layer-immutability
     title: Core-layer immutability (authoring guard)
     gate_types: [retro]
-    adjudication: llm   # git-diff logic run by the lead; reads the manifests below
+    adjudication: llm   # the two carve-outs are the lead's; the diff classification is not
     reads:
       - core/scripts/core-paths.sh        # --is-core: the core set, derived not restated
       - core/skills/ai-dlc/core-manifest.md
       - core/skills/ai-dlc-update/reconcile/setup-sites.md
-    enforcer: []
+    enforcer:
+      - core/scripts/core-paths.sh
+    call_sites:
+      - site: gate-validation.md core-layer-immutability
+        posture: FAILS the gate on exit 1; exit 2 is "the core set could not be resolved"
+          and is not a pass either
+        why: v0.199.0 gave this check its executable and left this row reading
+          `enforcer: []`, so the one check that calls itself the BACKSTOP for an
+          in-place core edit was registered as having nothing behind it. The row is
+          how "which catalog checks have a live machine enforcer" is answered, and
+          it answered wrong about the check guarding the rule that keeps a
+          consumer's core tree pullable. The adjudication stays llm because the two
+          carve-outs the check applies on top — override coverage and declared
+          setup-substitution line regions — are judgement the mode does not make.
     ci_workflow: ~
+    fixtures: [tests/fixtures/core-paths-audit-diff]
 
   - id: failure
     title: Gate Failure

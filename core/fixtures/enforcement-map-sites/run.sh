@@ -864,6 +864,67 @@ else
 fi
 mv "$FDS.orig" "$FDS"
 
+# --- Assertion 26: I53 — a mode one core script asks another for is one it dispatches --
+# `core-paths.sh --audit-diff` decides whether the operator authorized an in-place core edit
+# by CALLING `validate-escalation-resolution.sh --any-authorized` instead of restating that
+# script's citation grammar. Delegation beats restatement only while the mode on the other
+# side is real: an unknown argument exits 2, the caller reads any non-zero as "no citation",
+# and the backstop starts FAILing consumers whose trees are clean.
+#
+# Three arms, each on its OWN wording — I49's arrangement, and row 4's recorded trap is why.
+ESR="$ROOT/core/scripts/validate-escalation-resolution.sh"
+CPS="$ROOT/core/scripts/core-paths.sh"
+
+# ARM 1 — GHOST MODE. The caller keeps the old spelling after a rename. Assembled, never
+# written out: I53 excludes core/fixtures/ from its citation corpus, and a fixture leaning on
+# that exclusion to hold its own text goes red the day the exclusion is reconsidered.
+i53_ghost="--any-authorize""d-by"
+cp "$CPS" "$CPS.orig"
+sed "s@validate-escalation-resolution\\.sh\" --any-authorized@validate-escalation-resolution.sh\" ${i53_ghost}@" "$CPS.orig" > "$CPS"
+if cmp -s "$CPS.orig" "$CPS"; then
+  bad "FIXTURE BROKEN: the I53 ghost-mode mutation matched nothing, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "mode(s) it does not dispatch"; then
+    ok "one core script invoking a mode the other does not dispatch FAILS I53 (the call exits 2, and the citation arm reads that as 'no operator citation')"
+  else
+    bad "core-paths.sh called an escalation mode that does not exist and I53 stayed silent — the core-layer-immutability backstop would FAIL trees that are clean"
+  fi
+fi
+mv "$CPS.orig" "$CPS"
+
+# ARM 2 — UNDOCUMENTED MODE. Drop a mode from the USAGE block. The delegation is code, but
+# the operator reproducing it by hand reads that block.
+cp "$ESR" "$ESR.orig"
+grep -v '^#   validate-escalation-resolution.sh --any-authorized' "$ESR.orig" > "$ESR"
+if cmp -s "$ESR.orig" "$ESR"; then
+  bad "FIXTURE BROKEN: the I53 undocumented-mode mutation matched nothing, so the second arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "its own USAGE block never names"; then
+    ok "a dispatched escalation mode missing from the USAGE block FAILS I53 (a mode no operator can discover)"
+  else
+    bad "a mode vanished from the USAGE block and I53 reported clean — the discoverable set and the dispatched set can now diverge"
+  fi
+fi
+mv "$ESR.orig" "$ESR"
+
+# ARM 3 — VACUITY. Rename the sentinel bounding the dispatch extraction. I53 reports an
+# ABSENCE, and an empty dispatched set makes `comm` compare against nothing and agree.
+cp "$ESR" "$ESR.orig"
+sed 's@# MODE_DISPATCH_BEGIN@# ARG_TABLE_BEGIN@' "$ESR.orig" > "$ESR"
+if cmp -s "$ESR.orig" "$ESR"; then
+  bad "FIXTURE BROKEN: the I53 vacuity mutation matched nothing, so the third arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if printf '%s' "$out" | grep -q "parsed ZERO modes out of validate-escalation-resolution.sh"; then
+    ok "a renamed dispatch sentinel FAILS I53 loudly (an empty set is a subset of everything, so the join must refuse rather than agree)"
+  else
+    bad "the escalation dispatch extraction found nothing and I53 did not say so — it was comparing against an empty set and calling it agreement"
+  fi
+fi
+mv "$ESR.orig" "$ESR"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "enforcement-map-sites: PASS"; exit 0; fi
 echo "enforcement-map-sites: $fails assertion(s) FAILED" >&2

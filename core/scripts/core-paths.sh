@@ -317,21 +317,46 @@ EOF
   # The operator's escape hatch. PRESENCE only: this cannot tell whether the
   # citation covers THIS touch, and says so rather than letting a caller read the
   # exit code as adjudication.
+  #
+  # WHETHER A CITATION EXISTS AT ALL IS NOT THIS SCRIPT'S QUESTION TO ANSWER. This arm used to
+  # be `grep -q 'Operator authorization:'` over the whole file, which is a second definition of
+  # "the operator authorized something" living next to the one `escalations.md` states and
+  # `validate-escalation-resolution.sh` enforces. Two definitions of one predicate drift, and
+  # this one had: measured on the reference consumer, half the lines satisfying that grep were
+  # not citations -- a preamble line belonging to no entry, prose quoting the convention, and
+  # one sentence stating that no citation exists or is required. Delegate to the owner instead.
+  # The delegate resolves beside this script in BOTH layouts (core/scripts/, scripts/ai-dlc/),
+  # the same way it resolves its own sibling; a missing delegate is exit 2, never a pass.
   ESC="${AUDIT_ROOT}/docs/escalations/pending.md"
-  if [ -f "$ESC" ] && grep -q 'Operator authorization:' "$ESC"; then
-    echo "PASS (with citation): core path(s) touched by non-reconcile commit(s), and an"
-    echo "  'Operator authorization:' line exists in the WORKING TREE's"
-    echo "  docs/escalations/pending.md -- the working tree and not <head-ref>, because at a"
-    echo "  live gate the operator has usually not committed the citation yet. A sweep over"
-    echo "  historical ranges therefore reads today's citations against yesterday's diffs."
-    echo "  This mode detects PRESENCE only -- whether the citation covers these touches is"
-    echo "  the adjudicator's call, not this exit code's:"
+  # The delegate is named in FULL at the call, not held in a variable, so the mode it is asked
+  # for is a literal string in this file. I53 joins that spelling to the modes the delegate
+  # dispatches, and a call assembled out of a variable is one the join cannot see -- which
+  # would leave the invariant guarding the prose that describes this call and not the call.
+  ESC_DIR="$(cd "$(dirname "$0")" && pwd)"
+  AUTH_OUT=""
+  if [ ! -f "$ESC_DIR/validate-escalation-resolution.sh" ]; then
+    echo "core-paths: cannot classify the range -- $ESC_DIR/validate-escalation-resolution.sh is" >&2
+    echo "  missing, so whether the operator authorized these touches cannot be decided." >&2
+    echo "  Reinstall ai-dlc. Findings:" >&2
+    printf '%s' "$OFFENDERS" >&2
+    exit 2
+  fi
+  if AUTH_OUT="$(bash "$ESC_DIR/validate-escalation-resolution.sh" --any-authorized "$ESC" 2>&1)"; then
+    echo "PASS (with citation): core path(s) touched by non-reconcile commit(s), and the WORKING"
+    echo "  TREE's docs/escalations/pending.md carries an operator citation that"
+    echo "  validate-escalation-resolution.sh accepts -- the working tree and not <head-ref>,"
+    echo "  because at a live gate the operator has usually not committed the citation yet. A"
+    echo "  sweep over historical ranges therefore reads today's citations against yesterday's"
+    echo "  diffs. This mode detects PRESENCE only -- whether the citation covers these touches"
+    echo "  is the adjudicator's call, not this exit code's:"
+    printf '%s\n' "$AUTH_OUT" | sed 's/^/  /'
     printf '%s' "$OFFENDERS"
     exit 0
   fi
 
   echo "FAIL: core path(s) edited in place by non-reconcile commit(s), no operator-authorization citation:"
   printf '%s' "$OFFENDERS"
+  printf '%s\n' "$AUTH_OUT" | sed 's/^/  /'
   exit 1
 fi
 

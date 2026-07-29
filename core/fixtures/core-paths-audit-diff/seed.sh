@@ -115,6 +115,17 @@ done
 [ -n "$RESOLVER" ] || { echo "seed: no core-paths.sh found walking up from $HERE" >&2; exit 2; }
 cp "$RESOLVER" "$WORK/control-core-paths.sh" || exit 2
 
+# The citation arm DELEGATES to a sibling — it asks validate-escalation-resolution.sh whether
+# the file carries an operator citation rather than restating that script's grammar. The
+# control copy and every mutant copy live in $WORK, so the sibling has to be there too or all
+# of them take the "delegate missing" exit-2 branch and every mutant scores as a kill at once.
+# Take it from the SAME directory the resolver was found in — walking up a second time could
+# resolve a different tree, and resolving it relative to $RESOLVER is the sibling-in-one-dir
+# case install.sh preserves in both layouts, not the walk-up I33 forbids.
+ESR_SRC="$(dirname "$RESOLVER")/validate-escalation-resolution.sh"
+[ -f "$ESR_SRC" ] || { echo "seed: no validate-escalation-resolution.sh beside $RESOLVER" >&2; exit 2; }
+cp "$ESR_SRC" "$WORK/validate-escalation-resolution.sh" || exit 2
+
 cat > "$WORK/env.sh" <<ENVEOF
 PROJ="$PROJ"
 VALIDATOR="$RESOLVER"
