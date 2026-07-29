@@ -158,6 +158,7 @@ core_manifest:
   - fixtures/check-h1-recursion/**
   - fixtures/check-manifest-bypass/**
   - fixtures/check5-anchor-base/**
+  - fixtures/check-22-spawn-ledger/**
   - fixtures/ci-gates-resolution/**
   - fixtures/consumer-machinery-home/**
   - fixtures/layer-qualifier-grain/**

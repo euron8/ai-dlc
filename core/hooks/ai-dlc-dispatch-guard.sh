@@ -169,37 +169,43 @@ ROLE_FILE_READABLE=true
 # settings.json. The ROLE FILE declares neither: a project changing which model a
 # role runs on is configuration, and forcing it through a core file made every such
 # change core divergence needing an override. The role file names the role; the
-# config says what that role runs as.
-#
-# `model` is a KEY into `aiDlcModels`, not a model string. The Agent tool's `model`
-# parameter is an enum (`opus`/`sonnet`/`haiku`/`fable`) and rejects a full string
-# like `claude-opus-5[1m]`, so the guard injects the KEY; the value it maps to is
-# what a teammate would type at `/model`. Resolving the key here also proves the
-# consumer's config is coherent before anything is bound.
+# config says what that role runs as. `pin_key()` below owns the resolution and
+# says why it has the shape it does.
 SETTINGS="$PROJECT_DIR/.claude/settings.json"
-PIN_KEY=""
-PIN_MODEL=""
-PIN_EFFORT=""
-if [ -r "$SETTINGS" ]; then
-  PIN_KEY="$(jq -r --arg r "$ROLE" '.aiDlcRoles[$r].model // empty' "$SETTINGS" 2>/dev/null || true)"
-  PIN_EFFORT="$(jq -r --arg r "$ROLE" '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null || true)"
-  [ -n "$PIN_KEY" ] && PIN_MODEL="$(jq -r --arg k "$PIN_KEY" \
-    '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null || true)"
-fi
 
-# Effort is validated against the documented vocabulary rather than passed through.
-# It is injected into the dispatch PROMPT (the Agent tool has no `effort` parameter),
-# so a malformed value would become an instruction to run a slash command that does
-# not exist. An unrecognised level is dropped, not repaired.
-case "$PIN_EFFORT" in
-  low|medium|high|xhigh|max) ;;
-  *) PIN_EFFORT="" ;;
-esac
-
-# EXPECT is the value the guard binds as `model`: the KEY, because that is what the
-# Agent tool accepts. Set only when the key resolved to a real string.
-EXPECT=""
-[ -n "$PIN_MODEL" ] && EXPECT="$PIN_KEY"
+# BOTH FUNCTIONS BELOW ARE SHARED, BYTE-IDENTICALLY, WITH
+# core/scripts/validate-spawn-ledger.sh, and I56 binds them.
+#
+# This guard decides the pin at DISPATCH time and records what it bound in the
+# spawn ledger. Check 22 re-asks the same question at the GATE — is the model
+# each recorded spawn actually ran on the one its role's config pins — so the
+# two must agree on what "the pin" is and on when a value matches it. A copy
+# that resolved the pin differently, or that narrowed the match, would clear a
+# spawn this guard corrected or fire on one it bound correctly, and either way
+# the operator believes whichever ran.
+#
+# COPIES rather than a sourced helper, for I25's reason: a guard that sources a
+# helper stops binding models entirely when a partial install omits it. It fails
+# open, silently, and a disabled dispatch guard is far worse than two bound
+# copies of eleven lines.
+#
+# `model` is a KEY into `aiDlcModels`, not a model string. The Agent tool's
+# `model` parameter is an enum (`opus`/`sonnet`/`haiku`/`fable`) and rejects a
+# full string like `claude-opus-5[1m]`, so the guard injects the KEY; the value
+# it maps to is what a teammate would type at `/model`. A key that maps to
+# nothing binds nothing, so it is not a pin and this prints nothing for it —
+# which is also why resolving here proves the config coherent before anything
+# is bound. Never fails: an unreadable or absent settings.json is a consumer
+# that pins no models, not an error.
+pin_key() {
+  pk_k=""; pk_m=""
+  [ -r "$1" ] || return 0
+  pk_k="$(jq -r --arg r "$2" '.aiDlcRoles[$r].model // empty' "$1" 2>/dev/null || true)"
+  [ -n "$pk_k" ] || return 0
+  pk_m="$(jq -r --arg k "$pk_k" '.aiDlcModels[$k] // empty' "$1" 2>/dev/null || true)"
+  [ -n "$pk_m" ] && printf '%s\n' "$pk_k"
+  return 0
+}
 
 # A request MATCHES when it is the key itself, or a model string containing it
 # (`claude-opus-5[1m]` against key `opus`). The tolerance is bounded by the
@@ -213,19 +219,33 @@ matches_pin() {
   esac
 }
 
-REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
+# The role's model and effort both come from `aiDlcRoles.<role>`, but only the
+# model is shared: the gate has no use for effort, which is injected into the
+# dispatch PROMPT (the Agent tool has no `effort` parameter) and leaves no
+# record a later reader could check.
+PIN_EFFORT=""
+[ -r "$SETTINGS" ] && PIN_EFFORT="$(jq -r --arg r "$ROLE" \
+  '.aiDlcRoles[$r].effort // empty' "$SETTINGS" 2>/dev/null || true)"
 
-# A request MATCHES when it is the key itself, or a model string containing it
-# (`claude-opus-5[1m]` against key `opus`). The tolerance is bounded by the
-# DECLARED key rather than a hardcoded tier table, so it cannot drift.
-matches_pin() {
-  [ -n "$EXPECT" ] || return 1
-  case "$1" in
-    "$EXPECT")   return 0 ;;
-    *"$EXPECT"*) return 0 ;;
-    *)           return 1 ;;
-  esac
-}
+# Effort is validated against the documented vocabulary rather than passed through.
+# A malformed value would become an instruction to run a slash command that does
+# not exist. An unrecognised level is dropped, not repaired.
+case "$PIN_EFFORT" in
+  low|medium|high|xhigh|max) ;;
+  *) PIN_EFFORT="" ;;
+esac
+
+# EXPECT is the value the guard binds as `model`: the KEY, because that is what
+# the Agent tool accepts. `pin_key` already returns it only when it resolved to a
+# real string, so an empty EXPECT means "this role pins nothing", exactly as
+# before. PIN_MODEL is the string it maps to, carried for the deny text and the
+# ledger's `model_pinned`.
+EXPECT="$(pin_key "$SETTINGS" "$ROLE")"
+PIN_MODEL=""
+[ -n "$EXPECT" ] && PIN_MODEL="$(jq -r --arg k "$EXPECT" \
+  '.aiDlcModels[$k] // empty' "$SETTINGS" 2>/dev/null || true)"
+
+REQUESTED="$(printf '%s' "$INPUT" | jq -r '.tool_input.model // empty' 2>/dev/null)"
 
 # --- SPAWN LEDGER --------------------------------------------------------------
 # PURE INSTRUMENTATION, written at DISPATCH time. Nothing below bounds, denies or
