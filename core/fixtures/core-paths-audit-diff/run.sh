@@ -103,15 +103,58 @@ audit "$VALIDATOR" "$BASE" "$RECONCILE"
   && ok "the same edit authored by a chore(ai-dlc-update) commit passes" \
   || bad "a reconcile-authored core edit did not pass by the reconcile arm (rc=$RC)"
 
-# --- Assertion 4: the operator's citation is an escape hatch, not an exemption --
+# --- Assertion 4: a real operator citation is an escape hatch, not an exemption --
+# The arm delegates to validate-escalation-resolution.sh, which owns the escalations.md
+# grammar, so what clears the range is a citation on an entry the OPERATOR dispositioned.
 mkdir -p "$(dirname "$ESC")" || broken "could not stage the escalations dir"
-printf -- '- Operator authorization: S1 core touch, adjudicated.\n' > "$ESC"
+cat > "$ESC" <<'RESOLVED_ESC'
+## [S1] [Lead] - 2026-01-01T00:00:00Z — core edit needed outside the layer
+**Status:** RESOLVED
+**Operator authorization:** 2026-01-01T00:10:00Z | "edit the core file directly this once"
+RESOLVED_ESC
 audit "$VALIDATOR" "$BASE" "$DIRTY"
 esc_rc="$RC"
+[ "$esc_rc" -eq 0 ] && says "PASS (with citation)" && says "PRESENCE only" \
+  && ok "a well-formed citation on an operator-resolved entry clears the range, and the output says it checked presence only" \
+  || bad "the citation arm did not fire on a well-formed citation, or did not state what it does not verify (rc=$esc_rc)"
+
+# --- Assertion 4a: the label alone is not a citation ---------------------------
+# THIS IS THE SHIPPED DEFECT THIS RELEASE FIXES, kept as an assertion because the old arm
+# passed it. `grep -q 'Operator authorization:'` over the whole file counts a bare line that
+# belongs to no entry, has no timestamp and quotes no operator. On the reference consumer four
+# of the eight lines satisfying that grep were of this kind, one of them a sentence saying that
+# no citation exists or is required — the negation of the thing satisfying the check for it.
+printf -- '- Operator authorization: S1 core touch, adjudicated.\n' > "$ESC"
+audit "$VALIDATOR" "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] \
+  && ok "a bare 'Operator authorization:' line belonging to no entry does NOT clear the range" \
+  || bad "a line carrying only the label cleared an in-place core edit (rc=$RC) — the escape hatch is a string search again"
+
+# --- Assertion 4b: the lead's own call is not the operator's -------------------
+# Asserted on the STATUS, with the citation itself byte-identical to Assertion 4's, so this
+# arm cannot be satisfied by whatever makes 4a pass. escalations.md: DECIDED_AUTONOMOUSLY is
+# the honest label for a decision the lead made and needs no citation — so it grants none.
+cat > "$ESC" <<'AUTONOMOUS_ESC'
+## [S1] [Lead] - 2026-01-01T00:00:00Z — core edit needed outside the layer
+**Status:** DECIDED_AUTONOMOUSLY
+**Operator authorization:** 2026-01-01T00:10:00Z | "edit the core file directly this once"
+AUTONOMOUS_ESC
+audit "$VALIDATOR" "$BASE" "$DIRTY"
+[ "$RC" -eq 1 ] \
+  && ok "the same citation on a DECIDED_AUTONOMOUSLY entry does NOT clear the range" \
+  || bad "a lead-authored disposition cleared an in-place core edit (rc=$RC) — the operator's escape hatch is available to the lead"
+
+# --- Assertion 4c: the delegate is missing, so nothing is decided --------------
+# Not 0 and not 1. "Cannot determine" is this resolver's 2 everywhere else, and a caller that
+# reads an unanswerable question as a clean tree is the failure the whole mode exists against.
+mv "$WORKDIR/validate-escalation-resolution.sh" "$WORKDIR/esr.parked" || broken "could not park the delegate"
+audit "$CONTROL_VALIDATOR" "$BASE" "$DIRTY"
+del_rc="$RC"
+mv "$WORKDIR/esr.parked" "$WORKDIR/validate-escalation-resolution.sh" || broken "could not restore the delegate"
+[ "$del_rc" -eq 2 ] \
+  && ok "with the delegate absent the mode exits 2 (cannot determine), never 0" \
+  || bad "the citation delegate was missing and the mode answered $del_rc — an undecidable question came back as a verdict"
 rm -f "$ESC"
-[ "$esc_rc" -eq 0 ] && says "PASS (with citation)" && says "detects PRESENCE only" \
-  && ok "an Operator authorization citation clears the range, and the output says it checked presence only" \
-  || bad "the citation arm did not fire, or did not state what it does not verify (rc=$esc_rc)"
 
 # --- Assertion 5: a tree the check does not cover says so ----------------------
 # Not "PASS". A pre-layer-split range and a distribution checkout both have zero paths that
@@ -166,6 +209,41 @@ audit "$M" "$BASE" "$DIRTY"
   || ok "mutation 4 killed: a finding that prints while the caller reads success is the whole failure class"
 audit "$M" "$BASE" "$RECONCILE"
 [ "$RC" -eq 0 ] || bad "MUTATION 4 ENTANGLED: it also changed the verdict on a reconcile-authored edit"
+
+# --- Mutation 5: the citation arm goes back to searching for the label ---------
+# The shipped defect, restored. Asserted on the BARE-LABEL range, because a well-formed
+# citation clears the range under both the mutant and the fix — a mutant that changes no
+# answer on the input an assertion uses is a mutant that assertion cannot see.
+printf -- '- Operator authorization: S1 core touch, adjudicated.\n' > "$ESC"
+M="$(mutate citation-grep 's@^  if AUTH_OUT=.*--any-authorized.*then$@  if AUTH_OUT="" \&\& grep -q "Operator authorization:" "$ESC"; then@')" || exit 2
+audit "$M" "$BASE" "$DIRTY"
+[ "$RC" -eq 0 ] \
+  && ok "mutation 5 killed: with the delegation replaced by a whole-file search, a bare label clears an in-place core edit again" \
+  || bad "MUTATION 5 SURVIVED: the label-only line still failed the range with the arm reverted to a string search (rc=$RC)"
+rm -f "$ESC"
+audit "$M" "$BASE" "$CLEAN"
+[ "$RC" -eq 0 ] || bad "MUTATION 5 ENTANGLED: it also changed the verdict on a clean layered range"
+
+# --- Mutation 6: the missing-delegate guard never fires ------------------------
+# Asserted on the EXIT CODE against a parked delegate, and the guard is disabled by its
+# CONDITION rather than by its exit, so this mutant and mutation 5 cannot both be satisfied by
+# one change to the arm.
+M="$(mutate delegate-guard 's@^  if \[ ! -f "\$ESC_DIR/validate-escalation-resolution.sh" \]; then@  if [ -f "/no-such-path-ever" ]; then@')" || exit 2
+cat > "$ESC" <<'RESOLVED_ESC2'
+## [S1] [Lead] - 2026-01-01T00:00:00Z — core edit needed outside the layer
+**Status:** RESOLVED
+**Operator authorization:** 2026-01-01T00:10:00Z | "edit the core file directly this once"
+RESOLVED_ESC2
+mv "$WORKDIR/validate-escalation-resolution.sh" "$WORKDIR/esr.parked" || broken "could not park the delegate for mutation 6"
+audit "$M" "$BASE" "$DIRTY"
+mut6_rc="$RC"
+mv "$WORKDIR/esr.parked" "$WORKDIR/validate-escalation-resolution.sh" || broken "could not restore the delegate after mutation 6"
+[ "$mut6_rc" -ne 2 ] \
+  && ok "mutation 6 killed: without the guard, an absent delegate stops answering 'cannot determine' and returns a verdict instead" \
+  || bad "MUTATION 6 SURVIVED: the mode still exited 2 with its missing-delegate guard disabled"
+audit "$M" "$BASE" "$DIRTY"
+[ "$RC" -eq 0 ] || bad "MUTATION 6 ENTANGLED: with the delegate present it also changed the verdict on a cited range (rc=$RC)"
+rm -f "$ESC"
 
 echo
 if [ "$fails" -eq 0 ]; then

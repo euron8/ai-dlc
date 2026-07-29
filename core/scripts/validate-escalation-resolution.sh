@@ -35,25 +35,50 @@
 #   treats DECIDED_AUTONOMOUSLY as non-blocking); closing it needs a baseline diff of who was ever
 #   a HARD_BLOCK, which is a later increment.
 #
+# --any-authorized: THE SAME DEFINITION, ASKED WITHOUT A TRANSCRIPT. `core-paths.sh
+# --audit-diff` offers the operator an escape hatch from the core-layer-immutability backstop,
+# and until now it decided whether one had been granted with `grep -q 'Operator authorization:'`
+# over the whole of pending.md. That is a SECOND definition of "the operator authorized this",
+# and it had already drifted from this one in every direction that matters: it counts a line in
+# the file preamble that belongs to no entry, a line inside an entry the lead resolved on its own
+# authority (`DECIDED_AUTONOMOUSLY`, which escalations.md says needs no citation and is not an
+# operator adjudication), and prose that merely SAYS the words. Measured on the reference
+# consumer: of the 8 lines that satisfy the grep, one sits in the preamble, three are prose
+# discussing the convention -- one of them the sentence "No `Operator authorization:` citation
+# exists or is required for this status" -- and four are real fields, of which one is on a
+# DECIDED_AUTONOMOUSLY entry. The negation of the thing satisfied the check for the thing.
+#
+# So the hatch now ASKS THIS SCRIPT, which owns the grammar, instead of restating a looser one.
+# This mode answers the one question a caller with no transcript can answer: does this file
+# carry at least one citation that is SHAPED like a citation and sits on an entry whose status
+# says the operator, not the lead, decided? It does NOT claim the citation covers any particular
+# change -- that is still the adjudicator's call, and --audit-diff still says so in its output.
+#
 # USAGE
 #   validate-escalation-resolution.sh --escalations <pending.md> --sprint <N> [--transcript PATH]
+#   validate-escalation-resolution.sh --any-authorized <pending.md>
 #
 # EXIT
 #   0  every current-sprint RESOLVED/OVERRIDDEN entry cites a verified operator message (or none
-#      are in scope)
+#      are in scope); --any-authorized: at least one well-formed citation on a terminal entry
 #   1  a current-sprint resolution cites no genuine operator message, or omits the citation, or
-#      (gate mode) no transcript was provided to verify against
+#      (gate mode) no transcript was provided to verify against; --any-authorized: no entry in
+#      the file carries a well-formed operator citation
 #   2  bad arguments / unreadable escalations file
 set -u
 
 ESCALATIONS=""
 SPRINT=""
 TRANSCRIPT=""
+ANY_AUTHORIZED=0
 while [ $# -gt 0 ]; do
   case "$1" in
+# MODE_DISPATCH_BEGIN
     --escalations) ESCALATIONS="${2:-}"; shift 2 ;;
     --sprint)      SPRINT="${2:-}"; shift 2 ;;
     --transcript)  TRANSCRIPT="${2:-}"; shift 2 ;;
+    --any-authorized) ANY_AUTHORIZED=1; ESCALATIONS="${2:-}"; shift 2 ;;
+# MODE_DISPATCH_END
     -h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -63,26 +88,36 @@ done
 # relative to $0 so this works in the distribution (core/scripts/) and the consumer (scripts/).
 STEER_SCRIPT="$(cd "$(dirname "$0")" && pwd)/validate-steering-budget.sh"
 
-if [ -z "$ESCALATIONS" ] || [ -z "$SPRINT" ]; then
-  echo "FAIL: --escalations <pending.md> and --sprint <N> are required" >&2
-  exit 2
-fi
-# No escalations file is a legitimate clean state -- nothing to adjudicate.
-[ -f "$ESCALATIONS" ] || { echo "OK: no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
+if [ "$ANY_AUTHORIZED" -eq 1 ]; then
+  [ -n "$ESCALATIONS" ] || { echo "FAIL: --any-authorized <pending.md> needs a path" >&2; exit 2; }
+  # An absent file is a clean state for the gate mode above and the OPPOSITE here: no file is no
+  # citation, and a caller asking "was this authorized?" must not read "nothing to check" as yes.
+  [ -f "$ESCALATIONS" ] || { echo "NONE: no escalations file ($ESCALATIONS), so no operator citation exists."; exit 1; }
+  SPRINT_NUM=""
+else
+  if [ -z "$ESCALATIONS" ] || [ -z "$SPRINT" ]; then
+    echo "FAIL: --escalations <pending.md> and --sprint <N> are required" >&2
+    exit 2
+  fi
+  # No escalations file is a legitimate clean state -- nothing to adjudicate.
+  [ -f "$ESCALATIONS" ] || { echo "OK: no escalations file ($ESCALATIONS); nothing to check."; exit 0; }
 
-# Normalize the sprint token: accept "290" or "S290".
-SPRINT_NUM="$(printf '%s' "$SPRINT" | tr -cd '0-9')"
-[ -n "$SPRINT_NUM" ] || { echo "FAIL: --sprint must contain a number (got '$SPRINT')" >&2; exit 2; }
+  # Normalize the sprint token: accept "290" or "S290".
+  SPRINT_NUM="$(printf '%s' "$SPRINT" | tr -cd '0-9')"
+  [ -n "$SPRINT_NUM" ] || { echo "FAIL: --sprint must contain a number (got '$SPRINT')" >&2; exit 2; }
+fi
 
 # Split pending.md into entries and, for each CURRENT-SPRINT entry whose Status is RESOLVED or
 # OVERRIDDEN, emit one TAB-separated record: <header>\t<STATUS>\t<auth-line-or-__MISSING__>.
 # The auth line is whatever follows an "Operator authorization:" (or "operator_authorization:")
 # label, verbatim, so bash can parse the timestamp + quoted substring exactly as F6 does.
-RECORDS="$(awk -v sprint="$SPRINT_NUM" '
+RECORDS="$(awk -v sprint="$SPRINT_NUM" -v anyauth="$ANY_AUTHORIZED" '
   function flush() {
     if (header == "") return
-    # In scope only if the header names THIS sprint (S<N> not followed by another digit).
-    if (header ~ ("[Ss]" sprint "([^0-9]|$)") && (status == "RESOLVED" || status == "OVERRIDDEN")) {
+    if (status != "RESOLVED" && status != "OVERRIDDEN") return
+    # --any-authorized asks about the FILE, so every terminal entry is in scope. The gate mode is
+    # in scope only if the header names THIS sprint (S<N> not followed by another digit).
+    if (anyauth == 1 || header ~ ("[Ss]" sprint "([^0-9]|$)")) {
       printf "%s\t%s\t%s\n", header, status, (auth == "" ? "__MISSING__" : auth)
     }
   }
@@ -99,7 +134,19 @@ RECORDS="$(awk -v sprint="$SPRINT_NUM" '
     next
   }
   # Operator-authorization citation line (with or without ** markdown, _ or space).
-  tolower($0) ~ /operator[_ ]authorization:/ {
+  #
+  # THE LABEL MUST OPEN THE LINE. escalations.md writes this as a FIELD of an entry, beside
+  # **Status:** and **Context:**, and a field is the thing at the start of its own line. This
+  # test used to be "the label appears anywhere on the line", which also matched an entry
+  # discussing the convention in prose -- including, on the reference consumer, a sentence
+  # reading "No `Operator authorization:` citation exists or is required for this status."
+  # A body that says a citation does not exist is not a citation. Leading blockquote, list and
+  # emphasis markers are stripped first so `> `, `- ` and `**` spellings all still count.
+  {
+    lbl = $0
+    gsub(/^[[:space:]>*_-]+/, "", lbl)
+  }
+  tolower(lbl) ~ /^operator[_ ]authorization:/ {
     a = $0
     sub(/^[^:]*:[[:space:]]*/, "", a)
     if (auth == "") auth = a
@@ -107,6 +154,36 @@ RECORDS="$(awk -v sprint="$SPRINT_NUM" '
   }
   END { flush() }
 ' "$ESCALATIONS")"
+
+# --- --any-authorized: shape only, no transcript, no sprint ------------------------------------
+# Reports the COUNTS it compared, because "no citation found" and "no entry was ever examined"
+# are different facts and a caller that cannot tell them apart will read the second as the first.
+if [ "$ANY_AUTHORIZED" -eq 1 ]; then
+  TERMINAL=0; AUTHORIZED=0; FIRST=""
+  while IFS="$(printf '\t')" read -r header status authline; do
+    [ -n "$header" ] || continue
+    TERMINAL=$((TERMINAL + 1))
+    [ "$authline" = "__MISSING__" ] && continue
+    [ -n "$authline" ] || continue
+    quote="$(printf '%s' "$authline" | sed -n 's/.*"\(.*\)".*/\1/p')"
+    [ -z "$quote" ] && quote="$(printf '%s' "${authline#*|}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+    [ "${#quote}" -lt 12 ] && continue
+    AUTHORIZED=$((AUTHORIZED + 1))
+    [ -n "$FIRST" ] || FIRST="$(printf '%s' "$header" | sed -E 's/^#+ //' | cut -c1-72)"
+  done <<EOF
+$RECORDS
+EOF
+  if [ "$AUTHORIZED" -gt 0 ]; then
+    echo "AUTHORIZED: ${AUTHORIZED} of ${TERMINAL} RESOLVED/OVERRIDDEN entr(ies) in ${ESCALATIONS} carry a"
+    echo "  well-formed 'Operator authorization:' citation. First: ${FIRST}"
+    exit 0
+  fi
+  echo "NONE: ${TERMINAL} RESOLVED/OVERRIDDEN entr(ies) in ${ESCALATIONS}, none carrying a well-formed"
+  echo "  'Operator authorization:' field (a line-leading label, an ISO timestamp and a verbatim"
+  echo "  operator quote of >=12 characters -- escalations.md). A DECIDED_AUTONOMOUSLY entry is the"
+  echo "  lead's own call and is not one; prose naming the convention is not one either."
+  exit 1
+fi
 
 if [ -z "$RECORDS" ]; then
   echo "OK: no S${SPRINT_NUM} RESOLVED/OVERRIDDEN escalation requires an operator citation."

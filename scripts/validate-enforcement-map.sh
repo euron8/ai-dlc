@@ -1657,6 +1657,50 @@ else
   fi
 fi
 
+# --- I53: the escalation-citation modes one core script asks another for actually exist ------
+#
+# I49 binds core-paths.sh's modes to the PROSE that names them. This is the same join where the
+# caller is CODE: `core-paths.sh --audit-diff` decides whether the operator authorized an
+# in-place core edit by shelling out to `validate-escalation-resolution.sh --any-authorized`,
+# because that script owns the escalations.md citation grammar and the arm used to restate a
+# looser one. A delegation is only better than a restatement while the mode on the other side
+# is real — rename or drop it and the call exits 2 on an unknown argument, which the caller
+# reads as "no citation" and turns into a FAIL on every consumer whose tree is clean.
+#
+# Both arms are the ones I49 settled on, for the same measured reasons: forward, every mode a
+# caller names is dispatched; reverse, every dispatched mode appears in the USAGE block, because
+# a hidden mode is one no operator finds and no rename reaches. "Every mode has a caller" is
+# again NOT asserted — `--transcript` is a modifier of the gate mode, not a caller's entry point.
+i53_f="$REPO_ROOT/core/scripts/validate-escalation-resolution.sh"
+if [ ! -f "$i53_f" ]; then
+  err "I53 cannot find core/scripts/validate-escalation-resolution.sh. It binds the modes that script dispatches to the modes core's other scripts invoke on it; with the script gone the join compares nothing and passes, while core-paths.sh's citation arm calls a file that is not there."
+else
+  i53_modes="$(awk '/# MODE_DISPATCH_BEGIN/{on=1;next} /# MODE_DISPATCH_END/{exit} on{print}' "$i53_f" \
+    | sed -nE 's@^[[:space:]]*(--[a-z-]+([|]--[a-z-]+)*)\).*@\1@p' | tr '|' '\n' | sort -u)"
+  # Callers, minus the three subjects I49 measured as non-callers, for the same reasons:
+  # core/fixtures/ writes wrong spellings on purpose, this file quotes them in prose and in its
+  # own grep flags, and a script documenting itself is not a caller.
+  # Callers name the delegate in full, so the mode is a literal beside the script name in both
+  # the code that calls it (`"$ESC_DIR/validate-escalation-resolution.sh" --mode`) and the prose
+  # that describes the call. The optional closing quote is what lets one pattern see both.
+  i53_cited="$(grep -rhoE 'validate-escalation-resolution\.sh"? --[a-z-]+' "$REPO_ROOT/core" "$REPO_ROOT/scripts" "$REPO_ROOT/templates" 2>/dev/null \
+    --exclude-dir=fixtures --exclude=validate-escalation-resolution.sh --exclude="$(basename "$0")" \
+    | sed -E 's@^validate-escalation-resolution\.sh"? @@' | sort -u)"
+  # USAGE is a comment block here rather than an echo, and the EXIT block below it discusses
+  # the same mode names in prose. Read the usage LINES — the ones spelling out an invocation —
+  # not the block, or the reverse arm is satisfied by the paragraph explaining the exit codes.
+  i53_usage="$(sed -nE 's@^#[[:space:]]+validate-escalation-resolution\.sh (.*)$@\1@p' "$i53_f" \
+    | grep -oE '\-\-[a-z-]+' | sort -u)"
+  if [ -z "$i53_modes" ] || [ -z "$i53_cited" ] || [ -z "$i53_usage" ]; then
+    err "I53 parsed ZERO modes out of validate-escalation-resolution.sh's dispatch ($(printf '%s' "$i53_modes" | grep -c . ) found), out of the core scripts that invoke it ($(printf '%s' "$i53_cited" | grep -c . ) found), and/or out of its USAGE block ($(printf '%s' "$i53_usage" | grep -c . ) found). An empty set is a subset of everything, so this fails closed rather than reporting agreement it never computed."
+  else
+    i53_ghost="$(comm -23 <(printf '%s\n' "$i53_cited") <(printf '%s\n' "$i53_modes") | tr '\n' ' ')"
+    [ -n "$i53_ghost" ] && err "I53 core scripts invoke validate-escalation-resolution.sh mode(s) it does not dispatch: ${i53_ghost}. That call exits 2 on an unknown argument, and core-paths.sh's citation arm reads any non-zero as 'no operator citation' — so a renamed mode turns the core-layer-immutability backstop into a FAIL on trees that are clean, which is how a working check gets switched off."
+    i53_undoc="$(comm -23 <(printf '%s\n' "$i53_modes") <(printf '%s\n' "$i53_usage") | tr '\n' ' ')"
+    [ -n "$i53_undoc" ] && err "I53 validate-escalation-resolution.sh dispatches mode(s) its own USAGE block never names: ${i53_undoc}. A mode no usage line mentions is one an operator cannot discover and a rename cannot reach."
+  fi
+fi
+
 # --- I50: every scripts/ai-dlc/<script> a shipped file names is one core actually ships ---
 #
 # I49 binds the MODES of one resolver. This is the same join one level out, over every
@@ -2233,7 +2277,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), and the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), and every escalation-citation mode one core script invokes on another is dispatched and documented there (I53)."
   exit 0
 fi
 exit 1

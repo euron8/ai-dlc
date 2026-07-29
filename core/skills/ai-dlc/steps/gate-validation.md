@@ -1708,8 +1708,9 @@ scripts/ai-dlc/core-paths.sh --audit-diff <sprint-base> HEAD
 ```
 
 Exit 0 = no core path edited in place, or every touching commit is a recognized
-`chore(ai-dlc-update):` reconcile, or an operator-authorization citation is
-present. Exit 1 = a core path edited by a non-reconcile commit with no citation.
+`chore(ai-dlc-update):` reconcile, or `docs/escalations/pending.md` carries an
+operator-authorization citation that `validate-escalation-resolution.sh` accepts.
+Exit 1 = a core path edited by a non-reconcile commit with no such citation.
 Exit 2 = the core set could not be resolved, which is **not** a pass. A `DORMANT`
 line means the activation rule below did not hold at `<sprint-base>`; it is not
 evidence that no core file was edited.
@@ -1718,7 +1719,18 @@ That mode does exactly what the paragraph below describes, which is why it exist
 this check called itself the backstop while being adjudicated by an agent reading a
 paragraph. Its findings are the input to the adjudication, not a substitute for it —
 the two carve-outs (override coverage and setup-substitution sites) are yours to
-apply on top, and a `PASS (with citation)` only reports that a citation EXISTS.
+apply on top, and a `PASS (with citation)` only reports that a citation exists, never
+that it covers these touches.
+
+**What the citation arm does and does not decide.** It asks
+`validate-escalation-resolution.sh --any-authorized`, the script that owns the
+`escalations.md` citation grammar, rather than searching for the label itself — a
+second definition of "the operator authorized this" drifts from the first, and this
+one had. What it accepts is a citation on an entry the **operator** dispositioned
+(`RESOLVED` / `OVERRIDDEN`), carrying the timestamp and the verbatim quote
+`escalations.md` specifies. A `DECIDED_AUTONOMOUSLY` entry is the lead's own call and
+needs no citation, so it grants no exemption here either. **Which touches a real
+citation covers is still yours to adjudicate** — the mode reports that one exists.
 
 Internally it computes the sprint diff against the branch base,
 `git diff --name-only <sprint-base>..HEAD`, and asks
