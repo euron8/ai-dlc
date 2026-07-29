@@ -1103,6 +1103,92 @@ fi
 mv "$V.orig" "$V"
 }
 
+A30_i55_suite_content_key() {
+# I55 guards the fixture-suite content key: the pre-push hook skips the entire suite when
+# the key is unchanged since the last fully green run, and the ONLY thing holding that up
+# is that the key covers a superset of the suite's inputs. Four arms, four mutants, each
+# asserted on its own distinct wording rather than on the shared token "I55" -- row 4's
+# recorded trap, where two arms quoting the same subject let a reverted fix pass.
+KEY="$ROOT/scripts/suite-content-key.sh"
+PREPUSH="$ROOT/.githooks/pre-push"
+if [ ! -f "$KEY" ] || [ ! -f "$PREPUSH" ]; then
+  bad "FIXTURE BROKEN: the seed carries no scripts/suite-content-key.sh or .githooks/pre-push, so I55 has nothing to read"
+  return
+fi
+
+# --- arm 1: an exclusion that is not a bare top-level name excludes NOTHING ----
+cp "$KEY" "$KEY.orig"
+sed 's@^docs$@docs/analysis@' "$KEY.orig" > "$KEY"
+if cmp -s "$KEY.orig" "$KEY"; then
+  bad "FIXTURE BROKEN: the I55 arm-1 mutation matched nothing, so the exclusion-shape arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "not bare top-level names" <<<"$out"; then
+    ok "an exclusion carrying a slash is REPORTED (it matches no top-level entry and silently excludes nothing)"
+  else
+    bad "suite-content-key.sh declared an exclusion that its own exact-match filter can never apply, and the build stayed green"
+  fi
+fi
+mv "$KEY.orig" "$KEY"
+
+# --- arm 2: dropping .git from the exclusion set --------------------------------
+cp "$KEY" "$KEY.orig"
+sed '/^# EXCLUDE_BEGIN$/,/^# EXCLUDE_END$/{/^\.git$/d;}' "$KEY.orig" > "$KEY"
+if cmp -s "$KEY.orig" "$KEY"; then
+  bad "FIXTURE BROKEN: the I55 arm-2 mutation matched nothing, so the .git arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "no longer excludes .git" <<<"$out"; then
+    ok "including .git in the key is REPORTED (it moves every commit, so the skip could never fire again)"
+  else
+    bad "the content key was widened to cover the object store and nothing objected — the suite skip became unreachable silently"
+  fi
+fi
+mv "$KEY.orig" "$KEY"
+
+# --- arm 3: a fixture reaching an EXCLUDED path at the distribution root ---------
+# Written into a real fixture's run.sh, because that is the corpus arm 3 reads.
+#
+# THE PROBE IS ASSEMBLED AT RUNTIME AND NOTHING ON ANY LINE HERE SPELLS IT OUT.
+# Arm 3's scan covers core/fixtures/, so a literal would be reported by the very
+# invariant this assertion exists to test -- and it was, on the first run, which is
+# the trap v0.194.0 recorded and paid for twice.
+I55_PROBE='probe="$'"RO""OT/do""cs/analysis\""
+I55_TGT="core/fixtures/ledger-rotate/run.sh"
+if [ ! -f "$ROOT/$I55_TGT" ]; then
+  bad "FIXTURE BROKEN: $I55_TGT is not in the seed, so I55 arm 3 has no subject"
+else
+  cp "$ROOT/$I55_TGT" "$ROOT/$I55_TGT.orig"
+  printf '%s\n' "$I55_PROBE" >> "$ROOT/$I55_TGT"
+  if cmp -s "$ROOT/$I55_TGT.orig" "$ROOT/$I55_TGT"; then
+    bad "FIXTURE BROKEN: the I55 arm-3 mutation changed no bytes"
+  else
+    out="$(bash "$V" 2>&1)"
+    if grep -q "reach a content-key-EXCLUDED path" <<<"$out"; then
+      ok "a fixture reading an excluded path at the distribution root is REPORTED (its input could change with the suite never re-running)"
+    else
+      bad "a fixture took an unhashed path as input and I55 stayed silent — the skip would hold across a change to that fixture's own subject"
+    fi
+  fi
+  mv "$ROOT/$I55_TGT.orig" "$ROOT/$I55_TGT"
+fi
+
+# --- arm 4: the record moved INSIDE the tree the key hashes ---------------------
+cp "$PREPUSH" "$PREPUSH.orig"
+sed 's@^KEY_RECORD="\.git/@KEY_RECORD="core/@' "$PREPUSH.orig" > "$PREPUSH"
+if cmp -s "$PREPUSH.orig" "$PREPUSH"; then
+  bad "FIXTURE BROKEN: the I55 arm-4 mutation matched nothing, so the record-location arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "inside the working tree" <<<"$out"; then
+    ok "storing the key inside the tree it hashes is REPORTED (writing the record would invalidate it and no push could ever hit)"
+  else
+    bad "the key record was moved into the hashed tree and nothing objected — the skip becomes machinery that runs on every push and never pays"
+  fi
+fi
+mv "$PREPUSH.orig" "$PREPUSH"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
