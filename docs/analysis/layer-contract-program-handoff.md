@@ -187,7 +187,7 @@ release, with the merge sha. `—` = not started.
 | ⏹ | **SESSION BOUNDARY** | |
 | 10 | the 8 absorptions, one arm per release | **IN PROGRESS.** arm 1 REFUTED, arm 2 ✅ `eb26178` (#281) v0.198.0, arm 5 ✅ `901202e` (#282) v0.199.0, arm 7 ✅ `853eab6` (#283) v0.200.0, arm 6 ✅ `0cc4028` (#284) v0.201.0, arm 8 ✅ `c695228` (#285) v0.202.0, arm 3 ✅ `590289b` (#286) v0.203.0, arm 4 **REFUTED** — v0.204.0 shipped the one core-owned slice inside it, §7.10. **ROW 10 IS CLOSED. All 8 arms are dispositioned: 6 shipped, 2 refuted** |
 | ⏹ | **SESSION BOUNDARY** | |
-| 10a | **wall-clock reduction across the whole distribution — by any route, not only parallelism** — operator-requested 2026-07-29, §7.10a | **IN PROGRESS.** ✅ `92aa72f` (#288) v0.205.0: **208s → 124s**. ✅ `bd0bf65` (#289) v0.206.0: **124.9s → 72.0s (−43%)** — and it **REFUTED this row's own next-two-poles ordering**: serial duration is the wrong statistic for a pooled suite, and both queued units had 40s and 82s of SLACK. Owed next, in this order: (1) `wait-stale-deliverable`, now the critical path at ~52s and **sleep-bound**; (2) the **content-keyed suite skip** the operator proposed 2026-07-29 — see §7.10a |
+| 10a | **wall-clock reduction across the whole distribution — by any route, not only parallelism** — operator-requested 2026-07-29, §7.10a | ✅ **ROW CLOSED.** `92aa72f` (#288) v0.205.0: **208s → 124s**. `bd0bf65` (#289) v0.206.0: **124.9s → 72.0s (−43%)** — and it **REFUTED this row's own next-two-poles ordering**: serial duration is the wrong statistic for a pooled suite. `8eaf896` (#290) v0.207.0: `wait-stale-deliverable` **52s → 9s, suite 72s → 50s**, plus the **300-site early-exit-reader class** the release leads on (**I54**). ✅ `8344631` (#291) v0.208.0: the content-keyed suite skip — **~50s → 0.3s on a push that changed only CHANGELOG/VERSION/docs** — and **§9 IS NOW CAUSALLY EXPLAINED AND FIXED**: a fixture was writing into the repository it tests. See §7.10a |
 | ⏹ | **SESSION BOUNDARY** | |
 | 10b | **mechanize what does not need inference** — operator-requested 2026-07-29, its own session because of scope, §7.10b | — |
 | ⏹ | **SESSION BOUNDARY** | |
@@ -1403,7 +1403,126 @@ membership.
 
 ---
 
-#### ⛔ START HERE — v0.207.0 IS BUILT AND HELD, AND THE REASON IS A LIVE CORRECTNESS DEFECT
+#### v0.207.0 — SHIPPED `8eaf896` (#290). The held release went out with the finding leading.
+
+**All four ordered steps of the block below were executed. Read this before re-opening any of them.**
+
+1. **The idiom is swept, repo-wide: 300 sites, 55 files, all converted to here-strings.**
+   The discovery expression matters and the block below understated it — matching the literal
+   `grep -q` cannot see `grep -Eq` or `grep -Fxq`, and it MISSED
+   `core/scripts/validate-layer-entries.sh`, the ERROR-tier authoring linter. Use
+   `| *grep -[A-Za-z]*q`. Exposure split, with a control: **250 sites in 38 files that set
+   `pipefail`** (live) and **44 in 17 that do not** (latent — `set -u` alone leaves the
+   pipeline reporting grep's status, which is correct). All 300 converted anyway; a file gains
+   `pipefail` in one line.
+2. **Fidelity was decided by measurement, not by the end-anchoring question the block asked.**
+   The real question is whether a pattern can match an EMPTY line, because that is the only
+   thing a here-string's extra newline adds. `printf '%s\n'` and `echo` sites (163) are
+   byte-identical by construction. Of the 137 `printf '%s'` sites, **0 of 115 resolvable
+   patterns match an empty line** (control: an empty-matching pattern IS caught by that
+   harness); the 22 built from a variable were adjudicated one by one — each has a literal
+   prefix, a length floor, or a variable non-empty at its assignment.
+3. **The differential caught two real breakages**, which is the answer to "would a clean
+   differential have proven anything". `check-31-ac-falsifiability` and
+   `layer-catalog-collision` each drive a `sed` mutation that QUOTES the shipped line it
+   targets; the sweep rewrote those lines and both `cmp -s` guards fired. **Expect this from
+   any mechanical sweep: a mutation program that quotes its subject is a hidden edge of the
+   subject set.**
+4. **I54 ships, with its own two probes** — one of the banned shape it must match, one of the
+   permitted shape it must not. 280 lines reported on the pre-sweep tree, zero after. Its
+   subject set is **walked from `REPO_ROOT`, never `git ls-files`**: this validator runs inside
+   seeded fixture trees that are not repositories, where git answers empty and would trip the
+   zero guard on every assertion in `enforcement-map-sites`.
+5. **`core/fixtures/early-exit-reader/`** (`.dist-only`, 0.09s) is the negative-direction proof
+   the block demanded, made permanent: two generated checkers of opposite form and identical
+   negative polarity, the converted one reporting a 200 KB violation and the banned one scoring
+   the same input clean, with a large-clean control and a small-violating control so the cause
+   is pinned to size rather than to a broken generator.
+
+**§9 IS NOT CLOSED, AND THE EVIDENCE POINTS AWAY FROM THIS BEING ITS CAUSE.** The block below
+called it "almost certainly" the intermittent-red class and said to test it first. Tested:
+
+- The intermittency needs a threshold that moves with load. **It does not move** — 32K correct,
+  64K wrong, idle and at 24-way load alike. This is a size trap, not a race.
+- **Every converted site was instrumented on a tree copy** to log the byte length it actually
+  reads, over a full 16-way suite run: 287 of 300 sites, 8,399 observations. **Exactly one
+  observation reached the 64 KiB buffer** — `reconcile/ledger-reverify.sh:290` at 226,919 bytes
+  — and that site was **already a here-string**, untouched by the sweep. The largest converted
+  site observed is `enforcement-map-sites:481` at **23,061 bytes**.
+- A/B in two fixed trees, 6 alternating rounds of 10 concurrent `layer-readopt-gate` copies:
+  **before 2/60, after 0/60.** Suggestive only — 2 events is not a rate, and no failing copy
+  carried `write error: Broken pipe`.
+
+So the class was real and measured but, under the suite's current workloads, **latent rather
+than firing**. Whoever picks §9 up inherits a narrowed field, not a closed one.
+
+**ONE ITEM REMAINS ON ROW 10a: the content-keyed suite skip** (scoped in the v0.206.0 block
+above). The profile is now FLAT — six units run 34.5s–45.9s and all start within 6s of t=0 —
+so no further scheduling change can pay. The next lever is doing less work, not spreading it
+wider.
+
+---
+
+#### v0.208.0 — SHIPPED `8344631` (#291). ROW 10a IS CLOSED, and §9 has a cause.
+
+**The content-keyed suite skip shipped: ~50s → 0.3s on a push that changed only
+`CHANGELOG.md`, `VERSION` or `docs/`.** But read the finding first — it is what the release
+leads on and it retires the oldest open item in this file.
+
+**§9's INTERMITTENT-RED CLASS IS DIAGNOSED AND FIXED. It was a fixture writing into the
+repository under test.** `core/fixtures/taught-schema/run.sh` proved three of its checks fire
+by mutating the package — stripping the forbidden list out of the real
+`provenance-block.json`, dropping a probe into `core/team-roles/`, editing the schema again —
+and every one of those writes landed in the **live tree**. Under the 16-way suite that is one
+writer racing fifteen readers, and the error is unambiguous once visible:
+`cp: core/team-roles/zz-taught-schema-fixture-probe.md: No such file or directory` —
+`enforcement-map-sites`' seed finding the probe gone mid-copy, killed by `set -e`, reporting
+`FIXTURE BROKEN` on **whichever assertion was seeding at that instant**. Seen on three
+different assertions in three rounds, which is exactly why it looked like three defects and
+why "passes standalone" was true every time.
+
+**Measured: unmodified `main` 5/5 clean, the branch before the fix 3/5 red, after the fix 5/5
+clean at 85/85.** The first control attempt was INVALID and is worth carrying: a `git archive`
+copy has no `.git`, so `ledger-status-vocabulary` fails there *deterministically* and that tree
+can answer nothing about intermittency. The schema window is the worse half and emits no error
+at all — for two assertions the real schema is missing its forbidden list.
+
+**§9's own entry should now be read as closed on cause, not merely narrowed.** v0.207.0
+correctly measured that the early-exit-reader class was NOT it; this is. Both fixtures §9
+records — `layer-readopt-gate` and `apply-drift-refile` — copy real trees, which is the
+property that made them the two that showed it.
+
+**No enforcer for the class, and the release says so.** A grep cannot tell a sandbox `$ROOT`
+from the real one — measured, the FP set is most of the seed corpus — and a before/after tree
+comparison cannot see a transient write that is cleaned up, which is precisely this one. What
+IS guarded is the surviving half: after a green run the pre-push recomputes the content key and
+**refuses to record it** if the suite changed the tree, naming both keys. Proven by a probe
+fixture, and the first version of that probe was a **no-op that `cmp -s` passed** — appended
+below a `run.sh` that exits first — so it is asserted behaviourally now.
+
+**THE ROW'S OWN PREMISE FOR THE SKIP WAS WRONG, in the way this file keeps being wrong.** It
+said to key on four trees "declared in the seeds". Those four are **one fixture's seed list**
+(`enforcement-map-sites/seed.sh`), generalised to all 85. And `ledger-status-vocabulary` builds
+its subject tree from `git ls-files`, so it copies **every tracked file** — `docs/` and
+`CHANGELOG.md` are inside a fixture's own input tree. The shipped key is therefore
+**everything EXCEPT a declared exclusion set**, which is the opposite polarity and the only
+safe one: an include-list loses coverage by omission, silently.
+
+**Carry this shape forward.** The row named a real file and a real seed, and that is what made
+"declared in the seeds" read as verified — §4's recorded lesson, hit again, for the fourth time
+in this program.
+
+**Left open, deliberately:** the hit rate. `main` is squash-merged so its history records
+releases, not the pushes inside them; the release-granularity proxy is **2 of the last 80
+commits** (control: 0 of 80 with an empty exclusion set). The instrument ships with the change —
+`.git/ai-dlc-suite-key.log`, one line per decision. **Measure it after a few weeks of real
+pushes before anyone widens the exclusion set to chase a bigger number.**
+
+---
+
+#### The held-release block that produced the above, kept for its scoping and its traps
+
+**⛔ v0.207.0 WAS BUILT AND HELD, AND THE REASON IS A LIVE CORRECTNESS DEFECT**
 
 **Branch `perf-wait-stale-parallel`, commit `e659858`, COMMITTED BUT NOT PUSHED. `main` is
 `bd0bf65` / v0.206.0.** The branch is green on everything it set out to do. It is held because

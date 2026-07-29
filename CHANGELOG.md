@@ -17,6 +17,78 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.209.0] — 2026-07-29
+
+### Changed — Check 16 published four regexes and shipped no program, and the program already existed inside its own fixture
+
+Check 16 (stub audit) stated its predicate as literal machinery: a marker regex, an item-reference
+regex, a backlog-status regex, a digit-only `file:line` regex, and a length floor beside a density
+rule given as an exact shell pipeline (`<reason> | tr -d '[:space:]' | wc -c`). Its
+`enforcement-map.yaml` row carried `enforcer: []`. So the most fully-specified mechanical
+comparison in the catalog was performed by an agent reading a paragraph — at `gate_types:
+[universal]`, which makes it the highest-frequency inferred comparison there is.
+
+**The elements had already been programmed.** `core/fixtures/check-15-bypass/run.sh` implemented
+all four inline, as a restatement of the check's published regexes, because there was nothing to
+call. Its own header said what that was worth:
+
+> Check 16 is `adjudication: llm` with `enforcer: []` — there is no validator script to drive […]
+> It proves the FIXTURE's claim, not the ADJUDICATOR's behaviour.
+
+A grammar spelled twice drifts, and the copy that cannot ship is the one that stays green.
+
+**`scripts/ai-dlc/validate-stub-audit.sh`** is now the elements' single home, and the fixture drives
+it instead of restating it — the code under test and the code that ships are the same bytes. It
+takes the gate's `changed_files` set as arguments or derives it with `--changed-from <base>`, drops
+upstream-owned paths through `core-paths.sh --is-core` **before** the elements run (exit 2 stays in
+scope and is reported, because "cannot determine" is not an exemption), and names the element that
+rejected each finding rather than only that one did.
+
+**The tier does not move.** Check 16 stays `adjudication: llm`, on the Check 2 / Check 5 precedent:
+the script decides the comparison, the adjudicator keeps what the script cannot see — whether the
+`changed_files` derivation was right, and whether an empty subject set is legitimate at this gate.
+`adjudication == "llm"` is also the gate-adjudicator escalation predicate, so flipping it would
+change routing for a reason a mechanization does not have.
+
+**Counts, and a non-vacuity code.** The run reports paths given, hot-path, dropped upstream-owned,
+resolver-undetermined, audited, markers examined and findings; the gate log records it. Auditing
+nothing exits **4**, never 0 — "audited and found nothing" and "audited nothing" are the two states
+every vacuously-green implementation of a gate check has collapsed into one.
+
+### Fixed — two arms of Check 16 that could not fire, both found by mutating the new program
+
+- **Element 4's length floor was untestable.** It has two independent floors — a 20-character body
+  and ≥10 non-whitespace characters — and every seeded variant was under BOTH. Deleting either left
+  the other catching all of them and the fixture stayed green. **V12** is a 16-character, 14-non-
+  whitespace reason: over density, under length. Each floor now has a mutant that flips exactly one
+  variant.
+- **The density measurement was tied to the length regex.** Taking the reason body from the length
+  match means shortening that floor shortens the captured body, so the density arm starts rejecting
+  reasons it should pass — one floor wearing the other's failure. The density is measured on the
+  line.
+
+Also fixed while driving it: the fixture's `audit` helper set the validator's exit code inside a
+command substitution — a subshell — so every variant read as exit 0. A driver that cannot fail,
+inside the fixture written to prove one can.
+
+### Evidence
+
+Ten mutants against a `cmp -s`-guarded copy of the validator, each run through a copy of the whole
+fixture, with an unmutated control and a liveness guard asserting all 15 assertions actually ran (a
+dead harness emits nothing, and nothing otherwise scores as a kill). Single-arm: element 2's status
+rule → V7; element 3's digit rule → V6; element 4's density floor → V4; its length floor → V12; exit
+4 folded into 0 → the vacuity floor; exit 1 folded into 0 → the finding-exit assertion; the counts
+line deleted → the counts assertion. Two documented pairs: element 1 always-passing → V9 + V11, the
+exemption dropped → V8 + V10. The always-rejecting mutant flips eight, which is what V5 exists for.
+
+The vacuity and counts assertions drive the audited-nothing case through a non-hot-path file rather
+than an exempt one, so no exemption mutation can reach them — otherwise one defect flips three
+assertions and two of them are vacuous.
+
+Verified on a tree built by running `scripts/install.sh` into an empty directory: the installed
+fixture resolves `scripts/ai-dlc/validate-stub-audit.sh` and passes all 15 assertions. 215 hot-path
+files audited in 1.8s.
+
 ## [0.208.0] — 2026-07-29
 
 ### Fixed — a fixture was writing into the repository it tests, and it is what §9's intermittent-red class has been
