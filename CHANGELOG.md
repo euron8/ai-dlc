@@ -17,6 +17,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.212.0] — 2026-07-29
+
+### Changed — the join that ends the "mechanical predicate, `enforcer: []`" class, and the paragraph scoping it was wrong in both directions: five of its nine subjects were a join that could not see a dispatcher, and one of its declared false positives was the only real defect in the catalog
+
+Three releases found the same defect one instance at a time. Check 16 (v0.209.0)
+published a marker regex, an item regex, a backlog-status regex and a density
+rule as an exact shell pipeline, and its `enforcement-map.yaml` row said nothing
+enforced it. Check 18 (v0.210.0) said "subtract one from the sprint number and
+resolve that entry's `sha`", same empty row. Check 22 (v0.211.0) published three
+field comparisons per ledger row, same empty row. In all three the program
+already existed somewhere that could not run at a gate. Each release bound one
+check. None of them stopped the fourth.
+
+**I57** is the join: every `scripts/ai-dlc/<validator>` a check body cites in a
+sentence asserting that its exit code decides the gate must be bound to that
+check in the enforcement map — on the check's own row, or on a
+`non_catalog_units:` row whose `call_sites:` names it. The map is the one
+artifact that answers "what actually enforces this check", so an unbound
+predicate tells the efficacy audit the check is adjudicated prose and tells the
+operator to re-perform a mechanical comparison by reading a paragraph at every
+gate.
+
+**The subject is not "a check that mentions a validator", and the difference is
+most of the work.** Naming a validator is not being enforced by it: `verdict.sh`
+in Checks 2/14/15/26 is the helper that *writes* the verdict,
+`wait-for-deliverable.sh` in Check 25 is the remedy offered *on FAIL*, and
+`core-paths.sh` in Check 16 is a delegation `validate-stub-audit.sh` makes
+internally, correctly carried under `reads:`. All three cite a validator in an
+imperative sentence, so an imperative-verb scan does not separate them. What
+separates them is the **exit-code posture** — "exit 0 required", "this check
+FAILS" — as against a code *legend* (`exit 0 = dropped, exit 1 = consumer-owned`)
+or a remedy under an On-FAIL heading. Measured over the catalog: **35 citations
+sit inside check bodies, 12 are predicates, and the false-positive set is
+empty.**
+
+**Both halves of the scoping this release inherited were wrong, and they were
+wrong in opposite directions.** It recorded nine named-but-not-enforcer pairs and
+said that with Check 22 bound *every one of them* was a false positive the
+discriminator must reject.
+
+- **Five were not pairs at all.** `verdict.sh` is a *dispatcher* —
+  `verdict.sh <validator> [args]` — so a basename join reads the wrapper and
+  misses the enforcer, which Checks 2 and 26 bind correctly. And a
+  `non_catalog_units:` row can bind a validator while naming the check as a call
+  site, which is how the `artifact-budget` unit binds Checks 14 and 15. Both
+  bindings are real and reviewable; the join could not see either.
+- **One was the only real defect in the catalog.** Check 17's two story-readiness
+  arms each run `stamp-story-provenance.sh … --check` and each say **"exit 0
+  required"**, and the check's own PASS line is "all required provenance scripts
+  exit 0". The scoping filed it as a producer mention because the script's
+  primary mode is a writer. `--check` re-runs the writer without writing, and it
+  is what separates a block that is schema-*shaped* from the *right* block —
+  every batch-invariant field equal to the terminal convergence pass,
+  `artifact_sha` equal to the story's current bytes. It is bound here, as the
+  `story-provenance-cross-check` unit rather than on Check 17's row: that row's
+  other call site is `retro.md`, which never invokes this script, and a
+  multi-site row asserts every enforcer at every site. W2 said so on the first
+  run.
+
+**The check reports an absence, so it carries its own control.** With Check 17
+bound the live subject set is empty, and a grammar that stops matching prints the
+same clean line as one that found nothing. I57 therefore builds two probes and
+runs its own selection grammar over them: one in the shape it exists to catch,
+which must be selected, and one carrying an exit-code legend, which must not.
+Both extractions have zero guards, and a run where *no* posture citation resolves
+to a binding fails closed rather than printing a wall of findings it did not
+compute.
+
+`enforcement-map-sites` assertion 32 is five single-arm mutants against `cmp -s`-
+guarded copies plus an unmutated control from the same seed, verified as a clean
+diagonal — every mutant fires exactly one assertion and the control fires none.
+Arm 1 is not a mutant but the tree as it shipped at v0.211.0. Arm 3 adds "exit 0
+required" to Check 25's remedy sentence and changes nothing else, which is the
+release's actual claim under test: the discriminator reads the sentence, not the
+mention. Arms 4 and 5 break and then widen the posture grammar, so the probes are
+themselves proven to fire.
+
+The first draft of I57 tripped **I54** — `printf | grep -q`, the idiom v0.207.0
+swept out of 300 sites — and **W2**, which is what caught the wrong home for the
+Check 17 binding. Both were the repo's own guards finding a new check's defects
+before it shipped.
+
 ## [0.211.0] — 2026-07-29
 
 ### Changed — Check 22 asked an agent to redo, at every gate, the comparison the dispatch guard had already made — and the guard was carrying two copies of it, one of them dead

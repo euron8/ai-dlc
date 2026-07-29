@@ -1276,6 +1276,118 @@ fi
 mv "$GUARD.orig" "$GUARD"
 }
 
+A32_i57_predicate_binding() {
+GVF="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+MAPF="$ROOT/core/skills/ai-dlc/enforcement-map.yaml"
+if [ ! -f "$GVF" ] || [ ! -f "$MAPF" ]; then
+  bad "FIXTURE BROKEN: the seed carries no gate-validation.md or enforcement-map.yaml, so I57 has nothing to join"
+  return
+fi
+
+# --- arm 1: THE DEFECT, REPLAYED. Not a mutant — the state the tree shipped in. ---
+# Until v0.212.0 nothing bound stamp-story-provenance.sh, while Check 17's two story
+# readiness arms each say "exit 0 required" over it. Deleting the unit row restores exactly
+# that tree, so this arm proves I57 fires on the real thing rather than on a contrivance.
+cp "$MAPF" "$MAPF.orig"
+awk '/^  - id: story-provenance-cross-check$/{s=1} s==1 && /^  - id: h2-attestation$/{s=0} s==0{print}' "$MAPF.orig" > "$MAPF"
+if cmp -s "$MAPF.orig" "$MAPF"; then
+  bad "FIXTURE BROKEN: the I57 unit-row deletion matched nothing, so the replay arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "Check 17: stamp-story-provenance.sh" <<<"$out"; then
+    ok "an unbound validator whose exit code the check's own body requires FAILS I57, named with its check (the v0.211.0 state of Check 17, replayed)"
+  else
+    bad "Check 17 states 'exit 0 required' over stamp-story-provenance.sh with nothing in the map binding it, and I57 reported clean — the class this invariant exists to end is still open"
+  fi
+fi
+mv "$MAPF.orig" "$MAPF"
+restore; MAPF="$ROOT/core/skills/ai-dlc/enforcement-map.yaml"
+
+# --- arm 2: THE TWO RESOLUTIONS. Break only the call-site route. -------------
+# Check 14 cites the validator THROUGH verdict.sh (`verdict.sh validate-artifact-budget`),
+# and its binding lives on the artifact-budget unit rather than on its own row. Repointing
+# that one site is the only mutation here, and the message it must produce names
+# validate-artifact-budget.sh at Check 14 — a string I57 can only print if it resolved the
+# dispatcher's first argument AND looked at non_catalog_units call sites. A join that reads
+# basenames and check rows alone prints nothing here, and prints five phantoms elsewhere.
+cp "$MAPF" "$MAPF.orig"
+sed 's@^      - site: gate-validation.md Check 14$@      - site: gate-validation.md Check 44@' "$MAPF.orig" > "$MAPF"
+if cmp -s "$MAPF.orig" "$MAPF"; then
+  bad "FIXTURE BROKEN: the I57 call-site repoint matched nothing, so the resolution arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "Check 14: validate-artifact-budget.sh" <<<"$out"; then
+    ok "a validator cited through the verdict.sh DISPATCHER and bound on a non_catalog_units call site is resolved both ways by I57 (repointing the site alone reports it)"
+  else
+    bad "the artifact-budget unit stopped naming Check 14 as a call site and I57 did not report it — either the dispatcher's argument or the call-site route is not being resolved, and the join is reading wrapper basenames"
+  fi
+fi
+mv "$MAPF.orig" "$MAPF"
+restore; GVF="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+
+# --- arm 3: THE DISCRIMINATOR IS THE SENTENCE, NOT THE CITATION. ------------
+# Check 25 cites wait-for-deliverable.sh as the REMEDY it offers on FAIL. That citation is
+# correct and must stay unbound. Giving that same sentence an exit-code posture — and
+# changing nothing else, not the citation, not the map — must flip it into the subject set.
+# This is the arm that proves the release's actual claim: an imperative naming a validator
+# is not the predicate; an assertion that its exit code binds the gate is.
+cp "$GVF" "$GVF.orig"
+sed 's@^  count\.$@  count; exit 0 required.@' "$GVF.orig" > "$GVF"
+if cmp -s "$GVF.orig" "$GVF"; then
+  bad "FIXTURE BROKEN: the I57 posture-injection matched nothing, so the discriminator arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "Check 25: wait-for-deliverable.sh" <<<"$out"; then
+    ok "adding an exit-code posture to an On-FAIL REMEDY — same citation, same map — moves it into I57's subject set (the discriminator reads the sentence, not the mention)"
+  else
+    bad "Check 25's remedy citation gained 'exit 0 required' and I57 stayed silent — the selection is not keying on the posture, so it cannot be separating predicates from producers and remedies either"
+  fi
+fi
+mv "$GVF.orig" "$GVF"
+restore
+
+# --- arm 4: THE LIVENESS PROBE. Kill the grammar; the probe must say so. -----
+# With Check 17 bound there is no live subject left, so a grammar that stops matching
+# reports the same clean line as one that found nothing to report. I57 answers that with a
+# probe it builds itself. Break the posture term and the probe — not the corpus — is what
+# fails.
+cp "$V" "$V.orig"
+sed 's@exits?\[ \]+\[0-9\]\[ \]+required/@exits?[ ]+[0-9][ ]+requiredZZZ/@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I57 grammar mutation matched nothing, so the liveness arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "did not fire on a probe" <<<"$out"; then
+    ok "a posture grammar that can no longer match FAILS I57 against its own probe (an empty subject set never again reads as a clean tree)"
+  else
+    bad "I57's posture grammar was broken so that it matches nothing, and the invariant still printed clean — the liveness probe is not wired, and this check would silently stop firing on its first grammar edit"
+  fi
+fi
+mv "$V.orig" "$V"
+restore
+
+# --- arm 5: THE NARROWNESS PROBE. Widen it back to the legend form. ---------
+# `exit 0 = dropped, exit 1 = consumer-owned` is how Check 16 DESCRIBES a delegation
+# validate-stub-audit.sh makes internally — correctly carried under reads:, and the nearest
+# miss in the measured corpus. Widening the grammar to accept `=` is the one-character
+# change that would report it, so the negative probe holds that door shut.
+# (The same widening also reports Check 16 itself; that is the false positive the narrow
+# grammar exists to avoid, and this arm asserts the probe's message, not the count.)
+cp "$V" "$V.orig"
+sed 's@exits?\[ \]+\[0-9\]\[ \]+required/@exits?[ ]+[0-9][ ]+(required|=)/@' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I57 grammar widening matched nothing, so the narrowness arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "exit-code LEGEND" <<<"$out"; then
+    ok "widening the posture to accept an exit-code LEGEND FAILS I57's negative probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
+  else
+    bad "I57's posture grammar was widened to match 'exit 0 = ...' and the negative probe stayed silent — nothing stops this check from growing back onto delegations that are correctly carried under reads:"
+  fi
+fi
+mv "$V.orig" "$V"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

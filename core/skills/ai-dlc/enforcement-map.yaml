@@ -804,6 +804,31 @@ non_catalog_units:
           the resolved window, but the window itself is settings state no gate can
           repair, so the honest posture stays "check and tell the operator"
 
+  - id: story-provenance-cross-check
+    title: Story-provenance CROSS-CHECK (Check 17 readiness arms) — the block on a
+      story is the RIGHT block, not merely a schema-shaped one
+    adjudication: script
+    enforcer:
+      - core/scripts/stamp-story-provenance.sh
+    call_sites:
+      - site: gate-validation.md Check 17 (story + bug-fix story readiness arms)
+        posture: FAILS the gate — `--check` exit 0 is required on both arms, and
+          Check 17's PASS line is "all required provenance scripts exit 0"
+        why: validate-provenance-block.sh proves a block is schema-SHAPED. It cannot
+          prove the block belongs to THIS story or to this sprint's terminal
+          convergence pass, so a block invented, copied stale from the previous
+          sprint, or edited after the fact passes it. `--check` re-runs the writer
+          without writing — every batch-invariant field compared against the terminal
+          pass, artifact_sha against the story's current bytes — so the check cannot
+          drift from the stamp. Bound here rather than on Check 17's row because the
+          row's other call site is retro.md, which never invokes this script; a
+          multi-site row asserts every enforcer at every site.
+        note: unbound until v0.212.0, and it is the only subject I57's discriminator
+          found across the whole catalog. The writer's `--check` mode read as a
+          producer mention — the same false-positive shape as verdict.sh and
+          wait-for-deliverable.sh — while its own two arms state "exit 0 required".
+    fixtures: [tests/fixtures/story-provenance]
+
   - id: h2-attestation
     title: H2 harness self-test (gate-validation.md H2) — drives the real fixtures
       once per sprint, pinned to a digest of the fixture set
