@@ -17,6 +17,81 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.211.0] — 2026-07-29
+
+### Changed — Check 22 asked an agent to redo, at every gate, the comparison the dispatch guard had already made — and the guard was carrying two copies of it, one of them dead
+
+Check 22 verifies that every teammate spawn in the sprint carried a role-matched
+model and a Rule 19(b) contract citation. It published the predicate as three
+field comparisons per `spawn-ledger.jsonl` row — `model_bound` against
+`aiDlcRoles.<role>.model`, `role_contract_cited` true, `role_file_readable` not
+false — and its `enforcement-map.yaml` row carried `enforcer: []`. So a teammate
+filtered a JSONL file by sprint and compared three fields against a JSON config,
+by hand, at every implementation-phase gate of every sprint. Its numbered
+clearing condition 3 — `validate-escalation-resolution.sh … exits 0`, the same
+invocation Check 2a makes — was carried under `reads:` with the comment "the
+operator citation is verified, not read", while Check 2a's row bound the same
+validator as an enforcer.
+
+**And the comparison was already programmed, for the third release running.**
+`ai-dlc-dispatch-guard.sh` resolves the pin and applies the match tolerance at
+PreToolUse; that is where `model_bound` gets its value. A PreToolUse hook cannot
+run at a gate, so the gate restated the hook's rule in prose and asked an agent
+to execute it.
+
+`validate-spawn-ledger.sh --ledger <f> --sprint <N> --settings <f>` is now that
+comparison's gate-time home. `pin_key()` and `matches_pin()` are the guard's,
+byte-identical, and **I56** binds them: a narrowed tolerance in either copy fails
+the build, because a gate that classifies a binding differently from the hook
+that made it either clears a spawn the guard corrected or fails one it bound
+correctly.
+
+**I56's second arm is the one with a history.** The guard shipped **two
+definitions of `matches_pin()`**, verbatim apart from one word of comment, the
+first shadowed and dead. An I25-shaped range extraction concatenates both spans,
+so the duplicate would not have forked the rule — it would have disabled the
+check written to catch a fork. I56 counts definitions before it compares them,
+and fails on anything but exactly one per file.
+
+**Exit 3 is PRE-LEDGER and it is neither a pass nor a finding.** An absent ledger
+and a ledger holding only other sprints' rows are one state: a consumer that
+installs the guard mid-sprint gets a file whose first row is the NEXT dispatch.
+The check hands the verdict back to the gate log's spawn table and says so. Exit
+2 covers a fumbled invocation, a missing `jq`, an **unreadable settings.json**,
+and an **unparseable ledger**. The settings case because `pin_key` fails open by
+design for the guard, so without an explicit refusal every role would resolve to
+"pins nothing" and every spawn would clear the model arm having compared nothing;
+the ledger case because `jq -s` fails on the whole file for one truncated line —
+the shape a crashed append leaves — and reporting zero rows for a file full of
+them would route to PRE-LEDGER, which states a different fact with a different
+remedy. The `COUNTS:` line prints on every path.
+
+**A partial bind, and the boundary is stated rather than implied.** The
+four-arm disposition of a recorded tier mismatch turns on arm 4 — the escalation
+entry states a remediation and names its artifact — which is a judgement about
+content, and story routing needs the sprint's story files, which the ledger does
+not name. Both stay with the adjudicator and the check body now says the
+validator does not decide them. `adjudication` stays `llm` for Check 2's and
+Check 5's reason: the script decides the comparison, the adjudicator applies the
+carve-outs.
+
+Fixture `check-22-spawn-ledger`: an eleven-arm battery, one scenario file per arm
+so that no mutant can move two, seven mutants against `cmp -s`-guarded copies
+beside an unmutated control, and an arm proving the verdict follows
+`settings.json` rather than the ledger's own `tier_pinned`. **Three of the seven
+mutants were wrong on the first pass and the per-arm battery is what said so** —
+`|| false ||` left an early-exit block reachable on exactly the input that
+reaches it, a sentinel mutation landed on the empty-string branch of a value that
+is JSON null (two byte-different no-ops, both of which `cmp -s` passed), and a
+third moved eight arms at once, which is a broken mutant reading as a strong
+kill. `enforcement-map-sites` assertion 31 covers I56's three arms. Verified on a
+tree built by running `scripts/install.sh` into an empty directory.
+
+The first draft of the validator had the defect its own F arm now guards: TAB is
+an IFS *whitespace* character, so a row with a null `model_requested` collapsed
+the delimiter and shifted every later field one place left. It reported
+`requested model='true'` — the citation flag, read as a model name.
+
 ## [0.210.0] — 2026-07-29
 
 ### Changed — Check 18 told the lead to subtract one and read a file, and the subtraction was already programmed in a copy no gate could reach

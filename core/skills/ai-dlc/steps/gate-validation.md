@@ -1196,34 +1196,40 @@ it as new.
 dispatched teammates via the Agent tool (dev, dev-escalated, code-reviewer,
 qa, or a `protected-path-editor`). Skips gates with no Agent-tool spawn.
 
-**Check.** Read `_bmad-output/spawn-ledger.jsonl` — written by
+**Check.** `_bmad-output/spawn-ledger.jsonl` is written by
 `ai-dlc-dispatch-guard.sh` at PreToolUse, one row per role-bound Agent/Task
 dispatch. It is the source of record, NOT the gate log's spawn table: the
 table is authored by the lead about its own conduct, and a lead that
-mis-dispatched cannot vouch for its own dispatch. Filter to this sprint
-(`sprint`), then for EVERY row confirm both bindings required by SKILL.md
-Rule 19:
+mis-dispatched cannot vouch for its own dispatch. Run:
 
-- **(a) model.** `model_bound` — the value the guard actually bound, not a
-  self-report — matches `aiDlcRoles.<role>.model` in settings.json.
-  `model_requested` sits beside it so a corrected dispatch stays visible as a
-  correction; a `model_requested` that disagrees with `model_bound` is a Rule
-  19(a) slip the guard caught, and is reported in the gate log but does not FAIL
-  this check — the teammate ran on the key its role names.
+```
+scripts/ai-dlc/validate-spawn-ledger.sh \
+  --ledger _bmad-output/spawn-ledger.jsonl --sprint <N> \
+  --settings .claude/settings.json
+```
 
-  Compare the binding against the config only. Do not evaluate the key, the
-  string `aiDlcModels` maps it to, the effort, or how an escalated role's
-  values compare to its base role's. Per Rule 19(a) those are operator
-  config, and an equal or lower escalated value is not a finding.
-- **(b) role contract.** `role_contract_cited` is `true`. `false` means the
-  dispatch named its role only via `subagent_type` and carried no Rule 19(b)
-  contract line — the guard bound the model anyway, but the contract citation
-  is owed and this FAILS.
+It filters to this sprint and decides all three Rule 19 comparisons per row:
+**(a)** `model_bound` — the value the guard actually bound, not a self-report —
+matches `aiDlcRoles.<role>.model`; **(b)** `role_contract_cited` is `true`; and
+`role_file_readable` is not `false`, which is Rule 19's fail-closed case. **The
+pin rule is the script's, not this paragraph's** — it shares `pin_key()` and
+`matches_pin()` with the dispatch guard byte-identically, and `validate-enforcement-map.sh`
+I56 binds them, so the gate cannot classify a binding differently from the hook
+that made it.
 
-`role_file_readable: false` FAILS unconditionally: a teammate ran against a
-role file that does not resolve, which is Rule 19's fail-closed case
-("a teammate that ran without a resolvable role-file binding is a Rule 19
-violation, not a pass").
+**Exit 0 = clean. Exit 1 FAILS**, clearable only by the four-arm disposition
+below. **Exit 2 FAILS** — a fumbled invocation, an unreadable settings.json, or
+no `jq`; nothing was compared. **Exit 3 is PRE-LEDGER**, handled below; it is
+not a pass. **Record the command, its exit code and its `COUNTS:` line in the
+gate-log entry.** A verdict without the counts cannot be told apart from one
+that examined nothing.
+
+A `model_requested` that disagrees with `model_bound` is a Rule 19(a) slip the
+guard caught before the work ran; the script reports it as `NOTE:` and does not
+fail. Do not evaluate the key, the string `aiDlcModels` maps it to, the effort,
+or how an escalated role's values compare to its base role's — per Rule 19(a)
+those are operator config, and an equal or lower escalated value is not a
+finding.
 
 **Dispositioning a Rule 19(a) violation that already happened.** A spawn that
 ran on the wrong tier is a fact about the past. No later action changes it, so
@@ -1283,25 +1289,26 @@ subagent transcript, and injected core prose there names
 `team-roles/adversary.md`, which reads as an `adversary` spawn regardless of the
 role actually dispatched.
 
-**If the ledger has no rows for this sprint** — the file is absent, OR it
-exists but every row belongs to another sprint — treat it as PRE-LEDGER and say
-so explicitly: fall back to the gate log's spawn table and record in the gate
-log that the verdict rests on lead-authored evidence rather than a machine
-record. The two cases are one case: a consumer that pulls the guard mid-sprint
-gets a ledger file whose first row is the NEXT dispatch, so "file exists" and
-"this sprint is covered" are different claims and only the second one licenses
-reading the ledger as complete.
+**Exit 3, PRE-LEDGER** — the file is absent, OR it exists but every row belongs
+to another sprint. The two cases are one case: a consumer that pulls the guard
+mid-sprint gets a ledger file whose first row is the NEXT dispatch, so "file
+exists" and "this sprint is covered" are different claims and only the second
+one licenses reading the ledger as complete. Fall back to the gate log's spawn
+table and record in the gate log that the verdict rests on lead-authored
+evidence rather than a machine record.
 
-Do NOT report a clean PASS from an empty or other-sprint ledger. Zero rows and
-zero spawns are different states; a check that cannot tell them apart passes
-vacuously on exactly the sprint where the mechanism was missing, which is the
-defect this check was rewritten to stop committing.
+Do NOT report a clean PASS from an exit 3. Zero rows and zero spawns are
+different states; a check that cannot tell them apart passes vacuously on
+exactly the sprint where the mechanism was missing, which is the defect this
+check was rewritten to stop committing.
 
 Additionally, verify **story routing** against the canonical map in
-`stories-test-strategy.md` "Story Routing Tags". For EVERY story in the
-sprint, RE-DERIVE the expected role from the story file's PERSISTED
-frontmatter — NOT from the spawn record's self-report — then confirm the
-story was serviced by the routed role:
+`stories-test-strategy.md` "Story Routing Tags". **The validator does not decide
+this** — it reads the ledger, which names spawns and not stories, so the
+sprint's story set is yours to derive. For EVERY story in the sprint,
+RE-DERIVE the expected role from the story file's PERSISTED frontmatter — NOT
+from the spawn record's self-report — then confirm the story was serviced by
+the routed role:
 - `protected_path_editor: true` → a `protected-path-editor` spawn
   (serialized), NOT executed inline by the lead and NOT delegated to a
   dev teammate.

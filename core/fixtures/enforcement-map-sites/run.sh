@@ -29,6 +29,16 @@
 # is simply broken and erroring for unrelated reasons.
 set -uo pipefail
 
+# I10's scrub. Assertion 31 names a hook path (it mutates ai-dlc-dispatch-guard.sh to prove
+# I56 fires), which puts this file in I10's hook-driving set. It never EXECUTES the hook, so
+# the scrub is belt-and-braces rather than load-bearing — but the honest move on a check that
+# fired is to satisfy it, not to narrow its grammar until it stops seeing this file.
+#
+# Ordered before HERE= and before the pool: the worker wrapper reads AI_DLC_EMS_SELF and
+# AI_DLC_EMS_OUT in its own `bash -c`, ahead of the run.sh it then invokes, so unsetting them
+# here cannot reach the values already resolved.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 # Distribution-only. `validate-enforcement-map.sh` is not shipped by install.sh (it checks
@@ -1187,6 +1197,83 @@ else
   fi
 fi
 mv "$PREPUSH.orig" "$PREPUSH"
+}
+
+# --- Assertion 31: I56 — the model pin cannot fork, and cannot be defined twice --
+# `ai-dlc-dispatch-guard.sh` decides a role's pin at dispatch and binds the teammate's model
+# to it; `validate-spawn-ledger.sh` re-asks the same question at the gate for Check 22. They
+# share `pin_key()` and `matches_pin()` as byte-identical COPIES — I25's reason: a guard that
+# sources a helper fails OPEN on a partial install, and a dispatch guard binding nothing is
+# far worse than eleven duplicated lines.
+#
+# THREE ARMS, EACH ON ITS OWN WORDING. Arm 3 is the one with a real history: the guard shipped
+# TWO definitions of `matches_pin()`, verbatim apart from one word of comment, with the first
+# shadowed and dead. An awk-range extraction concatenates both spans, so a duplicate does not
+# fork the rule — it disables the check that would have caught a fork. Arms 2 and 3 both land
+# on I56's count message, so they are distinguished by the COUNT they report, never by the
+# shared token: row 4's recorded trap.
+A31_i56_model_pin_binding() {
+GUARD="$ROOT/core/hooks/ai-dlc-dispatch-guard.sh"
+LEDGERV="$ROOT/core/scripts/validate-spawn-ledger.sh"
+if [ ! -f "$GUARD" ] || [ ! -f "$LEDGERV" ]; then
+  bad "FIXTURE BROKEN: the seed carries no ai-dlc-dispatch-guard.sh or validate-spawn-ledger.sh, so I56 has nothing to bind"
+  return
+fi
+
+# --- arm 1: FORK. Narrow the match tolerance in ONE copy. -------------------
+# Dropping the containment case is the exact divergence I56 exists to catch: both files still
+# run and both still answer, but the gate now reports a Rule 19(a) mismatch on every spawn the
+# guard bound from a full model string (`claude-opus-5[1m]` against the key `opus`).
+cp "$LEDGERV" "$LEDGERV.orig"
+sed 's@^    \*"\$EXPECT"\*) return 0 ;;@    *"$EXPECT"*) return 1 ;;@' "$LEDGERV.orig" > "$LEDGERV"
+if cmp -s "$LEDGERV.orig" "$LEDGERV"; then
+  bad "FIXTURE BROKEN: the I56 fork mutation matched nothing, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "the model pin has forked" <<<"$out"; then
+    ok "a one-copy change to the match tolerance FAILS I56 (the gate cannot classify a binding differently from the hook that made it)"
+  else
+    bad "matches_pin() forked between the dispatch guard and the gate validator and I56 stayed silent — Check 22 would fail spawns the guard bound correctly"
+  fi
+fi
+mv "$LEDGERV.orig" "$LEDGERV"
+
+# --- arm 2: VACUITY. Delete one subject outright. ---------------------------
+# I56 LOCATES its subjects by name. A rename or a deletion makes it find nothing, and
+# "found nothing" reads exactly like "found two identical bodies" unless it says so.
+cp "$LEDGERV" "$LEDGERV.orig"
+awk 'BEGIN{s=0} /^pin_key\(\) \{/{s=1} s==0{print} /^\}/{if(s==1){s=2; next}}' "$LEDGERV.orig" > "$LEDGERV"
+if cmp -s "$LEDGERV.orig" "$LEDGERV"; then
+  bad "FIXTURE BROKEN: the I56 deletion mutation matched nothing, so the vacuity arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "validate-spawn-ledger.sh (found 0)" <<<"$out"; then
+    ok "a MISSING bound function FAILS I56 loudly, naming the count it found (a rename never retires the binding in silence)"
+  else
+    bad "pin_key() was deleted from the gate validator and I56 did not report a zero count — the binding can be retired by a rename"
+  fi
+fi
+mv "$LEDGERV.orig" "$LEDGERV"
+
+# --- arm 3: DUPLICATE. Define matches_pin() twice in the guard. -------------
+# The state the guard actually shipped in until v0.211.0. Byte-identity alone passes it,
+# because the extraction returns both spans from one side and one from the other — so the
+# count arm has to come first.
+cp "$GUARD" "$GUARD.orig"
+{ cat "$GUARD.orig"
+  printf 'matches_pin() {\n  [ -n "$EXPECT" ] || return 1\n  case "$1" in\n    "$EXPECT")   return 0 ;;\n    *)           return 1 ;;\n  esac\n}\n'
+} > "$GUARD"
+if cmp -s "$GUARD.orig" "$GUARD"; then
+  bad "FIXTURE BROKEN: the I56 duplicate mutation wrote no second definition, so the third arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "ai-dlc-dispatch-guard.sh (found 2)" <<<"$out"; then
+    ok "a SECOND definition of a bound function FAILS I56, naming the count (the later one shadows the earlier and the fork arm would compare two spans against one)"
+  else
+    bad "the dispatch guard defined matches_pin() twice and I56 reported clean — this is the exact state it shipped in, and a genuine fork could hide behind it"
+  fi
+fi
+mv "$GUARD.orig" "$GUARD"
 }
 
 # ---------------------------------------------------------------------------

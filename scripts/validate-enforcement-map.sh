@@ -2548,10 +2548,50 @@ The pre-push hook skips the entire fixture suite when the key is unchanged, and 
   fi
 fi
 
+# --- I56: the model pin is ONE rule across the dispatch guard and the gate -----
+# `core/hooks/ai-dlc-dispatch-guard.sh` resolves a role's pin at PreToolUse and binds
+# the teammate's model to it. `core/scripts/validate-spawn-ledger.sh` re-asks the same
+# question at the gate for Check 22 -- is the model each recorded spawn actually ran on
+# the one its role's config pins. The two must agree on what the pin IS (`pin_key`) and
+# on when a value matches it (`matches_pin`), or a spawn the guard corrected clears the
+# gate, or one it bound correctly fails it, and the operator believes whichever ran.
+#
+# Same shape as I25 and I40, and a COPY rather than a sourced helper for I25's reason:
+# a guard that sources a helper stops binding models entirely when a partial install
+# omits it -- fail-open, silently -- and a disabled dispatch guard is far worse than
+# two bound copies of eleven lines.
+#
+# ARM 2 IS NOT DECORATION. Before v0.211.0 the guard carried TWO definitions of
+# `matches_pin()`, verbatim apart from one word of comment, the first shadowed and
+# dead. Nothing was looking, and a range-extraction like arm 1's silently concatenates
+# both spans -- so a second definition does not fork the comparison, it breaks the
+# check that would have caught a fork. Count first, then compare.
+i56_guard="$REPO_ROOT/core/hooks/ai-dlc-dispatch-guard.sh"
+i56_val="$REPO_ROOT/core/scripts/validate-spawn-ledger.sh"
+if [ ! -f "$i56_guard" ] || [ ! -f "$i56_val" ]; then
+  err "I56 cannot find core/hooks/ai-dlc-dispatch-guard.sh and/or core/scripts/validate-spawn-ledger.sh. It binds the dispatch-time model pin to the gate-time one; with either file gone it compares nothing and reports agreement it never computed."
+else
+  for i56_f in pin_key matches_pin; do
+    i56_ng="$(grep -c "^${i56_f}() {" "$i56_guard" || true)"
+    i56_nv="$(grep -c "^${i56_f}() {" "$i56_val" || true)"
+    if [ "$i56_ng" != 1 ] || [ "$i56_nv" != 1 ]; then
+      err "I56 expected exactly one ${i56_f}() definition in each of ai-dlc-dispatch-guard.sh (found ${i56_ng}) and validate-spawn-ledger.sh (found ${i56_nv}). Zero means the binding below extracts nothing and passes vacuously; more than one means the later definition silently shadows the earlier, the byte-identity arm compares two spans against one, and a genuine fork could hide behind a duplicate. This is the exact state the guard shipped in until v0.211.0."
+      continue
+    fi
+    i56_a="$(awk "/^${i56_f}\(\) \{/,/^\}/" "$i56_guard" 2>/dev/null)"
+    i56_b="$(awk "/^${i56_f}\(\) \{/,/^\}/" "$i56_val" 2>/dev/null)"
+    if [ -z "$i56_a" ] || [ -z "$i56_b" ]; then
+      err "I56 located a ${i56_f}() definition line in both files but extracted an EMPTY body from at least one. The comparison below would pass on two empty strings, so it fails here instead."
+    elif [ "$i56_a" != "$i56_b" ]; then
+      err "the model pin has forked between ai-dlc-dispatch-guard.sh and validate-spawn-ledger.sh at ${i56_f}(). One decides at dispatch what a teammate runs on, the other decides at the gate whether that was right; a rule that differs between them means Check 22 clears a spawn the guard corrected, or fails one it bound correctly. Make ${i56_f}() byte-identical."
+    fi
+  done
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), and the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), and the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56)."
   exit 0
 fi
 exit 1
