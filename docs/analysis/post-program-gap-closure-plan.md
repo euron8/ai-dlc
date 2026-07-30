@@ -171,7 +171,7 @@ before re-proposing anything below; this section is the short form.
 |---|---|---|---|---|
 | 1 | **Re-derive the four metrics that justified the whole program** — §6.1 | MEASURE | no | **DONE 2026-07-30** — corpus 78+10, baseline's 76/32/44 reproduced. clean-pull **30/32 → 22/44** (baseline 30/32 → 17/44; post grain unrecoverable); prose **4.3 → 5.7 kB** whole-log, **0.3 → 0.7 kB** sections (baseline 3.8 → 8.3 kB; grain unrecoverable); `NEEDS-REVIEW`+`HAND-REVIEW` **0 → peak 22 → 15 today** (baseline 38, unreproducible at any commit); re-litigation **4 of 9** (baseline 6 of 9, overstated); `EXTENSION-HOOK-DRIFT` **34/78** ([R] 31/76 → **[V]**). Metrics 1 and 3 measure detector arrival (v0.60.0, v0.122.0), not pull health. Archiving confound **REFUTED** — 15 both sides of the rotation. graph read-only, `18e00ef40` untouched |
 | 2 | **Disarm the predecessor's self-delete; index its refutations** — §6.2 | PRESERVE | no | **DONE 2026-07-30** — delete-licence and false-untracked claim removed (both greps 0 against controls returning 3 / 16 / 1); §0 rewritten as a completed-program record; **`## 0a. Refutation Index` added — 8 machinery-home predicates, the band ERROR + `RENUMBER-BAND --apply`, `layer-relocate.sh --apply`, `--is-consumer-machinery`, absorption arms 1 and 4, arm 8's refuted NAME, §7.9's value claim + subject-set-of-1, row 11's 5 design choices, `silent once recorded`, and §4's 3 pre-program falsifications**. §4a repointed; its "seven" machinery predicates recounted to **8** from the predecessor's own table. Weakness stated in the index: nothing enforces that a reader consults it. `docs:` commit, no version bump |
-| 3 | **Derive the retirement set with controls — per subject, is the core absorber actually drop-in?** — §6.3 | MEASURE | no | — |
+| 3 | **Derive the retirement set with controls — per subject, is the core absorber actually drop-in?** — §6.3 | MEASURE | no | **DONE 2026-07-30** — 6 subjects, each verdict backed by a run of the core absorber against the consumer's real inputs on a case that should PASS **and** one that should FAIL. **RETIRE 2 / PARTIAL 1 / REFUTED 3.** RETIRE: `check-protected-core-paths.sh` (162), `check-mutation-red-anchor.sh` (72). PARTIAL: `scan-stray-provenance.sh` (stray arm only, ~110 of 155). REFUTED: `retro-replay-harness.sh`, `generate-sprint-status.py`, `validate-no-direct-main-push.sh` — **1,211 of the 1,600 lines §2 tabulated are not absorbed by anything**. §6.3's "wired into nothing **[V]**" free win is **FALSIFIED** — `.pre-commit-config.yaml:30`. Entry cost: 129 of 915 lines leave `gate-validation-domain.md` (14.1%), expected next-pull adjudication saving **≈ 0** (Check 34 named in 2 of 39 logs since arrival, Check 35 in 0 of 28; control 78/78 universal token). graph read-only, `18e00ef40` untouched |
 | ⏹ | **SESSION BOUNDARY.** Report row 1's four numbers and row 3's per-subject verdicts before opening the graph batch. | | | |
 | 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | — |
 | 5 | **Execute the retirement in graph, then UNFREEZE** — operator-driven graph sessions — §6.5 | RETIRE | **YES** | — |
@@ -323,15 +323,176 @@ refuted outright).
 **Expect refutations.** If two of six come back REFUTED that is a good row, and it is the same rate
 the absorption arms themselves ran at.
 
-**Free win, confirm it first:** `validate-no-direct-main-push.sh` (46 lines) is wired into nothing
+~~**Free win, confirm it first:** `validate-no-direct-main-push.sh` (46 lines) is wired into nothing
 **[V]** — a `grep` across `ci-local.sh`, `.githooks/pre-push` and the extension check files returns
 no site, against a control that returns sites for the other five. Dead code, deletable with zero
-coupling.
+coupling.~~ **FALSIFIED by the row itself.** The subject is wired at `.pre-commit-config.yaml:30`.
+The `[V]` grep's three named haystacks did not include the pre-commit config, so its zero measured
+the scope of the search and not the absence of a site — the exact class `CLAUDE.md` opens with. See
+the Row 3 RESULT below.
 
 **Also derive the entry cost.** Every edit to `gate-validation-domain.md` changes a layer entry's
 digest and re-opens its adjudication at the next pull. Under freeze with no pull pending that is
 cheap, and the retirement **reduces** the entry's content — so state the expected effect on the next
 pull's adjudication load. That number is this program's payoff argument.
+
+#### Row 3 RESULT — measured 2026-07-30, read-only against graph at `18e00ef40`
+
+Method: a `git clone --local --no-checkout` of graph into a scratchpad, checked out at `18e00ef40`.
+Every run below is against that clone. graph itself was never written to; its `HEAD` is unchanged
+and its working tree carries the same four pre-existing runtime-state modifications it started with.
+Both scripts in every pair are the SHIPPING copies (`scripts/ai-dlc/core-paths.sh` in the sandbox is
+byte-identical to graph's, `shasum` `89ff1b7fc261`).
+
+| # | Consumer subject | Lines | Verdict | Decided by |
+|---|---|---|---|---|
+| 1 | `check-protected-core-paths.sh` | 162 | **RETIRE** | PASS and FAIL both agree, same offenders named |
+| 2 | `check-mutation-red-anchor.sh` | 72 | **RETIRE** | core is a strict superset and fixes a real defect |
+| 3 | `scan-stray-provenance.sh` | 155 | **PARTIAL** | stray arm drop-in on 9 boundary probes; `--fixture-provenance` not absorbed |
+| 4 | `retro-replay-harness.sh` | 97 | **REFUTED** | disjoint predicate — each mutant fails only its own assertion |
+| 5 | `generate-sprint-status.py` | 1068 | **REFUTED** | core compares 1 of the 5 fields, in 1 of the 5 modes |
+| 6 | `validate-no-direct-main-push.sh` | 46 | **REFUTED** | core passes the decisive FAIL case, by design |
+
+**Tally, verbatim, against §6.3's stated stop condition ("if two of six come back REFUTED that is a
+good row"): three of six REFUTED, one PARTIAL, two RETIRE.** Of the 1,600 lines §2 tabulated,
+**234 retire outright** and **~110 more** if the stray arm is excised from subject 3 — so
+**1,256 of 1,600 lines are not absorbed by anything**, against §2's "0 lines retired" framing which
+implied all 1,600 were owed.
+
+**1 — `check-protected-core-paths.sh` → `core-paths.sh --audit-diff`: RETIRE.** Identical CLI
+(`<base-ref> [<head-ref>]`). Three real ranges: the `/ai-dlc-update` reconcile commit `e3522f153`
+(PASS, both 0), `2f04341da` with no core path touched (control, both 0), and — because the first
+FAIL attempt returned a matching PASS on both sides via the citation escape hatch, which proves
+nothing — a second FAIL case run against the real graph tree at `85ac897a6` (2026-07-16), the last
+era in which `docs/escalations/pending.md` carried **0** `Operator authorization:` lines (control: 8
+at `HEAD`, 12 at `f718b1eea`, 0 at `85ac897a6` and earlier). There, `95ffa2297` touching
+`steps/carry-over-evaluation.md` and `steps/gate-validation.md` under a non-reconcile subject:
+**both exit 1, both name the same commit and the same paths.** Core is strictly better on the arm
+that differs — the consumer greps `pending.md` for `Operator authorization:`, core delegates to
+`validate-escalation-resolution.sh` (the v0.204.0 fix for a grep a sentence saying no citation
+exists could satisfy). **Wiring: 4 files.** `extensions/checks/gate-validation-domain.md`
+(Check 34, lines 787–861), `extensions/roles/code-reviewer-domain.md:41`,
+`extensions/roles/dev-domain.md:15`, `extensions/roles/qa-domain.md:17`.
+
+**2 — `check-mutation-red-anchor.sh` → `validate-mutation-red.sh`: RETIRE.** Identical CLI. Check
+35's own three declared arms, run against both detectors: unreachable anchor (both 1), reachable +
+value-asserting (both 0), coverage-only degenerate (both 1). Three further arms the consumer
+collapses into its single FAIL: a line number past EOF and a byte-identical replacement both go
+consumer 1 / core 2 — same pass/fail, and core's 2 correctly says *nothing was tested* rather than
+accusing the test. The decisive one: **a replacement containing `@` — consumer 1, core 0.** The
+consumer's rewrite is `sed "<n>s@.*@<repl>@"`, so the `@` breaks the expression, the file is never
+mutated, the test stays GREEN, and the consumer reports "claimed anchor is unproven" against a test
+that was never put under test. Core mutates correctly and returns PROVEN. **Wiring: 3 files.**
+`gate-validation-domain.md` (Check 35, lines 872–915),
+`scripts/tests/test-s291-3-check35-mutation-red.sh:21` (a single `DETECTOR=` line),
+`tests/fixtures/check-35-mutation-red-reachability/README.md:21`. **Repoint hazard:** core adds
+exit 2 (UNEVALUABLE) and exit 3 (HARD — **tree left mutated**). A caller written as
+`if script; then PASS else FAIL` is safe, but the fixture's arms assert only non-zero and would stay
+green against either; and exit 3 needs an operator-visible path, not a FAIL line.
+
+**3 — `scan-stray-provenance.sh` → `validate-provenance-block.sh --strays`: PARTIAL.** Identical
+`--strays [<path>...]` shape. Core's resolved home set is printed in its own FAIL message and is
+**identical to the consumer's six**: `_bmad-output/**`, `docs/retro/**`, `docs/reviews/**`,
+`docs/architecture.md`, `docs/architecture-history.md`, `scripts/tests/**`. The same real
+party-mode block was planted at nine home boundaries — 4 homes (all PASS on both) and 5 non-homes
+(all FAIL on both), **9 of 9 agree** — plus the whole-tree default scan (both 0; core reports 890
+files carrying the envelope), the two crafted stray fixtures (both 1), and two controls (a known
+stray: both 1; a file with no block: both 0). The sandbox was left with 0 modified paths.
+**`--fixture-provenance` is NOT absorbed** and is out of scope per the predecessor's §9, so the
+script stays — but that arm has **exactly one live caller, its own test**
+(`scripts/tests/test-s241-5-ac4-provenance-secret.sh`), which `ci-local.sh` does not reference
+(control: `ci-local.sh` names 39 other `scripts/tests/test-*.sh`) and no fixture `run.sh` drives.
+Whether to keep a 45-line arm nothing runs is a row-4 question, not a row-3 one. **Wiring: 3 live
+sites** — `gate-validation-domain.md:102,110` (Check 17, one arm), `scripts/lib/pr-class.sh:163`
+(`EXPECTED_VALIDATORS="scan-stray-provenance.sh"`), plus 4 test scripts.
+**Found in passing:** Check 17's prose names **five** homes and both implementations carry **six** —
+`docs/architecture-history.md` appears **0 times in the whole 914-line file** (control:
+`architecture.md` appears once in the same span). The prose under-declares its own mechanism by one
+home, so a party-mode block in `architecture-history.md` is legitimate to both scanners and a stray
+by the check that governs them.
+
+**4 — `retro-replay-harness.sh` → the fixture-drivability convention: REFUTED.** These answer
+disjoint questions and the run says so. The harness replays retro-merge validator fixtures and
+asserts each deny-reason token against `defect-manifest.txt`; `validate-fixture-drivability.sh`
+asserts every fixture directory has a `run.sh` or a declared exemption. Two mutants, on the same
+tree: making the declared-noncompliant `s155-noncompliant.md` compliant → **harness 1** ("(b)
+s155-noncompliant.md was ACCEPTED but declares defect"), **drivability 0**; removing
+`tests/fixtures/retro-replay/run.sh` → **drivability 1** (`undeclared: 1`), **harness 0**. Each
+mutant fails only its own assertion, and both restored byte-identical. What v0.202.0 absorbed is the
+**driving convention, not the harness**: `run.sh` delegates to it (`exec bash
+"$ROOT/scripts/retro-replay-harness.sh"`), and `.githooks/pre-push:160-170`'s generic
+`for d in tests/fixtures/*/` loop drives it on every push. **That does make `ci-local.sh:1336-1342`'s
+hand-listed `paths_match` trigger redundant** — a duplicate *invocation*, not a duplicate
+*predicate*, and reachable only from a manual `bash scripts/ci-local.sh` because the installed
+pre-push hook does not call `ci-local.sh` at all (control: it invokes 8 other `bash scripts/`
+targets). **The 97 lines are not retirable. The trigger block is.**
+**Measurement trap recorded:** the first drivability run answered `exit 0` in silence. Bare, it
+reads `PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"` — my own session had that set to `/Users/n8/git/ai-dlc`,
+which has no `tests/fixtures`, so it correctly reported "no fixture tree — nothing to judge" and
+`--quiet` swallowed the sentence. A false zero of the measurer's making. Row 4's brief must state
+that this validator is only meaningful with `--dir` or a correct `CLAUDE_PROJECT_DIR`, and must not
+be run under `--quiet` as evidence.
+
+**5 — `generate-sprint-status.py` → `sprint-status.sh check-stories`: REFUTED.** Both PASS on the
+live tree, and the pass is where the coverage gap shows: the consumer reports **1 story, 10
+comparisons across 5 fields** (`acceptance_criteria`, `capital_path`, `gate_1_model`, `priority`,
+`status`); core reports **2 entries, 2 comparisons**, on `status` alone. Three mutants against the
+live `_bmad-output/planning-artifacts/sprint-status.yaml`: corrupting `status` → **both 1**;
+corrupting `priority` → **consumer 1, core 0**; corrupting `gate_1_model` → **consumer 1, core 0**.
+All restored, 0 modified paths. Core covers **one of five compared fields in one of five modes** —
+the consumer also carries `--write`, `--migrate`, `--close-sweep` and `--validate`, and core's `roll`
+is deliberately a different mechanism (rotation at pipeline start, not at retro-close, stated in its
+own header). **1,068 lines are not retirable; neither is the `--check` mode.** The genuine duplicate
+is the `status` comparison alone, and unpicking one field from a five-field diff costs more than the
+duplicate does. **Wiring: 43 files** — `ci-local.sh` ×4, `overrides/steps__gate-validation__check-5.md`
+×4, `overrides/steps__retro__domain-sections.md` ×4, `qa-domain.md:136`,
+`.claude/schemas/sprint-status.json:30`, `validate-story-frontmatter.sh`,
+`validate-story-status-consistency.sh`, and 30+ test/fixture files. **This subject alone is a larger
+wiring surface than the other five combined; it should not enter the row-5 brief.**
+
+**6 — `validate-no-direct-main-push.sh` → `--trunk-push` + pre-push arm 0: REFUTED, and it is not a
+free win.** Real pre-push protocol lines built from real graph commits. Case A, the licensed Step 5b
+backfill `2f04341da` (`chore(s298): backfill audit-anchor SHA after retro PR #812 merge`, touching
+`_bmad-output/audit-anchors.md` alone): **both 0** — and that agreement proves nothing, which is why
+Case B matters. Case B, the real merge `e3522f153` pushed direct to `refs/heads/main`:
+**consumer 1 ("BLOCKED: direct push to main contains a non-exception commit"), core 0
+("--trunk-push: PASS — 1 commit(s) judged").** Case C control, the same commit pushed to a
+non-trunk ref: both 0. Core's header states the reason plainly — *"It bounds that commit; it does
+not police the trunk."* The consumer's predicate (**every** commit on a push to `main` must match
+the backfill regex) is strictly wider than core's (only a commit that claims the subject without the
+paths, or takes the paths without the subject). Corpus control: 106 commits on `main` match the
+backfill pattern, 2,767 commits total, a bogus pattern matches 0.
+**And the "wired into nothing" premise is false.** It is `id: no-direct-main-push` in
+`.pre-commit-config.yaml:30`, `stages: [pre-push]`, and `CLAUDE.md:281` documents
+`pre-commit install --hook-type pre-push` as the repo's one-time setup. It is nonetheless **dormant
+in every clone**, for a reason graph states itself: `overrides/steps__retro__ci-gates-enforcement-surface.md:49`
+records that the pre-push hook type is deliberately NOT installed because `ci-local.sh` exits 1
+today and installing it "would **REJECT EVERY PUSH**". Measured on this clone: `.git/hooks/pre-push`
+is a shim that `exec`s `.githooks/pre-push`, which never reaches the pre-commit framework (control:
+the token appears 6 times in `.git/hooks/pre-commit`, 0 times in `.githooks/pre-push`), and
+`pre-commit` 4.5.1 is installed with `--hook-type=pre-commit` only. **Net effect: graph today has no
+enforcement of "no direct push to `main`" at all** — the consumer's guard cannot fire, and core's arm
+declines the question by design. Deleting the script is defensible; deleting it *as a free win with
+zero coupling* is not, and the `.pre-commit-config.yaml` entry must go with it.
+
+**Entry cost — the payoff argument, and it does not survive the measurement.**
+`gate-validation-domain.md` is **914 lines**. Checks 33, 34 and 35 occupy lines **787–915**,
+contiguous at the file's tail: **129 lines, 14.1%**, excised without touching the interior. Against
+the reconcile corpus: the file is named in **13 of 78** pulls (controls: universal token `ai-dlc`
+78/78, a bogus token 0/78) — the second-most-adjudicated of the four extension check files, behind
+`gate-validation-push` at 21/78. But the three checks being removed are **not** what drives that
+traffic. Denominator-corrected to each check's own arrival in the file (33 on 2026-07-06, 34 and 35
+both on 2026-07-16): **Check 34 is named in 2 of the 39 logs postdating it, Check 35 in 0 of 28.**
+So the retirement **costs one guaranteed re-adjudication** of the entry at the next pull — a changed
+file is adjudicated with certainty, against a 13/78 base rate — and **saves an expected ≈ 0.05
+adjudications per pull**. The payoff for row 5 is §3 criterion 1 (two implementations of one
+predicate cannot disagree at a gate if only one exists) and criterion 3 (3 of 5 `W5` squatters, 2 of
+4 `UNLOADABLE`). **It is not adjudication load, and the brief must not claim it is.**
+
+**What row 4's brief covers, per §6.3's bound:** subjects 1 and 2 (RETIRE), subject 3's stray arm
+(PARTIAL), and checks 33/34/35. Subjects 4, 5 and 6 are REFUTED and are recorded here and in the
+CHANGELOG per §4 — subject 4's redundant `ci-local.sh` trigger block and subject 6's dormant
+pre-commit entry are filed as ledger entries with falsifiable receipts, not fixed in the brief.
 
 ### ⏹ SESSION BOUNDARY — report row 1's four numbers and row 3's six verdicts.
 
