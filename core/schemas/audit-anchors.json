@@ -38,7 +38,8 @@
     "audit_window": { "required": false,                        "desc": "<prior-sprint-sha>..<sprint-N-sha> git rev range for the next sprint's per-class test-debt audit (documentary)" }
   },
   "$backfill_commit_comment": [
-    "THE BOUND ON THE ONE DIRECT-TO-TRUNK COMMIT THIS PIPELINE MANDATES.",
+    "THE BOUND ON THE DIRECT-TO-TRUNK COMMIT `retro.md` STEP 5b MANDATES. Not the pipeline's only",
+    "one — retro.md §7a-post commits the log rotation to the trunk too — but the only one bounded here.",
     "",
     "`retro.md` Step 5b tells the lead to write the entry with a placeholder and then update the",
     "`sha` `in a follow-on commit on main after merge` — the merge SHA is not knowable until the",

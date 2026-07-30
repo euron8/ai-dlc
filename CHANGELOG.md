@@ -17,6 +17,112 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.213.1] — 2026-07-30
+
+### Fixed — retro §5b claimed to be the pipeline's ONLY out-of-PR commit, and retro §7a-post in the same file at the same sha is a second one
+
+**Found by a consumer, not here.** graph's pull to 0.213.0 read core §5b at `3490997` and hit the
+contradiction while adjudicating the 17 layer rows. §5b, new in that span, said of the audit-anchor
+backfill commit: "That follow-on commit is the ONE commit this pipeline pushes to `main` outside a
+PR" and closed with "Fold anything else into the retro PR." §7a-post step 7, **the same file, the
+same sha**, says: commit to `main`, subject `chore(s<N>): rotate gate-log and compaction-log
+post-retro-merge`. So the exclusivity claim was false against core's own step, and the remedy
+sentence was false twice over: §7a-post's own paragraph explains why the retro PR **cannot** carry
+that commit — emptying the live gate log before the merge turns the `## Gate Log: Sprint <N>`
+section missing and a consumer's merge-time validator (`validate-retro-prereq.sh`, consumer-provided)
+denies the merge. A lead who obeyed §5b's "fold anything else" would have produced exactly that
+denial.
+
+**Non-wedging, verified before anything was written.** `validate-audit-anchors.sh --trunk-push`
+fires only on a commit *claiming* the backfill subject with extra paths, or on one rewriting
+`audit-anchors.md` alone under another subject. The rotation commit claims neither, so no push was
+ever blocked by this. The defect was prose that would mislead a lead, not a gate that would stop
+one.
+
+**THE SUBJECT IS THE FALSE SENTENCE, NOT THE ENFORCER'S SCOPE.** `--trunk-push` was deliberately
+left alone. Its own header states the design — "It bounds the licensed commit; it does not police
+the trunk … core states no branch policy" — and the schema's `$backfill_commit_comment` records
+what a linter that errors on real data on first contact costs. Widening it to police the rotation
+commit would have made core state a branch policy it has never stated, in order to make a sentence
+true that should not have been written.
+
+**The remedy: stop counting.** §5b now says the backfill is the commit **this step** licenses to
+reach `main` outside a PR, explicitly not a count of the pipeline's out-of-PR commits, names
+§7a-post as another, allows that a consumer may license more, and states the rule that makes the
+set extensible without a count: *each such commit is licensed by the step that states why a PR
+cannot carry it.* The closing instruction keeps the part that was load-bearing — nothing else goes
+in **this** commit — and drops the part that generalised: other retro changes go in the retro PR,
+and a commit another step licenses stays with that step. A local claim cannot be falsified by a
+file it does not read; the cross-file count could, and was.
+
+**Four sites carried the claim, not one.** Grepped as one invocation over the whole tree, with the
+`audit-anchor` hit count as the control that the search ran:
+
+- `core/skills/ai-dlc/steps/retro.md` §5b — the only one that renders at a consumer, and it does
+  render: graph's `overrides/steps__retro__domain-sections.md` has retired its §5b shadow and
+  records core §5b authoritative again, so core's false sentence is what graph's lead reads.
+- `core/schemas/audit-anchors.json` `$backfill_commit_comment` — "THE BOUND ON THE ONE
+  DIRECT-TO-TRUNK COMMIT THIS PIPELINE MANDATES." Now names Step 5b as the mandator and says
+  outright it is not the pipeline's only one, only the only one bounded there. **`--render` output
+  is byte-identical before and after** (`diff` clean against a non-empty 21-line render), so no
+  consumer's header region goes stale on this edit.
+- `core/git-hooks/pre-push` — the step label read "the only one licensed"; it is the only one **that
+  arm bounds**, which is what the label now says.
+- `core/fixtures/enforcement-map-sites/run.sh` — assertion 22's header comment, the same claim in
+  the fixture that proves I51.
+
+Core's Rule 25(c) statements were checked in the same pass and carry no exclusivity claim, so the
+set is those four and it is closed.
+
+**No new check, and the reason.** The mechanizable shape would be an invariant joining "core's
+direct-to-trunk commit sites" against "core prose claiming there is one of them". The claim side is
+greppable; the **site** side is not derivable — §5b spells it "in a follow-on commit on main" and
+§7a-post spells it "Commit to main:", two spellings for one concept, and a hand-list of
+spellings is the check-cannot-fire class this repo keeps paying for. Removing the cross-file claim
+removes the thing that could drift, which is cheaper than policing it.
+
+**Verification.** `scripts/validate-enforcement-map.sh` exit 0, every invariant in its `OK:` line
+live and I51 among them; `core/fixtures/enforcement-map-sites/run.sh` PASS, 58 `ok` — including I51's three arms
+(prose drifts from the matcher, the remedy contradicts the rule, and the vacuity guard), which read
+the subject-template line the edit deliberately did not touch; `core/fixtures/trunk-push-bound`
+PASS; `core/fixtures/audit-anchors-schema` PASS; `bash -n` clean on the hook and the fixture; the
+schema still parses. The **whole fixture suite** ran 8-way in the pre-push hook's own shape with an
+injected always-fail directory as the control: **88 directories in, 88 results out, exactly 1 FAIL
+and it is the control, 87 `ok`** — so the green is a green the harness could have reported red. (The
+first run of that count was itself wrong for the reason this repo keeps writing down: `ls | grep -v
+list` silently dropped `reconcile-blocking-list` from the tally. The defect was the counting line,
+not the suite; the re-run above filters on an exact match.)
+
+The shipped surface was checked on a **built tree**, not only in `core/`: `scripts/install.sh` into
+a fresh repo, then grep the installed `.claude/skills/ai-dlc/steps/retro.md` — the old sentence **0**
+times, the new one **1**, with the installed `.githooks/pre-push` label at **1** as the control that
+the grep works in that tree.
+
+### Fixed — two stale-arithmetic expectations in the 0.213.0 pull brief, both already measured by the graph sessions that hit them
+
+`docs/reviews/graph-pull-0.213.0-operator-handoff.md`, both in §6, both cases of an expectation
+written before the row it describes was executed:
+
+- **Row 6's blocking list** expected "the 4 `HARD-OVERRIDE-DRIFT-SECTION` rows and NOTHING ELSE"
+  after rows 3–5. It is **3**: row 3b's required `git rm` of
+  `overrides/steps__gate-validation__check-25-universal-core.md` retires one of the 4. Controlled by
+  the graph session against a clean worktree of the pre-row-3 tree, which reproduced 69 rows / 4
+  exactly, with a `comm` diff of the two outputs showing precisely that row's disappearance plus
+  `gate-validation-domain.md`'s adjudication row changing content because its digest covers the
+  `gate_types:` row 3b added. The brief now states 3, says where the 4 came from, and the
+  `readopt-override.sh --merge` line below it agrees.
+- **Row 4's verify line** expected "2 declared undrivable", which is arithmetically impossible
+  beside its own 14/14 route split — every route-2 README increments that counter. The brief now
+  names the two load-bearing halves (exit 0, `0 undeclared`), states that the split follows the
+  routes, and records the measured 20 `run.sh` + 8 `README.md` outcome: 103 directories / 93 driven
+  / 10 declared undrivable / 0 undeclared, exit 0.
+
+**graph's in-flight pull is NOT re-targeted.** It stays pinned at `3490997` with rows 1–5 banked.
+Four blocking rows hook `retro.md` (`retro-domain`, `retro-push`, `retro-deferral-expiry`,
+`retro-gate-log-rotation`); re-pointing `theirs` at this release would change their THEIRS digests
+and re-open adjudications row 5 already paid for. The brief's out-of-scope list now names this
+release as where the fix lives and says not to re-point.
+
 ## [0.213.0] — 2026-07-29
 
 ### Added — a third severity, `level: ADJUDICATED`, and the first behavioural reader `level:` has ever had; five of the six things the plan said to build were refuted by measurement before any of them was written

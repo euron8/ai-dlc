@@ -64,7 +64,7 @@ step() {
 #    `$backfill_commit_comment` for what is deliberately left alone and why.
 trunk_push() { printf '%s' "$PUSH_REFS" | bash scripts/ai-dlc/validate-audit-anchors.sh --trunk-push; }
 if [ -f scripts/ai-dlc/validate-audit-anchors.sh ]; then
-  step "trunk push (the Step 5b backfill commit is the only one licensed)" trunk_push
+  step "trunk push (the Step 5b backfill commit is the only one this arm bounds)" trunk_push
 fi
 
 # 1. Rule 27 layer hygiene. Overrides carry a resolvable `base_sha`; extension checks
