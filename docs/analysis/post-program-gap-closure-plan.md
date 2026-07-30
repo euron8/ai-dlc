@@ -17,19 +17,26 @@ and the predecessor was tracked anyway. Ticking this ledger is a `chore:` commit
 **Updated as the last act of every row. If this block is stale, the row that moved the program did
 not finish.**
 
-> **Next: row 8** (§6.8) — alphabetic check ids `AP`/`VH`. Re-ranked ahead of rows 6/7 by row 1's
-> stop condition; see §5's ranking note.
+> **Next: row 6** (§6.6) — `LC-N5` WARN → ERROR. Second in §5's ranking, now that row 8 is
+> SHIPPED as **v0.215.0**.
 >
 > **Who: an agent, in a fresh `ai-dlc` session.** No operator decision is pending. Working directory
 > `/Users/n8/git/ai-dlc`. Paste:
 >
 > ```
-> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 8.
-> Rows 1-5 are ticked; row 5's RESULT is the most recent state. Rank-order note in
-> §5 puts row 8 ahead of rows 6 and 7 — do not fall back to ledger order.
-> Row 8 is measurement-gated: measure the relabeller's false-positive set before
-> writing anything. It may end REFUTED, which is a first-class outcome per §4.
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 6.
+> Rows 1-5 and 8 are ticked; read row 8's RESULT first. It SHIPPED v0.215.0 and
+> moved UNLOADABLE against the live consumer from 2 to 4 (19b 2s AP VH) — the W5
+> count it did NOT move, which stays at 2 (rules 31/32), this row's subject set.
+> What is owed is a MEASUREMENT, not code: which graph entries would declare
+> kind: qualifier, derived per hooked file and per frontmatter flag. May end
+> REFUTED, which is a first-class outcome per §4.
 > ```
+>
+> **Row 8's carry-forward, and it is the reason that row was cheap:** its stated blocker was a
+> sentence in the code that named the wrong invariant. Before treating any recorded "blocked on X"
+> in this file as a constraint, check that X is what the record says it is. Row 6's own recorded
+> blocker — the `kind: qualifier` grain — is unverified in exactly the same way.
 
 ---
 
@@ -226,7 +233,7 @@ before re-proposing anything below; this section is the short form.
 | ⏹ | ~~SESSION BOUNDARY — the freeze ends here.~~ **PASSED 2026-07-30 at merge `39f0248ff`. The freeze is lifted and everything below runs against a live consumer.** Rows 6–10 are `ai-dlc` sessions and touch graph not at all | | | |
 | 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | — |
 | 7 | **I38 reverse: every normative sentence carries a clause id** — blocked on normalising `overrides/README.md` — §6.7 | CORE | no | — |
-| 8 | **Checks `AP` / `VH`: alphabetic ids are invisible to GM1** — blocked on the relabeller's FP set — §6.8 | CORE | no | — |
+| 8 | **Checks `AP` / `VH`: alphabetic ids are invisible to GM1** — blocked on the relabeller's FP set — §6.8 | CORE | no | **SHIPPED 2026-07-30 — v0.215.0.** The recorded blocker was **REFUTED on both halves**: I34 binds `RULE_RE`, not any check grammar, and the relabeller's `ANCHOR_RE` had **already** carried `[A-Z]{1,3}[0-9]*` and the `—` terminator since the `### H1.` widening — no rewriter change was ever owed. **The relabeller's FP set was measured anyway and is EMPTY**: 39 labels stripped from a copy of the consumer tree, **32 proposals, 0 outside the hand-applied set** (control: intersection 32; the 2 non-proposals are `2s`/`2a`, ids core does not define, control returning 1 for `15` on the same invocation). `CHECK_HEAD_RE` widened in both detectors; measured delta across core + consumer is exactly `H1 H2 AP VH` + the consumer's `H1`, **0 spurious ids**, numeric branch unchanged at 171, `—` admitting no numeric heading. Against the live consumer `39f0248ff`: `UNLOADABLE` **2 → 4** (`19b 2s AP VH`) — the count row 8 was ranked 1st to make honest — and `validate-layer-entries` **unmoved at 0 errors / 2 warnings**. The bold pseudo-heading form is **deliberately not widened**, on a measured FP (`**QA —` in `steps/implementation.md`, both trees). **I47 extended to a three-way join** (detectors ↔ rewriter); reversion mutant fires it **alone**, and removing the arm turns only that fixture line red. **87/87 fixtures, 87 verdicts recorded**; verified again on a tree built by `install.sh`. `LC-E17` unchanged, `contract_version` stays 7 |
 | 9 | **Generalise the cross-script mode join** — blocked on fixing the extractor's 8 measured misses — §6.9 | CORE | no | — |
 | 10 | **The machinery home, inverted: consumer declares, core enforces the declaration** — unmeasured, may be refuted — §6.10 | CORE | no | — |
 
@@ -777,29 +784,104 @@ worth its release.
 
 ### Row 8 — alphabetic check ids. **RANKED 1st of the remaining five.**
 
-> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. No operator decision pending.
->
-> ```
-> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 8.
-> Rows 1-5 are ticked; row 5's RESULT is the most recent state. §5's ranking note
-> puts row 8 first — do not fall back to ledger order.
-> Measure the relabeller's false-positive set BEFORE widening any grammar. I34
-> binds the detector to reconcile/relabel-extension-checks.sh, so both change in
-> one release or neither does. REFUTED is a first-class outcome per §4.
-> ```
->
-> **On ending:** SHIPPED consumes a version and needs a mutant per new arm plus a measured FP set;
-> REFUTED consumes none and its deliverable is the written refutation. **Either way, tick §5, update
-> the `▶ NEXT STEP` block at the top of this file, and hand to row 6.**
+> **▶ DONE — SHIPPED as v0.215.0, 2026-07-30.** Ticked in §5, RESULT below, and the `▶ NEXT STEP`
+> block at the top now points at row 6. Nothing here is owed. The prompt this row ran from named
+> **I34** as the binding constraint; that was wrong, and the RESULT records what the constraint
+> actually was.
 
 **State [R — predecessor §9].** `CHECK_HEAD_RE` is numeric, so `Check AP` and `Check VH` are
 invisible to GM1, and both are reported live and unloadable. **Do not read GM1's silence as evidence
 they are fine** — they are structurally outside what it can see.
 
-**The constraint.** Widening the grammar is bound to `reconcile/relabel-extension-checks.sh` by
+~~**The constraint.** Widening the grammar is bound to `reconcile/relabel-extension-checks.sh` by
 **I34**. A detector that finds a heading the rewriter cannot rewrite reports a defect with no
 remedy, so both change in one release, and the relabeller's FP set across every heading it already
-rewrites is **unmeasured**. Measure first.
+rewrites is **unmeasured**. Measure first.~~ **REFUTED by the row itself — the [R] state above was
+accurate and the constraint under it was not.** See the Row 8 RESULT below.
+
+#### Row 8 RESULT — SHIPPED v0.215.0, 2026-07-30. Consumer read-only at `39f0248ff`.
+
+**The recorded blocker was false on both halves, and neither half needed a new measurement to
+falsify — only a reading of the files it named.**
+
+1. **I34 binds `RULE_RE`.** Its own header says the rule namespace is deliberately kept apart from
+   the check namespace, because folding the word `Rule` into the check grammar would merge `Rule 29`
+   and check `29` into one id. It has never governed a check heading. The invariant that binds the
+   two detectors is **I47**; the one that binds the two rewriter-side copies is **I15**.
+2. **The rewriter could already rewrite `## Check AP — …`.** `relabel-extension-checks.sh` defines
+   `ANCHOR_RE` as `…([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]` and has since the widening for
+   `### H1.`; its own inline comment names that exact heading form as one it resolves. **No rewriter
+   change was owed in this release or any other**, so "both change in one release or neither does"
+   had nothing behind it.
+3. **Unloadability's remedy was never the relabeller.** The relabeller adds an `[ext:<id>]` label to
+   resolve a NUMBER COLLISION. What clears an `UNLOADABLE` is an anchor plus `gate_types:`, or
+   deletion — which GM1's own FAIL message already prints, and which an alphabetic id satisfies
+   exactly as a numeric one does.
+
+**The FP measurement was run anyway, because §6.8 asked for it, and it is empty.** The 39
+hand-applied `[ext:…]` labels were stripped from a scratchpad copy of the consumer's skill tree and
+the relabeller re-run: **32 proposals, 0 outside the hand-applied set.** Control: the intersection is
+32 and both compared files are non-empty, so the `comm` is not answering on an empty side. The 2 hand
+labels it does not propose are not misses — `2s` and `2a` are ids core does not define in the file
+each entry hooks, verified with a control returning **1** for `15` on the identical invocation. The
+other 5 labels are in `extensions/README.md`, which the `kind:` filter skips. Dry-run only; the
+consumer's `HEAD` and its four pre-existing runtime modifications are unchanged.
+
+**What the widening admits, measured before it was written.** Across core's `skills/ai-dlc/` and the
+consumer's installed tree the alphabetic branch harvests exactly `H1`, `H2`, `AP`, `VH` and the
+consumer's `H1` — every one a real id, **0 spurious**. The `—` terminator admits **no numeric heading
+at all**. Nothing that matched before stops matching (numeric branch unchanged at **171** core
+matches; control: a bogus grammar matches 0).
+
+**Consumer effect, measured against `39f0248ff` and again from a tree built by `install.sh`:**
+`UNLOADABLE` **`19b 2s` → `19b 2s AP VH`**, and `validate-layer-entries` **unmoved at 0 errors /
+2 warnings**. No new `CHECK OUT OF BAND` — `below_band` already excluded alphabetic ids — and no new
+collision, because the consumer's `H1` extension heading is correctly labelled and `heading_labelled`
+clears it. **Note the direction: this row RAISES the `UNLOADABLE` count**, which is §3 criterion 3
+read the way §5's ranking note stated it — the 2 was an understatement and 4 is the honest number.
+The two new members are dispositioned in writing here and in the CHANGELOG.
+
+**One form deliberately NOT widened, on a measured FP.** `bold_anchors_of_file` harvests the
+`**24. …**` pseudo-heading. The alphabetic branch applied there harvests
+`**QA — validate every AC …**` (`steps/implementation.md`, present in core and in the consumer's
+installed copy) as a check id `QA` — a false positive with no remedy, since there is no check `QA` to
+anchor. The bold form stays numeric and the file says why.
+
+**Two lookups widened with the harvester, for the non-obvious reason.** `heading_title` and
+`heading_labelled` harvest nothing; they resolve an id already harvested. Left narrow, a widened
+harvester feeds them an id whose title comes back empty, an empty title routes the collision arm into
+its RESTATES branch, and `heading_labelled` can never clear it — the "remedy that does not remedy"
+defect that function's own header records, reached from the other side. Their terminator is an
+alternation, not the bracket class `[.—]` the shell grammar uses: a byte-oriented `awk` treats a
+multibyte `—` inside brackets as three bytes, and `sub()` would strip one and leave the rest in the
+title.
+
+**The mechanism, and it is the finding worth keeping.** `ANCHOR_RE` and `CHECK_HEAD_RE` are the same
+grammar in four files. I15 held the rewriter pair identical to *each other*; I47 held the detector
+pair identical to *each other*. **Both were green for four releases while the pairs diverged from one
+another** — two internally consistent halves of one grammar, which no pair-check can see and which is
+strictly harder to spot than a single forked copy. I47 is now a three-way join, with I15 carrying the
+fourth definition transitively. The mutant is a **reversion**: narrow both detectors, in step, back to
+the grammar this release replaced. The old arm is satisfied by construction — the fixture asserts the
+two mutated copies are byte-identical and fails itself if they are not — so **only** the new arm can
+fire, and it does; removing the arm turns that one fixture line red and leaves the other two green.
+No fixture arm exists for the new "cannot find `ANCHOR_RE`" branch on purpose: I15 reads the same
+assignment, so deleting it fails both invariants and neither mutant would be attributable.
+
+**Also fixed, same class as the blocker:** both detectors said their `CHECK_HEAD_RE` copies were
+bound by **I46**. I46 binds the extension `kind:` vocabulary. A citation a reader cannot follow is a
+join that reads as verified and is not — two more instances, in the same two files as the I34
+misattribution.
+
+**No contract change.** `LC-E17`'s normative text — *"A check an extension DEFINES as a heading is
+loadable"* — was already grammar-agnostic and already covered `AP` and `VH`; only its enforcer was
+narrow. `contract_version` stays **7**.
+
+**Generalise it.** A recorded blocker is a claim. This one had three verifiable parts, all wrong, all
+checkable by opening the file it named — and the predecessor's §9 wrote it, two handoffs restated it,
+and the code comment carrying it read as a design note rather than as the defect. **Before treating a
+"blocked on X" in this file as a constraint, check that X is what the record says it is.** Rows 6, 7
+and 9 each carry one.
 
 ### Row 9 — the cross-script mode join. **RANKED 3rd.**
 

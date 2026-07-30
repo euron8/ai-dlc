@@ -2389,16 +2389,20 @@ an earlier revision, found by a real run:
 - **graph's override-body finding** (§7 release 2's live instance) is a *consumer* decision: narrow
   the `shadows:` or extend the body. Recorded in graph's reconcile log, deferred to a sprint. Core
   ships the detector; core does not fix graph's override.
-- **An alphabetic check id is outside GM1's subject set** — opened by v0.197.0. `CHECK_HEAD_RE` is
-  numeric (`[0-9]+[a-z-]*\.`), so `Check AP` (attribution provenance, "every gate") and `Check VH`
-  (vacuous-validator honesty, "story-validation gate") are invisible to it. **Both are live, both
-  carry a real Scope line, and both are unloadable today** — measured with the same probe that
-  found the four GM1 reports. Widening the grammar is bound to
-  `reconcile/relabel-extension-checks.sh` by **I34**, and a detector that finds a heading the
-  rewriter cannot rewrite reports a defect with no remedy — so widening means changing the
-  relabeller in the same release, and its false-positive set across every heading it already
-  rewrites is unmeasured. Measure before writing it. **Do not read GM1's silence on AP/VH as
-  evidence they are fine; they are structurally outside what it can see.**
+- ~~**An alphabetic check id is outside GM1's subject set**~~ — opened by v0.197.0, **CLOSED by
+  v0.215.0**. `CHECK_HEAD_RE` was numeric (`[0-9]+[a-z-]*\.`), so `Check AP` (attribution
+  provenance, "every gate") and `Check VH` (vacuous-validator honesty, "story-validation gate")
+  were invisible to it. Both were live, both carry a real Scope line, and both were unloadable —
+  and GM1's silence on them was not evidence they were fine. **The stated blocker was false on
+  both halves.** The invariant named here is **I34**, which binds `RULE_RE` — a different
+  namespace, not this grammar. The relabeller's own check grammar is `ANCHOR_RE`, bound by **I15**
+  to `layer-drift.sh`, and it had ALREADY carried `[A-Z]{1,3}[0-9]*` and the `—` terminator since
+  the widening for `### H1.`: the rewriter could relabel `## Check AP — …` all along, so no
+  rewriter change was ever owed. The relabeller's false-positive set was measured anyway, as this
+  entry asked — **32 proposals, 0 false positives** against 34 hand-applied labels. Unloadability's
+  remedy was never the relabeller in any case: what clears it is an anchor plus `gate_types:`, or
+  deletion. v0.215.0 widens `CHECK_HEAD_RE`, and I47 now binds it to the relabeller's `ANCHOR_RE`
+  so the two internally-consistent halves of one grammar cannot fork again.
 - **An override asserting IDENTITY rather than survival has no detector** — opened by v0.197.0.
   v0.187.0's `OVERRIDE-ASSERTS-SHADOW-SURVIVES` requires a scope phrase whose noun is the shadowed
   grain (`rest of the section`, `surrounding check`). graph's
