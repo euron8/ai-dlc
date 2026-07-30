@@ -144,8 +144,13 @@ forbids a clause with no mechanism so `layer-contract.yaml` cannot hold one eith
 
 ## 4a. Premises this plan deliberately does NOT carry forward
 
-- **The machinery home's ERROR clauses stay refuted.** Seven candidate predicates measured, all
-  failed **[R, predecessor §7.6]**. Do not re-attempt on a path scan, a name shape, a layer-entry
+**The full list lives in the predecessor's `## 0a. Refutation Index`** — every refutation the last
+program measured, one line each, with the release and the failed predicate. Row 2 built it. Read it
+before re-proposing anything below; this section is the short form.
+
+- **The machinery home's ERROR clauses stay refuted.** **Eight** candidate predicates measured, all
+  failed **[V — recounted from the predecessor's own §7.6 table by row 2; the "seven" this section
+  carried was an undercount]**. Do not re-attempt on a path scan, a name shape, a layer-entry
   citation, a gate-check invocation, a fixture-dir complement, a `fixtures:` declaration, a basename
   collision, or a `settings.json` hook command. One untried direction is row 10; it is unmeasured.
 - **`RENUMBER-BAND --apply` and `layer-relocate.sh --apply` stay closed** — tools for refuted clauses.
@@ -165,7 +170,7 @@ forbids a clause with no mechanism so `layer-contract.yaml` cannot hold one eith
 | # | Row | Kind | Freeze | Status |
 |---|---|---|---|---|
 | 1 | **Re-derive the four metrics that justified the whole program** — §6.1 | MEASURE | no | **DONE 2026-07-30** — corpus 78+10, baseline's 76/32/44 reproduced. clean-pull **30/32 → 22/44** (baseline 30/32 → 17/44; post grain unrecoverable); prose **4.3 → 5.7 kB** whole-log, **0.3 → 0.7 kB** sections (baseline 3.8 → 8.3 kB; grain unrecoverable); `NEEDS-REVIEW`+`HAND-REVIEW` **0 → peak 22 → 15 today** (baseline 38, unreproducible at any commit); re-litigation **4 of 9** (baseline 6 of 9, overstated); `EXTENSION-HOOK-DRIFT` **34/78** ([R] 31/76 → **[V]**). Metrics 1 and 3 measure detector arrival (v0.60.0, v0.122.0), not pull health. Archiving confound **REFUTED** — 15 both sides of the rotation. graph read-only, `18e00ef40` untouched |
-| 2 | **Disarm the predecessor's self-delete; index its refutations** — §6.2 | PRESERVE | no | — |
+| 2 | **Disarm the predecessor's self-delete; index its refutations** — §6.2 | PRESERVE | no | **DONE 2026-07-30** — delete-licence and false-untracked claim removed (both greps 0 against controls returning 3 / 16 / 1); §0 rewritten as a completed-program record; **`## 0a. Refutation Index` added — 8 machinery-home predicates, the band ERROR + `RENUMBER-BAND --apply`, `layer-relocate.sh --apply`, `--is-consumer-machinery`, absorption arms 1 and 4, arm 8's refuted NAME, §7.9's value claim + subject-set-of-1, row 11's 5 design choices, `silent once recorded`, and §4's 3 pre-program falsifications**. §4a repointed; its "seven" machinery predicates recounted to **8** from the predecessor's own table. Weakness stated in the index: nothing enforces that a reader consults it. `docs:` commit, no version bump |
 | 3 | **Derive the retirement set with controls — per subject, is the core absorber actually drop-in?** — §6.3 | MEASURE | no | — |
 | ⏹ | **SESSION BOUNDARY.** Report row 1's four numbers and row 3's per-subject verdicts before opening the graph batch. | | | |
 | 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | — |

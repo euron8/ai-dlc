@@ -1,14 +1,131 @@
-# Layer Contract Program — execution handoff
+# Layer Contract Program — completed program record
 
-**Point a fresh Claude Code session at this file in `/Users/n8/git/ai-dlc`.** It drives the
-remaining program to done across multiple sessions.
+**This program is COMPLETE.** All 23 Progress Ledger rows (§6) are ticked; 12 of 12 numbered rows
+shipped or closed. It ran as an execution handoff and is now a record. **Its successor is
+`docs/analysis/post-program-gap-closure-plan.md`** — point a fresh session at that file, not this
+one.
 
-Untracked on purpose: committing it would need a version bump per edit, and it is edited every
-release. Do not delete it until the Progress Ledger is fully ticked.
+**Do not delete this file.** Its value is not the capability it shipped, which the CHANGELOG and
+the tree already record. Its value is **what was measured and refuted**: predicates that failed,
+subject sets that were of the wrong set, and design choices that died before they were built.
+Those findings exist nowhere else in a findable form — they survive otherwise only as prose spread
+across 297 CHANGELOG version headings. The **Refutation Index** below is the entry point.
+
+*(An earlier version of this header claimed the file was untracked "because committing it would
+need a version bump per edit", and licensed its own deletion once the ledger was fully ticked.
+Both were false: `docs:` and `chore:` subjects ship without a bump, the file was tracked anyway,
+and the ledger reaching fully-ticked is what would have armed the delete. Removed 2026-07-30 by
+row 2 of the successor plan.)*
 
 ---
 
-## 0. How to use this file
+## 0a. Refutation Index
+
+**Every refutation this program measured, one line each.** The predicate that failed, the release
+that recorded it, and where the measurement lives. Read the section before re-proposing any of
+these — each was checked with a control, and several were checked *before* being built on.
+
+**Its weakness, stated rather than papered over: nothing enforces that a reader consults an
+index.** No check can fire on "someone re-proposed a refuted predicate", because the proposal
+arrives as prose in a plan file that does not exist yet. This index is a pointer, not a mechanism.
+`I37` forbids a `layer-contract.yaml` clause with no mechanism, so the contract cannot hold these
+either; the successor plan's §4a is the other half, and it points here.
+
+### The machinery home — 8 predicates for "consumer ai-dlc machinery", all refuted (v0.194.0, §7.6)
+
+Every candidate was measured against graph `170ff9d8c` with controls. The row shipped as
+declaration + join; **all four ERROR clauses are refuted, not deferred.**
+
+| # | Predicate that failed | Why |
+|---|---|---|
+| 1 | Path scan under `scripts/` | `check-orphaned-fn.sh` (domain) and `check-protected-core-paths.sh` (ai-dlc) are siblings, same shape, opposite class |
+| 2 | Name shape (`check-*`, `validate-*`, `audit-*`) | Straddles both classes — the same two files |
+| 3 | Cited by a layer entry | 86 spellings, **39 resolve to no path**; the resolving 47 include product source (`rebalancer/api.py`, `server/aggregator.py`) |
+| 4 | Invoked by a gate check | Sweeps graph's entire domain-check toolchain — the FP set the row was warned about |
+| 5 | Consumer fixture dir not in core's derived set | 30 dirs, mixed product and ai-dlc; relocation breaks `MANIFEST`, `fixture-hashes.lock`, 4 `ci-local.sh` triggers, a pre-push glob |
+| 6 | Layer entry declares `fixtures:` | **Zero** live subjects — check-cannot-fire |
+| 7 | Basename collides with a core script | **Zero of 1003** consumer executables — vacuous |
+| 8 | `settings.json` hook command | Decidable but **1** subject; measured value none |
+
+Closed with them: **`reconcile/layer-relocate.sh --apply`** (a relocation tool needs a clause to
+trigger it) and **`core-paths.sh --is-consumer-machinery`** (it *was* the refuted clause's
+implementation). **The lesson:** this row's own rescue route — "derive the set instead of scanning
+for it" — was written in this file as the thing that works, and it does not. *A derivation is not
+sound merely because its inputs are readable by core. Ask what the derived set CONTAINS.*
+
+### The ≥900 numbering band — the ERROR clause and its tool, refuted (v0.195.0, §7.7)
+
+**"ERROR on a consumer number <900" is refuted.** The real subject set was **51 numbered headings
+across 13 files**, not the 19 across 2 the row assumed. Of those 51: 4 deliberate qualifiers on a
+core number (the integer *is* the reference; renumbering severs it), 8 push candidates staged
+against the core section they amend, 16 other core collisions, 16 step positions in an ordered
+procedure, 2 alphabetic ids a numeric band cannot order — leaving **5 genuine squats**.
+
+**`RENUMBER-BAND --apply` is closed with it, and its stated route was independently false.** It was
+to ride `relabel-extension-checks.sh --apply`, whose rewrite loop iterates the numbers **core**
+defines and looks each up in the entry. A number core does not define never enters the loop — it is
+blind to the entire subject set **by construction, not by coverage**. *The correction that mattered
+was not that the counts were off; it was that they were counts of the wrong set.*
+
+### The absorption arms — 2 of 8 refuted (§7.10)
+
+- **Arm 1** — `audit-rule-exercise.sh` → `audit-rule-files.sh --exercise`. **REFUTED: no core
+  subject set.** Core defines no anchored per-rule emission grammar (the 6 rule-id strings in
+  `core/`+`templates/` are prose in comments; control: 66 `Rule 26` hits, so the grep ran) and no
+  gate-log corpus enumerator (both tokens zero in `core/`; control: 5 core scripts read gate logs).
+  The consumer script keys on graph's own AC2 instrumentation and a sprint floor — all domain. *The
+  row's own quoted evidence refuted it: the header sentence continued past where it was cut.*
+- **Arm 4** — `audit-main-since.sh` → `validate-cycle-commits.sh`. **REFUTED: the absorber was
+  misidentified and the arm has no core subject set.** One counts ≥3 cycle commits per planning
+  artifact over `<trunk>..<branch>`; the other enumerates merges over `<genesis>..main`, classifies
+  by changed paths, re-runs validators in a detached worktree and advances a watermark. No shared
+  subject, input or output. v0.204.0 shipped the one core-owned slice inside it (verifying that an
+  operator-authorization citation *is* one) into `core-paths.sh --audit-diff`.
+- **Arm 8's arm NAME was refuted** while the absorption was real: `run.sh` already *is* a
+  registrable entry point. The gap was that nothing told the consumer 28 of its 29 fixture
+  directories were being skipped. Shipped v0.202.0 as `validate-fixture-drivability.sh` + I52.
+
+### `gate_types:` — the row's stated value claim refuted, and the release was larger (v0.197.0, §7.9)
+
+**"Closes the failure that script's own header records" is refuted as written** — the header
+records two failures and `gate_types:` touches neither; it closes the header's *opening* claim by a
+route the two-way resolve could not represent. **"Subject set of 1" was wrong**: measured **four**
+(`19b`, `2s`, `35`, tombstone `33`), FP set empty. *Third instance in this program of a guard whose
+subject set excludes the failure it describes.*
+
+### The ADJUDICATED tier — 5 of the row's 6 design choices refuted (v0.213.0, §7.11)
+
+Each was checked **before** it was built on.
+
+| The row said | Measured |
+|---|---|
+| Key on `(entry, clause, body-digest)` | The drift event is on the **core** file across `base..theirs`; the entry need not move for a verdict to go stale. The row's own key produces the exact permanent-exemption failure its mutant triple was written to catch |
+| Reuse the ledger entry shape so `ledger-reverify`/`ledger-rotate` work unchanged | The ledger's boundary is the `- **Bold**` grammar this program shipped a *silent-entry-swallowing* diagnostic for in v0.189.0. Neither tool's semantics reach an adjudication. Shipped as JSONL |
+| Add a `REGISTER-CONTRADICTION` arm to `hard-blockers.sh` | That file's header says its list is rendered *from the detectors*. The arm belongs in `layer-drift.sh`; the existing `HARD-` filter picks it up unchanged |
+| Order the four clauses by descending row count | The first two are **one mechanism**. Order inverted: **17 / 2 / 0** rows on the actual pull |
+| "6 of 9 blocker adjudications, three times in five hours" **[R]** | **4 of 9**, four files across **4h26m**. Repetition worse, fraction milder |
+
+Also **not shipped, and the reason generalises**: `silent once recorded`. Suppressing the candidate
+row once adjudicated leaves LC-E4's declared `code:` emitted by nothing — I36's forward grep still
+passes on the string surviving in a comment, and the clause becomes **unfalsifiable**.
+
+**Independently reproduced 2026-07-30** by row 1 of the successor plan, from the corpus rather than
+from this file: 4 of 9, four adjudications spanning 03:54–08:20Z on 2026-07-25.
+
+### Premises falsified before the program, kept because the base rate is the point (§4)
+
+Two of three Part G items were already fixed upstream when checked. One wrong claim shipped in core
+prose (`PC-S296` recorded as "absorbed v0.153.0" in the CHANGELOG *and* in a `ledger-reverify.sh`
+comment — a citation read as a fix; the entry's real subject stayed live until v0.184.0). And
+**release 1's own two guard premises were both false** — both named a mechanism *by path*, and
+naming a real file is what made them read as verified. **[V] means someone ran something. It does
+not mean they ran it against the question you are about to ask.**
+
+---
+
+## 0. How this file was used
+
+Kept as-is because §6's ticks and the per-row sections are read against it.
 
 1. Read §1–§5 in full. They are short and every line is load-bearing.
 2. Read the **Progress Ledger** (§6) to find the next unticked release.
