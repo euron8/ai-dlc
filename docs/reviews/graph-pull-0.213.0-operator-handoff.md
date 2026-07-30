@@ -22,24 +22,42 @@ them** — they pull to 0.183.0, which is already banked.
 2. Read the **Progress Ledger** (§5) to find the next unticked row.
 3. Read that row's section in §6, execute it, tick the ledger **with a sha or a count** as the last
    act. A fresh session's only way to know where it is.
-4. When you reach a **`⏹ SESSION BOUNDARY`**, stop and tell the operator to start a fresh session
-   pointed back here. Do not push past one.
+4. When you reach a **`⏹ FRESH GRAPH SESSION`**, stop. The operator opens a new session **in
+   `graph`**, pointed back at this file, and it picks up the next unticked row. Do not push past one.
 
-**TWO REPOS, TWO SESSIONS, AND THE SPLIT IS DELIBERATE.** Every row in §5 names its repo. The short
-version:
+## EVERY ROW RUNS IN `graph`. THERE IS ONE SESSION AT A TIME.
 
-| | **graph session** (`/Users/n8/git/graph`) | **ai-dlc session** (`/Users/n8/git/ai-dlc`) |
+This is the thing to be unambiguous about, so it is stated once and plainly:
+
+- **All nine rows in §5 run in a session whose working directory is `/Users/n8/git/graph`.** Every
+  command, every edit, the `apply`, the push. There is no row that runs in ai-dlc.
+- **This file lives in the ai-dlc repo and is read by absolute path.** That is the only ai-dlc
+  involvement in the normal path. Reading a brief from another directory is not "running in" it.
+- **`⏹ FRESH GRAPH SESSION` is context hygiene, not a repo switch.** It means *this* graph session is
+  full — 28 judgements or 17 adjudications is a context's worth — so start another **graph** session
+  and continue. Same repo, same file, next row.
+
+**When an ai-dlc session IS needed — and it is CONDITIONAL, not scheduled.** One trigger only:
+
+> **A tally deviates from its stated expectation, or a stop condition fires.**
+
+Then, and only then, stop and open a session in `/Users/n8/git/ai-dlc` with the deviation. If every
+tally matches, **you never open one** and the whole pull is a sequence of graph sessions.
+
+**Why that escalation exists, and why it is a different repo.** The graph session is the
+*worst-placed* agent to judge whether a check misfired: it has the consumer's context loaded, it is
+mid-push, and the cheap resolution is always "widen the thing that is complaining." §3 names that
+failure mode twice, and both wedging gates in this pull have a permissive route that silences them.
+An ai-dlc session with the distribution loaded is what refuses it. **A core defect found during this
+pull is fixed in ai-dlc and re-delivered — never patched in graph.**
+
+| | **graph session** — the default, all 9 rows | **ai-dlc session** — escalation only |
 |---|---|---|
-| Runs | the classifiers, `apply.sh`, the 28 declarations, the 17 adjudications, graph's own push | nothing against graph |
+| Opened | for every row, and again after each `⏹` | only when a tally deviates |
+| cwd | `/Users/n8/git/graph` | `/Users/n8/git/ai-dlc` |
+| Runs | classifiers, `apply.sh`, the 28 declarations, the 17 adjudications, the push | nothing against graph |
 | May edit | graph's tree | core only |
-| Job at a boundary | report the tally it measured, verbatim | decide whether a deviation is a **core defect** or a consumer decision |
-
-**Why the second session exists, and it is not ceremony.** When the graph session hits a tally that
-does not match, it is the *worst-placed* agent to judge whether the check misfired: it has the
-consumer's context loaded, it is mid-push, and the cheap resolution is always "widen the thing that
-is complaining." §3 names that failure mode twice. An ai-dlc session with the distribution loaded is
-what refuses it. **A core defect found during this pull is fixed in ai-dlc and re-delivered — never
-patched in graph.**
+| If all tallies match | does the entire pull | **is never opened** |
 
 **Everything in §6 is reference for the row you are on. §5 says what to do next; nothing else in
 this file does.** Rejected options and corrected premises are recorded so they are not
@@ -78,7 +96,7 @@ this pull merges.**
 | **`overrides/steps__gate-validation__check-25-universal-core.md` is RETIRED, as a required step** | Not optional. v0.197.0 exists to make it possible, and the override's own first line is false — it drops core's gate-type enum. |
 | **17 adjudications are RECORDED, not waived** | `level: ADJUDICATED` blocks `apply` while unrecorded. There is no skip flag, deliberately. |
 | **The 28 fixture declarations are a PER-DIRECTORY judgement** | Route 2 (`README.md`) over a fixture that HAS a driver is a false statement the script cannot detect and will accept. Do not batch-apply it. |
-| **A core defect is fixed in ai-dlc, never in graph** | Report it at the boundary and stop. |
+| **A core defect is fixed in ai-dlc, never in graph** | Stop and escalate to an ai-dlc session. This is the ONLY reason to open one. |
 
 ---
 
@@ -147,15 +165,15 @@ row, with a sha or the count you measured. `—` = not started.
 |---|---|---|---|
 | 1 | Pre-flight: the pre-push shim, `_bmad/`, a clean tree, pin the engine | graph | — |
 | 2 | Classify only. Report all six tallies. **Write nothing.** | graph | — |
-| ⏹ | **SESSION BOUNDARY** — the ai-dlc session adjudicates every deviation before anything is written | | |
+| ⏹ | **FRESH GRAPH SESSION.** Report the six tallies. **Escalate to ai-dlc ONLY if one deviates** — otherwise carry straight on in a new graph session | graph | |
 | 3 | The two mechanical pre-apply edits: party-mode home, retire `check-25-universal-core` | graph | — |
 | 4 | The **28** fixture declarations — one per-directory judgement each | graph | — |
-| ⏹ | **SESSION BOUNDARY** — 28 judgements is a session's worth on its own | | |
+| ⏹ | **FRESH GRAPH SESSION** — 28 judgements is a context's worth on its own | graph | |
 | 5 | The **17** adjudications — record a verdict per row | graph | — |
-| ⏹ | **SESSION BOUNDARY** | | |
+| ⏹ | **FRESH GRAPH SESSION** | graph | |
 | 6 | `apply` on one branch, machinery + rulebook | graph | — |
 | 7 | Post-apply verification, including the one probe that MUST fail | graph | — |
-| ⏹ | **SESSION BOUNDARY** | | |
+| ⏹ | **FRESH GRAPH SESSION** | graph | |
 | 8 | The push-candidate ledger: close `PC-S296`, update the 3 renamed tokens | graph | — |
 | 9 | Commit, push, PR, merge. Then unfreeze. | graph | — |
 
@@ -255,7 +273,7 @@ cut -f1 /tmp/ld.txt | sort | uniq -c | sort -rn
 | `OVERRIDE-ASSERTS-SHADOW-SURVIVES` | 2 | report-only |
 
 **STOP CONDITION:** any total other than 69, any status not in this table, or a count off by one.
-Report it at the boundary — do not adjust the table.
+Report it and escalate to an ai-dlc session — do not adjust the table.
 
 **ZEROS THAT ARE STRUCTURALLY IMPOSSIBLE, not clean.** State these in your report explicitly,
 because a real run has already mistaken one for evidence that work was disposed:
@@ -310,7 +328,7 @@ bash $E/core/scripts/sprint-status.sh check-stories 2>&1 | tail -3
 
 **The 2 `declared undrivable` are core's own `check-h1-recursion` and `check-manifest-bypass`.** If
 either appears in the 28 findings instead, the exemption marker has diverged and **that is a CORE
-defect** — stop and say so at the boundary.
+defect** — stop and escalate it to an ai-dlc session.
 
 **`--strays` CANNOT BE MEASURED HERE, and that is the finding.** graph's installed copy has the mode
 zero times; it arrives with the pull. Do not run it against graph's tree in row 2 and do not read its
@@ -319,8 +337,14 @@ absence as a pass. Row 3 stages it in a **copy**. Expected there: **5 findings, 
 
 **Tick row 2** with all six tallies, verbatim.
 
-⏹ **SESSION BOUNDARY.** Report every tally to the ai-dlc session. Any deviation is adjudicated
-there — core defect or consumer decision — **before** row 3 writes anything.
+⏹ **FRESH GRAPH SESSION.** Report all six tallies to the operator, verbatim.
+
+**If every tally matches its expectation, open a new `graph` session and go to row 3.** No ai-dlc
+session is involved — nothing has deviated, so there is nothing to adjudicate.
+
+**If any tally deviates, or any stop condition fired: STOP.** Open a session in
+`/Users/n8/git/ai-dlc` with the deviation and let it rule — core defect or consumer decision —
+**before** row 3 writes anything. This is the last point at which nothing has been written.
 
 ---
 
@@ -380,7 +404,7 @@ stale — **do NOT re-author the override to make it pass.**
 
 ---
 
-### Row 4 — the 28 fixture declarations. In `graph`. **Its own session.**
+### Row 4 — the 28 fixture declarations. In `graph`. **Its own graph session.**
 
 **WEDGES THE PUSH if skipped**, and this is the row most likely to be done wrong rather than left
 undone.
@@ -431,11 +455,12 @@ bash /tmp/pull-engine/core/scripts/validate-fixture-drivability.sh --dir tests/f
 
 **Tick row 4** with the count that went each route — `N run.sh, M README.md, N+M = 28`.
 
-⏹ **SESSION BOUNDARY.** 28 judgements is a full session. Do not continue into row 5.
+⏹ **FRESH GRAPH SESSION.** 28 judgements is a full context. Open a new `graph` session for row 5;
+do not continue into it here. Still graph — this is context hygiene, not a repo switch.
 
 ---
 
-### Row 5 — the 17 adjudications. In `graph`. **Its own session.**
+### Row 5 — the 17 adjudications. In `graph`. **Its own graph session.**
 
 **BLOCKS `apply`. There is no skip flag, deliberately.** This is *the layer conformance
 adjudication*, shipped in v0.213.0 as `level: ADJUDICATED` — the newest and largest obligation in
@@ -492,7 +517,7 @@ being emitted by nothing and the clause has become unfalsifiable — **report th
 
 **Tick row 5** with the verdict split — `N still-additive, M contradicts-core, K retire, sum = 17`.
 
-⏹ **SESSION BOUNDARY.**
+⏹ **FRESH GRAPH SESSION** for row 6.
 
 ---
 
@@ -603,7 +628,7 @@ bash scripts/ai-dlc/validate-fixture-drivability.sh --dir tests/fixtures   # EXP
 
 **Tick row 7** with the version line, the five `IDENTICAL` labels, and the linter's footer verbatim.
 
-⏹ **SESSION BOUNDARY.**
+⏹ **FRESH GRAPH SESSION** for row 8.
 
 ---
 
