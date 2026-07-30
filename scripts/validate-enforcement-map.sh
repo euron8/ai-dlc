@@ -1781,17 +1781,32 @@ fi
 # I40's reason for byte-identical COPIES rather than a shared source applies unchanged:
 # the resolver is bash+python and python's `re` has no `[[:space:]]`, so the grammar
 # lives in the bash half of both files precisely so it CAN be the same string.
+# THE PAIR-OF-PAIRS EDGE, added because the pairs themselves forked and neither pair-check
+# could see it. I15 held layer-drift.sh and relabel-extension-checks.sh identical while they
+# widened to `[A-Z]{1,3}[0-9]*` and the `—` terminator; the two-file check above held the
+# lint/resolver pair identical while they did not. Both invariants were green for four
+# releases, and the reference consumer's `Check AP` and `Check VH` were live, unloadable and
+# unreportable the whole time — a heading the REWRITER could relabel that the DETECTOR could
+# not see. Two internally-consistent halves of one grammar is the same defect as one forked
+# copy, and it is strictly harder to spot. So the join is three-way: the relabeller's
+# ANCHOR_RE is compared here too, and I15 carries the fourth definition transitively.
 ch_lint="$REPO_ROOT/core/scripts/validate-layer-entries.sh"
 ch_man="$REPO_ROOT/core/scripts/validate-gate-manifest.sh"
-if [ ! -f "$ch_lint" ] || [ ! -f "$ch_man" ]; then
-  err "I47 cannot find validate-layer-entries.sh and/or validate-gate-manifest.sh. It binds the check-heading grammar across the two; a missing side would make the join pass by comparing nothing."
+ch_rel="$REPO_ROOT/core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh"
+if [ ! -f "$ch_lint" ] || [ ! -f "$ch_man" ] || [ ! -f "$ch_rel" ]; then
+  err "I47 cannot find validate-layer-entries.sh, validate-gate-manifest.sh and/or reconcile/relabel-extension-checks.sh. It binds the check-heading grammar across the three; a missing side would make the join pass by comparing nothing."
 else
   ch_a="$(grep -n '^CHECK_HEAD_RE=' "$ch_lint")"
   ch_b="$(grep -n '^CHECK_HEAD_RE=' "$ch_man")"
+  ch_c="$(sed -n 's/^ANCHOR_RE=//p' "$ch_rel" | head -1)"
   if [ -z "$ch_a" ] || [ -z "$ch_b" ]; then
     err "I47 could not find a CHECK_HEAD_RE= assignment in validate-layer-entries.sh and/or validate-gate-manifest.sh. That assignment is what both tools call a check definition; failing to locate one makes this join vacuous while both keep running against whatever they do use."
+  elif [ -z "$ch_c" ]; then
+    err "I47 could not find an ANCHOR_RE= assignment in reconcile/relabel-extension-checks.sh. That assignment is what the rewriter calls a check heading; failing to locate it makes the detector-vs-rewriter half of this join vacuous while both keep running against whatever they do use."
   elif [ "${ch_a#*:}" != "${ch_b#*:}" ]; then
     err "I47: the check-heading grammar has forked between validate-layer-entries.sh and validate-gate-manifest.sh. One decides which check ids a layer entry allocates, the other which defined check never became loadable — a copy that differs means a heading one tool treats as a check definition the other cannot see, and GM1's subject set shrinks in silence. Make the CHECK_HEAD_RE= line byte-identical."
+  elif [ "${ch_a#*:CHECK_HEAD_RE=}" != "$ch_c" ]; then
+    err "I47: the DETECTORS' check-heading grammar and the REWRITER's have forked. validate-layer-entries.sh and validate-gate-manifest.sh define CHECK_HEAD_RE=${ch_a#*:CHECK_HEAD_RE=} while reconcile/relabel-extension-checks.sh defines ANCHOR_RE=$ch_c. Wider in the rewriter means a heading it will relabel that no detector reports — the state that hid two live unloadable checks for four releases. Wider in the detectors means a reported heading the operator is told to relabel with a tool that cannot see it. Widen all of them or none, in one release."
   fi
 fi
 

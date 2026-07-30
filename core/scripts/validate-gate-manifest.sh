@@ -104,11 +104,12 @@ case "$FILE" in
 esac
 
 # The check-HEADING grammar. This assignment is byte-identical to the one in
-# `core/scripts/validate-layer-entries.sh` and I46 asserts it. It lives here in BASH
-# rather than in the python below because python's `re` has no `[[:space:]]`, so a
-# python spelling could not be the same string — and a second spelling of an anchor
-# grammar is the defect I40's header records five times over.
-CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\.'
+# `core/scripts/validate-layer-entries.sh` and I47 asserts it — and, since the widening
+# below, to `ANCHOR_RE` in `reconcile/relabel-extension-checks.sh` too, which I47 also
+# asserts. It lives here in BASH rather than in the python below because python's `re` has
+# no `[[:space:]]`, so a python spelling could not be the same string — and a second
+# spelling of an anchor grammar is the defect I40's header records five times over.
+CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
 
 # Every check id a layer entry DEFINES as a heading, as `<file>\t<id>` lines. The
 # python filters these to the entries that hook this file; collecting them here keeps
@@ -121,7 +122,7 @@ if [ -n "$SKILL_DIR" ] && [ -d "$SKILL_DIR/extensions" ]; then
     [ -n "$entry" ] || continue
     while IFS= read -r h; do
       [ -n "$h" ] || continue
-      cid="$(printf '%s' "$h" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/\.$//')"
+      cid="$(printf '%s' "$h" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*[.—]$//')"
       EXT_HEADINGS="${EXT_HEADINGS}${entry}	${cid}
 "
     done <<EOH
@@ -373,12 +374,19 @@ orphan = sorted(a for a in anchors if a not in ids)
 # heading whose id core anchors is already in `anchors`, so an extension AUGMENTING a
 # core check drops out on its own rather than by a rule that could rot.
 #
-# WHAT IT CANNOT SEE, STATED PLAINLY. CHECK_HEAD_RE is numeric (`[0-9]+[a-z-]*\.`), so
-# an alphabetic check id is outside the subject set — the reference consumer has two
-# (`Check AP`, `Check VH`), both live, both unloadable, neither reportable here.
-# Widening the grammar is bound to reconcile/relabel-extension-checks.sh by I34, and a
-# detector that finds a heading the rewriter cannot rewrite reports a defect with no
-# remedy. That widening is its own change; this one does not imply whole-tree coverage.
+# WHAT IT CAN NOW SEE, AND WHAT THE PREVIOUS NOTE HERE GOT WRONG. This block used to say
+# that an alphabetic check id was outside the subject set and that widening was blocked
+# because `reconcile/relabel-extension-checks.sh` could not rewrite one. Both halves were
+# false. The rewriter's ANCHOR_RE has carried `[A-Z]{1,3}[0-9]*` and the `—` terminator
+# since the release that widened it for `### H1.`, so it could already rewrite exactly the
+# headings this could not report; and the invariant named there (I34) binds RULE_RE, a
+# different namespace, not this grammar at all. The two check grammars had simply forked,
+# and the note read as a reason rather than as the defect it was.
+#
+# Unloadability's remedy was never the relabeller in any case: the relabeller adds an
+# `[ext:<id>]` label to resolve a NUMBER COLLISION. What clears an UNLOADABLE is an anchor
+# plus a `gate_types:` declaration, or deletion — stated in the FAIL message below, and
+# available to a consumer with an alphabetic id exactly as to one with a numeric id.
 head_ids = {}
 for line in ext_headings_raw.splitlines():
     if "\t" not in line:

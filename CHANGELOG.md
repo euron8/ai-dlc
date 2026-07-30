@@ -17,6 +17,97 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.215.0] — 2026-07-30
+
+### Added — the check-heading grammar sees alphabetic ids, and the reason it did not was a note that named the wrong invariant
+
+**Two live checks were unreportable, and the record said the fix was blocked.** `Check AP`
+(attribution provenance, "every gate") and `Check VH` (vacuous-validator honesty,
+"story-validation gate") are defined as headings in the reference consumer's `extensions/checks/`,
+carry no `CHECK_LOADED` anchor and appear in no manifest row. That is exactly GM1's subject —
+a check that is neither MISSING nor an ORPHAN, so every gate passes without ever running it — and
+GM1 could not see either one, because `CHECK_HEAD_RE` matched `[0-9]+[a-z-]*\.` and nothing else.
+A comment in `validate-gate-manifest.sh` said so, and then said widening was bound to
+`reconcile/relabel-extension-checks.sh` by **I34**, since a detector that finds a heading the
+rewriter cannot rewrite reports a defect with no remedy.
+
+**Both halves of that were false, and the measurement is what says so.**
+
+- **I34 binds `RULE_RE`** — the rule namespace, deliberately kept apart from the check namespace by
+  that invariant's own header. It has never governed a check heading.
+- **The rewriter could already rewrite them.** `relabel-extension-checks.sh` defines `ANCHOR_RE`,
+  bound by **I15** to `layer-drift.sh`, and it has carried `[A-Z]{1,3}[0-9]*` and the `—`
+  terminator since the widening for `### H1.`. Its own inline comment names `## Check AP — T` as a
+  heading it resolves. No rewriter change was owed in this release or any other.
+- **Unloadability's remedy was never the relabeller.** The relabeller adds an `[ext:<id>]` label to
+  resolve a NUMBER COLLISION. What clears an UNLOADABLE is an anchor plus a `gate_types:`
+  declaration, or deletion — which GM1's own FAIL message already says, and which is available to a
+  consumer with an alphabetic id exactly as to one with a numeric one.
+
+**The relabeller's false-positive set was measured anyway, because the record asked for it, and it
+is empty.** Its 39 hand-applied `[ext:…]` labels were stripped from a copy of the reference
+consumer's tree and the tool re-run: **32 proposals, 0 of them outside the hand-applied set**
+(control: intersection 32, and the comparison ran against two non-empty files). The 2 hand labels
+it does not propose are not misses — `2s` and `2a` are ids core does not define in the file each
+entry hooks, so the consumer over-labelled; verified with a control returning 1 for `15` on the
+same invocation. The 5 remaining labels are in `extensions/README.md`, which the `kind:` filter
+skips.
+
+**What the widening actually admits, measured before it was written.** Across core's
+`skills/ai-dlc/` and the reference consumer's installed tree, the alphabetic branch harvests
+exactly `H1`, `H2`, `AP`, `VH` and the consumer's `H1` — every one a real id — and the `—`
+terminator admits **no numeric heading at all**. The numeric branch is unchanged at 171 core
+matches, and nothing that matched before stops matching. Against the live consumer, GM1 goes from
+`UNLOADABLE: 19b 2s` to `UNLOADABLE: 19b 2s AP VH`; `validate-layer-entries.sh` is unmoved at
+**0 errors, 2 warnings** — no new `CHECK OUT OF BAND`, because `below_band` already excludes
+alphabetic ids, and no new collision, because the consumer's `H1` heading is correctly labelled and
+`heading_labelled` clears it.
+
+**One form is deliberately NOT widened, and the reason is a measurement.** `bold_anchors_of_file`
+harvests the `**24. …**` pseudo-heading form. Applying the alphabetic branch there harvests
+`**QA — validate every AC …**` from `steps/implementation.md` as a check id `QA` — a false positive
+with no remedy, since there is no check `QA` to anchor. It is present in core and in the consumer's
+installed copy. The bold form stays numeric and says why in the file.
+
+**Two lookups widened with it, for a reason that is easy to miss.** `heading_title` and
+`heading_labelled` harvest nothing — they resolve an id the harvester already produced. Left narrow,
+a widened harvester feeds them an id whose title comes back empty, an empty title routes the
+collision arm into its RESTATES branch, and `heading_labelled` can never clear it: the
+"remedy that does not remedy" defect that function exists to record, reached from the other side.
+Their terminator is spelled as an alternation rather than the bracket class `[.—]` the shell
+grammar uses, because a byte-oriented `awk` treats a multibyte `—` inside brackets as three separate
+bytes and `sub()` would strip one and leave the rest in the title.
+
+### Changed — I47 is a three-way join, because two internally-consistent halves of one grammar is the harder defect
+
+`ANCHOR_RE` in the rewriter pair and `CHECK_HEAD_RE` in the detector pair are the same grammar.
+I15 held the rewriter pair identical to each other; the two-file arm of I47 held the detector pair
+identical to each other. **Both were green for four releases while the pairs diverged from one
+another** — which is how a heading the rewriter could relabel became one no detector could report.
+A pair-check cannot see that, and it is strictly harder to spot than a single forked copy.
+
+I47 now also compares `CHECK_HEAD_RE` against the relabeller's `ANCHOR_RE`, with I15 carrying
+`layer-drift.sh` transitively. **The mutant is a reversion:** narrow BOTH detectors, in step, back
+to the numeric-and-dot grammar this release replaced. The old arm's comparison is satisfied by
+construction — the fixture asserts that, and fails itself if the two mutated copies are not
+byte-identical — so **only** the new arm can fire, and it does. Removing the arm turns that fixture
+line red and leaves the other two I47 arms green.
+
+There is no fixture arm for the new "cannot find `ANCHOR_RE`" branch, on purpose: I15 reads the same
+assignment, so deleting or renaming it fails both invariants and neither mutant would be
+attributable. `enforcement-map-sites` assertion 21 already proves that absence fails loudly.
+
+### Fixed — two invariant citations that named a check which does not do the job
+
+`validate-layer-entries.sh` and `validate-gate-manifest.sh` each said their `CHECK_HEAD_RE` copies
+were asserted byte-identical by **I46**. I46 binds the extension `kind:` vocabulary; the invariant
+that binds those two lines is **I47**. A citation a reader cannot follow is a join that reads as
+verified and is not — the same shape as the I34 misattribution above, in the same two files.
+
+**No contract change.** `LC-E17`'s normative text — *"A check an extension DEFINES as a heading is
+loadable"* — was already grammar-agnostic and already covered `AP` and `VH`. Only its enforcer was
+narrow. `contract_version` stays **7**.
+
 ## [0.214.0] — 2026-07-30
 
 ### Added — I59: a mode a script dispatches must be a mode its own prose names, because the one that wasn't got a correct instruction filed as a defect

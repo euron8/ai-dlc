@@ -282,6 +282,13 @@ fm_unterminated() { # fm_unterminated <file> -- rc 0 when `---` opens and never 
 # register-drift's vs layer-drift's; the heading-label rule) -- so the
 # layer-catalog-collision fixture extracts BOTH copies and asserts they return the
 # same anchors for the same input. Change one, change the other, or the fixture says so.
+# DELIBERATELY NOT WIDENED alongside `CHECK_HEAD_RE`, and the reason is a measurement
+# rather than a preference: the alphabetic branch applied to the BOLD form harvests
+# `**QA — validate every AC …**` (steps/implementation.md, present in core and in the
+# reference consumer's installed copy) as a check id `QA`. That is a false positive with
+# no remedy — there is no check `QA` to anchor — so the bold pseudo-heading stays numeric.
+# The `#` form's alphabetic branch was measured over the same two trees and harvests only
+# real ids, which is why the two forms are allowed to differ here and nowhere else.
 bold_anchors_of_file() {
   awk '
     /^\*\*(Check[ \t]+)?[0-9]+[a-z-]*\./ {
@@ -293,17 +300,27 @@ bold_anchors_of_file() {
     }' "$1" 2>/dev/null
 }
 # The check-HEADING grammar, ONE definition. `validate-gate-manifest.sh` carries this
-# same assignment byte-identically and I46 asserts it, because that script has to find a
+# same assignment byte-identically and I47 asserts it, because that script has to find a
 # consumer check heading that never became a `CHECK_LOADED` anchor — the state in which a
 # check is neither MISSING (no manifest row names it) nor ORPHAN (no anchor exists), so
 # it falls through both directions of the two-way resolve and reports as nothing at all.
 # A second spelling of this pattern is exactly how the five-spelling normalizer in I40's
-# header came to exist, and the terminating `.` here is as load-bearing as it is below.
-CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\.'
+# header came to exist.
+#
+# ALPHABETIC IDS AND THE `—` TERMINATOR. This was numeric-and-dot-only for four releases,
+# while `reconcile/relabel-extension-checks.sh` and `reconcile/layer-drift.sh` had ALREADY
+# widened their ANCHOR_RE to `[A-Z]{1,3}[0-9]*` and `[.—]`. The two pairs forked in
+# silence: the rewriter could relabel `## Check AP — …` and the detector could not see it,
+# so the reference consumer's `Check AP` and `Check VH` were live, unloadable, and absent
+# from every report. I47 now binds this line to that ANCHOR_RE as well, so the fork cannot
+# reopen. Measured before widening: across core and the reference consumer the alphabetic
+# branch harvests exactly `H1 H2 AP VH` and nothing else, and the `—` terminator harvests
+# no numeric id at all (control: the numeric branch is unchanged at 171 core matches).
+CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
 defined_anchors() {
   [ -f "$1" ] || return 0
   { grep -Eho "$CHECK_HEAD_RE" "$1" 2>/dev/null \
-      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/\.$//'
+      | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//' | sed -E 's/[[:space:]]*[.—]$//'
     bold_anchors_of_file "$1"
   } | sort -u
 }
@@ -313,11 +330,20 @@ defined_anchors() {
 # "Financial-display ground-truth live-verify". The number cannot tell those apart
 # and the title can, which is exactly what the Consumer-catalog crosswalk rule has
 # always said (align by title/intent, never by number).
+# The two lookups below take an id `defined_anchors` already harvested; they add none of
+# their own. They still have to accept everything `CHECK_HEAD_RE` accepts, or a widened
+# harvester feeds them an id whose title comes back EMPTY — and an empty title routes the
+# collision arm into its RESTATES branch, where `heading_labelled` can never clear it. That
+# is the "remedy that does not remedy" this function's own header records, reached from the
+# other direction. The terminator is spelled as an ALTERNATION rather than the bracket
+# class `[.—]` used in the shell grammar: a byte-oriented awk treats a multibyte `—` inside
+# brackets as three separate bytes, so `sub()` would strip one of them and leave the rest in
+# the title. The BOLD arm keeps its `\.` for the reason `bold_anchors_of_file` states.
 heading_title() { # heading_title <file> <anchor>
   awk -v a="$2" "$NRM_FN"'
-    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[ \t]*(\\.|—)") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       h=$0; sub(/^#+[ \t]+/,"",h); sub(/^\*\*/,"",h); sub(/^Check[ \t]+/,"",h)
-      sub("^" a "\\.[ \t]*","",h)
+      sub("^" a "[ \t]*(\\.|—)[ \t]*","",h)
       # Strip the catalog label before normalizing. Left in, "[ext:foo]" becomes part
       # of the title, so a correctly-labelled heading never matches the core title
       # and the RESTATES/collision split misreads.
@@ -334,7 +360,7 @@ heading_title() { # heading_title <file> <anchor>
 # remedy. Found by applying this linter's own advice and re-running it.
 heading_labelled() { # heading_labelled <file> <anchor>
   awk -v a="$2" '
-    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "\\.") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
+    $0 ~ ("^#{2,4}[ \t]+(Check[ \t]+)?" a "[ \t]*(\\.|—)") || $0 ~ ("^\\*\\*(Check[ \t]+)?" a "\\.") {
       print ($0 ~ /\[ext:[A-Za-z0-9_.-]+\]|\[core\]/) ? "yes" : "no"; exit
     }' "$1" 2>/dev/null
 }

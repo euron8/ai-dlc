@@ -711,6 +711,40 @@ else
   fi
 fi
 restore
+VGM="$ROOT/core/scripts/validate-gate-manifest.sh"
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+
+# ARM 3 — THE PAIR-OF-PAIRS FORK, and it is the one the other two cannot reach. Arms 1
+# and 2 both move ONE detector, so both are caught by the lint-vs-resolver comparison
+# alone. The failure this invariant was extended for moved NEITHER out of step with the
+# other: the rewriter's ANCHOR_RE widened for alphabetic ids and the `—` terminator, both
+# detectors stayed numeric-and-dot, and every pair-check stayed green while `Check AP` and
+# `Check VH` were live and unreportable. So the mutation narrows BOTH detectors, together,
+# back to that exact pre-release grammar — arm 1's comparison is satisfied by construction
+# and only the detectors-vs-rewriter arm can fire.
+#
+# There is no fourth arm for the "cannot find ANCHOR_RE" branch on purpose. I15 reads the
+# same assignment, so deleting or renaming it fails both invariants and neither mutant
+# would be attributable — assertion 21 above already proves that absence fails loudly.
+cp "$VGM" "$VGM.orig"; cp "$VLE" "$VLE.orig"
+NARROW="CHECK_HEAD_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?[0-9]+[a-z-]*\\\\.'"
+sed "s|^CHECK_HEAD_RE=.*|$NARROW|" "$VGM.orig" > "$VGM"
+sed "s|^CHECK_HEAD_RE=.*|$NARROW|" "$VLE.orig" > "$VLE"
+if cmp -s "$VGM.orig" "$VGM" || cmp -s "$VLE.orig" "$VLE"; then
+  bad "FIXTURE BROKEN: the I47 pair-of-pairs mutation matched nothing in one or both detectors, so this assertion is unproven"
+elif ! cmp -s "$VGM" "$VLE" && ! diff <(grep '^CHECK_HEAD_RE=' "$VGM") <(grep '^CHECK_HEAD_RE=' "$VLE") >/dev/null; then
+  bad "FIXTURE BROKEN: the two narrowed detectors are not byte-identical, so arm 1 could fire and this assertion would not be attributable"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "the check-heading grammar has forked between" <<<"$out"; then
+    bad "the pair-of-pairs mutant tripped arm 1 as well — the two mutations are entangled and this arm proves nothing"
+  elif grep -q "the DETECTORS' check-heading grammar and the REWRITER's have forked" <<<"$out"; then
+    ok "narrowing BOTH detectors in step FAILS I47 (a heading the rewriter relabels that no detector reports — green under every pair-check)"
+  else
+    bad "both detectors reverted to the numeric grammar and I47 stayed silent — the fork that hid two live unloadable checks can reopen"
+  fi
+fi
+restore
 }
 
 # --- Assertion 23: I49 — a mode named in prose is a mode the script dispatches --

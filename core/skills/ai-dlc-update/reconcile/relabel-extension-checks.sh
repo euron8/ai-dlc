@@ -63,6 +63,12 @@ EXT_DIR="$SKILL_DIR/extensions"
 # core today -- `### H1.` / `### H2.` in gate-validation.md yielded NO anchor at all, so
 # an extension colliding on H1 was unrelabellable. `validate-enforcement-map.sh` asserts
 # the two definitions are identical; widen there and here together, or not at all.
+#
+# It is now bound to a THIRD and FOURTH copy as well — `CHECK_HEAD_RE` in
+# validate-layer-entries.sh and validate-gate-manifest.sh, by I47. That edge exists because
+# this pair widened for `### H1.` and that pair did not, and no check compared the pairs: a
+# rewriter that could already relabel `## Check AP — …` alongside a detector that could not
+# report it, green for four releases. Any widening now moves all four in one release.
 ANCHOR_RE='^#{2,4}[[:space:]]+(Check[[:space:]]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[[:space:]]*[.—]'
 core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//; s/[[:space:]]*[.—]$//'; }
 
