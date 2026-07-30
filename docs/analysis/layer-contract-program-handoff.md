@@ -67,6 +67,22 @@ defines and looks each up in the entry. A number core does not define never ente
 blind to the entire subject set **by construction, not by coverage**. *The correction that mattered
 was not that the counts were off; it was that they were counts of the wrong set.*
 
+**And the tightening this file left open is now refuted too — `kind: qualifier` cannot carry it**
+(measured 2026-07-30, successor plan row 6; `LC-N5` stays WARN, no release consumed). §9 below says
+the prerequisite grain "exists now" and that only a measurement was owed. The measurement, against
+the reference consumer at `39f0248ff` with the shipping extractors lifted rather than copied:
+**0 of 33 extension entries declare `kind: qualifier`, `extends:` or `position:`** (control: 33
+carry `^kind:`; every raw grep hit is in `extensions/README.md`, which `layer_files()` excludes),
+and **all 4 entries carrying a core-defined number are barred from ever declaring it** — E11 admits
+`extends:` exactly one anchor and they span 14, 3, 4 and 4 core sections. `kind:` is per **file**;
+`W5`'s subject is per **heading**, and both live subjects share a file with four excluded ones.
+Counterfactuals: replacing the exclusion with the flag takes the subject set **2 → 27**; adding it
+as an exemption exempts nothing. *Also correct the figure this section carries:* it is **8** entry
+rules sharing a core integer across two files, not 4, and one of the 4 in `SKILL-domain.md`
+(**Rule 30**) is not a qualifier at all — the consumer authored it 2026-07-20 and core allocated an
+unrelated Rule 30 six days later, so `W5` stopped reporting it on the day its own warning came true.
+The successor plan's §6.6 RESULT carries the full derivation and an unwired candidate predicate.
+
 ### The absorption arms — 2 of 8 refuted (§7.10)
 
 - **Arm 1** — `audit-rule-exercise.sh` → `audit-rule-files.sh --exercise`. **REFUTED: no core

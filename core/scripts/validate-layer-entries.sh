@@ -98,12 +98,34 @@
 #            section it exists to sit next to.
 #          - Alphabetic ids (`AP`, `VH`, `H1`) are excluded — a band is a numeric
 #            partition and cannot order them.
-#          - A number core DOES define is excluded, and this is the exclusion that
-#            keeps the check honest. An entry deliberately qualifying core's Rule 13
-#            shares that integer BECAUSE the integer is the reference; the reference
-#            consumer carries four such rules, each declaring itself a tightening of
-#            the core rule it names. Those are E6/W4's subject, resolved by the
-#            catalog label, and they must never be told to renumber.
+#          - A number core DOES define is excluded. An entry deliberately
+#            qualifying core's Rule 13 shares that integer BECAUSE the integer is
+#            the reference; those are E6/W4's subject, resolved by the catalog
+#            label, and they must never be told to renumber.
+#
+#            THIS EXCLUSION HAS A MEASURED HOLE, and the note that used to sit
+#            here ("the exclusion that keeps the check honest") overstated it.
+#            The predicate is "core defines this number TODAY", so a subject
+#            LEAVES the set at the moment core allocates its number — which is
+#            precisely the retroactive collision this clause exists to warn
+#            about. Re-derived on the reference consumer: EIGHT entry rules share
+#            a core integer across two files, not four, and one of them is not a
+#            qualifier at all. Its Rule 30 ("Lead states no fact it did not
+#            observe this session") was authored 2026-07-20 alongside its Rules
+#            31 and 32, three siblings filed in one retro; core allocated its own
+#            unrelated Rule 30 six days later. The warning came true, and the
+#            number went quiet here on the day it did. W4 does not report it
+#            either — the consumer's remedy was a catalog label, which W4 reads
+#            as the resolved state. Neither arm fires on the one number in the
+#            tree that has actually detonated.
+#
+#            Authorship order separates the two classes and nothing here reads it
+#            yet: a deliberate qualifier cannot reference a core rule that does
+#            not exist yet. Measured over all eight, from the consumer's own
+#            history: seven core-first, one consumer-first, none undecidable. It
+#            is not wired because a shallow or squashed consumer clone answers
+#            empty on both sides, and an arm that cannot fire reads exactly like
+#            one that passed. It needs a zero guard before it needs a predicate.
 #          - Check numbers are scoped to `kind: check`, exactly as E6 is, and for
 #            the same stated reason: a step number is a POSITION in an ordered
 #            procedure, not an allocation from a namespace, so a step-domain entry

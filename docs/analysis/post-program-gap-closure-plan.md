@@ -17,26 +17,32 @@ and the predecessor was tracked anyway. Ticking this ledger is a `chore:` commit
 **Updated as the last act of every row. If this block is stale, the row that moved the program did
 not finish.**
 
-> **Next: row 6** (§6.6) — `LC-N5` WARN → ERROR. Second in §5's ranking, now that row 8 is
-> SHIPPED as **v0.215.0**.
+> **Next: row 9** (§6.9) — generalise the cross-script mode join. Third in §5's ranking, now that
+> row 6 is closed **REFUTED** and row 8 is SHIPPED as **v0.215.0**.
 >
 > **Who: an agent, in a fresh `ai-dlc` session.** No operator decision is pending. Working directory
 > `/Users/n8/git/ai-dlc`. Paste:
 >
 > ```
-> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 6.
-> Rows 1-5 and 8 are ticked; read row 8's RESULT first. It SHIPPED v0.215.0 and
-> moved UNLOADABLE against the live consumer from 2 to 4 (19b 2s AP VH) — the W5
-> count it did NOT move, which stays at 2 (rules 31/32), this row's subject set.
-> What is owed is a MEASUREMENT, not code: which graph entries would declare
-> kind: qualifier, derived per hooked file and per frontmatter flag. May end
-> REFUTED, which is a first-class outcome per §4.
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 9.
+> Rows 1-6 and 8 are ticked. Do the cheap precondition FIRST: I59 shipped in
+> 0.214.0, after §9 recorded this hand-listing, and may already have absorbed part
+> of the subject set. If it did, re-derive the subject set before anything else —
+> the recorded lesson from the predecessor's row 7 is that the counts were of the
+> WRONG SET, not merely wrong. Fix the extractor before writing the invariant.
+> Write it only when the FP set is empty or enumerated; today it is 8 misses,
+> most of them the derivation's own grammar.
 > ```
 >
-> **Row 8's carry-forward, and it is the reason that row was cheap:** its stated blocker was a
-> sentence in the code that named the wrong invariant. Before treating any recorded "blocked on X"
-> in this file as a constraint, check that X is what the record says it is. Row 6's own recorded
-> blocker — the `kind: qualifier` grain — is unverified in exactly the same way.
+> **The carry-forward from rows 6 and 8, and it has now paid twice:** each row's recorded blocker
+> was a claim, and opening the file it named refuted it. Row 8's named the wrong invariant; row 6's
+> named a grain with **zero adoption in the consumer and no legal way to adopt it**. Before treating
+> any recorded "blocked on X" in this file as a constraint, check that X is what the record says it
+> is. Row 9's own recorded blocker — the extractor's 8 misses — is unverified in exactly the same
+> way, and row 9's prompt already tells you which precondition to check first.
+>
+> **Row 6's carry-forward for anyone who later re-opens `LC-N5`:** the clause's exclusion has a
+> measured hole. It is stated in `validate-layer-entries.sh`'s own header now, not only here.
 
 ---
 
@@ -231,7 +237,7 @@ before re-proposing anything below; this section is the short form.
 | 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | **DONE 2026-07-30** — `docs/reviews/graph-retirement-0.214.0-operator-handoff.md`, 7 rows, 2 `⏹` boundaries, §3's net-surface criterion carried as a reported `+added / −removed` tally and §3's four criteria as row 7's exit condition. Scope held to row 3's bound: subjects 1+2, subject 3's stray arm, checks 33/34/35; the 3 REFUTED filed as row-6 ledger entries with receipts. **Re-deriving the wiring against `18e00ef40` corrected FOUR of row 3's own figures and found one measured wedge** — see the Row 4 RESULT below. **No engine worktree needed**, unlike the 0.213.0 pull: all 3 core absorbers are already installed in graph and byte-identical to core. graph read-only, `18e00ef40` untouched, 4 pre-existing runtime modifications unchanged; scratchpad clone removed. `docs:` commit, no version bump |
 | 5 | **Execute the retirement in graph, then UNFREEZE** — operator-driven graph sessions — §6.5 | RETIRE | **YES** | **DONE 2026-07-30 — MERGE `39f0248ff`, PR #833, squash to `main`, operator-approved. THE GRAPH FREEZE IS LIFTED.** Brief's 7 rows all ticked. **Net `23 files changed, +599 / −679` = −80 overall, −469 excluding the +389 ledger filing.** Post-merge, **independently re-measured from ai-dlc against `39f0248ff`**: `W5`/`OUT OF BAND` **5 → 2** (rules 31/32 only, no check id); `UNLOADABLE` **4 → 2** (`19b 2s`), rc=1 not the wedge's 2, `manifest source: core`, `extension gate_types: none`, `manifest ids: 41 anchors: 41`; fixture dirs **114 → 113**, `0 undeclared`; `--strays` PASS at 893 carriers with the `AI_DLC_KNOWN_SKILLS_EXT=""` control still exit 1 at **exactly 5**, all under `scripts/tests/**`. Duplicate-path greps **0 hits, rc=1** for both retired subjects against controls returning **17** and **6** files. `scan-stray-provenance.sh` **155 → 83** lines (stray arm out, `--fixture-provenance` intact). **13 ledger entries filed with 13 `verify:` receipts**, `ledger-reverify.sh` **53 → 66 rows**, every new row `STILL-LIVE`, the other four statuses unmoved. **The retirement found a latent defect neither row 3 nor row 4 anticipated** — see the Row 5 RESULT below. **Six deviations reported rather than adjusted to**, one of them a slip in row 4's own brief |
 | ⏹ | ~~SESSION BOUNDARY — the freeze ends here.~~ **PASSED 2026-07-30 at merge `39f0248ff`. The freeze is lifted and everything below runs against a live consumer.** Rows 6–10 are `ai-dlc` sessions and touch graph not at all | | | |
-| 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | — |
+| 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | **REFUTED 2026-07-30 — `LC-N5` STAYS WARN, no release consumed.** The grain cannot carry the tightening and the measurement is what says so. Against the live consumer `39f0248ff` with the shipping 0.215.0 validator: **0 errors, 2 warnings**, both `RULE OUT OF BAND` (rules 31/32, one file), identical under graph's installed 0.214.0 copy — so row 8's widening did not move `W5`. **Of 33 extension entries, 0 declare `kind: qualifier`, 0 `extends:`, 0 `position:`** (control: 33 carry `^kind:`; the 7 raw grep hits are all in `extensions/README.md`, which `layer_files()` excludes) — 19 releases after v0.196.0 shipped the grain and documented it in the consumer's own entry contract. **All 4 entries carrying a core-defined number are structurally BARRED from declaring it** by E11's exactly-one-anchor rule; they span **14 / 3 / 4 / 4** core sections. `kind:` is per-FILE and `W5`'s subject is per-HEADING: rules 31/32 share `SKILL-domain.md` with rules 13/16/20/30. Counterfactuals: exclusion **replaced** by the flag → **2 → 27** subjects; **added** as an extra exemption → exempts nothing. **The row found a live hole in the clause it was sent to tighten** — see the Row 6 RESULT. `docs:` commit plus a comment correction in `validate-layer-entries.sh`, no version bump |
 | 7 | **I38 reverse: every normative sentence carries a clause id** — blocked on normalising `overrides/README.md` — §6.7 | CORE | no | — |
 | 8 | **Checks `AP` / `VH`: alphabetic ids are invisible to GM1** — blocked on the relabeller's FP set — §6.8 | CORE | no | **SHIPPED 2026-07-30 — v0.215.0.** The recorded blocker was **REFUTED on both halves**: I34 binds `RULE_RE`, not any check grammar, and the relabeller's `ANCHOR_RE` had **already** carried `[A-Z]{1,3}[0-9]*` and the `—` terminator since the `### H1.` widening — no rewriter change was ever owed. **The relabeller's FP set was measured anyway and is EMPTY**: 39 labels stripped from a copy of the consumer tree, **32 proposals, 0 outside the hand-applied set** (control: intersection 32; the 2 non-proposals are `2s`/`2a`, ids core does not define, control returning 1 for `15` on the same invocation). `CHECK_HEAD_RE` widened in both detectors; measured delta across core + consumer is exactly `H1 H2 AP VH` + the consumer's `H1`, **0 spurious ids**, numeric branch unchanged at 171, `—` admitting no numeric heading. Against the live consumer `39f0248ff`: `UNLOADABLE` **2 → 4** (`19b 2s AP VH`) — the count row 8 was ranked 1st to make honest — and `validate-layer-entries` **unmoved at 0 errors / 2 warnings**. The bold pseudo-heading form is **deliberately not widened**, on a measured FP (`**QA —` in `steps/implementation.md`, both trees). **I47 extended to a three-way join** (detectors ↔ rewriter); reversion mutant fires it **alone**, and removing the arm turns only that fixture line red. **87/87 fixtures, 87 verdicts recorded**; verified again on a tree built by `install.sh`. `LC-E17` unchanged, `contract_version` stays 7 |
 | 9 | **Generalise the cross-script mode join** — blocked on fixing the extractor's 8 measured misses — §6.9 | CORE | no | — |
@@ -723,20 +729,10 @@ test, which nothing drives; Check 17's five-vs-six home under-declaration is **f
 
 ### Row 6 — `LC-N5` WARN → ERROR. **RANKED 2nd.**
 
-> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. Run **after row 8**.
->
-> ```
-> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 6.
-> Row 8 is ticked ahead of this one per §5's ranking note; read its RESULT first —
-> if it changed the UNLOADABLE count, this row's subject set moved with it.
-> What is owed is a MEASUREMENT, not code: which graph entries would declare
-> kind: qualifier, derived per hooked file and per frontmatter flag. May end
-> REFUTED, which is a first-class outcome per §4.
-> ```
->
-> **On ending:** an ERROR that fires on live subjects with no remedy filed wedges the next pull —
-> that is the failure the predecessor's row 6 shipped into. **Tick §5, update the `▶ NEXT STEP` block
-> at the top, and hand to row 9.**
+> **▶ DONE — REFUTED, 2026-07-30. `LC-N5` stays WARN and no version was consumed.** Ticked in §5,
+> RESULT below, indexed in the predecessor's `## 0a. Refutation Index`, and the `▶ NEXT STEP` block
+> at the top now points at row 9. Nothing here is owed. The recorded blocker — "the `kind: qualifier`
+> grain is what unblocks this" — was a claim, and the RESULT records what it was actually worth.
 
 **Reordered: this now follows retirement.** Row 5 disposes checks 33/34/35, leaving **2** live `W5`
 subjects (rules 31/32) instead of 5 **[V]**. An ERROR that fires on live subjects with no remedy
@@ -748,7 +744,138 @@ that "the four rules that qualify core numbers" is a subagent-era figure v0.196.
 and its row 7's recorded lesson is that the counts were of the **wrong set**, not merely wrong.
 
 **May end REFUTED** — if the grain does not separate a deliberate qualifier from a squatter on real
-entries, `W5` stays WARN and the row records why.
+entries, `W5` stays WARN and the row records why. ~~May~~ **Did.** See below.
+
+#### Row 6 RESULT — REFUTED 2026-07-30. Consumer read-only at `39f0248ff`; `LC-N5` stays WARN.
+
+**The grain does not separate a deliberate qualifier from a squatter on real entries, and it cannot
+be made to — the reason is structural, not a matter of adoption.**
+
+Method: a `git clone --local --no-checkout` of graph into the scratchpad at `39f0248ff`. Every
+figure below is derived by **lifting the shipping extractors out of
+`core/scripts/validate-layer-entries.sh`** — `RULE_RE`, `CHECK_HEAD_RE`, `BAND_FLOOR`,
+`defined_rules`, `defined_anchors`, `below_band`, `fm`, `resolve_target`, `layer_files` — with I45's
+own `band_fn` technique, never by copying a grammar. Lift control in the same invocation: core
+`SKILL.md` **30** rules, `steps/gate-validation.md` **39** anchors, `BAND_FLOOR` **900**; a zero on
+any of the three aborts, because a lifted function whose pattern variable is unset greps the empty
+string and harvests nothing, which reads exactly like a conforming tree. graph itself was never
+written to; `HEAD` unchanged, the same four pre-existing runtime-state modifications.
+
+**Ground truth first, with the code that will ship.** `core/scripts/validate-layer-entries.sh` at
+0.215.0 against the clone: **`0 error(s), 2 warning(s)`**, both `RULE OUT OF BAND` — `Rule 31` and
+`Rule 32`, both in `extensions/steps-domain/SKILL-domain.md`. **Byte-for-byte the same two lines
+from graph's own installed 0.214.0 copy on the same tree**, so row 8's grammar widening did not move
+`W5`, as row 8 said. Zero `RULE NUMBER COLLISION` lines — remember that.
+
+**The measurement §6.6 owed, per hooked file and per frontmatter flag:**
+
+| | |
+|---|---|
+| extension entries | **33** |
+| declaring `kind: qualifier` | **0** |
+| declaring `extends:` | **0** |
+| declaring `position:` | **0** |
+| entries carrying ≥1 core-defined number | **4** |
+| …of those, able to declare `kind: qualifier` at all | **0** |
+
+Control on the zeros: **33** entry files carry `^kind:`, and the histogram is `step-domain` 21,
+`role` 8, `check` 4 — no fourth value. The raw tree-wide grep returns **7** hits for the three keys
+and **every one is in `extensions/README.md`**, which `layer_files()` excludes by name: the grain is
+fully documented in the consumer's own entry contract and adopted by nothing, **19 releases after
+v0.196.0 shipped it**.
+
+**Three reasons it cannot be the discriminator, in increasing order of finality:**
+
+1. **Zero adoption**, above — which alone only says nobody has done it yet.
+2. **`kind:` is per FILE; `W5`'s subject is per HEADING.** Both live subjects and four excluded
+   core-defined rules are in **one file**. `SKILL-domain.md` would have to be `qualifier` for rules
+   13/16/20/30 and not-qualifier for 31/32 simultaneously. No per-file flag can express that.
+3. **E11 bars the flag on every entry that would need it.** `kind: qualifier` requires `extends:`,
+   and `extends:` admits **exactly one anchor** — *"two anchors mean two spans, and a drift row could
+   no longer say which one moved."* The four entries carrying core-defined numbers render into
+   **14, 3, 4 and 4** core sections respectively. None of them can legally declare it. The grain is
+   built for an entry that qualifies **one** core section; the consumer has none.
+
+**Counterfactuals, computed rather than argued:**
+
+| Variant | `W5` subject set |
+|---|---|
+| today — exclusion is *"core defines this number"* | **2 rules / 0 checks** |
+| **A** — exclusion **replaced** by `kind: qualifier` | **10 rules / 17 checks = 27** |
+| **B** — `kind: qualifier` **added** as a further exemption | **2 / 0** — exempts nothing, changes nothing |
+
+A wedges every consumer immediately; B is a no-op. There is no third reading in which the grain
+moves this clause, so the tightening is **REFUTED on its stated prerequisite** and `LC-N5` stays
+WARN at `contract_version` 7.
+
+**`LC-N5` also stays WARN on grounds independent of the grain**, and this is the part §6.6 warned
+about: rules 31 and 32 are **live in graph today** and core cannot renumber them. An ERROR blocks
+graph's next pull until graph renames its own catalog — the failure the predecessor's row 6 shipped
+into, and the reason `W5`'s own header chose WARN when the set was five.
+
+**The finding worth keeping: the exclusion swallows its own detonated subjects, and one has already
+detonated.**
+
+`docs/retro/sprint-294.md`, written **2026-07-20** and untouched since, files three improvements
+from one retro as three consecutive rules — `I-1 → Rule 30`, `I-3 → Rule 32`, `I-14 → Rule 31`,
+each a bare integer in the durable audit record. All three landed in one commit (`67cb76d3d`). On
+that day all three were `W5` subjects. **Core allocated its own `### Rule 30 -- The spec is BMAD's;
+the enforcement is ours` on 2026-07-26 (`6dd9cff`), reaching graph on 2026-07-27** — an unrelated
+rule on the same integer, six days later.
+
+So `W5`'s stated detonation is not hypothetical. It happened, to a sibling of the two live subjects,
+inside the reference consumer, during this program. **And `W5` went quiet about that number on the
+exact day its warning came true**, because the exclusion asks whether core defines it *today*. Rule
+30 did not become clean; it became the defect. `W4` does not report it either — the consumer's
+remedy was the catalog label `[ext:skill-domain]`, applied 2026-07-28 (`54bb56cff`), and `W4` reads
+a labelled heading as the resolved state. **Neither arm fires on the one number in the tree that has
+actually gone off**, which is what the run's `2 RULE OUT OF BAND / 0 RULE NUMBER COLLISION` above
+records. This is the repo's named defect class sitting inside the clause row 6 was sent to tighten.
+
+Nor is the audit record repaired. The crosswalk table in graph's `extensions/README.md` — the remedy
+`W5`'s own message prescribes — carries **exactly one data row** (`Check 24`) and **no row for Rule
+30, 31 or 32**. The frozen retro's bare `Rule 30` still has two referents and nothing resolves it.
+
+**A candidate predicate, measured and deliberately NOT shipped.** A deliberate qualifier cannot
+reference a core rule that does not exist yet, so **authorship order separates the two classes**.
+Derived from graph's own history across all eight core-defined rule numbers: **7 qualifier-consistent
+(core first, by 3 days to 3 months), 1 consumer-first — Rule 30 — and 0 undecidable.** FP set empty
+on the reference consumer; controls: a number neither side defines is empty on both sides, core's
+`Rule 1` resolves to 2026-04-18, and the pickaxe survives the relabeller because `Rule 30 ` is a
+substring of both the labelled and unlabelled headings (Rule 30 returns its 2026-07-20 authoring
+date, not its 2026-07-28 relabel date). **It is not wired, and the reason is this repo's own rule:**
+a shallow or squashed consumer clone answers empty on *both* sides, and an arm that cannot fire
+reads exactly like one that passed. It needs a zero guard, a fixture, a mutant and a remedy decision
+before it needs a predicate — that is a release, and this row's deliverable is a measurement.
+Recorded here so it is not re-derived from scratch.
+
+**One figure corrected in shipping code.** `validate-layer-entries.sh`'s header called the
+core-defined-number exclusion *"the exclusion that keeps the check honest"* and said *"the reference
+consumer carries four such rules, each declaring itself a tightening of the core rule it names."*
+Re-derived: **eight** such rules across **two** entry files, not four — and one of the four in
+`SKILL-domain.md` is not a tightening of anything, since consumer Rule 30 ("Lead states no fact it
+did not observe this session") and core Rule 30 ("The spec is BMAD's; the enforcement is ours") share
+nothing but the integer. **The count was right for one file and the membership was wrong**, which is
+the predecessor's row 7 lesson verbatim. The header now states the hole, the eight, and the unwired
+predicate. Comment-only: `validate-enforcement-map.sh` exits 0, `shellcheck -S error` clean, the
+graph run is unmoved at `0 error(s), 2 warning(s)`, and all five fixtures that read this file —
+`enforcement-map-sites`, `layer-anchor-declaration`, `layer-catalog-collision`,
+`layer-contract-conformance`, `layer-qualifier-grain` — pass.
+
+**Two measurement traps, both mine, both recorded because the next row will meet them.**
+
+1. **`validate-layer-entries.sh` takes its root as `$1`, not `--dir`.** Invoked as
+   `... --dir <root>`, `PROJECT_ROOT` becomes the literal string `--dir`, the run prints **nothing**
+   and **exits 0**. My first ground-truth run did exactly that and read as a clean tree. The control
+   that caught it: the same script against `/tmp` says *"Not an ai-dlc consumer"* — a real absence is
+   loud, and silence was the tell. Row 4's brief already records this class for a different
+   validator; it is now four instances.
+2. **I45's `band_fn` extractor cannot lift a one-liner function.** Its awk stops at the first line
+   beginning with `}`, so `layer_files() { …; }` — whole body on the opening line — extracts to EOF
+   and `eval` re-executes the rest of the validator. It failed loudly (`OVR_DIR: unbound variable`)
+   rather than silently, which is the only reason it cost minutes. **I45 itself lifts only
+   multi-line functions today, so it is not affected** — but anything reusing the technique must
+   handle the one-liner case.
 
 ### Row 7 — I38's reverse direction. **RANKED 4th.**
 

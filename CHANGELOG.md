@@ -17,6 +17,52 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Refuted — `LC-N5` stays WARN: the `kind: qualifier` grain cannot carry the tightening
+
+No release consumed. Recorded here because a refutation nobody writes down gets re-proposed, and
+this one has been carried as an open prerequisite since v0.195.0.
+
+`LC-N5` (code `W5`) reports a consumer entry allocating a bare integer core has not defined, below
+the reserved band at 900. It has been WARN since it shipped, and the recorded reason it could not
+become ERROR was that it tells a deliberate qualifier from a squatter only by the fact that core
+already defines the number — with `kind: qualifier` + `extends:` (v0.196.0) named as the declared
+grain that would replace that test. **Measured against the reference consumer: the grain cannot do
+it, and the obstacle is structural rather than adoption.**
+
+- **0 of 33 extension entries declare `kind: qualifier`, `extends:` or `position:`** — 19 releases
+  after the grain shipped and was written into the consumer's own entry contract. Control: 33
+  entries carry `^kind:`, values `step-domain` 21 / `role` 8 / `check` 4; every raw grep hit for the
+  three keys is in `extensions/README.md`, which `layer_files()` excludes by name.
+- **`kind:` is per FILE; `W5`'s subject is per HEADING.** Both live subjects (`Rule 31`, `Rule 32`)
+  share one entry file with four core-defined rules the exclusion keeps. No per-file flag separates
+  them.
+- **E11 bars the flag on every entry that would need it.** `kind: qualifier` requires `extends:`,
+  which admits exactly one anchor; the four entries carrying core-defined numbers render into 14, 3,
+  4 and 4 core sections.
+- Counterfactuals: replacing the exclusion with the flag moves the subject set **2 → 27**; adding it
+  as a further exemption exempts nothing.
+
+`LC-N5` also stays WARN independently of the grain — its two subjects are live in the consumer,
+core cannot renumber them, and an ERROR would block that consumer's next pull until it renamed its
+own catalog. `contract_version` stays 7 and no clause text changed.
+
+### Fixed — a header note in `validate-layer-entries.sh` that overstated `W5`'s exclusion
+
+Comment-only; no behaviour change. The note called the core-defined-number exclusion *"the exclusion
+that keeps the check honest"* and said the reference consumer *"carries four such rules, each
+declaring itself a tightening of the core rule it names."* Re-derived: **eight** such rules across
+two entry files, and one of them declares no tightening of anything. The consumer authored its
+`Rule 30` on 2026-07-20 as one of three siblings from a single retro (the other two are `W5`'s live
+subjects); core allocated an unrelated `Rule 30` six days later. **`W5` stopped reporting that
+number on the day its own warning came true**, because the exclusion asks whether core defines it
+*today* — and `W4` does not report it either, since the consumer's remedy was a catalog label and
+`W4` reads a labelled heading as resolved. Neither arm fires on the one number in that tree that has
+actually detonated. The header now states the hole, the corrected count, and one unwired candidate
+predicate: a deliberate qualifier cannot reference a core rule that does not exist yet, so
+authorship order separates the classes — 7 core-first, 1 consumer-first, 0 undecidable across all
+eight. It is not wired because a shallow or squashed consumer clone answers empty on both sides, and
+an arm that cannot fire reads exactly like one that passed.
+
 ## [0.215.0] — 2026-07-30
 
 ### Added — the check-heading grammar sees alphabetic ids, and the reason it did not was a note that named the wrong invariant
