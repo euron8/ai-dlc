@@ -73,6 +73,10 @@
 #       Explicit series, in pass order.
 #   validate-adversarial-convergence.sh --series <prefix> --cycle-state
 #       Adjudicates an IN-PROGRESS cycle for the hooks. See below.
+#   ... [--transcript <file>]
+#       The session transcript arm D reads when a pass cites operator_authorization.
+#       Without it that citation cannot be checked and the run says so by name. Passed
+#       through to validate-steering-budget.sh, which owns the genuine-operator predicate.
 #
 # EXIT (gate mode)
 #   0  the cycle converged: every pass is adjudicable, consistent, non-divergent,

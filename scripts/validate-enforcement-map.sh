@@ -736,6 +736,105 @@ EOF
   fi
 fi
 
+# --- I59: every mode a shipped script DISPATCHES is named in that script's own prose --
+# THE STATE THIS MAKES UNREPRESENTABLE. A `case` arm no line of prose names is a mode that
+# exists and cannot be found. Nothing breaks; the mode is invisible, and the operator who
+# reads the usage block concludes it is not there.
+#
+# THE DEFECT THIS WAS DERIVED FROM, v0.213.1. `readopt-override.sh --merge` has been a
+# dispatched three-way re-adoption merge since before the reference consumer's base sha, and
+# the script's `# Usage:` header and its exit-2 usage string both listed only
+# dossier / --check / --stamp. A consumer mid-pull read that block, concluded the flag did
+# not exist, and filed the pull brief's own instruction — which names it correctly — as a
+# defect. The report was wrong and the documentation was the reason.
+#
+# I49 already holds both halves for ONE script (core-paths.sh), keyed on a sentinel that
+# script carries. This is the same predicate with the CORPUS derived instead of named: every
+# shipped `.sh` under core/, arms parsed from the case statements themselves, so a script
+# that ships tomorrow is in scope without an edit here.
+#
+# MEASURED BEFORE SHIPPING, which is this repo's bar for a new lint. 111 mode arms across the
+# shipped corpus. The false-positive set is EMPTY with ONE enumerated exemption, `--help`:
+# six scripts dispatch `-h|--help` to print their own header, and requiring the header to
+# name it is asking a file to cite itself. Every other arm was already documented except the
+# two real findings this was derived from — `--merge` above and
+# `validate-adversarial-convergence.sh --transcript`, both fixed in the same release.
+#
+# THE REVERSE DIRECTION IS DELIBERATELY NOT CHECKED, and this is a measurement, not an
+# oversight: a flag cited in a usage line is dispatched by a `case` arm in only some scripts
+# — others use `if [ "$1" = ... ]` — so the same join run backwards reports 7 of 35 cited
+# flags as undispatched, all 7 false. A lint with a fifth of its output wrong is one the
+# operator turns off.
+#
+# core/fixtures/ is out of corpus for the reason I49 and I50 state: fixtures deliberately
+# carry ghost text, and a lint that reads them reports their mutants as findings.
+#
+# ONE READER, used by the corpus scan AND by the probe below. A probe that exercises a copy
+# of the extraction proves the copy.
+i59_modes_of() {
+  grep -oE '^[[:space:]]*(--?[a-z][a-z0-9-]*\|)*--?[a-z][a-z0-9-]*\)' "$1" \
+    | tr -d ' )' | tr '|' '\n' | grep '^--' | sort -u
+}
+i59_undocumented_in() {   # <file> -> one undocumented mode per line
+  local f="$1" m
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    if [ "$m" = "--help" ]; then continue; fi   # I59_HELP_EXEMPTION
+    awk -v m="$m" 'index($0,m) && ($0 ~ /^[[:space:]]*#/ || index($0,"usage")) { found=1; exit }
+                   END { exit !found }' "$f" || printf '%s\n' "$m"
+  done < <(i59_modes_of "$f")
+}
+
+# THE LIVENESS PROBE. This invariant reports an ABSENCE, and its extraction is a regex over a
+# shell construct — the side that moves. A grammar that stops matching returns the same empty
+# set as a clean tree. So it is asked, every run, to answer a file whose answer is known.
+i59_probe_dir="$(mktemp -d)"
+cat > "$i59_probe_dir/probe.sh" <<'I59_PROBE'
+#!/usr/bin/env bash
+# Usage:
+#   probe.sh --documented    named right here, so it must NOT be reported
+case "$1" in
+  --documented) : ;;
+  --probe-undocumented) : ;;
+  -h|--help) : ;;
+esac
+I59_PROBE
+i59_probe="$(i59_undocumented_in "$i59_probe_dir/probe.sh" | tr '\n' ' ')"
+rm -rf "$i59_probe_dir"
+
+if ! grep -q -- '--probe-undocumented' <<<"$i59_probe"; then
+  err "I59's dispatch grammar did not fire on its own probe: a case arm that no comment names was not reported [probe answered: ${i59_probe:-<nothing>}]. The corpus result below is an empty set produced by an extraction that matches nothing, which reads exactly like a documented tree."
+elif grep -q -- '--documented ' <<<"$i59_probe"; then
+  err "I59 reported a DOCUMENTED mode on its own probe [probe answered: $i59_probe]. The predicate is not reading the prose, so every finding it prints is suspect."
+elif grep -q -- '--help' <<<"$i59_probe"; then
+  err "I59 reported the exempt --help arm on its own probe [probe answered: $i59_probe]. The exemption is gone or narrowed, and the six scripts that dispatch -h|--help to print their own header become findings — the measured-empty false-positive set is held by that exemption."
+else
+  # CORPUS BY `find`, NOT `git ls-files`. The fixture that tests this invariant seeds a
+  # COPY of the tree with no `.git` in it, where `ls-files` answers nothing — so a
+  # git-derived corpus would make the scan vacuous inside the very fixture that exists to
+  # prove it fires, and read as a clean tree in both places. The count is guarded below for
+  # the same reason.
+  i59_undoc=""
+  i59_n=0
+  i59_files=0
+  while IFS= read -r i59_f; do
+    [ -n "$i59_f" ] || continue
+    i59_files=$((i59_files + 1))
+    while IFS= read -r i59_m; do
+      [ -n "$i59_m" ] || continue
+      i59_undoc="${i59_undoc}
+  ${i59_f#"$REPO_ROOT/"} $i59_m"
+      i59_n=$((i59_n + 1))
+    done < <(i59_undocumented_in "$i59_f")
+  done < <(find "$REPO_ROOT/core" -type f -name '*.sh' -not -path "$REPO_ROOT/core/fixtures/*" | sort)
+  if [ "$i59_files" -lt 20 ]; then
+    err "I59 found only $i59_files shipped script(s) under core/ to scan. The corpus is derived by find; a count this low means the tree is not the one this runs against, and an empty corpus reports the same clean line as a documented one."
+  elif [ "$i59_n" -ne 0 ]; then
+    err "I59 found $i59_n dispatched mode(s) documented nowhere in their own file:$i59_undoc
+  Each is a mode that exists and cannot be discovered. Name it in the script's usage block — an operator who reads that block and concludes the mode is absent files a correct instruction as a defect, which is the v0.213.1 case this invariant was derived from."
+  fi
+fi
+
 # --- I39: the ledger status vocabulary is one set across emitter and rulebook --
 # THE STATE THIS MAKES UNREPRESENTABLE. `ledger-reverify.sh`'s statuses are a contract with
 # three readers that do not check each other: the operator following SKILL.md step 3f, the
@@ -2848,7 +2947,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59)."
   exit 0
 fi
 exit 1

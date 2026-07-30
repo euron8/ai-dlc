@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.214.0] — 2026-07-30
+
+### Added — I59: a mode a script dispatches must be a mode its own prose names, because the one that wasn't got a correct instruction filed as a defect
+
+**The defect, and it was reported backwards.** A consumer mid-pull ran row 6 of the 0.213.0 pull
+brief, which says the drift-section blockers go through `readopt-override.sh --merge`, and filed a
+deviation: *"there is no `--merge` flag; the script's modes are dossier / `--check` / `--stamp`."*
+That report is wrong. `--merge` is a dispatched `case` arm — the three-way `git merge-file`
+re-adoption, present in the engine at `3490997` **and** at the consumer's own base `46aa98a`
+(`grep -c -- '--merge)'` = 1 in each). What was missing was any line of prose naming it: the
+script's `# Usage:` header and its exit-2 usage string both listed only dossier / `--check` /
+`--stamp`. An operator who read the usage block and concluded the mode was absent did the correct
+thing with incorrect information. Nothing was broken; the mode was invisible.
+
+**Both homes now name it**, and `validate-adversarial-convergence.sh --transcript` — the second
+instance, found by the same sweep — is documented in that script's USAGE block.
+
+**I59 is the mechanism.** Every mode arm parsed from a `case` statement in a shipped `core/` script
+must appear on a comment or usage line in the same file. I49 already held both halves for one
+script (`core-paths.sh`) keyed on a sentinel that script carries; I59 is the same predicate with
+the **corpus derived** — so a script that ships tomorrow is in scope without an edit to the
+invariant.
+
+**Measured before shipping, which is this repo's bar for a new lint.** 111 mode arms across the
+shipped corpus. False-positive set **EMPTY** with exactly one enumerated exemption, `--help`: six
+scripts dispatch `-h|--help` to print their own header, and requiring the header to name it is
+asking a file to cite itself. Every other arm was already documented except the two real findings
+above.
+
+**The reverse direction is deliberately NOT checked, and that is a measurement rather than an
+oversight.** Run backwards — every flag cited in a usage line must be dispatched by a `case` arm —
+the join reports **7 of 35** cited flags as undispatched and **all 7 are false**: those scripts
+dispatch with `if [ "$1" = ... ]` instead. A lint with a fifth of its output wrong is one the
+operator turns off, so I59 states the asymmetry instead of shipping it.
+
+**Three ways the absence could lie, each with its own guard and its own message:**
+
+- **The extraction dies.** I59 writes a probe file every run — one documented mode, one
+  undocumented, one `-h|--help` — and answers it with the *same* reader the corpus scan uses. A
+  grammar that stops matching fails the probe instead of printing a clean tree.
+- **The exemption widens.** The probe's `--help` arm must come back unreported. Lose the carve-out
+  and six scripts become findings; widen it to swallow everything and the probe's undocumented mode
+  goes unreported. Both are named, separately.
+- **The corpus collapses.** The subject set is derived by `find`, **not** `git ls-files` — the
+  fixture that tests this seeds a copy of the tree with no `.git`, where `ls-files` answers nothing
+  and the scan would have been vacuous inside the very fixture that exists to prove it fires. A
+  floor refuses a corpus under 20 files.
+
+**I54 caught a bug in this release's own code.** The three probe assertions were first written as
+`printf '%s' "$var" | grep -q`, which returns *not found* on a match once the value clears the pipe
+buffer — the class swept in v0.207.0. The invariant that exists for it fired on the invariant being
+added beside it. Converted to here-strings.
+
+**Fixture `enforcement-map-sites` assertion 33, four arms, each asserting its own wording** — the
+v0.213.1 defect replayed, the extraction dead, the exemption gone, the corpus empty. **Both layers
+of the `--merge` fix are reverted in arm 1**: the flag is named in two places in that file, and a
+mutant that removes one proves only the other.
+
+**A `cmp -s` guard proves the sed matched, not that the mutant BITES.** Arm 2's first mutation
+edited the case-arm regex's leading alternation group — which is `(...)*`, so removing it changed
+bytes and changed nothing. `cmp -s` passed, the mutant ran, and the arm reported a real failure
+against a validator that was still working correctly. The arm now targets the pipeline's final
+filter, and the comment records why.
+
+**Verification.** `validate-enforcement-map.sh` exit 0 with I59 in its `OK:` line; assertion 33
+green on all four arms and each mutation confirmed to change behaviour, not just bytes;
+`enforcement-map-sites` PASS at 62 `ok`; whole fixture suite 8-way with an injected always-fail
+control; the pre-push gates green.
+
 ## [0.213.1] — 2026-07-30
 
 ### Fixed — retro §5b claimed to be the pipeline's ONLY out-of-PR commit, and retro §7a-post in the same file at the same sha is a second one
