@@ -1389,6 +1389,99 @@ fi
 mv "$V.orig" "$V"
 }
 
+# --- Assertion 33: I59 — a dispatched mode is a documented mode ---------------
+# A `case` arm no line of prose names is a mode that exists and cannot be found. Nothing
+# breaks, so nothing reports it: at v0.213.1 a consumer read `readopt-override.sh`'s usage
+# block, concluded `--merge` did not exist, and filed a correct instruction as a defect.
+#
+# FOUR ARMS, each asserting its OWN wording. Three of them mutate the VALIDATOR rather than
+# a subject, because this invariant reports an absence over a derived corpus and three
+# separate things can turn that absence into a lie: the extraction can stop matching, the
+# one enumerated exemption can widen, and the corpus can collapse to nothing. Each failure
+# mode has its own message and each arm names only its own.
+A33_i59_documented_modes() {
+RO="$ROOT/core/skills/ai-dlc-update/reconcile/readopt-override.sh"
+
+# ARM 1 — THE DEFECT ITSELF, and BOTH layers of the fix are reverted. `--merge` is named in
+# two places in that file (the `# Usage:` header and the exit-2 usage string), so a mutant
+# that removes one proves only the other. A partial revert here comes back green.
+cp "$RO" "$RO.orig"
+grep -v '<override> --merge    # three-way' "$RO.orig" \
+  | sed 's@\[--check|--merge|--stamp <outcome>\]@[--check|--stamp <outcome>]@' > "$RO"
+if cmp -s "$RO.orig" "$RO"; then
+  bad "FIXTURE BROKEN: the I59 undocumented-mode mutation matched nothing, so the defect arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "readopt-override.sh --merge" <<<"$out"; then
+    ok "a dispatched mode named in neither the usage header nor the usage string FAILS I59, named with its file (the v0.213.1 defect, replayed)"
+  else
+    bad "readopt-override.sh dispatched --merge with nothing naming it and I59 stayed silent — the mode is invisible again, and the next operator to read that block files the instruction that uses it as a defect"
+  fi
+fi
+mv "$RO.orig" "$RO"
+restore
+
+# ARM 2 — THE EXTRACTION DIES. I59 reports an ABSENCE over a regex against a shell
+# construct, and a regex that matches nothing returns the same empty set as a clean tree.
+# The invariant answers that with a probe file it writes itself; break the grammar and the
+# PROBE is what fails, not the corpus.
+#
+# The mutation targets the pipeline's FINAL filter, not the case-arm regex. The first
+# attempt at this arm edited the regex's leading alternation group — which is `(...)*`,
+# so dropping it changed bytes and changed nothing: `cmp -s` passed, the mutant ran, and
+# the arm reported a real failure against a validator that was still working. A byte
+# guard proves the sed matched; only the assertion proves the mutant BITES.
+cp "$V" "$V.orig"
+sed "s@grep '\^--'@grep '\^ZZ'@" "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I59 grammar mutation matched nothing, so the liveness arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "did not fire on its own probe" <<<"$out"; then
+    ok "a case-arm grammar that can no longer match FAILS I59 against its own probe (an extraction that finds nothing never again reads as a documented tree)"
+  else
+    bad "I59's mode extraction was broken so that it matches nothing and the invariant still printed clean — it would stop firing on its first grammar edit and no one would learn of it"
+  fi
+fi
+mv "$V.orig" "$V"
+restore
+
+# ARM 3 — THE EXEMPTION DIES. `--help` is the ONE enumerated carve-out and it is what makes
+# the measured false-positive set empty: six scripts dispatch `-h|--help` to print their own
+# header. Remove it and those six become findings — the shape that gets a lint turned off.
+cp "$V" "$V.orig"
+grep -v 'I59_HELP_EXEMPTION' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I59 exemption mutation matched nothing, so the carve-out arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "reported the exempt --help arm on its own probe" <<<"$out"; then
+    ok "losing the --help carve-out FAILS I59 on its own probe (the measured-empty false-positive set is held by a mechanism, not by a paragraph)"
+  else
+    bad "I59's --help exemption was deleted and the probe stayed silent — six scripts that dispatch -h|--help to print their own header become findings, and the carve-out is unheld"
+  fi
+fi
+mv "$V.orig" "$V"
+restore
+
+# ARM 4 — THE CORPUS COLLAPSES. The subject set is derived by `find`, not `git ls-files`,
+# precisely because this fixture seeds a copy with no `.git` — and an empty corpus prints
+# the same clean line as a fully documented one. The floor is what refuses.
+cp "$V" "$V.orig"
+sed "s@-type f -name '\*\.sh' -not -path@-type f -name '*.zzz' -not -path@" "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I59 corpus mutation matched nothing, so the floor arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "I59 found only 0 shipped script(s)" <<<"$out"; then
+    ok "a corpus derivation that returns nothing FAILS I59 loudly (scanning zero files is not the same answer as finding zero findings)"
+  else
+    bad "I59's corpus derivation matched no files and the invariant reported clean — every mode in core/ was unchecked and the run said so nowhere"
+  fi
+fi
+mv "$V.orig" "$V"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

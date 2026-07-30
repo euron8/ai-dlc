@@ -22,6 +22,7 @@
 # Usage:
 #   readopt-override.sh <dist> <theirs> <consumer> <override>            # dossier (default)
 #   readopt-override.sh <dist> <theirs> <consumer> <override> --check    # gate only; exit 1 if stale
+#   readopt-override.sh <dist> <theirs> <consumer> <override> --merge    # three-way re-adoption merge
 #   readopt-override.sh <dist> <theirs> <consumer> <override> --stamp <outcome> [--note "..."]
 #     <outcome> = readopt   body re-adopted; --check must pass; re-stamps base_sha
 #                 reaffirm  old core text deliberately kept; REQUIRES --note; re-stamps
@@ -30,7 +31,7 @@
 # Exit: 0 ok / 1 blocked (stale core text still in the body) / 2 usage.
 set -uo pipefail
 
-DIST="${1:?usage: readopt-override.sh <dist> <theirs> <consumer> <override> [--check|--stamp <outcome>]}"
+DIST="${1:?usage: readopt-override.sh <dist> <theirs> <consumer> <override> [--check|--merge|--stamp <outcome>]}"
 THEIRS="${2:?}"
 CONSUMER="${3:?}"
 OVR="${4:?}"
