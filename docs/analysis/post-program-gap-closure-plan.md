@@ -12,13 +12,61 @@ and the predecessor was tracked anyway. Ticking this ledger is a `chore:` commit
 
 ---
 
+## ▶ NEXT STEP — where the program is right now
+
+**Updated as the last act of every row. If this block is stale, the row that moved the program did
+not finish.**
+
+> **Next: row 8** (§6.8) — alphabetic check ids `AP`/`VH`. Re-ranked ahead of rows 6/7 by row 1's
+> stop condition; see §5's ranking note.
+>
+> **Who: an agent, in a fresh `ai-dlc` session.** No operator decision is pending. Working directory
+> `/Users/n8/git/ai-dlc`. Paste:
+>
+> ```
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 8.
+> Rows 1-5 are ticked; row 5's RESULT is the most recent state. Rank-order note in
+> §5 puts row 8 ahead of rows 6 and 7 — do not fall back to ledger order.
+> Row 8 is measurement-gated: measure the relabeller's false-positive set before
+> writing anything. It may end REFUTED, which is a first-class outcome per §4.
+> ```
+
+---
+
 ## 0. How to use this file, and WHICH REPO YOU ARE IN
 
 1. Read §1–§4 in full. Short, and every line is load-bearing.
 2. Read the **Progress Ledger** (§5) for the next unticked row.
 3. Read that row's section in §6, execute it, tick the ledger with a sha or a measured count as the
    last act. A fresh session's only way to know where it is.
-4. Stop at a **`⏹ SESSION BOUNDARY`**.
+4. **Update the `▶ NEXT STEP` block at the top of this file in the same commit as the tick.** The
+   tick says where the program has been; that block says what to do next, and only one of the two
+   survives a fresh session's first read.
+5. Stop at a **`⏹ SESSION BOUNDARY`**.
+
+### `▶ NEXT STEP` blocks — the operator never reconstructs a handoff from conversation
+
+**Every point at which this program needs a human carries a `▶ NEXT STEP` block naming the working
+directory and the literal prompt to paste.** This was missing through rows 4 and 5: both handoffs
+were assembled in chat, the operator had to ask for the prompt twice, and nothing in the file would
+have told a fresh reader what to do. **A reply that reports a row complete without pointing at one of
+these blocks is the same defect** — the file, not the conversation, is where the next action lives.
+
+Two kinds, and they are the only two:
+
+- **`▶ NEXT STEP — OPERATOR`** — a human must act: open a session in a *different* repo, approve a
+  merge or a push, or make a call the agent is barred from making. Carries the cwd and a fenced,
+  paste-able prompt.
+- **`▶ NEXT STEP — AGENT`** — the current session carries straight on, or a fresh session in the same
+  repo does. No human decision is pending, and the operator's only job is to start it.
+
+**A row whose section carries neither is unfinished.** Rows 6–10 each carry one.
+
+**What is an OPERATOR step and what is not.** Opening a fresh session is not by itself an operator
+decision — say `AGENT` and give the prompt. Reserve `OPERATOR` for: a repo switch, a merge or push
+(CLAUDE.md's Deployment Rule (b) puts merge after operator approval and no agent may self-authorize
+one), lifting or imposing the freeze, and any point where a stop condition fired and the remedy is a
+judgement call between core defect and consumer decision.
 
 ### Every row runs in `ai-dlc` except row 5.
 
@@ -175,7 +223,7 @@ before re-proposing anything below; this section is the short form.
 | ⏹ | **SESSION BOUNDARY.** Report row 1's four numbers and row 3's per-subject verdicts before opening the graph batch. | | | |
 | 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | **DONE 2026-07-30** — `docs/reviews/graph-retirement-0.214.0-operator-handoff.md`, 7 rows, 2 `⏹` boundaries, §3's net-surface criterion carried as a reported `+added / −removed` tally and §3's four criteria as row 7's exit condition. Scope held to row 3's bound: subjects 1+2, subject 3's stray arm, checks 33/34/35; the 3 REFUTED filed as row-6 ledger entries with receipts. **Re-deriving the wiring against `18e00ef40` corrected FOUR of row 3's own figures and found one measured wedge** — see the Row 4 RESULT below. **No engine worktree needed**, unlike the 0.213.0 pull: all 3 core absorbers are already installed in graph and byte-identical to core. graph read-only, `18e00ef40` untouched, 4 pre-existing runtime modifications unchanged; scratchpad clone removed. `docs:` commit, no version bump |
 | 5 | **Execute the retirement in graph, then UNFREEZE** — operator-driven graph sessions — §6.5 | RETIRE | **YES** | **DONE 2026-07-30 — MERGE `39f0248ff`, PR #833, squash to `main`, operator-approved. THE GRAPH FREEZE IS LIFTED.** Brief's 7 rows all ticked. **Net `23 files changed, +599 / −679` = −80 overall, −469 excluding the +389 ledger filing.** Post-merge, **independently re-measured from ai-dlc against `39f0248ff`**: `W5`/`OUT OF BAND` **5 → 2** (rules 31/32 only, no check id); `UNLOADABLE` **4 → 2** (`19b 2s`), rc=1 not the wedge's 2, `manifest source: core`, `extension gate_types: none`, `manifest ids: 41 anchors: 41`; fixture dirs **114 → 113**, `0 undeclared`; `--strays` PASS at 893 carriers with the `AI_DLC_KNOWN_SKILLS_EXT=""` control still exit 1 at **exactly 5**, all under `scripts/tests/**`. Duplicate-path greps **0 hits, rc=1** for both retired subjects against controls returning **17** and **6** files. `scan-stray-provenance.sh` **155 → 83** lines (stray arm out, `--fixture-provenance` intact). **13 ledger entries filed with 13 `verify:` receipts**, `ledger-reverify.sh` **53 → 66 rows**, every new row `STILL-LIVE`, the other four statuses unmoved. **The retirement found a latent defect neither row 3 nor row 4 anticipated** — see the Row 5 RESULT below. **Six deviations reported rather than adjusted to**, one of them a slip in row 4's own brief |
-| ⏹ | **SESSION BOUNDARY — the freeze ends here. Everything below runs against a live consumer.** | | | |
+| ⏹ | ~~SESSION BOUNDARY — the freeze ends here.~~ **PASSED 2026-07-30 at merge `39f0248ff`. The freeze is lifted and everything below runs against a live consumer.** Rows 6–10 are `ai-dlc` sessions and touch graph not at all | | | |
 | 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | — |
 | 7 | **I38 reverse: every normative sentence carries a clause id** — blocked on normalising `overrides/README.md` — §6.7 | CORE | no | — |
 | 8 | **Checks `AP` / `VH`: alphabetic ids are invisible to GM1** — blocked on the relabeller's FP set — §6.8 | CORE | no | — |
@@ -183,6 +231,23 @@ before re-proposing anything below; this section is the short form.
 | 10 | **The machinery home, inverted: consumer declares, core enforces the declaration** — unmeasured, may be refuted — §6.10 | CORE | no | — |
 
 **Version numbers are not pinned to rows.** Rows that end REFUTED consume no version.
+
+### Ranking for rows 6–10 — the ledger order is NOT the run order
+
+**Row 1's stop condition ruled that rows 6–10 are ranked on §3's four criteria, not on the baseline's
+four numbers**, two of which measured detector arrival rather than pull health. Ranked 2026-07-30,
+after row 5 moved the counts those criteria are stated in:
+
+| Order | Row | Why here |
+|---|---|---|
+| **1st** | **8** | Row 5 moved `UNLOADABLE` 4 → 2, and **that 2 is an understatement**: `Check AP` and `Check VH` are live, unloadable, and structurally invisible to the numeric heading grammar. The number this program just improved has the repo's named defect class inside it. Serves §3 criterion 3 directly |
+| **2nd** | **6** | Its subject set is now the 2 survivors row 5 left (rules 31/32) — the condition it was reordered to wait for. Also §3 criterion 3, but safer once row 8 has made the count honest |
+| **3rd** | **9** | Core-internal join hygiene. Cheap precondition first: **I59 shipped in 0.214.0, after §9 recorded the hand-listing, and may already have absorbed part of the subject set** |
+| **4th** | **7** | The 41→40 clause delta is worth measuring, but it moves no §3 criterion and is blocked on normalising `overrides/README.md` |
+| **5th** | **10** | Unchanged. Largest, least measured, and the row whose predecessor produced seven consecutive refutations |
+
+**Do not fall back to ledger order.** If a row is executed out of this ranking, say which criterion
+justified it.
 
 ### Explicitly out of scope
 
@@ -649,7 +714,22 @@ of "no direct push to `main`" at all**; `--fixture-provenance` survives with one
 test, which nothing drives; Check 17's five-vs-six home under-declaration is **fixed** —
 `docs/architecture-history.md` now named in the prose that governs both scanners.
 
-### Row 6 — `LC-N5` WARN → ERROR.
+### Row 6 — `LC-N5` WARN → ERROR. **RANKED 2nd.**
+
+> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. Run **after row 8**.
+>
+> ```
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 6.
+> Row 8 is ticked ahead of this one per §5's ranking note; read its RESULT first —
+> if it changed the UNLOADABLE count, this row's subject set moved with it.
+> What is owed is a MEASUREMENT, not code: which graph entries would declare
+> kind: qualifier, derived per hooked file and per frontmatter flag. May end
+> REFUTED, which is a first-class outcome per §4.
+> ```
+>
+> **On ending:** an ERROR that fires on live subjects with no remedy filed wedges the next pull —
+> that is the failure the predecessor's row 6 shipped into. **Tick §5, update the `▶ NEXT STEP` block
+> at the top, and hand to row 9.**
 
 **Reordered: this now follows retirement.** Row 5 disposes checks 33/34/35, leaving **2** live `W5`
 subjects (rules 31/32) instead of 5 **[V]**. An ERROR that fires on live subjects with no remedy
@@ -663,7 +743,21 @@ and its row 7's recorded lesson is that the counts were of the **wrong set**, no
 **May end REFUTED** — if the grain does not separate a deliberate qualifier from a squatter on real
 entries, `W5` stays WARN and the row records why.
 
-### Row 7 — I38's reverse direction.
+### Row 7 — I38's reverse direction. **RANKED 4th.**
+
+> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. Run **after row 9**.
+>
+> ```
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 7.
+> Normalise overrides/README.md's clauses into the bold-led bullet form FIRST —
+> the predicate cannot fire on half its subject otherwise, and a check that
+> cannot fire reads exactly like one that passed.
+> Measure the 41 -> 40 clause delta as part of this row; it is the number that
+> says whether the arm is worth its release.
+> ```
+>
+> **On ending: tick §5, update the `▶ NEXT STEP` block at the top, and hand to row 10 — which needs
+> an operator decision before it starts.**
 
 **State [V].** I38 forward ships. The reverse — every normative sentence carries a clause id — is
 refused **in code** at `scripts/validate-enforcement-map.sh:650` with the reason recorded: a keyword
@@ -681,7 +775,22 @@ predicate cannot fire on half its subject otherwise — then ship the reverse ar
 set. **Measure the 41→40 delta as part of this row**; it is the number that says whether the arm is
 worth its release.
 
-### Row 8 — alphabetic check ids.
+### Row 8 — alphabetic check ids. **RANKED 1st of the remaining five.**
+
+> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. No operator decision pending.
+>
+> ```
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 8.
+> Rows 1-5 are ticked; row 5's RESULT is the most recent state. §5's ranking note
+> puts row 8 first — do not fall back to ledger order.
+> Measure the relabeller's false-positive set BEFORE widening any grammar. I34
+> binds the detector to reconcile/relabel-extension-checks.sh, so both change in
+> one release or neither does. REFUTED is a first-class outcome per §4.
+> ```
+>
+> **On ending:** SHIPPED consumes a version and needs a mutant per new arm plus a measured FP set;
+> REFUTED consumes none and its deliverable is the written refutation. **Either way, tick §5, update
+> the `▶ NEXT STEP` block at the top of this file, and hand to row 6.**
 
 **State [R — predecessor §9].** `CHECK_HEAD_RE` is numeric, so `Check AP` and `Check VH` are
 invisible to GM1, and both are reported live and unloadable. **Do not read GM1's silence as evidence
@@ -692,7 +801,22 @@ they are fine** — they are structurally outside what it can see.
 remedy, so both change in one release, and the relabeller's FP set across every heading it already
 rewrites is **unmeasured**. Measure first.
 
-### Row 9 — the cross-script mode join.
+### Row 9 — the cross-script mode join. **RANKED 3rd.**
+
+> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. Run **after row 6**.
+>
+> ```
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 9.
+> Do the cheap precondition FIRST: I59 shipped in 0.214.0, after §9 recorded this
+> hand-listing, and may already have absorbed part of the subject set. If it did,
+> re-derive the subject set before anything else — the recorded lesson from the
+> predecessor's row 7 is that the counts were of the WRONG SET, not merely wrong.
+> Fix the extractor before writing the invariant. Write it only when the FP set
+> is empty or enumerated; today it is 8 misses, most of them the derivation's own
+> grammar.
+> ```
+>
+> **On ending: tick §5, update the `▶ NEXT STEP` block at the top, and hand to row 7.**
 
 **State [R — predecessor §9, now four instances].** I49 binds `core-paths.sh`'s modes, I53
 `validate-escalation-resolution.sh`'s, I59 (v0.214.0) every mode a shipped script dispatches to its
@@ -707,7 +831,27 @@ git pathspec and from a grep flag, `--mode` from prose, dispatch forms that are 
 **Check I59 first** — it shipped after §9 recorded this and may already have absorbed part of the
 subject set.
 
-### Row 10 — the machinery home, inverted. Unmeasured, likely REFUTED.
+### Row 10 — the machinery home, inverted. Unmeasured, likely REFUTED. **RANKED 5th.**
+
+> **▶ NEXT STEP — OPERATOR.** This one is a decision before it is a session.
+>
+> **The call to make: is this row worth a session at all?** It is the largest and least measured row
+> in the program, its predecessor produced **eight consecutive refutations** on the same subject
+> (§4a), and §9 of the predecessor already argues that the home staying a declaration with an empty
+> home is **correct behaviour, not a defect**. Closing it unstarted as REFUTED-BY-PRIOR-MEASUREMENT
+> is a legitimate ending and costs nothing.
+>
+> If you want it run, open a fresh session, cwd `/Users/n8/git/ai-dlc`, and paste:
+>
+> ```
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 10.
+> Measure the VALUE before building anything: if an undeclared script is exactly
+> as invisible as it is today, this row ends REFUTED and the home stays as it is.
+> Do not re-attempt any of the 8 refuted predicates in §4a's Refutation Index.
+> ```
+>
+> **On ending: tick §5, and update the `▶ NEXT STEP` block at the top to say the program is closed —
+> with the count of rows SHIPPED, REFUTED and RETIRED.** That block is the last thing anyone reads.
 
 **Do not re-attempt the refuted predicates in §4a.** All seven asked core to *infer* which consumer
 executables are ai-dlc. That question has no answer core can compute, and the measurement is
