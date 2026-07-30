@@ -173,7 +173,7 @@ before re-proposing anything below; this section is the short form.
 | 2 | **Disarm the predecessor's self-delete; index its refutations** — §6.2 | PRESERVE | no | **DONE 2026-07-30** — delete-licence and false-untracked claim removed (both greps 0 against controls returning 3 / 16 / 1); §0 rewritten as a completed-program record; **`## 0a. Refutation Index` added — 8 machinery-home predicates, the band ERROR + `RENUMBER-BAND --apply`, `layer-relocate.sh --apply`, `--is-consumer-machinery`, absorption arms 1 and 4, arm 8's refuted NAME, §7.9's value claim + subject-set-of-1, row 11's 5 design choices, `silent once recorded`, and §4's 3 pre-program falsifications**. §4a repointed; its "seven" machinery predicates recounted to **8** from the predecessor's own table. Weakness stated in the index: nothing enforces that a reader consults it. `docs:` commit, no version bump |
 | 3 | **Derive the retirement set with controls — per subject, is the core absorber actually drop-in?** — §6.3 | MEASURE | no | **DONE 2026-07-30** — 6 subjects, each verdict backed by a run of the core absorber against the consumer's real inputs on a case that should PASS **and** one that should FAIL. **RETIRE 2 / PARTIAL 1 / REFUTED 3.** RETIRE: `check-protected-core-paths.sh` (162), `check-mutation-red-anchor.sh` (72). PARTIAL: `scan-stray-provenance.sh` (stray arm only, ~110 of 155). REFUTED: `retro-replay-harness.sh`, `generate-sprint-status.py`, `validate-no-direct-main-push.sh` — **1,211 of the 1,600 lines §2 tabulated are not absorbed by anything**. §6.3's "wired into nothing **[V]**" free win is **FALSIFIED** — `.pre-commit-config.yaml:30`. Entry cost: 129 of 915 lines leave `gate-validation-domain.md` (14.1%), expected next-pull adjudication saving **≈ 0** (Check 34 named in 2 of 39 logs since arrival, Check 35 in 0 of 28; control 78/78 universal token). graph read-only, `18e00ef40` untouched |
 | ⏹ | **SESSION BOUNDARY.** Report row 1's four numbers and row 3's per-subject verdicts before opening the graph batch. | | | |
-| 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | — |
+| 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | **DONE 2026-07-30** — `docs/reviews/graph-retirement-0.214.0-operator-handoff.md`, 7 rows, 2 `⏹` boundaries, §3's net-surface criterion carried as a reported `+added / −removed` tally and §3's four criteria as row 7's exit condition. Scope held to row 3's bound: subjects 1+2, subject 3's stray arm, checks 33/34/35; the 3 REFUTED filed as row-6 ledger entries with receipts. **Re-deriving the wiring against `18e00ef40` corrected FOUR of row 3's own figures and found one measured wedge** — see the Row 4 RESULT below. **No engine worktree needed**, unlike the 0.213.0 pull: all 3 core absorbers are already installed in graph and byte-identical to core. graph read-only, `18e00ef40` untouched, 4 pre-existing runtime modifications unchanged; scratchpad clone removed. `docs:` commit, no version bump |
 | 5 | **Execute the retirement in graph, then UNFREEZE** — operator-driven graph sessions — §6.5 | RETIRE | **YES** | — |
 | ⏹ | **SESSION BOUNDARY — the freeze ends here. Everything below runs against a live consumer.** | | | |
 | 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | — |
@@ -520,6 +520,78 @@ ledger entries with falsifiable receipts, not fixed in it**. graph's `ledger-rev
 every receipt on every pull **[V — 53 rows today: 33 STILL-LIVE, 12 HAND-REVIEW, 3 NEEDS-REVIEW,
 3 ENTRY-SWALLOWED, 2 NAMED-UPSTREAM]**, which is the mechanism a merged PR body's 11 checkboxes are
 not.
+
+#### Row 4 RESULT — brief written 2026-07-30, wiring re-derived read-only against graph at `18e00ef40`
+
+Deliverable: **`docs/reviews/graph-retirement-0.214.0-operator-handoff.md`**. Shape reused from the
+0.213.0 handoff — §0 repo statement, §1 state, §2 locked decisions, §3 discipline, §4 falsified
+premises, §5 ledger, §6 rows, §7 known-open — with `⏹ FRESH GRAPH SESSION` after row 4 and after
+row 5, the two per-item-judgement boundaries.
+
+**One structural difference from the pull, and it removes the 0.213.0 brief's biggest trap.** That
+pull needed a pinned engine worktree because graph's installed engine could not emit the statuses the
+pull added (`--strays` appeared in it **0** times). Here graph is stamped at the distribution's own
+HEAD and **all three absorbers are installed and byte-identical to `core/scripts/`** — `core-paths.sh`
+`89ff1b7fc261`, `validate-mutation-red.sh` `a1ec071b3ca7`, `validate-provenance-block.sh`
+`392a592c5a53`. Every command in the brief runs graph's own copy; nothing is staged.
+
+**Four of Row 3's figures were wrong, each corrected with a control:**
+
+1. **The excision span.** Row 3 said checks 33/34/35 occupy lines **787–915** of a **914**-line file —
+   915 does not exist. The headings also run **34 (787), 33 (862), 35 (872)**, *not* numeric order, so
+   slicing "33 through 35" by number cuts the wrong range and leaves check 34 in the file. The
+   contiguous block including its `## Check 34` marker is **784–914 = 131 lines (14.3%)**, not 129.
+2. **Row 3's "~110 of 155" for the stray arm over-counts.** `--fixture-provenance` is lines 58–89
+   (32); the stray body is 90–155 (**66**); lines 1–57 are a header documenting **both**. Row 3
+   charged the shared header entirely to the stray arm. The brief tells the executing session to
+   report what it removed rather than carry 110 as a target.
+3. **Subject 3's wiring is short by one live site.** `scripts/lib/pr-class.sh` carries the script at
+   **:89** (`'^scripts/scan-stray-provenance\.sh$'`, a path allowlist) as well as at `:163`. Control:
+   bogus token rc **1** / 0 lines, universal token **389** files, same invocation.
+4. **Check 34 is not a pure duplicate — the SCRIPT is, the SCHEDULE is not.** Core's equivalent is
+   `Core-layer immutability (§7.1 authoring guard — retro/close gate)` at
+   `core/skills/ai-dlc/steps/gate-validation.md:1700`, whose Scope reads *"Fires at the retro /
+   sprint-close gate"*; graph's Check 34 fires *"at gate-1 … for every story"*, and **core's
+   `team-roles/` carry no protected-core-path pre-flight at all** (control: universal token matches 11
+   files there; the sole `core-paths.sh` hit is `protected-path-editor.md:42`, a different mode in a
+   different role). So the brief **deletes check 34 but repoints the three role lines** to
+   `core-paths.sh --audit-diff`, preserving the gate-1 firing point. Check 35 has no such problem —
+   core mandates `validate-mutation-red.sh` at `code-reviewer.md:418`, `dev.md:201`, `qa.md:79`.
+
+**A measured wedge the naive route walks into.** Excising the three checks while leaving the
+frontmatter `gate_types: implementation` makes `validate-gate-manifest.sh` exit **2**: *"declares
+gate_types: implementation and carries no `<!-- CHECK_LOADED: <id> -->` anchor … the declaration
+claims loading for nothing."* Check 34's anchor at line 788 is **the only one in the entire
+`extensions/checks/` tree** (control: the other three check files carry **0**). Measured on a
+`git clone --local` of `18e00ef40` in the scratchpad, both variants built as copies: variant A
+(line kept) exit **2**; variant B (line removed) exit **1** with the expected residual
+`UNLOADABLE: 19b 2s`, `manifest source: core`, `extension gate_types: none`. Both variants give
+`0 error(s), 2 warning(s)`. The reverted `gate_types: none` is **not** a regression of the pull's row
+3b, whose real gain was `manifest source: core` — the `34->implementation` mapping existed only to
+claim check 34.
+
+**Baselines recorded in the brief for the executing session to measure against**, all against
+`18e00ef40` with graph's own installed copies: `validate-layer-entries` exit 0, **5** `OUT OF BAND`;
+`validate-gate-manifest` exit 1, `UNLOADABLE 19b 2s 33 35`, MISSING/ORPHAN none, `manifest ids: 42
+anchors: 42`; **114** fixture directories, 0 undeclared; `--strays` PASS. Post-retirement expectation
+**5 → 2**, **4 → 2**, **114 → 113**, PASS held with its `AI_DLC_KNOWN_SKILLS_EXT=""` flip control.
+
+**Also folded in:** core ships replacement fixtures for both absorbers and **they are already in
+graph** (`mutation-red-replay/`, `core-paths-audit-diff/`, `stray-party-mode-provenance/`, each with
+`run.sh` + `seed.sh`, so already in the push suite's generic loop) — which is why the brief retires
+graph's `check-35-mutation-red-reachability/` fixture and its test alongside the detector. And
+**neither `ci-local.sh` nor `.githooks/pre-push` names any of the three retiring scripts** (controls:
+39 `scripts/tests/test-*` names, 8 `bash scripts/` invocations), so the retirement does not touch the
+push suite's script list.
+
+**The brief does not claim the adjudication-load payoff**, per row 3's measurement, and says so in
+its §7 — the cost is one guaranteed re-adjudication against an expected saving of ≈ 0.05 per pull,
+and the payoff is §3 criteria 1 and 3.
+
+**Honest weakness, stated rather than papered over.** Row 4 corrected four of row 3's figures by
+re-deriving them; nothing guarantees this brief is the fixed point. Its §4 says so and instructs the
+executing session to report a deviation rather than adjust to it — the same disposition the 0.213.0
+handoff's ledger records three times, each time correctly.
 
 ### Row 5 — execute in graph, then unfreeze. FREEZE-BEARING.
 
