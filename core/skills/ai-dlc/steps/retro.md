@@ -711,16 +711,21 @@ retro-PR-merge SHA placeholder. The merge SHA is unknown until the
 retro PR merges; lead writes the entry with sprint + closed_at fields
 and updates the SHA in a follow-on commit on `main` after merge.
 
-That follow-on commit is the ONE commit this pipeline pushes to `main`
-outside a PR. It edits `_bmad-output/audit-anchors.md` and nothing else,
-and its subject MUST be:
+That follow-on commit is the one THIS step licenses to reach `main` outside a
+PR — not a count of the pipeline's out-of-PR commits. §7a-post commits the log
+rotation direct to `main` too, for the reason stated there, and a consumer may
+license more; each such commit is licensed by the step that states why a PR
+cannot carry it. This one edits `_bmad-output/audit-anchors.md` and nothing
+else, and its subject MUST be:
 
 `chore(s<N>): backfill audit-anchor SHA after retro PR #<PR> merge`
 
 `scripts/ai-dlc/validate-audit-anchors.sh --trunk-push` runs in the
 pre-push hook and rejects the push if that commit carries any other path,
 or if a commit rewrites `audit-anchors.md` alone under any other subject.
-Fold anything else into the retro PR.
+It bounds this commit only and states no branch policy — so put nothing else
+in it: other retro changes go in the retro PR, and a commit another step
+licenses stays with that step.
 
 The schema is canonical in `.claude/schemas/audit-anchors.json` — NOT the live
 header or the template. Re-seed the header first: replace the file's

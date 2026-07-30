@@ -861,7 +861,8 @@ fi
 }
 
 # --- Assertion 22: I51 — the licensed commit has one subject in two files ------
-# Step 5b is the ONE place this pipeline writes to the trunk outside a PR, and the subject
+# Step 5b licenses one commit to the trunk outside a PR (not the pipeline's only one — §7a-post
+# commits the log rotation there too — but the only one bounded at push time), and the subject
 # it tells the lead to type is matched at push time by a regex in the schema. The two are
 # not derivable from each other by equality — one is a template with <N>/<PR>, the other a
 # regex — so the join fills the template and matches it, exactly as the lead and then the
