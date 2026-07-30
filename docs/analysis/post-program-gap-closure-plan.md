@@ -152,8 +152,9 @@ forbids a clause with no mechanism so `layer-contract.yaml` cannot hold one eith
 - **"6,118 lines of consumer ai-dlc machinery" is [R]** and presupposes the predicate that does not
   exist. What is measurable **[V]**: 75 `scripts/*.sh`, 295 files under `scripts/lib` +
   `scripts/tests`, 13 `.claude/hooks`, and `scripts/ai-dlc-local/` does not exist.
-- **`EXTENSION-HOOK-DRIFT` at "31 of 76 pulls" is still [R].** Row 1 has the corpus — fold the
-  re-derivation in rather than opening a row.
+- ~~**`EXTENSION-HOOK-DRIFT` at "31 of 76 pulls" is still [R].**~~ **CLOSED by row 1 [V]:
+  34 of 78 pulls** (13/32 pre-v0.60, 21/46 post). Control: all 44 logs lacking the code still match
+  the universal token `ai-dlc`, and a bogus code matches 0. The [R] figure was accurate.
 
 ---
 
@@ -163,7 +164,7 @@ forbids a clause with no mechanism so `layer-contract.yaml` cannot hold one eith
 
 | # | Row | Kind | Freeze | Status |
 |---|---|---|---|---|
-| 1 | **Re-derive the four metrics that justified the whole program** — §6.1 | MEASURE | no | — |
+| 1 | **Re-derive the four metrics that justified the whole program** — §6.1 | MEASURE | no | **DONE 2026-07-30** — corpus 78+10, baseline's 76/32/44 reproduced. clean-pull **30/32 → 22/44** (baseline 30/32 → 17/44; post grain unrecoverable); prose **4.3 → 5.7 kB** whole-log, **0.3 → 0.7 kB** sections (baseline 3.8 → 8.3 kB; grain unrecoverable); `NEEDS-REVIEW`+`HAND-REVIEW` **0 → peak 22 → 15 today** (baseline 38, unreproducible at any commit); re-litigation **4 of 9** (baseline 6 of 9, overstated); `EXTENSION-HOOK-DRIFT` **34/78** ([R] 31/76 → **[V]**). Metrics 1 and 3 measure detector arrival (v0.60.0, v0.122.0), not pull health. Archiving confound **REFUTED** — 15 both sides of the rotation. graph read-only, `18e00ef40` untouched |
 | 2 | **Disarm the predecessor's self-delete; index its refutations** — §6.2 | PRESERVE | no | — |
 | 3 | **Derive the retirement set with controls — per subject, is the core absorber actually drop-in?** — §6.3 | MEASURE | no | — |
 | ⏹ | **SESSION BOUNDARY.** Report row 1's four numbers and row 3's per-subject verdicts before opening the graph batch. | | | |
@@ -216,6 +217,65 @@ the predecessor quoted in two rows.
 **Stop condition.** If the metrics show the pull fight is materially better, rows 6–10 are
 optimisations and should be re-ranked rather than executed in order. **Row 5 is not gated on this** —
 duplicate enforcement paths are a defect regardless of how the pull metrics read.
+
+#### Row 1 RESULT — measured 2026-07-30, read-only against graph at `18e00ef40`
+
+Corpus **78** `reconcile-log-*.md` + **10** `blocker-adjudication-*.md`. The baseline's corpus is
+recoverable exactly: 78 minus the two logs postdating the baseline file's mtime
+(`reconcile-log-20260728T143546Z.md`, `reconcile-log-20260730T145354Z.md`) = **76**, splitting
+**32** pre / **44** post at v0.60 — the baseline's own denominators, both reproduced. Version
+extracted from each log header; **0 extraction misses**; monotonicity control found 7 inversions,
+1 a filename-sort artefact of the three ISO-dashed names and 6 genuine out-of-order re-pulls.
+
+| # | Metric | Baseline | Re-derived | Verdict |
+|---|---|---|---|---|
+| 1 | clean-pull rate | 30/32 (94%) → 17/44 (39%) | 30/32 (94%) → **22/44 (50%)** | grain UNRECOVERABLE on the post side |
+| 2 | adjudication prose / pull | 3.8 kB → 8.3 kB | whole log **4.3 → 5.7 kB**; adjudication sections only **0.3 → 0.7 kB** | grain UNRECOVERABLE; direction reproduced |
+| 3 | `NEEDS-REVIEW`/`HAND-REVIEW` | 0 → 38 | 0 → peak **22** (2026-07-26), **15 today** (3 + 12 of 53 rows) | 38 UNREPRODUCIBLE at any point in history |
+| 4 | blocker adjudications re-litigating | 6 of 9 | **4 of 9** (4 of 10 today) | OVERSTATED |
+| + | `EXTENSION-HOOK-DRIFT` | 31 of 76 pulls | **34 of 78** (13/32 pre, 21/46 post) | [R] → **[V]**, confirmed |
+
+**The definition of "clean" does not exist.** The logs never use the phrase "clean pull" and the
+baseline never defines it. Searched: no subset of the logs' own not-clean vocabulary (conflict /
+blocker / adjudication / operator-decision section headings, `CONFLICT <id>` markers, `HARD-` codes,
+`needs-confirmation`) reproduces both baseline cells. Best fit — **a log is not clean iff it carries
+a `HARD-` code or a blocker section** — reproduces the pre cell exactly (30/32) and misses the post
+cell by 5 (22/44 vs 17/44). Control: the predicate fires on 55 logs and does not fire on 23, so it
+is neither vacuous nor universal; 93 negated mentions across 52 logs are excluded and counted.
+
+**Metrics 1 and 3 measure detector availability, not pull health.** First appearance in the corpus:
+`HARD-` codes and `layer-drift.sh` at **v0.34.0**; the blocker section at **v0.60.0**;
+`hard-blockers.sh` at v0.67.0; `ledger-reverify.sh` at v0.106.0; `NEEDS-REVIEW`/`HAND-REVIEW` at
+**v0.122.0 (2026-07-22)**. The baseline's era boundary **is** the version the blocker section first
+appears, and its "post-2026-07-22 phenomenon" date **is** the day the two statuses first exist.
+Cutting at the detector's own arrival, the split reads 31/34 (91%) → 22/44 (50%). This is the
+repo's named defect class — a check that cannot fire reads exactly like one that passed — applied
+to the justification for thirty releases.
+
+**The archiving confound is REFUTED, not merely separated.** `ledger-reverify.sh` run with
+base/theirs held fixed at `3490997`→`04cea81` against both the pre-rotation ledger (`e3522f153`)
+and the post-rotation one: **54 rows → 53 rows, and `NEEDS-REVIEW` + `HAND-REVIEW` = 15 on both
+sides.** The 418-line rotation moved only closed entries — the archive carries 54 line-leading
+`ADOPTED UPSTREAM`/`WITHDRAWN` annotations and reverifies to **0 rows** against the live ledger's
+53 on the identical invocation. No part of the drop from the baseline is archiving.
+
+**`NEEDS-REVIEW`/`HAND-REVIEW` are runtime-only.** All 27 occurrences of those tokens in the two
+ledger files are prose mentions; neither is a status field. No static grep can reproduce "38", and
+no recorded tally of 38 exists anywhere in the corpus (largest recorded: 36 `STILL-LIVE`,
+12 `HAND-REVIEW`). The time series over 32 ledger commits peaks at **22**. The "0 before" half is
+confirmed with its control — 0 rows *and* 0 receipts at every commit from 2026-07-20 back, because
+the `verify:` receipt grammar did not exist yet.
+
+**Safe to re-run under freeze.** `ledger-reverify.sh` executes receipt shell commands at line 671;
+the 5 live `verify: sh` receipts are all read-only (`git show`, `git cat-file -e`, `awk`, `grep`,
+`test`). A first probe returned 0 `sh` receipts on the wrong grammar (`verify: sh:` — there is no
+second colon); the control that caught it was 81/60 bare `verify:` hits.
+
+**Stop condition, answered.** The pull fight is **not** materially better: the two metrics that
+justified the program cannot be reproduced, and their apparent collapse is detector arrival. Rows
+6–10 are not vindicated by this measurement and are not refuted by it either — the measurement is
+silent on them. **Rank rows 6–10 on §3's four criteria, not on the baseline's four numbers.**
+Row 5 stands unchanged, as §6.1 already provides.
 
 ### Row 2 — disarm the self-delete, index the refutations. Cheap and urgent.
 
