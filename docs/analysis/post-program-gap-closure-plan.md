@@ -57,7 +57,7 @@ contact with a measurement. Verify before building.
 | `graph` consumer | `18e00ef40`, stamped **0.214.0 @ 04cea81** on both pairs **[V]** |
 | Predecessor program | 12 rows closed; 27 merge shas all ancestors of `main` (control: `main` is not an ancestor of `main~1`) **[V]** |
 | Layer contract | **40 clauses**, all carrying `enforcer:` + `code:`. 21 ERROR / 17 WARN / 4 ADJUDICATED, `contract_version` 7 **[V]** |
-| **graph freeze** | **RE-IMPOSED, operator-directed 2026-07-30. No sprint runs in graph until this program completes.** |
+| **graph freeze** | ~~RE-IMPOSED, operator-directed 2026-07-30.~~ **LIFTED at row 5, 2026-07-30, merge `39f0248ff` (PR #833). Sprint work in graph may resume. Rows 6–10 do not touch graph and run against a live consumer.** graph is now at `39f0248ff`, still stamped 0.214.0 @ 04cea81 |
 
 **The freeze is the scarce resource in this plan, and only §6 rows 4–5 need it.** Row 1 reads graph
 read-only. Rows 2 and 6–10 do not touch it at all. Sequence accordingly: get the graph batch done,
@@ -174,7 +174,7 @@ before re-proposing anything below; this section is the short form.
 | 3 | **Derive the retirement set with controls — per subject, is the core absorber actually drop-in?** — §6.3 | MEASURE | no | **DONE 2026-07-30** — 6 subjects, each verdict backed by a run of the core absorber against the consumer's real inputs on a case that should PASS **and** one that should FAIL. **RETIRE 2 / PARTIAL 1 / REFUTED 3.** RETIRE: `check-protected-core-paths.sh` (162), `check-mutation-red-anchor.sh` (72). PARTIAL: `scan-stray-provenance.sh` (stray arm only, ~110 of 155). REFUTED: `retro-replay-harness.sh`, `generate-sprint-status.py`, `validate-no-direct-main-push.sh` — **1,211 of the 1,600 lines §2 tabulated are not absorbed by anything**. §6.3's "wired into nothing **[V]**" free win is **FALSIFIED** — `.pre-commit-config.yaml:30`. Entry cost: 129 of 915 lines leave `gate-validation-domain.md` (14.1%), expected next-pull adjudication saving **≈ 0** (Check 34 named in 2 of 39 logs since arrival, Check 35 in 0 of 28; control 78/78 universal token). graph read-only, `18e00ef40` untouched |
 | ⏹ | **SESSION BOUNDARY.** Report row 1's four numbers and row 3's per-subject verdicts before opening the graph batch. | | | |
 | 4 | **Generate the graph retirement brief** — a multi-session operator handoff, the pull-brief shape — §6.4 | BUILD | no | **DONE 2026-07-30** — `docs/reviews/graph-retirement-0.214.0-operator-handoff.md`, 7 rows, 2 `⏹` boundaries, §3's net-surface criterion carried as a reported `+added / −removed` tally and §3's four criteria as row 7's exit condition. Scope held to row 3's bound: subjects 1+2, subject 3's stray arm, checks 33/34/35; the 3 REFUTED filed as row-6 ledger entries with receipts. **Re-deriving the wiring against `18e00ef40` corrected FOUR of row 3's own figures and found one measured wedge** — see the Row 4 RESULT below. **No engine worktree needed**, unlike the 0.213.0 pull: all 3 core absorbers are already installed in graph and byte-identical to core. graph read-only, `18e00ef40` untouched, 4 pre-existing runtime modifications unchanged; scratchpad clone removed. `docs:` commit, no version bump |
-| 5 | **Execute the retirement in graph, then UNFREEZE** — operator-driven graph sessions — §6.5 | RETIRE | **YES** | — |
+| 5 | **Execute the retirement in graph, then UNFREEZE** — operator-driven graph sessions — §6.5 | RETIRE | **YES** | **DONE 2026-07-30 — MERGE `39f0248ff`, PR #833, squash to `main`, operator-approved. THE GRAPH FREEZE IS LIFTED.** Brief's 7 rows all ticked. **Net `23 files changed, +599 / −679` = −80 overall, −469 excluding the +389 ledger filing.** Post-merge, **independently re-measured from ai-dlc against `39f0248ff`**: `W5`/`OUT OF BAND` **5 → 2** (rules 31/32 only, no check id); `UNLOADABLE` **4 → 2** (`19b 2s`), rc=1 not the wedge's 2, `manifest source: core`, `extension gate_types: none`, `manifest ids: 41 anchors: 41`; fixture dirs **114 → 113**, `0 undeclared`; `--strays` PASS at 893 carriers with the `AI_DLC_KNOWN_SKILLS_EXT=""` control still exit 1 at **exactly 5**, all under `scripts/tests/**`. Duplicate-path greps **0 hits, rc=1** for both retired subjects against controls returning **17** and **6** files. `scan-stray-provenance.sh` **155 → 83** lines (stray arm out, `--fixture-provenance` intact). **13 ledger entries filed with 13 `verify:` receipts**, `ledger-reverify.sh` **53 → 66 rows**, every new row `STILL-LIVE`, the other four statuses unmoved. **The retirement found a latent defect neither row 3 nor row 4 anticipated** — see the Row 5 RESULT below. **Six deviations reported rather than adjusted to**, one of them a slip in row 4's own brief |
 | ⏹ | **SESSION BOUNDARY — the freeze ends here. Everything below runs against a live consumer.** | | | |
 | 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | — |
 | 7 | **I38 reverse: every normative sentence carries a clause id** — blocked on normalising `overrides/README.md` — §6.7 | CORE | no | — |
@@ -604,6 +604,50 @@ through the entire 0.213.0 pull and is not relaxed.
 records is a freeze that never ends.
 
 **The four §3 criteria are this row's exit condition, not row 10's.**
+
+#### Row 5 RESULT — merged `39f0248ff` 2026-07-30. Verified from ai-dlc against the merged tree.
+
+**All four §3 criteria met, each as a measurement rather than a claim.** (1) Duplicate enforcement
+paths **0** for subjects 1, 2 and subject 3's stray arm, by live-path grep with a control that
+returns non-zero in the same invocation. (2) Net surface **DOWN**: `+599 / −679`. (3) `W5` **5 → 2**,
+`UNLOADABLE` **4 → 2**, both survivor sets dispositioned in writing. (4) Each retirement carries a
+`ledger-reverify.sh` receipt that a later pull re-runs — the three `…-STAYS-RETIRED` entries — and all
+three were mutation-tested in both directions.
+
+**The finding worth keeping: retiring a duplicate can silently RE-ARM a dead gate, and this one
+nearly did.** Two gates discriminated by **validator name** rather than by PR class:
+`.claude/hooks/guarded-merge.sh` and `scripts/audit-main-since.sh` both tested
+`EXPECTED_VALIDATORS` for `validate-provenance-block.sh`. Since S249 the `provenance-in-non-retro`
+class carried `scan-stray-provenance.sh` instead, so **those arms had been unreachable for the entire
+time they appeared to be enforcing something**. Retiring the consumer scanner would have put the core
+validator's name on both classes and switched the dead arms back on — re-arming exactly the per-block
+retro validation the S249 Check-17 carve-out exists to prevent, whose stated consequence is that
+accumulated historical blocks "would permanently deny every future non-retro merge." The fix moved
+both gates to a **class** test and selects `--strays` from `PR_CLASS`, because `EXPECTED_VALIDATORS`
+is word-split and a flag cannot live in it. **+42 lines added, with the reason stated in the code** —
+§3 criterion 2's "a row that adds consumer surface states why", answered in the file rather than the
+PR body. Both unreachable arms are **filed, not revived**; reviving one is a consumer decision.
+
+**Generalise it: a join keyed on a NAME breaks when the name is the thing you are retiring.** The
+retirement was scoped by predicate (does core compute the same answer) and by schedule (does core
+fire at the same point, row 4's correction). This is a third axis — **does anything downstream key on
+the retired thing's NAME?** — and it is invisible to both of the first two. `CLAUDE.md`'s "derive
+both sides of a join rather than hand-list either" is the standing form of this; here the hand-listed
+side was a validator basename in a shell string.
+
+**Row 4's brief was itself wrong once, and the executing session reported it rather than adjusting.**
+Its §7d carried the 0.213.0 handoff's "118 findings / 45 files / 3 error-level" shellcheck figure as
+pre-existing red. Re-measured under ci-local's exact invocation: `main` is **122 / 49 / 3**, branch
+HEAD **120 / 47 / 3** — the branch **removes** two findings and adds none. Same non-reproducing class
+as the figure the 0.213.0 handoff itself failed to reproduce, so it is not carried forward again.
+**Two briefs in a row have now shipped that number wrong. Do not quote it a third time; measure it.**
+
+**Confirmed dispositions carried out of the row:** the three REFUTED subjects stay
+(`retro-replay-harness.sh`, `generate-sprint-status.py`, `validate-no-direct-main-push.sh` —
+**1,211 of the 1,600 lines §2 tabulated are absorbed by nothing**); graph still has **no enforcement
+of "no direct push to `main`" at all**; `--fixture-provenance` survives with one caller, its own
+test, which nothing drives; Check 17's five-vs-six home under-declaration is **fixed** —
+`docs/architecture-history.md` now named in the prose that governs both scanners.
 
 ### Row 6 — `LC-N5` WARN → ERROR.
 
