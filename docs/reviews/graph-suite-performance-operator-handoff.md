@@ -264,10 +264,10 @@ started. A row ticked with prose is not ticked.
 | 4 | CONFIRM §4's pre-measured baseline on the real box (3 ratios, not the seconds) | graph | **DONE 2026-07-31** — CONFIRMED at `ff444f656`: `sum÷max` **10.2x**, `system÷user` **1.47**, graph-owned **4.3%**; 106/106 exit 0 on run 2. One intermittent (`check-il-oracle-presence`, rc=1 in run 1, 0/6 repeats). Deliverable appended to §4. |
 | 5 | Confirm the **4.2%** graph-owned share and hand the lever upstream | graph | **DONE 2026-07-31** — **4.3%** (7.8s of 181.1s, 20 drivable of 28). Stop condition fired: nothing optimised. Upstream subjects named — `layer-readopt-gate` 17.68s, `layer-qualifier-grain` 14.61s, `ledger-reverify` 10.37s, all core-shipped. Carried to row 6. |
 | ⏹ | **FRESH SESSION** — rows 1–3 need an `ai-dlc` release merged AND pulled | graph | |
-| 1 | Verify the pulled hook carries the pool, the completeness arm and the empty-suite guard | graph | — |
-| 2 | Re-derive `AI_DLC_FIXTURE_JOBS` for THIS box; do not inherit 16 | graph | — |
-| 3 | Re-profile as a SCHEDULE and record the new critical path | graph | — |
-| 6 | Report the before/after pair back for the plan's ledger | graph | — |
+| 1 | Verify the pulled hook carries the pool, the completeness arm and the empty-suite guard | graph | **DONE 2026-07-31** — all three fire, at `5f425e664` / `version: 0.226.0`. Pool: **171.99s → 30.10s = 5.71x**, same tree, same code, 108/108 ok. Completeness arm: a dropped verdict yields `FAIL <name> (no verdict recorded)` + `107 of 108`, rc=1. Empty-suite guard: rc=1 on all three empty shapes; knock-out control rc=0. Finding: the flake row 4 saw is a `pipefail`+`grep -q` SIGPIPE bug in a graph-owned driver, and the pool is what makes it fire. |
+| 2 | Re-derive `AI_DLC_FIXTURE_JOBS` for THIS box; do not inherit 16 | graph | **DONE 2026-07-31** — re-derived on an 18-core box, 2 reps, P4→P32: **flat region P12–P32 at 30.1–31.6s**, knee at P8→P12. **16 retained because it lands inside this box's measured flat region**, not inherited; P12 is indistinguishable. Third measurement taken: heavy-8 concurrent = **1.06x** the pole (no contention), but whole-suite per-unit inflation is **1.41x / 1.99x / 2.96x at P8 / P16 / P24** — the pool trades per-unit speed for width ~1:1, so **the knob is spent at ~29s**. |
+| 3 | Re-profile as a SCHEDULE and record the new critical path | graph | **DONE 2026-07-31** — schedule recorded at P16, wall **29.43s**, 108 units, 0 non-zero. Critical path **`layer-readopt-gate`**, slack **0.00s** (24.47s under load vs 15.32s solo); next pole behind it **`layer-qualifier-grain`**, slack **1.91s**. **100 of 108 units carry >10s slack** — free, and would save nothing. Both poles are core-shipped. |
+| 6 | Report the before/after pair back for the plan's ledger | graph | **DONE 2026-07-31** — before/after pair: **171.99s serial → 29.43s pooled = 5.71x**, 108/108 green both sides. Reported to the operator; text in §6 Row 6. Upstream: release owes nothing; knob is spent at ~29s and the next lever (fork cost, both poles) is core's; LPT dispatch order worth ~8%. Graph-owned: the `pipefail`+`grep -q` SIGPIPE bug in `scripts/tests/test-s168-retro-gates.sh` needs an owner. |
 
 **Row order is 0, 4, 5, then the ⏹, then 1, 2, 3, 6.** Rows 4 and 5 need nothing from upstream
 and are what make rows 1–3 measurable; running them after the pool would destroy the baseline.
@@ -404,6 +404,72 @@ release owes, each with a control:
 **Stop condition.** If the wall clock drops and the second or third assertion does not fire, the
 release shipped speed without the correctness half. Report it and do not tick this row.
 
+#### Row 1's outcome — 2026-07-31. All three fire. The release shipped both halves.
+
+Tree: graph at `5f425e664`, `version: 0.226.0`. Row 0's five lines re-run first and now read **2**
+/ **1** / **108** drivable / `0.226.0` — lines 1 and 2 non-zero, so the release has landed. The
+hook is **294 lines** against the 208 §1 measured, and carries `xargs -P` (1), `n_expected` (6) and
+`no verdict recorded` (1) where the shipped copy had 0 of each.
+
+Everything below ran in a throwaway `git clone --local` under the scratchpad, never in graph's tree
+and never in `ai-dlc`. The results path was held in `ROW1_SINK`; no `OUT`/`TMP`/`WORK`/`DIR` was
+exported. What was measured is the shipped code, not a paraphrase of it: the block was extracted
+between the `FIXTURE_POOL_BEGIN`/`END` markers and sourced (75 lines, `bash -n` clean; control, a
+bogus token returns 0 against the same extract).
+
+**Note the fixture count moved: 108 drivable now, against row 4's 106.** So a bare wall-clock
+comparison against row 4 would confound the pool with a larger suite. The comparison below is
+therefore **same tree, same code, same 108 fixtures, `AI_DLC_FIXTURE_JOBS` the only variable** —
+`-P1` is the serial control, which is the shipped loop's schedule running the shipped loop's code.
+
+| assertion | result | control in the same run |
+|---|---|---|
+| **the pool runs** | `-P1` **171.99s** → `-P16` **30.10s** = **5.71x** | both runs 108/108 `ok`, rc=0; the two reports are **byte-identical** (`diff -q` clean), so the pool did not reorder the output |
+| **the completeness arm fires** | M2: `FAIL check-31-cited-sha (no verdict recorded)` **and** `FAIL 107 of 108 fixtures produced a verdict`, rc=1 | M1 (an ordinary failing fixture) names it and leaves the magnitude line **silent** — 0 occurrences — so the arm is not firing spuriously on every red suite |
+| **the empty-suite guard fires** | rc=1 with `no fixtures found` on all three shapes: empty `tests/fixtures/`, **no `tests/fixtures/` at all**, and directories present but none carrying a `run.sh` | knock-out E3, one passing fixture: `ok` and **rc=0**, so the guard is not a function that always fails |
+
+`5.71x` against row 4's pole of 17.68s: a perfect schedule would finish near **18s**, so the pool
+banks most of the available win and leaves roughly 12s on the table. That gap is precisely rows 2
+and 3's subject and is not a defect of this row.
+
+**Correction to this row's stated proof method, for whoever writes the next one.** The instruction
+above says to prove the completeness arm by *"point one fixture's `run.sh` at a non-existent
+interpreter"*. **That does not test the arm.** The worker invokes `bash "$d/run.sh"`, and `bash`
+reading a script as an argument treats the shebang as a comment — the mutant would run normally, or
+at most fail like any red fixture and exercise the FAIL path instead. The arm's actual condition is
+`[ ! -f "$out/$b" ]`, so M2 above reproduces it directly by having the fixture occupy its own
+verdict path with a directory: one fixture drops, no signal reaches `xargs`, no other verdict is
+touched. Both mutants were `cmp -s`-guarded against their originals and restored, and the copy's
+`git status` was clean afterwards.
+
+**FINDING, graph-owned, and the pool is what makes it fire.** Row 4 reported
+`check-il-oracle-presence` as an unreproducible intermittent (0 of 6 repeats). It is reproducible,
+it is not that fixture's fault, and it is a real bug:
+
+- It recurred here, but as a **different fixture** — `check-substrate-audit` in one pooled run,
+  `check-il-oracle-presence` in another. **Three graph-owned fixtures delegate to the same driver**,
+  `scripts/tests/test-s168-retro-gates.sh`: those two plus `check-ff-escalation` (control: a bogus
+  driver name matches 0 fixtures). Whichever one loses the race is the one that reports red, which
+  is why it looked unreproducible when chased per-fixture.
+- It is **not intrinsic to the fixture and not self-concurrency**: 10 of 10 standalone runs pass,
+  and 16 concurrent copies of the same fixture pass 16 of 16. It only fails inside the full suite.
+- **Root cause.** The driver sets `set -euo pipefail`. Its gate-4 assertions pipe into `grep -q`,
+  which exits on the first match and closes the pipe; when the upstream still has output to write,
+  it takes SIGPIPE, the pipeline status becomes **141**, and `pipefail` propagates that as a failed
+  assertion. Confirmed with two controls: the same shape with the matched line **last** passes, and
+  the same shape **without `pipefail`** passes. Sub-test `4c` is the one observed failing and is
+  the only gate-4 case that writes another line after the line `grep -q` matches.
+- **Why the pool matters.** The race needs the writer to still be scheduled when `grep -q` exits.
+  Serially that window is rarely open; at 16-way it is. So this defect was latent under the shipped
+  serial loop and becomes an intermittent push-blocker under the pool — it did not arrive with
+  v0.226.0, it was **exposed** by it.
+- **Ownership: graph's, not upstream's.** The driver and all three fixtures are graph-owned, so
+  this is not a stop condition for this row and the release is not implicated. Reported, not fixed
+  here, per row 4's stop condition. The fix is to drop `grep -q` for `grep -c`-style consumption
+  that drains its input, or to scope `pipefail` off around those assertions.
+
+Carried to row 6.
+
 ### Row 2 — re-derive the pool size for this box. In `graph`.
 
 `AI_DLC_FIXTURE_JOBS` is 16 because that was measured on the distribution's box against a
@@ -416,6 +482,61 @@ the sweep is flat, that is not evidence the suite is compute-bound — the distr
 getting exactly this wrong in both directions, and it took a third measurement (running the heavy
 units alone and concurrently) to say which. Take that third measurement before concluding.
 
+#### Row 2's outcome — 2026-07-31. Re-derived on this box: **the flat region is P12–P32**, and 16
+#### sits inside it. The knob was NOT inherited — it was measured, and it is not the lever.
+
+Box: **18 cores** (`hw.ncpu` = `hw.physicalcpu` = `hw.logicalcpu` = 18). Throwaway clone, same
+extracted `FIXTURE_POOL` block, `AI_DLC_FIXTURE_JOBS` the only variable, **two full reps**:
+
+| `-P` | rep 1 | rep 2 |
+|---|---|---|
+| 4 | 55.97s | 55.97s |
+| 8 | 37.11s | 37.19s |
+| 12 | 31.10s | 31.25s |
+| **16** | **30.35s** | **30.17s** |
+| 20 | 31.21s | 30.10s |
+| 24 | 32.46s | 30.37s |
+| 32 | 30.22s | 31.62s |
+
+**The flat region is P12 through P32, 30.1–31.6s, with the knee between P8 and P12.** Reported as
+a region rather than a winner, per this row's instruction: the spread across P12–P32 is smaller
+than the rep-to-rep spread at a single setting, so naming any one of them "the winner" would be
+reading noise. **16 is retained — but as a re-derived value that lands inside this box's measured
+flat region, not as an inherited one.** P12 is indistinguishable and costs 25% fewer workers, so an
+operator who cares about leaving headroom on a shared box can set 12 and lose nothing measurable.
+
+**The mandated third measurement, and it changes the diagnosis.** The eight heaviest units run
+**alone** sum to 73.45s with a pole of 17.98s; the **same eight run concurrently at -P8 finish in
+19.12s — 1.06x the pole.** So among the heavy units there is essentially no contention, which by
+itself would predict that more workers keep helping. They do not. Measuring the **whole** suite at
+three widths says why:
+
+| width | wall | mean per-unit inflation vs its solo duration (n=78 units >0.2s) | the pole's own duration |
+|---|---|---|---|
+| `-P8` | 37.02s | **1.41x** | 21.94s |
+| `-P16` | 29.43s | **1.99x** | 24.47s |
+| `-P24` | 29.93s | **2.96x** | 26.39s |
+
+**Every unit gets slower in almost exact proportion to how many run beside it**, and the pole
+itself stretches from a 15.32s solo duration to 26.39s at -P24. That is why the sweep flattens
+instead of continuing down: past P12 the pool buys width and pays for it in per-unit speed at
+roughly 1:1, so the product — the wall clock — stops moving. **This is finding (1)'s fork-bound
+signature showing up as a scheduling ceiling**, not compute saturation: at -P24 the box is running
+24 workers on 18 cores while system time, not user time, is what they are competing for.
+
+**The consequence for this workstream, stated plainly: the knob is spent.** No value of
+`AI_DLC_FIXTURE_JOBS` reaches below ~29s, because the floor is set by per-unit fork cost under
+concurrency rather than by worker count. The remaining lever is making the fixtures fork less, and
+**86 of the 108 units are core-shipped**, so that lever is the distribution's. Carried to row 6.
+
+**A hypothesis this row refuted, recorded so it is not re-tried.** The two heaviest units sit at
+positions **61 and 62 of 108** in the hook's alphabetical dispatch order, which suggested the wall
+was set by the pole *starting late*. Re-running the identical worker at -P16 over a
+longest-processing-time-first list against the alphabetical one — same 108 members, order the only
+difference (control: `diff` of the sorted lists is clean, `cmp` of the unsorted ones differs) —
+gives **27.16s LPT against 29.63s alphabetical**. Real, reproducible, and only ~8%. Ordering is
+worth having and it is not the constraint; the inflation above is.
+
 ### Row 3 — re-profile as a SCHEDULE. In `graph`.
 
 With a pool, durations stop being the instrument. Record **start and end per fixture** and rank by
@@ -424,11 +545,93 @@ everything else would save nothing, and the ranking says so rather than implying
 
 Deliverable: the schedule table, the named critical path, and the next pole behind it.
 
+#### Row 3's outcome — 2026-07-31. Critical path is `layer-readopt-gate`, 0 slack. **100 of 108 units carry more than 10s of slack.**
+
+Instrument changed as this row requires: start and end offset recorded per fixture relative to
+suite start, ranked by **END**, at `-P16` on the throwaway clone. Wall **29.43s**, 108 units
+recorded, **0 non-zero exits**. Control on the accounting: the sum of durations *under the pool* is
+**331.9s** against a serial sum of 173.72s — the same work taking 1.9x longer per unit, which is
+row 2's inflation seen from the other side and confirms these are loaded durations, not solo ones.
+
+| fixture | start | end | duration | slack |
+|---|---|---|---|---|
+| **`layer-readopt-gate`** | 4.96s | **29.43s** | 24.47s | **0.00s** ← the critical path |
+| `layer-qualifier-grain` | 4.89s | 27.52s | 22.63s | 1.91s ← the next pole behind it |
+| `wait-stale-deliverable` | 17.18s | 27.01s | 9.82s | 2.43s |
+| `ledger-reverify` | 7.44s | 23.29s | 15.86s | 6.14s |
+| `sprint-status-lifecycle` | 14.70s | 22.35s | 7.65s | 7.09s |
+| `layer-reference-resolution` | 5.33s | 20.76s | 15.43s | 8.67s |
+| `reconcile-emit-report` | 10.83s | 20.02s | 9.19s | 9.41s |
+| `validator-path-resolution` | 16.89s | 19.68s | 2.79s | 9.75s |
+
+**The named critical path is `layer-readopt-gate`** — it ends the suite with zero slack, and its
+24.47s under load is 1.60x its 15.32s solo duration. **The next pole behind it is
+`layer-qualifier-grain`** at 1.91s of slack; the two start within 0.07s of each other and run
+nearly the whole suite side by side, so removing the first exposes the second almost immediately
+and would buy under 2s.
+
+**Slack says what is worth touching, rather than implying it:**
+
+| slack band | units |
+|---|---|
+| < 1s (on the critical path) | **1** |
+| 1–5s | 2 |
+| 5–10s | 5 |
+| **> 10s** | **100** |
+
+**One hundred of the 108 units could be made instantaneous and the suite would not finish sooner.**
+Both poles, and six of the eight units with under 10s of slack, are core-shipped and not graph's to
+edit — which is row 5's conclusion arriving again by a different instrument. Carried to row 6.
+
 ### Row 6 — report back. In `graph`.
 
 One comment on the PR, or one message to the operator, carrying: row 4's baseline triple, row 5's
 outcome, rows 2 and 3's numbers, and any finding that belongs upstream. The plan's ledger closes
 its step on these numbers.
+
+#### Row 6 — the report. 2026-07-31. Delivered to the operator; this section is its text.
+
+**The before/after pair, on graph's own 18-core box.** Before is v0.224.0's shipped serial loop;
+after is v0.226.0's pool. Measured same-tree, same-code, `AI_DLC_FIXTURE_JOBS` the only variable,
+so the pair is attributable and not confounded by the fixture count moving 106 → 108.
+
+| | before (serial) | after (pooled, P16) |
+|---|---|---|
+| wall clock | **171.99s** | **29.43–30.35s** |
+| speed-up | — | **5.71x** |
+| fixtures green | 108/108 | 108/108 |
+
+**Row 4's baseline triple, as confirmed:** `sum ÷ max` **10.2x** (re-derived here at 11.34x on 108
+units), `system ÷ user` **1.47** (fork-bound), graph-owned share **4.3%**. Nothing moved.
+
+**Row 5's outcome:** stop condition fired as predicted. Graph-owned fixtures are 4.3% of the cost;
+nothing was optimised consumer-side, and that is the correct ending.
+
+**Row 2:** flat region **P12–P32**; 16 retained as a re-derived value, not an inherited one.
+**Row 3:** critical path **`layer-readopt-gate`**, 0 slack; next pole `layer-qualifier-grain` at
+1.91s; 100 of 108 units carry >10s slack.
+
+**What belongs upstream — three items.**
+
+1. **The release delivered both halves.** Pool, completeness arm and empty-suite guard all fire
+   under mutation, each with a knock-out control. No stop condition fired. Nothing owed.
+2. **The knob is spent, and the next lever is core's.** No worker count reaches below ~29s,
+   because per-unit duration inflates 1.41x → 2.96x from P8 → P24 and cancels the added width.
+   The remaining win is making fixtures **fork less**, and both poles plus six of the eight
+   lowest-slack units are core-shipped. `layer-readopt-gate` (24.47s under load, 15.32s solo) and
+   `layer-qualifier-grain` are the named subjects, unchanged from row 5's handoff.
+3. **Dispatch order is a real but small upstream win.** Longest-first ordering gives **27.16s vs
+   29.63s** at P16, ~8%. The hook dispatches in alphabetical order and the two heaviest units sit
+   at positions 61 and 62 of 108. Cheap to ship, and it is core's file.
+
+**What belongs to graph — one item, and it is a push-blocker.** The intermittent row 4 could not
+reproduce is a real bug in a **graph-owned** driver, `scripts/tests/test-s168-retro-gates.sh`:
+`set -euo pipefail` plus assertions piped into `grep -q`, which exits on first match and SIGPIPEs a
+still-writing upstream, yielding pipeline status **141** and a spurious FAIL. Three fixtures
+delegate to that driver, which is why it looked unreproducible when chased per-fixture. **The pool
+did not cause it and v0.226.0 is not implicated — the pool exposed it**, because the race needs a
+loaded scheduler. Observed 5 times across this session's pooled runs, never in 10 solo runs or 16
+self-concurrent ones. It fails the whole push when it fires, so it wants an owner.
 
 ---
 
