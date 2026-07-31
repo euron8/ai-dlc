@@ -43,8 +43,17 @@ WORK="$(cd "$WORK" && pwd)"
 trap 'rm -rf "$WORK"' EXIT
 
 fails=0
-ok()  { printf '  ok    %s\n' "$1"; }
-bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
+made=0
+ok()  { printf '  ok    %s\n' "$1"; made=$((made+1)); }
+bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
+
+# EXPECTED_ASSERTIONS is not bookkeeping. A sibling fixture lost an entire mutant
+# when a helper call was mis-spaced: `set -u` killed the `$( )` subshell, the `if`
+# read that as a false branch, and the arm never ran -- seventeen green lines and a
+# PASS. Every assertion below reaches the validator through `$( )`, so the same
+# shape is available here. A failed assertion is loud; one that never executed is
+# not, and this is what tells them apart.
+EXPECTED_ASSERTIONS=18
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -166,10 +175,214 @@ else
   sed 's/^/        /' "$WORK/mut.txt"
 fi
 
+# --- THE RANGE ARMS ------------------------------------------------------------
+#
+# THE DEFECT THESE EXIST TO CATCH, and it is a different one from assertions 1-7.
+# A release branch was cut from a local `main` fourteen commits ahead of
+# `origin/main`. The PR took `origin/main` as its merge-base and the squash carried
+# three releases under one `feat(v0.217.0):` subject. The triple reported
+# `PASS 15 commit(s)` on the branch and `PASS 1 commit(s)` on the squash -- BOTH
+# PASS, because the commits that could have disagreed are precisely the ones the
+# squash removed. So these assertions must show a red that the triple cannot
+# produce, on an input the triple calls green.
+#
+# A SECOND SANDBOX, deliberately. The repository above rewrites CHANGELOG.md to a
+# single heading per commit, so no range in it can ever add two. A cumulative
+# changelog is what the arm is actually pointed at.
+W2="$WORK/cumulative"
+mkdir -p "$W2" && cd "$W2" || exit 2
+git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed in W2" >&2; exit 2; }
+git config user.email f@example.com
+git config user.name Fixture
+git config commit.gpgsign false
+
+# release <version> <subject> -- PREPENDS a heading, the way a real CHANGELOG grows.
+# VERSION always matches the newest heading, so the triple stays green throughout
+# and every red below is attributable to a range arm.
+release() {
+  printf '%s' "$1" > VERSION
+  if [ -f CHANGELOG.md ]; then
+    { printf '# Changelog\n\n## [%s] — 2026-01-01\n\n- entry\n' "$1"
+      tail -n +2 CHANGELOG.md; } > CHANGELOG.next
+    mv CHANGELOG.next CHANGELOG.md
+  else
+    printf '# Changelog\n\n## [%s] — 2026-01-01\n\n- entry\n' "$1" > CHANGELOG.md
+  fi
+  git add -A
+  git commit -q -m "$2" 2>/dev/null
+}
+
+release 0.1.0 'feat(v0.1.0): the first one'
+base_sha="$(git rev-parse HEAD)"
+release 0.2.0 'feat(v0.2.0): one release, on its own branch'
+one_sha="$(git rev-parse HEAD)"
+
+# --- 8. One release in a range is silent ---------------------------------------
+status="$(run --range "$base_sha..$one_sha")"
+if [ "$status" = "0" ]; then
+  ok "a range adding ONE release heading passes -- the arm can be quiet"
+else
+  bad "a single-release range failed -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 9. Two releases in a range fail, and both are named -----------------------
+release 0.3.0 'feat(v0.3.0): a second release on the same branch'
+two_sha="$(git rev-parse HEAD)"
+status="$(run --range "$base_sha..$two_sha")"
+if [ "$status" = "1" ] \
+   && grep -q 'adds 2 release headings' "$WORK/out.txt" \
+   && grep -q '0.2.0' "$WORK/out.txt" && grep -q '0.3.0' "$WORK/out.txt"; then
+  ok "a range adding TWO release headings fails, and names both versions"
+else
+  bad "a two-release range was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 10. THE SQUASH ITSELF: one commit, two releases, triple in full agreement --
+# This is the load-bearing assertion. The commit's subject, VERSION and top
+# CHANGELOG heading all name 0.5.0, so predicates A and B are satisfied; only the
+# range arm can produce a red here. Assertion 11 proves that claim rather than
+# asserting it.
+git checkout -q -b squashed "$two_sha"
+printf '0.5.0' > VERSION
+{ printf '# Changelog\n\n## [0.5.0] — 2026-01-01\n\n- entry\n\n## [0.4.0] — 2026-01-01\n\n- entry\n'
+  tail -n +2 CHANGELOG.md; } > CHANGELOG.next
+mv CHANGELOG.next CHANGELOG.md
+git add -A
+git commit -q -m 'feat(v0.5.0): two releases squashed into one commit (#1)'
+squash_sha="$(git rev-parse HEAD)"
+status="$(run --commit "$squash_sha")"
+if [ "$status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/out.txt"; then
+  ok "a SQUASH carrying two releases fails, though its subject, VERSION and top heading all agree"
+else
+  bad "the squash shape was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 11. CONTROL: an unmutated COPY still fails on assertion 10's input ---------
+# Assertion 12 flips 10's input to green by editing a copy. That flip only means
+# something if an UNEDITED copy, run the same way from the same directory, still
+# goes red -- otherwise a copy that cannot execute would score as a kill.
+COPY="$WORK/copy.sh"
+cp "$VALIDATOR" "$COPY" || exit 2
+bash "$COPY" --commit "$squash_sha" >"$WORK/copy.txt" 2>&1
+copy_status=$?
+if [ "$copy_status" = "1" ] && grep -q 'adds 2 release headings' "$WORK/copy.txt"; then
+  ok "CONTROL: an unmutated copy of the validator still fails on the same input"
+else
+  bad "CONTROL: the unmutated copy did not reproduce the red (exit $copy_status) -- assertion 12 would prove nothing"
+  sed 's/^/        /' "$WORK/copy.txt"
+fi
+
+# --- 12. MUTATION: neuter the range arm's threshold ----------------------------
+MUT_C="$WORK/mutant-range.sh"
+sed 's/-ge 2 \]; then/-ge 99 ]; then/' "$VALIDATOR" > "$MUT_C" || exit 2
+if cmp -s "$VALIDATOR" "$MUT_C"; then
+  echo "FIXTURE ERROR: the range-arm mutation matched nothing -- the threshold was rewritten" >&2
+  echo "  update the sed pattern in assertion 12 to match the real comparison" >&2
+  exit 2
+fi
+bash "$MUT_C" --commit "$squash_sha" >"$WORK/mut2.txt" 2>&1
+mut_c_status=$?
+if [ "$mut_c_status" = "0" ]; then
+  ok "MUTATION: raising the range arm's threshold makes assertion 10's input go green"
+else
+  bad "MUTATION: assertion 10's input still fails (exit $mut_c_status) without the range arm"
+  sed 's/^/        /' "$WORK/mut2.txt"
+fi
+
+# --- THE BRANCH-BASE ARM -------------------------------------------------------
+# The PRECONDITION of the squash above: commits sitting on local main and not on
+# origin/main are behind the PR's merge-base, so they ride into it unremarked.
+W3="$WORK/branchbase"
+mkdir -p "$W3" && cd "$W3" || exit 2
+git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed in W3" >&2; exit 2; }
+git config user.email f@example.com
+git config user.name Fixture
+git config commit.gpgsign false
+release 0.1.0 'feat(v0.1.0): the first one'
+git branch -M main
+# origin/main is a real ref, not a real remote -- the arm reads refs, not network.
+git update-ref refs/remotes/origin/main "$(git rev-parse HEAD)"
+git commit -q --allow-empty -m 'chore: a tick committed to main and never pushed'
+ahead_main="$(git rev-parse HEAD)"
+git checkout -q -b release/0.2.0
+release 0.2.0 'feat(v0.2.0): cut from a main that was ahead'
+
+run0() { bash "$VALIDATOR" >"$WORK/out.txt" 2>&1; echo "$?"; }
+
+# --- 13. A branch cut from an ahead main fails ---------------------------------
+# Note the range arm stays quiet here: only 0.2.0 is added past origin/main. The
+# red is the branch-base arm's alone.
+status="$(run0)"
+if [ "$status" = "1" ] && grep -q 'carries 1 commit(s) that are on local main and not on origin/main' "$WORK/out.txt"; then
+  ok "a branch carrying an unpushed main commit fails, and the count is named"
+else
+  bad "the ahead-main precondition was not caught -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 14. MUTATION: neuter the branch-base arm ----------------------------------
+MUT_D="$WORK/mutant-base.sh"
+sed 's/-gt 0 \]; then/-gt 99 ]; then/' "$VALIDATOR" > "$MUT_D" || exit 2
+if cmp -s "$VALIDATOR" "$MUT_D"; then
+  echo "FIXTURE ERROR: the branch-base mutation matched nothing -- the comparison was rewritten" >&2
+  echo "  update the sed pattern in assertion 14 to match the real comparison" >&2
+  exit 2
+fi
+bash "$MUT_D" >"$WORK/mut3.txt" 2>&1
+mut_d_status=$?
+if [ "$mut_d_status" = "0" ]; then
+  ok "MUTATION: raising the branch-base arm's threshold makes assertion 13's input go green"
+else
+  bad "MUTATION: assertion 13's input still fails (exit $mut_d_status) without the branch-base arm"
+  sed 's/^/        /' "$WORK/mut3.txt"
+fi
+
+# --- 15. CONTROL: caught-up origin/main goes silent ----------------------------
+# Keyed on the INHERITANCE, not on merely standing on a branch. Same branch, same
+# commits, one ref moved.
+git update-ref refs/remotes/origin/main "$ahead_main"
+status="$(run0)"
+if [ "$status" = "0" ]; then
+  ok "CONTROL: the same branch passes once origin/main carries those commits"
+else
+  bad "a clean branch failed -- the arm fires on being on a branch at all"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 16. The remedy is not indicted --------------------------------------------
+# Pushing main is HOW unpushed main commits reach origin. An arm that fires on the
+# remedy is an arm that gets turned off, so it must be n/a there -- and must SAY
+# it is n/a rather than reporting the same green as an evaluated run.
+git update-ref refs/remotes/origin/main "$(git rev-parse main~1)"
+git checkout -q main
+status="$(run0)"
+if [ "$status" = "0" ] && grep -q 'branch-base arm n/a on main' "$WORK/out.txt"; then
+  ok "on main the branch-base arm is n/a, and the summary says so rather than claiming a green arm"
+else
+  bad "the arm fired on main, or reported an unevaluated arm as green -- exit $status"
+  sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 17. An arm that CANNOT be evaluated announces itself ----------------------
+# A quiet skip reads exactly like a pass. With no origin/main there is nothing to
+# compare against, and that has to be visible in the output.
+git checkout -q release/0.2.0
+git update-ref -d refs/remotes/origin/main
+status="$(run0)"
+if [ "$status" = "0" ] \
+   && grep -q 'branch-base arm not evaluated' "$WORK/out.txt" \
+   && grep -q 'BRANCH-BASE ARM NOT EVALUATED' "$WORK/out.txt"; then
+  ok "with no origin/main the arm announces it did not run, in the NOTE and in the summary"
+else
+  bad "an unevaluated arm passed silently -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
 echo ""
+if [ "$made" -ne "$EXPECTED_ASSERTIONS" ]; then
+  echo "release-version-triple: FAIL — $made assertions ran, $EXPECTED_ASSERTIONS were written. An arm did not execute at all, which is not the same as an arm that passed. Find the one that vanished before reading anything above as green."
+  exit 1
+fi
 if [ "$fails" -eq 0 ]; then
-  echo "release-version-triple: PASS"
+  echo "release-version-triple: PASS ($made assertions)"
   exit 0
 fi
-echo "release-version-triple: FAIL ($fails assertion(s))"
+echo "release-version-triple: FAIL ($fails of $made assertion(s))"
 exit 1

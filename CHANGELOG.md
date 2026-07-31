@@ -17,6 +17,72 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.219.0] — 2026-07-31
+
+### Added — the release triple gains a RANGE grain, because a squash defeated the per-commit one
+
+**The event this closes.** A release branch was cut from a local `main` that was fourteen commits
+ahead of `origin/main`. The PR therefore took `origin/main` as its merge-base, and its squash-merge
+carried three releases — v0.215.0, v0.216.0 and v0.217.0 — under one `feat(v0.217.0):` subject.
+`CLAUDE.md` forbids exactly this: *"Squash-merge only single-version branches: a squash of several
+takes the first version in the subject and breaks the triple."* The prohibition had no mechanism.
+
+**The tell was the validator going QUIETER, not louder.** `validate-release-version.sh` reported
+`PASS 15 commit(s)` on the branch and `PASS 1 commit(s)` on the squashed `main`. Both are PASS. The
+surviving commit's subject, `VERSION` and CHANGELOG heading all agreed, because the fourteen commits
+that could have disagreed were no longer there to. A check whose subject set collapses reports green.
+
+**So neither new arm keys on agreement between the triple's three members** — an arm keyed on
+agreement is satisfied by the collapse it exists to catch. Both key on the range.
+
+- **Arm C — a range adds at most one `## [X.Y.Z]` CHANGELOG heading.** Derived from the heading set
+  at each end of the range, so a multi-version branch is one by construction whether or not it has
+  been squashed yet. It fires at push, *before* the squash, which is the earlier seam.
+- **Arm D — a branch carries no commit that is on local `main` and not on `origin/main`.** That is
+  the precondition of the squash above: such commits sit behind the PR's merge-base and ride into it
+  unremarked. Evaluated in the default range mode only, and never when HEAD is `main` — pushing main
+  is how those commits reach origin, and an arm that fires on the remedy is an arm that gets turned
+  off.
+
+**Measured false-positive set: empty, over all 443 non-merge commits on `main`** — one commit per
+squashed PR. Two fire, and both are real instances of the prohibition rather than false positives:
+
+| Commit | Adds | Adjudication |
+|---|---|---|
+| `3288915` v0.95.0 | 2 | swallowed v0.94.0, and **passes the triple today** |
+| `5b5b95c` v0.172.0 | 8 | subject says `v0.169.6`, so predicate A already catches this one |
+
+One of the two is invisible to every existing predicate, which is what establishes the arm is not
+redundant with A and B. The sweep was re-run with the shipping script rather than a replica and
+reproduced the same two; controls in the same invocation — a phrase that must be absent returns 0
+across all 443, and every one of the 443 emitted a summary line, so the sweep was not vacuous.
+
+**Shown red on the real event, which was the stop condition.** Against the retained
+`safety/squash-de1cc21`: `FAIL this range adds 3 release headings to CHANGELOG.md: 0.215.0 0.216.0
+0.217.0`, exit 1, where the shipping validator before this release exits 0. It is also red on
+`04cea81..safety/true-main-cc7e9f9` — the true fifteen-commit branch, *before* any squash — which
+demonstrates the earlier seam rather than asserting it.
+
+### Added — `release-version-triple` grows from 8 assertions to 18
+
+Two mutants, an unmutated control, and the load-bearing assertion: **a single commit carrying two
+releases whose subject, `VERSION` and top heading all agree** must still fail. Predicates A and B are
+satisfied on that input by construction, so only the range arm can produce the red — and the
+unmutated-copy control proves the subsequent mutant's flip to green came from the mutation and not
+from a copy that could not execute. The two mutants were checked for entanglement in both directions:
+each kills its own arm and leaves the other red.
+
+**The `EXPECTED_ASSERTIONS` guard caught an off-by-one in itself on its first run** — eighteen
+assertions ran against a written seventeen, because assertion 6 emits two. This is the second
+consecutive release in which that guard's first act was to catch its own author.
+
+### Changed — the validator's PASS line enumerates the arms that actually ran
+
+A fixed summary would report an unevaluated arm as a green one. The line now distinguishes *evaluated
+and clean* from *n/a on main*, *n/a for an explicit range*, and *NOT EVALUATED*, and every
+non-evaluation also prints its reason as a `NOTE`. Asserted directly: with no `origin/main` present,
+the run is exit 0 **and** says in two places that the arm did not run.
+
 ## [0.218.0] — 2026-07-31
 
 ### Changed — the consumer naming partition becomes TOTAL, and ERROR

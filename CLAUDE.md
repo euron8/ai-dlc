@@ -76,3 +76,12 @@ lint is one the operator turns off, which is worse than none.
 Commit subject, `VERSION`, and the `CHANGELOG` heading are **one claim**, joined
 at pre-push. Squash-merge only single-version branches: a squash of several takes
 the first version in the subject and breaks the triple.
+
+Both halves are now mechanised in `scripts/validate-release-version.sh`, and the
+second half is there because the first one could not see it — the triple is
+per-commit, and a squash deletes the commits that would disagree, so it reported
+PASS on the branch and PASS on the squash that swallowed three releases. The range
+arms therefore key on the CHANGELOG heading set across the range, never on
+agreement between the triple's three members. **Cut release branches from
+`origin/main`, not from a local `main` that may be ahead of it** — that is the
+precondition the second arm checks, and the one that actually fired.
