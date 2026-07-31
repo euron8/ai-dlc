@@ -581,8 +581,8 @@ fi
 }
 
 # --- Assertion 21: I45 — core stays out of the reserved consumer band ---------
-# I45 is the CORE half of W5's partition, and it is the half a consumer cannot check.
-# W5 tells an author to renumber into the band at 900; the only thing that makes that
+# I45 is the CORE half of E15's partition, and it is the half a consumer cannot check.
+# E15 tells an author to renumber into the band at 900; the only thing that makes that
 # advice safe is core never allocating there. If I45 stops firing, nothing anywhere
 # notices until core ships the allocation, and by then the collision has landed
 # retroactively across gate logs that are the audit record.
@@ -614,9 +614,50 @@ if cmp -s "$SKB.orig" "$SKB"; then
 else
   out="$(bash "$V" 2>&1)"
   if grep -q "core allocates rule number(s) at or above the reserved consumer band" <<<"$out"; then
-    ok "a core rule numbered 900 FAILS I45 (core cannot allocate from the range W5 tells consumers to move into)"
+    ok "a core rule numbered 900 FAILS I45 (core cannot allocate from the range E15 tells consumers to move into)"
   else
     bad "core allocated Rule 900 and I45 stayed silent — the band is a promise to consumers with nothing holding core to it"
+  fi
+fi
+restore
+
+# ARM 1b — THE ALPHABETIC HALF, which is a separate partition and needs its own fire
+# arm. A band is numeric and alphabetic ids have no ordering in one, so they are
+# partitioned by a reserved PREFIX instead: the consumer takes `X…`, core takes
+# everything else. The numeric arm above cannot reach this — `XAP` has no leading
+# integer — so without this assertion core could allocate straight into the range a
+# consumer renamed `AP` into, and I45 would report clean. On the reference consumer that
+# is not hypothetical: it defines `AP`, `VH`, and its own `H1` which core also defines,
+# and four releases of a numeric-only band could see none of them.
+GVB="$ROOT/core/skills/ai-dlc/steps/gate-validation.md"
+cp "$GVB" "$GVB.orig"
+printf '\n### XAP. A core check allocated inside the consumer alphabetic prefix\n<!-- CHECK_LOADED: XAP -->\n\nBody.\n' >> "$GVB"
+if cmp -s "$GVB.orig" "$GVB"; then
+  bad "FIXTURE BROKEN: the I45 alphabetic fire mutation did not change gate-validation.md, so this assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "core allocates alphabetic check id(s) beginning with the reserved consumer prefix" <<<"$out"; then
+    ok "a core check id 'XAP' FAILS I45 (the alphabetic half of the partition has a mechanism, not just a paragraph)"
+  else
+    bad "core allocated check 'XAP' and I45 stayed silent — a consumer that renamed 'AP' into the reserved prefix has bought nothing, and the collision it migrated to escape reappears upstream for every consumer at once"
+  fi
+fi
+restore
+
+# ARM 1c — VACUITY, the prefix. Same shape as the floor arm below and for the same
+# reason: an unreadable BAND_ALPHA_PREFIX makes every core alphabetic id conforming,
+# which is this arm's PASS. It has to fail loudly instead.
+VLE="$ROOT/core/scripts/validate-layer-entries.sh"
+cp "$VLE" "$VLE.orig"
+sed 's/^BAND_ALPHA_PREFIX=/BAND_ALPHA_SUFFIX=/' "$VLE.orig" > "$VLE"
+if cmp -s "$VLE.orig" "$VLE"; then
+  bad "FIXTURE BROKEN: the I45 alphabetic-prefix mutation matched nothing, so its vacuity assertion is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "could not read BAND_ALPHA_PREFIX" <<<"$out"; then
+    ok "an unreadable BAND_ALPHA_PREFIX FAILS I45 loudly (a prefix it cannot read would make every core alphabetic id conforming)"
+  else
+    bad "I45 reported clean with BAND_ALPHA_PREFIX renamed — the alphabetic half retires itself silently the moment the constant moves"
   fi
 fi
 restore

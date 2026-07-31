@@ -74,14 +74,24 @@ Core absorbed this as its check 21 — same check, DIFFERENT number. Invisible t
 number-keyed join, which is how it survived unreported.
 
 ### 40b. Suffixed allocation beside core's 40.
-OUT OF BAND by integer but EXCLUDED from W5 by its suffix: `40b` marks a position
+OUT OF BAND by integer but EXCLUDED from E15 by its suffix: `40b` marks a position
 next to core's 40, and a band cannot express "beside". Renumbering it to 940b would
 move it away from the thing it exists to sit next to. Silent.
 
 ### 933. In-band consumer allocation (the conformant state).
-At or above the band floor, so W5 must be silent. This is the positive control for
+At or above the band floor, so E15 must be silent. This is the positive control for
 the whole check: without it, deleting the band arm outright would look identical to
 a passing run on the three assertions above.
+
+### AP. Attribution-provenance audit (an ALPHABETIC allocation).
+A band is numeric and cannot order `AP`, so the alphabetic half of the partition is a
+reserved PREFIX instead. `AP` does not carry it and is out of band; the remedy is `XAP`.
+The reference consumer carries exactly this shape, alongside its own `H1` — which core
+also defines, and which four releases of a numeric-only band could not see.
+
+### XQ. In-band alphabetic allocation (the conformant state, alphabetic half).
+Carries the reserved prefix, so it is silent. Without it, deleting the alphabetic arm
+outright would look identical to a passing run on `AP` above.
 EXT
 
 # --- a core STEP file whose step numbers a prose list can shadow ---------------
@@ -220,7 +230,7 @@ Same number AND same title as core -> a RESTATEMENT (Rule 27(c)), not a collisio
 
 ## Rule 44 -- Consumer-only rule with no core counterpart
 Core defines no rule 44, so it is silent for the COLLISION arm — that arm joins
-against the numbers core defines, and 44 is not one. It is exactly W5's subject for
+against the numbers core defines, and 44 is not one. It is exactly E15's subject for
 the same reason: core has not allocated 44 YET, and the day it does, this rule
 collides retroactively across every citation already written.
 

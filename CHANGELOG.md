@@ -17,51 +17,150 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-### Refuted — `LC-N5` stays WARN: the `kind: qualifier` grain cannot carry the tightening
+## [0.218.0] — 2026-07-31
 
-No release consumed. Recorded here because a refutation nobody writes down gets re-proposed, and
-this one has been carried as an open prerequisite since v0.195.0.
+### Changed — the consumer naming partition becomes TOTAL, and ERROR
 
-`LC-N5` (code `W5`) reports a consumer entry allocating a bare integer core has not defined, below
-the reserved band at 900. It has been WARN since it shipped, and the recorded reason it could not
-become ERROR was that it tells a deliberate qualifier from a squatter only by the fact that core
-already defines the number — with `kind: qualifier` + `extends:` (v0.196.0) named as the declared
-grain that would replace that test. **Measured against the reference consumer: the grain cannot do
-it, and the obstacle is structural rather than adoption.**
+**Operator-directed, and it overturns this file's own `Unreleased` refutation from the previous
+session.** That entry concluded *"`LC-N5` stays WARN"* and recorded the exclusion for
+core-defined numbers as correct. Both are withdrawn. The direction, in the operator's words:
+*"There is to be no carve out for only if 'core wrote it first'. We are literally making massive,
+sweeping changes to align on core as the source of truth and you're making carve outs that weaken
+the very premise of the plan."* Core is the source of truth for its own id range. A mechanism that
+carves an exception out of that premise is not a weaker version of the goal; it is the goal
+abandoned quietly.
 
-- **0 of 33 extension entries declare `kind: qualifier`, `extends:` or `position:`** — 19 releases
-  after the grain shipped and was written into the consumer's own entry contract. Control: 33
-  entries carry `^kind:`, values `step-domain` 21 / `role` 8 / `check` 4; every raw grep hit for the
-  three keys is in `extensions/README.md`, which `layer_files()` excludes by name.
-- **`kind:` is per FILE; `W5`'s subject is per HEADING.** Both live subjects (`Rule 31`, `Rule 32`)
-  share one entry file with four core-defined rules the exclusion keeps. No per-file flag separates
-  them.
-- **E11 bars the flag on every entry that would need it.** `kind: qualifier` requires `extends:`,
-  which admits exactly one anchor; the four entries carrying core-defined numbers render into 14, 3,
-  4 and 4 core sections.
-- Counterfactuals: replacing the exclusion with the flag moves the subject set **2 → 27**; adding it
-  as a further exemption exempts nothing.
+**Four exclusions removed. Each was argued for on its merits, and each was measured to be hiding a
+live collision.**
 
-`LC-N5` also stays WARN independently of the grain — its two subjects are live in the consumer,
-core cannot renumber them, and an ERROR would block that consumer's next pull until it renamed its
-own catalog. `contract_version` stays 7 and no clause text changed.
+| Exclusion | Its stated reason | What it was hiding |
+|---|---|---|
+| a number **core already defines** | *"an entry qualifying core's Rule 13 shares that integer BECAUSE the integer is the reference"* | 32 of the 49 subjects. The reasoning conflates the HEADING with the REFERENCE: the heading is an allocation from core's namespace, the reference is prose in the body, and renumbering the heading moves the first and leaves the second exactly where it was |
+| **suffixed** ids (`19b`, `4a-bis`, `5c-table`) | *"a suffix marks a POSITION beside core's N"* | 15 ids, of which **6 collide with core today** (`1a`, `2a`, `2d`, `2e`, `3a`, `3b`). The position is carried by the numeric prefix and survives the move |
+| **alphabetic** ids (`AP`, `VH`, `H1`) | *"a band is numeric and cannot order them"* | 3 ids, including the consumer's own `H1`, **which core also defines** — the seventh live collision and the one invisible longest. True premise, wrong conclusion: a reserved PREFIX is a partition that needs no ordering |
+| `kind: check` **scoping** | *"a step number is a position in an ordered PROCEDURE"* | 15 step ids. Same answer as the suffix: the prefix carries the order |
 
-### Fixed — a header note in `validate-layer-entries.sh` that overstated `W5`'s exclusion
+**The remedy forms.** Numeric-leading ids take a `9` with the leading integer zero-padded to two
+digits — `19b` → `919b`, `0b` → `900b`, `5c-table` → `905c-table`. Without the padding `0b` becomes
+`90b`, still below the floor: a remedy that does not remedy, and the fixture asserts every offered
+remedy is itself in band. Alphabetic ids take the reserved `BAND_ALPHA_PREFIX=X`: `AP` → `XAP`.
 
-Comment-only; no behaviour change. The note called the core-defined-number exclusion *"the exclusion
-that keeps the check honest"* and said the reference consumer *"carries four such rules, each
-declaring itself a tightening of the core rule it names."* Re-derived: **eight** such rules across
-two entry files, and one of them declares no tightening of anything. The consumer authored its
-`Rule 30` on 2026-07-20 as one of three siblings from a single retro (the other two are `W5`'s live
-subjects); core allocated an unrelated `Rule 30` six days later. **`W5` stopped reporting that
-number on the day its own warning came true**, because the exclusion asks whether core defines it
-*today* — and `W4` does not report it either, since the consumer's remedy was a catalog label and
-`W4` reads a labelled heading as resolved. Neither arm fires on the one number in that tree that has
-actually detonated. The header now states the hole, the corrected count, and one unwired candidate
-predicate: a deliberate qualifier cannot reference a core rule that does not exist yet, so
-authorship order separates the classes — 7 core-first, 1 consumer-first, 0 undecidable across all
-eight. It is not wired because a shallow or squashed consumer clone answers empty on both sides, and
-an arm that cannot fire reads exactly like one that passed.
+**What is genuinely lost, stated rather than smoothed.** A renamed id no longer sorts beside the
+core id it used to sit next to — `retro.md`'s `4a-bis/ter/quater` no longer land between core's `4a`
+and `4b`. That cost was named before the decision and accepted. An entry whose purpose is to render
+*inside* a core section is `kind: qualifier` with `extends:`, which does exactly that and needs no id
+from core's range at all.
+
+**`LC-N5` is now ERROR and its code moves `W5` → `E15`** (E7–E14 were taken). A clause at
+`level: ERROR` carrying a `W`-tier code is the internal contradiction this repo hunts, so the token
+moved with the level across all eight files that carry it. `contract_version` 7 → **8**.
+
+**Measured on the reference consumer, every figure with its control.**
+
+| | |
+|---|---|
+| before | exit **0**, `0 error(s), 2 warning(s)` — Rules 31/32 |
+| removing only the core-defines exclusion | `0 error(s), 27 warning(s)` |
+| **the total partition, at ERROR** | exit **1**, **49 band errors across 13 files** |
+| of which core has already allocated over | **32** |
+| live collisions the four exclusions hid | **7** |
+| in-band / suffixed-in-band / alphabetic-in-band controls | silent in every run |
+
+The severity argument that kept this at WARN gets **stronger**, not weaker, and is answered rather
+than ignored: blocking a pull on 5 subjects would wedge a consumer out of taking a fix over its own
+catalog, and blocking on 49 would wedge it flat. That is the point. The migration is now scheduled
+work with a mechanism behind it instead of advice that has gone unread for 23 releases.
+
+### Added — `LC-N6` / `E16`: an id that leaves the rulebook needs a crosswalk row
+
+The partition above renames 49 ids. Every one is a bare `Check N` / `Rule N` already written into a
+gate log, retro or escalation — and a gate log is the durable audit record, so no rename reaches back
+into it. The crosswalk row is the only thing that keeps the citation resolvable.
+
+**The withdrawn completeness clause stays withdrawn, and this is not it.** Core does not check the
+table against a consumer's evidence and still does not claim to: it cannot see which ids a consumer
+has cited, and a clause core cannot evaluate is a rule with no mechanism behind it (I37). The charter
+promised that clause; graph's shipped `extensions/README.md` refused it on correct grounds, and that
+withdrawal is recorded here rather than left as a promise in one file and a refusal in another. What
+`E16` enforces is the one thing core *can* see — an id leaving the rendered rulebook, read from the
+consumer's own git history — which covers every rename the migration itself creates.
+
+**Its subject set was wrong on the first cut and the correction is the interesting part.** Asking
+*"did an id leave THIS entry"* reported **32** subjects on the reference consumer, **25 of them
+wrong**. Every wrong one was an entry that had stopped RESTATING a core section — `retro-domain.md`
+alone carried twenty of core's own retro step ids. Nothing was retired there: a citation of `Step 7a`
+still resolves, to core's `7a`. The subject is *left the rendered rulebook* — core plus every entry
+hooking it — which is a narrowing of the subject set and **not** an exclusion from the partition: an
+id core defines is resolvable *because* core is the source of truth for it. After the correction: **4
+subjects, all genuine** (`33`, `34`, `35`, and one id core itself retired).
+
+**It refuses rather than guessing.** An unreadable id history and a clean one produce the same empty
+retired-set, which is the arm's PASS. So a missing git work tree, a shallow clone, or a tracked entry
+whose diff history yields none of its own ids produces one counted ERROR line naming every entry it
+did not judge.
+
+**Where it lives, and why not where a reader would look.** The natural home is
+`reconcile/layer-drift.sh`, blocking `apply`. But that script's span is `base_sha..theirs` in the
+*distribution*, and a renumber is a *consumer*-side event between two consumer commits — no
+distribution span contains it. The arm is authoring-time and ERROR, so the consumer's own pre-push
+refuses: earlier and stricter than blocking a later pull.
+
+### Added — `I45` gains the alphabetic half of the partition
+
+`I45` held core to allocating no check or rule *number* at or above `BAND_FLOOR`. Two gaps, both
+closed: its numeric arm was anchored `^[0-9]+$`, so a core id like `901a` — numeric-leading, suffixed,
+inside the consumer band — was not a subject at all; and nothing held core off the `X` prefix. Without
+the second, a consumer that renames `AP` to `XAP` on this release's instruction has bought nothing.
+Both arms read their constants from `validate-layer-entries.sh` and fail loudly when either is
+unreadable, because a constant it cannot read makes every core id conforming.
+
+### Added — `layer-retired-id-crosswalk` fixture; `layer-catalog-collision` rewritten
+
+The new fixture seeds a consumer whose **git history** carries a real renumber, because E16's subject
+cannot be seen in a working tree: an id renamed into the band and an id that never existed are both
+simply absent at HEAD. 11 assertions, 4 mutants scored by exact vector, an unmutated control, a real
+`--depth 1` clone for the zero guard, and `EXPECTED_ASSERTIONS`.
+
+`layer-catalog-collision`'s band section is rewritten for the total partition: its seed gains an
+alphabetic allocation (`AP`) and an in-band alphabetic control (`XQ`), and its four mutants now knock
+out the floor, the alphabetic branch, the already-collided split and the step-domain scope — each
+scored on the complete 15-cell vector, since four of the five arms are occupied by more than one
+subject and per-row scoring would report entanglement on every mutant.
+
+**One mutant is recorded because it was wrong first.** The shallow-clone mutant originally knocked
+out E16's per-file guard and the shallow tree still refused — two different branches produce a
+refusal and only one is reachable on a shallow clone. A mutant that fails to move its cell is telling
+you the arm it named is not the arm under test.
+
+### Fixed — two defects produced while building this release
+
+Both are the repo's named class, produced inside the work that was about to ship a mechanism against
+it, and both are recorded because the shape recurs.
+
+- **A `$( )` subshell swallowed a probe's state.** `authorship_probe`'s successor,
+  `crosswalk_probe`, sets a run-level variable and was first called lazily from inside a function
+  invoked as `$(...)`. Every assignment landed in a subshell and was discarded: the state read as
+  unset on every entry, the two `git rev-parse` calls re-ran once per file, and the degraded-mode
+  message named the generic reason on a tree that is plainly not a git repo at all. It is now primed
+  in the parent shell before the loop.
+- **A zero guard that fired 51 times on a clean tree.** E16's guard compared the entry's historical
+  ids against the *global* resolvability set, which is never empty — so it fired for every entry that
+  simply defines no rule. A guard that cannot tell "this file has no rules" from "I could not read
+  this file's rules" is noise, and noise is how a real refusal gets scrolled past.
+
+### Refuted — authorship order as a narrower exclusion
+
+Measured, with controls, and the **measurement holds**: over the 27 bare-integer subjects the
+de-blinding exposes, **24 core-first, 1 consumer-first (`Rule 30`), 2 core-never, 0 undecidable**,
+reproducing the 7/1/0 the validator's own header recorded over the eight rules. Read from the
+consumer's own git via a pickaxe over the vendored core copy and the entry file — so *"first"* means
+the date this consumer RECEIVED core's id, which is the right question for intent: an author cannot
+reference a number their tree has never carried.
+
+It was **built, run green, and reverted**, because as an exclusion it would have kept 24 of 27
+consumer allocations silent on the grounds that core happened to number first — the *"numbering is a
+**label**, not a namespace"* position the band exists to replace. It is recorded here, and in the
+governing plan, so it is not re-proposed: the defect is in the reasoning, not the arithmetic.
 
 ## [0.217.0] — 2026-07-31
 

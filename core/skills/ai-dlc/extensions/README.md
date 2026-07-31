@@ -228,7 +228,7 @@ state of your tree, so a pull that changes nothing here still reports it.
   absorbed-but-kept extension is the single most common way a layer rots: it starts as
   an exact duplicate and diverges from there.
 
-## Catalog crosswalk table (`kind: check` consumers)
+## Catalog crosswalk table (every namespace)
 
 Keep one table here, in this file, mapping every check you have ever numbered to its
 label and title. It is the resolver for any `Check N` written in your gate logs,
@@ -240,17 +240,27 @@ is the rotation date, not the authorship date.
 Seed it from the `EXTENSION-CHECK-NUMBER-COLLISION` and `EXTENSION-RESTATES-CORE` rows
 of your next `/ai-dlc-update` report, then freeze it.
 
-**The band is what retires this table.** New checks and rules go at 900 and above
-(LC-N5), where core never allocates, so nothing you number from now on can ever need a
-crosswalk row. The table stays as the resolver for the numbers you allocated *before*
-the band — that history is in your gate logs permanently and no renumber can reach it.
-When you renumber an existing check into the band, keep its old row and add the new
-number to the `notes` column: the row is what makes a bare `Check 33` in a two-year-old
-retro still resolvable. Core does not check this table's completeness and deliberately
-does not claim to — it cannot see which numbers you have ever written into evidence, and
-a clause core cannot evaluate would be a rule with no mechanism behind it.
+**The band is what retires this table.** New ids go at 900 and above, or at the `X`
+prefix if alphabetic (LC-N5), where core never allocates — so nothing you number from now
+on can ever need a crosswalk row. The table stays as the resolver for the ids you
+allocated *before* the band: that history is in your gate logs permanently and no rename
+can reach it. When you rename an existing id into the band, keep its old row and put the
+new id in the `notes` column — the row is what makes a bare `Check 33` in a two-year-old
+retro still resolvable.
 
-| your number | label | title | resolves a bare `Check N` written before | notes |
+**Write column 1 namespaced** — `Check 24`, `Rule 30` — now that the table carries both.
+A bare `30` cannot say which catalog it resolves. Bare entries are still accepted, because
+the row below predates the widening.
+
+**What core checks here, and what it does not.** It does **not** check this table against
+your evidence and does not claim to: it cannot see which ids you have written into a gate
+log, and a clause core cannot evaluate would be a rule with no mechanism behind it. What it
+*can* see is an id leaving the rendered rulebook — your entry defined it, your git history
+says so, and nothing defines it now. **LC-N6 makes that an ERROR until the row exists.** So
+completeness against history stays yours; completeness against every rename from here on is
+enforced.
+
+| your id | label | title | resolves a bare citation written before | notes |
 |---|---|---|---|---|
 | 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24 (adversarial convergence), which core added later |
 
@@ -343,12 +353,32 @@ times on first contact gets disabled and then catches nothing.
   retroactively across every gate log, retro and escalation already written against it. The band
   makes that state unrepresentable where a detector could not see it at all. Bare integers only: a
   suffixed id (`19b`, `4a-bis`) marks a position beside core's number, and an alphabetic id (`AP`)
-  has no ordering in a numeric band. A number core *already* defines is LC-N1..LC-N3's subject, not
-  this one — an entry deliberately qualifying core's Rule 13 shares that integer *because* the
-  integer is its reference, and must never be renumbered. Check numbers are scoped to
-  `kind: check`, exactly as LC-N1 is: a step number is a position in an ordered procedure, not an
-  allocation from a namespace. The remedy is a renumber plus a crosswalk row — **not** a catalog
-  label, which resolves a collision that exists rather than preventing one that does not yet.
+  has no ordering in a numeric band — so alphabetic ids take a reserved **`X` prefix** instead,
+  which is a partition that needs no ordering: `AP` → `XAP`, `H1` → `XH1`. **The partition is
+  total.** Every id you allocate is governed, in every namespace and every `kind:` — bare
+  integers, suffixed ids and alphabetic ids alike. A numeric-leading id takes a `9` with the
+  leading integer padded to two digits: `19b` → `919b`, `0b` → `900b`, `5c-table` → `905c-table`
+  (without the padding `0b` would become `90b`, still below the floor). A number core *already*
+  defines is **not** excluded — your heading is an allocation from core's namespace, while your
+  *reference* to core's rule is prose in your body, so renumbering the heading moves the
+  allocation and leaves the reference exactly where it was. That case is reported with the
+  collision stated as having already happened, because it has. Step ids are governed too: the
+  numeric prefix carries your ordering, so moving your whole range preserves every position
+  within it. What you lose is the ability to sort your section beside a *core* section of the
+  same number — and if that is what an entry needs, it is `kind: qualifier` with `extends:`,
+  which renders it *inside* the core section and needs no id from core's range at all. The
+  remedy is a rename plus a crosswalk row — **not** a catalog label, which resolves the reference
+  at the point of use from here on and cannot reach back into evidence already written.
+- **[LC-N6]** ERROR — an id you have **retired** carries a crosswalk row resolving it, in both
+  namespaces. The renumber LC-N5 asks for is what creates these: every retired id is a bare
+  `Check N` / `Rule N` already written into a gate log, retro or escalation, those citations are
+  permanent, and no rename reaches back into them. Core does **not** check this table against your
+  evidence and still does not claim to — it cannot see which numbers you have cited. What it can
+  see is an id leaving the rulebook, which it reads from your own git history. An id core or a
+  sibling entry still defines is not retired; the citation lands. Where that history cannot be
+  read — a shallow clone, no git, a tracked entry whose diff history yields none of its own ids —
+  this clause **refuses**, naming and counting the entries it did not judge, rather than
+  degrading to a silence indistinguishable from a clean result.
 - **[LC-R1]** WARN — a `Step <n>` reference in a layer entry resolves to an anchor defined
   somewhere in the rendered rulebook: core plus your own layers.
 

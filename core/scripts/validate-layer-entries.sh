@@ -69,9 +69,10 @@
 #        anything. WARN for the same reason W1 is: eight ERRORs on first contact is
 #        a linter that gets switched off, and a consumer must never be unable to
 #        take a security fix because its own rule catalog needs relabelling.
-#     W5 extension ALLOCATES a check or rule number core has NOT allocated, below the
-#        reserved consumer band. This is the case E6 and W4 are structurally unable
-#        to see, and it is the one that decides whether they ever fire.
+#     E15 extension ALLOCATES a check or rule number below the reserved consumer band —
+#        core's range. Whether core has taken that number yet decides the message, not
+#        the verdict. The case core has NOT taken is the one E6 and W4 are structurally
+#        unable to see, and it is the one that decides whether they ever fire.
 #
 #        E6/W4 are collision detectors: they join the entry's number against the
 #        numbers core defines TODAY. A consumer numbering its own check 33 while
@@ -98,15 +99,22 @@
 #            section it exists to sit next to.
 #          - Alphabetic ids (`AP`, `VH`, `H1`) are excluded — a band is a numeric
 #            partition and cannot order them.
-#          - A number core DOES define is excluded. An entry deliberately
-#            qualifying core's Rule 13 shares that integer BECAUSE the integer is
-#            the reference; those are E6/W4's subject, resolved by the catalog
-#            label, and they must never be told to renumber.
+#          - A number core DOES define is NOT excluded, and REMOVING that exclusion
+#            is what this arm now is. It shipped with one, on the reasoning that an
+#            entry deliberately qualifying core's Rule 13 shares that integer
+#            BECAUSE the integer is the reference. That reasoning conflates two
+#            different things: the HEADING is an allocation from core's namespace,
+#            the REFERENCE to core's rule is prose in the body. Renumbering the
+#            heading to 913 moves the allocation and leaves the reference exactly
+#            where it was. Core is the source of truth for the range below
+#            BAND_FLOOR; a consumer heading there is out of band whoever wrote it
+#            first, and an exclusion that says otherwise is the "numbering is a
+#            LABEL, not a namespace" position the band exists to replace.
 #
-#            THIS EXCLUSION HAS A MEASURED HOLE, and the note that used to sit
+#            THE EXCLUSION ALSO HAD A MEASURED HOLE, and the note that used to sit
 #            here ("the exclusion that keeps the check honest") overstated it.
-#            The predicate is "core defines this number TODAY", so a subject
-#            LEAVES the set at the moment core allocates its number — which is
+#            The predicate was "core defines this number TODAY", so a subject
+#            LEFT the set at the moment core allocated its number — which is
 #            precisely the retroactive collision this clause exists to warn
 #            about. Re-derived on the reference consumer: EIGHT entry rules share
 #            a core integer across two files, not four, and one of them is not a
@@ -116,16 +124,23 @@
 #            unrelated Rule 30 six days later. The warning came true, and the
 #            number went quiet here on the day it did. W4 does not report it
 #            either — the consumer's remedy was a catalog label, which W4 reads
-#            as the resolved state. Neither arm fires on the one number in the
-#            tree that has actually detonated.
+#            as the resolved state. Before this release, NEITHER ARM FIRED on the
+#            one number in the tree that had actually detonated.
 #
-#            Authorship order separates the two classes and nothing here reads it
-#            yet: a deliberate qualifier cannot reference a core rule that does
-#            not exist yet. Measured over all eight, from the consumer's own
-#            history: seven core-first, one consumer-first, none undecidable. It
-#            is not wired because a shallow or squashed consumer clone answers
-#            empty on both sides, and an arm that cannot fire reads exactly like
-#            one that passed. It needs a zero guard before it needs a predicate.
+#            Authorship order was measured as a candidate predicate for keeping a
+#            narrower exclusion — from the consumer's own history, seven core-first,
+#            one consumer-first, none undecidable over those eight; 24/1/2 over the
+#            full 27-subject set this de-blinding exposes. It is recorded and NOT
+#            shipped: it would have kept 24 of 27 consumer allocations silent on the
+#            grounds that core happened to number first, which is the carve-out
+#            above, wearing a git pickaxe. It also needed a zero guard, because a
+#            shallow or squashed clone answers empty on both sides and an arm that
+#            cannot fire reads exactly like one that passed.
+#
+#            SO THE SUBJECT SET IS EVERY BARE INTEGER BELOW THE FLOOR, and the two
+#            message bodies differ only in what has already happened to it: core
+#            has not allocated it yet (the collision is coming) or core has (the
+#            collision is here, retroactively, and no label reaches back).
 #          - Check numbers are scoped to `kind: check`, exactly as E6 is, and for
 #            the same stated reason: a step number is a POSITION in an ordered
 #            procedure, not an allocation from a namespace, so a step-domain entry
@@ -134,7 +149,7 @@
 #        Rule numbers are not scoped by kind: SKILL.md's rulebook is one global
 #        namespace whatever kind of entry writes into it.
 #
-#        A catalog label does NOT silence this, and that is the one place W5 departs
+#        A catalog label does NOT silence this, and that is the one place E15 departs
 #        from E6/W4's "a labelled heading is the resolved state". The label resolves
 #        an EXISTING collision in the audit record; the band removes the need for a
 #        label at all. A labelled squatter is the expected state on first contact —
@@ -142,13 +157,22 @@
 #        the migration signal, and suppressing it would hide the whole subject set
 #        behind the remedy for a different clause.
 #
-#        WARN, never ERROR. Measured on the reference consumer before shipping: FIVE
-#        live subjects (checks 33/34/35, rules 31/32), zero conforming entries
-#        reported. The remedy is renumbering, which rewrites the consumer's own
-#        durable audit key and needs a crosswalk row per number; blocking a pull on
-#        five of them would wedge a consumer out of taking a fix over its own
-#        catalog. Core is AT 32 checks and 30 rules, so `Rule 31` is literally the
-#        next integer core will allocate — the warning has a live detonation date.
+#        WARN, never ERROR. Measured on the reference consumer at the release the band
+#        first shipped: FIVE live subjects (checks 33/34/35, rules 31/32), zero
+#        conforming entries reported. Re-measured with the membership exclusion removed:
+#        TWENTY-SEVEN — 17 checks and 8 rules that core has ALREADY allocated over, plus
+#        the same 2 pending rules (31/32) the exclusion never hid. Zero conforming
+#        entries reported in either run: the in-band, suffixed and alphabetic controls
+#        stay silent, so the twenty-two the exclusion was suppressing are subjects it
+#        was hiding, not false positives it was preventing.
+#
+#        The severity argument is the same one and it got stronger, not weaker. The
+#        remedy is renumbering, which rewrites the consumer's own durable audit key and
+#        needs a crosswalk row per number; blocking a pull on five of those would wedge
+#        a consumer out of taking a fix over its own catalog, and blocking on
+#        twenty-seven would wedge it flat. Core is AT 32 checks and 30 rules, so
+#        `Rule 31` is literally the next integer core will allocate — the pending
+#        warnings have a live detonation date and the other twenty-five have a past one.
 #
 # Rule 26(c) contract — catches: a layer entry silently duplicating, restricting,
 # or shadowing a core rule upstream has since changed. False-positive cost: one
@@ -433,7 +457,7 @@ rule_labelled() { # rule_labelled <file> <n>
     }' "$1" 2>/dev/null
 }
 
-# --- the reserved consumer numbering band (W5) ---------------------------------
+# --- the reserved consumer numbering band (E15) ---------------------------------
 #
 # ONE definition of the floor, here, because it is a two-sided partition: this file
 # holds the CONSUMER side (allocate at or above it) and I45 in
@@ -442,6 +466,14 @@ rule_labelled() { # rule_labelled <file> <n>
 # halves disagree is worse than no partition — it would declare a range safe that
 # core is still allocating from.
 BAND_FLOOR=900
+
+# The ALPHABETIC half of the same partition. A band is an ordering and alphabetic ids
+# (`AP`, `VH`, `H1`) have none, which is why they were excluded from it for four
+# releases — and the exclusion was measured to hide a live collision: the reference
+# consumer defines check `H1` and so does core. A prefix is an ordering-free partition
+# and does the same job: core allocates alphabetic ids that do NOT start with this
+# letter, a consumer allocates ones that do. I45 holds core's side.
+BAND_ALPHA_PREFIX=X
 
 # --- the extension kind vocabulary (E10) ---------------------------------------
 #
@@ -458,15 +490,53 @@ BAND_FLOOR=900
 # the tree it was written against is EMPTY. `qualifier` is added by this release.
 LAYER_KINDS='check step-domain role qualifier'
 
-# Is <n> an allocation this band governs? Bare integers only, and the exclusions are
-# in the header note above: a suffix marks a position beside core's N, and an alpha id
-# has no ordering in a numeric band. Returns 0 (true) for a governed, out-of-band
-# allocation.
-below_band() { # below_band <n>
-  case "$1" in
-    ''|*[!0-9]*) return 1 ;;                 # suffixed or alphabetic -> not governed
+# THE PARTITION IS TOTAL. Every id a consumer entry allocates is governed — bare
+# integers, suffixed ids, alphabetic ids, in every namespace and every `kind:`. This
+# function answers with the CONFORMING FORM of an out-of-band id, and returns 1 when
+# the id is already in band, so a caller cannot report a violation without also
+# holding the remedy.
+#
+# THE THREE EXCLUSIONS THIS REPLACES WERE EACH MEASURED TO HIDE A LIVE COLLISION, which
+# is why none of them survives. Stated in full because each was argued for on its merits
+# and each argument was locally reasonable:
+#
+#   - "a suffix marks a POSITION beside core's N, not an allocation." The reference
+#     consumer carries fifteen suffixed ids and core defines `1a 2a 2d 2e 3a 3b` among
+#     its own — SIX live collisions the band could not see. The suffix does mark a
+#     position, and the position is expressed by the ORDER of the numeric prefix, which
+#     survives the move: `4a-bis` becomes `904a-bis` and still sorts before `904b`.
+#     What it stops doing is sorting beside CORE's `4a`, and that is the accepted cost
+#     of the partition rather than an oversight — a consumer section that must render
+#     inside a core section is what `kind: qualifier` and `extends:` are for.
+#   - "an alphabetic id has no ordering, so a numeric band cannot express it." True, and
+#     a band is not the only partition available. A reserved PREFIX is ordering-free.
+#     Core defines `H1`/`H2`, the reference consumer defines `AP`, `VH` and its own
+#     `H1` — the seventh live collision, and the one that had been invisible longest.
+#   - "a step number is a position in an ordered PROCEDURE, so `kind: check` scoping."
+#     Same answer as the suffix: the numeric prefix carries the order, the band moves
+#     the whole consumer range without permuting it, and a step that must render inside
+#     a core step is a qualifier.
+#
+# The remedy forms:
+#   numeric-leading   `19b` -> `919b`, `0b` -> `900b`, `5c-table` -> `905c-table`
+#                     The leading integer is zero-padded to two digits before the `9`,
+#                     or `0b` would become `90b` — still below the floor, a remedy that
+#                     does not remedy.
+#   alphabetic-leading `AP` -> `XAP`, `H1` -> `XH1`
+out_of_band() { # out_of_band <id> -> conforming form on stdout; rc 1 = already conforming
+  local id="$1" num rest
+  case "$id" in
+    '') return 1 ;;
+    [0-9]*)
+      num="${id%%[!0-9]*}"; rest="${id#"$num"}"
+      # `10#` or a consumer id like `08` is read as invalid octal and the arithmetic
+      # fails silently under `set -u`, which would retire this arm for that one id.
+      [ "$((10#$num))" -lt "$BAND_FLOOR" ] || return 1
+      printf '9%02d%s' "$((10#$num))" "$rest" ;;
+    "$BAND_ALPHA_PREFIX"*) return 1 ;;
+    [A-Za-z]*) printf '%s%s' "$BAND_ALPHA_PREFIX" "$id" ;;
+    *) return 1 ;;
   esac
-  [ "$1" -lt "$BAND_FLOOR" ]
 }
 
 # Do two normalized titles name the SAME check? Jaccard over significant tokens,
@@ -638,7 +708,133 @@ done < <(layer_files "$OVR_DIR")
 # ---------------------------------------------------------------------------
 # Pass 2 — extensions (E4, E5, W1, W2)
 # ---------------------------------------------------------------------------
+# --- E16: an id that LEFT an entry needs a crosswalk row -----------------------
+#
+# The renumber is the event, and it is the one thing about the migration core can
+# actually evaluate. Core cannot see which numbers a consumer has written into its gate
+# logs — `extensions/README.md` says so in its own prose, on correct I37 grounds, and
+# that clause stays withdrawn. But core CAN see that an entry used to define `24.` and
+# now defines `924.`, because the consumer's own history says so. Every such id is a
+# bare citation somewhere in evidence that no longer resolves, and the crosswalk row is
+# what resolves it.
+#
+# WHY THIS IS NOT IN reconcile/layer-drift.sh, where a reader would look for it. That
+# script's span is `base_sha..theirs` in the DISTRIBUTION. A renumber is a CONSUMER-side
+# event — the entry moves between two consumer commits — so no distribution span
+# contains it and the classifier would be joining against the wrong history. Here the
+# consumer's git is already in hand (E2 resolves base_sha against it), the arm is ERROR,
+# and the consumer's pre-push refuses: earlier and stricter than blocking `apply`.
+#
+# THE HISTORICAL SET IS READ FROM THE DIFF, not from one `git show` per commit. On the
+# reference consumer that is 33 git invocations rather than 230, and the union of every
+# ADDED heading line across a file's history is exactly the set of ids it has ever
+# defined. The added lines are written to a temp file and handed to `defined_anchors` /
+# `defined_rules` UNCHANGED, so this arm cannot harvest an id shape the rest of the file
+# would not — a second grammar here is how the five-copy fork in I40's header started.
+#
+# AND IT REFUSES RATHER THAN GUESSING. An empty history and a clean history produce the
+# same empty retired-set, which is this arm's PASS — the named defect class exactly. So
+# a shallow clone, a missing git, or a TRACKED file whose log comes back empty is
+# reported, counted and named, never skipped.
+CROSSWALK_MD="$EXT_DIR/README.md"
+CROSSWALK_STATE=''
+CROSSWALK_UNREADABLE=''
+CROSSWALK_UNREADABLE_N=0
+
+crosswalk_probe() {
+  [ -z "$CROSSWALK_STATE" ] || return 0
+  if ! git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    CROSSWALK_STATE=no-git
+  elif [ "$(git -C "$PROJECT_ROOT" rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then
+    CROSSWALK_STATE=shallow
+  else
+    CROSSWALK_STATE=ok
+  fi
+}
+
+# Column 1 of every data row of every pipe table in the crosswalk file. Deliberately
+# not scoped to one heading: the table is being widened from checks to both namespaces
+# and a heading-scoped reader would have to be edited in lockstep with a prose heading,
+# which is the restatement smell. A separator row and the header cell are dropped by
+# shape, not by position.
+crosswalk_rows() {
+  [ -f "$CROSSWALK_MD" ] || return 0
+  awk -F'|' '/^[[:space:]]*\|/ {
+      v=$2; gsub(/^[ \t`*]+|[ \t`*]+$/,"",v)
+      if (v == "" || v ~ /^-+$/) next
+      if (tolower(v) ~ /^your (number|id)$/) next
+      print v
+    }' "$CROSSWALK_MD" | sort -u
+}
+
+# Every id <extractor> would harvest from any version of <file> in this repo's history.
+historical_ids() { # historical_ids <file> <defined_anchors|defined_rules>
+  local tmp added
+  tmp="$(mktemp "${TMPDIR:-/tmp}/vle-hist.XXXXXX")" || return 0
+  git -C "$PROJECT_ROOT" log -p --format='' -- "$1" 2>/dev/null | sed -n 's/^+//p' > "$tmp"
+  added=$?
+  "$2" "$tmp"
+  rm -f "$tmp"
+  return $added
+}
+
+crosswalk_unreadable() { # crosswalk_unreadable <subject>
+  CROSSWALK_UNREADABLE="${CROSSWALK_UNREADABLE}${CROSSWALK_UNREADABLE:+, }$1"
+  CROSSWALK_UNREADABLE_N=$((CROSSWALK_UNREADABLE_N+1))
+}
+
 echo "== extensions =="
+
+# Primed HERE, in the parent shell. Called from inside a `$( )` it would assign into a
+# subshell, read as unset on every entry, and re-run its two `git rev-parse` calls once
+# per file — and the degraded-mode message would name the generic reason on a tree that
+# is plainly not a git repo at all.
+crosswalk_probe
+CROSSWALK_IDS="$(crosswalk_rows)"
+
+# THE RESOLVABILITY SET — measured, and it is what makes E16's subject the right one.
+#
+# The first form of this arm asked "did an id leave THIS entry", and on the reference
+# consumer that reported 32 subjects of which 25 were wrong. The wrong ones were all the
+# same shape: an entry that used to RESTATE a core section — `retro-domain.md` carried
+# twenty of core's own retro step ids — and later stopped. Nothing was retired there. A
+# gate log citing `Step 7a` still resolves, to core's `7a`, which is exactly where it
+# always pointed. The same for an id that moved to a SIBLING entry hooking the same core
+# file: the catalog still defines it, so the citation still lands.
+#
+# So the question is not "did it leave this file" but "did it leave the RENDERED
+# RULEBOOK" — core plus every entry hooking it. That is a narrowing of the subject set
+# and NOT an exclusion from the partition: an id core defines is resolvable BECAUSE core
+# is the source of truth for it. The band arms above are what make sure the consumer is
+# not squatting on it in the first place.
+#
+# Two sets, never one. `Rule 24` and check `24` are different catalogs that share an
+# integer on purpose, and a merged set would let a live rule resolve a retired check.
+LIVE_ANCHORS=''
+LIVE_RULES=''
+while IFS= read -r _lf; do
+  [ -n "$_lf" ] || continue
+  LIVE_ANCHORS="$LIVE_ANCHORS
+$(defined_anchors "$_lf")"
+  LIVE_RULES="$LIVE_RULES
+$(defined_rules "$_lf")"
+  _lh="$(fm "$_lf" hooks)"
+  [ -n "$_lh" ] || continue
+  _lc="$(resolve_target "$_lh")"
+  [ -f "$_lc" ] || continue
+  LIVE_ANCHORS="$LIVE_ANCHORS
+$(defined_anchors "$_lc")"
+  LIVE_RULES="$LIVE_RULES
+$(defined_rules "$_lc")"
+done < <(layer_files "$EXT_DIR")
+LIVE_ANCHORS="$(printf '%s\n' "$LIVE_ANCHORS" | grep -E '.' | sort -u)"
+LIVE_RULES="$(printf '%s\n' "$LIVE_RULES" | grep -E '.' | sort -u)"
+# A zero here is E16's PASS, so it cannot be allowed to pass silently: an empty live set
+# makes every historical id look retired, which would bury the real subjects in noise and
+# is the mirror of the unreadable-history case below.
+if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ]; then
+  err "E16 built an EMPTY resolvability set from the layer entries and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
+fi
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   kind="$(fm "$f" kind)"; hooks="$(fm "$f" hooks | awk '{print $1}')"; id="$(fm "$f" id)"
@@ -838,7 +1034,7 @@ while IFS= read -r f; do
     warn "$(rel "$f"): RULE NUMBER COLLISION on 'Rule $n' — this defines \"$r_ext\" while core '$hooks' defines \"$r_core\" at the same number. Extensions are ADDITIVE, so both render into one merged rulebook under one integer and a bare \"Rule $n\" in a gate log, retro finding or dispatch brief has two referents. Give this rule a catalog-labelled heading (\"## Rule $n [ext:$id] -- …\") per the Consumer-catalog crosswalk; the integer never moves. \`reconcile/relabel-extension-checks.sh --apply\` writes it."
   done < <(defined_rules "$f")
 
-  # W5 — an allocation from core's range. See the header note for why this is a
+  # E15 — an allocation from core's range. See the header note for why this is a
   # partition rather than a detector, and for every exclusion the predicate carries.
   #
   # THE TWO FILTERS BELOW ARE THE WHOLE CHECK, and each one has to be read in the
@@ -851,26 +1047,77 @@ while IFS= read -r f; do
   # `relabel-extension-checks.sh` CANNOT be offered as the remedy here, and the
   # reason is structural rather than a matter of coverage: its rewrite loop iterates
   # the numbers CORE defines and looks each one up in the entry. A number core does
-  # not define never enters that loop, so the relabeller is blind to W5's entire
+  # not define never enters that loop, so the relabeller is blind to E15's entire
   # subject set by construction. Prescribing it would hand the operator a tool that
   # exits "no unlabelled core-number collisions" on a tree full of findings.
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    below_band "$n" || continue
-    grep -Fxq -- "$n" <<<"$core_rules" && continue
-    warn "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to '9$n' or the next free number in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
+    want="$(out_of_band "$n")" || continue
+    if grep -Fxq -- "$n" <<<"$core_rules"; then
+      err "$(rel "$f"): RULE OUT OF BAND, ALREADY COLLIDED — 'Rule $n' allocates from core's range and core '$hooks' ALREADY defines rule $n. This is not a pending risk; every gate log, retro, escalation and dispatch brief written against a bare \"Rule $n\" has two referents right now, and it acquired the second one retroactively on the day core allocated. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written, which is why numbering is a label and not a namespace until the band makes it one. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries."
+    else
+      err "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
+    fi
   done < <(defined_rules "$f")
 
-  # The check namespace, scoped to `kind: check` exactly as E6 is — a step number is
-  # a position in a procedure, not an allocation, and a band cannot reorder a
-  # procedure without breaking it.
-  if [ "$kind" = check ]; then
-    while IFS= read -r a; do
-      [ -n "$a" ] || continue
-      below_band "$a" || continue
-      grep -Fxq -- "$a" <<<"$core_anchors" && continue
-      warn "$(rel "$f"): CHECK OUT OF BAND — check '$a.' allocates from core's range. Core '$hooks' does not define check $a TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer checks are reserved at ${BAND_FLOOR} and above — renumber to '9$a' or the next free number in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Check $a\" your existing history already carries."
-    done < <(defined_anchors "$f")
+  # THE SECTION-ID NAMESPACE, AND IT IS NO LONGER SCOPED TO `kind: check`. It was, on
+  # the reasoning E6 uses — a step number is a position in an ordered procedure, not an
+  # allocation from a namespace. The partition is total instead: the numeric prefix
+  # carries the order, so moving the whole consumer range preserves every relative
+  # position within it, and what is lost is only the ability to sort a consumer section
+  # beside a CORE section of the same number. A consumer section that must render inside
+  # a core section is `kind: qualifier` with `extends:`, which is the grain built for it
+  # and does not need to borrow core's integer to do it.
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    want="$(out_of_band "$a")" || continue
+    if grep -Fxq -- "$a" <<<"$core_anchors"; then
+      err "$(rel "$f"): SECTION ID OUT OF BAND, ALREADY COLLIDED — '$a.' allocates from core's range and core '$hooks' ALREADY defines '$a.'. Every gate log, retro and escalation written against a bare \"$a\" has two referents right now, and a gate log is the durable audit record, so it cannot be corrected after the fact. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written. E6 may be silent on this entry — a labelled heading is E6's resolved state — and that silence is the label doing its job on the reference, not the allocation ceasing to be one. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
+    else
+      err "$(rel "$f"): SECTION ID OUT OF BAND — '$a.' allocates from core's range. Core '$hooks' does not define '$a.' TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
+    fi
+  done < <(defined_anchors "$f")
+
+  # E16 — every id this entry has RETIRED needs a crosswalk row resolving it.
+  #
+  # Both namespaces, and the row may name the id bare (`24`) or namespaced
+  # (`Check 24` / `Rule 30`). Bare is accepted because the reference consumer's one
+  # existing row is bare and predates the widening; namespaced is what the widened table
+  # documents, because a bare `30` cannot say whether it resolves a check or a rule once
+  # the table carries both.
+  if [ "$CROSSWALK_STATE" = ok ]; then
+    if git -C "$PROJECT_ROOT" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+      for _ns in anchors rules; do
+        case "$_ns" in
+          anchors) _mine="$(defined_anchors "$f")"; _now="$LIVE_ANCHORS"; _was="$(historical_ids "$f" defined_anchors)"; _lbl='' ;;
+          rules)   _mine="$(defined_rules "$f")";   _now="$LIVE_RULES";   _was="$(historical_ids "$f" defined_rules)";   _lbl='Rule ' ;;
+        esac
+        # A TRACKED file whose history yields no id IT currently defines is the
+        # unreadable case, not a clean one: the diff sweep found nothing where the
+        # working tree plainly has something.
+        #
+        # THE GUARD COMPARES AGAINST THIS FILE'S OWN IDS, not the resolvability set,
+        # and the first version got that wrong in a way worth recording. `$_now` is the
+        # rendered rulebook's whole live set and is never empty, so `[ -n "$_now" ]` was
+        # true for every entry — including the great majority that define no RULE at
+        # all — and the guard fired 51 times on a tree with nothing wrong with it. A zero
+        # guard that cannot tell "this file has no rules" from "I could not read this
+        # file's rules" is noise, and noise is how a real refusal gets scrolled past.
+        if [ -n "$_mine" ] && [ -z "$_was" ]; then
+          crosswalk_unreadable "$(rel "$f") (${_ns})"
+          continue
+        fi
+        while IFS= read -r _rid; do
+          [ -n "$_rid" ] || continue
+          grep -Fxq -- "$_rid" <<<"$CROSSWALK_IDS" && continue
+          grep -Fxq -- "${_lbl}${_rid}" <<<"$CROSSWALK_IDS" && continue
+          grep -Fxq -- "Check ${_rid}" <<<"$CROSSWALK_IDS" && continue
+          err "$(rel "$f"): RETIRED ID WITH NO CROSSWALK ROW — this entry used to define '${_lbl}${_rid}' and no longer does, and extensions/README.md carries no row resolving it. Every gate log, retro and escalation written while it was live cites a bare \"${_lbl}${_rid}\", those citations are permanent, and no renumber can reach back into them — the row is the only thing that keeps them resolvable. Add one naming '${_lbl}${_rid}', the id it became, and the title, then this clears. Core does NOT claim to check the table's completeness against your evidence and cannot; it checks the one thing it can see, which is an id leaving this entry."
+        done < <(comm -23 <(printf '%s\n' "$_was" | sort -u) <(printf '%s\n' "$_now" | sort -u))
+      done
+    fi
+  else
+    crosswalk_unreadable "$(rel "$f")"
   fi
 
   # W2 — a restriction in an additive layer is a mis-filed override.
@@ -878,6 +1125,20 @@ while IFS= read -r f; do
     warn "$(rel "$f"): contains restricting language (\"only … are valid\" / \"is NOT subject to\"). An extension ADDS behavior; a restriction on a core rule belongs in overrides/ with a base_sha so drift is tracked."
   fi
 done < <(layer_files "$EXT_DIR")
+
+# E16's degraded mode, emitted ONCE per run rather than once per entry: on a clone with
+# no usable history every entry lands here, and a wall of identical lines is a wall an
+# operator scrolls past. One line, counted and naming its subjects. It is an ERROR and
+# not a note, because "no retired ids" and "I could not look" are the same output
+# otherwise — which is precisely the state this arm was built to end.
+if [ "$CROSSWALK_UNREADABLE_N" -gt 0 ]; then
+  case "$CROSSWALK_STATE" in
+    no-git)  cw_why="this project root is not inside a git work tree" ;;
+    shallow) cw_why="this is a SHALLOW clone, so the id history is truncated at the graft boundary and an id retired before it is invisible" ;;
+    *)       cw_why="the file is tracked but its diff history yielded none of the ids it currently defines" ;;
+  esac
+  err "RETIRED-ID HISTORY UNREADABLE — E16 could not be evaluated for ${CROSSWALK_UNREADABLE_N} entr(y/ies) because ${cw_why}. These were NOT judged clean, they were not judged at all: ${CROSSWALK_UNREADABLE}. Re-run in a full clone (\`git fetch --unshallow\`) before reading the crosswalk as complete."
+fi
 
 # ---------------------------------------------------------------------------
 # Pass 3 — W3: step references resolving nowhere in the rendered rulebook
