@@ -50,6 +50,45 @@
 # correct action is a gate that gets turned off. The commits the merge brings in are
 # each checked on their own, which is where the claim is actually authored.
 #
+# TWO FURTHER JOINS, ADDED AFTER THE TRIPLE WAS DEFEATED BY A SQUASH.
+#
+# The triple is per-commit, and a squash-merge deletes the commits that could
+# disagree. A release branch cut from a local `main` that was fourteen commits
+# ahead of `origin/main` took `origin/main` as its PR merge-base, and the squash
+# of that PR carried three releases under one `feat(v0.217.0):` subject. The
+# surviving commit's subject, VERSION and CHANGELOG heading all agreed, because
+# the fourteen commits that could have disagreed were no longer there to. This
+# script reported `PASS 15 commit(s)` on the branch and `PASS 1 commit(s)` on the
+# squashed main. BOTH ARE PASS.
+#
+# So the arms below must not key on any agreement between the triple's three
+# members: an arm keyed on agreement is satisfied by the collapse it exists to
+# catch. They key on the RANGE instead.
+#
+#   C. A range adds at most one `## [X.Y.Z]` CHANGELOG heading. CLAUDE.md already
+#      states the prohibition -- "Squash-merge only single-version branches: a
+#      squash of several takes the first version in the subject and breaks the
+#      triple" -- and nothing enforced it. A range adding two headings is a
+#      multi-version branch by construction, whether or not it has been squashed
+#      yet, so this fires at push, BEFORE the squash, which is the earlier seam.
+#
+#      MEASURED FALSE-POSITIVE SET: all 443 non-merge commits on main, which is
+#      one commit per squashed PR. Two add more than one heading, and both are
+#      real instances of the prohibition rather than false positives:
+#        3288915  v0.95.0, adds 2 -- swallowed v0.94.0, and PASSES the triple.
+#        5b5b95c  v0.172.0, adds 8 -- its subject says v0.169.6, so predicate A
+#                 already catches that one.
+#      One of the two is invisible to every existing predicate, which is why this
+#      arm is not redundant with A and B. The retained squash `de1cc21` adds three
+#      and likewise passes the triple.
+#
+#   D. A branch carries no commit that exists on local `main` but not on
+#      `origin/main`. That is the PRECONDITION of the squash above: such commits
+#      sit behind the PR's merge-base and ride into it unremarked. Evaluated only
+#      in the default range mode, and never when HEAD is `main` itself -- pushing
+#      main is how those commits reach origin, and an arm that fires on the remedy
+#      is an arm that gets turned off.
+#
 # USAGE
 #   scripts/validate-release-version.sh [--range A..B] [--commit SHA]
 #
@@ -58,8 +97,10 @@
 #                   origin/main is not present (a fresh clone, a detached head).
 #
 # EXIT
-#   0  every checked commit's three names agree
-#   1  a disagreement, or a commit could not be read
+#   0  every checked commit's three names agree, the range carries one release,
+#      and the branch inherits nothing unpushed from local main
+#   1  a disagreement, a multi-release range, an unpushed-main inheritance, or a
+#      commit that could not be read
 
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -85,15 +126,98 @@ else
   [ -n "$COMMITS" ] || COMMITS="$(git rev-parse HEAD 2>/dev/null)"
 fi
 
-if [ -z "$COMMITS" ]; then
-  echo "PASS  no non-merge commits to check."
-  exit 0
-fi
-
 fails=0
 checked=0
+range_fail=0
+base_fail=0
+arm_c_ran=0
+arm_d_ran=0
+arm_d_why=""
 
 semver_of() { printf '%s' "$1" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; }
+
+# ---------------------------------------------------------------------------
+# C. THE RANGE CARRIES AT MOST ONE RELEASE.
+#
+# Keyed on the CHANGELOG heading set at each end of the range, never on the
+# triple's internal agreement -- see the header for why that distinction is the
+# whole point of this arm.
+# ---------------------------------------------------------------------------
+headings_at() {
+  # No `grep -m1`: the first heading is not the question, the SET is. Sorted
+  # because comm requires it.
+  git show "$1:CHANGELOG.md" 2>/dev/null \
+    | grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' | sort -u
+}
+
+range_base=""; range_tip=""; range_why=""
+if [ -n "$COMMIT" ]; then
+  range_tip="$COMMIT"
+  range_base="$(git rev-parse -q --verify "${COMMIT}^" 2>/dev/null)" || range_base=""
+  [ -n "$range_base" ] || range_why="$COMMIT is a root commit -- there is no base to diff its CHANGELOG against"
+elif [ -n "$RANGE" ]; then
+  case "$RANGE" in
+    *..*)
+      range_tip="${RANGE##*..}"
+      range_base="$(git merge-base "${RANGE%%..*}" "${RANGE##*..}" 2>/dev/null)" || range_base=""
+      [ -n "$range_base" ] || range_why="the two ends of $RANGE have no merge base" ;;
+    *)
+      range_tip="$RANGE"
+      range_base="$(git rev-parse -q --verify "${RANGE}^" 2>/dev/null)" || range_base=""
+      [ -n "$range_base" ] || range_why="$RANGE is a root commit" ;;
+  esac
+elif git rev-parse -q --verify origin/main >/dev/null 2>&1; then
+  range_tip="HEAD"
+  range_base="$(git merge-base origin/main HEAD 2>/dev/null)" || range_base=""
+  [ -n "$range_base" ] || range_why="HEAD and origin/main have no merge base"
+else
+  range_tip="HEAD"
+  range_base="$(git rev-parse -q --verify HEAD^ 2>/dev/null)" || range_base=""
+  [ -n "$range_base" ] || range_why="origin/main is absent and HEAD is a root commit"
+fi
+
+if [ -n "$range_base" ]; then
+  arm_c_ran=1
+  added="$(comm -13 <(headings_at "$range_base") <(headings_at "$range_tip"))"
+  # `grep -c` prints 0 and exits 1 on no match; it answers this unaided and a
+  # `|| echo 0` fallback would fire on exactly the case it appears to cover.
+  n_added="$(printf '%s\n' "$added" | grep -c .)"
+  if [ "${n_added:-0}" -ge 2 ]; then
+    echo "FAIL  this range adds ${n_added} release headings to CHANGELOG.md: $(printf '%s\n' "$added" | tr -d '#[] ' | tr '\n' ' ')" >&2
+    range_fail=1
+  fi
+else
+  # Announced rather than skipped: an arm that goes quiet reads exactly like one
+  # that passed, which is the defect this whole script exists downstream of.
+  echo "NOTE  multi-release arm not evaluated -- $range_why"
+fi
+
+# ---------------------------------------------------------------------------
+# D. THE BRANCH INHERITS NOTHING UNPUSHED FROM LOCAL main.
+#
+# Default mode only. An explicit --range or --commit is a question about those
+# commits, not about the branch the operator happens to be standing on.
+# ---------------------------------------------------------------------------
+if [ -n "$COMMIT" ] || [ -n "$RANGE" ]; then
+  arm_d_why="scoped-out"
+else
+  cur_branch="$(git symbolic-ref -q --short HEAD 2>/dev/null)" || cur_branch=""
+  if [ "$cur_branch" = "main" ]; then
+    arm_d_why="on-main"  # pushing main is how unpushed main commits reach origin.
+  elif ! git rev-parse -q --verify origin/main >/dev/null 2>&1 \
+    || ! git rev-parse -q --verify refs/heads/main >/dev/null 2>&1; then
+    echo "NOTE  branch-base arm not evaluated -- origin/main or a local main branch is absent"
+  else
+    arm_d_ran=1
+    inherited="$(comm -12 \
+      <(git rev-list origin/main..HEAD 2>/dev/null | sort) \
+      <(git rev-list origin/main..refs/heads/main 2>/dev/null | sort) | grep -c .)"
+    if [ "${inherited:-0}" -gt 0 ]; then
+      echo "FAIL  this branch carries ${inherited} commit(s) that are on local main and not on origin/main" >&2
+      base_fail=1
+    fi
+  fi
+fi
 
 for c in $COMMITS; do
   short="$(git rev-parse --short "$c")"
@@ -144,8 +268,50 @@ if [ "$fails" -ne 0 ]; then
       made, `git commit --amend` it; the three are one claim, not three.
 EOF
   echo "FAIL: ${fails} of ${checked} commit(s) disagree." >&2
+fi
+
+if [ "$range_fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      A range that adds more than one release heading is a multi-version branch,
+      and CLAUDE.md permits squash-merging single-version branches only: a squash
+      of several takes the first version in its subject and the rest become
+      unattributable. The triple cannot see this -- the commits that would have
+      disagreed are the ones the squash removes, so it reports PASS on the branch
+      and PASS on the squash.
+
+      Remedy: put each release on its own branch off origin/main and merge them in
+      order. If a branch has already collected several, cut the later ones onto
+      fresh branches rather than squashing them together.
+EOF
+fi
+
+if [ "$base_fail" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+      Those commits are behind this branch's merge-base with origin/main, so a PR
+      from here carries them and a squash folds them into the release commit. This
+      is how three releases once shipped under one subject: local main was fourteen
+      commits ahead, the branch was cut from it, and nothing compared the two.
+
+      Remedy: push main first, then rebase this branch onto origin/main. Confirm
+      with `git rev-list --left-right --count main...origin/main` reading 0 0.
+EOF
+fi
+
+if [ "$fails" -ne 0 ] || [ "$range_fail" -ne 0 ] || [ "$base_fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "PASS  ${checked} commit(s): subject, VERSION and CHANGELOG heading agree."
+# The PASS line enumerates the arms that ACTUALLY RAN, and says so per arm. A
+# fixed summary would report an unevaluated arm as a green one, which is the
+# failure mode this file is a response to.
+summary="PASS  ${checked} commit(s): subject, VERSION and CHANGELOG heading agree"
+if [ "$arm_c_ran" -eq 1 ]; then summary="$summary; one release in the range"
+else                            summary="$summary; MULTI-RELEASE ARM NOT EVALUATED"; fi
+if [ "$arm_d_ran" -eq 1 ]; then summary="$summary; no unpushed main commits inherited"
+elif [ "$arm_d_why" = "on-main" ]; then summary="$summary; branch-base arm n/a on main"
+elif [ "$arm_d_why" = "scoped-out" ]; then summary="$summary; branch-base arm n/a for an explicit range"
+else                            summary="$summary; BRANCH-BASE ARM NOT EVALUATED"; fi
+echo "$summary."
 exit 0
