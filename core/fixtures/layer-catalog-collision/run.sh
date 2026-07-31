@@ -40,15 +40,15 @@ echo "layer-catalog-collision:"
 out="$(bash "$LINTER" "$ROOT" 2>&1)"
 
 grep -q "NUMBER COLLISION on '24\.'" <<<"$out" \
-  && ok "24 = COLLISION (core: adversarial convergence / ext: financial-display)" \
+  && ok "E6 — 24 = COLLISION (core: adversarial convergence / ext: financial-display)" \
   || bad "24 not reported as a collision — a bare 'Check 24' in the gate log has no referent"
 
 grep -q "^ERROR.*COLLISION on '24\.'" <<<"$out" \
-  && ok "the collision is an ERROR, not a warning (it reaches the durable audit record)" \
+  && ok "E6 — the collision is an ERROR, not a warning (it reaches the durable audit record)" \
   || bad "the collision is only a warning — a warning nobody reads is how this survived"
 
 grep -q "RESTATES core section '5\.'" <<<"$out" \
-  && ok "5 = RESTATEMENT (same number AND same title), not a collision" \
+  && ok "W1 — 5 = RESTATEMENT (same number AND same title), not a collision" \
   || bad "5 misclassified — same number and same title is a restatement"
 
 grep -q "'7\.'" <<<"$out" \
@@ -83,7 +83,7 @@ grep -q "COLLISION on '7a-post\.'" <<<"$out" \
 # check. Nothing asked whether the block CLOSED, so the shape linted clean while the
 # body it was supposed to carry sat inside the YAML.
 grep -q "unterminated\.md: frontmatter opens with '---' but never closes" <<<"$out" \
-  && ok "unterminated frontmatter is an ERROR (the body is not a body)" \
+  && ok "E1 — unterminated frontmatter is an ERROR (the body is not a body)" \
   || bad "unterminated frontmatter accepted — the entry lints clean while its '### …' body parses as a YAML comment"
 
 # NB: match the full basename — "terminated.md" is a substring of "unterminated.md",
@@ -202,7 +202,7 @@ RELABEL="$(pick "${3:-}" "$HERE/../../skills/ai-dlc-update/reconcile/relabel-ext
                          "$HERE/../../../core/skills/ai-dlc-update/reconcile/relabel-extension-checks.sh")"
 
 grep -q "RULE NUMBER COLLISION on 'Rule 29'" <<<"$out" \
-  && ok "Rule 29 = COLLISION (core: steering budget / ext: split-dispatch)" \
+  && ok "W4 — Rule 29 = COLLISION (core: steering budget / ext: split-dispatch)" \
   || bad "Rule 29 not reported — a bare 'Rule 29' in a gate log has two referents and nothing says so"
 
 grep -q "^WARN.*RULE NUMBER COLLISION on 'Rule 29'" <<<"$out" \
@@ -216,7 +216,7 @@ grep -q "RULE NUMBER COLLISION on 'Rule 30'" <<<"$out" \
   || ok "a labelled rule heading is the resolved state and is silent"
 
 grep -q "RESTATES core 'Rule 8'" <<<"$out" \
-  && ok "Rule 8 = RESTATEMENT (same number AND same title), not a collision" \
+  && ok "W4 — Rule 8 = RESTATEMENT (same number AND same title), not a collision" \
   || bad "Rule 8 misclassified — same number and same title is a Rule 27(c) restatement"
 
 grep -q "COLLISION on 'Rule 8'" <<<"$out" \
@@ -308,7 +308,7 @@ band_remedies() { # band_remedies <linter> <root> -> every remedy it offers, sor
 BAND_WANT="5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-"
 BAND_GOT="$(band_vector "$LINTER" "$ROOT")"
 if [ "$BAND_GOT" = "$BAND_WANT" ]; then
-  ok "the partition reports every id FORM and stays silent on every in-band one"
+  ok "E15 — the partition reports every id FORM and stays silent on every in-band one"
 else
   bad "the band vector moved.
           got  '$BAND_GOT'
@@ -320,7 +320,7 @@ fi
 # until it migrates, which is what makes the collision unrepresentable rather than merely
 # reported. A WARN here would leave the migration optional forever.
 grep -q "^ERROR.*OUT OF BAND" <<<"$out" \
-  && ok "  and the band finding is an ERROR (the migration blocks, it is not advisory)" \
+  && ok "  and the E15 band finding is an ERROR (the migration blocks, it is not advisory)" \
   || bad "  but the band finding is not an ERROR — a reported-only partition is the label-not-a-namespace state the band exists to replace"
 grep -q "^WARN.*OUT OF BAND" <<<"$out" \
   && bad "  a band finding was emitted at WARN — two severities for one clause means one of them is not the contract" \

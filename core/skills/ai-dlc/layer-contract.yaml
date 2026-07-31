@@ -74,6 +74,59 @@
 #          `level:` had NO behavioural reader in the tree — it was checked for presence by I37
 #          and read by nothing.
 #
+# `fixture:` NAMES THE PROOF THAT THE CLAUSE'S CODE ACTUALLY FIRES, and it is the last of the
+# charter's promised per-clause fields to arrive. `enforcer:` + `code:` say a mechanism exists;
+# I64 says the code reaches a site a run can attribute. NONE of that says anything ever makes it
+# speak. A clause can satisfy I36, I37 and I64 with an enforcer arm no fixture has ever driven,
+# which is this repo's named class one level up: an unexercised arm reads exactly like an
+# exercised one that passed.
+#
+# THE VALUE IS A BARE DIRECTORY NAME UNDER `core/fixtures/`, OR THE LITERAL `none`. I65 verifies
+# the declared pair; it never derives one, and the reason is measured. A derived join ("which
+# fixture names this code") has a non-empty false-positive set at every grain tried: at word
+# grain `E4` matches `LC-E4`; at token grain `W2` and `W3` match `core/fixtures/release-version-
+# triple/`, where they are SHELL VARIABLE NAMES. That second false positive was not merely noise
+# — it scored LC-R1 as covered while `W3` is exercised by no fixture at all, so the reason to
+# reject the derived join was also what hid a real gap.
+#
+# What I65 requires of a declared directory: it exists, it carries a `run.sh` (a driverless dir
+# is skipped by the pre-push loop in silence — I20's finding), it NAMES THE CLAUSE'S OWN
+# ENFORCER, and it names the clause's `code:` on a line that is neither a comment nor a seeded
+# contract `code:` declaration. The enforcer scope is load-bearing: `validate-enforcement-map.sh`
+# has its own `W1` and `W2`, so without it a fixture for a different script satisfies the join on
+# a token collision. The comment exclusion is I64's hole arriving one file over — a fixture header
+# sentence listing the checks it covers is prose ABOUT the proof, not the proof.
+#
+# `none` IS DATA, NOT AN EXEMPTION. A clause nothing exercises is a counted gap the build reports,
+# which is exactly what the charter asked this field to state. A reverse arm stops it decaying
+# into the exemption it looks like: a clause may not declare `none` while a fixture exists that
+# would satisfy the join, so writing a fixture and forgetting the clause fails the build instead
+# of leaving the gap on the books forever. Measured at contract_version 9, when the field shipped:
+# 29 clauses declare a fixture, 14 declare `none`.
+#
+# `predicate:` AND `fp:` ARE DELIBERATELY NOT HERE, and both dispositions were measured rather
+# than assumed. They are the charter's last two per-clause promises and each fails a different
+# test this repo already applies:
+#
+#   `predicate:`  an evaluable predicate in a data file is a SECOND IMPLEMENTATION of the
+#                 enforcer's logic, joined to the first by nothing. The repo has a live reading
+#                 on what happens to a restated field: I61 found THREE severity drifts one
+#                 release after the bullet carrying them was rewritten, and that field had a
+#                 mechanical join available. Prose-vs-shell has no I61-equivalent and none is
+#                 constructible. What the promise wanted — a row stating what the clause tests —
+#                 is carried by `normative:` (present on all 43, and the only field a human
+#                 reads), bound to a mechanism by `code:` + I64 and to a proof by `fixture:` +
+#                 I65. Recorded as subsumption WITH the measurement, not dropped as hard.
+#
+#   `fp:`         a false positive is a JUDGEMENT about a run, so no run can emit it. Stored, the
+#                 cell passes v0.123.0's test — *can this be written without the run?* — with a
+#                 plain yes, which is the definition of forgeable here. It is not "another
+#                 mechanism covers it": it is that no mechanism can, the same ground on which the
+#                 crosswalk-completeness clause was correctly refused under I37. The duty it
+#                 encodes survives as a duty: this plan's own verification section requires a
+#                 measured false-positive set, empty or enumerated, per shipped check, and that
+#                 measurement lands in the release that ships the check.
+#
 # `since:` is the contract_version that introduced the clause. Upstream adds clauses at a higher
 # `since` and never rewrites a lower one, which is the same additive, consumer-wins discipline
 # that lets `aiDlcRoles` in settings.json reconcile with zero drift. At contract_version 1 every
@@ -148,6 +201,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E1
+    fixture: layer-catalog-collision
 
   - id: LC-O2
     subject: override
@@ -159,6 +213,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E2
+    fixture: none
 
   - id: LC-O3
     subject: override
@@ -171,6 +226,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E3
+    fixture: layer-anchor-declaration
 
   - id: LC-O4
     subject: override
@@ -182,6 +238,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-OVERRIDE-BASE-UNRESOLVABLE
+    fixture: none
 
   - id: LC-O5
     subject: override
@@ -193,6 +250,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-OVERRIDE-BASE-CONSUMER-SHA
+    fixture: none
 
   # --- overrides/: drift against the shadowed core text --------------------------------
   - id: LC-O6
@@ -207,6 +265,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-OVERRIDE-DRIFT-SECTION
+    fixture: layer-readopt-gate
 
   - id: LC-O7
     subject: override
@@ -218,6 +277,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-DRIFT-FILE
+    fixture: none
 
   - id: LC-O8
     subject: override
@@ -229,6 +289,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-ANCHOR-UNRESOLVED
+    fixture: none
 
   - id: LC-O9
     subject: override
@@ -241,6 +302,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-DELEGATES-INTO-SHADOW
+    fixture: layer-readopt-gate
 
   - id: LC-O14
     subject: override
@@ -255,6 +317,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-ASSERTS-SHADOW-SURVIVES
+    fixture: layer-readopt-gate
 
   - id: LC-O10
     subject: override
@@ -266,6 +329,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E8
+    fixture: layer-anchor-declaration
 
   - id: LC-O11
     subject: override
@@ -279,6 +343,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E7
+    fixture: layer-anchor-declaration
 
   - id: LC-O12
     subject: override
@@ -291,6 +356,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-LOOSE-ANCHOR
+    fixture: layer-readopt-gate
 
   - id: LC-O13
     subject: override
@@ -303,6 +369,7 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-DOUBLE-SHADOW
+    fixture: layer-readopt-gate
 
   # --- extensions/: frontmatter and hooks ----------------------------------------------
   - id: LC-E1
@@ -314,6 +381,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E4
+    fixture: none
 
   - id: LC-E2
     subject: extension
@@ -325,6 +393,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E5
+    fixture: none
 
   - id: LC-E3
     subject: extension
@@ -336,6 +405,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-HOOK-MISSING
+    fixture: none
 
   - id: LC-E4
     subject: extension
@@ -348,6 +418,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-HOOK-DRIFT
+    fixture: layer-extends-grain
 
   - id: LC-E9
     subject: extension
@@ -360,6 +431,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E9
+    fixture: layer-anchor-declaration
 
   # --- extensions/: the qualifier grain (contract_version 5) ----------------------------
   # Ids taken by reading the WHOLE id set, not by counting on from the clause above this
@@ -376,6 +448,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E10
+    fixture: layer-qualifier-grain
 
   - id: LC-E11
     subject: extension
@@ -389,6 +462,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E11
+    fixture: layer-qualifier-grain
 
   - id: LC-E12
     subject: extension
@@ -402,6 +476,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E12
+    fixture: layer-qualifier-grain
 
   - id: LC-E13
     subject: extension
@@ -414,6 +489,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E13
+    fixture: layer-qualifier-grain
 
   - id: LC-E14
     subject: extension
@@ -426,6 +502,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-ANCHOR-DRIFT
+    fixture: layer-extends-grain
 
   - id: LC-E15
     subject: extension
@@ -439,6 +516,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-ANCHOR-MISSING
+    fixture: layer-qualifier-grain
 
   - id: LC-E16
     subject: extension
@@ -451,6 +529,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E14
+    fixture: layer-qualifier-grain
 
   - id: LC-E17
     subject: extension
@@ -465,6 +544,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-gate-manifest.sh
     code: GM1
+    fixture: enforcement-map-sites
 
   - id: LC-E18
     subject: extension
@@ -478,6 +558,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-gate-manifest.sh
     code: GM2
+    fixture: none
 
   # --- extensions/: additivity and retirement ------------------------------------------
   - id: LC-E5
@@ -491,6 +572,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-RESTATES-CORE
+    fixture: none
 
   - id: LC-E6
     subject: extension
@@ -504,6 +586,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-RETIRE-CANDIDATE
+    fixture: none
 
   - id: LC-E7
     subject: extension
@@ -516,6 +599,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-FIXTURE-UNBOUND
+    fixture: apply-drift-after-write
 
   - id: LC-E8
     subject: extension
@@ -528,6 +612,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W2
+    fixture: none
 
   # --- the shared number namespace ------------------------------------------------------
   - id: LC-N1
@@ -541,6 +626,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E6
+    fixture: layer-catalog-collision
 
   - id: LC-N2
     subject: extension
@@ -551,6 +637,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W1
+    fixture: layer-catalog-collision
 
   - id: LC-N3
     subject: extension
@@ -562,6 +649,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W4
+    fixture: layer-catalog-collision
 
   - id: LC-N4
     subject: extension
@@ -574,6 +662,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-CHECK-NUMBER-COLLISION
+    fixture: none
 
   - id: LC-N5
     subject: extension
@@ -599,6 +688,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E15
+    fixture: layer-catalog-collision
 
   - id: LC-N6
     subject: extension
@@ -623,6 +713,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E16
+    fixture: layer-retired-id-crosswalk
 
   # --- cross-references into the rendered rulebook --------------------------------------
   - id: LC-R1
@@ -635,6 +726,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W3
+    fixture: none
 
   # --- the layer conformance adjudication -----------------------------------------------
   #
@@ -657,6 +749,7 @@ clauses:
     prose_home: core/skills/ai-dlc-update/SKILL.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-LAYER-ADJUDICATION-MISSING
+    fixture: layer-adjudication-tier
 
   - id: LC-A2
     subject: any
@@ -670,6 +763,7 @@ clauses:
     prose_home: core/skills/ai-dlc-update/SKILL.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-REGISTER-CONTRADICTION
+    fixture: layer-adjudication-tier
 
   # --- the per-entry contract receipt (contract_version 9) -------------------------------
   # `contract_version` and `since:` were declared at version 1 and READ BY NOTHING through
@@ -698,6 +792,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: E17
+    fixture: layer-conforms-to
 
   - id: LC-C2
     subject: any
@@ -711,3 +806,4 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W6
+    fixture: layer-conforms-to
