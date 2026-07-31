@@ -3260,6 +3260,66 @@ else
   fi
 fi
 
+# --- I66: ONE fixture-suite runner across both pre-push hooks ------------------
+# I30 above joins the two hooks on the SYNTAX glob and has done since v0.126.x. The
+# suite runner beside it was joined by nothing, and it forked for the project's whole
+# history: the distribution ran its fixtures through a worker pool with a completeness
+# assertion and an empty-suite guard, while the file install.sh copies into every
+# consumer ran a serial `for` loop that returned 0 when the glob matched nothing AND
+# when no directory carried a run.sh. Measured on the reference consumer before
+# v0.226.0: 3 `xargs -P` here against 0 there, 5 completeness lines against 0, 1
+# empty-suite guard against 0 -- and `cmp -s` said the consumer's installed hook was
+# byte-identical to what core ships, so the consumer was running exactly that. Its
+# suite passed when it ran nothing, in the one gate a consumer actually has.
+#
+# The consumer could not fix it either: install.sh:445 marks the hook "always
+# overwrite -- upstream-owned", so a consumer-side pool is deleted at the next pull
+# with nothing reporting the regression. That is what makes this a JOIN rather than
+# advice.
+#
+# THE COMPARISON IS ON EXECUTABLE LINES ONLY, and that is the load-bearing choice.
+# The two hooks' prose is deliberately different -- one addresses a maintainer of this
+# repo, the other a consumer who must re-derive the pool size on their own box -- so
+# requiring byte-identity of the whole block would force one of those audiences to
+# read the other's measurements. Comments are therefore stripped before the diff.
+# I64's finding is why the strip runs in this direction rather than the other: a join
+# a COMMENT can satisfy is no join at all, because the token is present and the
+# mechanism is absent. Here the comment is what may differ and the code is what may
+# not, so nothing a comment says can make this invariant pass.
+#
+# The only permitted difference is the fixture root, which the install layout defines:
+# core/fixtures/ here, tests/fixtures/ there. It is mapped, not exempted -- a block
+# that differed anywhere else would still be reported.
+# THE SENTINEL MATCH IS ANCHORED, and the mutant that made it so is worth stating.
+# Written unanchored -- `/# FIXTURE_POOL_BEGIN/` -- the address still matches
+# `# FIXTURE_POOL_BEGINS`, so renaming the sentinel extracted the block anyway and
+# the zero guard below could never be reached by that mutation. The guard read as
+# correct and was unreachable: this file's own recurring class, produced while
+# building the check that names it. Anchoring is what makes a renamed sentinel
+# extract EMPTY, which is the state the guard exists to refuse.
+fx_pool_block() {
+  sed -n '/^# FIXTURE_POOL_BEGIN$/,/^# FIXTURE_POOL_END$/p' "$1" \
+    | grep -vE '^[[:space:]]*#' | grep -vE '^[[:space:]]*$'
+}
+if [ ! -f "$PP_DIST" ] || [ ! -f "$PP_CONS" ]; then
+  err "I66 could not read one of the pre-push hooks (dist='$PP_DIST' consumer='$PP_CONS'). With one end missing this invariant compares nothing and prints the same line as a pass."
+else
+  fx_dist="$(fx_pool_block "$PP_DIST")"
+  fx_cons="$(fx_pool_block "$PP_CONS")"
+  # ZERO GUARD, and it is the same one I30 needs: two empty extractions compare EQUAL,
+  # so a renamed sentinel would report agreement this invariant never tested. Fail
+  # closed on either end being empty rather than reporting a match between nothings.
+  if [ -z "$fx_dist" ] || [ -z "$fx_cons" ]; then
+    err "I66 parsed ZERO executable lines out of the FIXTURE_POOL block in $( [ -z "$fx_dist" ] && echo '.githooks/pre-push' || echo 'core/git-hooks/pre-push' ). The FIXTURE_POOL_BEGIN/END sentinels moved or the block became comment-only. An empty set compares equal to an empty set, so this invariant fails closed rather than reporting agreement it never checked."
+  else
+    fx_expect="$(printf '%s\n' "$fx_dist" | sed 's|core/fixtures/|tests/fixtures/|g')"
+    if [ "$fx_expect" != "$fx_cons" ]; then
+      fx_diff="$(diff <(printf '%s\n' "$fx_expect") <(printf '%s\n' "$fx_cons") | sed -n '1,12p' | tr '\n' ' ')"
+      err "I66 the two pre-push fixture-suite runners have forked. Mapped diff (distribution expected, consumer actual): ${fx_diff:-<none>}. The consumer hook is the ONLY fixture gate a consumer has and install.sh always overwrites it, so a runner that loses the pool, the empty-suite guard or the verdict-completeness assertion here reaches every consumer and cannot be repaired downstream. Bring core/git-hooks/pre-push's FIXTURE_POOL block to the mapped image of the distribution's."
+    fi
+  fi
+fi
+
 # --- I54: no shell variable is written into an EARLY-EXITING reader ------------
 # `grep -q` stops at its first match. Under `set -o pipefail` the pipeline's status
 # is then the WRITER's, and a writer that still had bytes to push gets EPIPE and
@@ -3646,7 +3706,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66)."
   exit 0
 fi
 exit 1

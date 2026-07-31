@@ -161,6 +161,7 @@ core_manifest:
   - fixtures/check-22-spawn-ledger/**
   - fixtures/ci-gates-resolution/**
   - fixtures/consumer-machinery-home/**
+  - fixtures/consumer-suite-pool/**
   - fixtures/layer-qualifier-grain/**
   - fixtures/layer-conforms-to/**
   - fixtures/layer-extends-grain/**

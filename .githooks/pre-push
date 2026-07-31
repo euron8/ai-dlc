@@ -107,6 +107,17 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 #
 # THE NUMBER IS MEASURED ON ONE MACHINE. That is why it stays the tunable
 # AI_DLC_FIXTURE_JOBS: on a smaller box, re-measure rather than inherit this.
+#
+# THE BLOCK BELOW IS JOINED TO core/git-hooks/pre-push BY I66, and the join is on
+# EXECUTABLE LINES ONLY. For this project's whole history the distribution ran its
+# suite through a pool with a completeness assertion and an empty-suite guard while
+# shipping consumers a serial loop that returned 0 when it ran nothing -- 313 lines
+# here against 208 there, and nothing compared them. Prose stays deliberately
+# different (this one addresses a maintainer, that one a consumer, and the pool size
+# is re-derived per box); the code must not. Comments are stripped before the
+# comparison because a comparison a comment can satisfy is I64's defect: the token
+# is present and the mechanism is absent.
+# FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
 
 run_fixtures() {
@@ -117,7 +128,15 @@ run_fixtures() {
     [ -f "$d/run.sh" ] || continue
     printf '%s\n' "$d"
   done > "$out/list"
-  n_expected="$(grep -c . "$out/list" 2>/dev/null || echo 0)"
+  # `grep -c .` PRINTS 0 and EXITS 1 on an empty file, so the obvious
+  # `$(grep -c . "$f" || echo 0)` yields the two-line string "0\n0" — and both
+  # integer tests in this function then die with "integer expression expected",
+  # take their false branch, and the suite returns 0 having run nothing. That is
+  # how the empty-suite guard below shipped UNABLE TO FIRE: the line was present,
+  # the mechanism was not, and a fixture driving the real hook is what found it.
+  # Normalise to a bare integer instead of rescuing a failed exit status.
+  n_expected="$(grep -c . "$out/list" 2>/dev/null)"
+  case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac
   if [ "$n_expected" -eq 0 ]; then
     printf '   FAIL  no fixtures found -- an empty suite passes every assertion it never made\n'
     rm -rf "$out"; return 1
@@ -153,6 +172,16 @@ run_fixtures() {
   # are not: a dropped job produces no verdict file, and a suite reporting 70 greens
   # instead of 75 reads exactly like a suite that passed. This is the check-that-cannot-
   # fire class one layer out, so the count is asserted rather than assumed.
+  #
+  # WHICH OF THE TWO ARMS DOES THE DETECTING, measured rather than asserted, because
+  # this comment used to imply the count was an independent detector and it is not.
+  # The report walks the LIST, so a missing verdict is caught by the `[ ! -f ]` branch
+  # above; `n_actual` is incremented on exactly the path that branch skips, so the
+  # count below can only fire when that branch already has. Its contribution is
+  # MAGNITUDE -- one line saying how much of the suite is missing, instead of N lines
+  # each saying one fixture is. `consumer-suite-pool`'s M2b mutant is the measurement:
+  # remove the per-fixture branch and a lost worker is misreported as a failing
+  # fixture while this count stays silent.
   if [ "$n_actual" -ne "$n_expected" ]; then
     printf '   FAIL  %s of %s fixtures produced a verdict -- the pool dropped work, and a short green suite reads exactly like a passing one\n' \
       "$n_actual" "$n_expected"
@@ -162,6 +191,7 @@ run_fixtures() {
   rm -rf "$out"
   return $rc
 }
+# FIXTURE_POOL_END
 
 # THE SUITE DOES NOT RE-RUN OVER A TREE IT ALREADY RAN OVER.
 #
