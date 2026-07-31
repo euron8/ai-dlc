@@ -246,13 +246,13 @@ row, with a sha or the count you measured. `—` = not started.
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report all six tallies. **Write nothing.** | graph | — |
-| 3 | `apply` on ONE branch | graph | — |
-| 4 | The semantic merge — six lines into `extensions/README.md`. **The only judgement.** | graph | — |
-| 5 | Post-apply verification **+ advance the machinery stamp** | graph | — |
-| 6 | Full pre-push, commit, push, PR, merge | graph | — |
-| 7 | Report back: the readings plan §6c-10 and the 9b handoff need | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ graph HEAD `ff444f656` (unmoved, `main`), tree 4 files all `_bmad-output/`, stamp `0.224.0 @ 1f5e6cc`, shim 314 B; engine pinned `/tmp/pull-engine-0226` @ `cedfa3b` VERSION `0.226.0` |
+| 2 | Classify only. Report all six tallies. **Write nothing.** | graph | ✅ all six match. (1) 57 rows exit 0 / 0 stderr, 38 EXT-OK · 12 OVR-OK · 2/2/2 · 1 RESTATES, ANCHOR-DRIFT 0 + ANCHOR-MISSING 0 over 10 `extends:` (control 39 `kind:`); wide-span control 3 HARD-ADJ + 3 HOOK-DRIFT. (2) exactly 1 `HARD-UNREGISTERED-CORE-DRIFT extensions/README.md`. (3) 63 = 59 CORE-OK / 3 TEMPLATE-SUBSTITUTED / 1 HARD (27 lines vs 1f5e6cc). (4) 66 = 46 STILL-LIVE / 12 HAND-REVIEW / 3 NEEDS-REVIEW / 3 ENTRY-SWALLOWED / 2 NAMED-UPSTREAM. (5) exit 0, `cv=9 entries=50 at_current=50 errors=0 warnings=0`, `unclaimed=none`. (6) exit 0, `0 error(s), 1 warning(s)`, **`unclaimed=W7`** |
+| 3 | `apply` on ONE branch | graph | ✅ branch `chore/ai-dlc-update-0.226.0`; `apply.sh` exit 0, 0 stderr, **13 RESOLVED / 1 WORKLIST / 1 DECISION** (both on `extensions/README.md`), final trio `relabel`+`restamp 1f5e6cc -> cedfa3b`+`consistent`; **9 changed paths** (7 M + 2 untracked fixtures). Refusal verified: README absent from `git status`, `Check 19b` row = 1, pipe rows = **22** (control) |
+| 4 | The semantic merge — six lines into `extensions/README.md`. **The only judgement.** | graph | ✅ 6-line `LC-R2` block inserted between `LC-R1` and `LC-C1`, byte-identical to `cedfa3b` (`cmp -s`, discriminating control ok). md5 `9c86cfa3…` → `0860ff3e…`. BEFORE-control **6 missing / 27 consumer-only** → AFTER **0 missing / 27 consumer-only**; crosswalk pipe rows still **22** |
+| 5 | Post-apply verification **+ advance the machinery stamp** | graph | ✅ both pairs now `0.226.0 / cedfa3b` (`installed_at`/`upstream` preserved), `contract_version: 10`, `SELF-UPDATE-OK`. 3× `IDENTICAL` validators + `control ok (CLAUDE.md forks)`. 9a delivery: `AI_DLC_FIXTURE_JOBS`=**2**, `no fixtures found`=**1**, pre-push **294** lines. Validator exit 0, `0 error(s), 2 warning(s)` (W6 50/50 below cv10; W7 `Check 11b`), footer `cv=10 entries=50 at_current=0 behind=50 undeclared=0`, **`unclaimed=none`** (flipped from `W7`) |
+| 6 | Full pre-push, commit, push, PR, merge | graph | ✅ `PREPUSH_RC=0`, `pre-push: all gates green`, `── fixture suite (16-way)`, `118 / 108 driven / 10 undrivable / 0 undeclared`, **108 ok, 0 FAIL**, **45.4s wall** on this box (`user 100.86 / sys 202.96`; rehearsal 43.5s). Diff surface **12 files, +1030/−15** exact, `extensions/README.md` **+6/−0**. Deploy-bearing dirs all 0 against a 12-file control → Rule (c) does not fire. Commit `d860044cc` → PR **#837** → squash-merged `5f425e664` on `main` (`main` re-verified by content: both stamp pairs `0.226.0/cedfa3b`, `AI_DLC_FIXTURE_JOBS`=2, `LC-R2` present, 22 crosswalk rows) |
+| 7 | Report back: the readings plan §6c-10 and the 9b handoff need | graph | ✅ all five reported. Stamp both pairs `0.226.0 / cedfa3b`; validator exit 0 `cv=10 entries=50 at_current=0 behind=50 undeclared=0 errors=0 warnings=2`, `unclaimed=none`, `fired=2` (`W7=LC-R2:1/50`, `W6=LC-C2:1/50`); `AI_DLC_FIXTURE_JOBS`=**2**; `drivable=108`; `origin/main` = `5f425e6641f8b4d818102c1cfc72ddb9f59d064d`. **9b-PART-2 rows 1, 2, 3, 6 are now runnable.** Engine worktree `/tmp/pull-engine-0226` removed |
 
 ### Out of scope for this pull — surface, do not fix
 
@@ -525,7 +525,10 @@ protocol on stdin during a real push, and the arm judges it then.
 Then commit, push, PR:
 
 ```
-git add -A && git commit -m "chore(ai-dlc): pull v0.226.0 (fixture pool + empty-suite guard, LC-R2)"
+# Stage the pull's paths EXPLICITLY. `git add -A` would sweep in the 4 pre-existing
+# _bmad-output/ runtime files, which the diff-surface expectation below excludes.
+git add .claude .githooks scripts/ai-dlc tests/fixtures
+git commit -m "chore(ai-dlc): pull v0.226.0 (fixture pool + empty-suite guard, LC-R2)"
 git push -u origin chore/ai-dlc-update-0.226.0
 gh pr create --fill
 git ls-remote --heads origin chore/ai-dlc-update-0.226.0    # verify the push by reading the remote
