@@ -1516,6 +1516,107 @@ fi
 mv "$V.orig" "$V"
 }
 
+# --- Assertion 34: I60 — a CITED mode is a mode the target dispatches ---------
+# The other half of I59's join, and the half no general invariant held. A file names
+# `<script>.sh --mode`, the script does not accept it, and the call exits 2 — which I49's
+# call site reads as "cannot determine what core is" and I53's reads as "no operator
+# citation", so the same typo becomes an unreadable manifest at one gate and a FAIL on a
+# clean tree at the other.
+#
+# FOUR ARMS. Three mutate the VALIDATOR rather than a subject, because this invariant
+# reports an absence over two derived corpora and three separate things turn that absence
+# into a lie: the citation grammar can stop matching, the dispatch grammar can widen until
+# nothing is ever a ghost, and the corpus can collapse. Each arm names only its own message.
+A34_i60_cited_modes() {
+
+# ARM 1 — THE DEFECT ITSELF. Rename the mode at a REAL call site rather than planting a
+# citation, so what is proven is the join reaching a live caller. The ghost spelling is
+# ASSEMBLED, never written out: I60 excludes core/fixtures/ from its corpus, but this file
+# is read by other invariants and a literal here is a citation somewhere.
+GHOST="--is-""kore"
+VICTIM="$(grep -rl -- 'core-paths\.sh --is-core' "$ROOT/core" --exclude-dir=fixtures 2>/dev/null | head -1)"
+if [ -z "$VICTIM" ]; then
+  bad "FIXTURE BROKEN: no file in the seed cites 'core-paths.sh --is-core', so the I60 defect arm has no live citation to rename and is unproven"
+else
+  cp "$VICTIM" "$VICTIM.orig"
+  sed "s@core-paths\.sh --is-core@core-paths.sh $GHOST@" "$VICTIM.orig" > "$VICTIM"
+  if cmp -s "$VICTIM.orig" "$VICTIM"; then
+    bad "FIXTURE BROKEN: the I60 ghost-citation mutation matched nothing, so the defect arm is unproven"
+  else
+    out="$(bash "$V" 2>&1)"
+    if grep -q -- "core-paths.sh $GHOST" <<<"$out"; then
+      ok "a shipped file naming a core-paths.sh mode the dispatch rejects FAILS I60, named with its mode (the call would exit 2, and both hand-listed call sites misread that 2)"
+    else
+      bad "a shipped file named a resolver mode that does not exist and I60 stayed silent — the generalisation covers 25 targets on paper and reached none of them"
+    fi
+  fi
+  mv "$VICTIM.orig" "$VICTIM"
+fi
+restore
+
+# ARM 2 — THE NON-CASE DISPATCH FORM DIES. This is the arm that carries the row's actual
+# finding. Six shipped scripts parse their mode with `[ "$1" = "--x" ]` rather than a case
+# arm, and a dispatch side that reads only case arms turns every one of them into a false
+# finding — the measured non-empty false-positive set that blocked this generalisation for
+# two programs. The probe target dispatches one mode each way precisely so this regression
+# is loud instead of quiet.
+cp "$V" "$V.orig"
+sed "s@grep -oE '==\?\[\[:space:\]\]+\"--\[a-z\]\[a-z0-9-\]\*\"'@grep -oE '--zzz-no-such-form'@" "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I60 non-case-dispatch mutation matched nothing, so the false-positive arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "has lost the non-case form" <<<"$out"; then
+    ok "a dispatch side that no longer reads \`[ \"\$1\" = \"--x\" ]\` FAILS I60 on its own probe (the empty false-positive set is held by a mechanism, not by a paragraph)"
+  else
+    bad "I60's non-case dispatch form was removed and the probe stayed silent — six shipped scripts become false findings, which is the shape that gets a lint turned off"
+  fi
+fi
+mv "$V.orig" "$V"
+restore
+
+# ARM 3 — THE CITATION GRAMMAR DIES. A regex that matches nothing returns the same empty
+# ghost set as a tree with no ghost in it. Break it and the PROBE is what fails.
+cp "$V" "$V.orig"
+sed "s@\[A-Za-z0-9_.-\]+\\\\\.sh\"?\[\[:space:\]\]+--\[a-z\]\[a-z0-9-\]\*@zzz-matches-no-citation@" "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I60 citation-grammar mutation matched nothing, so the liveness arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "did not fire on its own probe" <<<"$out"; then
+    ok "a citation grammar that can no longer match FAILS I60 against its own probe (an extraction that finds nothing never again reads as a tree with no ghost citation)"
+  else
+    bad "I60's citation extraction was broken so that it matches nothing and the invariant still printed clean — it would stop firing on its first grammar edit and no one would learn of it"
+  fi
+fi
+mv "$V.orig" "$V"
+restore
+
+# ARM 4 — THE CORPUS COLLAPSES. The floor is what refuses a derivation that returns almost
+# nothing. A probe that still passes plus a corpus of two pairs reads exactly like a clean
+# tree, so the count is guarded separately from the grammar.
+#
+# The mutation repoints the CORPUS SCAN's root and leaves the probe's alone, and that is the
+# whole point of the arm rather than an implementation detail. The first version of this arm
+# broke the shared citation function instead: the probe reads it too, so the probe fired
+# first, the floor was never reached, and the arm failed against a floor that was working.
+# A guard downstream of a liveness probe can only be tested on an input the probe still
+# passes.
+cp "$V" "$V.orig"
+sed 's@i60_citations "$REPO_ROOT"@i60_citations "$REPO_ROOT/nonexistent"@g' "$V.orig" > "$V"
+if cmp -s "$V.orig" "$V"; then
+  bad "FIXTURE BROKEN: the I60 corpus mutation matched nothing, so the floor arm is unproven"
+else
+  out="$(bash "$V" 2>&1)"
+  if grep -q "I60 derived only" <<<"$out"; then
+    ok "a citation corpus that collapses to nothing FAILS I60 loudly (scanning zero files is not the same answer as finding zero ghosts)"
+  else
+    bad "I60's citation corpus matched no files and the invariant reported clean — every cited mode in the tree was unchecked and the run said so nowhere"
+  fi
+fi
+mv "$V.orig" "$V"
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

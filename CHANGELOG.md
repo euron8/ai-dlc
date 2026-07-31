@@ -63,6 +63,52 @@ authorship order separates the classes — 7 core-first, 1 consumer-first, 0 und
 eight. It is not wired because a shallow or squashed consumer clone answers empty on both sides, and
 an arm that cannot fire reads exactly like one that passed.
 
+## [0.216.0] — 2026-07-30
+
+### Added — I60: every mode one shipped file names on another shipped script is one that script dispatches
+
+`I49` binds the modes of `core-paths.sh`; `I53` binds the modes of
+`validate-escalation-resolution.sh`; v0.210.0 opened a third instance
+(`validate-mandatory-rules.sh` → `validate-audit-anchors.sh --prior-sprint-sha`) that was never
+given an invariant. `CLAUDE.md` says to derive both sides of a join rather than hand-list either.
+**I60 derives both sides** — the citation side by grep over `core/`, `scripts/` and `templates/`,
+the dispatch side out of each target's own argument parsing — so a script that ships tomorrow and a
+caller written tomorrow are in scope without an edit. **44 (script, mode) pairs across 25 targets,
+false-positive set EMPTY, 0 citations resolving to nothing.**
+
+**This is not I59.** v0.214.0's I59 generalised the *other* half of the same join — every dispatched
+mode is named in its own file's prose. I60 is the half no general invariant held: every *cited* mode
+is dispatched. I59 also does **not** subsume I49/I53's documentation arms, and that is a measurement
+rather than a reading: drop `--list` from `core-paths.sh`'s `usage()` echo and I49 reports it while
+I59 stays silent, because I59 accepts a mode named in any comment and I49 requires it in the usage
+line. Both per-target invariants keep both arms.
+
+**The recorded blocker was the derivation's own grammar, in two enumerated classes.** This
+generalisation was carried as measured-and-rejected at 31 pairs / 15 targets / 8 misses. Re-derived
+at 0.215.0 the subject set is 44 pairs across 25 targets — a different set, not merely a different
+size — and every miss is the extractor's:
+
+- **Five of the eight are produced by `validate-enforcement-map.sh` itself**, which quotes
+  `<script>.sh --mode` in error prose, in its own grep flags (`--exclude=core-paths.sh --exclude=…`
+  reads as a citation of `--exclude`) and in I59's probe heredoc. I49 and I53 already exclude that
+  file by name for exactly this reason; the exclusion is inherited, not invented.
+- **Three are dispatch forms the `case`-arm grammar cannot see.** Six shipped scripts parse their
+  mode with `[ "$1" = "--x" ]` or `[[ "$1" == "--x" ]]`, and `audit-rule-files.sh` dispatches
+  `--fail-on=any|deterministic` as valued arms while callers cite `--fail-on`. Both sides are now
+  normalised at `=` and both dispatch forms are read. This is the same class I59's header names as
+  its reason for declining the reverse direction *within* a single file.
+
+Unresolved target names are skipped rather than reported — "does core ship a script by this name" is
+I50's join over a different citation grammar, and reporting it here would fire on every
+consumer-owned script a template legitimately names.
+
+The invariant writes its own liveness probe each run, and the probe target dispatches one mode as a
+`case` arm and one as a `[ "$1" = … ]` test, because the second form is the fix this release shipped
+and an extraction that lost it again would go quiet rather than red. Four fixture arms in
+`enforcement-map-sites`, each asserting its own message: the defect replayed at a live call site, the
+non-case dispatch form removed, the citation grammar broken, and the corpus collapsed. Reversion
+mutant kills only the I60 assertions and leaves the seven prior ones green.
+
 ## [0.215.0] — 2026-07-30
 
 ### Added — the check-heading grammar sees alphabetic ids, and the reason it did not was a note that named the wrong invariant
