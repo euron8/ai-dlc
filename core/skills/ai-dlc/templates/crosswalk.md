@@ -1,9 +1,9 @@
 # Catalog crosswalk — this consumer's retired ids
 
-**This file is yours.** The installer scaffolds it once and never overwrites it; no pull
-writes to it. Its location is declared as `consumer_crosswalk_file:` in
-`.claude/skills/ai-dlc/core-manifest.md`, which is where `validate-layer-entries.sh` reads
-it from — do not move it without moving the declaration.
+**This file is yours.** The installer creates it if it is missing, a pull creates it if it
+is missing, and neither ever overwrites it once it exists. Its location is declared as
+`consumer_crosswalk_file:` in `.claude/skills/ai-dlc/layer-contract.yaml`, which is where
+`validate-layer-entries.sh` reads it from — do not move it without moving the declaration.
 
 ## Why the rows matter
 

@@ -720,7 +720,7 @@ clauses:
     normative: >-
       An id a consumer entry has RETIRED — one its own history shows the entry defining, that
       nothing in the rendered rulebook defines any more — carries a crosswalk row in the file
-      `core-manifest.md` declares as `consumer_crosswalk_file:`, resolving it, in both the
+      `layer-contract.yaml` declares as `consumer_crosswalk_file:`, resolving it, in both the
       check and the rule namespace. The
       renumber LC-N5 requires is what creates these, and every one of them is a bare citation
       already written into a gate log, retro or escalation that no rename can reach back into;
@@ -744,7 +744,7 @@ clauses:
     level: WARN
     since: 11
     normative: >-
-      Crosswalk rows live in the file `core-manifest.md` declares as
+      Crosswalk rows live in the file `layer-contract.yaml` declares as
       `consumer_crosswalk_file:`, and rows found in the retired location
       (`extensions/README.md`) are reported, named, and counted. That file is core's — the
       distribution ships it and every pull compares a consumer's copy against the version

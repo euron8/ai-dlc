@@ -262,9 +262,9 @@ completeness against history stays yours; completeness against every rename from
 enforced.
 
 **THE TABLE DOES NOT LIVE IN THIS FILE.** It lives at the path
-`core-manifest.md` declares as `consumer_crosswalk_file:` — `.claude/skills/ai-dlc/crosswalk.md`
-— which the installer scaffolds once and neither the installer nor a pull ever
-overwrites. **This file is core's.** The distribution ships it, every pull compares your
+`layer-contract.yaml` declares as `consumer_crosswalk_file:` — `.claude/skills/ai-dlc/crosswalk.md`
+— which the installer creates when it is missing, a pull creates when it is missing, and
+neither ever overwrites. **This file is core's.** The distribution ships it, every pull compares your
 copy against the version you are updating from, and rows written here read as unregistered
 core drift: the reference consumer's migration wrote nineteen of them and earned a
 permanent `HARD-UNREGISTERED-CORE-DRIFT` whose two printed remedies would respectively
