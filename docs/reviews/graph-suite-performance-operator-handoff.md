@@ -210,6 +210,47 @@ fair reading of the machine as it is used. The three ratios — 10.2x, 1.51, 4.2
 from their decision boundaries that contention does not change any conclusion, and row 4 confirms
 them on the real box anyway.
 
+### Row 4's confirmation on the real box — 2026-07-31, graph at `ff444f656`
+
+**Confirmed. All three ratios reproduce; no stop condition fires.** Taken on graph's own machine
+(18 cores), in `git clone --local . /tmp/graph-perf-baseline`, serial, `bash "$d/run.sh"` from the
+repo root exactly as the shipped hook runs it, no `nice`. Results written outside the copy; the
+path was held in `LEDGER_SINK`, never `OUT`/`TMP`/`WORK`/`DIR`. The suite was run **twice** because
+run 1 carried one failure (below).
+
+| ratio | §4 pre-measured | run 1 | run 2 | verdict |
+|---|---|---|---|---|
+| `sum ÷ max` | 10.2x | 9.6x | **10.2x** | confirmed — nowhere near the 1x that would kill row 1 |
+| `system ÷ user` | 1.51 | 1.48 | **1.47** | confirmed — system above user, suite is fork-bound |
+| graph-owned share | 4.2% | 4.5% | **4.3%** | confirmed — well under row 5's 10% threshold |
+
+Absolute seconds, as expected, differ but barely: wall 187s / 182s against §4's 188.0s; sum 186.0s
+/ 181.1s against 183.3s; `max` is `layer-readopt-gate` in both runs (19.38s / 17.68s). Set
+partition re-derived over DIRECTORIES: 88 core-shipped + 28 graph-owned = 116, `comm -13` returns
+the 5 `.dist-only`, and the per-set cost sums back to the total exactly (7.8 + 173.3 = 181.1).
+Run 2's top eight is §4's top eight — same eight units, `ledger-reverify-unfalsifiable` and
+`layer-catalog-collision` trading 6th/7th. Heaviest graph-owned unit `check-27-config-integrity`
+at 1.09s against §4's 1.07s.
+
+**Finding — one INTERMITTENT fixture, reported not fixed, per this row's stop condition.**
+Run 1 recorded `check-il-oracle-presence` (graph-owned; an 11-line ROUTE-1 delegation to
+`scripts/tests/test-s168-retro-gates.sh`) at rc=1. It did not reproduce: rc=0 on 5 standalone
+repeats and rc=0 in the full run-2 suite, where all 106 exited 0 and no failure log was written.
+It is not a persistent red and the timings above are attributable — run 2 is a clean 106/106. The
+driver builds temp git repos under `mktemp -d`, and cross-fixture env leakage cannot explain it
+(each fixture is a separate child process), so the likely cause is a transient in that driver's
+temp-repo setup rather than suite state: the clone's tree was clean and `core.bare` false both
+before and after. **This is a flake in a gate that fails the whole push when it fires, so it is
+worth an owner — but it is graph-owned, not upstream's.**
+
+**§7's third open question, answered while here: the consumer's pre-push IS enabled.**
+`core.hooksPath` is unset as `install.sh` leaves it, but graph carries a 5-line
+`.git/hooks/pre-push` shim — *"Installed this way rather than via core.hooksPath, which would
+disable .git/hooks/pre-commit"* — whose last line is
+`exec "$(git rev-parse --show-toplevel)/.githooks/pre-push" "$@"`. Control: `.githooks/pre-push`
+exists and is executable. So the serial suite runs on every push and the 188s is paid for real;
+this is not a performance problem nobody has.
+
 ---
 
 ## 5. Progress Ledger
@@ -219,9 +260,9 @@ started. A row ticked with prose is not ticked.
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 0 | Pre-flight: which world am I in — has the pool shipped and been pulled? | graph | — |
-| 4 | CONFIRM §4's pre-measured baseline on the real box (3 ratios, not the seconds) | graph | — |
-| 5 | Confirm the **4.2%** graph-owned share and hand the lever upstream | graph | — |
+| 0 | Pre-flight: which world am I in — has the pool shipped and been pulled? | graph | **DONE 2026-07-31** — `0` / `0` / **106** drivable / `version: 0.224.0`. Pool NOT shipped; rows 1–3 blocked, start at row 4. Controls in the same run: `run_fixtures` = 2, directories = 116, both non-zero. This file is TRACKED in `ai-dlc` (O-1's untracked case does not apply; control `README.md` also tracked). |
+| 4 | CONFIRM §4's pre-measured baseline on the real box (3 ratios, not the seconds) | graph | **DONE 2026-07-31** — CONFIRMED at `ff444f656`: `sum÷max` **10.2x**, `system÷user` **1.47**, graph-owned **4.3%**; 106/106 exit 0 on run 2. One intermittent (`check-il-oracle-presence`, rc=1 in run 1, 0/6 repeats). Deliverable appended to §4. |
+| 5 | Confirm the **4.2%** graph-owned share and hand the lever upstream | graph | **DONE 2026-07-31** — **4.3%** (7.8s of 181.1s, 20 drivable of 28). Stop condition fired: nothing optimised. Upstream subjects named — `layer-readopt-gate` 17.68s, `layer-qualifier-grain` 14.61s, `ledger-reverify` 10.37s, all core-shipped. Carried to row 6. |
 | ⏹ | **FRESH SESSION** — rows 1–3 need an `ai-dlc` release merged AND pulled | graph | |
 | 1 | Verify the pulled hook carries the pool, the completeness arm and the empty-suite guard | graph | — |
 | 2 | Re-derive `AI_DLC_FIXTURE_JOBS` for THIS box; do not inherit 16 | graph | — |
@@ -313,6 +354,36 @@ number into this row, name the top three core-shipped units from §4 as the upst
 carry them to row 6. That is this row's correct ending, not a failure of it: the consumer's cost is
 core's fixtures plus the missing pool, and a consumer-side micro-optimisation of a 1.07s fixture
 would be work that measurement says is worth nothing.
+
+#### Row 5's outcome — 2026-07-31. The stop condition fired, as predicted. Nothing optimised here.
+
+**Measured share on graph's own box: 7.8s of 181.1s = 4.3%**, over the 20 drivable of 28
+graph-owned directories (8 carry no `run.sh`). Under 10%, so per this row's own instruction no
+consumer-side optimisation was attempted. The heaviest graph-owned unit is
+`check-27-config-integrity` at **1.09s**, then `check-31-cited-sha` 0.88s and `cycle-commits`
+0.74s — optimising the whole graph-owned set to zero would return 4.3% of a 188s suite.
+
+Set derived, not hand-listed. Controls, all in the same invocation: `comm -12` returns the
+core-shipped set **non-empty at 88**; 88 + 28 = 116, the directory total, so the two sets
+partition it; `comm -13` returns the **5** `.dist-only`; and a bogus name (`zzz-not-a-fixture`)
+appears in neither column (0 and 0).
+
+**The literal command printed above returns 32, not 28, and that is the §1 trap rather than a
+disagreement.** `ls tests/fixtures` lists entries, and four of them are not directories —
+`MANIFEST`, `README.md`, `fixture-hashes.lock`, `mock-workflow-with-dormant-gate.yml`. 32 − 4 = 28.
+Use the directory form; the literal one is left in place because it is what an earlier pass ran.
+
+**The lever handed upstream.** The top three units by duration are all core-shipped, which graph
+may not edit (control: `check-27-config-integrity` is correctly absent from the core-shipped set):
+
+| upstream subject | run 2 | user | system | note |
+|---|---|---|---|---|
+| `layer-readopt-gate` | 17.68s | 7.39 | **10.54** | the pole; sets the 10.2x ceiling single-handed |
+| `layer-qualifier-grain` | 14.61s | 6.20 | **11.70** | system ≈ 1.9× user, the most fork-bound unit measured |
+| `ledger-reverify` | 10.37s | 4.13 | 4.87 | |
+
+Carried to row 6. The consumer's entire remaining lever is the unshipped pool in
+`core/git-hooks/pre-push`, which is row 1's dependency.
 
 **If the share comes back ABOVE 10% on your box**, §4's finding (2) is wrong there and the row
 reverts to its original shape: rank the 28, take the top one, diagnose `user` vs `system` before
