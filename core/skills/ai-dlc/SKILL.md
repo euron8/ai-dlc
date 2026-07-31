@@ -1099,7 +1099,12 @@ self-improves *without* re-tangling core against upstream (spec §7).
 The clauses a layer entry must hold are declared in `layer-contract.yaml`
 (alongside this file), each bound to the enforcer that fires on it. Read it
 for the enforced set; the two layer `README.md` files carry the same clause
-ids with the rationale.
+ids with the rationale, at the same severity — bound by I61.
+
+Every entry declares `conforms_to: <n>`, the contract version it has been
+migrated to (**ERROR**, E17). It is a receipt and not an exemption: declaring
+a lower version subtracts no clause, it only lets the validator name which
+clauses postdate your last migration [LC-C1, LC-C2].
 
 **core** -- the upstream-owned file set declared in `core-manifest.md`
 (alongside this file). For a per-path answer, run

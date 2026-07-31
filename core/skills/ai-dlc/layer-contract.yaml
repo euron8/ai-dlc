@@ -60,19 +60,36 @@
 #          `level:` had NO behavioural reader in the tree — it was checked for presence by I37
 #          and read by nothing.
 #
-# `since:` is the contract_version that introduced the clause. A clause NEVER retro-applies:
-# an entry declaring `conforms_to: N` is held only to clauses with `since <= N`. Upstream adds
-# clauses at a higher `since` and never rewrites a lower one, which is the same additive,
-# consumer-wins discipline that lets `aiDlcRoles` in settings.json reconcile with zero drift.
-# At contract_version 1 every clause is `since: 1` and every clause already had a live enforcer
-# before this file existed, so declaring the contract changes NO consumer's verdict by one byte.
+# `since:` is the contract_version that introduced the clause. Upstream adds clauses at a higher
+# `since` and never rewrites a lower one, which is the same additive, consumer-wins discipline
+# that lets `aiDlcRoles` in settings.json reconcile with zero drift. At contract_version 1 every
+# clause is `since: 1` and every clause already had a live enforcer before this file existed, so
+# declaring the contract changes NO consumer's verdict by one byte.
+#
+# `conforms_to:` ON AN ENTRY IS A RECEIPT, NOT AN EXEMPTION, AND THIS PARAGRAPH REPLACES THE ONE
+# THAT SAID OTHERWISE. For eight contract versions this file stated the rule as *"an entry
+# declaring `conforms_to: N` is held only to clauses with `since <= N`"* — a skip. Nothing read
+# the field, so nothing exercised that semantics, and building it as specified would have shipped
+# a one-line-per-file escape hatch from every clause core had allocated since: the reference
+# consumer's 49 band ERRORs, allocated at `since: 4` and `since: 8`, would have been erased by
+# writing `conforms_to: 3` into thirteen files. Core is the source of truth; a consumer does not
+# self-declare which of core's clauses bind it.
+#
+# So what N buys is SCOPE, never silence. `validate-layer-entries.sh` reads it and reports, per
+# entry, exactly which clause ids postdate the declaration — that entry's migration worklist,
+# named rather than guessed — and every clause fires regardless. The retro-application problem
+# the skip was aimed at (a new clause wedging every consumer on first contact) is real, and it is
+# solved one level up where it belongs: core ships a new clause at WARN and promotes it to ERROR
+# in a later release once the migration has landed. That is core's decision, taken in the open in
+# a release, not a consumer's declaration taken per file. LC-N5's promotion from its retired
+# warn-tier code to `E15` at contract_version 8 is the worked example.
 #
 # WHAT IS DELIBERATELY NOT HERE. The seventeen clauses with no enforcer are absent, not listed
 # as pending: I37 rejects a clause without a live enforcer, and `enforcement: pending` would be
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 8
+contract_version: 9
 
 clauses:
 
@@ -608,3 +625,44 @@ clauses:
     prose_home: core/skills/ai-dlc-update/SKILL.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: HARD-REGISTER-CONTRADICTION
+
+  # --- the per-entry contract receipt (contract_version 9) -------------------------------
+  # `contract_version` and `since:` were declared at version 1 and READ BY NOTHING through
+  # eight bumps. I41 and I42 kept the declaration internally coherent — unique ids, no clause
+  # above the version — which is exactly the shape that reads as working: every field present,
+  # every field consistent, no behaviour anywhere. This clause gives the pair its first reader,
+  # and it is the ENTRY side of the join that makes `since:` mean something.
+  #
+  # WHY REQUIRED AND NOT OPTIONAL. Measured on the reference consumer at 5491d6c0e: 50 entry
+  # files, of which 38 declare `kind:` and 12 declare `base_sha:` — 38 + 12 = 50 exactly, so
+  # every file `layer_files()` yields is a real entry and the false-positive set of requiring a
+  # frontmatter key on all of them is EMPTY by construction. `conforms_to:` occurs 0 times in
+  # that set today. An optional field with zero adopters is a reader with no subject, which is
+  # this repo's named defect class wearing a capability's clothes — goal 4's `kind: qualifier`
+  # spent 20 releases in exactly that state.
+  - id: LC-C1
+    subject: any
+    level: ERROR
+    since: 9
+    normative: >-
+      Every layer entry declares `conforms_to: N` — the integer contract version the entry has
+      been migrated to — and 1 <= N <= the contract's own `contract_version`. It is a receipt,
+      not an exemption: every clause fires on the entry whatever N says. What N buys is scope,
+      because the clauses whose `since` exceeds it are that entry's migration worklist, reported
+      per entry by name instead of guessed.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E17
+
+  - id: LC-C2
+    subject: any
+    level: WARN
+    since: 9
+    normative: >-
+      An entry whose `conforms_to` is below the contract's `contract_version` is reported once
+      per run, with the clause ids introduced after the lowest declaration as the migration
+      worklist. Being behind is reportable, never subtractive: every clause is evaluated
+      against the entry in the same run whatever it declares.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W6
