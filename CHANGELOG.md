@@ -17,6 +17,125 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.225.0] — 2026-07-31
+
+### A remedy that named a string absent from the file, and the citations a renumber leaves behind
+
+Both defects in this release were found by **running** the band migration `v0.218.0` prescribes,
+against a local clone of the reference consumer. Neither is reachable from core's own tree: core
+has no consumer whose ids it can renumber, so nothing here could have been found by reading code.
+
+### Fixed — `E15` states its remedy in the form the heading actually carries
+
+`defined_anchors` strips a heading's terminator so that ids compare as ids, and `E15` then
+re-attached a `.` to every id it reported. Measured on the reference consumer: **37 of its 39
+section-id subjects carry `.` and two carry `—`** (`## Check AP — …`, `## Check VH — …`). For
+those two the remedy named a string that occurs nowhere in the file — a pattern built from
+`rename 'AP.' to 'XAP.'` matches nothing, the id stays out of band, and **the edit count still
+reads right**. Without a `cmp -s` guard on the edit, 47 of 49 renames reads as 49 of 49, which is
+what happened on the first pass of the rehearsal.
+
+The fix is a join, not a constant, because the constant is wrong in **both** directions: dropping
+the dot everywhere breaks 37 remedies instead of 2. `anchor_form` returns the id carrying the
+terminator its own heading uses, and the conforming form inherits that terminator by substitution
+rather than by a second spelling of it. An id whose heading matches neither grammar comes back
+**bare** — inventing a plausible `.` is the defect itself.
+
+Measured after the change, over all 39 subjects: the emitted form occurs in the file it is
+reported about **39 times of 39**, against **37 of 39** for the dotted form it replaced. The two
+misses are exactly `AP` and `VH`. Control: a bogus form is absent from the same file.
+
+### Added — `LC-R2` / `W7`, a `Check <n>` citation that resolves nowhere
+
+`LC-N5` renumbers an **allocation**. It does not touch the prose that cites the old id, and
+nothing joined the two. On the reference consumer's migration that orphaned **three `Check 19b`
+citations across three files** — one of them a group heading `## Check 19b` sitting directly
+above the `### 919b.` that replaced it, in the very file that did the rename. That heading carries
+no terminator, so `defined_anchors` never harvested it and `E15` never renamed it.
+
+`W3` caught none of them: its grammar is `Step`, and a check id is not a step id. The four
+dangling pointers `W3` *did* catch during that migration were luck of overlap — its subject is
+*references that resolve to nothing*, which happens to include this case for step ids only.
+
+**Not subsumed by `LC-N6`, and the reference consumer carries the proof.** `LC-N6` is keyed on an
+entry's own history — an id *this file* used to define. `W7` is keyed on the **citation site**, so
+it sees an id no surviving entry ever defined: `Check 11b`, cited in a step-domain entry, defined
+nowhere, absent from the crosswalk, and invisible to every other arm both before and after the
+migration.
+
+The crosswalk resolves a citation, in either accepted row form, because that is the row's entire
+stated purpose — so **a completed migration clears this clause** rather than carrying it. Measured
+on the reference consumer: **5 subjects before the migration** (`33`, `34` ×3, `11b`), **1 after**
+(`11b`), and the difference is the rows the migration adds.
+
+**False-positive set empty, and the grammar is what keeps it so.** Numeric-leading only, exactly
+as `W3` is: core prose uses `Check A`…`Check E` and `Check N` as placeholders in worked examples,
+an alphabetic grammar harvests every one of them, and there is no remedy to offer for any. Each of
+the five live subjects was read and each is a genuine citation of an id the rulebook does not
+define — three of them say *"retired at 0.214.0"* in their own words.
+
+`WARN`, not `ERROR`, and the reason is the subject set rather than the severity: four of the five
+predate the layer contract entirely, and erroring would wedge a consumer's pre-push on prose it
+wrote before the rule existed. §4b's ERROR ruling governs the naming partition, whose remedy the
+validator prints for every subject; here the remedy is a judgement about what the author meant.
+
+`contract_version` 9 → 10.
+
+### Added — `core/fixtures/layer-reference-resolution`
+
+14 assertions: 3 premises read without the code under test, the pristine vector, 2 applicability
+arms, the crosswalk row proven load-bearing by removing it, the migration **exit condition**, 5
+mutants and 1 unmutated control. Mutants are copies guarded by `cmp -s` and scored as a complete
+vector, so a mutant moving two cells reports entanglement rather than a kill.
+
+**The first cut seeded only the bare crosswalk row**, so the mutant that deletes the namespaced
+branch changed a line, passed `cmp -s`, and came back green — a mutation that lands and changes no
+verdict is not a kill. Two rows, two mutants, one cell each.
+
+### Fixed — a fixture literal that expired at this bump
+
+`layer-conforms-to` asserted that `E17` rejects `conforms_to 10`, written as a literal. That was
+one above the contract when it shipped and became the contract's **own** version here, so the
+assertion asked `E17` to reject a receipt that had become legal and went red for a reason with
+nothing to do with `E17`. Its seed already derived the value as `CV+1`; the assertion now derives
+it from the same place, so the pair cannot drift on the next bump.
+
+### Measured — what was NOT built, with the measurement rather than a preference
+
+- **The rule namespace gets no equivalent arm.** Under the shipping scan set the migration's
+  rule-namespace delta is **3 rows, all in `extensions/README.md`**: the crosswalk rows for
+  `Rule 31` and `Rule 32`, and the widened table's own `Rule N` placeholder. Every genuine
+  candidate is a sub-clause citation — `Rule 25a`, `Rule 26c`, `Rule 28a` — which resolves to its
+  parent rule and is not a dangling pointer. **Zero live subjects**, so the arm is not shipped: a
+  check with an empty live subject set is one this repo forbids.
+- **`I65` reads a contract code named anywhere in a fixture directory that is not a shell comment
+  as proof the clause is exercised.** A `.md` has no comment syntax, so an explanatory sentence in
+  a fixture README naming another clause's code files that clause's gap as closed. Hit while
+  writing this release's own README, worked around by naming the clause instead of the code, and
+  recorded here rather than fixed inside a release about something else.
+- **A fixture deletes a directory named by an inherited `OUT` environment variable.** The suite
+  profiler required by §7's gate exports its output directory to every worker; twice the whole
+  profile vanished mid-run, once from `/tmp` and once from `$HOME/.cache`, while a control canary
+  in the same filesystem survived. Renaming the variable to `AIDLC_PROF_OUT` fixed it on the next
+  run, which confirms the cause is the injected generic name. **32 fixtures reference `OUT`**; the
+  two that carry `rm -rf "$OUT"` in a trap were tested directly with an inherited value and both
+  left the canary alive, so the specific culprit is NOT identified and is not claimed to be. Filed
+  rather than guessed. The lesson is general and applies to any harness that measures this suite:
+  a profiler must not put a generic name into the environment of the code it measures.
+
+### Verification
+
+- Fixture suite **91/91**, zero failures, wall clock **148.0s** against the 145.3s `v0.224.0` left
+  it at. Profiled at the shipping pool size and ranked by END time per §7's gate: the new fixture
+  ends at **32.2s with 115.8s of slack**, so it is a passenger and not a pole, and the critical
+  path is unmoved — `enforcement-map-sites` still ends the suite at 0.0 slack, which is D-6c4e.1's
+  band of four units sharing the position rather than a new regression.
+- `validate-enforcement-map.sh` exit 0, **65** invariants.
+- Verified on a tree built by running `scripts/install.sh` into an empty directory: the fixture
+  ships, runs from the installed layout, and passes 14 assertions there. Control — hiding the
+  consumer's `validate-layer-entries.sh` makes it report `FIXTURE ERROR: cannot locate`, so the
+  distribution copy was not reached by accident (I33).
+
 ## [0.224.0] — 2026-07-31
 
 ### The fixture that WAS the suite is now a passenger, and the pool size that was measured against it buys 4%
