@@ -17,6 +17,130 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.224.0] — 2026-07-31
+
+### The fixture that WAS the suite is now a passenger, and the pool size that was measured against it buys 4%
+
+`v0.223.0` measured the fixture suite at 336.9s against the 72.0s the predecessor program left it
+at, and `layer-contract-conformance` was 331.2s of it with **zero slack**. Eleven releases had
+added mutants to that fixture one at a time; nothing measured the schedule while they did.
+
+The fixture is not slow, it is **serial**. Thirty-three assertions, each one a full run of
+`validate-enforcement-map.sh` — 6.45s on the reference box at 62% SYSTEM time, which is the fork
+signature rather than work — and every one already builds its own mutated contract copy in its own
+`$TMP` and points the validator at it with `AI_DLC_LAYER_CONTRACT`. They are independent by
+construction and were serial only because they were written in a row.
+
+### Changed — `layer-contract-conformance` runs its validator in a pool
+
+Three phases: build every mutant serially (cheap), run the validator for each through a pool
+writing to a per-label file, then evaluate serially **in declaration order**. Every arm's call site
+and every arm's comment is untouched — `mutant_fires` keeps its signature and only its timing moved,
+from running the job to registering it.
+
+| | before | after |
+|---|---|---|
+| standalone | **200.0s** | **41.3s** |
+| in the suite, `-P16` | 270.7s, **0.0s slack** | 87.2s, **54.1s slack** |
+| suite wall clock | **276.5s** | **144.3s** |
+
+Distinct validator runs also fall 33 → 30: three arms ask different questions of one unmutated
+control and one asks a second question of a mutant another arm already ran, and running the
+validator twice to learn the same thing costs 6.5s.
+
+#### What the pool makes possible that serial execution did not
+
+**A missing verdict is a FAILURE, not a gap.** Serially the run and the report were one statement,
+so an arm that never ran could not print an `ok`. With a pool they are two statements joined by a
+FILENAME, and a dropped job adds exactly what a passing arm adds: nothing. So `.done` is written
+after each run and its absence is asserted.
+
+**The job list is DERIVED from the file's own registrations**, with a zero guard. A hand-written
+list is the check-that-cannot-fire class one level out. The `EXPECTED_ASSERTIONS` floor moved to
+before the pool, which is the earliest point it is knowable.
+
+**The control stays serial and first.** It is the run every other arm's attributability depends on,
+so it is settled before the pool spends anything — and it is deliberately NOT skipped when it
+fails, because dropping the arms below it would turn a dirty control into a SHORT report.
+
+#### The three-part proof the gate requires
+
+- **(a) Differential.** The serial version, run in a `cp -R` copy and never swapped into the tree,
+  against the parallel one: **byte-identical across all 33 arms**. That is only available because
+  the evaluation order is declaration order. Control: a one-line change to the parallel output IS
+  reported by the same `diff`.
+- **(b) Mutation battery.** Seven mutants plus an unmutated control, each scored on the complete
+  expected vector (exit code + red-arm count + sentence) so entanglement is reported rather than
+  hidden: a dropped pool job, an empty run registry, a dropped arm, a `sed` that matched nothing, a
+  dirty control, and the two cross-talk arms below. Each fails only its own assertion.
+- **(c) Cross-talk knock-out — the failure only a pool can have.** A wrong run-to-arm join is
+  invisible: every arm still prints and the report is still 33 lines long. So a marker is planted
+  in one run's output and the blast radius is asserted. Planted in a run no arm names for that
+  token, **nothing moves**; planted in the run `i65-control` does name, exactly that arm goes red.
+
+#### The battery's unmutated control caught the battery
+
+The first cut built its mutants as NEW directories under `core/fixtures/`, and the unmutated
+control came out **red**: an unenumerated fixture dir trips two of the validator's own invariants,
+so the control arm went dirty in every mutant and each one scored its own kill **plus that one**.
+Without a control from the same directory, seven mutants would each have reported a kill they had
+not earned. Each mutant now occupies the real fixture's path in its own copy tree.
+
+### Changed — `AI_DLC_FIXTURE_JOBS` stays 16, and the REASON is now the opposite of the old one
+
+Re-derived because gate item 3 says a constant justified by a measurement expires when the thing it
+was measured against changes, and this release moved that thing.
+
+| `-P8` | `-P12` | `-P16` | `-P24` |
+|---|---|---|---|
+| **151.6s** | **144.9s** | **144.3s** | **145.2s** |
+
+90/90 verdicts and zero failures in all four. The old reason was a knee — the point where more
+workers stopped buying more than they cost. **There is no knee now: the whole 8→24 range spans
+4%.** Sixteen is kept because it is the middle of a flat range, not because it was measured as
+optimal.
+
+### THERE IS NO SINGLE POLE LEFT. The suite is bounded by its total WORK, and both pool knobs say so
+
+`enforcement-map-sites` ends at 141.1s of a 144.3s suite with zero slack, which reads exactly like
+the pole `layer-contract-conformance` was before this release. **It is not one**, and two further
+measurements were needed to establish that rather than one.
+
+Its internal pool is a fixed 8, justified in place against a floor this release moved — so gate
+item 3 required re-deriving it. Measured in the full suite at `-P16`:
+
+| its `JOBS=8` | `12` | `16` | `24` |
+|---|---|---|---|
+| **144.3s** | **140.5s** | **138.8s** | **136.5s** |
+
+5% across the whole range, and the reason is visible in the schedule: at `JOBS=16` the pole becomes
+`ledger-status-vocabulary` (127.2s), at `24` it becomes `enforcement-map-derivations` (134.1s).
+**Four units sit in the same band and optimising any one hands the position to the next.** The
+constant therefore STAYS at 8, with this measurement as the re-derivation.
+
+The discriminating test, because two flat knobs are consistent with more than one cause: the four
+heavy units run **ALONE and concurrently in 104.1s**, against a 144.3s suite. They are 72% of the
+suite's wall clock by themselves, with the other 86 fixtures contributing ~35s of contention on
+top. Suite CPU is 1625s over 18 cores — a perfect-parallel floor of 90.3s.
+
+**So the suite is compute-bound, and neither knob is flat because a floor holds it — both are flat
+because the WORK is the constraint.** The outer knob does not gate core utilisation once inner
+pools exist; the inner knob on one unit cannot beat its three siblings. All four drive
+`validate-enforcement-map.sh` — 75, 8, 7 and 5 invocations — at 6.45s a run and 62% SYSTEM time.
+
+**Recorded because this session got it wrong in both directions.** The 1.6x-over-floor figure was
+first read as compute-bound; the flat `AI_DLC_FIXTURE_JOBS` sweep was then taken to REFUTE that,
+on the reasoning that a compute-bound suite would be markedly worse at `-P8`. That refutation was
+itself wrong — the outer pool is not a proxy for core utilisation when every heavy unit carries its
+own pool — and the four-alone measurement is what settles it. **Two scheduling knobs that both read
+flat is not evidence about the cause; it is the absence of evidence, and it took a third
+measurement to say which.**
+
+**The next lever is therefore the validator's cost, not another pool**, and that is a different
+release owing its own three-part proof across 65 invariants. Its shape is already measured: no
+single cheap hotspot — the 10-invariant layer-contract block is 34%, then 0.96s and 0.51s, then a
+long tail. Per gate item 5 it is scheduled, not dropped.
+
 ## [0.223.0] — 2026-07-31
 
 ### Every clause names the fixture that proves its code fires, and the join that was specified to check it was satisfiable by a comment (I65)
