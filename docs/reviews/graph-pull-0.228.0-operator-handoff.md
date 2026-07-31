@@ -211,6 +211,40 @@ The file arrives **byte-identical to the template THEIRS ships** (1626 bytes) [M
 absent and the file is not there, **stop** — that is v0.227.0's defect recurring and it is
 ai-dlc's, not something to work around by creating the file by hand.
 
+### 4.9 — CORRECTION to §4's probe-(4) baseline: the rehearsal's `CLOSE-CANDIDATE` is a clone artifact
+
+**Found live on 2026-07-31 at row 2.** Probe (4) reads `CLOSE-CANDIDATE` **0** / `STILL-LIVE`
+**46** against this file's stated 1 / 45. Total rows **66** either way, and the other five probes
+match exactly.
+
+The differing entry is `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK`, receipt **2/2** — a
+`verify: sh` predicate, the only class that can flip without a file changing in the span:
+
+```
+verify: sh cd "$CONSUMER" && grep -qF no-direct-main-push .pre-commit-config.yaml \
+  && ! grep -qF pre-commit-hook-type-pre-push .git/hooks/pre-push \
+  && grep -qF githooks/pre-push .git/hooks/pre-push
+```
+
+It reads **`.git/hooks/pre-push`**, and `git clone` does not copy hooks. §4's rehearsal ran on a
+`git clone --local`, where that file does not exist, so the third `grep` exits non-zero, the
+predicate reads "no longer reproduces at theirs", and the row closes. The entry's own title says
+it: *"dormant in every clone"*. The receipt notes name two ways the predicate goes non-zero
+(declaration removed, hook type changed); **absence of the hook file is an unlisted third, and it
+is the one a clone-based rehearsal always takes.**
+
+**The live tree's `STILL-LIVE` is the correct reading, and the rehearsal's `CLOSE-CANDIDATE` was a
+false close.** Control, in the same shape: `ledger-reverify.sh` run against a fresh
+`git clone --local` of graph at `5f425e664` (`/tmp/graph-ledger-control`) reproduces the
+rehearsal's tally **exactly** — 45/12/3/3/2/1 — and diffing the two runs by label returns that one
+entry and no other.
+
+**Not a stop condition and not a core defect.** Receipt **1/2** is `STILL-LIVE` in both runs, so
+the entry stays open either way, and the classifier's own design (`ledger-reverify.sh:468`) already
+forbids a `CLOSE-CANDIDATE` row from hiding a `STILL-LIVE` one. Probe (4) is report-only residue by
+§5. **Whoever next rehearses a pull on a clone: `verify: sh` receipts that read `.git/hooks/` are
+not faithfully evaluable there.**
+
 ### 4.8 — Why ONE branch, measured rather than argued
 
 The plan says steps 13 and 14 are separable, and they are: `W8` is a WARN, so a pull-only branch
@@ -230,13 +264,13 @@ row, with a sha or the count you measured. `—` = not started.
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report all six tallies. **Write nothing.** | graph | — |
-| 3 | `apply` on ONE branch, and verify the scaffold arrived | graph | — |
-| 4 | The migration + the semantic merge. **The only judgement.** | graph | — |
-| 5 | Post-apply verification **+ advance the machinery stamp** | graph | — |
-| 6 | Full pre-push, commit, push, PR, merge | graph | — |
-| 7 | Report back: the readings plan §6c-13 and §6c-14 need | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ HEAD `5f425e664` unmoved, 4 `_bmad-output/` entries, stamp 0.226.0/cedfa3b, hook 314B; engine worktree `/tmp/pull-engine-0228` @ `5879f70` VERSION 0.228.0 |
+| 2 | Classify only. Report all six tallies. **Write nothing.** | graph | ⚠️ 5 of 6 exact; (4) deviates by ONE row — `CLOSE-CANDIDATE` 1→**0**, `STILL-LIVE` 45→**46**, total 66 unchanged. Diagnosed: `PC-S312-TRUNK-PUSH-DECLINES-TO-POLICE-THE-TRUNK` receipt 2/2. **Rehearsal artifact, live reading is the correct one** — see §4.9. No row-2 stop condition fired. Awaiting operator go/no-go for row 3 |
+| 3 | `apply` on ONE branch, and verify the scaffold arrived | graph | ✅ branch `chore/ai-dlc-update-0.228.0`; apply rc 0, 0 stderr; RESOLVED **12** incl. `crosswalk-scaffold`, WORKLIST **1**, DECISION **1**; `crosswalk.md` **1626B SCAFFOLD-OK**; README pipes **22** (apply refused); changed paths **9** = 6 M + 3 ?? |
+| 4 | The migration + the semantic merge. **The only judgement.** | graph | ✅ **20** rows + 7-line paragraph moved (incl. `24`, §4.5); crosswalk `^| ` **21**; README **3** pipes, byte-identical to core@`5879f70`; validator exit 0 `0 error(s), 2 warning(s)` `contract_version=11 … unclaimed=none`; **W8 fired 0, E16 fired 0** (control: 1/1 pre-migration); next-pull blockers **0** (control: **1** on pre-migration clone) |
+| 5 | Post-apply verification **+ advance the machinery stamp** | graph | ✅ `contract_version: 11`, declaration **1**, `SELF-UPDATE-OK`; stamp advanced — **both pairs 0.228.0 / 5879f70**, `installed_at`+`upstream` preserved; **3× IDENTICAL** validators, control ok (CLAUDE.md forks) |
+| 6 | Full pre-push, commit, push, PR, merge | graph | ✅ pre-push rc **0** all gates green, **109 ok / 0 FAIL**, drivability 119/109/10/0, wall **45s** (re-derived); diff surface **11 files, +913/−44**, README **+21/−28**; commit `8b595447a`, pushed (remote confirms sha), **PR #838**. Deploy surface 0/0/0/0/0/0 vs control 11 — **no deploy owed**. ⏳ merge is the operator's |
+| 7 | Report back: the readings plan §6c-13 and §6c-14 need | graph | ✅ all 7: stamp **both pairs 0.228.0 / 5879f70**; `crosswalk.md` **6938B**; declaration **1**; `origin/main` crosswalk **22** / README **5** (`^[[:space:]]*\|`; = 21+separator and 3+2 indented — reconciles with row 4); validator exit 0 `0 error(s), 2 warning(s)` `contract_version=11 … unclaimed=none`; `origin/main` **`d2b69420f`**. README on `origin/main` **byte-identical to core@5879f70** (control ok); W8/E16 fired **0/0** (control 1/1) |
 
 ### Out of scope for this pull — surface, do not fix
 
