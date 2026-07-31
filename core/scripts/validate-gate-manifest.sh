@@ -346,7 +346,7 @@ for f in sorted(ext_gt):
                    f"manifest has no row for (rows: {' '.join(g for g, _ in rows)}). A gate declares one of "
                    f"those types, so a check filed under any other never loads at any gate.")
 if gm2:
-    die("validate-gate-manifest: FAIL — a gate_types: declaration cannot load:\n"
+    die("validate-gate-manifest: FAIL GM2 — a gate_types: declaration cannot load:\n"
         + "\n".join(gm2) + "\n"
         "  The key states which gate types load an extension's checks. Declared against a\n"
         "  type, a file or an anchor set that does not exist, it reads as a registration and\n"
@@ -417,7 +417,7 @@ print("UNLOADABLE (check heading, no anchor and no row):", " ".join(unloadable) 
 if missing or orphan or unloadable:
     if unloadable:
         sys.stderr.write(
-            "validate-gate-manifest: FAIL — check(s) defined as a heading that no gate can load: "
+            "validate-gate-manifest: FAIL GM1 — check(s) defined as a heading that no gate can load: "
             + " ".join(unloadable) + "\n"
             "  Each is defined in an extensions/ entry that hooks this file, carries no\n"
             "  CHECK_LOADED anchor, and is named by no manifest row — so it is neither MISSING\n"

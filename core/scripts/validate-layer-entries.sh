@@ -189,8 +189,26 @@ OVR_DIR="$SKILL_DIR/overrides"
 
 ERRORS=0
 WARNS=0
-err()  { printf 'ERROR  %s\n' "$*"; ERRORS=$((ERRORS+1)); }
-warn() { printf 'WARN   %s\n' "$*"; WARNS=$((WARNS+1)); }
+
+# THE CODE IS AN ARGUMENT, and that is the whole point of this shape.
+#
+# WHAT IT ENDS, MEASURED ON THE RELEASE BEFORE THIS ONE. The contract's header claimed
+# "THE BINDING IS ON A TOKEN THE ENFORCER ALREADY EMITS". It was not: of the 22 codes
+# clauses bind to THIS script, EIGHTEEN appeared nowhere but its comments, and the other
+# four appeared in a message only because a neighbouring clause's prose mentioned them.
+# I36 forward greps the enforcer for the code with `grep -qF` over the WHOLE file, so
+# eighteen clauses satisfied the contract's central join ON A COMMENT — a join that a
+# comment can satisfy is a join a comment can also be the only thing holding up.
+#
+# Two things follow from passing it instead of printing it. A finding names the clause it
+# came from, so an operator handed `ERROR  E11  …` can look the rule up; and the per-code
+# tally below is produced BY THE RUN, so `measured{fires}` is a count nobody can transcribe
+# without running the script. That is v0.123.0's rule — ask whether a cell can be written
+# without the run — applied to the field the charter specified and never got.
+LC_FIRED=''
+_lc_fire() { LC_FIRED="${LC_FIRED}$1 "; }
+err()  { local c="$1"; shift; _lc_fire "$c"; printf 'ERROR  %s  %s\n' "$c" "$*"; ERRORS=$((ERRORS+1)); }
+warn() { local c="$1"; shift; _lc_fire "$c"; printf 'WARN   %s  %s\n' "$c" "$*"; WARNS=$((WARNS+1)); }
 
 if [ ! -d "$SKILL_DIR" ]; then
   echo "Not an ai-dlc consumer: $SKILL_DIR not found" >&2
@@ -653,6 +671,12 @@ echo "== contract receipt =="
 LC_FILE="$SKILL_DIR/layer-contract.yaml"
 LC_CV=''
 LC_SINCE=''
+LC_CODE_ROWS=''
+# Subject populations for the census, counted by the passes themselves rather than taken
+# from LC_ENTRIES: that counter only advances when the contract was readable, so on a broken
+# install it would report a population of zero and make every clause look evaluated-and-clean.
+LC_N_OVERRIDE=0
+LC_N_EXTENSION=0
 LC_ENTRIES=0
 LC_CURRENT=0
 LC_BEHIND=0
@@ -663,17 +687,27 @@ if [ ! -f "$LC_FILE" ]; then
   # NOT a skip. The contract ships with the skill (`install.sh` copies it beside SKILL.md),
   # so its absence is a broken install, and a pass that quietly evaluated nothing would
   # report the same clean footer as a consumer that holds every clause.
-  err "E17 cannot read the layer contract at $(rel "$LC_FILE") — it ships with the skill, so this is a broken or partial install. Every entry's conforms_to went UNCHECKED in this run; that is not the same as clean. Re-run /ai-dlc-update, or restore the file."
+  err E17 "cannot read the layer contract at $(rel "$LC_FILE") — it ships with the skill, so this is a broken or partial install. Every entry's conforms_to went UNCHECKED in this run; that is not the same as clean. Re-run /ai-dlc-update, or restore the file."
 else
   LC_CV="$(awk '/^contract_version:/{print $2; exit}' "$LC_FILE")"
   LC_SINCE="$(awk '/^  - id:/{id=$3} /^    since:/{ if (id != "") { print id, $2; id="" } }' "$LC_FILE")"
+  # `<code> <clause> <subject> <enforcer-basename>`, one row per clause. The census at the
+  # foot of this run reports on the rows whose enforcer is THIS script and no others: a code
+  # belonging to reconcile/layer-drift.sh has no subject population here, and printing a 0
+  # for it would say "evaluated, nothing found" about a clause this run never evaluated.
+  LC_CODE_ROWS="$(awk '
+    /^  - id:/       { id=$3; subj=""; enf=""; next }
+    /^    subject:/  { subj=$2; next }
+    /^    enforcer:/ { n=split($2,p,"/"); enf=p[n]; next }
+    /^    code:/     { if (id != "" && subj != "" && enf != "") print $2, id, subj, enf; id=""; next }
+  ' "$LC_FILE")"
 
   if ! grep -Eq '^[0-9]+$' <<<"${LC_CV:-x}" || [ "${LC_CV:-0}" -lt 1 ]; then
-    err "E17 read no usable contract_version out of $(rel "$LC_FILE") (got '${LC_CV:-<none>}'). Every receipt below is compared against it, so an unreadable value retires this whole pass silently instead of failing it."
+    err E17 "read no usable contract_version out of $(rel "$LC_FILE") (got '${LC_CV:-<none>}'). Every receipt below is compared against it, so an unreadable value retires this whole pass silently instead of failing it."
     LC_CV=''
   fi
   if [ -z "$LC_SINCE" ]; then
-    err "E17 read ZERO clauses with a since: out of $(rel "$LC_FILE"). The migration worklist below is derived from that set, so an empty one makes every entry look fully migrated — the state this pass exists to make visible."
+    err E17 "read ZERO clauses with a since: out of $(rel "$LC_FILE"). The migration worklist below is derived from that set, so an empty one makes every entry look fully migrated — the state this pass exists to make visible."
   fi
 fi
 
@@ -684,11 +718,11 @@ if [ -n "$LC_CV" ]; then
     ct="$(fm "$f" conforms_to)"
     if [ -z "$ct" ]; then
       LC_UNDECLARED=$((LC_UNDECLARED+1))
-      err "E17 $(rel "$f"): missing 'conforms_to:' frontmatter. Every layer entry declares the contract version it has been migrated to; without it neither you nor core can say which of the contract's ${LC_CV} versions of clauses this entry has ever been read against. Add 'conforms_to: ${LC_CV}' once the entry holds every clause, or the lower version it was last migrated to."
+      err E17 "$(rel "$f"): missing 'conforms_to:' frontmatter. Every layer entry declares the contract version it has been migrated to; without it neither you nor core can say which of the contract's ${LC_CV} versions of clauses this entry has ever been read against. Add 'conforms_to: ${LC_CV}' once the entry holds every clause, or the lower version it was last migrated to."
     elif ! grep -Eq '^[0-9]+$' <<<"$ct" || [ "$ct" -lt 1 ]; then
-      err "E17 $(rel "$f"): conforms_to '$ct' is not a positive integer. It names a contract version, so it is compared numerically against contract_version ${LC_CV}."
+      err E17 "$(rel "$f"): conforms_to '$ct' is not a positive integer. It names a contract version, so it is compared numerically against contract_version ${LC_CV}."
     elif [ "$ct" -gt "$LC_CV" ]; then
-      err "E17 $(rel "$f"): conforms_to $ct claims a contract version this distribution has never reached — its contract_version is ${LC_CV}. A receipt for a contract that does not exist cannot be honoured by anything, and it reads as MORE conformant than a correct entry."
+      err E17 "$(rel "$f"): conforms_to $ct claims a contract version this distribution has never reached — its contract_version is ${LC_CV}. A receipt for a contract that does not exist cannot be honoured by anything, and it reads as MORE conformant than a correct entry."
     elif [ "$ct" -lt "$LC_CV" ]; then
       LC_BEHIND=$((LC_BEHIND+1))
       LC_BEHIND_LIST="${LC_BEHIND_LIST}$(rel "$f")@${ct} "
@@ -709,7 +743,7 @@ if [ "$LC_BEHIND" -gt 0 ]; then
   lc_min="$(printf '%s\n' $LC_BEHIND_LIST | sed 's/.*@//' | sort -n | head -1)"
   lc_owed="$(awk -v n="$lc_min" '$2+0 > n { printf "%s ", $1 }' <<<"$LC_SINCE")"
   lc_owed="${lc_owed% }"
-  warn "W6 ${LC_BEHIND} of ${LC_ENTRIES} layer entr(y/ies) declare a conforms_to below contract_version ${LC_CV}: ${LC_BEHIND_LIST% }. Clauses introduced after the lowest of them (${lc_min}) are their migration worklist: ${lc_owed:-<none>}. This is scope, not an exemption — every one of those clauses was evaluated against these entries in this run."
+  warn W6 "${LC_BEHIND} of ${LC_ENTRIES} layer entr(y/ies) declare a conforms_to below contract_version ${LC_CV}: ${LC_BEHIND_LIST% }. Clauses introduced after the lowest of them (${lc_min}) are their migration worklist: ${lc_owed:-<none>}. This is scope, not an exemption — every one of those clauses was evaluated against these entries in this run."
 fi
 
 # ---------------------------------------------------------------------------
@@ -718,20 +752,21 @@ fi
 echo "== overrides =="
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  LC_N_OVERRIDE=$((LC_N_OVERRIDE+1))
   shadows="$(fm "$f" shadows)"; base_sha="$(fm "$f" base_sha)"
 
   fm_unterminated "$f" \
-    && err "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the override parses as a comment, not a section."
+    && err E1 "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the override parses as a comment, not a section."
 
-  [ -n "$shadows" ] || err "$(rel "$f"): missing 'shadows:' frontmatter"
+  [ -n "$shadows" ] || err E1 "$(rel "$f"): missing 'shadows:' frontmatter"
 
   if [ -z "$base_sha" ]; then
-    err "$(rel "$f"): missing 'base_sha:' — override-drift cannot be computed for this entry"
+    err E1 "$(rel "$f"): missing 'base_sha:' — override-drift cannot be computed for this entry"
   elif ! grep -Eq '^[0-9a-f]{7,40}$' <<<"$base_sha"; then
-    err "$(rel "$f"): base_sha '$base_sha' is not a 7-40 char hex sha"
+    err E1 "$(rel "$f"): base_sha '$base_sha' is not a 7-40 char hex sha"
   elif git -C "$PROJECT_ROOT" rev-parse -q --verify "${base_sha}^{commit}" >/dev/null 2>&1; then
     subj="$(git -C "$PROJECT_ROOT" log -1 --format='%s' "$base_sha" 2>/dev/null | cut -c1-46)"
-    err "$(rel "$f"): base_sha '$base_sha' is a CONSUMER commit (\"${subj}\") — it MUST be the DISTRIBUTION sha of the core rule when this override was authored. Override-drift detection is silently dead for this entry."
+    err E2 "$(rel "$f"): base_sha '$base_sha' is a CONSUMER commit (\"${subj}\") — it MUST be the DISTRIBUTION sha of the core rule when this override was authored. Override-drift detection is silently dead for this entry."
   fi
 
   # E8 — `reason:` is required. The contract has always said so and nothing read the key:
@@ -740,7 +775,7 @@ while IFS= read -r f; do
   # re-adoption can adjudicate against. Every entry on the reference consumer carries one, so
   # this fires zero times there — which is exactly why the fixture mutant below exists.
   [ -n "$(fm "$f" reason)" ] \
-    || err "$(rel "$f"): missing 'reason:' frontmatter. An override records why this consumer
+    || err E8 "$(rel "$f"): missing 'reason:' frontmatter. An override records why this consumer
 diverges from upstream; without it a later re-adoption has nothing to adjudicate the divergence against."
 
   # E3 / E7 — EVERY comma-part of `shadows:`, file AND anchor.
@@ -772,12 +807,12 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
       [ -n "$_pair" ] || continue
       tgt="${_pair%%"$_tab"*}"; anc="${_pair#*"$_tab"}"
       if [ -z "$tgt" ]; then
-        err "$(rel "$f"): shadows part '#$anc' names no target file, and no earlier comma-part supplies one to inherit. A bare '#anchor' inherits the file from the part before it; as the FIRST part there is nothing to inherit, so this part shadows nothing and every file and anchor check on it is skipped in silence."
+        err E3 "$(rel "$f"): shadows part '#$anc' names no target file, and no earlier comma-part supplies one to inherit. A bare '#anchor' inherits the file from the part before it; as the FIRST part there is nothing to inherit, so this part shadows nothing and every file and anchor check on it is skipped in silence."
         continue
       fi
       core_file="$(resolve_target "$tgt")"
       if [ ! -f "$core_file" ]; then
-        err "$(rel "$f"): shadows target '$tgt' does not exist at $core_file"
+        err E3 "$(rel "$f"): shadows target '$tgt' does not exist at $core_file"
         continue
       fi
       [ -n "$anc" ] || continue
@@ -785,10 +820,10 @@ diverges from upstream; without it a later re-adoption has nothing to adjudicate
         FORWARD) : ;;
         REVERSE:*)
           real="$(anchor_arm "$anc" < "$core_file" | sed 's/^REVERSE://')"
-          err "$(rel "$f"): shadows anchor '$anc' is not a heading in $tgt — it CONTAINS the heading '$real'. It resolves only by the reverse arm of the containment match, which silently widens the shadow to that WHOLE section: you believe you shadowed a narrower span and you have shadowed everything under that heading. Write the anchor as '$real', or narrow the shadow to the sub-headings you actually rewrote."
+          err E7 "$(rel "$f"): shadows anchor '$anc' is not a heading in $tgt — it CONTAINS the heading '$real'. It resolves only by the reverse arm of the containment match, which silently widens the shadow to that WHOLE section: you believe you shadowed a narrower span and you have shadowed everything under that heading. Write the anchor as '$real', or narrow the shadow to the sub-headings you actually rewrote."
           ;;
         *)
-          err "$(rel "$f"): shadows anchor '$anc' matches no heading in $tgt. The override shadows nothing, so its body never reaches the lead while every mechanical check reports green."
+          err E7 "$(rel "$f"): shadows anchor '$anc' matches no heading in $tgt. The override shadows nothing, so its body never reaches the lead while every mechanical check reports green."
           ;;
       esac
     # HERE-DOC, NOT A PIPE. `printf | tr | while` puts the loop body in a SUBSHELL, so every
@@ -929,17 +964,18 @@ LIVE_RULES="$(printf '%s\n' "$LIVE_RULES" | grep -E '.' | sort -u)"
 # makes every historical id look retired, which would bury the real subjects in noise and
 # is the mirror of the unreadable-history case below.
 if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ]; then
-  err "E16 built an EMPTY resolvability set from the layer entries and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
+  err E16 "built an EMPTY resolvability set from the layer entries and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
 fi
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  LC_N_EXTENSION=$((LC_N_EXTENSION+1))
   kind="$(fm "$f" kind)"; hooks="$(fm "$f" hooks | awk '{print $1}')"; id="$(fm "$f" id)"
 
   fm_unterminated "$f" \
-    && err "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the extension parses as a comment, not a section."
+    && err E4 "$(rel "$f"): frontmatter opens with '---' but never closes. Every reader here scans to EOF for its keys, so the entry looks well-formed while its body is still inside the YAML block — where the '### …' heading that carries the extension parses as a comment, not a section."
 
-  [ -n "$kind" ] || err "$(rel "$f"): missing 'kind:' frontmatter"
-  [ -n "$id" ]   || err "$(rel "$f"): missing 'id:' frontmatter"
+  [ -n "$kind" ] || err E4 "$(rel "$f"): missing 'kind:' frontmatter"
+  [ -n "$id" ]   || err E4 "$(rel "$f"): missing 'id:' frontmatter"
   # E9 — `push_candidate:` is required, and must be a boolean. The contract declared this key
   # and NOTHING read it: `grep -rl push_candidate` over the consumer's scripts, core/scripts and
   # core/hooks matched zero files. It is the flag the push queue is drained from, so an entry
@@ -948,16 +984,16 @@ while IFS= read -r f; do
   pc="$(fm "$f" push_candidate)"
   case "$pc" in
     true|false) : ;;
-    "")  err "$(rel "$f"): missing 'push_candidate:' frontmatter. It is the flag the push queue is drained from, so an entry without it can never be offered upstream and never retired on absorption." ;;
-    *)   err "$(rel "$f"): push_candidate '$pc' is not true or false." ;;
+    "")  err E9 "$(rel "$f"): missing 'push_candidate:' frontmatter. It is the flag the push queue is drained from, so an entry without it can never be offered upstream and never retired on absorption." ;;
+    *)   err E9 "$(rel "$f"): push_candidate '$pc' is not true or false." ;;
   esac
   if [ -z "$hooks" ]; then
-    err "$(rel "$f"): missing 'hooks:' frontmatter"; continue
+    err E4 "$(rel "$f"): missing 'hooks:' frontmatter"; continue
   fi
 
   core_path="$(resolve_target "$hooks")"
   if [ ! -f "$core_path" ]; then
-    err "$(rel "$f"): hooks target '$hooks' does not exist at $core_path"; continue
+    err E5 "$(rel "$f"): hooks target '$hooks' does not exist at $core_path"; continue
   fi
 
   # --- E10 — `kind:` names a grain the loader routes. ----------------------------
@@ -965,7 +1001,7 @@ while IFS= read -r f; do
   # measured. Checked AFTER the hooks arm so a single entry missing both keys reports
   # the missing hook first; an unknown kind on an entry that hooks nothing is noise.
   if [ -n "$kind" ] && ! printf '%s\n' $LAYER_KINDS | grep -Fxq -- "$kind"; then
-    err "$(rel "$f"): kind '$kind' is not one of: $LAYER_KINDS. Rule 27's loader routes an entry by its kind, so an unrecognised one is read by nothing — the entry sits in the layer directory looking active and governs no run. If this is a new grain, it needs a loader that reads it before it needs a file that declares it."
+    err E10 "$(rel "$f"): kind '$kind' is not one of: $LAYER_KINDS. Rule 27's loader routes an entry by its kind, so an unrecognised one is read by nothing — the entry sits in the layer directory looking active and governs no run. If this is a new grain, it needs a loader that reads it before it needs a file that declares it."
   fi
 
   # --- E11/E12/E13 — the qualifier grain: `extends:` and `position:`. ------------
@@ -992,7 +1028,7 @@ while IFS= read -r f; do
     ext_pairs="$(shadow_parts "$extends")"
     ext_n="$(printf '%s\n' "$ext_pairs" | grep -c .)"
     if [ "$ext_n" -ne 1 ]; then
-      err "$(rel "$f"): extends: declares $ext_n anchors ('$extends'); exactly one is allowed. The whole point of the key is to give this entry ONE drift subject — two anchors mean two spans, and a drift row could no longer say which one moved without re-introducing the file-grain report it replaces."
+      err E11 "$(rel "$f"): extends: declares $ext_n anchors ('$extends'); exactly one is allowed. The whole point of the key is to give this entry ONE drift subject — two anchors mean two spans, and a drift row could no longer say which one moved without re-introducing the file-grain report it replaces."
     else
       ext_file="$(printf '%s' "$ext_pairs" | cut -f1)"
       ext_anc="$(printf '%s' "$ext_pairs" | cut -f2)"
@@ -1000,18 +1036,18 @@ while IFS= read -r f; do
       # field for a first part that names none, and that is the intended spelling.
       [ -n "$ext_file" ] || ext_file="$hooks"
       if [ "$ext_file" != "$hooks" ]; then
-        err "$(rel "$f"): extends: names '$ext_file' but hooks: names '$hooks'. The anchor must live in the file this entry hooks, or the narrowed drift check would watch one file while the entry augments another — a green row for a section nothing here refers to."
+        err E11 "$(rel "$f"): extends: names '$ext_file' but hooks: names '$hooks'. The anchor must live in the file this entry hooks, or the narrowed drift check would watch one file while the entry augments another — a green row for a section nothing here refers to."
       elif [ -z "$ext_anc" ]; then
-        err "$(rel "$f"): extends: '$extends' carries no '#anchor'. Without one it declares the same file grain hooks: already declares, so it narrows nothing while reading as though it did."
+        err E11 "$(rel "$f"): extends: '$extends' carries no '#anchor'. Without one it declares the same file grain hooks: already declares, so it narrows nothing while reading as though it did."
       else
         case "$(anchor_arm "$ext_anc" < "$core_path")" in
           FORWARD) : ;;
           REVERSE:*)
             ext_real="$(anchor_arm "$ext_anc" < "$core_path" | sed 's/^REVERSE://')"
-            err "$(rel "$f"): extends: anchor '$ext_anc' is not a heading in $hooks — it CONTAINS the heading '$ext_real'. It resolves only by the reverse arm of the containment match, which silently WIDENS the span to that whole section: you would believe drift was narrowed to a paragraph while the classifier watched everything under that heading. Write the anchor as '$ext_real'."
+            err E11 "$(rel "$f"): extends: anchor '$ext_anc' is not a heading in $hooks — it CONTAINS the heading '$ext_real'. It resolves only by the reverse arm of the containment match, which silently WIDENS the span to that whole section: you would believe drift was narrowed to a paragraph while the classifier watched everything under that heading. Write the anchor as '$ext_real'."
             ;;
           *)
-            err "$(rel "$f"): extends: anchor '$ext_anc' matches no heading in $hooks. The narrowed drift check has no span to watch, so this entry would report clean through every upstream change to the section it augments."
+            err E11 "$(rel "$f"): extends: anchor '$ext_anc' matches no heading in $hooks. The narrowed drift check has no span to watch, so this entry would report clean through every upstream change to the section it augments."
             ;;
         esac
       fi
@@ -1022,10 +1058,10 @@ while IFS= read -r f; do
   # On any other kind it is a key the loader never reads, which is the same silent
   # no-op E10 exists to stop one field over.
   if [ "$kind" = qualifier ]; then
-    [ -n "$extends" ]  || err "$(rel "$f"): kind 'qualifier' requires 'extends:'. A qualifier renders inside a core section, so without the anchor naming that section there is nothing for the loader to render into and nothing for the pull to drift-check."
-    [ -n "$position" ] || err "$(rel "$f"): kind 'qualifier' requires 'position:'. The loader has to place this body relative to the core prose it qualifies; undeclared, two readers of the merged section can order it differently and the rendered rulebook stops being one document."
+    [ -n "$extends" ]  || err E12 "$(rel "$f"): kind 'qualifier' requires 'extends:'. A qualifier renders inside a core section, so without the anchor naming that section there is nothing for the loader to render into and nothing for the pull to drift-check."
+    [ -n "$position" ] || err E12 "$(rel "$f"): kind 'qualifier' requires 'position:'. The loader has to place this body relative to the core prose it qualifies; undeclared, two readers of the merged section can order it differently and the rendered rulebook stops being one document."
   elif [ -n "$position" ]; then
-    err "$(rel "$f"): position '$position' is declared on kind '$kind', which does not render inside a core section. Nothing reads the key here, so it states a placement that never happens. Use kind 'qualifier' if that is what this entry does."
+    err E12 "$(rel "$f"): position '$position' is declared on kind '$kind', which does not render inside a core section. Nothing reads the key here, so it states a placement that never happens. Use kind 'qualifier' if that is what this entry does."
   fi
 
   # --- E14 — `gate_types:` is a CHECK's key. --------------------------------------
@@ -1046,13 +1082,13 @@ while IFS= read -r f; do
   # Answering them here would need a second GATE_MANIFEST grammar (I26).
   gate_types="$(unquote "$(fm "$f" gate_types)")"
   if [ -n "$gate_types" ] && [ "$kind" != check ]; then
-    err "$(rel "$f"): gate_types '$gate_types' is declared on kind '$kind'. Only a check is loaded from a GATE_MANIFEST row, so on this kind nothing reads the key and it states a loading rule that never happens. Use kind 'check' if this entry defines gate checks."
+    err E14 "$(rel "$f"): gate_types '$gate_types' is declared on kind '$kind'. Only a check is loaded from a GATE_MANIFEST row, so on this kind nothing reads the key and it states a loading rule that never happens. Use kind 'check' if this entry defines gate checks."
   fi
 
   if [ -n "$position" ]; then
     case "$position" in
       append|prepend) : ;;
-      *) err "$(rel "$f"): position '$position' is not 'append' or 'prepend'. Two positions is the whole vocabulary on purpose: a literal-prose anchor would be a THIRD anchor resolver in this repo, and reconcile/lib.sh's header records two shipped defects caused by duplicate resolvers." ;;
+      *) err E13 "$(rel "$f"): position '$position' is not 'append' or 'prepend'. Two positions is the whole vocabulary on purpose: a literal-prose anchor would be a THIRD anchor resolver in this repo, and reconcile/lib.sh's header records two shipped defects caused by duplicate resolvers." ;;
     esac
   fi
 
@@ -1095,11 +1131,11 @@ while IFS= read -r f; do
       fi
       msg="$(rel "$f"): NUMBER COLLISION on '$a.' — this defines \"$t_ext\" while core '$hooks' defines \"$t_core\" at the same number. Extensions are ADDITIVE, so both render into one merged list under one integer: a bare \"Check $a\" in a gate log, retro, or escalation has no referent. Give this check a catalog-labelled heading (\"### $a. [ext:$id] …\") per the Consumer-catalog crosswalk."
       case "$kind" in
-        check) err "$msg" ;;
-        *)     warn "$msg" ;;
+        check) err E6 "$msg" ;;
+        *)     warn W1 "$msg" ;;
       esac
     else
-      warn "$(rel "$f"): RESTATES core section '$a.' (\"${t_core:-$a}\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core section — the copy cannot drift-check against the original, so it forks silently and then contradicts it. If this entry only ADDS to the core check, hook it without redefining the number; if it RESTRICTS core, it is an override wearing extension frontmatter and belongs in overrides/ with a base_sha."
+      warn W1 "$(rel "$f"): RESTATES core section '$a.' (\"${t_core:-$a}\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core section — the copy cannot drift-check against the original, so it forks silently and then contradicts it. If this entry only ADDS to the core check, hook it without redefining the number; if it RESTRICTS core, it is an override wearing extension frontmatter and belongs in overrides/ with a base_sha."
     fi
   done < <(defined_anchors "$f")
 
@@ -1121,13 +1157,13 @@ while IFS= read -r f; do
     if [ -z "$r_ext" ] || [ -z "$r_core" ]; then continue; fi
 
     if same_title "$r_ext" "$r_core"; then
-      warn "$(rel "$f"): RESTATES core 'Rule $n' (\"$r_core\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core rule — the copy cannot drift-check against the original, so it forks silently and then contradicts it."
+      warn W4 "$(rel "$f"): RESTATES core 'Rule $n' (\"$r_core\") from '$hooks'. Rule 27(c): an extension MUST NOT restate a core rule — the copy cannot drift-check against the original, so it forks silently and then contradicts it."
       continue
     fi
     # A labelled heading is the RESOLVED state — same contract as heading_labelled.
     if [ "$(rule_labelled "$f" "$n")" = yes ]; then continue; fi
 
-    warn "$(rel "$f"): RULE NUMBER COLLISION on 'Rule $n' — this defines \"$r_ext\" while core '$hooks' defines \"$r_core\" at the same number. Extensions are ADDITIVE, so both render into one merged rulebook under one integer and a bare \"Rule $n\" in a gate log, retro finding or dispatch brief has two referents. Give this rule a catalog-labelled heading (\"## Rule $n [ext:$id] -- …\") per the Consumer-catalog crosswalk; the integer never moves. \`reconcile/relabel-extension-checks.sh --apply\` writes it."
+    warn W4 "$(rel "$f"): RULE NUMBER COLLISION on 'Rule $n' — this defines \"$r_ext\" while core '$hooks' defines \"$r_core\" at the same number. Extensions are ADDITIVE, so both render into one merged rulebook under one integer and a bare \"Rule $n\" in a gate log, retro finding or dispatch brief has two referents. Give this rule a catalog-labelled heading (\"## Rule $n [ext:$id] -- …\") per the Consumer-catalog crosswalk; the integer never moves. \`reconcile/relabel-extension-checks.sh --apply\` writes it."
   done < <(defined_rules "$f")
 
   # E15 — an allocation from core's range. See the header note for why this is a
@@ -1150,9 +1186,9 @@ while IFS= read -r f; do
     [ -n "$n" ] || continue
     want="$(out_of_band "$n")" || continue
     if grep -Fxq -- "$n" <<<"$core_rules"; then
-      err "$(rel "$f"): RULE OUT OF BAND, ALREADY COLLIDED — 'Rule $n' allocates from core's range and core '$hooks' ALREADY defines rule $n. This is not a pending risk; every gate log, retro, escalation and dispatch brief written against a bare \"Rule $n\" has two referents right now, and it acquired the second one retroactively on the day core allocated. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written, which is why numbering is a label and not a namespace until the band makes it one. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries."
+      err E15 "$(rel "$f"): RULE OUT OF BAND, ALREADY COLLIDED — 'Rule $n' allocates from core's range and core '$hooks' ALREADY defines rule $n. This is not a pending risk; every gate log, retro, escalation and dispatch brief written against a bare \"Rule $n\" has two referents right now, and it acquired the second one retroactively on the day core allocated. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written, which is why numbering is a label and not a namespace until the band makes it one. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries."
     else
-      err "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
+      err E15 "$(rel "$f"): RULE OUT OF BAND — 'Rule $n' allocates from core's range. Core '$hooks' does not define rule $n TODAY, so no collision is reported and none can be: the collision appears in the release where core allocates $n, retroactively, across every gate log, retro and escalation already written against it. Consumer rules are reserved at ${BAND_FLOOR} and above — renumber to 'Rule $want' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"Rule $n\" your existing history already carries. A catalog label does not settle this; it resolves a collision that exists, and the band prevents one that does not yet."
     fi
   done < <(defined_rules "$f")
 
@@ -1168,9 +1204,9 @@ while IFS= read -r f; do
     [ -n "$a" ] || continue
     want="$(out_of_band "$a")" || continue
     if grep -Fxq -- "$a" <<<"$core_anchors"; then
-      err "$(rel "$f"): SECTION ID OUT OF BAND, ALREADY COLLIDED — '$a.' allocates from core's range and core '$hooks' ALREADY defines '$a.'. Every gate log, retro and escalation written against a bare \"$a\" has two referents right now, and a gate log is the durable audit record, so it cannot be corrected after the fact. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written. E6 may be silent on this entry — a labelled heading is E6's resolved state — and that silence is the label doing its job on the reference, not the allocation ceasing to be one. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
+      err E15 "$(rel "$f"): SECTION ID OUT OF BAND, ALREADY COLLIDED — '$a.' allocates from core's range and core '$hooks' ALREADY defines '$a.'. Every gate log, retro and escalation written against a bare \"$a\" has two referents right now, and a gate log is the durable audit record, so it cannot be corrected after the fact. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written. E6 may be silent on this entry — a labelled heading is E6's resolved state — and that silence is the label doing its job on the reference, not the allocation ceasing to be one. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
     else
-      err "$(rel "$f"): SECTION ID OUT OF BAND — '$a.' allocates from core's range. Core '$hooks' does not define '$a.' TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
+      err E15 "$(rel "$f"): SECTION ID OUT OF BAND — '$a.' allocates from core's range. Core '$hooks' does not define '$a.' TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
     fi
   done < <(defined_anchors "$f")
 
@@ -1208,7 +1244,7 @@ while IFS= read -r f; do
           grep -Fxq -- "$_rid" <<<"$CROSSWALK_IDS" && continue
           grep -Fxq -- "${_lbl}${_rid}" <<<"$CROSSWALK_IDS" && continue
           grep -Fxq -- "Check ${_rid}" <<<"$CROSSWALK_IDS" && continue
-          err "$(rel "$f"): RETIRED ID WITH NO CROSSWALK ROW — this entry used to define '${_lbl}${_rid}' and no longer does, and extensions/README.md carries no row resolving it. Every gate log, retro and escalation written while it was live cites a bare \"${_lbl}${_rid}\", those citations are permanent, and no renumber can reach back into them — the row is the only thing that keeps them resolvable. Add one naming '${_lbl}${_rid}', the id it became, and the title, then this clears. Core does NOT claim to check the table's completeness against your evidence and cannot; it checks the one thing it can see, which is an id leaving this entry."
+          err E16 "$(rel "$f"): RETIRED ID WITH NO CROSSWALK ROW — this entry used to define '${_lbl}${_rid}' and no longer does, and extensions/README.md carries no row resolving it. Every gate log, retro and escalation written while it was live cites a bare \"${_lbl}${_rid}\", those citations are permanent, and no renumber can reach back into them — the row is the only thing that keeps them resolvable. Add one naming '${_lbl}${_rid}', the id it became, and the title, then this clears. Core does NOT claim to check the table's completeness against your evidence and cannot; it checks the one thing it can see, which is an id leaving this entry."
         done < <(comm -23 <(printf '%s\n' "$_was" | sort -u) <(printf '%s\n' "$_now" | sort -u))
       done
     fi
@@ -1218,7 +1254,7 @@ while IFS= read -r f; do
 
   # W2 — a restriction in an additive layer is a mis-filed override.
   if grep -Eqi 'only[^.]{0,60}(are|is) valid|is NOT subject to|are the only valid' "$f"; then
-    warn "$(rel "$f"): contains restricting language (\"only … are valid\" / \"is NOT subject to\"). An extension ADDS behavior; a restriction on a core rule belongs in overrides/ with a base_sha so drift is tracked."
+    warn W2 "$(rel "$f"): contains restricting language (\"only … are valid\" / \"is NOT subject to\"). An extension ADDS behavior; a restriction on a core rule belongs in overrides/ with a base_sha so drift is tracked."
   fi
 done < <(layer_files "$EXT_DIR")
 
@@ -1233,7 +1269,7 @@ if [ "$CROSSWALK_UNREADABLE_N" -gt 0 ]; then
     shallow) cw_why="this is a SHALLOW clone, so the id history is truncated at the graft boundary and an id retired before it is invisible" ;;
     *)       cw_why="the file is tracked but its diff history yielded none of the ids it currently defines" ;;
   esac
-  err "RETIRED-ID HISTORY UNREADABLE — E16 could not be evaluated for ${CROSSWALK_UNREADABLE_N} entr(y/ies) because ${cw_why}. These were NOT judged clean, they were not judged at all: ${CROSSWALK_UNREADABLE}. Re-run in a full clone (\`git fetch --unshallow\`) before reading the crosswalk as complete."
+  err E16 "RETIRED-ID HISTORY UNREADABLE — E16 could not be evaluated for ${CROSSWALK_UNREADABLE_N} entr(y/ies) because ${cw_why}. These were NOT judged clean, they were not judged at all: ${CROSSWALK_UNREADABLE}. Re-run in a full clone (\`git fetch --unshallow\`) before reading the crosswalk as complete."
 fi
 
 # ---------------------------------------------------------------------------
@@ -1255,7 +1291,7 @@ while IFS= read -r f; do
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     grep -Fxq -- "$ref" <<<"$GLOBAL_STEP_ANCHORS" && continue
-    warn "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
+    warn W3 "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
   done < <(grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Step[ -]//' | sort -u)
 done <<< "$all_files"
 
@@ -1274,4 +1310,76 @@ printf 'validate-layer-entries: %d error(s), %d warning(s)\n' "$ERRORS" "$WARNS"
 # unevaluated consumer and a conforming one produce the same line.
 printf 'LAYER_CONFORMANCE v1 contract_version=%s entries=%d at_current=%d behind=%d undeclared=%d errors=%d warnings=%d\n' \
   "${LC_CV:--}" "$LC_ENTRIES" "$LC_CURRENT" "$LC_BEHIND" "$LC_UNDECLARED" "$ERRORS" "$WARNS"
+
+# THE MEASURED CENSUS — `measured{fires,of}`, the charter's last unbuilt contract field.
+#
+# WHY IT IS EMITTED AND NOT STORED. The charter asked for `measured{fires,of,fp}` as a row
+# in layer-contract.yaml. A stored count is writable without the run, which is the exact
+# forgeability test v0.123.0 put on evidence cells, and a hand-maintained fourth field is
+# the drift shape `level:` sat in for six versions. So the count is produced here, per code,
+# by the emitters themselves: `fires` is what this run actually reported and `of` is the
+# subject population it reported against.
+#
+# WHAT THE READER IS FOR. `silent_with_subjects` is the charter's own sentence as a number —
+# a clause whose `fires` is 0 against a non-empty `of` is a check that did not fire on
+# anything it was given. On a CONFORMING consumer that number is high and correct, which is
+# why this line is data and not a verdict: the reading that means something is the one taken
+# across the fixture suite, where a mutant seeds each clause's violation and the clause that
+# still reads 0 is the one that cannot fire. `fixture:` is the stored half of the same
+# question and I64 binds it.
+#
+# `contract_version=-` and `measured=-` are the honest readings when the contract could not
+# be read: the populations below are still real, but nothing maps a code to a subject, and
+# printing an empty census would make an unevaluated run and a clean one produce one line.
+lc_m_n=0; lc_m_fired=0; lc_m_silent=0; lc_m_list=''
+if [ -n "$LC_CODE_ROWS" ]; then
+  while read -r lc_m_code lc_m_clause lc_m_subj lc_m_enf; do
+    [ "${lc_m_enf:-}" = validate-layer-entries.sh ] || continue
+    case "$lc_m_subj" in
+      override)  lc_m_of=$LC_N_OVERRIDE ;;
+      extension) lc_m_of=$LC_N_EXTENSION ;;
+      *)         lc_m_of=$((LC_N_OVERRIDE+LC_N_EXTENSION)) ;;
+    esac
+    # `grep -c` exits 1 on zero matches and prints the 0 anyway; the `|| true` keeps the
+    # count and not the exit code. It reads the whole stream, so there is no early-close
+    # EPIPE here — the trap I54 exists for is `grep -q`, which this deliberately is not.
+    lc_m_f="$(printf '%s\n' $LC_FIRED | grep -Fxc -- "$lc_m_code" || true)"
+    lc_m_n=$((lc_m_n+1))
+    if [ "$lc_m_f" -gt 0 ]; then
+      lc_m_fired=$((lc_m_fired+1))
+    elif [ "$lc_m_of" -gt 0 ]; then
+      lc_m_silent=$((lc_m_silent+1))
+    fi
+    lc_m_list="${lc_m_list}${lc_m_list:+,}${lc_m_code}=${lc_m_clause}:${lc_m_f}/${lc_m_of}"
+  done <<EOF
+$LC_CODE_ROWS
+EOF
+fi
+# UNCLAIMED — a code this run REPORTED that the installed contract claims from no clause.
+#
+# This is I36's reverse direction asked at run time, in the consumer, and it is not a
+# theoretical arm: the first run of this census against the reference consumer reported 103
+# errors with `fired=0`, because that consumer's INSTALLED contract is at version 7 while its
+# validator emits E15/E16/E17. Every one of those findings reached an operator with no clause
+# behind it in the contract they actually hold — which is the state I36 forbids in the
+# distribution and nothing was watching for in the consumer. It is the sharpest single
+# signal that a pull landed one half of a release.
+#
+# Reported, never blocking: the remedy is a pull, and a validator that refuses until the
+# consumer has pulled is one that cannot be run to find out what to pull.
+lc_m_unclaimed=''
+if [ -n "$LC_CODE_ROWS" ]; then
+  while read -r lc_m_c; do
+    [ -n "$lc_m_c" ] || continue
+    awk -v c="$lc_m_c" '$1 == c { found=1 } END { exit !found }' <<<"$LC_CODE_ROWS" && continue
+    lc_m_unclaimed="${lc_m_unclaimed}${lc_m_unclaimed:+,}${lc_m_c}"
+  done < <(printf '%s\n' $LC_FIRED | grep -E '.' | sort -u)
+fi
+
+# A `-` in every derived cell, never a plausible 0. The populations stay numeric because the
+# passes counted them without the contract's help, and saying so is the point of the split.
+if [ "$lc_m_n" -eq 0 ]; then lc_m_n='-'; lc_m_fired='-'; lc_m_silent='-'; fi
+printf 'LAYER_MEASURED v1 enforcer=validate-layer-entries.sh contract_version=%s codes=%s fired=%s silent_with_subjects=%s unclaimed=%s subjects=override:%d,extension:%d measured=%s\n' \
+  "${LC_CV:--}" "$lc_m_n" "$lc_m_fired" "$lc_m_silent" "${lc_m_unclaimed:-none}" \
+  "$LC_N_OVERRIDE" "$LC_N_EXTENSION" "${lc_m_list:--}"
 [ "$ERRORS" -eq 0 ]

@@ -17,6 +17,129 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.222.0] — 2026-07-31
+
+### A finding now names the clause it came from, and the contract's central join stops being satisfiable by a comment (I64)
+
+`layer-contract.yaml`'s header has claimed since v0.181.0 that **"the binding is on a token the
+enforcer ALREADY emits"**, and named that as the property letting **I36** run the join in both
+directions. Measured at `contract_version: 9`, it was false for **twenty of the forty-three
+clauses**:
+
+| Enforcer | codes bound to it | codes reaching an executable line |
+|---|---|---|
+| `core/scripts/validate-layer-entries.sh` | 22 | **4** — and two of those four only inside a *neighbouring* code's message prose |
+| `core/scripts/validate-gate-manifest.sh` | 2 | **0** |
+| `core/skills/ai-dlc-update/reconcile/layer-drift.sh` | 19 | 19 — these are printed as row tokens |
+
+Control, same invocation: a bogus code returns 0 in all three columns, and `err` matches 44 lines
+in the entry validator.
+
+I36 forward tests the join with `grep -qF` over the **whole file, comments included**, so
+eighteen clauses were satisfying the contract's central join on a header comment — text no run
+can print. The word *already* was the tell: nothing had been added to the scripts to make the
+join work, and that was being recorded as a virtue.
+
+**What it cost, which is not cosmetic.** A finding that does not carry its code cannot be joined
+back to the rule behind it — not by the operator reading it, not by a gate log, not by any
+census. And a clause whose code no code path emits **cannot fire while reading, to I36, exactly
+like one that passed**. That is this repo's named defect class sitting inside the mechanism built
+to end it.
+
+**The code is now an argument, not a prefix an author remembers to type.** `err`/`warn` take the
+code first and print it: `ERROR  E11  <message>`. Forty-nine call sites across the entry
+validator were tagged against an explicit site→clause table, and both `GM` messages now carry
+their code. Every existing fixture assertion greps `^ERROR.*<substring>`, so the prefix is
+transparent to them — one mutant in `layer-conforms-to` targeted an emitter line by its old text
+and was updated, which is that fixture's `cmp -s` guard doing its job.
+
+**I64 holds it there.** Per-enforcer, keyed on the emission site rather than on the file: the
+code argument for the emitter-based script, a non-comment row token for the two classifiers. The
+comment-only set is **0** for all three enforcers and cannot rise without failing the build.
+
+**The uniform "appears on a non-comment line" predicate was measured and REJECTED.** `E6` appears
+on two non-comment lines of the entry validator, both inside `E15`'s message text explaining why
+`E6` is silent — so a line-grain predicate scores `E6` bound on a cross-reference. The emission
+site cannot be satisfied by prose about another clause.
+
+**I64 ships FORWARD ONLY, and that is a decision against a measurement.** A reverse arm would be
+strictly stronger than I36 reverse — which harvests the whole file and so cannot see a typo'd
+code at a call site when the correct token sits in a nearby comment. It is not shipped because
+that unique subject **cannot be constructed by mutating the contract**, which is the only thing
+this invariant's fixture can mutate: every contract-side mutation that orphans a code trips I36
+reverse on the same finding. An arm whose own case cannot be demonstrated red is an arm that
+reads exactly like one that passed. Recorded in place rather than silently omitted.
+
+### `measured{fires,of}` — the charter's last unbuilt contract field, emitted by the run instead of stored
+
+The charter specified `predicate`, `fixture` and `measured{fires,of,fp}` as columns in
+`layer-contract.yaml`; all three read **0** against a control of 43 for every field that is
+present. §4b of the governing plan overturned the disposition to drop them.
+
+`measured` ships as a **run-produced census**, not a stored row, because a stored count is
+writable without the run — v0.123.0's forgeability test — and a fourth hand-maintained field is
+the drift shape `level:` sat in for six contract versions. `validate-layer-entries.sh` now emits:
+
+```
+LAYER_MEASURED v1 enforcer=… contract_version=9 codes=22 fired=2 silent_with_subjects=20
+  unclaimed=none subjects=override:12,extension:38 measured=E1=LC-O1:0/12,E2=LC-O2:0/12,…
+```
+
+`of` is derived by joining each clause's own `subject:` field to populations the passes count
+themselves — never from `LC_ENTRIES`, which only advances when the contract was readable and
+would report a population of zero on a broken install, making every clause look
+evaluated-and-clean. `silent_with_subjects` is the charter's sentence as a number: a clause whose
+`fires` is 0 against a non-empty `of`. It is **data, not a verdict** — on a conforming consumer
+that number is correctly high, and the reading that means something is the one taken across the
+fixture suite. Every derived cell prints `-` rather than a plausible `0` when the contract could
+not be read.
+
+**`unclaimed=` was added because the first run of the census produced it.** Against the reference
+consumer the line read **103 errors with `fired=0`** — that consumer's *installed* contract is at
+version 7 while its validator emits `E15`/`E16`/`E17`. Every one of those findings reached an
+operator with **no clause behind it in the contract they actually hold**: I36's reverse direction,
+asked at run time, in the consumer, where nothing was watching for it. It is the sharpest single
+signal that a pull landed one half of a release. Reported, never blocking — the remedy is a pull,
+and a validator that refuses until you have pulled cannot tell you what to pull.
+
+### Still owed from this step, and why it is its own release
+
+`fixture:` — the stored half of the same question, answering *"is there a mutant proving this
+clause fires"* as data — is **not** in this release. Measuring it first changed its design and
+found live gaps:
+
+- A **derived** join ("which fixture names this code") has a measured false-positive set and
+  cannot be shipped: at word grain `W2` and `W3` match `release-version-triple`, where they are
+  **shell variable names** (`W2="$WORK/cumulative"`). The join must verify a clause-declared pair,
+  never derive one.
+- At word grain, **6 clauses have no fixture exercising their code at all** — `E4`, `E5`,
+  `HARD-OVERRIDE-BASE-UNRESOLVABLE`, `HARD-OVERRIDE-BASE-CONSUMER-SHA`, `OVERRIDE-DRIFT-FILE`,
+  `OVERRIDE-ANCHOR-UNRESOLVED`. Controls: a bogus code matches 0 fixtures, `W6` matches 2. That is
+  precisely the finding `fixture:` was promised to state as data, and closing it is fixture work,
+  not a field addition.
+- `E6` and `EXTENSION-CHECK-NUMBER-COLLISION` **are** exercised, in `layer-catalog-collision`, and
+  merely do not print the token — which this release's tagging fixes for `E6`.
+
+`predicate:` and `fp` are dispositions owed with their measurements in the same release.
+
+### Found by the census on its first run against a fresh install, and NOT fixed here
+
+Verified on a tree built by `scripts/install.sh` into an empty directory: a **brand-new consumer
+with no layer entries at all exits 1**. The census names the cell — `E16=LC-N6:1/0`, a clause
+firing once against a subject population of zero — and the cause is `E16`'s vacuity arm, which
+cannot tell *"this consumer has no entries yet"* from *"I could not read the entries it has"* and
+reports the empty resolvability set either way.
+
+The arm is **unchanged by this release**; the diff adds only its code argument. It has behaved
+this way since v0.218.0 and nothing surfaced it, because a bare `1 error(s)` on a tree nobody
+looks at reads like any other error. It is left alone deliberately: whether an empty consumer is
+an error is a real question about the clause, not a mechanical slip, and answering it inside a
+release about attribution would be the scope creep this plan keeps catching. Filed for §6c-4d.
+
+Controls for the same run: with the installed contract present the footer reads
+`contract_version=9 codes=22 unclaimed=none`; with it deleted, `contract_version=- codes=- fired=-`
+— never a plausible `0`.
+
 ## [0.221.0] — 2026-07-31
 
 ### Prose that names a contract code now cites the clause that claims it (I62), and the contract pins the files it absorbed (I63)

@@ -157,7 +157,7 @@ if mk m2 sed 's|^layer_files() { \[ -d "$1" \] .*$|layer_files() { [ -d "$1" ] \
 fi
 
 # --- m3: the missing-contract refusal removed -------------------------------------------
-if mk m3 sed 's|^  err "E17 cannot read the layer contract|  : "E17 cannot read the layer contract|'; then
+if mk m3 sed 's|^  err E17 "cannot read the layer contract|  : "cannot read the layer contract|'; then
   M3_OUT="$(bash "$TMP/m3.sh" "$NOLC" 2>&1)"; M3_RC=$?
   say "$([ "$M3_RC" -eq 0 ] && [ "$(footer_field "$M3_OUT" contract_version)" = '-' ] && echo 1 || echo 0)" \
     "MUTANT m3 killed: without the refusal an uninstalled contract exits 0 while the footer still admits it read no version"
