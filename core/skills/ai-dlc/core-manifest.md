@@ -162,6 +162,7 @@ core_manifest:
   - fixtures/ci-gates-resolution/**
   - fixtures/consumer-machinery-home/**
   - fixtures/layer-qualifier-grain/**
+  - fixtures/layer-extends-grain/**
   - fixtures/layer-adjudication-tier/**
   - fixtures/context-mode-protect/**
   - fixtures/context-sensor/**
