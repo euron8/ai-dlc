@@ -63,6 +63,78 @@ authorship order separates the classes — 7 core-first, 1 consumer-first, 0 und
 eight. It is not wired because a shallow or squashed consumer clone answers empty on both sides, and
 an arm that cannot fire reads exactly like one that passed.
 
+## [0.217.0] — 2026-07-31
+
+### Added — `layer-extends-grain`: the `extends:` narrowing proved on the axis that was missing, the SPAN
+
+The charter that opened this program listed six fixtures. Its `layer-extends-grain` row named the
+load-bearing one: *a commit changing the hooked file **outside** the declared anchor produces **no**
+`EXTENSION-ANCHOR-DRIFT`* — the assertion separating a real narrowing from a relabelling. The
+directory now exists.
+
+**What it adds that `layer-qualifier-grain` did not: the span axis.** That fixture varies the
+**entry** inside **one** span — three entries, three anchors, three verdicts from a single
+`base..theirs`. Every verdict there is attributable to something the entry declares, so a classifier
+keyed on anything entry-intrinsic (the id, the basename, merely *whether* `extends:` is present)
+reproduces its whole result table without reading a section body at either ref. This fixture holds
+two entries **fixed** and moves the span under them. They swap verdicts:
+
+| | run 1 `BASE..MID` | run 2 `MID..TIP` |
+|---|---|---|
+| `anchored-alpha` | `EXTENSION-OK` | `EXTENSION-ANCHOR-DRIFT` |
+| `anchored-beta` | `EXTENSION-ANCHOR-DRIFT` | `EXTENSION-OK` |
+| `unanchored` | `EXTENSION-HOOK-DRIFT` | `EXTENSION-HOOK-DRIFT` |
+
+Row 1 column 1 is the charter's arm. Row 1 column 2 is the **same entry** once its own anchor moves —
+held fixed, an entry cannot supply the difference, so the difference has to come from the bytes. Row
+2 column 2 is the diagonal: a sibling staying quiet in the run where its neighbour reports. Row 3 is
+the liveness witness, because every `EXTENSION-OK` above is an *absence* and a classifier that had
+stopped emitting would satisfy all of them.
+
+Both premises — the hooked file moved, the declared section did not — are extracted by an awk that
+shares no code with the classifier. Read back through `lib.sh`'s `section_of()`, a resolver returning
+the empty string for everything would report every section unchanged **and** make every anchored entry
+report `EXTENSION-OK`, and the fixture would call that a pass.
+
+**Mutants are scored by exact six-cell vector, not per row.** Both branches under test are occupied
+twice — `EXTENSION-OK` at (alpha, run 1) and (beta, run 2), `ANCHOR-DRIFT` at (beta, run 1) and
+(alpha, run 2) — so any mutation of either branch necessarily moves two cells and per-row scoring
+would report entanglement on every mutant. Each of the four carries one assertion: the complete
+vector it must produce, stated positively and distinct from every other's. Attribution stays exact
+and no assertion is satisfiable by a mutant that merely went quiet. `m1` drops the BASE side of the
+span comparison; `m2` leaks the narrowing onto entries that declared no anchor; `m3` makes every
+anchored entry watch one shared span, which is the **only** thing the diagonal detects; `m4` widens
+the resolved span back to the whole file — `extends:` declared, read and ignored, which is precisely
+what a relabelling looks like. Two land in `lib.sh` rather than the classifier, hence a copy of the
+whole `reconcile/` directory and an unmutated control that runs first.
+
+### Refuted — the charter row this fixture was scoped from
+
+It said the assertion existed nowhere. **It existed**, in the charter's own words, at
+`core/fixtures/layer-qualifier-grain/run.sh:9-14`, implemented in that fixture's Part 1a, paired with
+its anti-silencing half, and killed by its `M1` mutant. Measured: `OUTSIDE the declared anchor` over
+`core/fixtures/` returns that one hit; control, a phrase that should be absent returns rc=1 in the
+same invocation.
+
+The row was scored on the **directory name**, in a table whose own header says it is judged on the
+assertion, one line above that same document's full retraction of exactly that mistake. Recorded
+because a refutation nobody writes down gets re-proposed — and because the corrected count moves the
+charter's fixture scorecard from four of six met to **five of six**, leaving only Part E's, which is
+also the only one of the six no ledger ever scheduled.
+
+### Fixed — a fixture lost a whole mutant and still printed PASS
+
+Found in this fixture's own first run, and the reason it now carries a literal
+`EXPECTED_ASSERTIONS`. A `mk_mutant` call lost one space, so the helper received two arguments
+instead of three; `set -u` killed the **subshell** that `$( )` had opened; `if m="$( … )"` read that
+as a false branch; and the arm silently did not run. Seventeen green lines and a `PASS`, with the
+mutant proving the load-bearing branch simply absent — a check that cannot fire reading exactly like
+one that passed, inside a fixture written about that class. The guard then caught a second real
+error on its first run, an off-by-one in the expected count itself.
+
+**Any fixture emitting its arms from inside `$( )` needs a literal expected count.** A failed
+assertion is loud; an assertion that never executed is not.
+
 ## [0.216.0] — 2026-07-30
 
 ### Added — I60: every mode one shipped file names on another shipped script is one that script dispatches
