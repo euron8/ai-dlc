@@ -224,11 +224,120 @@ sed 's|^    prose_home: .*$|    prose_home: core/skills/ai-dlc/core-manifest.md|
 mutant_fires "$TMP/i61-zero.yaml" "found ZERO clause bullets" "i61-zero-bullets" \
   "an extraction that finds nothing reports exactly like one where every bullet agrees"
 
+# --- I62 arm 1: prose in a declared HOME names a code and cites the wrong clause ------
+# THE SHAPE I38 AND I61 BOTH MISS. I38 iterates clauses and is satisfied by one mention of the
+# id anywhere in the file; I61 iterates bullets that ALREADY carry an id. Prose that states a
+# duty, names the code enforcing it and carries no clause id is outside both, and it was live in
+# eleven places on the tree this shipped against.
+#
+# The mutation SWAPS two codes between two clauses rather than renaming one. A rename would move
+# the code out of every enforcer's vocabulary and fire I36 as well; a swap keeps both codes
+# emitted and both claimed, so I36, I37, I38, I41 and I61 all stay silent and this arm fires
+# alone. The pair is chosen for isolation too: both are WARN, so no severity moves, and both are
+# named ONLY in extensions/README.md, so the pointer arm below cannot be what fires.
+sed -e 's/^    code: EXTENSION-RESTATES-CORE$/    code: __SWAP__/' \
+    -e 's/^    code: EXTENSION-FIXTURE-UNBOUND$/    code: EXTENSION-RESTATES-CORE/' \
+    -e 's/^    code: __SWAP__$/    code: EXTENSION-FIXTURE-UNBOUND/' \
+    "$CONTRACT" > "$TMP/i62-home.yaml"
+mutant_fires "$TMP/i62-home.yaml" "I62: core/skills/ai-dlc/extensions/README.md" "i62-home" \
+  "prose in a declared home names a code while the clause that owns it goes unnamed"
+
+# --- I62 arm 2: the POINTER scope ------------------------------------------------------
+# A pointer homes no clause of its own, so the home arm's derived scope is empty for it and a
+# separate scope — every code it names — is what puts Rule 27 under the join at all. Without
+# this arm the pointer role would be a pin with no reader.
+#
+# W4 is named by NO pinned file except core SKILL.md, and W2 by none at all, so swapping them
+# moves exactly one unit's owed id and cannot reach extensions/README.md.
+sed -e 's/^    code: W4$/    code: __SWAP__/' \
+    -e 's/^    code: W2$/    code: W4/' \
+    -e 's/^    code: __SWAP__$/    code: W2/' \
+    "$CONTRACT" > "$TMP/i62-pointer.yaml"
+mutant_fires "$TMP/i62-pointer.yaml" "I62: core/skills/ai-dlc/SKILL.md" "i62-pointer" \
+  "a pointer that names a code without citing its clause is a second, unbound copy of the rule"
+
+# --- I62 arm 3: the vacuity guard ------------------------------------------------------
+# An empty code vocabulary makes every pinned file report clean for the reason a conforming tree
+# does. The only contract-only way to empty it is to move the field name out from under the
+# triple extractor, and `prose_home:` is read by I61 and I63 as well, so those co-fire. That is
+# unavoidable and is the same call this fixture already makes for i61-zero-bullets: the
+# assertion is on I62's OWN zero sentence, which no other arm and no other invariant emits.
+sed 's/^    prose_home:/    prose_home_x:/' "$CONTRACT" > "$TMP/i62-zero.yaml"
+mutant_fires "$TMP/i62-zero.yaml" "triples out of layer-contract.yaml" "i62-zero-vocab" \
+  "a scan with no vocabulary reports exactly like a tree where every mention is cited"
+
+# --- I63 arm 1: a pinned HOME that carries no clause ----------------------------------
+# The state that ran for nineteen releases with nothing able to say so. core-manifest.md is
+# re-pinned home; it is the prose_home of no clause, which is precisely the invisible gap.
+awk '
+  /^  - path: core\/skills\/ai-dlc\/core-manifest.md$/ { p=1 }
+  p && /^    role: none$/ { print "    role: home"; p=0; next }
+  { print }
+' "$CONTRACT" > "$TMP/i63-home.yaml"
+mutant_fires "$TMP/i63-home.yaml" "pinned role: home but is the declared prose_home of NO clause" \
+  "i63-home-empty" "a home contributing zero clauses is the gap this pin exists to make loud"
+
+# --- I63 arm 2: a pinned POINTER that points at nothing --------------------------------
+awk '
+  /^  - path: core\/skills\/ai-dlc\/core-manifest.md$/ { p=1 }
+  p && /^    role: none$/ { print "    role: pointer"; p=0; next }
+  { print }
+' "$CONTRACT" > "$TMP/i63-pointer.yaml"
+mutant_fires "$TMP/i63-pointer.yaml" "pinned role: pointer but names NO contract code" \
+  "i63-pointer-empty" "a pointer naming no code asserts a relationship the file does not have"
+
+# --- I63 arm 3: a file pinned `none` that has GROWN contract prose ---------------------
+# role: none is what keeps a file outside I62's citation join, so a file that quietly acquires
+# contract prose under that pin states duties nothing binds. Core SKILL.md names four codes.
+awk '
+  /^  - path: core\/skills\/ai-dlc\/SKILL.md$/ { p=1 }
+  p && /^    role: pointer$/ { print "    role: none"; p=0; next }
+  { print }
+' "$CONTRACT" > "$TMP/i63-none.yaml"
+mutant_fires "$TMP/i63-none.yaml" "pinned role: none but names" "i63-none-grew" \
+  "a file pinned as carrying no contract prose has acquired some, outside every join"
+
+# --- I63 arm 4: a pin at a path the tree does not carry --------------------------------
+sed 's|^  - path: core/skills/ai-dlc/core-manifest.md$|  - path: core/skills/ai-dlc/nope.md|' \
+  "$CONTRACT" > "$TMP/i63-path.yaml"
+mutant_fires "$TMP/i63-path.yaml" "absorbed_from pins" "i63-bad-path" \
+  "a pin at a missing path silently drops that file from every arm"
+
+# --- I63 arm 5: a role outside the vocabulary ------------------------------------------
+# Without this the third role is an escape hatch: an unrecognised value matches no arm, so the
+# file is pinned and checked by nothing, which reads exactly like a file that passed.
+sed 's/^    role: pointer$/    role: signpost/' "$CONTRACT" > "$TMP/i63-role.yaml"
+mutant_fires "$TMP/i63-role.yaml" "not one of home, pointer or none" "i63-bad-role" \
+  "an unrecognised role matches no arm, so the file is pinned and checked by nothing"
+
+# --- I63 arm 6: REVERSE — a declared prose_home that is not pinned ----------------------
+# The direction that stops the list falling behind the contract. Exactly one entry is dropped:
+# the path line and the single role line beneath it.
+awk '
+  /^  - path: core\/skills\/ai-dlc\/overrides\/README.md$/ { skip=1; next }
+  skip == 1 && /^    role:/ { skip=0; next }
+  { print }
+' "$CONTRACT" > "$TMP/i63-reverse.yaml"
+mutant_fires "$TMP/i63-reverse.yaml" "I63 reverse" "i63-reverse" \
+  "a home outside the pinned list is checked by no role arm and reduced to a pointer by nothing"
+
+# --- I63 arm 7: the vacuity guard ------------------------------------------------------
+# An empty list has no subject, and no subject passes every arm above. It also empties I62,
+# whose scope is this list — so this one zero would retire both invariants at once.
+awk '
+  /^absorbed_from:/ { d=1 }
+  d && /^  - path:|^    role:/ { next }
+  d && /^clauses:/ { d=0 }
+  { print }
+' "$CONTRACT" > "$TMP/i63-zero.yaml"
+mutant_fires "$TMP/i63-zero.yaml" "ZERO entries out of layer-contract.yaml" "i63-zero-pins" \
+  "an empty pin list retires I63 and I62 together, and reports clean doing it"
+
 # THE ASSERTION-COUNT FLOOR. A fixture that silently stops running arms prints a shorter green
 # report, and a shorter green report reads exactly like a passing one — the lesson v0.217.0
 # paid for, where a mis-spaced helper call killed a whole mutant inside a `$( )` subshell and
 # left seventeen ok lines and a PASS. Raise this deliberately when an arm is added.
-EXPECTED_ASSERTIONS=13
+EXPECTED_ASSERTIONS=23
 echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   echo "FAIL: $ASSERTIONS assertions ran, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."

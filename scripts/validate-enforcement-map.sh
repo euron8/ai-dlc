@@ -119,6 +119,23 @@
 #                         severity vocabulary is derived from the contract's own level: values,
 #                         and a clause bullet stating no severity is itself an error — otherwise
 #                         the join empties one bullet at a time.
+#   I62 prose that NAMES a contract code cites the clause that claims it. The shape I38 and I61
+#                         both leave open: I38 is satisfied by one mention of an id anywhere in
+#                         the file, I61 only inspects bullets that already carry one. Prose that
+#                         states a duty, names its code and cites no clause was live in ELEVEN
+#                         places. Keyed on the CODE, not on a MUST/NEVER keyword scan — that
+#                         predicate's false-positive set never emptied at any of three grains,
+#                         and one 100%-bound home names no code at all, so it cannot even detect
+#                         binding. Scope is derived per file from I63's role. Vacuity is defended
+#                         by a two-directional probe the invariant writes and runs each time,
+#                         not by a count a corpus edit retires.
+#   I63 the contract PINS the files it absorbed, and each still is what it says — home, pointer
+#                         or none. `prose_home:` alone cannot close this: it is written per
+#                         clause, so a file that stops carrying clauses stops appearing, and its
+#                         silence is identical to a file never in scope. Two of the four sites
+#                         the contract claims to have absorbed carried zero clauses for nineteen
+#                         releases with nothing able to say so. Both directions, so the list
+#                         cannot fall behind the contract.
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -737,6 +754,191 @@ EOF
       err "I61 found ZERO clause bullets across the $(printf '%s' "$lc_homes" | grep -c .) declared prose home(s). Either the bullet grammar moved or the homes did; a zero here retires the whole severity join in silence, which is indistinguishable from every bullet agreeing."
     fi
   fi
+
+  # --- I63: the contract PINS the files it absorbed, and each one still is what it says. ---
+  #
+  # WHAT THIS CLOSES. The contract's own header names the four files it was created to absorb.
+  # Nothing joined that claim to anything, so "the four prose homes are reduced to pointers" was
+  # a sentence rather than a state, and a home could contribute zero clauses invisibly — which
+  # two of the four did for nineteen releases. `prose_home:` alone cannot close it: it is written
+  # per clause, so a file that stops carrying clauses simply stops appearing, and its silence is
+  # identical to a file that was never in scope.
+  #
+  # THE ROLES ARE THE POINT. `home` means the file states clauses and is a declared prose_home.
+  # `pointer` means it states none and only refers to clauses homed elsewhere — Rule 27's state,
+  # and the charter's stated goal for all four. `none` means it carries no contract prose at all;
+  # core-manifest.md is pinned that way on measurement, not on the charter's say-so, which listed
+  # it as a scatter site: it names zero contract codes and carries zero clause bullets, so the
+  # charter's four-site list was wrong about it and this records that rather than papering it.
+  #
+  # BOTH DIRECTIONS, or the pin rots the way every hand-maintained list in this repo has. Forward:
+  # a pinned file must match its declared role. Reverse: a file that becomes a prose_home without
+  # being pinned fails the build, so the list cannot silently fall behind the contract.
+  lc_pins="$(awk '
+    /^absorbed_from:/  { inblk=1; next }
+    inblk && /^[a-z_]/ { inblk=0 }
+    inblk && /^  - path:/ { p=$3; next }
+    inblk && /^    role:/ { if (p != "") { printf "%s|%s\n", p, $2; p="" } }
+  ' "$lc_file")"
+  lc_pin_n="$(printf '%s' "$lc_pins" | grep -c . || true)"
+  if [ "$lc_pin_n" -eq 0 ]; then
+    err "I63 read ZERO entries out of layer-contract.yaml's absorbed_from: list. The contract states which files it absorbed and this is the only thing holding that claim to the tree; an empty read passes every arm below by having no subject, which reads exactly like a contract whose homes are all correct."
+  else
+    while IFS='|' read -r lc_pin_path lc_pin_role; do
+      [ -n "$lc_pin_path" ] || continue
+      if [ ! -f "$REPO_ROOT/$lc_pin_path" ]; then
+        err "I63: absorbed_from pins '$lc_pin_path', which does not exist. A pin at a path the tree does not carry silently drops that file from every arm below."
+        continue
+      fi
+      lc_pin_clauses="$(awk -v h="$lc_pin_path" '/^    prose_home:/ && $2==h' "$lc_file" | grep -c . || true)"
+      # ONE PASS over the file rather than a grep per code: 43 codes x 5 pinned files is 215
+      # invocations, and a per-code `grep -q` fed a shell variable is the construct I54 forbids.
+      lc_pin_codes="$(awk '
+        NR==FNR { code[$1]=1; next }
+        { for (c in code) { if ($0 ~ ("(^|[^A-Za-z0-9_-])" c "([^A-Za-z0-9_-]|$)")) { seen[c]=1 } } }
+        END { n=0; for (c in seen) { n++ }; print n }
+      ' <(awk '/^    code:/{print $2}' "$lc_file" | sort -u) "$REPO_ROOT/$lc_pin_path")"
+      case "$lc_pin_role" in
+        home)
+          [ "$lc_pin_clauses" -gt 0 ] || err "I63: '$lc_pin_path' is pinned role: home but is the declared prose_home of NO clause. A home contributing zero clauses is the invisible gap this pin exists to make loud — either it still states clauses and one of them should declare it, or its role is pointer or none." ;;
+        pointer)
+          # NOT ALSO "pointer homes no clause": for a file in this list that is the same
+          # condition the reverse arm below tests, and shipping both would mean neither could
+          # be mutated in isolation. Reverse covers it, and covers unlisted files too.
+          [ "$lc_pin_codes" -gt 0 ] || err "I63: '$lc_pin_path' is pinned role: pointer but names NO contract code at all. It points at nothing, so the pin asserts a relationship the file does not have — pin it role: none, or restore the reference it lost." ;;
+        none)
+          [ "$lc_pin_codes" -eq 0 ] || err "I63: '$lc_pin_path' is pinned role: none but names $lc_pin_codes contract code(s). It has grown contract prose since it was pinned, and role: none is what keeps it outside I62's citation join — so every duty it now states is unbound and unmeasured." ;;
+        *)
+          err "I63: '$lc_pin_path' is pinned with role '${lc_pin_role:-<none>}', which is not one of home, pointer or none. An unrecognised role matches no arm below, so the file is pinned and checked by nothing." ;;
+      esac
+    done <<EOF
+$lc_pins
+EOF
+    # REVERSE: every declared prose_home is pinned. Without this the list falls behind the
+    # contract silently, which is the failure mode of every hand-maintained list this repo has
+    # retired — and the forward arms above would all still pass.
+    awk '/^    prose_home:/{print $2}' "$lc_file" | sort -u | while IFS= read -r lc_h; do
+      [ -n "$lc_h" ] || continue
+      if ! grep -qxF -- "$lc_h|home" <<<"$lc_pins"; then
+        err "I63 reverse: '$lc_h' is a declared prose_home but is not pinned role: home in absorbed_from. The contract states which files it absorbed; a home outside that list is checked by no role arm and reduced to a pointer by nothing."
+      fi
+    done
+  fi
+
+  TMPDIR_I62="$(mktemp -d "${TMPDIR:-/tmp}/i62-XXXXXX")"
+
+  # --- I62: prose that NAMES a contract code cites the clause that claims it. ---
+  #
+  # THE HALF I38 AND I61 BOTH LEAVE OPEN. I38 iterates CLAUSES and asks that each id appear
+  # somewhere in its declared home — file grain, satisfied by one mention anywhere. I61 iterates
+  # BULLETS THAT ALREADY CARRY AN ID and checks their severity. Neither can see the opposite
+  # shape: prose that states a duty, names the code that enforces it, and carries no clause id
+  # at all. That is the seventeen-unenforced state arriving from the prose side, and it was live
+  # in ELEVEN places on the tree this shipped against — eight in declared homes, three in Rule 27.
+  #
+  # THE PREDICATE, AND WHY IT IS NOT THE ONE THE PLAN SPECIFIED. The specified reverse arm was
+  # "every normative sentence carries a clause id", keyed on a MUST/NEVER keyword scan. Measured
+  # at three grains — line, bullet, paragraph — its false-positive set never emptied: on
+  # extensions/README.md, a file whose 27 clauses are 100% bound at bullet grain, six units still
+  # read as unbound because they explain a mechanism rather than state a rule. The distinction is
+  # semantic, so no grain reaches it. Worse, overrides/README.md — also 100% bound — names ZERO
+  # codes, so a code-shaped predicate cannot even detect that it is bound. Keying on the CODE
+  # instead of on a keyword is what makes the subject set decidable: a code is a token this
+  # contract already joins on in both directions (I36), so "names a code" is machine-answerable
+  # where "states a rule" is not.
+  #
+  # THE SCOPE IS DERIVED, NOT LISTED. For a declared `prose_home`, the subject is the codes that
+  # file is the home FOR — a file must bind the duties it is the stated home of, while naming
+  # another home's code is a cross-reference, not a restatement. That derivation is what drops
+  # ai-dlc-update/SKILL.md from 21 candidate units to 2 without a single hand-written exclusion:
+  # the other 19 narrate report rows whose clauses live elsewhere. For a file pinned `pointer`
+  # (I63), the subject is EVERY code it names, because a pointer's whole job is to point at the
+  # clause and it homes none of its own.
+  #
+  # THE VACUITY DEFENCE IS A PROBE THIS INVARIANT WRITES ITSELF, not a count. A zero here is
+  # indistinguishable from a tree where every mention is cited, and every count-based floor this
+  # could assert is one an edit to the corpus retires silently. So the extractor is run each time
+  # against two units the invariant authors: one naming a code with no id, one naming the same
+  # code WITH it. Reporting anything but exactly the first means the grammar has stopped reading
+  # either the code or the citation, and every clean line below is unattributable.
+  lc_units_flagged() {
+    # $1 file to scan   $2 file of "CODE LC-ID" pairs in scope   $3 label used in the report
+    awk -v home="$3" '
+      NR==FNR { want[$1]=$2; next }
+      function flush(   c, miss) {
+        if (buf == "") { return }
+        miss = ""
+        for (c in want) {
+          if (buf ~ ("(^|[^A-Za-z0-9_-])" c "([^A-Za-z0-9_-]|$)") &&
+              buf !~ ("(^|[^A-Za-z0-9_-])" want[c] "([^A-Za-z0-9_-]|$)")) {
+            miss = miss " " c " [" want[c] "]"
+          }
+        }
+        if (miss != "") { printf "%s:%d names%s\n", home, start, miss }
+        buf = ""
+      }
+      {
+        if ($0 ~ /^```/) { fence = !fence }
+        # Interval expressions are not portable to every awk this repo runs on, so the
+        # list-item indents are spelled out rather than written as a {0,3} bound.
+        isitem = (!fence && ($0 ~ /^([-*]|[0-9]+\.)[ \t]/ || $0 ~ /^ ([-*]|[0-9]+\.)[ \t]/ || \
+                             $0 ~ /^  ([-*]|[0-9]+\.)[ \t]/ || $0 ~ /^   ([-*]|[0-9]+\.)[ \t]/))
+        if ((!fence && $0 ~ /^[ \t]*$/) || isitem) { flush(); start = FNR }
+        buf = buf "\n" $0
+      }
+      END { flush() }
+    ' "$2" "$1"
+  }
+
+  lc_pairs_all="$TMPDIR_I62/all.pairs"
+  # `prose_home:` precedes `code:` inside a clause, so the triple is completed at the code line,
+  # not at the home line. Emitting on the wrong one reads zero triples and passes every file for
+  # want of a vocabulary — which is what the first cut of this did.
+  awk '
+    /^  - id:/         { id=$3; home=""; next }
+    /^    prose_home:/ { home=$2; next }
+    /^    code:/       { if (id != "" && home != "") { print $2, id, home }; id=""; home=""; next }
+  ' "$lc_file" > "$lc_pairs_all"
+  if [ ! -s "$lc_pairs_all" ]; then
+    err "I62 read ZERO (code, clause, prose_home) triples out of layer-contract.yaml, so every file below would be scanned against an empty vocabulary and report clean for the reason a conforming tree does."
+  else
+    # THE SELF-WRITTEN PROBE. Both directions, every run.
+    lc_probe62="$TMPDIR_I62/probe"
+    mkdir -p "$lc_probe62"
+    awk '{ print $1, $2; exit }' "$lc_pairs_all" > "$lc_probe62/pairs"
+    lc_pc="$(awk '{print $1; exit}' "$lc_probe62/pairs")"
+    lc_pi="$(awk '{print $2; exit}' "$lc_probe62/pairs")"
+    {
+      printf -- '- **Uncited.** The pull reports %s against the entry.\n' "$lc_pc"
+      printf -- '\n'
+      printf -- '- **Cited.** The pull reports %s against the entry [%s].\n' "$lc_pc" "$lc_pi"
+    } > "$lc_probe62/home.md"
+    lc_probe62_out="$(lc_units_flagged "$lc_probe62/home.md" "$lc_probe62/pairs" "probe")"
+    lc_probe62_n="$(printf '%s' "$lc_probe62_out" | grep -c . || true)"
+    if [ "$lc_probe62_n" != "1" ]; then
+      err "I62's probe answered with $lc_probe62_n finding(s) where exactly 1 is correct [$(printf '%s' "$lc_probe62_out" | tr '\n' '; ')]. The probe carries one uncited mention of '$lc_pc' and one cited by '$lc_pi'; anything but the uncited one alone means the extractor has stopped reading the code, the citation or the unit boundary, and every clean result below is an empty set produced by a grammar that can no longer find a ghost."
+    fi
+
+    while IFS='|' read -r lc_pin_path lc_pin_role; do
+      [ -n "$lc_pin_path" ] || continue
+      [ -f "$REPO_ROOT/$lc_pin_path" ] || continue
+      case "$lc_pin_role" in
+        home)    awk -v h="$lc_pin_path" '$3==h {print $1, $2}' "$lc_pairs_all" > "$TMPDIR_I62/scope" ;;
+        pointer) awk '{print $1, $2}' "$lc_pairs_all" > "$TMPDIR_I62/scope" ;;
+        *)       : > "$TMPDIR_I62/scope" ;;
+      esac
+      [ -s "$TMPDIR_I62/scope" ] || continue
+      while IFS= read -r lc_hit; do
+        [ -n "$lc_hit" ] || continue
+        err "I62: $lc_hit but cites no clause id. The prose states a duty and names the code that enforces it while the clause that owns it goes unnamed, so the reader-facing side and the enforced side are joined by nothing — which is how three severities drifted apart one field over before I61 caught them. Cite the clause id in the same bullet or paragraph."
+      done <<EOF
+$(lc_units_flagged "$REPO_ROOT/$lc_pin_path" "$TMPDIR_I62/scope" "$lc_pin_path")
+EOF
+    done <<EOF
+$lc_pins
+EOF
+  fi
+  rm -rf "$TMPDIR_I62"
 
   # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
   # on it, PROVEN BY RUNNING THE ENFORCER rather than by grepping it. ---
@@ -3166,7 +3368,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63)."
   exit 0
 fi
 exit 1

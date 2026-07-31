@@ -1155,7 +1155,7 @@ never resolves in the consumer repo); `reconcile/layer-drift.sh` reports it as
 HARD and blocks `apply` until the operator adjudicates. Re-stamp `base_sha`
 whenever you revise an override.
 
-**(b) Retirement duty on absorption.** When upstream lands a layer entry's content
+**(b) Retirement duty on absorption [LC-E6].** When upstream lands a layer entry's content
 in core, the consumer MUST retire that entry. An absorbed extension left in place
 becomes a duplicate that silently forks from the core text it once matched, and
 then contradicts it. `/ai-dlc-update` emits
@@ -1170,7 +1170,8 @@ subject to" -- is an **override wearing extension frontmatter**: file it in
 which is a file-grain anchor, so a restriction hidden in one is invisible to every
 check the pull performs.
 
-**(d) An extension's numbered sections are ITS OWN catalog -- label them.** Because
+**(d) An extension's numbered sections are ITS OWN catalog -- label them [LC-N1, LC-N4].**
+Because
 extensions are additive, an extension's `### 24.` and core's `### 24.` render into ONE
 merged list under ONE integer. The number stops being a referent, and the lead then
 writes that number into the gate log, where the ambiguity becomes permanent. So a
@@ -1184,7 +1185,7 @@ legible. Enforced by `scripts/ai-dlc/validate-layer-entries.sh` (E6) and, at pul
 `EXTENSION-CHECK-NUMBER-COLLISION` in the reconcile report. Full convention:
 `steps/gate-validation.md`, "Consumer-catalog crosswalk".
 
-This binds every numbered section an extension defines, not only checks. An extension's
+This binds every numbered section an extension defines, not only checks [LC-N3]. An extension's
 `## Rule <n>` and core's `### Rule <n>` render into one merged rulebook under one integer,
 and "Rule 29" in a gate log, retro finding or dispatch brief then has two referents. Label
 it the same way, before the separator: `## Rule <n> [ext:<id>] -- <title>`. The integer never
