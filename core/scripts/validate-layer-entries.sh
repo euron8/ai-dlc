@@ -617,6 +617,102 @@ layer_files() { [ -d "$1" ] || return 0; find "$1" -type f -name '*.md' ! -name 
 rel() { printf '%s' "${1#"$PROJECT_ROOT"/}"; }
 
 # ---------------------------------------------------------------------------
+# Pass 0 — the contract receipt (E17, W6)
+# ---------------------------------------------------------------------------
+# WHAT THIS ENDS. `contract_version` and per-clause `since:` were declared at contract
+# version 1 and read by NOTHING through eight bumps. I41 held ids unique and I42 held
+# every `since` at or below the version, so the declaration was internally perfect and
+# behaviourally absent — the shape that reads exactly like a working mechanism. This
+# pass is the entry side of the join, and it is what makes `since:` mean something.
+#
+# THE SPECIFIED SEMANTICS WAS A SKIP AND IT IS NOT BUILT. Both the contract's own header
+# and the plan that scheduled this stated the rule as "an entry declaring `conforms_to: N`
+# is held only to clauses with `since <= N`". Built that way, a consumer erases any clause
+# core has allocated since by writing one frontmatter line: the reference consumer's 49
+# band ERRORs sit at `since: 4` and `since: 8`, so `conforms_to: 3` in thirteen files
+# retires the whole partition. Core is the source of truth. The receipt reports scope and
+# silences nothing, and the header paragraph that said otherwise was replaced in the same
+# release rather than left to be read as still true.
+#
+# The retro-application problem the skip aimed at is real — a new clause that fires on
+# every entry on first contact is a linter the operator turns off — and it is solved one
+# level up, in core's release decision: ship the clause at WARN, promote it to ERROR once
+# the migration has landed. LC-N5's promotion from its retired warn-tier code to E15 at
+# contract_version 8 is the worked example, and it was core's call taken in the open, in a
+# release, not a per-file declaration. (The retired code is deliberately not written here:
+# I36 reverse reads every code token in this file and would demand a clause for it.)
+#
+# FALSE-POSITIVE SET, MEASURED BEFORE SHIPPING, on the reference consumer at 5491d6c0e:
+# 50 entry files under extensions/ + overrides/, of which 38 declare `kind:` and 12
+# declare `base_sha:`. 38 + 12 = 50 exactly, so every file `layer_files()` yields is a
+# real entry and there is no file for which requiring the key is wrong. Live subject set
+# 50, false-positive set EMPTY. `conforms_to:` occurs 0 times there today, which is why
+# this is required rather than optional: an optional field nobody declares is a reader
+# with no subject, and `kind: qualifier` spent 20 releases proving how that ends.
+echo "== contract receipt =="
+LC_FILE="$SKILL_DIR/layer-contract.yaml"
+LC_CV=''
+LC_SINCE=''
+LC_ENTRIES=0
+LC_CURRENT=0
+LC_BEHIND=0
+LC_UNDECLARED=0
+LC_BEHIND_LIST=''
+
+if [ ! -f "$LC_FILE" ]; then
+  # NOT a skip. The contract ships with the skill (`install.sh` copies it beside SKILL.md),
+  # so its absence is a broken install, and a pass that quietly evaluated nothing would
+  # report the same clean footer as a consumer that holds every clause.
+  err "E17 cannot read the layer contract at $(rel "$LC_FILE") — it ships with the skill, so this is a broken or partial install. Every entry's conforms_to went UNCHECKED in this run; that is not the same as clean. Re-run /ai-dlc-update, or restore the file."
+else
+  LC_CV="$(awk '/^contract_version:/{print $2; exit}' "$LC_FILE")"
+  LC_SINCE="$(awk '/^  - id:/{id=$3} /^    since:/{ if (id != "") { print id, $2; id="" } }' "$LC_FILE")"
+
+  if ! grep -Eq '^[0-9]+$' <<<"${LC_CV:-x}" || [ "${LC_CV:-0}" -lt 1 ]; then
+    err "E17 read no usable contract_version out of $(rel "$LC_FILE") (got '${LC_CV:-<none>}'). Every receipt below is compared against it, so an unreadable value retires this whole pass silently instead of failing it."
+    LC_CV=''
+  fi
+  if [ -z "$LC_SINCE" ]; then
+    err "E17 read ZERO clauses with a since: out of $(rel "$LC_FILE"). The migration worklist below is derived from that set, so an empty one makes every entry look fully migrated — the state this pass exists to make visible."
+  fi
+fi
+
+if [ -n "$LC_CV" ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    LC_ENTRIES=$((LC_ENTRIES+1))
+    ct="$(fm "$f" conforms_to)"
+    if [ -z "$ct" ]; then
+      LC_UNDECLARED=$((LC_UNDECLARED+1))
+      err "E17 $(rel "$f"): missing 'conforms_to:' frontmatter. Every layer entry declares the contract version it has been migrated to; without it neither you nor core can say which of the contract's ${LC_CV} versions of clauses this entry has ever been read against. Add 'conforms_to: ${LC_CV}' once the entry holds every clause, or the lower version it was last migrated to."
+    elif ! grep -Eq '^[0-9]+$' <<<"$ct" || [ "$ct" -lt 1 ]; then
+      err "E17 $(rel "$f"): conforms_to '$ct' is not a positive integer. It names a contract version, so it is compared numerically against contract_version ${LC_CV}."
+    elif [ "$ct" -gt "$LC_CV" ]; then
+      err "E17 $(rel "$f"): conforms_to $ct claims a contract version this distribution has never reached — its contract_version is ${LC_CV}. A receipt for a contract that does not exist cannot be honoured by anything, and it reads as MORE conformant than a correct entry."
+    elif [ "$ct" -lt "$LC_CV" ]; then
+      LC_BEHIND=$((LC_BEHIND+1))
+      LC_BEHIND_LIST="${LC_BEHIND_LIST}$(rel "$f")@${ct} "
+    else
+      LC_CURRENT=$((LC_CURRENT+1))
+    fi
+  done < <(layer_files "$EXT_DIR"; layer_files "$OVR_DIR")
+fi
+
+# W6 — ONE line per run, not one per entry, and the reason is the one the E16 degraded-mode
+# line records: the release that bumps contract_version puts EVERY entry behind at once, and
+# a wall of identical lines is a wall an operator scrolls past. The union of postdating
+# clause ids is the migration worklist; the per-entry version is on each entry.
+#
+# IT DOES NOT SILENCE ANYTHING and that is the whole design. Being behind is reported, never
+# subtracted: every clause above still fired on these entries in this same run.
+if [ "$LC_BEHIND" -gt 0 ]; then
+  lc_min="$(printf '%s\n' $LC_BEHIND_LIST | sed 's/.*@//' | sort -n | head -1)"
+  lc_owed="$(awk -v n="$lc_min" '$2+0 > n { printf "%s ", $1 }' <<<"$LC_SINCE")"
+  lc_owed="${lc_owed% }"
+  warn "W6 ${LC_BEHIND} of ${LC_ENTRIES} layer entr(y/ies) declare a conforms_to below contract_version ${LC_CV}: ${LC_BEHIND_LIST% }. Clauses introduced after the lowest of them (${lc_min}) are their migration worklist: ${lc_owed:-<none>}. This is scope, not an exemption — every one of those clauses was evaluated against these entries in this run."
+fi
+
+# ---------------------------------------------------------------------------
 # Pass 1 — overrides (E1, E2, E3)
 # ---------------------------------------------------------------------------
 echo "== overrides =="
@@ -1165,4 +1261,17 @@ done <<< "$all_files"
 
 echo
 printf 'validate-layer-entries: %d error(s), %d warning(s)\n' "$ERRORS" "$WARNS"
+
+# THE MACHINE FOOTER. Specified with the contract at v0.181.0 and never built — 0 occurrences
+# repo-wide, against 7 for `LAYER_CONTRACT` in the same sweep. It is one printf, and what it
+# buys is unforgeability: a lead reporting conformance in a gate log can transcribe "0 errors"
+# from memory, but not `entries=50 at_current=38 behind=12` — those are run-specific counts that
+# do not exist until this script has walked the tree. That is the same argument that put
+# run-specific counts in H1's fixture criterion and in the ledger report headings.
+#
+# `contract_version=-` is the honest reading when the contract could not be read at all: the
+# fields below are then counts over zero entries, and printing a plausible 0 there would make an
+# unevaluated consumer and a conforming one produce the same line.
+printf 'LAYER_CONFORMANCE v1 contract_version=%s entries=%d at_current=%d behind=%d undeclared=%d errors=%d warnings=%d\n' \
+  "${LC_CV:--}" "$LC_ENTRIES" "$LC_CURRENT" "$LC_BEHIND" "$LC_UNDECLARED" "$ERRORS" "$WARNS"
 [ "$ERRORS" -eq 0 ]

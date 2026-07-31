@@ -101,6 +101,25 @@ CSKILL="$CONS/.claude/skills/ai-dlc"
 mkdir -p "$CSKILL/extensions" "$CSKILL/overrides" "$CSKILL/steps" "$CONS/.claude/team-roles"
 git -C "$DIST" show "HEAD~1:$SKILL_REL/steps/demo.md" > "$CSKILL/steps/demo.md"
 
+# THE CONSUMER CARRIES THE CONTRACT, because an installed one always does — install.sh copies
+# layer-contract.yaml beside SKILL.md. E17 reads each entry's `conforms_to` receipt against that
+# file's contract_version, and a seed without it would make this fixture assert "a well-formed
+# consumer lints clean" against a shape no consumer has — the same correction the git-init block
+# below records. It is COPIED from the shipping file and the version is READ back out of the
+# copy, so neither can drift from the real contract as it bumps.
+#
+# Rooted at this seed's OWN location with both layouts named, never derived from another
+# resolved path: I33 fails the build on the second shape, and this fixture runs in both trees.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+for _lc in "$HERE/../../skills/ai-dlc/layer-contract.yaml" \
+           "$HERE/../../../core/skills/ai-dlc/layer-contract.yaml" \
+           "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml"; do
+  [ -f "$_lc" ] && { cp "$_lc" "$CSKILL/layer-contract.yaml"; break; }
+done
+[ -f "$CSKILL/layer-contract.yaml" ] || { echo "SEED ERROR: cannot locate layer-contract.yaml" >&2; exit 2; }
+CV="$(awk '/^contract_version:/{print $2; exit}' "$CSKILL/layer-contract.yaml")"
+[ -n "$CV" ] || { echo "SEED ERROR: no contract_version in the copied layer-contract.yaml" >&2; exit 2; }
+
 # A team-role core file, for the "extends: names a file hooks: does not" arm.
 cat > "$CONS/.claude/team-roles/dev.md" <<'EOF'
 # Dev
@@ -112,7 +131,7 @@ EOF
 
 ext() { # ext <basename> <frontmatter-body>
   local n="$1"; shift
-  { printf -- '---\n'; printf '%s\n' "$1"; printf -- '---\n\n'
+  { printf -- '---\n'; printf '%s\n' "$1"; printf 'conforms_to: %s\n' "$CV"; printf -- '---\n\n'
     printf '### 901. [ext:%s] Consumer entry.\n\nBody.\n' "$n"
   } > "$CSKILL/extensions/$n.md"
 }
@@ -168,9 +187,11 @@ mkdir -p "$BSKILL/extensions" "$BSKILL/overrides" "$BSKILL/steps" "$BAD/.claude/
 cp "$CSKILL/steps/demo.md" "$BSKILL/steps/demo.md"
 cp "$CONS/.claude/team-roles/dev.md" "$BAD/.claude/team-roles/dev.md"
 
+cp "$CSKILL/layer-contract.yaml" "$BSKILL/layer-contract.yaml"
+
 bad_ext() { # bad_ext <basename> <frontmatter-body>
   local n="$1"; shift
-  { printf -- '---\n'; printf '%s\n' "$1"; printf -- '---\n\n'
+  { printf -- '---\n'; printf '%s\n' "$1"; printf 'conforms_to: %s\n' "$CV"; printf -- '---\n\n'
     printf '### 902. [ext:%s] Consumer entry.\n\nBody.\n' "$n"
   } > "$BSKILL/extensions/$n.md"
 }

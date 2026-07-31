@@ -17,6 +17,121 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.220.0] — 2026-07-31
+
+### `conforms_to` gets a reader — and it is a receipt, not the exemption it was specified as
+
+`contract_version` and per-clause `since:` were declared at contract version 1 and **read by
+nothing through eight bumps**. I41 held clause ids unique and I42 held every `since` at or below
+the version, so the declaration was internally perfect and behaviourally absent — the shape that
+reads exactly like a working mechanism. Measured before this release: `conforms_to` occurs in two
+core files, and all three hits in `validate-enforcement-map.sh` are a comment or an error string
+(control: `base_sha` is read by 6 scripts in the same corpus). Zero consumer entries declared it.
+
+**The specified semantics was a skip, and it is deliberately not built.** Both the contract's own
+header and the plan that scheduled this work stated the rule as *"an entry declaring
+`conforms_to: N` is held only to clauses with `since <= N`"*. Built that way it is a
+one-line-per-file escape hatch from every clause core has allocated since: the reference
+consumer's 49 band ERRORs sit at `since: 4` and `since: 8`, so `conforms_to: 3` written into
+thirteen files retires the whole naming partition v0.218.0 shipped. Core is the source of truth,
+and a consumer does not self-declare which of core's clauses bind it.
+
+So the receipt reports **scope, never silence**:
+
+- **`LC-C1` / `E17` (ERROR)** — every layer entry declares `conforms_to: N`, `1 <= N <=
+  contract_version`. Missing, non-numeric, or above the version each fail with their own message.
+- **`LC-C2` / `W6` (WARN)** — entries below the current version are reported **once per run**,
+  with the clause ids introduced after the lowest declaration as the migration worklist. One line
+  rather than one per entry, for the reason the E16 degraded-mode line already records: the
+  release that bumps the version puts every entry behind at once.
+- **Nothing is subtracted.** Every clause is evaluated against every entry whatever it declares.
+  The retro-application problem the skip aimed at is real and is solved one level up, in core's
+  release decision — ship a new clause at WARN, promote it to ERROR once the migration has
+  landed. LC-N5's promotion at contract_version 8 is the worked example, taken in the open.
+
+The header paragraph that stated the skip was **replaced**, not left to be read as still true,
+and I42's comment and error message were rewritten off it in the same commit.
+
+`contract_version` 8 -> 9.
+
+**Why required rather than optional, measured.** On the reference consumer at `5491d6c0e`: 50
+entry files under `extensions/` + `overrides/`, of which 38 declare `kind:` and 12 declare
+`base_sha:`. 38 + 12 = 50 exactly, so every file `layer_files()` yields is a real entry and the
+false-positive set of requiring the key on all of them is **empty by construction**. Live subject
+set 50, `conforms_to` occurrences 0. An optional field nobody declares is a reader with no
+subject — `kind: qualifier` spent 20 releases in that state and the plan scores it FAILED.
+
+Running the shipping validator against that consumer read-only: **103 errors** (the 53 from
+v0.218.0 plus 50 `E17`), footer `entries=50 at_current=0 behind=0 undeclared=50`. graph was not
+written to: `git status --porcelain` and HEAD identical before and after.
+
+### The `LAYER_CONFORMANCE v1` machine footer, specified at v0.181.0 and never built
+
+Measured before: **0 occurrences repo-wide**, including templates and fixtures; control, in the
+same invocation, `LAYER_CONTRACT` matches 6 files. It is one `printf`, and what it buys is
+unforgeability — a lead can transcribe "0 errors" from memory but not
+`entries=50 at_current=0 behind=0 undeclared=50`, which does not exist until the script has
+walked the tree. `contract_version=-` is printed when the contract could not be read at all,
+because a plausible `0` there would make an unevaluated consumer and a conforming one produce the
+same line.
+
+### I61 — the prose home states the SAME SEVERITY the contract declares
+
+I38 asks only that a clause's declared prose home MENTIONS its id. That is satisfied by a bullet
+whose every other word has gone stale, and **three had**, live on the tree this shipped against
+(control: 39 of 39 bold-led clause bullets parsed):
+
+| Clause | Contract | `extensions/README.md` said |
+|---|---|---|
+| `LC-N5` | ERROR | WARN |
+| `LC-E4` | ADJUDICATED | WARN |
+| `LC-E14` | ADJUDICATED | WARN |
+
+None is cosmetic. `LC-N5` was promoted to ERROR **one release earlier, in a commit that rewrote
+24 lines of that same bullet** and left the severity word at its head untouched — so the
+consumer-facing contract told an author the total naming partition was a non-blocking WARN while
+their own pre-push was refusing on it. `LC-E4`/`LC-E14` understated ADJUDICATED, whose whole
+point is that it blocks `apply` until a verdict is recorded. All three are corrected here.
+
+The severity vocabulary is **derived from the contract's own `level:` values**, so a fourth level
+needs no edit; and a clause bullet stating no severity is itself an error, because otherwise the
+join empties one bullet at a time.
+
+### Fixtures
+
+- **`layer-conforms-to`** (new) — 23 assertions, 5 mutants, one unmutated control, three seeded
+  consumer trees. **The load-bearing assertion is Part 3, and it asserts an ABSENCE:** an entry
+  declaring `conforms_to: 1` still takes the band ERROR from a clause introduced at `since: 4`.
+  No ordinary assertion can see that property, because the code for it is absent — so `m2`
+  supplies the missing skip (`layer_files()` stops yielding a behind entry) and the assertion
+  catches the entry going quiet. `m1` makes the receipt optional, `m3` removes the
+  missing-contract refusal, `m4` detaches the footer's counts from the walk, `m5` removes the
+  above-version arm. Runs from an installed tree; control — removing the installed
+  `validate-layer-entries.sh` produces `FIXTURE ERROR: cannot locate`, so the distribution copy
+  was not reached by accident.
+- **`layer-contract-conformance`** — three I61 mutants (severity mismatch, a severity outside the
+  contract's own vocabulary, and the zero-bullet vacuity guard), plus an `EXPECTED_ASSERTIONS`
+  floor. 10 -> 13 assertions.
+- **`layer-qualifier-grain`, `layer-extends-grain`, `layer-retired-id-crosswalk`** — their seeds
+  now copy the real `layer-contract.yaml` into the consumer they build and read `contract_version`
+  back out of the copy, so no receipt in any seed can drift from the shipping contract. This is
+  the same correction v0.218.0 made for `git init`: **a fixture seed missing something every real
+  consumer has is not a consumer**, and the resulting refusal reads as a regression. Faithfulness,
+  not tolerance — no exemption was added for the no-contract case.
+
+### Defects produced while building this, both this repo's named classes
+
+1. **A `$( )` command substitution swallowed every exit code the fixture asserts on.** The first
+   draft routed each run through a `run()` helper that set a global `RC`; `OUT="$(run ...)"`
+   evaluates the helper in a subshell, so `RC` was discarded and three exit-code assertions read
+   a stale `0`. Two of them failed loudly, which is the only reason it was caught. Each call site
+   now captures `$?` on its own line, and the comment says why there is no helper.
+2. **`printf | grep -q` came back, five times, in the new fixture — and I54 caught it.** The
+   invariant added in v0.207.0 after a 300-site sweep fired on exactly the idiom it was built
+   for. Converted to here-strings, including one `awk` reader that `exit`s at its first match and
+   carries the same EPIPE hazard one reader over.
+
+
 ## [0.219.0] — 2026-07-31
 
 ### Added — the release triple gains a RANGE grain, because a squash defeated the per-commit one

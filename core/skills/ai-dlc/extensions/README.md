@@ -83,6 +83,7 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
+conforms_to: 9                         # the contract version you migrated this entry to [LC-C1]
 ---
 
 <the additive rule / check / step body>
@@ -280,7 +281,7 @@ times on first contact gets disabled and then catches nothing.
   convention: `team-roles/<role>.md` resolves OUTSIDE this skill directory.
 - **[LC-E3]** WARN — a `hooks:` target absent from the incoming ref is reported; the entry hooks
   onto nothing.
-- **[LC-E4]** WARN — when the hooked core file changes, the entry is re-read and its verdict
+- **[LC-E4]** ADJUDICATED — when the hooked core file changes, the entry is re-read and its verdict
   recorded as still-additive, contradicts-core, or retire. That re-read is the ONLY mechanism
   behind the additive-only rule; skipped, the rule is unenforced.
 - **[LC-E5]** WARN — an extension does not restate a core section. A duplicate predating the
@@ -314,7 +315,7 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-E13]** ERROR — `position:` is `append` or `prepend`. Two positions is the whole vocabulary
   on purpose; a literal-prose anchor would be a third anchor resolver, and `reconcile/lib.sh`
   records two shipped defects caused by duplicate resolvers.
-- **[LC-E14]** WARN — when a declared `extends:` span changes, the entry is re-read against the new
+- **[LC-E14]** ADJUDICATED — when a declared `extends:` span changes, the entry is re-read against the new
   core text. This is LC-E4's duty at the grain you declared instead of at file grain, with the same
   verdict set.
 - **[LC-E15]** WARN — an `extends:` anchor that resolves to no heading in the incoming ref is
@@ -346,7 +347,7 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-N4]** WARN — an incoming release that creates a check-number collision is reported and you
   relabel your own catalog. Report-only by design: you must never be unable to take a security fix
   because your catalog needs relabelling.
-- **[LC-N5]** WARN — allocate your own check and rule numbers from the reserved band at **900 and
+- **[LC-N5]** ERROR — allocate your own check and rule numbers from the reserved band at **900 and
   above**; core allocates below it. LC-N1..LC-N4 are collision DETECTORS: they join your number
   against the numbers core defines *today*, so a number core has not reached yet matches nothing
   and reports clean — until the release where core allocates it, and then the collision appears
@@ -381,6 +382,19 @@ times on first contact gets disabled and then catches nothing.
   degrading to a silence indistinguishable from a clean result.
 - **[LC-R1]** WARN — a `Step <n>` reference in a layer entry resolves to an anchor defined
   somewhere in the rendered rulebook: core plus your own layers.
+- **[LC-C1]** ERROR — every entry, in `extensions/` and `overrides/` alike, declares
+  `conforms_to: N` — the integer contract version you have migrated it to, between 1 and the
+  `contract_version` at the top of `layer-contract.yaml`. **It is a receipt, not an exemption.**
+  Declaring a lower N does not switch any clause off: every clause is evaluated against the entry
+  in the same run whatever it says. What N buys is scope — core can then tell you which clauses
+  postdate your last migration instead of you guessing. A new clause that would wedge you on
+  first contact is core's problem to sequence, and core solves it by shipping the clause at WARN
+  and promoting it to ERROR in a later release, in the open, once the migration has landed.
+- **[LC-C2]** WARN — entries declaring a `conforms_to` below the current `contract_version` are
+  reported **once per run**, with the clause ids introduced after the lowest of them: that list
+  is your migration worklist. One line rather than one per entry, because the release that bumps
+  the version puts every entry behind at once and a wall of identical lines is a wall you scroll
+  past.
 
 ## Authoring routing (§7.1 — enforced)
 

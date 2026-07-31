@@ -187,7 +187,53 @@ sed 's/^contract_version: .*$/contract_version: three/' "$CONTRACT" > "$TMP/i42-
 mutant_fires "$TMP/i42-unparseable.yaml" "cannot read a numeric contract_version" "i42-unparseable" \
   "an unreadable version would make every since: comparison pass by finding nothing"
 
+# --- I61 arm 1: the prose home states a DIFFERENT severity from the contract ----------
+# The arm that caught three live mismatches on the tree it shipped against. LC-N5 was promoted
+# to ERROR one release earlier — in a commit that rewrote 24 lines of its own README bullet —
+# and the severity word at the head of that bullet stayed WARN. I38 was green throughout,
+# because it asks only that the home MENTIONS the id.
+#
+# The FIRST level: line is flipped between two values the contract itself uses, so the mutation
+# stays inside the vocabulary and arm 2 below cannot be what fires. Asserted on this arm's own
+# wording — "but layer-contract.yaml declares it" — never on the bare token I61, which three
+# arms emit.
+awk '
+  /^    level: ERROR$/ { if (!done) { done = 1; print "    level: WARN"; next } }
+  { print }
+' "$CONTRACT" > "$TMP/i61-severity.yaml"
+mutant_fires "$TMP/i61-severity.yaml" "but layer-contract.yaml declares it" "i61-severity" \
+  "an author reads a severity in the README that their own pre-push does not apply"
+
+# --- I61 arm 2: a bullet whose severity is outside the contract's own vocabulary -------
+# The escape hatch this arm closes: a clause bullet that states no severity at all is a bullet
+# arm 1 cannot check, so without a membership test the join empties one bullet at a time. The
+# vocabulary is DERIVED from the contract's level: values, so the mutation moves the vocabulary
+# out from under every bullet rather than editing any bullet — which is the only way to test
+# membership from a contract-only mutation.
+sed 's/^    level: .*$/    level: NOTALEVEL/' "$CONTRACT" > "$TMP/i61-vocab.yaml"
+mutant_fires "$TMP/i61-vocab.yaml" "no severity from the contract's own vocabulary" "i61-vocabulary" \
+  "a bullet stating a severity the contract does not use is an unchecked bullet"
+
+# --- I61 arm 3: the vacuity guard -----------------------------------------------------
+# Zero bullets found is indistinguishable from every bullet agreeing, which is this repo's named
+# defect class applied to I61 itself. Every prose_home is repointed at a core file that carries
+# no clause bullets. I38 co-fires on the same mutant — unavoidable, since a home that carries no
+# bullet also carries no id — so the assertion is on I61's own zero-guard sentence, which no
+# other arm and no other invariant emits.
+sed 's|^    prose_home: .*$|    prose_home: core/skills/ai-dlc/core-manifest.md|' "$CONTRACT" > "$TMP/i61-zero.yaml"
+mutant_fires "$TMP/i61-zero.yaml" "found ZERO clause bullets" "i61-zero-bullets" \
+  "an extraction that finds nothing reports exactly like one where every bullet agrees"
+
+# THE ASSERTION-COUNT FLOOR. A fixture that silently stops running arms prints a shorter green
+# report, and a shorter green report reads exactly like a passing one — the lesson v0.217.0
+# paid for, where a mis-spaced helper call killed a whole mutant inside a `$( )` subshell and
+# left seventeen ok lines and a PASS. Raise this deliberately when an arm is added.
+EXPECTED_ASSERTIONS=13
 echo
+if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
+  echo "FAIL: $ASSERTIONS assertions ran, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."
+  exit 1
+fi
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
   exit 1

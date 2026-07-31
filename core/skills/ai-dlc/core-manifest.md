@@ -162,6 +162,7 @@ core_manifest:
   - fixtures/ci-gates-resolution/**
   - fixtures/consumer-machinery-home/**
   - fixtures/layer-qualifier-grain/**
+  - fixtures/layer-conforms-to/**
   - fixtures/layer-extends-grain/**
   - fixtures/layer-retired-id-crosswalk/**
   - fixtures/layer-adjudication-tier/**

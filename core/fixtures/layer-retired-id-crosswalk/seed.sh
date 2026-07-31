@@ -36,6 +36,31 @@ commit() { GIT_AUTHOR_DATE="$1" GIT_COMMITTER_DATE="$1" \
   git -C "$CONS" -c user.email=fixture@example.invalid -c user.name=fixture \
     commit -q --no-verify -m "$2"; }
 
+# THE CONSUMER CARRIES THE CONTRACT, because an installed one always does — install.sh copies
+# layer-contract.yaml beside SKILL.md. E17 reads each entry's `conforms_to` receipt against that
+# file's contract_version, and a seed without it would make this fixture assert "a well-formed
+# consumer lints clean" against a shape no consumer has. It is COPIED from the shipping file and
+# the version is READ back out of the copy, so neither can drift from the real contract.
+#
+# Rooted at this seed's OWN location with both layouts named, never derived from another
+# resolved path: I33 fails the build on the second shape, and this fixture runs in both trees.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+for _lc in "$HERE/../../skills/ai-dlc/layer-contract.yaml" \
+           "$HERE/../../../core/skills/ai-dlc/layer-contract.yaml" \
+           "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml"; do
+  [ -f "$_lc" ] && { cp "$_lc" "$SKILL/layer-contract.yaml"; break; }
+done
+[ -f "$SKILL/layer-contract.yaml" ] || { echo "SEED ERROR: cannot locate layer-contract.yaml" >&2; exit 2; }
+CV="$(awk '/^contract_version:/{print $2; exit}' "$SKILL/layer-contract.yaml")"
+[ -n "$CV" ] || { echo "SEED ERROR: no contract_version in the copied layer-contract.yaml" >&2; exit 2; }
+
+# The entry bodies below are quoted heredocs on purpose — every id in them is literal and must
+# stay that way. The receipt is therefore injected after the fact rather than interpolated in.
+receipt() { # receipt <entry-file>
+  awk -v cv="$CV" 'NR==1 && $0=="---" { print; print "conforms_to: " cv; next } { print }' "$1" > "$1.r" \
+    && mv "$1.r" "$1"
+}
+
 cat > "$SKILL/steps/gate-validation.md" <<'CORE'
 ---
 name: gate-validation
@@ -85,6 +110,7 @@ The migration drops it here and CORE still defines 5, so the citation still land
 ### 933. In-band allocation, present from the start.
 Never retired. The control that keeps "everything reports" from scoring as a pass.
 EXT
+receipt "$SKILL/extensions/checks/domain.md"
 
 cat > "$SKILL/extensions/checks/sibling.md" <<'SIB'
 ---
@@ -96,6 +122,7 @@ push_candidate: false
 
 ### 70. A sibling entry's own allocation.
 SIB
+receipt "$SKILL/extensions/checks/sibling.md"
 
 git -C "$CONS" add -A
 commit '2026-02-04T09:00:00+00:00' 'layer: the consumer catalog before any migration'
@@ -115,6 +142,7 @@ Never retired.
 ### 934. Cross-story test-strategy deliverable presence.
 This IS the old 33, renamed into the band. The old id is now a dangling citation.
 EXT2
+receipt "$SKILL/extensions/checks/domain.md"
 
 cat > "$SKILL/extensions/checks/sibling.md" <<'SIB2'
 ---
@@ -129,6 +157,7 @@ push_candidate: false
 ### 34. Passive-monitor carry-over ceilings.
 Moved here from domain.md. The id never left the rulebook, so nothing is retired.
 SIB2
+receipt "$SKILL/extensions/checks/sibling.md"
 
 git -C "$CONS" add -A
 commit '2026-05-19T09:00:00+00:00' 'layer: migrate 33 into the band, move 34 to the sibling, drop the core restatement'

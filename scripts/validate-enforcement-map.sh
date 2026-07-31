@@ -111,6 +111,14 @@
 #                         than restated, so the two halves of the partition cannot drift apart —
 #                         a second spelling of 900 could declare a range safe that core is still
 #                         allocating from.
+#   I61 the prose home states the SAME SEVERITY the contract declares — I38 asks only that the
+#                         home MENTIONS the clause id, which a bullet whose every other word has
+#                         gone stale satisfies. Three had: LC-N5 said WARN one release after its
+#                         promotion to ERROR rewrote 24 lines of that same bullet, and LC-E4 /
+#                         LC-E14 said WARN against ADJUDICATED, which blocks `apply`. The
+#                         severity vocabulary is derived from the contract's own level: values,
+#                         and a clause bullet stating no severity is itself an error — otherwise
+#                         the join empties one bullet at a time.
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -531,16 +539,19 @@ else
   fi
 
   # --- I42: no clause is introduced at a contract_version the contract has not reached. --
-  # `since:` is the whole retro-application rule — an entry declaring `conforms_to: N` is held
-  # only to clauses with `since <= N` — and a clause with `since` ABOVE `contract_version` can
-  # never satisfy that for any conforming entry. It is a clause that cannot fire wearing a
-  # version number, which is this repo's named defect class at contract grain.
+  # `since:` dates a clause, and `validate-layer-entries.sh` subtracts it from each entry's
+  # `conforms_to` receipt to name that entry's migration worklist. A clause whose `since` is
+  # ABOVE `contract_version` can never appear on any worklist, because no entry may declare a
+  # receipt above the version. It is a clause that cannot fire wearing a version number, which
+  # is this repo's named defect class at contract grain.
   #
   # MEASURED WHEN THIS WAS ADDED: contract_version was 2 while THREE clauses declared `since: 3`
   # (both LC-O12s and LC-O13). v0.183.0 set the 2; v0.187.0 and v0.192.0 each wrote a 3 past it.
-  # Nothing read either field, so nothing objected — `conforms_to` has no reader anywhere in the
-  # tree to this day, and that gap is recorded separately. This invariant does not create the
-  # reader; it stops the declaration from drifting into a state no reader could ever honour.
+  # Nothing read either field, so nothing objected. That gap closed at contract_version 9, which
+  # gave both fields their first reader — and closed it in the opposite semantics to the one this
+  # comment used to state. `conforms_to` does NOT hold an entry to a subset of the clauses: every
+  # clause fires whatever it declares, and what the receipt buys is scope. Do not restate that
+  # rule here; `layer-contract.yaml`'s header owns it.
   #
   # A missing `since:` or an unparseable `contract_version` is an ERROR, not a skip: either one
   # would let this scan pass by finding nothing.
@@ -560,7 +571,7 @@ else
         }
       ' "$lc_file")"
       if [ -n "$lc_i42" ]; then
-        err "I42: layer-contract.yaml carries a clause the contract's own version has not reached — $lc_i42 An entry declaring 'conforms_to: N' is held only to clauses with since <= N, so a clause above contract_version binds nobody. Bump contract_version in the same release that introduces the clause."
+        err "I42: layer-contract.yaml carries a clause the contract's own version has not reached — $lc_i42 No entry may declare a conforms_to receipt above contract_version, so a clause introduced above it can never reach any entry's migration worklist. Bump contract_version in the same release that introduces the clause."
       fi ;;
   esac
 
@@ -670,6 +681,62 @@ $(awk '
   function emit() { if (home != "") printf "%s|%s\n", id, home }
 ' "$lc_file")
 EOF
+
+  # --- I61: the prose home states the SAME SEVERITY the contract declares. ---
+  #
+  # I38 forward asks only that the home MENTIONS the id. That is satisfied by a bullet whose
+  # every other word has gone stale, and three of them had — measured on the tree that shipped
+  # this invariant, with the join below and a control of 39 bullets parsed:
+  #
+  #   LC-N5   contract ERROR        extensions/README.md said WARN
+  #   LC-E4   contract ADJUDICATED  extensions/README.md said WARN
+  #   LC-E14  contract ADJUDICATED  extensions/README.md said WARN
+  #
+  # None of the three is cosmetic. LC-N5 was promoted W5 -> E15 one release earlier and its
+  # bullet BODY was rewritten in that same release to describe the total partition — the author
+  # rewrote 24 lines of the bullet and left the severity word at its head untouched. So the
+  # consumer-facing contract told an author the total naming partition was a non-blocking WARN
+  # while their own pre-push was refusing on it. LC-E4 and LC-E14 understated ADJUDICATED, whose
+  # whole point is that it BLOCKS `apply` until a verdict is recorded.
+  #
+  # This is the restatement-drift class the contract exists to end, arriving in the contract's
+  # own reader-facing half: a mechanism restated in prose drifts TIGHTER or LOOSER, invisibly,
+  # because nothing joins the restatement to the thing restated. The severity is the one field
+  # where the drift changes what an author will do about it.
+  #
+  # THE VOCABULARY IS DERIVED, never hand-listed — it is the set of `level:` values the contract
+  # itself uses, so adding a fourth level tomorrow needs no edit here. And the bullet grammar is
+  # required to CARRY a severity: a clause bullet stating none would otherwise be an escape hatch
+  # that empties this join one bullet at a time. Measured false-positive set: 0 of 39 bullets
+  # across the two declared READMEs lack one.
+  lc_homes="$(awk '/^    prose_home:/{print $2}' "$lc_file" | sort -u)"
+  lc_levels="$(awk '/^  - id:/{id=$3} /^    level:/{ if (id != "") { print id, $2; id="" } }' "$lc_file")"
+  lc_vocab="$(awk '{print $2}' <<<"$lc_levels" | sort -u)"
+  lc_bullets_n=0
+  if [ -z "$lc_vocab" ]; then
+    err "I61 read ZERO level: values out of layer-contract.yaml, so the severity vocabulary it joins against is empty and every bullet below would fail or pass for the wrong reason."
+  else
+    for lc_home in $lc_homes; do
+      [ -f "$REPO_ROOT/$lc_home" ] || continue
+      while IFS= read -r lc_line; do
+        [ -n "$lc_line" ] || continue
+        lc_bullets_n=$((lc_bullets_n+1))
+        lc_bid="$(sed -E 's/^- \*\*\[(LC-[A-Za-z0-9]+)\]\*\*.*/\1/' <<<"$lc_line")"
+        lc_btok="$(sed -E 's/^- \*\*\[LC-[A-Za-z0-9]+\]\*\*[[:space:]]*//' <<<"$lc_line" | grep -oE '^[A-Z]+')"
+        lc_bdecl="$(awk -v w="$lc_bid" '$1==w{print $2; exit}' <<<"$lc_levels")"
+        if [ -z "$lc_bdecl" ]; then
+          err "I61: '$lc_home' carries a clause bullet for '$lc_bid' that layer-contract.yaml does not declare. A reader is being handed a rule with no enforcer behind it — the exact state the contract was created to end, arriving from the prose side."
+        elif [ -z "$lc_btok" ] || ! grep -qxF -- "$lc_btok" <<<"$lc_vocab"; then
+          err "I61: '$lc_home' states clause $lc_bid with no severity from the contract's own vocabulary [$(printf '%s' "$lc_vocab" | tr '\n' ' ')]. Every clause bullet leads with its severity; one that does not is a bullet this join cannot check, and an unchecked bullet is how the three live mismatches this invariant shipped for got there."
+        elif [ "$lc_btok" != "$lc_bdecl" ]; then
+          err "I61: '$lc_home' states clause $lc_bid as $lc_btok but layer-contract.yaml declares it $lc_bdecl. The enforced side and the reader-facing side disagree about whether this blocks, so an author reads a severity their own pre-push does not apply. The contract is the source of truth; fix the prose."
+        fi
+      done < <(grep -E '^- \*\*\[LC-[A-Za-z0-9]+\]\*\*' "$REPO_ROOT/$lc_home")
+    done
+    if [ "$lc_bullets_n" -eq 0 ]; then
+      err "I61 found ZERO clause bullets across the $(printf '%s' "$lc_homes" | grep -c .) declared prose home(s). Either the bullet grammar moved or the homes did; a zero here retires the whole severity join in silence, which is indistinguishable from every bullet agreeing."
+    fi
+  fi
 
   # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
   # on it, PROVEN BY RUNNING THE ENFORCER rather than by grepping it. ---
@@ -3099,7 +3166,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61)."
   exit 0
 fi
 exit 1

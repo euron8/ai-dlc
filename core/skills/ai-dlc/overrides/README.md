@@ -20,6 +20,7 @@ shadows: steps/gate-validation.md#Check 14   # exact core target: file + rule/ch
 base_sha: <dist sha>                          # the distribution sha of the core rule
                                               # WHEN THIS OVERRIDE WAS AUTHORED
 reason: <one line — why this consumer changes the core rule>
+conforms_to: <n>                              # the contract version you migrated this entry to
 ---
 
 <the replacement / patched body that shadows the core rule for this consumer>
