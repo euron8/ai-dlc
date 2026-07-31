@@ -258,11 +258,13 @@ row, with a sha or the count you measured. `—` = not started.
 | 5 | Post-apply verification **+ advance the machinery stamp** | graph | ✅ §4.10 reproduced verbatim (`0.224.0`/`1f5e6cc` + `skill_*` still `0.214.0`/`04cea81`), `contract_version: 9`. `skill_version`/`skill_commit` advanced to **0.224.0 / 1f5e6cc**, `installed_at` and `upstream` preserved. Three `IDENTICAL` + `control ok (CLAUDE.md forks)`. Wedge is RED as expected: exit **1**, `103 error(s), 0 warning(s)`, footer `contract_version=9 entries=50 at_current=0 behind=0 undeclared=50`, **`unclaimed=none`** (§4.11 flip confirmed — read `E15,E16,E17` at row 2), split **49 E15 / 4 E16 / 50 E17**. ⚠ **HANDOFF PATH DEFECT, not a tally deviation:** row 5 names `scripts/ai-dlc/self-update-gate.sh` — that file does not exist in graph (exit 127). The script is at `.claude/skills/ai-dlc-update/reconcile/self-update-gate.sh` (byte-`IDENTICAL` to the engine's), usage `<dist> <base> <theirs> <consumer>`. Run correctly it returns **`SELF-UPDATE-DEFER`** as stated, over one `SELF-UPDATE-UNDECIDED` row (post-apply, current and incoming `validate-layer-entries.sh` are the same copy, so both exit 1 and the failure is unattributable by construction). Verdict matched, so no ai-dlc session opened |
 | ⏹ | **FRESH GRAPH SESSION** — the migration is its own context | graph | ⏹ **STOPPED HERE 2026-07-31.** Rows 4–5 done on branch `chore/ai-dlc-update-0.224.0` (uncommitted working tree — the branch carries the apply + the stamp advance and is NOT yet committed; row 9 commits). Next session resumes at **row 6**, the 49 renames. Engine worktree `/tmp/pull-engine` @ `1f5e6cc` still pinned — re-`cat` its `VERSION` before trusting it. Row 6 reads `E15` from graph's now-installed validator, which is live and red at 103 |
 | 6 | The migration, part 1: the **49** renames | graph | ✅ 2026-07-31 — **49 ids cleared, 0 MISS**. Routes per decision 4: **46 band-id renames** (script-applied, every edit `cmp -s`-guarded, `applied=46 missed=0`) + **3 qualifier** (`retro-deferral-expiry.md`'s `4a-bis`/`4a-ter`/`4a-quater` → `kind: qualifier` + existing `extends: '#4a. Close-Out Sweep'` + `position: append`; the three headings drop their ids for `### [ext:retro-deferral-expiry] …`, which matches neither `CHECK_HEAD_RE` arm, so they allocate nothing). §4.5 trap cleared — `AP`/`VH` edited as `## Check XAP —` / `## Check XVH —` (no trailing dot), 1 line each, `cmp` confirmed non-identical. Verify: **E15 0**, **E16 20**, **E17 50**, **W3 4**, exit 1, 0 stderr, footer `contract_version=9 entries=50 at_current=0 behind=0 undeclared=50 errors=70 warnings=4`. **CONTROL for the E15 zero:** reverting `## Check XVH —`→`## Check VH —` returns **1 E15**, restoring returns **0** — the arm is live, not blind. The qualifier route produced the SAME four tallies the rehearsal measured under the all-rename route; `E10`/`E11`/`E12` all read `0/38`, so the conversion is contract-clean. Row 8's inputs confirmed: 20 E16 rows over exactly the predicted 19 distinct ids (incl. `4a-bis`/`4a-ter`/`4a-quater` — the crosswalk obligation is identical on either route), and the 4 W3 are exactly the predicted pairs |
-| 7 | The migration, part 2: `conforms_to: 9` on all **50** entries | graph | — |
-| 8 | The migration, part 3: **19** crosswalk rows + the **4** reference repairs | graph | — |
-| ⏹ | **FRESH GRAPH SESSION** | graph | |
-| 9 | Verify `0 error(s), 0 warning(s)`, run the full pre-push, commit, push, PR, merge | graph | — |
-| 10 | Report the acceptance-test inputs back for plan §6c-7 | graph | — |
+| ⏹ | **FRESH GRAPH SESSION** — row 6 carried the judgement; row 7 is 50 more edits | graph | ⏹ **STOPPED HERE 2026-07-31.** Rows 6 and **8c** done (8c pulled forward at operator direction — the citation trap was found while reporting row 6 and left unresolved would have shipped). Next session resumes at **row 7**, then row 8. **The branch `chore/ai-dlc-update-0.224.0` is still UNCOMMITTED** — it carries the apply, the stamp advance, the 49 renames and the 20 citation realignments in the working tree; row 9 commits all of it. Engine worktree `/tmp/pull-engine` @ `1f5e6cc` still pinned — re-`cat` its `VERSION` before trusting it. Current validator reading, which row 7 starts from: **exit 1, `70 error(s), 4 warning(s)`**, E16 20 / E17 50 / W3 4 |
+| 7 | The migration, part 2: `conforms_to: 9` on all **50** entries | graph | ✅ 2026-07-31 — **applied=50 missed=0 badread=0**. Value `9` read from the installed `layer-contract.yaml`, not transcribed. Subject list taken verbatim from the validator's own 50 `E17` lines. Every insert anchored to the CLOSING `---` of a line-1 frontmatter block, `cmp -s`-guarded, and read back through the validator's own `fm()` semantics. **Guard proven live before the real run:** a control list of three malformed inputs (no frontmatter / unclosed frontmatter / absent file) returned `applied=0 missed=3`. Verify: exit 1, 0 stderr, `20 error(s), 4 warning(s)`, footer `contract_version=9 entries=50 at_current=50 behind=0 undeclared=0` — E17 **50 → 0**, E16 20 and W3 4 both byte-unchanged (row 8's work). **CONTROL for the E17 zero:** deleting the `conforms_to` line from `validator-honesty.md` returns **1 E17**, restoring returns **0** — the arm is live, not blind. Diff surface: exactly **50** `+conforms_to: 9` additions tree-wide, **0** removals, **0** outside `extensions/`+`overrides/`. No `W6` — nothing declared behind |
+| 8 | The migration, part 3: **19** crosswalk rows + the **4** reference repairs | graph | ✅ 2026-07-31 — **19 crosswalk rows added, 5 reference repairs applied, 0 MISS.** Obligations derived from the validator (`grep '^ERROR  E16'`), never by hand: **20 rows over 19 distinct ids**, exactly as predicted, `5e` claimed by both `retro-domain.md` and `retro-gate-log-rotation.md` and cleared by one row. Column 1 written namespaced where the matcher accepts it (`Check N` / `Rule N`) and **bare for the 11 step-section ids**, because `grep -Fxq` at L1259–1261 accepts only bare / `Check N` / `Rule N` — there is no `Step N` arm, so `Step 0b` in column 1 would have matched nothing; the namespace is carried in the title instead and the choice is stated in the row's `notes`. **Four ids carry no successor and none was invented:** `Check 33`/`34`/`35` deleted by `39f0248f` 2026-07-30 (34 absorbed by core `core-paths.sh --audit-diff`, 35 by `validate-mutation-red.sh`, per that commit's own body), and `5d` "Pre-Commit Validation Gate" dropped by `7bf089d1` 2026-07-08. Verified absent from the live layer with a live control (same pattern for `915` returns 2 hits). **Three carry no successor by ROUTE, not retirement** — `4a-bis`/`4a-ter`/`4a-quater` went the row-6 qualifier route, so their rows name the anchor (`extends: '#4a. Close-Out Sweep'`, cite by title under Step 4a) rather than a band id, per §6c-8b's "use the successor you actually chose". **8b was 5 edits over the 4 W3 subjects** — `gate-validation-domain.md` carries `Step 0b` twice (the `### 929.` heading text at :653 and the Scope line at :655); W3 reports once per file, so a 4-edit reading would have left one dangling. All line-anchored and `cmp -s`-guarded, `applied=5 missed=0`. **EXIT CONDITION MET: exit 0, `0 error(s), 0 warning(s)`, 0 stderr**, footer `contract_version=9 entries=50 at_current=50 behind=0 undeclared=0 errors=0 warnings=0`, census `fired=0 silent_with_subjects=22` — E16 **20 → 0**, W3 **4 → 0**. **BOTH CONTROLS, and B is the one that proves THIS row:** (A, prescribed) reverting `## Check XVH —`→`## Check VH —` returns **1**, restoring returns **0**; (B) deleting the `Check 34` crosswalk row returns **exit 1, 1 error, 1 `E16`**, restoring returns **0** — so the E16 arm is demonstrably reading the table this row wrote, which control A alone cannot show. Both files restored byte-`IDENTICAL` (`cmp -s`). Diff surface: 5 files, all under `extensions/`; **0** paths under `steps/`, `team-roles/`, `docs/retro/`, `docs/reviews/`, `docs/escalations/` |
+| 8c | The migration, part 4: realign the **20** consumer-id citations in LIVE ROUTING DOCS (§6c-8c) | graph | ✅ 2026-07-31 — **20 realigned, 0 MISS**, executed early in the row-6 session at operator direction (independent of rows 7–8; touches no layer entry, so validator tallies are byte-unchanged: `70 error(s), 4 warning(s)`, E16 20 / E17 50 / W3 4 before AND after). `CLAUDE.md` 10, `docs/coding-conventions.md` 6, `docs/operator-runbooks/execution-health-onchain-verify.md` 4. Plus one pre-existing staleness in the same file (`Rule 1 through Rule 26`; core now defines through **Rule 30**) rewritten range-free, and a new **"Reading a numbered citation in this file"** block added to `CLAUDE.md` stating the band so the two namespaces are tellable apart without a path. **Deliberately NOT rewritten:** durable audit records and core-delivered files — see §6c-8c for the three-class rule and the evidence behind each |
+| ⏹ | **FRESH GRAPH SESSION** | graph | ⏹ **STOPPED HERE 2026-07-31.** Rows 6, 7, 8 and 8c are all done — **the migration is complete and the layer reads `0 error(s), 0 warning(s)`, exit 0**. Next session resumes at **row 9**: verify, run the full pre-push, commit, push, PR, merge. **The branch `chore/ai-dlc-update-0.224.0` is still UNCOMMITTED** — the working tree carries the apply, the stamp advance, the 49 renames, the 50 `conforms_to` lines, the 19 crosswalk rows, the 5 reference repairs and the 20 citation realignments, and row 9 commits all of it in one commit. Engine worktree `/tmp/pull-engine` @ `1f5e6cc` still pinned — re-`cat` its `VERSION` before trusting it. Row 9 expects **78 files, not 75** (§6c-9: row 8c is additive to the rehearsal) |
+| 9 | Verify `0 error(s), 0 warning(s)`, run the full pre-push, commit, push, PR, merge | graph | ✅ 2026-07-31 through PR — **merge is the operator's and is PENDING**. Commit `1ff00a1` on `chore/ai-dlc-update-0.224.0`, pushed, **PR #836** open. Diff **78 files, +3388/−431** — the 78 reproduces §6c-9 exactly (39 `extensions/`, 13 `overrides/`, 13 `tests/fixtures/`, 2 `scripts/ai-dlc/`, 3 `ai-dlc-update/`, stamp, contract, `SKILL.md`, `core-manifest.md`, register, + row 8c's 3 routing docs). **0** paths under `steps/`, `team-roles/`, `docs/retro/`, `docs/reviews/`, `docs/escalations/`. The 4 pre-existing `_bmad-output/` runtime files from row 1 were deliberately left UNCOMMITTED — including them would have made the count 82; they are operational state, not this branch's work. Final pre-push: **`pre-push: all gates green`, rc 0, 106 fixtures ok, 0 FAIL**, `116 / driven 106 / declared undrivable 10 / undeclared 0`. Push verified by `git ls-remote --heads` (local == remote == `1ff00a1`), never by a piped exit code. ⚠ **DEVIATION, resolved in graph — no ai-dlc session opened.** The FIRST push returned **rc 1**: layer gate clean, but `audit-rule-files.sh` FAILed at `--fail-on=deterministic` with **32 tier-1 findings (13 `ORIGIN_TAG` + 19 `EMBEDDED_DATE`), all 32 in the row-8 crosswalk table** at `extensions/README.md:267–285`. Judged graph-side on three measurements: `audit-rule-files.sh` is **not in the diff** (same instrument before and after); at `9b5d408a3` the table held one row whose column 4 read `(label adoption)` and the audit was clean, so the 19 new rows introduced every finding; and the remedy is in-subject. Fixed the subject, not the gate's scope — sprint tags backticked (`used()` blanks quoted spans *by design*: "a phrase inside backticks is being MENTIONED, not used", and a row reproducing a historical title is a mention by construction, which is why `label` was already backticked), and column 4 reduced to the event or sha (the table's own prose already says **"Do NOT try to resolve those by date"**). Audit **32 → 0** tier-1, layer byte-unchanged at 0/0. **BOTH ARMS CONTROLLED:** unwrapping one backtick returns **1 `ORIGIN_TAG`**, re-adding one date returns **1 `EMBEDDED_DATE`**, restore returns **0** each time, both files `cmp -s` IDENTICAL after. This also explains the +24-line README delta vs the rehearsal's `+3326/−408`: the rehearsal's rows were terser and date-free, which is why its `PREPUSH_RC=0` never surfaced this. New §7 candidate filed below |
+| 10 | Report the acceptance-test inputs back for plan §6c-7 | graph | ✅ 2026-07-31 — **MERGED and reported. THE PROGRAM IS COMPLETE.** PR #836 squash-merged at operator approval; merge commit **`ff444f6`** on `main`. Squash reconciled **by content, not ancestry**: `git diff 1ff00a1 origin/main` = **0 lines**, control `git diff 9b5d408a3 origin/main` = **5909**, and `--is-ancestor` reads **FALSE** exactly as squash predicts (recording the FALSE so a later reader does not mistake it for an unmerged branch — plan D-6c1.1). **The three §6c-10 readings, taken post-merge on `main`:** (1) exit **0**, 0 stderr, `LAYER_CONFORMANCE v1 contract_version=9 entries=50 at_current=50 behind=0 undeclared=0 errors=0 warnings=0`, and `LAYER_MEASURED … codes=22 fired=0 silent_with_subjects=22 unclaimed=none subjects=override:12,extension:38`. (2) **10** entries declare `extends:`, control **39** declare `kind:`, control bogus key **0**. (3) HEAD `ff444f656ab744192530ed40b58541900220e383`. **THE ACCEPTANCE-TEST NUMBER §4.3 EXISTS FOR:** `EXTENSION-ANCHOR-DRIFT` = `E14=LC-E16:` **0/38**, i.e. **0 anchor drift across a 10-entry `extends:` subject set** — the first pull in this program where that zero has a non-empty subject set, in a span where the hooked file (`SKILL.md`) moved `+22/−9`. Previously 0 of 45 entries were anchored, which made every prior anchor-drift zero vacuous. **No deploy owed:** all 78 paths are `.claude/`, `tests/fixtures/`, `scripts/ai-dlc/`, `docs/` and `CLAUDE.md` — `server/`, `web/`, `rebalancer/`, `graph-node-src/`, `subgraph/` and `infra/` each read **0** against a control of 78 total, so `CLAUDE.md` Deployment Rule (c) does not fire |
 
 **Rows 6, 7 and 8 are separated on purpose.** 49 + 50 + 23 mechanical edits do not survive sharing a
 context, and row 6 carries the only genuine judgement in the migration (decision 4).
@@ -633,6 +635,79 @@ bash scripts/ai-dlc/validate-layer-entries.sh . | tail -1      # EXPECT 0 error(
 
 ---
 
+### Row 8c — the migration, part 4: the citation trap OUTSIDE the layer. In `graph`.
+
+**Why this row exists, and why no rehearsal row caught it.** Rows 6–8 are bounded by what the
+validator can see, and the validator's subject set is the **50 layer entries** (`W3 = LC-R1: 4/50`).
+`CLAUDE.md`, `docs/coding-conventions.md` and `docs/operator-runbooks/` are not entries, so a
+consumer-id citation in them is invisible to every gate in this pull — it survives `0 error(s), 0
+warning(s)` and a green pre-push. `CLAUDE.md` in particular is loaded into context on **every
+session in this project**, so a stale pointer there misroutes future work rather than merely
+recording a dead reference. §4.6's `W3` trap is this same defect at layer scope; this is its
+out-of-layer half, and nothing joins the two.
+
+**THE THREE-CLASS RULE. Apply it by CLASS, never file by file.**
+
+| class | paths | action | why |
+|---|---|---|---|
+| **Durable audit record** | `_bmad-output/`, `docs/retro/`, `docs/reviews/`, `docs/escalations/`, `docs/ai-dlc-layer-adjudications/` | **NEVER rewrite** | Evidence of what was written at the time. Rewriting corrupts the audit record, and LC-N6's crosswalk (row 8) is the mechanism built for exactly these — that is the clause's whole stated rationale |
+| **Core-delivered** | `.claude/skills/ai-dlc/steps/`, `SKILL.md`, **`.claude/team-roles/`** | **NEVER edit** (decision 5) | Unregistered core drift the next `apply` overwrites. `team-roles/` is core-delivered — verify with `ls /tmp/pull-engine/core/team-roles/`; it is easy to mistake for consumer-owned because `CLAUDE.md` lists it under Key References |
+| **Live routing doc** | `CLAUDE.md`, `QUICKSTART.md`, `docs/coding-conventions.md`, `docs/operator-runbooks/` | **REALIGN** | These route FUTURE work. A stale pointer is an active defect, not a historical fact |
+
+**ALIGN — do not remove the numbers and do not reduce to a subset.** After the band, a `9xx`/`X`
+id is self-identifying as consumer-owned *by construction*, which is the property the whole
+migration exists to create. Stripping the numbers to make the prose rename-proof would forfeit it,
+and the band is a one-time TOTAL partition — consumer ids do not move again, so alignment carries
+no recurring cost.
+
+**THE TRAP INSIDE THE TRAP, and it is the reason this row cannot be a `sed`.** Core and the consumer
+BOTH define 17, 24, 26, 28, 29, 30, 31 — that is what "ALREADY COLLIDED" meant in row 6. **A citation
+must be classified by TITLE/INTENT, never by number.** The validator's own source states the
+canonical example: core's 24 is *"The adversarial cycle CONVERGED"*, the consumer's is
+*"Financial-display ground-truth live-verify"*. Measured on this tree:
+
+| citation | resolves to | action |
+|---|---|---|
+| `team-roles/adversary.md` "Check 24 orders the pass series" | **core** (adversarial cycle) | leave |
+| `docs/coding-conventions.md:1128` "deploy-validate Check 24 fails closed" | **consumer** (financial-display) | → `924` |
+| `team-roles/qa.md:247`, `code-reviewer.md`, `gate-adjudicator.md` "Check 17" | **core** (skill-invocation provenance) | leave |
+| `QUICKSTART.md:363` "gate-validation.md Check 14" | **core** (update pipeline snapshot) | leave |
+| `QUICKSTART.md:72`, `coding-conventions.md:529` "SKILL.md Rule 13" | **core** (requirements define WHAT) | leave |
+| `coding-conventions.md:1170` "orphaned-function gate … Check 30" | **consumer** (exact title match) | → `930` |
+
+`19b` is the easy half — core defines no `19b`, so every citation of it is unambiguously the
+consumer's.
+
+**MECHANICS.** Line-anchored and `cmp -s` guarded, so a shifted file MISSes loudly instead of
+editing the wrong citation. **20 edits [M]:** `CLAUDE.md` 10, `docs/coding-conventions.md` 6,
+`docs/operator-runbooks/execution-health-onchain-verify.md` 4.
+
+Also add a **"Reading a numbered citation in this file"** block to `CLAUDE.md` stating the band —
+`Check 928`/`Rule 916` are the consumer's, a bare `Check 28`/`Rule 16` is core's — and pointing at
+the row-8 crosswalk. Without it the next reader has no way to tell the namespaces apart, and this
+row recurs. While there, `Rule 1 through Rule 26` is stale on its own terms (core defines through
+**Rule 30**); rewrite it range-free rather than to a number that goes stale again.
+
+**VERIFY, and the control is the point:**
+
+```
+# the realigned ids are present
+grep -rncE 'Check 9(19b|22|24|27|28|29|30)|Rule 916|Step 903b' CLAUDE.md docs/coding-conventions.md
+# CONTROL: the core-referent citations are still there, untouched — a sweep that
+# rewrote them too would look identical on the line above
+grep -rnE 'Check 14|Check 17|Check 24|Rule 13' QUICKSTART.md .claude/team-roles/ docs/coding-conventions.md
+# and the layer tallies must be BYTE-UNCHANGED: no file here is a validator subject
+bash scripts/ai-dlc/validate-layer-entries.sh . | tail -2
+```
+
+**EXPECT** the layer reading to be exactly what row 8 left (`0 error(s), 0 warning(s)` once row 8 is
+done; `70 error(s), 4 warning(s)` if 8c runs before 7–8, as it did here). **A change in that number
+means you edited a layer entry and this row's classification was wrong.**
+
+**STOP CONDITION:** any `MISS`, or any edit under a Durable-audit-record or Core-delivered path.
+
+---
+
 ### Row 9 — verify, commit, push, PR, merge. In `graph`.
 
 ```
@@ -642,6 +717,13 @@ git add -A && git commit -m "chore(ai-dlc): pull 0.224.0 and migrate every consu
 **Rehearsal diff against `9b5d408a3`: 75 files changed, +3326 / −408** — 39 under `extensions/`,
 13 `tests/fixtures/`, 13 `overrides/` (the `base_sha` restamp), 2 `scripts/ai-dlc/`, plus the stamp,
 the contract, `SKILL.md`, `core-manifest.md`, the update skill and the register.
+
+**EXPECT 78, NOT 75 — row 8c is additive to the rehearsal and this is not a deviation.** The
+rehearsal predates row 8c, so its 75 excludes the three live routing docs that row realigns:
+`CLAUDE.md`, `docs/coding-conventions.md`, `docs/operator-runbooks/execution-health-onchain-verify.md`.
+Line counts move by roughly +30 for the same reason. **Any OTHER file beyond those three is a real
+deviation** — in particular a `.claude/team-roles/` path in the diff means row 8c edited a
+core-delivered file and must be reverted before the push.
 
 **Run the full pre-push.** Do it in the background and poll — the fixture suite is the long pole:
 
@@ -672,8 +754,9 @@ git diff 9b5d408a3 origin/main | wc -l    # CONTROL: must be large
 ```
 
 **PR body carries:** row 2's five tallies verbatim, row 3's 3/0/0 verdict split, the rename route
-taken per entry (band id vs qualifier), the 19 crosswalk rows, and the ledger residue from row 2 (3)
-as follow-ups.
+taken per entry (band id vs qualifier), the 19 crosswalk rows, row 8c's 20 citation realignments
+**and the three-class rule that decided which citations were left alone**, and the ledger residue
+from row 2 (3) as follow-ups.
 
 ---
 
@@ -702,6 +785,33 @@ git rev-parse HEAD
 - **`W3` has no arm for a reference broken by a rename in the same tree (§4.6).** The 4 warnings are
   correct and were caught, but nothing joins "id renamed" to "references to it" — a consumer that
   renames and does not read the warnings ships dangling prose. A candidate ai-dlc invariant.
+- **`W3`'s subject set stops at the layer, and the citations that matter most are outside it
+  (row 8c).** `LC-R1` measures `4/50` — the 50 layer entries. `CLAUDE.md` is not among them, yet it
+  is loaded into context on every session in the consumer project, so a consumer id renamed by
+  Rule 27 leaves a stale pointer there that passes `0 error(s), 0 warning(s)` AND a green pre-push.
+  Found by hand on this pull, after row 6 reported clean. **The strongest candidate invariant in
+  this file:** core knows every id an entry defines and every id it retired (it computes both for
+  `E15`/`E16`), so it can grep the consumer tree outside the layer for those ids and WARN — the same
+  join `W3` already performs, with the subject set widened past the entries. Until that exists, this
+  is a hand-discipline step every layered consumer must be told about, which is why it is now row 8c
+  rather than a footnote. Note the classification cannot be fully mechanized — core and consumer
+  legitimately share numbers, so the id join proposes candidates and a human still resolves each by
+  title. A WARN naming candidates is the right level; an ERROR would be wrong.
+- **`LC-N6` mandates crosswalk rows that `audit-rule-files.sh` then flags, and nothing joins the
+  two instruments (found at row 9, the pull's LAST gate).** A crosswalk row's `title` column
+  reproduces the entry's historical title, which routinely carries a sprint tag (`[PI-S253-1]`,
+  `(S294 I-14)`) — bare, that is an `ORIGIN_TAG` tier-1 finding. And an author filling column 4
+  ("resolves a bare citation written before …") reaches naturally for a date, which is an
+  `EMBEDDED_DATE` tier-1 finding. **19 rows produced 32 tier-1 findings and wedged the push**, at
+  the one gate that runs after everything else is green. Neither is unsatisfiable — backticks make
+  the tag a mention, and column 4 takes an event or a sha — but **nothing tells the author that**,
+  and the layer validator says `0 error(s), 0 warning(s)` throughout. The rehearsal missed it
+  because its rows happened to be terser and date-free. Cheap candidate fixes, in order of value:
+  state both constraints in the README's own crosswalk prose (core delivers that prose, so every
+  consumer gets it); and have `validate-layer-entries.sh` WARN when a crosswalk row it is already
+  parsing for `E16` contains a bare `S\d{2,4}` or an ISO date. This is the third instance in this
+  pull of the same shape — **a mandated edit that a DIFFERENT instrument then penalizes, with no
+  join between them** (§4.6 `W3`, row 8c's out-of-layer citations, and now this).
 - **The 6 report-only override rows.** Unchanged since the 0.213.0 pull.
 - **The `ledger-reverify.sh` residue** — 66 rows, 46 `STILL-LIVE`. Worked in its own pass, not here.
 - **The 3 `NEEDS-REVIEW` ledger rows** — new status since the last pull; report, do not adjudicate.
