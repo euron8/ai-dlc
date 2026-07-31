@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# layer-reference-resolution — seed a consumer that has been THROUGH the band migration.
+#
+# The two mechanisms under test are both artefacts of that migration, and neither is visible
+# from core's own tree, which has no consumer to renumber:
+#
+#   W7  a `Check <n>` citation the renumber orphaned. The heading moved; the prose did not.
+#   E15 the remedy string for an id whose heading does NOT end in a dot.
+#
+# So the seed carries a consumer mid-migration — some ids renamed into the band, some not —
+# together with every case the two arms have to tell apart:
+#
+#   checks/domain.md    ### 917.        renamed already, cited nowhere      -> silent
+#                       ### 919b.       renamed, and `Check 19b` still cited -> W7
+#                       ## Check 19b    the GROUP HEADING left behind        -> the same W7
+#                       ### 7.          NOT renamed, dotted heading          -> E15, dotted remedy
+#                       ## Check AP —   NOT renamed, EM-DASH heading         -> E15, em-dash remedy
+#   checks/sibling.md   ### 934.        renamed, and `Check 34` cited, WITH a crosswalk row
+#                                       -> silent: the row is what resolves it
+#   roles/dev.md        cites `Check 11b`, defined nowhere, no row           -> W7
+#                       cites `Check A` / `Check N` placeholders             -> silent
+#                       cites `Check 7`, which core defines                  -> silent
+#                       cites `Check 12`, resolved by a NAMESPACED row       -> silent
+#
+# The crosswalk carries its two rows in the two forms the table accepts — bare (`34`) and
+# namespaced (`Check 12`) — because the resolver reads both and a seed carrying only one form
+# leaves the other branch inert. That is not hypothetical: the first cut of this fixture seeded
+# only the bare form, and the mutant that deletes the namespaced branch came back GREEN.
+#
+# `Check 34` is the load-bearing silent case. Without the crosswalk join the arm reports it,
+# and reporting it would mean core demanding a repair for a citation the consumer has already
+# resolved by the sanctioned mechanism — the arm firing on its own remedy.
+#
+# Writes a throwaway tree under $1 (default: a mktemp dir) and echoes the path.
+set -euo pipefail
+
+ROOT="${1:-$(mktemp -d "${TMPDIR:-/tmp}/layer-refres.XXXXXX")}"
+CONS="$ROOT/consumer"
+SKILL="$CONS/.claude/skills/ai-dlc"
+mkdir -p "$SKILL/steps" "$SKILL/extensions/checks" "$SKILL/extensions/roles" "$SKILL/overrides"
+
+# A CONSUMER IS A GIT REPO. Two sibling fixtures asserted "a well-formed consumer lints clean"
+# against a tree with no git in it, and E16's refusal then read as a regression. The fix there
+# was faithfulness rather than an exemption, and this seed starts from that state.
+git init -q "$CONS"
+git -C "$CONS" config user.email fixture@example.invalid
+git -C "$CONS" config user.name  'layer-reference-resolution fixture'
+git -C "$CONS" config commit.gpgsign false
+
+# THE CONSUMER CARRIES THE CONTRACT, copied from the shipping file with the version read back
+# out of the copy, so neither the receipt nor the version can drift from the real contract.
+# Rooted at this seed's OWN location with both layouts named — I33 fails the build on a fixture
+# that reaches a core subtree by walking up from a path some other resolver produced.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+for _lc in "$HERE/../../skills/ai-dlc/layer-contract.yaml" \
+           "$HERE/../../../core/skills/ai-dlc/layer-contract.yaml" \
+           "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml"; do
+  [ -f "$_lc" ] && { cp "$_lc" "$SKILL/layer-contract.yaml"; break; }
+done
+[ -f "$SKILL/layer-contract.yaml" ] || { echo "SEED ERROR: cannot locate layer-contract.yaml" >&2; exit 2; }
+CV="$(awk '/^contract_version:/{print $2; exit}' "$SKILL/layer-contract.yaml")"
+[ -n "$CV" ] || { echo "SEED ERROR: no contract_version in the copied layer-contract.yaml" >&2; exit 2; }
+
+# Entry bodies are quoted heredocs: every id in them is literal and must stay that way. The
+# receipt is injected afterwards rather than interpolated in.
+receipt() { # receipt <entry-file>
+  awk -v cv="$CV" 'NR==1 && $0=="---" { print; print "conforms_to: " cv; next } { print }' "$1" > "$1.r" \
+    && mv "$1.r" "$1"
+}
+
+cat > "$SKILL/SKILL.md" <<'EOF'
+# ai-dlc
+
+## Rule 27 -- Layers
+Extensions are additive.
+EOF
+
+# The core file the entries hook. It defines check 7 and nothing else in that namespace, so
+# `Check 7` in consumer prose resolves against CORE — the case that must stay silent.
+cat > "$SKILL/steps/gate-validation.md" <<'EOF'
+# Gate validation
+
+### 7. Core's own check, and the consumer cites it.
+
+Worked example, and the placeholders here are why the grammar is numeric-leading:
+if Check A fails, record Check N in the ledger.
+EOF
+
+cat > "$SKILL/extensions/checks/domain.md" <<'EOF'
+---
+kind: check
+id: domain
+hooks: steps/gate-validation.md
+---
+
+### 917. Renamed into the band, cited by nobody.
+
+## Check 19b
+
+### 919b. Renamed into the band while its citations stayed put.
+
+The scope note under this check still says gate-1 fails at Check 19b, which is the
+citation the renumber orphaned.
+
+### 7. Not renamed yet, and its heading ends in a dot.
+
+## Check AP — Not renamed yet, and its heading ends in an em-dash.
+EOF
+receipt "$SKILL/extensions/checks/domain.md"
+
+cat > "$SKILL/extensions/checks/sibling.md" <<'EOF'
+---
+kind: check
+id: sibling
+hooks: steps/gate-validation.md
+---
+
+### 934. Renamed into the band, and the crosswalk carries its row.
+
+Retired at 0.214.0 as Check 34; the row in extensions/README.md is what keeps that
+citation resolvable.
+EOF
+receipt "$SKILL/extensions/checks/sibling.md"
+
+cat > "$SKILL/extensions/roles/dev.md" <<'EOF'
+---
+kind: role
+id: dev
+hooks: steps/gate-validation.md
+---
+
+- Absent probe means gate-1 fails (Check 19b).
+- Tooling-error SKIPs become FAIL in Check 11b, which nothing defines and no row resolves.
+- Check 34 was retired at 0.214.0; the crosswalk row resolves this one, in BARE form.
+- Check 12 was retired too, and its row names the id in NAMESPACED form.
+- Check 7 is core's, and it still resolves.
+- In the worked example, Check A precedes Check N.
+EOF
+receipt "$SKILL/extensions/roles/dev.md"
+
+# THE CROSSWALK. One row for 34 and none for 11b or 19b, which is what splits the two silent
+# cases from the two reported ones. Column 1 is read by `crosswalk_rows`, which takes column 1
+# of every pipe-table data row in this file and drops the header and separator by shape.
+cat > "$SKILL/extensions/README.md" <<'EOF'
+# Extensions
+
+## Catalog crosswalk table (every namespace)
+
+| Your id | Became | Title |
+|---|---|---|
+| 34 | 934 | Retired at 0.214.0, absorbed by core |
+| Check 12 | 912 | Retired, and this row names the id in namespaced form |
+EOF
+
+git -C "$CONS" add -A
+GIT_AUTHOR_DATE='2026-01-01T00:00:00Z' GIT_COMMITTER_DATE='2026-01-01T00:00:00Z' \
+  git -C "$CONS" commit -q --no-verify -m 'consumer, mid-migration'
+
+printf '%s' "$ROOT"
