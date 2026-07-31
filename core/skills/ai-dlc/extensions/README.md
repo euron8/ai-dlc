@@ -261,9 +261,29 @@ says so, and nothing defines it now. **LC-N6 makes that an ERROR until the row e
 completeness against history stays yours; completeness against every rename from here on is
 enforced.
 
+**THE TABLE DOES NOT LIVE IN THIS FILE.** It lives at the path
+`core-manifest.md` declares as `consumer_crosswalk_file:` — `.claude/skills/ai-dlc/crosswalk.md`
+— which the installer scaffolds once and neither the installer nor a pull ever
+overwrites. **This file is core's.** The distribution ships it, every pull compares your
+copy against the version you are updating from, and rows written here read as unregistered
+core drift: the reference consumer's migration wrote nineteen of them and earned a
+permanent `HARD-UNREGISTERED-CORE-DRIFT` whose two printed remedies would respectively
+delete the rows and file them where nothing reads them. The columns and the shape are
+unchanged; only the home moved. **LC-N7** reports rows still sitting here, and they keep
+resolving until you move them, so nothing wedges while you do.
+
+```markdown
 | your id | label | title | resolves a bare citation written before | notes |
 |---|---|---|---|---|
-| 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24 (adversarial convergence), which core added later |
+| 24 | `[ext:gate-validation-domain]` | Financial-display ground-truth live-verify | (label adoption) | collides with core 24, which core added later |
+```
+
+That example is **fenced deliberately, and the fence is load-bearing.** The reader harvests
+column 1 of every pipe table it is given and, until this release, did not skip fenced
+blocks — so core's own file contributed three ids to every consumer's crosswalk set, and
+`24` arrived pre-resolved in a tree whose operator had never written a row. A worked example
+that satisfies the clause it illustrates is a check that cannot fire for that id. **I68**
+holds core's shipped files to yielding zero ids under the shipping reader.
 
 **Validate any entry you author or revise:** `scripts/ai-dlc/validate-layer-entries.sh`.
 

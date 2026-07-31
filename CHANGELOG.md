@@ -17,6 +17,116 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.227.0] — 2026-07-31
+
+### An ERROR clause whose only compliant output was an unregistered edit to upstream's tree
+
+`LC-N6` requires a consumer to write a crosswalk row for every id its entries retire, and until
+this release it named `extensions/README.md` as the file to write it into. That file is core's.
+The distribution ships it, `install.sh` scaffolds it, and `unregistered-drift.sh` compares a
+consumer's copy against the version it is updating from. So obeying an ERROR clause produced
+unregistered core drift, by construction, and the reference consumer's migration did exactly
+that: nineteen rows, a permanent `HARD-UNREGISTERED-CORE-DRIFT`, and two printed remedies of
+which one deletes the rows and the other files them under `overrides/` where the reader does not
+look — `validate-layer-entries.sh` hard-wired `CROSSWALK_MD="$EXT_DIR/README.md"` as the sole
+crosswalk path. Each of the four mechanisms was right on its own terms. Nothing joined them.
+
+The table now lives where `layer-contract.yaml` declares it, as `consumer_crosswalk_file:`.
+`install.sh` scaffolds it once from `core/skills/ai-dlc/templates/crosswalk.md` and never
+overwrites it; core ships no file at that path, so it is outside `unregistered-drift.sh`'s
+subject set by construction rather than by exemption.
+
+**Carving the table's region out of `unregistered-drift.sh` was the other candidate and it was
+rejected as a carve-out.** It would have left the rows inside a file a future `apply` may decide
+to write, and an exemption that keeps consumer data in upstream's tree is the ownership problem
+restated, not solved.
+
+### The dual-read is not silent, and that was the bar
+
+Rows in the retired location still RESOLVE. A clause that wedged every consumer carrying them
+would re-create, at the instant of the fix, the state the fix exists to clear — the reference
+consumer would have gone red on `LC-N6` for all nineteen. So the migration is reported rather
+than enforced: **`LC-N7` / `W8`** names every row still sitting in `extensions/README.md`, counts
+them, and prints the path to move them to. A migrated consumer says nothing; an unmigrated one
+says exactly what it still owes. The fixture asserts the two runs are not byte-identical rather
+than inferring the difference from the fact that a warn exists.
+
+`contract_version` 10 → 11.
+
+### The reader was harvesting core's own worked examples, and `24` arrived pre-resolved in every consumer
+
+`crosswalk_rows()` takes column 1 of every pipe table in the file it is given — deliberately not
+scoped to a heading, because a heading-scoped reader has to be edited in lockstep with prose.
+It did not skip fenced blocks. Measured on the shipped `extensions/README.md`: **three ids
+harvested from core's own file** — two from a gate-log render example inside a ``` fence, one a
+live data row in the table itself. Every consumer inherited all three. `LC-N6` and `LC-R2` could
+therefore never fire on `24` in any tree, and the reference consumer's "one crosswalk row" was
+core's example rather than anything its operator wrote.
+
+A worked example that satisfies the clause it illustrates is a check that cannot fire for that
+id. The reader now skips fenced blocks and core's example is fenced. **`I68`** holds core's two
+shipped crosswalk-readable files — the retired location and the scaffold — to yielding zero ids,
+each zero carrying a same-run control that appending one unfenced row moves the count by one.
+The control is the delta rather than an absolute, because written as `= 1` it fired alongside
+the claim on every mutant that added a row and no assertion was independently attributable.
+
+Because core no longer contributes rows, an id found in the retired location is consumer-authored
+by construction — `LC-N7` needs no subtraction, and there is no distribution copy for a
+consumer-side reader to subtract against anyway.
+
+### The declaration is bound in both directions
+
+**`I67`** holds `consumer_crosswalk_file:` to one string across `layer-contract.yaml` and
+`reconcile/setup-sites.md`, and — the arm that matters — refuses to let either reader carry the
+literal, with a zero guard asserting each reader does read the key. A hard-wired path passes an
+agreement check forever while the declaration drifts under it, which is precisely how the old
+`CROSSWALK_MD` outlived the ownership model it broke.
+
+**The declaration is in the contract rather than in `core-manifest.md`, and the reason was
+measured.** The manifest was the obvious home by `consumer_machinery_home:`'s precedent, but
+**55 of the 63 fixture seeds that build a synthetic consumer never write a `core-manifest.md`** —
+a refusing reader there would have ERRORed on a subject set that is entirely harness. Every one
+of those seeds already copies the contract, because `E17` reads `contract_version` out of it. Same
+declaration, false-positive set zero instead of fifty-five.
+
+### Two defects produced in the doing, both caught by the repo's own gates
+
+- **`I54` fired on this release's own new fixture.** Two `printf | grep -q` sites, the
+  pipefail/SIGPIPE class swept in v0.207.0, written fresh by the session adding a check about
+  checks that cannot fire. Converted to here-strings.
+- **The new refusal double-reported a missing contract**, entangling `layer-conforms-to`'s m3 —
+  that mutant asserts removing ITS refusal lets an uninstalled contract exit 0, and it stopped
+  being able to say so. The arm is now scoped to a contract that exists and is silent about the
+  key, which is the only state it can speak to.
+- **`I68`'s control probe was written into the repository it keys.** The first cut wrote
+  `.i68-probe.md` into `$REPO_ROOT`. Measured: an untracked, unignored file at the repo root
+  MOVES `scripts/suite-content-key.sh`'s value — `3488ca3…` clean against `b6c9884…` with a
+  probe present — so an invariant about checks that cannot fire was quietly invalidating the
+  suite skip for every later run. **This is v0.208.0's finding reproduced exactly**: a check
+  writing into the tree it tests, and a transient write leaves nothing behind to find it by.
+  The probe now goes to `mktemp`. Verified by taking the key either side of a full validator
+  run — identical — with a control confirming the key is still sensitive to a root file.
+
+### Verification
+
+New fixture `layer-crosswalk-home`: 17 assertions, 4 mutants, an unmutated control, green in
+BOTH layouts. Its two `install.sh` arms cannot run in an installed tree, so the skip states its
+reason and proves it — install.sh absent AND a shipped script present, with both absent a FAIL.
+`I67` and `I68` carry a four-mutant battery on a `cp -R` copy, `cmp -s` guarded, each red on
+exactly one invariant; a fifth blinds the extractor and turns only the controls red.
+
+Suite **93/93, 166s**, both validators exit 0, **68** invariants. *(The first draft of this line
+said 92/92 — v0.226.0's figure, carried down the page rather than re-derived, in a release whose
+whole subject is checks that report without measuring. The drivable count is 93: 95 directories,
+5 `.dist-only`, 93 carrying a `run.sh`, and the suite's own green-run record agrees at 93.)*
+
+**Recorded, not fixed here: a brand-new consumer's pre-push emits `W7` on `Check 33`**, a citation
+in core's own `steps/gate-validation.md` of an id graph retired. Verified pre-existing by running
+HEAD's validator against a HEAD-built fresh install — same warning, same subject; only the path in
+the message moved. *(An earlier probe of this reported "no warnings" and was a false zero: the
+stash it used left `install.sh` requiring a declaration the stashed contract no longer carried, so
+the installer exited 1 and nothing was measured.)*
+
 ## [0.226.0] — 2026-07-31
 
 ### The consumer's fixture suite passed when it ran nothing — and so did the guard the distribution wrote against exactly that

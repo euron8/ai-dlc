@@ -91,6 +91,7 @@ core_manifest:
   - core/fixtures/layer-conforms-to/**
   - core/fixtures/layer-extends-grain/**
   - core/fixtures/layer-retired-id-crosswalk/**
+  - core/fixtures/layer-crosswalk-home/**
   - core/fixtures/layer-reference-resolution/**
   - core/fixtures/layer-adjudication-tier/**
   - core/fixtures/context-mode-protect/**
@@ -172,7 +173,20 @@ rulebook:
   - core/team-roles/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/
+consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md
 ```
+
+`consumer_crosswalk_file:` is here for the same reason and under the same rule.
+It is the file LC-N6 requires a consumer to write a crosswalk row into, and it
+was `extensions/README.md` — a file the distribution ships and this skill's own
+`unregistered-drift.sh` compares against base, so the only compliant output of an
+ERROR clause was an unregistered edit to upstream's tree. Declaring the path is
+what lets the two ends disagree loudly instead of silently: `validate-enforcement-map.sh`
+**I67** binds this copy to the one in `skills/ai-dlc/layer-contract.yaml` and
+refuses to let the validator or the installer carry the literal. The AUTHORITATIVE
+copy is the contract's, beside the clauses that cite it — this one exists because
+this skill may not read pipeline files. Core never writes the file beyond
+scaffolding it once.
 
 `consumer_machinery_home:` carries NO `core/` prefix, unlike every entry above it.
 The entries above name distribution paths that this skill maps into consumer form;

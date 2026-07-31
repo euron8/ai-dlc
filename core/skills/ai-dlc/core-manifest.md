@@ -166,6 +166,7 @@ core_manifest:
   - fixtures/layer-conforms-to/**
   - fixtures/layer-extends-grain/**
   - fixtures/layer-retired-id-crosswalk/**
+  - fixtures/layer-crosswalk-home/**
   - fixtures/layer-reference-resolution/**
   - fixtures/layer-adjudication-tier/**
   - fixtures/context-mode-protect/**
