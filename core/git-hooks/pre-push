@@ -158,18 +158,104 @@ step "shell syntax (every shipped script and hook)" syntax_all
 #    and reporting that would name a core file the consumer did not write and cannot fix.
 drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
 
+#    AND THE SUITE RAN SERIALLY, AND PASSED WHEN IT RAN NOTHING. Until v0.226.0 the
+#    loop below was `for d in ...; do bash "$d/run.sh"; done` with `return $rc` and
+#    nothing else: no pool, no verdict accounting, and rc=0 both when the glob matched
+#    no directory and when no directory carried a run.sh. Measured on the reference
+#    consumer with 0.224.0 applied: 106 drivable fixtures, 188.0s serial wall clock,
+#    67.8s user against 102.3s SYSTEM -- fork-bound, not work-bound -- and a
+#    sum-over-max of 10.2x available from a pool. The distribution had fixed all three
+#    for its own tree and shipped none of them; install.sh marks this file
+#    "always overwrite -- upstream-owned", so a consumer could not fix it either.
+#
+#    THE TWO ARMS THAT ARE NOT ABOUT SPEED ARE WHY THIS IS NOT A NICE-TO-HAVE. An empty
+#    suite that returns 0 is a gate reporting a pass it never earned, and with a worker
+#    pool a dropped job produces no verdict file while the report still reads green and
+#    merely SHORTER. Both are this repo's named class sitting in the gate a consumer
+#    actually runs, so both are asserted rather than assumed.
+#
+#    THE BLOCK IS JOINED TO .githooks/pre-push BY I66 on EXECUTABLE LINES ONLY, so the
+#    two suites cannot silently fork again. The prose differs on purpose; the code does
+#    not. Comments are stripped before that comparison, because a join a comment can
+#    satisfy is I64's defect.
+#
+#    RE-DERIVE THE POOL SIZE ON YOUR OWN BOX rather than inheriting 16. It is measured
+#    on one 18-core machine, which is why it stays the tunable AI_DLC_FIXTURE_JOBS.
+# FIXTURE_POOL_BEGIN
+FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
+
 run_fixtures() {
-  local rc=0 d
+  local rc=0 d b out n_expected n_actual verdict
+  out="$(mktemp -d)" || return 1
+
   for d in tests/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
-    if bash "$d/run.sh" >/dev/null 2>&1; then
-      printf '   ok    %s\n' "$(basename "$d")"
-    else
-      printf '   FAIL  %s\n' "$(basename "$d")"; rc=1
+    printf '%s\n' "$d"
+  done > "$out/list"
+  # `grep -c .` PRINTS 0 and EXITS 1 on an empty file, so the obvious
+  # `$(grep -c . "$f" || echo 0)` yields the two-line string "0\n0" — and both
+  # integer tests in this function then die with "integer expression expected",
+  # take their false branch, and the suite returns 0 having run nothing. That is
+  # how the empty-suite guard below shipped UNABLE TO FIRE: the line was present,
+  # the mechanism was not, and a fixture driving the real hook is what found it.
+  # Normalise to a bare integer instead of rescuing a failed exit status.
+  n_expected="$(grep -c . "$out/list" 2>/dev/null)"
+  case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac
+  if [ "$n_expected" -eq 0 ]; then
+    printf '   FAIL  no fixtures found -- an empty suite passes every assertion it never made\n'
+    rm -rf "$out"; return 1
+  fi
+
+  # Each worker records its verdict to a file named for its fixture. The verdict is read
+  # back from those FILES, not from xargs exit status, because that is what makes the
+  # completeness assertion below possible -- and because `xargs` collapses any number of
+  # failures into one exit code that cannot say WHICH.
+  AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
+    d="$1"; b="$(basename "$d")"
+    if bash "$d/run.sh" >/dev/null 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
+    else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
+  ' _ {} < "$out/list"
+
+  # Rendered in list order, so the output is deterministic and diffable across runs even
+  # though the work completed out of order.
+  n_actual=0
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    b="$(basename "$d")"
+    if [ ! -f "$out/$b" ]; then
+      printf '   FAIL  %s  (no verdict recorded)\n' "$b"; rc=1; continue
     fi
-  done
+    n_actual=$((n_actual + 1))
+    verdict="$(cat "$out/$b")"
+    if [ "$verdict" = ok ]; then printf '   ok    %s\n' "$b"
+    else                        printf '   FAIL  %s\n' "$b"; rc=1; fi
+  done < "$out/list"
+
+  # THE CONTROL PARALLELISM MAKES NECESSARY. Serially, a fixture that never ran could not
+  # print an `ok` -- the loop and the report were the same thing. With a worker pool they
+  # are not: a dropped job produces no verdict file, and a suite reporting 70 greens
+  # instead of 75 reads exactly like a suite that passed. This is the check-that-cannot-
+  # fire class one layer out, so the count is asserted rather than assumed.
+  #
+  # WHICH OF THE TWO ARMS DOES THE DETECTING, measured rather than asserted, because
+  # this comment used to imply the count was an independent detector and it is not.
+  # The report walks the LIST, so a missing verdict is caught by the `[ ! -f ]` branch
+  # above; `n_actual` is incremented on exactly the path that branch skips, so the
+  # count below can only fire when that branch already has. Its contribution is
+  # MAGNITUDE -- one line saying how much of the suite is missing, instead of N lines
+  # each saying one fixture is. `consumer-suite-pool`'s M2b mutant is the measurement:
+  # remove the per-fixture branch and a lost worker is misreported as a failing
+  # fixture while this count stays silent.
+  if [ "$n_actual" -ne "$n_expected" ]; then
+    printf '   FAIL  %s of %s fixtures produced a verdict -- the pool dropped work, and a short green suite reads exactly like a passing one\n' \
+      "$n_actual" "$n_expected"
+    rc=1
+  fi
+
+  rm -rf "$out"
   return $rc
 }
+# FIXTURE_POOL_END
 #    A MID-PULL TREE CANNOT BE JUDGED. /ai-dlc-update writes core one file at a time and
 #    clears .claude/.ai-dlc-applying only when it writes the re-stamp, so while that marker
 #    exists the tree is a mixture of two releases. Its fixtures then fail in both
@@ -198,7 +284,7 @@ if [ -f .claude/.ai-dlc-applying ]; then
 elif [ -d tests/fixtures ]; then
   [ -f scripts/ai-dlc/validate-fixture-drivability.sh ] &&
     step "fixture drivability (a skipped fixture reads like one that passed)" drivability
-  step "fixture suite" run_fixtures
+  step "fixture suite (${FIXTURE_JOBS}-way)" run_fixtures
 fi
 
 if [ "$fail" -ne 0 ]; then

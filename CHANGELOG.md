@@ -17,6 +17,124 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.226.0] — 2026-07-31
+
+### The consumer's fixture suite passed when it ran nothing — and so did the guard the distribution wrote against exactly that
+
+`install.sh` copies `core/git-hooks/pre-push` into every consumer as `.githooks/pre-push` and
+marks it *"always overwrite — upstream-owned"*, so it is both the only fixture gate a consumer
+has and the one thing a consumer cannot repair for itself. The distribution had been running its
+own suite through a worker pool with a completeness assertion and an empty-suite guard since
+v0.206.0. It shipped none of them, and nothing compared the two files.
+
+Measured on the reference consumer with 0.224.0 applied, `cmp -s` confirming it runs exactly the
+file core ships: **106 drivable fixtures, serial, 188.0s of wall clock at 67.8s user against
+102.3s SYSTEM** — fork-bound, not work-bound — with **10.2x** available from a pool. Before/after
+across the two hooks, re-derived from `origin/main` rather than quoted, control `xargs -Q` = 0 in
+both files:
+
+| | distribution | consumer, before | consumer, now |
+|---|---|---|---|
+| `xargs -P` | 1 | **0** | 1 |
+| `AI_DLC_FIXTURE_JOBS` | 2 | **0** | 2 |
+| empty-suite guard | 1 | **0** | 1 |
+| `no verdict recorded` | 1 | **0** | 1 |
+| verdict-count assertion | 1 | **0** | 1 |
+
+### Fixed — the empty-suite guard could never fire, in EITHER hook
+
+This is the release's real finding, and a fixture driving the real hook is what produced it.
+`grep -c .` **prints `0` and exits `1`** on an empty file, so the shipped
+`n_expected="$(grep -c . "$out/list" || echo 0)"` yields the two-line string `0\n0`. Both integer
+tests in `run_fixtures` then die with `integer expression expected`, both take their false branch,
+and the function returns **0** having run nothing. Measured with a control in the same probe: the
+identical expression over a two-line list yields a clean `2` and compares correctly.
+
+So the arm written to stop a suite passing on nothing **passed on nothing itself**, for as long as
+it has existed, in the distribution's own gate. Its line was present; its mechanism was not. That
+is this repo's named class arriving inside the guard against it, and it is why §6c-9's gap table —
+which counted the guard as present in one hook and absent in the other — understated the defect in
+one direction while the count still read right.
+
+Fixed by normalising to a bare integer (`case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac`)
+rather than rescuing a failed exit status, in both hooks.
+
+### Added — I66, one fixture-suite runner across both pre-push hooks
+
+I30 has joined the two hooks on their **syntax** glob since v0.126.x. The suite runner beside it
+was joined by nothing, which is how it forked for the project's whole history. I66 extracts the
+`FIXTURE_POOL_BEGIN`/`END` block from each, maps the fixture root the install layout defines
+(`core/fixtures/` → `tests/fixtures/`) and requires the two to be identical.
+
+**The comparison is on executable lines only, and the direction is deliberate.** The two hooks'
+prose differs on purpose — one addresses a maintainer of this repo, the other a consumer who must
+re-derive the pool size on their own box — so comments are stripped before the diff. I64's finding
+is why the strip runs this way round: a join a *comment* can satisfy is no join at all. Here the
+comment is what may differ and the code is what may not, so nothing a comment says can make I66
+pass. Its false-positive arm is a mutant that changes only a comment and must stay green.
+
+**A mutant caught the zero guard being unreachable.** Written with an unanchored sed address,
+`/# FIXTURE_POOL_BEGIN/` still matches `# FIXTURE_POOL_BEGINS`, so renaming the sentinel extracted
+the block anyway and the guard that refuses an empty extraction could not be reached by that
+mutation. It read as correct and was inert — the same class as the defect above, produced while
+building the check that names it. The address is anchored, and the rename mutant now reaches the
+guard.
+
+Battery: 5 mutants plus an unmutated control, **each red on exactly one invariant** (asserted, not
+assumed — the distinct invariant ids in each mutant's output are counted).
+
+### Added — `consumer-suite-pool`, and it is SHIPPED rather than dist-only
+
+The fixture drives the real hook ten times against seeded trees. It is shipped because a
+`.dist-only` fixture would repeat the exact shape this release exists to fix: the correctness arms
+tested only where they already worked. It resolves its subject in **both layouts** from its own
+location — `core/git-hooks/pre-push` here, `.githooks/pre-push` in a consumer — and reports
+`FIXTURE ERROR` rather than scoring an absence as a pass. Verified on a tree built by running
+`install.sh` into an empty directory: 14 of 14 green there, with `core/git-hooks/` confirmed absent
+and the installed hook byte-identical to what core ships.
+
+14 assertions, 4 mutants, an unmutated control, and an `EXPECTED_ASSERTIONS` floor.
+
+**Concurrency is proven by OBSERVATION, not by a stopwatch.** Four fixtures each mark their own
+presence, wait, count the marks, and clear their own — so the arm reads how many were in flight
+rather than how long the suite took, which is the timing-sensitive assertion §7's gate warns
+about. The `AI_DLC_FIXTURE_JOBS=1` control is what makes that number mean something, and it earned
+its place immediately: the first version of the instrument never cleared its markers, so a serial
+run counted 1, 2, 3, 4 and reported a maximum of 4. The number looked like concurrency and was
+arithmetic. Only the `-P1` control could tell the difference.
+
+**I10 caught a real hazard in this fixture before it shipped.** It drives a hook that reads
+`AI_DLC_FIXTURE_JOBS`, so an operator with that set to 1 in their environment would have failed the
+concurrency arm against a hook behaving exactly as configured — and since the arm lives in the
+pre-push suite, that failure would have blocked every push they make. The env is scrubbed.
+
+### Changed — the verdict-count assertion is a MAGNITUDE statement, not an independent detector
+
+A mutant written to show that cutting both verdict arms lets a lost worker pass silently found the
+opposite, and the refutation is worth more than the arm it replaced. The report walks the **list**,
+not the directory of verdicts, so a fixture with no verdict file still reaches the reader; with the
+`[ ! -f ]` branch removed it falls through to an unreadable `cat` and is reported as a plain
+`FAIL <name>`. The push still blocks.
+
+Two consequences, both now asserted: the per-fixture branch's contribution is **attribution** —
+without it a worker the pool lost is indistinguishable from a fixture that ran and failed, which
+sends someone to debug a fixture that never executed; and `n_actual` is incremented on exactly the
+path that branch skips, so the count **can only fire when the per-fixture branch already has**. The
+comment claiming *"the count is asserted rather than assumed"* implied independence it does not
+have, and is corrected in both hooks to say which arm does the detecting.
+
+### Not shipped, and recorded rather than deferred silently
+
+**`scripts/suite-content-key.sh` stays distribution-only.** Measured on the built tree: it is
+absent from `scripts/ai-dlc/`, control — `validate-fixture-drivability.sh` is present among the 35
+scripts that do ship. The skip's soundness rests on the key hashing a **superset of everything the
+suite can read**, and that superset is defined over this repo's tree. A consumer's suite reads its
+own `.claude/`, its own `scripts/ai-dlc/` and its own fixtures, and nothing has measured whether the
+key covers them. Shipping the skip on an unverified superset would install a *cached green* in the
+consumer's gate — the same class as everything above, with a longer fuse. The measured win here is
+the pool (10.2x available); the skip is worth roughly 50s of an inner loop and is not worth taking
+on an unmeasured key. Scheduled, not dropped.
+
 ## [0.225.0] — 2026-07-31
 
 ### A remedy that named a string absent from the file, and the citations a renumber leaves behind
