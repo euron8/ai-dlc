@@ -1187,11 +1187,18 @@ moves. Reported by `validate-layer-entries.sh` (W4) as a WARN, never an ERROR --
 must not be unable to take a fix because its own rule catalog needs relabelling -- and
 written by `reconcile/relabel-extension-checks.sh --apply`.
 
-Allocate NEW consumer check and rule numbers from **900 and above**; core allocates below
-it. The label resolves a collision that already exists; the band prevents one that does
-not yet, and it is the only thing that reaches a number core has not allocated so far.
-Reported by `validate-layer-entries.sh` (W5); core is held to the complement by I45.
-Convention and the crosswalk it retires: `extensions/README.md` [LC-N5].
+Allocate EVERY consumer id from **900 and above**, or from the reserved **`X` prefix** if it
+is alphabetic; core allocates below the floor and never at that prefix. The partition is
+**total** — bare integers, suffixed ids (`19b` -> `919b`, `0b` -> `900b`), alphabetic ids
+(`AP` -> `XAP`) and step ids alike, in every namespace and every `kind:`. Your numeric prefix
+carries your ordering, so moving your whole range preserves every position within it; what
+you lose is sorting a section beside a CORE section of the same number, and if that is what
+an entry needs it is `kind: qualifier` with `extends:`, which renders it inside the core
+section and borrows no id at all. A label resolves a collision that already exists; the band
+prevents one that does not yet. An **ERROR** from `validate-layer-entries.sh` (E15), so the
+pre-push refuses until you migrate; core is held to both halves of the complement by I45. An
+id you RETIRE by migrating needs a crosswalk row (E16). Convention and the crosswalk:
+`extensions/README.md` [LC-N5, LC-N6].
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: in-place rule authoring
 silently mutating core, so the next upstream pull clobbers the new rule or

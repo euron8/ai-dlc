@@ -122,4 +122,23 @@ hooks: steps/demo.md
 id: unanchored
 push_candidate: false"
 
+
+# THE CONSUMER IS A GIT REPO, because a real one always is. E16 reads an entry's id
+# history from the consumer's own git to decide whether an id it no longer defines was
+# RETIRED or merely never there, and on a tree with no git it REFUSES — correctly, and
+# loudly, since an unreadable history and a clean one are otherwise the same output. A
+# seed without git would make this fixture assert "a well-formed consumer lints clean"
+# against a shape no consumer has, and the refusal would read as a regression.
+for _c in "$CONS"; do
+  [ -d "$_c" ] || continue
+  git init -q "$_c"
+  git -C "$_c" config user.email fixture@example.invalid
+  git -C "$_c" config user.name fixture
+  git -C "$_c" config commit.gpgsign false
+  git -C "$_c" add -A
+  GIT_AUTHOR_DATE='2026-01-02T00:00:00+00:00' GIT_COMMITTER_DATE='2026-01-02T00:00:00+00:00' \
+    git -C "$_c" -c user.email=fixture@example.invalid -c user.name=fixture \
+      commit -q --no-verify -m 'seed: the consumer layer as authored'
+done
+
 printf '%s\n' "$ROOT"

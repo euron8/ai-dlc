@@ -72,7 +72,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 7
+contract_version: 8
 
 clauses:
 
@@ -515,25 +515,52 @@ clauses:
 
   - id: LC-N5
     subject: extension
-    level: WARN
+    level: ERROR
     since: 4
     normative: >-
       A consumer entry allocates its own check and rule numbers from the reserved band at 900
-      and above; core allocates below it. LC-N1 to LC-N4 are collision DETECTORS and they join
-      against the numbers core defines today, so a consumer allocating a number core has not
-      reached yet matches nothing and reports clean — until the release where core allocates it,
-      at which point the collision appears retroactively across every gate log, retro and
-      escalation already written. A partition makes that unrepresentable where a detector cannot
-      see it at all. Bare integers only: a suffixed id marks a position beside core's number and
-      an alphabetic id has no ordering in a numeric band, and a number core already defines is
-      LC-N1 to LC-N3's subject — an entry deliberately qualifying core's rule shares that integer
-      because the integer is its reference. Check numbers are scoped to `kind: check` for the
-      same reason LC-N1 is: a step number is a position in a procedure, not an allocation.
-      Report-only, and the remedy is a renumber plus a crosswalk row, never a catalog label —
-      the label resolves a collision that exists, the band prevents one that does not yet.
+      and above; core allocates below it, and core is the source of truth for its own range.
+      LC-N1 to LC-N4 are collision DETECTORS and they join against the numbers core defines
+      today, so a consumer allocating a number core has not reached yet matches nothing and
+      reports clean — until the release where core allocates it, at which point the collision
+      appears retroactively across every gate log, retro and escalation already written. A
+      partition makes that unrepresentable where a detector cannot see it at all. Bare integers
+      only: a suffixed id marks a position beside core's number and an alphabetic id has no
+      ordering in a numeric band. A number core ALREADY defines is not excluded — the heading is
+      an allocation from core's namespace and the reference to core's rule is prose in the body,
+      so renumbering the heading moves the allocation and leaves the reference where it was; that
+      case is reported with the collision stated as already having happened, because it has.
+      Check numbers are scoped to `kind: check` for the same reason LC-N1 is: a step number is a
+      position in a procedure, not an allocation. Report-only, and the remedy is a renumber plus
+      a crosswalk row, never a catalog label — the label resolves the reference at the point of
+      use from here on and cannot reach back into evidence already written.
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
-    code: W5
+    code: E15
+
+  - id: LC-N6
+    subject: extension
+    level: ERROR
+    since: 8
+    normative: >-
+      An id a consumer entry has RETIRED — one its own history shows the entry defining, that
+      nothing in the rendered rulebook defines any more — carries a crosswalk row in
+      `extensions/README.md` resolving it, in both the check and the rule namespace. The
+      renumber LC-N5 requires is what creates these, and every one of them is a bare citation
+      already written into a gate log, retro or escalation that no rename can reach back into;
+      the row is the only thing that keeps it resolvable. Core does NOT check the table against
+      the consumer's evidence and still does not claim to — that clause stays withdrawn on the
+      grounds I37 states, since core cannot see which numbers a consumer has ever cited and a
+      clause core cannot evaluate is a rule with no mechanism behind it. What
+      core can see, and this clause enforces, is an id leaving the rulebook. An id core or a
+      sibling entry still defines is not retired: the citation lands. Where the id history
+      cannot be read — a shallow clone, a missing git, a tracked file whose diff history yields
+      none of the ids it currently defines — the clause REFUSES, naming and counting the entries
+      it did not judge, because an unreadable history and a clean one produce the same empty
+      retired-set otherwise.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E16
 
   # --- cross-references into the rendered rulebook --------------------------------------
   - id: LC-R1

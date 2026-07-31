@@ -223,7 +223,7 @@ grep -q "COLLISION on 'Rule 8'" <<<"$out" \
   && bad "Rule 8 reported as a collision as well as a restatement — the split on title is not happening" \
   || ok "  and it is not ALSO reported as a collision"
 
-# ANCHORED ON THE ARM'S OWN WORDING, not on the shared subject. W5 (Part 5) reports
+# ANCHORED ON THE ARM'S OWN WORDING, not on the shared subject. E15 (Part 5) reports
 # Rule 44 too, by a different clause and for the opposite reason, so the old bare
 # `grep -q "'Rule 44'"` here would fail the moment the band arm shipped — and it would
 # have failed pointing at the collision detector, which is not what changed. Two arms
@@ -270,145 +270,170 @@ else
     || bad "  but the check-side findings vanished too — the 'cleared' result above is a dead linter, not a fix"
 fi
 
-# --- Part 5: the reserved consumer band (W5) -----------------------------------
+# --- Part 5: the TOTAL naming partition (E15) -----------------------------------
 #
-# Parts 1 and 4 test COLLISION detectors, and both join the entry's number against
-# the numbers core defines today. That join is why neither can see the defect this
-# part covers: a consumer allocating a number core has NOT reached matches nothing
-# and reports clean, until the release where core allocates it and the collision
-# appears retroactively across gate logs that are already the audit record.
+# Parts 1 and 4 test COLLISION detectors, and both join the entry's id against the ids
+# core defines today. That join is why neither can see the defect this part covers: a
+# consumer allocating an id core has NOT reached matches nothing and reports clean,
+# until the release where core allocates it and the collision appears retroactively
+# across gate logs that are already the audit record.
 #
-# So the assertions below are deliberately built on subjects the other parts read as
-# CLEAN. Check 30, check 33 and Rule 44 are each asserted silent above — correctly,
-# for the collision arm — and each is a W5 finding. If a future change makes Part 1
-# or Part 4 report them, these two sets of assertions have merged and one of them has
-# stopped testing anything.
+# THE PARTITION IS TOTAL, and this part is the record of what that replaced. It shipped
+# with three exclusions — suffixed ids, alphabetic ids, and ids core already defines —
+# plus a `kind: check` scope, and on the reference consumer those four together were
+# hiding SEVEN live collisions and thirty-nine subjects. Each is now a governed id form
+# with its own remedy, and the seed carries one of every form so that removing any arm
+# moves a named cell rather than merely lowering a count.
+#
+# Scored as a VECTOR over every seeded id, never per row. Four of the five arms are
+# occupied by more than one subject, so a per-row assertion would report entanglement on
+# every mutant; the vector states the whole expected table positively and no mutant can
+# satisfy another's assertion by going quiet.
+band_vector() { # band_vector <linter> <root> -> "<id>=<OOB|COLLIDED|-> …" over every seeded id
+  local out cell v=''
+  out="$(bash "$1" "$2" 2>&1)"
+  for s in "5." "24." "30." "33." "40b." "933." "AP." "XQ." "0." "7a-post." \
+           "Rule 8" "Rule 29" "Rule 30" "Rule 44" "Rule 931"; do
+    cell='-'
+    grep -qF "OUT OF BAND — '$s'" <<<"$out" && cell=OOB
+    grep -qF "OUT OF BAND, ALREADY COLLIDED — '$s'" <<<"$out" && cell=COLLIDED
+    v="$v${v:+ }${s%.}=$cell"
+  done
+  printf '%s' "$v"
+}
+band_remedies() { # band_remedies <linter> <root> -> every remedy it offers, sorted
+  bash "$1" "$2" 2>&1 | grep -oE "(rename to '[^']+'|renumber to 'Rule [0-9]+')" | sort -u | tr '\n' ' '
+}
 
-# The check side. 30 and 33 are extension-only integers below the floor.
-for n in 30 33; do
-  grep -q "CHECK OUT OF BAND — check '$n\.'" <<<"$out" \
-    && ok "check $n = OUT OF BAND (core does not define it and it is below the floor)" \
-    || bad "check $n not reported out of band — an allocation from core's range is invisible until core takes the number, and then it is too late to fix the gate logs"
+BAND_WANT="5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-"
+BAND_GOT="$(band_vector "$LINTER" "$ROOT")"
+if [ "$BAND_GOT" = "$BAND_WANT" ]; then
+  ok "the partition reports every id FORM and stays silent on every in-band one"
+else
+  bad "the band vector moved.
+          got  '$BAND_GOT'
+          want '$BAND_WANT'
+        Each cell is a separate arm: 30/33 bare-below-floor, 5/24 core-defined, 40b suffixed, AP alphabetic, 0 step-domain, 7a-post a bold anchor core also defines. 933/XQ/Rule 931 are the in-band controls and a non-'-' there means the arm fires on a conformant entry, so following its own advice cannot clear it."
+fi
+
+# ERROR, not WARN. The partition is a hard invariant now: the consumer's pre-push refuses
+# until it migrates, which is what makes the collision unrepresentable rather than merely
+# reported. A WARN here would leave the migration optional forever.
+grep -q "^ERROR.*OUT OF BAND" <<<"$out" \
+  && ok "  and the band finding is an ERROR (the migration blocks, it is not advisory)" \
+  || bad "  but the band finding is not an ERROR — a reported-only partition is the label-not-a-namespace state the band exists to replace"
+grep -q "^WARN.*OUT OF BAND" <<<"$out" \
+  && bad "  a band finding was emitted at WARN — two severities for one clause means one of them is not the contract" \
+  || ok "  and no band finding is emitted at WARN"
+
+# THE REMEDY IS PART OF THE FINDING, and it has its own failure mode: a remedy that is
+# itself out of band. `0` -> `90` and `5c-table` -> `95c-table` are both below the floor,
+# which is a message that tells an author to move somewhere the same arm will report.
+BAND_REM="$(band_remedies "$LINTER" "$ROOT")"
+bad_rem=''
+for r in $(grep -oE "'[0-9][0-9a-z-]*\.'" <<<"$BAND_REM" | tr -d "'."); do
+  n="${r%%[!0-9]*}"
+  [ "$((10#$n))" -ge 900 ] || bad_rem="$bad_rem $r"
 done
+if [ -z "$bad_rem" ]; then
+  ok "  and every remedy it offers is itself in band (no message sends an author somewhere this arm reports)"
+else
+  bad "  a remedy is itself OUT OF BAND:$bad_rem — the zero-padding is what keeps '0b' from becoming '90b', and without it the message prescribes a move to a range the same arm governs"
+fi
 
-# The rule side, one namespace over.
-grep -q "RULE OUT OF BAND — 'Rule 44'" <<<"$out" \
-  && ok "Rule 44 = OUT OF BAND (the same allocation defect in the rule namespace)" \
-  || bad "Rule 44 not reported out of band — core is free to allocate 44 and the collision would land retroactively"
-
-# WARN, never ERROR. The remedy rewrites the consumer's own durable audit key and
-# needs a crosswalk row per number; blocking a pull on it would wedge a consumer out
-# of taking a fix over its own catalog.
-grep -q "^WARN.*CHECK OUT OF BAND" <<<"$out" \
-  && ok "  and the band finding is a WARN (a renumber is not a precondition for taking a fix)" \
-  || bad "  but the band finding is an ERROR — five on first contact is a linter that gets switched off"
-
-# THE POSITIVE CONTROLS. Each one fails if the arm is widened, and together they are
-# what stops "no findings" from scoring as a pass for a check that stopped looking.
-grep -q "OUT OF BAND.*'933\.'" <<<"$out" \
-  && bad "the IN-BAND check 933 was reported — the band arm fires on conformant entries, so following its own advice cannot clear it" \
-  || ok "in-band check 933 correctly silent (the remedy clears the message)"
-
-grep -q "OUT OF BAND.*'Rule 931'" <<<"$out" \
-  && bad "the IN-BAND 'Rule 931' was reported — same defect one namespace over" \
-  || ok "in-band Rule 931 correctly silent"
-
-grep -q "OUT OF BAND.*'40b\.'" <<<"$out" \
-  && bad "the SUFFIXED '40b' was reported — a suffix marks a position beside core's 40 and has no expression in a numeric band; renumbering it to 940b would move it away from the section it exists to sit next to" \
-  || ok "suffixed check 40b correctly excluded (a suffix is a position, not an allocation)"
-
-# Core's OWN numbers must never be reported. Check 24 and Rule 29 are collisions —
-# LC-N1/LC-N3's subject, resolved by the catalog label — and an entry qualifying a
-# core rule shares that integer BECAUSE the integer is its reference. Telling it to
-# renumber would break the only thing that makes it comprehensible.
-for n in 5 24; do
-  grep -q "OUT OF BAND — check '$n\.'" <<<"$out" \
-    && bad "check $n reported out of band although CORE defines it — the band arm is not excluding core's own numbers, so every deliberate qualifier is told to renumber away from its own reference" \
-    || ok "check $n (core-defined) correctly excluded from the band arm"
-done
-grep -q "OUT OF BAND — 'Rule \(8\|29\|30\)'" <<<"$out" \
-  && bad "a core-defined rule number was reported out of band — the exclusion that protects a deliberate qualifier is gone" \
-  || ok "core-defined rules 8/29/30 correctly excluded from the band arm"
-
-# NAMESPACE SCOPE. `prose.md` is kind: step-domain and defines `### 0.` against a core
-# retro that has no step 0. That is an extension-only integer below the floor and it
-# must stay silent: a step number is a POSITION in an ordered procedure, not an
-# allocation, and renumbering it to 900 would render it at the end of the procedure.
-grep -q "CHECK OUT OF BAND — check '0\.'" <<<"$out" \
-  && bad "a step-domain entry's step '0.' was reported out of band — the check arm is not scoped to kind: check, so the band would reorder a procedure it does not govern" \
-  || ok "step-domain step '0.' correctly outside the check band's scope"
-
-# --- Part 6: W5's exclusions are load-bearing, proved by mutation --------------
+# --- Part 5b: E16's zero guard, which this seed is the negative control for -----
 #
-# Part 5 already proves W5 FIRES: three findings on the pristine seed, from the
-# shipping linter, on subjects the collision arms read as clean. What Part 5 cannot
-# prove is that the four EXCLUSIONS mean anything, and each of them is exactly the
-# kind of narrowing that looks careful and does nothing. So each is mutated OUT and
-# the assertion is that a NEW finding appears naming the subject that exclusion
-# protects — a positive outcome, never the absence of a message.
+# The seeded tree is a mktemp dir with no git in it, so E16 CANNOT read an id history —
+# and an unreadable history and a clean one produce the same empty retired-set. The arm
+# must therefore refuse out loud here. This fixture is where that is asserted because
+# the condition is free: every other fixture that seeds a bare tree has it too.
+grep -q "RETIRED-ID HISTORY UNREADABLE" <<<"$out" \
+  && ok "E16 REFUSES on a tree with no id history rather than reporting it clean" \
+  || bad "E16 was silent on a tree it cannot read an id history from. An unreadable history and a clean one now produce identical output, which is the defect the arm was built to end."
+grep -q "not inside a git work tree" <<<"$out" \
+  && ok "  and it names WHY it could not read it, so the operator can tell a refusal from a pass" \
+  || bad "  but it did not name the reason, so a refusal is indistinguishable from a finding-free run"
+
+# --- Part 6: every arm of the partition is load-bearing, proved by mutation ------
 #
-# The suffix arm is the one that needed this most. Its pristine assertion ("40b
-# correctly excluded") passes whether the exclusion is present OR removed, because
-# without it `[ 40b -lt 900 ]` errors rather than reporting — a silent non-finding
-# scored as a deliberate one. Only the mutation below tells the two apart.
+# Part 5 proves the partition FIRES. What it cannot prove is that each ARM is doing its
+# own work — and three of the four exclusions this release removed were unfalsifiable in
+# exactly that way. The suffix exclusion is the worked example: with it removed but the
+# numeric comparison unchanged, `[ 40b -lt 900 ]` ERRORS and reports nothing, which is
+# indistinguishable from excluding it on purpose. Only a mutation that moves a NAMED CELL
+# tells the two apart.
 #
-# MUTATION DISCIPLINE. Every mutant is a COPY of the linter, `cmp -s`-guarded so a
-# sed that matched nothing cannot pass as a mutation, run against a FRESH seed
-# (Part 4b's `--apply` rewrote the shared one), with an unmutated control copy from
-# the same directory so a copy that simply fails to run cannot score as a kill.
+# ONE ASSERTION PER MUTANT: the complete expected vector, stated positively and distinct
+# from every other mutant's. A mutant that broke the linter outright fails its own
+# assertion instead of passing it.
+#
+# MUTATION DISCIPLINE. Every mutant is a COPY of the linter, `cmp -s`-guarded so a sed
+# that matched nothing cannot pass as a mutation, run against a FRESH seed (Part 4b's
+# `--apply` rewrote the shared one), with an unmutated control copy from the same
+# directory so a copy that simply fails to run cannot score as a kill.
 MROOT="$(bash "$HERE/seed.sh")" || { echo "FIXTURE ERROR: mutant seed failed" >&2; exit 2; }
 MDIR="$MROOT/.fixture-mutants"
 mkdir -p "$MDIR"
 
-band_hits() { # band_hits <linter> -> the subjects it reports out of band, sorted
-  bash "$1" "$MROOT" 2>&1 | grep 'OUT OF BAND' | sed 's/.*OUT OF BAND — //; s/ allocates.*//' | sort
-}
-
-# THE CONTROL, first, and it earns its place: every assertion below is "this subject
-# is now reported", and a linter copy that dies on startup reports nothing at all —
-# which would read as a clean exclusion, not as a broken harness.
 cp "$LINTER" "$MDIR/control.sh"
-BASE="$(band_hits "$MDIR/control.sh")"
-if [ "$(printf '%s\n' "$BASE" | grep -c .)" -eq 3 ]; then
-  ok "unmutated control copy reproduces all three band findings (the mutants below run against a live linter)"
+CTRL="$(band_vector "$MDIR/control.sh" "$MROOT")"
+if [ "$CTRL" = "$BAND_WANT" ]; then
+  ok "CONTROL: an unmutated copy reproduces the shipped vector (the mutants below run against a live linter)"
 else
-  bad "CONTROL FAILED — an unmutated copy of the linter reports $(printf '%s\n' "$BASE" | grep -c .) band findings, not 3. Every mutant below would be scored against a linter that is not working."
+  bad "CONTROL FAILED — an unmutated COPY of the linter does not reproduce the shipped vector.
+          copy '$CTRL'
+          ship '$BAND_WANT'
+        Every mutant below would be scored against a linter that is not working, and a copy that cannot run scores as a kill for all of them."
 fi
 
-# mutant <label> <sed> <expected-new-subject> <why>
-mutant() {
-  local label="$1" prog="$2" want="$3" why="$4" f="$MDIR/m.sh"
+mutant() { # mutant <label> <sed> <want-vector> <why>
+  local label="$1" prog="$2" want="$3" why="$4" f="$MDIR/m.sh" got
   sed "$prog" "$LINTER" > "$f"
   if cmp -s "$LINTER" "$f"; then
     bad "MUTATION VACUOUS ($label) — the sed matched nothing in the linter, so the assertion below would score an unchanged run as a kill"
     return
   fi
-  if comm -13 <(printf '%s\n' "$BASE") <(band_hits "$f") | grep -qF "$want"; then
-    ok "$label"
+  got="$(band_vector "$f" "$MROOT")"
+  if [ "$got" = "$want" ]; then
+    ok "MUTANT killed: $label"
   else
-    bad "$label — removing the exclusion did NOT make $want report. $why"
+    bad "MUTANT '$label' did not produce its expected vector, so what it is meant to prove is unproven.
+          got  '$got'
+          want '$want'
+        $why"
   fi
 }
 
-mutant "dropping the suffix exclusion makes '40b' report (so excluding it is a decision, not an accident)" \
-  's|.*# suffixed or alphabetic -> not governed|    "") return 1 ;; *[!0-9]*) set -- "${1%%[!0-9]*}" ;;|' \
-  "check '40b.'" \
-  "The exclusion is unfalsifiable as written: without it the numeric comparison ERRORS on a suffixed id and reports nothing, which is indistinguishable from excluding it on purpose."
-
-mutant "dropping the core-set exclusion makes core's own check '5' report (so a deliberate qualifier is protected by a live arm)" \
-  's#grep -Fxq -- "$a" <<<"$core_anchors" && continue#:#' \
-  "check '5.'" \
-  "This is the exclusion that keeps an entry qualifying a core check from being told to renumber away from the very integer that is its reference. Core's 24 reports alongside 5 — the same arm, one more subject."
-
-mutant "dropping the kind scope makes a step-domain step '0' report (so the band does not reorder a procedure)" \
-  's|if \[ "$kind" = check \]; then|if true; then|' \
-  "check '0.'" \
-  "A step number is a position in an ordered procedure, not an allocation; renumbering it into the band would render it at the end of the procedure it belongs inside."
-
-mutant "raising the floor past 933 makes the in-band check report (so the floor is what decides, not a hardcoded subject list)" \
+# M1 — the floor is what decides, not a hardcoded subject list. Raising it past 933 must
+# pull the two in-band NUMERIC controls in and leave the alphabetic one out, because the
+# alphabetic half is a prefix and has no floor.
+mutant "raising BAND_FLOOR past 933 pulls in the in-band numeric controls and ONLY those" \
   's|^BAND_FLOOR=900$|BAND_FLOOR=1000|' \
-  "check '933.'" \
-  "If this does not move, the arm is keyed on something other than BAND_FLOOR and I45's binding to the same constant proves nothing. Rule 931 moves with it — the same floor, one namespace over."
+  "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=OOB AP=OOB XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=OOB" \
+  "If 933 and Rule 931 do not move, the arm is keyed on something other than BAND_FLOOR and I45's binding to the same constant proves nothing. If XQ moves too, the alphabetic half is reading the floor, which it must not."
+
+# M2 — the alphabetic half is a real arm, not decoration. Without it `AP` goes silent and
+# nothing else moves: the numeric cells are produced by a different branch entirely.
+mutant "removing the alphabetic branch silences 'AP' and nothing else" \
+  's|^    \[A-Za-z\]\*) printf .*|    [A-Za-z]*) return 1 ;;|' \
+  "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=- XQ=- 0=OOB 7a-post=COLLIDED Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-" \
+  "A band is numeric and cannot order 'AP', so the alphabetic half is a reserved prefix instead. This is the arm that found the reference consumer's own 'H1' colliding with core's after four releases of a numeric-only band."
+
+# M3 — the already-collided split is a real split. Forcing the membership test false must
+# turn every COLLIDED cell into a plain OOB while the verdict itself is unchanged: the
+# two messages are one clause, and the difference is what has already happened, not
+# whether it is reported.
+mutant "forcing the core-membership test false turns every COLLIDED cell into OOB and changes no verdict" \
+  's#if grep -Fxq -- "\$a" <<<"\$core_anchors"; then#if false; then#; s#if grep -Fxq -- "\$n" <<<"\$core_rules"; then#if false; then#' \
+  "5=OOB 24=OOB 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=OOB 7a-post=OOB Rule 8=OOB Rule 29=OOB Rule 30=OOB Rule 44=OOB Rule 931=-" \
+  "Every cell must stay reported. If one goes to '-', the membership test is gating the VERDICT and not just the message — which is the exclusion this release removed, growing back."
+
+# M4 — the step-domain scope really is gone. Restoring `kind: check` must silence exactly
+# the two ids that come from step-domain entries and leave every check-side cell alone.
+mutant "restoring the kind: check scope silences ONLY the step-domain ids" \
+  's|^  while IFS= read -r a; do$|  if [ "$kind" = check ]; then while IFS= read -r a; do|; s|^  done < <(defined_anchors "\$f")$|  done < <(defined_anchors "$f"); fi|' \
+  "5=COLLIDED 24=COLLIDED 30=OOB 33=OOB 40b=OOB 933=- AP=OOB XQ=- 0=- 7a-post=- Rule 8=COLLIDED Rule 29=COLLIDED Rule 30=COLLIDED Rule 44=OOB Rule 931=-" \
+  "'0.' and '7a-post.' are prose.md's, which is kind: step-domain. The rule cells must not move — rules were never kind-scoped — and no check-side cell may move either, or the scope is doing more than it claims."
 
 rm -rf "$MROOT"
 

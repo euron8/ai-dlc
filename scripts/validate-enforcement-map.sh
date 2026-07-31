@@ -99,8 +99,8 @@
 #                         Nothing asserted it. Derived from install.sh/uninstall.sh's targets and
 #                         the core_manifest globs, with a positive control so a broken extractor
 #                         cannot report the same clean result as a correct one.
-#   I45 core allocates BELOW the reserved consumer band — the other half of W5's partition.
-#                         W5 tells a consumer its check and rule numbers live at BAND_FLOOR and
+#   I45 core allocates BELOW the reserved consumer band — the other half of E15's partition.
+#                         E15 tells a consumer its check and rule numbers live at BAND_FLOOR and
 #                         above; that is worth nothing unless core is held to the complement,
 #                         because the guarantee a consumer buys is "core will never allocate the
 #                         number you just took". Derived from steps/gate-validation.md's check
@@ -1795,7 +1795,7 @@ if [ -n "$CMH" ]; then
 fi
 
 # --- I45: core allocates below the reserved consumer band ----------------------
-# The complement of W5. A consumer that renumbers its catalog into the band has bought
+# The complement of E15. A consumer that renumbers its catalog into the band has bought
 # exactly one guarantee — that core will never allocate the number it just took — and
 # that guarantee is this check. Without it the band is a declaration with no mechanism,
 # and the failure mode is the worst kind: it is invisible until core ships the
@@ -1815,6 +1815,7 @@ if [ ! -f "$vle" ]; then
   err "I45 cannot find validate-layer-entries.sh at $vle. The band floor and both catalog extractors are read from it, so its absence would retire this invariant while reporting nothing."
 else
   band_floor="$(sed -n 's/^BAND_FLOOR=\([0-9][0-9]*\)$/\1/p' "$vle" | head -1)"
+  band_alpha="$(sed -n 's/^BAND_ALPHA_PREFIX=\([A-Za-z]\)$/\1/p' "$vle" | head -1)"
   band_gv="$REPO_ROOT/core/skills/ai-dlc/steps/gate-validation.md"
   band_sk="$REPO_ROOT/core/skills/ai-dlc/SKILL.md"
   # awk, not sed: BSD sed mis-parses the `{` in a `/^fn\(\) \{/` address. Same
@@ -1823,6 +1824,8 @@ else
 
   if [ -z "$band_floor" ]; then
     err "I45 could not read BAND_FLOOR out of core/scripts/validate-layer-entries.sh. The floor is the only thing that says which numbers are core's, so an unreadable one makes every core number conforming and this check vacuous."
+  elif [ -z "$band_alpha" ]; then
+    err "I45 could not read BAND_ALPHA_PREFIX out of core/scripts/validate-layer-entries.sh. It is the ALPHABETIC half of the same partition — the half that keeps core off 'XAP' after a consumer renames 'AP' into it — and an unreadable value makes every core alphabetic id conforming, which is this arm's PASS."
   elif [ ! -f "$band_gv" ] || [ ! -f "$band_sk" ]; then
     err "I45 cannot find core's catalogs (steps/gate-validation.md and/or SKILL.md). A scan over a missing file reports the same clean result as a scan over a conforming one."
   else
@@ -1848,10 +1851,23 @@ defined_rules \"\$1\"" _ "$band_sk" 2>/dev/null)"
     elif [ -z "$band_rules" ]; then
       err "I45 extracted ZERO rule headings from SKILL.md. Same shape as the check arm above — an empty rulebook passes the band assertion by containing nothing."
     else
-      band_bad_c="$(printf '%s\n' "$band_checks" | awk -v f="$band_floor" '/^[0-9]+$/ && $0+0 >= f+0' | tr '\n' ' ')"
-      band_bad_r="$(printf '%s\n' "$band_rules"  | awk -v f="$band_floor" '/^[0-9]+$/ && $0+0 >= f+0' | tr '\n' ' ')"
-      [ -n "$band_bad_c" ] && err "I45 core allocates check number(s) at or above the reserved consumer band floor ${band_floor}: ${band_bad_c% }. steps/gate-validation.md is core's catalog and everything from ${band_floor} up belongs to the consumer — W5 tells authors to renumber into that range, so a core allocation there recreates, upstream and for every consumer at once, the exact collision the band exists to make unrepresentable. Allocate below ${band_floor}."
-      [ -n "$band_bad_r" ] && err "I45 core allocates rule number(s) at or above the reserved consumer band floor ${band_floor}: ${band_bad_r% }. SKILL.md's rulebook is core's catalog and the band above ${band_floor} is the consumer's; a core rule there collides with every consumer that followed W5's advice, and it collides retroactively across rulebook citations already written. Allocate below ${band_floor}."
+      # BOTH HALVES OF THE PARTITION, and the numeric one is no longer `^[0-9]+$`.
+      # That anchor meant a core id like `901a` — numeric-leading, suffixed, inside
+      # the consumer band — was not a subject, so core could allocate into the range
+      # it publishes as reserved and this invariant would report clean. The consumer
+      # side governs the leading integer of ANY numeric-leading id (`19b` -> `919b`),
+      # so this side has to read the same thing or the halves disagree.
+      band_num='{ n=$0; sub(/[^0-9].*$/,"",n); if (n != "" && n+0 >= f+0) print $0 }'
+      band_bad_c="$(printf '%s\n' "$band_checks" | awk -v f="$band_floor" "$band_num" | tr '\n' ' ')"
+      band_bad_r="$(printf '%s\n' "$band_rules"  | awk -v f="$band_floor" "$band_num" | tr '\n' ' ')"
+      # The alphabetic half. Rules carry no alphabetic ids today, so this arm reads the
+      # check catalog only — and it is NOT scoped that way by preference: `defined_rules`
+      # harvests `[0-9]+[a-z]*`, which cannot produce a leading letter at all, so an
+      # alphabetic arm over it would be a check that cannot fire.
+      band_bad_x="$(printf '%s\n' "$band_checks" | grep -E "^${band_alpha}" | tr '\n' ' ')"
+      [ -n "$band_bad_x" ] && err "I45 core allocates alphabetic check id(s) beginning with the reserved consumer prefix '${band_alpha}': ${band_bad_x% }. A band is numeric and alphabetic ids have no place in one, so the partition's alphabetic half is a PREFIX: a consumer renames 'AP' to '${band_alpha}AP' and E15 tells it to. Core allocating '${band_alpha}…' recreates the collision that rename was performed to end, for every consumer at once. Allocate an alphabetic id that does not begin with '${band_alpha}'."
+      [ -n "$band_bad_c" ] && err "I45 core allocates check number(s) at or above the reserved consumer band floor ${band_floor}: ${band_bad_c% }. steps/gate-validation.md is core's catalog and everything from ${band_floor} up belongs to the consumer — E15 tells authors to renumber into that range, so a core allocation there recreates, upstream and for every consumer at once, the exact collision the band exists to make unrepresentable. Allocate below ${band_floor}."
+      [ -n "$band_bad_r" ] && err "I45 core allocates rule number(s) at or above the reserved consumer band floor ${band_floor}: ${band_bad_r% }. SKILL.md's rulebook is core's catalog and the band above ${band_floor} is the consumer's; a core rule there collides with every consumer that followed E15's advice, and it collides retroactively across rulebook citations already written. Allocate below ${band_floor}."
     fi
   fi
 fi
@@ -1894,7 +1910,7 @@ fi
 #
 # `CHECK_HEAD_RE` decides what counts as a check DEFINITION. Two tools need it and they
 # reach opposite verdicts if it forks: validate-layer-entries.sh harvests the ids a layer
-# entry allocates (E6/W1/W5), and validate-gate-manifest.sh reports a definition that
+# entry allocates (E6/W1/E15), and validate-gate-manifest.sh reports a definition that
 # never became loadable (GM1). A narrower copy in the resolver silently shrinks GM1's
 # subject set — and GM1's whole subject is checks nothing else reports, so the shrinkage
 # would restore the exact silence it was written to end, with the build green.

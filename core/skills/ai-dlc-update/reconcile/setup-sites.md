@@ -88,6 +88,7 @@ core_manifest:
   - core/fixtures/consumer-machinery-home/**
   - core/fixtures/layer-qualifier-grain/**
   - core/fixtures/layer-extends-grain/**
+  - core/fixtures/layer-retired-id-crosswalk/**
   - core/fixtures/layer-adjudication-tier/**
   - core/fixtures/context-mode-protect/**
   - core/fixtures/context-sensor/**
