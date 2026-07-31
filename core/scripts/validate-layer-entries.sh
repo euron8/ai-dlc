@@ -897,7 +897,47 @@ done < <(layer_files "$OVR_DIR")
 # same empty retired-set, which is this arm's PASS — the named defect class exactly. So
 # a shallow clone, a missing git, or a TRACKED file whose log comes back empty is
 # reported, counted and named, never skipped.
-CROSSWALK_MD="$EXT_DIR/README.md"
+# WHERE THE TABLE LIVES, AND WHY IT IS DECLARED RATHER THAN WRITTEN HERE.
+#
+# It used to be `$EXT_DIR/README.md`, hard-wired. That file is CORE's — the distribution
+# ships it, `install.sh` scaffolds it, and `unregistered-drift.sh` compares a consumer's
+# copy against the distribution at base. So LC-N6, an ERROR, had its only compliant output
+# inside a file the consumer does not own: the reference consumer's migration wrote 19 rows
+# into it and earned a permanent `HARD-UNREGISTERED-CORE-DRIFT`, whose two printed remedies
+# (revert, or refile under overrides/) respectively delete the rows and put them where this
+# reader does not look. A rule whose enforcement and whose ownership model disagree is not a
+# bug in either one; it is a missing join, and this is the join.
+#
+# The path is DECLARED in layer-contract.yaml, beside the clauses that cite it, and twinned
+# into reconcile/setup-sites.md for the reason `consumer_machinery_home:` is — ai-dlc-update
+# may not read pipeline files, so the updater and this reader would otherwise be bound by
+# nothing. I67 holds the two declarations to one string and refuses to let this script carry
+# the literal. The contract rather than core-manifest.md because the manifest is a file 55 of
+# the 63 fixture seeds touching a synthetic consumer never build, while every one of them
+# already copies the contract for E17 — same declaration, false-positive set zero instead of
+# fifty-five.
+#
+# IT REFUSES RATHER THAN GUESSING. An unreadable declaration and a consumer with no rows are
+# the same empty crosswalk set otherwise, and that set is what E16 and W7 clear themselves
+# against — so a missing key would silently turn two clauses into unconditional PASSes.
+#
+# SCOPED TO A CONTRACT THAT EXISTS. An absent `layer-contract.yaml` is already refused by
+# LC-C1's own arm, which names it and says why; reporting it a second time here made ONE
+# defect produce TWO findings and entangled a sibling fixture's mutant with this clause —
+# `layer-conforms-to`'s m3 asserts that removing ITS refusal lets an uninstalled contract
+# exit 0, and it stopped being able to say that. The subject here is a contract present and
+# silent about the key, which is the only state this arm can speak to.
+CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[ \t]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+if [ -z "$CROSSWALK_REL" ] && [ -f "$LC_FILE" ]; then
+  err E16 "could not read 'consumer_crosswalk_file:' from $(rel "$LC_FILE"). The crosswalk table's location is declared there and nowhere else, so without it this run has no table to read — and an unread table is indistinguishable from an empty one, which is E16's and W7's PASS. Both clauses are therefore unevaluated in this run, not clean."
+  CROSSWALK_MD=''
+else
+  CROSSWALK_MD="$PROJECT_ROOT/$CROSSWALK_REL"
+fi
+# The retired location, kept readable for exactly one reason: an unmigrated consumer's rows
+# must still RESOLVE, or this release would re-wedge every consumer it is meant to unblock.
+# LC-N7 is what keeps that from being a silent dual-read.
+CROSSWALK_LEGACY="$EXT_DIR/README.md"
 CROSSWALK_STATE=''
 CROSSWALK_UNREADABLE=''
 CROSSWALK_UNREADABLE_N=0
@@ -918,14 +958,27 @@ crosswalk_probe() {
 # and a heading-scoped reader would have to be edited in lockstep with a prose heading,
 # which is the restatement smell. A separator row and the header cell are dropped by
 # shape, not by position.
-crosswalk_rows() {
-  [ -f "$CROSSWALK_MD" ] || return 0
-  awk -F'|' '/^[[:space:]]*\|/ {
+#
+# FENCED BLOCKS ARE SKIPPED, and that arm is not tidiness. Measured on the shipped
+# `extensions/README.md` before this release: the reader harvested THREE ids from core's own
+# file — two from a gate-log render example inside a ``` fence, and one live example row in
+# the table itself. Every consumer inherited all three, so `24` arrived pre-resolved and
+# E16 could never fire on it. A prose example that satisfies the clause it illustrates is
+# this repo's named class, and it had been shipping since the table existed. Core's own
+# files now yield ZERO ids under this reader, which is what makes an id found in the retired
+# location provably consumer-authored — LC-N7 needs no subtraction because there is nothing
+# to subtract. I68 is the arm that keeps it that way.
+crosswalk_rows() { # crosswalk_rows <file>
+  [ -n "${1:-}" ] && [ -f "$1" ] || return 0
+  awk -F'|' '
+    /^[[:space:]]*```/ { fence = !fence; next }
+    fence { next }
+    /^[[:space:]]*\|/ {
       v=$2; gsub(/^[ \t`*]+|[ \t`*]+$/,"",v)
       if (v == "" || v ~ /^-+$/) next
       if (tolower(v) ~ /^your (number|id)$/) next
       print v
-    }' "$CROSSWALK_MD" | sort -u
+    }' "$1" | sort -u
 }
 
 # Every id <extractor> would harvest from any version of <file> in this repo's history.
@@ -951,7 +1004,18 @@ echo "== extensions =="
 # per file — and the degraded-mode message would name the generic reason on a tree that
 # is plainly not a git repo at all.
 crosswalk_probe
-CROSSWALK_IDS="$(crosswalk_rows)"
+CROSSWALK_IDS="$(crosswalk_rows "$CROSSWALK_MD")"
+
+# LC-N7 / W8 — the retired location, and the reason this is a WARN with teeth rather than a
+# silent dual-read. The spec this release was cut against is explicit: an unmigrated consumer
+# and a migrated one MUST NOT produce identical output. They do not — the ids still resolve,
+# so nothing wedges, and the run names every row that has not moved yet. A consumer that has
+# migrated says nothing here, which is the only state in which this arm is quiet.
+CROSSWALK_LEGACY_IDS="$(crosswalk_rows "$CROSSWALK_LEGACY")"
+if [ -n "$CROSSWALK_LEGACY_IDS" ]; then
+  CROSSWALK_IDS="$(printf '%s\n%s\n' "$CROSSWALK_IDS" "$CROSSWALK_LEGACY_IDS" | grep -E '.' | sort -u)"
+  warn W8 "$(rel "$CROSSWALK_LEGACY"): carries $(printf '%s\n' "$CROSSWALK_LEGACY_IDS" | grep -c .) crosswalk row(s) in the RETIRED location — $(printf '%s' "$CROSSWALK_LEGACY_IDS" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g'). That file is core's: the distribution ships it and every pull compares your copy against it, so rows written there read as unregistered core drift and the two remedies the updater prints for that status will either delete them or move them somewhere nothing reads. They still resolve today and nothing is wedged. Move them to ${CROSSWALK_REL:-the declared crosswalk file} and delete them from here; the declaration is 'consumer_crosswalk_file:' in core-manifest.md."
+fi
 
 # THE RESOLVABILITY SET — measured, and it is what makes E16's subject the right one.
 #
@@ -1295,7 +1359,7 @@ while IFS= read -r f; do
           grep -Fxq -- "$_rid" <<<"$CROSSWALK_IDS" && continue
           grep -Fxq -- "${_lbl}${_rid}" <<<"$CROSSWALK_IDS" && continue
           grep -Fxq -- "Check ${_rid}" <<<"$CROSSWALK_IDS" && continue
-          err E16 "$(rel "$f"): RETIRED ID WITH NO CROSSWALK ROW — this entry used to define '${_lbl}${_rid}' and no longer does, and extensions/README.md carries no row resolving it. Every gate log, retro and escalation written while it was live cites a bare \"${_lbl}${_rid}\", those citations are permanent, and no renumber can reach back into them — the row is the only thing that keeps them resolvable. Add one naming '${_lbl}${_rid}', the id it became, and the title, then this clears. Core does NOT claim to check the table's completeness against your evidence and cannot; it checks the one thing it can see, which is an id leaving this entry."
+          err E16 "$(rel "$f"): RETIRED ID WITH NO CROSSWALK ROW — this entry used to define '${_lbl}${_rid}' and no longer does, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no row resolving it. Every gate log, retro and escalation written while it was live cites a bare \"${_lbl}${_rid}\", those citations are permanent, and no renumber can reach back into them — the row is the only thing that keeps them resolvable. Add one naming '${_lbl}${_rid}', the id it became, and the title, then this clears. Core does NOT claim to check the table's completeness against your evidence and cannot; it checks the one thing it can see, which is an id leaving this entry."
         done < <(comm -23 <(printf '%s\n' "$_was" | sort -u) <(printf '%s\n' "$_now" | sort -u))
       done
     fi
@@ -1390,7 +1454,7 @@ while IFS= read -r f; do
     grep -Fxq -- "$ref" <<<"$GLOBAL_CHECK_ANCHORS" && continue
     grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" && continue
     grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS" && continue
-    warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, and extensions/README.md carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
+    warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, and the crosswalk file (${CROSSWALK_REL:-undeclared}) carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
   done < <(grep -Eoh 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Check[ -]//' | sort -u)
 done <<< "$all_files"
 

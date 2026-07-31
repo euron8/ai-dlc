@@ -211,6 +211,28 @@ for layer in extensions overrides; do
   fi
 done
 
+# The catalog crosswalk table. SCAFFOLDED ONCE, NEVER OVERWRITTEN, and the path is not
+# spelled here — it is read from the `consumer_crosswalk_file:` declaration the validator
+# reads, so the installer and the reader cannot drift apart. I67 binds them.
+#
+# It is a separate file rather than a section of extensions/README.md because that README
+# is CORE's: the distribution ships it and every pull compares a consumer's copy against
+# base, so rows written there read as unregistered core drift. LC-N6 is an ERROR whose only
+# compliant output used to be an unregistered edit to upstream's tree.
+CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[ \t]*//p' \
+  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[ \t]*$//')"
+if [ -z "$CROSSWALK_REL" ]; then
+  echo "  ERROR: layer-contract.yaml declares no 'consumer_crosswalk_file:' — cannot scaffold the crosswalk table." >&2
+  exit 1
+fi
+mkdir -p "$PROJECT_ROOT/$(dirname "$CROSSWALK_REL")"
+if [ ! -f "$PROJECT_ROOT/$CROSSWALK_REL" ]; then
+  cp "$SCRIPT_DIR/../core/skills/ai-dlc/templates/crosswalk.md" "$PROJECT_ROOT/$CROSSWALK_REL"
+  echo "  $CROSSWALK_REL scaffolded"
+else
+  echo "  $CROSSWALK_REL preserved (consumer-owned)"
+fi
+
 # Copy setup skill (always overwrite with AI/DLC versions)
 echo "Installing setup skill..."
 cp "$SCRIPT_DIR/../core/skills/ai-dlc-setup/SKILL.md" "$PROJECT_ROOT/.claude/skills/ai-dlc-setup/"
@@ -478,7 +500,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-anchor-declaration layer-catalog-collision layer-contract-conformance layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication self-update-gate setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive mandatory-rules-clean-tree check5-anchor-base check-22-spawn-ledger cycle-commits-enforce ledger-reverify ledger-status-vocabulary ledger-reverify-unfalsifiable ledger-rotate snapshot-section-schema resume-whole-read retired-contract-token retired-layer-contract retro-audit-scans context-mode-protect verdict-pass-content provenance-not-accessible snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary apply-legacy-script-path validator-path-resolution relocation-preclassify ci-gates-resolution shadowed-local-validators h2-attest-scripts-dir gate-verdict-grep-shape blocker-adjudication-record bmad-invocation-resolve check-31-ac-falsifiability spec-adoption-floor spec-join-integrity consumer-machinery-home layer-qualifier-grain layer-extends-grain layer-retired-id-crosswalk layer-reference-resolution layer-conforms-to layer-adjudication-tier stray-party-mode-provenance core-paths-audit-diff mutation-red-replay trunk-push-bound fixture-drivability consumer-suite-pool; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-anchor-declaration layer-catalog-collision layer-contract-conformance layer-readopt-gate handoff-resume-guard divergence-hard-block taught-schema gate-adjudication self-update-gate setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive mandatory-rules-clean-tree check5-anchor-base check-22-spawn-ledger cycle-commits-enforce ledger-reverify ledger-status-vocabulary ledger-reverify-unfalsifiable ledger-rotate snapshot-section-schema resume-whole-read retired-contract-token retired-layer-contract retro-audit-scans context-mode-protect verdict-pass-content provenance-not-accessible snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary apply-legacy-script-path validator-path-resolution relocation-preclassify ci-gates-resolution shadowed-local-validators h2-attest-scripts-dir gate-verdict-grep-shape blocker-adjudication-record bmad-invocation-resolve check-31-ac-falsifiability spec-adoption-floor spec-join-integrity consumer-machinery-home layer-qualifier-grain layer-extends-grain layer-retired-id-crosswalk layer-crosswalk-home layer-reference-resolution layer-conforms-to layer-adjudication-tier stray-party-mode-provenance core-paths-audit-diff mutation-red-replay trunk-push-bound fixture-drivability consumer-suite-pool; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"

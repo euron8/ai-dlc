@@ -156,7 +156,30 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 10
+contract_version: 11
+
+# WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
+# `core-manifest.md`, for a reason that was measured rather than argued.
+#
+# LC-N6 and LC-R2 name this file's location in their normative text; the enforcer reads it to
+# evaluate them. Putting the declaration in the manifest made the reader require a file that
+# 55 of the 63 fixture seeds touching a synthetic consumer do not build — an ERROR on a
+# subject population that is entirely harness. Every one of those seeds already copies THIS
+# file, because E17 reads `contract_version` out of it, so the same declaration here has a
+# false-positive set of zero. A constant belongs beside the clauses that cite it.
+#
+# `reconcile/setup-sites.md` carries the twin, and I67 binds them: `ai-dlc-update` is
+# self-contained by a HARD CONSTRAINT and may not read pipeline files, so the updater and the
+# validator would otherwise agree only by coincidence. The path is CONSUMER-relative and
+# identical in both layouts, so there is nothing to map.
+#
+# It is NOT `extensions/README.md`, which is where it was through contract version 10. That
+# file is core's — the distribution ships it and every pull compares a consumer's copy against
+# base — so LC-N6, an ERROR, had its only compliant output inside a file the consumer does not
+# own. The reference consumer's migration wrote nineteen rows there and earned a permanent
+# `HARD-UNREGISTERED-CORE-DRIFT` whose two printed remedies respectively delete the rows and
+# file them where no reader looks. LC-N7 reports rows still in the old location.
+consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md
 
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
@@ -696,8 +719,9 @@ clauses:
     since: 8
     normative: >-
       An id a consumer entry has RETIRED — one its own history shows the entry defining, that
-      nothing in the rendered rulebook defines any more — carries a crosswalk row in
-      `extensions/README.md` resolving it, in both the check and the rule namespace. The
+      nothing in the rendered rulebook defines any more — carries a crosswalk row in the file
+      `core-manifest.md` declares as `consumer_crosswalk_file:`, resolving it, in both the
+      check and the rule namespace. The
       renumber LC-N5 requires is what creates these, and every one of them is a bare citation
       already written into a gate log, retro or escalation that no rename can reach back into;
       the row is the only thing that keeps it resolvable. Core does NOT check the table against
@@ -714,6 +738,30 @@ clauses:
     enforcer: core/scripts/validate-layer-entries.sh
     code: E16
     fixture: layer-retired-id-crosswalk
+
+  - id: LC-N7
+    subject: extension
+    level: WARN
+    since: 11
+    normative: >-
+      Crosswalk rows live in the file `core-manifest.md` declares as
+      `consumer_crosswalk_file:`, and rows found in the retired location
+      (`extensions/README.md`) are reported, named, and counted. That file is core's — the
+      distribution ships it and every pull compares a consumer's copy against the version
+      it is updating from — so rows written there read as unregistered core drift, and the
+      two remedies the updater prints for that status respectively DELETE the rows and file
+      them where no reader looks. LC-N6 is an ERROR whose only compliant output was
+      therefore an unregistered edit to upstream's tree, which is an enforcement model and
+      an ownership model disagreeing with nothing joining them. This is a WARN and not an
+      ERROR because the rows in the retired location STILL RESOLVE: a clause that wedged
+      every consumer carrying them would re-create, at the moment of the fix, the state the
+      fix exists to clear. It is not a silent dual-read either — a migrated consumer and an
+      unmigrated one do not produce the same output, and that is the whole difference
+      between accepting both paths and pretending there is only one.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W8
+    fixture: layer-crosswalk-home
 
   # --- cross-references into the rendered rulebook --------------------------------------
   - id: LC-R1
@@ -734,7 +782,8 @@ clauses:
     since: 10
     normative: >-
       A `Check <n>` reference in the rendered rulebook resolves — either the rulebook still
-      defines that check anchor, or `extensions/README.md` carries a crosswalk row for the id.
+      defines that check anchor, or the declared `consumer_crosswalk_file:` carries a crosswalk
+      row for the id.
       LC-R1 states this for the step namespace and cannot state it for this one: its grammar is
       `Step`, and a check id is not a step id. The subject is created by the LC-N5 renumber,
       which moves an allocation and leaves every citation of the old id where it was — the
