@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 9
+contract_version: 10
 
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
@@ -727,6 +727,29 @@ clauses:
     enforcer: core/scripts/validate-layer-entries.sh
     code: W3
     fixture: none
+
+  - id: LC-R2
+    subject: any
+    level: WARN
+    since: 10
+    normative: >-
+      A `Check <n>` reference in the rendered rulebook resolves — either the rulebook still
+      defines that check anchor, or `extensions/README.md` carries a crosswalk row for the id.
+      LC-R1 states this for the step namespace and cannot state it for this one: its grammar is
+      `Step`, and a check id is not a step id. The subject is created by the LC-N5 renumber,
+      which moves an allocation and leaves every citation of the old id where it was — the
+      reference consumer's migration orphaned three `Check 19b` citations across three files,
+      one of them a group heading in the very file that renamed the id. It is keyed on the
+      CITATION SITE rather than on an entry's own history, which is what separates it from
+      LC-N6: an id no surviving entry ever defined is invisible to that clause and visible to
+      this one. Numeric-leading ids only, for the reason LC-R1 is: core prose uses `Check A`
+      and `Check N` as placeholders in worked examples and there is no remedy to offer for
+      either. A crosswalk row resolves it because that is the row's stated purpose, so a
+      completed migration clears this clause rather than carrying it.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W7
+    fixture: layer-reference-resolution
 
   # --- the layer conformance adjudication -----------------------------------------------
   #

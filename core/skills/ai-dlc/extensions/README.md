@@ -382,6 +382,12 @@ times on first contact gets disabled and then catches nothing.
   degrading to a silence indistinguishable from a clean result.
 - **[LC-R1]** WARN — a `Step <n>` reference in a layer entry resolves to an anchor defined
   somewhere in the rendered rulebook: core plus your own layers.
+- **[LC-R2]** WARN — a `Check <n>` reference resolves the same way, and a crosswalk row counts
+  as resolving it. The renumber LC-N5 requires moves an *allocation*; it does not touch the
+  prose that cites the old id, so this is the clause that finds what a migration leaves behind.
+  Numeric-leading ids only — `Check A` and `Check N` are placeholders in worked examples, not
+  citations. If the id was retired rather than mis-cited, the crosswalk row is the fix and it
+  clears this warning as well as **[LC-N6]**.
 - **[LC-C1]** ERROR — every entry, in `extensions/` and `overrides/` alike, declares
   `conforms_to: N` — the integer contract version you have migrated it to, between 1 and the
   `contract_version` at the top of `layer-contract.yaml`. **It is a receipt, not an exemption.**

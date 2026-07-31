@@ -76,7 +76,14 @@ has() { grep -Fq "$1" <<<\"$BAD_OUT\"; }
 say "$([ "$BAD_RC" -eq 1 ] && echo 1 || echo 0)"  "a malformed receipt exits 1 — the consumer's pre-push refuses"
 say "$(has "no-receipt.md: missing 'conforms_to:'" && echo 1 || echo 0)"      "E17 reports a MISSING receipt"
 say "$(has "not-a-number.md: conforms_to 'eight' is not" && echo 1 || echo 0)" "E17 reports a NON-NUMERIC receipt"
-say "$(has "above-cv.md: conforms_to 10 claims a contract version" && echo 1 || echo 0)" \
+# DERIVED, not written down. This read `conforms_to 10`, which was one above the contract at
+# the release that shipped it and became the contract's OWN version at the next bump — the
+# assertion then asked E17 to reject a receipt that had become legal, and went red for a
+# reason that had nothing to do with E17. The seed already derives the value as CV+1; this
+# side has to derive it from the same place or the pair drifts on every bump.
+CV_NOW="$(awk '/^contract_version:/{print $2; exit}' "$CONS/.claude/skills/ai-dlc/layer-contract.yaml")"
+[ -n "$CV_NOW" ] || { echo "FIXTURE ERROR: no contract_version in the seeded contract" >&2; exit 2; }
+say "$(has "above-cv.md: conforms_to $((CV_NOW + 1)) claims a contract version" && echo 1 || echo 0)" \
   "E17 reports a receipt ABOVE contract_version — a version no distribution has reached"
 say "$([ "$(footer_field "$BAD_OUT" undeclared)" = 1 ] && echo 1 || echo 0)" \
   "the footer's undeclared count is the measured 1, not a restatement of the error count"

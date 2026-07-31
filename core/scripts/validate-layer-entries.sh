@@ -429,6 +429,36 @@ heading_labelled() { # heading_labelled <file> <anchor>
     }' "$1" 2>/dev/null
 }
 
+# THE ID AS ITS OWN HEADING SPELLS IT, terminator included.
+#
+# `defined_anchors` strips the terminator so that ids compare as ids, and E15's remedy then
+# re-attached a `.` to every one of them. Measured on the reference consumer: 37 of its 39
+# section-id subjects carry `.` and TWO carry `—` (`## Check AP — …`, `## Check VH — …`), so
+# for those two the remedy named a string that occurs nowhere in the file. An operator or a
+# script transcribing "rename 'AP.' to 'XAP.'" matches nothing, the id stays out of band, and
+# the edit count still reads right: a remedy that does not remedy, failing silently. Without a
+# `cmp -s` guard on the edit, 47 of 49 renames reads as 49 of 49 — which is what happened on
+# the first pass of the migration rehearsal.
+#
+# The reverse fix is wrong in the other direction, which is why this is a join rather than a
+# constant: drop the dot everywhere and 37 of the 39 remedies stop matching instead of 2.
+#
+# NEVER INVENTS A TERMINATOR. An id whose heading matches neither grammar comes back bare,
+# because appending a plausible `.` is precisely the defect above. Found by RUNNING the
+# migration this partition prescribes; it is not visible from core's own tree, which has no
+# consumer to rename ids in.
+anchor_form() { # anchor_form <file> <id> -> the id carrying the terminator its heading uses
+  local m
+  m="$(grep -Ehom1 "^#{2,4}[[:space:]]+(Check[[:space:]]+)?$2[[:space:]]*[.—]" "$1" 2>/dev/null)"
+  if [ -n "$m" ]; then
+    printf '%s' "$m" | sed -E 's/^#+[[:space:]]+(Check[[:space:]]+)?//'
+    return
+  fi
+  # The bold pseudo-heading form has no `—` variant; `bold_anchors_of_file` requires the dot.
+  grep -Eq "^\*\*(Check[[:space:]]+)?$2\." "$1" 2>/dev/null && { printf '%s.' "$2"; return; }
+  printf '%s' "$2"
+}
+
 # --- RULE numbers: a SECOND namespace, deliberately not folded into the above ---
 #
 # `defined_anchors` matches `### 24.` and `### Check 24.` and nothing else -- the
@@ -1218,10 +1248,16 @@ while IFS= read -r f; do
   while IFS= read -r a; do
     [ -n "$a" ] || continue
     want="$(out_of_band "$a")" || continue
+    # The remedy is quoted in the form the heading actually carries, and the conforming form
+    # inherits that terminator by substitution rather than by a second spelling of it. See
+    # anchor_form: a hardcoded `.` here named a string absent from two of the reference
+    # consumer's headings, and the failure was silent at the point of transcription.
+    a_form="$(anchor_form "$f" "$a")"
+    want_form="$want${a_form#"$a"}"
     if grep -Fxq -- "$a" <<<"$core_anchors"; then
-      err E15 "$(rel "$f"): SECTION ID OUT OF BAND, ALREADY COLLIDED — '$a.' allocates from core's range and core '$hooks' ALREADY defines '$a.'. Every gate log, retro and escalation written against a bare \"$a\" has two referents right now, and a gate log is the durable audit record, so it cannot be corrected after the fact. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written. E6 may be silent on this entry — a labelled heading is E6's resolved state — and that silence is the label doing its job on the reference, not the allocation ceasing to be one. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
+      err E15 "$(rel "$f"): SECTION ID OUT OF BAND, ALREADY COLLIDED — '$a_form' allocates from core's range and core '$hooks' ALREADY defines '$a.'. Every gate log, retro and escalation written against a bare \"$a\" has two referents right now, and a gate log is the durable audit record, so it cannot be corrected after the fact. A catalog label does not settle it: the label resolves the reference at the point of use from here on and cannot reach back into evidence already written. E6 may be silent on this entry — a labelled heading is E6's resolved state — and that silence is the label doing its job on the reference, not the allocation ceasing to be one. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want_form' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
     else
-      err E15 "$(rel "$f"): SECTION ID OUT OF BAND — '$a.' allocates from core's range. Core '$hooks' does not define '$a.' TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want.' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
+      err E15 "$(rel "$f"): SECTION ID OUT OF BAND — '$a_form' allocates from core's range. Core '$hooks' does not define '$a_form' TODAY, so E6 has nothing to join against and reports clean: the collision appears in the release where core allocates $a, retroactively, across every gate log already written — and a gate log is the durable audit record, so it cannot be corrected after the fact. Consumer section ids are reserved at ${BAND_FLOOR} and above, or at the '${BAND_ALPHA_PREFIX}' prefix for alphabetic ids — rename to '$want_form' or the next free id in your band, and add a crosswalk row in extensions/README.md resolving the bare \"$a\" your existing history already carries."
     fi
   done < <(defined_anchors "$f")
 
@@ -1308,6 +1344,54 @@ while IFS= read -r f; do
     grep -Fxq -- "$ref" <<<"$GLOBAL_STEP_ANCHORS" && continue
     warn W3 "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
   done < <(grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Step[ -]//' | sort -u)
+done <<< "$all_files"
+
+# W7 — the same question in the CHECK namespace, and it is a different subject from W3's.
+#
+# WHY IT IS OWED, measured rather than argued. The band migration renames consumer ids into
+# the reserved range, and nothing joined "an id was renamed" to "the prose that cites it".
+# Run against the reference consumer's migration, the renames orphaned three `Check 19b`
+# citations across three files — one of them a group HEADING inside the very file that
+# renamed the id, `## Check 19b` sitting directly above `### 919b.`. W3 caught none of them:
+# its grammar is `Step`, and a check id is not a step id. The four dangling pointers W3 DID
+# catch during that migration were luck of overlap, not coverage.
+#
+# THE RESOLVER IS THE CROSSWALK, and that is the mechanism working rather than an exclusion.
+# A citation resolves if the rendered rulebook still defines the anchor, OR if the crosswalk
+# table carries a row for it — which is the row's entire stated purpose: a gate log citing a
+# retired id is permanent and the row is the only thing that keeps it resolvable. So a
+# complete migration clears this arm, and the arm is one more statement that the standard is
+# satisfiable.
+#
+# NOT SUBSUMED BY E16, and the reference consumer carries the proof. E16 is keyed on the
+# entry's OWN history — an id this file used to define. W7 is keyed on the CITATION SITE, so
+# it sees an id no surviving entry ever defined: `Check 11b`, cited in a step-domain entry,
+# defined nowhere, absent from the crosswalk, and invisible to every other arm in this file
+# both before and after the migration.
+#
+# NUMERIC-LEADING, exactly as W3 is, and the restriction is what keeps the false-positive set
+# empty rather than a hand-list. Core prose uses `Check A`…`Check E` and `Check N` as
+# placeholders in worked examples; an alphabetic grammar harvests all of them and has no
+# remedy to offer for any. Measured on the reference consumer, numeric-leading: FIVE subjects
+# before the migration (`33`, `34` x3, `11b`), every one of them a genuine citation of an id
+# the rulebook does not define, and ZERO false positives.
+#
+# WARN, not ERROR, and the reason is the subject set rather than the severity of the defect:
+# four of those five predate the layer contract entirely, and erroring would wedge a
+# consumer's pre-push on prose it wrote before the rule existed. §4b's ERROR ruling is about
+# the naming partition, whose remedy the validator itself prints for every subject; here the
+# remedy is a judgement about what the author meant.
+GLOBAL_CHECK_ANCHORS="$(while IFS= read -r f; do [ -n "$f" ] && defined_anchors "$f"; done <<< "$all_files" | sort -u)"
+
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  while IFS= read -r ref; do
+    [ -n "$ref" ] || continue
+    grep -Fxq -- "$ref" <<<"$GLOBAL_CHECK_ANCHORS" && continue
+    grep -Fxq -- "$ref" <<<"$CROSSWALK_IDS" && continue
+    grep -Fxq -- "Check $ref" <<<"$CROSSWALK_IDS" && continue
+    warn W7 "$(rel "$f"): references \"Check $ref\" but no core file, extension, or override defines check $ref anywhere in the rendered rulebook, and extensions/README.md carries no crosswalk row resolving it — dangling check pointer. Either repoint the citation at the id the check carries today, or add a crosswalk row naming '$ref', the id it became, and the title. A renumber into the reserved band does not reach back into prose that cites the old id, which is how these are made."
+  done < <(grep -Eoh 'Check[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Check[ -]//' | sort -u)
 done <<< "$all_files"
 
 echo

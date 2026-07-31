@@ -90,6 +90,7 @@ core_manifest:
   - core/fixtures/layer-conforms-to/**
   - core/fixtures/layer-extends-grain/**
   - core/fixtures/layer-retired-id-crosswalk/**
+  - core/fixtures/layer-reference-resolution/**
   - core/fixtures/layer-adjudication-tier/**
   - core/fixtures/context-mode-protect/**
   - core/fixtures/context-sensor/**
