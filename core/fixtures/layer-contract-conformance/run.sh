@@ -23,6 +23,24 @@
 #
 # Each mutant is a COPY guarded by `cmp -s`, asserts a POSITIVE outcome (the specific invariant
 # id appears in the output), and must fail ONLY its own assertion.
+#
+# TWO PHASES, AND THE REASON IS MEASURED. Every arm here is one full run of
+# validate-enforcement-map.sh — 6.45s on the reference box, 62% of it SYSTEM time, which is the
+# fork signature rather than work. Thirty of them in a row made this fixture 270.7s of a 276.5s
+# suite with ZERO slack: it WAS the suite, and every other unit finished 137s before it. The runs
+# are independent by construction — each builds its own contract copy in its own $TMP and points
+# the validator at it with AI_DLC_LAYER_CONTRACT — so they were serial only because they were
+# written in a row.
+#
+# So: build every mutant serially (cheap), run the validator for each through a pool, then
+# evaluate serially IN DECLARATION ORDER. The evaluation order is what keeps stdout deterministic
+# and diffable against the serial version; the arms and their comments below are untouched.
+#
+# A MISSING VERDICT IS A FAILURE, NOT A GAP. Serially, an arm that never ran could not print an
+# `ok` — the run and the report were the same statement. With a pool they are two, and an arm
+# whose job was dropped produces no output file, which adds nothing to the count. That is exactly
+# what a passing arm adds. So the absence is asserted, not assumed — this fixture's own
+# EXPECTED_ASSERTIONS floor, one layer out.
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -53,26 +71,47 @@ trap 'rm -rf "$TMP"' EXIT
 FAILURES=0
 ASSERTIONS=0
 
-# Run the validator against a given contract file; print only its FAIL lines.
-run_with() { AI_DLC_LAYER_CONTRACT="$1" bash "$VAL" 2>&1 | grep '^FAIL' || true; }
+OUTD="$TMP/out"; mkdir -p "$OUTD"
+
+# THE TWO REGISTRIES, AND THEY ARE WHAT THE POOL IS DERIVED FROM. A hand-written job list would
+# be the check-that-cannot-fire class one level out: an arm dropped from it runs nothing, prints
+# nothing, and 32 greens read exactly like 33.
+#
+#   RUNS  one line per DISTINCT validator run — `label<TAB>contract-file`
+#   ARMS  one line per assertion, in DECLARATION order — `kind<TAB>label<TAB>run<TAB>want<TAB>a<TAB>b`
+#
+# Fields are TAB-separated and every one is written non-empty (`-` where unused) DELIBERATELY:
+# TAB is IFS whitespace, so `read` collapses a run of them and an empty field would silently
+# shift every field after it.
+RUNS="$TMP/runs"; : > "$RUNS"
+ARMS="$TMP/arms"; : > "$ARMS"
+
+# reg_run <run-label> <contract-file> — deduped, because several arms read one run's output and
+# running the validator twice to learn the same thing costs 6.5s.
+reg_run() {
+  awk -F'\t' -v l="$1" '$1==l{f=1} END{exit !f}' "$RUNS" \
+    || printf '%s\t%s\n' "$1" "$2" >> "$RUNS"
+}
+
+# reg_arm <kind> <label> <run> <want> <a> <b>
+reg_arm() {
+  ASSERTIONS=$((ASSERTIONS + 1))
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" >> "$ARMS"
+}
 
 # $1 mutant-file  $2 invariant id that MUST appear  $3 label  $4 why
+#
+# THE SIGNATURE AND EVERY CALL SITE BELOW ARE UNCHANGED. Only the timing moved: this now builds
+# the job rather than running it. The `cmp -s` guard stays HERE, in the serial phase, because a
+# mutation that matched nothing is a fact about the build and must not consume a pool slot.
 mutant_fires() {
-  local file="$1" want="$2" label="$3" why="$4" out
-  ASSERTIONS=$((ASSERTIONS + 1))
+  local file="$1" want="$2" label="$3" why="$4"
   if cmp -s "$CONTRACT" "$file"; then
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-18s the mutation matched nothing, so this assertion is unproven\n' "$label"
+    reg_arm unmutated "$label" - - "$why" -
     return
   fi
-  out="$(run_with "$file")"
-  if grep -q "$want" <<<"$out"; then
-    printf '  ok    %-18s %s fires  (%s)\n' "$label" "$want" "$why"
-  else
-    FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-18s %s did NOT fire  (%s)\n' "$label" "$want" "$why"
-    printf '%s\n' "$out" | sed 's/^/          | /' | head -5
-  fi
+  reg_run "$label" "$file"
+  reg_arm fires "$label" "$label" "$want" "$why" -
 }
 
 echo "layer-contract-conformance fixture"
@@ -81,16 +120,16 @@ echo
 # THE UNMUTATED CONTROL, FIRST. If the real contract does not come out clean, every "the mutant
 # fired" result below is meaningless — the validator would be failing for an unrelated reason and
 # each mutant would score a kill it did not earn.
-ASSERTIONS=$((ASSERTIONS + 1))
+#
+# IT IS ALSO THE ONE RUN THAT STAYS SERIAL, AND FIRST, deliberately: it is the run every other
+# arm's attributability depends on, so it is settled before the pool spends anything. It is NOT
+# skipped when it fails — that would drop the arms below out of the count and turn a dirty
+# control into a SHORT report, which is the shape this fixture exists to make impossible.
 cp "$CONTRACT" "$TMP/control.yaml"
-ctl="$(run_with "$TMP/control.yaml")"
-if [ -z "$ctl" ]; then
-  printf '  ok    %-18s clean  (the real contract passes, so a mutant fire is attributable)\n' "control"
-else
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-18s the UNMUTATED contract already fails — every mutant below is unattributable\n' "control"
-  printf '%s\n' "$ctl" | sed 's/^/          | /' | head -5
-fi
+reg_run control "$TMP/control.yaml"
+reg_arm clean control control - \
+  "clean  (the real contract passes, so a mutant fire is attributable)" \
+  "the UNMUTATED contract already fails — every mutant below is unattributable"
 
 # --- I36 forward: a clause naming a code its enforcer does not emit -------------------
 # The clause becomes unfireable while still reading like a rule with teeth. `E99` is chosen
@@ -348,13 +387,11 @@ sed 's/^    code: OVERRIDE-LOOSE-ANCHOR$/    code: EXTENSION-OK/' "$CONTRACT" > 
 mutant_fires "$TMP/i64-unemitted.yaml" "I64 LC-O12" "i64-unemitted" \
   "a clause bound to a token its enforcer carries but never emits cannot fire, and reads to I36 exactly like one that passed"
 
-ASSERTIONS=$((ASSERTIONS + 1))
-if run_with "$TMP/i64-unemitted.yaml" | grep -q "I36 LC-O12"; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-18s I36 forward ALSO fired on LC-O12, so the arm above is not evidence I64 sees anything I36 misses\n' "i64-vs-i36"
-else
-  printf '  ok    %-18s I36 forward stays SILENT on LC-O12 — the token IS in the enforcer, so only I64 reports it\n' "i64-vs-i36"
-fi
+# Reads the SAME run as the arm above rather than repeating it — the question is about two
+# invariants' behaviour on one mutant, so one run answers both.
+reg_arm nofire i64-vs-i36 i64-unemitted "I36 LC-O12" \
+  "I36 forward stays SILENT on LC-O12 — the token IS in the enforcer, so only I64 reports it" \
+  "I36 forward ALSO fired on LC-O12, so the arm above is not evidence I64 sees anything I36 misses"
 
 # --- I64 arm 2: the vacuity guard on its own extraction ---------------------------------
 # I64 reads the enforcer through a per-enforcer `case`, which is a second extraction beside
@@ -370,13 +407,13 @@ mutant_fires "$TMP/i64-vacuous.yaml" "I64: found NO attributable emission sites"
 # --- I64 arm 3: the control — silent on the shipping contract ---------------------------
 # The arms above prove I64 speaks. This proves it is not simply always speaking, which is the
 # other way an invariant reads green while meaning nothing.
-ASSERTIONS=$((ASSERTIONS + 1))
-if run_with "$CONTRACT" | grep -q '^FAIL: I64'; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-18s I64 fires on the UNMUTATED contract, so its kills above prove nothing\n' "i64-control"
-else
-  printf '  ok    %-18s CONTROL: I64 is silent on the shipping contract, so its kills are attributable\n' "i64-control"
-fi
+# Reads the unmutated control's run. It is NOT subsumed by the `control` arm above: that one
+# asserts the output is EMPTY, this one asserts I64 specifically is not in it, so a control that
+# goes dirty for an unrelated reason still leaves I64's kills attributable or not on their own
+# evidence.
+reg_arm nofire i64-control control '^FAIL: I64' \
+  "CONTROL: I64 is silent on the shipping contract, so its kills are attributable" \
+  "I64 fires on the UNMUTATED contract, so its kills above prove nothing"
 
 # --- I65: the clause names the FIXTURE that proves it, and the fixture can prove it -----
 #
@@ -441,24 +478,113 @@ mutant_fires "$TMP/i65-noneforged.yaml" "I65 LC-O1: declares 'fixture: none' but
 # only thing this fixture mutates. The zero-rows guard is likewise unisolatable: a contract
 # with no clauses fails every other invariant here first, so a mutant for it would be entangled
 # and would prove nothing about I65. Recorded rather than left as a silent gap.
-ASSERTIONS=$((ASSERTIONS + 1))
-if run_with "$CONTRACT" | grep -q '^FAIL: I65'; then
-  FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-18s I65 fires on the UNMUTATED contract, so its kills above prove nothing\n' "i65-control"
-else
-  printf '  ok    %-18s CONTROL: I65 is silent on the shipping contract, so its kills are attributable\n' "i65-control"
-fi
+reg_arm nofire i65-control control '^FAIL: I65' \
+  "CONTROL: I65 is silent on the shipping contract, so its kills are attributable" \
+  "I65 fires on the UNMUTATED contract, so its kills above prove nothing"
 
 # THE ASSERTION-COUNT FLOOR. A fixture that silently stops running arms prints a shorter green
 # report, and a shorter green report reads exactly like a passing one — the lesson v0.217.0
 # paid for, where a mis-spaced helper call killed a whole mutant inside a `$( )` subshell and
 # left seventeen ok lines and a PASS. Raise this deliberately when an arm is added.
+#
+# IT IS CHECKED HERE, BEFORE THE POOL, because that is now the earliest point at which it is
+# knowable and because a pool sized from a short registry would go on to report a short green run.
 EXPECTED_ASSERTIONS=33
-echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
-  echo "FAIL: $ASSERTIONS assertions ran, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."
+  echo "FAIL: $ASSERTIONS assertions registered, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."
   exit 1
 fi
+
+# ================== PHASE 2: run the validator, once per distinct contract ==================
+#
+# THE JOB LIST IS DERIVED FROM THE REGISTRATIONS ABOVE, with a zero guard. It is never restated:
+# a hand-written list is the same defect one level out, and a pool given nothing to do finishes
+# instantly and reports every arm as a dropped job rather than saying the list was empty.
+N_RUNS="$(grep -c . "$RUNS" || true)"
+if [ "$N_RUNS" -lt 25 ]; then
+  echo "FIXTURE ERROR: derived $N_RUNS validator run(s) from this file's own registrations — the registry did not fill, so nothing below is evidence" >&2
+  exit 2
+fi
+
+# The control is settled FIRST and SERIALLY — see its arm above.
+run_one() { # run_one <label> <contract-file>
+  AI_DLC_LAYER_CONTRACT="$2" bash "$VAL" 2>&1 | grep '^FAIL' > "$OUTD/$1.txt" || true
+  printf done > "$OUTD/$1.done"
+}
+run_one control "$TMP/control.yaml"
+
+# EIGHT, AND FIXED RATHER THAN TUNABLE — the same number and the same reasoning as
+# enforcement-map-sites, which states it in place: this pool nests inside the pre-push suite's
+# own, so a knob here multiplies against the knob there and the PRODUCT is what lands on the
+# machine. Eight against 18 cores leaves headroom for the sibling fixtures the suite runs beside
+# this one.
+#
+# Measured standalone on the reference box: -P4 60.1s, -P6 45.7s, -P8 41.3s, -P12 35.5s,
+# -P16 32.1s. It is still falling at 16 and eight is deliberately NOT the standalone optimum —
+# inside the suite this fixture now has 54s of slack, so buying it another 9s standalone would
+# be paid for by every unit it contends with. Re-derive both numbers together if the critical
+# path moves off enforcement-map-sites.
+LCC_JOBS=8
+awk -F'\t' '$1!="control"{print $1}' "$RUNS" > "$TMP/pool"
+AI_DLC_LCC_VAL="$VAL" AI_DLC_LCC_OUT="$OUTD" AI_DLC_LCC_RUNS="$RUNS" \
+  xargs -P "$LCC_JOBS" -I{} bash -c '
+    l="$1"
+    f="$(awk -F"\t" -v k="$l" "\$1==k{print \$2}" "$AI_DLC_LCC_RUNS")"
+    [ -n "$f" ] || exit 0
+    AI_DLC_LAYER_CONTRACT="$f" bash "$AI_DLC_LCC_VAL" 2>&1 | grep "^FAIL" > "$AI_DLC_LCC_OUT/$l.txt"
+    printf done > "$AI_DLC_LCC_OUT/$l.done"
+  ' _ {} < "$TMP/pool"
+
+# ================== PHASE 3: evaluate, serially, in DECLARATION order ==================
+#
+# Rendered from ARMS rather than from completion order, so this fixture's stdout is byte-
+# comparable against the serial version it replaces — which is the differential this refactor
+# was required to produce, and it is only available because the order is declaration order.
+while IFS=$'\t' read -r kind label run want a b; do
+  case "$kind" in
+    unmutated)
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-18s the mutation matched nothing, so this assertion is unproven\n' "$label"
+      continue ;;
+  esac
+  # A MISSING VERDICT IS A FAILURE. `.done` is written after the run, so its absence means the
+  # job was dropped — which otherwise adds exactly what a passing arm adds: nothing.
+  if [ ! -f "$OUTD/$run.done" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-18s run %s produced no verdict — the pool dropped work, and a short green report reads exactly like a passing one\n' "$label" "$run"
+    continue
+  fi
+  case "$kind" in
+    fires)
+      if grep -q "$want" "$OUTD/$run.txt"; then
+        printf '  ok    %-18s %s fires  (%s)\n' "$label" "$want" "$a"
+      else
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-18s %s did NOT fire  (%s)\n' "$label" "$want" "$a"
+        sed 's/^/          | /' "$OUTD/$run.txt" | head -5
+      fi ;;
+    nofire)
+      if grep -q "$want" "$OUTD/$run.txt"; then
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-18s %s\n' "$label" "$b"
+      else
+        printf '  ok    %-18s %s\n' "$label" "$a"
+      fi ;;
+    clean)
+      if [ ! -s "$OUTD/$run.txt" ]; then
+        printf '  ok    %-18s %s\n' "$label" "$a"
+      else
+        FAILURES=$((FAILURES + 1))
+        printf '  FAIL  %-18s %s\n' "$label" "$b"
+        sed 's/^/          | /' "$OUTD/$run.txt" | head -5
+      fi ;;
+    *)
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-18s unknown arm kind %s — an arm registered a shape this loop cannot evaluate\n' "$label" "$kind" ;;
+  esac
+done < "$ARMS"
+
+echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
   exit 1
