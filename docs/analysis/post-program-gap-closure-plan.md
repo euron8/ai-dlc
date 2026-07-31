@@ -17,29 +17,36 @@ and the predecessor was tracked anyway. Ticking this ledger is a `chore:` commit
 **Updated as the last act of every row. If this block is stale, the row that moved the program did
 not finish.**
 
-> **Next: row 9** (§6.9) — generalise the cross-script mode join. Third in §5's ranking, now that
-> row 6 is closed **REFUTED** and row 8 is SHIPPED as **v0.215.0**.
+> **Next: row 7** (§6.7) — I38's reverse direction, every normative sentence carries a clause id.
+> Fourth in §5's ranking, now that row 9 is SHIPPED as **v0.216.0**. Rows 1–6, 8 and 9 are ticked;
+> **row 7 is the last one before row 10, which is an operator decision rather than a session.**
 >
 > **Who: an agent, in a fresh `ai-dlc` session.** No operator decision is pending. Working directory
 > `/Users/n8/git/ai-dlc`. Paste:
 >
 > ```
-> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 9.
-> Rows 1-6 and 8 are ticked. Do the cheap precondition FIRST: I59 shipped in
-> 0.214.0, after §9 recorded this hand-listing, and may already have absorbed part
-> of the subject set. If it did, re-derive the subject set before anything else —
-> the recorded lesson from the predecessor's row 7 is that the counts were of the
-> WRONG SET, not merely wrong. Fix the extractor before writing the invariant.
-> Write it only when the FP set is empty or enumerated; today it is 8 misses,
-> most of them the derivation's own grammar.
+> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 7.
+> Rows 1-6, 8 and 9 are ticked. Normalise overrides/README.md's clauses into the
+> bold-led bullet form FIRST — the predicate cannot fire on half its subject
+> otherwise, and a check that cannot fire reads exactly like one that passed.
+> Measure the 41 -> 40 clause delta as part of this row; it is the number that
+> says whether the arm is worth its release.
+> Row 7's recorded blocker is that overrides/README.md has zero bold-led bullets.
+> Three rows running, the recorded blocker was a claim that died on being opened.
+> Check that one before you build around it.
 > ```
 >
-> **The carry-forward from rows 6 and 8, and it has now paid twice:** each row's recorded blocker
-> was a claim, and opening the file it named refuted it. Row 8's named the wrong invariant; row 6's
-> named a grain with **zero adoption in the consumer and no legal way to adopt it**. Before treating
-> any recorded "blocked on X" in this file as a constraint, check that X is what the record says it
-> is. Row 9's own recorded blocker — the extractor's 8 misses — is unverified in exactly the same
-> way, and row 9's prompt already tells you which precondition to check first.
+> **The carry-forward from rows 6, 8 and 9, and it has now paid three times:** each row's recorded
+> blocker was a claim, and opening the file it named refuted it. Row 8's named the wrong invariant;
+> row 6's named a grain with **zero adoption in the consumer and no legal way to adopt it**; row 9's
+> named 8 false positives that were **all the extractor's own grammar, five of them produced by the
+> validator file itself**. Before treating any recorded "blocked on X" in this file as a constraint,
+> check that X is what the record says it is. **Row 7 carries the last unverified one.**
+>
+> **Row 9's carry-forward, which is about fixtures rather than about this program:** a guard sitting
+> downstream of a liveness probe can only be tested on an input the probe still passes. An arm that
+> breaks the shared extractor trips the probe first and reports a defect in a mechanism that is
+> working. It is stated in `enforcement-map-sites/run.sh`'s own arm 4 now, not only here.
 >
 > **Row 6's carry-forward for anyone who later re-opens `LC-N5`:** the clause's exclusion has a
 > measured hole. It is stated in `validate-layer-entries.sh`'s own header now, not only here.
@@ -240,7 +247,7 @@ before re-proposing anything below; this section is the short form.
 | 6 | **`LC-N5` WARN → ERROR** — subject set shrinks to 2 after row 5; still owed a `kind: qualifier` measurement — §6.6 | CORE | no | **REFUTED 2026-07-30 — `LC-N5` STAYS WARN, no release consumed.** The grain cannot carry the tightening and the measurement is what says so. Against the live consumer `39f0248ff` with the shipping 0.215.0 validator: **0 errors, 2 warnings**, both `RULE OUT OF BAND` (rules 31/32, one file), identical under graph's installed 0.214.0 copy — so row 8's widening did not move `W5`. **Of 33 extension entries, 0 declare `kind: qualifier`, 0 `extends:`, 0 `position:`** (control: 33 carry `^kind:`; the 7 raw grep hits are all in `extensions/README.md`, which `layer_files()` excludes) — 19 releases after v0.196.0 shipped the grain and documented it in the consumer's own entry contract. **All 4 entries carrying a core-defined number are structurally BARRED from declaring it** by E11's exactly-one-anchor rule; they span **14 / 3 / 4 / 4** core sections. `kind:` is per-FILE and `W5`'s subject is per-HEADING: rules 31/32 share `SKILL-domain.md` with rules 13/16/20/30. Counterfactuals: exclusion **replaced** by the flag → **2 → 27** subjects; **added** as an extra exemption → exempts nothing. **The row found a live hole in the clause it was sent to tighten** — see the Row 6 RESULT. `docs:` commit plus a comment correction in `validate-layer-entries.sh`, no version bump |
 | 7 | **I38 reverse: every normative sentence carries a clause id** — blocked on normalising `overrides/README.md` — §6.7 | CORE | no | — |
 | 8 | **Checks `AP` / `VH`: alphabetic ids are invisible to GM1** — blocked on the relabeller's FP set — §6.8 | CORE | no | **SHIPPED 2026-07-30 — v0.215.0.** The recorded blocker was **REFUTED on both halves**: I34 binds `RULE_RE`, not any check grammar, and the relabeller's `ANCHOR_RE` had **already** carried `[A-Z]{1,3}[0-9]*` and the `—` terminator since the `### H1.` widening — no rewriter change was ever owed. **The relabeller's FP set was measured anyway and is EMPTY**: 39 labels stripped from a copy of the consumer tree, **32 proposals, 0 outside the hand-applied set** (control: intersection 32; the 2 non-proposals are `2s`/`2a`, ids core does not define, control returning 1 for `15` on the same invocation). `CHECK_HEAD_RE` widened in both detectors; measured delta across core + consumer is exactly `H1 H2 AP VH` + the consumer's `H1`, **0 spurious ids**, numeric branch unchanged at 171, `—` admitting no numeric heading. Against the live consumer `39f0248ff`: `UNLOADABLE` **2 → 4** (`19b 2s AP VH`) — the count row 8 was ranked 1st to make honest — and `validate-layer-entries` **unmoved at 0 errors / 2 warnings**. The bold pseudo-heading form is **deliberately not widened**, on a measured FP (`**QA —` in `steps/implementation.md`, both trees). **I47 extended to a three-way join** (detectors ↔ rewriter); reversion mutant fires it **alone**, and removing the arm turns only that fixture line red. **87/87 fixtures, 87 verdicts recorded**; verified again on a tree built by `install.sh`. `LC-E17` unchanged, `contract_version` stays 7 |
-| 9 | **Generalise the cross-script mode join** — blocked on fixing the extractor's 8 measured misses — §6.9 | CORE | no | — |
+| 9 | **Generalise the cross-script mode join** — blocked on fixing the extractor's 8 measured misses — §6.9 | CORE | no | **SHIPPED 2026-07-30 — v0.216.0, `I60`.** The cheap precondition came back **NO**: I59 (0.214.0) generalised the **other half** of the join — every *dispatched* mode is documented — and left row 9's half (every *cited* mode is dispatched) untouched. It does not even subsume I49/I53's documentation arms, measured not read: drop `--list` from `core-paths.sh`'s `usage()` and **I49 fires while I59 stays silent**, because I59 accepts a mode named in any comment. **The subject set was re-derived and it is a different set, not a different size: 44 (script, mode) pairs across 25 targets, against the recorded 31 across 15** — the predecessor's row 7 lesson for the third row running. **The recorded 8 misses were all the extractor's, in two enumerated classes: FIVE produced by `validate-enforcement-map.sh` itself** (error prose, its own grep flags, I59's probe heredoc — and I49/I53 already carry that exact self-exclusion), **THREE from dispatch forms the `case`-arm grammar cannot see** (six scripts parse with `[ "$1" = "--x" ]`; `audit-rule-files.sh` dispatches `--fail-on=any\|deterministic` as valued arms). Both sides normalised at `=`, both dispatch forms read. **FP set EMPTY, 0 citations resolving to nothing.** Liveness probe carries both dispatch forms; 4 fixture arms in `enforcement-map-sites`; reversion mutant kills **only** the I60 assertions and leaves the seven prior ones green. Distribution-only — no consumer surface change (control: `tests/fixtures/` ships 82 fixtures, this one is not among them). **87/87 fixtures.** graph untouched |
 | 10 | **The machinery home, inverted: consumer declares, core enforces the declaration** — unmeasured, may be refuted — §6.10 | CORE | no | — |
 
 **Version numbers are not pinned to rows.** Rows that end REFUTED consume no version.
@@ -879,15 +886,19 @@ graph run is unmoved at `0 error(s), 2 warning(s)`, and all five fixtures that r
 
 ### Row 7 — I38's reverse direction. **RANKED 4th.**
 
-> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. Run **after row 9**.
+> **▶ NEXT STEP — AGENT. This is the current row** — row 9 shipped as v0.216.0 and row 7 is next.
+> Fresh session, cwd `/Users/n8/git/ai-dlc`.
 >
 > ```
 > Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 7.
-> Normalise overrides/README.md's clauses into the bold-led bullet form FIRST —
-> the predicate cannot fire on half its subject otherwise, and a check that
-> cannot fire reads exactly like one that passed.
+> Rows 1-6, 8 and 9 are ticked. Normalise overrides/README.md's clauses into the
+> bold-led bullet form FIRST — the predicate cannot fire on half its subject
+> otherwise, and a check that cannot fire reads exactly like one that passed.
 > Measure the 41 -> 40 clause delta as part of this row; it is the number that
 > says whether the arm is worth its release.
+> Row 7's recorded blocker is that overrides/README.md has zero bold-led bullets.
+> Three rows running, the recorded blocker was a claim that died on being opened.
+> Check that one before you build around it.
 > ```
 >
 > **On ending: tick §5, update the `▶ NEXT STEP` block at the top, and hand to row 10 — which needs
@@ -1012,20 +1023,11 @@ and 9 each carry one.
 
 ### Row 9 — the cross-script mode join. **RANKED 3rd.**
 
-> **▶ NEXT STEP — AGENT.** Fresh session, cwd `/Users/n8/git/ai-dlc`. Run **after row 6**.
->
-> ```
-> Read docs/analysis/post-program-gap-closure-plan.md in full, then execute row 9.
-> Do the cheap precondition FIRST: I59 shipped in 0.214.0, after §9 recorded this
-> hand-listing, and may already have absorbed part of the subject set. If it did,
-> re-derive the subject set before anything else — the recorded lesson from the
-> predecessor's row 7 is that the counts were of the WRONG SET, not merely wrong.
-> Fix the extractor before writing the invariant. Write it only when the FP set
-> is empty or enumerated; today it is 8 misses, most of them the derivation's own
-> grammar.
-> ```
->
-> **On ending: tick §5, update the `▶ NEXT STEP` block at the top, and hand to row 7.**
+> **▶ DONE — SHIPPED as v0.216.0, 2026-07-30.** Ticked in §5, RESULT below, and the
+> `▶ NEXT STEP` block at the top now points at row 7. Nothing here is owed. The cheap
+> precondition this row was told to run first answered **NO** — I59 absorbed none of the subject
+> set — and the recorded blocker under it was, for the third row running, a claim rather than a
+> constraint.
 
 **State [R — predecessor §9, now four instances].** I49 binds `core-paths.sh`'s modes, I53
 `validate-escalation-resolution.sh`'s, I59 (v0.214.0) every mode a shipped script dispatches to its
@@ -1039,6 +1041,87 @@ git pathspec and from a grep flag, `--mode` from prose, dispatch forms that are 
 **Do.** Fix the extractor first; write the invariant only when the FP set is empty or enumerated.
 **Check I59 first** — it shipped after §9 recorded this and may already have absorbed part of the
 subject set.
+
+#### Row 9 RESULT — SHIPPED v0.216.0, 2026-07-30. `I60`. Distribution-only; graph untouched.
+
+**The precondition answered NO, and the answer is a distinction the ranking note did not have.**
+The join has two halves. **I59 (v0.214.0) generalised the half row 9 was not about** — every mode a
+shipped script *dispatches* is named in its own prose. Row 9's half is the reverse: every mode a
+shipped file *cites* on another script is one that script dispatches. I59 never touched it, and its
+own header records the reverse direction as measured-and-declined for a *within-file* citation
+grammar, which is a different join from this cross-script one.
+
+**I59 does not even subsume I49's and I53's documentation arms**, and that is a measurement rather
+than a reading. On a copy of `core-paths.sh` with `--list` removed from its `usage()` echo and the
+dispatch untouched: **I49 reports `--list`, I59 stays silent** — I59 accepts a mode named in *any*
+comment line, I49 requires it in the usage line. Control, same invocation: the unmutated copy
+returns empty on both. So the two per-target invariants keep both arms and nothing was retired.
+
+**The subject set is a different set, not a different size.** Re-derived at 0.215.0:
+**44 (script, mode) pairs across 25 targets**, against §9's recorded **31 across 15**. That is the
+predecessor's row 7 lesson — the counts were of the wrong set — for the third row of this program.
+§9's third instance (`validate-mandatory-rules.sh` → `validate-audit-anchors.sh --prior-sprint-sha`)
+is inside the derived set, along with 22 targets nobody had hand-listed.
+
+**All 8 recorded misses were the extractor's, in two enumerated classes.** Neither is a property of
+the tree:
+
+| Class | Count | What it was |
+|---|---|---|
+| **The validator file itself** | **5** | `validate-enforcement-map.sh` quotes `<script>.sh --mode` in error prose, in its **own grep flags** (`--exclude=core-paths.sh --exclude=…` reads as a citation of `--exclude`), and inside I59's probe heredoc. **I49 and I53 already exclude that file by name** — the exclusion is inherited, not invented |
+| **Dispatch forms the `case` grammar cannot see** | **3** | Six shipped scripts parse with `[ "$1" = "--x" ]` or `[[ "$1" == "--x" ]]`; `audit-rule-files.sh` dispatches `--fail-on=any\|deterministic` as **valued** arms while callers cite `--fail-on` |
+
+With the self-exclusion restored and both dispatch forms read (both sides normalised at `=`):
+**44 pairs, 0 ghosts, 0 unresolved targets — the false-positive set is EMPTY.** Measured both ways in
+one invocation: with the validator left in corpus the run reports 3 ghosts and 2 unresolved, all
+five bogus; with it excluded, zero.
+
+**Unresolved target names are skipped, not reported**, and that is a scope call rather than an
+oversight: "does core ship a script by this name" is I50's join over a different citation grammar,
+and reporting it here would fire on every consumer-owned script a template legitimately names.
+Measured: 0 citations in the shipped corpus resolve to nothing, so the skip discards no live subject
+today.
+
+**The invariant can fire, proven three ways rather than asserted.** I60 writes its own liveness probe
+each run, and **the probe target dispatches one mode as a `case` arm and one as a `[ "$1" = … ]`
+test** — the second form is the fix this release shipped, and an extraction that lost it again would
+go quiet rather than red. Targeted mutants, each with its own message and an unmutated control that
+stays silent: break the non-case dispatch form → *"has lost the non-case form"*; break the citation
+grammar → *"did not fire on its own probe"*; collapse the corpus → *"I60 derived only …"*.
+Four fixture arms in `enforcement-map-sites` (the family home — I49, I53 and I59 all live there).
+**The reversion mutant — excise I60 entirely — kills only the two I60 assertion lines and leaves all
+seven prior assertions green.**
+
+**The finding worth keeping: a guard downstream of a liveness probe can only be tested on an input
+the probe still passes.** The corpus-floor arm was written first as "break the shared citation
+function and require the floor message". It failed — against a floor that was working. The probe
+reads the same function, so it fired first and the floor was never reached. The arm now repoints the
+**corpus scan's** root and leaves the probe's own alone. Generalised: a probe that shields the rest
+of an invariant also shields it from its own fixture, and an arm written without noticing that
+reports a defect in a mechanism that is fine. This is adjacent to the repo's named class rather than
+an instance of it — the check could fire, but the *assertion* could not.
+
+**Three false zeros of the measurer's own making, all caught by controls, all recorded because they
+are cheap to repeat.**
+
+1. **`$S` not exported into a `bash -c` script**, so the derivation wrote to nowhere and reported
+   `distinct targets: 0`. The universal-token control in the same invocation returned **254 files**,
+   which is the only reason it read as a broken run rather than an empty tree.
+2. **zsh does not word-split unquoted `$var`**, so `set -- $pair` inside a `for` loop passed
+   `"audit-rule-files.sh --fail-on"` as a single argument and every `find` returned nothing. Already
+   recorded in this repo's memory; it cost minutes again. Force `bash -c` for any loop that splits.
+3. **A basename join answered SHIPPED for a file that is not shipped.** Checking which changed files
+   reach a consumer tree with `find -name "$(basename …)"` matched `run.sh` — one of **82** installed
+   fixtures. The corrected join is on the path suffix, and it reports the truth: this release is
+   distribution-only, and `enforcement-map-sites` is not among the 82 (control: `tests/fixtures/`
+   is non-empty and lists `adversarial-citation` and others). **A join key that is not unique is a
+   join that cannot answer**, which is `CLAUDE.md`'s per-file-grep-against-a-glob trap one step over.
+
+**Verification.** `validate-enforcement-map.sh` exit 0, `validate-no-dead-doc-refs.sh` PASS,
+`shellcheck -S error` clean on both changed files, **87/87 fixtures**. Re-verified on a tree built by
+running `scripts/install.sh` into an empty directory: the validator is correctly **not** shipped and
+the control (`scripts/ai-dlc/core-paths.sh`) is. No contract change — I60 is an invariant of the
+distribution's own validator, not a layer-contract clause, so `contract_version` stays **7**.
 
 ### Row 10 — the machinery home, inverted. Unmeasured, likely REFUTED. **RANKED 5th.**
 
