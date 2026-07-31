@@ -17,6 +17,143 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.223.0] — 2026-07-31
+
+### Every clause names the fixture that proves its code fires, and the join that was specified to check it was satisfiable by a comment (I65)
+
+`v0.222.0` bound each clause's `code:` to an emission site a run can attribute, so a FINDING names
+the clause it came from. That says the mechanism can speak. It says nothing about whether anything
+ever makes it speak — a clause can satisfy **I36**, **I37** and **I64** with an enforcer arm no
+fixture has ever driven, which is this repo's named class one level up: an unexercised arm reads
+exactly like an exercised one that passed.
+
+`fixture:` is the last of the charter's promised per-clause fields, and it closes that.
+
+#### The spec's own measurement was wrong in both directions, and the reason is the one it warned about
+
+The plan scheduling this work stated **six** clauses with no fixture exercising their code, derived
+by grepping `core/fixtures/` for each code. Re-measured with the join scoped to the clause's own
+enforcer and to attributable sites: **fourteen**, and one of the six (`LC-E1`/`E4`) is **not** a
+gap — `layer-adjudication-tier` seeds it.
+
+The spec rejected a *derived* join because its false-positive set is non-empty, and named the case:
+`W2` and `W3` match `core/fixtures/release-version-triple/`, where they are **shell variable
+names** (`W2="$WORK/cumulative"`, `W3="$WORK/branchbase"`). That reasoning was right and its
+consequence was missed — **the same false positive scored `LC-R1` as covered, and `W3` is exercised
+by no fixture at all.** The measurement taken to prove the derived join unsafe was itself resting
+on it.
+
+Two further false-positive classes only the scoped join can see:
+
+- **Cross-enforcer collisions.** `validate-enforcement-map.sh` has its own `W1` and `W2`, so
+  `enforcement-map-derivations` satisfies `LC-E8` and `LC-N2` while driving neither's enforcer.
+- **Seeded contract rows.** Fixtures that build a mutated `layer-contract.yaml` name every code
+  they seed; `layer-contract-conformance` rewrites `code: W2` into `code: W4` and would otherwise
+  count as proof for both.
+
+#### What I65 requires of a declared pair
+
+The join VERIFIES a pair the clause declares; it never derives one. For `fixture: <dir>`:
+
+1. the directory exists under `core/fixtures/` and carries a `run.sh` — a driverless directory is
+   skipped by the pre-push loop in silence, which is **I20**'s finding;
+2. it names the clause's **own declared enforcer**;
+3. it names the clause's `code:` on a line that is neither a comment nor a seeded contract `code:`
+   declaration.
+
+Condition 3 is I64's hole arriving one file over: a fixture header sentence listing the checks it
+covers is prose *about* the proof. Eight fixtures were in exactly that state for codes they do
+exercise, and their assertions now carry the code — so the fixture's own output says which clause
+it closed.
+
+**`fixture: none` is data, not an exemption.** A clause nothing exercises is a counted gap the
+build reports, which is what the charter asked this field to state. A **reverse arm** stops it
+decaying into the exemption it looks like: a clause may not declare `none` while a fixture exists
+that would satisfy the join, so writing a fixture and forgetting the clause fails the build.
+
+Shipped state: **29 clauses declare a directory across 10 fixtures, 14 declare `none`.**
+
+#### `predicate:` and `fp` are disposed with their measurements, not dropped
+
+Both are charter promises and each fails a different test this repo already applies. `predicate:`
+would be a **second implementation of the enforcer's logic in a data file**, joined to the first by
+nothing — and I61 found three severity drifts in a restated field one release after that field was
+rewritten, with a mechanical join available. Prose-vs-shell has no I61-equivalent. What the promise
+wanted is carried by `normative:` (present on all 43), bound to a mechanism by `code:` + I64 and to
+a proof by `fixture:` + I65. `fp` is a **judgement about a run**, so no run can emit it; stored, it
+passes v0.123.0's forgeability test with a plain yes. That is not "another mechanism covers it" —
+it is that no mechanism can, the same ground the crosswalk-completeness clause was refused on.
+
+### A brand-new consumer's pre-push refused, and a bare `1 error(s)` reads like any other
+
+`E16`'s vacuity arm refuses to answer when the resolvability set comes out empty, because an empty
+set makes every historical id read as retired. It was keyed on the set being empty **and nothing
+else** — so it also fired on a tree that has just run the installer and has no layer entries at
+all. Measured on a tree built by running `scripts/install.sh` into an empty directory: **exit 1**,
+from a census cell reading `E16=LC-N6:1/0` — a clause firing once against a subject population of
+zero. The arm is unchanged since v0.218.0 and nothing surfaced it.
+
+This is the named class arriving as a **false positive** rather than a false zero. The guard is now
+the entry COUNT, because that is the fact that differs: zero entries and an empty set is a new
+consumer; entries present and an empty set is the unreadable case the arm exists for, and it still
+errs. `layer-retired-id-crosswalk` asserts **both directions**, because fixing the first by deleting
+the guard would silently take the second with it.
+
+### The performance gate, and it fired on this release's own work
+
+The first cut of I65 asked its three questions per (clause, directory) pair and **nearly doubled the
+validator: 5.59s → 10.36s, at 6.21s SYSTEM against 3.73s USER.** That ratio is the diagnosis rather
+than the total — process creation, not work, the same fork-per-item shape v0.205.0 removed from six
+other invariants here. Rewritten to index the corpus once and answer every arm from that index:
+**6.49s**, with all five mutants still firing and the control silent.
+
+Measuring it surfaced a larger regression the program had not been looking at. Profiled at
+`AI_DLC_FIXTURE_JOBS=16`, ranked by END time per the gate, 90/90 verdicts and zero failures both
+times:
+
+| | suite wall | `layer-contract-conformance` | its slack | next unit's slack |
+|---|---|---|---|---|
+| with the naive I65 | 409.0s | 402.9s | 0.1s | 214.4s |
+| **as shipped** | **336.9s** | **331.2s** | **0.0s** | 195.6s |
+
+So the index took 72.1s off the suite, and what it uncovered is that **the suite is 4.7x the 72.0s
+the predecessor program left it at, and `layer-contract-conformance` IS the suite** — zero slack
+against 195.6s for the next unit, so every other row would save nothing and the ranking says so
+rather than implying it. The predecessor's own note names that fixture as *"owed next, measured and
+undiagnosed"* at 45.6s. Its diagnosis is already written down and is not new work: the fixture is
+not slow, it is **serial** — 33 independent validator runs written in a row. Scheduled as its own
+release with the schedule profile attached, per the precedent that split v0.205.0 from v0.206.0.
+
+The gate itself is now stated where the work is planned rather than living only in a retro.
+
+### Added
+
+- **I65** — every clause declares the fixture that proves its code fires, or the literal `none`.
+  Forward and reverse, with a self-written four-directory probe that must total exactly 1 and that
+  drives the shipping indexer rather than a parallel helper.
+- `fixture:` on all 43 clauses of `layer-contract.yaml`.
+- `layer-contract-conformance`: 27 → 33 assertions — five I65 mutants (missing field, driverless
+  directory, wrong enforcer, unattributed code, forged `none`) plus a control.
+- `layer-retired-id-crosswalk`: 12 → 14 assertions — E16's vacuity arm in both directions.
+- Assertion labels in `layer-anchor-declaration`, `layer-catalog-collision` and
+  `layer-retired-id-crosswalk` now name the contract code they prove.
+
+`contract_version` is deliberately **not** bumped. `fixture:` is a new field on every clause, not a
+new clause and not a change to any clause's duty, and E16's arm is a defect fix rather than a
+change of semantics — so no consumer's verdict moves by one byte for a reason a receipt should
+record. Same posture as v0.221.0.
+
+### Fixed
+
+- `E16` no longer fires on a consumer with zero layer entries. A fresh install exited 1.
+
+### Not shipped, and disposed rather than deferred
+
+- `predicate:` — subsumed by `normative:` + `code:`/I64 + `fixture:`/I65, with the restatement
+  hazard measured.
+- `fp` — unbindable by construction; the duty survives as this plan's per-check false-positive
+  measurement, which lands in the release that ships the check.
+
 ## [0.222.0] — 2026-07-31
 
 ### A finding now names the clause it came from, and the contract's central join stops being satisfiable by a comment (I64)

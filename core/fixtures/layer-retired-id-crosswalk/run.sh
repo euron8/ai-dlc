@@ -50,8 +50,9 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # read that as a false branch, and the arm silently did not run — green lines, a PASS,
 # and the mutant proving the load-bearing branch gone. Counting what actually ran is what
 # closes it, and the count is a literal here or it disappears with the assertions.
-# 2 premises + 1 pristine vector + 1 remedy + 2 shallow + 1 control + 4 mutants + 1 exit condition.
-EXPECTED_ASSERTIONS=12
+# 2 premises + 1 pristine vector + 1 remedy + 2 shallow + 1 control + 4 mutants + 1 exit
+# condition + 2 vacuity arms (no entries vs entries-but-no-resolvable-set).
+EXPECTED_ASSERTIONS=14
 
 echo "layer-retired-id-crosswalk:"
 
@@ -99,7 +100,7 @@ fi
 # --- Part 1: the shipped verdict ------------------------------------------------
 GOT="$(vector "$LINTER" "$CONS")"
 if [ "$GOT" = "$WANT" ]; then
-  ok "the arm reports the retired id and NEITHER resolvable one"
+  ok "E16 — the arm reports the retired id and NEITHER resolvable one"
 else
   bad "the retired-id vector moved.
           got  '$GOT'
@@ -116,7 +117,7 @@ printf '%s\n' '| 33 | `[ext:domain]` | Cross-story test-strategy deliverable pre
   >> "$FIX/.claude/skills/ai-dlc/extensions/README.md"
 FIXED="$(vector "$LINTER" "$FIX")"
 if [ "$FIXED" = '33=- 34=- 5=- 933=- guard=0' ]; then
-  ok "adding the crosswalk row the message asks for CLEARS the finding"
+  ok "E16 — adding the crosswalk row the message asks for CLEARS the finding"
 else
   bad "adding the row did not clear the finding (got '$FIXED'). The remedy the message prescribes cannot be applied to clear the message, which is the 'remedy that does not remedy' defect this file's own heading_labelled header records."
 fi
@@ -249,6 +250,79 @@ if [ "$MIGRC" -eq 0 ]; then
 else
   bad "a FULLY migrated consumer still fails (rc=$MIGRC). Every id is in band and every retired id has a crosswalk row, so if this does not exit 0 the rules cannot all be satisfied at once and an author's only way to clear the linter is to switch it off:
 $(grep '^ERROR' <<<"$MIGOUT" | sed 's/^/        /' | cut -c1-200)"
+fi
+
+# --- E16's VACUITY ARM, BOTH DIRECTIONS -------------------------------------------------
+#
+# THE DEFECT THESE TWO ARMS SHIPPED FOR, and it is a FALSE POSITIVE where this repo's named
+# class usually produces a false zero. E16 refuses to answer when the resolvability set it
+# builds comes out empty, because an empty set makes every historical id read as retired. That
+# guard was keyed on the SET being empty and nothing else — so it also fired on a consumer that
+# has just run the installer and has no layer entries at all. Measured on a tree built by
+# running scripts/install.sh into an empty directory: `1 error(s)`, EXIT 1, from a census cell
+# reading `E16=LC-N6:1/0` — a clause firing once against a subject population of zero. A fresh
+# install's pre-push refused, and a bare `1 error(s)` on a new tree reads like any other error.
+#
+# The two states are opposite and the old arm could not tell them apart: "no subject" versus
+# "could not read the subject". So both are asserted here, together, because fixing the first
+# by deleting the guard would silently take the second with it — and the second is the one the
+# arm was written for.
+
+# ARM A — a consumer with NO layer entries is not an error. This is the shape install.sh
+# produces: the contract present, the two layer directories empty.
+NEW="$ROOT/new-consumer"
+mkdir -p "$NEW/.claude/skills/ai-dlc/extensions" "$NEW/.claude/skills/ai-dlc/overrides"
+cp "$CONS/.claude/skills/ai-dlc/layer-contract.yaml" "$NEW/.claude/skills/ai-dlc/layer-contract.yaml"
+NEWOUT="$(bash "$LINTER" "$NEW" 2>&1)"; NEWRC=$?
+# ANCHORED TO THE FINDING LINE, NOT TO THE TOKEN. A bare `grep E16` is satisfied by the
+# LAYER_MEASURED census, which names every code every run — including `E16=LC-N6:0/0`, the
+# cell that says it did NOT fire. The first draft of this assertion did exactly that and
+# reported a failure against a clean tree.
+if [ "$NEWRC" -eq 0 ] && ! grep -qE '^ERROR[[:space:]]+E16' <<<"$NEWOUT"; then
+  ok "E16 — a consumer with ZERO layer entries exits 0: an empty set with no subject is not an unreadable one"
+else
+  bad "E16 fired on a brand-new consumer (rc=$NEWRC). A tree straight out of the installer has no entries, so its resolvability set is empty BECAUSE there is nothing to resolve — and its pre-push now refuses on a finding about ids it has never written:
+$(grep '^ERROR' <<<"$NEWOUT" | sed 's/^/        /' | cut -c1-200)"
+fi
+
+# ARM B — THE ANTI-SILENCING HALF, and it is what makes arm A a fix rather than a deletion.
+# Entries PRESENT and the resolvability set still empty is the case the guard exists for: the
+# arm cannot be trusted in either direction, so it must refuse. The entry below is well-formed
+# and defines no anchor or rule of its own, and it hooks a core file that defines none either.
+BLIND="$ROOT/blind-consumer"
+mkdir -p "$BLIND/.claude/skills/ai-dlc/steps" "$BLIND/.claude/skills/ai-dlc/extensions/checks" \
+         "$BLIND/.claude/skills/ai-dlc/overrides"
+cp "$CONS/.claude/skills/ai-dlc/layer-contract.yaml" "$BLIND/.claude/skills/ai-dlc/layer-contract.yaml"
+BCV="$(awk '/^contract_version:/{print $2; exit}' "$BLIND/.claude/skills/ai-dlc/layer-contract.yaml")"
+cat > "$BLIND/.claude/skills/ai-dlc/steps/prose-only.md" <<'BCORE'
+---
+name: prose-only
+description: a core file that defines no numbered section and no rule
+---
+
+# Prose only
+
+Nothing here is a numbered heading, so it contributes no anchor and no rule.
+BCORE
+cat > "$BLIND/.claude/skills/ai-dlc/extensions/checks/prose-only-domain.md" <<BEXT
+---
+kind: check
+id: prose-only-domain
+conforms_to: ${BCV}
+hooks: steps/prose-only.md
+push_candidate: false
+---
+
+## Prose only, extended
+
+This entry allocates no id of its own either, so together with its hooked core file
+the resolvability set comes out empty while an entry plainly exists.
+BEXT
+BLINDOUT="$(bash "$LINTER" "$BLIND" 2>&1)"; BLINDRC=$?
+if grep -qE '^ERROR[[:space:]]+E16' <<<"$BLINDOUT" && [ "$BLINDRC" -ne 0 ]; then
+  ok "E16 — entries PRESENT and the resolvability set still empty is STILL an error (the guard was narrowed, not deleted)"
+else
+  bad "E16 stayed silent on a consumer that HAS an entry and still built an empty resolvability set (rc=$BLINDRC). That is the unreadable case the arm exists for, and fixing the fresh-install false positive has taken it with it — every historical id would read as retired and the arm would report clean doing it."
 fi
 
 echo

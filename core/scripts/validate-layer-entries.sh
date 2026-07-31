@@ -943,8 +943,10 @@ CROSSWALK_IDS="$(crosswalk_rows)"
 # integer on purpose, and a merged set would let a live rule resolve a retired check.
 LIVE_ANCHORS=''
 LIVE_RULES=''
+LIVE_ENTRY_N=0
 while IFS= read -r _lf; do
   [ -n "$_lf" ] || continue
+  LIVE_ENTRY_N=$((LIVE_ENTRY_N+1))
   LIVE_ANCHORS="$LIVE_ANCHORS
 $(defined_anchors "$_lf")"
   LIVE_RULES="$LIVE_RULES
@@ -963,8 +965,21 @@ LIVE_RULES="$(printf '%s\n' "$LIVE_RULES" | grep -E '.' | sort -u)"
 # A zero here is E16's PASS, so it cannot be allowed to pass silently: an empty live set
 # makes every historical id look retired, which would bury the real subjects in noise and
 # is the mirror of the unreadable-history case below.
-if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ]; then
-  err E16 "built an EMPTY resolvability set from the layer entries and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
+#
+# BUT AN EMPTY SET IS ONLY MEANINGLESS WHEN THERE WERE ENTRIES TO BUILD IT FROM. A consumer
+# that has just run the installer has ZERO layer entries, and this arm fired on every one of
+# them: the set is empty because there is no subject, not because the subject could not be
+# read. Measured on a tree built by running scripts/install.sh into an empty directory before
+# this guard: `1 error(s)`, exit 1, from `E16=LC-N6:1/0` in the census — a clause firing once
+# against a subject population of zero. The two states are opposite and the old arm could not
+# tell them apart, which is this repo's named class arriving as a FALSE POSITIVE rather than a
+# false zero: a fresh install's pre-push refused, and a bare `1 error(s)` reads like any other.
+#
+# The guard is the entry COUNT, not the emptiness of the set, because those are the two facts
+# that differ. Zero entries and an empty set is a new consumer. Entries present and an empty
+# set is the unreadable case this arm exists for, and it still errs.
+if [ -z "$LIVE_ANCHORS" ] && [ -z "$LIVE_RULES" ] && [ "$LIVE_ENTRY_N" -gt 0 ]; then
+  err E16 "built an EMPTY resolvability set from the $LIVE_ENTRY_N layer entr(y/ies) present and the core files they hook. Every id any entry has ever defined would read as retired, so this arm's output is meaningless in both directions — it cannot be trusted to fire and it cannot be trusted to stay quiet."
 fi
 while IFS= read -r f; do
   [ -n "$f" ] || continue

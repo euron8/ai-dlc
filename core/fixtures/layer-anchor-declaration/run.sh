@@ -69,7 +69,7 @@ echo
 row "SKILL__Rule-8.md"                 CLEAN \
   "a heading CONTAINING the anchor is the legitimate id-prefix grain"
 row "team-roles__tea__escalation.md"   "Escalation" \
-  "an anchor CONTAINING the heading resolves only by the reverse arm and silently widens the shadow"
+  "E7 — an anchor CONTAINING the heading resolves only by the reverse arm and silently widens the shadow"
 
 # The error must hand over the fix, not just the diagnosis: a consumer cannot act on "wrong" but
 # can act on "write it as this".
@@ -82,11 +82,11 @@ else
 fi
 
 row "steps__retro__ghost.md"           "matches no heading" \
-  "an anchor matching nothing means the body never reaches the lead while checks report green"
+  "E7 — an anchor matching nothing means the body never reaches the lead while checks report green"
 
 # THE BLIND SPOT. Part one is valid; part two is not. A first-part-only reader sees nothing.
 row "steps__retro__multi.md"           "Empirical gate validation" \
-  "every comma-part is validated, not just the first"
+  "E3 — every comma-part is validated, not just the first"
 
 # THE SECOND BLIND SPOT, inside the fix for the first. The per-part widening still computed the
 # target per part, so a part that inherits its file computed an EMPTY one and was skipped before
@@ -96,14 +96,14 @@ row "steps__retro__multi.md"           "Empirical gate validation" \
 # an entry that resolved no file at all, and the assertion would pass while the fix was reverted.
 # Mutation 3 caught exactly that.
 row "steps__retro__inherit.md"         "Inherited Heading' matches no heading in steps/retro.md" \
-  "a bare '#anchor' part inherits the file from the part before it and is still anchor-checked"
+  "E3 — a bare '#anchor' part inherits the file from the part before it and is still anchor-checked"
 row "steps__retro__orphan.md"          "names no target file" \
-  "a first part with no file has nothing to inherit, and silence there skips every check on the entry"
+  "E3 — a first part with no file has nothing to inherit, and silence there skips every check on the entry"
 
 row "SKILL__Rule-9.md"                 "missing 'reason:'" \
-  "reason: was declared by the contract and read by nothing"
+  "E8 — reason: was declared by the contract and read by nothing"
 row "no-flag.md"                       "missing 'push_candidate:'" \
-  "push_candidate: was declared by the contract and read by nothing"
+  "E9 — push_candidate: was declared by the contract and read by nothing"
 row "ok-extension.md"                  CLEAN \
   "a well-formed extension stays silent, so the two above are attributable"
 

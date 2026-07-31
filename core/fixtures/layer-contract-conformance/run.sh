@@ -378,11 +378,82 @@ else
   printf '  ok    %-18s CONTROL: I64 is silent on the shipping contract, so its kills are attributable\n' "i64-control"
 fi
 
+# --- I65: the clause names the FIXTURE that proves it, and the fixture can prove it -----
+#
+# FIVE ARMS, ONE PER PART OF THE PREDICATE, because each part was added for a state the ones
+# before it accepted. Every arm rewrites the `fixture:` of ONE clause, and no other invariant
+# reads that field, so each fires alone.
+#
+# THE MUTATION TARGETS ARE REAL DIRECTORIES CHOSEN BY MEASUREMENT, not invented names, because
+# a nonsense path would be rejected by the first arm and prove nothing about the later ones:
+#   check-h1-recursion      exists and has NO run.sh (one of exactly two such dirs)
+#   release-version-triple  has a run.sh and names validate-layer-entries.sh ZERO times
+#   layer-conforms-to       drives validate-layer-entries.sh and names E1 ZERO times
+# Each is asserted below by the arm it feeds; if any of them acquires the property it was
+# chosen for lacking, that arm reports the mutation as unproven rather than scoring a kill.
+
+# set_fixture <clause> <value|DELETE> <outfile>
+set_fixture() {
+  awk -v want="$1" -v val="$2" '
+    /^  - id:/ { id=$3 }
+    { if (id == want && $1 == "fixture:") { if (val != "DELETE") printf "    fixture: %s\n", val; next } ; print }
+  ' "$CONTRACT" > "$3"
+}
+
+# ARM 1 — the field itself. A clause with no fixture: is neither a proof nor a declared gap,
+# and it is the only one of the three states the invariant cannot report on.
+set_fixture LC-O1 DELETE "$TMP/i65-missing.yaml"
+mutant_fires "$TMP/i65-missing.yaml" "I65 LC-O1: no 'fixture:' declared" "i65-missing" \
+  "an undeclared field is not the same as a declared gap, and only one of them is counted"
+
+# ARM 2 — a driverless directory. The pre-push loop skips a dir with no run.sh in silence, so a
+# clause citing one cites a proof that never executes.
+set_fixture LC-O3 check-h1-recursion "$TMP/i65-nodriver.yaml"
+mutant_fires "$TMP/i65-nodriver.yaml" "I65 LC-O3: fixture 'check-h1-recursion' has no run.sh" "i65-nodriver" \
+  "a fixture the suite skips is not evidence, and its silence is identical to a pass"
+
+# ARM 3 — the enforcer scope. Without it a fixture for a DIFFERENT script satisfies the join
+# whenever the two vocabularies collide on a token, which W1 and W2 actually do in this repo.
+set_fixture LC-O10 release-version-triple "$TMP/i65-wrongenf.yaml"
+mutant_fires "$TMP/i65-wrongenf.yaml" "I65 LC-O10: fixture 'release-version-triple' never names" "i65-wrongenf" \
+  "a fixture that never drives the clause's enforcer cannot be evidence about that clause"
+
+# ARM 4 — the attributable site. THE ARM THIS INVARIANT EXISTS FOR: a fixture that genuinely
+# drives the enforcer but names the code only in a header sentence proves nothing a run can
+# join back to the clause. Six fixtures were in exactly that state when this shipped.
+set_fixture LC-O1 layer-conforms-to "$TMP/i65-unattributed.yaml"
+mutant_fires "$TMP/i65-unattributed.yaml" "I65 LC-O1: fixture 'layer-conforms-to' drives" "i65-unattributed" \
+  "prose about the proof is not the proof; the fixture's own output must name the clause it closed"
+
+# ARM 5 — the REVERSE arm, and it is what stops `none` decaying into an exemption. `none` is a
+# counted gap; writing it over a clause a live fixture proves would retire that proof from the
+# census with nothing able to say so.
+set_fixture LC-O1 none "$TMP/i65-noneforged.yaml"
+mutant_fires "$TMP/i65-noneforged.yaml" "I65 LC-O1: declares 'fixture: none' but" "i65-noneforged" \
+  "a fixture written without updating the clause it proves would leave the gap on the books forever"
+
+# ARM 6 — the control. The five above prove I65 speaks; this proves it is not simply always
+# speaking, which is the other way an invariant reads green while meaning nothing.
+#
+# THERE IS NO VACUITY MUTANT HERE, and that is a decision rather than an omission. I65's own
+# vacuity defence is a PROBE it writes and runs itself each time — four directories whose
+# answers must total exactly 1 — so it is unreachable by mutating the contract, which is the
+# only thing this fixture mutates. The zero-rows guard is likewise unisolatable: a contract
+# with no clauses fails every other invariant here first, so a mutant for it would be entangled
+# and would prove nothing about I65. Recorded rather than left as a silent gap.
+ASSERTIONS=$((ASSERTIONS + 1))
+if run_with "$CONTRACT" | grep -q '^FAIL: I65'; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-18s I65 fires on the UNMUTATED contract, so its kills above prove nothing\n' "i65-control"
+else
+  printf '  ok    %-18s CONTROL: I65 is silent on the shipping contract, so its kills are attributable\n' "i65-control"
+fi
+
 # THE ASSERTION-COUNT FLOOR. A fixture that silently stops running arms prints a shorter green
 # report, and a shorter green report reads exactly like a passing one — the lesson v0.217.0
 # paid for, where a mis-spaced helper call killed a whole mutant inside a `$( )` subshell and
 # left seventeen ok lines and a PASS. Raise this deliberately when an arm is added.
-EXPECTED_ASSERTIONS=27
+EXPECTED_ASSERTIONS=33
 echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   echo "FAIL: $ASSERTIONS assertions ran, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."

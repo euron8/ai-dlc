@@ -136,6 +136,12 @@
 #                         the contract claims to have absorbed carried zero clauses for nineteen
 #                         releases with nothing able to say so. Both directions, so the list
 #                         cannot fall behind the contract.
+#   I65 every clause names the FIXTURE that proves it, that fixture drives the clause's own
+#                         declared enforcer, and it names the clause's code where a run can
+#                         attribute it. I64 binds the code to an emission SITE; this binds the
+#                         clause to the PROOF that the site fires. `fixture: none` is a declared,
+#                         counted gap rather than an absence, and a reverse arm stops `none` from
+#                         being written over a fixture that would satisfy the join.
 #
 # Tool dependencies: bash ≥3.2, grep, sed, awk, sort, comm. No hard dep on
 # jq/yq/rg — the map is authored line-oriented so the portable subset parses it
@@ -1008,6 +1014,209 @@ $(awk '
   function emit() { if (enf != "" && code != "") printf "%s|%s|%s\n", id, enf, code }
 ' "$lc_file")
 EOF
+
+  # --- I65: every clause names the FIXTURE that proves it, and that fixture can prove it. ---
+  #
+  # WHAT THIS ADDS TO I64, AND WHY ONE DOES NOT IMPLY THE OTHER. I64 asks that the clause's
+  # code reach a site its enforcer can attribute — that the mechanism can SPEAK. It says
+  # nothing about whether anything ever makes it speak. A clause can pass I36, I37 and I64
+  # with an enforcer arm no fixture has ever driven, which is this repo's named class one
+  # level up: an unexercised arm reads exactly like an exercised one that passed.
+  #
+  # THE JOIN VERIFIES A DECLARED PAIR AND MUST NEVER DERIVE ONE. Measured before this was
+  # built: a derived join ("which fixture names this code") has a non-empty false-positive
+  # set at every grain tried. At word grain `E4` matches `LC-E4`. At token grain `W2` and
+  # `W3` match core/fixtures/release-version-triple/, where they are SHELL VARIABLE NAMES
+  # (`W2="$WORK/cumulative"`, `W3="$WORK/branchbase"`) — and that particular false positive
+  # is not merely noise: it scored LC-R1 as covered when W3 is exercised by no fixture at
+  # all, so the reason to reject the derived join was also hiding a real gap.
+  #
+  # SO THE PREDICATE HAS THREE PARTS, and each was added because the two before it passed
+  # something that could not be proof:
+  #
+  #   (1) the declared directory exists under core/fixtures/ AND carries a run.sh. A
+  #       directory with no driver is skipped by the pre-push loop in silence — that is
+  #       I20's finding, and a clause citing such a directory cites a fixture that never runs.
+  #   (2) it names the clause's OWN declared enforcer. Without this, `enforcement-map-derivations`
+  #       satisfies LC-E8 and LC-N2, because validate-enforcement-map.sh has its own W1 and W2
+  #       and the two vocabularies collide on the token. A fixture that never drives the script
+  #       the clause binds cannot be evidence about that clause whatever it names.
+  #   (3) it names the code on a line that is neither a COMMENT nor a contract `code:`
+  #       declaration. The comment half is I64's hole arriving one file over — a fixture whose
+  #       only mention of a code is a header sentence saying which checks it covers proves
+  #       nothing, and six fixtures were in exactly that state. The `code:` half is the other
+  #       direction: fixtures that SEED a contract copy (layer-adjudication-tier,
+  #       layer-contract-conformance) name every code they seed, and a mutation harness that
+  #       rewrites `code: W2` into `code: W4` would otherwise satisfy this join for both.
+  #
+  # `fixture: none` IS DATA, NOT AN EXEMPTION, and this is the field's whole point. The
+  # charter asked for a row per clause carrying its proof; a clause with no fixture is then a
+  # counted gap that the build reports, rather than an absence nobody can see. Measured when
+  # this shipped: 29 clauses declare a fixture, 14 declare none. The reverse arm is what stops
+  # `none` decaying into the exemption it looks like — a clause may not declare `none` while a
+  # fixture exists that would satisfy (1)-(3), so writing a fixture and forgetting the clause
+  # fails the build instead of leaving the gap on the books forever.
+  # READ EACH CORPUS ONCE. THE FIRST CUT OF THIS INVARIANT FORKED ~5,000 GREPS AND NEARLY
+  # DOUBLED THE VALIDATOR — 5.59s to 10.36s, at 6.21s SYSTEM against 3.73s USER. That ratio is
+  # the diagnosis, not the total: it is process creation, not work, and it is the exact shape
+  # v0.205.0 removed from six other invariants here. The naive form asked its three questions
+  # per (clause, fixture-dir) pair, and the `none` reverse arm alone is 14 clauses x 92
+  # directories x 4 forks.
+  #
+  # So the corpus is indexed ONCE, into a set of (dir, enforcer, code) triples that satisfy the
+  # whole predicate, and every arm below is a lookup in that one file. One grep over
+  # core/fixtures/ for the code vocabulary, one per enforcer basename, and a fork-free glob for
+  # run.sh. Measured after: the validator is back under the pre-I65 figure.
+  #
+  # THE INDEX IS BUILT BY A FUNCTION TAKING A ROOT, so the probe below can build one over its
+  # own synthetic tree and exercise THE SHIPPING CODE PATH. A probe that tested a separate
+  # helper would prove nothing about the index the arms actually read.
+  lc_i65_index() { # lc_i65_index <fixtures-root> <out-triples-file>
+    local root="$1" out="$2" d b
+    : > "$out"
+    [ -d "$root" ] || return 0
+
+    # (a) drivable directories — a glob, no forks.
+    : > "$TMPDIR_I65/drv"
+    for d in "$root"/*/; do
+      [ -f "${d}run.sh" ] || continue
+      printf '%s\n' "$(basename "${d%/}")" >> "$TMPDIR_I65/drv"
+    done
+    [ -s "$TMPDIR_I65/drv" ] || return 0
+
+    # (b) which directories name each enforcer basename — one grep per enforcer, not per pair.
+    : > "$TMPDIR_I65/enf"
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      grep -rls -- "$b" "$root" > "$TMPDIR_I65/hits" 2>/dev/null || true
+      awk -v r="$root/" -v e="$b" '{ p=$0; sub("^" r, "", p); sub("/.*", "", p); print p "\t" e }' \
+        "$TMPDIR_I65/hits" | sort -u >> "$TMPDIR_I65/enf"
+    done < "$TMPDIR_I65/enfnames"
+
+    # (c) which directories name each code AT AN ATTRIBUTABLE SITE — ONE grep for the whole
+    # vocabulary, then the comment and `code:` exclusions applied in awk over only the lines
+    # that matched. grep -n keeps the filename so the directory is recoverable.
+    grep -rnE "(^|[^A-Za-z0-9_-])(${LC_I65_ALT})([^A-Za-z0-9_-]|$)" "$root" \
+      > "$TMPDIR_I65/craw" 2>/dev/null || true
+    awk -v r="$root/" -F: '
+      NR==FNR { codes[++nc]=$0; next }
+      {
+        path=$1; text=$0
+        sub("^[^:]*:[0-9]*:", "", text)
+        if (text ~ /^[[:space:]]*#/) next          # a comment is prose about the proof
+        sub("^" r, "", path); sub("/.*", "", path)
+        for (i=1; i<=nc; i++) {
+          c=codes[i]
+          if (text ~ ("code:[[:space:]]*" c "([^A-Za-z0-9_-]|$)")) continue   # a seeded contract row
+          if (text ~ ("(^|[^A-Za-z0-9_-])" c "([^A-Za-z0-9_-]|$)")) print path "\t" c
+        }
+      }' "$TMPDIR_I65/codes" "$TMPDIR_I65/craw" | sort -u > "$TMPDIR_I65/code"
+
+    # (d) the join: a triple survives only if the directory is drivable, names the enforcer and
+    # names the code. Three sorted sets, one awk, no per-pair forks.
+    awk -F'\t' '
+      FILENAME==d  { drv[$0]=1; next }
+      FILENAME==e  { enf[$1 SUBSEP $2]=1; ed[$1]=ed[$1] " " $2; next }
+      { if (!($1 in drv)) next
+        n=split(ed[$1], es, " ")
+        for (i=1; i<=n; i++) if (es[i] != "") print $1 "|" es[i] "|" $2 }
+    ' d="$TMPDIR_I65/drv" e="$TMPDIR_I65/enf" \
+      "$TMPDIR_I65/drv" "$TMPDIR_I65/enf" "$TMPDIR_I65/code" | sort -u > "$out"
+  }
+
+  TMPDIR_I65="$(mktemp -d "${TMPDIR:-/tmp}/i65-XXXXXX")"
+
+  lc_i65_pairs="$TMPDIR_I65/pairs"
+  awk '
+    /^  - id:/       { if (id != "") emit(); id=$3; enf=""; code=""; fx="" ; next }
+    /^    enforcer:/ { enf=$2; next }
+    /^    code:/     { code=$2; next }
+    /^    fixture:/  { fx=$2; next }
+    END              { if (id != "") emit() }
+    function emit() { if (enf != "" && code != "") printf "%s|%s|%s|%s\n", id, enf, code, fx }
+  ' "$lc_file" > "$lc_i65_pairs"
+
+  if [ ! -s "$lc_i65_pairs" ]; then
+    err "I65 read ZERO (clause, enforcer, code, fixture) rows out of layer-contract.yaml. Every arm below iterates that set, so an empty read passes the whole invariant by having no subject — which reads exactly like a contract whose every clause is proven."
+  fi
+
+  # The vocabularies the index is built over, derived from the contract rather than listed.
+  awk -F'|' '{print $3}' "$lc_i65_pairs" | sort -u > "$TMPDIR_I65/codes"
+  awk -F'|' '{n=split($2,p,"/"); print p[n]}' "$lc_i65_pairs" | sort -u > "$TMPDIR_I65/enfnames"
+  LC_I65_ALT="$(awk 'NR>1{printf "|"} {printf "%s", $0}' "$TMPDIR_I65/codes")"
+
+  # THE PROBE, written and run here rather than trusted, and it drives THE SAME INDEXER the
+  # arms below read. lc_i65_index() is a grep, an awk and a three-way join; a change to any of
+  # them can turn it into a function that answers "bound" for everything or nothing, and either
+  # way every arm goes quiet in the same direction. So build a tree whose four directories have
+  # exactly one right answer between them, index it with the shipping function, and refuse to
+  # run the invariant unless the answers total exactly 1.
+  lc_p65="$TMPDIR_I65/probe"
+  mkdir -p "$lc_p65/fx/yes" "$lc_p65/fx/no-comment" "$lc_p65/fx/no-driver" "$lc_p65/fx/other-enf"
+  printf 'bash probe-enforcer.sh\nok "PROBE65 fired"\n'  > "$lc_p65/fx/yes/run.sh"
+  printf 'bash probe-enforcer.sh\n# PROBE65 is not exercised here\n    code: PROBE65\n' \
+                                                         > "$lc_p65/fx/no-comment/run.sh"
+  printf 'bash probe-enforcer.sh\nok "PROBE65 fired"\n'  > "$lc_p65/fx/no-driver/driver.sh"
+  printf 'bash other-enforcer.sh\nok "PROBE65 fired"\n'  > "$lc_p65/fx/other-enf/run.sh"
+  lc_p65_codes_save="$TMPDIR_I65/codes.save"; cp "$TMPDIR_I65/codes" "$lc_p65_codes_save"
+  lc_p65_enf_save="$TMPDIR_I65/enfnames.save"; cp "$TMPDIR_I65/enfnames" "$lc_p65_enf_save"
+  lc_p65_alt_save="$LC_I65_ALT"
+  printf 'PROBE65\n' > "$TMPDIR_I65/codes"
+  printf 'probe-enforcer.sh\n' > "$TMPDIR_I65/enfnames"
+  LC_I65_ALT='PROBE65'
+  lc_i65_index "$lc_p65/fx" "$TMPDIR_I65/probe.triples"
+  lc_p65_n=0
+  grep -qxF 'yes|probe-enforcer.sh|PROBE65'        "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+1))
+  grep -qxF 'no-comment|probe-enforcer.sh|PROBE65' "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+100))
+  grep -qxF 'no-driver|probe-enforcer.sh|PROBE65'  "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+1000))
+  grep -qxF 'other-enf|probe-enforcer.sh|PROBE65'  "$TMPDIR_I65/probe.triples" && lc_p65_n=$((lc_p65_n+10000))
+  cp "$lc_p65_codes_save" "$TMPDIR_I65/codes"
+  cp "$lc_p65_enf_save"   "$TMPDIR_I65/enfnames"
+  LC_I65_ALT="$lc_p65_alt_save"
+  if [ "$lc_p65_n" -ne 1 ]; then
+    err "I65's probe scored $lc_p65_n where exactly 1 is correct. The four probe directories are: one bound (+1), one naming the code only in a comment and on a contract code: line (+100), one with no run.sh (+1000), and one naming a DIFFERENT enforcer (+10000). Any other total means lc_i65_index has stopped reading the driver, the comment grain, the code: grain or the enforcer, and every result below is produced by an index that can no longer tell proof from mention."
+  else
+    # THE REAL INDEX, built once. Every arm below is a lookup in this file.
+    lc_i65_index "$REPO_ROOT/core/fixtures" "$TMPDIR_I65/triples"
+    if [ ! -s "$TMPDIR_I65/triples" ]; then
+      err "I65 indexed core/fixtures/ and found ZERO (directory, enforcer, code) triples. The probe above proves the indexer works, so an empty result here means the fixture corpus moved out from under it — and an empty index makes every declared fixture fail and every 'none' pass, which is loud in one direction and silent in the other."
+    fi
+    while IFS='|' read -r fid fenf fcode ffx; do
+      [ -n "$fid" ] || continue
+      if [ -z "$ffx" ]; then
+        err "I65 $fid: no 'fixture:' declared. Every clause names the fixture that proves its code fires, or the literal 'none' to record that nothing does. An undeclared field is neither, and it is the only one of the three states this invariant cannot report."
+        continue
+      fi
+      fenf_base="${fenf##*/}"
+      if [ "$ffx" = none ]; then
+        # REVERSE: 'none' may not be written over a fixture that would satisfy the join. One
+        # awk over the index, not a walk of 92 directories per clause.
+        lc_i65_witness="$(awk -F'|' -v e="$fenf_base" -v c="$fcode" '$2==e && $3==c {print $1; exit}' "$TMPDIR_I65/triples")"
+        [ -z "$lc_i65_witness" ] \
+          || err "I65 $fid: declares 'fixture: none' but core/fixtures/$lc_i65_witness/ drives '$fenf_base' and names '$fcode' at an attributable site — so the proof exists and the clause says it does not. 'none' is a counted gap, not a default; a fixture written without updating the clause it proves leaves the gap on the books forever."
+        continue
+      fi
+      case "$ffx" in
+        */*|.*) err "I65 $fid: fixture '$ffx' is not a bare directory name under core/fixtures/. The value is joined to that one root so a clause cannot cite a proof living outside the suite the pre-push drives."; continue ;;
+      esac
+      fdir="$REPO_ROOT/core/fixtures/$ffx"
+      if [ ! -d "$fdir" ]; then
+        err "I65 $fid: declares fixture '$ffx', which is not a directory under core/fixtures/. A clause citing a fixture that does not exist states a proof nothing can run."
+        continue
+      fi
+      if [ ! -f "$fdir/run.sh" ]; then
+        err "I65 $fid: fixture '$ffx' has no run.sh. The pre-push loop skips a driverless directory in silence (I20's finding), so this clause cites a proof that never executes and reads exactly like one that passes every push."
+        continue
+      fi
+      if ! grep -qxF "$ffx	$fenf_base" "$TMPDIR_I65/enf"; then
+        err "I65 $fid: fixture '$ffx' never names '$fenf_base', the enforcer this clause declares. A fixture that does not drive the script the clause binds cannot be evidence about that clause — the two W1/W2 vocabularies in this repo collide on the token, so naming the code alone is satisfied by a fixture for a different enforcer entirely."
+        continue
+      fi
+      grep -qxF "$ffx|$fenf_base|$fcode" "$TMPDIR_I65/triples" \
+        || err "I65 $fid: fixture '$ffx' drives '$fenf_base' but names '$fcode' nowhere a run can attribute — only in comments, or only on a seeded contract 'code:' line. A fixture header sentence listing the checks it covers is prose about the proof, not the proof; when this shipped, six fixtures were in exactly that state for codes they do exercise. Name the code in the assertion that proves it, so the fixture's own output says which clause it closed."
+    done < "$lc_i65_pairs"
+  fi
+  rm -rf "$TMPDIR_I65"
 
   # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
   # on it, PROVEN BY RUNNING THE ENFORCER rather than by grepping it. ---
@@ -3437,7 +3646,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65)."
   exit 0
 fi
 exit 1
