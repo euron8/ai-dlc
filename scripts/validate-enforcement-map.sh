@@ -3341,7 +3341,7 @@ ccf_decl() { # <file> -> the declared crosswalk file, trailing whitespace stripp
 LC_YAML="$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml"
 CCF="$(ccf_decl "$LC_YAML")"
 CCF_SS="$(ccf_decl "$SETUP_SITES")"
-CCF_READERS="$REPO_ROOT/core/scripts/validate-layer-entries.sh $REPO_ROOT/scripts/install.sh"
+CCF_READERS="$REPO_ROOT/core/scripts/validate-layer-entries.sh $REPO_ROOT/scripts/install.sh $REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 
 if [ -z "$CCF" ] || [ -z "$CCF_SS" ]; then
   err "I67 could not read 'consumer_crosswalk_file:' from layer-contract.yaml and/or reconcile/setup-sites.md (got '${CCF:-<none>}' and '${CCF_SS:-<none>}'). Both copies are required: the validator reads the contract's, ai-dlc-update cannot read pipeline files and reads its own, and an absent declaration leaves the two ends bound by nothing while this check reports the same line as agreement."
@@ -3418,6 +3418,66 @@ for _cw in "$REPO_ROOT/core/skills/ai-dlc/extensions/README.md" \
   # The delta is what the control is actually about: the reader can still SEE a row.
   [ "$_p" -eq $((_n + 1)) ] || err "I68's control failed on ${_cw#"$REPO_ROOT"/}: the reader yielded $_n on the file and $_p on the same file plus ONE unfenced row, so appending a row did not move the count by one. The reading above is therefore a broken extractor rather than a measurement of the file, and this invariant would report every future example row as absent."
 done
+
+# --- I69: prose naming the declaration's HOME must name a file that carries it --
+# THE DEFECT, measured on the release that shipped the declaration. Four sites told the
+# reader the home was `core-manifest.md`: the clause text of LC-N6 and LC-N7, the
+# extensions README, the scaffold template a consumer receives, and W8's own remedy
+# string. The key has never been in that file — it is in layer-contract.yaml, and the
+# contract's own header explains at length why it is there rather than in the manifest.
+# So a consumer following the remedy while migrating its rows would open a file that does
+# not carry the declaration, and the one site an operator reads DURING the migration was
+# the one shipped inside the message telling them to migrate.
+#
+# THIS IS THE REMEDY CLASS v0.225.0 CLOSED FOR `anchor_form`, one string over: a fix whose
+# instructions cannot be followed literally. W8's site is fixed the same way — it now emits
+# `$(rel "$LC_FILE")` and carries no literal at all, which is why it is absent from the
+# subject set below rather than passing it. A message that derives its own remedy cannot be
+# wrong about it.
+#
+# THE GRAMMAR IS A HOME CLAIM, NOT A CO-OCCURRENCE, and that distinction is the whole
+# false-positive set. Two paragraphs — one in the contract, one in the validator — name
+# `core-manifest.md` precisely to say the declaration is NOT there and why, with the
+# measurement behind the choice. A rule keyed on "a manifest-shaped filename appears near
+# the token" reports both, and a check that fires on the rationale for its own subject gets
+# turned off. Measured against the tree that carried the defect: this grammar returns the 4
+# real sites and neither rationale paragraph.
+#
+# The window is the line plus the one before it, because the claim wraps in prose — the
+# template's spans two lines and a line-scoped reader missed it while its control fired.
+i69_claims() { # i69_claims <root> -> "<file>\t<named-file>" per home claim
+  local _f
+  for _f in $(grep -rl 'consumer_crosswalk_file' "$1/core" "$1/scripts" 2>/dev/null | grep -v '/fixtures/'); do
+    awk -v F="${_f#"$1"/}" '
+      { win = prev " " $0; prev = $0
+        if (match(win, /[A-Za-z0-9._\/-]+\.(md|yaml)`?[^.]{0,40}declares as `?consumer_crosswalk_file/)) {
+          s = substr(win, RSTART, RLENGTH); match(s, /[A-Za-z0-9._\/-]+\.(md|yaml)/)
+          print F "\t" substr(s, RSTART, RLENGTH); next }
+        if (match(win, /consumer_crosswalk_file:?.?[^.]{0,40}[ `\x27]in[ `\x27]+[A-Za-z0-9._\/-]+\.(md|yaml)/)) {
+          s = substr(win, RSTART, RLENGTH)
+          if (match(s, /[ `\x27]in[ `\x27]+[A-Za-z0-9._\/-]+\.(md|yaml)/)) {
+            t = substr(s, RSTART, RLENGTH); match(t, /[A-Za-z0-9._\/-]+\.(md|yaml)/)
+            print F "\t" substr(t, RSTART, RLENGTH) } }
+      }' "$_f"
+  done | sort -u
+}
+I69_CLAIMS="$(i69_claims "$REPO_ROOT")"
+# ZERO GUARD. An empty claim set means the grammar stopped matching, not that core stopped
+# restating the home — and this arm's whole failure mode is going quiet, because every fix
+# to it removes one of its own subjects.
+if [ -z "$I69_CLAIMS" ]; then
+  err "I69 found no 'consumer_crosswalk_file:' home claim anywhere in core/ or scripts/, and there are three: the extensions README, the contract's own clause text, and the scaffold template. A zero here is this grammar having stopped matching, which reads exactly like core having stopped restating the declaration's home."
+else
+  while IFS="$(printf '\t')" read -r _cf _named; do
+    [ -n "$_cf" ] || continue
+    if ! grep -q '^consumer_crosswalk_file:' "$REPO_ROOT/core/skills/ai-dlc/$(basename "$_named")" 2>/dev/null \
+       && ! grep -q '^consumer_crosswalk_file:' "$REPO_ROOT/core/skills/ai-dlc-update/reconcile/$(basename "$_named")" 2>/dev/null; then
+      err "I69 $_cf names '$_named' as the home of the 'consumer_crosswalk_file:' declaration, and that file does not carry it. The declaration lives in core/skills/ai-dlc/layer-contract.yaml, twinned into reconcile/setup-sites.md; a consumer following this text during a migration opens a file with no declaration in it. Name the file that carries the key, or derive the name as W8 does."
+    fi
+  done <<EOF
+$I69_CLAIMS
+EOF
+fi
 
 # --- I54: no shell variable is written into an EARLY-EXITING reader ------------
 # `grep -q` stops at its first match. Under `set -o pipefail` the pipeline's status
@@ -3805,7 +3865,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator nor the installer permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69)."
   exit 0
 fi
 exit 1

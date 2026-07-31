@@ -513,6 +513,65 @@ done
 [ "$declared_bad" -eq 0 ] || mech_fail=$((mech_fail + declared_bad))
 
 # -----------------------------------------------------------------------------
+# THE CONSUMER-OWNED CROSSWALK FILE IS SCAFFOLDED HERE, and the reason it has to be
+# here is that `install.sh` is the only other writer of it and NO CONSUMER RUNS
+# install.sh AGAIN. A pull is how an existing consumer receives everything; a
+# create-once file introduced after that consumer installed therefore arrives
+# through this driver or it never arrives at all.
+#
+# MEASURED ON THE REFERENCE CONSUMER, which is what put this block here. The
+# release that moved the crosswalk table to a consumer-owned path shipped the
+# installer arm and a fixture that drives it, and both were green. The pull that
+# delivered it left the declared path EMPTY: the contract arrived declaring
+# `consumer_crosswalk_file:`, the template arrived under `templates/`, the
+# validator's W8 told the operator to move their rows to a file that did not
+# exist, and nothing anywhere reported an absence. `install.sh` and this driver
+# are different programs and only the first had been exercised.
+#
+# IT REFUSES RATHER THAN GUESSING, on both legs, and both legs are the
+# distribution's fault rather than the consumer's — which is exactly why they must
+# be loud here. A pull that silently declares a path it did not create hands the
+# next migration a destination that is not there, and the failure surfaces as rows
+# written into a file nothing reads. That is the state this whole mechanism
+# replaced.
+#
+# The template's name is DERIVED from the declared path's basename rather than
+# spelled: the declaration is the one string, and a second literal here would be
+# the drift I67 exists to prevent.
+# SCOPED TO A THEIRS THAT SHIPS A CONTRACT, and the scoping was measured rather than
+# reasoned: without it `apply-drift-refile` and `apply-restamp-theirs` both went red. Their
+# synthetic distributions ship no layer-contract.yaml at all, which is not a malformed
+# declaration — it is a version from before the crosswalk mechanism existed, and a pull from
+# one has nothing to scaffold. Refusing there would wedge every consumer updating across that
+# boundary. The subject is a contract that is PRESENT and silent about the key, which is the
+# only state this block can speak to — the same scoping, for the same reason, that
+# validate-layer-entries.sh's own E16 arm carries.
+CW_LC='core/skills/ai-dlc/layer-contract.yaml'
+CW_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
+  | sed -n 's/^consumer_crosswalk_file:[ \t]*//p' | head -1 | sed 's/[ \t]*$//')"
+if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
+  : # THEIRS predates the layer contract; there is no declared crosswalk file to create.
+elif [ -z "$CW_REL" ]; then
+  say DECISION crosswalk-undeclared "core/skills/ai-dlc/layer-contract.yaml" \
+    "THEIRS declares no 'consumer_crosswalk_file:', so this driver cannot know where the consumer's crosswalk table lives and will not guess. The validator reads that declaration too: without it LC-N6 and LC-R2 evaluate against a table nothing read, which is indistinguishable from an empty one."
+  mech_fail=$((mech_fail+1))
+elif [ ! -f "$CONSUMER/$CW_REL" ]; then
+  cw_tpl="core/skills/ai-dlc/templates/$(basename "$CW_REL")"
+  cw_tmp="$CONSUMER/$CW_REL.incoming.$$"
+  mkdir -p "$(dirname "$CONSUMER/$CW_REL")" 2>/dev/null || true
+  if git -C "$DIST" show "${THEIRS}:${cw_tpl}" > "$cw_tmp" 2>/dev/null && [ -s "$cw_tmp" ]; then
+    mv "$cw_tmp" "$CONSUMER/$CW_REL"
+    say RESOLVED crosswalk-scaffold "$CW_REL" \
+      "created from ${cw_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes to it again, and the branch above is why: this driver only ever creates it when absent."
+  else
+    rm -f "$cw_tmp"
+    say DECISION crosswalk-template-missing "$cw_tpl" \
+      "THEIRS declares '$CW_REL' but ships no template to scaffold it from, so the declared path would stay empty while the validator reports rows against it. Fix upstream and re-run; this is a distribution packaging defect and not something to work around here."
+    mech_fail=$((mech_fail+1))
+  fi
+fi
+
+# -----------------------------------------------------------------------------
 # EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
 # consumer tree once this driver is done.
 #

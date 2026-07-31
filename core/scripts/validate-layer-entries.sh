@@ -1014,7 +1014,7 @@ CROSSWALK_IDS="$(crosswalk_rows "$CROSSWALK_MD")"
 CROSSWALK_LEGACY_IDS="$(crosswalk_rows "$CROSSWALK_LEGACY")"
 if [ -n "$CROSSWALK_LEGACY_IDS" ]; then
   CROSSWALK_IDS="$(printf '%s\n%s\n' "$CROSSWALK_IDS" "$CROSSWALK_LEGACY_IDS" | grep -E '.' | sort -u)"
-  warn W8 "$(rel "$CROSSWALK_LEGACY"): carries $(printf '%s\n' "$CROSSWALK_LEGACY_IDS" | grep -c .) crosswalk row(s) in the RETIRED location — $(printf '%s' "$CROSSWALK_LEGACY_IDS" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g'). That file is core's: the distribution ships it and every pull compares your copy against it, so rows written there read as unregistered core drift and the two remedies the updater prints for that status will either delete them or move them somewhere nothing reads. They still resolve today and nothing is wedged. Move them to ${CROSSWALK_REL:-the declared crosswalk file} and delete them from here; the declaration is 'consumer_crosswalk_file:' in core-manifest.md."
+  warn W8 "$(rel "$CROSSWALK_LEGACY"): carries $(printf '%s\n' "$CROSSWALK_LEGACY_IDS" | grep -c .) crosswalk row(s) in the RETIRED location — $(printf '%s' "$CROSSWALK_LEGACY_IDS" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g'). That file is core's: the distribution ships it and every pull compares your copy against it, so rows written there read as unregistered core drift and the two remedies the updater prints for that status will either delete them or move them somewhere nothing reads. They still resolve today and nothing is wedged. Move them to ${CROSSWALK_REL:-the declared crosswalk file} and delete them from here; the declaration is 'consumer_crosswalk_file:' in $(rel "$LC_FILE")."
 fi
 
 # THE RESOLVABILITY SET — measured, and it is what makes E16's subject the right one.

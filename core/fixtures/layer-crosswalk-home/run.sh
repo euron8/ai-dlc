@@ -60,8 +60,9 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # the load-bearing branch gone. Counting what actually ran is what closes it.
 # 2 premises + 2 state vectors + 1 message content + 1 difference + 1 declaration-is-read + 1 refusal
 # + 2 core-yields-zero (claim + control) + 2 installer (scaffold + preserve)
+# + 4 pull-side (scaffold, preserve, refusal, mutant)
 # + 1 unmutated control + 4 mutants.
-EXPECTED_ASSERTIONS=17
+EXPECTED_ASSERTIONS=21
 
 echo "layer-crosswalk-home:"
 
@@ -263,6 +264,118 @@ else
   else
     bad "install.sh did not scaffold '$CW_REL' into a fresh tree"
     bad "preserve-on-reinstall not reached: nothing was scaffolded"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# THE PULL scaffolds it too, and this is the arm whose absence shipped
+# ---------------------------------------------------------------------------
+# MEASURED ON THE REFERENCE CONSUMER, one release after the installer arm above went green.
+# `install.sh` is not something a consumer ever runs again — a pull is how an existing tree
+# receives everything — so a create-once file introduced after that tree was installed
+# arrives through `apply.sh` or it does not arrive. It did not. The contract landed
+# declaring `consumer_crosswalk_file:`, the template landed under `templates/`, W8 told the
+# operator to move their rows to a path that did not exist, and no probe anywhere reported
+# an absence. The two installer assertions above were green throughout: `install.sh` and
+# `apply.sh` are different programs and only one of them was being asked.
+#
+# These arms run in BOTH layouts, unlike the installer's, because `apply.sh` IS shipped.
+APPLY="$(pick "$HERE/../../skills/ai-dlc-update/reconcile/apply.sh" \
+              "$HERE/../../../.claude/skills/ai-dlc-update/reconcile/apply.sh")"
+if [ -z "$APPLY" ]; then
+  bad "cannot locate ai-dlc-update/reconcile/apply.sh from $HERE — the pull-side scaffold arms did not run, and an arm that never ran is silent rather than green"
+  bad "  (scaffold-on-pull, preserve-on-pull, refusal and the mutant are all unverified)"
+  bad "  "
+  bad "  "
+else
+  # A synthetic distribution: two commits, and a consumer stamped at the first. It ships a
+  # core validator because a DIST that ships none makes `manifest_dests` empty, which apply
+  # correctly reports as manifest-unreadable — the run would then fail for a reason that has
+  # nothing to do with the crosswalk.
+  synth() { # synth <declare-key: yes|no> -> "<dist> <base> <consumer> <theirs>"
+    local d c
+    d="$(mktemp -d "$WORK/dist.XXXXXX")"; c="$(mktemp -d "$WORK/cons.XXXXXX")"
+    mkdir -p "$d/core/scripts" "$d/core/skills/ai-dlc/templates" "$c/.claude/skills/ai-dlc"
+    git -C "$d" init -q 2>/dev/null || return 1
+    printf '1.0.0\n' > "$d/VERSION"
+    printf '#!/usr/bin/env bash\necho v1\n' > "$d/core/scripts/validate-synthetic.sh"
+    if [ "$1" = yes ]; then
+      printf 'contract_version: 1\nconsumer_crosswalk_file: %s\n' "$CW_REL" > "$d/core/skills/ai-dlc/layer-contract.yaml"
+    else
+      printf 'contract_version: 1\n' > "$d/core/skills/ai-dlc/layer-contract.yaml"
+    fi
+    printf '# Catalog crosswalk\n\n%s\n' "$TABLE_HEAD" > "$d/core/skills/ai-dlc/templates/$(basename "$CW_REL")"
+    git -C "$d" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1
+    git -C "$d" -c user.email=f@f -c user.name=fixture commit -qm base >/dev/null 2>&1
+    local b; b="$(git -C "$d" rev-parse HEAD)"
+    printf '2.0.0\n' > "$d/VERSION"
+    printf '#!/usr/bin/env bash\necho v2\n' > "$d/core/scripts/validate-synthetic.sh"
+    git -C "$d" -c user.email=f@f -c user.name=fixture add -A >/dev/null 2>&1
+    git -C "$d" -c user.email=f@f -c user.name=fixture commit -qm theirs >/dev/null 2>&1
+    printf 'version: 1.0.0\ncommit: %s\n' "$b" > "$c/.claude/.ai-dlc-version"
+    cp "$d/core/skills/ai-dlc/layer-contract.yaml" "$c/.claude/skills/ai-dlc/layer-contract.yaml"
+    printf '%s %s %s %s' "$d" "$b" "$c" "$(git -C "$d" rev-parse HEAD)"
+  }
+
+  # --- the file arrives, and it arrives as THEIRS' template rather than as anything ------
+  read -r SD SB SC ST <<<"$(synth yes)"
+  bash "$APPLY" "$SD" "$SB" "$SC" "$ST" > "$WORK/apply1.out" 2>&1
+  if [ -f "$SC/$CW_REL" ] \
+     && cmp -s "$SC/$CW_REL" "$SD/core/skills/ai-dlc/templates/$(basename "$CW_REL")"; then
+    ok "the PULL scaffolds the declared crosswalk file, byte-identical to the template THEIRS ships"
+  else
+    bad "apply left '$CW_REL' absent or unlike the template — this is the defect the 0.227.0 pull shipped: a declared path nothing creates"
+  fi
+
+  # --- and it is the consumer's from there ----------------------------------------------
+  printf '%s\n' "$ROW" >> "$SC/$CW_REL"
+  SUM="$(cksum < "$SC/$CW_REL")"
+  bash "$APPLY" "$SD" "$SB" "$SC" "$ST" >/dev/null 2>&1
+  [ "$(cksum < "$SC/$CW_REL")" = "$SUM" ] \
+    && ok "a SECOND pull preserves a populated crosswalk file — the rows are the consumer's" \
+    || bad "a second pull overwrote the populated crosswalk file, which is the whole ownership claim"
+
+  # --- an undeclared path is REFUSED, and the refusal withholds the stamp ----------------
+  # A pull that quietly declares a path it did not create hands the next migration a
+  # destination that is not there, and the failure surfaces as rows written into a file
+  # nothing reads — the state this mechanism replaced.
+  read -r ND NB NC NT <<<"$(synth no)"
+  bash "$APPLY" "$ND" "$NB" "$NC" "$NT" > "$WORK/apply2.out" 2>&1
+  if grep -q '^DECISION	crosswalk-undeclared' "$WORK/apply2.out" \
+     && grep -q '^DECISION	restamp-withheld' "$WORK/apply2.out" \
+     && [ ! -f "$NC/$CW_REL" ]; then
+    ok "THEIRS declaring no crosswalk file is REFUSED by name and withholds the re-stamp, rather than guessing a path"
+  else
+    bad "an undeclared crosswalk file did not produce 'DECISION crosswalk-undeclared' plus a withheld re-stamp: $(tr '\n' ' ' < "$WORK/apply2.out" | cut -c1-200)"
+  fi
+
+  # --- MUTANT: the write itself. Without it every reading above still looks like a pull ---
+  # The whole reconcile directory is copied, not the one script: apply.sh reads its sibling
+  # setup-sites.md for the manifest, and a lone copy would fail for that reason instead.
+  MUTDIR="$WORK/apply-mut"
+  cp -R "$(dirname "$APPLY")" "$MUTDIR" 2>/dev/null
+  # THE BRANCH CONDITION, not the write and not the line: making the guard unreachable
+  # reproduces exactly the state v0.227.0 shipped — a pull that completes, re-stamps, and
+  # leaves the declared path empty.
+  #
+  # THREE GUARDS, because this arm has already passed twice for the wrong reason. The first
+  # cut mutated the wrong line and the file appeared anyway; the second's expression was
+  # malformed, the tool died mid-write, and the "mutant" was a truncated script that could
+  # not create anything — `cmp -s` calls a truncated file different, so it scored a kill it
+  # had not earned. DELETING the line has the same defect in a subtler form: it leaves an
+  # `if` with a dangling body, and a mutant that does not parse proves only that bash
+  # refused it. So the copy must differ, still parse, and still carry the rest of the block.
+  sed 's|^elif \[ ! -f .* \]; then$|elif false; then|' "$APPLY" > "$MUTDIR/apply.sh"
+  if cmp -s "$APPLY" "$MUTDIR/apply.sh"; then
+    bad "MUTANT apply-scaffold did not apply (the branch condition was not found) — a mutation that changes nothing scores a kill it has not earned"
+  elif ! bash -n "$MUTDIR/apply.sh" 2>/dev/null || ! grep -q 'crosswalk-scaffold' "$MUTDIR/apply.sh"; then
+    bad "MUTANT apply-scaffold produced a script that does not parse or lost the block it was meant to reach — the copy is damaged rather than mutated, so anything it fails to do is unattributable"
+  else
+    read -r MD MB MC MT <<<"$(synth yes)"
+    bash "$MUTDIR/apply.sh" "$MD" "$MB" "$MC" "$MT" >/dev/null 2>&1
+    [ ! -f "$MC/$CW_REL" ] \
+      && ok "MUTANT killed: with the scaffold removed the pull completes and the declared path stays EMPTY — which is exactly what shipped" \
+      || bad "MUTANT apply-scaffold: the file appeared anyway, so the arm above is not what creates it and its verdict is unattributable"
   fi
 fi
 

@@ -17,6 +17,88 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.228.0] — 2026-07-31
+
+### The release that moved the crosswalk table shipped its scaffold in the one program no consumer runs
+
+v0.227.0 relocated the catalog crosswalk table to a consumer-owned path and had `install.sh`
+create it from `core/skills/ai-dlc/templates/crosswalk.md`. The installer arm shipped with a
+fixture driving it and both were green. **A consumer never runs `install.sh` again.** A pull is
+how an existing tree receives everything, so a create-once file introduced after that tree was
+installed arrives through `apply.sh` or it does not arrive at all.
+
+Measured on a `git clone --local` of the reference consumer, running the real `apply.sh` at
+`a203038`: the contract arrives declaring `consumer_crosswalk_file:` (grep = 1, control — the
+pre-pull copy = 0), the template arrives under `templates/`, the validator's `W8` tells the
+operator to move their rows to `.claude/skills/ai-dlc/crosswalk.md`, and **that file does not
+exist and nothing reports its absence.** The pull is green throughout: exit 0, `0 error(s), 3
+warning(s)`. `install.sh` and `apply.sh` are different programs and only the first was ever
+asked the question.
+
+`apply.sh` now scaffolds the declared file when it is absent and never touches it when it is
+present, deriving both the path and the template's name from the declaration rather than
+spelling either — I67 forbids a reader restating that literal, and the driver is now a third
+reader under it. Both failure legs REFUSE rather than guess and both withhold the re-stamp: a
+`THEIRS` that declares no crosswalk file, and one that declares a path but ships no template.
+A pull that quietly declares a path it did not create hands the next migration a destination
+that is not there, which is the state this whole mechanism replaced.
+
+**The refusal's false-positive set was measured by the suite rather than before it, and that is
+the finding to carry.** The first cut refused whenever `THEIRS` yielded no declaration, and
+`apply-drift-refile` and `apply-restamp-theirs` both went red: their synthetic distributions
+ship no `layer-contract.yaml` at all. That is not a malformed declaration — it is a version
+from before the mechanism existed, and a pull across that boundary has nothing to scaffold.
+Refusing there would have wedged exactly the consumers furthest behind. The arm is now scoped
+to a contract that is PRESENT and silent about the key, which is the same scoping, for the same
+reason, that `validate-layer-entries.sh`'s own `E16` already carries. Two fixtures are a
+cheap way to learn it; a consumer's pull is not.
+
+### `I69` — four statements of where the declaration lives, and all four named the wrong file
+
+The key has never been in `core-manifest.md`. It is in `layer-contract.yaml`, and the
+contract's own header explains at length why it is there rather than in the manifest — a
+declaration in the manifest would have required a file 55 of 63 fixture seeds do not build.
+Four shipped sites said otherwise: `LC-N6` and `LC-N7`'s clause text, `extensions/README.md`,
+the scaffold template a consumer receives, and **`W8`'s own remedy string** — the one sentence
+an operator reads *while* migrating their rows told them to open a file with no declaration in
+it. That is v0.225.0's `anchor_form` class one string over: a remedy whose instructions cannot
+be followed literally.
+
+`W8`'s site is fixed by derivation — it emits `$(rel "$LC_FILE")` and carries no literal at
+all, so it cannot be wrong about it — and the other three now name the contract. `I69` binds
+the rest: prose naming where the declaration LIVES must name a file that carries it.
+
+**The grammar is a home CLAIM, not a co-occurrence, and that distinction is the entire
+false-positive set.** Two paragraphs name `core-manifest.md` beside the token precisely to
+record that the declaration is not there. A rule keyed on proximity reports both — measured, 8
+false positives against 4 real ones — and a check that fires on the rationale for its own
+subject is one the operator turns off. The shipped grammar was measured in both directions:
+**4 of 4 real sites on the tree that carried the defect, 0 false positives, and 3 live subjects
+after the fix**, so it cannot go vacuously green. A zero guard reports an empty claim set,
+because every fix to this invariant removes one of its own subjects.
+
+### Fixtures
+
+- **`crosswalk-home-declaration`** (new, `.dist-only`): 1 premise, 1 control, 4 mutants —
+  same-line claim, a claim broken across a line break, the zero guard, and a knock-out that
+  disables `I69`'s own `err` and shows the same violating tree going silent. It MIRRORS `core/`
+  and `scripts/` into a temp root rather than mutating in place: its subjects are read by
+  `layer-crosswalk-home` and by `I68` in a suite that runs 16-way, and the in-place idiom is a
+  cross-talk failure waiting for a scheduler. The mirror costs 0.08s.
+- **`layer-crosswalk-home`** 17 → 21 assertions: the pull scaffolds it byte-identical to the
+  template, a second pull preserves a populated one, an undeclared path is refused by name with
+  the re-stamp withheld, and a mutant that makes the guard unreachable leaves the declared path
+  empty — which is exactly what shipped.
+
+**The mutant arm passed twice for the wrong reason before it was right, and both are recorded
+in place.** It first mutated the wrong line and the file appeared anyway; its second form had a
+malformed expression, the tool died mid-write, and the truncated script could not create
+anything — `cmp -s` calls a truncated file different, so it scored a kill it had not earned,
+written directly beneath a comment about that class. Deleting the branch line has the same
+defect one layer down: it leaves an `if` with a dangling body, and a mutant that does not parse
+proves only that bash refused it. The shipped form makes the condition unreachable and asserts
+that the copy differs, still parses, and still carries the block it was meant to reach.
+
 ## [0.227.0] — 2026-07-31
 
 ### An ERROR clause whose only compliant output was an unregistered edit to upstream's tree
