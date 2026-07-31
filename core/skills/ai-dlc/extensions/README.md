@@ -139,7 +139,7 @@ extension, which is the exact practice H1's rewrite exists to end. Declaring it 
 fixture in the set H1 reads.
 
 The binding is the whole mechanism, so a dangling one is worse than none: it makes H1 report
-coverage that does not exist. `ai-dlc-update` reports `EXTENSION-FIXTURE-UNBOUND` for a
+coverage that does not exist. `ai-dlc-update` reports `EXTENSION-FIXTURE-UNBOUND` [LC-E7] for a
 `fixtures:` value that is not a directory in the consumer tree, level-triggered — it is a
 state of your tree, so a pull that changes nothing here still reports it.
 
@@ -151,10 +151,10 @@ state of your tree, so a pull that changes nothing here still reports it.
     no drift anchor, so when core grows a third valid value your entry silently
     starts contradicting it.
   - **Where this rule is checked.** At the pull, per entry: `EXTENSION-HOOK-DRIFT`
-    becomes a `WORKLIST extension-reread` row whose verdict is one of
+    [LC-E4] becomes a `WORKLIST extension-reread` row whose verdict is one of
     still-additive / contradicts-core / retire (`ai-dlc-update/SKILL.md` step 7).
-    No scanner decides it, and none can: `EXTENSION-RESTATES-CORE` catches an entry
-    that COPIES a core section, but an entry asserting the opposite in its own words
+    No scanner decides it, and none can: `EXTENSION-RESTATES-CORE` [LC-E5] catches an
+    entry that COPIES a core section, but an entry asserting the opposite in its own words
     copies nothing and matches nothing, and an extension has no `base_sha` to compute
     a contradiction against. The re-read is the whole mechanism.
 
@@ -183,7 +183,7 @@ state of your tree, so a pull that changes nothing here still reports it.
     makes the merged file define one section twice.
 
     The labelled form renders as its own section, so the reference stays
-    unambiguous and `/ai-dlc-update` stops reporting `EXTENSION-RESTATES-CORE`
+    unambiguous and `/ai-dlc-update` stops reporting `EXTENSION-RESTATES-CORE` [LC-E5]
     against it on every pull. What it does NOT do is render the rule *inside*
     core's section. If that placement is what you want, that is `kind: qualifier`
     with `extends:` and `position:` — see the entry contract above. Reaching for
@@ -212,16 +212,16 @@ state of your tree, so a pull that changes nothing here still reports it.
   Without the label, a bare `Check 24: PASSED` in your gate log — the durable audit
   record — has no referent once core also defines a check 24. That is not a
   hypothetical: it has already happened, and the lead had to disambiguate by hand in
-  prose. `scripts/ai-dlc/validate-layer-entries.sh` fails (E6) on a check that redefines a
-  core check number with a different title, and `/ai-dlc-update` reports
-  `EXTENSION-CHECK-NUMBER-COLLISION` at pull time when an incoming release creates one.
+  prose. `scripts/ai-dlc/validate-layer-entries.sh` fails (E6) [LC-N1] on a check that
+  redefines a core check number with a different title, and `/ai-dlc-update` reports
+  `EXTENSION-CHECK-NUMBER-COLLISION` [LC-N4] at pull time when an incoming release creates one.
 - **`push_candidate: true`** marks a generalizable improvement. `ai-dlc-update`
   drains flagged extensions as the push backlog (spec §8.1) — the pull tool
   produces the push queue as a side effect.
 - **Retire on absorption (Rule 27(b)).** When upstream lands your entry's content
   in core, DELETE the entry. `/ai-dlc-update` flags it as
-  `EXTENSION-RETIRE-CANDIDATE` (absorbed by this pull) or `EXTENSION-RESTATES-CORE`
-  (core already had it at your base — you have been carrying a duplicate for some
+  `EXTENSION-RETIRE-CANDIDATE` [LC-E6] (absorbed by this pull) or `EXTENSION-RESTATES-CORE`
+  [LC-E5] (core already had it at your base — you have been carrying a duplicate for some
   number of releases). Both are title-matched, so they fire **even when upstream
   absorbed your check under a different number** — the case a number-keyed signal
   could never see, and the way two duplicates survived ~35 minor versions unreported.
@@ -238,8 +238,8 @@ one. Do NOT try to resolve those by date: `steps/gate-validation.md` Check 12 ma
 that gate logs are rotated cut-and-paste into archives, so a git date on a rotated line
 is the rotation date, not the authorship date.
 
-Seed it from the `EXTENSION-CHECK-NUMBER-COLLISION` and `EXTENSION-RESTATES-CORE` rows
-of your next `/ai-dlc-update` report, then freeze it.
+Seed it from the `EXTENSION-CHECK-NUMBER-COLLISION` [LC-N4] and `EXTENSION-RESTATES-CORE`
+[LC-E5] rows of your next `/ai-dlc-update` report, then freeze it.
 
 **The band is what retires this table.** New ids go at 900 and above, or at the `X`
 prefix if alphabetic (LC-N5), where core never allocates — so nothing you number from now

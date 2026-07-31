@@ -17,6 +17,101 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.221.0] — 2026-07-31
+
+### Prose that names a contract code now cites the clause that claims it (I62), and the contract pins the files it absorbed (I63)
+
+`layer-contract.yaml` has held two joins to its reader-facing half: **I38** iterates clauses and
+asks that each id appear *somewhere* in its declared prose home, and **I61** inspects clause
+bullets that *already carry* an id and holds their severity to the contract's. Neither can see
+the opposite shape — prose that states a duty, names the code that enforces it, and carries no
+clause id at all. That is the seventeen-unenforced state the contract was created to end,
+arriving from the prose side, and it was **live in eleven places**: six paragraphs in
+`extensions/README.md`, two in `ai-dlc-update/SKILL.md`, three in `SKILL.md` Rule 27. All eleven
+are bound in this release, and I62 keeps them bound.
+
+**The predicate the plan specified does not work, and the measurement is what says so.** The
+scheduled reverse arm was *"every normative sentence carries a clause id"*, keyed on a
+`MUST|NEVER|never|cannot` keyword scan. Measured at three grains — line, bullet, and
+paragraph — its false-positive set never emptied: on `extensions/README.md`, whose 27 clauses are
+100% bound at bullet grain, six units still read as unbound because they *explain* a mechanism
+rather than state a rule, and that distinction is semantic, so no grain reaches it. The decisive
+control is one the specification never took: **`overrides/README.md`, also 100% bound, names zero
+codes** — so a keyword predicate cannot even detect that a file *is* bound. Keying on the CODE is
+what makes the subject decidable, because a code is a token this contract already joins on in
+both directions (I36).
+
+**The scope is derived per file, never listed.** For a declared `prose_home` the subject is the
+codes that file is the home *for*; naming another home's code is a cross-reference, not a
+restatement. That derivation is what drops `ai-dlc-update/SKILL.md` from 21 candidate units to 2
+**without one hand-written exclusion** — the other 19 narrate pull-report rows whose clauses live
+elsewhere. For a file pinned `pointer`, the subject is every code it names, because a pointer
+homes none of its own and pointing is its whole job.
+
+**Vacuity is defended by a probe I62 writes and runs each invocation**, not by a count that a
+corpus edit retires in silence. Two units are authored per run — one naming a code uncited, one
+naming it cited — and anything but exactly the first being reported is an error. Proven in both
+directions against a copied tree: an extractor blind to codes answers **0**, one blind to
+citations answers **2**, and the unmutated copy answers **0 findings, exit 0**.
+
+**I63 pins the files the contract claims to have absorbed**, each with the role it now has —
+`home`, `pointer`, or `none` — in both directions. `prose_home:` alone could never close this: it
+is written per clause, so a file that stops carrying clauses simply stops appearing, and its
+silence is identical to a file that was never in scope. Two of the four sites the contract's own
+header names carried zero clauses for nineteen releases with nothing able to say so.
+
+**`core-manifest.md` is pinned `none` on measurement, and the charter's four-site list was wrong
+about it.** It names **zero** contract codes and carries **zero** clause bullets (control: the
+same extraction returns 6 code-naming units on `extensions/README.md` and 43 codes from the
+contract). It is not a contract prose home and never became one; recording that is cheaper than
+carrying a pin nobody can satisfy.
+
+### `machinery:` was already correct — the promise recorded as never built was REFUTED
+
+The gap-closure plan carried *"classified `machinery:` in `core-manifest.md`"* as one of four
+goal-1 promises never built, on the evidence that `layer-contract.yaml` "is listed under
+`core_manifest:` at `:126`". It is listed under **both**: `core_manifest:` at `:126` is the file
+*enumeration* — every core file is in it — and `machinery:` at `:230` is the *classification*.
+They are not alternatives. Dated with controls: the classification shipped in `b313293`
+(**v0.182.0**, the contract's own first release); the first commit of `core-manifest.md`, which
+predates the contract, reads 0, and `escalations.md` — core but not machinery — reads 0 in the
+same block, so the probe both discriminates and can read zero.
+
+**The original claim's control is the lesson.** It was *"the file's own `machinery:` key exists at
+`:225`, so the absence is real"* — a control that proved the grep **ran**, not that the entry was
+missing from the block. That is F-2.1's class exactly, one file over.
+
+### Two defects produced while building this, both this repo's named class
+
+1. **`"$sha:core/..."` in zsh** — `:c` is a history modifier and ate the `c`, so `git show`
+   reported `...fc5ore/skills/...` absent and the dating probe returned a false zero. `CLAUDE.md`
+   opens with this exact trap; it was still produced, in the session's first probe.
+2. **The triple extractor emitted on the wrong line.** `prose_home:` precedes `code:` inside a
+   clause, so completing the triple at the home line read **zero** triples and passed every
+   pinned file for want of a vocabulary. Caught by its own zero guard on the first run.
+
+**And I54 fired on this release's own code** — the I63 reverse arm shipped
+`printf '%s\n' "$lc_pins" | grep -qxF`, the pipefail/EPIPE idiom converted tree-wide in v0.207.0.
+Converted to a here-string.
+
+### Verification
+
+- `layer-contract-conformance` **13 → 23 assertions**, 10 new mutants, unmutated control first.
+  **Nine of the ten fire exactly one invariant.** The tenth is I62's vocabulary guard, which
+  co-fires with I61 and I63 because `prose_home:` is read by all three; that is unavoidable and
+  is the call this fixture already made for `i61-zero-bullets`, so the assertion is on I62's own
+  zero sentence, which no other arm emits.
+- Two redundant I63 forward arms were **removed before shipping**: for a file in the pinned list,
+  "pointer homes no clause" is the same condition the reverse arm tests, and shipping both would
+  leave neither mutable in isolation.
+- Suite **90/90**. `validate-enforcement-map.sh` exit 0, **63 invariants**.
+- Verified on a tree built by `scripts/install.sh`: `absorbed_from:` ships, **nothing
+  consumer-side reads it** (`validate-enforcement-map.sh` is distribution-only), and the
+  installed tree's `validate-layer-entries.sh` result is **byte-identical to the committed
+  baseline** — same 1 pre-existing E16 zero-guard error on an entry-less fresh install, same
+  footer. No consumer-visible change, and `contract_version` is deliberately **not** bumped: no
+  clause was added, so no entry's migration worklist moves.
+
 ## [0.220.0] — 2026-07-31
 
 ### `conforms_to` gets a reader — and it is a receipt, not the exemption it was specified as

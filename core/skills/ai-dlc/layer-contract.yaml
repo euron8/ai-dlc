@@ -91,6 +91,37 @@
 
 contract_version: 9
 
+# THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
+# codes any of them names are held to their clauses by I62.
+#
+# The header above names the scatter this file was created to end. That naming was prose, so
+# "the prose homes are reduced to pointers" stayed a sentence for nineteen releases while two
+# of the four contributed zero clauses with nothing able to say so — `prose_home:` is written
+# per clause, so a file that stops carrying them stops appearing, and its silence is identical
+# to a file that was never in scope.
+#
+#   home     states clauses, and is the declared prose_home of at least one.
+#   pointer  states none of its own and refers to clauses homed elsewhere. Every contract code
+#            it names must cite the clause that claims it (I62), which is what stops a pointer
+#            from drifting back into a second, unbound copy of the rule.
+#   none     carries no contract prose. Pinned so that GROWING some is a build failure rather
+#            than a silent re-scattering.
+#
+# core-manifest.md is pinned `none` on measurement, not on the header's say-so: it names zero
+# contract codes and carries zero clause bullets. The four-site list this file inherited was
+# wrong about it, and recording that is cheaper than leaving a pin nobody can satisfy.
+absorbed_from:
+  - path: core/skills/ai-dlc/extensions/README.md
+    role: home
+  - path: core/skills/ai-dlc/overrides/README.md
+    role: home
+  - path: core/skills/ai-dlc-update/SKILL.md
+    role: home
+  - path: core/skills/ai-dlc/SKILL.md
+    role: pointer
+  - path: core/skills/ai-dlc/core-manifest.md
+    role: none
+
 clauses:
 
   # --- overrides/: frontmatter and provenance -------------------------------------------

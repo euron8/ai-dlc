@@ -476,11 +476,11 @@ prose is itself generated rather than composed.
      available: re-read the entry against the new core text. Its clause is at
      `level: ADJUDICATED`, so the re-read must be RECORDED — see the two statuses below
      and step 7.
-   - `HARD-LAYER-ADJUDICATION-MISSING` → a row of a clause at `level: ADJUDICATED` has no
+   - `HARD-LAYER-ADJUDICATION-MISSING` [LC-A1] → a row of a clause at `level: ADJUDICATED` has no
      recorded verdict in `_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl`
      under the `subject_digest` the row carries. **Blocks `apply`.** The remedy is to make
      the judgement and write it down, not to widen anything. Step 7 has the record shape.
-   - `HARD-REGISTER-CONTRADICTION` → that register states two different verdicts under one
+   - `HARD-REGISTER-CONTRADICTION` [LC-A2] → that register states two different verdicts under one
      key and the later record declares no `supersedes` plus `reason`. **Blocks `apply`**,
      because a lookup would otherwise answer with whichever record was read last.
    - `EXTENSION-HOOK-MISSING`, `OVERRIDE-OK`, `EXTENSION-OK` → as named.
