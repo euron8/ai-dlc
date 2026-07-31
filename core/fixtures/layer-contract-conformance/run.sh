@@ -333,11 +333,56 @@ awk '
 mutant_fires "$TMP/i63-zero.yaml" "ZERO entries out of layer-contract.yaml" "i63-zero-pins" \
   "an empty pin list retires I63 and I62 together, and reports clean doing it"
 
+# --- I64 arm 1: a code the enforcer carries but never EMITS attributably ----------------
+# THE CASE I36 CANNOT SEE, and the mutation is chosen to prove exactly that rather than to
+# trip both. `EXTENSION-OK` is a real token in reconcile/layer-drift.sh — it is the clean-state
+# row — so I36 forward's whole-file `grep -qF` FINDS it and stays quiet on this clause. It is
+# not a finding vocabulary, so it is excluded from the emitted set and I64 reports it.
+#
+# Stated rather than smoothed: this mutation also orphans OVERRIDE-LOOSE-ANCHOR, so I36 reverse
+# fires too — on a DIFFERENT subject (the code left unclaimed), not on this clause. The
+# assertion below is therefore paired with its complement: I36 forward must stay SILENT on
+# LC-O12 while I64 speaks about it. Without that pair the arm would prove only that something
+# fired, which is what a redundant check looks like from the outside.
+sed 's/^    code: OVERRIDE-LOOSE-ANCHOR$/    code: EXTENSION-OK/' "$CONTRACT" > "$TMP/i64-unemitted.yaml"
+mutant_fires "$TMP/i64-unemitted.yaml" "I64 LC-O12" "i64-unemitted" \
+  "a clause bound to a token its enforcer carries but never emits cannot fire, and reads to I36 exactly like one that passed"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if run_with "$TMP/i64-unemitted.yaml" | grep -q "I36 LC-O12"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-18s I36 forward ALSO fired on LC-O12, so the arm above is not evidence I64 sees anything I36 misses\n' "i64-vs-i36"
+else
+  printf '  ok    %-18s I36 forward stays SILENT on LC-O12 — the token IS in the enforcer, so only I64 reports it\n' "i64-vs-i36"
+fi
+
+# --- I64 arm 2: the vacuity guard on its own extraction ---------------------------------
+# I64 reads the enforcer through a per-enforcer `case`, which is a second extraction beside
+# I36's and fails independently of it. If that case stops matching, every clause bound to the
+# script passes by having no emitted set to be absent from — so the zero is reported, never
+# skipped. (I36 reverse's own vacuity arm fires on this mutation too; the two guard different
+# extractions and both going quiet is the state neither could report alone.)
+sed 's|^    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh$|    enforcer: core/skills/ai-dlc/extensions/README.md|' \
+  "$CONTRACT" > "$TMP/i64-vacuous.yaml"
+mutant_fires "$TMP/i64-vacuous.yaml" "I64: found NO attributable emission sites" "i64-vacuity" \
+  "an extraction that matches nothing retires this invariant for every clause bound to that enforcer"
+
+# --- I64 arm 3: the control — silent on the shipping contract ---------------------------
+# The arms above prove I64 speaks. This proves it is not simply always speaking, which is the
+# other way an invariant reads green while meaning nothing.
+ASSERTIONS=$((ASSERTIONS + 1))
+if run_with "$CONTRACT" | grep -q '^FAIL: I64'; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-18s I64 fires on the UNMUTATED contract, so its kills above prove nothing\n' "i64-control"
+else
+  printf '  ok    %-18s CONTROL: I64 is silent on the shipping contract, so its kills are attributable\n' "i64-control"
+fi
+
 # THE ASSERTION-COUNT FLOOR. A fixture that silently stops running arms prints a shorter green
 # report, and a shorter green report reads exactly like a passing one — the lesson v0.217.0
 # paid for, where a mis-spaced helper call killed a whole mutant inside a `$( )` subshell and
 # left seventeen ok lines and a PASS. Raise this deliberately when an arm is added.
-EXPECTED_ASSERTIONS=23
+EXPECTED_ASSERTIONS=27
 echo
 if [ "$ASSERTIONS" -ne "$EXPECTED_ASSERTIONS" ]; then
   echo "FAIL: $ASSERTIONS assertions ran, $EXPECTED_ASSERTIONS expected — an arm did not execute, and a short green report reads exactly like a passing one."

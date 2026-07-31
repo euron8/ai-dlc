@@ -22,13 +22,27 @@
 # WHY IT IS `machinery:` IN core-manifest.md. A consumer does not override the contract it is
 # held to. Precedent: `core-manifest.md` classifies itself as machinery for the same reason.
 #
-# THE BINDING IS ON A TOKEN THE ENFORCER ALREADY EMITS — `code:` is `E1`..`W4` for the
-# authoring-time validator, or the literal pull-time status string for the drift classifier.
-# Nothing was sprinkled into a script to make this join work. That matters twice: the join
-# cannot rot into a second vocabulary that has to be hand-synced, and I36 can run it in BOTH
-# directions, so a clause naming a code its enforcer does not emit fails the build AND a code
-# an enforcer emits that no clause claims fails the build. The seventeen-unenforced state and
-# its mirror, an undocumented status, both become unrepresentable.
+# THE BINDING IS ON A TOKEN THE ENFORCER EMITS — `code:` is `E1`..`W6` for the authoring-time
+# validator, or the literal pull-time status string for the drift classifier. The join cannot
+# rot into a second vocabulary that has to be hand-synced, and I36 runs it in BOTH directions,
+# so a clause naming a code its enforcer does not emit fails the build AND a code an enforcer
+# emits that no clause claims fails the build. The seventeen-unenforced state and its mirror,
+# an undocumented status, both become unrepresentable.
+#
+# THIS PARAGRAPH USED TO SAY "ALREADY EMITS" AND THAT WAS MEASURABLY FALSE FOR TWENTY OF THE
+# FORTY-THREE CLAUSES. I36 tests it with `grep -qF` over the WHOLE enforcer file, comments
+# included. Measured at contract_version 9: of the 22 codes bound to validate-layer-entries.sh,
+# EIGHTEEN appeared nowhere in it but comments and two more only inside a neighbouring code's
+# message prose; both GM codes were comment-only as well. Those clauses satisfied this file's
+# central join on text no run could ever print — so no finding they produced could be joined
+# back to the rule behind it, and a clause whose code no code path emits reads to I36 exactly
+# like one that passed. The word "already" was the tell: nothing had been sprinkled into the
+# scripts to make the join work, and that was being reported as a virtue.
+#
+# The fix is that the code is now an ARGUMENT to the emitter rather than a token in its prose,
+# and **I64** holds it there — per-enforcer, keyed on the emission site rather than on the file.
+# The count of clauses satisfying the join on a comment is 0 and cannot rise without failing
+# the build.
 #
 # `level:` is what happens on violation.
 #   ERROR  mechanized, no false-positive path, BLOCKS. Authoring-time: non-zero exit, so the

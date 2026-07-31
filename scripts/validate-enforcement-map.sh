@@ -940,6 +940,75 @@ EOF
   fi
   rm -rf "$TMPDIR_I62"
 
+  # --- I64: every clause's code reaches an ATTRIBUTABLE EMISSION SITE in its enforcer. ---
+  #
+  # THE HOLE THIS CLOSES, AND IT SAT UNDER THE CONTRACT'S CENTRAL CLAIM. layer-contract.yaml's
+  # header states "THE BINDING IS ON A TOKEN THE ENFORCER ALREADY EMITS". I36 forward tests that
+  # with `grep -qF` over the WHOLE enforcer file — comments included. Measured on the tree this
+  # shipped against: of the 22 codes clauses bind to validate-layer-entries.sh, EIGHTEEN occurred
+  # nowhere in it but comments, and two of the remaining four occurred only inside a NEIGHBOURING
+  # code's message prose. Both GM codes were comment-only too. So twenty of forty-three clauses
+  # satisfied the contract's central join on text that no run can ever print.
+  #
+  # It is not a cosmetic gap. A finding that does not name its code cannot be joined back to the
+  # rule it came from by the operator reading it, by a gate log, or by the per-code census the
+  # enforcer now emits — and a clause whose code no code path emits is a clause that CANNOT FIRE
+  # while reading, to I36, exactly like one that passed. That is this repo's named defect class
+  # sitting inside the mechanism built to end it.
+  #
+  # THE PREDICATE IS PER-ENFORCER, deliberately, and mirrors I36 reverse's `case` rather than
+  # inventing a second shape. "Non-comment line" was measured and REJECTED as the uniform
+  # predicate: E6 appears on two non-comment lines of validate-layer-entries.sh, both inside
+  # E15's message text explaining why E6 is silent, so a line-grain predicate scores E6 bound on
+  # a cross-reference. For the emitter-based script the site is the CODE ARGUMENT itself, which
+  # cannot be satisfied by prose about another clause. The two classifier scripts print their
+  # codes as row tokens, so non-comment is exact there.
+  #
+  # FORWARD ONLY, and that is a decision taken against a measurement rather than an oversight.
+  # A reverse arm here — every attributably-emitted code is claimed — would be strictly stronger
+  # than I36 reverse, which harvests the whole file and so cannot see a typo'd code at a CALL
+  # SITE whenever the correct token also sits in a nearby comment. It is not shipped because
+  # that unique subject cannot be constructed by mutating the contract, which is the only thing
+  # this invariant's fixture can mutate: every contract-side mutation that orphans a code trips
+  # I36 reverse on the same finding. An arm whose own unique case cannot be demonstrated red is
+  # an arm that reads exactly like one that passed, so it stays out until it has a fixture that
+  # can mutate an ENFORCER. Recorded rather than silently omitted.
+  lc_i64_sites() { # lc_i64_sites <enforcer-relpath> -> one emitted code per line
+    case "$1" in
+      *validate-layer-entries.sh)
+        grep -oE '\b(err|warn)[[:space:]]+(E[1-9][0-9]?|W[1-9][0-9]?)\b' "$REPO_ROOT/$1" \
+          | awk '{print $2}' | sort -u ;;
+      *layer-drift.sh)
+        grep -vE '^[[:space:]]*#' "$REPO_ROOT/$1" \
+          | grep -oE '\b(HARD-[A-Z0-9-]+|OVERRIDE-[A-Z0-9-]+|EXTENSION-[A-Z0-9-]+)\b' \
+          | sort -u | grep -v -- '-OK$' ;;
+      *validate-gate-manifest.sh)
+        grep -vE '^[[:space:]]*#' "$REPO_ROOT/$1" | grep -oE '\bGM[1-9][0-9]?\b' | sort -u ;;
+      *) : ;;
+    esac
+  }
+
+  # Forward: a clause's code is emitted somewhere its enforcer can attribute it.
+  while IFS='|' read -r cid cenf ccode; do
+    [ -n "$cid" ] || continue
+    [ -f "$REPO_ROOT/$cenf" ] || continue          # I36 forward already errs on a missing enforcer
+    lc_i64_emitted="$(lc_i64_sites "$cenf")"
+    if [ -z "$lc_i64_emitted" ]; then
+      err "I64: found NO attributable emission sites in declared enforcer '$cenf'. Either that script changed shape or the extraction above no longer matches its vocabulary; a zero here silently retires this invariant for every clause bound to it, which is the state it exists to report."
+      continue
+    fi
+    grep -qxF -- "$ccode" <<<"$lc_i64_emitted" \
+      || err "I64 $cid: '$cenf' never emits '$ccode' at a site a run can attribute — the token appears only in prose there, if at all. I36 forward passes on that, because it greps the whole file including comments. A finding that cannot name its clause cannot be joined back to this contract by the operator who receives it, and a code no code path prints is a clause that cannot fire while reading exactly like one that passed. Pass the code to err/warn at the site that reports it, or print it in the row."
+  done <<EOF
+$(awk '
+  /^  - id:/       { if (id != "") emit(); id=$3; enf=""; code="" ; next }
+  /^    enforcer:/ { enf=$2; next }
+  /^    code:/     { code=$2; next }
+  END              { if (id != "") emit() }
+  function emit() { if (enf != "" && code != "") printf "%s|%s|%s\n", id, enf, code }
+' "$lc_file")
+EOF
+
   # --- I58: the ADJUDICATED level is one token across the contract and the enforcer that acts
   # on it, PROVEN BY RUNNING THE ENFORCER rather than by grepping it. ---
   #
@@ -3368,7 +3437,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and records itself outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64)."
   exit 0
 fi
 exit 1
