@@ -408,6 +408,19 @@ times on first contact gets disabled and then catches nothing.
   Numeric-leading ids only — `Check A` and `Check N` are placeholders in worked examples, not
   citations. If the id was retired rather than mis-cited, the crosswalk row is the fix and it
   clears this warning as well as **[LC-N6]**.
+- **[LC-R3]** WARN — a script path your entry names resolves to a file that exists in your
+  project. This is the same question as **[LC-R1]** and **[LC-R2]** in the namespace neither
+  covers: the executables an entry tells a dispatched agent to *run*. On the reference consumer
+  two entries named a script that had never existed — a bare command in a step's command list,
+  and a `Required:` clause in a role file naming a wrapper — and an agent following either would
+  have run nothing. Paths resolve against your project root, so a leading `./` is normalised and a
+  path written against the distribution's own layout is not a subject — it is not relative to the
+  root the clause resolves against, which is a derivation rather than a carve-out. Fenced blocks
+  are skipped, because that is where illustrative invocations live — **the cost is that a
+  dangling path appearing only inside a fence is not reported**, and it is stated here rather
+  than discovered. WARN, not ERROR: an entry correctly recording that a script *was* retired
+  names a path that no longer resolves, and a clause that blocked you for writing true prose
+  would punish accuracy. If that is your case, name the script without a runnable path.
 - **[LC-C1]** ERROR — every entry, in `extensions/` and `overrides/` alike, declares
   `conforms_to: N` — the integer contract version you have migrated it to, between 1 and the
   `contract_version` at the top of `layer-contract.yaml`. **It is a receipt, not an exemption.**

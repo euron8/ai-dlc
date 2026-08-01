@@ -69,6 +69,15 @@
 #        anything. WARN for the same reason W1 is: eight ERRORs on first contact is
 #        a linter that gets switched off, and a consumer must never be unable to
 #        take a security fix because its own rule catalog needs relabelling.
+#     W9 a layer entry names a SCRIPT PATH that resolves nowhere in this project. The
+#        third citation namespace: W3 resolves `Step <n>`, W7 resolves `Check <n>`,
+#        and nothing asked the question of the executables an entry tells an agent
+#        to RUN. Root-anchored (`./scripts/x.sh` is checked, `core/scripts/x.sh` is
+#        a distribution path and is not this arm's subject) and fence-skipping, with
+#        the cost of that skip recorded at the arm itself. Measured on the reference
+#        consumer before shipping: TWO live subjects, both agent-facing instructions
+#        naming a file that has never existed in that repo's history, and both
+#        invisible to every other mechanism in the rulebook.
 #     E15 extension ALLOCATES a check or rule number below the reserved consumer band —
 #        core's range. Whether core has taken that number yet decides the message, not
 #        the verdict. The case core has NOT taken is the one E6 and W4 are structurally
@@ -1409,6 +1418,66 @@ while IFS= read -r f; do
     warn W3 "$(rel "$f"): references \"Step $ref\" but no core file, extension, or override defines Step $ref anywhere in the rendered rulebook — dangling step pointer"
   done < <(grep -Eoh 'Step[ -][0-9]+[a-z-]*' "$f" 2>/dev/null | sed -E 's/^Step[ -]//' | sort -u)
 done <<< "$all_files"
+
+# ---------------------------------------------------------------------------
+# W9 — a SCRIPT path a layer entry names that resolves nowhere in this project
+# ---------------------------------------------------------------------------
+# THE THIRD NAMESPACE. W3 resolves `Step <n>`, W7 resolves `Check <n>`; both ask whether a
+# citation still points at something. An entry also cites EXECUTABLES, and nothing asked the
+# question of those. Found by measurement on the reference consumer, not by reading the code:
+# two entries name a script that has NEVER existed in that repo's history, and both are
+# agent-facing instructions rather than prose about a mechanism —
+#
+#   a step's own command list:   - ./scripts/smoke-test.sh
+#   a role file's Required: clause naming a wrapper "which handles backgrounding internally"
+#
+# A dispatched agent reads either one and runs a file that is not there. Nothing in the
+# rendered rulebook, in either pre-push hook, or in this validator noticed, across the whole
+# life of both citations.
+#
+# ROOT-ANCHORED, and the anchoring is what keeps the distribution's own paths out. The token
+# is captured WITH any leading path segments and then required to start at the project root:
+# `./scripts/x.sh` normalises to `scripts/x.sh` and is checked, while `core/scripts/x.sh` —
+# a distribution path an entry may legitimately name in prose — is not a consumer-root path
+# and is dropped. That is a derivation, not a carve-out: the arm resolves paths against
+# PROJECT_ROOT, so a token that is not relative to PROJECT_ROOT is not its subject.
+#
+# FENCED BLOCKS ARE SKIPPED, and the cost of that is stated rather than hidden. I68's finding
+# was a reader that did not skip fences importing core's own worked examples into every
+# consumer; the same trap is live here, because an entry's fenced block is where illustrative
+# invocations sit. The cost is real: on the reference consumer the skip drops one GENUINE
+# command citation (`python3 scripts/check_deployed_ranges_consistency.py`, inside a fenced
+# block, resolving). So a dangling path that appears ONLY inside a fence is outside this
+# arm's subject set by construction, and this comment is where that is recorded.
+#
+# WARN, NOT ERROR, and the false-positive set is enumerated rather than claimed empty.
+# Measured over the reference consumer's 52 entries: 82 unfenced root-anchored occurrences,
+# 34 distinct paths, 32 resolving, 2 not — and both of the 2 are real. The one FP category
+# with a live SHAPE is retirement narration: an entry correctly reporting that a script WAS
+# retired names a path that no longer resolves. There is no live instance today (the one
+# candidate, `scripts/scan-stray-provenance.sh`, still exists), but the shape is real and it
+# is why an ERROR here would eventually wedge a consumer for writing true prose.
+echo "== script citations =="
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    [ -e "$PROJECT_ROOT/$p" ] && continue
+    warn W9 "$(rel "$f"): names \`$p\`, and no such file exists in this project. A layer entry that cites an executable is telling a dispatched agent to run it; a citation that resolves nowhere is an instruction that fails at the moment it is followed. Either the path is stale and should be repointed or removed, or the file was never added. If this line is PROSE recording that the script was retired, name it without a runnable path."
+  done < <(awk '
+    /^[[:space:]]*```/ { fence = 1 - fence; next }
+    fence { next }
+    {
+      s = $0
+      while (match(s, /[A-Za-z0-9_.\/-]*scripts\/[A-Za-z0-9_.\/-]+\.(sh|py)/)) {
+        t = substr(s, RSTART, RLENGTH)
+        s = substr(s, RSTART + RLENGTH)
+        sub(/^\.\//, "", t)
+        if (t ~ /^scripts\//) print t
+      }
+    }
+  ' "$f" 2>/dev/null | sort -u)
+done < <({ layer_files "$EXT_DIR"; layer_files "$OVR_DIR"; })
 
 # W7 — the same question in the CHECK namespace, and it is a different subject from W3's.
 #
