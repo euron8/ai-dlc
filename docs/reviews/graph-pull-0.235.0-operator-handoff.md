@@ -151,13 +151,13 @@ release does to your tree until you declare a taxonomy.
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures — timing and per-fixture assertion counts | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | Advance the machinery stamp | graph | — |
-| 6 | Assertion delta, full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings §6c-37 needs | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | ✅ |
+| 3 | Bank the BEFORE figures — timing and per-fixture assertion counts | graph | ✅ |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | ✅ |
+| 5 | Advance the machinery stamp | graph | ✅ |
+| 6 | Assertion delta, full pre-push, commit, push, PR | graph | ✅ |
+| 7 | Report back the readings §6c-37 needs | graph | ✅ |
 
 ### Row 1 — pre-flight
 
@@ -256,15 +256,25 @@ what this whole series exists to stop accepting.
 
 | reading | value | its control |
 |---|---|---|
-| `origin/main` before | | `ls-remote` agrees |
-| apply rows | | 0 bytes stderr |
-| diff surface | | the §4.2 path set exactly |
-| validator after | | same footer fields as before |
-| drivable fixtures | | `trunk-audit-mutants` ABSENT |
-| assertion delta | | joined-pair count non-zero |
-| gate timing | | verdict count both sides |
-| `--audit-trunk` first run | | exit code |
-| commit / PR / merge sha | | |
+| `origin/main` before | `c459f207a464d1504e73ae746e240bbe4a380253` (local `HEAD` on `main` identical) | `ls-remote` agrees — `c459f207a464…	refs/heads/main` |
+| apply rows | **15** — 13 `RESOLVED`, 1 `DECISION` (§2.3), 1 `WORKLIST` (§2.4); rc 0 | **0** bytes stderr |
+| diff surface | **8 files, +376 / −11**, plus the 3 new paths | the §4.2 path set exactly; the 4 `_bmad-output/` runtime files are the whole remainder (+22 / −4) and stayed unstaged |
+| validator after | `0 error(s), 1 warning(s)`; footer `contract_version=13 entries=50 at_current=50 behind=0 undeclared=0 errors=0 warnings=1` | byte-identical to the before-run; the one warning is `W7=LC-R2:1/50` on both sides |
+| drivable fixtures | **110 → 111** | `ls tests/fixtures \| grep trunk-audit` returns exactly **1** row, `trunk-audit-classes` — `trunk-audit-mutants` ABSENT |
+| assertion delta | **EMPTY**; 111 after-rows, one added (`trunk-audit-classes`) | **110 joined pairs** — non-zero, so the empty delta is a reading |
+| gate timing | before 44.95 / 44.51 / 45.35 → **median 44.95s**; after 44.48 / 45.57 / 45.66 → **median 45.57s** (+0.6s) | **110 ok / 0 FAIL** before, **111 ok / 0 FAIL** after; rc 0 on all six runs |
+| `--audit-trunk` first run | one `AUDIT-TRUNK: WORKLIST` line naming `pr-classes.md` | exit **0** |
+| commit / PR / merge sha | commit `1f2854642`, PR [#846](https://github.com/euron8/fee_accrual_graph/pull/846), squash-merge sha **`e0291eaa1a8893a07bf281b15972985e96361776`** | pre-push green on the real push, 111 ok / 0 FAIL; after merge, `main` at that sha carries all four stamp lines at `0.235.0` / `944c2e2` and `--audit-trunk HEAD` still exits 0 on the WORKLIST |
+
+**Two instrument notes for the next brief in this series.**
+
+- **`apply.sh` rows are TAB-separated.** A tally grepped as `'^RESOLVED '` (space) returns a
+  vacuous **0** against 15 real rows. §4.1's table renders them as columns, which reads as spaces.
+- **`.githooks/pre-push` blocks forever unless stdin is closed.** Line 45 is
+  `[ -t 0 ] || PUSH_REFS="$(cat)"` — with a non-TTY stdin that stays open, the `cat` never returns
+  and the hook produces **0 bytes** in 10+ minutes. Run it as `bash .githooks/pre-push </dev/null`.
+  On both sides that leaves `PUSH_REFS` empty, so arm 0 judges nothing and says so; the real push
+  is the only run where arm 0 has refs to judge, and it was green.
 
 ---
 
