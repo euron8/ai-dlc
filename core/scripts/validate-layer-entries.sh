@@ -936,7 +936,7 @@ done < <(layer_files "$OVR_DIR")
 # `layer-conforms-to`'s m3 asserts that removing ITS refusal lets an uninstalled contract
 # exit 0, and it stopped being able to say that. The subject here is a contract present and
 # silent about the key, which is the only state this arm can speak to.
-CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[ \t]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
 if [ -z "$CROSSWALK_REL" ] && [ -f "$LC_FILE" ]; then
   err E16 "could not read 'consumer_crosswalk_file:' from $(rel "$LC_FILE"). The crosswalk table's location is declared there and nowhere else, so without it this run has no table to read — and an unread table is indistinguishable from an empty one, which is E16's and W7's PASS. Both clauses are therefore unevaluated in this run, not clean."
   CROSSWALK_MD=''
@@ -1039,12 +1039,12 @@ fi
 # home literal lives in ai-dlc-update's setup-sites.md copy (I43 binds it across every
 # surface); the inventory path is declared in the contract beside the crosswalk's, and I67's
 # rule applies to it — a reader that restates the literal is the drift this contract removes.
-MACHINERY_REL="$(sed -n 's/^consumer_machinery_file:[ \t]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+MACHINERY_REL="$(sed -n 's/^consumer_machinery_file:[[:space:]]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
 # NOT from reconcile/setup-sites.md: I25 and I29 forbid core/scripts depending on the update
 # skill, and that is why nrm_awk() above is a bound COPY rather than a source. `core-manifest.md`
 # ships inside THIS skill, carries the same literal, and I43 holds every surface to one string --
 # so reading it here is a join, not a fifth spelling.
-MACHINERY_HOME="$(sed -n 's/^consumer_machinery_home:[ \t]*//p' "$SKILL_DIR/core-manifest.md" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+MACHINERY_HOME="$(sed -n 's/^consumer_machinery_home:[[:space:]]*//p' "$SKILL_DIR/core-manifest.md" 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
 
 # Both arms are SILENT on a tree with no contract, exactly as E16 is. A distribution that
 # predates the declaration is not a consumer failing to migrate, and v0.228.0 recorded what
@@ -1061,7 +1061,7 @@ if [ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]; then
     # The inventory: every non-blank line inside the fenced block that is not prose. The
     # grammar is deliberately dumb -- a path per line -- because the consumer writes this by
     # hand and a clever parser would make a hand-written file a source of parse errors.
-    MACHINERY_LINES="$(awk '/^```/{f=!f; next} f && NF' "$MACHINERY_MD" 2>/dev/null | sed 's/[ \t]*$//' | grep -E '.' || true)"
+    MACHINERY_LINES="$(awk '/^```/{f=!f; next} f && NF' "$MACHINERY_MD" 2>/dev/null | sed 's/[[:space:]]*$//' | grep -E '.' || true)"
     if [ -z "$MACHINERY_LINES" ]; then
       warn W10 "$MACHINERY_REL: carries no inventory block at all -- not even the literal 'none'. An empty inventory and an undeclared one must not look alike: state 'none' if this project has no ai-dlc machinery of its own, or list one path per line inside the fenced block."
     elif [ "$(printf '%s\n' "$MACHINERY_LINES" | grep -c .)" = "1" ] && [ "$MACHINERY_LINES" = "none" ]; then

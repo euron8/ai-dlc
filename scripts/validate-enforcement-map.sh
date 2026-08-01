@@ -2277,7 +2277,7 @@ fi
 # distribution is EMPTY: exactly two tokens exist, `scripts/ai-dlc` (458 occurrences) and
 # `scripts/ai-dlc-local` (14). Measured before this check was written, per CLAUDE.md.
 cmh_decl() { # <file> -> the declared home, trailing slash stripped
-  sed -n 's/^consumer_machinery_home:[ \t]*//p' "$1" | head -1 | sed 's#/*$##'
+  sed -n 's/^consumer_machinery_home:[[:space:]]*//p' "$1" | head -1 | sed 's#/*$##'
 }
 CMH="$(cmh_decl "$CORE_MANIFEST")"
 CMH_SS="$(cmh_decl "$SETUP_SITES")"
@@ -3336,7 +3336,7 @@ fi
 #            hard-codes it passes the forward arm forever while the declaration drifts under
 #            it, which is precisely how `CROSSWALK_MD="$EXT_DIR/README.md"` survived.
 ccf_decl() { # <file> -> the declared crosswalk file, trailing whitespace stripped
-  sed -n 's/^consumer_crosswalk_file:[ \t]*//p' "$1" | head -1 | sed 's/[ \t]*$//'
+  sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$1" | head -1 | sed 's/[[:space:]]*$//'
 }
 LC_YAML="$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml"
 CCF="$(ccf_decl "$LC_YAML")"
@@ -3496,7 +3496,7 @@ fi
 #               rename of the declaration would leave install.sh scaffolding and the pull
 #               driver reporting `pr-class-template-missing` — a divergence visible only to a
 #               consumer mid-pull, which is the audience least able to act on it.
-PCF_DECL="$(sed -n 's/^consumer_pr_class_file:[ \t]*//p' "$LC_YAML" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+PCF_DECL="$(sed -n 's/^consumer_pr_class_file:[[:space:]]*//p' "$LC_YAML" 2>/dev/null | head -1 | sed 's/[[:space:]]*$//')"
 PCF_READERS="$REPO_ROOT/core/scripts/validate-cycle-commits.sh $REPO_ROOT/scripts/install.sh $REPO_ROOT/core/skills/ai-dlc-update/reconcile/apply.sh"
 if [ -z "$PCF_DECL" ]; then
   err "I70 could not read 'consumer_pr_class_file:' from core/skills/ai-dlc/layer-contract.yaml. The trunk audit, the installer and the pull driver all derive the taxonomy's location from that one line; without it the audit reports every consumer as predating the declaration, which is silence that reads exactly like a clean trunk."
@@ -3512,6 +3512,92 @@ else
   _pcf_tpl="$REPO_ROOT/core/skills/ai-dlc/templates/$(basename "$PCF_DECL")"
   [ -f "$_pcf_tpl" ] || \
     err "I70 core ships no templates/$(basename "$PCF_DECL") to scaffold the declared taxonomy from. install.sh names that template literally and reconcile/apply.sh derives it from the declaration's basename; with the file absent the installer fails loudly and the pull driver files 'pr-class-template-missing', and a consumer that never runs install.sh again sees only the second."
+fi
+
+# --- I71: no sed or grep expression uses a bracket class containing \t ---------
+# In awk, `[ \t]` is correct: awk processes the escape when it compiles the regex.
+# In sed and grep it is NOT. POSIX bracket expressions have no escapes, so the
+# class is the three characters SPACE, BACKSLASH and `t` -- and `s/[ \t]*$//`,
+# the idiom every declaration reader in this tree used to strip trailing space,
+# silently eats a trailing `t` or backslash instead.
+#
+# Measured on this box, BSD sed: `capture: sprint` -> `capture: sprin`, and
+# `validator: x --strict` -> `validator: x --stric`. The leading form is the same
+# defect one end over: ` true` -> `rue`. There is no error and no exit code; the
+# value is simply the wrong string from then on. It is the false-zero class from
+# CLAUDE.md arriving through a character class rather than through a pathspec.
+#
+# Found by v0.236.0 while extending the PR-class parser, whose own new `capture:`
+# names are [A-Za-z][A-Za-z0-9_]* and therefore routinely end in `t`. The sweep
+# was 22 sites with an FP set of ZERO -- every candidate was real, including the
+# one that also carries `awk` on the same physical line, where the awk is a
+# separate stage of the same pipeline and the `sed` is the violation.
+#
+# The needle is ASSEMBLED rather than written, so this file does not itself carry
+# the construct it forbids and needs no exemption for its own definition site --
+# an exemption is the thing this repo has learned to distrust most.
+i71_needle="$(printf '[ %st]' '\')"
+i71_scan() { # $1 = root -- prints `file:line` for every violating line
+  grep -rn -F -- "$i71_needle" "$1" 2>/dev/null \
+    | grep -E '(^|[^a-zA-Z0-9_])(sed|grep)([^a-zA-Z0-9_]|$)' \
+    | cut -d: -f1,2 || true
+}
+# The probe proves BOTH directions in the same run, because "0 findings" and "the
+# scanner is broken" are the same output. A sed line carrying the needle must be
+# reported; an awk line carrying the same needle must NOT be, since that one is
+# correct and reporting it would make this invariant an FP machine on 75 live
+# sites. Built here rather than committed: a probe in the tree is a subject.
+i71_probe="$(mktemp -d 2>/dev/null)"
+if [ -n "$i71_probe" ] && [ -d "$i71_probe" ]; then
+  printf 'X="$(sed -n %ss/^k:%s*//p%s f)"\n' "'" "$i71_needle" "'" > "$i71_probe/bad.sh"
+  printf 'Y="$(awk %s{sub(/%s+/,"",$0); print}%s f)"\n' "'" "$i71_needle" "'" > "$i71_probe/ok.sh"
+  i71_pos="$(i71_scan "$i71_probe" | grep -c 'bad\.sh' || true)"
+  i71_neg="$(i71_scan "$i71_probe" | grep -c 'ok\.sh' || true)"
+  rm -rf "$i71_probe"
+  if [ "$i71_pos" -ne 1 ]; then
+    err "I71's own probe was NOT reported: a sed expression carrying a bracket class with a backslash-t went unseen by the scanner, so a clean result below would mean nothing. The invariant fails closed rather than reporting an absence its instrument could not have found."
+  fi
+  if [ "$i71_neg" -ne 0 ]; then
+    err "I71's negative probe WAS reported: an awk expression carrying the same bracket class was flagged, and awk's is correct. Shipping this would put 75 live and correct sites into the finding set, which is how a lint gets turned off."
+  fi
+fi
+i71_hits="$(i71_scan "$REPO_ROOT/core"; i71_scan "$REPO_ROOT/scripts")"
+if [ -n "$i71_hits" ]; then
+  err "I71 sed or grep expression(s) using a bracket class that contains a literal backslash and t, which in a POSIX bracket expression is the CHARACTER SET rather than a tab:
+$(printf '%s\n' "$i71_hits" | sed 's/^/  /')
+Each one silently truncates any value ending in 't' or a backslash -- 'capture: sprint' becomes 'capture: sprin' with no error and no non-zero exit. Use [[:space:]]. If the expression is awk's, this invariant does not report it and something on the same physical line is invoking sed or grep."
+fi
+
+# --- I72: the PR-class grammar is ONE key set across the parser and the template
+# The parser dispatches on a `case`; the template is what a consumer actually reads before
+# writing a taxonomy. A key in one and not the other is silent in both directions and both
+# directions have a victim:
+#   parser-only   the key works and nobody knows it exists, so the obligation it expresses is
+#                 kept in the consumer's own script -- which is the exact failure v0.236.0
+#                 was written to end, arriving one level up as a documentation gap.
+#   template-only the consumer writes the key, the parser's `*)` arm calls it unknown, and
+#                 the taxonomy is MALFORMED -- so following core's own instructions wedges
+#                 the audit.
+# Both sides are DERIVED. A hand-listed key set is the thing this invariant exists to stop.
+i72_parser="$(sed -n '/^    case "\$_key" in/,/^    esac/p' \
+    "$REPO_ROOT/core/scripts/validate-cycle-commits.sh" 2>/dev/null \
+  | grep -oE '^      [a-z|]+\)' | tr -d ' )' | tr '|' '\n' | grep -v '^\*$' | sort -u)"
+i72_tpl="$(sed -n '/^## The grammar/,/^### /p' \
+    "$REPO_ROOT/core/skills/ai-dlc/templates/pr-classes.md" 2>/dev/null \
+  | grep -oE '^- `[a-z]+:' | tr -d '`-: ' | sort -u)"
+i72_np="$(grep -c . <<<"$i72_parser" || true)"
+i72_nt="$(grep -c . <<<"$i72_tpl" || true)"
+if [ "$i72_np" -lt 2 ] || [ "$i72_nt" -lt 2 ]; then
+  err "I72's extractors read $i72_np parser key(s) and $i72_nt template key(s). Fewer than two on either side means an extractor stopped matching, not that the grammar shrank -- and an empty set agrees with every other empty set, so this fails closed rather than reporting agreement it did not compute."
+else
+  i72_only_p="$(comm -23 <(printf '%s\n' "$i72_parser") <(printf '%s\n' "$i72_tpl") | tr '\n' ' ')"
+  i72_only_t="$(comm -13 <(printf '%s\n' "$i72_parser") <(printf '%s\n' "$i72_tpl") | tr '\n' ' ')"
+  if [ -n "${i72_only_p// /}" ]; then
+    err "I72 the PR-class parser dispatches key(s) the template never documents: ${i72_only_p}. A consumer writes its taxonomy from that template, so a key only the parser knows is an obligation nobody can declare -- and keeping an obligation undeclarable is what left 364 lines in the reference consumer's own script."
+  fi
+  if [ -n "${i72_only_t// /}" ]; then
+    err "I72 the PR-class template documents key(s) the parser does not dispatch: ${i72_only_t}. Following core's own instructions would produce 'unknown key' and a MALFORMED taxonomy, which audits nothing and exits 1."
+  fi
 fi
 
 # --- I54: no shell variable is written into an EARLY-EXITING reader ------------
@@ -4031,7 +4117,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70), and no sed or grep expression strips whitespace with a bracket class containing a backslash and the letter t, which in a POSIX bracket expression is those two characters and silently truncates any value ending in one of them — proven each run against both a positive and a negative probe the invariant writes itself, since awk's identical-looking class is correct (I71), and the PR-class taxonomy's grammar is ONE key set across the parser that dispatches it and the template a consumer writes from, both sides derived and neither hand-listed (I72)."
   exit 0
 fi
 exit 1

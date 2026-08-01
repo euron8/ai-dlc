@@ -219,8 +219,8 @@ done
 # is CORE's: the distribution ships it and every pull compares a consumer's copy against
 # base, so rows written there read as unregistered core drift. LC-N6 is an ERROR whose only
 # compliant output used to be an unregistered edit to upstream's tree.
-CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[ \t]*//p' \
-  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[ \t]*$//')"
+CROSSWALK_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' \
+  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[[:space:]]*$//')"
 if [ -z "$CROSSWALK_REL" ]; then
   echo "  ERROR: layer-contract.yaml declares no 'consumer_crosswalk_file:' — cannot scaffold the crosswalk table." >&2
   exit 1
@@ -236,8 +236,8 @@ fi
 # The ai-dlc machinery inventory. SCAFFOLDED ONCE, NEVER OVERWRITTEN, path read from the
 # `consumer_machinery_file:` declaration rather than spelled here, for the reason the
 # crosswalk above states and I67 enforces.
-MACHINERY_REL="$(sed -n 's/^consumer_machinery_file:[ \t]*//p' \
-  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[ \t]*$//')"
+MACHINERY_REL="$(sed -n 's/^consumer_machinery_file:[[:space:]]*//p' \
+  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[[:space:]]*$//')"
 if [ -z "$MACHINERY_REL" ]; then
   echo "  ERROR: layer-contract.yaml declares no 'consumer_machinery_file:' — cannot scaffold the machinery inventory." >&2
   exit 1
@@ -253,8 +253,8 @@ fi
 # The PR-class taxonomy the post-merge trunk audit reads. Same rule as the two above:
 # scaffolded once, never overwritten, path read from `consumer_pr_class_file:` rather than
 # spelled here.
-PRCLASS_REL="$(sed -n 's/^consumer_pr_class_file:[ \t]*//p' \
-  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[ \t]*$//')"
+PRCLASS_REL="$(sed -n 's/^consumer_pr_class_file:[[:space:]]*//p' \
+  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[[:space:]]*$//')"
 if [ -z "$PRCLASS_REL" ]; then
   echo "  ERROR: layer-contract.yaml declares no 'consumer_pr_class_file:' — cannot scaffold the PR-class taxonomy." >&2
   exit 1

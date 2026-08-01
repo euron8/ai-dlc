@@ -548,7 +548,7 @@ done
 # validate-layer-entries.sh's own E16 arm carries.
 CW_LC='core/skills/ai-dlc/layer-contract.yaml'
 CW_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
-  | sed -n 's/^consumer_crosswalk_file:[ \t]*//p' | head -1 | sed 's/[ \t]*$//')"
+  | sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
 if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
   : # THEIRS predates the layer contract; there is no declared crosswalk file to create.
 elif [ -z "$CW_REL" ]; then
@@ -576,7 +576,7 @@ fi
 # is present and silent about the key. v0.228.0 is why this block exists at all -- a
 # create-once file scaffolded only by install.sh reaches no consumer that already installed.
 MC_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
-  | sed -n 's/^consumer_machinery_file:[ \t]*//p' | head -1 | sed 's/[ \t]*$//')"
+  | sed -n 's/^consumer_machinery_file:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
 if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
   : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
 elif [ -z "$MC_REL" ]; then
@@ -602,7 +602,7 @@ fi
 # The PR-class taxonomy the post-merge trunk audit reads, on the same terms and with the same
 # scoping as the two blocks above.
 PC_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
-  | sed -n 's/^consumer_pr_class_file:[ \t]*//p' | head -1 | sed 's/[ \t]*$//')"
+  | sed -n 's/^consumer_pr_class_file:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
 if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
   : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
 elif [ -z "$PC_REL" ]; then
