@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# layer-reference-resolution — W7, and the form E15 states its remedy in.
+# layer-reference-resolution — W7, W9, and the form E15 states its remedy in.
 #
 # BOTH MECHANISMS WERE FOUND BY RUNNING THE BAND MIGRATION, not by reading the code, and
 # neither is visible from core's own tree: core has no consumer whose ids it can renumber.
@@ -24,6 +24,20 @@
 # file: a pattern built from it matches nothing, the id stays out of band, and the edit count
 # still reads right. The assertion here is APPLICABILITY — the emitted form is present in the
 # file it is emitted about — because "the message changed" is not the property that failed.
+#
+# W9 — THE THIRD CITATION NAMESPACE, added at contract_version 12 and found the same way: by
+# measuring the reference consumer rather than by reading the code. W3 resolves `Step <n>` and
+# W7 resolves `Check <n>`; nothing asked the question of the EXECUTABLES an entry tells a
+# dispatched agent to run. Two entries there name a script that has never existed in that
+# repository's history — a bare command in a step's own command list, and a `Required:` clause
+# in a role file — and an agent following either runs nothing.
+#
+# ITS FOUR SILENT CASES ARE FOUR DIFFERENT REASONS, which is why there is one mutant each:
+#
+#   scripts/present.sh          the file resolves          -> the arm has something to be quiet about
+#   scripts/fenced-missing.sh   inside a fenced block      -> I68's defect, and the skip's stated cost
+#   core/scripts/…              not root-relative          -> resolved against the wrong root otherwise
+#   extensions/README.md        not a layer entry          -> layer_files() drops it by name
 #
 # Usage: run.sh [path-to-validate-layer-entries.sh]
 # Exit:  0 = every assertion holds, 1 = something regressed, 2 = fixture broken.
@@ -56,9 +70,9 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # space in a helper call: `set -u` killed the `$( )` subshell, `if m="$( … )"` read that as a
 # false branch, and the arm silently did not run — green lines and a PASS. Counting what ran is
 # what closes it, and the count is a literal here or it disappears with the assertions.
-# 3 premises + 1 pristine vector + 2 applicability + 1 crosswalk-is-load-bearing
-# + 1 exit condition + 5 mutants + 1 unmutated control.
-EXPECTED_ASSERTIONS=14
+# 3 premises + 3 W9 premises + 1 pristine vector + 2 applicability + 1 code-attribution
+# + 1 crosswalk-is-load-bearing + 1 exit condition + 9 mutants + 1 unmutated control.
+EXPECTED_ASSERTIONS=22
 
 echo "layer-reference-resolution:"
 
@@ -79,6 +93,24 @@ grep -q '^### 7\. ' "$DOMAIN" \
 grep -q '^## Check 19b$' "$DOMAIN" \
   && ok "premise: the orphaned group heading '## Check 19b' is in the seed, terminator-less" \
   || bad "premise BROKEN: no terminator-less '## Check 19b' heading in the seed"
+
+# --- W9's premises. Same rule: read out of the seed, never back through the arm. ----------
+# The SILENT cell has to be silent for the right reason. If `scripts/present.sh` were absent
+# from the seed, `w9ok=-` would mean "the arm did not look" and would read identically.
+[ -f "$CONS/scripts/present.sh" ] \
+  && ok "premise: scripts/present.sh EXISTS in the seed, so its silent cell is a resolution" \
+  || bad "premise BROKEN: scripts/present.sh is not in the seed — its silent cell proves nothing"
+
+# And the REPORTED cell's subject has to be genuinely absent, or the report is the defect.
+[ ! -e "$CONS/scripts/missing-tool.sh" ] \
+  && ok "premise: scripts/missing-tool.sh is absent from the seed, so its reported cell is a finding" \
+  || bad "premise BROKEN: scripts/missing-tool.sh EXISTS — W9 reporting it would be the false positive"
+
+# The fenced case must actually be fenced. A seed that put the path outside a fence would make
+# the fence-skip mutant unkillable while every line still read green.
+awk '/^[[:space:]]*```/ { f = 1 - f; next } f && /scripts\/fenced-missing\.sh/ { hit = 1 } END { exit hit ? 0 : 1 }' "$DOMAIN" \
+  && ok "premise: scripts/fenced-missing.sh sits INSIDE a fenced block in the seed" \
+  || bad "premise BROKEN: scripts/fenced-missing.sh is not inside a fence — the fence mutant cannot fire"
 
 # vector <linter> <root> -> one line, one cell per case
 #
@@ -103,10 +135,21 @@ vector() {
   dotf="$(grep -oE "SECTION ID OUT OF BAND[^—]*— '[^']*' allocates" <<<"$out" | grep -oE "'[^']*'" | tr -d "'" | grep -E '^7' | head -1)"
   v="$v apform=$([ -n "$apf" ] && grep -qF -- "$apf" "$DOMAIN" && echo OK || echo BAD)"
   v="$v dotform=$([ -n "$dotf" ] && grep -qF -- "$dotf" "$DOMAIN" && echo OK || echo BAD)"
+  # W9 — the script-citation namespace. Three subjects that must report and four that must
+  # not, and each silent cell is silent for a DIFFERENT reason: the file resolves, the path
+  # is fenced, the path is not root-relative, the file is not an entry.
+  v="$v w9miss=$(grep -q 'roles/dev.md: names `scripts/missing-tool.sh`' <<<"$out" && echo W || echo -)"
+  v="$v w9dot=$(grep -q 'roles/dev.md: names `scripts/dot-slash-missing.sh`' <<<"$out" && echo W || echo -)"
+  v="$v w9ovr=$(grep -q 'overrides/gate-validation__8.md: names `scripts/override-missing.sh`' <<<"$out" && echo W || echo -)"
+  v="$v w9ok=$(grep -q 'names `scripts/present.sh`' <<<"$out" && echo W || echo -)"
+  v="$v w9fence=$(grep -q 'names `scripts/fenced-missing.sh`' <<<"$out" && echo W || echo -)"
+  v="$v w9dist=$(grep -q 'dist-only-missing.sh' <<<"$out" && echo W || echo -)"
+  v="$v w9rdme=$(grep -q 'names `scripts/readme-missing.sh`' <<<"$out" && echo W || echo -)"
   printf '%s' "$v"
 }
 
-WANT='d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK'
+W9WANT='w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-'
+WANT="d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT"
 
 # --- Part 1: the pristine vector ---------------------------------------------------------
 got="$(vector "$LINTER" "$CONS")"
@@ -129,6 +172,13 @@ grep -qF -- 'AP.' "$DOMAIN" \
   && bad "control BROKEN: the dotted form 'AP.' is in the seed, so its absence proves nothing" \
   || ok "control: the dotted form 'AP.' occurs NOWHERE in the file — the old remedy named a string that is not there"
 
+# The finding NAMES ITS CLAUSE. I64's whole point: a code that reaches only a comment satisfies
+# a whole-file grep while no run can attribute a line to it. The vector above matches on message
+# text, so it would score green for an arm that emitted the right subjects under the wrong code.
+grep -qE '^WARN[[:space:]]+W9[[:space:]]' <<<"$out" \
+  && ok "the script-citation findings are emitted under the code W9, so a run can attribute them" \
+  || bad "no emitted line carries the code W9 — the subjects report but name no clause"
+
 # --- Part 3: the crosswalk join is load-bearing, proven by removing the row ---------------
 # Not a mutation of the code: a mutation of the CONSUMER, which is the operator action the
 # clause describes. Removing the row must make the resolved citation reappear.
@@ -138,7 +188,7 @@ if cmp -s "$ROOT/crosswalk.orig" "$CROSSWALK"; then
   bad "fixture BROKEN: removing the 34 crosswalk row changed nothing"
 else
   got="$(vector "$LINTER" "$CONS")"
-  [ "$got" = 'd19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK' ] \
+  [ "$got" = "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT" ] \
     && ok "removing the 34 crosswalk row makes Check 34 dangle, and moves no other cell" \
     || bad "crosswalk row removal: got [$got]"
 fi
@@ -152,7 +202,7 @@ cp "$ROOT/crosswalk.orig" "$CROSSWALK"
 sed -i.bak 's/Check 19b/Check 919b/g' "$DOMAIN" "$CONS/.claude/skills/ai-dlc/extensions/roles/dev.md"
 printf '| 11b | 911b | Retired, repointed |\n' >> "$CROSSWALK"
 got="$(vector "$LINTER" "$CONS")"
-[ "$got" = 'd19b=- r19b=- r11b=- c34=- c12=- c7=- alpha=- apform=OK dotform=OK' ] \
+[ "$got" = "d19b=- r19b=- r11b=- c34=- c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT" ] \
   && ok "exit condition: the prescribed repairs clear every W7 subject" \
   || bad "exit condition: repairs applied and W7 still reports [$got]"
 git -C "$CONS" checkout -q -- . 2>/dev/null
@@ -180,7 +230,7 @@ mk_mutant() { # mk_mutant <label> <sed-expr> <expected-vector>
 # M1 — put the hardcoded dot back. Only the em-dash subject's applicability moves.
 mk_mutant hardcoded-dot \
   "s/a_form=\"\\\$\(anchor_form \"\\\$f\" \"\\\$a\"\)\"/a_form=\"\\\${a}.\"/" \
-  'd19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=BAD dotform=OK'
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=BAD dotform=OK $W9WANT"
 
 # M2 — drop the BARE half of the crosswalk join. Only the bare-row citation moves.
 # The first cut of this fixture had one mutant for the whole join and seeded only a bare row,
@@ -188,22 +238,54 @@ mk_mutant hardcoded-dot \
 # and proved nothing. Two rows, two mutants, one cell each.
 mk_mutant no-crosswalk-bare \
   "/grep -Fxq -- \"\\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/d" \
-  'd19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK'
+  "d19b=W r19b=W r11b=W c34=W c12=- c7=- alpha=- apform=OK dotform=OK $W9WANT"
 
 # M2b — drop the NAMESPACED half. Only the namespaced-row citation moves.
 mk_mutant no-crosswalk-namespaced \
   "/grep -Fxq -- \"Check \\\$ref\" <<<\"\\\$CROSSWALK_IDS\" && continue/d" \
-  'd19b=W r19b=W r11b=W c34=- c12=W c7=- alpha=- apform=OK dotform=OK'
+  "d19b=W r19b=W r11b=W c34=- c12=W c7=- alpha=- apform=OK dotform=OK $W9WANT"
 
 # M3 — widen the grammar to alphabetic ids. Only the placeholders move.
 mk_mutant alphabetic-grammar \
   "s/grep -Eoh 'Check\[ -\]\[0-9\]\+\[a-z-\]\*'/grep -Eoh 'Check[ -][0-9A-Z]+[a-z-]*'/" \
-  'd19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=W apform=OK dotform=OK'
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=W apform=OK dotform=OK $W9WANT"
 
 # M4 — drop the rulebook resolve. Only core's own check moves.
 mk_mutant no-anchor-resolve \
   "/grep -Fxq -- \"\\\$ref\" <<<\"\\\$GLOBAL_CHECK_ANCHORS\" && continue/d" \
-  'd19b=W r19b=W r11b=W c34=- c12=- c7=W alpha=- apform=OK dotform=OK'
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=W alpha=- apform=OK dotform=OK $W9WANT"
+
+# --- W9's mutants. One per narrowing, and each narrowing exists for a measured reason. ----
+# The arm is four decisions, not one: skip fences, normalise `./`, require the path to be
+# root-relative, and read overrides as well as extensions. A single mutant over the whole arm
+# would go red for any of them and identify none.
+
+# M5 — stop skipping fenced blocks. Only the fenced path moves. This is I68's defect exactly:
+# a reader that does not skip fences turns a worked example into a finding.
+mk_mutant w9-no-fence-skip \
+  "/^[[:space:]]+fence \{ next \}$/d" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=W w9dist=- w9rdme=-"
+
+# M6 — stop normalising the leading `./`. Only the dot-slash path moves, and it goes SILENT:
+# the reference consumer's live subject is written in exactly this form, in a step's own
+# command list, so without this line the arm misses the case that motivated it.
+mk_mutant w9-no-dotslash \
+  "/, \"\", t\)/d" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=- w9ovr=W w9ok=- w9fence=- w9dist=- w9rdme=-"
+
+# M7 — stop requiring the token to be root-relative. Only the distribution-form path moves.
+# Unanchored, the arm resolves a path written against the distribution's layout against the
+# CONSUMER's root, where it correctly does not exist — a finding manufactured by the grammar.
+mk_mutant w9-no-root-anchor \
+  "s/if \(t ~ [^)]*\) print t/print t/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=W w9ok=- w9fence=- w9dist=W w9rdme=-"
+
+# M8 — narrow the subject set to extensions/. Only the override's citation moves, and it goes
+# silent: an arm that walked one of the two layer directories would print the same clean line
+# on a tree whose overrides tell an agent to run a file that is not there.
+mk_mutant w9-extensions-only \
+  "s/\{ layer_files \"\\\$EXT_DIR\"; layer_files \"\\\$OVR_DIR\"; \}/layer_files \"\\\$EXT_DIR\"/" \
+  "d19b=W r19b=W r11b=W c34=- c12=- c7=- alpha=- apform=OK dotform=OK w9miss=W w9dot=W w9ovr=- w9ok=- w9fence=- w9dist=- w9rdme=-"
 
 # THE UNMUTATED CONTROL, from the same directory and run last. A lone copy that dies for a
 # reason unrelated to any mutation emits nothing, and "no output" otherwise scores as a kill.

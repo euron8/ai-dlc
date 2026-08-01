@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 11
+contract_version: 12
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -798,6 +798,37 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-layer-entries.sh
     code: W7
+    fixture: layer-reference-resolution
+
+  - id: LC-R3
+    subject: any
+    level: WARN
+    since: 12
+    normative: >-
+      A script path a layer entry names resolves to a file that exists in the consumer's
+      project. LC-R1 and LC-R2 ask this of the `Step` and `Check` namespaces; an entry also
+      cites EXECUTABLES, and until contract_version 12 nothing asked it of those. The subject
+      is not hypothetical and it is not prose drift: measured on the reference consumer, two
+      entries name a script that has never existed in that repository's history, and both
+      citations are agent-facing instructions rather than commentary — one is a bare command
+      in a step's own command list, the other a `Required:` clause in a role file naming a
+      wrapper "which handles backgrounding internally". A dispatched agent that follows either
+      runs a file that is not there. The path is resolved against the project root, so a
+      leading `./` is normalised away and a path written against the distribution's own layout
+      is not this clause's subject — it is not relative to the root the clause resolves against,
+      which is a derivation rather than an exclusion. Fenced
+      blocks are skipped, for the reason LC-N6's reader learned at contract_version 11: a
+      fenced block is where illustrative invocations live, and a reader that does not skip
+      them imports worked examples as findings. That skip has a stated cost — a dangling path
+      appearing ONLY inside a fence is outside the subject set by construction — and the cost
+      is recorded at the enforcer rather than left to be rediscovered. WARN and not ERROR
+      because the false-positive category is real even though it is currently empty: an entry
+      correctly narrating that a script WAS retired names a path that no longer resolves, and
+      a clause that wedged a consumer for writing true prose would be a rule punishing
+      accuracy.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W9
     fixture: layer-reference-resolution
 
   # --- the layer conformance adjudication -----------------------------------------------

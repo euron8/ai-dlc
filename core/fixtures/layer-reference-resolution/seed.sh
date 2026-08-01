@@ -84,7 +84,16 @@ cat > "$SKILL/steps/gate-validation.md" <<'EOF'
 
 Worked example, and the placeholders here are why the grammar is numeric-leading:
 if Check A fails, record Check N in the ledger.
+
+### 8. Core's own second check, and the override shadows this one.
 EOF
+
+# W9's RESOLVING subject. A real file at a real path, so the arm has something to stay silent
+# about. Without it every W9 cell would be a report and "the arm fires" would be indisplacable
+# from "the arm fires on everything".
+mkdir -p "$CONS/scripts"
+printf '#!/usr/bin/env bash\necho present\n' > "$CONS/scripts/present.sh"
+chmod +x "$CONS/scripts/present.sh"
 
 cat > "$SKILL/extensions/checks/domain.md" <<'EOF'
 ---
@@ -105,6 +114,13 @@ citation the renumber orphaned.
 ### 7. Not renamed yet, and its heading ends in a dot.
 
 ## Check AP — Not renamed yet, and its heading ends in an em-dash.
+
+W9's FENCED case. The path below does not exist, and it must stay silent because the
+arm skips fenced blocks — the cost of that skip, stated at the enforcer.
+
+```bash
+bash scripts/fenced-missing.sh --dry-run
+```
 EOF
 receipt "$SKILL/extensions/checks/domain.md"
 
@@ -135,8 +151,27 @@ hooks: steps/gate-validation.md
 - Check 12 was retired too, and its row names the id in NAMESPACED form.
 - Check 7 is core's, and it still resolves.
 - In the worked example, Check A precedes Check N.
+- **Required:** run scripts/missing-tool.sh before dispatch. Nothing of that name exists.
+- Then run ./scripts/dot-slash-missing.sh, which also does not exist and is written with a
+  leading dot-slash, the form a step's own command list uses.
+- scripts/present.sh exists and resolves, so the arm stays silent about it.
+- The distribution's own copy lives at core/scripts/dist-only-missing.sh, which is not a path
+  relative to this project's root and is therefore not W9's subject.
 EOF
 receipt "$SKILL/extensions/roles/dev.md"
+
+# W9's OVERRIDE subject. The arm's subject set is extensions/ AND overrides/; an arm that
+# walked only extensions/ would report the same clean line on a tree whose overrides cite a
+# script that is not there. Shape copied from the sibling fixture that seeds a valid override,
+# shadowing the second core anchor so it collides with nothing the other arms measure.
+{ printf -- '---\n'
+  printf 'shadows: steps/gate-validation.md#8. Core'"'"'s own second check, and the override shadows this one.\n'
+  printf 'base_sha: 0123456789abcdef0123456789abcdef01234567\n'
+  printf 'reason: fixture override, carries W9 subject on the override side\n'
+  printf 'conforms_to: %s\n' "$CV"
+  printf -- '---\n\n### 8. Core'"'"'s own second check, and the override shadows this one.\n\n'
+  printf 'Shadowed body. Invoke scripts/override-missing.sh, which does not exist.\n'
+} > "$SKILL/overrides/gate-validation__8.md"
 
 # THE CROSSWALK. One row for 34 and none for 11b or 19b, which is what splits the two silent
 # cases from the two reported ones. Column 1 is read by `crosswalk_rows`, which takes column 1
@@ -150,6 +185,11 @@ cat > "$SKILL/extensions/README.md" <<'EOF'
 |---|---|---|
 | 34 | 934 | Retired at 0.214.0, absorbed by core |
 | Check 12 | 912 | Retired, and this row names the id in namespaced form |
+
+W9's EXCLUDED-FILE case. `layer_files()` drops README.md by name, so the path below must
+stay silent: this file is core's worked example, not a consumer entry.
+
+Run scripts/readme-missing.sh, which does not exist.
 EOF
 
 git -C "$CONS" add -A

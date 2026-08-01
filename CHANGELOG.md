@@ -17,6 +17,121 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.232.0] — 2026-08-01
+
+### Two entries told an agent to run a script that had never existed, and three namespaces of citation check had never asked
+
+`LC-R1` resolves `Step <n>`. `LC-R2` resolves `Check <n>`. A layer entry also cites
+**executables** — the files it tells a dispatched agent to *run* — and nothing in the
+rendered rulebook, in either pre-push hook, or in `validate-layer-entries.sh` ever asked
+whether those resolve.
+
+Measured on the reference consumer, read-only:
+
+```
+extensions/steps-domain/deploy-validate-domain.md:194   - ./scripts/smoke-test.sh
+extensions/roles/dev-domain.md:20    **Required:** … call `scripts/ssm-tunnel.sh` wrapper
+                                     which handles backgrounding + readiness check internally
+```
+
+Neither path has ever existed in that repository's history — `git log -- <path>` returns
+no commit for either, against a control returning a commit for `scripts/ci-local.sh` in
+the same probe. **Neither citation is prose about a mechanism.** One is a bare command in
+a step's own command list; the other is a `Required:` clause in a role file. An agent
+following either runs nothing, and has been able to for the whole life of both lines.
+
+`LC-R3` / **`W9`** is the arm. `contract_version` 11 → 12.
+
+### The false-positive set was measured before it shipped, and it is one category with zero live instances
+
+91 raw occurrences across the reference consumer's 52 entries, 35 distinct paths. After
+the two narrowings the arm derives:
+
+| narrowing | effect | why it is a derivation and not a carve-out |
+|---|---|---|
+| skip fenced blocks | 91 → 82 occurrences, 9 dropped, **all 9 resolve** | `I68`'s finding: a reader that does not skip fences imports worked examples as findings |
+| require the path to be root-relative | 35 → 34 distinct | the arm resolves against the project root, so a token that is not relative to it is not its subject |
+
+Both non-resolving paths survive both narrowings. The one FP category with a live *shape*
+is **retirement narration** — an entry correctly recording that a script *was* retired
+names a path that no longer resolves. There is no live instance (the one candidate,
+`scripts/scan-stray-provenance.sh`, still exists), and it is why this is a WARN: a clause
+that wedged a consumer for writing true prose would punish accuracy.
+
+**The skip has a cost and it is stated at the enforcer rather than left to be found.** On
+the reference consumer it drops one *genuine* command citation —
+`python3 scripts/check_deployed_ranges_consistency.py`, inside a fenced block, resolving.
+A dangling path appearing only inside a fence is outside the subject set by construction.
+
+### Charter goal 2 — "consumer machinery confined to one declared home core can police" — is DROPPED, with the counterfactual
+
+This is the ending the goal's own verification section allows, and it is **not** the one
+that closed it before. Eight predicates were refuted for asking core to *infer* which
+consumer executables are ai-dlc; that refutation is sound and none of it is re-attempted
+here. What was never measured is whether a **declared** inventory would change any output.
+It was measured now, on both sides of the join:
+
+- The mechanism the home serves is `reconcile/warn-shadowed-local-validators.sh`, and it is
+  a **three-way** join, not the flat two-directory one the record describes: a `.sh`
+  basename named in a CLOSED `ADOPTED UPSTREAM` push-candidate ledger entry, a fork of that
+  basename under the declared home, and a core validator of that basename.
+- **Side 1 is not empty.** The shipping `awk` grammar over the reference consumer's ledger
+  yields **12** closed basenames — control, the same grammar with the closed-marker ignored
+  yields **60**, so the marker discriminates and the silence is not a dead subject set.
+- **Side 2 is empty, and stays empty when widened to the entire consumer tree.** Joining
+  those 12 against all **274** consumer-authored `.sh` returns 3 apparent hits, and all
+  three are **byte-identical to core's own shipped files** — the installed copies, not
+  forks. A second, independent cut agrees: core's **34** shipped script basenames against
+  the consumer's **257** distinct ones intersect in **0**, with both flanks non-empty.
+- **And widening is not the free fix it looks like.** Unanchored, the join re-imports core's
+  own shipped files into the subject set — `I68`'s defect arriving inside the mechanism the
+  goal would have used.
+
+So a perfect inventory changes no output on the reference consumer, because there is
+nothing to police. **The home, `I43` and `I44` stay**: their value is a construction
+property — a subject set core is forbidden to write into — not a discovery one, and they
+cost nothing. **What would re-open the goal is one `comm`**: a consumer fork of a core
+validator appearing anywhere in the tree. It reads 0 today with both flanks non-empty, and
+that is the drop's own falsification test.
+
+### The acceptance criterion that has had no instrument for five pulls is retired, and its question is kept
+
+The charter's first acceptance number — *"per-pull adjudication prose falling from 8.3 kB
+toward the 3.8 kB baseline"* — is retired as written. The corpus is frozen at **78** logs,
+newest 2026-07-30, and **0** of them name any of the last five pulls' versions, against a
+control of **1** for `0.213.0`. The cause is structural: `reconcile-log-<ts>.md` is written
+by the update skill's step 7 under `apply`, and this program's deliveries are hand-authored
+operator briefs that never run it. Its baseline was never reproducible either.
+
+The successor is not a proposal. `layer-adjudication-register.jsonl` already exists in the
+consumer (24 records), is **demanded by a script** that blocks the pull until a verdict line
+is written, and is keyed on a digest covering the entry *and* the core text it hooks at
+`theirs` — so a record cannot be written without the run and is spent when either side
+moves. Its zeros are readings: it was touched by exactly the three pulls that owed
+adjudication and none of the four that owed none.
+
+### Verification
+
+`layer-reference-resolution` 14 → **22 assertions**, 5 → **9 mutants** plus the unmutated
+control. Each new mutant moves **exactly one** cell of the vector, which is what separates a
+kill from entanglement:
+
+| mutant | cell |
+|---|---|
+| stop skipping fences | the fenced path reports |
+| stop normalising `./` | the dot-slash path goes **silent** — the form the live subject is written in |
+| stop requiring root-relative | the distribution-form path reports |
+| walk `extensions/` only | the override's citation goes silent |
+
+Three of the six premises are new and each is read out of the seed rather than back through
+the arm: the resolving file exists (so its silent cell is a resolution, not a blind spot),
+the reported file is genuinely absent, and the fenced case is genuinely fenced. One further
+assertion checks the emitted line carries the code `W9` — the vector matches on message
+text, so without it an arm emitting the right subjects under the wrong code would score
+green, which is `I64`'s point one layer out.
+
+Suite green; `validate-enforcement-map.sh` exit 0, **69** invariants.
+
 ## [0.231.0] — 2026-07-31
 
 ### I54 banned one writer and one shape of pipeline; the defect needs neither, and 22 sites lived in the difference
