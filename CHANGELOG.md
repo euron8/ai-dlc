@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.233.0] — 2026-08-01
+
+### A core fixture the consumer still carries after core stopped shipping it
+
+`install.sh` and `apply.sh` copy a core fixture into the consumer. When core later marks
+that fixture `.dist-only` — or deletes it — both stop copying it, correctly, and **the copy
+already installed becomes unreachable by every mechanism core has.** Nothing updates it,
+nothing removes it, and nothing says it is there. It is not drift (the consumer never edited
+it) and not a missing file (the consumer has one), so no bucket claims it. It freezes at
+whatever core last shipped, indefinitely.
+
+Measured on the reference consumer at 0.232.0: `tests/fixtures/enforcement-map-sites/` was
+core's own copy from `384326a`, 2026-07-14 — **110 lines against core's 1,782 that day** —
+carried for 177 releases after core marked the fixture `.dist-only`. Its three
+`| grep -q` sites were core's pre-sweep construct, frozen in a consumer that had long since
+pulled the v0.231.0 sweep that removed them upstream.
+
+**New: `reconcile/retired-fixtures.sh`**, run at classification as SKILL.md step 3a-iv.
+It emits `RETIRED-FIXTURE-ORPHAN` and never blocks — core does not remove the directory,
+because the file is the consumer's. Two arms, and they are separate for a reason:
+
+- **Arm A** — core still has the directory and it carries `.dist-only`. Read from the tree
+  at THEIRS, so a fixture retired *in this pull* is reported by this pull. Needs no history
+  and therefore cannot answer a false zero.
+- **Arm B** — core deleted the directory outright. Only history separates that from a
+  fixture the consumer wrote itself, so arm B carries a zero guard and refuses rather than
+  answering when the distribution clone is shallow.
+
+**The second half of the predicate is the whole false-positive story.** The reference
+consumer has 119 fixture directories; 90 are core's shipped set, and of the remaining 29
+**exactly one** has ever existed in core's history. The other 28 are the consumer's own and
+the arm is silent on every one. A predicate of "not in core's shipped set" alone would
+report all 29 on the first run — the unmeasured lint `CLAUDE.md` warns about, arriving as
+28 false positives. **Subject set 1, false-positive set 0, both measured before the arm was
+written.**
+
+**The zero guard's first cut was wrong, and its own fixture is what caught it.** The guard
+probed `git log --all -- core/fixtures` on the reasoning that the directory has been in this
+repo's history for its whole life, so an empty answer means the history is gone. Measured on
+a `--depth 1` clone: that probe returns **one** commit — the tip still touches
+`core/fixtures` — while the question arm B actually asks, the log for a directory deleted
+*before* the tip, returns **zero**. The guard passed and the arm false-zeroed underneath it.
+**A control that survives the truncation it is testing for proves the command ran, not that
+the answer is available.** The guard now asks git for the property directly
+(`--is-shallow-repository`), and the fixture asserts the truncated state was built by
+reading the deleted fixture's own history — 0 on the shallow clone against 2 on the full one
+— instead of skipping when it could not tell.
+
+New fixture `retired-fixture-orphan`: **13 assertions, an unmutated control, and 6 mutants**,
+each mutant a `cmp -s`-guarded copy. Five move exactly one assertion. `armA-silent` moves
+three, and that is structural rather than sloppy — arm A's `emit` is the precondition for the
+remedy assertion and for the arm-A-survives-the-guard assertion, so nothing can silence arm A
+and leave them standing. §7's rule exists to catch a *vacuous* assertion, so both are proved
+independently instead: `remedy-unusable` moves the remedy alone and `guard-too-wide` moves the
+guard width alone. Every assertion is moved by at least one mutant that moves nothing else.
+
+**Two defects produced in the doing, both caught by this repo's own gates.** (1) The battery
+first ran every mutant against the *real* detector, because the fixture set an override
+variable it never read at resolution — all six mutants reported zero reds and the unmutated
+control passed for the same wrong reason. Six kills arriving at once is not a thing a real
+battery does. (2) `I54b` then found **9** `printf … | grep -q` sites in the new fixture
+itself, under `pipefail`, with the status load-bearing — the exact class v0.231.0 swept 22
+sites for, reintroduced inside the release that documents it. All 9 converted to here-strings;
+the shipped predicate reads 0 over this tree.
+
+The fixture ships rather than going `.dist-only`, and that is a measurement, not a default:
+**3.0s standalone against an 11.2s `layer-reference-resolution` pole**, so it cannot become a
+consumer's critical path — the gate step 17 was created to enforce.
+
 ## [0.232.0] — 2026-08-01
 
 ### Two entries told an agent to run a script that had never existed, and three namespaces of citation check had never asked

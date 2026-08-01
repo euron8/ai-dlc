@@ -357,6 +357,24 @@ prose is itself generated rather than composed.
    Note what it does NOT catch: a shape the consumer invented that core never had,
    and a layer file that paraphrases a retired construct without using its literal
    shape. A clean result is not proof every layer file survived the release.
+3a-iv. **Core fixtures the consumer still carries after core stopped shipping them**
+   (cheap, deterministic — no agents): run
+   `reconcile/retired-fixtures.sh <dist-repo> <theirs-ref> <consumer-root>`.
+   `install.sh` and `apply.sh` copy a core fixture into the consumer; when core later
+   marks it `.dist-only` or deletes it, both stop copying it — correctly — and the copy
+   already installed becomes unreachable by every mechanism core has. It is not drift
+   (nobody edited it) and not a missing file (the consumer has one), so no bucket claims
+   it, and it freezes at whatever core last shipped.
+   Output is `RETIRED-FIXTURE-ORPHAN<TAB><consumer-path><TAB><remedy>`.
+   **This does NOT block the apply**, and core does not remove the directory — the file
+   is the consumer's. Each row is a `rm -rf` the operator confirms, or a rename if the
+   consumer has adopted the fixture as its own.
+   Two rows are NOT orphans and mean the scan was incomplete: `HARD-RETIRED-FIXTURE-
+   SCAN-UNAVAILABLE` (the path mapper could not be loaded — nothing was scanned) and
+   `RETIRED-FIXTURE-HISTORY-UNAVAILABLE` (a shallow clone, so a fixture core DELETED
+   cannot be told from one the consumer wrote; the `.dist-only` half is unaffected).
+   Note what it does NOT catch: a core fixture the consumer RENAMED, which by design
+   reads as the consumer's own.
 
 3b. **Template pre-classification** (the generated files outside `core/`):
    run `reconcile/preclassify.sh <dist-repo> <base-sha> <theirs-ref>
@@ -613,7 +631,7 @@ prose is itself generated rather than composed.
    COMPARISON (`--verify` now normalises the path on both sides), and the rendering was kept
    deliberately, so the anchor is still there and the receipt still says STILL-LIVE. Ask of the
    substring: *could the fix be written without removing this?* If yes, it is the wrong anchor —
-   prefer a `theirs_lacks` on the token the fix cannot be written without.
+   anchor `theirs_lacks` on the token the fix cannot be written without.
 
    **Never reproduce a receipt's substring in the core file that receipt tests.** A
    `theirs_lacks` receipt is satisfied by ANY occurrence in that file, including one written
