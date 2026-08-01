@@ -122,13 +122,13 @@ fixture that ships alongside it proves the arm fires.
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures — timing and per-fixture assertion counts | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | Advance the machinery stamp | graph | — |
-| 6 | Full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings §6c-32 needs | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ `origin/main`=`b7ff53013`, `ls-remote` agrees; stamp `0.232.0`/`56202bc` on both pairs; engine worktree `9857448` VERSION `0.234.1`; tracked tree carries only the 4 `_bmad-output/` runtime files |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | ✅ `0 HARD blockers`; validator `0 error(s), 4 warning(s)` at `contract_version=12 entries=50 at_current=0 behind=50 undeclared=0`; layer-drift 38 EXTENSION-OK / 1 EXTENSION-RESTATES-CORE / 2 OVERRIDE-ASSERTS-SHADOW-SURVIVES / 2 OVERRIDE-DELEGATES-INTO-SHADOW / 2 OVERRIDE-DOUBLE-SHADOW / 12 OVERRIDE-OK; ledger-reverify (verbatim, not a match target) 3 ENTRY-SWALLOWED / 12 HAND-REVIEW / 2 NAMED-UPSTREAM / 3 NEEDS-REVIEW / 46 STILL-LIVE |
+| 3 | Bank the BEFORE figures — timing and per-fixture assertion counts | graph | ✅ `/tmp/assert-before-0234.tsv` = **108** rows; three pre-push runs all `rc=0` at `real` 44.25 / 43.30 / 43.49 s, **median 43.49 s** (sanity bound, not a result); control on the same run: **108 `ok`, 0 `FAIL`** |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | ✅ branch `chore/ai-dlc-update-0.234.1`; `apply.sh $E $B $G $T` rc **0**, stderr **0 bytes**, **15 rows all `RESOLVED`** incl. `machinery-scaffold` + `restamp 56202bc -> 9857448`. Surface = exactly the 13 §4.2 paths (8 M / 5 new) + the 4 `_bmad-output/` files. ai-dlc-only diffstat **13 files, +976 / −4** — §4.2's +978/−6 is the post-Row-5 figure, and `.claude/.ai-dlc-version` reads `2 2` here vs the `4 4` Row 5 requires, so the 2/2 gap is exactly the pending hand edit. Arrivals: `E18\|W10` **5** hits (controls `E17\|W9`=12, `ZZ99`=0), `contract_version: 13`, `machinery.md` block = `none` (placeholder, left per §2.1), both new fixture dirs present |
+| 5 | Advance the machinery stamp | graph | ✅ both pairs now `0.234.1` / `9857448`; `git diff --numstat` on `.claude/.ai-dlc-version` reads exactly **`4 4`**; `installed_at:` and `upstream:` appear as unchanged context lines in the diff |
+| 6 | Full pre-push, commit, push, PR | graph | ✅ after-table **110** rows, join pairs **108**, **delta EMPTY**; validator `0 error(s), 4 warning(s)` at `contract_version=13`; pre-push `rc=0`, **110 ok, 0 FAIL**, median **44.44 s** (before 43.49 s); commit `772d45dc9`, PR [#843](https://github.com/euron8/fee_accrual_graph/pull/843), squash-merged as `56927c419`; 4 `_bmad-output/` files left unstaged |
+| 7 | Report back the readings §6c-32 needs | graph | ✅ see §7 below |
 
 ### Row 1 — pre-flight
 
@@ -233,3 +233,91 @@ both pre-push medians and the `ok`/`FAIL` counts; and the contents of the scaffo
 - **Filling in the machinery inventory** — the whole point of v0.234.0, and the follow-on step.
   This pull only makes the file exist.
 - **`W7` / `Check 11b`** — a dangling check pointer, pre-existing.
+
+---
+
+## 7. Row 7 — the readings, each with its control
+
+Executed 2026-08-01 in `/Users/n8/git/graph`. All seven rows green, no deviation from §4 except
+one figure that resolved to expectation once the Row-5 hand edit landed (noted in Row 4).
+
+**`origin/main` and its control.** `git rev-parse origin/main` →
+`56927c4199ca8685acebdfd49e32c9cfb54ea5b1`; `git ls-remote origin main` →
+`56927c4199ca8685acebdfd49e32c9cfb54ea5b1	refs/heads/main`. The two agree. Pre-pull it was
+`b7ff5301328b2547cd0f7c4a965f34b0b1b2a781` on both, so §4's figures were taken against the
+tree §5 required.
+
+**Both stamp pairs.** `.claude/.ai-dlc-version` on merged `main`:
+
+```
+version: 0.234.1
+commit: 9857448
+skill_version: 0.234.1
+skill_commit: 9857448
+installed_at: 2026-06-13T13:56:26Z
+upstream: https://github.com/euron8/ai-dlc
+```
+
+`installed_at:` and `upstream:` are byte-for-byte their pre-pull values — they appear as unchanged
+context lines in `git diff`, and the file's `--numstat` read exactly `4 4` as Row 5 requires.
+
+**Validator, final line and both footers, verbatim, on merged `main`:**
+
+```
+validate-layer-entries: 0 error(s), 4 warning(s)
+LAYER_CONFORMANCE v1 contract_version=13 entries=50 at_current=0 behind=50 undeclared=0 errors=0 warnings=4
+LAYER_MEASURED v1 enforcer=validate-layer-entries.sh contract_version=13 codes=27 fired=3 silent_with_subjects=24 unclaimed=none subjects=override:12,extension:38 measured=E1=LC-O1:0/12,E2=LC-O2:0/12,E3=LC-O3:0/12,E8=LC-O10:0/12,E7=LC-O11:0/12,E4=LC-E1:0/38,E5=LC-E2:0/38,E9=LC-E9:0/38,E10=LC-E10:0/38,E11=LC-E11:0/38,E12=LC-E12:0/38,E13=LC-E13:0/38,E14=LC-E16:0/38,W2=LC-E8:0/38,E6=LC-N1:0/38,W1=LC-N2:0/38,W4=LC-N3:0/38,E15=LC-N5:0/38,E16=LC-N6:0/38,W8=LC-N7:0/38,E18=LC-M1:0/50,W10=LC-M2:0/50,W3=LC-R1:0/50,W7=LC-R2:1/50,W9=LC-R3:2/50,E17=LC-C1:0/50,W6=LC-C2:1/50
+```
+
+Its control is the same three lines taken in Row 2, before anything was written — identical but for
+`contract_version=12`, `codes=25`, `silent_with_subjects=22`, and the absence of `E18`/`W10`. The
+warning count is `4` on both sides, so §2.2's PASS condition held rather than being restored. The
+four are `W6`×1, `W7`×1, `W9`×2 — `fired=3` across three codes, matching. `behind=50` is identical
+on both sides and is not this release's doing.
+
+**Assertion delta, verbatim.** The join printed nothing:
+
+```
+after rows: 110
+joined rows: 108
+--- delta (expect empty) ---
+--- end delta ---
+```
+
+110 after against 108 before, the join pairing 108 and reporting zero lines. The two unpaired rows
+are the arriving fixtures, which the join cannot pair and therefore does not report — exactly §6's
+predicted shape. No count moved in either direction.
+
+**Pre-push medians and the `ok`/`FAIL` counts.** Three runs each side, every run `rc=0`:
+
+| | run 1 | run 2 | run 3 | median | `ok` | `FAIL` |
+|---|---|---|---|---|---|---|
+| before | 44.25 | 43.30 | 43.49 | **43.49 s** | 108 | 0 |
+| after | 44.72 | 44.44 | 44.44 | **44.44 s** | 110 | 0 |
+
+Both new fixtures appear by name in the after-run as `ok    consumer-machinery-inventory` and
+`ok    retired-fixture-orphan`, so the 110 is two fixtures driven and not two lines counted. The
++0.95 s is within the spread of the before-runs themselves; per §4.6 these are reported, not matched
+against the rehearsal's figures. The real push ran the gate again live and printed
+`pre-push: all gates green.`
+
+**The scaffolded `machinery.md` block, verbatim:**
+
+```
+none
+```
+
+Left exactly as `apply.sh` wrote it. Per §2.1 this is a placeholder and not an answer: it declares
+in graph's own tree that the project has no ai-dlc machinery of its own, which is false. `W10` is
+silent because of it (`W10=LC-M2:0/50`), and that silence is **not** charter goal 2 being met.
+
+**Two things §5 did not ask for, recorded because they are this pull's other arm.**
+`hard-blockers.sh` printed `0 HARD blockers` both before and after. `retired-fixtures.sh $E $T $G`
+— three args — exited `0` with **zero lines** of output, which §4.7 calls the correct result: the
+orphan it was built for was deleted in the previous branch, and the fixture shipping alongside it is
+what proves the arm is not blind.
+
+**Method note.** Every fixture tally was re-derived under an explicit `bash -c` rather than the
+session's `grep`, which is a shell-snapshot function that undercounts the real binary. The arrival
+greps were each run beside a positive and a negative control (`E18\|W10`=5, `E17\|W9`=12,
+`ZZ99`=0) so that a zero could be distinguished from a pattern that never matches.
