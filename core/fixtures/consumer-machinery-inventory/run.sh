@@ -153,12 +153,7 @@ fi
 # ================================ mutant battery ================================
 # Each mutant is a cmp -s guarded COPY and must turn exactly the assertions it should red.
 if [ -n "${AI_DLC_CMI_VALIDATOR:-}" ]; then
-  # M6 — the arm still fires but its remedy stops naming a runnable move. This is what keeps
-# M1's two-cell move honest: the remedy assertion is moved here by itself.
-expect_set remedy-unusable 1 'does not name a runnable move' \
-  's@git mv @move @'
-
-if [ "$fails" -eq 0 ]; then echo "PASS consumer-machinery-inventory"; exit 0; fi
+  if [ "$fails" -eq 0 ]; then echo "PASS consumer-machinery-inventory"; exit 0; fi
   echo "FAIL consumer-machinery-inventory ($fails)"; exit 1
 fi
 
@@ -217,6 +212,19 @@ expect_set no-missing-warning 1 'unscaffolded inventory is SILENT' \
 expect_set unscoped-to-declaration 1 'predates the declaration' \
   's@^if \[ -n "\$MACHINERY_REL" \] && \[ -n "\$MACHINERY_HOME" \]; then@if [ -n "$MACHINERY_HOME" ]; then MACHINERY_REL="${MACHINERY_REL:-.claude/skills/ai-dlc/machinery.md}"@'
 
+# M6 — the arm still fires and its remedy stops naming a runnable move. This is what keeps
+# M1's two-cell expectation honest: without it the remedy cell is proven only by the mutant
+# that silences the whole arm.
+#
+# IT SHIPPED INSIDE THE CHILD-RUN BRANCH AND HAD NEVER EXECUTED. `expect_set` and `mut_reds`
+# are defined BELOW that branch, so in a child run the call was a command-not-found swallowed
+# by the battery's own `2>/dev/null`, and in the parent run the branch is not taken at all.
+# Measured: five MUTANT lines in the output and zero occurrences of this mutant's label.
+# A mutant that cannot run reads exactly like one that killed — this repo's named class,
+# produced inside the fixture whose control caught a different instance of it one release
+# earlier.
+expect_set remedy-unusable 1 'does not name a runnable move' \
+  's@git mv @move @'
+
 if [ "$fails" -eq 0 ]; then echo "PASS consumer-machinery-inventory"; exit 0; fi
-echo "FAIL consumer-machinery-inventory ($fails)"
-exit 1
+echo "FAIL consumer-machinery-inventory ($fails)"; exit 1

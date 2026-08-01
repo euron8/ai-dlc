@@ -55,6 +55,21 @@ sprint (current sprint number minus one). Resolve the `sha` field as
 file HARD_BLOCK at carry-over-evaluation gate — silent skip is
 forbidden.
 
+### 1b. Post-Merge Trunk Audit
+
+Run `scripts/ai-dlc/validate-cycle-commits.sh --audit-trunk`. It walks
+every commit that reached the trunk since the watermark, resolves each
+to a class declared in the file `layer-contract.yaml` declares as
+`consumer_pr_class_file:`, and re-runs that class's validators against
+that commit's own checked-out tree.
+
+Exit 0 with a `WORKLIST` line means this project has not declared its
+PR classes yet and nothing was audited — that is a backlog item, not a
+clean trunk. Exit 1 is one or more findings: file HARD_BLOCK at the
+carry-over-evaluation gate naming each reported SHA; silent skip is
+forbidden. Exit 2 is a setup error (no genesis, unreadable contract) —
+fix the invocation and re-run; it is NOT a clean result.
+
 **Backlog health check.** Before per-item evaluation, count OPEN
 items and flag any older than 10 sprints. When OPEN count exceeds 15,
 prioritize triage as a sprint deliverable.

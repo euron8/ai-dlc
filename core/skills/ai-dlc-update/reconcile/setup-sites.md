@@ -122,6 +122,7 @@ core_manifest:
   - core/fixtures/ledger-rotate/**
   - core/fixtures/mandatory-rules-clean-tree/**
   - core/fixtures/mutation-red-replay/**
+  - core/fixtures/trunk-audit-classes/**
   - core/fixtures/trunk-push-bound/**
   - core/fixtures/pause-hook-origin/**
   - core/fixtures/provenance-not-accessible/**
