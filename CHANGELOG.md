@@ -17,6 +17,77 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.230.0] — 2026-07-31
+
+### v0.229.0 spent 9 seconds of the consumer's gate to save it 2.4, because its fixture's slack was measured in the wrong suite
+
+v0.229.0 taught the fixture pool to dispatch longest-first and proved it with four arms
+and three mutants added to `consumer-suite-pool`. Those arms cost about 30s, because the
+only honest way to observe a dispatch order is to give units distinguishable costs and
+then pay them. **In this repository that was free.** The fixture went 8.8s → 41s against
+a 151s pole, so every slack figure said it cost nothing, and it was shipped.
+
+**`consumer-suite-pool` is SHIPPED to consumers, and on the consumer it became the pole.**
+Measured on a `git clone --local` of the reference consumer, running the real `apply.sh`
+at `8fde1de` and then graph's own `.githooks/pre-push`, three runs each side on one box
+in one session:
+
+| | before (0.228.0 hook) | after (0.229.0 hook) |
+|---|---|---|
+| readings | 40.55, 41.07, 41.08 | 49.91, 50.12, 49.98 |
+| median | 41.07s | **49.98s — 21.7% SLOWER** |
+
+The consumer's own durations record names the cause without ambiguity:
+`consumer-suite-pool 40` against a next-heaviest unit of **29**. Before the release it
+was a ~9s passenger there. **The release that reorders dispatch to save the consumer
+2.4s spent 9 of them**, and the net was a regression in the only suite it was written
+for.
+
+**The error is the release's own headline finding, one layer down and in my own work.**
+v0.229.0's finding is that what a schedule is worth is a property of the SUITE it runs
+in, not of the box — measured on two suites that gave opposite answers. What a fixture
+COSTS is the same kind of property, and I measured it only in the suite where it was
+free. §7 gate item 6 states the rule directly: *a new `.dist-only` fixture costs zero
+enumeration and runs concurrently; prefer that to growing a fixture already on a
+critical path.* It was applied when this work declined to grow `enforcement-map-sites`
+and not applied one file over.
+
+#### The fix
+
+The dispatch arms move to a new **`.dist-only`** fixture, `suite-dispatch-order` — 8
+assertions, 30.3s, reaching no consumer. `consumer-suite-pool` returns to its **14**
+assertions and **7.85s**, which is what a consumer ran before v0.229.0.
+
+Nothing is given up. What stays with the consumer is everything about the pool's
+CORRECTNESS — the empty-suite guard in both its forms, the dropped-worker completeness
+arm, failure attribution, list-order reporting, and that the pool is really a pool. The
+dispatch ORDER cannot cost a consumer a verdict, because the report and the expected
+count are both taken from the unordered list, so proving it is the distribution's job.
+
+**Trimming the arms to fit under the consumer's pole was the rejected alternative.** It
+would have worked until the consumer's pole moved, and that is a number core does not
+control — the same tuned-versus-robust choice v0.229.0 made when it refused a hoist-K
+constant.
+
+The `mut` fix from v0.229.0 stays in `consumer-suite-pool`, because it is a defect fix
+rather than part of the move: its `cmp -s` guard reported into a command substitution, so
+a mutation that matched nothing said nothing.
+
+#### Two things the rehearsal found that are NOT fixed here, recorded rather than carried silently
+
+- **`apply-drift-refile` pipes `git show` into `grep -q` under `set -o pipefail`**
+  (`run.sh:28`). `grep -q` exits on first match and SIGPIPEs a still-writing upstream, so
+  the pipeline status is 141 and the `if` takes its false branch. It failed once in four
+  post-pull runs and **0 of 8 solo** — the race needs a loaded scheduler, which is exactly
+  how D-6c9.4 describes the same class in the consumer. **I54 guards a shell VARIABLE
+  written into a first-match reader; a COMMAND's output into one is outside its subject
+  set**, which is how this survived v0.207.0's 300-site sweep. Core-shipped, so it is
+  core's to fix, and it needs I54's scope widened rather than one line patched.
+- The pull that carries this is otherwise clean: `layer-drift.sh` 57 rows with
+  `EXTENSION-HOOK-DRIFT` **0** (control, wide span: 3), `hard-blockers.sh` **none** —
+  the `HARD-UNREGISTERED-CORE-DRIFT` that made step 11 exist is closed in the consumer —
+  and both validators exit 0 at `0 error(s), 2 warning(s)`.
+
 ## [0.229.0] — 2026-07-31
 
 ### The fixture pool dispatches longest-first, and the win turns out to be a property of the SUITE, not of the box
