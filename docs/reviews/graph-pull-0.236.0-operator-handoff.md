@@ -211,13 +211,13 @@ not the pole, 4.42s of slack. **Report your own figures; do not match them again
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures — timing, and BOTH assertion instruments | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | Advance the machinery stamp | graph | — |
-| 6 | Assertion delta, full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings §6c-41 needs | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | ✅ |
+| 3 | Bank the BEFORE figures — timing, and BOTH assertion instruments | graph | ✅ |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | ✅ |
+| 5 | Advance the machinery stamp | graph | ✅ |
+| 6 | Assertion delta, full pre-push, commit, push, PR | graph | ✅ |
+| 7 | Report back the readings §6c-41 needs | graph | ✅ |
 
 ### Row 1 — pre-flight
 
@@ -333,16 +333,38 @@ it is a recording act, and the six briefs before this one were closed the same w
 
 | reading | value | its control |
 |---|---|---|
-| `origin/main` before | | `ls-remote` agrees |
-| apply rows | | 0 bytes stderr |
-| diff surface | | the §4.2 path set exactly |
-| `pr-classes.md` md5 | | 5 classes, unchanged |
-| `capture:` in the installed validator | | `audit-trunk` reads 6 at both ends |
-| validator after | | same footer fields as before |
-| drivable fixtures | | `trunk-audit-mutants` ABSENT |
-| assertion delta, run-based | | the untouched control fixture |
-| gate timing | | verdict count both sides |
-| commit / PR / merge sha | | |
+| `origin/main` before | `b7b7e1b6a9aa871166204970d3228dd0b0e95cc7` — the expected ref, no STOP | `git ls-remote origin main` agrees, same sha |
+| apply rows | rc `0`, **11** rows — 10 `RESOLVED`, 1 `DECISION`, **0** `WORKLIST`; §4.1's row set exactly, in order | **0** bytes stderr; tallies grepped TAB-anchored per §3, not space-anchored |
+| diff surface | at row 4, **8** files **+408 / −18**, **0** untracked; as committed, the same 8 files at **+410 / −20** | the §4.2 path set exactly — and the count is 8/+408/−18 only under `:(exclude)_bmad-output`; a bare `git diff --shortstat` reads 12/+464/−22 because the four pre-existing runtime files (4 files, +56/−4) are in the tree. The committed +410/−20 is §4.2's figure **plus row 5's two stamp lines**: `apply` moves `version:`/`commit:` (2/2 at row 4) and row 5 moves `skill_version:`/`skill_commit:` as well (4/4 at commit). Expected, not a discrepancy — but **a future brief should say which of the two it is quoting**, since a reader who checks §4.2 against the merged squash commit will find +410/−20 |
+| `pr-classes.md` md5 | `1ed82e923f50862267960a2a8e048449` — **unwritten**, matching §2.2's before-value | **5** classes; `apply` printed no row for the installed copy, only for `templates/pr-classes.md` |
+| `capture:` in the installed validator | **0 → 7** | `audit-trunk` in the same file, same grep: **6 → 6**; `templates/pr-classes.md` **absent → 5** |
+| validator after | `0 error(s), 1 warning(s)` | footer **byte-identical** to before: `LAYER_CONFORMANCE v1 contract_version=13 entries=50 at_current=50 behind=0 undeclared=0 errors=0 warnings=1`; the warning is `W7=LC-R2:1/50` on both sides, the pre-existing dangling `Check 11b` |
+| drivable fixtures | **111 → 111**, unchanged | `tests/fixtures/trunk-audit-mutants` **ABSENT** — `dist-only held` |
+| assertion delta, run-based | `trunk-audit-classes` **22 → 37** | `layer-reference-resolution`, untouched by this release: **22 → 22**. Instrument A joined 111/111 rows and moved **one** line, `trunk-audit-classes 0 → 2` (the §2.5 artefact), nothing else, nothing downward |
+| gate timing | before `44.66 / 44.71 / 44.95` → median **44.71s**; after `44.55 / 45.72 / 45.46` → median **45.46s** | `rc=0` and **111 ok / 0 FAIL** on all six runs |
+| commit / PR / merge sha | commit `d7ea5eb1b` · PR [#848](https://github.com/euron8/fee_accrual_graph/pull/848) · squash-merged to `main` as **`63cff7274a153be065335c663c6b1ad2d67065c6`**, operator-approved | the four `_bmad-output/` runtime files left uncommitted. Verified on `main` **by content, not by ancestry** (a squash merge makes `--is-ancestor` false): all four stamp lines `0.236.0`/`7d2dd6a`, `capture:` reads 7 against the `audit-trunk` control at 6, installed `pr-classes.md` md5 unchanged |
+
+**No deploy follows this merge.** The diff is `.claude/`, `scripts/ai-dlc/` and `tests/fixtures/`
+only — no `server/`, `web/`, `rebalancer/`, `graph-node-src/` or `infra/` path — so there is no
+`ecs-deploy.sh` service to run and no `cdk deploy`. Machinery-only, as the six pulls before it.
+
+
+**Two instrument notes back, both about §2.5's grep rather than about the tree.**
+
+- **§2.5's figure of "38 of 111" does not reproduce here; the reading is 39, and the cause is the
+  grep and not the fixtures.** §2.5 writes the instrument as `'^\s*(ok|bad) '` while row 3 writes it
+  as `'^[[:space:]]*(ok|bad) '`. macOS `grep -E` (BSD) does not honour `\s`, so those two are
+  different instruments on this box. Row 3's bracket-expression form is the one banked, and it was
+  banked identically at both ends, so the join and its 111-row control are unaffected. **A future
+  brief quoting a `\s` figure at a consumer on macOS should expect it to be off by a few.**
+- **§2.5's conclusion holds regardless, and this run is the demonstration**: the line-anchored
+  instrument scored the one fixture this release moves at **0 before**, and the run-based one
+  scored it **22 → 37**.
+
+**Everything else in §4 reproduced exactly.** No STOP condition fired: `apply` did not write
+`pr-classes.md`, there was no `WORKLIST` row, and there was no second `DECISION` row. Timing came in
+about 3.3s above §4.9's rehearsal on both sides — a different box, and the before/after delta is
++0.75s, so it is read as a sanity bound and not as a result, per §4.9.
 
 ---
 
