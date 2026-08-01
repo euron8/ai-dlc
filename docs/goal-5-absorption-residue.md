@@ -7,6 +7,8 @@ script with one extra arm."* This document exists because that outcome has been 
 places with three different arithmetics, none of which reconciles with the others, and a reader
 quoting any one of them quotes a different number. **Every figure below is re-derived on a single
 instrument against graph at `daf1d4a46` (2026-08-01), and every percentage states its denominator.**
+**§2 carries one correction taken later the same day at `c459f207a`**, after graph's goal-2
+segregation established that one of the charter's eight was never a subject.
 
 The instrument is `git show <ref>:<path> | wc -l`. All subject files end in `0a`, so `wc -l` is the
 true line count and not an undercount of a final unterminated line.
@@ -51,6 +53,11 @@ subject-set size of ~2,060 and a residue of 1,763, then reported **307** lines r
 
 **The residue is the one figure that did not move.** 1,763 lines, reproduced exactly.
 
+*(That figure was correct for the subject set as the charter defined it. It is superseded by §2's
+correction, which removes one row the charter should never have listed: the residue is **1,717**.
+Both are stated because the first is what the re-derivation found and the second is what the tree
+supports — and conflating those is how this goal acquired three arithmetics in the first place.)*
+
 ---
 
 ## 2. The one arithmetic
@@ -66,9 +73,9 @@ Measured at `18e00ef40` — graph immediately before `39f0248ff`, the retirement
 | `audit-rule-exercise.sh` | 105 | 105 | **0** | REFUTED (arm 1) |
 | `generate-sprint-status.py` | 1068 | 1068 | **0** | REFUTED |
 | `audit-main-since.sh` | 348 | 364 | **+16** | REFUTED (arm 4) — and it grew |
-| `validate-no-direct-main-push.sh` | 46 | 46 | **0** | REFUTED |
+| ~~`validate-no-direct-main-push.sh`~~ | ~~46~~ | ~~46~~ | — | **NOT A SUBJECT — see below** |
 | `retro-replay-harness.sh` | 97 | 97 | **0** | REFUTED |
-| **Total** | **2,053** | **1,763** | **−290** | |
+| **Total** | **2,007** | **1,717** | **−290** | |
 
 Controls, same invocation: `ci-local.sh` resolves at both refs at 1,659 lines; a bogus path under
 `scripts/` returns `fatal: path … does not exist` at both. So `GONE` is a reading and not a failed
@@ -76,7 +83,7 @@ lookup.
 
 **Retirement was 290 lines. Against each of the three denominators that have been used:**
 
-- **290 of 2,053** — the subject set as it actually stood when the program started = **14.1%**
+- **290 of 2,007** — the subject set as it actually stood when the program started = **14.4%**
 - **290 of 2,610** — the charter's own tabled total for the same eight files = **11.1%**
 - **290 of ~3,000** — locked decision 4's promise = **9.7%**
 
@@ -92,7 +99,18 @@ They are nested, and each is inflated relative to the one inside it.
    or 15%, and nothing in the charter derives it.
 2. **2,610** — the charter's Part F table. It overstates the tree by **557 lines**: 7 from the
    one-line instrument skew above, and **550 from a single row**.
-3. **2,053** — the measured subject set. The only one of the three that a command reproduces.
+3. **2,007** — the measured subject set. The only one of the three that a command reproduces.
+
+**CORRECTED 2026-08-01: `validate-no-direct-main-push.sh` is not a subject at all.** The charter's
+Part F names it as consumer ai-dlc machinery. When graph performed the goal-2 segregation, its
+session applied the test — *would this script still have a job with ai-dlc removed?* — and judged
+it **domain code**: its inputs are git refs and commit subjects, and with ai-dlc gone it still
+blocks direct pushes to `main`. It was excluded from the machinery inventory with that reasoning
+stated, and reported rather than moved, which is exactly what that step's stop condition required.
+**So the charter's Part F list was wrong by one row**, and its 46 lines leave both the subject set
+and the residue: 2,053 → **2,007** and 1,763 → **1,717**. **Retirement does not move** — this
+script was refuted, never retired — **so the correction changes a denominator, not an
+achievement.**
 
 **The 550-line row has no support in graph's history at all.** The charter records
 `retro-replay-harness.sh` at 647 lines. Measured across **every commit that has ever touched it** —
@@ -156,7 +174,7 @@ reason this document exists.
 
 ## 5. The residue, and its disposition
 
-**1,763 lines are live in the consumer today**, across six files, and they are an **OPEN** item.
+**1,717 lines are live in the consumer today**, across five files, and they are an **OPEN** item. As of 2026-08-01 all five sit inside the declared machinery home — goal 2's segregation — so the residue is now *segregated* rather than mixed with domain code, which is a different thing from being retired.
 
 They were previously dispositioned as *"formally dropped"*, on the reasoning that the refutations
 closed them. **That disposition is withdrawn.** The governing decision of 2026-07-31 states that a
@@ -181,10 +199,10 @@ is the whole distinction this document is making.
 |---|---|
 | Promised (locked decision 4) | ~3,000 lines |
 | Charter's own tabled subject set | 2,610 lines — overstates the tree by 557 |
-| Measured subject set | **2,053 lines** |
+| Measured subject set | **2,007 lines** |
 | Retired, net | **290 lines** |
-| Retirement rate | **14.1% of 2,053** / 11.1% of 2,610 / 9.7% of ~3,000 |
-| Live residue | **1,763 lines** across 6 files — **OPEN** |
+| Retirement rate | **14.4% of 2,007** / 11.1% of 2,610 / 9.7% of ~3,000 |
+| Live residue | **1,717 lines** across 5 files — **OPEN**, and all five now sit inside the declared machinery home |
 | Subjects retired | 2 of 8 |
 | Subjects partially absorbed | 1 of 8 |
 | Subjects refuted | 5 of 8, all with receipts, 2 re-derived at v0.232.0 |
