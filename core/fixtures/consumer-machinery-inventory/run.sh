@@ -42,8 +42,18 @@ elif [ -n "$ROOT" ] && [ -f "$ROOT/scripts/ai-dlc/validate-layer-entries.sh" ]; 
 else
   echo "FIXTURE ERROR: validate-layer-entries.sh not found in either layout" >&2; exit 2
 fi
-SRC="$ROOT/core/skills/ai-dlc"
-[ -d "$SRC" ] || { echo "FIXTURE ERROR: core/skills/ai-dlc not found" >&2; exit 2; }
+# The contract and manifest this fixture copies into its synthetic consumers, resolved in
+# BOTH layouts. install.sh splits what shares a parent in core/, so a fixture that knows only
+# the distribution path dies with exit 2 on every consumer — which the suite reports as a
+# FAIL, not as a skip. Found by rehearsing this release's pull against a real consumer clone
+# rather than by reading the code.
+if [ -n "$ROOT" ] && [ -d "$ROOT/core/skills/ai-dlc" ]; then
+  SRC="$ROOT/core/skills/ai-dlc"
+elif [ -n "$ROOT" ] && [ -d "$ROOT/.claude/skills/ai-dlc" ]; then
+  SRC="$ROOT/.claude/skills/ai-dlc"
+else
+  echo "FIXTURE ERROR: the ai-dlc skill dir was not found in either layout" >&2; exit 2
+fi
 
 WORK="$(mktemp -d 2>/dev/null)" || { echo "FIXTURE ERROR: mktemp failed" >&2; exit 2; }
 WORK="$(cd "$WORK" && pwd)"

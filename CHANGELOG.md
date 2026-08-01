@@ -17,6 +17,24 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.234.1] — 2026-08-01
+
+### The fixture v0.234.0 shipped could not run in the layout it ships to
+
+`consumer-machinery-inventory` resolved the ai-dlc skill directory as
+`core/skills/ai-dlc` only. `install.sh` splits what shares a parent in `core/`, so in a
+consumer that path does not exist and the fixture exited 2 — which the suite reports as a
+**FAIL**, not as a skip. Every consumer receiving v0.234.0 would have had a red gate on the
+first push after the pull.
+
+**Found by rehearsing the pull against a real consumer clone**, not by reading the code: the
+distribution's own suite is green on this fixture because the distribution is the one layout
+it knew. That is the two-layouts rule in `CLAUDE.md` and invariant `I33`, arriving in a
+fixture written in the same session that quotes them.
+
+The sibling shipped in v0.233.0, `retired-fixture-orphan`, already resolved both layouts and
+passes in a consumer clone unchanged — so this is one fixture's defect and not a class.
+
 ## [0.234.0] — 2026-08-01
 
 ### Goal 2: the consumer declares its ai-dlc machinery, and core enforces that it is segregated
