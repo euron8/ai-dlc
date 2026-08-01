@@ -1026,6 +1026,65 @@ if [ -n "$CROSSWALK_LEGACY_IDS" ]; then
   warn W8 "$(rel "$CROSSWALK_LEGACY"): carries $(printf '%s\n' "$CROSSWALK_LEGACY_IDS" | grep -c .) crosswalk row(s) in the RETIRED location — $(printf '%s' "$CROSSWALK_LEGACY_IDS" | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g'). That file is core's: the distribution ships it and every pull compares your copy against it, so rows written there read as unregistered core drift and the two remedies the updater prints for that status will either delete them or move them somewhere nothing reads. They still resolve today and nothing is wedged. Move them to ${CROSSWALK_REL:-the declared crosswalk file} and delete them from here; the declaration is 'consumer_crosswalk_file:' in $(rel "$LC_FILE")."
 fi
 
+# ================= LC-M1 / E18 and LC-M2 / W10 — the machinery inventory ==================
+#
+# THE GOAL THIS SERVES, and the distinction that took the whole program to get right. Eight
+# predicates asking core to INFER which consumer executables are ai-dlc were measured and all
+# eight refuted; that refutation is sound and nothing below re-attempts it. But inference and
+# declaration are different questions. Core cannot decide whether `scripts/foo.sh` serves the
+# ai-dlc process or the consumer's own domain. A consumer CAN, and once it has said so,
+# "is this declared path inside the declared home" is a string comparison.
+#
+# THE HOME AND THE INVENTORY FILE ARE BOTH READ FROM DECLARATIONS, never spelled here. The
+# home literal lives in ai-dlc-update's setup-sites.md copy (I43 binds it across every
+# surface); the inventory path is declared in the contract beside the crosswalk's, and I67's
+# rule applies to it — a reader that restates the literal is the drift this contract removes.
+MACHINERY_REL="$(sed -n 's/^consumer_machinery_file:[ \t]*//p' "$LC_FILE" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+# NOT from reconcile/setup-sites.md: I25 and I29 forbid core/scripts depending on the update
+# skill, and that is why nrm_awk() above is a bound COPY rather than a source. `core-manifest.md`
+# ships inside THIS skill, carries the same literal, and I43 holds every surface to one string --
+# so reading it here is a join, not a fifth spelling.
+MACHINERY_HOME="$(sed -n 's/^consumer_machinery_home:[ \t]*//p' "$SKILL_DIR/core-manifest.md" 2>/dev/null | head -1 | sed 's/[ \t]*$//')"
+
+# Both arms are SILENT on a tree with no contract, exactly as E16 is. A distribution that
+# predates the declaration is not a consumer failing to migrate, and v0.228.0 recorded what
+# happens when an arm cannot tell those apart: two apply fixtures went red because their
+# synthetic distributions predate the contract entirely.
+if [ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]; then
+  MACHINERY_MD="$PROJECT_ROOT/$MACHINERY_REL"
+  if [ ! -f "$MACHINERY_MD" ]; then
+    # Scaffolded by install.sh and by the pull driver. Absent means neither has run since the
+    # declaration shipped -- v0.228.0's finding, where a create-once file reached no existing
+    # consumer because a consumer never runs install.sh twice.
+    warn W10 "$MACHINERY_REL: the ai-dlc machinery inventory has not been scaffolded, so this project has not declared which of its scripts are ai-dlc machinery. The next pull creates it from core's template; until then nothing states the inventory and nothing can check it. An empty inventory is legitimate and is declared with the literal 'none' -- what is not legitimate is silence, because a project with no machinery and a project that has never looked are indistinguishable without it."
+  else
+    # The inventory: every non-blank line inside the fenced block that is not prose. The
+    # grammar is deliberately dumb -- a path per line -- because the consumer writes this by
+    # hand and a clever parser would make a hand-written file a source of parse errors.
+    MACHINERY_LINES="$(awk '/^```/{f=!f; next} f && NF' "$MACHINERY_MD" 2>/dev/null | sed 's/[ \t]*$//' | grep -E '.' || true)"
+    if [ -z "$MACHINERY_LINES" ]; then
+      warn W10 "$MACHINERY_REL: carries no inventory block at all -- not even the literal 'none'. An empty inventory and an undeclared one must not look alike: state 'none' if this project has no ai-dlc machinery of its own, or list one path per line inside the fenced block."
+    elif [ "$(printf '%s\n' "$MACHINERY_LINES" | grep -c .)" = "1" ] && [ "$MACHINERY_LINES" = "none" ]; then
+      : # explicitly empty, and that is a complete answer
+    else
+      while IFS= read -r mpath; do
+        [ -n "$mpath" ] || continue
+        case "$mpath" in "#"*) continue ;; esac
+        # ERROR 1 of 2 -- declared but outside the home. THIS IS THE SEGREGATION.
+        case "$mpath" in
+          "$MACHINERY_HOME"*) ;;
+          *) err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL but it does not live under the declared machinery home '$MACHINERY_HOME'. That is the state the home exists to end -- ai-dlc machinery and this project's own domain code mixed in one directory with nothing able to tell them apart. Move it and update every reference: git mv '$mpath' '${MACHINERY_HOME}$(basename "$mpath")'. If this file is NOT ai-dlc machinery -- if it would still have a job with ai-dlc removed from this repository -- then it should not be in the inventory at all; remove the line instead of moving the file."
+             continue ;;
+        esac
+        # ERROR 2 of 2 -- declared but absent. An inventory nothing checks is forgeable.
+        [ -e "$PROJECT_ROOT/$mpath" ] || err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL but no such file exists in this project. A declared inventory that names paths which are not there is a list nothing checks, which is exactly the forgeability this contract removes. Either the path is stale and should be removed from the inventory, or the file was moved and the inventory did not follow."
+      done <<MACHINERY_EOF
+$MACHINERY_LINES
+MACHINERY_EOF
+    fi
+  fi
+fi
+
 # THE RESOLVABILITY SET — measured, and it is what makes E16's subject the right one.
 #
 # The first form of this arm asked "did an id leave THIS entry", and on the reference

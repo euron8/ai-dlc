@@ -209,6 +209,7 @@ core_manifest:
   - fixtures/retired-contract-token/**
   - fixtures/retired-layer-contract/**
   - fixtures/retired-fixture-orphan/**
+  - fixtures/consumer-machinery-inventory/**
   - fixtures/retro-audit-scans/**
   - fixtures/route-defect-classification/**
   - fixtures/self-update-gate/**
@@ -249,6 +250,7 @@ rulebook:
   - team-roles/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/
+consumer_machinery_subdirs: lib/ hooks/ fixtures/ config/ tests/
 ```
 
 **Note on the second copy.** `ai-dlc-update`'s

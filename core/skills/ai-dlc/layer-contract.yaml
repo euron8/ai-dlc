@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 12
+contract_version: 13
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -180,6 +180,24 @@ contract_version: 12
 # `HARD-UNREGISTERED-CORE-DRIFT` whose two printed remedies respectively delete the rows and
 # file them where no reader looks. LC-N7 reports rows still in the old location.
 consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md
+
+# THE CONSUMER'S ai-dlc MACHINERY INVENTORY. Same shape as the crosswalk above and for the
+# same reason: core declares the PATH, the installer and the pull driver scaffold it once
+# from a template, core never overwrites it, and every reader derives the location from here.
+#
+# WHY A DECLARATION AT ALL, given that eight predicates asking core to INFER which consumer
+# executables are ai-dlc were all refuted. Because inference and declaration are different
+# questions. Core cannot look at `scripts/foo.sh` and decide whether it serves the ai-dlc
+# process or the consumer's own domain -- that question is genuinely undecidable from core's
+# side, and re-attempting it is this program's most repeated mistake. But a consumer CAN say
+# which of its scripts are ai-dlc machinery, and once it has said so, "is this declared file
+# in the declared home" is decidable by string comparison.
+#
+# WHAT THIS CANNOT DO, stated here rather than discovered later: it cannot catch
+# UNDER-declaration. A consumer that omits a script from the inventory makes it invisible,
+# and no clause here pretends otherwise. The inventory is a reviewable artifact plus
+# mechanical segregation of everything in it -- not a proof that it is complete.
+consumer_machinery_file: .claude/skills/ai-dlc/machinery.md
 
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
@@ -762,6 +780,49 @@ clauses:
     enforcer: core/scripts/validate-layer-entries.sh
     code: W8
     fixture: layer-crosswalk-home
+
+  # --- the consumer's machinery inventory ------------------------------------------------
+  - id: LC-M1
+    subject: any
+    level: ERROR
+    since: 13
+    normative: >-
+      Every path declared in the file `layer-contract.yaml` names as
+      `consumer_machinery_file:` MUST exist and MUST live under the directory declared as
+      `consumer_machinery_home:`. This is the segregation the home exists for, and it is
+      the half of it core can actually decide: whether a path the consumer has ITSELF
+      called ai-dlc machinery sits inside the home is a string comparison, needing none of
+      the inference eight refuted predicates died on. A declared path outside the home is
+      the state the home was created to end -- machinery and domain code mixed in one
+      directory with nothing able to tell them apart -- and a declared path that does not
+      exist is an inventory nothing checks, which is the forgeability this contract exists
+      to remove. The remedy names both ends of the move. NOTE what this does NOT assert:
+      that the inventory is complete. A script the consumer omits is invisible here, and
+      that is the undecidable question, not an oversight in this clause.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: E18
+    fixture: consumer-machinery-inventory
+
+  - id: LC-M2
+    subject: any
+    level: WARN
+    since: 13
+    normative: >-
+      The consumer declares its ai-dlc machinery inventory, and an EMPTY inventory is
+      declared with the literal `none` rather than by leaving the file unfilled. Silence
+      and emptiness must not look alike: a consumer that has no machinery of its own and a
+      consumer that has never done the work produce identical trees under any weaker rule,
+      and the reference consumer spent an entire program in the second state while the
+      first was assumed. This is the shape `fixture: none` already takes in this contract --
+      a counted gap nothing is allowed to satisfy in silence. It is a WARN and not an ERROR
+      because an unmigrated consumer must not be wedged by a clause whose remedy is a
+      judgement call about its own scripts; it reports one worklist line per run, the same
+      way LC-C2 reports the conformance worklist.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/scripts/validate-layer-entries.sh
+    code: W10
+    fixture: consumer-machinery-inventory
 
   # --- cross-references into the rendered rulebook --------------------------------------
   - id: LC-R1

@@ -571,6 +571,34 @@ elif [ ! -f "$CONSUMER/$CW_REL" ]; then
   fi
 fi
 
+# The machinery inventory, scaffolded on exactly the same terms as the crosswalk above and
+# scoped the same way: silent when THEIRS predates the contract, a DECISION when the contract
+# is present and silent about the key. v0.228.0 is why this block exists at all -- a
+# create-once file scaffolded only by install.sh reaches no consumer that already installed.
+MC_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
+  | sed -n 's/^consumer_machinery_file:[ \t]*//p' | head -1 | sed 's/[ \t]*$//')"
+if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
+  : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
+elif [ -z "$MC_REL" ]; then
+  : # THEIRS predates the machinery declaration specifically. Not a failure -- the key
+    # arrived at contract version 13 and a consumer updating across that boundary has
+    # nothing to create. E16's scoping lesson, applied before it could cost a release.
+elif [ ! -f "$CONSUMER/$MC_REL" ]; then
+  mc_tpl="core/skills/ai-dlc/templates/$(basename "$MC_REL")"
+  mc_tmp="$CONSUMER/$MC_REL.incoming.$$"
+  mkdir -p "$(dirname "$CONSUMER/$MC_REL")" 2>/dev/null || true
+  if git -C "$DIST" show "${THEIRS}:${mc_tpl}" > "$mc_tmp" 2>/dev/null && [ -s "$mc_tmp" ]; then
+    mv "$mc_tmp" "$CONSUMER/$MC_REL"
+    say RESOLVED machinery-scaffold "$MC_REL" \
+      "created from ${mc_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. Declare which of your scripts are ai-dlc machinery, or leave the literal 'none' if this project has none of its own."
+  else
+    rm -f "$mc_tmp"
+    say DECISION machinery-template-missing "$mc_tpl" \
+      "THEIRS declares '$MC_REL' but ships no template to scaffold it from, so the declared path would stay empty while the contract says it is the inventory's home."
+    mech_fail=$((mech_fail+1))
+  fi
+fi
+
 # -----------------------------------------------------------------------------
 # EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
 # consumer tree once this driver is done.

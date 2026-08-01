@@ -17,6 +17,75 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.234.0] — 2026-08-01
+
+### Goal 2: the consumer declares its ai-dlc machinery, and core enforces that it is segregated
+
+**This release exists because the goal was dropped and the operator voided the drop.** v0.232.0
+closed charter goal 2 with a measurement — the shadow join's consumer side is empty and stays empty
+across all 274 consumer-authored scripts. That measurement is sound and is not withdrawn. What was
+wrong is that it measured **forks of core validators**, a strict subset of the goal's subject, and a
+measured empty subset was read as the empty set. The governing decision this program operates under
+says a measurement may choose the mechanism and may not choose whether the goal survives.
+
+**The subject set is not empty, and its floor needs no inference at all.** Measured on the reference
+consumer: 277 consumer scripts sit outside the declared home, and **6 of 6 of the charter's own
+Part F machinery list are among them** — `scan-stray-provenance.sh`, `audit-rule-exercise.sh`,
+`generate-sprint-status.py`, `audit-main-since.sh`, `validate-no-direct-main-push.sh`,
+`retro-replay-harness.sh`. The charter named those as consumer ai-dlc machinery itself. **Goal 5's
+residue and goal 2's subject set are the same six files seen from two directions**, which neither
+goal's record had noticed.
+
+**The eight refuted inference predicates are not re-attempted, and this is the distinction that
+took the whole program to reach.** Core cannot look at `scripts/foo.sh` and decide whether it serves
+the ai-dlc process or the project's own domain; that question is undecidable from core's side. But a
+consumer *can* say which of its scripts are machinery, and once it has said so, "is this declared
+path inside the declared home" is a string comparison.
+
+**New: `consumer_machinery_file:`**, declared in `layer-contract.yaml` beside
+`consumer_crosswalk_file:` and scaffolded on identical terms — template shipped, created once by
+`install.sh` and by the pull driver, never overwritten, and every reader derives the path from the
+declaration rather than spelling it. `apply.sh` scaffolds it because v0.228.0 established that a
+create-once file reaching only `install.sh` reaches no consumer that already installed.
+
+- **`LC-M1` / `E18` (ERROR)** — every declared path exists and lives under
+  `consumer_machinery_home:`. The remedy names both ends of the move, and names the other
+  legitimate resolution: if the file would still have a job with ai-dlc removed, it is domain code
+  and belongs out of the inventory rather than in the home.
+- **`LC-M2` / `W10` (WARN)** — the inventory is declared, and an empty one is written as the
+  literal `none`. Silence and emptiness must not look alike; the reference consumer spent an entire
+  program in the second state while the first was assumed. WARN rather than ERROR so an unmigrated
+  project is not wedged by a clause whose remedy is a judgement about its own scripts — the shape
+  `E17`/`W6` already took for `conforms_to`.
+
+**The boundary is stated in the shipped template, because over-migration is a defect in the other
+direction.** A consumer-owned, ai-dlc-agnostic script stays where it is. The test is per file: *if
+ai-dlc were removed from this repository tomorrow, would this script still have a job?* Yes → it is
+domain code and stays. No → it is machinery and moves. The worked example is measured: a deploy
+script in this consumer is captured by any keyword grammar on a **single substring in one comment**
+(`Sprint 141 retro Item I4`) while carrying zero ai-dlc-specific tokens, and 12 of 127 keyword
+candidates are deploy/infra-shaped. A migration driven by that grammar would move deploy scripts
+into the machinery home on the strength of comments.
+
+**What the mechanism does not claim, stated in the clause's own text rather than discovered later:**
+it cannot catch under-declaration. A script omitted from the inventory is invisible, and that is the
+undecidable question, not a gap. What it buys is that the inventory becomes a stated, reviewable
+artifact and that everything stated is mechanically segregated.
+
+Also shipped: `consumer_machinery_subdirs:` in both twins — the `lib/ hooks/ fixtures/ config/
+tests/` layout the charter's Part A specified and that had **never been declared on any surface**.
+
+New fixture `consumer-machinery-inventory`: 13 assertions, an unmutated control, 6 mutants. Five
+move exactly one assertion; `home-always-matches` moves two structurally, because the remedy text
+lives inside the arm it silences, so `remedy-unusable` moves the remedy alone and neither assertion
+is vacuous. `contract_version` 12 → 13.
+
+**The fixture's control caught a defect in the fixture's own assertions**: a bare `grep -q 'E18'`
+matches the `LAYER_MEASURED` census footer, which names every code with its fired count — so five
+"the arm fired when it should not" assertions were failing against a validator that was behaving
+correctly. Every membership test is now anchored on a real finding line. A grep hit is not a
+finding, in the fixture as much as in the tree.
+
 ## [0.233.0] — 2026-08-01
 
 ### A core fixture the consumer still carries after core stopped shipping it
