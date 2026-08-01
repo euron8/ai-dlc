@@ -1,6 +1,6 @@
 # Goal 5 — absorption of the eight duplicate consumer scripts: one arithmetic, and what is left
 
-**Status: PARTIAL. The residue is OPEN, not closed.**
+**Status: PARTIAL. The residue is OPEN with a per-subject disposition (§5b) — two core seams named, one operator question, and 180 lines that were never subjects.**
 
 The charter's fifth goal was *"absorption of the eight consumer scripts that merely duplicate a core
 script with one extra arm."* This document exists because that outcome has been stated in three
@@ -192,6 +192,58 @@ scheduled work here and none is implied. The residue is recorded as open so that
 is the whole distinction this document is making.
 
 ---
+
+## 5b. Per-subject disposition — the analysis the refutations never did
+
+**Added 2026-08-01, and this section is why §5's "OPEN item" was not an ending.** The refutations
+measured whether CORE has the arm. That answers a different question from the charter's premise,
+which is that each subject *"merely duplicates a core script with one extra arm."* `validate-no-
+direct-main-push.sh` proved that premise can simply be FALSE for a subject — and the test had never
+been applied to the rest.
+
+**Each subject resolves to exactly one of three dispositions:**
+
+- **(i) NOT A DUPLICATE** — the remainder is consumer-specific. It leaves the subject set, and the
+  charter was wrong for that row.
+- **(ii) CORE LACKS A SEAM** — the consumer re-implemented because core offered nowhere to hook.
+  **Actionable core work.**
+- **(iii) CORE LACKS A DUTY** — core does not claim the responsibility. **An operator decision about
+  core's scope, not a measurement.**
+
+**Residue re-derived at graph `c459f207a`: 1,722 lines across 5 files**, not the 1,717 in §2.
+`generate-sprint-status.py` went 1,068 → **1,073** when the segregation rewrote its own path
+references. *A figure moving while a document about moving figures is being written is the finding,
+not a typo.*
+
+| subject | lines | disposition | evidence |
+|---|---|---|---|
+| `scan-stray-provenance.sh` | 83 | **(i) NOT A DUPLICATE** | The duplicated half is gone. All 8 of its `stray`/`party-mode` mentions are deprecation text; lines 78–79 are an error message redirecting the caller to core's `validate-provenance-block.sh --strays`. What remains is an S241-5 fixture-provenance lint core has no concept of. **Part of it is a pure deprecation stub and is retirable in the consumer.** |
+| `retro-replay-harness.sh` | 97 | **(i) NOT A DUPLICATE** | It replays graph's OWN historical failures — `S154`, `S155`, `S238`, `S239`. Core cannot hold a fixture for another project's sprint history. Control: exactly one core fixture matches those tokens, `check-15-bypass/README.md` naming `LR-S155-3` in an unrelated wording note. |
+| `audit-rule-exercise.sh` | 105 | **(ii) CORE LACKS A SEAM** | Core's `audit-rule-files.sh` has **0** `--exercise` modes. **Its stated blocker is REFUTED:** the header says core shipped *"a python3 implementation with no bash-callable seam"* — core's is `#!/usr/bin/env bash`. The language half of the claim is false; the seam half holds. |
+| `generate-sprint-status.py` | 1073 | **(ii) CORE LACKS A SEAM** | Same artifact, two writers. Core's `sprint-status.sh` owns the sprint-status envelope and **does** read story files (28 references; control: 8 for its schema), but its modes are `--check --closed-at --evidence --intensity --name --render --retro-doc --root --sprint --variant` — **no derive-from-frontmatter mode**. The consumer's tool writes frontmatter-derived values into core's artifact because there is nowhere to hook. |
+| `audit-main-since.sh` | 364 | **(iii) CORE LACKS A DUTY — OPERATOR QUESTION** | Re-derived: `trunk audit` **0** files in `core/`+`templates/`, `post-merge` 2, `audit-main` 1 (control: `cycle-commits` **12**). It is the detection mechanism behind graph's own Rule 20 and catches merges that bypass both hooks, including `--admin` and web-UI merges. **Whether core should claim a post-merge trunk-audit duty is a scope decision, not a measurement.** |
+
+### What this changes
+
+**180 lines leave the subject set** — the two `(i)` rows are not duplicates and never were. The
+subject set becomes **1,827** and the live residue **1,542**, with retirement unchanged at **290 =
+15.9% of 1,827**. **Retirement does not move on any of these corrections; only denominators do.**
+
+**1,178 lines are (ii) — actionable core work**, and that is the disposition the refutations never
+distinguished from (iii). Two seams are named: an `--exercise` mode on `audit-rule-files.sh`, and a
+derive-from-frontmatter mode on `sprint-status.sh`. **Neither is scheduled here** — naming a seam is
+not shipping one, and each needs its own measurement, false-positive set and fixture.
+
+**364 lines are (iii) and are the operator's question**, stated as a question: *should core claim a
+post-merge trunk-audit duty?* If yes, the arm is core's and the consumer's script retires. If no,
+`audit-main-since.sh` is legitimate consumer machinery, it leaves the subject set like the `(i)`
+rows, and goal 5's residue is **1,178** — entirely (ii).
+
+### Goal 5's remaining distance, stated so it is not an open-ended "OPEN"
+
+Goal 5 closes when: both `(ii)` seams are shipped or explicitly declined with a measurement, and the
+`(iii)` question has an operator answer. **That is two core changes and one decision — not an
+unbounded backlog**, and it is the first time this goal has had a finite statement of what remains.
 
 ## 6. Summary
 
