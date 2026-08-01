@@ -1109,7 +1109,7 @@ while IFS= read -r f; do
   # See LAYER_KINDS for why the set is defined once and what its false-positive set
   # measured. Checked AFTER the hooks arm so a single entry missing both keys reports
   # the missing hook first; an unknown kind on an entry that hooks nothing is noise.
-  if [ -n "$kind" ] && ! printf '%s\n' $LAYER_KINDS | grep -Fxq -- "$kind"; then
+  if [ -n "$kind" ] && ! grep -Fxq -- "$kind" <<<"$(printf '%s\n' $LAYER_KINDS)"; then
     err E10 "$(rel "$f"): kind '$kind' is not one of: $LAYER_KINDS. Rule 27's loader routes an entry by its kind, so an unrecognised one is read by nothing — the entry sits in the layer directory looking active and governs no run. If this is a new grain, it needs a loader that reads it before it needs a file that declares it."
   fi
 

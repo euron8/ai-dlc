@@ -39,7 +39,7 @@ raw() { printf '%s' "$2" | CLAUDE_PROJECT_DIR="$1" bash "$HOOK" 2>/dev/null; }
 
 # decision <project_dir> <json> -> "deny" | "allow"
 decision() {
-  if raw "$1" "$2" | grep -q '"permissionDecision": *"deny"'; then echo deny; else echo allow; fi
+  if grep -q '"permissionDecision": *"deny"' <<<"$(raw "$1" "$2")"; then echo deny; else echo allow; fi
 }
 
 # mkjson <tool> <file_path> [old_string]

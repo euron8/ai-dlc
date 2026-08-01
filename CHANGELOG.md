@@ -17,6 +17,170 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.231.0] — 2026-07-31
+
+### I54 banned one writer and one shape of pipeline; the defect needs neither, and 22 sites lived in the difference
+
+`I54` says no shipped script writes a shell variable into a reader that stops at its
+first match. Its grammar requires three things the defect does not: that the **writer**
+be a builtin pushing a double-quoted variable, that the **reader** be the immediately
+next stage, and that the two sit on the **same physical line**. Relax any of them and
+the same false pass returns:
+
+```
+git show REF:path | <reader>              a COMMAND upstream
+printf '%s' "$v" | awk ... | <reader>     the banned writer, one filter away
+printf '%s\n' "$v" \                      the banned writer, one continuation away
+     | <reader>
+```
+
+None of these is a variant of the guarded form. Each is **outside the subject set by
+construction**, which is why v0.207.0's 300-site sweep did not end the class, and why
+`I54` kept printing a clean line over a tree carrying twenty-two instances of it.
+
+**The named live instance is REFUTED, and that is the first finding.** `D-6c16.2`
+attributes an intermittent failure of `core/fixtures/apply-drift-refile/run.sh:28` to
+this class. Measured: the `git show` there emits **41 bytes** against a **65,536-byte**
+pipe buffer, so the reader cannot leave before the writer is done and the mechanism is
+unreachable at that site. 140 executions agree — 20 solo, 24 under a 20-spinner load, 96
+in a 16-wide pool, **0 red**. Whatever failed on the consumer's box, it was not this.
+
+**It is a LATENT instance all the same, and a mutant settles that rather than an
+argument.** Pad the seeded upstream past the buffer with `run.sh` untouched and assertion
+0b reports `FIXTURE BROKEN` on a correct tree — `cmp -s` guarded, with a sibling fixture
+in the same copied tree green as the unmutated control. That is the argument for the arm:
+the threshold is a SIZE, so a site that is right at 41 bytes is wrong forever the day its
+input grows, with no symptom in between.
+
+#### The false-positive set was measured before the predicate was chosen
+
+A blanket ban on a pipe into a first-match reader is the unmeasured lint `CLAUDE.md`
+warns about — it reports **43** sites in this tree. So every `grep -q` reading a pipe was
+**instrumented across a whole suite run plus the validators**. The number that decides
+the hazard is the bytes sitting AFTER the first match, because that is what the writer
+still has to push when the reader leaves:
+
+| | reading |
+|---|---|
+| calls observed | **6,737** (6,188 matched in real code; 332 no-match, safe by construction) |
+| bytes after the first match | median **24**, max **1,885** |
+| calls above the 65,536-byte buffer | **0** |
+| control, same run | **1** — the `early-exit-reader` fixture's own 200 KB probe, so the zero is a reading and not a blind instrument |
+
+**Two narrowings make the arm shippable, and both are derived from the file rather than
+hand-listed.** The file must enable `pipefail` — without it the pipeline's status is the
+reader's alone and the construct is simply correct — and the status must be load-bearing.
+Measured by removing each in turn, on both trees:
+
+| grammar | before the sweep | after |
+|---|---|---|
+| unnarrowed (the blanket ban) | 43 | **21** ← the false positives the narrowings avoid |
+| pipefail narrowing removed | 40 | 18 |
+| status narrowing removed | 23 | 1 |
+| **as shipped** | **22** | **0** |
+
+**The scan classifies LOGICAL lines, and that is not tidiness.** A first cut worked on
+physical lines and read five sites as status-free because their `&&` sat on the next one
+— including three of the form `lstat "$m" | <reader> "..." \` / `&& bad …` / `|| ok …`,
+where **the status decides whether a MUTANT SCORES A KILL**. A false "not found" there
+awards a kill that was never earned. Removing the continuation-joining from the shipped
+grammar drops the pre-sweep count from 22 to 17, which is the measurement of what the
+first cut could not see.
+
+**`head -N` and `read` were measured in the same pass and are REFUTED as members**, so a
+fourth instance does not re-derive them: `| read` has **no sites at all**, and of **118**
+`| head -N` sites exactly **one** sits in a file combining `set -e` with `pipefail` — the
+only mode where head's early exit can bite — and that one's upstream emits a single line.
+
+#### The remedy, and the one that was rejected
+
+Dropping `-q` and discarding stdout is one token and keeps `pipefail`'s genuine
+upstream-failure signal, which the here-string form loses. It was **rejected anyway**:
+whether a bare `grep` reads to EOF when its output goes to `/dev/null` is an
+implementation question, no GNU grep exists on the box this was measured on, and a remedy
+whose correctness depends on which `grep` a consumer has is not a remedy. The 22 sites
+take the here-string form — `<<<"$(cmd)"` — which has no pipe at all, is therefore correct
+by construction, and is the remedy `I54` already prescribes.
+
+*A first attempt to refute that alternative was itself wrong, and the error is worth
+recording: the test generator was `{ printf ...; yes PAD | head -c 200000; }`, whose own
+inner pipeline SIGPIPEs `yes` and hands `141` out through `pipefail`. The harness
+contained the bug it was measuring and blamed the remedy for it.*
+
+### The differential caught a shipped fixture going quiet, and the guard that should have caught it could not fire
+
+The sweep rewrote the line `layer-qualifier-grain`'s `m3` mutant anchors its `sed` on.
+The mutation stopped landing — and the fixture went from 27 assertions to **26**, exit 0,
+`PASS`. No diagnostic, no red, one fewer check.
+
+**Its `cmp -s` guard existed, was correct, and was structurally unable to report.** Every
+caller invokes the helper as `if m="$(mutate …)"`, so the `bad` it calls is captured as
+the function's OUTPUT and its `fails++` happens in a subshell that dies at the closing
+paren. Measured directly rather than read: a helper calling `bad` and returning 1 inside
+`$( )` leaves `fails` at **0** in the parent and skips the `then` branch entirely, against
+a control where the same helper called outside `$( )` leaves `fails` at **1**. That is
+§7's `RC=$?` trap one level up, and it is why the whole assertion vanished instead of
+failing.
+
+Both fixtures with this shape are repaired — `layer-qualifier-grain` (6 call sites) and
+`fixture-drivability` (2) — by the remedy §7 names: the helper records the unlanded
+mutation to a **file**, which no subshell can swallow, and a new final assertion reads it.
+`layer-qualifier-grain` 27 → **28**, `fixture-drivability` 9 → **10**. Each new control is
+proven to fire: poisoning a mutation's `sed` so it matches nothing now yields rc=1 with
+exactly one red naming that mutant, against an unmutated control at rc=0 in the same tree.
+Before this release the identical poison produced `PASS`.
+
+**This is the differential earning its place in §7.** Nothing else in the release would
+have noticed: the fixture was green before and green after, and only the assertion COUNT
+moved.
+
+#### What this reaches, and what it does not
+
+`scripts/validate-enforcement-map.sh` is distribution-only, so **`I54b` reaches no
+consumer**. The *sweep* does: **21 of the 22 sites ship**, across ten consumer fixtures
+and `core/scripts/validate-layer-entries.sh`. And `D-6c9.4`'s consumer-owned driver, with
+four instances of this construct, is outside any invariant over this repository's tree by
+construction. **That is 9a's shape a fourth time** — the distribution fixes a class for
+itself and cannot see the consumer's copy — and the honest statement is that closing it
+needs a check that ships, not a wider invariant here.
+
+#### Proof
+
+- **Replay:** the shipped arm against the pre-sweep tree reports `I54b found 22`, naming
+  every site; against the swept tree, zero. The validator is carried into the copy and
+  `cmp -s` proves the copy's sites really are the pre-sweep ones.
+- **Seven mutants on the invariant**, each a copy of the shipping validator with one piece
+  removed and guarded by `cmp -s`, each producing **exactly one** `FAIL` line so the arms
+  are not entangled: both narrowings dropped, the grammar blinded, the grammar widened to
+  eat the here-string form, the grammar widened to read `||` as a pipe, the status probe
+  blinded, the pipefail detector blinded.
+- **Three mutants on `early-exit-reader`**, one per new arm, each turning exactly one
+  assertion red against an unmutated control at rc=0.
+- **`early-exit-reader` gains four assertions, 4 → 8**, and assertion 8 is the one worth
+  naming: it proves the identical pipeline is CORRECT in a file without `pipefail`, so the
+  first narrowing excludes sites that genuinely cannot misbehave rather than sites it
+  merely hopes are safe. An exclusion that is wrong is a check that cannot fire over
+  whatever it excluded.
+
+**Three harness failures were caught by unmutated controls rather than by luck**, and they
+are why §7 requires them. The fixture-level mutant was first built as a directory copy
+outside `core/fixtures/`, where the fixture cannot resolve `apply.sh` at all — the control
+went `FIXTURE ERROR` too, so "the mutant failed" would have scored a kill it had not
+earned. The invariant battery was first run from a scratch directory, where this validator
+cannot resolve its own root (I33) and all six mutants died of the harness at `rc=2`. And a
+guard probe was first written against copies outside the fixture root, where every
+baseline read `rc=2` and no fixture could be scored at all. All three were rebuilt at the
+real path inside a tree copy.
+
+#### Performance gate
+
+The validator is **5.91s → 6.13s** median (3 reps each, one box, one session). The fixture
+that IS the suite's critical path is unchanged: `enforcement-map-sites` reads
+**95.95 / 95.26s** before and **95.90 / 95.24s** after, so the added arm is inside the
+noise where it actually costs something. The one awk pass replaced a per-file fork and a
+second corpus grep, per §7 gate item 2. `early-exit-reader` stays `.dist-only`, so the
+four new assertions **cannot repeat v0.230.0's mistake of growing a fixture that ships**.
+
 ## [0.230.0] — 2026-07-31
 
 ### v0.229.0 spent 9 seconds of the consumer's gate to save it 2.4, because its fixture's slack was measured in the wrong suite

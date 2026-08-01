@@ -142,13 +142,26 @@ else
   bad "CONTROL FAILED: an unmutated COPY of the linter reports a different error count than the shipped one"
 fi
 
+# EVERY CALLER INVOKES THIS INSIDE `$( )` TO CAPTURE THE MUTANT'S PATH, so this
+# function cannot report anything by calling bad(): the diagnostic is captured as
+# its OUTPUT and becomes the mutant path, and the fails++ happens in a subshell
+# that dies at the closing paren. Measured -- `if m="$(helper)"` where the helper
+# calls bad() and returns 1 leaves fails at 0 in the parent and skips the `then`
+# branch, so the assertion simply VANISHES and the fixture still reports PASS.
+# That is §7's `RC=$?` trap one level up, and it is how a stale m3 expression went
+# unnoticed: v0.231.0's I54 sweep rewrote the line m3's sed anchors on, the
+# mutation stopped landing, and this fixture went from 27 assertions to 26 in
+# silence. The remedy is §7's: write it to a FILE, which no subshell can swallow,
+# and assert on that file at the end where the count is visible.
+MUT_UNLANDED="$MDIR/mutations-that-did-not-land"
+: > "$MUT_UNLANDED"
 mutate() { # mutate <name> <src> <sed-expr> [dest-dir]
   local out="${4:-$MDIR}/$1.sh"
   cp "$2" "$out"
   sed -i.orig "$3" "$out"
   if cmp -s "$out" "$out.orig"; then
-    bad "MUTANT '$1' changed nothing — its sed matched no line, so the assertion below would score a working check as a kill"
-    rm -f "$out"; return 1
+    printf '%s\n' "$1" >> "$MUT_UNLANDED"
+    rm -f "$out" "$out.orig"; return 1
   fi
   rm -f "$out.orig"; printf '%s' "$out"
 }
@@ -173,8 +186,8 @@ fi
 
 lstat() { bash "$1" "$BAD" 2>&1; }
 # M3 — the kind enum.
-if m="$(mutate m3-no-kind-enum "$LINTER" "s/^  if \[ -n \"\\\$kind\" \] \&\& ! printf/  if false \&\& ! printf/")"; then
-  lstat "$m" | grep -q "kind 'qualifer' is not one of" \
+if m="$(mutate m3-no-kind-enum "$LINTER" "s/^  if \[ -n \"\\\$kind\" \] \&\& /  if false \&\& /")"; then
+  grep -q "kind 'qualifer' is not one of" <<<"$(lstat "$m")" \
     && bad "MUTANT m3 (enum check disabled) still rejects the bad kind — E10's assertion is being satisfied by something else" \
     || ok "MUTANT m3 killed: with the enum off, a typo'd kind is accepted in silence"
 fi
@@ -207,16 +220,27 @@ fi
 
 # M5 — the qualifier's required keys.
 if m="$(mutate m5-no-qualifier-keys "$LINTER" 's/^  if \[ "\$kind" = qualifier \]; then$/  if false; then/')"; then
-  lstat "$m" | grep -q "requires 'extends:'" \
+  grep -q "requires 'extends:'" <<<"$(lstat "$m")" \
     && bad "MUTANT m5 (qualifier key requirement disabled) still demands extends:" \
     || ok "MUTANT m5 killed: a qualifier with neither key lints clean"
 fi
 
 # M6 — the position vocabulary.
 if m="$(mutate m6-any-position "$LINTER" "s/^      append|prepend) : ;;$/      append|prepend|middle) : ;;/")"; then
-  lstat "$m" | grep -q "is not 'append' or 'prepend'" \
+  grep -q "is not 'append' or 'prepend'" <<<"$(lstat "$m")" \
     && bad "MUTANT m6 (vocabulary widened to accept 'middle') still rejects it" \
     || ok "MUTANT m6 killed: widening the vocabulary accepts the bad value"
+fi
+
+# --- CONTROL: every mutation above actually landed -----------------------------
+# The six assertions above are each guarded by `if m="$(mutate ...)"`, and a sed
+# that matches nothing takes the false branch — no assertion, no diagnostic, and
+# a PASS one line shorter than the run before it. This is where mutate()'s file
+# is read, because this scope is the only one a `$( )` cannot swallow.
+if [ ! -s "$MUT_UNLANDED" ]; then
+  ok "control: all 6 mutations landed (a sed matching nothing cannot skip its assertion in silence)"
+else
+  bad "mutation(s) matched nothing and their assertions were SKIPPED, not failed: $(tr '\n' ' ' < "$MUT_UNLANDED")— each one leaves a check scoring as proven when nothing proved it"
 fi
 
 echo

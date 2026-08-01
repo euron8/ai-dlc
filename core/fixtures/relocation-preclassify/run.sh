@@ -115,7 +115,7 @@ n="$(printf '%s\n' "$PC" | awk -F'\t' '$2 ~ /^core\/scripts\// && $4 ~ /CLASSIFY
 
 # --- D. the consumer's OWN script is never mentioned --------------------------
 # Derived from the upstream tree, not from find scripts/. audit-dormant-gates.sh is theirs.
-if printf '%s\n' "$PC" | awk -F'\t' '$3 ~ /audit-dormant-gates/' | grep -q .; then
+if grep -q . <<<"$(printf '%s\n' "$PC" | awk -F'\t' '$3 ~ /audit-dormant-gates/')"; then
   bad "a consumer-authored script was reported — the pass globbed the shared dir instead of the upstream tree"
 else
   ok "the consumer's own scripts/audit-dormant-gates.sh is not mentioned"
@@ -128,7 +128,7 @@ mkdir -p "$CONS/scripts/ai-dlc" || exit 2
 git -C "$DIST" show "$THEIRS:core/scripts/validate-beta.sh" > "$CONS/scripts/ai-dlc/validate-beta.sh"
 rm -f "$CONS/scripts/validate-beta.sh"
 PC2="$(run_pc "$RECON")"
-if printf '%s\n' "$PC2" | awk -F'\t' '$2=="core/scripts/validate-beta.sh" && $4 ~ /RELOCATE/' | grep -q .; then
+if grep -q . <<<"$(printf '%s\n' "$PC2" | awk -F'\t' '$2=="core/scripts/validate-beta.sh" && $4 ~ /RELOCATE/')"; then
   bad "a migrated validator still emits a RELOCATE row — the new-path guard is not firing"
 else
   ok "a migrated validator (now at scripts/ai-dlc/) emits no RELOCATE row"

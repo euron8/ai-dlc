@@ -123,8 +123,8 @@ V0="$(vector "$LINTER" "$R0")"
   || bad "premise: expected 'e16=1 w8=0 rc=1' on the pristine seed, got '$V0'"
 
 # The seed's retired id must really be retired, or every cell below is measuring nothing.
-if git -C "$R0/consumer" log -p --format='' -- .claude/skills/ai-dlc/extensions/checks/domain.md \
-     | grep -q '^+### 33\.' \
+if grep -q '^+### 33\.' \
+     <<<"$(git -C "$R0/consumer" log -p --format='' -- .claude/skills/ai-dlc/extensions/checks/domain.md)" \
    && ! grep -q '^### 33\.' "$R0/consumer/.claude/skills/ai-dlc/extensions/checks/domain.md"; then
   ok "premise: '33' is defined in the history and gone at HEAD (there is a retirement to find)"
 else

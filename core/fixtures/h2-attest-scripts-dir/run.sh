@@ -151,8 +151,8 @@ ATT_RC=$?
 if [ "$ATT_RC" -ne 0 ]; then
   bad "--attest FAILED in a consumer layout (rc=$ATT_RC) — H2 cannot attest"
   printf '%s\n' "$ATT_OUT" | sed 's/^/        /'
-elif printf '%s\n' "$ATT_OUT" \
-     | grep -qE '^H2_ATTESTED v1 sprint=999 digest=[0-9a-f]{16} at=.+ items=1,2,3 mechanical=check-17-bypass:PASS$'; then
+elif grep -qE '^H2_ATTESTED v1 sprint=999 digest=[0-9a-f]{16} at=.+ items=1,2,3 mechanical=check-17-bypass:PASS$' \
+     <<<"$ATT_OUT"; then
   ok "--attest drove check-17-bypass and printed the H2_ATTESTED v1 line"
 else
   bad "--attest exited 0 but printed no well-formed H2_ATTESTED v1 line"

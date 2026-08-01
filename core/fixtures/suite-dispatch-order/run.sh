@@ -147,7 +147,7 @@ rc="$(drive "$T" "$WORK/lpt4.out")"
 n_rec="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
 case "$n_rec" in ''|*[!0-9]*) n_rec=0 ;; esac
 if [ "$n_rec" -eq 3 ] && [ ! -f "$T/ai-dlc-fixture-durations" ] \
-   && ! git -C "$T" status --porcelain 2>/dev/null | grep -q 'ai-dlc-fixture-durations'; then
+   && ! grep -q 'ai-dlc-fixture-durations' <<<"$(git -C "$T" status --porcelain 2>/dev/null)"; then
   ok "the durations record holds one line per fixture under .git/ and git itself cannot see it"
 else
   bad "the durations record is not where it must be (lines=$n_rec under .git/, root copy present=$([ -f "$T/ai-dlc-fixture-durations" ] && echo yes || echo no)) — a record inside the tree is hashed by the key that decides whether the suite runs at all"

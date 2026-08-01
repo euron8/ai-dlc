@@ -141,7 +141,7 @@ if grep -q 'DECISION.*legacy-script' <<<"$OUT"; then
 else
   ok "no DECISION row is raised for a locally edited leftover"
 fi
-if printf '%s' "$OUT" | grep 'relocate-move' | grep -q 'validate-edited\.sh'; then
+if grep -q 'validate-edited\.sh' <<<"$(printf '%s' "$OUT" | grep 'relocate-move')"; then
   ok "  the edited copy is reported as moved, alongside the rest"
 else
   bad "  the edited copy was moved without appearing in the move record"

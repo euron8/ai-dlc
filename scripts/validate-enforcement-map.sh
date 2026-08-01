@@ -3534,6 +3534,123 @@ Under pipefail the pipeline reports the WRITER's status, so once the value passe
   fi
 fi
 
+# --- I54b: nor does any PIPELINE, where the status is load-bearing -------------
+# The arm above bans one WRITER -- a builtin pushing a shell variable -- and it
+# requires the reader to be the IMMEDIATELY next stage. Both halves of that are
+# narrower than the defect, and the tree had 17 sites in the gap:
+#
+#   a COMMAND's output into the reader   git show REF:path | <reader>
+#   one filter in between                printf ... "$v" | awk ... | <reader>
+#
+# Neither is a variant of the guarded form. Each is outside its subject set BY
+# CONSTRUCTION, which is why v0.207.0's 300-site sweep did not end the class and
+# why the arm above kept printing a clean line over a tree that carried it.
+#
+# WHAT MADE THIS SHIPPABLE IS THE TWO NARROWINGS, AND BOTH ARE DERIVED FROM THE
+# FILE RATHER THAN HAND-LISTED. A plain ban on a pipe into a first-match reader
+# is the unmeasured lint CLAUDE.md warns about -- 43 sites, most of them correct.
+#
+#   1. The file must enable pipefail. Without it the pipeline's status is the
+#      READER's alone and the writer's EPIPE is discarded, so the construct is
+#      simply correct. Measured behaviourally, not argued: the same 200 KB input
+#      answers TRUE under `set -u` and FALSE under `set -uo pipefail`.
+#   2. The status must be load-bearing -- a conditional keyword, `&&`, `||` or a
+#      negation. A pipeline whose status nothing reads cannot mislead anything.
+#
+# Together they cut 43 candidate sites to 17, all 17 were converted, and the arm
+# now reports zero over a corpus where the unnarrowed grammar would report 28.
+#
+# THE FALSE-POSITIVE SET IS EMPTY AND THAT IS A MEASUREMENT, NOT A CLAIM. Every
+# `grep -q` reading a pipe in this tree was instrumented across a whole suite run
+# plus the validators -- 6,737 calls. The number that decides the hazard is the
+# bytes sitting AFTER the first match, because that is what the writer still has
+# to push when the reader leaves: median 24, max 1,885, and ZERO above the 65,536
+# -byte buffer. The control in the same run is the one call that DID exceed it,
+# the early-exit-reader fixture's own 200 KB probe, so the zero is a reading and
+# not a blind instrument.
+#
+# So no site in this tree is a LIVE defect today, and the arm is still worth its
+# lines for the reason the arm above already gives: the threshold is a SIZE, so a
+# site that is safe at 24 bytes switches the check off permanently and silently
+# the day its input grows. Seventeen latent inversions, each one token to remove.
+#
+# `head -N` and `read` were measured in the same pass and are REFUTED as members:
+# `| read` has no sites at all, and of 118 `| head -N` sites exactly one sits in a
+# file combining `set -e` with pipefail -- the only mode where head's early exit
+# can bite -- and that one's upstream emits a single line. Recorded so a fourth
+# instance does not re-derive it.
+#
+# The grammar is assembled from fragments and every probe is built at runtime, for
+# the reason the arm above states: this scan covers its own file.
+i54b_rd="gre""p"
+i54b_pf_re="^[[:space:]]*set[[:space:]]+-[a-zA-Z]*[[:space:]]*pipefail"
+i54b_re="[^|][|][[:space:]]*${i54b_rd}[[:space:]]+(-[A-Za-z]*q[A-Za-z]*|--quiet)([[:space:]]|\$)"
+i54b_st_re="(^|[[:space:]])(if|elif|while|until)[[:space:]]|&&|[|][|]|![[:space:]]"
+# Probes, all four tested before the verdict on the tree is believed. A grammar
+# that matches nothing and a narrowing that excludes everything both read exactly
+# like a clean tree.
+i54b_p_bad="if git show REF:p | ${i54b_rd} -q TOKEN; then"
+i54b_p_here="if ${i54b_rd} -q TOKEN <<<\"\$(git show REF:p)\"; then"
+i54b_p_or="${i54b_rd} -q A f || ${i54b_rd} -q B f"
+i54b_p_free="git log | ${i54b_rd} -q TOKEN"
+if ! grep -qE "$i54b_re" <<<"$i54b_p_bad"; then
+  err "I54b's grammar no longer matches a pipeline feeding a reader that stops at its first match, tested against a probe built in this script. Every tree passes it now, including one full of the defect."
+elif grep -qE "$i54b_re" <<<"$i54b_p_here"; then
+  err "I54b's grammar matches the very form it tells people to convert TO. It would report every remediated site, which is the unmeasured lint that gets switched off."
+elif grep -qE "$i54b_re" <<<"$i54b_p_or"; then
+  err "I54b's grammar reads a shell OR as a pipe. Two guarded readers joined by || carry no pipeline at all, so every such line would be reported and none of them is a defect."
+elif grep -qE "$i54b_st_re" <<<"$i54b_p_free"; then
+  err "I54b's load-bearing-status narrowing matches a pipeline whose status nothing reads. The narrowing is what keeps this arm off the 26 correct sites in this tree; without it the arm is a blanket ban."
+elif ! grep -qE "$i54b_pf_re" <<<"set -uo pipefail"; then
+  err "I54b's pipefail detector does not recognise the form this repo actually writes, tested against a probe built in this script. It would exclude every file and the arm would report a clean tree by excluding all of it."
+elif grep -qE "$i54b_pf_re" <<<"set -u"; then
+  err "I54b's pipefail detector fires on a file that does NOT enable pipefail. That file's pipeline reports the reader's status alone and the construct is correct there, so the arm would report sites that cannot misbehave."
+else
+  # ONE awk pass over the whole corpus -- no fork per file, and no second grep
+  # for the pipefail set. §7's gate item 2 says to read each corpus once and
+  # answer every question from the index; this arm runs on every push.
+  #
+  # IT JOINS BACKSLASH CONTINUATIONS FIRST, AND THAT IS NOT TIDINESS. A first cut
+  # classified PHYSICAL lines and read three sites as status-free because their
+  # `&&` sat on the next one:
+  #
+  #     lstat "$m" | <reader> "..." \
+  #       && bad "the mutant did not fire" \
+  #       || ok  "MUTANT killed"
+  #
+  # The status there decides whether a MUTANT SCORES A KILL, so a false "not
+  # found" awards one that was never earned -- this repo's named defect, reached
+  # through the check written to catch it. A per-line narrowing cannot see it,
+  # so the unit of classification is the LOGICAL line and the reported number is
+  # the line it starts on.
+  i54b_hits="$(printf '%s\n' "$i54_files" | tr '\n' '\0' \
+    | xargs -0 awk -v pfre="$i54b_pf_re" -v re="$i54b_re" -v stre="$i54b_st_re" '
+        FNR == 1 { buf = ""; start = 0 }
+        {
+          if (FILENAME != seen_f) { seen_f = FILENAME; files[++nf] = FILENAME }
+          if ($0 ~ pfre) pf[FILENAME] = 1
+          line = $0
+          if (buf != "") { buf = buf " " line } else { buf = line; start = FNR }
+          if (line ~ /\\[[:space:]]*$/) next        # logical line continues
+          body = buf; buf = ""
+          if (body ~ /^[[:space:]]*#/) next         # a comment is not a site
+          if (body !~ re) next
+          if (body !~ stre) next                    # narrowing 2: status not load-bearing
+          hits[++nh] = FILENAME ":" start
+          hitf[nh]  = FILENAME
+        }
+        END {
+          for (i = 1; i <= nh; i++)
+            if (hitf[i] in pf) print hits[i]        # narrowing 1: no pipefail, no defect
+        }' 2>/dev/null | sed "s@^${REPO_ROOT}/@@")"
+  if [ -n "$i54b_hits" ]; then
+    i54b_c="$(printf '%s\n' "$i54b_hits" | grep -c .)"
+    err "I54b found ${i54b_c} pipeline(s) feeding a reader that stops at its first match, in a file that enables pipefail and on a line whose status decides something:
+$(printf '%s\n' "$i54b_hits" | cut -c1-160)
+The reader leaves at its first match and the writer is still pushing, so under pipefail the pipeline answers with the WRITER's EPIPE and the test reports 'not found' on input that contains the pattern. It is a SIZE threshold, not a race: correct until the upstream's output after the match passes the pipe buffer, then wrong permanently and with no symptom. Remove the pipe -- put the upstream in a command substitution and feed the reader a here-string. Seventeen sites were converted that way in v0.231.0 and the false-positive set was empty; a new one means the idiom came back through the writer or the intermediate stage this arm exists to see."
+  fi
+fi
+
 # --- I55: what the suite's content key does NOT cover stays uncovered ----------
 # The pre-push hook skips the fixture suite when a content key over the tree is
 # unchanged since the last fully green run. That is a check that did not run, and
@@ -3879,7 +3996,7 @@ fi
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69)."
   exit 0
 fi
 exit 1
