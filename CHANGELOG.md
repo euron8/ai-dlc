@@ -17,6 +17,94 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.235.0] — 2026-08-01
+
+### Goal 5 (c): core absorbs the post-merge trunk audit, and the class taxonomy is declared
+
+`validate-cycle-commits.sh --audit-trunk` walks every commit that reached the trunk in a
+range, resolves each to a class the consumer declares, checks that commit's OWN tree out into
+a detached worktree, and RE-RUNS the class's validators against it.
+
+**The verdict is re-derived, never read from a log.** A gate log is local, gitignored,
+machine-specific and absent on a fresh clone — and the merge this exists to catch never wrote
+one. That is why the audit sees what the two hooks cannot: `gh pr merge --admin`, a web-UI
+merge and a direct push to the trunk all skip the PreToolUse hook and the pre-push hook, and
+none of them can skip being a commit on the trunk.
+
+**Every first-parent commit is the subject set, not "the merges".** The consumer script this
+absorbs enumerated squash-PR subjects plus true merge commits, and a direct push is neither —
+it sat outside that subject set by construction. Enumerating by shape excludes one of the
+three bypasses the mechanism exists for.
+
+**Fail closed on an unresolved class.** A commit matching no declared class is a finding. A
+class that legitimately owes nothing says so with `validator: none`; silence is not a legal
+answer, on the same reasoning that made `fixture: none` and the machinery inventory's `none`
+counted rather than quiet.
+
+**What core does NOT infer.** Which classes exist and what each owes are facts about the
+project. `PR class` and `pr_class` appear in zero core files, so the taxonomy is DECLARED —
+`consumer_pr_class_file:` in `layer-contract.yaml`, scaffolded once from
+`templates/pr-classes.md` by `install.sh` and by the pull driver, never overwritten, its
+location derived by every reader. That is v0.234.0's pattern, unchanged, one file over. **I70**
+binds it: no reader may restate the literal, every reader must read the key, and the template
+must be named by the declaration's own basename — the installer names it literally while the
+pull driver derives it, and nothing compared them.
+
+**An undeclared taxonomy prints a worklist and exits 0**, and every ERROR is against a
+declared taxonomy's own contents. `E17`/`W6` and `E18`/`W10` are the precedents and neither
+wedged anyone. Measured on the reference consumer at `c459f207a` in both states it can
+actually be in — key absent, and scaffolded-but-`none` — false-positive set **zero**, exit 0.
+
+**The false-positive set that is NOT zero, enumerated rather than described.** Auditing
+BACKWARD across a validator's own history produces findings: 2 of 2 attempts on real graph
+trunk commits, both because a validator's PATH or MODE postdates the audited tree
+(`scripts/retro-replay-harness.sh` before the segregation moved it;
+`validate-provenance-block.sh --strays` before that mode existed, which answers
+`ERROR: artifact not found: --strays` at a 2026-06 tree and exits 0 at HEAD). The remedy is
+structural — the genesis is a watermark and the audit runs forward from adoption — and the
+finding now carries the validator's own first line, because core gets an exit code and cannot
+tell a missing mode from a real rejection. A confident wrong diagnosis is worse than the
+opaque one it replaces.
+
+**Audited forward with a taxonomy translated from the consumer's own `pr-class.sh`: 11
+commits, 0 findings**, of which 2 resolved to the `retro` class and re-ran its validator
+green. A run in which every commit lands in a catch-all proves the enumeration and nothing
+else, so the range was chosen to make a real class fire.
+
+**Two expressiveness gaps are recorded rather than claimed closed**, because the consumer
+cannot retire its script until they are resolved: the grammar matches when ANY changed path
+matches, and cannot express the consumer's `pipeline-infra` rule that ALL paths must; and a
+validator runs once against the tree, not once per changed file — coverable today only
+because core ships a whole-tree `--strays` mode.
+
+### The performance gate fired on this release's own fixture, in the suite that ships
+
+Held together with its assertions the fixture cost 21.6s and **became the reference consumer's
+pole**: that suite went **32.83s → 42.31s, +28.9%**, with the new unit at 0.02s slack. In this
+repository the identical fixture had **112.93s of slack against a 162.9s pole** and every
+reading said it was free. That is v0.230.0's finding arriving one release later: what a fixture
+COSTS is a property of the suite it runs in.
+
+The mutation battery moves to `trunk-audit-mutants`, `.dist-only`, reaching no consumer. The
+split has a principle and not just an arithmetic: the battery mutates `validate-cycle-commits.sh`,
+which `ai-dlc-core-guard.sh` denies a consumer editing, so the surface it perturbs cannot change
+in a consumer tree. **The consumer keeps all 22 correctness assertions and both controls.**
+Re-measured: consumer suite **33.35s**, pole unchanged at `layer-readopt-gate` 27.4s / 0.02s
+slack; the fixture 21.6s → **3.0s** in-suite. Distribution suite **99 units, 0 failures,
+163.4s**, pole unchanged.
+
+### A mutant that shipped in v0.234.0 had never executed
+
+`consumer-machinery-inventory`'s M6 sat INSIDE the child-run branch, above the definitions of
+`expect_set` and `mut_reds`. In a child run the call was a command-not-found swallowed by the
+battery's own `2>/dev/null`; in the parent run the branch is not taken at all. Measured: five
+`MUTANT` lines in the output, **zero** occurrences of that mutant's label. **A mutant that
+cannot run reads exactly like one that killed** — this repository's named class, inside the
+fixture whose control caught a different instance of it one release earlier. Moved below the
+definitions; the battery is 5 → **6** mutants and M6 moves exactly its own assertion. The
+first fix reproduced the same class one line over — appended after a `PASS`/`exit 0` — and
+running it rather than reading it is what caught that too.
+
 ## [0.234.1] — 2026-08-01
 
 ### The fixture v0.234.0 shipped could not run in the layout it ships to

@@ -30,6 +30,54 @@
 #   0  -- all artifacts pass
 #   1  -- one or more artifacts fail, or validation-cycle-log.md missing
 #
+# ----------------------------------------------------------------------------
+# SECOND MODE: --audit-trunk [<genesis>]  -- the POST-MERGE TRUNK AUDIT.
+#
+# Usage: ./validate-cycle-commits.sh --audit-trunk [<genesis-sha>]
+#
+# The cycle-commit mode above audits a BRANCH before it lands. This one audits
+# what actually LANDED, and it exists because the two hooks that enforce the
+# process both watch a path a merge can go around. The PreToolUse hook sees only
+# the agent's own tool calls; the pre-push hook sees only a push. A
+# `gh pr merge --admin`, a merge from the web UI and a direct push to the trunk
+# skip both -- and none of them can skip being a commit on the trunk. That is the
+# only property this mode relies on.
+#
+# Per commit in <genesis>..<trunk>, first-parent, oldest first:
+#   1. derive its changed paths and added lines from git
+#   2. resolve it to a class declared in the consumer's PR-class taxonomy
+#   3. check that commit's OWN tree out into a detached worktree and RE-RUN the
+#      class's declared validators against it
+#   4. advance the watermark to the last clean commit, stopping at the first
+#      finding
+#
+# THE VERDICT COMES FROM THE RE-RUN, NEVER FROM A LOG. A gate log is local,
+# gitignored, machine-specific and absent on a fresh clone, and the merge this
+# mode exists to catch never wrote one. Re-derivation from the committed tree is
+# reproducible anywhere, which is what makes the audit an instrument rather than
+# a record of one.
+#
+# FAIL CLOSED ON AN UNRESOLVED CLASS. A trunk commit matching no declared class
+# is a FINDING, not a skip -- an unclassifiable change on the trunk is the shape
+# of the thing being looked for. A class that legitimately owes nothing is
+# declared with `validator: none`, so "owes nothing" is a statement and not a
+# silence.
+#
+# THE TAXONOMY IS THE CONSUMER'S AND CORE DOES NOT INFER IT. Which classes exist
+# and what each owes are facts about the project, not about ai-dlc. Core derives
+# the enumeration, the diff, the checkout and the re-run; the consumer declares
+# the classes, in the file declared as `consumer_pr_class_file:` in
+# layer-contract.yaml. An UNDECLARED taxonomy prints a worklist line and exits 0
+# -- a project that has not adopted this must not have its trunk wedged by it --
+# and every ERROR is against a declared taxonomy's own contents. That split is
+# E17/W6's and E18/W10's, and neither wedged anyone.
+#
+# Exit codes (--audit-trunk):
+#   0  -- every commit in range resolved and re-verified clean, or the taxonomy
+#         is undeclared (worklist printed), or the range is empty
+#   1  -- one or more findings, or the declared taxonomy is malformed
+#   2  -- usage/setup error: not a git repo, no genesis, unreadable contract
+#
 # Companion to validate-retro-evidence.sh: this enforces ">=3 cycle commits per
 # planning artifact"; retro-evidence enforces that retro party-mode was actually
 # invoked. Different inputs, different outputs, both are pipeline structural
@@ -37,10 +85,257 @@
 #
 # bash 3.2+ and Python 3.
 
+TRUNK="${AI_DLC_TRUNK:-main}"
+
+# ============================================================================
+# --audit-trunk -- the post-merge trunk audit. Header above states what it is
+# for and why the verdict is a re-run rather than a log.
+# ============================================================================
+if [ "${1:-}" = "--audit-trunk" ]; then
+  shift
+  audit_die() { echo "audit-trunk: $*" >&2; exit 2; }
+
+  AROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+    || audit_die "not a git repository, so there is no trunk to audit."
+  cd "$AROOT" || audit_die "cannot enter the repository root $AROOT."
+
+  # The taxonomy's LOCATION comes from the declaration, never from a literal
+  # here -- a reader that restates the path passes every agreement check while
+  # the declaration moves out from under it. Both layouts are searched because
+  # this script runs in both: installed as scripts/ai-dlc/ in a consumer and read
+  # out of core/scripts/ by the distribution's own fixtures.
+  A_LC=""
+  for _c in ".claude/skills/ai-dlc/layer-contract.yaml" \
+            "core/skills/ai-dlc/layer-contract.yaml"; do
+    if [ -f "$AROOT/$_c" ]; then A_LC="$AROOT/$_c"; break; fi
+  done
+  [ -n "$A_LC" ] || audit_die "no layer-contract.yaml in either layout (looked for .claude/skills/ai-dlc/ and core/skills/ai-dlc/). The taxonomy's location is declared there and nowhere else, so this run has nothing to read -- which is not the same answer as a clean trunk."
+  A_PRC_REL="$(sed -n 's/^consumer_pr_class_file:[ \t]*//p' "$A_LC" | head -1 | sed 's/[ \t]*$//')"
+
+  # A contract that PREDATES the declaration is not a consumer failing to adopt
+  # this. v0.228.0 recorded what happens to an arm that cannot tell those apart.
+  if [ -z "$A_PRC_REL" ]; then
+    echo "AUDIT-TRUNK: WORKLIST -- $(basename "$A_LC") declares no 'consumer_pr_class_file:', so this project's contract predates the trunk audit. Nothing was audited and nothing is wrong; the next pull ships the declaration."
+    exit 0
+  fi
+
+  A_PRC="$AROOT/$A_PRC_REL"
+  if [ ! -f "$A_PRC" ]; then
+    echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL: no PR-class taxonomy has been scaffolded, so this project has not declared what its trunk classes are or what each owes. install.sh and the pull driver both create it from core's template; until one has run, nothing states the taxonomy and nothing can be audited against it. Nothing was audited: that is a worklist item, not a clean trunk."
+    exit 0
+  fi
+
+  # The block: every non-blank, non-comment line inside the fence, stripped. The
+  # grammar is deliberately dumb -- the consumer writes this by hand, and a
+  # clever parser turns a hand-written file into a source of parse errors.
+  A_BLOCK="$(awk '/^```/{f=!f; next} f' "$A_PRC" 2>/dev/null \
+    | sed 's/^[ \t]*//; s/[ \t]*$//' | grep -v '^#' | grep -E '.' || true)"
+  if [ -z "$A_BLOCK" ]; then
+    echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL: carries no taxonomy block at all, not even the literal 'none'. An undeclared taxonomy and an empty one must not look alike: state 'none' if this project declares no classes, or write one stanza per class. Nothing was audited."
+    exit 0
+  fi
+  if [ "$A_BLOCK" = "none" ]; then
+    echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL declares 'none', so this project recognises no trunk classes yet and the audit has nothing to resolve commits against. That is a complete answer and it is not a clean trunk: declare the classes to start auditing."
+    exit 0
+  fi
+
+  A_TMP="$(mktemp -d 2>/dev/null)" || audit_die "mktemp failed."
+  trap 'rm -rf "$A_TMP"' EXIT
+  A_N=0
+  A_DECL_ERR=0
+  decl_err() { echo "ERROR  $A_PRC_REL: $*" >&2; A_DECL_ERR=$((A_DECL_ERR+1)); }
+
+  while IFS= read -r _line; do
+    [ -n "$_line" ] || continue
+    _key="${_line%%:*}"
+    _val="${_line#*:}"
+    _val="$(printf '%s' "$_val" | sed 's/^[ \t]*//')"
+    case "$_key" in
+      class)
+        [ -n "$_val" ] || { decl_err "a 'class:' line declares no name."; continue; }
+        _i=1
+        while [ "$_i" -le "$A_N" ]; do
+          if [ "$_val" = "$(cat "$A_TMP/c$_i.name")" ]; then
+            decl_err "class '$_val' is declared twice. Two stanzas under one name cannot both be first-match, so one of them is unreachable."
+          fi
+          _i=$((_i+1))
+        done
+        A_N=$((A_N+1))
+        printf '%s' "$_val" > "$A_TMP/c$A_N.name"
+        : > "$A_TMP/c$A_N.paths"; : > "$A_TMP/c$A_N.added"; : > "$A_TMP/c$A_N.val"
+        ;;
+      paths|added|validator)
+        if [ "$A_N" -eq 0 ]; then
+          decl_err "'$_key:' appears before any 'class:' line, so it belongs to no class and nothing reads it."
+          continue
+        fi
+        [ -n "$_val" ] || { decl_err "class '$(cat "$A_TMP/c$A_N.name")' has an empty '$_key:' value."; continue; }
+        case "$_key" in
+          paths)     printf '%s\n' "$_val" >> "$A_TMP/c$A_N.paths" ;;
+          added)     printf '%s\n' "$_val" >> "$A_TMP/c$A_N.added" ;;
+          validator) printf '%s\n' "$_val" >> "$A_TMP/c$A_N.val" ;;
+        esac
+        ;;
+      *)
+        decl_err "unknown key '$_key'. The grammar is class:, paths:, added: and validator:; a line this parser does not know is a line the audit silently ignores, which is how a class ends up owing nothing by accident."
+        ;;
+    esac
+  done <<A_EOF
+$A_BLOCK
+A_EOF
+
+  # Every class must be able to MATCH and must state what it owes. Both are the
+  # same defect in two directions: a class with no pattern can never fire, and a
+  # class with no validator line is indistinguishable from one that owes nothing.
+  _i=1
+  while [ "$_i" -le "$A_N" ]; do
+    _nm="$(cat "$A_TMP/c$_i.name")"
+    if [ ! -s "$A_TMP/c$_i.paths" ] && [ ! -s "$A_TMP/c$_i.added" ]; then
+      decl_err "class '$_nm' declares neither 'paths:' nor 'added:', so no commit can ever resolve to it. A class that cannot match is a check that cannot fire."
+    fi
+    if [ ! -s "$A_TMP/c$_i.val" ]; then
+      decl_err "class '$_nm' declares no 'validator:'. If it owes nothing, say so with 'validator: none' -- silence and 'nothing owed' must not look alike."
+    fi
+    _i=$((_i+1))
+  done
+  if [ "$A_N" -eq 0 ]; then
+    decl_err "declares no classes at all, yet is not the literal 'none'. Nothing here can resolve a commit."
+  fi
+  if [ "$A_DECL_ERR" -gt 0 ]; then
+    echo "AUDIT-TRUNK: declared=$A_N decl_errors=$A_DECL_ERR -- the taxonomy is malformed, so NOTHING was audited. A malformed taxonomy is not an empty one." >&2
+    exit 1
+  fi
+
+  # ---- range ---------------------------------------------------------------
+  A_WM="$AROOT/_bmad-output/.audit-watermark"
+  A_GENESIS="${1:-}"
+  if [ -z "$A_GENESIS" ] && [ -r "$A_WM" ]; then
+    A_GENESIS="$(head -1 "$A_WM" | tr -d '[:space:]')"
+  fi
+  [ -n "$A_GENESIS" ] || audit_die "no genesis commit. Pass one as an argument, or record one in _bmad-output/.audit-watermark. This mode never defaults to the whole of history: an audit whose range nobody chose re-runs every validator against every tree that ever existed here, and the first old commit that predates a validator reads as a finding."
+  git rev-parse --verify -q "${A_GENESIS}^{commit}" >/dev/null 2>&1 \
+    || audit_die "genesis '$A_GENESIS' does not resolve to a commit in this repository."
+  git rev-parse --verify -q "${TRUNK}^{commit}" >/dev/null 2>&1 \
+    || audit_die "trunk '$TRUNK' does not resolve to a commit here. Set AI_DLC_TRUNK if this project's trunk is not '$TRUNK'."
+
+  # EVERY first-parent commit in range, oldest first. Not "the merges": a direct
+  # push to the trunk is neither a merge commit nor a squash subject, and it is
+  # one of the three bypasses this mode exists for. Enumerating by shape would
+  # put it outside the subject set by construction.
+  A_COMMITS="$(git log "${A_GENESIS}..${TRUNK}" --first-parent --format='%H' 2>/dev/null \
+    | awk '{a[NR]=$0} END{for(i=NR;i>=1;i--) print a[i]}')"
+  A_TOTAL="$(printf '%s\n' "$A_COMMITS" | grep -cE '.' || true)"
+  if [ "$A_TOTAL" -eq 0 ]; then
+    # A zero here is the PASS, so it carries its control in the same run: the
+    # trunk's own commit count proves the enumeration ran at all.
+    echo "AUDIT-TRUNK: audited=0 clean=0 findings=0 range=${A_GENESIS}..${TRUNK} (empty; control: the trunk holds $(git rev-list --count "$TRUNK" 2>/dev/null || echo '?') commit(s), so the enumeration ran)"
+    exit 0
+  fi
+
+  A_CLEAN=0; A_FIND=0; A_LAST_CLEAN="$A_GENESIS"
+
+  # Prints the INDEX, not the name: the name is what the operator reads and the
+  # index is what the validator list is keyed on, and returning the name would
+  # make two classes with one name silently share a validator set. The duplicate
+  # is already a declaration error above; this keeps it from mattering twice.
+  resolve_class() { # $1 = paths file, $2 = added file -- prints the class index
+    local i=1 re
+    while [ "$i" -le "$A_N" ]; do
+      while IFS= read -r re; do
+        [ -n "$re" ] || continue
+        if grep -qE "$re" "$1" 2>/dev/null; then printf '%s\n' "$i"; return 0; fi
+      done < "$A_TMP/c$i.paths"
+      while IFS= read -r re; do
+        [ -n "$re" ] || continue
+        if grep -qE "$re" "$2" 2>/dev/null; then printf '%s\n' "$i"; return 0; fi
+      done < "$A_TMP/c$i.added"
+      i=$((i+1))
+    done
+    return 1
+  }
+
+  for _sha in $A_COMMITS; do
+    _f="$A_TMP/files"; _a="$A_TMP/added"
+    if git rev-parse --verify -q "${_sha}^1" >/dev/null 2>&1; then
+      git diff --name-only "${_sha}^1" "$_sha" > "$_f" 2>/dev/null || : > "$_f"
+      git diff "${_sha}^1" "$_sha" 2>/dev/null | grep '^+' | grep -v '^+++' > "$_a" || : > "$_a"
+    else
+      git show --format= --name-only "$_sha" > "$_f" 2>/dev/null || : > "$_f"
+      git show --format= "$_sha" 2>/dev/null | grep '^+' | grep -v '^+++' > "$_a" || : > "$_a"
+    fi
+
+    _ci="$(resolve_class "$_f" "$_a" || true)"
+    _class=""
+    [ -n "$_ci" ] && _class="$(cat "$A_TMP/c$_ci.name")"
+    if [ -z "$_ci" ]; then
+      echo "  FAIL    ${_sha} (UNRESOLVED): matches no declared class, so nothing states what it owed and nothing could be re-run. An unclassifiable change on the trunk is a finding, not a skip -- either it belongs to a class you have not declared, or it is the merge this audit exists to surface."
+      A_FIND=$((A_FIND+1))
+      break
+    fi
+
+    _verdict="CLEAN"; _why=""
+    _wt="$(mktemp -d 2>/dev/null)/w"
+    if git worktree add --detach "$_wt" "$_sha" >/dev/null 2>&1; then
+      while IFS= read -r _cmd; do
+        [ -n "$_cmd" ] || continue
+        [ "$_cmd" = "none" ] && continue
+        _bin="$(printf '%s' "$_cmd" | awk '{print $1}')"
+        case "$_bin" in
+          */*)
+            if [ ! -f "$_wt/$_bin" ]; then
+              _verdict="FAIL"
+              _why="${_why} declared validator '$_bin' does not exist in this commit's own tree, so the class's obligation could not be re-run against it. Either the validator postdates this commit -- move the genesis forward past it -- or this commit is what removed it;"
+              continue
+            fi
+            ;;
+        esac
+        # THE VALIDATOR'S FIRST LINE IS CARRIED INTO THE FINDING, and it is there because of
+        # a measured false positive rather than for tidiness. A declared command can fail
+        # against an older tree because the MODE it passes postdates that commit -- measured
+        # on the reference consumer, where `validate-provenance-block.sh --strays` answers
+        # `ERROR: artifact not found: --strays` at a 2026-06 tree and exits 0 at HEAD. Core
+        # gets only an exit code and cannot tell that from a real rejection, so the choice is
+        # between a confident wrong diagnosis and handing the operator the line that settles
+        # it. Parameter expansion, not a pipeline: this is the early-exiting-reader shape.
+        if ! _out="$( cd "$_wt" && eval "$_cmd" 2>&1 )"; then
+          _verdict="FAIL"
+          _first="${_out%%$'\n'*}"
+          [ -n "$_first" ] || _first="(it printed nothing)"
+          _why="${_why} '$_cmd' exits non-zero against this commit's own tree, so this change reached the trunk without satisfying its class -- it said: ${_first};"
+        fi
+      done < "$A_TMP/c$_ci.val"
+      git worktree remove --force "$_wt" >/dev/null 2>&1 || true
+    else
+      _verdict="FAIL"
+      _why=" could not check this commit's tree out into a worktree, so nothing was re-run against it. An unreadable tree is not a clean one;"
+    fi
+    rm -rf "$(dirname "$_wt")" 2>/dev/null || true
+
+    if [ "$_verdict" = "CLEAN" ]; then
+      echo "  CLEAN   ${_sha} (${_class})"
+      A_CLEAN=$((A_CLEAN+1)); A_LAST_CLEAN="$_sha"
+    else
+      echo "  FAIL    ${_sha} (${_class}):${_why}"
+      A_FIND=$((A_FIND+1))
+      break
+    fi
+  done
+
+  # The watermark advances only to the last clean commit, and only if the
+  # directory core writes its artifacts into already exists -- creating it here
+  # would make a repo that has never run ai-dlc look like one that has.
+  if [ -d "$AROOT/_bmad-output" ]; then
+    printf '%s\n' "$A_LAST_CLEAN" > "$A_WM" 2>/dev/null || true
+  fi
+
+  echo "AUDIT-TRUNK: audited=$((A_CLEAN + A_FIND)) of=$A_TOTAL clean=$A_CLEAN findings=$A_FIND classes=$A_N watermark=$A_LAST_CLEAN"
+  [ "$A_FIND" -eq 0 ] || exit 1
+  exit 0
+fi
+
 BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
 LOG_FILE="_bmad-output/validation-cycle-log.md"
 MIN_CYCLES=3
-TRUNK="${AI_DLC_TRUNK:-main}"
 
 # ---- Edge case: missing log file -------------------------------------------
 if [ ! -f "$LOG_FILE" ]; then

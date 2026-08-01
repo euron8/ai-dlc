@@ -197,6 +197,7 @@ core_manifest:
   - fixtures/ledger-rotate/**
   - fixtures/mandatory-rules-clean-tree/**
   - fixtures/mutation-red-replay/**
+  - fixtures/trunk-audit-classes/**
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
   - fixtures/provenance-not-accessible/**

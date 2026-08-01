@@ -199,6 +199,26 @@ consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md
 # mechanical segregation of everything in it -- not a proof that it is complete.
 consumer_machinery_file: .claude/skills/ai-dlc/machinery.md
 
+# THE CONSUMER'S PR-CLASS TAXONOMY. Same shape as the two above and for the same reason:
+# core declares the PATH, the installer and the pull driver scaffold it once from a
+# template, core never overwrites it, and every reader derives the location from here.
+#
+# WHAT READS IT. `validate-cycle-commits.sh --audit-trunk` — the post-merge trunk audit.
+# Every ai-dlc consumer has a trunk, merges into it, and validators keyed to a class of
+# change, and `gh pr merge --admin` and web-UI merges bypass both the PreToolUse hook and
+# the pre-push hook for all of them. The audit re-derives each trunk commit's verdict from
+# git alone. What it CANNOT derive from git is which classes this project recognises and
+# which validators each class owes — that is the consumer's, exactly as the machinery
+# inventory above is, and for the same reason: core cannot look at a diff and know whether
+# this project calls it a retro.
+#
+# The taxonomy is DATA the audit reads, not clauses this contract enforces, so no LC- clause
+# governs its contents. The declaration lives here rather than in `core-manifest.md` because
+# this is where the consumer-owned file declarations live and because the reason measured for
+# the crosswalk holds unchanged: a fixture seeding a synthetic consumer already copies THIS
+# file, so a reader that needs the declaration finds it with no new seeding.
+consumer_pr_class_file: .claude/skills/ai-dlc/pr-classes.md
+
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
 #

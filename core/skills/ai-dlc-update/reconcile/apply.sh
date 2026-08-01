@@ -599,6 +599,31 @@ elif [ ! -f "$CONSUMER/$MC_REL" ]; then
   fi
 fi
 
+# The PR-class taxonomy the post-merge trunk audit reads, on the same terms and with the same
+# scoping as the two blocks above.
+PC_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
+  | sed -n 's/^consumer_pr_class_file:[ \t]*//p' | head -1 | sed 's/[ \t]*$//')"
+if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
+  : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
+elif [ -z "$PC_REL" ]; then
+  : # THEIRS predates the PR-class declaration specifically. The audit's own arm is silent
+    # in that state too, so a consumer updating across the boundary is not wedged by either.
+elif [ ! -f "$CONSUMER/$PC_REL" ]; then
+  pc_tpl="core/skills/ai-dlc/templates/$(basename "$PC_REL")"
+  pc_tmp="$CONSUMER/$PC_REL.incoming.$$"
+  mkdir -p "$(dirname "$CONSUMER/$PC_REL")" 2>/dev/null || true
+  if git -C "$DIST" show "${THEIRS}:${pc_tpl}" > "$pc_tmp" 2>/dev/null && [ -s "$pc_tmp" ]; then
+    mv "$pc_tmp" "$CONSUMER/$PC_REL"
+    say RESOLVED pr-class-scaffold "$PC_REL" \
+      "created from ${pc_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. Declare your trunk's classes and the validators each owes, or leave the literal 'none': until you do, 'validate-cycle-commits.sh --audit-trunk' prints a worklist line and audits nothing."
+  else
+    rm -f "$pc_tmp"
+    say DECISION pr-class-template-missing "$pc_tpl" \
+      "THEIRS declares '$PC_REL' but ships no template to scaffold it from, so the declared path would stay empty while the trunk audit has nothing to resolve commits against."
+    mech_fail=$((mech_fail+1))
+  fi
+fi
+
 # -----------------------------------------------------------------------------
 # EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
 # consumer tree once this driver is done.
