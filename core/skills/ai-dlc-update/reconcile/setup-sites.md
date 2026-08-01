@@ -133,6 +133,7 @@ core_manifest:
   - core/fixtures/resume-whole-read/**
   - core/fixtures/retired-contract-token/**
   - core/fixtures/retired-layer-contract/**
+  - core/fixtures/retired-fixture-orphan/**
   - core/fixtures/retro-audit-scans/**
   - core/fixtures/route-defect-classification/**
   - core/fixtures/self-update-gate/**

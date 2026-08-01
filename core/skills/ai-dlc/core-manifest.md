@@ -208,6 +208,7 @@ core_manifest:
   - fixtures/resume-whole-read/**
   - fixtures/retired-contract-token/**
   - fixtures/retired-layer-contract/**
+  - fixtures/retired-fixture-orphan/**
   - fixtures/retro-audit-scans/**
   - fixtures/route-defect-classification/**
   - fixtures/self-update-gate/**
