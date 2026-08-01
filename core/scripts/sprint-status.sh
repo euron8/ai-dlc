@@ -20,6 +20,26 @@
 #                                              # gate-validation.md Check 5: every story entry's
 #                                              # `status:` equals the status in the story file it
 #                                              # names, in every canonical copy
+#   sprint-status.sh derive-stories [--check] [--sprint <N>] [--root <dir>]
+#                                              # the WRITE half of that same join: rewrite each
+#                                              # derivable field's value from the story file
+#
+# DERIVE-STORIES, AND WHY THE FIELD SET IS DECLARED RATHER THAN CONSTANT. `check-stories` reads
+# the entry-to-story-file join and reports drift; nothing in core could write the derived value
+# back, so a consumer that wanted that kept its own tool. The one that exists derives NINE fields
+# while schemas/sprint-status.json declares TWO story-entry fields, exactly ONE of which is among
+# the nine. Hand-listing the other eight in core would be a second home for a schema — I28 and I48
+# both bite — so the CONSUMER declares them, in the file the contract names as
+# `consumer_story_fields_file:`, and core owns everything else: the parse, both canonical views,
+# the story-file resolution, the frontmatter read and the byte-verbatim write.
+#
+# `status` IS NOT DECLARABLE. It comes from the schema's own `story_entry_fields`, because it is
+# the field Check 5 depends on and a consumer must not be able to declare its way out of it. The
+# declaration ADDS to that floor and cannot subtract from it.
+#
+# THE WRITE IS BYTE-VERBATIM EXCEPT FOR THE VALUE TOKEN, and that is a requirement rather than a
+# courtesy: this envelope is hand-edited by six actors across a sprint, so a tool that re-emits it
+# loses their inline comments, their field order and their block scalars on every run.
 #
 # CHECK 5 HAD NO ENFORCER. Its own text says "Run: Read both files, compare status values
 # programmatically" and core shipped no program — enforcement-map.yaml carried `enforcer: []` for it
@@ -43,12 +63,18 @@
 #   2  — usage error
 #   3  — HARD_BLOCK: the two canonical copies disagree on `sprint:`. Never guess which is
 #        authoritative (route.md Step 6 rule 5). Surface both and wait for the operator.
+#        derive-stories also: MATCHED NO STORY FILES. Compared nothing because there was nothing
+#        to compare against, which is not the same answer as compared-and-clean.
 #   4  — check-stories only: NOTHING WAS COMPARED (no canonical on disk, or no `stories:` key in
 #        the sprint that is live). Its own code, never folded into 0, because "compared nothing"
 #        and "compared and found no drift" are the two states every consumer implementation of
 #        this check conflated. Check 5's prose decides which is acceptable: at an implementation
 #        gate a 4 FAILS (a sprint in flight with no story entries), at a planning-phase gate it is
 #        the exemption that check already states.
+#        derive-stories also: it MATCHED story files and some story got ZERO comparisons — every
+#        declared field, `status` included, was unreadable for it. Same distinction, one grain
+#        down, and it is separate from 3 because "found nothing to read" and "read nothing from
+#        what it found" have different remedies.
 #
 # Compatible with bash 3.2+ and Python 3 stdlib (no PyYAML — hence JSON for the schema, and a line
 # parser for the flat YAML envelope, matching validate-audit-anchors.sh).
@@ -113,12 +139,16 @@ case "${1:-}" in
   roll)       MODE="roll"; shift ;;
   close)      MODE="close"; shift ;;
   check-stories) MODE="check-stories"; shift ;;
-  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--sprint <N>]" >&2; exit 2 ;;
+  derive-stories) MODE="derive-stories"; shift ;;
+  "")         echo "usage: sprint-status.sh --render | --check <file> | sprint-id | roll --sprint <N> | close --evidence <text> | check-stories [--sprint <N>] | derive-stories [--check] [--sprint <N>]" >&2; exit 2 ;;
   *)          echo "sprint-status: unknown command '$1'" >&2; exit 2 ;;
 esac
 
+DRY=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --check)     [ "$MODE" = "derive-stories" ] || { echo "sprint-status: --check is a mode of its own, or a flag of derive-stories" >&2; exit 2; }
+                 DRY="1"; shift ;;
     --root)      PROJECT_ROOT="${2:-}"; shift 2 ;;
     --sprint)    SPRINT="${2:-}"; shift 2 ;;
     --name)      NAME="${2:-}"; shift 2 ;;
@@ -148,9 +178,26 @@ fi
 
 command -v python3 >/dev/null 2>&1 || { echo "sprint-status: FAIL — python3 required" >&2; exit 1; }
 
+# The derivable-field list's LOCATION comes from the contract's declaration, never from a literal
+# here — a reader that restates the path passes every agreement check while the declaration moves
+# out from under it. Both layouts, because this script runs in both. An UNREADABLE contract is not
+# an error here: the derive's own arm reports it as a worklist and exits 0, exactly as the trunk
+# audit does, so a consumer that predates the declaration is not wedged by it.
+STORY_FIELDS_FILE=""
+for _lc in "$PROJECT_ROOT/.claude/skills/ai-dlc/layer-contract.yaml" \
+           "$PROJECT_ROOT/core/skills/ai-dlc/layer-contract.yaml"; do
+  [ -f "$_lc" ] || continue
+  _rel="$(sed -n 's/^consumer_story_fields_file:[[:space:]]*//p' "$_lc" | head -1 | sed 's/[[:space:]]*$//')"
+  [ -n "$_rel" ] && STORY_FIELDS_FILE="$PROJECT_ROOT/$_rel"
+  STORY_FIELDS_REL="$_rel"
+  break
+done
+
 MODE="$MODE" FILE="$FILE" SCHEMA="$SCHEMA" PROJECT_ROOT="$PROJECT_ROOT" \
 SPRINT="$SPRINT" NAME="$NAME" VARIANT="$VARIANT" INTENSITY="$INTENSITY" \
-EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" python3 - <<'PY'
+EVIDENCE="$EVIDENCE" CLOSED_AT="$CLOSED_AT" RETRO_DOC="$RETRO_DOC" \
+DRY="$DRY" STORY_FIELDS_FILE="${STORY_FIELDS_FILE:-}" \
+STORY_FIELDS_REL="${STORY_FIELDS_REL:-}" python3 - <<'PY'
 import json, os, re, sys
 from pathlib import Path
 
@@ -705,6 +752,250 @@ def check_stories():
     return 0
 
 
+# --- derive-stories: the WRITE half of the duty check-stories already reads ---------------------
+# check-stories JOINS the entry's `status:` to the story file's and reports drift. Nothing in core
+# could write the derived value back, so every consumer that wanted that kept its own tool -- and
+# the tool that exists derives NINE fields against a schema declaring ONE of them. Hence the split:
+# core owns the parse, the two views, the resolution, the frontmatter read and the byte-verbatim
+# write; the CONSUMER declares which of its story fields are derivable, because core cannot know
+# that this project's stories carry `capital_path`.
+
+FIELD_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+def declared_story_fields():
+    """(state, [names]). state is one of:
+         no-declaration  the contract carries no `consumer_story_fields_file:`, or the file it
+                         names is not on disk. A consumer predating this, reported and exit 0.
+         none            the literal `none` -- a complete answer, and NOT the same as silence.
+         ok              at least one field.
+         malformed       a block with content that yields no field. Reported, never treated as
+                         empty: that collapse is what every vacuous-green in this file's history
+                         is made of.
+       `status` is NOT in this set and is never read from it -- see STATUS_FLOOR."""
+    p = os.environ.get("STORY_FIELDS_FILE") or ""
+    if not p or not Path(p).is_file():
+        return ("no-declaration", [])
+    try:
+        text = Path(p).read_text(errors="replace")
+    except OSError:
+        return ("no-declaration", [])
+    inside = False
+    body = []
+    for ln in text.split("\n"):
+        if ln.startswith("```"):
+            inside = not inside
+            continue
+        if not inside:
+            continue
+        s = ln.strip()
+        if s == "" or s.startswith("#"):
+            continue
+        body.append(s)
+    if not body:
+        return ("no-declaration", [])
+    if len(body) == 1 and body[0] == "none":
+        return ("none", [])
+    names, bad = [], []
+    for s in body:
+        if not s.startswith("field:"):
+            bad.append(s)
+            continue
+        v = s.split(":", 1)[1].strip()
+        if not FIELD_NAME_RE.match(v):
+            bad.append(s)
+            continue
+        if v not in names:
+            names.append(v)
+    if bad or not names:
+        return ("malformed", bad)
+    return ("ok", names)
+
+
+# THE FLOOR, AND IT COMES FROM THE SCHEMA RATHER THAN FROM THE DECLARATION. `status` is the one
+# field Check 5 reads, core's schema declares it as a story-entry field, and a consumer must not
+# be able to declare its way out of it. The declaration ADDS; it cannot subtract.
+STATUS_FLOOR = [k for k, v in schema.get("story_entry_fields", {}).items() if v.get("required")]
+
+
+def story_file_field(path, field):
+    """(value, why-not). `status` keeps check-stories' two-grammar read verbatim -- frontmatter
+    first, `**Status:**` header only for a file with no frontmatter block -- because both
+    spellings are live in a real corpus and the two readers must not disagree about one file.
+    Every other field is frontmatter only: there is no second spelling to honour and inventing
+    one would be core guessing at the consumer's document shape."""
+    if field == "status":
+        return story_file_status(path)
+    try:
+        text = Path(path).read_text(errors="replace")
+    except OSError:
+        return (None, "cannot read the file")
+    if not (text.startswith("---\n") or text.startswith("---\r\n")):
+        return (None, "carries no frontmatter block")
+    end = text.find("\n---", 3)
+    if end == -1:
+        return (None, "frontmatter block is unterminated")
+    m = re.search(r"^%s:[ \t]*(.*?)[ \t]*$" % re.escape(field), text[4:end], re.M)
+    if not m:
+        return (None, "frontmatter carries no `%s:`" % field)
+    return (strip_value(m.group(1)), "frontmatter")
+
+
+def rewrite_field_value(line, new):
+    """Replace ONLY the value token of `<indent><key>:<sep><value><comment>`, verbatim otherwise.
+
+    The byte-verbatim requirement is not stylistic. This envelope is hand-edited by six actors
+    across a sprint; a tool that re-emits it loses their inline comments, their field order and
+    their block scalars, and it would be doing that on every derive. Returns the line unchanged
+    if it cannot see a value to replace -- there is no branch here that guesses at a shape."""
+    m = re.match(r"^([ \t]*[A-Za-z_][A-Za-z0-9_]*:)([ \t]*)(.*)$", line)
+    if not m:
+        return line
+    head, sep, rest = m.group(1), m.group(2), m.group(3)
+    # An inline comment is kept WITH THE WHITESPACE RUN THAT PRECEDES IT, not merely kept. A
+    # first cut normalised that run to one space and turned `draft          # hand note` into
+    # `in_review # hand note` -- the comment survived and the hand-aligned column did not,
+    # across every commented line in the file, on every run. Whitespace between the value and
+    # the `#` is not part of the value, so it is not this function's to touch.
+    tail = ""
+    if rest[:1] not in ("'", '"'):
+        cm = re.match(r"^(.*?)([ \t]+#.*)$", rest)
+        if cm:
+            tail = cm.group(2)
+    if sep == "":
+        sep = " "
+    return head + sep + new + tail
+
+
+def derive_stories():
+    dry = bool(os.environ.get("DRY"))
+    state, fields = declared_story_fields()
+    rel = os.environ.get("STORY_FIELDS_REL") or "<undeclared>"
+
+    if state == "malformed":
+        sys.stderr.write(
+            "sprint-status: FAIL — %s carries a block this parser cannot read as a field list: "
+            "%s. The grammar is one `field: <name>` line per derivable field, or the literal "
+            "`none`. A malformed list is not an empty one, and deriving against a partial read "
+            "would write some fields and silently skip others.\n" % (rel, "; ".join(fields[:4])))
+        return 1
+    if state in ("no-declaration", "none"):
+        why = ("declares no `consumer_story_fields_file:`, or the file it names is not on disk, "
+               "so this project predates the declaration" if state == "no-declaration"
+               else "declares the literal `none`, so this project derives nothing beyond the "
+                    "schema's own floor")
+        print("sprint-status: derive-stories WORKLIST — %s %s. Nothing beyond %s was derived and "
+              "nothing is wrong; declare the fields to widen it."
+              % (rel, why, ", ".join("`%s`" % f for f in STATUS_FLOOR) or "the floor"))
+        # The floor still runs: `status` is the schema's, not the declaration's.
+    want = list(STATUS_FLOOR) + [f for f in fields if f not in STATUS_FLOOR]
+
+    target = int(os.environ["SPRINT"]) if os.environ.get("SPRINT") else declared_sprint()
+    if target is None:
+        print("sprint-status: derive-stories MATCHED NO STORY FILES (exit 3) — no canonical on "
+              "disk carries a `sprint:` key, so there is no sprint whose stories could be read.")
+        return 3
+
+    print("sprint-status derive-stories: sprint %d, fields %s%s"
+          % (target, ", ".join(want), " (--check: nothing will be written)" if dry else ""))
+
+    drifted = []
+    files_matched = 0
+    zero_comparison = []
+    wrote = 0
+    entries_total = 0
+
+    for view in VIEWS:
+        p = VIEWS[view]
+        if not p.is_file():
+            continue
+        text = p.read_text()
+        n, _ = parse(text)
+        if n is not None and n != target:
+            continue                      # a canonical holding a different sprint is not ours
+        st, entries = parse_story_entries(text)
+        if st != "ok":
+            continue
+        lines = text.split("\n")
+        changed = False
+        for key, flds, lineno in entries:
+            entries_total += 1
+            sf = resolve_story_file(p, key, flds.get("file"))
+            if sf is None or isinstance(sf, list):
+                # Unresolvable, or ambiguous. check-stories already reports this as a FINDING on
+                # the status join; the derive does not double-report it and does not guess.
+                continue
+            files_matched += 1
+            comparisons = 0
+            for field in want:
+                have = flds.get(field)
+                if have is None:
+                    continue              # the entry does not carry this field: nothing to rewrite
+                val, why = story_file_field(sf, field)
+                if val is None:
+                    continue              # the story file does not carry it: not invented
+                comparisons += 1
+                if val == have:
+                    continue
+                drifted.append("[%s] %s.%s: envelope `%s` -> story file `%s` (%s)"
+                               % (view, key, field, have, val, sf.name))
+                if dry:
+                    continue
+                # Find the field's own line inside this entry. The entry starts at `lineno`
+                # (1-based) and ends at the next line no deeper than the entry's own indent.
+                base = lineno - 1
+                ei = len(lines[base]) - len(lines[base].lstrip())
+                for j in range(base + 1, len(lines)):
+                    lj = lines[j]
+                    if lj.strip() == "":
+                        continue
+                    if len(lj) - len(lj.lstrip()) <= ei:
+                        break
+                    fm = STORY_FIELD_RE.match(lj)
+                    if fm and fm.group(2) == field:
+                        new = rewrite_field_value(lj, val)
+                        if new != lj:
+                            lines[j] = new
+                            changed = True
+                            wrote += 1
+                        break
+            if comparisons == 0:
+                zero_comparison.append("[%s] %s (%s)" % (view, key, sf.name))
+        if changed and not dry:
+            p.write_text("\n".join(lines))
+
+    print("")
+    if files_matched == 0:
+        print("sprint-status: derive-stories MATCHED NO STORY FILES (exit 3) — %d entr%s parsed "
+              "for sprint %d and not one resolved to a story file on disk. This is not a clean "
+              "run: it compared nothing."
+              % (entries_total, "y" if entries_total == 1 else "ies", target))
+        return 3
+    if zero_comparison:
+        print("sprint-status: derive-stories COMPARED NOTHING for %d stor%s (exit 4) — %s. Every "
+              "declared field, `status` included, was unreadable for %s. 'Matched files but "
+              "verified nothing' is the same failure as 'matched no files' and must not print a "
+              "clean line."
+              % (len(zero_comparison), "y" if len(zero_comparison) == 1 else "ies",
+                 "; ".join(zero_comparison[:5]),
+                 "it" if len(zero_comparison) == 1 else "them"))
+        return 4
+    if dry:
+        if drifted:
+            for d in drifted:
+                sys.stderr.write("sprint-status: DRIFT %s\n" % d)
+            print("sprint-status: derive-stories --check FAIL — %d drifted key(s) over %d stor%s; "
+                  "NOTHING was written."
+                  % (len(drifted), files_matched, "y" if files_matched == 1 else "ies"))
+            return 1
+        print("sprint-status: derive-stories --check PASS — 0 drifted key(s) over %d stor%s"
+              % (files_matched, "y" if files_matched == 1 else "ies"))
+        return 0
+    print("sprint-status: derive-stories PASS — %d value(s) written over %d stor%s, %d entr%s"
+          % (wrote, files_matched, "y" if files_matched == 1 else "ies",
+             entries_total, "y" if entries_total == 1 else "ies"))
+    return 0
+
+
 if mode == "render":
     print(render_header())
     sys.exit(0)
@@ -719,6 +1010,8 @@ elif mode == "close":
     sys.exit(close())
 elif mode == "check-stories":
     sys.exit(check_stories())
+elif mode == "derive-stories":
+    sys.exit(derive_stories())
 else:
     fail("unknown mode '%s'" % mode, code=2)
 PY
