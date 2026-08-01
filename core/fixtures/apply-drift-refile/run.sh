@@ -25,7 +25,7 @@ fi
 # --- Assertion 0b: SANITY — the driver starts at v1 and upstream has v2 -------
 # Without this, "the driver was not updated" below could pass against a seed that never
 # staged an update in the first place.
-if grep -q 'driver v1' "$DRIVER" && git -C "$DIST" show "$THEIRS:core/session-driver/ai-dlc-session-driver.sh" | grep -q 'driver v2'; then
+if grep -q 'driver v1' "$DRIVER" && grep -q 'driver v2' <<<"$(git -C "$DIST" show "$THEIRS:core/session-driver/ai-dlc-session-driver.sh")"; then
   ok "before: consumer driver at v1, upstream at v2 (a real UPSTREAM-ONLY delta to apply)"
 else
   bad "FIXTURE BROKEN — no staged session-driver update"; echo; echo "apply-drift-refile: FIXTURE BROKEN" >&2; exit 2

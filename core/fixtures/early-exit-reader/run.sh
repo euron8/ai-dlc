@@ -18,6 +18,15 @@
 # file that sets pipefail. I54 bans the shape. This fixture is why the ban exists: it
 # demonstrates the false pass rather than asserting it.
 #
+# THE SECOND HALF, ADDED AT v0.231.0. I54's grammar requires the writer to be a builtin
+# pushing a shell variable AND the reader to be the immediately next stage. The defect
+# requires neither, so a command upstream and a variable with one filter in between both
+# sit outside the ban by construction -- which is how seventeen live sites survived the
+# 300-site sweep that was supposed to end this class. Assertions 5 and 6 carry the defect
+# through each gap. Assertion 8 is the other direction: it proves that WITHOUT pipefail
+# the identical pipeline is correct, which is what licenses I54b to exclude those files
+# rather than merely hope they are safe.
+#
 # WHY THIS IS NOT A STOPWATCH TEST. The threshold is the pipe buffer, not a race. It was
 # measured at 64 KiB on the machine this shipped from, identical idle and under 24-way
 # load, so the sizes below straddle it by a wide margin rather than sitting near it.
@@ -104,6 +113,73 @@ if [ "$(says "$BANNED" "$SMALL_BAD")" = VIOLATION ] && [ "$(says "$CONVERTED" "$
   ok "control: both forms report the violation in a SMALL input (the banned form is not simply broken — it works until the value grows)"
 else
   bad "the two forms already disagree below the pipe buffer, so the size explanation is wrong and assertion 2 is attributing the failure to the wrong cause"
+fi
+
+# --- the two shapes the ORIGINAL grammar could not see ---------------------------------
+# I54's first arm requires the writer to be a BUILTIN pushing a shell variable, and the
+# reader to be the IMMEDIATELY next stage. The defect needs neither. These two checkers
+# carry it through the gaps, and v0.231.0 found seventeen live sites sitting in them.
+write_piped() {   # a COMMAND's output, straight into the reader
+  {
+    printf '#!/usr/bin/env bash\nset -uo pipefail\nif cat "$1" | %s FORBIDDEN_TOKEN; then\n' "$_rd"
+    printf '  echo "VIOLATION"\nfi\n'
+  } > "$1"
+}
+write_staged() {  # a shell variable, but with ONE filter between it and the reader
+  {
+    printf '#!/usr/bin/env bash\nset -uo pipefail\nv="$(cat "$1")"\n'
+    printf 'if printf %s "$v" | cat | %s FORBIDDEN_TOKEN; then\n' "$_fmt" "$_rd"
+    printf '  echo "VIOLATION"\nfi\n'
+  } > "$1"
+}
+write_nopf() {    # the piped form again, in a file that does NOT enable pipefail
+  {
+    printf '#!/usr/bin/env bash\nset -u\nif cat "$1" | %s FORBIDDEN_TOKEN; then\n' "$_rd"
+    printf '  echo "VIOLATION"\nfi\n'
+  } > "$1"
+}
+PIPED="$WORK/check-piped.sh";   write_piped  "$PIPED"
+STAGED="$WORK/check-staged.sh"; write_staged "$STAGED"
+NOPF="$WORK/check-nopf.sh";     write_nopf   "$NOPF"
+for g in "$PIPED" "$STAGED" "$NOPF"; do
+  bash -n "$g" || { echo "FIXTURE ERROR: a generated checker does not parse" >&2; exit 2; }
+done
+cmp -s "$PIPED" "$NOPF" && { echo "FIXTURE ERROR: the pipefail and no-pipefail checkers are byte-identical — assertion 8 would compare a file with itself" >&2; exit 2; }
+
+# --- Assertion 5: a COMMAND upstream reaches the same false pass -----------------------
+# The gap D-6c16.2 named. Nothing about the defect requires the writer to be a builtin.
+if [ -z "$(says "$PIPED" "$BIG_BAD")" ]; then
+  ok "a COMMAND piped into the reader scores the violating 200 KB input as clean — the same false pass, through a writer the first arm's grammar cannot see"
+else
+  bad "the piped-command form reported the violation, so this machine no longer reproduces the defect through a command upstream — re-measure before trusting I54b's subject set"
+fi
+
+# --- Assertion 6: ONE filter in between reaches it too ---------------------------------
+# The other half of the gap, and the one no report had named: the writer here IS the
+# builtin-plus-variable the first arm bans, and inserting a single stage hides it.
+if [ -z "$(says "$STAGED" "$BIG_BAD")" ]; then
+  ok "a variable with ONE filter between it and the reader scores the same input as clean — the first arm's own banned writer, outside its grammar because the reader is not the next stage"
+else
+  bad "the staged form reported the violation, so an intermediate stage no longer carries the defect — I54b's second gap would then be closed and its lines are not earning them"
+fi
+
+# --- Assertion 7 (CONTROL): both new forms are correct below the buffer -----------------
+# Same control assertion 4 makes for the original pair, and it is what makes 5 and 6 a
+# size trap rather than two simply-broken checkers.
+if [ "$(says "$PIPED" "$SMALL_BAD")" = VIOLATION ] && [ "$(says "$STAGED" "$SMALL_BAD")" = VIOLATION ]; then
+  ok "control: both new forms report the violation in a SMALL input (they work until the input grows, which is why nobody notices)"
+else
+  bad "a new form already disagrees below the pipe buffer, so assertions 5 and 6 are attributing their silence to size when something else is wrong"
+fi
+
+# --- Assertion 8 (CONTROL): without pipefail the SAME pipeline is correct ---------------
+# This is I54b's first narrowing, asserted behaviourally rather than argued. The arm
+# excludes every file that does not enable pipefail, and an exclusion that is wrong is a
+# check that cannot fire over whatever it excluded.
+if [ "$(says "$NOPF" "$BIG_BAD")" = VIOLATION ]; then
+  ok "control: the identical pipeline in a file WITHOUT pipefail reports the violation — so I54b's pipefail narrowing excludes sites that genuinely cannot misbehave, not sites it merely hopes are safe"
+else
+  bad "the piped form fails even without pipefail, so I54b's first narrowing excludes a population that DOES carry the defect and the arm is blind over every file that omits the option"
 fi
 
 if [ "$fails" -eq 0 ]; then

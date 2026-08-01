@@ -28,7 +28,7 @@ s_absent=1
 for s in -- "--strict-provenance" "strict provenance enforced by default"; do
   [ "$s" = "--" ] && continue
   for ref in "$BASE" "$THEIRS"; do
-    git -C "$DIST" show "$ref:core/scripts/validate-thing.sh" | grep -qF -- "$s" && s_absent=0
+    grep -qF -- "$s" <<<"$(git -C "$DIST" show "$ref:core/scripts/validate-thing.sh")" && s_absent=0
   done
 done
 if [ "$s_absent" -eq 1 ]; then

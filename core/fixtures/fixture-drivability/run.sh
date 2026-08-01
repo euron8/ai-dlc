@@ -111,11 +111,21 @@ fi
 #     the mutated copy ACCEPTS a tree the shipped script rejects. Each mutant fails only
 #     its own assertion — the two guards are independent branches and the tree carries a
 #     distinct subject for each.
+# BOTH CALLERS WRAP THIS IN `$( )` to capture the mutant's path, so a bad() here
+# is captured as the return value and its fails++ dies with the subshell. The
+# caller's `if` then takes the false branch, the assertion vanishes with no
+# diagnostic, and the fixture still reports PASS one assertion shorter. Recorded
+# to a FILE instead and read at the end, where nothing can swallow it. Same defect
+# and same remedy as layer-qualifier-grain — see v0.231.0, where an unrelated
+# sweep rewrote a line a mutation anchored on and this shape hid it.
+MUT_UNLANDED="$WORK/mutations-that-did-not-land"
+: > "$MUT_UNLANDED"
 mutate() {  # <name> <sed program>
   local name="$1" prog="$2" mp="$WORK/$1.sh"
   sed "$prog" "$SCRIPT" > "$mp"
   if cmp -s "$SCRIPT" "$mp"; then
-    bad "FIXTURE BROKEN: mutation '$name' matched nothing, so its assertion is unproven"
+    printf '%s\n' "$name" >> "$MUT_UNLANDED"
+    rm -f "$mp"
     return 1
   fi
   printf '%s' "$mp"
@@ -152,6 +162,17 @@ if mp="$(mutate m2 's@if grep -qF -- "$EXEMPT_MARKER" "${d}README.md"; then@if t
   else
     bad "MUTANT 2 did not isolate the marker test (either 'echo' still reported, or 'delta' fell silent with it)"
   fi
+fi
+
+# --- CONTROL: both mutations above actually landed -----------------------------
+# Each mutant is guarded by `if mp="$(mutate ...)"`, so a sed matching nothing
+# takes the false branch and skips its assertion in silence. This is where
+# mutate()'s record is read, because this scope is the only one `$( )` cannot
+# swallow.
+if [ ! -s "$MUT_UNLANDED" ]; then
+  ok "control: both mutations landed (a sed matching nothing cannot skip its assertion in silence)"
+else
+  bad "mutation(s) matched nothing and their assertions were SKIPPED, not failed: $(tr '\n' ' ' < "$MUT_UNLANDED")— each leaves a branch scoring as load-bearing when nothing tested it"
 fi
 
 echo

@@ -127,7 +127,7 @@ else
   RAW="$(bash "$NOGUARD" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
   if grep -q 'HARD-CORE-DRIFT-ABSORBED.*alpha.md' <<<"$RAW" \
      && grep -q 'HARD-UNREGISTERED-CORE-DRIFT.*beta.md' <<<"$RAW" \
-     && printf '%s\n' "$RAW" | grep 'alpha.md' | grep -q 'a revert DELETES text'; then
+     && grep -q 'a revert DELETES text' <<<"$(printf '%s\n' "$RAW" | grep 'alpha.md')"; then
     ok "guard removed: BOTH hazard rows return, absorbed one still carrying the ready revert — the guard is what suppresses them"
   else
     bad "FIXTURE VACUOUS — with the guard stripped the hazard did not reproduce, so assertion 3 proves nothing. Got: $(printf '%s\n' "$RAW" | tr '\n' '|')"

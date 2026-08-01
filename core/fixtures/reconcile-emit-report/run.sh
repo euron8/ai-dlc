@@ -193,11 +193,11 @@ rm -rf "$MUTR"; cp -R "$(dirname "$EMIT")" "$MUTR"
 sha_line_of() { bash "$1" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep -m1 '^_base_ '; }
 sed 's@_base_ `%s` → _theirs_ `%s`.@_base_ \\`%s\\` → _theirs_ \\`%s\\`.@' "$EMIT" > "$MUTR/mutant-emit.sh"
 
-if printf '%s' "$(sha_line_of "$MUTR/emit-report.sh")" | grep -q '\\`'; then
+if grep -q '\\`' <<<"$(sha_line_of "$MUTR/emit-report.sh")"; then
   bad "FIXTURE BROKEN — an UNMUTATED copy in the mutant directory already emits backslashes, so the mutation below would score a false kill"
 elif cmp -s "$EMIT" "$MUTR/mutant-emit.sh"; then
   bad "FIXTURE BROKEN — the mutation matched nothing, so the assertion above is unproven"
-elif printf '%s' "$(sha_line_of "$MUTR/mutant-emit.sh")" | grep -q '\\`'; then
+elif grep -q '\\`' <<<"$(sha_line_of "$MUTR/mutant-emit.sh")"; then
   ok "mutation: re-escaping inside the single quotes puts literal backslashes back (the assertion above is load-bearing)"
 else
   bad "the mutant emitted no backslashes — the assertion above cannot fail and is vacuous"

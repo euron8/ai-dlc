@@ -103,7 +103,7 @@ J="$(mkjson Agent gate-adjudicator)"
 [ "$(verdict "$CONSUMER" "$J")" = allow ] \
   && ok "set emits permissionDecision=allow (cannot override another hook's deny)" \
   || bad "set did not emit allow — either it still denies, or it emits a more-restrictive verdict"
-if raw "$CONSUMER" "$J" | grep -q 'opus' && raw "$CONSUMER" "$J" | grep -q 'role file'; then
+if grep -q 'opus' <<<"$(raw "$CONSUMER" "$J")" && grep -q 'role file' <<<"$(raw "$CONSUMER" "$J")"; then
   ok "the correction names the tier it bound and cites the role file as the source"
 else
   bad "the correction does not explain what it set or from where — unauditable"

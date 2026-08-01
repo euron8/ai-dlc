@@ -484,7 +484,7 @@ else
   # The anchor MUST resolve to a real heading in core, or drift detection is dead
   # for this entry from the day it is written.
   anchor="$(sed -n 's/^shadows:[[:space:]]*//p' "$NEW" 2>/dev/null | sed 's/.*#//; s/,.*//')"
-  if [ -n "$anchor" ] && git -C "$DIST" show "${BASE}:core/team-roles/tea.md" | grep -qiF "$anchor"; then
+  if [ -n "$anchor" ] && grep -qiF "$anchor" <<<"$(git -C "$DIST" show "${BASE}:core/team-roles/tea.md")"; then
     ok "shadows: anchors to a heading that EXISTS in core (#$anchor)"
   else
     bad "shadows: anchor '#$anchor' resolves to no heading -- drift detection is dead for this entry"
@@ -603,7 +603,7 @@ else
 
   # Report-only. It must not block `apply`, or a consumer cannot take a security fix
   # until it has restructured its own overrides.
-  if printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}' | grep -q DELEGATES; then
+  if grep -q DELEGATES <<<"$(printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}')"; then
     bad "OVERRIDE-DELEGATES-INTO-SHADOW carries a HARD- prefix — it would block apply"
   else
     ok "  and it is report-only, never a blocker"
@@ -659,7 +659,7 @@ else
   fi
 
   # Report-only, for the same reason as its sibling.
-  if printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}' | grep -q ASSERTS; then
+  if grep -q ASSERTS <<<"$(printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}')"; then
     bad "OVERRIDE-ASSERTS-SHADOW-SURVIVES carries a HARD- prefix — it would block apply"
   else
     ok "  and it is report-only, never a blocker"
@@ -717,7 +717,7 @@ else
 
   # Report-only, and the reason is on the record: the one live instance is DELIBERATE and
   # says so in prose. An ERROR would fire on a case the consumer already reasoned about.
-  if printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}' | grep -qE 'LOOSE-ANCHOR|DOUBLE-SHADOW'; then
+  if grep -qE 'LOOSE-ANCHOR|DOUBLE-SHADOW' <<<"$(printf '%s\n' "$ld_out" | awk -F'\t' '$1 ~ /^HARD-/{print $1}')"; then
     bad "a new pull-time status carries a HARD- prefix — it would block apply on a report-only finding"
   else
     ok "  and both new statuses are report-only, never blockers"
