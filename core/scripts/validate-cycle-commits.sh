@@ -72,6 +72,37 @@
 # and every ERROR is against a declared taxonomy's own contents. That split is
 # E17/W6's and E18/W10's, and neither wedged anyone.
 #
+# A DUTY KEYED TO SOMETHING THE COMMIT DETERMINES IS DECLARED WITH `capture:`.
+# Until v0.236.0 every argument in a `validator:` line was a literal, so a
+# consumer whose validator takes the audited commit's sprint number -- or its
+# release number, or its story id -- could not declare that obligation at all
+# and kept its own script for that reason alone. Measured on the reference
+# consumer: three of its four retro-class obligations take the sprint number as
+# an argument, so the declared taxonomy re-ran 2 where the incumbent re-ran 4.
+#
+#   capture: <name> <anchored-regex-with-one-capturing-group>
+#   validator: some-check.sh {<name>}
+#
+# The regex is matched against the commit's CHANGED PATHS and must be anchored
+# ^...$, because it extracts rather than tests -- an unanchored one leaves the
+# unmatched remainder of the path in the value. Group 1 is the value.
+#
+# THE VALUE MUST BE EXACTLY ONE, AND EVERY OTHER OUTCOME IS A FINDING. Zero
+# matching paths means the class's stated obligation is un-runnable against this
+# commit; two different values mean the commit spans more than the capture
+# assumed and core will not pick one. Neither is a skip, for the same reason an
+# unresolved class is not. A value outside [A-Za-z0-9._-] is also a finding: the
+# command is evaluated, so the capture is an injection surface fed by the
+# repository's own paths, and `(.*)` is a legal thing for a consumer to write.
+#
+# There is NO runtime arm for "an unsubstituted {name} reached a validator's
+# argv", and its absence is deliberate. The declaration-time join below binds
+# every {name} to a `capture:` in the same class and every `capture:` to a
+# {name} that reads it, in both directions, and a failure there stops the run
+# before a single commit is audited -- so that arm's subject set would be empty
+# by construction, and an arm that cannot fire reads exactly like one that
+# passed.
+#
 # Exit codes (--audit-trunk):
 #   0  -- every commit in range resolved and re-verified clean, or the taxonomy
 #         is undeclared (worklist printed), or the range is empty
@@ -110,7 +141,7 @@ if [ "${1:-}" = "--audit-trunk" ]; then
     if [ -f "$AROOT/$_c" ]; then A_LC="$AROOT/$_c"; break; fi
   done
   [ -n "$A_LC" ] || audit_die "no layer-contract.yaml in either layout (looked for .claude/skills/ai-dlc/ and core/skills/ai-dlc/). The taxonomy's location is declared there and nowhere else, so this run has nothing to read -- which is not the same answer as a clean trunk."
-  A_PRC_REL="$(sed -n 's/^consumer_pr_class_file:[ \t]*//p' "$A_LC" | head -1 | sed 's/[ \t]*$//')"
+  A_PRC_REL="$(sed -n 's/^consumer_pr_class_file:[[:space:]]*//p' "$A_LC" | head -1 | sed 's/[[:space:]]*$//')"
 
   # A contract that PREDATES the declaration is not a consumer failing to adopt
   # this. v0.228.0 recorded what happens to an arm that cannot tell those apart.
@@ -129,7 +160,7 @@ if [ "${1:-}" = "--audit-trunk" ]; then
   # grammar is deliberately dumb -- the consumer writes this by hand, and a
   # clever parser turns a hand-written file into a source of parse errors.
   A_BLOCK="$(awk '/^```/{f=!f; next} f' "$A_PRC" 2>/dev/null \
-    | sed 's/^[ \t]*//; s/[ \t]*$//' | grep -v '^#' | grep -E '.' || true)"
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^#' | grep -E '.' || true)"
   if [ -z "$A_BLOCK" ]; then
     echo "AUDIT-TRUNK: WORKLIST -- $A_PRC_REL: carries no taxonomy block at all, not even the literal 'none'. An undeclared taxonomy and an empty one must not look alike: state 'none' if this project declares no classes, or write one stanza per class. Nothing was audited."
     exit 0
@@ -149,7 +180,7 @@ if [ "${1:-}" = "--audit-trunk" ]; then
     [ -n "$_line" ] || continue
     _key="${_line%%:*}"
     _val="${_line#*:}"
-    _val="$(printf '%s' "$_val" | sed 's/^[ \t]*//')"
+    _val="$(printf '%s' "$_val" | sed 's/^[[:space:]]*//')"
     case "$_key" in
       class)
         [ -n "$_val" ] || { decl_err "a 'class:' line declares no name."; continue; }
@@ -163,8 +194,9 @@ if [ "${1:-}" = "--audit-trunk" ]; then
         A_N=$((A_N+1))
         printf '%s' "$_val" > "$A_TMP/c$A_N.name"
         : > "$A_TMP/c$A_N.paths"; : > "$A_TMP/c$A_N.added"; : > "$A_TMP/c$A_N.val"
+        : > "$A_TMP/c$A_N.cap"
         ;;
-      paths|added|validator)
+      paths|added|validator|capture)
         if [ "$A_N" -eq 0 ]; then
           decl_err "'$_key:' appears before any 'class:' line, so it belongs to no class and nothing reads it."
           continue
@@ -174,10 +206,65 @@ if [ "${1:-}" = "--audit-trunk" ]; then
           paths)     printf '%s\n' "$_val" >> "$A_TMP/c$A_N.paths" ;;
           added)     printf '%s\n' "$_val" >> "$A_TMP/c$A_N.added" ;;
           validator) printf '%s\n' "$_val" >> "$A_TMP/c$A_N.val" ;;
+          capture)
+            # Every rejection below is at DECLARATION time and stops the whole
+            # run, which is the design rather than an accident: it is what makes
+            # it impossible for an unsubstituted `{name}` to reach a validator's
+            # argv. There is deliberately no runtime arm for that -- with these
+            # in place its subject set is empty, and a check that cannot fire
+            # reads exactly like one that passed.
+            _cnm="${_val%% *}"; _cre="${_val#* }"
+            _cls="$(cat "$A_TMP/c$A_N.name")"
+            if [ "$_cnm" = "$_val" ] || [ -z "$_cre" ]; then
+              decl_err "class '$_cls' has 'capture: $_val', which is a name with no regex after it. The form is 'capture: <name> <anchored-regex-with-one-group>' -- the name is what a validator: line writes as {name}, and the regex is what extracts its value from this commit's changed paths."
+              continue
+            fi
+            # Here-string, not a pipe: I54's rule -- a variable written into a
+            # reader that stops at its first match answers "not found" on input
+            # that contains the pattern, once the value clears the pipe buffer.
+            if ! grep -qE '^[A-Za-z][A-Za-z0-9_]*$' <<<"$_cnm"; then
+              decl_err "class '$_cls' declares capture name '$_cnm'. A capture name is [A-Za-z][A-Za-z0-9_]* so that {$_cnm} is unambiguous inside a validator: command; a name outside that set cannot be substituted for without guessing where it ends."
+              continue
+            fi
+            case "$_cre" in
+              '^'*'$') ;;
+              *)
+                decl_err "class '$_cls' capture '$_cnm' has regex '$_cre', which is not anchored ^...\$. paths: TESTS a path and may match part of one; a capture EXTRACTS from it, and an unanchored regex leaves the unmatched remainder in the value -- 'sprint-([0-9]+)' against docs/retro/sprint-168.md yields docs/retro/168.md, silently. Anchor it so the regex describes the whole path."
+                continue
+                ;;
+            esac
+            # ERE has no non-capturing group, so an unescaped '(' IS a group.
+            # Strip escaped backslashes first, then escaped parens, then look.
+            _probe="$(printf '%s' "$_cre" | sed 's/\\\\//g; s/\\(//g')"
+            case "$_probe" in
+              *'('*) ;;
+              *)
+                decl_err "class '$_cls' capture '$_cnm' has regex '$_cre', which contains no capturing group. A capture with nothing to capture matches or does not match and yields no value either way, so every commit of this class would report an unresolved capture."
+                continue
+                ;;
+            esac
+            if grep -qE "^${_cnm} " "$A_TMP/c$A_N.cap" 2>/dev/null; then
+              decl_err "class '$_cls' declares capture '$_cnm' twice. Two regexes under one name cannot both supply {$_cnm}, and silently taking the first would make the second unreachable."
+              continue
+            fi
+            # The extraction is a sed s///, so it needs a delimiter the regex
+            # does not itself contain. Chosen HERE, at declaration time, and
+            # stored -- picking it per commit would put a failure mode inside
+            # the audit loop where it could only be discovered by a commit.
+            _cd=""
+            for _d in '/' '#' '%' ',' '@' '=' '+' '~' ':' ';' '!' '|'; do
+              case "$_cre" in *"$_d"*) ;; *) _cd="$_d"; break ;; esac
+            done
+            if [ -z "$_cd" ]; then
+              decl_err "class '$_cls' capture '$_cnm' has a regex containing every character this parser can use to delimit the extraction (/ # % , @ = + ~ : ; ! |). Rewrite it using a bracket expression for one of them."
+              continue
+            fi
+            printf '%s %s %s\n' "$_cnm" "$_cd" "$_cre" >> "$A_TMP/c$A_N.cap"
+            ;;
         esac
         ;;
       *)
-        decl_err "unknown key '$_key'. The grammar is class:, paths:, added: and validator:; a line this parser does not know is a line the audit silently ignores, which is how a class ends up owing nothing by accident."
+        decl_err "unknown key '$_key'. The grammar is class:, paths:, added:, capture: and validator:; a line this parser does not know is a line the audit silently ignores, which is how a class ends up owing nothing by accident."
         ;;
     esac
   done <<A_EOF
@@ -196,6 +283,28 @@ A_EOF
     if [ ! -s "$A_TMP/c$_i.val" ]; then
       decl_err "class '$_nm' declares no 'validator:'. If it owes nothing, say so with 'validator: none' -- silence and 'nothing owed' must not look alike."
     fi
+    # The capture join, BOTH DIRECTIONS, because each direction is a different
+    # defect and one of them is silent. A {name} with no capture behind it is
+    # un-runnable and knowable now rather than on whichever future commit first
+    # resolves to this class; a capture no validator reads costs a regex per
+    # commit and does nothing, which is the shape of a field with no reader that
+    # this program has already paid for twice.
+    grep -oE '\{[A-Za-z][A-Za-z0-9_]*\}' "$A_TMP/c$_i.val" 2>/dev/null | sort -u \
+      | while IFS= read -r _ref; do
+          _rn="${_ref#\{}"; _rn="${_rn%\}}"
+          grep -qE "^${_rn} " "$A_TMP/c$_i.cap" 2>/dev/null \
+            || echo "$_rn"
+        done > "$A_TMP/c$_i.unbound"
+    while IFS= read -r _rn; do
+      [ -n "$_rn" ] || continue
+      decl_err "class '$_nm' has a validator: naming {$_rn} and declares no 'capture: $_rn'. Nothing would supply that value, so the command cannot be built -- and a taxonomy that ships this way would substitute nothing and hand the validator the literal string {$_rn}."
+    done < "$A_TMP/c$_i.unbound"
+    while IFS= read -r _cl; do
+      [ -n "$_cl" ] || continue
+      _cn="${_cl%% *}"
+      grep -qF "{$_cn}" "$A_TMP/c$_i.val" 2>/dev/null \
+        || decl_err "class '$_nm' declares 'capture: $_cn' and no validator: names {$_cn}. The capture is evaluated against every commit of this class and its value is then discarded, so it can only cost findings -- an ambiguous or unmatched capture would fail commits over a value nothing was going to use."
+    done < "$A_TMP/c$_i.cap"
     _i=$((_i+1))
   done
   if [ "$A_N" -eq 0 ]; then
@@ -273,6 +382,60 @@ A_EOF
       break
     fi
 
+    # ---- captures: resolve this commit's values, then build the commands -----
+    # A capture is resolved from the commit's own changed paths, BEFORE the
+    # worktree, and a capture that does not resolve is a FINDING rather than a
+    # skip -- for the same reason an unresolved class is. The class's stated
+    # obligation is un-runnable against this commit and saying nothing about
+    # that reads exactly like having run it.
+    : > "$A_TMP/subs"
+    _cap_why=""
+    while IFS= read -r _cl; do
+      [ -n "$_cl" ] || continue
+      _cn="${_cl%% *}"; _rest="${_cl#* }"; _cd="${_rest%% *}"; _cre="${_rest#* }"
+      # -E, not plain sed: `paths:` and `added:` are grep -E, and a capture
+      # written in a second dialect is a trap the consumer cannot see. In BRE
+      # `(` is a literal and `+` is a literal, so the same regex silently
+      # matches nothing and the capture reads as unresolved.
+      _cvals="$(sed -nE "s${_cd}${_cre}${_cd}\\1${_cd}p" "$_f" 2>/dev/null | sort -u)"
+      _cnum="$(printf '%s\n' "$_cvals" | grep -cE '.' || true)"
+      if [ "$_cnum" -eq 0 ]; then
+        _cap_why="${_cap_why} capture '$_cn' matched none of this commit's $(grep -cE '.' "$_f" || echo 0) changed path(s), so {$_cn} has no value and the class's obligations naming it could not be built. Either this commit belongs to a class you have not declared, or the capture's regex does not describe the paths this class actually changes;"
+      elif [ "$_cnum" -gt 1 ]; then
+        _cap_why="${_cap_why} capture '$_cn' matched $_cnum DIFFERENT values in one commit ($(printf '%s' "$_cvals" | tr '\n' ' ')), so {$_cn} is ambiguous here. Core will not pick one: running the class's validators against a guess is worse than reporting that the commit spans more than the capture assumed;"
+      else
+        case "$_cvals" in
+          *[!A-Za-z0-9._-]*)
+            # The command is run through eval, so a capture value is an
+            # injection surface that the repository's own paths feed. The
+            # consumer writes the regex, and `(.*)` is a legal thing to write.
+            _cap_why="${_cap_why} capture '$_cn' resolved to '$_cvals', which is outside [A-Za-z0-9._-]. A capture value is substituted into a command that is then evaluated, so a value carrying shell syntax would run it; narrow the capture's group to the part you actually need;"
+            ;;
+          *)
+            printf '%s %s\n' "$_cn" "$_cvals" >> "$A_TMP/subs"
+            ;;
+        esac
+      fi
+    done < "$A_TMP/c$_ci.cap"
+
+    if [ -n "$_cap_why" ]; then
+      echo "  FAIL    ${_sha} (${_class}):${_cap_why}"
+      A_FIND=$((A_FIND+1))
+      break
+    fi
+
+    # Substitution is parameter expansion against a QUOTED pattern, not a sed:
+    # the value comes from a path and can carry any sed delimiter.
+    : > "$A_TMP/valres"
+    while IFS= read -r _cmd; do
+      while IFS= read -r _s; do
+        [ -n "$_s" ] || continue
+        _sn="${_s%% *}"; _sv="${_s#* }"
+        _cmd="${_cmd//"{$_sn}"/$_sv}"
+      done < "$A_TMP/subs"
+      printf '%s\n' "$_cmd" >> "$A_TMP/valres"
+    done < "$A_TMP/c$_ci.val"
+
     _verdict="CLEAN"; _why=""
     _wt="$(mktemp -d 2>/dev/null)/w"
     if git worktree add --detach "$_wt" "$_sha" >/dev/null 2>&1; then
@@ -303,7 +466,7 @@ A_EOF
           [ -n "$_first" ] || _first="(it printed nothing)"
           _why="${_why} '$_cmd' exits non-zero against this commit's own tree, so this change reached the trunk without satisfying its class -- it said: ${_first};"
         fi
-      done < "$A_TMP/c$_ci.val"
+      done < "$A_TMP/valres"
       git worktree remove --force "$_wt" >/dev/null 2>&1 || true
     else
       _verdict="FAIL"

@@ -75,7 +75,10 @@ expect_set unresolved-skipped 2 'unresolvable commit was skipped|unresolved clas
 
 # M2 — the validator's exit code stops deciding anything. The re-run still happens and its
 # answer is discarded, which is the log-trusting shape this mode replaced.
-expect_set exit-code-ignored 4 'bypassed merge was NOT reported|does not name the validator|finding exited|watermark advanced past a finding' \
+# FIVE since v0.236.0, not four, and the fifth is re-derived rather than inherited: the
+# capture pair's second half (11b) turns a captured value into a validator REJECTION, so an
+# exit code that decides nothing takes that cell too. Same arm, one more fact about it.
+expect_set exit-code-ignored 5 'bypassed merge was NOT reported|does not name the validator|finding exited|watermark advanced past a finding|capture did not vary with the commit' \
   's@^        if ! _out="\$( cd "\$_wt" \&\& eval "\$_cmd" 2>\&1 )"; then@        if _out="$( cd "$_wt" \&\& eval "$_cmd" 2>\&1 )" \&\& false; then@'
 
 # M3 — a declared validator missing from the audited tree is no longer NAMED as absent.
@@ -120,6 +123,73 @@ expect_set finding-unattributed 1 'does not name the validator' \
 # failed and the finding is never seen again. Detection is untouched; only recurrence moves.
 expect_set watermark-advances-past-finding 1 'watermark advanced past a finding' \
   's@^      echo "  FAIL    \${_sha} (\${_class}):\${_why}"@      A_LAST_CLEAN="$_sha"; echo "  FAIL    ${_sha} (${_class}):${_why}"@'
+
+# ============================================================================
+# M10-M18 — the CAPTURE arms, v0.236.0.
+# ============================================================================
+
+# M10 — substitution stops happening. The command still runs and the validator receives the
+# literal `{sprint}`, which is the failure this grammar's whole declaration-time join exists
+# to make impossible; here it is induced directly to prove the assertions can see it.
+expect_set capture-not-substituted 2 "capture did not reach the validator|capture did not vary with the commit" \
+  's@^        _cmd="\${_cmd//"{\$_sn}"/\$_sv}"@        _cmd="$_cmd"@'
+
+# M11 — a capture matching nothing becomes a skip. Fail-closed becomes fail-open one level
+# below the class: the class resolved, its obligation could not be built, and the audit says
+# nothing. Same defect as M1, reached through the capture rather than through the class.
+expect_set capture-zero-match-skipped 1 'unresolvable capture was skipped' \
+  's@^      if \[ "\$_cnum" -eq 0 \]; then@      if [ "$_cnum" -eq 0 ] \&\& false; then@'
+
+# M12 — an ambiguous capture silently takes the first value. TWO reds and they are a fan-out,
+# not an entanglement: that it reported at all, and that the report names both candidates.
+expect_set capture-ambiguity-guessed 2 'ambiguous capture did not report|ambiguity finding does not name the values' \
+  's@^      elif \[ "\$_cnum" -gt 1 \]; then@      elif [ "$_cnum" -gt 1 ] \&\& false; then@'
+
+# M13 — the safe-charset guard goes. The value is substituted into a command that is then
+# `eval`ed, so this is the arm between a consumer's `(.*)` and arbitrary execution driven by
+# a path in their own repository.
+expect_set capture-unsafe-value-allowed 1 'unsafe capture value was substituted' \
+  's@^          \*\[!A-Za-z0-9._-\]\*)@          *[!A-Za-z0-9._-Z]*)@'
+
+# M14 — the {name}-to-capture join goes. This is the arm that makes the runtime "unsubstituted
+# brace" check unnecessary; without it a typo'd {nosuch} ships and is discovered by whichever
+# future commit first resolves to that class, which may be never.
+expect_set capture-unbound-ref-accepted 1 'no capture behind it is a declaration error' \
+  "s@^      decl_err \"class '\\\$_nm' has a validator: naming@      : \"class '\$_nm' has a validator: naming@"
+
+# M15 — the anchor requirement goes, so an unanchored regex is ACCEPTED and extracts the
+# path's unmatched remainder along with the value. The verdict still moves, which is the
+# point: the value is silently wrong rather than absent.
+#
+# THE FIRST CUT OF THIS MUTANT SCORED TEN REDS AND WOULD HAVE PASSED AS A KILL. It replaced
+# the anchored case PATTERN with a token nothing matches, which refuses every capture in the
+# fixture rather than accepting the one unanchored one — proving that captures can be turned
+# off, which no assertion here is about. Widening the arm to `|*)` is the mutation that
+# isolates the cell. A mutant must fail ONLY its own assertion; ten failures meant the
+# mutation was the wrong shape, not that the arms were entangled.
+expect_set capture-unanchored-accepted 1 'UNANCHORED capture regex is refused' \
+  "s@^              '\^'\*'\\\$') ;;@              '^'*'\$'|*) ;;@"
+
+# M16 — the capturing-group requirement goes, same shape and for the same reason as M15.
+expect_set capture-no-group-accepted 1 'NO capturing group is refused' \
+  "s@^              \*'('\*) ;;@              *'('*|*) ;;@"
+
+# M17 — a duplicate capture name is accepted, so the second regex is unreachable and the
+# first silently wins. The same defect the duplicate-CLASS arm guards, one grain down.
+expect_set capture-duplicate-name-accepted 1 'declared twice in one class is refused' \
+  's@^            if grep -qE "\^\${_cnm} " "\$A_TMP/c\$A_N.cap" 2>/dev/null; then@            if false; then@'
+
+# M18 — the sed bracket class goes back to the pre-v0.236.0 form. This is not a hypothetical:
+# it is the defect as it actually shipped, and the mutant is how the fixture proves the fix
+# is what changed rather than something else in the same release. In a POSIX bracket
+# expression `[ \t]` is SPACE, BACKSLASH and `t`, so `capture: sprint` is truncated to
+# `capture: sprin` and the parser reports a declaration nobody wrote.
+# The replacement doubles the backslash because sed processes `\t` in the REPLACEMENT as a
+# tab. The first cut emitted a real tab, which is a CORRECT bracket class -- so the mutant
+# applied cleanly, `cmp -s` was satisfied, nothing was truncated, and it reported zero reds.
+# A mutation that lands and does not mutate the behaviour is the shape `cmp -s` cannot catch.
+expect_set decl-line-trailing-t-eaten 1 'name-only capture was misreported' \
+  "s@| sed 's/\^\[\[:space:\]\]\*//; s/\[\[:space:\]\]\*\\\$//'@| sed 's/^[ \\\\t]*//; s/[ \\\\t]*\$//'@"
 
 if [ "$fails" -eq 0 ]; then echo "PASS trunk-audit-mutants"; exit 0; fi
 echo "FAIL trunk-audit-mutants ($fails)"; exit 1

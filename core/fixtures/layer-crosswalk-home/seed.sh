@@ -53,7 +53,7 @@ CV="$(awk '/^contract_version:/{print $2; exit}' "$SKILL/layer-contract.yaml")"
 # The declared path, read from the copy the consumer will actually be linted against. The
 # seed does NOT know this string; if it did, the fixture would assert against its own literal
 # and pass on a tree where the declaration had moved.
-CW_REL="$(sed -n 's/^consumer_crosswalk_file:[ \t]*//p' "$SKILL/layer-contract.yaml" | head -1 | sed 's/[ \t]*$//')"
+CW_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' "$SKILL/layer-contract.yaml" | head -1 | sed 's/[[:space:]]*$//')"
 [ -n "$CW_REL" ] || { echo "SEED ERROR: the copied layer-contract.yaml declares no consumer_crosswalk_file:" >&2; exit 2; }
 mkdir -p "$CONS/$(dirname "$CW_REL")"
 

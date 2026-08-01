@@ -78,10 +78,10 @@ fresh() { # fresh -> <root>
   printf '%s' "$r"
 }
 
-CW_REL="$(sed -n 's/^consumer_crosswalk_file:[ \t]*//p' \
+CW_REL="$(sed -n 's/^consumer_crosswalk_file:[[:space:]]*//p' \
   "$(pick "$HERE/../../skills/ai-dlc/layer-contract.yaml" \
           "$HERE/../../../core/skills/ai-dlc/layer-contract.yaml" \
-          "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml")" | head -1 | sed 's/[ \t]*$//')"
+          "$HERE/../../../.claude/skills/ai-dlc/layer-contract.yaml")" | head -1 | sed 's/[[:space:]]*$//')"
 
 # The row that resolves the seed's retired id, in the shape the message asks for.
 ROW='| 33 | `[ext:domain]` | Cross-story test-strategy deliverable presence | pre-migration gate logs | became 934 |'

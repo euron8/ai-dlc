@@ -17,6 +17,131 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.236.0] — 2026-08-01
+
+### The trunk audit can express a duty keyed to the commit, which is the one thing standing between the consumer and 364 lines
+
+v0.235.0 shipped `--audit-trunk` and the reference consumer declared its taxonomy the same
+day. It did **not** retire its own 364-line script, and its measurement says why: **three of
+its four retro-class obligations take the audited commit's sprint number as an argument.**
+
+    validate-retro-evidence.sh <retro-branch> <sprint-number>
+    validate-mandatory-rules.sh <sprint-number>
+    validate-provenance-block.sh docs/retro/sprint-<N>.md --require-skill bmad-party-mode
+
+Every argument in a `validator:` line was a literal, so **none of the three could be
+declared**. On the 6 retro-class commits in its audited range the incumbent script re-ran 4
+validators and the declared taxonomy re-ran 2. Retiring on those terms would have dropped two
+obligations on every future retro merge, silently — which is why the consumer's session
+refused to retire and handed the gap back rather than deleting the file and finding out later.
+
+**This release is that gap.** A class may declare a capture:
+
+    class: retro
+    paths: ^docs/retro/sprint-[0-9]+\.md$
+    capture: sprint ^docs/retro/sprint-([0-9]+)\.md$
+    validator: scripts/ai-dlc/validate-mandatory-rules.sh {sprint}
+
+The regex is matched against the commit's changed paths; group 1 is the value; `{sprint}` in
+any `validator:` line of the same class is replaced by it. **Core supplies the substitution
+and the failure modes; the consumer supplies the meaning** — the same split that made
+`consumer_pr_class_file:`, `consumer_machinery_file:` and `consumer_crosswalk_file:` work,
+one level down.
+
+**Exactly one value, and every other outcome is a FINDING.** Zero matching paths means the
+class's stated obligation is un-runnable against this commit; two changed paths yielding
+different values means the commit spans more than the capture assumed and core will not pick
+one. Neither is a skip, for the same reason an unresolved class is not. A value outside
+`[A-Za-z0-9._-]` is also a finding: the declared command is `eval`ed, so the capture is an
+injection surface fed by the repository's own paths, and `(.*)` is a legal thing to write.
+
+**There is deliberately NO runtime arm for "an unsubstituted `{name}` reached a validator's
+argv", and the absence is the design.** A declaration-time join binds every `{name}` to a
+`capture:` in the same class and every `capture:` to a `{name}` that reads it, in both
+directions, and a failure there exits 1 before a single commit is audited. With that in
+place the runtime arm's subject set is empty by construction — and an arm that cannot fire
+reads exactly like one that passed.
+
+Seven further rejections are all at declaration time, for the same reason: a capture before
+any `class:`, a name with no regex, a name outside `[A-Za-z][A-Za-z0-9_]*`, a duplicate name
+in one class, an **unanchored** regex (`paths:` tests a path and may match part of one; a
+capture extracts, and an unanchored regex leaves the remainder in the value), a regex with no
+capturing group, and a regex containing every delimiter the extraction can use.
+
+**Existing declarations are untouched, and that is measured rather than asserted.** The
+reference consumer's own five-class taxonomy, run through the v0.235.0 parser and this one
+over four commits covering four of its five classes: **byte-identical output, 380 bytes, both
+exit 0** — with 4 `CLEAN` lines naming 4 different classes as the control that the
+differential is not comparing two empty runs.
+
+### The second finding is a defect this release was not looking for, and it had been shipping since v0.227.0
+
+Extending the parser exposed it, because a capture name is `[A-Za-z][A-Za-z0-9_]*` and
+therefore routinely ends in `t`:
+
+    capture: sprint      →  the parser saw   capture: sprin
+
+**A POSIX bracket expression has no escapes.** The idiom every declaration reader in this tree
+used to strip surrounding whitespace put a backslash and a `t` inside a bracket class, so the
+class was SPACE, BACKSLASH and the letter `t` — and any declaration line ending in one of
+those three lost its last character. No error, no non-zero exit, and the value is simply the
+wrong string from then on. `validator: x --strict` arrives as `--stric`; the leading form is
+the same defect one end over, turning a leading ` true` into `rue`. **In awk the identical
+class is correct**, which is why it survived: 75 live awk sites in this tree use it properly.
+
+**Swept: 22 sites, false-positive set ZERO** — every candidate was real, including the one
+that also carries `awk` on the same physical line, where the awk is a separate stage of the
+pipeline and the `sed` is the violation. Live instances on the reference consumer today: **0
+of 35 taxonomy lines and 0 of 75 declared machinery paths**, so the class was LATENT rather
+than firing — the same reading v0.231.0 took on the SIGPIPE class, and the same reason it is
+worth closing before it is not.
+
+**`I71`** forbids the construct repo-wide. Its needle is **assembled at runtime rather than
+written**, so the validator does not itself carry what it forbids and needs no exemption for
+its own definition site. It proves itself in **both** directions every run against probes it
+writes: a `sed` line carrying the class must be reported, and an `awk` line carrying the same
+class must not — because reporting the second would put 75 correct sites into the finding set,
+which is how a lint gets turned off.
+
+**`I72`** binds the taxonomy's grammar to the template a consumer writes from, both sides
+derived, neither hand-listed. Both directions have a victim: a key only the parser knows is an
+obligation nobody can declare — this release's own subject, one level up — and a key only the
+template documents produces `unknown key` and a MALFORMED taxonomy, so following core's own
+instructions wedges the audit. Today the join reads 5 against 5.
+
+### Verification
+
+`trunk-audit-classes` **22 → 39 assertions**, green in both layouts on a tree built by
+`install.sh`. The load-bearing pair is 11a/11b: a run that goes green proves the command ran,
+not that the right VALUE reached its argv, so the validator accepts one value and rejects
+every other, and a second commit hands it a different one. Without 11b, 11a passes just as
+well against a substitution that always produced `7`.
+
+`trunk-audit-mutants` **9 → 18 mutants** plus the unmutated control, each moving exactly its
+own cells. `exit-code-ignored` is **5, re-derived rather than inherited**: the capture pair's
+second half turns a captured value into a validator rejection, so an exit code that decides
+nothing takes that cell too.
+
+**Two mutants passed for the wrong reason before they were right, and both are recorded
+because `cmp -s` could not catch either.** The anchor and capturing-group mutants first
+replaced the accepting case PATTERN with a token nothing matches, which refuses *every*
+capture rather than accepting the one bad regex: ten reds, which would have scored as a kill
+while proving only that captures can be turned off. Widening the arm to `|*)` isolates the
+cell. And the bracket-class mutant emitted a real TAB, because `sed` processes `\t` in the
+*replacement*: the mutation applied, `cmp -s` was satisfied, the resulting class was correct,
+and it reported zero reds. **A mutation that lands without changing behaviour is the shape
+`cmp -s` is blind to.**
+
+`I71` and `I72` each proven red on a `cp -R` copy — I71 on the reintroduced construct, with
+the real tree as the control; I72 on all three arms, including its own blinded extractor.
+
+**Performance gate.** `trunk-audit-classes` 1.7s → 4.28s, measured in a CONSUMER tree built by
+`install.sh` rather than in this one — D-6c36.1's rule, and the rule v0.230.0 paid for. It is
+**not the pole** (`wait-stale-deliverable`, 8.67s at 0.02s slack) and carries 4.42s of slack
+under a profiler that batches rather than pools, which understates slack, so the reading holds
+a fortiori. Against the reference consumer's own ~28s pole it is a passenger. The 9 new
+mutants stay in `trunk-audit-mutants`, which is `.dist-only` and reaches no consumer.
+
 ## [0.235.0] — 2026-08-01
 
 ### Goal 5 (c): core absorbs the post-merge trunk audit, and the class taxonomy is declared

@@ -38,6 +38,8 @@ the specific classes above the general ones.
 - `class: <name>` — opens a stanza. The name appears in the audit's per-commit output.
 - `paths: <regex>` — extended regex, matched against each changed path in the commit.
 - `added: <regex>` — extended regex, matched against the commit's added lines.
+- `capture: <name> <regex>` — extracts a per-commit value a validator needs as an argument.
+  Optional; see below.
 - `validator: <command>` — run from the root of the audited commit's checked-out tree; a
   non-zero exit is a FAIL for that commit. Repeat the key for more than one. The literal
   `validator: none` declares that this class owes nothing.
@@ -45,6 +47,34 @@ the specific classes above the general ones.
 A stanza needs at least one `paths:` or `added:` — a class that can never match is a check
 that cannot fire — and at least one `validator:`, `none` included. `#` comments and blank
 lines are ignored.
+
+### `capture:` — when the validator needs a value from the commit itself
+
+Some obligations are not a fixed command. If your retro check is
+`validate-mandatory-rules.sh <sprint-number>`, the number is a fact about the commit being
+audited, and no literal in this file can supply it.
+
+    class: retro
+    paths: ^docs/retro/sprint-[0-9]+\.md$
+    capture: sprint ^docs/retro/sprint-([0-9]+)\.md$
+    validator: scripts/ai-dlc/validate-mandatory-rules.sh {sprint}
+
+The regex is matched against the commit's **changed paths** and **must be anchored `^...$`**,
+because it extracts rather than tests — `sprint-([0-9]+)` against `docs/retro/sprint-168.md`
+would yield `docs/retro/168.md`. Group 1 is the value; `{sprint}` in any `validator:` line of
+the same class is replaced by it.
+
+**Exactly one value, or it is a finding.** If no changed path matches, the class's stated
+obligation cannot be run against that commit and the audit says so. If two changed paths yield
+different values, the commit spans more than the capture assumed and core will not pick one —
+running a validator against a guess is worse than reporting the ambiguity. A value containing
+anything outside `A-Za-z0-9._-` is also a finding: the command is evaluated, so keep the group
+narrowed to the part you actually need rather than writing `(.*)`.
+
+**Both directions are checked before anything is audited.** A `{name}` with no `capture: name`
+in the same class is a declaration error, and so is a `capture:` no `validator:` reads. The
+first would hand a validator the literal string `{name}`; the second costs a regex per commit
+and a possible finding over a value nothing was going to use.
 
 ## The taxonomy
 

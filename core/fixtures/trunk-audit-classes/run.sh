@@ -82,6 +82,12 @@ mkrepo() { # $1 = dir, $2 = taxonomy body ("" = no taxonomy file at all), $3 = "
   [ -n "$body" ] && printf 'x\n```\n%s\n```\n' "$body" > "$d/.claude/skills/ai-dlc/pr-classes.md"
   printf '#!/bin/sh\nexit 0\n' > "$d/validators/ok.sh";  chmod +x "$d/validators/ok.sh"
   printf '#!/bin/sh\nexit 1\n' > "$d/validators/bad.sh"; chmod +x "$d/validators/bad.sh"
+  # The capture arms' instrument. It accepts ONE value and rejects every other, so a
+  # substitution that silently produced the wrong string -- or produced nothing and left the
+  # literal `{sprint}` -- is a FAIL rather than a pass. A validator that ignored its argument
+  # would make every capture assertion below vacuous.
+  printf '#!/bin/sh\necho "arg=$1"\n[ "$1" = "7" ] || exit 3\nexit 0\n' > "$d/validators/wants7.sh"
+  chmod +x "$d/validators/wants7.sh"
   git init -q "$d" >/dev/null 2>&1
   git -C "$d" symbolic-ref HEAD refs/heads/main
   G "$d" add -A >/dev/null 2>&1
@@ -233,6 +239,197 @@ grep -q 'predates the trunk audit' <<<"$out9" && [ "$rc9" -eq 0 ] \
 grep -q '^consumer_pr_class_file:' "$REAL_LC" \
   && ok "core's shipped layer-contract.yaml declares consumer_pr_class_file:" \
   || bad "core's own contract does not declare consumer_pr_class_file: — every case above tested a synthetic one"
+
+# ============================================================================
+# CAPTURES — v0.236.0. A duty keyed to something the COMMIT determines.
+#
+# The gap this closes was measured on the reference consumer rather than imagined: three of
+# its four retro-class obligations take the commit's sprint number as an argument, so the
+# declared taxonomy re-ran 2 where the incumbent script re-ran 4, and that is the single
+# reason 364 lines of consumer machinery could not retire.
+#
+# EVERY ARM BELOW EXISTS BECAUSE THE OTHERS ARE SATISFIABLE WITHOUT IT. The pair 11a/11b is
+# the load-bearing one: a run that goes green proves the command ran, not that the right
+# VALUE reached its argv, and the only way to tell those apart is a validator that rejects
+# every value but one and a second commit that hands it a different one.
+# ============================================================================
+
+CAPTAX='class: sprintdoc
+paths: ^docs/s/
+capture: sprint ^docs/s/sprint-([0-9]+)\.md$
+validator: validators/wants7.sh {sprint}
+
+class: rest
+paths: .
+validator: none'
+
+RC="$WORK/rc-cap"; gc="$(mkrepo "$RC" "$CAPTAX")"
+mkdir -p "$RC/docs/s"; printf 'a\n' > "$RC/docs/s/sprint-7.md"
+G "$RC" add -A >/dev/null 2>&1; G "$RC" commit -q -m "sprint 7" >/dev/null 2>&1
+cc7="$(git -C "$RC" rev-parse HEAD)"
+outc7="$(run_audit "$RC" "$gc")"; rcc7="$(arc)"
+
+# ---- 11a: the captured value REACHES the validator's argv, and it is the right one
+grep -qE "^  CLEAN   ${cc7} \(sprintdoc\)" <<<"$outc7" && [ "$rcc7" -eq 0 ] \
+  && ok "a capture resolves and its value reaches the validator's argv (rc=0)" \
+  || bad "the capture did not reach the validator (rc=$rcc7) — a {name} that is not substituted is a validator run against a literal"
+
+# ---- 11b: the SAME taxonomy on a commit whose capture yields a different value FAILS.
+# Without this, 11a passes just as well against a substitution that always produced `7`.
+printf 'b\n' > "$RC/docs/s/sprint-9.md"
+G "$RC" add -A >/dev/null 2>&1; G "$RC" commit -q -m "sprint 9" >/dev/null 2>&1
+cc9="$(git -C "$RC" rev-parse HEAD)"
+outc9="$(run_audit "$RC" "$cc7")"; rcc9="$(arc)"
+grep -q 'arg=9' <<<"$outc9" && [ "$rcc9" -eq 1 ] \
+  && ok "a different commit yields a DIFFERENT captured value, so 11a is not a constant" \
+  || bad "the capture did not vary with the commit (rc=$rcc9) — 11a proved nothing"
+
+# ---- 12: a capture that matches NO changed path is a finding, not a skip.
+# Same fail-closed reasoning as an unresolved class: the class's stated obligation could not
+# be built, and saying nothing about that reads exactly like having run it.
+RCN="$WORK/rc-none"; gcn="$(mkrepo "$RCN" "$CAPTAX")"
+mkdir -p "$RCN/docs/s"; printf 'x\n' > "$RCN/docs/s/notes.md"
+G "$RCN" add -A >/dev/null 2>&1; G "$RCN" commit -q -m "a docs/s file with no sprint number" >/dev/null 2>&1
+outcn="$(run_audit "$RCN" "$gcn")"; rccn="$(arc)"
+grep -q "capture 'sprint' matched none of this commit's" <<<"$outcn" && [ "$rccn" -eq 1 ] \
+  && ok "a capture matching no changed path is a finding (rc=1), not a silent skip" \
+  || bad "an unresolvable capture was skipped (rc=$rccn) — the obligation went un-run and un-reported"
+
+# ---- 13: two changed paths yielding DIFFERENT values is a finding. Core will not guess.
+RCA="$WORK/rc-amb"; gca="$(mkrepo "$RCA" "$CAPTAX")"
+mkdir -p "$RCA/docs/s"; printf 'a\n' > "$RCA/docs/s/sprint-7.md"; printf 'b\n' > "$RCA/docs/s/sprint-8.md"
+G "$RCA" add -A >/dev/null 2>&1; G "$RCA" commit -q -m "two sprints in one commit" >/dev/null 2>&1
+outca="$(run_audit "$RCA" "$gca")"; rcca="$(arc)"
+grep -q "matched 2 DIFFERENT values in one commit" <<<"$outca" && [ "$rcca" -eq 1 ] \
+  && ok "an ambiguous capture is a finding rather than a guess" \
+  || bad "an ambiguous capture did not report (rc=$rcca) — a validator ran against one of two candidate values"
+grep -qE '\(7 8|8 7\)' <<<"$outca" \
+  && ok "the ambiguity finding names BOTH values it found" \
+  || bad "the ambiguity finding does not name the values — un-actionable"
+
+# ---- 14: a value outside [A-Za-z0-9._-] is a finding. The command is EVALUATED, so the
+# capture is an injection surface the repository's own paths feed, and `(.*)` is legal to write.
+RCU="$WORK/rc-unsafe"; gcu="$(mkrepo "$RCU" 'class: sprintdoc
+paths: ^docs/s/
+capture: v ^docs/s/(.*)$
+validator: validators/wants7.sh {v}
+
+class: rest
+paths: .
+validator: none')"
+mkdir -p "$RCU/docs/s/nested"; printf 'x\n' > "$RCU/docs/s/nested/deep.md"
+G "$RCU" add -A >/dev/null 2>&1; G "$RCU" commit -q -m "a nested path" >/dev/null 2>&1
+outcu="$(run_audit "$RCU" "$gcu")"; rccu="$(arc)"
+grep -q 'which is outside \[A-Za-z0-9._-\]' <<<"$outcu" && [ "$rccu" -eq 1 ] \
+  && ok "a capture value carrying characters outside the safe set is a finding" \
+  || bad "an unsafe capture value was substituted into an evaluated command (rc=$rccu)"
+
+# ---- 15: captures are PER CLASS and do not leak. A commit resolving to a class with no
+# capture runs its validator exactly as before — which is the release's no-behaviour-change
+# promise, asserted rather than assumed.
+RCP="$WORK/rc-perclass"; gcp="$(mkrepo "$RCP" 'class: sprintdoc
+paths: ^docs/s/
+capture: sprint ^docs/s/sprint-([0-9]+)\.md$
+validator: validators/wants7.sh {sprint}
+
+class: plain
+paths: ^src/
+validator: validators/ok.sh')"
+mkdir -p "$RCP/src"; printf 'x\n' > "$RCP/src/app.txt"
+G "$RCP" add -A >/dev/null 2>&1; G "$RCP" commit -q -m "code only" >/dev/null 2>&1
+ccp="$(git -C "$RCP" rev-parse HEAD)"
+outcp="$(run_audit "$RCP" "$gcp")"; rccp="$(arc)"
+grep -qE "^  CLEAN   ${ccp} \(plain\)" <<<"$outcp" && [ "$rccp" -eq 0 ] \
+  && ok "a class with no capture is unaffected by a sibling class that declares one" \
+  || bad "a capture in one class changed another class's behaviour (rc=$rccp)"
+
+# ---- 16-22: the DECLARATION-time arms. Every one of these stops the run before a single
+# commit is audited, and that is what makes an unsubstituted {name} unable to reach a
+# validator's argv — which is why there is no runtime arm for it. One repo, rewritten
+# taxonomy per case: the taxonomy is read from the working tree, so re-seeding a git repo
+# per case would buy nothing but wall clock.
+RCD="$WORK/rc-decl"; gcd="$(mkrepo "$RCD" "$CAPTAX")"
+mkdir -p "$RCD/docs/s"; printf 'a\n' > "$RCD/docs/s/sprint-7.md"
+G "$RCD" add -A >/dev/null 2>&1; G "$RCD" commit -q -m "sprint 7" >/dev/null 2>&1
+
+decl_case() { # $1 = label, $2 = taxonomy body, $3 = ERE the error must match
+  printf 'x\n```\n%s\n```\n' "$2" > "$RCD/.claude/skills/ai-dlc/pr-classes.md"
+  local o r
+  o="$(run_audit "$RCD" "$gcd")"; r="$(arc)"
+  if grep -qE "$3" <<<"$o" && [ "$r" -eq 1 ] && grep -q 'NOTHING was audited' <<<"$o"; then
+    ok "$1"
+  else
+    bad "$1 — rc=$r, output did not match '$3'"
+  fi
+}
+
+decl_case "a {name} with no capture behind it is a declaration error, and nothing is audited" \
+  'class: c
+paths: .
+capture: sprint ^docs/s/sprint-([0-9]+)\.md$
+validator: validators/wants7.sh {sprint} {nosuch}' \
+  "naming \{nosuch\} and declares no 'capture: nosuch'"
+
+decl_case "a capture no validator reads is a declaration error" \
+  'class: c
+paths: .
+capture: sprint ^docs/s/sprint-([0-9]+)\.md$
+validator: validators/ok.sh' \
+  "declares 'capture: sprint' and no validator: names \{sprint\}"
+
+decl_case "an UNANCHORED capture regex is refused, because a capture extracts rather than tests" \
+  'class: c
+paths: .
+capture: sprint docs/s/sprint-([0-9]+)
+validator: validators/wants7.sh {sprint}' \
+  'is not anchored'
+
+decl_case "a capture regex with NO capturing group is refused" \
+  'class: c
+paths: .
+capture: sprint ^docs/s/sprint-[0-9]+\.md$
+validator: validators/wants7.sh {sprint}' \
+  'contains no capturing group'
+
+decl_case "a capture name declared twice in one class is refused" \
+  'class: c
+paths: .
+capture: sprint ^docs/s/sprint-([0-9]+)\.md$
+capture: sprint ^docs/s/x-([0-9]+)\.md$
+validator: validators/wants7.sh {sprint}' \
+  "declares capture 'sprint' twice"
+
+decl_case "a capture name outside [A-Za-z][A-Za-z0-9_]* is refused" \
+  'class: c
+paths: .
+capture: 9sprint ^docs/s/sprint-([0-9]+)\.md$
+validator: validators/wants7.sh {9sprint}' \
+  "declares capture name '9sprint'"
+
+decl_case "a capture: appearing before any class: is refused" \
+  'capture: sprint ^docs/s/sprint-([0-9]+)\.md$
+class: c
+paths: .
+validator: validators/wants7.sh {sprint}' \
+  "'capture:' appears before any 'class:' line"
+
+# ---- 23: the name-with-no-regex case, AND the truncation defect it exposed.
+# The parser's whitespace strip used to be a sed bracket class written with a backslash-t
+# escape, which POSIX bracket expressions do not have: the class was SPACE, BACKSLASH and
+# the letter, so every declaration line ending in one of those three lost its last
+# character. `capture: sprint` arrived as a five-letter name nobody wrote. This asserts the
+# value the parser SAW, which is the only reading that tells the fix from the defect.
+# I71 in validate-enforcement-map.sh forbids the construct repo-wide; this proves the
+# behaviour. The construct is DESCRIBED and not reproduced here, deliberately — writing it
+# out would make this comment a live subject of the invariant it is explaining.
+printf 'x\n```\n%s\n```\n' 'class: c
+paths: .
+capture: sprint
+validator: validators/wants7.sh {sprint}' > "$RCD/.claude/skills/ai-dlc/pr-classes.md"
+outct="$(run_audit "$RCD" "$gcd")"; rcct="$(arc)"
+grep -q "has 'capture: sprint', which is a name with no regex" <<<"$outct" && [ "$rcct" -eq 1 ] \
+  && ok "a capture with a name and no regex is refused, and the name is reported UNTRUNCATED" \
+  || bad "the name-only capture was misreported (rc=$rcct) — a trailing 't' eaten by a sed bracket class reads as a different declaration"
 
 # ---- the run itself is a control
 [ -n "$out1" ] && ok "the audit produced output (the run is not a silent death)" \
