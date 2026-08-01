@@ -134,6 +134,7 @@ core_manifest:
   - core/fixtures/retired-contract-token/**
   - core/fixtures/retired-layer-contract/**
   - core/fixtures/retired-fixture-orphan/**
+  - core/fixtures/consumer-machinery-inventory/**
   - core/fixtures/retro-audit-scans/**
   - core/fixtures/route-defect-classification/**
   - core/fixtures/self-update-gate/**
@@ -174,6 +175,7 @@ rulebook:
   - core/team-roles/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/
+consumer_machinery_subdirs: lib/ hooks/ fixtures/ config/ tests/
 consumer_crosswalk_file: .claude/skills/ai-dlc/crosswalk.md
 ```
 

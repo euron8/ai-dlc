@@ -400,6 +400,22 @@ times on first contact gets disabled and then catches nothing.
   read — a shallow clone, no git, a tracked entry whose diff history yields none of its own ids —
   this clause **refuses**, naming and counting the entries it did not judge, rather than
   degrading to a silence indistinguishable from a clean result.
+- **[LC-M1]** ERROR — every path you declare in your machinery inventory exists, and lives
+  under the declared machinery home. This is the segregation the home was created for, and it is
+  the half of it core can decide: whether a script *you* have called ai-dlc machinery sits inside
+  the home is a string comparison, needing none of the inference that eight measured predicates
+  refuted. A declared path outside the home is the mixed state the home exists to end; a declared
+  path that does not exist is a list nothing checks. **What this does not claim is completeness** —
+  a script you leave out of the inventory is invisible here, and that is the genuinely undecidable
+  question rather than a gap in the clause. If a file would still have a job with ai-dlc removed
+  from your repository, it is your own domain code: it stays where it is, and it does not belong
+  in the inventory at all.
+- **[LC-M2]** WARN — your machinery inventory is declared, and an empty one is written as the
+  literal `none`. Silence and emptiness must not look alike: a project with no ai-dlc machinery of
+  its own and a project that has never looked produce identical trees under any weaker rule. This
+  is the shape `fixture: none` already takes in this contract — a counted gap nothing may satisfy
+  in silence. It is a WARN so that an unmigrated project is not wedged by a clause whose remedy is
+  a judgement about its own scripts; it reports one worklist line per run.
 - **[LC-R1]** WARN — a `Step <n>` reference in a layer entry resolves to an anchor defined
   somewhere in the rendered rulebook: core plus your own layers.
 - **[LC-R2]** WARN — a `Check <n>` reference resolves the same way, and a crosswalk row counts
