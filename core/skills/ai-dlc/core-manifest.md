@@ -198,6 +198,7 @@ core_manifest:
   - fixtures/mandatory-rules-clean-tree/**
   - fixtures/mutation-red-replay/**
   - fixtures/trunk-audit-classes/**
+  - fixtures/story-fields-derive/**
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
   - fixtures/provenance-not-accessible/**

@@ -17,6 +17,124 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.237.0] — 2026-08-01
+
+### Goal 5 (b), re-homed: the consumer declares its derivable story fields and core derives from the declaration
+
+The first attempt at this row **stopped on its own stop condition and built nothing**, and that is
+why this release exists rather than a narrower one. The reference consumer's tool derives **nine**
+fields; `schemas/sprint-status.json` declares **two** story-entry fields, exactly **one** of which
+is among the nine. A schema-only derive was buildable — and it would have absorbed about a ninth
+of the duty while the ledger scored goal 5 (b) closed.
+
+**The mechanism that survives is the one goals 2 and 5 (c) both used, one artifact over: the
+consumer DECLARES, core derives.** `consumer_story_fields_file:` joins the crosswalk, the
+machinery inventory and the PR-class taxonomy as the fourth consumer-owned file this contract
+declares — scaffolded once by `install.sh` **and** by `reconcile/apply.sh` (v0.228.0's lesson),
+never overwritten, its location derived by every reader.
+
+**Core already owned the read half.** `check-stories` performs the entry-to-story-file `status`
+join over every canonical copy, reads a story file's status from frontmatter first and the
+`**Status:**` header second, and exits 4 on "matched files, compared nothing". What core could not
+do was write the derived value back. `sprint-status.sh derive-stories` is that, and it keeps the
+two-grammar read verbatim for `status` so the reader and the writer cannot disagree about one file.
+
+**`status` is not declarable.** It comes from the schema's own `story_entry_fields`, because it is
+the field Check 5 depends on and a consumer must not be able to declare its way out of it. The
+declaration ADDS to that floor and cannot subtract from it — measured in the fixture by a consumer
+that declares only `priority` and still gets `status` derived, and by a consumer that declares the
+literal `none` and still has a `status` drift caught.
+
+**Three exit codes, and two of them exist to stop a silent success:**
+
+- **1** — `--check` found drift. Every drifted key is listed and **nothing is written**.
+- **3** — matched **zero** story files. Compared nothing because there was nothing to compare.
+- **4** — matched files and **some story got zero comparisons**: every declared field, `status`
+  included, was unreadable for it. *"Matched files but verified nothing"* is the same failure as
+  *"matched no files"*, and every consumer implementation of this join has collapsed one of them
+  into a clean line at least once.
+
+An **undeclared** list and the literal **`none`** are a worklist line and exit 0 — and they print
+**different** lines, because a project that answered and a project that has never seen the
+declaration are different states. A **malformed** list fails closed: deriving against a partial
+read would write some fields and silently skip others.
+
+### The write is byte-verbatim outside the value token, and that was this row's stop condition
+
+The spec's stop condition was: *if any real consumer envelope round-trips with a diff beyond the
+values actually changed, stop and report.* **It did not fire, and the evidence is a run rather than
+an argument.**
+
+Measured against the reference consumer's **real** `sprint-status.yaml` (988-file story corpus,
+both canonical views): with its own nine fields declared, `--check` reads **0 drifted keys** and
+writes nothing, a write changes **0 of 27 lines** in both views, and a second derive is a
+byte-level no-op.
+
+**A zero diff on a tree with no drift proves the tool wrote nothing, not that a write is
+byte-verbatim** — so the real envelope's own `status` value was perturbed and a hand-aligned
+comment appended to it. The write then changed **exactly 1 line**, **value-only, 0 violations**:
+the key, the indent and the comment column all identical, the 1,400-character `note:` block scalar
+and every other line untouched.
+
+**A first cut of the writer normalised the whitespace run before an inline comment**, turning
+`draft          # note` into `in_review # note` — the comment survived and the hand-aligned column
+did not, on every commented line, on every run. Whitespace between the value and the `#` is not
+part of the value, so it is not the writer's to touch. `M5` is that defect, held as a mutant.
+
+### `I73` and `I74`
+
+**`I73`** binds the declaration across its three readers on I70's terms, plus **a fourth arm this
+declaration needs and I70 does not**: the derive must read `status` from the SCHEMA. Without it
+every other arm still passes while a consumer declares its way out of Check 5's own field.
+
+**`I74` is not this row's subject — it is a defect the row produced and the consumer install
+caught.** `install.sh` copies fixtures from a **hand-written list of directory names**, and nothing
+compared that list to `core/fixtures/`. The new fixture was written, ran green in this repository,
+and **reached no consumer at all**; the distribution's suite stays green either way, because the
+fixture is right there in core/. Measured at the moment of discovery: **93 listed, 94 shipped, one
+unlisted** — mine. Controls: 0 listed-but-absent, and 0 of the 9 `.dist-only` fixtures leaked into
+the list.
+
+I74 joins the two sets in **three** directions, each a different defect: a shipped fixture missing
+from the list never reaches a consumer; a listed name that does not exist is a silent no-op the
+copy loop's `[ -d ]` guard swallows, so a rename uninstalls a fixture without saying so; and a
+`.dist-only` fixture appearing in the list is v0.230.0's packaging defect from the other side.
+
+**Two invariants that already existed caught what I74 would not have**, and they are worth naming
+because they are the reason this is one gap and not three: the install/uninstall fixture-loop join,
+and the `core_manifest` entry a shipped fixture needs so the core guard protects it.
+
+### Verification
+
+New fixture `story-fields-derive`: **25 assertions**, green in both layouts on a tree built by
+`install.sh`. New `.dist-only` sibling `story-fields-derive-mutants`: **9 mutants plus the
+unmutated control**, each moving exactly its own cells.
+
+**Three mutants passed for the wrong reason before they were right, and `cmp -s` caught none of
+them:**
+
+- **The write is guarded twice, on purpose.** A mutant removing only the inner `if dry: continue`
+  scored zero reds; one removing only the outer `if changed and not dry` also scored zero, because
+  with the inner guard in place `changed` never becomes true. **Each guard proves the other**, and
+  a single-site mutant reads exactly like a surviving one.
+- **`STATUS_FLOOR = [] or [k for k…]` is a Python no-op** — `[] or X` is `X`. It applied cleanly
+  and mutated nothing.
+- **A blunter comment mutant scored two reds**, because dropping the separator entirely corrupts
+  the value on re-read and so also broke idempotence. Two failures meant the mutation was the
+  wrong shape, not that the arms were entangled.
+
+**And the fixture's own data had to move to keep two arms independent**: with the hand-aligned
+comment on the `status` line, a mutant removing the schema floor scored a kill on the alignment
+arm, which has nothing to do with the floor.
+
+**Performance gate**, measured in a CONSUMER tree built by `install.sh` per D-6c36.1: the new
+fixture is **0.52s** against a pole of **8.70s** (`wait-stale-deliverable`, 0.02s slack) and adds
+**0.44s** to a 67s batched run. The 9 mutants are `.dist-only` and reach no consumer.
+
+Suite green; `validate-enforcement-map.sh` exit 0. **`contract_version` stays 13** — this release
+adds a declaration key and no LC- clause, which is exactly what v0.235.0's `consumer_pr_class_file:`
+did and what it did not bump for.
+
 ## [0.236.0] — 2026-08-01
 
 ### The trunk audit can express a duty keyed to the commit, which is the one thing standing between the consumer and 364 lines

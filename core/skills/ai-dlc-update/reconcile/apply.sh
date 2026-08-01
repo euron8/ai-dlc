@@ -624,6 +624,31 @@ elif [ ! -f "$CONSUMER/$PC_REL" ]; then
   fi
 fi
 
+# The derivable story-field list `sprint-status.sh derive-stories` reads, on the same terms and
+# with the same scoping as the three blocks above.
+SF_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
+  | sed -n 's/^consumer_story_fields_file:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
+if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
+  : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
+elif [ -z "$SF_REL" ]; then
+  : # THEIRS predates the story-field declaration specifically. The derive's own arm is silent
+    # in that state too, so a consumer updating across the boundary is not wedged by either.
+elif [ ! -f "$CONSUMER/$SF_REL" ]; then
+  sf_tpl="core/skills/ai-dlc/templates/$(basename "$SF_REL")"
+  sf_tmp="$CONSUMER/$SF_REL.incoming.$$"
+  mkdir -p "$(dirname "$CONSUMER/$SF_REL")" 2>/dev/null || true
+  if git -C "$DIST" show "${THEIRS}:${sf_tpl}" > "$sf_tmp" 2>/dev/null && [ -s "$sf_tmp" ]; then
+    mv "$sf_tmp" "$CONSUMER/$SF_REL"
+    say RESOLVED story-fields-scaffold "$SF_REL" \
+      "created from ${sf_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. List the story-entry fields this project DERIVES from its story files, or leave the literal 'none': until you do, 'sprint-status.sh derive-stories' prints a worklist line and derives only \`status\`, which comes from the schema and is not declarable."
+  else
+    rm -f "$sf_tmp"
+    say DECISION story-fields-template-missing "$sf_tpl" \
+      "THEIRS declares '$SF_REL' but ships no template to scaffold it from, so the declared path would stay empty while the derive has nothing to read."
+    mech_fail=$((mech_fail+1))
+  fi
+fi
+
 # -----------------------------------------------------------------------------
 # EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
 # consumer tree once this driver is done.

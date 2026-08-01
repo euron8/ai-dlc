@@ -219,6 +219,27 @@ consumer_machinery_file: .claude/skills/ai-dlc/machinery.md
 # file, so a reader that needs the declaration finds it with no new seeding.
 consumer_pr_class_file: .claude/skills/ai-dlc/pr-classes.md
 
+# THE CONSUMER'S DERIVABLE STORY FIELDS. Fourth declaration on the same terms as the three
+# above, and the reason is measured rather than argued.
+#
+# WHAT READS IT. `sprint-status.sh derive-stories` — the WRITE half of a duty core already
+# owns the READ half of. `check-stories` already performs the entry-to-story-file `status`
+# join over every canonical copy that exists, reads a story file's status from frontmatter
+# first and the `**Status:**` header second, and exits 4 on "matched files, compared
+# nothing". What core had no way to do was write the derived value back.
+#
+# WHY IT IS A DECLARATION AND NOT A CONSTANT. The reference consumer's own tool derives NINE
+# fields; `schemas/sprint-status.json` declares TWO story-entry fields, of which exactly ONE
+# (`status`) is among the nine. Core cannot know that this project's stories carry
+# `capital_path` — that is a fact about the project, in the same sense the PR-class taxonomy
+# is. Hand-listing the other eight in core would be a second home for a schema and I28/I48
+# both bite.
+#
+# `status` IS NOT DECLARABLE AND IS ALWAYS DERIVED. It comes from the schema, not from here,
+# because it is the one field core's own Check 5 reads and a consumer must not be able to
+# declare its way out of it. The declaration ADDS to that floor; it cannot subtract from it.
+consumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md
+
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
 #
