@@ -111,8 +111,18 @@ instructions wedges the audit. Today the join reads 5 against 5.
 
 ### Verification
 
-`trunk-audit-classes` **22 → 39 assertions**, green in both layouts on a tree built by
-`install.sh`. The load-bearing pair is 11a/11b: a run that goes green proves the command ran,
+`trunk-audit-classes` **22 → 37 assertions**, green in both layouts on a tree built by
+`install.sh`.
+
+> **Correction, made where a reader of this release will find it.** The merge commit's message
+> and the first cut of this entry both said **39**, from a hand count of the arms added rather
+> than from a run. Re-derived by RUNNING the fixture at both refs in the same consumer tree —
+> **22 → 37**, 15 new arms and not 17 — with an untouched fixture reading 22 at both ends as the
+> control that the instrument discriminates. The figure is the only thing that moves; every arm
+> described below shipped and is green. A hand-counted tally in a release note is the forgeable
+> cell this repository has a rule about, and this one was forged by its own author.
+
+The load-bearing pair is 11a/11b: a run that goes green proves the command ran,
 not that the right VALUE reached its argv, so the validator accepts one value and rejects
 every other, and a second commit hands it a different one. Without 11b, 11a passes just as
 well against a substitution that always produced `7`.
