@@ -124,11 +124,32 @@ exit 0
 FX
 }
 
+# A fixture that RECORDS THE MOMENT IT WAS DISPATCHED, by appending its own name, and
+# then costs a stated number of seconds. The cost is what the hook writes into its
+# durations record; the trace is how the next run's dispatch order is read back.
+mkfx_trace() {                 # mkfx_trace <tree> <name> <seconds>
+  mkdir -p "$1/tests/fixtures/$2"
+  cat > "$1/tests/fixtures/$2/run.sh" <<FX
+#!/usr/bin/env bash
+printf '%s\n' '$2' >> "\$CSP_TRACE"
+sleep $3
+exit 0
+FX
+}
+
 # Drive the hook. stdin is /dev/null, never a terminal: on a terminal the hook's own
 # `[ -t 0 ]` guard leaves PUSH_REFS empty and arm 0 says so, which is a different run
 # from the one a real push makes.
 drive() {                      # drive <tree> <outfile>  -> rc
   ( cd "$1" && bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
+}
+
+# Drive it ONE AT A TIME, which is what makes dispatch order observable at all. At any
+# width above 1 the workers overlap and the trace records a race; at width 1 execution
+# order IS dispatch order, so the trace reads the schedule directly rather than
+# inferring it from a wall clock -- the timing-sensitive assertion §7's gate warns about.
+drive1() {                     # drive1 <tree> <outfile>  -> rc
+  ( cd "$1" && AI_DLC_FIXTURE_JOBS=1 bash .githooks/pre-push </dev/null >"$2" 2>&1; echo $? )
 }
 
 # ------------------------------------------------------------- 1. green baseline --
@@ -247,18 +268,100 @@ else
   bad "the report is not in list order (rc=$rc, got '$seen_order') — the output is not diffable across runs"
 fi
 
+# ------------------------------ 7. dispatch is LONGEST-FIRST, off a real record ----
+# THE TWO RUNS ARE THE WHOLE POINT, and seeding the record by hand instead would have
+# made this arm worthless. The first run WRITES the durations record; the second READS
+# it. So the record's format is bound end to end by the runner itself, and a hook whose
+# writer and reader disagreed about it could not pass here. Hand-written seed data
+# would have restated the format instead of testing it, and the mechanism would then be
+# free to degrade silently to glob order -- a check that cannot fire, with a stopwatch.
+#
+# The costs are 0, 1 and 3 seconds against a whole-second record, so the two orders are
+# exact reverses of each other and a full second of scheduling noise on the middle unit
+# still cannot reorder them.
+T="$WORK/lpt"; seed "$T" "$HOOK" || broken "seed failed"
+export CSP_TRACE="$T/trace"
+mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
+: > "$CSP_TRACE"
+rc="$(drive "$T" "$WORK/lpt1.out")"
+[ "$rc" = 0 ] || broken "the run that writes the durations record did not pass (rc=$rc); arm 7 reads what it wrote"
+: > "$CSP_TRACE"
+rc="$(drive1 "$T" "$WORK/lpt2.out")"
+lpt_order="$(tr '\n' ' ' < "$CSP_TRACE")"
+if [ "$rc" = 0 ] && [ "$lpt_order" = "zzz mmm aaa " ]; then
+  ok "the second run dispatches longest-first (zzz mmm aaa) off the costs the FIRST run recorded"
+else
+  bad "the second run did not dispatch longest-first (rc=$rc, got '$lpt_order', glob order is 'aaa mmm zzz') — the pool's makespan is decided by when its longest unit starts"
+fi
+
+# CONTROL for that arm. Same tree, same fixtures, same width — only the record removed.
+# Without it the order must fall back to glob order, which is what says the RECORD is
+# what reordered the dispatch rather than anything else about this tree.
+rm -f "$T/.git/ai-dlc-fixture-durations"
+: > "$CSP_TRACE"
+rc="$(drive1 "$T" "$WORK/lpt3.out")"
+ctl_order="$(tr '\n' ' ' < "$CSP_TRACE")"
+if [ "$rc" = 0 ] && [ "$ctl_order" = "aaa mmm zzz " ]; then
+  ok "with the record deleted the SAME tree dispatches in glob order — the record is what reorders it, and a first run is correct without one"
+else
+  bad "removing the record did not restore glob order (rc=$rc, got '$ctl_order') — arm 7 is not measuring the record"
+fi
+
+# ------------------------------- 8. the record is written OUTSIDE the working tree --
+# I55 arm 4's prohibition, observed rather than asserted about. A cost record inside
+# the tree would be hashed by the distribution's own suite content key, so writing it
+# would move the key it is trying to match and the suite skip could never hit again.
+# For a consumer the same file would turn up in every `git status` they ever ran.
+: > "$CSP_TRACE"
+rc="$(drive "$T" "$WORK/lpt4.out")"
+n_rec="$(grep -c . "$T/.git/ai-dlc-fixture-durations" 2>/dev/null)"
+case "$n_rec" in ''|*[!0-9]*) n_rec=0 ;; esac
+if [ "$n_rec" -eq 3 ] && [ ! -f "$T/ai-dlc-fixture-durations" ] \
+   && ! git -C "$T" status --porcelain 2>/dev/null | grep -q 'ai-dlc-fixture-durations'; then
+  ok "the durations record holds one line per fixture under .git/ and git itself cannot see it"
+else
+  bad "the durations record is not where it must be (lines=$n_rec under .git/, root copy present=$([ -f "$T/ai-dlc-fixture-durations" ] && echo yes || echo no)) — a record inside the tree is hashed by the key that decides whether this suite runs at all"
+fi
+unset CSP_TRACE
+
+# ------------------------- 9. a record that makes no sense loses no fixture ---------
+# Garbage lines, a one-field line, and an entry for a fixture that no longer exists.
+# The failure this refuses is the quiet one: an ordering step that drops a unit reads
+# exactly like an ordering step that is fast.
+T="$WORK/badrec"; seed "$T" "$HOOK" || broken "seed failed"
+mkfx "$T" alpha 0; mkfx "$T" bravo 0; mkfx "$T" charlie 0
+printf 'this is not a record line\nghost 42\nalpha\n\n' > "$T/.git/ai-dlc-fixture-durations"
+rc="$(drive "$T" "$WORK/badrec.out")"
+if [ "$rc" = 0 ] && grep -q 'ok    alpha' "$WORK/badrec.out" \
+                 && grep -q 'ok    bravo' "$WORK/badrec.out" \
+                 && grep -q 'ok    charlie' "$WORK/badrec.out" \
+                 && ! grep -q 'produced a verdict' "$WORK/badrec.out"; then
+  ok "a malformed record naming a fixture that no longer exists still runs every live fixture"
+else
+  bad "a malformed record cost the suite a fixture (rc=$rc) — the ordering step must never be able to shorten the run"
+fi
+
 # =================================================================== MUTANTS =======
 # Each is a COPY of the hook with one arm removed, guarded by `cmp -s` so a sed that
 # matched nothing cannot pass as a mutation. Each asserts a POSITIVE outcome: the
 # mutant goes GREEN on the tree the real hook goes RED on.
-mut() {                        # mut <label> <sed-expr>  -> path, or 1
+# THE GUARD SETS `MUT` RATHER THAN PRINTING THE PATH, and v0.229.0's knock-out battery
+# is what forced that. Written as `M="$(mut ...)"` the helper ran inside a command
+# SUBSTITUTION, so its `cmp -s` failure message went into `$M` instead of to the report
+# and its `asserts` increment happened in a subshell that then exited. A mutation which
+# matched nothing therefore said NOTHING: the arm silently did not run, and the only
+# thing that noticed was the EXPECTED_ASSERTIONS floor reporting `20 of 21` with no clue
+# which one. The guard existed, was correct, and could not speak — this repo's named
+# class inside the guard written to prevent it, found by knocking out a mechanism this
+# release added and watching the wrong arm report.
+mut() {                        # mut <label> <sed-expr>  -> sets MUT, or returns 1
   local lbl="$1" expr="$2" m="$WORK/hook.$1"
-  sed "$expr" "$HOOK" > "$m" || return 1
+  sed "$expr" "$HOOK" > "$m" || { bad "MUTANT $lbl: sed failed"; return 1; }
   if cmp -s "$HOOK" "$m"; then
     bad "MUTANT $lbl matched nothing (cmp -s guard) — this arm proves nothing"
     return 1
   fi
-  printf '%s' "$m"
+  MUT="$m"
 }
 
 # UNMUTATED CONTROL, and it runs FIRST. The hook is driven ten times above; if the
@@ -275,7 +378,7 @@ rc="$(drive "$T" "$WORK/mctl.out")"
 # and leaving the `if`/`fi` produces a syntax error, and a mutant that cannot parse
 # fails for a reason that has nothing to do with the arm under test. Both of this
 # battery's structural mutants were written that way first and both exited 2.
-if M="$(mut m1 '/if \[ "\$n_expected" -eq 0 \]/,+3d')"; then
+if mut m1 '/if \[ "\$n_expected" -eq 0 \]/,+3d'; then M="$MUT"
   T="$WORK/m1"; seed "$T" "$M" || broken "seed failed"
   mkdir -p "$T/tests/fixtures/alpha"
   rc="$(drive "$T" "$WORK/m1.out")"
@@ -284,7 +387,7 @@ if M="$(mut m1 '/if \[ "\$n_expected" -eq 0 \]/,+3d')"; then
 fi
 
 # M2 — the completeness assertion removed. The dropped worker must go green.
-if M="$(mut m2 '/n_actual" -ne "\$n_expected/,+4d')"; then
+if mut m2 '/n_actual" -ne "\$n_expected/,+4d'; then M="$MUT"
   T="$WORK/m2"; seed "$T" "$M" || broken "seed failed"
   mkfx "$T" alpha 0; mkfx_kill "$T" bravo
   rc="$(drive "$T" "$WORK/m2.out")"
@@ -314,7 +417,7 @@ fi
 #      magnitude statement, not an independent detector — and the hook's comment
 #      claiming "the count is asserted rather than assumed" is corrected in both
 #      hooks to say which of the two does the detecting.
-if M="$(mut m2b '/if \[ ! -f "\$out\/\$b" \]/,+2d')"; then
+if mut m2b '/if \[ ! -f "\$out\/\$b" \]/,+2d'; then M="$MUT"
   T="$WORK/m2b"; seed "$T" "$M" || broken "seed failed"
   mkfx "$T" alpha 0; mkfx_kill "$T" bravo
   rc="$(drive "$T" "$WORK/m2b.out")"
@@ -327,7 +430,7 @@ if M="$(mut m2b '/if \[ ! -f "\$out\/\$b" \]/,+2d')"; then
 fi
 
 # M3 — the pool removed. The concurrency observation must collapse to 1.
-if M="$(mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|')"; then
+if mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|'; then M="$MUT"
   T="$WORK/m3"; seed "$T" "$M" || broken "seed failed"
   export CSP_OBSERVE="$T/observe"; mkdir -p "$CSP_OBSERVE"
   for n in alpha bravo charlie delta; do mkfx_observe "$T" "$n"; done
@@ -338,12 +441,79 @@ if M="$(mut m3 's|xargs -P "\$FIXTURE_JOBS"|xargs -P 1|')"; then
   unset CSP_OBSERVE
 fi
 
+# M4 — dispatch reads the UNORDERED list. The reordering still computes; nothing uses
+# it. Order must fall back to glob order, which is what says arm 7 measures the
+# dispatch source and not some other property of that tree.
+#
+# THE RECORD THESE THREE COPY IS A REAL ONE, taken from arm 7's own first run. Writing
+# one here would restate the format the hook produces, and a mutant that restates the
+# thing under test proves the restatement.
+if mut m4 's|< "\$out/\.order"|< "$out/list"|'; then M="$MUT"
+  T="$WORK/m4"; seed "$T" "$M" || broken "seed failed"
+  export CSP_TRACE="$T/trace"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
+  cp "$WORK/lpt/.git/ai-dlc-fixture-durations" "$T/.git/ai-dlc-fixture-durations" \
+    || broken "could not carry arm 7's real durations record into the M4 tree"
+  : > "$CSP_TRACE"
+  rc="$(drive1 "$T" "$WORK/m4.out")"
+  m4_order="$(tr '\n' ' ' < "$CSP_TRACE")"
+  [ "$m4_order" = "aaa mmm zzz " ] \
+    && ok "M4 with dispatch reading the unordered list the same record produces glob order — the dispatch source is what arm 7 measures" \
+    || bad "M4 dispatch still reordered (got '$m4_order') — arm 7 is not measuring which file the pool is fed"
+  unset CSP_TRACE
+fi
+
+# M5 — THE FALLBACK PATH, driven rather than argued. §6c-12 required that the path
+# taken when the ordering is unavailable be shown to produce a CORRECT suite and not
+# merely a slower one, so the sort is broken outright and the whole suite is read back.
+# The count guard then rejects the short reordering and the glob list stands.
+if mut m5 's@| sort -k1,1nr@| sort-is-not-installed@'; then M="$MUT"
+  T="$WORK/m5"; seed "$T" "$M" || broken "seed failed"
+  export CSP_TRACE="$T/trace"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
+  cp "$WORK/lpt/.git/ai-dlc-fixture-durations" "$T/.git/ai-dlc-fixture-durations" \
+    || broken "could not carry arm 7's real durations record into the M5 tree"
+  : > "$CSP_TRACE"
+  rc="$(drive1 "$T" "$WORK/m5.out")"
+  m5_order="$(tr '\n' ' ' < "$CSP_TRACE")"
+  if [ "$rc" = 0 ] && [ "$m5_order" = "aaa mmm zzz " ] \
+     && grep -q 'ok    aaa' "$WORK/m5.out" && grep -q 'ok    mmm' "$WORK/m5.out" \
+     && grep -q 'ok    zzz' "$WORK/m5.out" && ! grep -q 'produced a verdict' "$WORK/m5.out"; then
+    ok "M5 with the ordering broken the suite runs COMPLETE in glob order — the fallback loses speed and nothing else"
+  else
+    bad "M5 a broken ordering did not fall back cleanly (rc=$rc, order '$m5_order') — an unavailable schedule must cost time, never coverage"
+  fi
+  unset CSP_TRACE
+fi
+
+# M6 — the WRITER removed, reader intact. Without a run recording what it cost there is
+# nothing for the next run to sort on, so the order stays glob. This is the half M4
+# cannot reach: M4 proves the reader is wired to the pool, M6 proves the record it
+# reads is produced by the workers rather than by anything else in the tree.
+if mut m6 '/AI_DLC_FX_OUT\/\.dur\//d'; then M="$MUT"
+  T="$WORK/m6"; seed "$T" "$M" || broken "seed failed"
+  export CSP_TRACE="$T/trace"
+  mkfx_trace "$T" aaa 0; mkfx_trace "$T" mmm 1; mkfx_trace "$T" zzz 3
+  : > "$CSP_TRACE"
+  rc="$(drive "$T" "$WORK/m6a.out")"
+  : > "$CSP_TRACE"
+  rc="$(drive1 "$T" "$WORK/m6.out")"
+  m6_order="$(tr '\n' ' ' < "$CSP_TRACE")"
+  if [ "$rc" = 0 ] && [ "$m6_order" = "aaa mmm zzz " ] \
+     && [ ! -s "$T/.git/ai-dlc-fixture-durations" ]; then
+    ok "M6 with the workers not recording their cost no record is written and the second run stays in glob order"
+  else
+    bad "M6 an order appeared without the workers recording anything (rc=$rc, order '$m6_order') — the record arm 7 reads is not the one the pool writes"
+  fi
+  unset CSP_TRACE
+fi
+
 # ------------------------------------------------------------------- floor ---------
 # EXPECTED_ASSERTIONS, mandatory since v0.217.0 for any fixture whose arms are
 # emitted from inside a conditional: an assertion that never executed prints nothing,
 # and a short green report reads exactly like a complete one. This is the same
 # property the hook itself now asserts about its own workers, one layer out.
-EXPECTED_ASSERTIONS=14
+EXPECTED_ASSERTIONS=21
 if [ "$asserts" -ne "$EXPECTED_ASSERTIONS" ]; then
   printf '  FAIL  %s assertions ran, %s expected — an arm did not execute, and a short green report reads exactly like a complete one\n' \
     "$asserts" "$EXPECTED_ASSERTIONS"

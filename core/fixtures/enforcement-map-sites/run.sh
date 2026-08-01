@@ -1259,17 +1259,35 @@ else
   mv "$ROOT/$I55_TGT.orig" "$ROOT/$I55_TGT"
 fi
 
-# --- arm 4: the record moved INSIDE the tree the key hashes ---------------------
+# --- arm 4: EVERY cross-run record moved INSIDE the tree the key hashes ----------
+# THE MUTATION IS DERIVED FROM THE HOOK, and v0.229.0 is why it had to become so. This
+# arm named `KEY_RECORD` for as long as the hook kept exactly one record. That release
+# gave it a SECOND -- the fixture durations the pool dispatches on -- and made I55's
+# subject set a grammar rather than a name. Mutating only the record this fixture
+# happened to know would then prove the arm FIRES without proving it covers what it now
+# claims to: a record outside the derived set would sit in the tree, and this arm would
+# go on printing the same green line about the other one.
+#
+# So the mutation moves every `<NAME>_RECORD=` the hook declares, and the assertion
+# counts the records the report NAMES against the records the hook DECLARES. Both sides
+# are read off the hook, so a third record is covered the day someone writes it, and a
+# subject set that quietly stopped growing fails here instead of passing quietly.
 cp "$PREPUSH" "$PREPUSH.orig"
-sed 's@^KEY_RECORD="\.git/@KEY_RECORD="core/@' "$PREPUSH.orig" > "$PREPUSH"
-if cmp -s "$PREPUSH.orig" "$PREPUSH"; then
+i55_declared="$(grep -cE '^[A-Z][A-Z0-9_]*_RECORD="' "$PREPUSH.orig" 2>/dev/null)"
+case "$i55_declared" in ''|*[!0-9]*) i55_declared=0 ;; esac
+sed -E 's@^([A-Z][A-Z0-9_]*_RECORD)="\.git/@\1="core/@' "$PREPUSH.orig" > "$PREPUSH"
+if [ "$i55_declared" -lt 2 ]; then
+  bad "FIXTURE BROKEN: the hook declares $i55_declared cross-run record(s) under .git/; this arm proves a DERIVED subject set and cannot do that over fewer than two"
+elif cmp -s "$PREPUSH.orig" "$PREPUSH"; then
   bad "FIXTURE BROKEN: the I55 arm-4 mutation matched nothing, so the record-location arm is unproven"
 else
   out="$(bash "$V" 2>&1)"
-  if grep -q "inside the working tree" <<<"$out"; then
-    ok "storing the key inside the tree it hashes is REPORTED (writing the record would invalidate it and no push could ever hit)"
+  i55_named="$(grep -oE '[A-Z][A-Z0-9_]*_RECORD=' <<<"$out" | sort -u | grep -c . 2>/dev/null)"
+  case "$i55_named" in ''|*[!0-9]*) i55_named=0 ;; esac
+  if grep -q "inside the working tree" <<<"$out" && [ "$i55_named" -eq "$i55_declared" ]; then
+    ok "moving ALL $i55_declared cross-run records inside the tree they are hashed by is REPORTED, and the report names every one — the subject set is derived from the hook, not from a name this fixture knows"
   else
-    bad "the key record was moved into the hashed tree and nothing objected — the skip becomes machinery that runs on every push and never pays"
+    bad "the cross-run records were moved into the hashed tree and I55 named $i55_named of $i55_declared — a record outside the derived subject set sits in the tree while the skip becomes machinery that runs on every push and never pays"
   fi
 fi
 mv "$PREPUSH.orig" "$PREPUSH"
