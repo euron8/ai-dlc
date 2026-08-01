@@ -173,13 +173,13 @@ rehearsal's run, which is not evidence it will not fire in yours.
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures — the timing AND the per-fixture assertion counts | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | Advance the machinery stamp | graph | — |
-| 6 | The assertion-count delta, the two `W9` findings, full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings plan §6c-23 needs | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | **DONE** — `graph` HEAD `a0f36ec94`, `ls-remote origin main` agrees. Stamp `0.231.0`/`65b2f2f` on both pairs; contract control `44714` bytes. Tracked tree carries only the 4 pre-existing `_bmad-output/` runtime modifications (no source paths). Engine pinned: `/tmp/pull-engine-0232` detached at `56202bc`, `VERSION` = `0.232.0`. Distance re-derived from `git log 65b2f2f..56202bc` = 3 commits, **one release** (`56202bc` feat + 2 docs). |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | **DONE** — `hard-blockers` **`0 HARD blockers`**. Validator **`0 error(s), 2 warning(s)`**, footer `contract_version=11 entries=50 at_current=0 behind=50 undeclared=0`, census `codes=24 fired=2 silent_with_subjects=22 unclaimed=none subjects=override:12,extension:38`. `layer-drift` (narrow) `38 EXTENSION-OK / 12 OVERRIDE-OK / 1 EXTENSION-RESTATES-CORE / 2 OVERRIDE-ASSERTS-SHADOW-SURVIVES / 2 OVERRIDE-DELEGATES-INTO-SHADOW / 2 OVERRIDE-DOUBLE-SHADOW`, **0 HOOK-DRIFT**; control at `04cea81..56202bc` reads **`3 EXTENSION-HOOK-DRIFT` + `3 HARD-LAYER-ADJUDICATION-MISSING`**, so the counter reads high. `unregistered-drift` `61 CORE-OK / 3 CORE-TEMPLATE-SUBSTITUTED`. `ledger-reverify` verbatim: `3 ENTRY-SWALLOWED / 12 HAND-REVIEW / 2 NAMED-UPSTREAM / 3 NEEDS-REVIEW / 46 STILL-LIVE`. **§6 CORRECTION — two invocations in the Row 2 block have transposed arguments. Operator-confirmed 2026-08-01. Use these forms, not the ones printed in the block below:**<br>`layer-drift.sh     $E $B $T $G`  — `<dist> <base> <theirs> <consumer>`<br>`ledger-reverify.sh $E $B $G $T`  — `<dist> <base> <consumer> <theirs>`<br>**`hard-blockers.sh` and `unregistered-drift.sh` in that block are correct as written** and were run unchanged. The two failures are not symmetric and only one is loud: `ledger-reverify.sh` as printed (`$G` alone) dies `line 138: 2: parameter null or not set`, but `layer-drift.sh` as printed (`$E $B $G $T`, theirs and consumer swapped) exits **silently with zero rows and no stderr** — a textbook bare zero, and it would have read as "no drift" to anyone not running §2's wide-span control. Every figure in this tick was measured under the corrected forms. |
+| 3 | Bank the BEFORE figures — the timing AND the per-fixture assertion counts | graph | **DONE** — `/tmp/assert-before-0232.tsv`: **109 fixtures**, `layer-reference-resolution` at **14**. Control: **8** of the 109 rows carry a non-empty `EXPECTED_ASSERTIONS`, so the join below is over a populated column, not an all-blank one. Three timed pre-push runs, all `rc=0`, `ok=109`, `FAIL=0`: `43.84 / 42.86 / 42.74` — **MEDIAN 42.86s**. §4.6's intermittent did NOT fire on the before side. |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | **DONE** — branch `chore/ai-dlc-update-0.232.0`. `apply.sh` **rc=0, 0 bytes stderr, 8 rows ALL `RESOLVED`** (5 `pure-apply`, `relabel`, `restamp 65b2f2f -> 56202bc`, `consistent`). `git status` = exactly the **6 pull paths** modified, plus the 4 pre-existing `_bmad-output/` runtime files; **`.githooks/pre-push` absent**, as stated. Diff surface **6 files, +250 / −15** — exact. Arrivals with byte controls: `W9` **3** hits against `105045` bytes, `LC-R3` **1** hit against `46793` bytes, `contract_version: 12`. **§6 correction — the fixture-directory EXPECT is a conflation:** `ls -d tests/fixtures/*/ \| wc -l` reads **119**, not 109, and read 119 at `HEAD` before the apply too (`git ls-tree -d --name-only HEAD tests/fixtures/` = 119). **109** is the count of fixture dirs that contain a `run.sh` — the figure Row 3 banks. Both are unchanged by this release, which is what the check was for. |
+| 5 | Advance the machinery stamp | graph | **DONE** — `skill_version: 0.232.0`, `skill_commit: 56202bc` set by hand (`apply` had already written the `version`/`commit` pair). `git diff --numstat` = **`4	4`**, exactly 4 changed lines, all four in the two stamp pairs. `installed_at: 2026-06-13T13:56:26Z` and `upstream: https://github.com/euron8/ai-dlc` preserved byte-for-byte. |
+| 6 | The assertion-count delta, the two `W9` findings, full pre-push, commit, push, PR | graph | **DONE** — Delta: **exactly one line, `layer-reference-resolution	14	22`**, join pairing **109** rows. No second line, nothing moving downward. Validator **`0 error(s), 4 warning(s)`**; footer `contract_version=12 entries=50 at_current=0 behind=50 undeclared=0`; census `codes=25 fired=3 unclaimed=none`, `W9=LC-R3:2/50`. **Exactly two `W9` subjects, no third:** `extensions/roles/dev-domain.md` names `scripts/ssm-tunnel.sh`; `extensions/steps-domain/deploy-validate-domain.md` names `scripts/smoke-test.sh`. Not repaired (§2.2). Three AFTER pre-push runs, all `rc=0`, `ok=109`, `FAIL=0`: `45.66 / 44.49 / 44.18` — **MEDIAN 44.49s** vs before-median 42.86s, a **+1.63s** move well inside the §4.5 sanity bound. §4.6's intermittent did not fire on either side. Commit **`6d1c893e4`**, pushed; PR **#841**. Staged surface **6 files, +252 / −17** — the rehearsal's `+250 / −15` plus the Row 5 stamp edit's `+2 / −2`, which reconciles exactly. The 4 `_bmad-output/` runtime files were left unstaged as instructed. |
+| 7 | Report back the readings plan §6c-23 needs | graph | **DONE** — see §8. Merged as **`daf1d4a46`** (squash, PR #841, branch deleted). |
 
 ---
 
@@ -369,6 +369,58 @@ After the merge, report — each with its control:
 - The assertion-count delta, verbatim.
 - Both medians, **stated as a sanity bound**.
 - Whether §4.6's intermittent fired, and on which side.
+
+---
+
+## 8. Row 7 report — measured 2026-08-01, post-merge
+
+- **`origin/main`'s new sha:** **`daf1d4a46`**. Control: `git ls-remote origin main` reads
+  `daf1d4a46`, agreeing with `git rev-parse --short HEAD`. It is the squash-merge commit of
+  PR **#841** (`gh pr view` → `MERGED`, `2026-08-01T13:29:53Z`,
+  `daf1d4a461d4a32962925ae92d8b2aa7494c5df7`).
+- **Both stamp pairs at `0.232.0` / `56202bc`.** `installed_at: 2026-06-13T13:56:26Z` still
+  present, unmoved.
+- **Validator final line and footer**, against a `105045`-byte control on the validator:
+
+  ```
+  validate-layer-entries: 0 error(s), 4 warning(s)
+  LAYER_CONFORMANCE v1 contract_version=12 entries=50 at_current=0 behind=50 undeclared=0 errors=0 warnings=4
+  LAYER_MEASURED v1 ... contract_version=12 codes=25 fired=3 silent_with_subjects=22 unclaimed=none ... W7=LC-R2:1/50,W9=LC-R3:2/50,E17=LC-C1:0/50,W6=LC-C2:1/50
+  ```
+
+  `codes` 24 → **25**, `fired` 2 → **3**, `unclaimed=none` on both sides — the §2.3 PASS
+  condition, met.
+- **The two `W9` subjects, verbatim, and NOT repaired** (§2.2):
+
+  ```
+  WARN   W9  .claude/skills/ai-dlc/extensions/roles/dev-domain.md: names `scripts/ssm-tunnel.sh`, and no such file exists in this project. ...
+  WARN   W9  .claude/skills/ai-dlc/extensions/steps-domain/deploy-validate-domain.md: names `scripts/smoke-test.sh`, and no such file exists in this project. ...
+  ```
+
+  Exactly two, no third path — the false-positive measurement in §4.3 holds on the live tree.
+  Repair stays a separate `graph` change.
+- **The 50 `conforms_to` receipts were NOT advanced.** Deliberate, and the reason is §2.3: the
+  locked PASS condition for this pull is `0 error(s), 4 warning(s)`. A mechanical
+  `9` → `12` sweep clears `W6` and lands the branch at 3 warnings, which would have made the
+  release's own result unreadable against the stated bar — the same argument §2.2 makes for not
+  repairing the `W9` subjects in this branch. The gap is now **three versions old**
+  (v0.225.0, v0.227.0, and this one) and `behind=50` is unchanged on both sides. It is a
+  standing, deliberately-open item, not an oversight.
+- **Assertion-count delta, verbatim:** one line, `layer-reference-resolution	14	22`, against a
+  join pairing **109** rows. Nothing else moved and nothing moved downward.
+- **Both medians, as a sanity bound only:** before **42.86s** (`43.84 / 42.86 / 42.74`), after
+  **44.49s** (`45.66 / 44.49 / 44.18`). All six runs `rc=0`, `ok=109`, `FAIL=0`. The **+1.63s**
+  is bound-shaped noise, not a result — this release changes no scheduling (§4.5).
+- **§4.6's intermittent did not fire on either side.** `check-il-oracle-presence`,
+  `check-substrate-audit` and `check-ff-escalation` were green in all six runs. Not evidence
+  they are fixed.
+
+**Two §6 command defects found and corrected in-place** (Rows 2 and 4 carry the detail):
+`layer-drift.sh`'s arg order is `<dist> <base> <theirs-ref> <consumer-root>`, not the block's
+`$E $B $G $T` — as written it returns **zero rows with no stderr**, which is precisely the bare
+zero §3 forbids; `ledger-reverify.sh` takes the same four args, not `$G` alone. And the
+"109 fixture directories" EXPECT in Row 4 is a conflation: there are **119** directories and
+**109** of them carry a `run.sh`. Both counts were unchanged by the pull.
 
 ---
 
