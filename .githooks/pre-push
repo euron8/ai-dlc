@@ -119,10 +119,16 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 # is present and the mechanism is absent.
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
+DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 
 run_fixtures() {
-  local rc=0 d b out n_expected n_actual verdict
+  local rc=0 d b out n_expected n_actual n_ordered verdict
   out="$(mktemp -d)" || return 1
+  # DOT-PREFIXED, and that is what makes the name collision-proof rather than
+  # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
+  # below cannot match a directory whose name begins with a dot -- so no fixture
+  # can ever be called `.dur` and land on top of this one.
+  mkdir -p "$out/.dur" || { rm -rf "$out"; return 1; }
 
   for d in core/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
@@ -142,15 +148,65 @@ run_fixtures() {
     rm -rf "$out"; return 1
   fi
 
+  # DISPATCH LONGEST-FIRST, FROM WHAT THE LAST RUN ACTUALLY COST.
+  #
+  # A pool's makespan is decided by when its longest unit STARTS. Dispatched in glob
+  # order the poles are picked up wherever the alphabet puts them, and the tail is one
+  # long unit finishing alone: measured on the reference consumer at width 16, its two
+  # heaviest units sat at positions 62 and 63 of 109 and the pole began 5.5s in.
+  # Longest-first started it at 0.0s and took the suite from a 30.83s median to 28.61s
+  # over four alternating pairs whose two sets of readings do not overlap -- ~7%.
+  #
+  # AND IT IS NOT FREE, WHICH IS WHY THE ORDER IS NOT ALSO A CLAIM ABOUT SPEED. Running
+  # the heavy units together makes each of them slower: the same measurement puts the
+  # consumer's pole at 25.30s dispatched late against 28.46s dispatched first, so a 5.5s
+  # head start bought 2.4s. On THIS repository's own suite that trade comes out level --
+  # `enforcement-map-sites` alone is 144s of a 148s wall, so no dispatch order can win
+  # more than 2.5% here and this one wins nothing measurable. The reorder ships for the
+  # consumer's schedule shape, and the distribution carries it because I66 makes the two
+  # runners one program. A `hoist the K longest, leave the rest alphabetical` variant was
+  # measured too and lost to plain longest-first, so nothing here carries a tuning
+  # constant that §7's gate item 3 would have to expire.
+  #
+  # THE RECORD IS WRITTEN BY THE PREVIOUS RUN AND LIVES UNDER .git, for I55 arm 4's
+  # reason exactly: the content key hashes the working tree, so a cost record inside it
+  # would change the key that decides whether this suite runs at all.
+  #
+  # THE FALLBACK IS THE LIST, and it is reached three ways -- no record yet (every first
+  # run on a fresh clone), an unreadable one, and a reordering that did not come back
+  # with exactly the units it was given. The last is the guard that matters: a reorder
+  # which DROPS a unit reads exactly like a reorder that is fast. It cannot hide even if
+  # this guard were removed, because `n_expected` and the report below are both taken
+  # from "$out/list" and never from the dispatch order -- so a dropped unit still reaches
+  # the reader, still finds no verdict, and still fails the push.
+  cp "$out/list" "$out/.order"
+  if [ -s "$DURATIONS_RECORD" ]; then
+    awk 'NR==FNR { if (NF == 2) prev[$1] = $2; next }
+         { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b)
+           print ((b in prev) ? prev[b] : 999999) " " $0 }' \
+        "$DURATIONS_RECORD" "$out/list" 2>/dev/null \
+      | sort -k1,1nr | cut -d' ' -f2- > "$out/.order.lpt" 2>/dev/null
+    n_ordered="$(grep -c . "$out/.order.lpt" 2>/dev/null)"
+    case "$n_ordered" in ''|*[!0-9]*) n_ordered=0 ;; esac
+    [ "$n_ordered" -eq "$n_expected" ] && mv "$out/.order.lpt" "$out/.order"
+  fi
+
   # Each worker records its verdict to a file named for its fixture. The verdict is read
   # back from those FILES, not from xargs exit status, because that is what makes the
   # completeness assertion below possible -- and because `xargs` collapses any number of
   # failures into one exit code that cannot say WHICH.
+  #
+  # It records its own COST beside the verdict, in whole seconds off the worker shell's
+  # own SECONDS -- no clock fork, and a unit never dispatched simply has no line, which
+  # is the reading the ordering above wants anyway. A fixture the record has never seen
+  # sorts FIRST: an unknown cost is treated as the largest, because the failure mode
+  # worth avoiding is a new heavy unit dispatched last.
   AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
     if bash "$d/run.sh" >/dev/null 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
-  ' _ {} < "$out/list"
+    printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
+  ' _ {} < "$out/.order"
 
   # Rendered in list order, so the output is deterministic and diffable across runs even
   # though the work completed out of order.
@@ -187,6 +243,15 @@ run_fixtures() {
       "$n_actual" "$n_expected"
     rc=1
   fi
+
+  # Publish this run's costs for the next run to dispatch on. One `cat` for the whole
+  # suite rather than a read per unit: §7 gate item 2 is that a fork per item is the
+  # shape that makes a runner system-bound, and this runner is the thing that finding
+  # came out of. A run that recorded nothing leaves the previous record alone rather
+  # than replacing it with an empty file, which would silently cost the NEXT run its
+  # ordering as well.
+  cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
+  [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
 
   rm -rf "$out"
   return $rc

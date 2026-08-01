@@ -183,10 +183,16 @@ drivability() { bash scripts/ai-dlc/validate-fixture-drivability.sh; }
 #    on one 18-core machine, which is why it stays the tunable AI_DLC_FIXTURE_JOBS.
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
+DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
 
 run_fixtures() {
-  local rc=0 d b out n_expected n_actual verdict
+  local rc=0 d b out n_expected n_actual n_ordered verdict
   out="$(mktemp -d)" || return 1
+  # DOT-PREFIXED, and that is what makes the name collision-proof rather than
+  # unlikely. Every verdict file in "$out" is named for a fixture, and the glob
+  # below cannot match a directory whose name begins with a dot -- so no fixture
+  # can ever be called `.dur` and land on top of this one.
+  mkdir -p "$out/.dur" || { rm -rf "$out"; return 1; }
 
   for d in tests/fixtures/*/; do
     [ -f "$d/run.sh" ] || continue
@@ -206,15 +212,61 @@ run_fixtures() {
     rm -rf "$out"; return 1
   fi
 
+  # DISPATCH LONGEST-FIRST, FROM WHAT YOUR OWN LAST RUN COST.
+  #
+  # A pool finishes when its longest unit finishes, so what matters is when that unit
+  # STARTS. In glob order it starts wherever the alphabet puts it. Measured on the
+  # reference consumer's own 109-fixture suite at width 16: the two heaviest units sat
+  # at positions 62 and 63, the pole began 5.5s into the run, and the suite ended with
+  # it running alone. Dispatched longest-first the pole starts at 0.0s and the suite's
+  # median goes 30.83s -> 28.61s over four alternating pairs whose readings do not
+  # overlap -- about 7%.
+  #
+  # NOTHING HERE IS TUNED TO ONE MACHINE, which is the difference between this and the
+  # pool width above. The order is derived from YOUR suite's own recorded costs, so a
+  # box or a fixture set that makes a different unit the pole gets a different order for
+  # free. What you should NOT expect is a fixed percentage: running the heavy units
+  # together makes each of them slower, and where one unit dominates the wall clock that
+  # trade comes out level. On the distribution's own suite it does exactly that and wins
+  # nothing measurable; it is shipped for the schedule shape a consumer suite has.
+  #
+  # THE RECORD LIVES UNDER .git ON PURPOSE. It is written once per run and it is not
+  # part of your project's tree, so it never shows up in a diff, a status, or a commit.
+  #
+  # IF ANYTHING ABOUT IT IS MISSING OR ODD, THE SUITE RUNS IN PLAIN GLOB ORDER: no
+  # record yet (every first run), an unreadable one, or a reordering that did not come
+  # back with exactly the units it was handed. That last guard is the one worth stating,
+  # because a reorder which DROPS a unit reads exactly like a reorder that is fast --
+  # and it still could not hide if the guard were gone, since the expected count and the
+  # report below are both taken from "$out/list" and never from the dispatch order.
+  cp "$out/list" "$out/.order"
+  if [ -s "$DURATIONS_RECORD" ]; then
+    awk 'NR==FNR { if (NF == 2) prev[$1] = $2; next }
+         { b = $0; sub(/\/$/, "", b); sub(/.*\//, "", b)
+           print ((b in prev) ? prev[b] : 999999) " " $0 }' \
+        "$DURATIONS_RECORD" "$out/list" 2>/dev/null \
+      | sort -k1,1nr | cut -d' ' -f2- > "$out/.order.lpt" 2>/dev/null
+    n_ordered="$(grep -c . "$out/.order.lpt" 2>/dev/null)"
+    case "$n_ordered" in ''|*[!0-9]*) n_ordered=0 ;; esac
+    [ "$n_ordered" -eq "$n_expected" ] && mv "$out/.order.lpt" "$out/.order"
+  fi
+
   # Each worker records its verdict to a file named for its fixture. The verdict is read
   # back from those FILES, not from xargs exit status, because that is what makes the
   # completeness assertion below possible -- and because `xargs` collapses any number of
   # failures into one exit code that cannot say WHICH.
+  #
+  # It records its own cost beside the verdict, in whole seconds off the worker shell's
+  # own SECONDS, which costs no extra process. A unit that never ran simply has no line.
+  # A fixture the record has never seen sorts FIRST, because an unknown cost is safer
+  # treated as the largest: the case worth avoiding is a new heavy fixture dispatched
+  # last, and that is exactly what a brand-new fixture would otherwise be.
   AI_DLC_FX_OUT="$out" xargs -P "$FIXTURE_JOBS" -I{} bash -c '
     d="$1"; b="$(basename "$d")"
     if bash "$d/run.sh" >/dev/null 2>&1; then printf ok   > "$AI_DLC_FX_OUT/$b"
     else                                      printf FAIL > "$AI_DLC_FX_OUT/$b"; fi
-  ' _ {} < "$out/list"
+    printf "%s %s\n" "$b" "$SECONDS" > "$AI_DLC_FX_OUT/.dur/$b"
+  ' _ {} < "$out/.order"
 
   # Rendered in list order, so the output is deterministic and diffable across runs even
   # though the work completed out of order.
@@ -251,6 +303,14 @@ run_fixtures() {
       "$n_actual" "$n_expected"
     rc=1
   fi
+
+  # Publish this run's costs for the next run to dispatch on -- one read for the whole
+  # suite, not one per fixture, because a process per item is what made this runner
+  # system-bound in the first place. A run that recorded nothing leaves the previous
+  # record alone instead of replacing it with an empty one, which would cost the next
+  # run its ordering too.
+  cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
+  [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
 
   rm -rf "$out"
   return $rc

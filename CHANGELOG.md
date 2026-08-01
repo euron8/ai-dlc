@@ -17,6 +17,116 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.229.0] — 2026-07-31
+
+### The fixture pool dispatches longest-first, and the win turns out to be a property of the SUITE, not of the box
+
+A worker pool finishes when its longest unit finishes, so what decides the makespan is
+when that unit STARTS. Both pre-push hooks fed the pool in glob order, which put the
+poles wherever the alphabet happened to put them. On the reference consumer's own
+109-fixture suite that is positions 62 and 63: the heaviest unit began 5.5s into the
+run and the suite ended with it running alone.
+
+Dispatch is now longest-first, off a durations record the previous run wrote. Measured
+on an 18-core box at the shipping width of 16, four alternating pairs on a
+`git clone --local` of the consumer at `d2b69420f`:
+
+| | alphabetical | longest-first |
+|---|---|---|
+| readings | 30.81, 33.36, 30.72, 30.85 | 29.80, 28.65, 28.57, 28.48 |
+| median | 30.83s | **28.61s — 7.2%** |
+
+**Every longest-first reading beats every alphabetical one**, so the two sets do not
+overlap; the handoff's independently measured ~8% reproduces at a fixture set one unit
+larger than the one it was taken at.
+
+**And on THIS repository's suite the same change wins nothing, which is the release's
+real finding.** Three alternating pairs: 147.97 / 149.77 / 148.71 against 148.37 /
+148.78 / 148.72 — a median of 148.71 against 148.72, with the sign flipping between
+reps. The cause is not the machine, because it is the same machine. It is that
+`enforcement-map-sites` alone runs 144.24s of a 147.97s wall — **97.5%** — so no
+dispatch order whatsoever can win more than 2.5% here.
+
+**The mechanism was measured directly on each suite's pole rather than inferred, and it
+is a trade:**
+
+| suite | pole | starts | runs for | head start | contention cost | net |
+|---|---|---|---|---|---|---|
+| consumer | `layer-readopt-gate` | 5.54s → 0.01s | 25.30s → 28.46s | −5.53s | +3.16s | **−2.37s** |
+| distribution | `enforcement-map-sites` | 3.72s → 0.02s | 144.24s → 148.35s | −3.70s | +4.11s | **+0.41s** |
+
+Dispatching the heavy units together makes each of them slower — total CPU across the
+suite rises 7.2% here and 8.8% on the consumer — and where one unit dominates the wall
+clock that cost cancels the head start exactly. This is the handoff's *"width and
+per-unit speed trade about 1:1"* finding arriving in the dispatch question rather than
+in the pool-size one. The reorder ships for the shape a consumer suite has; the
+distribution carries it because I66 makes the two runners one program.
+
+**A `hoist the K longest, leave the rest alphabetical` variant was built and refuted.**
+It was the obvious way to buy the head start without front-loading the contention.
+Measured at K=4 on the consumer: a 29.40s median against plain longest-first's 28.61s —
+worse, because the global ordering helps the tail as well as the head. Plain
+longest-first also carries no tuning constant for §7 gate item 3 to expire.
+
+#### What it costs to be wrong
+
+Nothing, and that is asserted rather than argued. `n_expected` and the report are both
+taken from the unordered list and never from the dispatch order, so a reordering that
+DROPPED a unit still reaches the reader, still finds no verdict, and still fails the
+push through the arm v0.226.0 shipped. On top of that the reordering is discarded
+unless it comes back with exactly the units it was handed. The glob order is used on
+every first run, on an unreadable record, and on a reordering that fails that count —
+and §6c-12 required that path be shown to produce a CORRECT suite rather than merely a
+slower one, so `M5` breaks the sort outright and reads the whole suite back.
+
+The record lives at `.git/ai-dlc-fixture-durations` for I55 arm 4's reason exactly: the
+content key hashes the working tree, so a cost record inside it would move the key that
+decides whether the suite runs at all.
+
+#### I55 arm 4 now DERIVES its subject set, and the second record is why
+
+That arm read one hand-named variable, `KEY_RECORD`, for as long as the hook kept one
+record. This release adds a second. A hand-named arm would have gone on reporting green
+about the first while the new one sat wherever it was put — the prohibition is
+identical for both, so the grammar now names the SHAPE (`<NAME>_RECORD=`) and the arm
+inherits every record the hook grows. Measured on the shipping hook: 2 subjects, both
+under `.git/`; control, the same grammar over a file carrying none returns 0. It fails
+closed on an empty subject set.
+
+#### The knock-out battery found a defect in the fixture's own mutant guard
+
+`consumer-suite-pool` builds each mutant as a copy guarded by `cmp -s`, and the guard
+was invoked as `M="$(mut m4 ...)"` — inside a command SUBSTITUTION. So when a mutation
+matched nothing, the guard's failure message went into `$M` instead of to the report,
+and its assertion counter incremented in a subshell that then exited. **A mutation that
+matched nothing said nothing.** The only thing that noticed was the
+`EXPECTED_ASSERTIONS` floor reporting `20 of 21` with no indication which arm was
+missing. The guard existed, was correct, and could not speak: this repository's named
+class sitting inside the guard written to prevent it. `mut` now sets `MUT` and reports
+in the caller's shell, and the knock-out that exposed it re-run afterwards prints
+`MUTANT m4 matched nothing` by name.
+
+#### Verification
+
+- **Differential**, over a `git clone --local` of the consumer with **five** fixtures
+  induced red — each verified red by running it directly, because the first attempt
+  appended `exit 1` after an existing `exit 0` and changed the bytes without changing
+  the behaviour, which `cmp -s` cannot catch. Old hook, new hook cold, new hook warm:
+  **109 verdict lines and 5 FAIL on all three, byte-identical**, with the warm run
+  confirmed to have reordered off a 109-line record. Control: dropping one line makes
+  the same `diff` speak.
+- **Mutants** `M4` (dispatch fed the unordered list), `M5` (the sort broken — the
+  fallback arm), `M6` (the workers' cost write removed) join the four already there,
+  plus the unmutated control. `consumer-suite-pool` 14 → **21 assertions**, 38s, and it
+  remains a passenger with ~110s of slack.
+- **Knock-outs**, five, against an unmutated control at 0 red: reverting the dispatch
+  source and breaking the sort each turn arm 7 red; removing the writer or leaving the
+  record unpublished turn arms 7 and 9 red; and **removing the count guard turns
+  exactly one arm red — `M5`** — which is what says that guard is load-bearing rather
+  than a check that cannot fire.
+- I66 holds: 55 executable lines each side, mapped-identical, and the unmapped control
+  differs on exactly the fixture-root line.
+
 ## [0.228.0] — 2026-07-31
 
 ### The release that moved the crosswalk table shipped its scaffold in the one program no consumer runs
