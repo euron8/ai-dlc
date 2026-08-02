@@ -1077,7 +1077,25 @@ if [ -n "$MACHINERY_REL" ] && [ -n "$MACHINERY_HOME" ]; then
              continue ;;
         esac
         # ERROR 2 of 2 -- declared but absent. An inventory nothing checks is forgeable.
-        [ -e "$PROJECT_ROOT/$mpath" ] || err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL but no such file exists in this project. A declared inventory that names paths which are not there is a list nothing checks, which is exactly the forgeability this contract removes. Either the path is stale and should be removed from the inventory, or the file was moved and the inventory did not follow."
+        #
+        # EXISTENCE ON DISK IS NOT ENOUGH, AND THE WEAKER TEST HID A RED TRUNK FOR FOUR DAYS.
+        # A retirement deleted every tracked file under a declared directory, and a working tree
+        # that had once run the deleted tests still held an ignored `__pycache__/` inside it. `-e`
+        # was satisfied by the bytecode, so this clause read GREEN on the operator's checkout while
+        # reading RED on a fresh clone of the same commit -- the check reporting the OPPOSITE of
+        # trunk, on a tree `git status` calls clean, which is this repository's named defect
+        # arriving through the one clause whose whole job is to make an inventory unforgeable.
+        #
+        # So in a git repository the path must also resolve to at least one TRACKED file. Measured
+        # on the reference consumer before shipping: 67 declared paths, 67 exist, 67 tracked --
+        # a false-positive set of ZERO. Outside a git repository the tightening is skipped rather
+        # than failed, because "not version-controlled" is a legitimate consumer state and failing
+        # closed on it would wedge every one of them.
+        if [ ! -e "$PROJECT_ROOT/$mpath" ]; then
+          err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL but no such file exists in this project. A declared inventory that names paths which are not there is a list nothing checks, which is exactly the forgeability this contract removes. Either the path is stale and should be removed from the inventory, or the file was moved and the inventory did not follow."
+        elif [ -e "$PROJECT_ROOT/.git" ] && ! git -C "$PROJECT_ROOT" ls-files --error-unmatch -- "$mpath" >/dev/null 2>&1; then
+          err E18 "$mpath: declared as ai-dlc machinery in $MACHINERY_REL and something exists at that path, but git tracks no file there -- so what is satisfying the path is build output, an editor artefact or another ignored leftover, and the declared machinery is gone. This reads GREEN on the checkout that has the leftover and RED on a fresh clone of the same commit, which is the worse of the two failures: the inventory looks checked and is not. Either the path is stale and should be removed from the inventory, or the files were deleted and the inventory did not follow. \`git clean -nxd '$mpath'\` names what is actually there."
+        fi
       done <<MACHINERY_EOF
 $MACHINERY_LINES
 MACHINERY_EOF

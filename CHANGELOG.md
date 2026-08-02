@@ -17,6 +17,54 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.240.0] — 2026-08-02
+
+### `E18` read GREEN on a working tree and RED on a fresh clone of the same commit
+
+Found by the reference consumer's 0.239.0 pull, in the control it ran before trusting a reading —
+not by this repository's suite, which was green throughout.
+
+`LC-M1`/`E18` tested a declared machinery path with `[ -e ]`. A retirement deleted all 16 tracked
+files under one declared directory, and a checkout that had once run the deleted tests still held
+an ignored `__pycache__/` inside it. **The bytecode satisfied `-e`.** So the clause reported the
+inventory clean on the operator's tree while reporting it stale on a clone of the identical commit
+— on a tree `git status` calls clean, because the leftover is gitignored.
+
+**That is the worse of the two failures.** The whole job of this clause is to make a hand-written
+inventory unforgeable, and existence-on-disk is forgeable by build output. It also nearly cost the
+pull its evidence: the red trunk the operator was banking as a *before* figure was invisible on the
+tree they were standing in, and a green *after* would have been unattributable.
+
+**In a git repository the path must now also resolve to at least one TRACKED file.** The two
+failures get separate messages — absent entirely, versus present-but-nothing-tracked — because they
+have different remedies, and the second names `git clean -nxd <path>` so the operator can see what
+is actually there.
+
+**Outside a git repository the tightening is skipped rather than failed.** "Not version-controlled"
+is a legitimate consumer state and failing closed on it would wedge every one of them.
+
+**False-positive set measured before shipping, per the standing rule: 67 declared machinery paths
+on the reference consumer, 67 exist, 67 tracked — the set is EMPTY.**
+
+### Verification
+
+`consumer-machinery-inventory` **14 → 20 assertions**, three of them new cases and none redundant:
+the leftover must fire, a tracked file at the same path must not (or compliance wedges the
+consumer), and a project that is not a git repository must not — which is every pre-existing case
+in the fixture, so that third arm is what proves the tightening did not fail closed on all of them.
+
+The leftover case carries a **fixture control** ahead of its assertion: the seed is checked to have
+actually produced the shape under test — path present, nothing tracked beneath it — because a seed
+whose `git add` quietly caught the artefact would exercise the tracked path and score a pass.
+
+**`no-tracked-check` is the defect exactly**, held as a mutant. **`no-existence-check` had to be
+repointed rather than re-counted**: its sed targeted a one-line `[ -e … ] || err E18` that this
+change turns into an if/elif, so it stopped matching and reported `UNMUTATED`. That is the `cmp -s`
+guard doing its job — a mutation that matches nothing is indistinguishable from a surviving one
+without it, and this is the second release running in which that guard caught a stale sed.
+
+Suite **101/101**, `validate-enforcement-map.sh` exit 0.
+
 ## [0.239.0] — 2026-08-02
 
 ### `derive-stories` counted entry-VIEW pairs and called them stories, and its `--check` printed no entry count at all
