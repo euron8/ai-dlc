@@ -1,6 +1,6 @@
 # Goal 5 — absorption of the eight duplicate consumer scripts: one arithmetic, and what is left
 
-**Status: PARTIAL, 649 of 2,007 retired = 32.3% (§7). The residue is 1,358 lines across 4 files, and it is SCHEDULED, not merely open: §6c-43 is the last `(ii)` subject and §6c-44 the deprecation stub. §1–§6 record what was measured before the number moved; §7 supersedes §6.**
+**Status: PARTIAL, 1,722 of 2,007 retired = 85.8% (§8). The residue is 285 lines across 3 files and ALL THREE are `(i)` — not duplicates and never were — so the absorbable set is exhausted. §1–§7 record earlier states; §8 supersedes them.**
 
 *Two figures in §1–§5b are corrected by §7 and are left in place as the record: the subject that "grew" is **2**, not 1 (`generate-sprint-status.py` is +5 alongside `audit-main-since.sh`'s +16), and the lines that leave the subject set are **285**, not the 180 §5b's summary states against its own three-row table.*
 
@@ -360,3 +360,44 @@ is: **649 lines of the charter's subject set, plus 510 lines of collateral the r
 not updated with it. The figure is **285**, not 180. Nothing downstream depended on it — §7 above
 re-derives from the tree rather than from that subtraction — but a document about arithmetic
 carrying two arithmetics is the defect it exists to name.
+
+
+---
+
+## 8. The absorbable set is exhausted — re-derived 2026-08-02 at graph `7d1d7862a`
+
+`generate-sprint-status.py` is retired (PR #853), and with it goal 5's last `(ii)` subject.
+Re-derived at the same two refs §2 and §7 used, never subtracted:
+
+| Subject | before | now | change |
+|---|---|---|---|
+| `check-protected-core-paths.sh` | 162 | **GONE** | **−162** |
+| `check-mutation-red-anchor.sh` | 72 | **GONE** | **−72** |
+| `scan-stray-provenance.sh` | 155 | 83 | **−72** |
+| `audit-rule-exercise.sh` | 105 | 105 | 0 |
+| `generate-sprint-status.py` | 1068 | **GONE** | **−1068** |
+| `audit-main-since.sh` | 348 | **GONE** | **−348** |
+| `retro-replay-harness.sh` | 97 | 97 | 0 |
+| **Total** | **2,007** | **285** | **−1,722** |
+
+Control: `ci-local.sh` resolves at both refs. **1,722 = 85.8% of 2,007**, 66.0% of the charter's
+2,610, 57.4% of decision 4's ~3,000 — against **32.3%** the previous day and **14.4%** the day
+before that.
+
+**Both `(ii)` and `(iii)` are now empty. The 285 lines that remain are the three `(i)` rows** —
+`scan-stray-provenance.sh` 83, `retro-replay-harness.sh` 97, `audit-rule-exercise.sh` 105 — each
+established on a structural test as *not a duplicate of anything core has or should have*.
+**There is no further absorption to schedule**, and that is a measurement rather than a
+disposition: the charter's word was "absorption of the eight scripts that merely duplicate a core
+script with one extra arm", and what is left does not duplicate one.
+
+**No live caller survives the retirement.** 35 files still name the generator and **0 invoke it** —
+every survivor is a comment or an archived gate log — control, 2 files invoke `ci-local.sh` under
+the same grammar. **`W9`, the arm built in v0.232.0 to catch exactly a dangling caller, reads 0/50
+on the live tree while `W7` reads 1/50**, so the zero is a reading and not a blind instrument.
+
+**Two core rows came back and are `§6c-50`**: `story-fields.md` cannot express a field that is safe
+to CHECK but not to WRITE (`title`, 0 live subjects today), and `derive-stories` cannot see a story
+FILE the envelope does not declare. Both are DEFECT-tier. A third item — core not parsing the
+sequence-of-maps story layout — is a NOTE and deliberately not a row: it appears in 2 archived
+views, 0 in the live canonicals, and the canonical's own comment forbids the form.
