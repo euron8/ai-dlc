@@ -118,17 +118,35 @@ expect_set silent-states-collapsed 1 'undeclared list and an empty one print the
 
 # M8 — the drift comparison is inverted into always-equal, so nothing is ever derived and every
 # run reports a clean check.
-# SEVEN, and it is a fan-out rather than an entanglement: detection, the exit code, both derived
-# values, the floor, the byte count and the `none`-still-derives-status arm are seven different
-# facts about one comparison. M4, M5 and M9 each isolate one of them independently, so none is
-# proven only by this total knock-out.
-expect_set nothing-ever-drifts 7 'did not name the drift|--check exited|derived value is not the story file|only one declared field|status. was not derived|write touched|silenced .status. too|inline comment.s alignment' \
+# TEN as of v0.238.0 — re-derived, not inherited. It is a fan-out rather than an entanglement:
+# detection, the exit code, both derived values, the floor, the byte count, the
+# `none`-still-derives-status arm and the three v0.238.0 write arms are ten different facts about
+# one comparison, and a comparison that never finds drift writes nothing at all. M4, M5, M9, M10
+# and M11 each isolate one independently, so no cell is proven only by this total knock-out.
+expect_set nothing-ever-drifts 10 'did not name the drift|--check exited|derived value is not the story file|only one declared field|status. was not derived|write touched|silenced .status. too|inline comment.s alignment|colon-space was written bare|unwritable value was accepted|quotes values that need no quoting' \
   's@^                if val == have:@                if True:@'
 
 # M9 — the write re-emits the line instead of editing its value token, dropping the trailing
 # comment entirely. Detection is untouched; only the document survives differently.
 expect_set write-drops-comment 1 'inline comment.s alignment was destroyed' \
-  's@^    return head + sep + new + tail@    return head + sep + new@'
+  's@^    return head + sep + yaml_scalar(new) + tail@    return head + sep + yaml_scalar(new)@'
+
+# M10 — `yaml_scalar` returns the value unchanged. THIS IS v0.237.0 EXACTLY: the derived value
+# is re-emitted bare and a title carrying `: ` writes a line that is not YAML. Held as a mutant
+# because the fix and the defect differ by one function call, and a release that only says "now
+# it quotes" cannot show that the arm sees the difference.
+# THREE, and the fan-out is the design rather than an entanglement: with the value emitted bare
+# the ROUND-TRIP GUARD has nothing to catch, because the envelope's own reader is a regex that
+# reads a bare mangled line back as itself. That coupling is exactly why the quoting and the guard
+# ship together — either alone is silent. M11 isolates the guard independently.
+expect_set value-emitted-bare 3 'colon-space was written bare|unwritable value was accepted|guard reported and wrote anyway' \
+  's@^    return head + sep + yaml_scalar(new) + tail@    return head + sep + new + tail@'
+
+# M11 — the round-trip guard goes. The write still happens and nothing reads it back, which is
+# the state that made v0.237.0's corruption SILENT rather than loud: the envelope's own reader is
+# a regex and agrees with the mangled line.
+expect_set roundtrip-guard-removed 2 'unwritable value was accepted|guard reported and wrote anyway' \
+  's@^                        if rb is None or strip_value(rb.group(3)) != val:@                        if False:@'
 
 if [ "$fails" -eq 0 ]; then echo "PASS story-fields-derive-mutants"; exit 0; fi
 echo "FAIL story-fields-derive-mutants ($fails)"; exit 1

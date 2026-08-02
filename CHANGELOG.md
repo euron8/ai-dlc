@@ -17,6 +17,65 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.237.1] — 2026-08-01
+
+### v0.237.0's derive corrupted the artifact it writes, and then reported it clean
+
+Found by the reference consumer's `§6c-43` session while measuring what retiring its own generator
+would cost — **not by this repository's suite, which was green throughout.**
+
+`derive-stories` takes the derived value off the story file with `strip_value`, which removes the
+quotes. It then re-emitted it **bare**. A story title carrying `: ` therefore wrote:
+
+```
+    title: Fix: the direction-flip guard
+```
+
+which is not YAML. **Measured on the reference consumer's real corpus: 29 of 262 titles produce an
+unparseable line and 1 more is silently mangled — against a control of ZERO for all eight other
+declared fields** (`status` 343, `priority` 317, `acceptance_criteria` 260, `sprint` 232, `effort`
+220, `capital_path` 177, `gate_1_model` 170, `model` 166 present, 0 unsafe each). So it is
+prose-valued fields, not a broken writer.
+
+**And the second half is worse than the first.** The envelope's own reader is a REGEX, and it is
+more permissive than YAML: handed the mangled line it returns `Fix: the direction-flip guard` and
+compares equal. **`--check` therefore reported PASS over a file the same tool had just made
+unparseable.** Reproduced here end to end: `derive-stories` writes, `--check` says
+`0 drifted key(s)`, and `yaml.safe_load` says `mapping values are not allowed here`.
+
+**The fix is two arms, and shipping only the first would leave the silence.**
+
+- **`yaml_scalar()`** emits the value bare when that is safe and double-quoted otherwise —
+  non-empty, no YAML lead indicator, no `: `, no ` #`, no trailing `:`, no surrounding whitespace.
+  The empty string is quoted too: a bare empty value is a YAML null, which is a different value
+  from the empty string the story file carried. **Corpus after the fix: 29 → 0 unparseable, 0
+  refused.**
+- **A round-trip guard** reads the composed line back through the envelope's own `story_field_re`
+  and refuses the write when it does not yield the value. It **is reachable** — a value that both
+  needs quoting and contains a `"` (e.g. `-a"b`) cannot be read back by a reader that finds the
+  closing quote by scanning, so the guard fires, **writes nothing for that key, and exits 1**. That
+  is a finding rather than a corruption, which is the whole difference from v0.237.0.
+
+### Verification
+
+`story-fields-derive` **25 → 30 assertions**: the quoted write, a plain value still written bare
+(nothing is gratuitously quoted — the byte-verbatim promise), the round-trip, the refusal, and the
+envelope left byte-unchanged when a key is refused.
+
+`story-fields-derive-mutants` **9 → 11 mutants** plus the control. **`value-emitted-bare` is
+v0.237.0 exactly, held as a mutant** — the fix and the defect differ by one function call, and a
+release that only says "now it quotes" cannot show the arm sees the difference. It moves **3**
+cells, and the fan-out is the design: **with the value emitted bare the round-trip guard has
+nothing to catch**, because the permissive regex reads a bare mangled line back as itself. That
+coupling is why the two ship together; `roundtrip-guard-removed` isolates the guard independently.
+
+`nothing-ever-drifts` is **re-derived to 10** from 7 — a comparison that never finds drift writes
+nothing at all, so it now takes the three new write arms too.
+
+**Two mutants had to be repaired rather than re-counted**: `write-drops-comment`'s sed no longer
+matched, because the line it targets gained the `yaml_scalar()` call — **a mutation that matches
+nothing reports `UNMUTATED` here rather than scoring a kill**, which is the guard that caught it.
+
 ## [0.237.0] — 2026-08-01
 
 ### Goal 5 (b), re-homed: the consumer declares its derivable story fields and core derives from the declaration
