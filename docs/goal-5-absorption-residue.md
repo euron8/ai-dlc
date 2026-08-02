@@ -245,7 +245,7 @@ Goal 5 closes when: both `(ii)` seams are shipped or explicitly declined with a 
 `(iii)` question has an operator answer. **That is two core changes and one decision — not an
 unbounded backlog**, and it is the first time this goal has had a finite statement of what remains.
 
-## 6. Summary
+## 6. Summary — SUPERSEDED 2026-08-01 by §7. The table below is left as the record of what §2–§5b measured.
 
 | | |
 |---|---|
@@ -264,3 +264,69 @@ unbounded backlog**, and it is the first time this goal has had a finite stateme
 fixed genuine defects in the scripts they were replacing. **The retirement half — which is what the
 charter's word "absorption" means — delivered 14.1% of the only denominator that a command
 reproduces.**
+
+---
+
+## 7. The number moved — re-derived 2026-08-01 at graph `f15ce591552e9db18bf6df07f4ba3d4b09ab072d`
+
+**This is the first time in the program that goal 5's retirement figure has changed.** Every prior
+correction in this document moved a DENOMINATOR; this one moves the achievement, because
+`audit-main-since.sh` is gone from the consumer's tree.
+
+**Re-derived, not subtracted.** Every cell below is `git show <ref>:<path> | wc -l` at the same two
+refs §2 used — `18e00ef40` before, `origin/main` after — with the segregation's path move
+(`scripts/` → `scripts/ai-dlc-local/`) resolved per file:
+
+| Subject | before | now | change |
+|---|---|---|---|
+| `check-protected-core-paths.sh` | 162 | **GONE** | **−162** |
+| `check-mutation-red-anchor.sh` | 72 | **GONE** | **−72** |
+| `scan-stray-provenance.sh` | 155 | 83 | **−72** |
+| `audit-rule-exercise.sh` | 105 | 105 | 0 |
+| `generate-sprint-status.py` | 1068 | **1073** | **+5** |
+| `audit-main-since.sh` | 348 | **GONE** | **−348** |
+| `retro-replay-harness.sh` | 97 | 97 | 0 |
+| **Total** | **2,007** | **1,358** | **−649** |
+
+Controls in the same invocation: `ci-local.sh` resolves at both refs (1,659 → 1,661), and a bogus
+path under `scripts/ai-dlc-local/` returns nothing at either. So each `GONE` is a reading.
+
+**Retirement is 649 lines = 32.3% of 2,007** — 24.9% of the charter's 2,610, 21.6% of decision 4's
+~3,000. Against the **14.4%** this document recorded a day earlier, that is the movement.
+
+**Excluding the three `(i)` rows** — the 285 lines §5b established are not duplicates and never
+were — the reading is **649 of 1,722 = 37.7%**. Both are stated because they answer different
+questions, and neither is quotable without its denominator.
+
+**A SECOND SUBJECT HAS NOW GROWN DURING THE PROGRAM.** `generate-sprint-status.py` is **+5**
+(1068 → 1073), joining `audit-main-since.sh`'s +16. The summary row above said "1"; it is 2, and
+the pattern is worth naming: **a subject nobody is absorbing does not sit still.**
+
+### The 510 lines that are NOT in this arithmetic, stated so they are not quietly added
+
+The retirement branch also deleted `tests/test-audit-squash-enum.sh` (337 lines, wired into no
+runner) and Section C of `tests/test-pr-class-provenance-in-non-retro.sh` (173 lines, which drove
+the deleted script; 16 → 8 assertions, 0 failed either side). **They are real deletions and they
+are not charter subjects.** Adding them would produce a fourth denominator over a fifth population,
+which is the exact error §2's "three denominators" section exists to record. The honest statement
+is: **649 lines of the charter's subject set, plus 510 lines of collateral the retirement enabled.**
+
+### What the residue is now
+
+**1,358 lines across 4 files, and its composition changed as well as its size.**
+
+- **285 lines are `(i)`** — `scan-stray-provenance.sh` 83, `retro-replay-harness.sh` 97,
+  `audit-rule-exercise.sh` 105. Not duplicates, never were.
+- **1,073 lines are `(ii)`** — `generate-sprint-status.py`, and **v0.237.0 built the seam it named**:
+  core's `sprint-status.sh derive-stories` is the derive-from-frontmatter mode §5b measured as
+  absent. **The seam exists; the consumer has not adopted it.** Its `story-fields.md` arrived
+  declaring the literal `none` in the 0.237.0 pull, which is honest and is not adoption.
+- **`(iii)` is EMPTY.** The operator's question — *should core claim a post-merge trunk-audit
+  duty?* — was answered YES by v0.235.0/v0.236.0 and the answer was executed.
+
+**CORRECTION to §5b, and it is an internal inconsistency rather than a new measurement.** §5b says
+*"180 lines leave the subject set — the two `(i)` rows"* while its own table marks **three** rows
+`(i)`; `audit-rule-exercise.sh` was reclassified in that same table and the summary sentence was
+not updated with it. The figure is **285**, not 180. Nothing downstream depended on it — §7 above
+re-derives from the tree rather than from that subtraction — but a document about arithmetic
+carrying two arithmetics is the defect it exists to name.
