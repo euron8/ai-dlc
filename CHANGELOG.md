@@ -17,6 +17,23 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Corrected: two assertion counts in the notes below were wrong, and both were wrong in a way that matters
+
+Not a release. Re-derived while rehearsing the 0.240.0 pull, by running each fixture **in place at
+the commit before and the commit after**, which is the only way that gets the right answer here — a
+copy extracted to a scratch directory dies resolving its root and prints `0`, and a `0` from a
+fixture that never ran is indistinguishable from a real count.
+
+- **v0.239.0 `story-fields-derive`: `30 → 39` was wrong. It is `33 → 39`.** The `30` was inherited
+  from v0.237.1's note rather than measured; v0.238.0 added three arms in between. The pull brief
+  and the consumer both had `33` and were right, so only this file was wrong.
+- **v0.240.0 `consumer-machinery-inventory`: `14 → 20` was wrong on both ends. It is `19 → 24`.**
+  Counted off a `tail`-truncated view of the fixture's output instead of the whole run.
+
+**These are not cosmetic and that is why they are corrected rather than noted.** Every pull brief's
+`EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
+published `20` would fire a stop condition on a run that was working.
+
 ## [0.240.0] — 2026-08-02
 
 ### `E18` read GREEN on a working tree and RED on a fresh clone of the same commit
@@ -48,7 +65,7 @@ on the reference consumer, 67 exist, 67 tracked — the set is EMPTY.**
 
 ### Verification
 
-`consumer-machinery-inventory` **14 → 20 assertions**, three of them new cases and none redundant:
+`consumer-machinery-inventory` **19 → 24 assertions**, three of them new cases and none redundant:
 the leftover must fire, a tracked file at the same path must not (or compliance wedges the
 consumer), and a project that is not a git repository must not — which is every pre-existing case
 in the fixture, so that third arm is what proves the tightening did not fail closed on all of them.
@@ -109,7 +126,7 @@ Escaped. The success message now says what it was written to say, and nothing is
 
 ### Verification
 
-`story-fields-derive` **30 → 39 assertions**, and the new ones needed a shape no case in this
+`story-fields-derive` **33 → 39 assertions**, and the new ones needed a shape no case in this
 fixture had: **every prior case seeds the implementation canonical ALONE.** With one view on disk a
 per-view sum and a per-story count are the same number, so no assertion could have told them apart.
 The two-view cases assert the same entry in both views counts once, that views declaring
