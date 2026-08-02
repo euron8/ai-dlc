@@ -167,13 +167,13 @@ pull — 0 modified paths under it.** The artifact six actors hand-edit is not w
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures — timing, and both assertion instruments | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | **Re-adopt the Check 5 override with core's new arm** (§2.1), then advance the stamp | graph | — |
-| 6 | Assertion delta, full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings §6c-48 needs, and answer §7's question | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ `origin/main` still `0040b020e`; engine `0.238.0`; stamp `0.237.0`/`0cc51fc` |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | ✅ `0 HARD blockers`; validator `0 error(s), 1 warning(s)` `contract_version=13`; drift: 1 `HARD-OVERRIDE-DRIFT-SECTION` (check-5) + 6 `EXTENSION-HOOK-DRIFT` + 6 paired `HARD-LAYER-ADJUDICATION-MISSING`; rest OK/pre-existing |
+| 3 | Bank the BEFORE figures — timing, and both assertion instruments | graph | ✅ `yaml_scalar` 0 / control 16 / invoking 0 / fixtures 112 / derive 25 / control 22; pre-push ×3 rc 0, 112 ok / 0 FAIL, median 45.11s. D-6c42.1 reproduced: fixture-form grep on the aggregate = vacuous 0 |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | ✅ branch `chore/pull-0.238.0`; rc 0, 0B stderr, 15 rows (7 R / 1 D / 7 W) identical to §4.1; §4.2 diff 5 files +169/−3; `yaml_scalar` 0→2, control 16→17, step files 0→2; `_bmad-output` untouched (5 pre-existing) |
+| 5 | **Re-adopt the Check 5 override with core's new arm** (§2.1), then advance the stamp | graph | ✅ arm carried verbatim, `base_sha` 3490997→44db151, reason block records it came from core; all 7 core bullets still present (controlled); `HARD-OVERRIDE-DRIFT-SECTION` 1→0, `OVERRIDE-OK` 11→12. Six rereads: 0 command-list restatements (controlled 4/1 positive, 10–294 readability). **Beyond the brief:** 6 `LC-E4` `still-additive` records appended, register 24→30, aside/restore control 0/6/0. Stamp all four lines `0.238.0`/`44db151` |
+| 6 | Assertion delta, full pre-push, commit, push, PR | graph | ✅ subject 25→**33**, control 22→22, fixtures 112→112; validator footer byte-identical; pre-push ×3 rc 0, 112 ok / 0 FAIL, median 45.07s; commit `91b865c76`, PR #852, merged `91a3b8910`. No service/infra path in the diff, so no ECS deploy |
+| 7 | Report back the readings §6c-48 needs, and answer §7's question | graph | ✅ §6 filled with every reading and its control; §7 answered in **§7.1** — `--close-sweep` has **no live subject** and is **contraindicated** on this shape (it would prune the block `sprint-id` reads). No core row returns upstream. §7.2 measures the residual: a **2-field** declaration gap, not a capability gap |
 
 ### Row 1 — pre-flight
 
@@ -280,18 +280,26 @@ Fill §6, answer §7's question, and commit this file with its ticks.
 
 | reading | value | its control |
 |---|---|---|
-| `origin/main` before | | `ls-remote` agrees |
-| apply rows | | 0 bytes stderr; 7 WORKLIST expected |
-| diff surface (say WHICH) | | the §4.2 path set exactly |
-| `yaml_scalar` installed | | `derive-stories`, same file, same grep |
-| step files invoking `derive-stories` | | 0 before |
-| Check 5 override re-adopted, `base_sha` advanced | | the new arm present in the shadow |
-| validator after | | same footer fields as before |
-| drivable fixtures | | unchanged at 112 |
-| assertion count, run-based | | the untouched control fixture |
-| `_bmad-output` paths the pull touched | | expect 0 beyond your pre-existing |
-| gate timing | | verdict count both sides, aggregate grep |
-| commit / PR / merge sha | | |
+| `origin/main` before | `0040b020e` — **unmoved**, §4's before-figures stand as written | `ls-remote` agreed with `rev-parse` |
+| apply rows | rc `0`, **15 rows** — 7 `RESOLVED` / 1 `DECISION` / **7 `WORKLIST`**, identical to §4.1's set | **0 bytes** stderr; no 8th `WORKLIST`, no 2nd `DECISION`, no `story-fields.md` row |
+| diff surface (say WHICH) | **two quoted, both named.** The **§4.2 pull-only** figure: **5 files, +169 / −3**, no new paths. The **committed** figure: **7 files, +242 / −14** (adds the re-adopted override + the register) | the §4.2 path set matched exactly, all ` M`, no `??` |
+| `yaml_scalar` installed | **0 → 2** | live sibling `derive-stories`, same file, same grep: **16 → 17** |
+| step files invoking `derive-stories` | **0 → 2** | 0 before |
+| Check 5 override re-adopted, `base_sha` advanced | **yes** — arm carried verbatim, `3490997 → 44db151`, reason block records it came from core | arm present (`NEVER WRITES` clause = 1); **all 7 core bullets still present**; `HARD-OVERRIDE-DRIFT-SECTION` 1 → 0, `OVERRIDE-OK` 11 → 12 |
+| validator after | `0 error(s), 1 warning(s)` | footer **byte-identical**: `contract_version=13 entries=50 at_current=50 behind=0 undeclared=0 errors=0 warnings=1`. §2.4 held |
+| drivable fixtures | **112 → 112** | unchanged, as §2.5/§4.6 predicted |
+| assertion count, run-based | `story-fields-derive` **25 → 33** | untouched `layer-reference-resolution`: **22 → 22** |
+| `_bmad-output` paths the pull touched | **0.** Status showed the same 5 pre-existing paths after `apply` as before it | the 6th path (`layer-adjudication-register.jsonl`) is **this commit's, not the pull's** — appended after the row-4 reading was banked |
+| gate timing | before **45.59 / 44.75 / 45.11 → median 45.11s**; after **44.73 / 45.07 / 45.52 → median 45.07s**. Slower than the rehearsal's ~41.9s in absolute terms, but a **sanity bound** and flat across the pull | **112 `ok` / 0 `FAIL`, rc 0, all six runs**, via the aggregate grep. D-6c42.1 reproduced live: the fixture-form grep on the aggregate returns a vacuous **0** |
+| commit / PR / merge sha | commit `91b865c76` · PR **#852** · merge **`91a3b8910`** (squash, branch deleted) | `ls-remote` and local `main` both `91a3b8910`; stamp on `main` reads `0.238.0` on all four lines |
+
+**Two additions beyond the brief, both flagged rather than folded in silently:**
+
+1. **Six `LC-E4` adjudication records.** `layer-drift.sh` raised 6 `HARD-LAYER-ADJUDICATION-MISSING` rows paired with the 6 `EXTENSION-HOOK-DRIFT` rows — a mechanism §2.2 does not mention, though graph's own 0.224.0 pull row 3 set the precedent. All six recorded **`still-additive`**, register **24 → 30**. `LC-E4` was derived from the incoming contract at `44db151` (adjacent `LC-E3` carries a different code, as the control), and digests were extracted programmatically from drift field 4 rather than hand-copied. Control that the register is what cleared the rows: present **0**, moved aside **6**, restored **0**. `hard-blockers.sh` stayed `0` throughout.
+
+2. **Two now-false statements in the override body, corrected.** Carrying core's arm made the generator-diff bullet's *"core has no equivalent"* and the evidence bullet's *"record this for **both** commands"* untrue. Both were fixed — the second to "all three", since an evidence count recorded for two of three arms is exactly the blind spot that bullet exists to close.
+
+**One discrepancy against the brief, minor.** §4.8 describes "its own six-field declaration"; the live run enumerates **seven** field names — `status, priority, model, gate_1_model, effort, capital_path, acceptance_criteria`. That is `s6c-43`'s six declared fields plus `status`, which core derives regardless. The `--check` verdict itself matched §4.8 exactly: `PASS — 0 drifted key(s) over 2 stories`, rc 0.
 
 ---
 
@@ -317,6 +325,83 @@ there is no rotation grain for core to gain.** The question:
 **If it has none, then your FIRST reason for not retiring dissolves**, and with this pull installed
 your second does too. **Answer it in §6 with a reading, not a judgement** — and if it does have a
 live subject, that measurement is the core row, and it comes back upstream.
+
+### 7.1 — ANSWER: no live subject, and the operation is CONTRAINDICATED on this shape
+
+**Four readings, each with a control. Not a judgement — the last one is the decisive one and it
+came off core's own source, not off an opinion about it.**
+
+**(a) Both canonicals are single-owner, measured by the generator's OWN partition.** Not by eye and
+not by regex-reasoning — `partition_monolith` was called directly on both live files:
+
+```
+planning        segs=2 owners=['299'] sprint_owners=[299] closing=299 foreign=[] trailing_envelope=False
+implementation  segs=2 owners=['299'] sprint_owners=[299] closing=299 foreign=[] trailing_envelope=False
+```
+
+`foreign=[]` and `trailing_envelope=False` are exactly the two conditions the `sys.exit(3)`
+HARD_BLOCK at `_run_close_sweep` guards. **Positive control** — the same partition over the same
+file with one synthetic `sprint_298_leftover:` block appended returns `sprint_owners=[298, 299]`,
+`foreign=[298]`, and the guard WOULD fire. So the guard is live machinery with an absent subject,
+not dead code, and the zero is a real zero.
+
+**(b) The schema-collision key resolves to the SAME owner, so it never reads as foreign.**
+`SPRINT_KEY_RE = ^sprint[_-]([0-9]+)(?:[_-][A-Za-z0-9][A-Za-z0-9_-]*)?:` does match
+`sprint_299_housekeeping:` — but it captures owner **299**, which is the closing sprint. The one
+apparent monolith key cannot manufacture a multi-sprint canonical.
+
+**(c) Rotation is already working, and the migration is already complete.** `_preamble.yaml` is
+present in **both** views, which is `--migrate`'s output and confirms the `active=299 frozen=0
+no-loss=OK` one-time split really did complete. Archived per-sprint views: planning **53**,
+contiguous `246..298`, no gaps; implementation **44**, contiguous `279..298` (its earlier gaps all
+predate 279). **299 is absent from both** — the steady one-behind pattern. Control: a bogus
+directory reads **0**.
+
+**(d) THE DECISIVE READING — core rotates at pipeline START, not at close, so the unfrozen 299 is
+core's INTENDED state rather than a pending close-sweep subject.** From core's own header in
+`scripts/ai-dlc/sprint-status.sh`:
+
+> `ROTATION HAPPENS AT PIPELINE START, NOT AT CLOSE.` `roll` freezes the closed sprint to
+> `sprint-status/sprint-<N>.yaml` and writes the new envelope in ONE step. The reference consumer
+> rotates at retro-close instead, **which prunes the `status: done` block that sprint-id must
+> read** and leaves a preamble-only file no rule covers — a window its lead fills BY HAND.
+
+This was tested, not taken on trust. `sprint-status.sh sprint-id` currently returns **300**, rc 0 —
+derived from the `status: done` sprint-299 block still resident in the canonical. **That block is
+precisely what `--close-sweep`'s prune leg would delete.**
+
+**So the answer is stronger than "no subject."** The one capability `--close-sweep` uniquely has —
+partitioning a multi-sprint canonical — has **no live subject** (a). Its freeze-and-prune is not
+merely redundant with core's `roll`; on this shape it is **actively harmful**, because it would
+destroy the input `sprint-id` reads to compute the next sprint (d). The absent `sprint-299.yaml`
+that looks like pending work is the correct state, and `roll --sprint 300` is what freezes it.
+
+**Therefore §6c-43's FIRST reason dissolves, and this pull dissolves the SECOND.** Both reasons for
+not retiring `generate-sprint-status.py` are now gone. **No core row comes back upstream from this
+question** — core's whole-text freeze is right for the shape, and there is no rotation grain for
+core to gain.
+
+### 7.2 — what retirement still needs, which is one declaration, not a capability
+
+One residual, and it is a measurement rather than a caveat. The consumer's `DERIVABLE` list is
+**9** fields; core's live declaration derives **7**:
+
+| | fields |
+|---|---|
+| consumer `DERIVABLE` (`generate-sprint-status.py:47`) | `status, priority, model, gate_1_model, effort, capital_path, acceptance_criteria, sprint, title` |
+| core, live `derive-stories` run | `status, priority, model, gate_1_model, effort, capital_path, acceptance_criteria` |
+| **gap** | **`sprint`, `title`** |
+
+The gap is exactly two fields, and §8 already dispositions one of them: `title` was withheld only
+until this pull landed, and **it has now landed**, so declaring it is safe and is the operator's
+call. Declare `title` and `sprint`, and core's coverage equals the consumer's — at which point the
+Check 5 override's delta 2 has no field-coverage argument left either, and retiring the consumer
+generator becomes a mechanical removal rather than a capability loss.
+
+**Note the interaction with the override's removal condition (§2.1 work).** Retirement is still not
+automatic: conjunct (i) — core invoking a *project-supplied* validator script — remains UNMET, so
+the override itself stands regardless of what happens to the generator. Retiring the generator and
+retiring the override are two decisions, not one.
 
 ## 8. Known-open, deliberately out of scope
 
