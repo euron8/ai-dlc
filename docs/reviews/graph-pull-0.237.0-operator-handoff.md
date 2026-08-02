@@ -191,13 +191,13 @@ pole. **Report your own figures; do not match them against these.**
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures — timing, and the run-based assertion control | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | Advance the machinery stamp | graph | — |
-| 6 | Assertion delta, full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings §6c-42 needs | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | ✅ |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | ✅ |
+| 3 | Bank the BEFORE figures — timing, and the run-based assertion control | graph | ✅ |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | ✅ |
+| 5 | Advance the machinery stamp | graph | ✅ |
+| 6 | Assertion delta, full pre-push, commit, push, PR | graph | ✅ |
+| 7 | Report back the readings §6c-42 needs | graph | ✅ |
 
 ### Row 1 — pre-flight
 
@@ -302,17 +302,36 @@ it is a recording act, and the seven briefs before this one were closed the same
 
 | reading | value | its control |
 |---|---|---|
-| `origin/main` before | | `ls-remote` agrees |
-| apply rows | | 0 bytes stderr |
-| diff surface (say WHICH of the three) | | the §4.2 path set exactly |
-| `derive-stories` in the installed script | | `check-stories`, same file, same grep |
-| `story-fields.md` scaffolded, block = `none` | | absent before |
-| validator after | | same footer fields as before |
-| drivable fixtures | | `story-fields-derive-mutants` ABSENT |
-| assertion count, run-based | | the untouched control fixture |
-| `_bmad-output` paths the pull touched | | expect 0 beyond your pre-existing four |
-| gate timing | | verdict count both sides |
-| commit / PR / merge sha | | |
+| `origin/main` before | **`8fe6d33fbc328a6f91ef6ad8471de8eda436176a`** — **MOVED** off the brief's `63cff7274`; §6c-38's retirement of `audit-main-since.sh` (#849) had already landed. Row 1's instruction followed: did not stop, re-derived the before-figures | `git ls-remote origin refs/heads/main` agrees, same sha. §4.1–§4.6 held **verbatim** as row 1 predicted, since §6c-38 touches only `scripts/ai-dlc-local/` and `pr-classes.md` and this pull writes under neither. The two figures row 1 flagged as movable both moved as flagged: §4.7's control and §4.9's timings |
+| apply rows | rc `0`, **12** rows — 11 `RESOLVED`, 1 `DECISION`, **0** `WORKLIST`; §4.1's row set **exactly, in order**, including the new `story-fields-scaffold` shape | **0** bytes stderr; tallies grepped TAB-anchored per §3, not space-anchored |
+| diff surface (say WHICH of the three) | **All three measured and labelled.** (a) at row 4, `git diff --shortstat -- ':(exclude)_bmad-output'` = **6 / +345 / −4** — §4.2's figure, reproduced exactly; (b) bare `git diff --shortstat` at row 4 = **11 / +439 / −8**, the runtime files included; (c) **as committed and as merged = 9 / +782 / −6**. Quoted in the PR body and the merge commit: **(c)**. (a) counts only tracked-modified files — the three new paths contribute 0 to a `git diff` and +437 to a staged diff — and (c) also carries row 5's two extra stamp lines. **This is the labelling the 0.236.0 report asked the next brief to supply** | the §4.2 path set **exactly**: 6 `M` + 3 `??`, no path outside it |
+| `derive-stories` in the installed script | **0 → 16** | live-sibling `check-stories`, same file, same grep: **12 → 17**. Both before-values are §4.3's exactly |
+| `story-fields.md` scaffolded, block = `none` | **absent → 3,760 bytes**, byte-exact on §4.3. Fenced block reads the literal **`none`** — §2.1's placeholder, **not adopted**. §4.8's first run reproduced: WORKLIST line, `sprint 299, fields status`, `--check PASS — 0 drifted key(s) over 2 stories`, rc `0` | absent before, proven positively by `git cat-file -e "origin/main:.claude/skills/ai-dlc/story-fields.md"` returning non-zero — not by an unexamined `??` |
+| validator after | `0 error(s), 1 warning(s)` | footer **byte-identical** to the before-run: `LAYER_CONFORMANCE v1 contract_version=13 entries=50 at_current=50 behind=0 undeclared=0 errors=0 warnings=1`. §2.3 held — no footer field moved. The warning is `W7=LC-R2:1/50` on both sides, the pre-existing dangling `Check 11b`. `hard-blockers.sh` read `0 HARD blockers` on both sides per §4.4 |
+| drivable fixtures | **111 → 112**, up by one | `tests/fixtures/story-fields-derive-mutants` **ABSENT** — `dist-only held`; `story-fields-derive` **present**. §4.6's both-halves check satisfied |
+| assertion count, run-based | `story-fields-derive` = **25**, 0 `FAIL` | untouched `layer-reference-resolution`: **22 → 22**, unmoved. §2.5's run-based instrument used throughout; the line-anchored one was never run |
+| `_bmad-output` paths the pull touched | **0.** `apply` and `derive-stories` each left it byte-unchanged | **The count reads 5, not the brief's 4, and the fifth is not the pull's.** `_bmad-output/context-mode-protection-log.md` became modified during this session by the context-mode plugin's own logging, before `apply` ran — it is present in row 2's write-nothing status, which is the proof it predates row 4. All five left uncommitted |
+| gate timing | before `45.28 / 45.90 / 45.74` → median **45.74s**; after `46.11 / 48.56 / 48.07` → median **48.07s**; delta **+2.33s** | `rc=0` on all six. **111 `ok` / 0 `FAIL` before, 112 `ok` / 0 `FAIL` after.** See the instrument note below — the first before-side count was taken with a wrong grep and re-taken |
+| commit / PR / merge sha | commit `c3869cb1f` · PR [#850](https://github.com/euron8/fee_accrual_graph/pull/850) · squash-merged to `main` as **`f15ce591552e9db18bf6df07f4ba3d4b09ab072d`**, merged under the operator's in-prompt delegation of merge approval | verified on `main` **by content, not by ancestry** (a squash merge makes `--is-ancestor` false): all four stamp lines `0.237.0`/`0cc51fc`, `derive-stories` 16 against the `check-stories` control at 17, `story-fields.md` 3,760 bytes, 112 drivable fixtures, mutants still absent. Remote branch deleted, local pruned, engine worktree removed |
+
+**No STOP condition fired.** `apply` did not write `story-fields.md` over an existing one (there was
+none), it wrote nothing under `_bmad-output/`, there was no `WORKLIST` row, and the single
+`DECISION` row is §2.2's — left unresolved, deliberately.
+
+**No deploy follows this merge.** The diff is `.claude/`, `scripts/ai-dlc/` and `tests/fixtures/`
+only — no `server/`, `web/`, `rebalancer/`, `graph-node-src/` or `infra/` path — so there is no
+`ecs-deploy.sh` service to run and no `cdk deploy`. Machinery-only, as the seven pulls before it.
+
+**One instrument note, and it is about the aggregate gate rather than about a fixture.** §4.9 and
+row 3 quote a verdict count without giving its grep, and the fixture-level instrument rows 3 and 6
+DO give — `'^  (ok|FAIL)'`, two leading spaces — **is the wrong instrument for the pre-push
+aggregate**, whose verdict lines carry **three**. Applied there it returns a vacuous **0**, which
+on the before-side is indistinguishable from a gate that ran nothing. The first before-side timing
+loop was banked that way; it was caught and the count re-taken with
+`'^[[:space:]]+ok[[:space:]]'` against a printed control (`grep -oE` shape histogram: `111 ok`),
+which is what the 111/112 figures above rest on. The three timed before-runs' `real` values stand —
+only their verdict count was re-derived. **A future brief should write the aggregate instrument out
+the way it writes the fixture one, since the two differ by one space and one of them fails silent.**
 
 ---
 
