@@ -314,6 +314,87 @@ grep -qE '^    title: "old"$' "$IG" \
   && ok "refusing to write leaves the envelope BYTE-UNCHANGED for that key" \
   || bad "the guard reported and wrote anyway — worse than either alone"
 
+# ---- 30-34: TWO VIEWS. Every case above seeds the implementation canonical ALONE, and that is
+# why the double count shipped: with one view on disk a per-view sum and a per-story count are the
+# same number, so four releases of assertions could not tell them apart. The reference consumer
+# carries both views, declares `story-S299-1` in each, and read `over 2 stories` from a run that
+# saw one story.
+#
+# THE COUNT IS THIS MODE'S CONTRACT AND IT IS ALSO THE ONE NUMBER A CONSUMER CANNOT DERIVE ALONE.
+# `derive-stories` resolves story files FROM the entries, so it can never see a story file the
+# envelope omits; detecting that needs a corpus count (the consumer's membership rule) compared
+# against an ENVELOPE count (core's). A consumer that took a per-view sum as that denominator
+# reads a false mismatch on every tree that carries both views — which is every real one.
+two_view() { # $1 = dir, $2 = implementation body, $3 = planning body
+  mkc "$1" "$2" 'field: priority'
+  printf '%s\n' "$3" > "$1/_bmad-output/planning-artifacts/sprint-status.yaml"
+}
+TV_BODY='sprint: 42
+status: in_progress
+stories:
+  story-42-1:
+    status: draft
+    priority: low'
+
+# 30 & 31: the SAME entry in both views is ONE story and ONE entry, not two of each.
+RTV="$WORK/rtv"; two_view "$RTV" "$TV_BODY" "$TV_BODY"; seed_stories "$RTV"
+out_tv="$(run "$RTV" --check)"; rc_tv="$(arc)"
+grep -qE 'over 1 story, 1 entr' <<<"$out_tv" \
+  && ok "the same entry in both views counts as ONE story and ONE entry, not a per-view sum" \
+  || bad "the summary counted per view — one story declared twice reported as two: $(grep -F 'drifted key(s)' <<<"$out_tv")"
+grep -qE '^  implementation: 1 entry, 1 resolved$' <<<"$out_tv" \
+  && grep -qE '^  planning: +1 entry, 1 resolved$' <<<"$out_tv" \
+  && ok "the per-view work is printed per view, so the summary's total is legible rather than asserted" \
+  || bad "no per-view breakdown — a view skipped in silence reads exactly like a view that agreed"
+
+# 32: DIFFERENT entries across the views are the UNION. This is the arm that stops the fix being
+# `stories_n = files_matched // 2` or any other arithmetic on the sum: the two views are not
+# required to agree on their entry set, and a story declared in only one of them still counts.
+RTU="$WORK/rtu"; two_view "$RTU" "$TV_BODY" 'sprint: 42
+status: in_progress
+stories:
+  story-42-2:
+    status: done
+    priority: high'
+seed_stories "$RTU"
+out_tu="$(run "$RTU" --check)"
+grep -qE 'over 2 stories, 2 entr' <<<"$out_tu" \
+  && ok "views declaring DIFFERENT entries count as the union, not as one view's set" \
+  || bad "the distinct count is not a union — a story declared in only one view was lost or doubled: $(grep -F 'drifted key(s)' <<<"$out_tu")"
+
+# 33: the entry count is on the `--check` line AT ALL. It was absent for four releases, and
+# `--check` is the only mode a gate may run — so the number core holds and the consumer needs was
+# emitted solely by the write, which a gate must not call.
+#
+# BOTH VERDICTS ARE ASSERTED, and that is not belt-and-braces. `--check` has two summary lines and
+# they are built independently; the first cut of this arm matched only `check PASS` and read FAIL
+# against a run that was correctly reporting DRIFT, because the two-view case seeds a drifting
+# corpus. An arm that only ever sees one of the two verdicts leaves the other free to drop the
+# number silently.
+#
+# ONE grep, NOT a `grep … | grep -q`. The two-grep form reads more clearly and it is I54b's exact
+# subject: the reader stops at its first match, the writer takes SIGPIPE, and under this file's
+# `pipefail` the pipeline returns NON-ZERO ON A MATCH once the input is large enough to fill a
+# pipe buffer. It passed here and `validate-enforcement-map.sh` failed the tree anyway, which is
+# the check working — the defect is size-dependent, so a green fixture is not evidence against it.
+grep -qE 'check FAIL.*entr(y|ies) declared' <<<"$out_tv" \
+  && ok "--check's DRIFT summary prints the declared entry count" \
+  || bad "--check FAIL prints no entry count — the denominator vanishes on the verdict a gate acts on"
+
+# 34: and the write path still writes BOTH views. The distinct count must not have been bought by
+# derive-ing only the first view it met.
+run "$RTV" >/dev/null 2>&1
+grep -q 'priority: high' "$RTV/_bmad-output/implementation-artifacts/sprint-status.yaml" \
+  && grep -q 'priority: high' "$RTV/_bmad-output/planning-artifacts/sprint-status.yaml" \
+  && ok "the write still reaches BOTH canonical views — counting distinctly did not stop at one" \
+  || bad "only one view was written — the per-story count was bought by skipping a view"
+
+# 35: the CLEAN verdict carries it too, now that the write above settled the drift.
+out_tc="$(run "$RTV" --check)"
+grep -qE 'check PASS.*entr(y|ies) declared' <<<"$out_tc" \
+  && ok "--check's CLEAN summary prints the declared entry count too" \
+  || bad "--check PASS prints no entry count — the denominator is emitted only by the write path"
+
 # ---- 21: the join to what core actually SHIPS. Every case above seeds a synthetic contract, so
 # without this the whole fixture passes on a distribution that never declared the path at all.
 grep -q '^consumer_story_fields_file:' "$REAL_LC" \

@@ -118,12 +118,15 @@ expect_set silent-states-collapsed 1 'undeclared list and an empty one print the
 
 # M8 — the drift comparison is inverted into always-equal, so nothing is ever derived and every
 # run reports a clean check.
-# TEN as of v0.238.0 — re-derived, not inherited. It is a fan-out rather than an entanglement:
-# detection, the exit code, both derived values, the floor, the byte count, the
-# `none`-still-derives-status arm and the three v0.238.0 write arms are ten different facts about
-# one comparison, and a comparison that never finds drift writes nothing at all. M4, M5, M9, M10
-# and M11 each isolate one independently, so no cell is proven only by this total knock-out.
-expect_set nothing-ever-drifts 10 'did not name the drift|--check exited|derived value is not the story file|only one declared field|status. was not derived|write touched|silenced .status. too|inline comment.s alignment|colon-space was written bare|unwritable value was accepted|quotes values that need no quoting' \
+# TWELVE as of v0.239.0 — re-derived at every release that touches this fixture, never inherited.
+# It is a fan-out rather than an entanglement: detection, the exit code, both derived values, the
+# floor, the byte count, the `none`-still-derives-status arm, the three v0.238.0 write arms and
+# the two v0.239.0 arms that need a write to have happened are twelve different facts about one
+# comparison, and a comparison that never finds drift writes nothing at all. The two new cells are
+# that shape exactly: with no drift `--check` prints its PASS summary rather than its FAIL one, and
+# the both-views write arm has no write to inspect. M4, M5, M9, M10, M11, M12, M13, M14 and M15
+# each isolate one independently, so no cell is proven only by this total knock-out.
+expect_set nothing-ever-drifts 12 'did not name the drift|--check exited|derived value is not the story file|only one declared field|status. was not derived|write touched|silenced .status. too|inline comment.s alignment|colon-space was written bare|unwritable value was accepted|quotes values that need no quoting|check FAIL prints no entry count|only one view was written' \
   's@^                if val == have:@                if True:@'
 
 # M9 — the write re-emits the line instead of editing its value token, dropping the trailing
@@ -147,6 +150,34 @@ expect_set value-emitted-bare 3 'colon-space was written bare|unwritable value w
 # a regex and agrees with the mangled line.
 expect_set roundtrip-guard-removed 2 'unwritable value was accepted|guard reported and wrote anyway' \
   's@^                        if rb is None or strip_value(rb.group(3)) != val:@                        if False:@'
+
+# M12 — the counts go back to being per-view sums. THIS IS THE DEFECT AS IT SHIPPED, held as a
+# mutant for the same reason M10 is: the fix and the defect differ by which variable the summary
+# formats, and a release that only says "now it counts stories" cannot show the arm sees it. One
+# red, not two: the union case declares a DIFFERENT entry in each view, so its per-view sum and
+# its distinct count are the same number — which is exactly why that case is a separate assertion
+# and cannot stand in for this one.
+expect_set counts-per-view 1 'summary counted per view' \
+  's@^    stories_n = len(seen_resolved)@    stories_n = files_matched@;
+   s@^    entries_n = len(seen_entries)@    entries_n = entries_total@'
+
+# M13 — the per-view breakdown goes. The summary is then a total with nothing behind it, which is
+# the state that let the double count survive four releases: one number, no way to see it was the
+# sum of two views that hold the same story.
+expect_set breakdown-removed 1 'no per-view breakdown' \
+  's@^    for view, note in per_view:@    for view, note in []:@'
+
+# M14 — the declared-entry set stops being a UNION across views and keeps only the entry last
+# seen. A tree whose two views agree still reads correctly, so this fires ONLY on the case where
+# they differ — the arm that stops the fix being arithmetic on the per-view sum.
+expect_set entry-set-not-union 1 'distinct count is not a union' \
+  's@^            seen_entries.add(key)@            seen_entries = set([key])@'
+
+# M15 — `--check` drops the declared entry count from both its verdict lines. The write path keeps
+# it, which is precisely the pre-fix state: the number exists and is emitted only by the mode a
+# gate must not call. TWO reds because `--check` has two summaries and they are built separately.
+expect_set check-drops-entry-count 2 'check FAIL prints no entry count|check PASS prints no entry count' \
+  's@entr%s declared@entr%s@g'
 
 if [ "$fails" -eq 0 ]; then echo "PASS story-fields-derive-mutants"; exit 0; fi
 echo "FAIL story-fields-derive-mutants ($fails)"; exit 1

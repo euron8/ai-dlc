@@ -51,6 +51,15 @@
 # carried. `check-stories` is core's version, and the count is part of its contract: it prints how
 # many entries it parsed and how many comparisons it made, and it never exits 0 on zero.
 #
+# BOTH MODES COUNT DISTINCT STORIES AND PRINT THE PER-VIEW WORK SEPARATELY. The two canonical
+# views carry the same sprint's `stories:` mapping, so a per-view sum reports one story as two.
+# `derive-stories` did exactly that for four releases, on the summary line whose count is the
+# contract, and its `--check` — the mode a gate runs — printed no entry count at all. That number
+# is the only half of the envelope-vs-corpus comparison core can supply: the derive resolves files
+# FROM the entries, so it can never see a story file the envelope omits, and the consumer's own
+# membership rule is what supplies the other side. Core owns the denominator; it does not own,
+# and must not infer, which files on disk are stories.
+#
 # ROTATION HAPPENS AT PIPELINE START, NOT AT CLOSE. `roll` freezes the closed sprint to
 # sprint-status/sprint-<N>.yaml and writes the new envelope in ONE step. The reference consumer
 # rotates at retro-close instead, which prunes the `status: done` block that sprint-id must read and
@@ -930,28 +939,50 @@ def derive_stories():
     zero_comparison = []
     wrote = 0
     entries_total = 0
+    # THE COUNTS ARE PER-STORY, AND THE PER-VIEW WORK IS PRINTED SEPARATELY. Both canonical views
+    # carry the same sprint's `stories:` mapping, so summing per view reports one story as two --
+    # measured on the reference consumer, whose sprint 299 declares `story-S299-1` once in each
+    # view and read `over 2 stories` from a run that saw one. That number is not cosmetic: the
+    # count is this mode's contract, and the one thing a consumer cannot get from core is the
+    # denominator for its own corpus scan. `derive-stories` resolves files FROM the entries, so it
+    # can never see a story file the envelope omits -- but the ENVELOPE side of that comparison is
+    # core's and core already computes it. A consumer comparing its corpus against a per-view sum
+    # reads a false mismatch, which is why the number has to name distinct stories.
+    seen_entries = set()
+    seen_resolved = set()
+    per_view = []
 
     for view in VIEWS:
         p = VIEWS[view]
         if not p.is_file():
+            per_view.append((view, "no canonical on disk"))
             continue
         text = p.read_text()
         n, _ = parse(text)
         if n is not None and n != target:
-            continue                      # a canonical holding a different sprint is not ours
+            # a canonical holding a different sprint is not ours
+            per_view.append((view, "holds sprint %s, not %d — not derived" % (n, target)))
+            continue
         st, entries = parse_story_entries(text)
         if st != "ok":
+            per_view.append((view, "no entry to derive (`stories:` %s)" % st))
             continue
         lines = text.split("\n")
         changed = False
+        view_entries = 0
+        view_resolved = 0
         for key, flds, lineno in entries:
             entries_total += 1
+            view_entries += 1
+            seen_entries.add(key)
             sf = resolve_story_file(p, key, flds.get("file"))
             if sf is None or isinstance(sf, list):
                 # Unresolvable, or ambiguous. check-stories already reports this as a FINDING on
                 # the status join; the derive does not double-report it and does not guess.
                 continue
             files_matched += 1
+            view_resolved += 1
+            seen_resolved.add(key)
             comparisons = 0
             for field in want:
                 have = flds.get(field)
@@ -1004,15 +1035,28 @@ def derive_stories():
                         break
             if comparisons == 0:
                 zero_comparison.append("[%s] %s (%s)" % (view, key, sf.name))
+        per_view.append((view, "%d entr%s, %d resolved"
+                               % (view_entries, "y" if view_entries == 1 else "ies",
+                                  view_resolved)))
         if changed and not dry:
             p.write_text("\n".join(lines))
+
+    # The breakdown is printed for EVERY view, including the ones that contributed nothing.
+    # `check-stories` already does this and `derive-stories` did not: a view skipped in silence
+    # reads exactly like a view that agreed, which is this repository's named defect and the
+    # reason the summed count above went four releases without anyone noticing it double-counted.
+    for view, note in per_view:
+        print("  %-15s %s" % (view + ":", note))
+
+    stories_n = len(seen_resolved)
+    entries_n = len(seen_entries)
 
     print("")
     if files_matched == 0:
         print("sprint-status: derive-stories MATCHED NO STORY FILES (exit 3) — %d entr%s parsed "
               "for sprint %d and not one resolved to a story file on disk. This is not a clean "
               "run: it compared nothing."
-              % (entries_total, "y" if entries_total == 1 else "ies", target))
+              % (entries_n, "y" if entries_n == 1 else "ies", target))
         return 3
     if roundtrip:
         for r in roundtrip:
@@ -1035,16 +1079,26 @@ def derive_stories():
         if drifted:
             for d in drifted:
                 sys.stderr.write("sprint-status: DRIFT %s\n" % d)
-            print("sprint-status: derive-stories --check FAIL — %d drifted key(s) over %d stor%s; "
-                  "NOTHING was written."
-                  % (len(drifted), files_matched, "y" if files_matched == 1 else "ies"))
+            print("sprint-status: derive-stories --check FAIL — %d drifted key(s) over %d stor%s, "
+                  "%d entr%s declared; NOTHING was written."
+                  % (len(drifted), stories_n, "y" if stories_n == 1 else "ies",
+                     entries_n, "y" if entries_n == 1 else "ies"))
             return 1
-        print("sprint-status: derive-stories --check PASS — 0 drifted key(s) over %d stor%s"
-              % (files_matched, "y" if files_matched == 1 else "ies"))
+        # THE ENTRY COUNT IS ON THIS LINE BECAUSE `--check` IS THE MODE A CONSUMER'S GATE RUNS,
+        # and it was the one summary that printed no entry count at all -- so the number core
+        # holds and the consumer needs was emitted only by the write, which a gate must not call.
+        print("sprint-status: derive-stories --check PASS — 0 drifted key(s) over %d stor%s, "
+              "%d entr%s declared"
+              % (stories_n, "y" if stories_n == 1 else "ies",
+                 entries_n, "y" if entries_n == 1 else "ies"))
         return 0
-    print("sprint-status: derive-stories PASS — %d value(s) written over %d stor%s, %d entr%s"
-          % (wrote, files_matched, "y" if files_matched == 1 else "ies",
-             entries_total, "y" if entries_total == 1 else "ies"))
+    # `wrote` stays a per-view total and is correct as one: the write touches every view that
+    # carries the entry, so two writes over one story is what happened. The two NOUNS are what
+    # had to become distinct.
+    print("sprint-status: derive-stories PASS — %d value(s) written over %d stor%s, %d entr%s "
+          "declared"
+          % (wrote, stories_n, "y" if stories_n == 1 else "ies",
+             entries_n, "y" if entries_n == 1 else "ies"))
     return 0
 
 
