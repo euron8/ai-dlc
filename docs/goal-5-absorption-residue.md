@@ -1,6 +1,8 @@
 # Goal 5 — absorption of the eight duplicate consumer scripts: one arithmetic, and what is left
 
-**Status: PARTIAL. The residue is OPEN with a per-subject disposition (§5b) — two core seams named, one operator question, and 180 lines that were never subjects.**
+**Status: PARTIAL, 649 of 2,007 retired = 32.3% (§7). The residue is 1,358 lines across 4 files, and it is SCHEDULED, not merely open: §6c-43 is the last `(ii)` subject and §6c-44 the deprecation stub. §1–§6 record what was measured before the number moved; §7 supersedes §6.**
+
+*Two figures in §1–§5b are corrected by §7 and are left in place as the record: the subject that "grew" is **2**, not 1 (`generate-sprint-status.py` is +5 alongside `audit-main-since.sh`'s +16), and the lines that leave the subject set are **285**, not the 180 §5b's summary states against its own three-row table.*
 
 The charter's fifth goal was *"absorption of the eight consumer scripts that merely duplicate a core
 script with one extra arm."* This document exists because that outcome has been stated in three
