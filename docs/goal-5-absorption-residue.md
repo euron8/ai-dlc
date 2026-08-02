@@ -401,3 +401,69 @@ to CHECK but not to WRITE (`title`, 0 live subjects today), and `derive-stories`
 FILE the envelope does not declare. Both are DEFECT-tier. A third item — core not parsing the
 sequence-of-maps story layout — is a NOTE and deliberately not a row: it appears in 2 archived
 views, 0 in the live canonicals, and the canonical's own comment forbids the form.
+
+## 9. GOAL 5 IS MET — operator decision, 2026-08-02, and it resolves an arithmetic contradiction rather than a wording one
+
+**Operator-directed. A session may not overturn this and may not re-open it as a measurement
+question.** The decision was taken on the challenge *"if goal 5 isn't met then how is there no
+further work scheduled?"*, which is the fifth time this program has met D-4.5's shape — and the
+first time it was caught by arithmetic instead of by re-reading a sentence.
+
+**The contradiction.** §8 reported two figures in the same breath and they cannot both be true:
+
+| the figure | what it asserts about the 285 residual lines |
+|---|---|
+| **85.8% of 2,007** | they ARE in the subject set — so they are **owed**, and work is scheduled |
+| **`(i)` NOT A DUPLICATE**, ×3, each on a structural test | they were **never** in it — so the **denominator is wrong** |
+
+Reporting both and then reporting no remaining work is three claims of which at most two can hold.
+**An arithmetic contradiction is a better tell than a prose one, because a sentence can be reworded
+into looking new and a number cannot.**
+
+**The reading that governs, chosen by the operator: the charter's subject is the duplicated
+CONTENT, not the eight files as objects.** Charter line 77 — *"absorption of the eight scripts that
+merely duplicate a core script with one extra arm"* — scopes the goal to what duplicates. On that
+reading:
+
+| | lines |
+|---|---|
+| duplicated content in the subject set | **1,722** |
+| duplicated content absorbed | **1,722** |
+| **goal 5** | **MET — 100%** |
+| non-duplicate lines inside listed files | 285 |
+
+**The 285 do not reduce the score, because they were never duplicates.** Each carries its own
+structural test in §8's table, and the one part that looked reducible — `scan-stray-provenance.sh`'s
+deprecation stub — was measured and REFUSED, not skipped: the stub **is** the file's argument
+handler, and deleting it turns a setup error into a content finding.
+
+### 9.1 — The charter's list is wrong by two rows, and that is the defect this decision exposes
+
+The score moves because the charter listed subjects **by FILE where it meant by LINE**. Two of its
+eight had **zero** absorption and were later established, on structural tests, as never having been
+duplicates at all:
+
+| mis-listed subject | lines | why it was never in scope |
+|---|---|---|
+| `retro-replay-harness.sh` | 97 | replays graph's OWN historical failures (`S154`, `S155`, `S238`, `S239`). Core cannot hold a fixture for another project's sprint history. Control: exactly one core fixture matches those tokens, and it is an unrelated wording note |
+| `audit-rule-exercise.sh` | 105 | its helper binds two core scripts that once enumerated a corpus two ways. **That divergence is measured GONE from core** — glob-corpus 0, `nullglob` 0 — so absorbing it would import a fix for a defect core no longer has |
+
+`scan-stray-provenance.sh` is **not** in that table and was correctly listed: 72 of its 155 lines
+were genuinely duplicated and were absorbed. Only its 83-line remainder is non-duplicate.
+
+**This is the second recorded defect in the charter's own lists**, after `D-6c31.1` (Part F wrong by
+one row). Both are recorded rather than edited, because the charter is the operator's document.
+
+### 9.2 — What this does NOT license
+
+**It does not license the sentence this program retracted four times.** *"PARTIAL, and the
+remainder is closed, not owed"* remains wrong, and the reason goal 5 closes MET here is **not** that
+the remainder stopped being worth doing. It is that the remainder was never in the goal's subject
+set, established per file on a structural test, and the operator has ruled on which subject set the
+charter names. **A measurement chose the mechanism; the operator chose whether the goal survives** —
+which is §4b's division, applied the right way round for the first time in this program.
+
+**The falsifier, stated so this can be re-opened rather than merely believed:** if any of the three
+`(i)` verdicts is wrong — if a core equivalent exists today for `retro-replay-harness.sh`,
+`audit-rule-exercise.sh`, or the 83-line remainder of `scan-stray-provenance.sh` — then that file's
+lines return to the numerator, goal 5 drops below 100%, and this section is void.
