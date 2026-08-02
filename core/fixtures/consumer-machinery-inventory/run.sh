@@ -146,6 +146,69 @@ else
     || ok "both arms are silent on a contract with no machinery declaration"
 fi
 
+# ---- 7-9: EXISTENCE ON DISK IS NOT ENOUGH INSIDE A GIT REPOSITORY.
+# The defect this covers hid a red trunk for four days in the reference consumer: a retirement
+# deleted every tracked file under a declared directory, and a checkout that had once run the
+# deleted tests still held an ignored `__pycache__/` inside it. `-e` was satisfied by the
+# bytecode, so this clause read GREEN on that working tree and RED on a fresh clone of the SAME
+# commit. A check reporting the opposite of trunk, on a tree `git status` calls clean.
+#
+# THE THREE ARMS ARE ONE CASE EACH AND NONE OF THEM IS REDUNDANT: the leftover must fire, a
+# tracked file at the same path must NOT (or compliance wedges the consumer), and a project that
+# is not a git repository at all must NOT (which is every case above this line, so the third arm
+# is what stops the tightening from failing closed on a legitimate consumer state).
+mk_git_consumer() { # $1 = dest, $2 = inventory body — same shape as mk_consumer, plus a repo
+  mk_consumer "$1" "$2"
+  git -C "$1" init -q 2>/dev/null
+  git -C "$1" config user.email fixture@example.invalid
+  git -C "$1" config user.name fixture
+  printf '__pycache__/\n' > "$1/.gitignore"
+}
+
+# 7: the path exists ONLY as ignored leftovers. No tracked file is under it.
+C7="$WORK/c7"; mk_git_consumer "$C7" "scripts/ai-dlc-local/retired-suite"
+mkdir -p "$C7/scripts/ai-dlc-local/retired-suite/__pycache__"
+printf 'stale bytecode\n' > "$C7/scripts/ai-dlc-local/retired-suite/__pycache__/x.cpython-314.pyc"
+git -C "$C7" add -A >/dev/null 2>&1
+git -C "$C7" commit -qm seed >/dev/null 2>&1
+# FIXTURE CONTROL, and it is what makes the assertion below mean anything: the seed must
+# reproduce the real shape — the path present, and git tracking nothing under it.
+if [ ! -e "$C7/scripts/ai-dlc-local/retired-suite" ]; then
+  bad "FIXTURE BROKEN: case 7's path is absent, so it tests the ORIGINAL arm and not the new one"
+elif git -C "$C7" ls-files --error-unmatch -- scripts/ai-dlc-local/retired-suite >/dev/null 2>&1; then
+  bad "FIXTURE BROKEN: case 7's leftover got TRACKED, so the seed is not the shape being tested"
+else
+  out7="$(run_val "$C7")"
+  grep -q 'retired-suite.*git tracks no file there' <<<"$out7" \
+    && ok "E18 fires when a declared path exists ONLY as ignored leftovers (green here, red on a clone)" \
+    || bad "a declared path satisfied by ignored build output passed — the check reads the opposite of trunk"
+  grep -q 'retired-suite.*no such file exists' <<<"$out7" \
+    && bad "the leftover was reported as ABSENT — two different failures sharing one message" \
+    || ok "the leftover is reported as its own failure, not as a missing path"
+fi
+
+# 8: the SAME path, tracked. The tightening must not fire on a compliant consumer.
+C8="$WORK/c8"; mk_git_consumer "$C8" "scripts/ai-dlc-local/live-suite"
+mkdir -p "$C8/scripts/ai-dlc-local/live-suite"
+printf '#!/bin/sh\n' > "$C8/scripts/ai-dlc-local/live-suite/run.sh"
+git -C "$C8" add -A >/dev/null 2>&1
+git -C "$C8" commit -qm seed >/dev/null 2>&1
+out8="$(run_val "$C8")"
+grep -qE '^ERROR +E18' <<<"$out8" \
+  && bad "E18 fired on a TRACKED declared path — the tightening wedges a compliant consumer" \
+  || ok "a tracked declared path is silent (measured FP set on the reference consumer: 0 of 67)"
+
+# 9: not a git repository. The tightening is SKIPPED, not failed — every case above this line
+# relies on it, and failing closed here would wedge every consumer that is not version-controlled.
+C9="$WORK/c9"; mk_consumer "$C9" "scripts/ai-dlc-local/untracked-but-present.sh"
+printf '#!/bin/sh\n' > "$C9/scripts/ai-dlc-local/untracked-but-present.sh"
+[ -e "$C9/.git" ] && bad "FIXTURE BROKEN: case 9 is a git repo, so it cannot test the non-repo path" || {
+  out9="$(run_val "$C9")"
+  grep -qE '^ERROR +E18' <<<"$out9" \
+    && bad "E18 fired outside a git repository — 'not version-controlled' is a legitimate consumer state" \
+    || ok "outside a git repository the tracked test is skipped rather than failed"
+}
+
 # ---- the run itself is a control: a validator that died prints nothing, and so does a clean tree
 [ -n "$out1" ] && ok "the validator produced output (the run is not a silent death)" \
                || bad "the validator printed NOTHING — every assertion above is vacuous"
@@ -193,9 +256,20 @@ ctl="$(mut_reds control "")"
 expect_set home-always-matches 2 'outside the home|does not name a runnable move' \
   's@^          "\$MACHINERY_HOME"\*) ;;@          *) ;;@'
 
-# M2 — the existence check is removed. Only the absent-path assertion moves.
+# M2 — the absent-path arm is removed. Only the absent-path assertion moves.
+# REPOINTED at v0.240.0 and the repoint is the point: the old sed targeted a one-line
+# `[ -e … ] || err E18` that the git-tracking arm turned into an if/elif, so it stopped matching
+# and reported UNMUTATED rather than scoring a kill. That is the `cmp -s` guard doing its job --
+# a mutation that matches nothing is indistinguishable from a surviving one without it.
 expect_set no-existence-check 1 'does not exist' \
-  's@^        \[ -e "\$PROJECT_ROOT/\$mpath" \] || err E18@        [ -e "$PROJECT_ROOT/$mpath" ] || : E18@'
+  's@^        if \[ ! -e "\$PROJECT_ROOT/\$mpath" \]; then@        if false; then@'
+
+# M7 — the git-tracking arm is removed, so a path satisfied by ignored leftovers passes again.
+# THIS IS THE DEFECT AS IT SHIPPED, held as a mutant: it read GREEN on a working tree while the
+# same commit read RED on a fresh clone. ONE red, not two — the second case-7 assertion checks
+# that the leftover is not reported as ABSENT, and with this arm gone nothing is reported at all.
+expect_set no-tracked-check 1 'satisfied by ignored build output' \
+  's@^        elif \[ -e "\$PROJECT_ROOT/.git" \] && ! git -C@        elif false \&\& ! git -C@'
 
 # M3 — `none` stops being recognised, so an explicitly empty inventory is reported. This is
 # the arm that keeps a compliant consumer from being punished for compliance.
