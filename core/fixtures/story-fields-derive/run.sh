@@ -257,6 +257,63 @@ grep -q 'closure_evidence: "prior sprint, must not move"' "$I9" \
   && ok "a sprint-level block outside the stories mapping is untouched" \
   || bad "the derive edited outside the current sprint's story entries"
 
+# ---- 22-25: THE VALUE MUST SURVIVE BEING WRITTEN. v0.238.0, and every arm below is a defect
+# v0.237.0 shipped: the derived value arrives unquoted (`strip_value` takes the quotes off on the
+# way in) and was re-emitted BARE, so a story title carrying `: ` wrote a line that is not YAML —
+# 29 of 262 real titles on the reference consumer, against a control of ZERO for all eight other
+# declared fields. And the envelope's own reader is a REGEX, more permissive than YAML, so
+# `--check` then reported PASS over the file the same tool had just corrupted.
+RQ="$WORK/rq"; mkc "$RQ" 'sprint: 42
+status: in_progress
+stories:
+  story-42-1:
+    status: draft
+    title: "old"
+    priority: low' 'field: title
+field: priority'
+cat > "$RQ/_bmad-output/planning-artifacts/stories/story-42-1.md" <<'EOF'
+---
+status: draft
+title: "Fix: the direction-flip guard"
+priority: high
+---
+# s
+EOF
+IQ="$RQ/_bmad-output/implementation-artifacts/sprint-status.yaml"
+run "$RQ" >/dev/null 2>&1
+
+grep -qE '^    title: "Fix: the direction-flip guard"$' "$IQ" \
+  && ok "a value containing \`: \` is written QUOTED, not bare (v0.237.0 wrote unparseable YAML)" \
+  || bad "a value containing a colon-space was written bare — the envelope is no longer YAML"
+grep -qE '^    priority: high$' "$IQ" \
+  && ok "a plain value is still written BARE — nothing is gratuitously quoted" \
+  || bad "the writer quotes values that need no quoting, which is a reformat of every derived line"
+out_rq="$(run "$RQ" --check)"; rc_rq="$(arc)"
+[ "$rc_rq" -eq 0 ] \
+  && ok "the quoted value ROUND-TRIPS — a second --check reads it back as itself and passes" \
+  || bad "the written value does not read back as itself (rc=$rc_rq) — the write is lossy"
+
+# ---- 26 & 27: a value the envelope's own reader CANNOT read back is REFUSED, and refusing means
+# writing nothing. This is the arm whose ABSENCE made the corruption silent: without it the tool
+# writes a line, reads it back through a regex that agrees, and prints PASS.
+RG="$WORK/rg"; mkc "$RG" 'sprint: 42
+status: in_progress
+stories:
+  story-42-1:
+    status: draft
+    title: "old"' 'field: title'
+printf -- '---\nstatus: draft\ntitle: -a"b\n---\n# s\n' \
+  > "$RG/_bmad-output/planning-artifacts/stories/story-42-1.md"
+IG="$RG/_bmad-output/implementation-artifacts/sprint-status.yaml"
+out_rg="$(run "$RG")"; rc_rg="$(arc)"
+grep -q 'could not be written in a form this envelope reads back as itself' <<<"$out_rg" \
+  && [ "$rc_rg" -eq 1 ] \
+  && ok "a value the reader cannot read back is a FINDING (exit 1), not a silent write" \
+  || bad "an unwritable value was accepted (rc=$rc_rg) — the corrupting write reports clean again"
+grep -qE '^    title: "old"$' "$IG" \
+  && ok "refusing to write leaves the envelope BYTE-UNCHANGED for that key" \
+  || bad "the guard reported and wrote anyway — worse than either alone"
+
 # ---- 21: the join to what core actually SHIPS. Every case above seeds a synthetic contract, so
 # without this the whole fixture passes on a distribution that never declared the path at all.
 grep -q '^consumer_story_fields_file:' "$REAL_LC" \

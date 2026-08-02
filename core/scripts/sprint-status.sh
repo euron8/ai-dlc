@@ -840,6 +840,32 @@ def story_file_field(path, field):
     return (strip_value(m.group(1)), "frontmatter")
 
 
+# YAML INDICATORS. A plain scalar may not START with any of these, and may not CONTAIN `: ` or
+# ` #` anywhere -- both re-open the mapping or the comment. This list is the YAML 1.2 c-indicator
+# set minus the ones that are only special inside a flow collection, which this envelope never uses.
+YAML_LEAD = "-?:,[]{}#&*!|>'\"%@`"
+
+
+def yaml_scalar(v):
+    """The value as a scalar the envelope can be re-read from. Bare when that is safe, otherwise
+    double-quoted with the two characters that matter inside double quotes escaped.
+
+    THIS EXISTS BECAUSE v0.237.0 SHIPPED WITHOUT IT AND CORRUPTED THE ARTIFACT IT WRITES. The
+    derived value arrives already unquoted -- `strip_value` takes the quotes off on the way in --
+    and re-emitting it bare turns a story title like `Fix: the direction-flip guard` into
+    `title: Fix: the direction-flip guard`, which is not YAML. Measured on the reference consumer's
+    corpus: 29 of 262 titles produce an unparseable line and 1 more is silently mangled, against a
+    control of ZERO for all eight other declared fields -- so it is prose-valued fields, not a
+    broken writer.
+
+    The empty string is quoted too: a bare empty value is a YAML null, which is a different value
+    from the empty string the story file actually carried."""
+    if v == "" or v[:1] in YAML_LEAD or ": " in v or " #" in v or v.endswith(":") \
+       or v != v.strip():
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return v
+
+
 def rewrite_field_value(line, new):
     """Replace ONLY the value token of `<indent><key>:<sep><value><comment>`, verbatim otherwise.
 
@@ -863,7 +889,7 @@ def rewrite_field_value(line, new):
             tail = cm.group(2)
     if sep == "":
         sep = " "
-    return head + sep + new + tail
+    return head + sep + yaml_scalar(new) + tail
 
 
 def derive_stories():
@@ -899,6 +925,7 @@ def derive_stories():
           % (target, ", ".join(want), " (--check: nothing will be written)" if dry else ""))
 
     drifted = []
+    roundtrip = []
     files_matched = 0
     zero_comparison = []
     wrote = 0
@@ -953,6 +980,23 @@ def derive_stories():
                     fm = STORY_FIELD_RE.match(lj)
                     if fm and fm.group(2) == field:
                         new = rewrite_field_value(lj, val)
+                        # THE ROUND-TRIP GUARD, and it is here because the ABSENCE of it is what
+                        # made v0.237.0's corruption silent rather than loud. This reader is a
+                        # regex and it is MORE PERMISSIVE THAN YAML: handed the line
+                        # `title: Fix: the thing` it returns `Fix: the thing` and compares equal,
+                        # so `--check` reported PASS over a file the same tool had just made
+                        # unparseable. The value is therefore read back through the envelope's own
+                        # grammar before the line is accepted, and a mismatch is a FINDING that
+                        # writes nothing rather than a write nobody can see.
+                        rb = STORY_FIELD_RE.match(new)
+                        if rb is None or strip_value(rb.group(3)) != val:
+                            roundtrip.append(
+                                "[%s] %s.%s: the value could not be written in a form this "
+                                "envelope reads back as itself (wanted `%s`, the line would read "
+                                "as `%s`). Nothing was written for this key."
+                                % (view, key, field, val,
+                                   strip_value(rb.group(3)) if rb else "<unparseable>"))
+                            break
                         if new != lj:
                             lines[j] = new
                             changed = True
@@ -970,6 +1014,14 @@ def derive_stories():
               "run: it compared nothing."
               % (entries_total, "y" if entries_total == 1 else "ies", target))
         return 3
+    if roundtrip:
+        for r in roundtrip:
+            sys.stderr.write("sprint-status: UNWRITABLE %s\n" % r)
+        print("sprint-status: derive-stories FAIL — %d value(s) could not be written in a form "
+              "this envelope reads back as itself. NOTHING was written for those keys. This is the "
+              "guard v0.237.0 shipped without, and its absence is why a corrupting write reported "
+              "PASS." % len(roundtrip))
+        return 1
     if zero_comparison:
         print("sprint-status: derive-stories COMPARED NOTHING for %d stor%s (exit 4) — %s. Every "
               "declared field, `status` included, was unreadable for %s. 'Matched files but "
