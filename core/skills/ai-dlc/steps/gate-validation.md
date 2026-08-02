@@ -423,6 +423,20 @@ a story inlines — to satisfy a tooling constraint.
     is never a pass. Apply the non-vacuity sub-clause below.
 - **Gate FAILS** if any story has mismatched status between the two files.
   Fix the mismatch before proceeding.
+- **Declared derivable fields, if this project has any.** Run:
+  `scripts/ai-dlc/sprint-status.sh derive-stories --check`. It is the same
+  entry-to-story-file join one grain wider — `check-stories` compares `status`,
+  this compares every field the project declares as derived. Read its exit code:
+  - `0` — every declared field agrees, or the project declares none (a worklist
+    line prints and the run is clean). PASS.
+  - `1` — a declared field DRIFTED, each printed with both values, **and
+    nothing was written**. Gate FAILS.
+  - `3` / `4` — matched no story files, or matched files and compared nothing.
+    Same non-vacuity reading as `check-stories` above; neither is a pass.
+  - **`--check` NEVER WRITES, and that is why this is the mode the gate runs.**
+    The write is `implementation.md`'s, in the same commit as the story's own
+    status change. A gate that edits the artifact it is validating can pass a
+    tree it just changed.
 - **Non-vacuous assertion (implementation gates only).** At Phase 4+
   gates, `sprint-status.yaml` MUST contain ≥1 story entry for the
   current sprint. If zero stories are found at an implementation gate,
