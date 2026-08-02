@@ -321,8 +321,36 @@ is: **649 lines of the charter's subject set, plus 510 lines of collateral the r
   core's `sprint-status.sh derive-stories` is the derive-from-frontmatter mode §5b measured as
   absent. **The seam exists; the consumer has not adopted it.** Its `story-fields.md` arrived
   declaring the literal `none` in the 0.237.0 pull, which is honest and is not adoption.
+
+  **AND THAT IS A SCHEDULED ROW, NOT A CLOSING STATEMENT.** This document's first draft of §7 said
+  adoption was *"a judgement only the consumer can make"* and therefore not work anyone owed. The
+  premise is true and the conclusion does not follow: **core cannot decide which fields are
+  derivable, and the consumer already has.** `generate-sprint-status.py:47` carries a `DERIVABLE`
+  list of nine names (`status priority model gate_1_model effort capital_path acceptance_criteria
+  sprint title`); control, a bogus token returns 0. Declaring them is a transcription of a list
+  already in force — the same act that retired `audit-main-since.sh` a day earlier.
+
+  Three further measurements make it schedulable rather than aspirational. Core now dispatches
+  `--check / --render / check-stories / close / derive-stories / roll / sprint-id` against the
+  consumer tool's `--check / --close-sweep / --dry-run / --migrate / --migrate-artifact-dir /
+  --root / --sprint / --validate / --write`. The consumer's own `EXIT_CHECK_ZERO_FILES = 3` and
+  `EXIT_CHECK_ZERO_COMPARISONS = 4` are **the two exit codes v0.237.0 shipped**, transcribed from
+  this tool — **the semantics already agree.** And the caller set is enumerable: two overrides, one
+  role file, and the machinery inventory.
+
+  **The one genuine judgement is per field: DERIVED from the story file, or AUTHORED in the
+  envelope and mirrored into it.** Only core cannot tell those apart. A field that is authored must
+  not be declared, and if most of the eight turn out authored, that is a real answer that shrinks
+  what the seam can absorb — a measured residue rather than a retirement. It is `§6c-43`.
 - **`(iii)` is EMPTY.** The operator's question — *should core claim a post-merge trunk-audit
   duty?* — was answered YES by v0.235.0/v0.236.0 and the answer was executed.
+- **The `(i)` rows are not uniformly closed either.** §5b's own note on `scan-stray-provenance.sh`
+  says *"part of it is a pure deprecation stub and is retirable in the consumer"*, and no row
+  carried it. Measured at `origin/main`: the repo-wide arm was retired in 0.214.0 and what sits at
+  that path is an `echo … >&2; exit 2` block whose own comment says the script *"now implements
+  `--fixture-provenance <path>...` only"*. **A finding stated in a document and carried by no row is
+  how a loose end survives** — `D-6c9.4` was recorded three times before anyone fixed it. It is
+  `§6c-44`.
 
 **CORRECTION to §5b, and it is an internal inconsistency rather than a new measurement.** §5b says
 *"180 lines leave the subject set — the two `(i)` rows"* while its own table marks **three** rows
