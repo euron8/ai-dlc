@@ -339,6 +339,15 @@ Instruct all teammates:
   validation check #4 will reject templates with `{{...}}`.
 - Update sprint-status.yaml in the same commit as story Status: change.
   Gate validation check #5 will reject mismatches.
+  - If this project declares derivable story fields, run
+    `scripts/ai-dlc/sprint-status.sh derive-stories` instead of hand-editing
+    the entry: it rewrites each declared field's value from the story file into
+    both canonical copies, touching only the value token and leaving field
+    order, inline comments and block scalars byte-verbatim. **THE WRITE
+    BELONGS HERE AND NOT AT THE GATE** — check #5 runs `--check`, which reports
+    and never writes, because a gate that edits the artifact it is validating
+    can pass a tree it just changed. An undeclared list is a worklist line and
+    exit 0, so a project that has not adopted this is unaffected.
 - On story transition to `done`, close out any upstream source item the
   story satisfies — do not defer to retro:
   - If the story traces to a carry-over backlog item: update

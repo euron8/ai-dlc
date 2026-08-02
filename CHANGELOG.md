@@ -17,6 +17,66 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.238.0] — 2026-08-01
+
+### `derive-stories` shipped in v0.237.0 and no step file invoked it
+
+The reference consumer named this as one of two reasons it could not retire its own generator:
+**`derive-stories` has 0 invocation sites in the consumer, against 9 for the tool it replaces.**
+Retiring the consumer arm would have removed the only live enforcement of frontmatter-as-SSOT and
+put nothing in its place.
+
+Measured here, and it is one mode rather than a class. Every mode `sprint-status.sh` dispatches,
+against the step files that invoke it: `sprint-id` **1**, `roll` **1**, `close` **1**,
+`check-stories` **1**, `--render` **0**, `--check` **0**, `derive-stories` **0**. Control:
+`validate-cycle-commits.sh --audit-trunk` is named by 1. **`--render`/`--check` are core's own
+schema-header render/verify pair and are not step work** — which is exactly why no invariant ships
+here; see below.
+
+**A capability with no invocation site is not delivered, whatever the pull report says.** That is
+the finding v0.226.0, v0.229.0, v0.233.0 and v0.235.0 each paid a delivery row to learn, arriving
+a fifth time one level up: the mode reached the consumer, and nothing told anyone to run it.
+
+**Two sites, two different modes, and the split is the design.**
+
+- **Check 5 (`gate-validation.md`) runs `--check`** — the same entry-to-story-file join
+  `check-stories` performs, one grain wider: `check-stories` compares `status`, this compares every
+  field the project declares. Its exit codes get the same non-vacuity reading, and `3`/`4` are
+  never a pass.
+- **`implementation.md` runs the write**, in the same commit as the story's own `Status:` change,
+  where a human is already editing.
+
+**`--check` never writes, and that is why it is the mode the gate runs. A gate that edits the
+artifact it is validating can pass a tree it just changed.**
+
+**False-positive set, measured against the reference consumer's real tree with its own six-field
+declaration before anything was wired: ZERO drifted keys, exit 0.** Control, the same tree with one
+value perturbed: 1 drifted key, exit 1. And a project that declares nothing gets a worklist line
+and exit 0, so adoption is not a precondition for passing the gate.
+
+### The invariant this release deliberately does NOT ship
+
+The obvious mechanism — *every mode a script dispatches is invoked by some step file* — was
+measured and **its false-positive set is 2 of 7** (`--render`, `--check`). The narrowing that would
+empty it is "modes that act on the consumer's tree, not modes that render core's own header", and
+that is not derivable from anything either file declares today. **A hand-listed pair of exemptions
+over 29% of the subject set is the carve-out §4b exists to refuse**, so the measurement is recorded
+and the check is not shipped. `CLAUDE.md`'s rule is the reason: an unmeasured lint is one the
+operator turns off, and a barely-measured one is worse.
+
+### Verification
+
+`story-fields-derive` **30 → 33 assertions**, all three proven red on `cp -R` copies against a
+clean control: the gate's `--check` invocation removed; the write's invocation removed; and **the
+writing form ADDED to the gate**, which is the arm that catches a future edit collapsing the two
+sites into one.
+
+**The first cut of two of those arms was anchored on end-of-line and matched nothing** — every
+command in these step files sits inside a code span, so the terminator is a backtick. One arm
+reported `UNMUTATED` under its own mutant, which caught it; **the other went GREEN under a mutation
+that added the writing form to the gate — the exact failure it exists to prevent.** Both now anchor
+on the backtick.
+
 ## [0.237.1] — 2026-08-01
 
 ### v0.237.0's derive corrupted the artifact it writes, and then reported it clean

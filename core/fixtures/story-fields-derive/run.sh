@@ -323,6 +323,40 @@ grep -q '"status"' "$SCHEMA" \
   && ok "core's shipped schema declares the \`status\` story-entry field the floor reads" \
   || bad "the schema declares no \`status\` field — the floor arm above is vacuous"
 
+# ---- 28 & 29: THE MODE IS INVOKED BY A STEP FILE. v0.238.0, and it is the defect graph named
+# as its second reason for not retiring: `derive-stories` had 0 invocation sites in the consumer
+# against 9 for the generator it replaces, so retiring the consumer arm would have removed the
+# only live enforcement of frontmatter-as-SSOT and put nothing in its place. A capability with no
+# invocation site is not delivered, whatever the pull report says.
+#
+# BOTH SITES ARE ASSERTED AND THEY ARE DIFFERENT MODES ON PURPOSE. The gate runs `--check`, which
+# reports and never writes; the write belongs where a human is already editing the story. A gate
+# that edits the artifact it validates can pass a tree it just changed.
+STEPS=""
+for _c in "$ROOT/core/skills/ai-dlc/steps" "$ROOT/.claude/skills/ai-dlc/steps"; do
+  [ -d "$_c" ] && { STEPS="$_c"; break; }
+done
+if [ -z "$STEPS" ]; then
+  bad "no steps/ directory in either layout — the two wiring assertions below cannot run"
+else
+  grep -rq -- 'sprint-status.sh derive-stories --check' "$STEPS/gate-validation.md" 2>/dev/null \
+    && ok "the gate invokes derive-stories in its READ-ONLY mode (--check)" \
+    || bad "no gate step invokes derive-stories --check — the mode ships and nothing runs it"
+  # THE BACKTICK IS THE TERMINATOR, not end-of-line. Every command in these step files is written
+  # inside a code span, so an arm anchored on `$` matches nothing and reads exactly like a wiring
+  # that is present. The first cut of these two arms was anchored that way: one reported UNMUTATED
+  # under its own mutant — caught — and the other went GREEN under a mutation that added the
+  # writing form to the gate, which is the failure it exists to prevent.
+  grep -rq -- 'sprint-status.sh derive-stories`' "$STEPS/implementation.md" 2>/dev/null \
+    && ok "the WRITE is invoked from the authoring step, not from the gate" \
+    || bad "no authoring step invokes the write — the derive can only ever be run by hand"
+  # The control: the gate must NOT carry the writing form. This is the arm that would catch a
+  # future edit collapsing the two sites into one.
+  grep -rq -- 'sprint-status.sh derive-stories`' "$STEPS/gate-validation.md" 2>/dev/null \
+    && bad "the GATE invokes the writing form — a gate that edits what it validates can pass a tree it just changed" \
+    || ok "the gate does NOT carry the writing form (the read/write split is asserted, not assumed)"
+fi
+
 # ---- the run itself is a control
 [ -n "$out1" ] && ok "the mode produced output (the run is not a silent death)" \
                || bad "the mode printed NOTHING — every assertion above is vacuous"
