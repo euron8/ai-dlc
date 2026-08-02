@@ -180,13 +180,13 @@ trunk, not the pull. **After row 5 fixes `machinery.md`, expect `112 ok / 0 FAIL
 
 | # | Row | Repo | Status |
 |---|---|---|---|
-| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | — |
-| 2 | Classify only. Report the tallies. **Write nothing.** | graph | — |
-| 3 | Bank the BEFORE figures, **including the red gate** | graph | — |
-| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | — |
-| 5 | **Fix `machinery.md`'s stale `s279-4` entry** (§2.1) | graph | — |
-| 6 | Assertion delta, full pre-push, commit, push, PR | graph | — |
-| 7 | Report back the readings §6c-51 needs, and answer §7 | graph | — |
+| 1 | Pre-flight: clean tree, pin the engine, confirm graph has not moved under this file | graph | **DONE** — `origin/main` still `7d1d7862a`; engine `0.239.0` @ `bd740f6`; stamp `0.238.0` / `44db151` |
+| 2 | Classify only. Report the tallies. **Write nothing.** | graph | **DONE** — `0 HARD blockers`; `1 error(s), 1 warning(s)`; `contract_version=13`. **See §9.1 — the error was masked locally at first** |
+| 3 | Bank the BEFORE figures, **including the red gate** | graph | **DONE** — red banked: `112 ok / 1 FAIL`, rc 1, ×3 |
+| 4 | `apply` on ONE branch, and verify what did and did NOT arrive | graph | **DONE** — 5 R / 1 D / **0 W**; 3 files, +147 / −12. **See §9.2 — the stamp moved 2 of 4 lines, by design** |
+| 5 | **Fix `machinery.md`'s stale `s279-4` entry** (§2.1) | graph | **DONE** — `E18` 1 → 0, `W7` still 1 |
+| 6 | Assertion delta, full pre-push, commit, push, PR | graph | **DONE** — 39 / 22 / 112; `112 ok / 0 FAIL` rc 0; PR **#854** |
+| 7 | Report back the readings §6c-51 needs, and answer §7 | graph | **DONE** — §6 filled, §7 answered: 7.1 **ACCEPTED**, 7.2 **DECLINED with a measurement** |
 
 ### Row 1 — pre-flight
 
@@ -299,18 +299,18 @@ Fill each cell with the measurement, not with "as expected".
 
 | reading | expected | measured |
 |---|---|---|
-| `apply.sh` rc / stderr bytes / row counts | 0 / 0 / 5 R, 1 D, **0 W** | |
-| diff shape | 3 files, +147 / −12, `_bmad-output` 0 | |
-| `seen_resolved` before → after | 0 → 3 | |
-| `story-fields-derive` assertions before → after | 33 → 39 | |
-| `layer-reference-resolution` (control) | 22 → 22 | |
-| fixture count (control) | 112 → 112 | |
-| stamp, all four lines | `0.239.0` / `bd740f6` | |
-| `LAYER_CONFORMANCE` footer before/after | byte-identical | |
-| **`E18` before row 5 / after row 5** | **1 → 0**, `W7` still 1 | |
-| pre-push before / after | `112 ok / 1 FAIL` rc 1 → `112 ok / 0 FAIL` rc 0 | |
-| suite median | ~42.2s | |
-| `derive-stories --check` on your envelope | breakdown + `over 1 story, 1 entry declared` | |
+| `apply.sh` rc / stderr bytes / row counts | 0 / 0 / 5 R, 1 D, **0 W** | **rc 0, 0 bytes, 6 rows = 5 RESOLVED / 1 DECISION / 0 WORKLIST.** MATCH. Tallied on a literal tab; the `'^RESOLVED '` space form returned the vacuous 0 §3 warns about, printed beside it as the control |
+| diff shape | 3 files, +147 / −12, `_bmad-output` 0 | **3 files, +147 / −12.** MATCH. `_bmad-output` carried **5 pre-existing** modified paths before the run (operational pipeline state, not mine to commit); `apply` added **0** and the set was byte-identical after |
+| `seen_resolved` before → after | 0 → 3 | **0 → 3.** MATCH |
+| `story-fields-derive` assertions before → after | 33 → 39 | **33 → 39.** MATCH, 0 FAIL within the fixture |
+| `layer-reference-resolution` (control) | 22 → 22 | **22 → 22.** Did not move |
+| fixture count (control) | 112 → 112 | **112 → 112.** Did not move |
+| stamp, all four lines | `0.239.0` / `bd740f6` | **DEPARTURE, and the brief is what is wrong — see §9.2.** `version`/`commit` → `0.239.0` / `bd740f6` under `apply.sh`'s own restamp. `skill_version`/`skill_commit` stay `0.238.0` / `44db151`: `apply.sh` has no code path that writes them, and `ai-dlc-update/SKILL.md:1182` specifies the re-stamp as *preserving* them |
+| `LAYER_CONFORMANCE` footer before/after | byte-identical | **`entries=50 at_current=50 behind=0 undeclared=0` byte-identical.** The `errors=`/`warnings=` tail moved `errors=1` → `errors=0` at row 5, as intended |
+| **`E18` before row 5 / after row 5** | **1 → 0**, `W7` still 1 | **`E18=LC-M1:1/50` → `0/50`; `W7=LC-R2:1/50` at both.** MATCH. The `E18` line named `s279-4` and nothing else, so the §2.1 stop condition did not fire |
+| pre-push before / after | `112 ok / 1 FAIL` rc 1 → `112 ok / 0 FAIL` rc 0 | **`112 ok / 1 FAIL` rc 1 → `112 ok / 0 FAIL` rc 0**, three runs each. MATCH. **See §9.3 — the `FAIL` grep needs a different form than the `ok` one** |
+| suite median | ~42.2s | **before 46.58s** (46.58 / 48.06 / 45.28); **after 46.24s** (46.43 / 45.63 / 46.24). ~4s slower than the rehearsal at both ends, and equally slower on both sides, so it reads as this machine rather than as the pull |
+| `derive-stories --check` on your envelope | breakdown + `over 1 story, 1 entry declared` | **MATCH, verbatim:** `implementation: 1 entry, 1 resolved` / `planning: 1 entry, 1 resolved` / `PASS — 0 drifted key(s) over 1 story, 1 entry declared` |
 
 ---
 
@@ -331,6 +331,36 @@ is REFUTED with that measurement**, and building it would be a grain for an empt
 
 **If you decline, say why with a measurement**, not with "it was unsafe once".
 
+#### ANSWER — ACCEPTED. The write-unsafe class measures empty on this corpus.
+
+Re-measured here rather than taken from the brief, and **end-to-end through the real script** —
+a first attempt using a synthetic harness that called `yaml_scalar`/`rewrite_field_value` directly
+produced an incoherent reading (a control of 0 where 29 was expected), so it was discarded rather
+than reported. What is below drives `sprint-status.sh derive-stories` in **write mode**.
+
+Method: a synthetic project carrying **all 262** of this repo's story files that have a `title:`
+in frontmatter, one envelope entry each, `field: title` declared, derive run in write mode, then
+the written envelope parsed with `yaml.safe_load` and every value compared to its source.
+
+| script | envelope after the write | titles round-tripping | `title:` lines that do not parse standalone |
+|---|---|---|---|
+| shipping (v0.239.0) | **parses** | **262 / 262** | **0 / 262** |
+| control (v0.237.0, `git show f15ce5915:`) | **UNPARSEABLE** — `mapping values are not allowed here` | — | **29 / 262** |
+
+The control script carries **0** occurrences of `yaml_scalar`, confirming it is the pre-fix
+version, and it fires — so the instrument discriminates rather than passing everything. The 29
+reproduces the figure in `yaml_scalar`'s own docstring, independently, on this corpus.
+
+**`title` is writable. The withholding in `story-fields.md` rests on a defect that no longer
+exists, and the upstream ask it generated — a check-only field form — is refuted with that
+measurement.**
+
+**Not implemented in this PR, deliberately.** Adding `field: title` changes what the gate
+compares project-wide and can turn gates red on existing drift; §7 hands it back as the
+operator's decision, and it is not one of this brief's six rows. The remedy is one `field: title`
+line plus retiring the `title` row's "DERIVED BUT WITHHELD" verdict in
+`.claude/skills/ai-dlc/story-fields.md`. Say the word and it is a one-line follow-up.
+
 ### 7.2 — Repoint your yaml-side denominator to core's number, or record why not
 
 `entry_count_no_idregex` exists because the retired generator's independent count went away and
@@ -348,6 +378,46 @@ from entries by construction. A membership rule for which files on disk are stor
 same way the derivable-field set is, and asking core to infer it is the eight refuted predicates'
 territory.
 
+#### ANSWER — DECLINED, and the measurement is a scope difference, not a preference.
+
+On the live envelope the two numbers agree, so today's corpus **cannot tell them apart** —
+agreement at n=1 is not evidence either way:
+
+```
+current sprint: 299
+  entry_count_no_idregex(planning-artifacts)       = 1
+  entry_count_no_idregex(implementation-artifacts) = 1
+  core:  PASS — 0 drifted key(s) over 1 story, 1 entry declared
+```
+
+So the question was put to a corpus that *can* discriminate: a two-view project whose views carry
+**different entry sets** — `story-42-1` in both, `story-42-2` in the implementation view only.
+
+```
+incumbent (planning view only) : 1
+incumbent (impl view only)     : 2
+core derive-stories --check    : implementation: 2 entries, 2 resolved
+                                 planning:       1 entry,  1 resolved
+                                 FAIL — 3 drifted key(s) over 2 stories, 2 entries declared
+```
+
+**The incumbent reads 1 where core reads 2.** They are not interchangeable, and the divergence is
+structural rather than incidental: `entry_count_no_idregex` reads the **planning view alone**,
+while core's new number is the **union of both views** — which is exactly the change v0.239.0
+made, and it is correct for core's purpose.
+
+It is the wrong denominator for cross-check B. That check compares the union against Step-1
+`checked`, a recursive `find` over story **files**. A story declared in the implementation view,
+present on disk, and **missing from the planning envelope** is a membership divergence: the
+incumbent reads 1 against `checked` 2 and **fires**; core's union reads 2 against `checked` 2 and
+is **silent**. Repointing would buy a separate program and a separate parser at the cost of going
+blind to the case the check is fail-closed for.
+
+Recorded per D-4.5 with its reason. The `yq` dependency stays; it is the cheaper of the two costs.
+**If core ever emits the per-view counts as separate readable numbers** — it already prints them
+in the breakdown — the planning-view figure alone would be a genuine drop-in, and this answer
+would flip. That is a smaller upstream ask than the refuted one, and it is the one worth filing.
+
 ---
 
 ## 8. Known-open, deliberately out of scope
@@ -361,3 +431,64 @@ territory.
 - **`OVERRIDE-DOUBLE-SHADOW` on `steps/retro.md#4a`** and the two
   `OVERRIDE-ASSERTS-SHADOW-SURVIVES` rows — report-only, unchanged by this pull, and named here so
   a reader of row 2's output does not mistake them for new.
+
+All three appeared in row 2's output exactly as described, alongside the pre-existing
+`EXTENSION-RESTATES-CORE` on `checks/gate-validation-push.md`. Nothing new.
+
+---
+
+## 9. Departures from this brief, and what each turned out to be
+
+Three readings did not match §4. None was noise, and none stopped the pull.
+
+### 9.1 — `E18` did not fire in the working tree, and the brief was right anyway
+
+Row 2 expected `1 error(s), 1 warning(s)`. The live tree read **`0 error(s), 1 warning(s)`** with
+`E18=LC-M1:0/50` — the red gate §2.1 exists to fix was **invisible here**.
+
+Cause: `#853` deleted all 16 tracked files under `tests/fixtures/s279-4/`, but a working tree that
+had ever run the deleted `mutation_selfcheck.py` still held
+`s279-4/__pycache__/mutation_selfcheck.cpython-314.pyc`, ignored by `.gitignore:59`. `E18` tests
+path existence, and the ignored bytecode directory satisfies it. `git status` is silent on it by
+construction, so the tree looks clean while the check reads the opposite of trunk.
+
+The brief's §2.1 table was then reproduced on untouched clones rather than assumed, with `W7`
+unchanged at both as the control:
+
+| ref | verdict | `E18` | `W7` |
+|---|---|---|---|
+| `91a3b8910` | `0 error(s), 1 warning(s)` | `0/50` | `1/50` |
+| `7d1d7862a` | **`1 error(s), 1 warning(s)`** | **`1/50`** | `1/50` |
+
+Removing the stale `__pycache__` made the live tree reproduce trunk (`E18=1/50`), which is what
+made row 3's banked red real and row 6's green attributable. **Anyone re-running §2.1 on a
+long-lived checkout will see the same false green** — that note is in the fix commit.
+
+### 9.2 — the stamp advanced 2 of 4 lines, and that is correct
+
+Row 4 expected all four stamp lines at `0.239.0` / `bd740f6`. Measured: `version` and `commit`
+advanced; `skill_version` and `skill_commit` stayed at `0.238.0` / `44db151`.
+
+This is `apply.sh` behaving as specified, not a partial write. Its restamp is
+`sed -E 's/^(version:).*/'` and `s/^(commit:).*/'` — the `^` anchor cannot match `skill_version:`
+or `skill_commit:`, so **the engine has no code path that writes those two lines at all**.
+`ai-dlc-update/SKILL.md:1182` specifies the re-stamp as *"preserving `skill_version` /
+`skill_commit` / `installed_at` / `upstream`"*, and lines 42-43 define `skill_version` as the
+ai-dlc-update tool itself, advanced by the autonomous self-update, not by a content pull. v0.239.0
+touches no skill file, so there is nothing to self-update.
+
+The four prior pulls moved all four in lockstep only because of the manual `sed` that §2.4
+correctly drops. **§2.4's actual stop condition — "the stamp not advancing on its own" — did not
+fire.** Nothing was hand-edited. The brief's row-4 EXPECT is the line to correct for the next pull.
+
+### 9.3 — the `FAIL` verdict needs a different grep from the `ok` verdict
+
+§3 and row 3 give the aggregate `ok` form as `'^[[:space:]]+ok[[:space:]]'`, and it is right — the
+aggregate's `ok` lines are followed by a fixture name. **The symmetric `FAIL` form returns a
+vacuous 0**: the failing verdict renders as a bare `   FAIL` with nothing after it, so a trailing
+`[[:space:]]` matches nothing.
+
+That zero is the dangerous kind. On the before-side, `112 ok / 0 FAIL` at rc 1 is exactly what a
+green suite looks like, and the red row 3 exists to bank would have been recorded as absent.
+Use `'^[[:space:]]+FAIL[[:space:]]*$'`; the same form finds the 8 `PASS` verdicts, which is the
+control that it reads bare verdict lines rather than nothing.
