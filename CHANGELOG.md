@@ -17,6 +17,82 @@ and [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.239.0] — 2026-08-02
+
+### `derive-stories` counted entry-VIEW pairs and called them stories, and its `--check` printed no entry count at all
+
+Found while measuring whether the reverse direction — a story file on disk that the envelope does
+not declare — is core's duty. It is not, and it is not core's to infer: `derive-stories` resolves
+files FROM the entries by construction, and the membership rule that says which files on disk are
+stories belongs to the consumer, exactly as the derivable-field set does. That half is settled.
+
+**But the comparison that detects such a file needs two numbers, and the ENVELOPE side is core's.**
+Core already computes it. It was not emitted in a form anything could use:
+
+- **Both canonical views carry the same sprint's `stories:` mapping, and the counts were summed
+  across them.** Measured on the reference consumer: sprint 299 declares `story-S299-1` once in
+  each view, and `derive-stories --check` reported **`over 2 stories`** for a run that saw one.
+  The consumer's own validator reads **1** from a structural count of the same envelope, so a
+  consumer that took core's number as its denominator would fire a false mismatch on every tree
+  that carries both views — which is every real one.
+- **`--check` printed no entry count whatsoever.** The write path printed one; `--check` — the only
+  mode a gate may run, since a gate that edits what it validates can pass a tree it just changed —
+  printed the resolved-story count alone. So the number core holds was emitted solely by the mode
+  a gate must not call.
+- **`derive-stories` printed no per-view breakdown**, while `check-stories` has always printed one.
+  A view skipped in silence reads exactly like a view that agreed, and that is why one number
+  standing for two views survived four releases without anyone reading it as wrong.
+
+Both counts are now per-STORY — distinct across views, and the declared-entry count is the UNION,
+since the two views are not required to agree on their entry set. The per-view work is printed
+per view. `wrote` stays a per-view total and is correct as one: the write touches every view that
+carries the entry, so two writes over one story is what happened. The two NOUNS are what changed.
+
+`check-stories` sums identically and is left alone — it prints the per-view breakdown that makes
+its total legible, which is the property `derive-stories` lacked.
+
+### The `OK:` line of `validate-enforcement-map.sh` was executing two of its own words
+
+Unrelated to the above and found by running the gate for it. The verdict message is a
+double-quoted `echo` carrying backticks, so every green run executed `status` and `.dist-only` as
+commands — two `command not found` lines on stderr, and both words expanded to nothing, leaving
+the enumeration reading *"and  read from the SCHEMA"* and *"and no  fixture appears in it"*.
+Escaped. The success message now says what it was written to say, and nothing is executed.
+
+### Verification
+
+`story-fields-derive` **30 → 39 assertions**, and the new ones needed a shape no case in this
+fixture had: **every prior case seeds the implementation canonical ALONE.** With one view on disk a
+per-view sum and a per-story count are the same number, so no assertion could have told them apart.
+The two-view cases assert the same entry in both views counts once, that views declaring
+*different* entries count as the **union** rather than as either view's set or as arithmetic on the
+sum, that both `--check` verdict lines carry the declared count, and that the write still reaches
+both views — the distinct count must not have been bought by stopping at the first view.
+
+`story-fields-derive-mutants` **11 → 15 mutants** plus the control. **`counts-per-view` is the
+defect exactly**, held as a mutant for the same reason `value-emitted-bare` is: the fix and the
+defect differ by which variable the summary formats. It moves **one** cell, not two — the union
+case declares a different entry in each view, so its per-view sum and its distinct count coincide,
+which is precisely why that case is a separate assertion and cannot stand in for this one.
+`entry-set-not-union` fires only where the views differ, and `check-drops-entry-count` moves both
+`--check` verdicts because they are built separately.
+
+`nothing-ever-drifts` is **re-derived to 12** from 10. Both new cells are the same fan-out its
+note already describes: with no drift `--check` prints its PASS summary rather than its FAIL one,
+and the both-views write arm has no write to inspect.
+
+**Two harness bugs of my own, recorded because each read as a finding for a moment.** The first cut
+of the `--check` arm matched only `check PASS` and read FAIL against a run correctly reporting
+DRIFT. Its replacement was a `grep … | grep -q`, which passed here and which
+`validate-enforcement-map.sh` failed the tree over — I54b's exact subject, where the reader stops
+at its first match and `pipefail` turns a match into a non-zero pipeline once the input is large
+enough. A green fixture is not evidence against a size-dependent defect.
+
+Suite **101/101**, `validate-enforcement-map.sh` exit 0. Schedule profiled at
+`AI_DLC_FIXTURE_JOBS=16` and ranked by END time per the performance gate: the critical path is
+`trunk-audit-mutants` at 177.6s and `story-fields-derive-mutants` ends at **81.5s**, roughly 96s of
+slack. The battery is `.dist-only`, so it costs a consumer zero enumeration.
+
 ## [0.238.0] — 2026-08-01
 
 ### `derive-stories` shipped in v0.237.0 and no step file invoked it
