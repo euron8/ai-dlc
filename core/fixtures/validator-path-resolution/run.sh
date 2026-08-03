@@ -42,6 +42,13 @@ set -uo pipefail
 # or AI_DLC_CI_SURFACE would pin every run to the same answer and turn the comparison
 # green against a script that is broken.
 for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+# CLAUDE_CODE_* too, and for the same reason one level over. These outrank the
+# settings.json a validator reads OUT OF THE ROOT, so a set one makes the root
+# irrelevant: validate-compact-window.sh printed byte-identical output from the
+# right root and a nonexistent one while CLAUDE_CODE_AUTO_COMPACT_WINDOW was live,
+# and scored inert. Anything that can make a root-dependent read root-independent
+# belongs in this loop.
+for _v in $(env | sed -n 's/^\(CLAUDE_CODE_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 unset CLAUDE_PROJECT_DIR
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -125,6 +132,24 @@ printf '# artifact\n' > "$WORK/docs/artifact.md"
 printf '# terminal pass\n' > "$WORK/docs/pass-p1.md"
 printf '# story\n' > "$WORK/docs/stories/story-1.md"
 
+# Root-dependent inputs for the four validators whose bare run stops at a usage
+# line. Each is placed ONLY under the correct root, never under $WORK/scripts, so a
+# script reading the wrong root finds nothing and the mutant separates. Without
+# these the four reach no root-dependent code and score inert — "a question never
+# asked", which the mutant arm below is no longer allowed to accept.
+mkdir -p "$WORK/.claude/skills/ai-dlc/steps" || exit 2
+printf '{"autoCompactWindow":"400k"}\n' > "$WORK/.claude/settings.json"
+printf '# escalations\n\n**Terminal statuses**: `RESOLVED | OVERRIDDEN`\n' \
+  > "$WORK/.claude/skills/ai-dlc/escalations.md"
+printf '# stories-test-strategy\n\nfalsifiable acceptance criteria\n' \
+  > "$WORK/.claude/skills/ai-dlc/steps/stories-test-strategy.md"
+printf '# pending\n\n## [x] [lead] - 2026-01-01T00:00:00Z\n**Status:** RESOLVED\n' \
+  > "$WORK/docs/pending.md"
+for d in check-h1-recursion check-17-bypass check-manifest-bypass; do
+  mkdir -p "$WORK/tests/fixtures/$d" || exit 2
+  printf 'seed\n' > "$WORK/tests/fixtures/$d/README.md"
+done
+
 argv_for() {
   case "$1" in
     sync-taught-schema.sh)          printf '%s' "--check" ;;
@@ -132,21 +157,38 @@ argv_for() {
     validate-gate-adjudication.sh)  printf '%s' "--expected implementation" ;;
     validate-provenance-block.sh)   printf '%s' "$WORK/docs/artifact.md" ;;
     stamp-story-provenance.sh)      printf '%s' "--terminal $WORK/docs/pass-p1.md --check $WORK/docs/stories/story-1.md" ;;
+    validate-ac-falsifiability.sh)  printf '%s' "$WORK/docs/stories/story-1.md" ;;
+    validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
+    validate-h2-attestation.sh)     printf '%s' "--digest" ;;
     *)                              printf '%s' "" ;;
   esac
 }
 
-# The seven the relocation actually broke. Each must prove path-sensitive below; if one
-# stops being sensitive, its agreement assertion has gone vacuous and this fixture
-# would otherwise keep reporting a pass it no longer earns.
+# Which scripts MUST prove path-sensitive. DERIVED FROM THE SOURCE, not listed: a
+# script owes path-sensitivity iff it consults a project root at all. If one stops
+# being sensitive its agreement assertion has gone vacuous, and this fixture would
+# otherwise keep reporting a pass it no longer earns.
 #
-# The first draft of this list held four — the four a hand investigation had found.
-# Running the comparison over the whole directory produced validate-audit-anchors.sh
-# on the first execution, and widening the argv table to reach past the usage lines
-# produced validate-gate-adjudication.sh and validate-provenance-block.sh. Three of the
-# seven were invisible to reading; that is the argument for deriving the subject list
-# from the directory rather than from what an investigation happened to notice.
-SENSITIVE_REQUIRED="validate-ci-gates.sh sprint-status.sh stamp-story-provenance.sh sync-taught-schema.sh validate-audit-anchors.sh validate-gate-adjudication.sh validate-provenance-block.sh"
+# THIS WAS A HAND-LIST OF SEVEN AND THAT IS WHY IT MISSED. The list named the seven a
+# hand investigation had found; five more scripts consulted a root through a bare
+# `${CLAUDE_PROJECT_DIR:-.}` and were never required to be sensitive, so they sat in
+# the printed `inert_list` — which this fixture reported and did not fail on — for
+# their whole existence. Two of them answered rc=0 about the WRONG REPOSITORY. The
+# fixture's own header already argued for this: "three of the seven were invisible to
+# reading; that is the argument for deriving the subject list from the directory
+# rather than from what an investigation happened to notice." The argument was made
+# and then not applied to this line.
+#
+# Scripts that take the root as an ARGUMENT (`${1:-$(pwd)}`, `ROOT="$PWD"`) match none
+# of the three tokens and are correctly out of scope — a different and legitimate
+# contract. That exemption is stated so it is a decision rather than an accident.
+SENSITIVE_REQUIRED="$(grep -lE 'AI_DLC_PROJECT_ROOT|CLAUDE_PROJECT_DIR|ai_dlc_resolve_root' "$SRC"/*.sh 2>/dev/null \
+  | while IFS= read -r p; do basename "$p"; done | sort | tr '\n' ' ')"
+[ -n "${SENSITIVE_REQUIRED// /}" ] || {
+  echo "FIXTURE ERROR: derived an EMPTY required-sensitive set from $SRC — every" >&2
+  echo "  mutant assertion below would pass vacuously. A zero here is not a finding." >&2
+  exit 2
+}
 
 # Normalize the one difference that is legitimate: the script's own path, which several
 # validators echo in their usage text. Longest prefix first.
@@ -157,8 +199,14 @@ norm() {
 }
 
 run_one() { # run_one <layout-dir> <script-name> <wrong-root|""> -> "rc=<n>\n<output>"
+  # THE POISON GOES INTO EVERY ROOT CHANNEL, NOT ONE. Setting only
+  # AI_DLC_PROJECT_ROOT probed a variable that five scripts never read: they fell
+  # through to `${CLAUDE_PROJECT_DIR:-.}` = cwd = $WORK, the correct root under both
+  # layouts, agreed trivially, and scored inert. A mutant that leaves a channel open
+  # tests the channel it closed, not the script.
   local dir="$1" name="$2" out rc
-  out="$(cd "$WORK" && AI_DLC_PROJECT_ROOT="${3:-}" bash "$WORK/$dir/$name" $(argv_for "$name") 2>&1)"
+  out="$(cd "$WORK" && AI_DLC_PROJECT_ROOT="${3:-}" CLAUDE_PROJECT_DIR="${3:-}" \
+         bash "$WORK/$dir/$name" $(argv_for "$name") 2>&1)"
   rc=$?
   printf '%s\n' "rc=$rc"
   printf '%s\n' "$out" | norm
@@ -230,6 +278,60 @@ for want in $SENSITIVE_REQUIRED; do
   esac
 done
 
+# --- WRONG REPO: CLAUDE_PROJECT_DIR must not outrank the script's own location ---
+# The mutant arm above proves a script CONSULTS a root. This proves it consults the
+# RIGHT one. They are different questions and only this one catches the shipped
+# defect: five validators assigned `${CLAUDE_PROJECT_DIR:-.}` directly, so a stale
+# value inherited from another repo won over their own install path. Measured in a
+# real pair of trees, two of them then answered rc=0 about a repository they were
+# not run against — a pass reachable by two structurally different roads.
+#
+# CLAUDE_PROJECT_DIR is deliberately the ONLY channel poisoned here.
+# AI_DLC_PROJECT_ROOT is an operator override and outranking the walk is its job;
+# poisoning it too would assert the opposite of the contract.
+WORK2="$WORK/.otherrepo"
+mkdir -p "$WORK2/.git" "$WORK2/.claude/skills/ai-dlc/steps" "$WORK2/docs/retro" \
+         "$WORK2/tests/fixtures" "$WORK2/.github/workflows" || exit 2
+# Populated differently ON PURPOSE: if both roots looked alike, a script that read
+# the wrong one would agree and the assertion would pass without looking.
+printf 'CI gate `other-gate-never-declared-here`\n' > "$WORK2/docs/retro/sprint-99.md"
+printf '{"autoCompactWindow":"1m"}\n' > "$WORK2/.claude/settings.json"
+
+wrong_repo_checked=0
+wrong_repo_bad=0
+for name in $SENSITIVE_REQUIRED; do
+  [ -f "$WORK/scripts/ai-dlc/$name" ] || continue
+  clean="$(run_one "scripts/ai-dlc" "$name")"
+  poisoned="$(cd "$WORK" && CLAUDE_PROJECT_DIR="$WORK2" \
+              bash "$WORK/scripts/ai-dlc/$name" $(argv_for "$name") 2>&1 | norm; )"
+  poisoned="rc=?
+$poisoned"
+  # Compare OUTPUT only: rc is captured differently above, and the output is what
+  # names the tree. A script that read $WORK2 mentions it or reports its contents.
+  if [ "$(printf '%s\n' "$clean" | tail -n +2)" = "$(printf '%s\n' "$poisoned" | tail -n +2)" ]; then
+    wrong_repo_checked=$((wrong_repo_checked+1))
+  else
+    bad "WRONG REPO: $name changed its answer when CLAUDE_PROJECT_DIR pointed at another tree — it outranked the script's own install path"
+    wrong_repo_bad=$((wrong_repo_bad+1))
+  fi
+done
+[ "$wrong_repo_checked" -gt 0 ] \
+  && ok "WRONG REPO: $wrong_repo_checked script(s) ignored a CLAUDE_PROJECT_DIR pointing at a different consumer" \
+  || bad "WRONG REPO: the probe checked ZERO scripts — a zero here is not a finding"
+
+# Non-vacuity control for the loop above. The probe must still be able to SEE a
+# script that reads CLAUDE_PROJECT_DIR: a copy with the walk removed has to be
+# caught, or the run of oks above is the probe failing to look.
+PROBE="$WORK/scripts/ai-dlc/.wrongrepo-probe.sh"
+printf '#!/usr/bin/env bash\nR="${CLAUDE_PROJECT_DIR:-$(pwd)}"\necho "root: $R"\n' > "$PROBE"
+p_clean="$(cd "$WORK" && bash "$PROBE" 2>&1 | norm)"
+p_pois="$(cd "$WORK" && CLAUDE_PROJECT_DIR="$WORK2" bash "$PROBE" 2>&1 | norm)"
+[ "$p_clean" != "$p_pois" ] \
+  && ok "CONTROL: the probe still detects a script that DOES let CLAUDE_PROJECT_DIR win" \
+  || bad "CONTROL: the probe could not detect a deliberately-broken script — every WRONG REPO ok above is silence"
+rm -f "$PROBE"
+
+echo ""
 n_sensitive=$(printf '%s' "$sensitive_list" | wc -w | tr -d ' ')
 n_inert=$(printf '%s' "$inert_list" | wc -w | tr -d ' ')
 echo ""

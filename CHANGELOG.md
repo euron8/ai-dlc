@@ -34,6 +34,103 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.242.0] — 2026-08-03
+
+### Eight validators resolved the project root from a variable the caller owns, and two answered `0` about the wrong repository
+
+`CLAUDE_PROJECT_DIR` is set by the harness for whichever repository the session started
+in. Eight of the fifteen `core/scripts/*.sh` that consult a project root read it
+directly — `ROOT="${CLAUDE_PROJECT_DIR:-.}"`, no walk, no fallback to the script's own
+install path. A validator installed in repo B and run against repo B therefore answered
+about repo A.
+
+**Measured on a real pair of trees, installed copies, both root channels poisoned.**
+Three of five answered about the wrong repository, and **two of those returned `0` where
+the same script returns `1` on the right one** — a pass reachable by two structurally
+different roads, which is this repository's recurring defect in its purest form.
+`validate-fixture-drivability.sh` printed *"no fixture tree at … — nothing to judge"* and
+exited 0. The same probe run against a consumer built from `origin/main` reproduces all
+three; run against this release's build it reproduces none. That before/after pair is the
+control: a clean result with no demonstrated ability to detect a dirty one is not a
+measurement.
+
+All eight now carry the canonical resolution block, extracted from a sibling rather than
+retyped: `AI_DLC_PROJECT_ROOT` → **walk up from the script's own location** →
+`CLAUDE_PROJECT_DIR` → walk up from cwd → exit 2.
+
+**Four more scripts had no fail-closed guard at all.** `sprint-status.sh`,
+`stamp-story-provenance.sh`, `sync-taught-schema.sh` and `validate-audit-anchors.sh` ended
+the chain with no terminal check, so an unresolved root left the variable **empty** and
+every derived path became absolute from `/`. Found by the new invariant, not by reading.
+
+### The fixture that existed to catch exactly this had three independent reasons it could not
+
+`core/fixtures/validator-path-resolution` was written for this defect class and passed
+throughout.
+
+1. **Its mutant poisoned one root channel of two.** It set only `AI_DLC_PROJECT_ROOT` —
+   a variable the eight offenders never read. They fell through to
+   `${CLAUDE_PROJECT_DIR:-.}` = cwd = the correct root under *both* layouts, agreed
+   trivially, and scored **inert**. A mutant that leaves a channel open tests the channel
+   it closed, not the script.
+2. **Inertness was printed, not failed** — and gated on a **hand-list of seven**. The
+   file's own header already contains the argument against that list: *"three of the seven
+   were invisible to reading; that is the argument for deriving the subject list from the
+   directory rather than from what an investigation happened to notice."* The argument was
+   made and then not applied to the line below it. The list is now derived: a script owes
+   path-sensitivity iff its source consults a root token. That moved the required set from
+   7 to 15.
+3. **Four of the fifteen never reached root-dependent code**, stopping at a usage line —
+   "a question never asked", which the mutant arm is no longer allowed to score as a pass.
+   The argv table and seed now carry what each of them reads.
+
+A fourth leak surfaced while fixing the third: `validate-compact-window.sh` printed
+byte-identical output from the right root and a nonexistent one, because
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW` was live in the environment and outranks the
+`settings.json` the validator reads *out of the root*. The unset loop now covers
+`CLAUDE_CODE_*` for the same reason it already covered `AI_DLC_*`.
+
+New arm: **WRONG REPO.** The mutant arm proves a script consults *a* root; this proves it
+consults the *right* one. `CLAUDE_PROJECT_DIR` is pointed at a second, differently
+populated synthetic consumer and the answer must not move — because the self-dir walk
+outranks it. `AI_DLC_PROJECT_ROOT` is deliberately **not** poisoned here: outranking the
+walk is that variable's job, and poisoning it would assert the opposite of the contract.
+The arm carries its own non-vacuity control — a deliberately-broken probe script the arm
+must still catch. Run against `origin/main`'s validators it fails on six.
+
+### New invariant I75 — and it is not byte-identity, which is a measurement rather than a preference
+
+Every `core/scripts/*.sh` that consults a project root must use the canonical
+**precedence chain** and must **fail closed**. Both sides derived: the subject set from
+the scripts mentioning a root token, the required chain as the **modal** chain across
+those same scripts — no donor file is named, so a rename cannot quietly make it vacuous.
+
+Byte-identity was the first design and the measurement refuted it. The block's prose
+legitimately differs per copy (each names the failure that script saw, which is the house
+style), and two copies fail closed by substituting an unresolvable path rather than
+`exit 2` because they must not die mid-parse. Demanding identical bytes would have forced
+churn on six working scripts to satisfy a requirement stricter than the defect. I75
+compares **executable lines only** with indentation and local variable names normalised
+away — the I66 precedent — and accepts either fail-closed idiom while rejecting neither.
+
+Three self-probes, written by the invariant each run: the canonical chain must match, a
+bare `${CLAUDE_PROJECT_DIR:-.}` must not, and the fail-closed reader must reject a block
+with no terminal guard. Against a tree built from `origin/main`, I75 fails closed with
+*"the most common chain … is EMPTY, and an empty chain matches every subject"* — it does
+not report an agreement it did not compute.
+
+Scripts taking the root as an argument (`${1:-$(pwd)}`, `ROOT="$PWD"`) match none of the
+tokens and are out of scope **by decision, stated in the invariant's header** rather than
+by accident — that is a different and legitimate contract.
+
+### Not shipped: making `validate-fixture-drivability.sh` exit 2 on a missing fixture tree
+
+Proposed, then refuted by measurement. The script's header documents exit 0 there as a
+deliberate choice — *"no fixture tree to judge, stated in words rather than passed in
+silence"* — and `pre-push` runs it on every consumer, so exit 2 would red every consumer
+that has no fixtures yet. Non-empty false-positive set, and the root fix already makes
+that path unreachable for a correctly installed copy.
+
 ## [0.241.0] — 2026-08-03
 
 ### Check 32 counted a path segment as a call site, and the poison was its own fixture's name
