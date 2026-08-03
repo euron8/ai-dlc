@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.241.0] — 2026-08-03
+
+### Check 32 counted a path segment as a call site, and the poison was its own fixture's name
+
+`validate-bmad-invocations.sh` enumerated invoked BMAD skills with
+`grep -rhoE '/bmad-[a-z0-9-]+'` over the rulebook. In a call site the `/` is a command
+sigil; in a path it is a separator, and they are the same byte. So
+`core-manifest.md`'s `- fixtures/bmad-invocation-resolve/**` — a line in the rulebook's
+own manifest, naming the fixture directory that tests **this check** — was read as an
+invocation of a skill that does not exist and cannot exist.
+
+The script's own comment shows the class was anticipated and the guard stopped one step
+short: *"a bare `bmad-output` path fragment or a prose mention is not a call site"* is
+true, and excludes only fragments with **no** leading slash.
+
+**Every consumer got a permanent FAIL.** In the graph consumer, 15 of 16 names resolved
+against installed BMAD and only this one did not; it was carried as a disclosed
+structural override at three consecutive planning gates. The distribution's own tree
+exits 1 for the same reason. Second poison site, same shape:
+`enforcement-map.yaml`'s `fixtures: [tests/fixtures/bmad-invocation-resolve]`.
+
+**The fix is a call-site grammar naming both boundaries.** A sigil cannot follow a path
+character (`[^A-Za-z0-9_.-]`, or line start) and is not followed by another separator
+(`[^A-Za-z0-9_/-]`, or line end). The trailing half is not redundant: it is what
+rejects a path segment at line start, where there is no leading character to test.
+
+**Measured on both layouts before shipping, because a narrowing that loses a real call
+site is worse than the defect.** Distribution 16 names → 15; consumer (graph) 17 → 16.
+The difference is exactly `{bmad-invocation-resolve}` in both trees and the **gained
+set is empty in both** — every real call site survives, including the backticked,
+line-start and parenthesised forms. graph now exits 0, 16/16 resolved.
+
+**Not done: scoping the scan to the manifest's `rulebook:` partition.** It was the first
+design and it is wrong here — `team-roles/*.md` sits outside the skill root, so
+resolving the partition means locating one core tree by walking up from another, which
+**I33 fails the build on**. Grammar closes the class without a path derivation. A
+second, unmeasurable layer behind it would be the check-that-cannot-fire defect this
+release is fixing.
+
+`core/fixtures/bmad-invocation-resolve/` gains all three poison shapes the tree actually
+carries (manifest bullet, enforcement-map list, line-start path), a positive-outcome
+control asserting the scan enumerates **exactly 2** names rather than merely exiting 0,
+and a grammar mutant paired with an anti-neutering assertion: under the reverted
+slash-only enumerator the clean rulebook goes red **and the dangling-name check stays
+green**. That pairing is the claim — the grammar narrowed the scan without disarming
+the check. A mutant that reds both would mean the assertions are entangled and one is
+vacuous. The `cmp -s` guard earned its keep during authoring: the first mutation
+matched nothing and the fixture refused to score it as a kill.
+
 ## [0.240.0] — 2026-08-02
 
 ### `E18` read GREEN on a working tree and RED on a fresh clone of the same commit

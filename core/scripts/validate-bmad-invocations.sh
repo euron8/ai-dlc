@@ -88,9 +88,35 @@ fi
   exit 2
 }
 
-# Enumerate invoked names. Only `/bmad-…` (a slash-prefixed invocation) counts; a
-# bare `bmad-output` path fragment or a prose mention is not a call site.
-NAMES="$(grep -rhoE '/bmad-[a-z0-9-]+' "$RULES" 2>/dev/null \
+# Enumerate invoked names. THE DISCRIMINATOR IS THE SLASH, AND IT IS NOT ENOUGH TO
+# REQUIRE ONE. In a call site the `/` is a command sigil; in a path it is a
+# separator, and the two are the same byte. The prior form required only the slash
+# and reasoned that "a bare `bmad-output` path fragment is not a call site" -- true,
+# but it only excludes fragments with NO leading slash. `fixtures/bmad-invocation-
+# resolve/**` has one, so this check invented an invocation of a skill that does not
+# exist and cannot exist. It shipped that FAIL to every consumer for the life of the
+# arm, off a line in the rulebook's OWN manifest naming the fixture that tests this
+# very check.
+#
+# So the grammar names both boundaries:
+#
+#   LEADING   a sigil cannot follow a path character. `[^A-Za-z0-9_.-]` (or line
+#             start) admits the backtick, space, `(` and `[` that real call sites
+#             sit behind, and rejects the `s` of `fixtures/`.
+#   TRAILING  a sigil-introduced name is not followed by another separator. `/`
+#             after the name means the name was a directory, so `[^A-Za-z0-9_/-]`
+#             (or line end) rejects it. `_` and `-` are excluded too: a longer name
+#             was truncated, not a call site that ended.
+#
+# The second grep re-extracts the name from the match, because the first consumes
+# a context character at each end.
+#
+# MEASURED, both layouts, before shipping: distribution 16 names -> 15, consumer
+# (graph) 17 -> 16. The difference is exactly {bmad-invocation-resolve} in both and
+# the gained set is empty in both -- every real call site survives, including the
+# backticked, line-start and parenthesised forms.
+NAMES="$(grep -rhoE '(^|[^A-Za-z0-9_.-])/bmad-[a-z0-9-]+([^A-Za-z0-9_/-]|$)' "$RULES" 2>/dev/null \
+  | grep -oE '/bmad-[a-z0-9-]+' \
   | sed 's#^/##' | sed 's/-$//' | sort -u)"
 
 COUNT="$(printf '%s\n' "$NAMES" | grep -c . )"

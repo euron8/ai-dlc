@@ -29,4 +29,23 @@ printf -- '---\nname: bmad-deprecated-one\ndescription: DEPRECATED -- consolidat
   > "$S/bmad-deprecated-one/SKILL.md"
 
 printf 'Invoke `/bmad-live-one` and `/bmad-loader-ok` at this step.\n' > "$ROOT/rules/steps/clean.md"
+
+# (5) THE POISON. A fixture-path DECLARATION carrying a `/bmad-…` segment, in a file
+# the scan reads. This is the real shape: the rulebook's own manifest names the
+# fixture directory that tests this check, and for the life of the UNLOADABLE arm the
+# enumerator counted it as an invocation of a skill nobody wrote. Both spellings the
+# distribution actually carries are seeded -- the manifest bullet and the
+# enforcement-map list form -- plus the line-start case, where there is no leading
+# path character at all and only the TRAILING separator distinguishes it.
+cat > "$ROOT/rules/core-manifest.md" <<'EOF'
+# core manifest
+
+```yaml
+core_manifest:
+  - fixtures/bmad-invocation-resolve/**
+```
+EOF
+printf 'fixtures: [tests/fixtures/bmad-invocation-resolve]\n' > "$ROOT/rules/enforcement-map.yaml"
+printf '/bmad-line-start-path/seed.sh is a path, not a call site.\n' >> "$ROOT/rules/steps/clean.md"
+
 printf '%s\n' "$ROOT"
