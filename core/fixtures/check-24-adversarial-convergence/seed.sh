@@ -422,9 +422,48 @@ cat > "$TARGET/operator-transcript.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-12T01:00:00Z","message":{"content":"/ai-dlc Sprint 1. Kick off the cycle."}}
 {"type":"assistant","timestamp":"2026-07-12T02:00:00Z","message":{"content":[{"type":"text","text":"p2 stamped DIVERGENT_HARD_BLOCK; pausing for your adjudication."}]}}
 {"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Revert the p1 to p2 repair wholesale — it made the check unfalsifiable."}}
+{"type":"assistant","timestamp":"2026-07-12T04:00:00Z","message":{"content":[{"type":"text","text":"A second series has held a nonzero MAJOR at zero CRITICAL for three passes -- arm E calls that a STALL. Another pass is not the remedy."}]}}
+{"type":"user","timestamp":"2026-07-12T05:00:00Z","message":{"content":"Cut the claim and re-verify — if it cannot be checked cheaply it is not load-bearing."}}
 JSONL
 
 printf '%s\n' "$TARGET"
+
+# --- stalled-resolved: THE SANCTIONED EXIT FROM A STALL ------------------------
+# `RESOLVED_TERMINAL` was assigned in ONE place, inside a loop whose first line is
+# `[ "${P_VERDICT[$i]}" = "DIVERGENT_HARD_BLOCK" ] || continue`. A stalled terminal pass
+# stamps EXIT_CONDITION_NOT_MET, so it was continue'd past and the flag stayed 0 forever
+# -- making `RESOLVED` unreachable for a stall and that emit branch dead code.
+#
+# The cost was a DEADLOCK. Arm E's remedy says "resolve on the record and run ONE
+# verification pass"; ai-dlc-acknowledge.sh denies every dispatch on rc 3. So the lead
+# wrote the record arm E asked for, the state stayed STALLED/rc 3, and the pass the remedy
+# named could not be dispatched. The only way out was forging the terminal verdict.
+#
+# Identical severity trajectory to `stalled` above -- the ONLY difference is the record.
+# That pairing is the assertion: same series, one file, opposite states.
+mkdir -p "$TARGET/stalled-resolved"
+pass "$TARGET/stalled-resolved/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1
+pass "$TARGET/stalled-resolved/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/stalled-resolved/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/stalled-resolved/s1-adversarial-p4.md" 4 0 1 2 EXIT_CONDITION_NOT_MET 0 ddd4
+record "$TARGET/stalled-resolved/s1-resolution-p4.md" \
+  s1-adversarial-p4.md CHANGE_APPROACH ddd4 ddd5 4000 4200 \
+  "cut the unverifiable universal the MAJORs kept falsifying" \
+  '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
+
+# --- stalled-record-invalid: an INVALID record legalises NOTHING ----------------
+# The over-fire control for the arm above. If a malformed record cleared a stall, the
+# resume would be reachable by writing any file at all and the notarization would be
+# decoration.
+mkdir -p "$TARGET/stalled-record-invalid"
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p1.md" 1 2 2 3 EXIT_CONDITION_NOT_MET 1
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p2.md" 2 0 1 3 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p3.md" 3 0 1 4 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/stalled-record-invalid/s1-adversarial-p4.md" 4 0 1 2 EXIT_CONDITION_NOT_MET 0 eee4
+record "$TARGET/stalled-record-invalid/s1-resolution-p4.md" \
+  s1-adversarial-p4.md CHANGE_APPROACH WRONGSHA eee5 4000 4200 \
+  "sha_before does not match the pass it claims to resolve" \
+  '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
 
 # =============================================================================
 # ARM J -- RE-OPEN: a pass ran after the series already stamped EXIT_CONDITION_MET.
