@@ -34,6 +34,71 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.248.0] — 2026-08-03
+
+### A resolution record's operator citation could not outlive the session that wrote it, re-closing the deadlock 0.247.0 opened
+
+Reported as a consumer push candidate
+(`PC-S300-RESOLUTION-RECORD-CITATION-CANNOT-OUTLIVE-ITS-SESSION`). **Confirmed, reproduced
+and fixed.** It is the second lock on the door 0.247.0 unlocked, and it bound the moment the
+first one opened.
+
+Arm F6 verifies a record's `operator_authorization` by shelling to
+`validate-steering-budget.sh --transcript <file>` — **one file**, and
+`ai-dlc-acknowledge.sh` sets it from the hook payload, so it is always the session **asking
+permission** and never the session in which the operator **spoke**.
+
+A resolution record therefore verified only inside the session that wrote it. Cross any
+handoff, `/clear` or auto-compact and the citation reported NOMATCH, the record stopped
+counting, and `--cycle-state` regressed `RESOLVED` → `STALLED` → rc 3 → every dispatch
+denied. **The record survived on disk; its provenance did not survive the session
+boundary.**
+
+**And the failure was inverted against honesty.** With NO transcript, F6 fails OPEN on the
+hook path and the record counts. With a READABLE transcript that merely lacks the quote, it
+fails CLOSED. Supplying ground truth was strictly worse than supplying none, and a genuine
+cross-session record was treated exactly like a forged one. Reproduced on the reference
+consumer's live series at 0.247.0 — same tree, same record:
+
+```
+--transcript <none>                 RESOLVED  rc=0    <- fail-open
+--transcript <empty but readable>   STALLED   rc=3    <- what the hook actually passes
+```
+
+### The fix was withheld machinery, not new machinery
+
+`validate-steering-budget.sh` already has `--dir`, and its own usage block already states
+the reason: *"a sprint spans many transcripts (every handoff and auto-compact starts a new
+one), so a single `--transcript` run audits only the window since the last compaction."*
+That reasoning applies to a **citation** with more force than to an audit — yet one line
+withheld it: *"`--cite` is a single-transcript query; it never scans a corpus."*
+
+`--cite` now takes `--dir`. The corpus assembly needed no second implementation — `files`
+was already `[one]` for `--transcript` and the since-bounded listing for `--dir`; only the
+cite block read the single file. The scan count is printed on both outcomes, because this
+file's own principle is that a narrow scan must be visible rather than assumed.
+
+`validate-adversarial-convergence.sh` gains `--transcript-dir`, which takes precedence, and
+both hooks now pass `dirname "$transcript_path"` — the directory every session's transcript
+already shares. Measured against the reference consumer's real corpus: the live citation
+matches across 400 transcripts, and a phrase never uttered returns NOMATCH rc 2, so the
+match is a real one and not a checker that accepts anything.
+
+Scalars, not an array, for the flag pair: `arr=()` then `${#arr[@]}` under `set -u` is an
+unbound-variable error on bash 3.2 — what macOS ships, and a shape this repository has
+already shipped a silent fail-open on once.
+
+### Proof
+
+`stalled-resolved`'s operator adjudication moves OUT of the current session's transcript
+into a second `prior-session-transcript.jsonl` beside it. That is the real shape, and the
+pair is the assertion: **current transcript alone → `STALLED`; add the directory → the same
+record, same citation, same tree → `RESOLVED`.**
+
+Caught during authoring by **I59**: `--transcript-dir` was dispatched and documented in no
+usage block — a mode that exists and cannot be discovered. Check 24's instruction now names
+it too, since the gate is what tells a lead which flags to pass.
+
 ## [0.247.0] — 2026-08-03
 
 ### `RESOLVED` was unreachable for a stalled cycle, so the sanctioned exit from a stall was a deadlock
