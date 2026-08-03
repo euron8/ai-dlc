@@ -34,6 +34,95 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.244.0] — 2026-08-03
+
+### A LOCKED block whose closer was spelled differently passed Check 3b with zero claims checked
+
+Check 3b (`hard_block: true`) exists to stop a story inventing a requirement: every
+`full_text_source:` claim must be byte-present in the product brief. It parses the
+block out of the story by its HTML-comment sentinels, and it recognised **one**
+spelling.
+
+**Measured with a same-run control.** One story file, one fabricated requirement, two
+closer spellings, nothing else different:
+
+```
+<!-- END S1 LOCKED requirements -->   PASS (0 block(s), 0 full_text_source claim(s) verified)   exit 0
+<!-- END LOCKED_REQUIREMENTS -->      FAIL — requirement not byte-present at full_text_source   exit 1
+```
+
+One word in a comment disarmed the check, and the PASS line said `0 block(s)` in
+words that read like success.
+
+**Seven spellings are in the field.** Counted across one consumer's live brief and its
+history file (199 openers):
+
+| spelling | count |
+|---|---|
+| `<!-- END LOCKED_REQUIREMENTS -->` (core's template) | 168 |
+| `<!-- END S<N> LOCKED requirements -->` | 15 |
+| `<!-- END LOCKED_REQUIREMENTS S<N> … -->` | 8 |
+| `<!-- END S<N> LOCKED_REQUIREMENTS -->` | 5 |
+| `<!-- LOCKED_REQUIREMENTS_END -->` | 1 |
+| `<!-- LOCKED_REQUIREMENTS_BEGIN -->` (opener variant) | 1 |
+| whole block as one comment: `<!-- LOCKED_REQUIREMENTS` … `END LOCKED_REQUIREMENTS -->` | — |
+
+**The consumer was not being sloppy.** `steps/discovery.md` templates one closer and
+says to put the block "at the top of the artifact" — singular. A brief accumulates one
+block per sprint, so a per-block discriminator is a need the template never met and the
+consumer invented one. The template now shows the multi-block form.
+
+**A second consequence: silent swallowing.** The non-greedy span also let a block run
+past any closer it did not recognise. In the reference history that produced 4 such
+blocks, the largest **151 KB** spanning dozens of real ones, every bullet in it then
+attributed to a single block.
+
+### The extraction is now line-oriented, which removes the class rather than one instance
+
+A span regex must say "anything up to the closer", and every spelling of *anything* is
+wrong here. `.` with DOTALL crosses block boundaries. `[^>]` — the obvious repair, and
+the one this release tried first — still crosses **newlines**, so the whole-block-in-one-
+comment form matched as a single opener with no closer behind it. That produced 30
+newly-failing files on the first measurement. Matching an opener *line* and scanning
+forward for a closer *line* cannot express that mistake; the count went to 4.
+
+**New guard: an opener with no closer FAILS.** Zero blocks extracted from a file that
+plainly starts one is not "nothing to check" — it is the parser failing on a block that
+is right there, and it used to be indistinguishable from a clean story because both
+roads end at the same PASS line.
+
+### False-positive set: measured, enumerated, empty
+
+Run across **1013** real artifacts in the reference consumer, old grammar versus new.
+Four files newly fail, and all four are real:
+
+- **three story files** (`story-256-1`, `story-256-2`, `story-S299-1`) carry an opening
+  sentinel with **no closer anywhere in the file**. They had been passing with zero
+  claims verified. `story-S299-1` has two such openers.
+- **`product-brief.md`** newly extracts a block and trips the pre-existing *uncheckable*
+  arm. It is the source of record, not a story — Check 3b is `gate_types: [story]` and
+  its usage takes a story file — so this is outside the check's subject set.
+
+Nothing that passed for a good reason started failing.
+
+### Fixture
+
+`core/fixtures/check-3b-locked-anchor/` gains the full spelling matrix, each spelling
+asserted **twice**: it must reject a fabricated requirement *and* accept an honest one.
+Only the pair proves the block was parsed — "rejects everything" and "parses correctly"
+are different claims, and a grammar matching nothing would satisfy the first alone.
+Plus the unclosed-block guard, an over-fire control (a story with no LOCKED block at all
+must not be failed by it), and an unmutated control.
+
+**The mutant reverts BOTH layers**, because the fix is layered. Narrowing the grammar
+alone does not reproduce the shipped defect: the new unclosed-block guard then catches
+what the grammar no longer sees, and the mutant comes out red for the wrong reason —
+the partial-revert trap, hit and corrected during authoring. With the narrow grammar
+*and* the guard disabled, the sprint-suffixed spelling goes green on a fabricated
+requirement: the original bug on demand. Its pairing assertion requires the same mutant
+to still catch core's own spelling, so a mutant that reds or greens everything cannot
+score.
+
 ## [0.243.0] — 2026-08-03
 
 ### GM1 named 23 checks that had never run, and shipped no way to adopt them

@@ -96,10 +96,71 @@ sor_override = sys.argv[2] or None
 DEFAULT_SOR_BASENAME = "product-brief.md"
 sor_basename = os.path.basename(sor_override) if sor_override else DEFAULT_SOR_BASENAME
 
-BLOCK_RE = re.compile(
-    r"<!--\s*LOCKED_REQUIREMENTS\b.*?-->(.*?)<!--\s*END LOCKED_REQUIREMENTS\b.*?-->",
-    re.DOTALL,
-)
+# THE SENTINEL HAS SIX SPELLINGS IN THE FIELD AND THIS USED TO RECOGNISE ONE.
+#
+# `steps/discovery.md` templates `<!-- END LOCKED_REQUIREMENTS -->` and assumes ONE block
+# "at the top of the artifact". Real briefs accumulate one block per sprint, so consumers
+# invented per-block discriminators to tell them apart — a need the template never met.
+# Measured across a reference consumer's live brief and its history file (198 openers):
+#
+#     <!-- END LOCKED_REQUIREMENTS -->                168     core's form
+#     <!-- END S<N> LOCKED requirements -->            15
+#     <!-- END LOCKED_REQUIREMENTS S<N> … -->           8
+#     <!-- END S<N> LOCKED_REQUIREMENTS -->             5
+#     <!-- LOCKED_REQUIREMENTS_END -->                  1
+#     <!-- LOCKED_REQUIREMENTS_BEGIN -->                1     (opener variant)
+#
+# WHY THAT WAS NOT COSMETIC. A block whose closer this could not see extracted as NOTHING,
+# and `blocks == []` fell straight through the per-block loop to the PASS line with
+# `claims_checked = 0`. Measured with a same-run control: one story file, one FABRICATED
+# requirement, two closer spellings —
+#
+#     <!-- END S1 LOCKED requirements -->   PASS (0 block(s), 0 claim(s) verified)   exit 0
+#     <!-- END LOCKED_REQUIREMENTS -->      FAIL — not byte-present at full_text_source
+#
+# One word in a comment silently disarmed a `hard_block: true` check. And because the
+# match is non-greedy across the whole file, an unrecognised closer also let a block
+# SWALLOW everything up to the next closer it did recognise: 4 such blocks in the
+# reference history, the largest 151 KB spanning dozens of real ones, every bullet in it
+# then attributed to a single block.
+#
+# So the grammar admits every measured form, and the guard below makes a zero-block
+# extraction over a file that plainly carries sentinels impossible to report as a pass.
+# EXTRACTION IS LINE-ORIENTED, NOT A SPAN REGEX, AND THAT IS A BUG FIX NOT A STYLE
+# CHOICE. A span regex has to say "anything up to the closer", and every spelling of
+# "anything" is wrong here: `.` with DOTALL crosses block boundaries, and `[^>]` — the
+# obvious repair — still crosses NEWLINES, so `<!-- LOCKED_REQUIREMENTS` followed by
+# eight content lines and `END LOCKED_REQUIREMENTS -->` matched as ONE OPENER and left
+# no closer behind it. Matching an opener LINE and then scanning forward for a closer
+# LINE cannot express that mistake.
+OPEN_RE = re.compile(
+    r"^<!--[ \t]*LOCKED_REQUIREMENTS(?:_BEGIN)?\b[^\n]*$")
+CLOSE_RE = re.compile(
+    r"^(?:<!--[ \t]*)?(?:END[ \t]+[^\n]*LOCKED[^\n]*|LOCKED_REQUIREMENTS_END\b[^\n]*)-->[ \t]*$")
+
+
+def extract_blocks(text):
+    """Yield (body, opener_lineno) for each delimited LOCKED_REQUIREMENTS block.
+
+    Also returns the openers that never found a closer, so a block this cannot parse
+    is reported rather than silently contributing nothing."""
+    lines = text.splitlines()
+    out, dangling, i = [], [], 0
+    while i < len(lines):
+        if OPEN_RE.match(lines[i]):
+            j = i + 1
+            while j < len(lines) and not CLOSE_RE.match(lines[j]):
+                # A second opener before any closer means the first was never closed.
+                if OPEN_RE.match(lines[j]):
+                    break
+                j += 1
+            if j < len(lines) and CLOSE_RE.match(lines[j]):
+                out.append("\n".join(lines[i + 1:j]))
+                i = j + 1
+                continue
+            dangling.append(i + 1)
+        i += 1
+    return out, dangling
 FULL_TEXT_RE = re.compile(r"^\s*full_text_source:\s*(\S+)\s*$")
 REQUIRES_CTX_RE = re.compile(r"^\s*requires_context:\s*\S")
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
@@ -143,9 +204,27 @@ def resolve_artifact(cited, story_path):
 with open(story_path, "r", encoding="utf-8") as fh:
     content = fh.read()
 
-blocks = BLOCK_RE.findall(content)
+blocks, dangling = extract_blocks(content)
 failures = []
 claims_checked = 0
+
+# THE UNMATCHED-SENTINEL GUARD. An opener with no closer is not "nothing to check" — it
+# is this script failing to parse a block that is right there, and it used to be
+# indistinguishable from a clean story because both roads end at the same PASS line.
+# Reporting the openers that found no closer is what makes the two roads separable.
+if dangling:
+    print(f"VALIDATE-LOCKED-ANCHOR: FAIL ({story_path})", file=sys.stderr)
+    print(f"  - {len(dangling)} LOCKED_REQUIREMENTS opener(s) with no closing sentinel, "
+          f"at line(s) {', '.join(str(n) for n in dangling)}.", file=sys.stderr)
+    print(f"    Close each block with `<!-- END LOCKED_REQUIREMENTS -->`. A per-block "
+          f"discriminator is allowed (`<!-- END S<N> LOCKED_REQUIREMENTS -->`), and so is "
+          f"the whole-block-in-one-comment form (`END LOCKED_REQUIREMENTS -->`).",
+          file=sys.stderr)
+    print(f"    This is not a formatting nit. An unparsed block contributed NOTHING, and "
+          f"zero blocks reached the PASS line with zero claims verified — measured with a "
+          f"same-run control, a fabricated requirement passed this check on one word's "
+          f"difference in a comment.", file=sys.stderr)
+    sys.exit(1)
 
 for bidx, block in enumerate(blocks, start=1):
     lines = block.splitlines()

@@ -124,6 +124,24 @@ into a `LOCKED_REQUIREMENTS` block at the top of the artifact:
 <!-- END LOCKED_REQUIREMENTS -->
 ```
 
+**A brief accumulates one block per sprint, and the closer may carry a
+discriminator so they can be told apart:**
+
+```markdown
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+- [S<N> requirement]
+<!-- END S<N> LOCKED_REQUIREMENTS -->
+```
+
+**Every block MUST be closed.** `validate-locked-anchor.sh` (Check 3b) parses
+blocks by their sentinels, and an opener it cannot pair extracts as nothing —
+which used to reach the PASS line reporting `0 block(s), 0 claim(s) verified`,
+so a fabricated requirement passed a `hard_block` check on one word's difference
+in a comment. Measured across one consumer: SEVEN sentinel spellings, three
+story files with an opener and no closer at all. The parser now accepts every
+spelling found in the field and FAILS on an unpaired opener; keep to one of the
+two forms above so a reader does not have to.
+
 Sources to extract from:
 - The user's original input to `/ai-dlc`
 - Any carry-over items referenced by the user
