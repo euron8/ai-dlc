@@ -294,7 +294,7 @@ VALID_VERDICTS="EXIT_CONDITION_MET EXIT_CONDITION_NOT_MET DIVERGENT_HARD_BLOCK"
 # (FREEZE is the right remedy for a MOVING ARTIFACT -- arm D's SCOPE_GREW branch --
 # which is a different failure with a different shape. The two got conflated because
 # they look alike from the outside. They have opposite remedies.)
-VALID_RESOLUTIONS="REVERT_REPAIR CHANGE_APPROACH CUT_SCOPE RESTART_CYCLE"
+VALID_RESOLUTIONS="REVERT_REPAIR CHANGE_APPROACH CUT_SCOPE RESTART_CYCLE REOPEN_AFTER_MET"
 
 # Passes that found CRITICALs in scope the previous pass never saw. Derived from
 # findings_critical vs findings_critical_prior_scope; Check D turns it into the
@@ -897,6 +897,66 @@ if [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ] && [ "$STALL_PEAK" -ge "$STALL_TH
 fi
 
 # =============================================================================
+# J. RE-OPEN -- a pass ran after the series had already stamped EXIT_CONDITION_MET.
+# =============================================================================
+# THIS IS ARM F GENERALISED, AND ARM F SHOULD HAVE CAUGHT IT. Arm F's rule is that a
+# pass following a TERMINAL state must declare the record that authorised it, and it
+# keys on `DIVERGENT_HARD_BLOCK`. `EXIT_CONDITION_MET` is terminal too -- it is the
+# state the whole gate exists to reach -- so running a pass after it walks past a
+# terminal state in exactly the way running a pass after a hard block does. Arm F was
+# keyed on the wrong predicate, not missing a concept.
+#
+# THE MEASURED CASE. One consumer's `research-requirements` series reached
+# EXIT_CONDITION_MET at pass 2 and was re-opened by an Advanced Elicitation run that
+# edited the artifact AFTER convergence. That cost a fresh five-pass sub-cycle
+# (adversarial p3 -> repair -> p4 fresh MAJOR -> repair -> p5 MET) and nothing in Rule 8
+# governed it, because nothing named the state it walked past.
+#
+# THE `blocking > 0` REFINEMENT IS WHAT EMPTIES THE FALSE-POSITIVE SET, and it was
+# measured rather than reasoned. Across 28 series, the naive form ("a MET pass followed
+# by any pass") fires 5 times and TWO are false: `s290-discovery` p1 MET -> p2 MET and
+# `s292-stories` p1 MET -> p2 MET, both the same shape -- a `full` cycle whose p1 already
+# converged still OWES its second pass, and that pass finding nothing is the intensity
+# FLOOR being met. Requiring the successor to report CRITICAL+MAJOR >= 1 leaves 3 fires,
+# 3 true positives, 0 false positives.
+#
+# It is also closed by construction rather than by taste: the same bytes reviewed under
+# the same contract yield the same residue, so a NON-ZERO residue after a MET pass is
+# proof the artifact moved after it was signed off. A zero residue costs nothing.
+REOPEN_LIVE=0
+REOPEN_AT=""
+REOPEN_FROM=""
+for ((i = 0; i + 1 < N; i++)); do
+  [ "${P_VERDICT[$i]}" = "EXIT_CONDITION_MET" ] || continue
+  j=$((i + 1))
+  nxt_block=$(( ${P_CRIT[$j]:-0} + ${P_MAJOR[$j]:-0} ))
+  [ "$nxt_block" -gt 0 ] || continue          # the intensity FLOOR pass -- not a re-open
+  REOPEN_LIVE=1
+  REOPEN_FROM="$(basename "${P_FILE[$i]}")"
+  REOPEN_AT="$(basename "${P_FILE[$j]}")"
+  if [ -z "${P_RESOLVES[$j]}" ]; then
+    err "J -- REOPEN" "$REOPEN_FROM stamps EXIT_CONDITION_MET and $REOPEN_AT ran after it,
+      reporting $nxt_block CRITICAL+MAJOR finding(s).
+      EXIT_CONDITION_MET IS A FREEZE POINT. The same bytes reviewed under the same contract
+      yield the same residue, so a non-zero residue after a MET pass is proof the artifact
+      MOVED after it was signed off -- that is a RE-OPEN, and it costs a fresh sub-cycle.
+      A pass after MET that finds NOTHING is the intensity floor being met and costs nothing;
+      this one is not that.
+      The cycle is ORDERED: Party Mode -> Advanced Elicitation -> Adversarial Review.
+      Elicitation runs BEFORE the convergence cycle, never after it. The measured instance of
+      this arm was exactly that -- an elicitation editing an artifact its series had already
+      notarised, buying a five-pass sub-cycle nobody scheduled.
+      Declare it on the record: write a resolution with 'resolution: REOPEN_AFTER_MET' naming
+      what moved and why, and have $REOPEN_AT cite it with 'resolves_divergence:'. After MET,
+      an improvement is deferred to the NEXT step's artifact or it re-opens this series on the
+      record -- it does not simply happen."
+  else
+    # A declared re-open is a sanctioned exit, exactly as a resolved hard block is.
+    REOPEN_LIVE=0
+  fi
+done
+
+# =============================================================================
 # --cycle-state: emit and exit. Arm D does NOT run.
 # =============================================================================
 if [ "$CYCLE_STATE" -eq 1 ]; then
@@ -919,6 +979,8 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
     else
       STATE="STALLED"; RC=3
     fi
+  elif [ "$REOPEN_LIVE" -eq 1 ]; then
+    STATE="REOPENED"; RC=3
   fi
   printf '%s\t%s\n' "$STATE" "$LAST_FILE"
   exit "$RC"

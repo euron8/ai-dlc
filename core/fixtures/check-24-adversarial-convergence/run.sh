@@ -205,6 +205,13 @@ expect_state stalled                   s1-adversarial-p STALLED   3 "the STOP co
 expect_state divergent-terminal        s1-adversarial-p DIVERGENT 3 "the reference consumer's parked state, exactly"
 expect_state divergent-terminal-resolved s1-adversarial-p RESOLVED 0 "THE RESUME: the record exists, so the verification pass is permitted"
 
+# --- arm J: RE-OPEN ------------------------------------------------------------
+expect reopen-unrecorded 1 "a pass ran after EXIT_CONDITION_MET reporting 1C/2M -- RE-OPEN, FAIL (J)" s1-adversarial-p
+expect reopen-floor-pass 0 "THE DECOY: p1 MET -> p2 MET with 0 findings is the intensity FLOOR, not a re-open" s1-adversarial-p
+expect reopen-recorded   0 "a re-open DECLARED with resolution: REOPEN_AFTER_MET resumes -- the arm has a door" s1-adversarial-p
+expect_state reopen-unrecorded s1-adversarial-p REOPENED  3 "the hooks must deny the dispatch on a live re-open"
+expect_state reopen-floor-pass s1-adversarial-p CONVERGED 0 "the floor pass must not be denied"
+expect_state reopen-recorded   s1-adversarial-p CONVERGED 0 "a declared re-open ran its sub-cycle to convergence -- never denied"
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

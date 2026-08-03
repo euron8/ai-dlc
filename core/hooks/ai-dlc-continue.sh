@@ -314,11 +314,16 @@ if [ "$CYCLE_RC" -eq 3 ] && [ "$(cat "$ADVERSARIAL_STOP" 2>/dev/null)" != "${CYC
     echo ""
   } >> "$LOG_FILE"
 
-  if [ "$CYCLE_STATE" = "DIVERGENT" ]; then
-    WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\`: it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected, and the next pass only finds the next wave."
-  else
-    WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass. It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified, and the next pass falsifies the rewrite with one more counterexample. Passes are buying counterexamples, not convergence."
-  fi
+  # One branch per exit-3 state. The `else` used to assume STALLED, so any new state
+  # described itself as a plateau and handed the lead the wrong remedy confidently.
+  case "$CYCLE_STATE" in
+    DIVERGENT)
+      WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\`: it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected, and the next pass only finds the next wave." ;;
+    REOPENED)
+      WHAT="This series had ALREADY stamped \`EXIT_CONDITION_MET\`, and \`$(basename "$CYCLE_PASS")\` ran after it reporting CRITICAL/MAJOR work. A non-zero residue after MET is proof the artifact moved after it was signed off -- a RE-OPEN, costing a fresh sub-cycle nobody scheduled. Declare it with \`resolution: REOPEN_AFTER_MET\` naming what moved, or defer the improvement to the next step's artifact." ;;
+    *)
+      WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass. It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified, and the next pass falsifies the rewrite with one more counterexample. Passes are buying counterexamples, not convergence." ;;
+  esac
 
   # THE SENTENCE THAT USED TO STAND HERE READ: "Do NOT dispatch another adversarial pass,
   # and do NOT clear the pause flag to get past this."

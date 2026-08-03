@@ -425,3 +425,44 @@ cat > "$TARGET/operator-transcript.jsonl" <<'JSONL'
 JSONL
 
 printf '%s\n' "$TARGET"
+
+# =============================================================================
+# ARM J -- RE-OPEN: a pass ran after the series already stamped EXIT_CONDITION_MET.
+# =============================================================================
+
+# --- reopen-unrecorded: the measured case ------------------------------------
+# One consumer's research-requirements series reached MET at pass 2 and was re-opened by
+# an Advanced Elicitation run that edited the artifact AFTER convergence, buying a
+# five-pass sub-cycle nobody scheduled. J must fire, and the state must be REOPENED so
+# the hooks deny the dispatch.
+mkdir -p "$TARGET/reopen-unrecorded"
+pass "$TARGET/reopen-unrecorded/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/reopen-unrecorded/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0
+pass "$TARGET/reopen-unrecorded/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0
+repair "$TARGET/reopen-unrecorded/s1-brief-repair-p1.md"
+
+# --- reopen-floor-pass: THE DECOY FOR J, and the one Rule 8's FLOOR depends on --
+# `full` intensity owes 2+ passes. A series whose p1 already converged still owes p2, and
+# that pass finding NOTHING is the floor being met -- not a re-open. Seeded from a REAL
+# trajectory (s292-stories p1 MET -> p2 MET, 0 findings). The naive arm fires here; if
+# this case ever goes red the `blocking > 0` refinement has been lost and Rule 8's floor
+# is being punished as a defect.
+mkdir -p "$TARGET/reopen-floor-pass"
+pass "$TARGET/reopen-floor-pass/s1-adversarial-p1.md" 1 0 0 2 EXIT_CONDITION_MET 0
+pass "$TARGET/reopen-floor-pass/s1-adversarial-p2.md" 2 0 0 1 EXIT_CONDITION_MET 0
+
+# --- reopen-recorded: the sanctioned exit ------------------------------------
+# A declared re-open resumes, exactly as a resolved hard block does. Without this case
+# the arm would be a trap with no door: every real re-open would need the operator to
+# delete a pass file.
+mkdir -p "$TARGET/reopen-recorded"
+pass "$TARGET/reopen-recorded/s1-adversarial-p1.md" 1 4 2 1 EXIT_CONDITION_NOT_MET 0
+pass "$TARGET/reopen-recorded/s1-adversarial-p2.md" 2 0 0 0 EXIT_CONDITION_MET     0
+record "$TARGET/reopen-recorded/s1-resolution-p2.md" \
+  s1-adversarial-p2.md REOPEN_AFTER_MET ccc1 ccc2 4000 4300 \
+  "advanced elicitation edited the artifact after it was notarised" \
+  '2026-07-12T03:00:00Z | "re-open the series and carry the elicitation edits"'
+pass "$TARGET/reopen-recorded/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_MET 0 ccc2 s1-resolution-p2.md
+pass "$TARGET/reopen-recorded/s1-adversarial-p4.md" 4 0 0 1 EXIT_CONDITION_MET         0 ccc3
+repair "$TARGET/reopen-recorded/s1-brief-repair-p1.md"
+repair "$TARGET/reopen-recorded/s1-brief-repair-p3.md"

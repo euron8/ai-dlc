@@ -258,7 +258,7 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    ```
    <!-- ADVERSARIAL_RESOLUTION v1
    resolves: <path of the DIVERGENT_HARD_BLOCK pass>
-   resolution: REVERT_REPAIR | CHANGE_APPROACH | CUT_SCOPE | RESTART_CYCLE
+   resolution: REVERT_REPAIR | CHANGE_APPROACH | CUT_SCOPE | RESTART_CYCLE | REOPEN_AFTER_MET
    adjudicated_by: operator
    artifact: <path of the artifact under review>
    artifact_sha_before: <MUST equal the resolved pass's artifact_sha>
@@ -277,8 +277,33 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    | `CUT_SCOPE` | remove the contested scope | `artifact_bytes_after` **<** `artifact_bytes_before` |
    | `CHANGE_APPROACH` | a different approach, on the operator's authority | sha changed; `scope_delta` present |
    | `RESTART_CYCLE` | abandon the series and start over | as above, **plus** the passes MOVED to an existing `archive:` dir |
+   | `REOPEN_AFTER_MET` | the series had already stamped `EXIT_CONDITION_MET` and the artifact moved after it | sha changed; `scope_delta` names what moved |
 
-   **`operator_authorization` is a CITATION, required for ALL FOUR kinds, and verified.** A
+   **`EXIT_CONDITION_MET` IS A FREEZE POINT, AND THE CYCLE IS ORDERED.** Rule 8's intensity
+   arrow is a sequence — Party Mode → Advanced Elicitation → Adversarial Review — so
+   elicitation runs BEFORE the convergence cycle, never after it. Once a series stamps
+   `EXIT_CONDITION_MET` the artifact it notarised is frozen for that step.
+
+   A pass that runs after MET and reports any CRITICAL or MAJOR is proof the artifact moved
+   after it was signed off: the same bytes reviewed under the same contract yield the same
+   residue. That is a RE-OPEN, arm J stops it, and it costs a fresh sub-cycle. A pass after
+   MET that finds NOTHING is the intensity FLOOR being met and costs nothing — the arm
+   requires a non-zero residue precisely so the floor is never punished as a defect.
+
+   Rule 7 ("fix it directly in the artifact") governs findings raised INSIDE the cycle.
+   After MET, an improvement is DEFERRED to the next step's artifact, or it re-opens the
+   series on this record. It does not simply happen: the measured instance was an
+   elicitation editing an artifact its own series had already notarised, buying a five-pass
+   sub-cycle nobody scheduled.
+
+   **This clause lives here rather than in Rule 8 because `SKILL.md` has no room.** The
+   POST-COMPACT RECOVERY PROTOCOL must end inside Claude Code's ~5000-token re-attach
+   window, and it ended with THREE tokens of slack; any prose added above it pushes the
+   tail out of the window a re-attaching lead can see. Rule 8 already delegates kinds and
+   procedure to this file, so this is where it belongs — but the constraint, not the
+   taxonomy, is what decided it.
+
+   **`operator_authorization` is a CITATION, required for EVERY kind, and verified.** A
    resolution CLEARS a HARD_BLOCK, and a hard block is operator-gated by design (only the
    operator may adjudicate). So the field is not free text — it is a *timestamp* plus a
    *verbatim substring* of the operator's own message, and Check 24 checks that substring

@@ -192,11 +192,18 @@ if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
     # exactly what should be dispatched now. The validator decides that; this hook does not
     # know what a resolution record is.
     if [ "$CYCLE_RC" -eq 3 ]; then
-      if [ "$CYCLE_STATE" = "DIVERGENT" ]; then
-        STOP_WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\` -- it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected. The next pass finds the next wave."
-      else
-        STOP_WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass (through \`$(basename "$CYCLE_PASS")\`). It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified; the next pass falsifies the rewrite with one more counterexample."
-      fi
+      # ONE BRANCH PER STATE THE VALIDATOR CAN EMIT AT rc=3. This was a two-way `if`
+      # whose `else` assumed STALLED, so a new exit-3 state arrived describing itself
+      # as a plateau -- a wrong remedy delivered with a confident verdict, which is
+      # worse than no message. Any future state added there must land here too.
+      case "$CYCLE_STATE" in
+        DIVERGENT)
+          STOP_WHAT="\`$(basename "$CYCLE_PASS")\` stamps \`verdict: DIVERGENT_HARD_BLOCK\` -- it found CRITICALs in scope a previous pass had ALREADY cleared. Those are defects the REPAIR injected. The next pass finds the next wave." ;;
+        REOPENED)
+          STOP_WHAT="This series had ALREADY stamped \`EXIT_CONDITION_MET\`, and \`$(basename "$CYCLE_PASS")\` ran after it and found CRITICAL/MAJOR work. The same bytes reviewed under the same contract yield the same residue, so a non-zero residue after MET is proof the artifact MOVED after it was signed off. That is a RE-OPEN, not a continuation: it costs a fresh sub-cycle nobody scheduled. The cycle is ORDERED -- Party Mode, then Advanced Elicitation, then Adversarial Review -- and elicitation editing an artifact its series already notarised is the measured cause." ;;
+        *)
+          STOP_WHAT="The cycle has held a nonzero MAJOR at ZERO CRITICAL for pass after pass (through \`$(basename "$CYCLE_PASS")\`). It is neither converging nor diverging -- it is STALLED. Each repair rewrites the prose around a claim nobody verified; the next pass falsifies the rewrite with one more counterexample." ;;
+      esac
 
       STOP_REASON="AI/DLC Rule 8: THE ADVERSARIAL CYCLE HAS STOPPED (${CYCLE_STATE}). \`${TOOL_NAME}\` would dispatch another pass, so it is DENIED.
 
