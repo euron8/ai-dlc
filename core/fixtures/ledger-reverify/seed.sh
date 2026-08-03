@@ -148,6 +148,33 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry SH-MOVED runs an `sh` receipt whose subject no longer exists.** A RENAMED subject
+  exits 127 (command not found), which the `sh` verb read as "no longer reproduces" and
+  closed. That is an absorption that never happened, and closing is the direction that
+  loses information permanently — measured on a reference consumer where ONE relocation
+  commit flipped five entries to CLOSE-CANDIDATE in a single run, every one still
+  reproducing at its new path.
+  <br>The `theirs_*` verbs have always emitted NEEDS-REVIEW for an unresolvable path; `sh`
+  is the verb that runs arbitrary commands, where paths are most volatile, and it was the
+  one without the guard.
+  verify: sh bash /nonexistent/path/that/was/renamed.sh
+
+---
+
+- **Entry SH-REAL runs an `sh` receipt that genuinely stops reproducing.** The OVER-FIRE
+  CONTROL for the entry above: a plain non-zero exit that is NOT 126/127 must still close,
+  or the guard would pin every `sh` entry open forever and be worse than the defect.
+  verify: sh test -e /nonexistent-so-this-exits-1
+
+---
+
+- **Entry SH-LIVE runs an `sh` receipt that still reproduces.** Exit 0. Pins the third
+  outcome so the two above cannot both be satisfied by a verb that always reports one
+  thing.
+  verify: sh true
+
+---
+
 ## PC-FIXTURE-HEADING-ABSORBED — the heading entry shape (filed for the fixture)
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"

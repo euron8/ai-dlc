@@ -667,12 +667,36 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
         emit NEEDS-REVIEW "$label" "unresolved: empty 'verify: sh' directive"
         continue
       fi
-      if DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
-         bash -c "$rest" >/dev/null 2>&1; then
-        emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV)"
-      else
-        emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry."
-      fi
+      # A MISSING SUBJECT IS NOT A FIX, AND THIS IS THE ONE VERDICT THAT LOSES DATA.
+      #
+      # `sh` reads a non-zero exit as "no longer reproduces" -> CLOSE-CANDIDATE. But a
+      # receipt whose subject file was RENAMED also exits non-zero -- 127 for a missing
+      # command, 126 for a non-executable one, 2 for a `grep` on a missing path -- so a
+      # relocation reads as an absorption that never happened. Measured on a reference
+      # consumer: ONE relocation commit moved five receipt subjects and all five flipped to
+      # CLOSE-CANDIDATE in a single run, every one of them still reproducing at its new
+      # path. This file's own header calls that the direction that loses information
+      # permanently.
+      #
+      # The `theirs_*` verbs have been guarded against exactly this since they were
+      # written -- an unresolvable path is NEEDS-REVIEW, never a close. `sh` is the escape
+      # hatch that runs arbitrary consumer-side commands, where paths are MOST volatile,
+      # and it was the one verb without the guard.
+      #
+      # Status-based, not path-parsing: a subject inside a longer `&&` chain does not
+      # surface as a distinguishable status, so a parser would give false confidence. This
+      # arm claims only what the status can carry, and says so.
+      DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
+        bash -c "$rest" >/dev/null 2>&1
+      sh_rc=$?
+      case "$sh_rc" in
+        0)
+          emit STILL-LIVE "$label" "verify sh: still reproduces at theirs ($TV)" ;;
+        126|127)
+          emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc (command not found / not executable), which is what a RENAMED or DELETED subject looks like — not a fix. A close here would record an absorption that never happened. Re-anchor the receipt at the subject's current path, then re-run. If the subject really is gone, say so in the entry rather than letting the exit status say it." ;;
+        *)
+          emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. NOTE: exit $sh_rc cannot distinguish 'fixed' from 'subject moved' inside an && chain — check the receipt's subject paths still exist before draining." ;;
+      esac
       ;;
     manual)
       emit HAND-REVIEW "$label" "verify: manual — no mechanical predicate by design; adjudicate the entry body against theirs ($TV)"

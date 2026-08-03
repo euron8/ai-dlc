@@ -126,6 +126,12 @@ row_is "Entry K" NEEDS-REVIEW    "theirs_lacks on a substring present at base to
 # would sit open forever against an upstream that had already absorbed it. Matching each
 # substring separately is what makes the pair disagree, which is what makes the test real.
 row_is "Entry L" STILL-LIVE      "two substrings, neither at theirs -> genuinely still live"
+# --- the `sh` verb: a MISSING SUBJECT is not a fix -----------------------------
+# Three outcomes, because two would let a verb that always reports one thing pass.
+row_is "Entry SH-MOVED" NEEDS-REVIEW "exit 127 = subject renamed/deleted, NOT absorbed. A close here records an absorption that never happened, and closing is the direction that loses information permanently"
+row_is "Entry SH-REAL"  CLOSE-CANDIDATE "OVER-FIRE CONTROL: a plain non-zero exit still closes, or the guard pins every sh entry open forever"
+row_is "Entry SH-LIVE"  STILL-LIVE "exit 0 still means it reproduces"
+
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
 
 # THE SECOND DIFFERENTIAL — entry SHAPE. These three carry the same directives as B/C/D but

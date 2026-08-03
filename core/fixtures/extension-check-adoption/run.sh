@@ -104,6 +104,44 @@ else
   ok "a refused run wrote nothing"
 fi
 
+
+# --- a `team-roles/` hook must not be FATAL ------------------------------------------
+# It resolves OUTSIDE the skill dir. The tool joined it under the skill dir and exited 2 on
+# failure, so one role extension made it scan NOTHING -- and a GM1 tool that prints nothing
+# reads exactly like a clean one. The dry-run above already exercised this seed; assert the
+# code, because rc 2 and rc 1 are "died" and "found work".
+RN="$(fresh)"; SN="$RN/.claude/skills/ai-dlc"
+bash "$T" "$RN" >/dev/null 2>&1
+[ $? -ne 2 ] && ok "a team-roles/ hook does not kill the run (it resolves outside the skill dir)" \
+             || bad "a team-roles/ hook still exits 2 — the tool scans nothing on any consumer with a role extension"
+
+# --- the GLOBAL flag is REFUSED across several undeclared entries ---------------------
+# `gate_types:` is entry frontmatter and the right answer differs per entry; the reference
+# consumer needed four different values. One flag wrote one value into all four, silently,
+# including entries the operator never considered.
+bash "$T" "$RN" --apply --gate-types planning >/dev/null 2>&1
+[ $? -eq 2 ] && ok "a GLOBAL --gate-types across >1 undeclared entry is REFUSED" \
+             || bad "a global --gate-types wrote to several entries at once — the silent wrong-value write"
+if grep -q 'CHECK_LOADED' "$SN/extensions/checks/numeric.md"; then
+  bad "the REFUSED run still wrote — a refusal that writes is not a refusal"
+else
+  ok "the refused run wrote nothing"
+fi
+
+# --- per-entry answers, and they must DIFFER -----------------------------------------
+bash "$T" "$RN" --apply \
+  --entry extensions/checks/numeric.md --gate-types planning \
+  --entry extensions/checks/alpha.md   --gate-types "story, implementation" >/dev/null 2>&1
+a=$?
+[ "$a" -eq 0 ] && ok "per-entry --entry/--gate-types applies" || bad "per-entry apply exited $a"
+if grep -q '^gate_types: \[planning\]' "$SN/extensions/checks/numeric.md" && \
+   grep -q '^gate_types: \[story, implementation\]' "$SN/extensions/checks/alpha.md"; then
+  ok "each entry got its OWN value — the per-entry question its header documents is now expressible"
+else
+  bad "per-entry values did not land distinctly: $(grep -h '^gate_types:' "$SN/extensions/checks/numeric.md" "$SN/extensions/checks/alpha.md" | tr '\n' ' ')"
+fi
+rm -rf "$RN"
+
 # --- 4. baseline: GM1 fires on the seeded tree --------------------------------------
 MF="$S/steps/gate-validation.md"
 GOUT="$(bash "$V" "$MF" 2>&1)"; g=$?
@@ -117,7 +155,7 @@ grep -q 'adopt-extension-checks.sh' <<<"$GOUT" \
   || bad "GM1 names no remedy tool — the operator is told what is wrong and given nothing that does it"
 
 # --- 5. apply: both halves, then GM1 is clear ---------------------------------------
-bash "$T" "$R" --apply --gate-types planning >/dev/null 2>&1
+bash "$T" "$R" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
 a=$?
 [ "$a" -eq 0 ] && ok "--apply --gate-types planning exits 0" || bad "--apply exited $a, expected 0"
 
@@ -144,7 +182,9 @@ bash "$V" "$MF" >/dev/null 2>&1
              || bad "GM1 went clear with the kind-mismatch entry unresolved — something wrote into it"
 
 decide "$R"
-bash "$T" "$R" --apply --gate-types planning >/dev/null 2>&1
+# The operator answered the decision, so the entry is now a `check` and needs its OWN
+# gate types -- naming only the earlier two would leave it undeclared, which is the point.
+bash "$T" "$R" --apply --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
 bash "$V" "$MF" >/dev/null 2>&1
 g=$?
 [ "$g" -eq 0 ] && ok "after the operator answers the decision and re-runs, GM1 is CLEAR" \
@@ -152,7 +192,7 @@ g=$?
 
 # --- 6. idempotence ------------------------------------------------------------------
 BEFORE="$(cat "$S/extensions/checks/numeric.md")"
-bash "$T" "$R" --apply --gate-types planning >/dev/null 2>&1
+bash "$T" "$R" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
 [ "$(cat "$S/extensions/checks/numeric.md")" = "$BEFORE" ] \
   && ok "re-running --apply is a no-op (level-triggered on tree STATE, not on a diff)" \
   || bad "re-running --apply changed the tree — it is edge-triggered and will double-write"
@@ -215,7 +255,7 @@ M1="$(mutate anchor ' + f"<!-- CHECK_LOADED: {i} -->\n"' ' + ""')"
 if [ -z "$M1" ]; then
   bad "FIXTURE ERROR: the anchor-write mutation matched nothing — assertion 5 proves nothing"
 else
-  R1="$(fresh)"; decide "$R1"; bash "$M1" "$R1" --apply --gate-types planning >/dev/null 2>&1
+  R1="$(fresh)"; decide "$R1"; bash "$M1" "$R1" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
   c="$(code_of "$R1")"
   [ "$c" = "GM2" ] && ok "MUTANT anchor-write: without the anchor the declaration claims loading for nothing — GM2" \
                    || bad "MUTANT anchor-write: expected GM2, got $c"
@@ -227,7 +267,7 @@ M2="$(mutate gts '        if not declared:' '        if False:')"
 if [ -z "$M2" ]; then
   bad "FIXTURE ERROR: the gate_types-write mutation matched nothing — assertion 5 proves nothing"
 else
-  R2="$(fresh)"; decide "$R2"; bash "$M2" "$R2" --apply --gate-types planning >/dev/null 2>&1
+  R2="$(fresh)"; decide "$R2"; bash "$M2" "$R2" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
   c="$(code_of "$R2")"
   [ "$c" = "ORPHAN" ] && ok "MUTANT gate_types-write: without the declaration the anchors become ORPHANs (a DIFFERENT code, so the two assertions are not entangled)" \
                       || bad "MUTANT gate_types-write: expected ORPHAN, got $c"
@@ -241,7 +281,7 @@ M3="$(mutate kind '        if frontmatter(t, "kind") != "check":' '        if Fa
 if [ -z "$M3" ]; then
   bad "FIXTURE ERROR: the entry-filter mutation matched nothing"
 else
-  R3="$(fresh)"; bash "$M3" "$R3" --apply --gate-types planning >/dev/null 2>&1
+  R3="$(fresh)"; bash "$M3" "$R3" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
   if grep -q 'CHECK_LOADED: 940' "$R3/.claude/skills/ai-dlc/extensions/checks/out-of-scope.md" 2>/dev/null; then
     ok "MUTANT entry-filter: ignoring \`kind:\` rewrites a \`step-domain\` entry (that filter is load-bearing)"
   else
@@ -254,7 +294,7 @@ fi
 # A mutant copy that dies for its own reasons emits nothing, and "no output" would
 # otherwise score as a kill.
 MC="$(mktemp "${TMPDIR:-/tmp}/adopt-control.XXXXXX")"; cp "$T" "$MC"
-RC="$(fresh)"; decide "$RC"; bash "$MC" "$RC" --apply --gate-types planning >/dev/null 2>&1
+RC="$(fresh)"; decide "$RC"; bash "$MC" "$RC" --apply --entry extensions/checks/numeric.md --gate-types planning --entry extensions/checks/alpha.md --gate-types planning --entry extensions/checks/out-of-scope.md --gate-types planning >/dev/null 2>&1
 c="$(code_of "$RC")"
 [ "$c" = "PASS" ] && ok "CONTROL: an UNMUTATED copy still clears GM1 (the mutants died of their edits, not of being copies)" \
                   || bad "CONTROL: the unmutated copy produced $c — every mutant verdict above is unattributable"
