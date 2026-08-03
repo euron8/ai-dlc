@@ -423,6 +423,14 @@ cat > "$TARGET/operator-transcript.jsonl" <<'JSONL'
 {"type":"assistant","timestamp":"2026-07-12T02:00:00Z","message":{"content":[{"type":"text","text":"p2 stamped DIVERGENT_HARD_BLOCK; pausing for your adjudication."}]}}
 {"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Revert the p1 to p2 repair wholesale — it made the check unfalsifiable."}}
 {"type":"assistant","timestamp":"2026-07-12T04:00:00Z","message":{"content":[{"type":"text","text":"A second series has held a nonzero MAJOR at zero CRITICAL for three passes -- arm E calls that a STALL. Another pass is not the remedy."}]}}
+JSONL
+
+# A SECOND SESSION'S TRANSCRIPT, in the same directory. The stall was adjudicated HERE,
+# not in the session that later asks permission -- which is the whole defect. A resolution
+# record outlives the session that wrote it, and `transcript_path` is always the session
+# ASKING, never the one in which the operator spoke. A single-file check therefore made
+# every record unverifiable across a handoff, /clear or auto-compact.
+cat > "$TARGET/prior-session-transcript.jsonl" <<'JSONL'
 {"type":"user","timestamp":"2026-07-12T05:00:00Z","message":{"content":"Cut the claim and re-verify — if it cannot be checked cheaply it is not load-bearing."}}
 JSONL
 

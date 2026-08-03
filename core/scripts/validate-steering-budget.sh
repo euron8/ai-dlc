@@ -100,7 +100,7 @@
 #       Print ONLY the total violation count (A+B+C+D) as a bare integer, exit 0.
 #       gate-validation.md Check 25 needs an integer to compare against the count
 #       the previous gate recorded; it must not have to grep one out of prose.
-#   core/scripts/validate-steering-budget.sh --transcript PATH --cite "SUBSTR" [--since ISO]
+#   core/scripts/validate-steering-budget.sh (--transcript PATH | --dir PATH) --cite "SUBSTR" [--since ISO]
 #       PROVENANCE-CITATION query mode. Asks a different question from the checks
 #       above: not "did the lead mishandle operator messages?" but "did a GENUINE
 #       operator message actually contain these words?" Prints MATCH <ts> or NOMATCH
@@ -159,9 +159,27 @@ done
 
 say(){ [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
 
-# --cite is a single-transcript query; it never scans a corpus.
-if [ -n "$CITE" ] && [ -z "$TRANSCRIPT" ]; then
-  echo "FAIL: --cite requires --transcript PATH" >&2
+# --cite TAKES A CORPUS, and withholding that was a live deadlock.
+#
+# This used to read "--cite is a single-transcript query; it never scans a corpus" and
+# reject --dir. But --dir exists for a reason stated a few lines up in this file's own
+# usage block -- "a sprint spans many transcripts (every handoff and auto-compact starts a
+# new one)" -- and that reason applies to a CITATION with more force than to an audit.
+#
+# A resolution record's operator_authorization is verified by shelling here. The caller
+# (ai-dlc-acknowledge.sh) passes the CURRENT session's transcript, which is always the
+# session asking permission and never the session in which the operator spoke. So a record
+# was verifiable only inside the session that wrote it: cross any handoff, /clear or
+# auto-compact and the citation reported NOMATCH, the record stopped counting, and
+# --cycle-state regressed RESOLVED -> STALLED -> rc 3 -> every dispatch denied. The record
+# survived on disk; its provenance did not survive the session boundary.
+#
+# Worse, the failure was INVERTED against honesty: with NO transcript the caller fails OPEN
+# and the record counts, but with a READABLE transcript merely lacking the quote it fails
+# CLOSED. Supplying ground truth was strictly worse than supplying none, and a genuine
+# cross-session record was treated exactly like a forged one.
+if [ -n "$CITE" ] && [ -z "$TRANSCRIPT" ] && [ -z "$DIR" ]; then
+  echo "FAIL: --cite requires --transcript PATH or --dir PATH" >&2
   exit 1
 fi
 
@@ -373,12 +391,21 @@ if (CITE) {
   const norm = (s) => (s || "").replace(/\s+/g, " ").trim().toLowerCase();
   const needle = norm(CITE);
   const sinceMs = SINCE ? Date.parse(SINCE) : -Infinity;
-  let recs;
-  try {
-    recs = fs.readFileSync(one, "utf8").split("\n").filter(Boolean)
-      .map(l => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean).filter(r => !r.isSidechain);
-  } catch { console.log("NOMATCH"); process.exit(2); }
+  // THE CORPUS, not one file. `files` is already [one] for --transcript and the
+  // since-bounded directory listing for --dir, so this needs no second assembly.
+  let recs = [];
+  for (const f of files) {
+    try {
+      recs = recs.concat(
+        fs.readFileSync(f, "utf8").split("\n").filter(Boolean)
+          .map(l => { try { return JSON.parse(l); } catch { return null; } })
+          .filter(Boolean).filter(r => !r.isSidechain));
+    } catch { /* an unreadable member is not a verdict; the count below shows the scan */ }
+  }
+  if (!recs.length) {
+    console.error(`NOMATCH (0 records across ${files.length} transcript(s))`);
+    console.log("NOMATCH"); process.exit(2);
+  }
   // Which tool_use ids are AskUserQuestion calls. Resolved by PAIRING, never by sniffing the
   // result text: any subagent can emit a string that looks like an answer block, and only the
   // tool_use it replies to says what actually asked the operator.
@@ -393,8 +420,12 @@ if (CITE) {
     if (!txt) continue;
     const ts = Date.parse(r.timestamp);
     if (!(ts >= sinceMs)) continue;
-    if (norm(txt).includes(needle)) { console.log(`MATCH ${r.timestamp}`); process.exit(0); }
+    if (norm(txt).includes(needle)) {
+      console.error(`cite: scanned ${files.length} transcript(s)`);
+      console.log(`MATCH ${r.timestamp}`); process.exit(0);
+    }
   }
+  console.error(`cite: scanned ${files.length} transcript(s), no genuine operator message carried it`);
   console.log("NOMATCH"); process.exit(2);
 }
 

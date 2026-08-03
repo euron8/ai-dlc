@@ -51,7 +51,7 @@ ASSERTIONS=0
 expect() {
   local case_dir="$1" want="$2" why="$3" prefix="${4:-s1-adversarial-pass}" got out
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" 2>&1)"
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
   got=$?
   if [ "$got" -eq "$want" ]; then
     printf '  ok    %-28s exit=%s  (%s)\n' "$case_dir" "$got" "$why"
@@ -68,7 +68,7 @@ expect_says() {
   local case_dir="$1" prefix="$2" label="$3"; shift 3
   local out missing=""
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" 2>&1)"
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1)"
   for want in "$@"; do
     grep -qF -- "$want" <<<"$out" || missing="$missing
             missing: \"$want\""
@@ -85,7 +85,7 @@ expect_says() {
 expect_state() {
   local case_dir="$1" prefix="$2" want_state="$3" want_rc="$4" why="$5" out state rc
   ASSERTIONS=$((ASSERTIONS + 1))
-  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null)"
+  out="$(bash "$VALIDATOR" --series "$ROOT/$case_dir/$prefix" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null)"
   rc=$?
   state="$(printf '%s' "$out" | cut -f1)"
   if [ "$state" = "$want_state" ] && [ "$rc" -eq "$want_rc" ]; then
@@ -225,15 +225,42 @@ if cmp -s "$VALIDATOR" "$MUT"; then
   echo "  FAIL  MUTATION matched nothing -- the stalled-resolved assertion proves nothing" >&2
   FAILURES=$((FAILURES + 1))
 else
-  m_res="$(bash "$MUT" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null | cut -f1)"
-  m_pln="$(bash "$MUT" --series "$ROOT/stalled/s1-adversarial-p"          --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null | cut -f1)"
-  m_inv="$(bash "$MUT" --series "$ROOT/stalled-record-invalid/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null | cut -f1)"
+  m_res="$(bash "$MUT" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
+  m_pln="$(bash "$MUT" --series "$ROOT/stalled/s1-adversarial-p"          --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
+  m_inv="$(bash "$MUT" --series "$ROOT/stalled-record-invalid/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null | cut -f1)"
   if [ "$m_res" = "STALLED" ] && [ "$m_pln" = "STALLED" ] && [ "$m_inv" = "STALLED" ]; then
     printf '  ok    %-28s %s  (%s)\n' "MUTATION stall-resolution" "STALLED" "without the stall call site RESOLVED is unreachable again; the other two are unmoved, so the mutant is attributable"
   else
     echo "  FAIL  MUTATION: expected stalled-resolved to revert to STALLED, got '$m_res' (plain='$m_pln' invalid='$m_inv')" >&2
     FAILURES=$((FAILURES + 1))
   fi
+fi
+
+# --- the citation must OUTLIVE the session that wrote it ------------------------
+# `stalled-resolved`'s operator adjudication lives in `prior-session-transcript.jsonl`,
+# NOT in the current session's transcript. That is the real shape: a resolution record
+# outlives its session, and `transcript_path` is always the session ASKING permission,
+# never the one in which the operator spoke.
+#
+# The pair is the assertion. Current transcript alone -> the citation is unfindable, the
+# record stops counting and the stall re-deadlocks. Add the DIRECTORY the transcripts
+# actually live in and the same record verifies. Same tree, same record, same citation.
+cs_state() {  # cs_state <extra-args...> -> prints the state
+  bash "$VALIDATOR" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state \
+    --transcript "$TRANSCRIPT" "$@" 2>/dev/null | cut -f1
+}
+ASSERTIONS=$((ASSERTIONS + 2))
+got_nodir="$(cs_state)"
+got_dir="$(cs_state --transcript-dir "$ROOT")"
+if [ "$got_nodir" = "STALLED" ]; then
+  printf '  ok    %-28s %s  (%s)\n' "cross-session (no dir)" "STALLED" "a citation from a PRIOR session is unfindable in one transcript -- the deadlock"
+else
+  echo "  FAIL  cross-session (no dir): expected STALLED, got '$got_nodir'" >&2; FAILURES=$((FAILURES + 1))
+fi
+if [ "$got_dir" = "RESOLVED" ]; then
+  printf '  ok    %-28s %s  (%s)\n' "cross-session (with dir)" "RESOLVED" "the SAME record verifies against the corpus the citation actually lives in"
+else
+  echo "  FAIL  cross-session (with dir): expected RESOLVED, got '$got_dir'" >&2; FAILURES=$((FAILURES + 1))
 fi
 
 # --- arm J: RE-OPEN ------------------------------------------------------------

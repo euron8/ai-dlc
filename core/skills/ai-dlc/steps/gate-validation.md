@@ -1431,10 +1431,11 @@ one-shot stamps no verdict and this check has nothing to read; do not drag its
 artifact into the series.
 
 **Check.** Invoke `scripts/ai-dlc/validate-adversarial-convergence.sh --series
-<path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path>`;
+<path-prefix-of-this-step's-pass-series> --transcript <this session's transcript_path>
+--transcript-dir <the directory that transcript sits in>`;
 exit 0 required. Pass `--transcript` (the current session's JSONL) so arm F6 can verify a
 resolution record's `operator_authorization` against ground truth; the gate **fails closed**
-if a resolution cites an operator message the transcript does not contain — and fails closed
+if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
 pass in the series (mapping in `team-roles/adversary.md`) and enforces eight arms:
@@ -1443,6 +1444,11 @@ pass in the series (mapping in `team-roles/adversary.md`) and enforces eight arm
 with the offending pass and the concrete counts — `err "C -- DIVERGENCE" "<file> declares
 findings_critical_prior_scope=N but ..."` — so the remedy arrives with the verdict and is
 not restated here. Arm F is why `--transcript` is mandatory.
+**Pass `--transcript-dir` too, and prefer it.** A resolution record OUTLIVES the session
+that wrote it, while `transcript_path` is always the session ASKING permission — never the
+one in which the operator spoke. Checking one file made every record unverifiable across a
+handoff, `/clear` or auto-compact: the citation reported NOMATCH, the record stopped
+counting, and the cycle re-deadlocked at `STALLED`/rc 3 with every dispatch denied.
 
 It does NOT enforce the per-intensity pass floor ("2+ passes"). Rule 8 delegates
 that to each planning step's own intensity gate; duplicating it here would fail
