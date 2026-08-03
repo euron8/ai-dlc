@@ -126,6 +126,11 @@ SP_ROOT="${AI_DLC_PROJECT_ROOT:-}"
 [ -n "$SP_ROOT" ] || SP_ROOT="$(ai_dlc_resolve_root "$SP_SCRIPT_DIR" || true)"
 [ -n "$SP_ROOT" ] || SP_ROOT="${CLAUDE_PROJECT_DIR:-}"
 [ -n "$SP_ROOT" ] || SP_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$SP_ROOT" ] || {
+  echo "ERROR: cannot resolve the project root from ${SP_SCRIPT_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 2
+}
 # --- end AI_DLC_ROOT --------------------------------------------------------
 
 SCHEMA=""

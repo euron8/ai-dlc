@@ -60,7 +60,43 @@ fi
 
 # ---- 1. Locate the vocabulary source ---------------------------------------
 ES_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ES_ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+# --- AI_DLC_ROOT ------------------------------------------------------------
+# Resolve the project root by walking UP for a marker, never by a fixed number of
+# `..` hops. This script runs from three layouts:
+#   <root>/core/scripts/X      distribution
+#   <root>/scripts/ai-dlc/X    consumer, v0.126.0+
+#   <root>/scripts/X           consumer, pre-v0.126.0
+# and no fixed hop count fits all three. v0.126.0 moved the validators one level
+# deeper, which silently turned every `dirname $0/..` root into <root>/scripts:
+# this script then found no docs/retro/, printed "Scanned 0 retros, 0 gates
+# declared, 0 dormant" and exited 0 — a check that could no longer fire, reading
+# exactly like one that passed.
+# Inline on purpose, in every script that needs it: a shared lib cannot fix this,
+# because locating the lib is the same unsolved problem. Duplication is correct
+# here. core/fixtures/validator-path-resolution asserts both layouts agree.
+ai_dlc_resolve_root() {
+  local d="$1"
+  while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -e "$d/.git" ] || [ -d "$d/.claude" ] || [ -d "$d/core/skills/ai-dlc" ]; then
+      printf '%s\n' "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+AI_DLC_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AI_DLC_ROOT="${AI_DLC_PROJECT_ROOT:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$AI_DLC_SELF_DIR" || true)"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="${CLAUDE_PROJECT_DIR:-}"
+[ -n "$AI_DLC_ROOT" ] || AI_DLC_ROOT="$(ai_dlc_resolve_root "$(pwd)" || true)"
+[ -n "$AI_DLC_ROOT" ] || {
+  echo "ERROR: cannot resolve the project root from ${AI_DLC_SELF_DIR} (no .git or" >&2
+  echo "  .claude/ marker in any parent). Set AI_DLC_PROJECT_ROOT to the repo root." >&2
+  exit 2
+}
+# --- end AI_DLC_ROOT --------------------------------------------------------
+
+ES_ROOT="$AI_DLC_ROOT"
 SPEC="${2:-${AI_DLC_ESCALATIONS_MD:-}}"
 if [ -z "$SPEC" ]; then
   for cand in \
