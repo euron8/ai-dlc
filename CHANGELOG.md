@@ -34,6 +34,86 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.245.0] — 2026-08-03
+
+### `EXIT_CONDITION_MET` was not a freeze point, so a converged series could be re-opened for free
+
+Rule 8 defines a pass FLOOR ("2+ passes"), a divergence trap and a stall trap. All three
+are content predicates. Nothing named the state a pass walks past when it runs after the
+series has already converged.
+
+**The measured case.** One consumer's `research-requirements` series stamped
+`EXIT_CONDITION_MET` at pass 2 and was re-opened by an Advanced Elicitation run that
+edited the artifact *after* convergence. That bought a fresh five-pass sub-cycle
+(adversarial p3 → repair → p4 fresh MAJOR → repair → p5 MET) which nothing scheduled,
+nothing recorded, and no rung questioned. Across the same sprint the four planning steps
+ran **20 adversarial passes and 13 repairs in ~15 hours with zero implementation**.
+
+**Arm J is arm F generalised, and arm F should have caught it.** Arm F already says a
+pass following a TERMINAL state must declare the record that authorised it — it just
+keys on `DIVERGENT_HARD_BLOCK`. `EXIT_CONDITION_MET` is terminal too; it is the state the
+gate exists to reach. Running a pass after it walks past a terminal state exactly the way
+running a pass after a hard block does. The predicate was wrong, not the concept missing.
+
+New `--cycle-state` state `REOPENED` (exit 3, so the hooks deny the dispatch) and a new
+resolution kind `REOPEN_AFTER_MET`: `EXIT_CONDITION_MET` is a freeze point, the cycle is
+ORDERED (elicitation runs *before* the convergence cycle, never after), and after MET an
+improvement is deferred to the next step's artifact or it re-opens the series on the
+record.
+
+**The clause is in `steps/_gate-procedures.md`, not in Rule 8, and the re-attach budget
+is why.** It was written into `SKILL.md` first and `validate-reattach-budget.sh` blocked
+the push: the POST-COMPACT RECOVERY PROTOCOL must end inside Claude Code's ~5000-token
+re-attach window and it ended with **three tokens of slack**, so any prose added above it
+pushes the tail out of the window a re-attaching lead can see. A shortened three-line
+version still overran by 63 tokens. Rule 8 already delegates kinds and procedure to
+`_gate-procedures.md`, so that is where it belongs — but the constraint decided it, not
+the taxonomy, and `SKILL.md` is unchanged by this release.
+
+### The `blocking > 0` refinement was measured, not reasoned
+
+Across **28 series** in the reference consumer, the naive form — "a MET pass followed by
+any pass" — fires 5 times and **two are false**: `s290-discovery` p1 MET → p2 MET and
+`s292-stories` p1 MET → p2 MET. Both are the same shape and it is the shape the floor
+protects: a `full` cycle whose p1 already converged still OWES its second pass, and that
+pass finding nothing is the intensity floor being met.
+
+Requiring the successor to report CRITICAL+MAJOR ≥ 1 gives **3 fires, 3 true positives,
+0 false positives**. It is closed by construction too: the same bytes reviewed under the
+same contract yield the same residue, so a *non-zero* residue after MET is proof the
+artifact moved after it was signed off.
+
+The fixture seeds that decoy from the real trajectory. If `reopen-floor-pass` ever goes
+red, the refinement has been lost and Rule 8's floor is being punished as a defect.
+
+### Both hooks: one branch per state, because the `else` assumed STALLED
+
+`ai-dlc-acknowledge.sh` and `ai-dlc-continue.sh` each carried a two-way `if` on the
+cycle state whose `else` described a plateau. A new exit-3 state would have arrived
+telling the lead its cycle was stuck at a nonzero MAJOR — a wrong remedy delivered with a
+confident verdict, which is worse than no message. Both are now `case` statements with a
+branch per state.
+
+### Arm I (the yield budget) is NOT in this release, and the measurement is why
+
+The plan was to pair arm J with an arm I that bounds a cycle's COST. The backtest killed
+every cost-denominated predicate outright — **the most expensive cycle in the corpus is a
+healthy one** (`s300-discovery`, 6 passes, converged), and no pass-count ceiling
+separates: at B=5 it fires twice and both are converged series.
+
+Repair-injection does separate, and it needs a new provenance field
+(`findings_repair_injected`) whose ship gate is a hand-label of the series that could
+possibly fire. That gate is **not met**. Computed here: of 28 series, the upper bound —
+assume every finding is injected — fires on **5** prefixes; **4 of those converged** and
+would be false positives unless labelling shows otherwise. The four do not carry a
+repair-injected partition in their own prose (unlike `s300-architecture`, which labels
+its own "Part 2 — new findings, all repair-injected"), so the label is not derivable and
+must be judged finding by finding.
+
+Shipping the arm on an unmeasured false-positive set would be the defect this repository
+is organised against. Arm J needs no new field, no schema change and no grace mechanism,
+and it catches the re-open that cost the measured sprint five passes. It ships alone.
+
 ## [0.244.0] — 2026-08-03
 
 ### A LOCKED block whose closer was spelled differently passed Check 3b with zero claims checked
