@@ -3562,6 +3562,67 @@ else
   fi
 fi
 
+# --- I76: every flat skill-root file is shipped AND claimed, or declared not-shipped --
+# `install.sh` copied the skill root's flat files from a HAND-LIST that nothing compared
+# to anything. Two live asymmetries when this was written, in opposite directions:
+#
+#   `enforcement-map.yaml`   SHIPPED, and absent from `core_manifest:`. The core-write
+#                            guard and Check 16's scope filter both key on that manifest,
+#                            so the file was UNPROTECTED on every consumer.
+#   `research-citations.md`  in `audit-rule-files.sh`'s IN_SCOPE and shipped by NOBODY.
+#                            IN_SCOPE is the set of paths a pointer may resolve against,
+#                            so an alternand naming a file no consumer has is a target
+#                            that can never resolve — a check that cannot fire.
+#
+# THE INSTALL SIDE IS MEASURED BY RUNNING THE LOOP, not by pattern-matching its source.
+# The loop is now a glob, so there is no list to read; and a source-shaped assertion is
+# what let the hand-list drift in the first place. I8's site-table precedent.
+#
+# `.not-shipped` is the same self-declaring exemption I8 uses for `.dist-only`, with the
+# same reverse arm: a marked file may not ALSO be claimed by `core_manifest:`, so the
+# marker cannot decay into a way of having it both ways.
+i76_skill="$REPO_ROOT/core/skills/ai-dlc"
+i76_loop="$(sed -n '/^for doc in /,/^done$/p' "$REPO_ROOT/scripts/install.sh")"
+[ -n "$i76_loop" ] || err "I76 could not extract install.sh's skill-root copy loop. It measures the ship side by RUNNING that loop; with nothing extracted it would report every file unshipped."
+i76_probe="$(mktemp -d)"
+mkdir -p "$i76_probe/.claude/skills/ai-dlc"
+( cd "$REPO_ROOT" && SCRIPT_DIR="$REPO_ROOT/scripts" PROJECT_ROOT="$i76_probe" \
+  bash -c "$i76_loop" ) 2>/dev/null
+i76_shipped="$(cd "$i76_probe/.claude/skills/ai-dlc" 2>/dev/null && ls 2>/dev/null | sort)"
+rm -rf "$i76_probe"
+
+i76_flat="$(cd "$i76_skill" && ls *.md *.yaml 2>/dev/null | grep -v '^SKILL\.md$' | sort)"
+i76_nf="$(grep -c . <<<"$i76_flat" || true)"
+if [ "$i76_nf" -lt 3 ]; then
+  err "I76 found $i76_nf flat file(s) under core/skills/ai-dlc/. Fewer than three means the enumerator stopped matching, not that the rulebook shrank — and an empty subject set satisfies every requirement, so this fails closed."
+else
+  i76_bad=""
+  while IFS= read -r _f; do
+    [ -n "$_f" ] || continue
+    _marked=0; [ -f "$i76_skill/$_f.not-shipped" ] && _marked=1
+    _ships=0;  grep -qx "$_f" <<<"$i76_shipped" && _ships=1
+    _claimed=0; grep -qE "^  - $(printf '%s' "$_f" | sed 's/\./\\./g')$" "$i76_skill/core-manifest.md" && _claimed=1
+    if [ "$_marked" -eq 1 ]; then
+      [ "$_ships" -eq 0 ] || i76_bad="${i76_bad}$_f(declared not-shipped but the installer copies it) "
+      [ "$_claimed" -eq 0 ] || i76_bad="${i76_bad}$_f(declared not-shipped but core_manifest: claims it — the exemption is not self-certifying) "
+    else
+      [ "$_ships" -eq 1 ]   || i76_bad="${i76_bad}$_f(reaches no consumer and carries no .not-shipped marker) "
+      [ "$_claimed" -eq 1 ] || i76_bad="${i76_bad}$_f(ships but core_manifest: does not claim it, so the core-write guard cannot protect it) "
+    fi
+  done <<<"$i76_flat"
+
+  # SELF-PROBES. Without them a run whose installer probe copied NOTHING would report
+  # every file as unshipped, or — worse, if the ls failed — as trivially consistent.
+  grep -qx "core-manifest.md" <<<"$i76_shipped" \
+    || err "I76 self-probe FAILED: the installer probe did not copy core-manifest.md, a file that plainly ships. The probe is broken, so every verdict below is unattributable."
+  [ -n "$(cd "$i76_skill" && ls *.not-shipped 2>/dev/null)" ] \
+    || err "I76 self-probe FAILED: no .not-shipped marker exists anywhere, so the exemption arm has never been exercised and cannot be known to fire."
+
+  if [ -n "${i76_bad// /}" ]; then
+    err "I76 skill-root flat file(s) whose ship path and manifest claim disagree: ${i76_bad}. Every flat file under core/skills/ai-dlc/ must SHIP and be claimed by core_manifest:, or carry a \`<name>.not-shipped\` marker and be claimed by neither. A file that ships unclaimed is invisible to the core-write guard on every consumer; a file claimed but unshipped is a manifest entry no consumer can satisfy."
+  fi
+fi
+
 # --- I75: a validator that consults a project root consults it through ONE block ----
 # Eight of the fifteen `core/scripts/*.sh` that consult a project root did it with a bare
 # `${CLAUDE_PROJECT_DIR:-.}` or `${AI_DLC_PROJECT_ROOT:-.}` — no walk, no fallback to the

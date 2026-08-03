@@ -1,0 +1,14 @@
+Not shipped to consumers, by decision rather than by omission.
+
+`v0.32.0` deliberately RETIRED the pointer that named this file (`steps/retro.md`,
+then `SKILL.md`); its own verification line was `grep -rn research-citations core/`
+-> 0 hits. The file was reintroduced later as reference prose and never rewired, so
+nothing in the shipped rulebook points at it.
+
+It stayed in `audit-rule-files.sh`'s IN_SCOPE regex the whole time. IN_SCOPE is the
+set of paths a POINTER may resolve against, so an alternand naming a file no consumer
+has is a target that can never resolve there -- a check that cannot fire, reading
+exactly like one that passed. The alternand is removed with this marker.
+
+To revive: delete this marker, restore a pointer from a shipped rule file, and add
+the alternand back. I76 will then require it in `core_manifest:` as well.

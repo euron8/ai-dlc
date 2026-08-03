@@ -123,6 +123,7 @@ protects.
 ```yaml
 core_manifest:
   - core-manifest.md
+  - enforcement-map.yaml
   - layer-contract.yaml
   - git-hooks/pre-push
   - SKILL.md
@@ -235,6 +236,7 @@ core_manifest:
 
 machinery:
   - core-manifest.md
+  - enforcement-map.yaml
   - layer-contract.yaml
   - git-hooks/pre-push
   - templates/*.md
