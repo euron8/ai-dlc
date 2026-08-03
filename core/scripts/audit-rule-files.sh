@@ -359,7 +359,7 @@ OUT_OF_SCOPE = re.compile(
     r"gate-log|pipeline-snapshot|compaction-log\.md$|audit-anchors\.md$)")
 IN_SCOPE = re.compile(r"^(steps/|schemas/|team-roles/|templates/|"
                       r"rule-authoring\.md$|escalations\.md$|core-manifest\.md$|"
-                      r"enforcement-map\.yaml$|research-citations\.md$)")
+                      r"enforcement-map\.yaml$)")
 
 def resolve(target):
     """A pointer's path is skill-dir-relative; team-roles/ resolves outside it."""

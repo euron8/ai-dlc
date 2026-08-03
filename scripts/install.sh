@@ -172,6 +172,16 @@ cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/
 # refusing rather than adjudicating, with nothing reporting that it never ran. It
 # reached the reference consumer only through the ai-dlc-update pull path, which maps
 # the whole skill dir, so the gap was invisible to anyone who had ever pulled.
+# THE LIST IS HAND-WRITTEN AND I76 BINDS IT, which is the part that was missing rather
+# than the list itself. Deriving it with a glob was tried and reverted: I23 decides which
+# skill-root files ship by substring-searching THIS FILE's text, so a glob makes the
+# shipped set unreadable to it — and a comment naming a file would then make I23 call
+# that file shipped, which is the grep-satisfied-by-a-comment defect one file over.
+#
+# What I76 asserts instead: every flat file under core/skills/ai-dlc/ either lands in a
+# probe install AND is claimed by core_manifest:, or carries a `<name>.not-shipped`
+# marker and is claimed by neither. The ship side is measured by RUNNING this loop, so
+# the list cannot drift from what it delivers.
 for doc in escalations.md rule-authoring.md core-manifest.md enforcement-map.yaml layer-contract.yaml; do
   [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"

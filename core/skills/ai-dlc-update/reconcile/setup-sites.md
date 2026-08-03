@@ -48,6 +48,7 @@ the core file set changes:
 ```yaml
 core_manifest:
   - core/skills/ai-dlc/core-manifest.md
+  - core/skills/ai-dlc/enforcement-map.yaml
   - core/skills/ai-dlc/layer-contract.yaml
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/SKILL.md
@@ -160,6 +161,7 @@ core_manifest:
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md
+  - core/skills/ai-dlc/enforcement-map.yaml
   - core/skills/ai-dlc/layer-contract.yaml
   - core/git-hooks/pre-push
   - core/skills/ai-dlc/templates/*.md

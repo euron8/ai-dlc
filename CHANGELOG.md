@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.246.0] — 2026-08-03
+
+### `enforcement-map.yaml` shipped to every consumer and the core-write guard could not see it
+
+`install.sh` copied the skill root's flat files from a hand-list that nothing compared to
+anything. Two live asymmetries, in opposite directions:
+
+- **`enforcement-map.yaml` shipped and was absent from `core_manifest:`.**
+  `ai-dlc-core-guard.sh` and Check 16's scope filter both key on that manifest, so the
+  file was **unprotected on every consumer** — an edit to it was neither denied nor
+  reported. It is now claimed, with the `machinery:` grain I28 requires and the second
+  authoritative copy in `reconcile/setup-sites.md` kept in step.
+- **`research-citations.md` sat in `audit-rule-files.sh`'s IN_SCOPE and shipped to
+  nobody.** IN_SCOPE is the set of paths a *pointer* may resolve against, so an alternand
+  naming a file no consumer has is a target that can never resolve — a check that cannot
+  fire. `v0.32.0` deliberately retired the pointer that named it (its own verification
+  line was `grep -rn research-citations core/` → 0 hits); the file was reintroduced later
+  as reference prose and never rewired. It now carries a `.not-shipped` marker stating
+  that, and the alternand is gone.
+
+### New invariant I76 — and the ship side is measured by RUNNING the loop
+
+Every flat file under `core/skills/ai-dlc/` must **ship AND be claimed** by
+`core_manifest:`, or carry a `<name>.not-shipped` marker and be claimed by **neither**.
+`.not-shipped` is the same self-declaring exemption I8 uses for `.dist-only` fixtures,
+with the same reverse arm — a marked file that *is* claimed fails, so the marker cannot
+decay into having it both ways.
+
+I76 extracts `install.sh`'s own copy loop and executes it against a probe directory. A
+source-shaped assertion is what let the hand-list drift in the first place.
+
+Both directions proven against the live tree: removing the manifest claim produces
+*"ships but core_manifest: does not claim it"*, and claiming the marked file produces
+*"declared not-shipped but core_manifest: claims it"*. Two self-probes run every
+invocation.
+
+### Deriving the list with a glob was tried and REVERTED, and the reason is a defect one file over
+
+The obvious fix is to replace the hand-list with a glob. It was written, and then backed
+out: **I23 decides which skill-root files ship by substring-searching `install.sh`'s
+text.** A glob leaves no basenames to find, so I23 would report every skill-root file
+unshipped — and worse, the explanatory comment naming `research-citations.md` made I23
+call *that* file shipped. A `grep` over a whole file satisfied by a comment is a defect
+this repository has already paid for once.
+
+So the list stays hand-written and I76 binds it, which was the part actually missing. The
+list cannot drift from what it delivers, because the thing measured *is* what it
+delivers.
+
 ## [0.245.0] — 2026-08-03
 
 ### `EXIT_CONDITION_MET` was not a freeze point, so a converged series could be re-opened for free
