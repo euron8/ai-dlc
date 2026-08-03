@@ -612,7 +612,12 @@ checks:
           names differing by one word, so a directory-existence check passes on a
           skill that loads nothing and the lead reports running a workflow that never
           ran. Four such call sites were live in this rulebook when the check was
-          written.
+          written. The enumerator reads a CALL-SITE GRAMMAR, not a bare slash: a
+          sigil cannot follow a path character and is not followed by a separator.
+          Requiring only the slash counted `fixtures/bmad-invocation-resolve/**`
+          — a line in this rulebook's OWN manifest, naming this check's OWN fixture
+          — as an invocation of a skill nobody wrote, and shipped that FAIL to every
+          consumer for the life of the arm.
     ci_workflow: ~
     fixtures: [tests/fixtures/bmad-invocation-resolve]
 
