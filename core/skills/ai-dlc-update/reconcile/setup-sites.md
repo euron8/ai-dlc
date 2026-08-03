@@ -103,6 +103,7 @@ core_manifest:
   - core/fixtures/dispatch-model-guard/**
   - core/fixtures/divergence-hard-block/**
   - core/fixtures/escalation-citation/**
+  - core/fixtures/extension-check-adoption/**
   - core/fixtures/escalation-status-vocabulary/**
   - core/fixtures/gate-adjudication/**
   - core/fixtures/gate-verdict-grep-shape/**

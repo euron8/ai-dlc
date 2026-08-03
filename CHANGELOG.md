@@ -34,6 +34,93 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.243.0] — 2026-08-03
+
+### GM1 named 23 checks that had never run, and shipped no way to adopt them
+
+`validate-gate-manifest.sh`'s GM1 arm reports a check defined only as a HEADING in an
+`extensions/` entry — no `<!-- CHECK_LOADED: <id> -->` anchor, named by no manifest row.
+It is neither MISSING nor an ORPHAN, so both directions of the resolve miss it and every
+gate passes without ever running it.
+
+The arm is correct. It landed with no remedy. The reference consumer met it as **23
+checks across 4 entries** on the pull that delivered it, filed a disclosed structural
+override, and **re-filed that override at every subsequent gate** — because the stated
+remedy was 23 hand edits, and a hand edit here has a specific trap:
+
+> **The two writes must be atomic.** An anchor with no `gate_types:` is an ORPHAN
+> (exit 1). A `gate_types:` with no anchor trips GM2 (exit 2). Doing one half trades one
+> FAIL for a different FAIL, so an operator working down the list is red the whole way
+> and cannot tell progress from regression.
+
+That is a mechanism argument for a tool, not a convenience argument.
+
+New `reconcile/adopt-extension-checks.sh`, offered at pull time (new step **3ea**, and
+at step 7 after core is in place). **Half-mechanical, deliberately.** The anchor is 100%
+derivable from the heading id, so it writes it. `gate_types:` is a semantic choice with
+no derivable answer, and the only inferable default — `universal` — would silently
+promote every adopted check to run at every gate: a behaviour change nobody authorised,
+and an invisible one afterwards, because an over-broad slice just passes vacuously.
+Inferring it converts a loud FAIL into a quiet wrong answer. So `--apply` **refuses**
+without `--gate-types`, and refuses a value outside the enum it reads out of the
+manifest's own first column. Because `gate_types:` is *entry* frontmatter, the reference
+consumer's 23 checks are **4 questions, not 23**.
+
+Report-only at dry-run; it never blocks `apply`. A consumer must never be unable to take
+a fix because the fix newly-fails its own content.
+
+### The fixture found a defect in the tool: its subject set was narrower than GM1's
+
+First draft filtered entries on `kind: check` **and** `hooks:`. **`validate-gate-manifest.sh`
+never reads `kind:`** — its UNLOADABLE set is every `extensions/` entry whose `hooks:`
+names the manifest, whatever kind it declares. So a `kind: step-domain` entry hooking
+gate-validation.md with a check-shaped heading was reported by GM1 and **unreachable by
+its own remedy**: a remedy that does not run, which is the exact class this release
+exists to close, reproduced one level over.
+
+The filter is now `hooks:` alone — GM1's own predicate. A kind mismatch becomes a
+reported `NEEDS DECISION` row rather than a silent exclusion **or** a write: the two
+honest fixes are opposite (the entry really is a check and `kind:` is wrong, or the
+heading is not a check and should not match the grammar), and writing `gate_types:` into
+a `step-domain` entry would pick one by accident.
+
+The fixture therefore walks the **whole** remedy path: adopt, assert GM1 *still* fires
+while the decision is open (the refusal is not a silent skip), take the operator's
+answer, re-adopt, assert GM1 clear. "GM1 clear" reached any other way would be reachable
+by a tool that writes indiscriminately.
+
+`core/fixtures/extension-check-adoption/` seeds numeric ids, an alphabetic id
+(`## Check XVH —`, the shape a narrower heading grammar cannot see), an already-adopted
+over-fire control, an entry excluded by `kind:` alone, an entry excluded by `hooks:`
+alone, and an extension whose heading id **core** anchors so the subtraction drops it
+without a rule that could rot. The two exclusions are separate entries on purpose: one
+excluded by both filters at once cannot tell you which is load-bearing.
+
+**Non-vacuity:** stripping the written `gate_types:` back out must turn the tree ORPHAN.
+Without that, "the two writes are one edit" is decoration and the tool's reason to exist
+is unfounded.
+
+**Three mutants, asserted on the emitted CODE rather than exit status** — both halves
+fail at exit 1, so an exit-status assertion would entangle them and one would be vacuous.
+Neutering the anchor write yields **GM2**; neutering the `gate_types:` write yields
+**ORPHAN**; neutering the kind guard rewrites the `step-domain` entry. Three different
+observable outcomes from three different edits. Plus an unmutated control, because a
+mutant that dies of its own syntax emits nothing and "no output" otherwise scores as a
+kill — the `cmp -s` guard caught exactly that during authoring, twice.
+
+The GM1 failure message now names the tool and states why the two edits must land
+together: a prohibition with a mechanism behind it.
+
+### Deferred, and why rather than silently
+
+`reconcile/newly-failing.sh` — the general form, diffing which enforcer codes fire at
+BASE versus THEIRS so a consumer learns at pull time rather than at the next gate. It is
+the right generalisation and it is **not** in this release: running arbitrary enforcers
+against a live consumer tree needs a sandbox, several core validators write by default,
+and "exclude the writers" is a hand-list of exactly the kind this repository keeps
+paying for. Shipping a pull-time tool that can mutate a consumer's tree during a
+*dry-run* is worse than not shipping it yet.
+
 ## [0.242.0] — 2026-08-03
 
 ### Eight validators resolved the project root from a variable the caller owns, and two answered `0` about the wrong repository

@@ -640,7 +640,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/scripts/validate-gate-manifest.sh
     code: GM2
-    fixture: none
+    fixture: extension-check-adoption
 
   # --- extensions/: additivity and retirement ------------------------------------------
   - id: LC-E5

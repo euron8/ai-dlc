@@ -178,6 +178,7 @@ core_manifest:
   - fixtures/dispatch-model-guard/**
   - fixtures/divergence-hard-block/**
   - fixtures/escalation-citation/**
+  - fixtures/extension-check-adoption/**
   - fixtures/escalation-status-vocabulary/**
   - fixtures/gate-adjudication/**
   - fixtures/gate-verdict-grep-shape/**
