@@ -814,6 +814,18 @@ validate_record() { # $1 record, $2 divergent-pass, $3 index-of-divergent-pass -
 F_WHY=""
 RESOLVED_TERMINAL=0
 N="${#P_FILE[@]}"
+
+# Has the operator already adjudicated the TERMINAL pass? One implementation, because
+# there are TWO ways a terminal pass can be stopped and both take the same exit. It was
+# written inline inside the divergence loop and therefore only ever ran for one of them
+# -- see the stall call site below for what that cost.
+terminal_record_resolves() {   # terminal_record_resolves <index> -> 0 if a valid record exists
+  local ti="$1" rec
+  for rec in $(ls "$(dirname "${P_FILE[$ti]}")"/*-resolution-p*.md 2>/dev/null); do
+    if validate_record "$rec" "${P_FILE[$ti]}" "$ti"; then return 0; fi
+  done
+  return 1
+}
 for ((i = 0; i < N; i++)); do
   [ "${P_VERDICT[$i]}" = "DIVERGENT_HARD_BLOCK" ] || continue
 
@@ -844,11 +856,38 @@ for ((i = 0; i < N; i++)); do
     # The hard block IS the terminal pass. Arm D owns that failure at the gate -- but
     # --cycle-state needs to know whether the operator has already adjudicated it, because
     # that is exactly the moment the verification pass becomes legal.
-    for rec in $(ls "$(dirname "${P_FILE[$i]}")"/*-resolution-p*.md 2>/dev/null); do
-      if validate_record "$rec" "${P_FILE[$i]}" "$i"; then RESOLVED_TERMINAL=1; break; fi
-    done
+    terminal_record_resolves "$i" && RESOLVED_TERMINAL=1
   fi
 done
+
+# THE SAME QUESTION, FOR THE OTHER WAY A TERMINAL PASS STOPS.
+#
+# `RESOLVED_TERMINAL` was assigned in exactly one place: inside the loop above, whose
+# first line is `[ "${P_VERDICT[$i]}" = "DIVERGENT_HARD_BLOCK" ] || continue`. A STALLED
+# terminal pass stamps `EXIT_CONDITION_NOT_MET` -- that is what a stall IS -- so it was
+# `continue`d past and the flag stayed 0 forever. Both readers of the flag on the stall
+# path (arm E's gate error below, and the emit block's STALL branch) then tested a value
+# that could never be 1. `RESOLVED` was unreachable for a stall and that branch was dead
+# code.
+#
+# THE COST WAS A DEADLOCK, NOT A COSMETIC GAP. Arm E's own remedy text instructs the lead
+# to "resolve on the record and run ONE verification pass", and `ai-dlc-acknowledge.sh`
+# denies every dispatch on rc 3. So the sanctioned exit from a stall was closed: you wrote
+# the record arm E asked for, the state stayed STALLED/rc 3, and the verification pass the
+# remedy names could not be dispatched. The only way forward was to forge the terminal
+# pass's verdict -- the one thing the notarization exists to prevent.
+#
+# Reported as a consumer push candidate against a LIVE stalled series, with the verdict
+# token as the sole variable between the two arms. Reproduced here before the fix.
+#
+# The stall condition is recomputed rather than read from `STALL_LIVE`, because that
+# variable is set by arm E BELOW this point and reading it here would be the same
+# ordering mistake one line over.
+if [ "$RESOLVED_TERMINAL" -eq 0 ] && [ "$N" -gt 0 ] \
+   && [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ] \
+   && [ "$STALL_PEAK" -ge "$STALL_THRESHOLD" ]; then
+  terminal_record_resolves "$((N - 1))" && RESOLVED_TERMINAL=1
+fi
 
 # =============================================================================
 # E. STALL -- hoisted (v0.59.0).

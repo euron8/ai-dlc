@@ -34,6 +34,75 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.247.0] — 2026-08-03
+
+### `RESOLVED` was unreachable for a stalled cycle, so the sanctioned exit from a stall was a deadlock
+
+Reported as a consumer push candidate
+(`PC-S300-CYCLE-STATE-RESOLVED-UNREACHABLE-FOR-A-STALLED-TERMINAL-PASS`) against a live
+stalled series. **Confirmed, reproduced, and fixed.** The report was correct in every
+particular.
+
+`--cycle-state`'s header contract states *"RESOLVED — the terminal pass STOPPED (divergent
+**or stalled**) AND a valid resolution record for it exists."* The stalled half was
+unreachable.
+
+`RESOLVED_TERMINAL=1` was assigned in exactly ONE place, inside a loop whose first line is
+`[ "${P_VERDICT[$i]}" = "DIVERGENT_HARD_BLOCK" ] || continue`. **A stalled terminal pass
+stamps `EXIT_CONDITION_NOT_MET`** — that is what a stall *is* — so it was `continue`d past
+and the flag stayed `0` forever. Both readers on the stall path (arm E's gate-mode error,
+and the emit block's STALL branch) then tested a value that could never be `1`. That branch
+was dead code.
+
+**The cost was a deadlock, not a cosmetic gap.** Arm E's own remedy text instructs the lead
+to *"resolve on the record and run ONE verification pass"*, and `ai-dlc-acknowledge.sh`
+denies every dispatch on rc 3. So: you write the record arm E asks for, the state stays
+`STALLED`/rc 3, and the verification pass the remedy names cannot be dispatched. The only
+way forward was to forge the terminal pass's verdict — the one thing the notarization
+exists to prevent.
+
+Reproduced here before the fix, on the reference consumer's live
+`s300-architecture-adversarial-p{1..5}` series, with the verdict token as the sole variable
+between arms:
+
+```
+A  stalled terminal pass + a VALID record resolving it    STALLED   rc=3
+B  identical tree, p5 verdict -> DIVERGENT_HARD_BLOCK     RESOLVED  rc=0
+```
+
+Arm B also proves the record was well-formed — arm F accepted it. Only the consumption path
+was broken.
+
+### The fix, and why it is a function rather than a second copy
+
+The record lookup is extracted to `terminal_record_resolves()` and called from **both** ways
+a terminal pass can stop. One implementation, because there are two paths to the same exit
+and the original was written inline inside one of them.
+
+The stall condition is **recomputed** at the new call site rather than read from
+`STALL_LIVE`, because that variable is set by arm E *below* that point — reading it there
+would be the same ordering mistake one line over.
+
+Three cases, seeded with an **identical severity trajectory** so the record is the only
+difference:
+
+| case | state |
+|---|---|
+| `stalled` (no record) | `STALLED` / 3 |
+| `stalled-resolved` (valid record) | `RESOLVED` / 0 |
+| `stalled-record-invalid` (bad `sha_before`) | `STALLED` / 3 |
+
+The third is the over-fire control: if a malformed record cleared a stall, the resume would
+be reachable by writing any file at all and the notarization would be decoration.
+
+The mutant neuters **only** the new call site and asserts all three states — `stalled-resolved`
+reverts to `STALLED` (the shipped defect on demand) while the other two are **unmoved**,
+because a mutant that moves all three is too broad to attribute.
+
+The fixture's operator transcript gains the stall adjudication it lacked. A stall resolution
+is an operator act, and F6 verifies the citation against the transcript — so a fixture with
+no such message could not have carried this case honestly.
+
 ## [0.246.0] — 2026-08-03
 
 ### `enforcement-map.yaml` shipped to every consumer and the core-write guard could not see it

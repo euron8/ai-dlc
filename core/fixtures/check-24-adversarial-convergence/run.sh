@@ -205,6 +205,37 @@ expect_state stalled                   s1-adversarial-p STALLED   3 "the STOP co
 expect_state divergent-terminal        s1-adversarial-p DIVERGENT 3 "the reference consumer's parked state, exactly"
 expect_state divergent-terminal-resolved s1-adversarial-p RESOLVED 0 "THE RESUME: the record exists, so the verification pass is permitted"
 
+# --- the sanctioned exit from a STALL ------------------------------------------
+expect_state stalled              s1-adversarial-p STALLED  3 "no record: the stall stands"
+expect_state stalled-resolved     s1-adversarial-p RESOLVED 0 "SAME trajectory + a valid record: the verification pass is legal. RESOLVED was unreachable for a stall and the branch was dead code"
+expect_state stalled-record-invalid s1-adversarial-p STALLED 3 "OVER-FIRE CONTROL: an INVALID record legalises nothing, or the resume is reachable by writing any file"
+
+# --- MUTATION: the stall call site is what makes RESOLVED reachable ------------
+# Neuter ONLY the new terminal-record lookup on the stall path. `stalled-resolved` must go
+# back to STALLED/3 -- the shipped defect on demand -- and `stalled` and
+# `stalled-record-invalid` must be UNCHANGED, because a mutant that moves all three is too
+# broad to attribute.
+MUT="$ROOT/mutant-stall-resolution.sh"
+MUT_OLD='  terminal_record_resolves "$((N - 1))" && RESOLVED_TERMINAL=1' \
+MUT_NEW='  : ' \
+python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+  "$VALIDATOR" "$MUT"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$VALIDATOR" "$MUT"; then
+  echo "  FAIL  MUTATION matched nothing -- the stalled-resolved assertion proves nothing" >&2
+  FAILURES=$((FAILURES + 1))
+else
+  m_res="$(bash "$MUT" --series "$ROOT/stalled-resolved/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null | cut -f1)"
+  m_pln="$(bash "$MUT" --series "$ROOT/stalled/s1-adversarial-p"          --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null | cut -f1)"
+  m_inv="$(bash "$MUT" --series "$ROOT/stalled-record-invalid/s1-adversarial-p" --cycle-state --transcript "$TRANSCRIPT" 2>/dev/null | cut -f1)"
+  if [ "$m_res" = "STALLED" ] && [ "$m_pln" = "STALLED" ] && [ "$m_inv" = "STALLED" ]; then
+    printf '  ok    %-28s %s  (%s)\n' "MUTATION stall-resolution" "STALLED" "without the stall call site RESOLVED is unreachable again; the other two are unmoved, so the mutant is attributable"
+  else
+    echo "  FAIL  MUTATION: expected stalled-resolved to revert to STALLED, got '$m_res' (plain='$m_pln' invalid='$m_inv')" >&2
+    FAILURES=$((FAILURES + 1))
+  fi
+fi
+
 # --- arm J: RE-OPEN ------------------------------------------------------------
 expect reopen-unrecorded 1 "a pass ran after EXIT_CONDITION_MET reporting 1C/2M -- RE-OPEN, FAIL (J)" s1-adversarial-p
 expect reopen-floor-pass 0 "THE DECOY: p1 MET -> p2 MET with 0 findings is the intensity FLOOR, not a re-open" s1-adversarial-p
