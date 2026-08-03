@@ -422,7 +422,13 @@ if missing or orphan or unloadable:
             "  Each is defined in an extensions/ entry that hooks this file, carries no\n"
             "  CHECK_LOADED anchor, and is named by no manifest row — so it is neither MISSING\n"
             "  nor an ORPHAN, and every gate passes without ever running it. Give it an anchor\n"
-            "  and declare `gate_types:` on its entry, or delete it if it is retired.\n")
+            "  and declare `gate_types:` on its entry, or delete it if it is retired.\n"
+            "  THE TWO WRITES MUST LAND TOGETHER: an anchor with no `gate_types:` is an ORPHAN\n"
+            "  (exit 1) and a `gate_types:` with no anchor trips GM2 (exit 2), so doing one half\n"
+            "  trades this FAIL for a different one. `.claude/skills/ai-dlc-update/reconcile/\n"
+            "  adopt-extension-checks.sh <consumer-root>` writes both atomically per entry: it\n"
+            "  derives the anchors from the heading ids and asks you for the `gate_types:`, which\n"
+            "  is one question per ENTRY rather than one per check.\n")
     if missing or orphan:
         sys.stderr.write("validate-gate-manifest: FAIL — the manifest and the anchors disagree.\n")
     sys.exit(1)

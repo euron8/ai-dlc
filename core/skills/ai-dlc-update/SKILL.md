@@ -568,6 +568,25 @@ prose is itself generated rather than composed.
    7. The integer never moves; only the label is added, so existing gate history maps by
    identity.
 
+3ea. **Extension checks the incoming core makes newly-unloadable.** Run
+   `reconcile/adopt-extension-checks.sh <consumer-root>` (dry-run). It lists, per
+   `kind: check` extension entry, the check ids defined only as a HEADING — no
+   `<!-- CHECK_LOADED: <id> -->` anchor, named by no manifest row — which is
+   `validate-gate-manifest.sh`'s GM1 finding: neither MISSING nor an ORPHAN, so every
+   gate passes without ever running them. **Report-only; it never blocks `apply`** — a
+   consumer must never be unable to take a fix because the fix newly-fails its own
+   content. The updater OFFERS the write at step 7.
+   **The two writes are atomic and that is the reason a tool exists.** An anchor with no
+   `gate_types:` is an ORPHAN (exit 1); a `gate_types:` with no anchor trips GM2 (exit 2).
+   A hand edit doing one half trades one FAIL for another, so an operator working down a
+   23-item list is red the whole way and cannot tell progress from regression.
+   **`--apply` requires `--gate-types` and there is no default.** The anchor is derivable
+   from the heading id; the gate slice is not. The only inferable default, `universal`,
+   would promote every adopted check to run at every gate — unauthorised, and invisible
+   afterwards because an over-broad slice passes vacuously. The dry-run prints the
+   question once per ENTRY (`gate_types:` is entry frontmatter), which is why the
+   reference consumer's 23 checks are 4 questions and not 23.
+
 3f. **Push-candidate ledger re-verify — the CLOSE path.** Run
    `reconcile/ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <theirs-ref>`.
    Step 8 APPENDS to the ledger; nothing ever closed it, so an entry upstream adopted stayed
@@ -1030,6 +1049,16 @@ prose is itself generated rather than composed.
    <consumer-root> --apply` once core is in place, since the collision set is defined
    against the NEW core. Then run `scripts/ai-dlc/validate-layer-entries.sh` and report its
    errors/warnings in the apply summary. This never blocks the apply.
+
+   **Offer the extension-check adoption (step 3ea).** Run
+   `reconcile/adopt-extension-checks.sh <consumer-root>` once core is in place — the
+   anchor set it subtracts against is the NEW core's, so a check the incoming release
+   started anchoring drops out on its own. Put its per-entry `gate_types:` question to
+   the operator and apply only their explicit answer, one entry at a time:
+   `--apply --gate-types <list>`. Never guess the slice; refusing is what the tool does
+   on its own if you pass `--apply` without it. Re-run
+   `scripts/ai-dlc/validate-gate-manifest.sh` afterwards and report its verdict in the
+   apply summary. This never blocks the apply.
 
    **Flagged-block checkpoint (mid-apply, every block, not just conflicts).**
    Before executing a block's mechanical bucket action, check whether it (or
