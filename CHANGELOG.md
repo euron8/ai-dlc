@@ -34,6 +34,102 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.249.0] — 2026-08-03
+
+### Five consumer-reported defects, three of them mine, and the two invariants that stop the class
+
+The reference consumer filed six push candidates against 0.242.0–0.248.0. Five are fixed
+here. The sixth is measured and deliberately not fixed — see the end.
+
+### 1. Seven validators shipped NON-EXECUTABLE, and only UPDATING consumers broke
+
+0.242.0 rewrote eight validators with `awk > tmp && mv`, which creates a new file at the
+umask and **silently drops the mode**. Seven went out as `100644`. The eighth survived only
+because it was edited in place.
+
+`apply.sh` derives each file's mode from **git's tree** and chmods the consumer copy to
+match (`100644) chmod -x`), so the bit was actively STRIPPED on every consumer at the next
+pull — `rc=126 permission denied` on the first invocation by path, including
+`validate-bmad-invocations.sh`, the Check 32 driver. `install.sh` chmods on FRESH install,
+which is exactly why this hid: a new consumer was fine and an updating one was not.
+
+Twelve tracked `.sh` files were `100644`; the seven plus five pre-existing fixtures. All
+restored.
+
+**New invariant I77:** every shipped `.sh` is tracked executable in git. Reads the INDEX, so
+the mode is fixable before the commit that would ship it. Self-probe each run, and scoped to
+a real work tree — failing closed in a scratch tree produced a false red that **entangled
+another fixture's mutants**, two failures where the assertion expected one, which is the
+shape that makes a mutant unattributable. "git is absent" and "git found nothing" are
+different answers and only the second is a finding.
+
+### 2. `adopt-extension-checks.sh` exited 2 and scanned NOTHING on any consumer with a role extension
+
+A `hooks:` value is **core-relative**, not skill-relative: `team-roles/<role>.md` maps to
+`.claude/team-roles/<role>.md`, OUTSIDE the skill dir. The tool joined every hook under the
+skill dir — the naive join that `ai-dlc-update/SKILL.md` §7v criterion 2 already warns
+about in as many words, and that `validate-layer-entries.sh`'s `resolve_target()` already
+implements correctly. A third spelling, and the wrong one.
+
+Worse than a misreport: an unresolvable hook was **fatal**, so one role extension made the
+tool exit 2 having scanned nothing — and a GM1-surfacing tool that prints nothing reads
+exactly like a clean one. It now mirrors the existing case split, and an unresolvable hook
+**skips** rather than abandoning every other entry.
+
+### 3. `--gate-types` was global, contradicting the tool's own documented design
+
+The header states the design — *"the operator answers ONE question PER ENTRY"* — and the CLI
+exposed a single global flag applied to every entry in one pass. On the reference consumer
+that wrote `[universal]` into four entries needing four different values.
+
+Now `--entry <path> --gate-types <list>`, repeatable. And a **global flag across more than
+one entry the tool would write to is REFUSED** — the refusal counts entries it would
+actually touch, not every entry lacking `gate_types:`, because the first draft counted
+entries with nothing adoptable and refused a run that would have written to one.
+
+### 4. The `sh` receipt verb read a MISSING SUBJECT as a fix
+
+`ledger-reverify.sh` read any non-zero exit as "no longer reproduces" → CLOSE-CANDIDATE. A
+receipt whose subject was RENAMED exits 127, so a relocation read as an absorption that
+never happened. **One relocation commit flipped five entries in a single run**, every one
+still reproducing at its new path. This file's own header calls that the direction that
+loses information permanently.
+
+The `theirs_*` verbs have always emitted NEEDS-REVIEW for an unresolvable path; `sh` — the
+escape hatch that runs arbitrary commands, where paths are most volatile — was the one verb
+without the guard. 126/127 now emit `NEEDS-REVIEW: unresolved`. Every other non-zero status
+still closes, but says that a status cannot distinguish "fixed" from "subject moved" inside
+an `&&` chain.
+
+Three fixture cases, because two would let a verb that always reports one thing pass:
+missing subject → NEEDS-REVIEW; plain non-zero → CLOSE-CANDIDATE (the over-fire control,
+or the guard pins every `sh` entry open forever); exit 0 → STILL-LIVE.
+
+### 5. The copyable example seeded every new entry four contract versions stale
+
+`extensions/README.md`'s fenced frontmatter read `conforms_to: 9` against
+`contract_version: 13`. It is what an author COPIES, so it seeded new entries with a value
+`[LC-C1]` then measures them against. The consumer had corrected it locally and thereby
+tripped `HARD-UNREGISTERED-CORE-DRIFT` on its own pull.
+
+**New invariant I78** binds the example to the contract, both sides derived, so it cannot go
+stale at the next bump.
+
+### Not fixed: the ledger entry-boundary split
+
+`PC-S313-LEDGER-ROTATE-SPLITS-AN-ENTRY-AT-A-BOLD-ANNOTATION` is real and destructive — the
+rotator physically moves an entry's head to the archive and strands its tail, receipt
+included. Both cheap discriminators fail on measurement: of **123** boundary-matching lines
+in the live ledger, **49 name no `PC-` id — and some of those are real entries** in an
+older id-less format, so tightening the rule would make the rotator silently stop archiving
+them, which is worse than the split. A `verify:`-presence probe fails the same way, because
+legacy entries predate the receipt convention.
+
+The measurement, the shapes that have to be enumerated first, and why the separator rather
+than the heading may be the real boundary are recorded in
+`docs/analysis/ledger-entry-boundary-measurement.md`. Shipping a boundary rule with an
+unmeasured false-negative set is how this class keeps producing another release.
+
 ## [0.248.0] — 2026-08-03
 
 ### A resolution record's operator citation could not outlive the session that wrote it, re-closing the deadlock 0.247.0 opened

@@ -3562,6 +3562,69 @@ else
   fi
 fi
 
+# --- I78: the copyable example declares the CURRENT contract version ---------------
+# `extensions/README.md`'s fenced frontmatter is what an author copies when writing a new
+# entry, so a stale `conforms_to:` there seeds every new entry with a stale value that
+# [LC-C1] then measures them against. Found at `conforms_to: 9` against
+# `contract_version: 13` -- four versions behind, and it reached a consumer, which had
+# corrected it locally and thereby tripped HARD-UNREGISTERED-CORE-DRIFT on its own pull.
+# Both sides derived, so this cannot go stale again when the contract advances.
+i78_cv="$(sed -n 's/^contract_version: //p' "$REPO_ROOT/core/skills/ai-dlc/layer-contract.yaml" | head -1)"
+i78_ex="$(sed -n 's/^conforms_to: \([0-9][0-9]*\).*/\1/p' "$REPO_ROOT/core/skills/ai-dlc/extensions/README.md" | head -1)"
+if [ -z "$i78_cv" ] || [ -z "$i78_ex" ]; then
+  err "I78 could not read both sides (contract_version='$i78_cv', README example='$i78_ex'). An unread side compares equal to nothing, so this fails closed rather than reporting agreement it did not compute."
+elif [ "$i78_cv" != "$i78_ex" ]; then
+  err "I78 the extensions/README.md example declares 'conforms_to: $i78_ex' while layer-contract.yaml declares 'contract_version: $i78_cv'. The example is what an author COPIES, so every new entry it seeds is born stale and [LC-C1] measures them against it."
+fi
+
+# --- I77: every shipped shell file is EXECUTABLE in git ----------------------------
+# `apply.sh` derives each file's mode from GIT'S TREE and chmods the consumer copy to match
+# (`100644) chmod -x "$2"`), so a mode bit lost upstream is actively STRIPPED on every
+# consumer at the next pull. `install.sh` chmods on fresh install, which is exactly why this
+# hid: a fresh consumer was fine and an UPDATING one got `rc=126 permission denied` on the
+# first invocation by path.
+#
+# MEASURED WHEN THIS WAS WRITTEN: 12 shipped `.sh` files at `100644`, seven of them
+# `core/scripts/` validators that consumers invoke by path -- including
+# `validate-bmad-invocations.sh`, the Check 32 driver. They were made non-executable by a
+# release that rewrote them with `awk > tmp && mv`, which creates a new file at the umask
+# and silently drops the mode. Nothing compared the mode of a shipped file to anything, so
+# the release went out green and a real consumer's pull found it.
+#
+# The subject set is DERIVED: every `*.sh` git tracks under a subtree that ships. A file
+# that is data rather than a program does not carry `.sh`.
+# THE INDEX, not HEAD: the mode is fixable before the commit that would ship it, and at
+# pre-push the index and HEAD agree, so nothing is lost by catching it earlier.
+i77_bad="$(cd "$REPO_ROOT" && git ls-files -s 2>/dev/null \
+  | awk '$1=="100644" && $4 ~ /\.sh$/ {print "    " $4}')"
+i77_n="$(cd "$REPO_ROOT" && git ls-files -s 2>/dev/null | awk '$4 ~ /\.sh$/' | grep -c . || true)"
+# SCOPE, and it is a distinction not a loophole. This invariant's subject is git's own
+# index, so it can only run where there IS one. Fixture harnesses copy this validator into
+# a scratch tree that is not a work tree; failing closed there produced a false red that
+# ENTANGLED another fixture's mutants -- two failures where the assertion expected one,
+# which is the shape that makes a mutant unattributable. "git is absent" and "git works and
+# found nothing" are different answers and only the second is a finding.
+if ! (cd "$REPO_ROOT" && git rev-parse --is-inside-work-tree >/dev/null 2>&1); then
+  : # not a work tree -- I77 has no index to read. Not a pass and not a failure.
+elif [ "$i77_n" -lt 20 ]; then
+  err "I77 read git's index and enumerated $i77_n tracked shell file(s). Fewer than twenty inside a real work tree means the enumerator stopped matching, not that the tree shrank -- and an empty subject set has no offenders by construction, so this fails closed rather than reporting a cleanliness it did not measure."
+else
+  # SELF-PROBE. Without it, an enumerator that silently returned no rows would print the
+  # same clean line as a tree with every mode correct.
+  i77_probe="$(cd "$REPO_ROOT" && git ls-files -s 2>/dev/null \
+    | awk '$1=="100755" && $4 ~ /\.sh$/' | grep -c . || true)"
+  [ "$i77_probe" -gt 0 ] || err "I77 self-probe FAILED: the reader found ZERO executable shell files, so it cannot distinguish a 100644 from a 100755 and its verdict below is unattributable."
+  if [ -n "$i77_bad" ]; then
+    err "I77 shipped shell file(s) tracked as 100644 (not executable):
+$i77_bad
+    apply.sh derives the consumer's mode from git and chmods to match, so each of these is
+    actively made non-executable on every consumer at the next pull -- \`rc=126 permission
+    denied\` on the first invocation by path. install.sh chmods on FRESH install, so this is
+    invisible until a real consumer updates. Fix with \`git update-index --chmod=+x <path>\`;
+    beware editors that rewrite a file via \`> tmp && mv\`, which drops the mode at the umask."
+  fi
+fi
+
 # --- I76: every flat skill-root file is shipped AND claimed, or declared not-shipped --
 # `install.sh` copied the skill root's flat files from a HAND-LIST that nothing compared
 # to anything. Two live asymmetries when this was written, in opposite directions:

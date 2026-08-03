@@ -42,11 +42,17 @@
 #        2 = usage error, unresolvable tree, or a gate type outside the derived enum
 set -uo pipefail
 
-CONSUMER=""; APPLY=""; GTS=""
+CONSUMER=""; APPLY=""; GTS=""; ENTRY_GTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply)      APPLY=1; shift ;;
     --gate-types) GTS="${2:?--gate-types needs a list}"; shift 2 ;;
+    --entry)      _e="${2:?--entry needs a path}"; shift 2
+                  case "${1:-}" in
+                    --gate-types) ENTRY_GTS="${ENTRY_GTS}${_e}=${2:?--entry PATH --gate-types needs a list}"'
+'; shift 2 ;;
+                    *) echo "adopt-extension-checks: --entry PATH must be followed by --gate-types LIST" >&2; exit 2 ;;
+                  esac ;;
     -*)           echo "adopt-extension-checks: unknown arg: $1" >&2; exit 2 ;;
     *)            if [ -z "$CONSUMER" ]; then CONSUMER="$1"; shift
                   else echo "adopt-extension-checks: unexpected arg: $1" >&2; exit 2; fi ;;
@@ -62,7 +68,7 @@ EXT_DIR="$SKILL_DIR/extensions"
 # `--apply` without `--gate-types` is REFUSED rather than defaulted. A default here is
 # the inference this tool exists not to make, and a half-write is the atomicity failure
 # described above.
-if [ -n "$APPLY" ] && [ -z "$GTS" ]; then
+if [ -n "$APPLY" ] && [ -z "$GTS" ] && [ -z "$ENTRY_GTS" ]; then
   echo "adopt-extension-checks: --apply requires --gate-types. There is no safe default:" >&2
   echo "  the only inferable one is 'universal', which would promote every adopted check to" >&2
   echo "  run at every gate — a behaviour change nobody authorised, and an invisible one," >&2
@@ -71,10 +77,22 @@ if [ -n "$APPLY" ] && [ -z "$GTS" ]; then
   exit 2
 fi
 
-SKILL_DIR="$SKILL_DIR" EXT_DIR="$EXT_DIR" APPLY="${APPLY:-}" GTS="$GTS" python3 - <<'PY'
+CONSUMER="$CONSUMER" SKILL_DIR="$SKILL_DIR" EXT_DIR="$EXT_DIR" APPLY="${APPLY:-}" GTS="$GTS" \
+  ENTRY_GTS="$ENTRY_GTS" python3 - <<'PY'
 import os, re, sys, glob
 
 SKILL = os.environ["SKILL_DIR"]; EXT = os.environ["EXT_DIR"]
+CONSUMER = os.environ["CONSUMER"]
+# --entry PATH --gate-types LIST, repeatable. `gate_types:` is ENTRY frontmatter and the
+# right answer differs per entry -- the reference consumer needed four different values
+# across four entries. A single global flag could not express the per-entry question this
+# tool's own header documents, and applied one answer to every entry in one pass: a silent
+# wrong-value write on entries the operator never considered.
+ENTRY_GTS = {}
+for _line in os.environ.get("ENTRY_GTS", "").splitlines():
+    if "=" in _line:
+        _k, _v = _line.split("=", 1)
+        ENTRY_GTS[os.path.normpath(_k)] = _v
 APPLY = bool(os.environ.get("APPLY")); GTS_RAW = os.environ.get("GTS", "")
 
 def read(p):
@@ -101,6 +119,21 @@ LOADED_RE = re.compile(r"^<!--\s*CHECK_LOADED:\s*(\S+)\s*-->$", re.M)
 # Resolved, not assumed: an overrides/ entry shadowing the step file is the copy the
 # lead actually reads, so it is the copy whose anchors and rows count.
 def resolve_manifest(rel):
+    """A `hooks:` value is CORE-RELATIVE, not skill-relative, and joining it under the
+    skill dir is wrong for one subtree.
+
+    `team-roles/<role>.md` maps to `.claude/team-roles/<role>.md` -- OUTSIDE the skill
+    dir -- while `steps/<x>.md` and bare `SKILL.md` live inside it. This is the case
+    split `validate-layer-entries.sh`'s `resolve_target()` already implements and that
+    `ai-dlc-update/SKILL.md` §7v criterion 2 already documents, warning in as many words
+    that "a naive skill-relative join would falsely report every role extension's target
+    MISSING". This tool shipped that naive join anyway, and it did worse than misreport:
+    an unresolvable hook was FATAL, so on any consumer carrying a `team-roles/*` hook the
+    tool exited 2 having scanned NOTHING -- and an empty run of a tool whose whole job is
+    to surface GM1 findings reads exactly like a clean one."""
+    if rel.startswith("team-roles/"):
+        cand = os.path.join(CONSUMER, ".claude", rel)
+        return cand if os.path.isfile(cand) else None
     ovr = os.path.join(SKILL, "overrides", rel.replace("/", "__"))
     for cand in (ovr, os.path.join(SKILL, rel)):
         if os.path.isfile(cand): return cand
@@ -133,8 +166,13 @@ total_adoptable = 0
 for hook, group in sorted(by_hook.items()):
     mpath = resolve_manifest(hook)
     if mpath is None:
-        print(f"adopt-extension-checks: entries hook '{hook}' and no such file resolves under {SKILL}", file=sys.stderr)
-        sys.exit(2)
+        # NOT fatal. This tool's subject is the gate manifest; an entry hooking something
+        # else -- or something this consumer does not carry -- is out of scope, not a
+        # reason to abandon every other entry. Exiting here made the tool scan nothing on
+        # any consumer with a `team-roles/*` hook, and print nothing while doing it.
+        print(f"  note: entries hook '{hook}', which resolves to no file here — skipped "
+              f"(not the gate manifest, or not installed)")
+        continue
     mtext = read(mpath)
 
     # The legal gate types, DERIVED from the rendered manifest's own first column
@@ -168,17 +206,42 @@ for hook, group in sorted(by_hook.items()):
     print(f"manifest source: {os.path.relpath(mpath, SKILL)}")
     print(f"gate-type enum : {' '.join(enum)}")
 
+    # PHASE 1 -- what would be WRITTEN. The refusal below has to count the entries this
+    # tool would actually touch, not every entry lacking `gate_types:`: an entry whose
+    # headings core already anchors, or which hooks another file, has nothing adoptable and
+    # counting it produced a refusal on a run that would have written to one entry.
+    plan = []
     for f, t in sorted(group):
-        rel = os.path.relpath(f, SKILL)
         own = set(LOADED_RE.findall(t))
         declared = frontmatter(t, "gate_types")
-        heads = []
-        for line in t.splitlines():
-            m = ANCHOR_RE.match(line)
-            if m: heads.append((m.group(1), line))
+        heads = [(m.group(1), ln) for ln in t.splitlines()
+                 for m in [ANCHOR_RE.match(ln)] if m]
+        todo = [(i, ln) for i, ln in heads if i not in core_anchors and i not in own]
+        plan.append((f, t, own, declared, todo))
+
+    # A GLOBAL answer spread across SEVERAL entries this tool would write to is the silent
+    # wrong-value write. One entry is unambiguous; the reference consumer had four, each
+    # needing a different value, and one flag wrote one value into all of them.
+    if APPLY and GTS_RAW.strip() and not ENTRY_GTS:
+        multi = [f for f, t, own, declared, todo in plan
+                 if todo and not declared and frontmatter(t, "kind") == "check"]
+        if len(multi) > 1:
+            print("adopt-extension-checks: --gate-types is GLOBAL and "
+                  f"{len(multi)} entries would be written:", file=sys.stderr)
+            for _f in multi:
+                print(f"    {os.path.relpath(_f, SKILL)}", file=sys.stderr)
+            print("  `gate_types:` is ENTRY frontmatter and the right answer differs per entry —\n"
+                  "  one flag would write the same value into all of them, silently, including\n"
+                  "  entries you never considered. Answer them individually:\n"
+                  "    --entry <path> --gate-types <list>   (repeatable)\n"
+                  "  A single entry is unambiguous and the global flag still works there.",
+                  file=sys.stderr)
+            sys.exit(2)
+
+    for f, t, own, declared, todo in plan:
+        rel = os.path.relpath(f, SKILL)
         # Subtraction, exactly as GM1 derives its own subject set: an extension that
         # AUGMENTS a core check has its id in core_anchors and drops out on its own.
-        todo = [(i, ln) for i, ln in heads if i not in core_anchors and i not in own]
         if not todo:
             # Nothing adoptable. Two structurally different reasons, and only one of
             # them is a finding:
@@ -215,7 +278,18 @@ for hook, group in sorted(by_hook.items()):
         if not APPLY:
             continue
 
-        gts = [g.strip() for g in re.split(r"[,\s]+", GTS_RAW) if g.strip()]
+        # Per-entry answer wins; the global flag is the fallback.
+        raw = None
+        for _k, _v in ENTRY_GTS.items():
+            if os.path.normpath(f) == _k or os.path.basename(f) == os.path.basename(_k) \
+               or os.path.normpath(rel) == _k:
+                raw = _v; break
+        if raw is None: raw = GTS_RAW
+        if not raw.strip():
+            print(f"adopt-extension-checks: no gate types given for {rel}. Pass "
+                  f"--entry {rel} --gate-types <list>, or a global --gate-types.", file=sys.stderr)
+            sys.exit(2)
+        gts = [g.strip() for g in re.split(r"[,\s]+", raw) if g.strip()]
         bad = [g for g in gts if g not in enum]
         if bad:
             print(f"adopt-extension-checks: gate type(s) not in the manifest's own enum: {' '.join(bad)}\n"

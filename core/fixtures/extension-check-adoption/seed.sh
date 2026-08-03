@@ -4,7 +4,8 @@
 set -eu
 ROOT="$(mktemp -d "${TMPDIR:-/tmp}/extension-check-adoption.XXXXXX")"
 S="$ROOT/.claude/skills/ai-dlc"
-mkdir -p "$S/steps" "$S/extensions/checks" "$S/overrides" "$ROOT/scripts/ai-dlc"
+mkdir -p "$S/steps" "$S/extensions/checks" "$S/extensions/roles" "$S/overrides" \
+         "$ROOT/.claude/team-roles" "$ROOT/scripts/ai-dlc"
 
 # --- the manifest the entries hook -------------------------------------------------
 # Real GATE_MANIFEST region: the tool derives its legal gate-type enum from this table's
@@ -139,6 +140,23 @@ id: elsewhere
 ### 950. [ext:elsewhere] A consumer check on a different step file.
 
 Body.
+EOF
+
+# --- (7) A `team-roles/` HOOK — outside the skill dir --------------------------------
+# `hooks:` values are CORE-relative, not skill-relative: `team-roles/<role>.md` maps to
+# `.claude/team-roles/<role>.md`, OUTSIDE the skill dir, while `steps/<x>.md` lives inside
+# it. The tool joined every hook under the skill dir, and an unresolvable hook was FATAL —
+# so on any consumer carrying a role extension it exited 2 having scanned NOTHING, and an
+# empty run of a GM1-surfacing tool reads exactly like a clean one.
+printf '# code reviewer role\n' > "$ROOT/.claude/team-roles/code-reviewer.md"
+cat > "$S/extensions/roles/code-reviewer-domain.md" <<'EOF'
+---
+kind: role
+hooks: team-roles/code-reviewer.md
+id: code-reviewer-domain
+---
+
+Domain additions for the reviewer role. Carries no check heading.
 EOF
 
 printf '%s\n' "$ROOT"
