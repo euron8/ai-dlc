@@ -289,13 +289,31 @@ WHOLE_READ_POOL=$(( READER_WINDOW_TOKENS * ARTIFACT_SHARE_PCT / 100 ))
 #                neither this table nor is_archive() for 120 sprints. Ungoverned is
 #                not the same as unrotated -- nothing measured it, so nothing could
 #                report it. retro.md Step 5b prunes it to the 3 most recent entries.
-#   trim         pipeline-snapshot.md -> trim to its 7-section schema (Rule 25(a)).
-#                Check 14 owns the schema. It is SEVEN sections since v0.50.0 --
-#                In-Flight Teammates is one of them, and it is the ledger that
-#                stops the lead re-dispatching live teammates. Do not delete it.
-#                Never consolidation. A snapshot over threshold means the schema
-#                stopped being enforced at gate passages, and the gates that let it
-#                grow are the finding -- not the file.
+#   trim         pipeline-snapshot.md -> MOVE superseded content verbatim to
+#                pipeline-snapshot-history.md (write-only, Rule 25(a)), THEN delete
+#                it from the live file. Check 14 owns the schema. It is SEVEN
+#                sections since v0.50.0 -- In-Flight Teammates is one of them, and
+#                it is the ledger that stops the lead re-dispatching live teammates.
+#                Do not delete it. Never consolidation. A snapshot over threshold
+#                means the schema stopped being enforced at gate passages, and the
+#                gates that let it grow are the finding -- not the file.
+#
+#                THE DESTINATION IS THE LOAD-BEARING WORD, and this arm did not
+#                carry one. Its two siblings above both name where the bytes go;
+#                only this one said what to make the file, never what to do with
+#                what came out. A lead holding a post-compaction rule set -- which
+#                is Rules 1-13, so NOT Rule 25(a) -- has this string as its only
+#                instruction, and an instruction to shrink a file with nowhere to
+#                put the content is an instruction to delete it.
+#
+#                Measured in the reference consumer across one sprint: of 2,524
+#                substantive lines deleted from the snapshot, 2,141 (84%) are
+#                absent from the repository entirely -- gate dispositions, operator
+#                override citations and adversarial verdicts. 69 of the 70 commits
+#                touching the file destroyed at least one line. The history file is
+#                not the problem: 17 commits touch it and NONE deletes a line.
+#                Append-only holds. Coverage is what fails, and it fails because
+#                this string never asked for any.
 # -----------------------------------------------------------------------------
 BUDGETS="
 gate-log.md|25000|rotate
@@ -334,8 +352,7 @@ is_not_artifact() {
 # Check 14 enumerates seven sections to REFRESH. It never said "and no others,"
 # and nothing counted them -- so the schema was a REQUIRED-set, not a CLOSED-set.
 # An eighth section was invisible to every check until total BYTES breached, and
-# by then the remedy text ("trim to its 7-section schema", below) was pointing at
-# a schema nothing could evaluate.
+# by then the remedy text below was pointing at a schema nothing could evaluate.
 #
 # Measured in the reference consumer at sprint 296, mid-sprint: the snapshot held
 # TEN `## ` sections at 141% of budget. Three were lead invention that no hook, no
@@ -766,11 +783,17 @@ if [ -s "$BREACH_FILE" ]; then
                        operator sign-off. Raising the pool is NOT a remedy.
         rotate      -> a rotation was MISSED. Move the epoch to a dated archive
                        (Rule 25(c)); never rewrite a log.
-        trim        -> trim pipeline-snapshot.md to its 7-section schema (gate-validation
-                       Check 14 owns it). The gates that let it grow past 6k are the
-                       finding, not the file. NOTE: In-Flight Teammates is one of the
-                       seven -- it is the dispatch ledger, and deleting it is how a lead
-                       re-dispatches a teammate that is still alive.
+        trim        -> MOVE superseded content verbatim to pipeline-snapshot-history.md
+                       (write-only, Rule 25(a)), THEN delete it from
+                       pipeline-snapshot.md. Never delete it outright -- moving it is
+                       the remedy, and deleting it is the defect this line exists to
+                       stop. The live file keeps all seven sections (gate-validation
+                       Check 14 owns them): a section is trimmed by moving its
+                       SUPERSEDED ENTRIES out, never by dropping the section. The gates
+                       that let it grow past 6k are the finding, not the file. NOTE:
+                       In-Flight Teammates is one of the seven -- it is the dispatch
+                       ledger, and deleting it is how a lead re-dispatches a teammate
+                       that is still alive.
 EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi

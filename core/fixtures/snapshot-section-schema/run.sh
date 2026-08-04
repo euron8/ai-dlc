@@ -9,8 +9,8 @@
 # gate-validation.md Check 14 enumerates seven sections to REFRESH. It never said
 # "and no others," and nothing counted them. So the schema was a REQUIRED-set, and
 # an eighth section was invisible to every check until total BYTES breached --
-# by which point validate-artifact-budget.sh's own remedy string was telling the
-# lead to "trim to its 7-section schema" while nothing on disk could evaluate one.
+# by which point validate-artifact-budget.sh's own remedy string was pointing the
+# lead at a schema nothing on disk could evaluate.
 #
 # Measured in the reference consumer at sprint 296, mid-sprint: TEN `## ` sections
 # at 141% of budget (156% an hour later, still growing). Three were lead invention

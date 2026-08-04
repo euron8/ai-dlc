@@ -73,6 +73,7 @@ core_manifest:
   - core/fixtures/operator-request-capture/**
   - core/fixtures/request-coverage/**
   - core/fixtures/scope-confirmation/**
+  - core/fixtures/snapshot-conservation/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**

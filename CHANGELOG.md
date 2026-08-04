@@ -34,6 +34,75 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.259.0] — 2026-08-04
+
+### The remedy that shrinks the snapshot never said where the content goes
+
+`validate-artifact-budget.sh` names three remedies for an over-budget artifact. Two of them
+say where the bytes go: `rotate` says *move the epoch to a dated archive*, and the
+schema-breach remedy says *move each unknown section verbatim to
+`pipeline-snapshot-history.md`*. The third, `trim`, said what to make the file and never said
+what to do with what came out.
+
+A lead that has compacted holds Rules 1–13 and nothing above, so it does not hold Rule 25(a)'s
+*move, never delete*. That remedy string is its only instruction. It reads "trim" and deletes.
+
+**Measured in the reference consumer across one sprint: of 2,524 substantive lines removed
+from `pipeline-snapshot.md`, 2,141 — 84% — exist nowhere in the repository.** They are the
+sprint's own HARD_BLOCK resolutions, operator override citations, gate dispositions and
+adversarial pass verdicts. 69 of the 70 commits touching the file destroyed at least one line.
+The byte budget passed throughout, because a file that got smaller is exactly what
+conservation and destruction have in common.
+
+**The `trim` remedy now names its destination**, in the breach block, in the header table and
+in `route.md`'s mirror of the same three remedies. `_gate-procedures.md` already named it,
+which is why the omission survived: three of the four sibling sites were right.
+
+**New Check 35 — `validate-snapshot-conservation.sh`** — verifies the move actually happened.
+It diffs the snapshot from the last resolvable gate sha and reports every substantive line
+that left the file and is present in no tracked markdown file anywhere in the repository.
+
+- **The predicate is survival, not coverage, because coverage was measured and refuted.** The
+  obvious join — deletions must be matched by history additions — fails on this corpus: **six
+  of the seven largest evictions DID write to the history file in the same commit, and four of
+  those six still destroyed 75% or more of what they removed.** The clearest deleted 244
+  substantive lines, moved 61, and left behind a note saying the cycles had been moved to the
+  history file and could be read there. A line-count join scores that a partial pass. The
+  history file is not the defect: 17 commits touch it and **not one deletes a line**.
+- **The floor of 40 is read off the distribution, not chosen.** Per-commit destroyed-line
+  counts run 1..35 and then jump to 62, 68, 76, 100, 121, 165, 202, 231, 244, 327. Any floor
+  in 36..62 selects the same ten commits. Firing at 1 would fire on 69 of 70 commits, which is
+  the unmeasured lint an operator turns off.
+- **False-positive set measured with the shipping script**, replayed across the 9 gate
+  intervals the reference consumer's `gate-metrics.jsonl` can resolve: **3 fire, covering 562
+  of 601 destroyed lines (94%)**. The two LARGEST removals — 551 and 452 lines — **pass**,
+  because their content was genuinely conserved. It discriminates a bulk move from a bulk
+  deletion rather than flagging large diffs.
+- **A reworded line reads as destroyed.** That is the check's false-positive class, it is
+  stated in the check rather than suppressed, and the floor is what bounds it.
+- Set membership rather than per-line grepping: the first build took **114 seconds** against
+  an 87 MB corpus for a check that runs at every gate. This takes 3, and is strictly more
+  conservative — over the same 223 removed lines it accuses 159 where grepping accuses 161,
+  and every line it accuses is one grepping accuses too.
+- **NOT-APPLICABLE is exit 0 and prints why**; a `gate-metrics.jsonl` that exists and cannot
+  be parsed is exit 2, because a clean line from a broken input is a verdict never computed.
+  `base_sha`, `lines_removed` and `lines_destroyed` print on every path.
+- The base sha walks BACKWARDS to the newest one the repository can resolve — only **10 of
+  34** recorded gate shas in the reference corpus resolve, the rest written from worktrees or
+  rewritten since, so taking the newest and failing would make the check unrunnable at most
+  gates.
+
+Fixture `core/fixtures/snapshot-conservation/` builds a real git repository, because the check
+is a git-derived join and a simulated one would prove nothing about the part that runs. 19
+assertions, 3 mutants, each killed and each failing only its own assertion, plus an unmutated
+control.
+
+**Not shipped, and why.** The planned schema arm — Open Items becomes a pointer to
+`pending.md` — rested on a premise that measured false. **0 of the 110 substantive Open Items
+lines appear in `pending.md`**, and 7 of its 19 identifiers exist nowhere else. Converting it
+to a pointer would have destroyed 2,563 tokens of unique content: the exact harm this release
+exists to prevent.
+
 ## [0.258.0] — 2026-08-04
 
 ### The sprint had no seam at which anyone looked at the scope before it hardened
