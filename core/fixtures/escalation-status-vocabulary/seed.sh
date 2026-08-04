@@ -50,6 +50,12 @@ cat > "$WORK/pending-clean.md" <<'MD'
 ## S299-5 Dev - 2026-07-20T09:30Z
 **Status:** OVERRIDDEN
 **Context:** the autonomous call was wrong
+
+## S299-6 Lead - 2026-07-20T10:00Z
+**Status:** SUPPRESSED
+**Suppresses:** [core] 32 — bmad-invocation-resolves
+**Expires after:** 1 gates
+**Operator authorization:** 2026-07-20T10:00:00Z | "Override, proceed, file backlog item"
 MD
 
 # ---- DRIFTED: two tokens core never defined --------------------------------

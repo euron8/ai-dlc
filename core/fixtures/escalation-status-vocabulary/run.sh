@@ -28,7 +28,7 @@ echo "escalation-status-vocabulary:"
 # --- Assertion 1: POSITIVE CONTROL — the published set passes ----------------
 # Without this, every assertion below is satisfied by a validator that reds on everything.
 if bash "$VALIDATOR" "$CLEAN" "$SPEC_SRC" >/dev/null 2>&1; then
-  ok "positive control: all five published tokens pass"
+  ok "positive control: every token the spec publishes passes"
 else
   bad "the check reds on entries using only the published set — it would fail every gate: $(bash "$VALIDATOR" "$CLEAN" "$SPEC_SRC" 2>&1 | grep FAIL | head -1)"
 fi
@@ -66,9 +66,14 @@ fi
 # must now pass. If it still fails, the script is carrying its own private set and the
 # derivation is decoration.
 SPEC_MUT="$WORK/escalations-mutant.md"
-sed 's/^\(\*\*Terminal statuses\*\*.*\)`RESOLVED | OVERRIDDEN`/\1`RESOLVED | OVERRIDDEN | FILED | OPEN`/' \
+# APPEND to whatever the line publishes; do not restate its current contents. This
+# anchor used to carry the literal `RESOLVED | OVERRIDDEN`, which made the fixture go
+# STALE the moment a token was added to the published set — a hand-listed copy of the
+# very set this fixture exists to prove is DERIVED. Insert before the closing backtick
+# instead, so the mutant widens the vocabulary whatever it currently holds.
+sed 's/^\(\*\*Terminal statuses\*\*.*\)`$/\1 | FILED | OPEN`/' \
   "$SPEC_SRC" > "$SPEC_MUT"
-if ! grep -q 'RESOLVED | OVERRIDDEN | FILED | OPEN' "$SPEC_MUT"; then
+if ! grep -q 'FILED | OPEN' "$SPEC_MUT"; then
   bad "FIXTURE STALE: could not extend the terminal-status line — escalations.md's '**Terminal statuses**' line was reworded"
 elif bash "$VALIDATOR" "$DRIFT" "$SPEC_MUT" >/dev/null 2>&1; then
   ok "widening escalations.md's published set makes the same entries pass — the vocabulary is read, not restated"

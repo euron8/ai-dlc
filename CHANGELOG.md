@@ -34,6 +34,69 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.260.0] — 2026-08-04
+
+### Suppression becomes an object with a lifetime — and the lifetime bounds the licence, not the re-run
+
+`RESOLVED` and `OVERRIDDEN` close a QUESTION. Neither closes a CHECK, and neither
+names one. Measured on the reference consumer: a `hard_block: true` check failed at
+two consecutive planning gates and the pipeline proceeded past both of them on a
+**single** operator turn, each passage recorded in the gate log verbatim as
+*"carried forward, none re-litigated"*.
+
+**The mechanism this release was specified with is not the one it ships, because the
+specified one was measured and refuted.** The stated diagnosis was that the check goes
+silent and nothing re-runs it. It is false: both affected checks were emitted at all
+three of that sprint's planning gates and read `FAIL`, `FAIL`, `PASS`. The check ran
+every time and re-reported its own failure; the metrics carry all three verdicts. What
+was reused was the AUTHORIZATION. An expiry that "forces the check to re-run" would
+have been a no-op against the only corpus available.
+
+So what expires here is the operator's permission to walk past a verdict that is still
+red — and the verdict is re-read rather than assumed, so a suppression whose cause was
+genuinely fixed costs nothing and reports nothing.
+
+**Added.**
+
+- `SUPPRESSED` joins the closed terminal-status vocabulary in `escalations.md`, with
+  `**Suppresses:**`, `**Expires after:** <1..3> gates` and the same
+  `**Operator authorization:**` citation grammar the other terminal statuses use.
+  Adding the token required editing only the published line — `validate-escalation-
+  status-vocabulary.sh` DERIVES its set from that line and picked the new token up
+  with no change to the script, which is what that derivation was built for.
+- `core/scripts/validate-suppression-lifetime.sh`, bound as a second enforcer on
+  Check 2. Past its expiry, a suppression whose named check is still recorded `FAIL`
+  fails the gate and the prior citation may not be re-cited. A terminal
+  `RESOLVED`/`OVERRIDDEN` entry that names a currently-failing check is malformed —
+  that is the loophole the measurement found, shut.
+- `core/fixtures/suppression-lifetime/` — 23 assertions, 3 mutants, an unmutated
+  control, and mutants A and B each proven to fail only their own assertion.
+
+**Three defects found while building it, each of which would have shipped a check that
+could not fire, and none visible without replaying against the real corpus.**
+
+- **`gate-metrics.jsonl` is written in two JSON spacings.** 337 of 723 rows are
+  `"check":"1"` and 386 are `"check": "1"`. A per-field regex anchored to one spacing
+  reads 47% of the file and reports clean over the rest. Every field is now read
+  through a whitespace-tolerant extractor, and the fixture seeds the decisive check in
+  the spaced form ONLY, so an anchored extractor cannot pass.
+- **`read` will not split on `0x01` in bash 3.2** — it strips the bytes and collapses
+  the whole line into the first field.
+- **A tab delimiter silently loses empty fields.** Tab is IFS whitespace, so `read`
+  folds a run of consecutive tabs into one delimiter; an entry missing an optional
+  field shifts every later field left and parses as a well-formed entry naming nothing.
+  Records are delimited with the ASCII unit separator (`0x1f`) instead, and mutant C
+  reverts exactly that to prove the assertion has teeth — discriminating on the
+  REPORTED REASON, because the mutant still exits 1 for the wrong cause.
+
+**Measured false-positive set: zero on the live consumer corpus** — 80 entries scanned,
+no suppression past its lifetime, no terminal entry closing a still-failing check,
+because the checks in question are green today. Replayed at the historical gate where
+they were red, it fires on exactly two entries, and they are exactly the two the
+diagnosis named. No `--baseline` is needed at the current HEAD; the flag exists, carries
+R5's rule that a baselined key which stops reproducing is itself a failure, and is
+asserted both ways.
+
 ## [0.259.0] — 2026-08-04
 
 ### The remedy that shrinks the snapshot never said where the content goes

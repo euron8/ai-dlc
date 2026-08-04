@@ -29,7 +29,7 @@ authority has made a `DECIDED_AUTONOMOUSLY` call, whatever it labels it.
 **Impact if skipped:** [What happens if work continues without this answer]
 ```
 
-**Terminal statuses** (set at resolution, never at authorship): `RESOLVED | OVERRIDDEN`
+**Terminal statuses** (set at resolution, never at authorship): `RESOLVED | OVERRIDDEN | SUPPRESSED`
 
 Those two lines — the `**Status:**` line in the format block above and the terminal
 list here — are the CLOSED vocabulary. Every token an entry's `**Status:**` field may
@@ -92,6 +92,54 @@ follow-up. The decay path is a handoff to a fresh session: a successor
 lead cannot reconstruct a verbatim substring it never received, so a
 citation deferred past the edit is not late, it is unrecoverable except
 by asking the operator to repeat themselves.
+
+**SUPPRESSED — an authorization to proceed past a failing check, with a
+lifetime.** `RESOLVED` and `OVERRIDDEN` close a *question*. Neither closes a
+*check*, and using one for that is how a red check stops being re-argued while
+it is still red. Measured on the reference consumer: a `hard_block: true` check
+failed at two consecutive planning gates and the pipeline proceeded past both
+on a single operator turn, each passage logged as *"carried forward, none
+re-litigated"*.
+
+**What that measurement did NOT show, and it decides the mechanism:** the
+check was not silenced. It ran at every gate and reported `FAIL` at every gate,
+and the metrics record it. What was reused was the AUTHORIZATION. So the
+lifetime here bounds how long an operator's *permission to proceed* stays in
+force — not whether the check re-runs, which it already does. A suppression
+that expires does not un-silence anything; it withdraws the licence to walk
+past a verdict that is still red.
+
+A `SUPPRESSED` entry MUST carry, in the same edit that sets the status:
+
+```
+**Suppresses:** [<catalog>] <check-id> — <check title>
+**Expires after:** <n> gates
+**Operator authorization:** <ISO-8601 UTC ts> | "<verbatim substring, ≥12 chars, of the operator's message>"
+```
+
+`<n>` defaults to 1 and may not exceed 3. `<catalog>` is `core` for a
+distribution check and `extension:<id>` for a consumer domain check, matching
+the `GATE_METRIC v1` field of the same name — the id is a join key, so it is
+written the way the metrics write it. The `**Operator authorization:**` line
+carries the identical grammar and the identical verification as the
+`RESOLVED`/`OVERRIDDEN` citation above; a suppression is an operator decision
+or it is nothing.
+
+**A suppression names its target.** `RESOLVED` and `OVERRIDDEN` name none, and
+that is the loophole: an entry may be closed on an operator's word while a
+check id sits in its body, still failing, with nothing joining the two. So a
+terminal entry that names a currently-failing check id and is NOT `SUPPRESSED`
+is malformed — use `SUPPRESSED` and declare the target and the lifetime, or
+resolve the underlying failure.
+
+**Past expiry the entry authorizes nothing.** Once `<n>` gates have been
+recorded since the authorization timestamp, a still-failing named check is a
+live failure again and the gate must obtain fresh authorization. The prior
+citation may not be re-cited; re-suppression is a new entry with a new operator
+turn. Enforced by `scripts/ai-dlc/validate-suppression-lifetime.sh` at Check 2,
+which counts elapsed gates from `gate-metrics.jsonl` and re-reads the named
+check's own recorded verdict — so a suppression whose cause has genuinely been
+fixed costs nothing, and only one that is still red is stopped.
 
 **AC verification-category-change disclosure.** When resolving a
 HARD_BLOCK changes how an acceptance criterion is verified — moving it
