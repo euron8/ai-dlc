@@ -206,7 +206,31 @@ prose is itself generated rather than composed.
    resolves the core guard hook. Pulling only `skills/ai-dlc-update/**` left both asserting
    against machinery this cycle did not carry, and a red derived fixture HARD-STOPS the
    cycle — so the self-update wedged on a pull that broke nothing. The machinery set is the
-   smallest slice that closes that, because a fixture's subject is always machinery.
+   smallest slice that closes that ~~, because a fixture's subject is always machinery~~.
+
+   **CORRECTED — "a fixture's subject is always machinery" is FALSE, and widening the slice
+   cannot fix it, because the only thing left to widen into is the rulebook this step
+   deliberately excludes.** Measured on the reference consumer pulling 0.249.0 → 0.261.0:
+   **7 of that tree's 109 fixtures are red in the state this step constructs**, and the
+   operator had to cut a branch, write the 17-path slice and run 43 derived fixtures to
+   find out. Two distinct couplings, both real:
+
+   - **`enforcement-map.yaml` is machinery; its `CHECK_LOADED` anchors are rulebook.** A
+     release that adds a check makes the incoming map reference an anchor that does not
+     exist in the consumer's `steps/gate-validation.md` yet, so `validate-enforcement-map.sh`
+     fails on the consumer's own tree and every fixture driving it goes red. Measured:
+     checks 33, 34 and 35.
+   - **Some fixtures assert on rulebook directly.** `postcompact-rulebook-recovery` runs
+     `validate-reattach-budget.sh` against the SHIPPED `SKILL.md` and mutates its mandate.
+     Its subject is rulebook, so it cannot be green while machinery is at theirs and
+     rulebook at ours — whatever the slice contains.
+
+   **So the deferral is structural, not exceptional**, and for any pull spanning a
+   check-adding release it is the expected outcome. `reconcile/self-update-gate.sh` now
+   detects both couplings BEFORE the branch is cut and returns `SELF-UPDATE-DEFER`, so the
+   slice folds into the gated apply without the branch/write/run/revert cycle. Its arms fire
+   only when the rulebook is ALSO about to change: a machinery-only pull still proceeds
+   autonomously (verified against 0.256.0 → 0.257.0, which touches no rulebook file).
 
    **EMPTY is a CONTENT question, not a diff question — or this step never terminates.**
    The slice is `git diff base→theirs`, and `base` is the stamp's `commit`, which advances

@@ -27,36 +27,44 @@ fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/esc-vocab.XXXXXX")" || exit 2
 
-# ---- CLEAN: every token in the published set -------------------------------
-cat > "$WORK/pending-clean.md" <<'MD'
-# Pending Escalations
+# ---- CLEAN: every token in the published set, DERIVED ----------------------
+# GENERATED FROM THE SPEC, never hand-listed. This block used to enumerate the tokens by
+# hand, and the hand-list is what broke: publishing a new terminal status made the clean
+# file cover 5 of 6, and — worse — a consumer whose escalations.md predates the token got
+# a clean file asserting a status its own spec does not publish, so the fixture went red
+# on a pull that broke nothing. That is the machinery-vs-rulebook coupling the self-update
+# gate now defers on, reproduced inside a fixture: the seed is machinery, escalations.md
+# is rulebook, and a hand-list welds them to each other's versions.
+#
+# Deriving also makes the POSITIVE CONTROL mean what it claims. "Every published token
+# passes" is only true if the file actually carries every published token.
+{
+  echo "# Pending Escalations"
+  echo
+  i=0
+  awk '
+    /^\*\*Status:\*\*/ || /^\*\*Terminal statuses\*\*/ {
+      s = $0
+      sub(/^[^:]*:[[:space:]]*/, "", s); gsub(/`/, "", s)
+      n = split(s, parts, /[|]/)
+      for (j = 1; j <= n; j++) { t = parts[j]; gsub(/[^A-Z_]/, "", t); if (t != "") print t }
+    }
+  ' "$SPEC_SRC" | sort -u | while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    i=$((i + 1))
+    echo "## S300-$i Dev - 2026-07-21T10:0${i}Z"
+    echo "**Status:** $tok"
+    echo "**Context:** derived from the published set"
+    echo
+  done
+} > "$WORK/pending-clean.md"
 
-## S300-1 Dev - 2026-07-21T10:00Z
-**Status:** HARD_BLOCK
-**Context:** needs an operator call
-
-## S300-2 QA - 2026-07-21T11:00Z
-**Status:** DECIDED_AUTONOMOUSLY
-**Context:** picked the cheaper option
-
-## S300-3 Architect - 2026-07-21T12:00Z
-**Status:** DEFERRAL_REQUEST
-**Context:** deferred behind an upstream release
-
-## S299-4 Dev - 2026-07-20T09:00Z
-**Status:** RESOLVED
-**Context:** operator adjudicated at the checkpoint
-
-## S299-5 Dev - 2026-07-20T09:30Z
-**Status:** OVERRIDDEN
-**Context:** the autonomous call was wrong
-
-## S299-6 Lead - 2026-07-20T10:00Z
-**Status:** SUPPRESSED
-**Suppresses:** [core] 32 — bmad-invocation-resolves
-**Expires after:** 1 gates
-**Operator authorization:** 2026-07-20T10:00:00Z | "Override, proceed, file backlog item"
-MD
+# A derived file that derived NOTHING is the false zero this fixture would never notice:
+# an empty clean file passes the validator trivially and the positive control means nothing.
+if [ "$(grep -c '^\*\*Status:\*\*' "$WORK/pending-clean.md")" -lt 2 ]; then
+  echo "FIXTURE ERROR: derived fewer than 2 status tokens from $SPEC_SRC; the clean file would pass vacuously" >&2
+  exit 2
+fi
 
 # ---- DRIFTED: two tokens core never defined --------------------------------
 # FILED and OPEN are the exact tokens the reference consumer accumulated 8 entries on.

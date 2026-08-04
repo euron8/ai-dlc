@@ -75,6 +75,7 @@ core_manifest:
   - core/fixtures/scope-confirmation/**
   - core/fixtures/snapshot-conservation/**
   - core/fixtures/suppression-lifetime/**
+  - core/fixtures/self-update-join-gate/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**

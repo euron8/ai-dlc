@@ -55,6 +55,111 @@ CONSUMER="${4:?}"
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
+# ---- THE MACHINERY SLICE CANNOT ALWAYS STAND ALONE -------------------------------------
+# Step 2's stated premise is "a fixture's subject is always machinery". It is FALSE, and the
+# arms below are the two ways it fails. Both were measured on the reference consumer at
+# 0.249.0 against 0.261.0: 7 of that tree's 109 fixtures are red in the state step 2 builds,
+# and the operator had to cut a branch, write 17 paths and run 43 fixtures to discover it.
+#
+# This runs BEFORE the push-blocking differential below because it is cheaper and it is a
+# harder stop: the push arm asks whether the slice can be PUSHED, this asks whether the slice
+# can be GREEN at all. Both answer SELF-UPDATE-DEFER so step 2 needs no new vocabulary --
+# the existing "fold the machinery slice into the gated apply" handling is exactly right.
+
+# --- ARM R1: the map declares a check whose anchor is rulebook-side ----------------------
+# enforcement-map.yaml is MACHINERY; the `CHECK_LOADED` anchors it is joined against live in
+# steps/gate-validation.md, which is RULEBOOK and which step 2 deliberately excludes. So a
+# release that adds a check makes the map (new) reference an anchor (old) that does not exist
+# yet, and validate-enforcement-map.sh fails on the consumer's tree through no fault of it.
+# Measured: checks 33, 34 and 35 on the reference consumer.
+#
+# BOTH SIDES DERIVED, and scoped to ids that are anchored UPSTREAM -- 14 of the map's entries
+# are named validators with no gate section at all, and demanding an anchor for those would
+# defer every pull forever.
+R1_GV_THEIRS="$(git -C "$DIST" show "${THEIRS}:core/skills/ai-dlc/steps/gate-validation.md" 2>/dev/null || true)"
+R1_GV_OURS=""
+for cand in "$CONSUMER/.claude/skills/ai-dlc/steps/gate-validation.md" \
+            "$CONSUMER/core/skills/ai-dlc/steps/gate-validation.md"; do
+  [ -f "$cand" ] && { R1_GV_OURS="$(cat "$cand")"; break; }
+done
+if [ -n "$R1_GV_THEIRS" ] && [ -n "$R1_GV_OURS" ]; then
+  r1_theirs="$(grep -oE '^<!-- CHECK_LOADED: [^ ]+ -->' <<<"$R1_GV_THEIRS" | sed 's/.*: //; s/ -->//' | sort -u)"
+  r1_ours="$(grep -oE '^<!-- CHECK_LOADED: [^ ]+ -->' <<<"$R1_GV_OURS" | sed 's/.*: //; s/ -->//' | sort -u)"
+  # A zero here must not be a false zero: if either side parsed to nothing the anchor grammar
+  # moved, and comparing an empty set to anything reports agreement it never computed.
+  if [ -z "$r1_theirs" ] || [ -z "$r1_ours" ]; then
+    emit SELF-UPDATE-UNDECIDED "gate-validation.md" "could not parse CHECK_LOADED anchors from one side (theirs=$(grep -c . <<<"$r1_theirs"), ours=$(grep -c . <<<"$r1_ours")). An empty anchor set compares equal to nothing, so this must not read as agreement."
+  else
+    r1_missing="$(comm -23 <(printf '%s\n' "$r1_theirs") <(printf '%s\n' "$r1_ours") | tr '\n' ' ' | sed 's/ *$//')"
+    if [ -n "$r1_missing" ]; then
+      emit SELF-UPDATE-DEFER "enforcement-map.yaml" "the incoming map declares check(s) [$r1_missing] whose CHECK_LOADED anchor lives in steps/gate-validation.md -- RULEBOOK, which step 2 excludes. Installing the map without it leaves validate-enforcement-map.sh failing on the consumer's own tree, and every fixture that drives it red. Machinery and rulebook must land together: fold the slice into the gated apply."
+      deferred_join=1
+    fi
+  fi
+fi
+
+# --- ARM R2: a derived fixture asserts on rulebook that is about to differ ---------------
+# The arm the reference consumer actually hit. postcompact-rulebook-recovery runs
+# validate-reattach-budget.sh against the SHIPPED SKILL.md and mutates its mandate -- its
+# subject is rulebook, not machinery. A fixture like that cannot be green while machinery is
+# at theirs and rulebook at ours, whatever the slice contains.
+#
+# DIFFERENTIAL, NOT STATIC. Asking "does any fixture touch rulebook" would defer on a consumer
+# whose rulebook is already current, stranding the machinery slice for no reason -- the exact
+# false positive this file's header warns about. So the arm fires only when the rulebook is
+# ALSO about to change. If ours already equals theirs, no fixture can break on it.
+# COMPARE OURS AGAINST THEIRS, NEVER THE RANGE. The first version of this arm asked
+# `git diff base..theirs`, which is a question about the DISTRIBUTION's history and not
+# about this consumer. A consumer that already holds theirs' rulebook still shows a
+# non-empty range diff, so the arm deferred a pull it had no business deferring — the
+# machinery slice stranded for no reason, which is the precise false positive this file's
+# header warns about and which the fixture's assertion 3 exists to catch. What matters is
+# whether the consumer's OWN rulebook is about to change, so each candidate is compared by
+# CONTENT against theirs and only genuine differences count.
+R2_CAND="$(git -C "$DIST" diff --name-only "${BASE}..${THEIRS}" -- \
+           core/skills/ai-dlc/SKILL.md \
+           core/skills/ai-dlc/steps/ \
+           core/skills/ai-dlc/escalations.md \
+           core/skills/ai-dlc/rule-authoring.md \
+           core/team-roles/ 2>/dev/null)"
+R2_RB=""
+for r2p in $R2_CAND; do
+  r2_consumer="$CONSUMER/.claude/${r2p#core/}"
+  # Absent at the consumer means this pull ADDS it, which is a change by definition.
+  if [ ! -f "$r2_consumer" ]; then
+    R2_RB="$R2_RB $(basename "$r2p")"; continue
+  fi
+  if ! git -C "$DIST" show "${THEIRS}:${r2p}" 2>/dev/null | cmp -s - "$r2_consumer"; then
+    R2_RB="$R2_RB $(basename "$r2p")"
+  fi
+done
+R2_RB="$(printf '%s' "${R2_RB# }")"
+if [ -n "$R2_RB" ]; then
+  # Fixtures whose NON-COMMENT code resolves a rulebook file in the LIVE tree. A comment
+  # naming SKILL.md is not a subject -- a whole-file grep is satisfied by prose.
+  R2_HITS=""
+  for fx in "$DIST"/core/fixtures/*/; do
+    [ -d "$fx" ] || continue
+    # Read once into a variable and feed the readers a HERE-STRING. `... | grep -q` under
+    # `pipefail` reports the WRITER's EPIPE once the upstream's output past the match
+    # exceeds the pipe buffer, so the test answers "not found" on input that contains the
+    # pattern -- a size threshold, wrong permanently and with no symptom. I54b catches it.
+    r2_body="$(grep -hv '^[[:space:]]*#' "$fx"*.sh 2>/dev/null || true)"
+    grep -qE '(SKILL\.md|escalations\.md|rule-authoring\.md|skills/ai-dlc/steps/)' <<<"$r2_body" || continue
+    grep -qE '\$\{?(D_ROOT|ROOT|REPO_ROOT|AI_DLC_ROOT)\b' <<<"$r2_body" || continue
+    R2_HITS="$R2_HITS $(basename "${fx%/}")"
+  done
+  if [ -n "$R2_HITS" ]; then
+    emit SELF-UPDATE-DEFER "rulebook-coupled-fixtures" "this pull changes rulebook file(s) [$R2_RB], and fixture(s)${R2_HITS} assert against a rulebook file resolved in the live tree. Step 2 installs machinery without rulebook, so those fixtures judge new machinery against the OLD rulebook and go red on a pull that broke nothing. Fold the slice into the gated apply so both land on one branch."
+    deferred_join=1
+  fi
+fi
+
+if [ "${deferred_join:-0}" -eq 1 ]; then
+  emit SELF-UPDATE-DEFER "-" "the machinery slice cannot be green on its own for this pull. Step 2's premise that a fixture's subject is always machinery does not hold here. Do NOT cut the self-update branch."
+  exit 0
+fi
+
 # The consumer's hook is the authority on what can block ITS push. Fall back to the shipped copy
 # only when the consumer has none — a consumer that has never armed the hook still deserves the
 # right answer about what WOULD block once it does.

@@ -34,6 +34,54 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.262.0] — 2026-08-04
+
+### The self-update slice could not be green without the rulebook, and nothing said so until a branch had been cut
+
+Step 2 of `ai-dlc-update` installs **machinery** and deliberately excludes the
+**rulebook**, on a premise stated in its own text: *"a fixture's subject is always
+machinery."* That premise is **false**, and widening the slice cannot fix it, because the
+only thing left to widen into is the rulebook the step excludes by design.
+
+Found by an operator pulling `0.249.0 → 0.261.0`: the gate returned OK, so they cut the
+branch, wrote the 17-path slice and ran its 43 derived fixtures — 42 green, one red. They
+verified rather than assumed (swapping `SKILL.md` to theirs took it to zero FAILs), reverted
+to a byte-identical tree, and folded the slice into `apply`. Correct on every count, and the
+whole cycle was avoidable.
+
+**Measured, not inferred.** Reproducing that mixed state — machinery at HEAD, rulebook at the
+consumer's pin — and running the full suite: **7 of 109 fixtures red.** With machinery at
+`0.259.0` as a control, **6 of 108**, so the two couplings are long-standing rather than new:
+
+- **`enforcement-map.yaml` is machinery; its `CHECK_LOADED` anchors are rulebook.** A release
+  that adds a check makes the incoming map reference an anchor that does not exist in the
+  consumer's `steps/gate-validation.md` yet, so `validate-enforcement-map.sh` fails on the
+  consumer's own tree and every fixture driving it goes red. Measured: checks **33, 34, 35**,
+  i.e. every check added since `0.252.0`.
+- **Some fixtures assert on rulebook directly.** `postcompact-rulebook-recovery` runs
+  `validate-reattach-budget.sh` against the shipped `SKILL.md` and mutates its mandate.
+
+**Added.** Two arms in `reconcile/self-update-gate.sh`, running before the branch is cut and
+returning the existing `SELF-UPDATE-DEFER` so step 2 needs no new vocabulary — the current
+"fold the slice into the gated apply" handling is already the right outcome. Plus
+`core/fixtures/self-update-join-gate/` — 8 assertions, 2 mutants, an unmutated control.
+
+**The arms are DIFFERENTIAL, and that is the assertion that carries the release.** An arm
+that deferred whenever a fixture merely mentions rulebook would strand the machinery slice on
+every pull — the exact false positive the gate's own header warns about. **The first version
+of the fixture arm had that bug**: it asked `git diff base..theirs`, a question about the
+distribution's history rather than about this consumer, so a consumer already holding theirs'
+rulebook still deferred. The fixture's assertion 3 caught it. It now compares the consumer's
+own copy against theirs by content, and mutant B reverts exactly that.
+
+**Fixed a coupling this repo shipped one release earlier.** `escalation-status-vocabulary`'s
+clean seed hand-listed its status tokens, so `0.260.0` publishing `SUPPRESSED` made the seed
+assert a token an older consumer's `escalations.md` does not publish — the fixture went red on
+a pull that broke nothing. The seed now **derives** the tokens from the spec under test, which
+also makes its positive control ("every published token passes") true rather than approximate.
+That is the same machinery-vs-rulebook coupling reproduced inside a fixture, and a hand-list
+is what welded the two versions together.
+
 ## [0.261.0] — 2026-08-04
 
 ### Every rule below the re-attach cut declares what carries it, or is a counted gap

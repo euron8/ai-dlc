@@ -150,6 +150,7 @@ core_manifest:
   - fixtures/scope-confirmation/**
   - fixtures/snapshot-conservation/**
   - fixtures/suppression-lifetime/**
+  - fixtures/self-update-join-gate/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**
