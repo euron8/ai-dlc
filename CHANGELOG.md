@@ -34,6 +34,61 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.257.0] — 2026-08-04
+
+### The recovery directive's weakest instructions are its unobeyed ones
+
+`v0.256.0` established that a compacted lead holds Rules 1–13 and nothing above, and made the
+directive tell it to re-read the rest. Measuring what the directive actually gets shows the
+compliance is **not uniform** — it tracks emphasis, and it collapses where no carrier exists.
+
+**Arm A — emphasis, measured over 265 boundaries.** Within the first 8 tool calls after a
+compaction, a snapshot Read appears in **66%** of cases and a step-file Read in **41%**. Both
+instructions sit in the *same* injected block, so rule loss cannot explain the gap. What differs
+is wording: *"Your FIRST tool call MUST be"* for the snapshot against *"Then `Read` the current
+step file"* for the step file. Rule 21 makes the step-file Read the FIRST call after any
+`READ AND FOLLOW`, and the directive was demoting it to an afterthought.
+
+- The step-file sentence now carries the same bolded MUST grade as the snapshot's.
+- **The 34% is reported rather than buried:** a third of compactions produce no snapshot Read at
+  all, so the directive's own strongest instruction runs at 66%. Fixing the weaker one does not
+  make the stronger one healthy, and a later measurement that finds 66% unchanged should not
+  read as a regression introduced here.
+
+**Arm B — Rule 23 had no carrier, and its absence is self-amplifying.** `ctx_*` calls per 1,000
+assistant turns: **8.88** in sessions that never compacted, **2.17** before a first compaction in
+sessions that did, **0.67** after (raw 366 / 27 / 32). Rule 23 is resident-context discipline —
+the rule that keeps context small — and it sits past the re-attach cut. So the rule whose absence
+*causes* compaction is removed *by* compaction, and each one makes the next likelier. Nothing in
+that loop reports itself.
+
+- The directive now carries Rule 23's operative instruction, naming `ctx_execute_file` and the
+  read-to-Edit exception rather than gesturing at a rule the lead cannot consult. The existing
+  `ctx_search` paragraph is not this: it is scoped to recovering *rationale* and capped at one
+  call.
+- **Honest limit.** The two compacted arms rest on n=27 and n=32. The load-bearing figure is the
+  13× gap between the never-compacted and post-compaction populations, because those are
+  independent session sets rather than slices of the same ones. Direction, not effect size.
+
+**Neither arm can block anything** — the directive is injected text. The only silent failure mode
+here is the 10,000-character cliff, where the harness replaces an oversize block wholesale with a
+file-path stub. The block grows 6,032 → 7,311 characters against a 9,000 ceiling.
+
+- `core/fixtures/postcompact-rulebook-recovery/` gains four assertions and two mutants (14 and 4
+  in total). The grade arm is **derived, not hand-matched** — it counts bolded tool-call mandates
+  and requires both, so demoting either fails it.
+- **Mutant 8b demotes the step-file sentence and must fail ONLY the grade arm**; it asserts that
+  the path, Rule 23, and escape-closed arms all still pass, and reports entanglement by name if
+  they do not. **Mutant 8c pads the block past the cliff** and must fail only the size arm —
+  measured at 38,297 characters, which is what proves the cliff assertion can fire at all. Every
+  arm in this release adds prose to that block, so that mutant is the one guarding the rest.
+- Both `cmp -s` and `bash -n` guarded; the unmutated control copy still reproduces the directive.
+
+**Measure after shipping.** Re-run the 265-boundary compliance figures once the consumer has run
+a sprint on this release. A directive change with no follow-up measurement is the unfalsifiable
+rule Rule 26 forbids — and this release exists only because the previous one's effect was
+measured.
+
 ## [0.256.0] — 2026-08-04
 
 ### Post-compact recovery recovered the snapshot and left three quarters of the rulebook behind

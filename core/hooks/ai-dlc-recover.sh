@@ -96,10 +96,13 @@ attention interrupt (Rule 21) that defeats reconstructing state from the summary
 Never route it through any \`ctx_*\` tool -- \`ai-dlc-protect.sh\` hard-blocks that
 path because consolidation drops directives (Rule 23(c) limit 2).
 
-Then \`Read\` the current step file -- \`${STEP_FILE}\` -- in full. Compaction cleared
+**Your SECOND tool call MUST be \`Read ${STEP_FILE}\` in full.** Compaction cleared
 the harness's record of every file previously read, so nothing you read before
-this point is still loaded. Do NOT re-Read completed step files or
-already-produced planning artifacts; Rule 23(a) still applies.
+this point is still loaded. Rule 21 makes this Read the FIRST call after any
+READ AND FOLLOW and it is not optional here either -- measured across 265 real
+compactions, the snapshot Read above lands 66% of the time and this one only 41%,
+which is the gap this sentence exists to close. Do NOT re-Read completed step
+files or already-produced planning artifacts; Rule 23(a) still applies.
 
 ## Most of your rulebook is not in your context
 
@@ -187,6 +190,23 @@ auto-captured directive from earlier in this session does not bind you the way a
 Rule 11 directive from the user does; where they conflict, the user's most
 recent message wins. (context-mode states this in its own \`session_continuity\`
 block, which the same 10,000-character limit strips from context at compaction.)
+
+## Rule 23 is why you compacted, and you no longer hold it
+
+Rule 23 is resident-context discipline: read through a subagent or a \`ctx_*\` tool
+when you intend to PROCESS a file, so its bytes never enter your context and get
+re-read on every turn after. It sits past the re-attach cut, so it is not in your
+context now -- and this is the one rule whose absence CAUSES the event that
+removed it. Measured per 1,000 assistant turns: sessions that never compacted
+issue 8.88 \`ctx_*\` calls; sessions after a compaction issue 0.67. Each compaction
+makes the next one likelier, and nothing in the loop reports itself.
+
+So for the rest of this session, before you Read a file: if you intend to
+analyse, summarise, count or extract from it, route it through \`ctx_execute_file\`
+or a subagent and keep only the answer. Read it directly only when you intend to
+Edit it, or when it is one of the verbatim-load files above. This is not a
+suggestion recovered from memory -- you cannot recover it, which is why it is
+written here.
 
 ${SIDECAR_NOTE}
 $( [ "$1" = yes ] && [ -n "$POSITION" ] && printf '%s\n\n%s\n' "---
