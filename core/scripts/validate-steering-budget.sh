@@ -110,11 +110,13 @@
 #       authorization citation) can be checked against the harness-owned transcript.
 #
 #       Its predicate is Check B's, plus AskUserQuestion ANSWERS -- and only the answer
-#       side, never the lead-authored question. Check B deliberately does NOT accept
-#       them. The two checks ask different questions ("did the lead execute through a
-#       steer?" vs "did the operator say these words?"), and an answer the lead
-#       solicited is evidence for the second while being a false positive for the
-#       first. See the note on citableOperatorText.
+#       side, never the lead-authored question -- plus SLASH-COMMAND ARGUMENTS, and only
+#       the <command-args> side, never the harness-written command name. Check B
+#       deliberately accepts neither. The two checks ask different questions ("did the
+#       lead execute through a steer?" vs "did the operator say these words?"), and both
+#       additions are evidence for the second while being false positives for the first:
+#       an answer the lead solicited, and a /ai-dlc invocation whose whole purpose is to
+#       be executed straight through. See the notes on citableOperatorText.
 #
 # ENV OVERRIDES
 #   AI_DLC_STEERING_BUDGET  max foreground block, seconds   (default 120)
@@ -290,11 +292,65 @@ const askUserQuestionAnswers = (r, askIds) => {
   return out.join(" ").trim();
 };
 
-// The --cite predicate. genuineOperatorText, plus an AskUserQuestion answer. Every OTHER
-// tool_result shape stays rejected -- a Bash result, a file read, a subagent return is not an
-// operator message however operator-sounding its bytes are.
+// ---------------------------------------------------------------------------
+// Slash-command arguments: citable, but NOT steamroll-relevant.
+//
+// WHY THIS EXISTS. genuineOperatorText rejects any record whose text opens with `<command-`.
+// A slash-command turn reaches the transcript as that envelope, with what the operator
+// actually typed inside <command-args>:
+//
+//     <command-message>ai-dlc</command-message>
+//     <command-name>/ai-dlc</command-name>
+//     <command-args>Sprint 300: take the ETH-REWARDS ... through to production</command-args>
+//
+// So --cite could not accept ANY text an operator supplied to a slash command. That is not an
+// edge case: /ai-dlc IS the sprint kickoff, which makes the SPRINT'S OWN SCOPE the single
+// largest class of operator prose the requirement chain rests on, and it was structurally
+// uncitable. Measured on the reference consumer: 5508 operator text records, 643 rejected by
+// the `<command-` arm, 304 of them carrying non-empty args, 148 of those /ai-dlc invocations.
+//
+// The failure that surfaced it: a lead recorded `user_request_verbatim` as a POINTER to the
+// previous sprint's locked block, planned three stories sharing not one identifier with what
+// the operator asked for, and passed four consecutive gates. Nothing could contradict the
+// pointer, because the operator's actual words were invisible to the only verifier that could
+// have refuted it.
+//
+// WHY THE PREDICATE IS SPLIT RATHER THAN WIDENED -- and this time it is measured. Check B asks
+// "did an operator message land that the lead then executed straight through?" A /ai-dlc
+// invocation is followed by pipeline-ADVANCING calls BY DESIGN; dispatching is what the
+// operator invoked it to do. On the reference consumer, 305 of the 643 command-envelope
+// records are followed by an advancing call before the next genuine operator turn, against
+// 183 for the free-typed records that are Check B's real subject. Widening genuineOperatorText
+// would therefore have nearly TRIPLED Check B's candidate set with sprint starts -- every one
+// a false positive, in the one check whose design notes twice warn against reading a
+// solicited event as an unsolicited one.
+//
+// WHY ONLY THE ARGS SIDE. <command-name> is scaffolding the HARNESS wrote, and
+// <command-message> is its echo. Accepting the whole envelope would let a lead cite the string
+// `/ai-dlc` -- a token no operator composed -- and pass a provenance check. Only <command-args>
+// is returned, by a regex that structurally cannot reach a sibling <local-command-stdout>:
+// command OUTPUT is not operator input. An invocation with empty args (`/ai-dlc resume`)
+// yields "" and stays uncitable, which is correct -- nothing was said.
+const commandArgsText = (r) => {
+  if (!r || r.type !== "user") return "";
+  const c = r.message?.content;
+  if (Array.isArray(c) && c.some(b => b.type === "tool_result")) return "";
+  let txt = typeof c === "string" ? c
+    : Array.isArray(c) ? c.map(b => (b.type === "text" ? b.text : "")).join(" ") : "";
+  txt = (txt || "").replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+  // Only a command envelope. This arm widens nothing else that genuineOperatorText rejects.
+  if (!/^<command-/.test(txt)) return "";
+  const out = [];
+  for (const m of txt.matchAll(/<command-args>([\s\S]*?)<\/command-args>/g)) out.push(m[1]);
+  return out.join(" ").trim();
+};
+
+// The --cite predicate. genuineOperatorText, plus an AskUserQuestion answer, plus the
+// arguments an operator typed to a slash command. Every OTHER tool_result shape stays
+// rejected -- a Bash result, a file read, a subagent return is not an operator message
+// however operator-sounding its bytes are.
 const citableOperatorText = (r, askIds) =>
-  genuineOperatorText(r) || askUserQuestionAnswers(r, askIds);
+  genuineOperatorText(r) || askUserQuestionAnswers(r, askIds) || commandArgsText(r);
 
 // `_bmad-output/ai-dlc-update/**` is the UPDATER's own scratch space (reconcile
 // report, push-candidate ledger), not pipeline output. /ai-dlc-update is a
