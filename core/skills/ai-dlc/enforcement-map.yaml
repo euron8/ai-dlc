@@ -621,6 +621,33 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/bmad-invocation-resolve]
 
+  - id: "33"
+    title: Every identifier the operator named reaches this sprint's declared scope
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-request-coverage.sh
+    call_sites:
+      - site: gate-validation.md Check 33
+        posture: FAILS the gate (exit 0 required; exit 2 on absent evidence is also a FAIL)
+        why: every byte-level guarantee in the pipeline terminates at product-brief.md
+          — Check 3b anchors stories to it, Check 30 joins capabilities through it —
+          and the brief is the LEAD's restatement of an ask it received across a hop
+          with NO mechanical join. A plan can therefore be perfectly self-consistent
+          from the brief forward while sharing nothing with what was asked. Measured:
+          a request naming six identifiers produced a LOCKED block containing none of
+          them, three unrelated stories, and four consecutive green gates. Coverage is
+          measured only inside bullets headed by an LR id of THIS sprint, because
+          briefs accumulate one block per sprint and cite each other constantly —
+          reading the whole block scores the PREVIOUS sprint's references as coverage
+          and passes the exact failure. Check 27 was the nearest existing check and
+          could never have caught this: its subject is a subordinated DEFECT, and it
+          carries enforcer:[] besides.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/request-coverage]
+
+
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
     gate_types: [universal]
