@@ -69,6 +69,7 @@ core_manifest:
   - core/fixtures/apply-legacy-script-path/**
   - core/fixtures/apply-restamp-theirs/**
   - core/fixtures/askuserquestion-citation/**
+  - core/fixtures/command-args-citation/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**

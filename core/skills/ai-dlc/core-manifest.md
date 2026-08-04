@@ -144,6 +144,7 @@ core_manifest:
   - fixtures/apply-legacy-script-path/**
   - fixtures/apply-restamp-theirs/**
   - fixtures/askuserquestion-citation/**
+  - fixtures/command-args-citation/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**
