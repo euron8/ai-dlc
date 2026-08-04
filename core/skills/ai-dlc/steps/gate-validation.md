@@ -240,10 +240,29 @@ Two arms, either satisfies (dual-arm OR):
   check reports PASS regardless. The script derives the set from `escalations.md` and
   FAILS the gate on any entry outside it. Run it before the branches, not after: a
   token the branches cannot reach is not a wrong verdict, it is a missing one.
+- **Second, the suppression lifetimes.** Run
+
+      scripts/ai-dlc/verdict.sh validate-suppression-lifetime --escalations docs/escalations/pending.md
+
+  `RESOLVED` and `OVERRIDDEN` close a QUESTION and name no check, so an operator's
+  one-time permission to proceed past a failing check has no target and no expiry.
+  Measured on the reference consumer: a `hard_block: true` check failed at two
+  consecutive planning gates and the pipeline proceeded past both on a **single**
+  operator turn, each passage logged as *"carried forward, none re-litigated"*.
+  The script bounds the **licence**, not the re-run — those checks were emitted at
+  every gate and re-reported `FAIL`, so an expiry that forced a re-run would be a
+  no-op. Past its `**Expires after:**` count a suppression whose named check is
+  still recorded `FAIL` needs fresh authorization; one whose cause was fixed
+  reports nothing. See `escalations.md` for the `SUPPRESSED` field set.
 - If any entry has status `HARD_BLOCK` and is not RESOLVED, do NOT
   proceed. `touch _bmad-output/pipeline-paused.flag` (Rule 3), then
   report the block and wait for human input.
 - `DECIDED_AUTONOMOUSLY` entries do not block. They are informational.
+- `SUPPRESSED` entries do not block **while in force**. They name a check, an
+  expiry and an operator citation, and the script above adjudicates them. Past
+  expiry with the named check still failing, the gate FAILS and the prior
+  citation may not be re-cited — re-suppression is a new entry and a new
+  operator turn.
 - `DEFERRAL_REQUEST` entries block only the deferred item, not the
   pipeline. Proceed with non-deferred work.
 - A HARD_BLOCK marked `RESOLVED`/`OVERRIDDEN` must cite the operator — enforced by

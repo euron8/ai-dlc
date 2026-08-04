@@ -69,6 +69,7 @@ checks:
     hard_block: true
     enforcer:
       - core/scripts/validate-escalation-status-vocabulary.sh
+      - core/scripts/validate-suppression-lifetime.sh
     call_sites:
       - site: gate-validation.md Check 2
         posture: FAILS the gate (exit 0 required)
@@ -77,8 +78,20 @@ checks:
           recorded — no verdict is computed for it and the gate reports PASS.
           The script guards the vocabulary the LLM adjudication branches on; the
           adjudication itself stays llm.
+      - site: gate-validation.md Check 2 (suppression lifetime)
+        posture: FAILS the gate (exit 0 required)
+        why: RESOLVED and OVERRIDDEN close a QUESTION and name no check, so an
+          operator's one-time permission to proceed past a failing check has no
+          target and no expiry. Measured on the reference consumer, a hard_block
+          check failed at two consecutive gates and the pipeline proceeded past
+          both on a single operator turn, logged as "carried forward, none
+          re-litigated". The arm bounds the LICENCE, not the re-run — the checks
+          were emitted at every gate and re-reported FAIL, so an expiry that
+          forced a re-run would be a no-op. Past expiry a still-failing named
+          check needs fresh authorization; a suppression whose cause was fixed
+          reports nothing.
     ci_workflow: ~
-    fixtures: [tests/fixtures/escalation-status-vocabulary]
+    fixtures: [tests/fixtures/escalation-status-vocabulary, tests/fixtures/suppression-lifetime]
 
   - id: "2a"
     title: Escalation resolution operator-citation

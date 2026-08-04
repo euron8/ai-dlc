@@ -159,6 +159,7 @@ argv_for() {
     stamp-story-provenance.sh)      printf '%s' "--terminal $WORK/docs/pass-p1.md --check $WORK/docs/stories/story-1.md" ;;
     validate-ac-falsifiability.sh)  printf '%s' "$WORK/docs/stories/story-1.md" ;;
     validate-escalation-status-vocabulary.sh) printf '%s' "$WORK/docs/pending.md" ;;
+    validate-suppression-lifetime.sh) printf '%s' "--escalations $WORK/docs/pending.md" ;;
     validate-h2-attestation.sh)     printf '%s' "--digest" ;;
     *)                              printf '%s' "" ;;
   esac

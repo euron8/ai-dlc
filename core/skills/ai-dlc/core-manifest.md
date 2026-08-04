@@ -149,6 +149,7 @@ core_manifest:
   - fixtures/request-coverage/**
   - fixtures/scope-confirmation/**
   - fixtures/snapshot-conservation/**
+  - fixtures/suppression-lifetime/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**
