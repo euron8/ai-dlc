@@ -536,11 +536,21 @@ rationale, define phase boundaries, ensure each phase delivers
 standalone value. Each sprint is deployed and validated at the
 production checkpoint before the next sprint begins.
 
+
+**Carrier:** `.claude/skills/ai-dlc/steps/route.md`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 15 -- Document what you changed
 
 After each validation cycle, append a brief changelog to the artifact
 noting what was improved and why.
 
+
+**Carrier:** none -- the rule governs commit and CHANGELOG prose, which no gate reads and no artifact schema holds. Declared a GAP, not a decision that prose suffices.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 16 -- Err on the side of doing
 
 When in doubt, apply the improvement. The human reviews the final
@@ -548,6 +558,11 @@ production deployment, not intermediate artifacts. "Doing" means the
 smallest change that resolves the doubt (Rule 26); this rule is never
 license to add mechanism no requirement demands.
 
+
+**Carrier:** none -- a disposition rule with no observable artifact: acting rather than asking leaves no trace a check could read. Declared a GAP.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 17 -- Write large files in sections
 
 When creating or updating a file that exceeds ~200 lines, break the
@@ -556,6 +571,11 @@ output token limits and timeouts that leave files incomplete. Applies
 to all file types: planning artifacts, story files, code, tests,
 reviews.
 
+
+**Carrier:** none -- write shape is invisible to every gate; a sectioned write and a single write produce the same file. Declared a GAP.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 18 -- Rules are hard, directive, and self-contained
 
 A rule in this skill, CLAUDE.md, coding-conventions.md, step files,
@@ -570,6 +590,11 @@ three violation classes (narrative drift, rule weakness, complexity
 accretion) live in `rule-authoring.md` alongside this file. READ AND
 FOLLOW it when authoring or auditing a rule file (`retro.md` Step 4).
 
+
+**Carrier:** `.claude/skills/ai-dlc/steps/retro.md`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 19 -- Agent spawns MUST bind the full role contract
 
 When the lead invokes the Agent tool to spawn a teammate, the spawn MUST
@@ -611,6 +636,11 @@ model without contract and is a Rule 19 violation.
 Violation of (a) or (b) fails gate-validation Check 22 on detection at
 retro.
 
+
+**Carrier:** `scripts/ai-dlc/validate-spawn-ledger.sh`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 20 -- Validation evaluations run in independent subagents with provenance
 
 Validation evaluations -- the four sub-skills (`/bmad-party-mode`,
@@ -794,6 +824,11 @@ ai-dlc does not own `/bmad-party-mode` internals, so the mandate is
 Absence of the preamble at a persona-spawning call site is a
 lead-conduct retro finding.
 
+
+**Carrier:** `.claude/skills/ai-dlc/steps/_gate-procedures.md`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 21 -- READ AND FOLLOW is a Read tool call, not recall
 
 A `READ AND FOLLOW` directive MUST produce a `Read` tool call for the
@@ -835,6 +870,11 @@ skips the Read entirely, executing from memory. The Read tool call
 is the interrupt that forces re-engagement with the step's actual
 instructions. Memory of a step file is not equivalent to loading it.
 
+
+**Carrier:** `.claude/skills/ai-dlc/steps/implementation.md`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 22 -- Pause-point resume MUST re-read the step file
 
 When a pipeline pause point (Rule 3(a)-(d)) receives human input and
@@ -848,6 +888,11 @@ step file is the authority for what remains, not the lead's memory.
 not "skip to completion." Violation: Rule 4 (every section must
 complete). Gate FAILS on detection at retro.
 
+
+**Carrier:** none -- the post-compact directive names the re-read but nothing verifies it happened; measured at 41% against the snapshot's 66% from the same injected block. Declared a GAP.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 23 -- Resident-context discipline
 
 Cache-read cost scales with the size of the working context times the
@@ -896,6 +941,11 @@ one of those files is blocked too. Archives and the planning corpus (`prd.md`,
 `product-brief.md`, `carry-over-backlog.md`) are deliberately NOT protected —
 offload them freely.
 
+
+**Carrier:** none -- measured the sharpest collapse in the band, 13x across a compaction boundary, and nothing outside this rule's own prose carries it. Declared a GAP. Do not mistake `context-mode-protection-log.md` for a carrier: that is an artifact-budget file under Rule 25, and matching its NAME is how a scanner wrongly scores this rule as carried.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 24 -- Planning and retro exploration is dispatched to analyst subagents
 
 Read-heavy exploration in planning **and retro** steps is the lead's
@@ -984,6 +1034,11 @@ lead's live accumulated state" narrows to exactly the non-delegable set
 -- it is not a general license to keep read-heavy or mechanical work
 inline.
 
+
+**Carrier:** `scripts/ai-dlc/validate-draft-stamps.sh`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 25 -- Artifact-size discipline
 
 Living planning artifacts that grow without bound are the single
@@ -1053,6 +1108,11 @@ An over-budget artifact is always *reported*; only a breach past the band *block
 Consolidation itself stays operator-invoked (`artifact-consolidation.md`): it is a
 fidelity-critical rewrite and must be supervised.
 
+
+**Carrier:** `scripts/ai-dlc/validate-artifact-budget.sh`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 26 -- Minimum mechanism (KISS)
 
 Every produced artifact -- design, code, test, guard, or process
@@ -1098,6 +1158,11 @@ Violation is a MAJOR in adversarial review (`adversary.md`) and a
 code-review finding (`code-reviewer.md`); machinery lacking the (c)
 contract is flagged by the retro rule-file audit (`retro.md` Step 4).
 
+
+**Carrier:** `.claude/skills/ai-dlc/steps/gate-validation.md`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 27 -- Layered rulebook: core, extensions, overrides
 
 The consumer rulebook is three layers. This rule is how a consumer
@@ -1223,6 +1288,11 @@ still-valid override whose core section moved. Removal condition: retire once co
 ships as an immutable package the skill loads rather than a writable tree, with
 layer bindings resolved (and validated) at load time.
 
+
+**Carrier:** `scripts/ai-dlc/validate-layer-entries.sh`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 28 -- Delegation is the default; inline execution is the exception
 
 The lead MUST delegate any action a subagent can service. Doing the
@@ -1296,6 +1366,11 @@ round, recovered in context headroom. Removal condition:
 retire once the harness structurally prevents the lead from taking
 non-orchestration actions.
 
+
+**Carrier:** `.claude/skills/ai-dlc/steps/implementation.md`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 29 -- Steering budget: the operator must always be able to reach you
 
 Claude Code delivers a queued operator message at a **tool-call boundary** --
@@ -1470,6 +1545,11 @@ delivers queued input mid-call.
 Enforcement: `scripts/ai-dlc/validate-steering-budget.sh` (Checks A, B, C, D) and
 `.claude/hooks/ai-dlc-acknowledge.sh` (runtime deny).
 
+
+**Carrier:** `scripts/ai-dlc/validate-steering-budget.sh`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 30 -- The spec is BMAD's; the enforcement is ours
 
 Specification artifacts MUST be produced by the BMAD workflows that own them and
@@ -1504,6 +1584,11 @@ a call-site argument.
 Violation is a MAJOR adversary finding and a `code-reviewer` finding. Retire
 this rule if BMAD stops shipping the workflows it names, or starts failing on
 its own findings.
+
+**Carrier:** `scripts/ai-dlc/validate-spec-join.sh`
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 
 ## INITIALIZATION
 

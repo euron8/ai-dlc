@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.261.0] — 2026-08-04
+
+### Every rule below the re-attach cut declares what carries it, or is a counted gap
+
+A compacted lead holds only the rules that survive the harness's skill re-attach cut.
+Measured over 261 real re-attaches the cut is deterministic, and **13 of 30 rules
+survive it** — so 17 are absent from every post-compaction lead. Rule 19 sits in that
+band and **held at 89%** across the boundary because a dispatch template carries its
+requirement; Rule 23 sits beside it and **collapsed 13×** because nothing outside its own
+prose does. A rule survives a compaction only if something other than the lead's memory
+carries it.
+
+**Added.** `**Carrier:**` on all 17 band rules, and **invariant I79** in
+`scripts/validate-enforcement-map.sh`, which verifies each declaration RESOLVES — a
+consumer path that exists, or a `Check <id>` the map lists — and fails when a rule
+declares neither a carrier nor an explicit `none -- <why>`.
+
+**This is a DECLARATION and not a scanner, and that was decided by measurement.**
+Inference was tried first and fails in *both* directions:
+
+- **Name-matching false-positives.** Rule 30 contains zero occurrences of "Rule 30" and
+  is nonetheless carried by `validate-spec-join.sh` and Check 30. A scanner keyed on the
+  rule's own number reports a gap that does not exist.
+- **Semantic matching false-negatives, exactly where it costs most.** Broadening the
+  probe to `context-mode|ctx_search` "rescues" Rule 23 with hits that are **all the
+  filename `context-mode-protection-log.md`** and its rotation — an artifact-budget
+  concern under Rule 25. The one rule with the strongest measured collapse would have
+  scored as carried.
+
+**Rule numbers and check numbers are unrelated namespaces**, and the invariant never
+forms that join: Check 22 is "Teammate-spawn role binding", which is *Rule 19's* subject;
+Check 23 is "Analyst-draft sprint stamps (Rule 24)". A carrier naming a check is looked up
+in the map by id alone. Joining `Rule N` to `Check N` is the collision class that has
+already shipped here twice.
+
+**Both sides derived.** The band comes from `validate-reattach-budget.sh`'s own window and
+bytes-per-token, never a hardcoded "14–30" — which would silently stop matching the moment
+a rule is inserted and keep printing the same clean line. The fixture's decisive assertion
+halves the window and requires the band to grow (17 → 22).
+
+**Measured gap set: 5 of 17** — Rules 15, 16, 17, 22, 23 — reported by count on every run
+rather than silently accepted. That is a lever, not a backlog. Rule 30 was in the gap list
+until the measurement showed it has a real carrier that never names it, and Rule 23 was
+out of it until the filename false-positive was caught.
+
+**The declarations name CONSUMER paths.** `SKILL.md` is a runtime file, so a `core/...`
+path is a dead link for every consumer reading it; an existing invariant caught that on
+the first attempt, and I79 maps the consumer path back to the distribution tree using
+install.sh's own two mappings rather than walking up from one core file to another.
+
 ## [0.260.0] — 2026-08-04
 
 ### Suppression becomes an object with a lifetime — and the lifetime bounds the licence, not the re-run

@@ -175,6 +175,85 @@ elif edit "$victim" \
                "must be '\$HERE/../../..'"
 fi
 
+# --- I79: the carrier declaration on every rule below the re-attach cut ---------
+# The rule this whole invariant exists for: a rule survives a compaction only if
+# something other than the lead's memory carries it. Rule 19 held at 89% across the
+# boundary because a dispatch template carries it; Rule 23 collapsed 13x with nothing
+# but its own prose.
+SKILL_REL="core/skills/ai-dlc/SKILL.md"
+
+# THE ASSERTION THAT MATTERS MOST. The band must be DERIVED from the re-attach budget,
+# never hardcoded: a band written as "14-30" silently stops matching the moment a rule is
+# inserted, and it would keep printing this same clean line. Halving the window must move
+# the reported band size. If this stops firing, every assertion below is scoped to a
+# subject set the invariant chose rather than measured.
+t="$(fresh)"
+base_n="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1 | sed -n 's/.*I79: \([0-9]*\) rule(s).*/\1/p')"
+if edit "$t/core/scripts/validate-reattach-budget.sh" \
+      '/^BUDGET=/ { print "BUDGET=\"${AI_DLC_REATTACH_BUDGET:-2500}\""; next } { print }'; then
+  moved_n="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1 | sed -n 's/.*I79: \([0-9]*\) rule(s).*/\1/p')"
+  if [ -n "$base_n" ] && [ -n "$moved_n" ] && [ "$moved_n" -gt "$base_n" ]; then
+    ok "I79: halving the re-attach window GROWS the band ($base_n -> $moved_n) — it is derived, not hardcoded"
+  else
+    bad "I79: the band did not move when the window changed (base='$base_n' moved='$moved_n') — it is hardcoded, and a rule inserted into the band would never be scanned"
+  fi
+fi
+
+# A band rule that declares no carrier at all.
+t="$(fresh)"
+if edit "$t/$SKILL_REL" \
+      '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { next } { print }'; then
+  assert_fires "I79: a band rule with NO **Carrier:** declaration is REPORTED" \
+               "declares no '**Carrier:**'"
+fi
+
+# A carrier that names a path which does not exist. An unresolvable carrier carries
+# nothing, and the declaration would otherwise keep reading like coverage.
+t="$(fresh)"
+if edit "$t/$SKILL_REL" \
+      '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** `scripts/ai-dlc/validate-nothing-at-all.sh`"; next } { print }'; then
+  assert_fires "I79: a carrier naming a path that does not exist is REPORTED" \
+               "does not exist in the tree"
+fi
+
+# `none` with no reason. A declared exemption with no argument is the defect this repo
+# keeps finding, so "none" may not be the cheap way out.
+t="$(fresh)"
+if edit "$t/$SKILL_REL" \
+      '/^\*\*Carrier:\*\* none -- write shape is invisible/ { print "**Carrier:** none"; next } { print }'; then
+  assert_fires "I79: 'carrier: none' with no reason is REPORTED" \
+               "with no reason"
+fi
+
+# RULE NUMBERS AND CHECK NUMBERS ARE UNRELATED NAMESPACES. Check 22 is "Teammate-spawn
+# role binding", which is RULE 19's subject; Check 23 is "Analyst-draft sprint stamps
+# (Rule 24)". A carrier naming a check must be one the MAP lists, and this proves the
+# invariant looks it up rather than assuming Rule N is carried by Check N.
+t="$(fresh)"
+if edit "$t/$SKILL_REL" \
+      '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** `Check 9999`"; next } { print }'; then
+  assert_fires "I79: a carrier naming a check id absent from the map is REPORTED" \
+               "is not an id in enforcement-map.yaml"
+fi
+
+# A carrier that is neither a mappable consumer path nor a check id. SKILL.md is a RUNTIME
+# file, so a `core/...` path is a dead link for every consumer reading it.
+t="$(fresh)"
+if edit "$t/$SKILL_REL" \
+      '/^\*\*Carrier:\*\* `scripts\/ai-dlc\/validate-spawn-ledger\.sh`$/ { print "**Carrier:** `somewhere in the codebase`"; next } { print }'; then
+  assert_fires "I79: a carrier that maps to no layout is REPORTED" \
+               "neither a consumer path this invariant can map"
+fi
+
+# The gap count is REPORTED rather than silently tolerated — a bound the invariant accepts
+# must be visible, or an accepted gap reads as full coverage.
+t="$(fresh)"
+out="$(bash "$t/scripts/validate-enforcement-map.sh" 2>&1)"
+case "$out" in
+  *"declared carrier gap(s)."*) ok "I79: the declared-gap count is reported, not silently accepted" ;;
+  *) bad "I79: no gap count in the output — an accepted gap reads exactly like full coverage" ;;
+esac
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "enforcement-map-derivations: PASS"

@@ -3562,6 +3562,125 @@ else
   fi
 fi
 
+# --- I79: every rule below the re-attach cut declares what CARRIES it -------------
+# A compacted lead holds only the rules that survive the harness's skill re-attach cut.
+# Measured over 261 real re-attaches, the cut is deterministic and 13 of 30 rules survive
+# it, so 17 are absent from every post-compaction lead. Rule 19 sits in that band and HELD
+# at 89% across the boundary because a dispatch template carries its requirement; Rule 23
+# sits beside it and collapsed 13x because nothing outside its own prose does. A rule
+# survives a compaction only if something other than the lead's memory carries it.
+#
+# WHY THIS IS A DECLARATION AND NOT A SCANNER, WHICH IS THE WHOLE DESIGN. Inference was
+# measured and FAILS IN BOTH DIRECTIONS:
+#   * Name-matching FALSE-POSITIVES. Rule 30 contains zero occurrences of "Rule 30" and is
+#     nonetheless carried by validate-spec-join.sh and Check 30. A scanner keyed on the
+#     rule's own number reports a gap that does not exist.
+#   * Semantic matching FALSE-NEGATIVES exactly where it costs most. Broadening the probe
+#     to context-mode/ctx_search "rescues" Rule 23 with hits that are ALL the filename
+#     `context-mode-protection-log.md` and its rotation -- an artifact-budget concern under
+#     Rule 25. The one rule with the strongest measured collapse would score as carried.
+# So the rule DECLARES its carrier and this invariant verifies the declaration RESOLVES.
+#
+# RULE NUMBERS AND CHECK NUMBERS ARE UNRELATED NAMESPACES. Check 22 is "Teammate-spawn role
+# binding", which is RULE 19's subject; Check 23 is "Analyst-draft sprint stamps (Rule 24)".
+# Any join keyed on `Rule N <-> Check N` is wrong by construction -- the collision class
+# that has already shipped here twice. This invariant never forms that join: a carrier that
+# names a check must spell it `Check <id>` and is looked up in the map by that id alone.
+#
+# BOTH SIDES DERIVED. The band comes from validate-reattach-budget.sh's own window and
+# bytes-per-token, never from a hardcoded "14-30" -- a hardcoded band silently stops
+# matching the moment a rule is inserted, and would keep printing this same clean line.
+i79_budget="$(sed -n 's/^BUDGET="${AI_DLC_REATTACH_BUDGET:-\([0-9]*\)}"/\1/p' "$REPO_ROOT/core/scripts/validate-reattach-budget.sh" | head -1)"
+i79_bpt="$(sed -n 's/^BPT="${AI_DLC_BYTES_PER_TOKEN:-\([0-9]*\)}"/\1/p' "$REPO_ROOT/core/scripts/validate-reattach-budget.sh" | head -1)"
+i79_skill="$REPO_ROOT/core/skills/ai-dlc/SKILL.md"
+if [ -z "$i79_budget" ] || [ -z "$i79_bpt" ] || [ ! -f "$i79_skill" ]; then
+  err "I79 could not derive the re-attach cut (BUDGET='$i79_budget', BPT='$i79_bpt', SKILL.md present=$([ -f "$i79_skill" ] && echo yes || echo no)). An underived band would either scan nothing or scan everything, and both print a clean line."
+else
+  i79_cut=$(( i79_budget * i79_bpt ))
+  i79_total="$(grep -c '^### Rule [0-9]' "$i79_skill")"
+  i79_resident="$(head -c "$i79_cut" "$i79_skill" | grep -c '^### Rule [0-9]')"
+  if [ "$i79_resident" -lt 1 ] || [ "$i79_resident" -ge "$i79_total" ]; then
+    err "I79 derived a degenerate band: $i79_resident resident of $i79_total at a ${i79_cut}-byte cut. Either every rule is resident or none is, so the invariant has no subject and would pass vacuously."
+  else
+    # The band is every rule heading at or past the cut.
+    i79_band="$(awk -v cut="$i79_cut" '
+      { off += length($0) + 1 }
+      /^### Rule [0-9]/ { if (off > cut) { n=$3; print n } }
+    ' "$i79_skill")"
+    i79_band_n="$(printf '%s\n' "$i79_band" | grep -c .)"
+    i79_expect=$(( i79_total - i79_resident ))
+    if [ "$i79_band_n" -ne "$i79_expect" ]; then
+      err "I79 band derivation disagrees with itself: offset walk found $i79_band_n rules past the ${i79_cut}-byte cut, head -c found $i79_expect. One of the two readings is wrong and the invariant cannot say which."
+    fi
+    i79_gaps=0
+    for i79_n in $i79_band; do
+      # the rule's own body span, so a Carrier line cannot be borrowed from a neighbour
+      i79_body="$(awk -v n="$i79_n" '
+        $0 ~ ("^### Rule " n " ") { inb=1; next }
+        inb && /^### Rule [0-9]/ { exit }
+        inb && /^## / { exit }
+        inb { print }
+      ' "$i79_skill")"
+      i79_line="$(grep -c '^\*\*Carrier:\*\*' <<<"$i79_body")"
+      if [ "$i79_line" -eq 0 ]; then
+        err "I79 Rule $i79_n is below the re-attach cut and declares no '**Carrier:**'. A compacted lead does not hold this rule; without a declared carrier nothing does, and the omission is indistinguishable from a rule that genuinely needs none."
+        continue
+      elif [ "$i79_line" -gt 1 ]; then
+        err "I79 Rule $i79_n declares $i79_line '**Carrier:**' lines. One rule, one carrier declaration -- two readings make the resolution below ambiguous."
+        continue
+      fi
+      i79_val="$(grep -m1 '^\*\*Carrier:\*\*' <<<"$i79_body" | sed 's/^\*\*Carrier:\*\* *//')"
+      case "$i79_val" in
+        none*)
+          # A gap is legal, but it must say WHY, or "none" becomes the cheap way out.
+          if ! grep -q '^none[[:space:]]*--[[:space:]]*[^[:space:]]' <<<"$i79_val"; then
+            err "I79 Rule $i79_n declares 'carrier: none' with no reason. A declared exemption with no argument is the defect this repo keeps finding; write 'none -- <why>'."
+          else
+            i79_gaps=$(( i79_gaps + 1 ))
+          fi
+          ;;
+        '')
+          err "I79 Rule $i79_n has an empty '**Carrier:**' declaration."
+          ;;
+        *)
+          # Resolve it. A carrier that names nothing real is prose wearing a field name.
+          i79_target="$(sed -e 's/^`//' -e 's/`.*$//' <<<"$i79_val")"
+          case "$i79_target" in
+            Check\ *)
+              i79_cid="${i79_target#Check }"
+              if ! grep -qE "^  - id: \"?${i79_cid}\"?$" "$MAP"; then
+                err "I79 Rule $i79_n declares carrier '$i79_target', which is not an id in enforcement-map.yaml. Note that rule numbers and check numbers are UNRELATED namespaces -- Check 22 is Rule 19's subject -- so a check carrier must be one the map actually lists."
+              fi
+              ;;
+            *)
+              # TWO LAYOUTS. SKILL.md is a RUNTIME file: it is read by consumers, where a
+              # `core/...` path is a dead link. So the declaration carries the CONSUMER
+              # path and this invariant maps it back to the distribution tree it is
+              # checking, using install.sh's own two mappings. Never walk up from one core
+              # file to find another (I33) -- both forms are resolved from the repo root.
+              case "$i79_target" in
+                scripts/ai-dlc/*)          i79_dist="core/scripts/${i79_target#scripts/ai-dlc/}" ;;
+                .claude/skills/ai-dlc/*)   i79_dist="core/skills/ai-dlc/${i79_target#.claude/skills/ai-dlc/}" ;;
+                .claude/*)                 i79_dist="core/${i79_target#.claude/}" ;;
+                *)
+                  err "I79 Rule $i79_n declares carrier '$i79_target', which is neither a consumer path this invariant can map to the distribution tree (scripts/ai-dlc/... or .claude/...) nor a 'Check <id>'. An unmappable carrier cannot be resolved, and an unresolved carrier reads exactly like a real one."
+                  i79_dist=""
+                  ;;
+              esac
+              if [ -n "$i79_dist" ] && [ ! -e "$REPO_ROOT/$i79_dist" ]; then
+                err "I79 Rule $i79_n declares carrier '$i79_target' (distribution path '$i79_dist'), which does not exist in the tree. A carrier that cannot be resolved carries nothing, and this declaration would keep reading like coverage."
+              fi
+              ;;
+          esac
+          ;;
+      esac
+    done
+    # The gap count is REPORTED, never silently tolerated. Per CLAUDE.md, a bound the
+    # invariant accepts must be visible or it reads as full coverage.
+    echo "  I79: ${i79_band_n} rule(s) below the ${i79_cut}-byte re-attach cut; ${i79_gaps} declared carrier gap(s)."
+  fi
+fi
+
 # --- I78: the copyable example declares the CURRENT contract version ---------------
 # `extensions/README.md`'s fenced frontmatter is what an author copies when writing a new
 # entry, so a stale `conforms_to:` there seeds every new entry with a stale value that
