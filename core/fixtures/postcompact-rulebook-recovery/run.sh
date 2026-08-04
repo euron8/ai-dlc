@@ -77,6 +77,29 @@ else
   bad "the directive does not demand a full read; a partial read leaves the same silent gap"
 fi
 
+# --- Assertion 2b: the two mandatory Reads carry the SAME grade --------------
+# Measured across 265 real compactions: the snapshot Read, written
+# "**Your FIRST tool call MUST be**", landed 66% of the time; the step-file Read, written
+# "Then `Read` the current step file", landed 41%. Both instructions were in THIS block, so
+# rule loss cannot explain the gap -- the wording can. Derived rather than hand-matched: count
+# the bolded tool-call mandates and require BOTH, so demoting either one fails here.
+GRADE="$(grep -c '\*\*Your [A-Z]* tool call MUST be' <<<"$CTX")"
+if [ "$GRADE" -ge 2 ]; then
+  ok "both mandatory Reads carry a bolded MUST grade (found ${GRADE})"
+else
+  bad "only ${GRADE} bolded tool-call mandate(s); the step-file Read was demoted below the snapshot's grade and it is the one already running 25 points behind"
+fi
+
+# --- Assertion 2c: Rule 23 is CARRIED, not left to a rule the lead lost -------
+# Rule 23 is the one rule whose absence causes the event that removes it: ctx_* calls per 1k
+# assistant turns run 8.88 in sessions that never compacted and 0.67 after one, so each
+# compaction makes the next likelier. Prose cannot fix it -- the prose is what is gone.
+if grep -q 'ctx_execute_file' <<<"$CTX" && grep -q 'Rule 23' <<<"$CTX"; then
+  ok "Rule 23's discipline is carried in the directive, naming a concrete tool"
+else
+  bad "Rule 23 has no carrier in the directive; it is past the re-attach cut, so nothing in the lead's context asks it to keep context small — and that is the self-amplifying one"
+fi
+
 # --- Assertion 3: it does NOT fall back to asking the operator ---------------
 # The old remedy. If it survives anywhere in the directive the lead has a sanctioned way to
 # do nothing, and it will take it — the ask costs it a turn and the Read costs it tokens.
@@ -153,6 +176,50 @@ else
     bad "MUTANT EMITTED NOTHING — its silence is indistinguishable from a kill, so assertions 1-3 are unproven"
   else
     bad "MUTANT DID NOT FAIL — the directive still names the skill with the mandate stripped"
+  fi
+fi
+
+# --- Assertion 8b: MUTANT — demote the step-file Read, only 2b may go red -----
+# The entanglement test for the grade arm. Demoting the sentence must not disturb the path,
+# IN FULL, escape-closed, cliff or Rule 23 assertions -- if it does, 2b is not measuring grade.
+MUT_G="$WORK/recover-demoted.sh"
+sed 's|\*\*Your SECOND tool call MUST be \\`Read \${STEP_FILE}\\` in full\.\*\*|Then \\`Read\\` the current step file \\`\${STEP_FILE}\\` --|' "$HOOK" > "$MUT_G"
+if cmp -s "$HOOK" "$MUT_G"; then
+  bad "FIXTURE STALE: the step-file mandate was reworded, so the demotion mutant is byte-identical and assertion 2b proves nothing"
+elif ! bash -n "$MUT_G" 2>/dev/null; then
+  bad "FIXTURE STALE: the demotion mutant is not valid shell, so its silence would score as a kill"
+else
+  GCTX="$(fire "$MUT_G")"
+  g="$(grep -c '\*\*Your [A-Z]* tool call MUST be' <<<"$GCTX")"
+  keeps=0
+  grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$GCTX" && keeps=$((keeps+1))
+  grep -q 'ctx_execute_file' <<<"$GCTX" && keeps=$((keeps+1))
+  grep -q 'do not ask the operator to re-invoke' <<<"$GCTX" && keeps=$((keeps+1))
+  if [ -n "$GCTX" ] && [ "$g" -lt 2 ] && [ "$keeps" -eq 3 ]; then
+    ok "mutant: demoting the step-file Read fails ONLY the grade arm — the assertions are not entangled"
+  elif [ "$g" -ge 2 ]; then
+    bad "MUTANT DID NOT FAIL — the grade arm still counts 2 mandates with the sentence demoted, so assertion 2b asserts nothing"
+  else
+    bad "MUTANT FAILED TOO MUCH — the demotion also broke $((3-keeps)) unrelated assertion(s), so 2b and they are entangled and one is vacuous"
+  fi
+fi
+
+# --- Assertion 8c: MUTANT — push the block past the cliff, only 4 may go red --
+# THE regression that matters. Every arm above ADDS prose to a block the harness replaces
+# wholesale at 10,000 characters. This proves assertion 4 can actually fail.
+MUT_C="$WORK/recover-oversize.sh"
+awk '/^# AI\/DLC POST-COMPACT RECOVERY/ && !d {print; for(i=0;i<400;i++) print "padding line to push the injected block past the ten-thousand character cliff"; d=1; next} 1' "$HOOK" > "$MUT_C"
+if cmp -s "$HOOK" "$MUT_C"; then
+  bad "FIXTURE STALE: could not build the oversize mutant — the directive heading moved"
+elif ! bash -n "$MUT_C" 2>/dev/null; then
+  bad "FIXTURE STALE: the oversize mutant is not valid shell, so its silence would score as a kill"
+else
+  OCTX="$(fire "$MUT_C")"
+  OLEN="$(printf '%s' "$OCTX" | wc -c | tr -d ' ')"
+  if [ -n "$OCTX" ] && [ "$OLEN" -ge 9000 ]; then
+    ok "mutant: an oversize directive is ${OLEN} chars and trips the cliff arm — assertion 4 can fail"
+  else
+    bad "MUTANT DID NOT FAIL — the padded directive measured ${OLEN} chars, under the ceiling, so assertion 4 never proves the cliff is watched"
   fi
 fi
 
