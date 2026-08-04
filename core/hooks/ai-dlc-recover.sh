@@ -101,6 +101,24 @@ the harness's record of every file previously read, so nothing you read before
 this point is still loaded. Do NOT re-Read completed step files or
 already-produced planning artifacts; Rule 23(a) still applies.
 
+## Most of your rulebook is not in your context
+
+Then \`Read .claude/skills/ai-dlc/SKILL.md\` IN FULL. This one IS a re-Read and is
+required anyway, because the harness re-attaches only the first ~5,000 tokens of
+an invoked skill -- measured at 20,121 bytes, under a QUARTER of that file. The
+back three quarters is gone: most of the numbered rules, the handoff triggers,
+and the snapshot schema.
+
+You cannot find the cut by introspection. Nothing marks it, the surviving text
+ends mid-file without a seam, and the rules that govern re-reading are themselves
+past it -- so the instruction to recover them cannot come from a rule you still
+hold. It comes from here. A lead that skips this runs the rest of the sprint on
+the quarter of the rulebook that happened to survive, and reports no problem,
+because a rule it never saw is indistinguishable from a rule that does not exist.
+
+Read it. Do not reconstruct it, and do not ask the operator to re-invoke
+\`/ai-dlc\` to restore it -- the file is on disk and one Read is the whole fix.
+
 Before acting, emit a verification turn naming: the current step file, the last
 gate passed with its timestamp, any in-flight sub-step, the In-Flight Teammates
 state below, and the current git branch and last commit. Then proceed to the next

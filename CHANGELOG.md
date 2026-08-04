@@ -34,6 +34,70 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.256.0] — 2026-08-04
+
+### Post-compact recovery recovered the snapshot and left three quarters of the rulebook behind
+
+Claude Code re-attaches only the first ~5,000 tokens of an invoked skill after a compaction.
+`SKILL.md` is 84,283 bytes. Nothing in the pipeline re-read it: the three compaction hooks
+(`ai-dlc-recover.sh`, `ai-dlc-postcompact.sh`, `ai-dlc-precompact.sh`) carried **zero**
+references to `SKILL.md` or `skills/ai-dlc` — control: they name `pipeline-snapshot` 3, 2 and 3
+times, so the scan fires — and Rules 21/22's re-read mandates name STEP files and the snapshot,
+never the skill.
+
+**Measured over the reference consumer's 379 transcripts, not inferred.** 69 hold a
+`compact_boundary` record; 261 post-boundary records carry a real skill re-attach. The cut lands
+at **20,121 bytes in every one of them** — identical at p10, p25, p50, p75 and p90, so the
+harness truncates deterministically, and the ~5,000-token figure assumed since v0.35.0 is
+confirmed rather than drifted. Controls: an invented phrase matched **0** of 379 files while
+`ai-dlc` matched 366, and the single full-file sample is a `/ai-dlc` re-invocation rather than a
+re-attach.
+
+What nobody had measured is what that keeps. **Under a quarter of the file. Rules 14–30 — 17 of
+30 — are absent after every compaction**, along with the handoff triggers and the snapshot
+schema. That set includes **Rule 21 and Rule 22, the two re-read mandates themselves**: the rule
+that says "re-read the step file" is dropped by the compaction, so the instruction to recover
+the rulebook cannot come from a rule the lead still holds.
+
+The protocol's own remedy made it worse than absent. It told the lead to ask the **operator** to
+re-invoke `/ai-dlc`, gated on the lead first *noticing* that rules were missing. Nothing marks
+where the cut fell, the surviving text ends mid-file without a seam, and a lead cannot notice a
+rule it has never seen — a rule it never saw is indistinguishable from a rule that does not
+exist. So the sprint continues on whatever survived and reports no problem.
+
+260 of the 261 samples kept the recovery protocol whole, which is what makes the fix
+deliverable: an instruction placed inside the protocol does arrive.
+
+- `core/hooks/ai-dlc-recover.sh` gains a section telling the lead to `Read
+  .claude/skills/ai-dlc/SKILL.md` **in full**, naming the installed path rather than `core/`,
+  and explicitly closing the ask-the-operator escape. Placement is the mechanism: this is the
+  hard interrupt at the moment of compaction, not a soft rule the lead reasons out of.
+  The block grows 5,008 → 6,032 characters, still under the 9,000 ceiling — the v0.35.0 defect
+  where a 31,881-character block was replaced wholesale by a file-path stub and **never**
+  injected on any of three observed compactions.
+- `SKILL.md`'s POST-COMPACT RECOVERY PROTOCOL carries the same mandate as the fallback for a
+  consumer whose hooks are disabled. Written as a **replacement** of the paragraph that held the
+  old ask-the-operator remedy, at +6 bytes against 10 bytes of headroom, because any net
+  addition above the protocol pushes its own tail toward the cliff.
+- `core/scripts/validate-reattach-budget.sh` gains a second arm: the protocol must contain both
+  the installed path and `IN FULL`. Keeping the protocol inside the window was half the
+  guarantee; what it says on arrival is the other half, and the byte arm cannot see it — a
+  protocol that fits perfectly and never tells the lead to recover the rest passed with room to
+  spare. Anchored on both tokens because either alone is satisfied by prose that instructs
+  nothing: the path appears in any sentence about the file, and `IN FULL` already appears in the
+  snapshot Read directive one paragraph up.
+- `core/fixtures/postcompact-rulebook-recovery/` — 10 assertions across both ends of the join,
+  resolving each artifact on its own path in both layouts (never by walking up from a sibling,
+  which I33 fails the build on). Verified on a tree built by running `scripts/install.sh` into an
+  empty directory, where the fixture and the validator's own root resolution both pass.
+- **Two mutants, each killing exactly one assertion**, both `cmp -s` guarded so a `sed` that
+  matched nothing cannot pass as a mutation, and the hook mutant `bash -n` guarded so a copy
+  that dies before doing anything cannot score its silence as a kill. Stripping the mandate from
+  `SKILL.md` fails the **mandate** arm specifically and the fixture says so if it trips the byte
+  arm instead — the two are not entangled. Stripping it from the hook still emits a directive,
+  so assertions 1–3 fail on the mutation rather than on absence. An **unmutated control copy**
+  reproduces the real directive.
+
 ## [0.255.0] — 2026-08-04
 
 ### The escalation citation verifier could not see the session the operator spoke in

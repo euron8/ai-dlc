@@ -206,6 +206,7 @@ core_manifest:
   - fixtures/story-fields-derive/**
   - fixtures/trunk-push-bound/**
   - fixtures/pause-hook-origin/**
+  - fixtures/postcompact-rulebook-recovery/**
   - fixtures/provenance-not-accessible/**
   - fixtures/reconcile-blocking-list/**
   - fixtures/reconcile-emit-report/**

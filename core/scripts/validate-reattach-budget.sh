@@ -156,5 +156,46 @@ if [ "$EST_TOKENS" -gt "$CEILING" ]; then
   exit 1
 fi
 
+# -----------------------------------------------------------------------------
+# The protocol must carry the ESCAPE from the window it lives in.
+# -----------------------------------------------------------------------------
+# Keeping the protocol inside the re-attach window is half the guarantee. The
+# other half is what the protocol SAYS once it arrives, and the arm above cannot
+# see it: a protocol that fits perfectly and never tells the lead to recover the
+# rest of the file passes this script with room to spare.
+#
+# Measured over the reference consumer's 379 transcripts: 69 hold a
+# `compact_boundary`, and 261 post-boundary records carry a real skill re-attach.
+# The cut sits at 20,121 bytes in every one of them -- identical at p10, p25,
+# p50, p75 and p90, so the harness truncates deterministically, and the ~5,000
+# figure this script has assumed since v0.35.0 is confirmed rather than drifted.
+# What that means for the lead is the part nobody had measured: it keeps under a
+# QUARTER of SKILL.md. Most of the numbered rules, the handoff triggers and the
+# snapshot schema are simply absent, INCLUDING the rules that mandate re-reading
+# -- so the instruction to recover them cannot come from a rule the lead still
+# holds. It has to be in the protocol, which is why this arm exists.
+#
+# The old text made it worse than absent: it told the lead to ask the OPERATOR to
+# re-invoke `/ai-dlc`, gated on the lead first NOTICING rules were missing. A lead
+# cannot notice a rule it has never seen, and nothing marks where the cut fell.
+#
+# Anchored on the installed path plus the full-read demand, because either alone
+# is satisfiable by prose that does not instruct anything -- the path appears in
+# any sentence about the file, and "IN FULL" appears in the snapshot Read
+# directive one paragraph up.
+PROTO_TEXT="$(sed -n "${START_LINE},${PROTO_END}p" "$SKILL_MD")"
+if ! grep -q '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT" \
+   || ! grep -q 'IN FULL' <<<"$PROTO_TEXT"; then
+  echo "FAIL: the POST-COMPACT RECOVERY PROTOCOL does not tell the lead to re-read" >&2
+  echo "      this skill. Expected both '.claude/skills/ai-dlc/SKILL.md' and 'IN FULL'" >&2
+  echo "      inside lines ${START_LINE}..${PROTO_END}; found path=$(grep -c '\.claude/skills/ai-dlc/SKILL\.md' <<<"$PROTO_TEXT") in-full=$(grep -c 'IN FULL' <<<"$PROTO_TEXT")." >&2
+  echo "      A compaction keeps under a quarter of this file and marks nothing, so a" >&2
+  echo "      lead that is not told to Read the rest runs the sprint on whatever" >&2
+  echo "      survived and reports no problem -- a rule it never saw is" >&2
+  echo "      indistinguishable from a rule that does not exist." >&2
+  exit 1
+fi
+
 say "PASS  protocol ends at ~${EST_TOKENS} tokens; ${SLACK} tokens of slack under the ${CEILING}-token ceiling (${BUDGET} window - ${MARGIN} margin)."
+say "      protocol carries the full-rulebook re-read mandate."
 exit 0
