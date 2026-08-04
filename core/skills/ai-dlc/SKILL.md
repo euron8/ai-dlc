@@ -118,11 +118,14 @@ Protocol** sections below and in `gate-validation.md` Check 14.
 ### Rule 3 -- Never stall the pipeline
 
 The pipeline runs as a continuous, uninterrupted flow. Exactly
-THREE pause points exist where you stop and wait for human input:
+FOUR pause points exist where you stop and wait for human input:
 
 - (a) **Ambiguity resolution** (Rule 11).
 - (b) **Production Validation Checkpoint** (Rule 10).
 - (c) **Retro commentary prompt**.
+- (d) **Sprint-scope confirmation** (`route.md` Step 6) -- the only
+  pause point upstream of planning. Confirm or correct the scope you
+  already resolved; it is never a question about what to build.
 
 At a pause point -- and at any terminal STOP or integrity failure that
 awaits a human -- `touch _bmad-output/pipeline-paused.flag` before
@@ -131,7 +134,11 @@ flag alone; without it your pause reads as a stall and the hook returns
 a forced-continuation reason urging you to pair the text with a tool
 call, pushing you past the very checkpoint you stopped at.
 
-If you are not at one of these three pause points, you are not done.
+(d) is the exception and sets NO flag: it is solicited with
+`AskUserQuestion`, so the turn never ends and the Stop hook never runs.
+A flag set there is a pause nobody clears.
+
+If you are not at one of these four pause points, you are not done.
 Keep working. Do not ask if you should continue.
 
 **Show your work.** Output sub-skill results so the human can
@@ -489,7 +496,7 @@ model default.
 
 The lead MAY automatically execute the path (a) procedure
 (`steps/handoff.md`) at a defined safe seam when all preconditions hold.
-Auto-handoff is NOT a fourth pause point -- it is a session-terminating
+Auto-handoff is NOT a fifth pause point -- it is a session-terminating
 action that runs the path (a) procedure unchanged, and resume itself is
 never automated.
 
@@ -830,7 +837,7 @@ instructions. Memory of a step file is not equivalent to loading it.
 
 ### Rule 22 -- Pause-point resume MUST re-read the step file
 
-When a pipeline pause point (Rule 3(a)-(c)) receives human input and
+When a pipeline pause point (Rule 3(a)-(d)) receives human input and
 the lead resumes execution, the lead's FIRST action MUST be a `Read`
 tool call for the current step file. The lead MUST then enumerate the
 remaining numbered sections in output before executing any of them.

@@ -147,6 +147,7 @@ core_manifest:
   - fixtures/command-args-citation/**
   - fixtures/operator-request-capture/**
   - fixtures/request-coverage/**
+  - fixtures/scope-confirmation/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**

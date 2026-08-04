@@ -60,7 +60,7 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33                              |
+| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34                          |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
 | sprint-review  | 18, 21                                                          |
@@ -722,8 +722,17 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   written once by `route.md` Step 6 and never rewritten after: the
   verbatim request and the routing signals Check 27 re-adjudicates —
   `user_request_verbatim`, `user_request_cite`, `bug_signal_present`
-  (yes/no), `carryover_or_sprint_signal_present` (yes/no), and
-  `clarification_asked` (yes/no/n-a). `user_request_verbatim` is the only
+  (yes/no), `carryover_or_sprint_signal_present` (yes/no),
+  `clarification_asked` (yes/no/n-a), `scope_confirmed`
+  (confirmed/corrected) and `scope_confirmed_cite`.
+  `scope_confirmed` records what the operator did at the Rule 3(d)
+  sprint-scope pause point, and `scope_confirmed_cite` is the `SHA256:` of
+  the `operator-answers-history.md` entry holding their selection, or the
+  literal `none`. That hash covers the ANSWER alone: the question was
+  lead-authored, and a lead permitted to cite its own question passes a
+  provenance check by talking to itself. `scope_confirmed` has no `n-a`
+  value — the pause point is unconditional, so an absent confirmation is a
+  missing one rather than an inapplicable one. `user_request_verbatim` is the only
   on-disk copy of the operator's original request; without it the fresh
   gate-adjudicator that Check 27 escalates to cannot re-classify the routing
   decision. `user_request_cite` is the `SHA256:` of the
@@ -2215,6 +2224,63 @@ consistent. False-positive cost: one disposition line per identifier the sprint
 legitimately does not take — measured at 4.0 per id-bearing request. Removal
 condition: retire when a spec-layer join covers `request → CAP` directly, making
 the identifier proxy redundant.
+
+### 34. The operator saw the scope before the sprint planned against it (all planning gates).
+<!-- CHECK_LOADED: 34 -->
+
+**Check.** Run `scripts/ai-dlc/validate-scope-confirmation.sh --snapshot
+_bmad-output/pipeline-snapshot.md --answers
+_bmad-output/operator-answers-history.md`; exit 0 required. The routing record's
+`scope_confirmed` must read `confirmed` or `corrected`, and `scope_confirmed_cite`
+must resolve to a `SHA256:` entry the PostToolUse capture hook wrote — or be the
+literal `none` against a capture file holding no entries at all.
+
+**What this catches.** A sprint that planned against a scope no operator ever saw.
+Rule 3(d) makes the sprint-scope pause point mandatory at `route.md` Step 6, and
+until this check existed that mandate had no enforcer — a prohibition with no
+mechanism is a suggestion, and the sprint this was written for broke no rule at
+all. It resolved the scope wrongly at hour one, and the first human to look at
+that reading did so on day 7.
+
+**Why it is separate from Check 33 rather than an arm of it.** Check 33 reports
+NOT-APPLICABLE when the captured ask names no identifier, which was 5 of 23
+measured requests. An arm inside it would go silent on roughly a fifth of sprints
+while still printing a clean line. The pause point is unconditional, so its
+verifier is too.
+
+**The cite is the whole check; the boolean alone is worthless.** `scope_confirmed`
+is a field the lead writes about a conversation the lead had — the same
+self-declaration shape as the pre-`user_request_cite` routing record, where the
+router that misclassified also wrote the booleans attesting it had not. The hash
+resolves into `operator-answers-history.md`, which the hook writes from its own
+PostToolUse payload before any agent sees it, and it covers the ANSWER only. The
+lead chooses which hash to copy and cannot author what it resolves to. **A lead
+must never compute this hash itself** — a hash computed over text the lead chose
+resolves perfectly and proves nothing.
+
+**Exit 3 is PENDING, and its two causes are deliberately narrow.** A snapshot with
+no routing record at all predates the release that created one. A consumer with no
+`operator-answers-history.md` has not installed the capture hook, so nothing could
+have recorded the answer whatever the lead did, and failing there would blame a
+lead for a missing hook. **"No `scope_confirmed` field" is NOT one of them** — that
+reading is indistinguishable from a lead on the current release skipping the pause
+point, and it fails open on precisely the conduct this check exists to catch. Once
+the capture file exists the hook is live, and a missing field is the lead's.
+
+**Exit 2 is a FAIL.** No snapshot at the resolved path means the verdict would be
+about nothing. `answers_entries_scanned:` prints on every path including PENDING,
+so a run that scanned an empty capture file cannot read like one that scanned
+forty healthy entries.
+
+Fixture: `tests/fixtures/scope-confirmation/`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate passing on a
+scope the operator was never shown, or on a confirmation citing a record that does
+not exist. False-positive cost: none on a consumer running the capture hook — the
+field is written once by `route.md` Step 6 and never rewritten, so the check reads
+back one line the router already had to write. Removal condition: retire when the
+scope confirmation becomes a harness-enforced precondition of loading the first
+planning step, so a sprint cannot reach a planning gate without it.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

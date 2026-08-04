@@ -34,6 +34,117 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.258.0] — 2026-08-04
+
+### The sprint had no seam at which anyone looked at the scope before it hardened
+
+Rule 3's pause points were all downstream of implementation. A sprint that never reaches
+implementation therefore has structurally nowhere to ask, and the reference sprint did not:
+it ran seven days, produced **0 lines of product code**, planned three stories sharing **not
+one identifier** with the operator's ask, passed **four consecutive gates green**, and then
+filed all three of its blocking questions on day 7. It broke no rule doing it. It resolved
+the scope wrongly at hour one, and the first human to look at that reading did so on day 7.
+
+This adds the seam, and the machinery that makes it a requirement rather than a suggestion.
+
+**Rule 3 gains a fourth pause point (d) — sprint-scope confirmation**, at `route.md` Step 6,
+before the first planning step loads. It is the only pause point upstream of planning. The
+question is *confirm or correct the scope I resolved*, never *what should I build* — the
+operator already answered that, in their own bytes, in `operator-requests-history.md`, and
+re-asking it discards the answer and invites a second one.
+
+**A new PostToolUse hook, `ai-dlc-answer-capture.sh`**, writes what the operator selected to
+`_bmad-output/operator-answers-history.md`. This is the first hook core registers on that
+event (there were 50 `PreToolUse` registrations and 0 `PostToolUse`).
+
+- **It reads the answer from its OWN payload, and the alternative is dead rather than
+  merely worse.** The obvious design — have the lead quote the answer and verify the quote
+  against the transcript — was built as a probe and measured. At the moment PostToolUse
+  fires, the transcript does **not** yet carry the answers record: a `tail` of the live
+  transcript at hook time returns **0** matches while the same pattern over the whole file
+  afterwards returns **2**. The zero is timing, not absence. A hook reading the transcript
+  would find nothing and have to fail or invent.
+- **`ai-dlc-pause.sh` structurally cannot do this job.** It is a `UserPromptSubmit` hook and
+  an AskUserQuestion answer never raises that event, so the one class of operator decision
+  the pipeline deliberately solicits was the one class no artifact held.
+- **The hash covers the ANSWER alone.** The question is text the lead authored, and it is
+  stored on a labelled metadata line no hash covers. A lead permitted to cite its own
+  question passes a provenance check by talking to itself — the S290 fabrication,
+  reintroduced through the fix for its mirror image. `validate-steering-budget.sh`'s
+  `askUserQuestionAnswers` extractor already makes exactly this split, which is what lets a
+  captured body be verified independently with `--cite`.
+- One record per question/answer pair, never per tool call: a single AskUserQuestion may ask
+  up to four independent questions, and one hash over all of them could cite none of them.
+- Append-only by construction — the filename ends `-history.md`, the predicate
+  `validate-artifact-budget.sh`'s `is_archive()` reads, so no budget may trim it.
+
+**New Check 34** (`validate-scope-confirmation.sh`, `adjudication: script`,
+`hard_block: true`, planning gates) joins the two. `scope_confirmed` must read `confirmed`
+or `corrected`, and `scope_confirmed_cite` must resolve to a hook-written `SHA256:` entry.
+
+- **The boolean alone would be worthless**, which is the whole point of the cite. It is a
+  field the lead writes about a conversation the lead had — the same shape as the
+  pre-`user_request_cite` routing record, where the router that misclassified also wrote the
+  booleans attesting it had not. The lead chooses which hash to copy and cannot author what
+  it resolves to. A lead must never compute the hash itself.
+- **It is deliberately NOT an arm of Check 33.** Check 33 reports NOT-APPLICABLE when the
+  captured ask names no identifier, which was **5 of 23** measured requests. An arm inside it
+  would go silent on roughly a fifth of sprints while still printing a clean line. The pause
+  point is unconditional, so its verifier is too.
+- **"No `scope_confirmed` field" is deliberately not a PENDING cause.** That reading is
+  indistinguishable from a lead on the current release skipping the pause point, and it fails
+  OPEN on precisely the conduct the check exists to catch. Pre-migration is decided instead by
+  an artifact no agent authors: no `operator-answers-history.md` means the hook is not
+  installed and nothing could have recorded the answer whatever the lead did → PENDING. Once
+  the capture file exists the hook is live, and a missing field is the lead's.
+- `answers_entries_scanned:` prints on every path including PENDING, so a run that scanned an
+  empty capture file cannot read like one that scanned forty healthy entries.
+
+**The extractor is not anchored to the start of a line, and the corpus is why.** It was
+written that way, and against the reference consumer's live snapshot it reported "no routing
+record" — the fail-open direction — because that snapshot writes the routing record as a
+prose bullet with the fields inline and backticked, several to a line, rather than one field
+per line. Both grammars are now parsed and both are asserted; `scope_confirmed_cite` is
+written *before* `scope_confirmed` in the fixture because the former has the latter as a
+string prefix and a careless extractor reads the digest as the value. No assertion written
+against the fixture's own synthetic grammar could have caught this.
+
+**FP set, measured:** across **157** snapshots in the reference consumer, Check 34 returns
+PENDING on **157** and FAILs **0** — it fires on nothing until the capture hook has run at
+least once. The zero is trustworthy because the fixture proves the check can fail: 20
+assertions, three mutants, each killed and each failing **only** its own assertion.
+
+**Also corrected, because this release falsifies them:** auto-handoff is now "NOT a *fifth*
+pause point" in `SKILL.md` and `_gate-procedures.md`; Rule 22's resume mandate covers
+`Rule 3(a)-(d)`; and the auto-handoff precondition that enumerates the pause points names
+sprint-scope confirmation. Pause point (d) sets **no** pause flag — it is solicited with
+`AskUserQuestion`, so the turn never ends and the Stop hook never runs, and a flag set there
+is a pause nobody clears. That asymmetry is the same one for which
+`validate-steering-budget.sh` scores an AskUserQuestion answer as citable operator text but
+never as a steamroll.
+
+### Enabling commit: the recovery protocol moved above the autonomy rules
+
+`SKILL.md` had **3 bytes** of headroom — the budget validator passed at 4749 of a 4750-token
+ceiling — so any net addition above the recovery protocol failed the push, and Rule 3's list
+sits above it. Moving `## POST-COMPACT RECOVERY PROTOCOL` to sit immediately above
+`## AUTONOMY RULES` drops its end offset from 18,997 bytes (4,749 tokens) to **3,468 bytes
+(867 tokens)**: **3,883 tokens of slack** where there was 1.
+
+**It evicts nothing, and that is measured rather than assumed.** The protocol was already
+inside the re-attach window, so moving bytes around within that window changes their order
+and not which of them fit. Against the real cut — 20,121 bytes, identical at p10 through p90
+across 261 live re-attaches — the resident rule set is the same set in both arrangements:
+**13 of 30** `### Rule N` headings survive, ending at Rule 13, before and after. Whole-file
+byte count and the multiset of lines are unchanged; only their order moved. Rule 11 stays
+resident, so the protocol's reference to Rule 11(b) still resolves for a compacted lead.
+
+Also corrects a claim in the budget validator's header that the move falsifies: it named
+`## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS` as the bounding heading "by design".
+The script has always derived that boundary as "the next `## ` heading" and never asserted
+the name, so the code is unaffected — but a comment naming the wrong section is how the next
+author mis-measures.
+
 ## [0.257.0] — 2026-08-04
 
 ### The recovery directive's weakest instructions are its unobeyed ones
