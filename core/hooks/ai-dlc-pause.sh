@@ -68,18 +68,12 @@ PROMPT_PREVIEW=$(printf '%s' "$PROMPT_RAW" | head -c 120 | tr '\n' ' ')
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # -----------------------------------------------------------------------------
-# Skip if no active pipeline
+# Does this event carry operator prose?
 # -----------------------------------------------------------------------------
-if [ ! -f "$SNAPSHOT_FILE" ]; then
-  # No snapshot means no active pipeline. Don't create flag.
-  # This covers the /ai-dlc invocation case: first message, no snapshot
-  # yet, skip. Claude starts the pipeline. By the time snapshot exists,
-  # we're in autonomous mode.
-  exit 0
-fi
-
-# -----------------------------------------------------------------------------
-# Skip if the event carries no operator prose
+# Computed BEFORE the snapshot gate below, because two things need it and they are
+# gated differently: the pause flag (active pipeline only) and the operator-request
+# capture (always, including the very first /ai-dlc of a project, when no snapshot
+# exists yet by definition).
 # -----------------------------------------------------------------------------
 # The harness raises UserPromptSubmit identically when a backgrounded task completes as
 # when a human types. This hook inspected neither the prompt nor its origin, so it created
@@ -108,6 +102,103 @@ fi
 PROMPT_STRIPPED=$(printf '%s' "$PROMPT_RAW" \
   | sed -e 's/<system-reminder>.*<\/system-reminder>//g' \
   | tr -d '[:space:]')
+
+# -----------------------------------------------------------------------------
+# Capture the operator's request -- a HARNESS artifact, not a lead artifact
+# -----------------------------------------------------------------------------
+# WHY THIS EXISTS. `user_request_verbatim` in the pipeline snapshot is prose the LEAD
+# writes about what the operator asked for. Nothing produced it but the lead, and nothing
+# could contradict it. On the reference consumer a lead recorded that field as a POINTER to
+# the PREVIOUS sprint's locked block, planned three stories sharing not one identifier with
+# the actual ask, and passed four consecutive gates green. The operator's words existed --
+# 1359 bytes of them, timestamped -- and no artifact in the pipeline held them.
+#
+# This hook is the only place in the system that sees an operator's message before any agent
+# interprets it. So it writes them down.
+#
+# WHY ABOVE THE SNAPSHOT GATE. The gate below exits when no snapshot exists, and its own
+# comment names the case it is skipping: "the /ai-dlc invocation case: first message, no
+# snapshot yet". That is precisely the message worth keeping -- the sprint kickoff. Capturing
+# below the gate would miss the first request of every project, which is the one request no
+# later artifact can reconstruct.
+#
+# WHY THE COMMAND TOKEN IS SPLIT OFF. The harness hands this hook the RAW typed text
+# (`/ai-dlc Sprint 300: ...`), while the transcript stores the same message as an envelope
+# whose <command-args> holds only the argument body. Recording the raw form verbatim would
+# produce a record that cannot be cited against the transcript it came from -- the leading
+# `/ai-dlc ` appears in one and not the other. The body is what the operator composed; the
+# command token is how they addressed it. They are stored in different fields.
+#
+# APPEND-ONLY, and structurally so. The filename ends in `-history.md`, which is what
+# validate-artifact-budget.sh's is_archive() reads: no budget row, no rotation, no trim. A
+# provenance record that can be evicted to fit a budget is not a provenance record -- and
+# eviction-with-no-durable-home is the failure this same sprint suffered five times.
+REQUESTS_FILE="${LOG_DIR}/operator-requests-history.md"
+if [ -n "$PROMPT_STRIPPED" ]; then
+  case "$PROMPT_RAW" in
+    /*) REQ_COMMAND=$(printf '%s' "$PROMPT_RAW" | sed -e 's/[[:space:]].*$//' -e 's/^\(.\{1,64\}\).*/\1/')
+        REQ_BODY=$(printf '%s' "$PROMPT_RAW" | sed -e '1s/^[^[:space:]]*[[:space:]]*//') ;;
+    *)  REQ_COMMAND="(typed)"
+        REQ_BODY="$PROMPT_RAW" ;;
+  esac
+  # Strip system-reminder blocks from the stored body for the same reason the predicate
+  # above strips them: they are harness injection, not operator prose. Everything else --
+  # newlines, punctuation, casing -- is preserved byte-for-byte, because the whole value of
+  # this record is that it was not paraphrased.
+  REQ_BODY=$(printf '%s' "$REQ_BODY" | sed -e 's/<system-reminder>.*<\/system-reminder>//g')
+  if [ -n "$(printf '%s' "$REQ_BODY" | tr -d '[:space:]')" ]; then
+    mkdir -p "$LOG_DIR"
+    if [ ! -s "$REQUESTS_FILE" ]; then
+      cat > "$REQUESTS_FILE" <<'EOF'
+# Operator Requests
+
+Every message an operator sent, recorded by the UserPromptSubmit hook BEFORE any agent read
+it. Append-only. Written by `ai-dlc-pause.sh`; no agent may edit or reorder it.
+
+This file exists because `user_request_verbatim` in the pipeline snapshot is the LEAD's
+account of what was asked, and a lead that misremembers the ask produces a snapshot nothing
+can contradict. This is the record that can.
+
+`body` is what the operator composed, with any leading slash-command token moved to
+`command`. That split is what makes an entry CITABLE: the harness hands the hook the raw
+typed text, while the session transcript stores the same message as an envelope holding only
+the argument body. Verify any entry with:
+
+    validate-steering-budget.sh --dir <transcript-dir> --cite "<a phrase from body>"
+
+Rotation: none, ever. The filename ends `-history.md` so the artifact-budget validator
+treats it as an archive (Rule 25(a)): growth is free, and nothing may trim it.
+
+---
+
+EOF
+    fi
+    REQ_SHA=$(printf '%s' "$REQ_BODY" | { shasum -a 256 2>/dev/null || sha256sum; } | cut -d' ' -f1)
+    {
+      echo "## ${TIMESTAMP} -- ${REQ_COMMAND}"
+      echo "- Session: ${SESSION_ID}"
+      echo "- Bytes: $(printf '%s' "$REQ_BODY" | wc -c | tr -d '[:space:]')"
+      echo "- SHA256: ${REQ_SHA}"
+      echo ""
+      echo '```text'
+      printf '%s\n' "$REQ_BODY"
+      echo '```'
+      echo ""
+    } >> "$REQUESTS_FILE"
+  fi
+fi
+
+# -----------------------------------------------------------------------------
+# Skip if no active pipeline
+# -----------------------------------------------------------------------------
+if [ ! -f "$SNAPSHOT_FILE" ]; then
+  # No snapshot means no active pipeline. Don't create flag.
+  # This covers the /ai-dlc invocation case: first message, no snapshot
+  # yet, skip. Claude starts the pipeline. By the time snapshot exists,
+  # we're in autonomous mode. The capture above has already run -- it is
+  # deliberately NOT gated on the pipeline being live.
+  exit 0
+fi
 # Seed the log header if this is the first write. Both the skip path and the pause path
 # call this: whichever event lands first, the legend that explains it must already be there.
 seed_log_header() {
