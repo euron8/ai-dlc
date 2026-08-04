@@ -60,7 +60,7 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32                              |
+| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33                              |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
 | sprint-review  | 18, 21                                                          |
@@ -2102,6 +2102,53 @@ report having run a workflow that never ran. False-positive cost: none observed 
 the check reads names the rulebook already commits to. Removal condition: retire
 when BMAD publishes a machine-readable manifest of live skill names that the pull
 can diff against.
+
+### 33. Every identifier the operator named reaches this sprint's scope (all planning gates).
+<!-- CHECK_LOADED: 33 -->
+
+**Check.** Run `scripts/ai-dlc/validate-request-coverage.sh --requests
+_bmad-output/operator-requests-history.md --brief <brief> --sprint <n>
+--cite-sha <user_request_cite>`; exit 0 required. Every `CO-`, `LR-`, `CAP-` and
+`Epic-` identifier in the operator's captured request must appear inside a LOCKED
+bullet this sprint commits to, or carry a `<!-- NOT-IN-SCOPE: <id> — <reason> -->`
+disposition in the brief's LOCKED blocks.
+
+**What this catches that nothing else did.** Every byte-level guarantee in the
+pipeline terminates at `product-brief.md` — Check 3b anchors stories to it, Check
+30 joins capabilities through it. The brief is the LEAD's restatement of the ask,
+authored across a hop with no mechanical join at all. So a plan can be perfectly
+self-consistent from the brief forward while sharing nothing with what was asked
+for, and every downstream check reads green. Measured: a sprint whose operator
+request named six identifiers produced a LOCKED block containing none of them,
+planned three unrelated stories, and passed four consecutive gates.
+
+**A mention is not a commitment.** Briefs accumulate one LOCKED block per sprint
+and blocks cite each other constantly. Coverage is measured only against bullets
+headed by an `LR-S<n>-` id of THIS sprint — what a committed bullet cites is
+committed; what surrounding prose mentions is not. Reading the whole block instead
+scores the previous sprint's references as coverage and passes the exact failure
+this exists to catch.
+
+**Exit 2 is a FAIL, and both of its causes matter.** No captured request means the
+hook is absent or the ask predates it — no evidence, which must never render as no
+problem. No LOCKED bullet declaring this sprint's id means there is no declared
+scope to compare against — an unanswerable question, not a clean one.
+
+**A zero identifier count is reported, not passed silently.** `identifiers_scanned`
+prints on every path including NOT-APPLICABLE. Across 23 measured requests, 18
+named at least one identifier (mean 4.0, max 13) and **5 named none** — on those
+this check has no subject and says so. It is not a general scope-fidelity check.
+
+**Do NOT resolve a failure by editing the captured request.** Rule 13 reserves
+WHAT-changes to the operator; back-filling the ask to agree with the plan is the
+silent drop this catches, laundered.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: the dominant work of a sprint
+absent from the sprint's own plan, with every downstream artifact internally
+consistent. False-positive cost: one disposition line per identifier the sprint
+legitimately does not take — measured at 4.0 per id-bearing request. Removal
+condition: retire when a spec-layer join covers `request → CAP` directly, making
+the identifier proxy redundant.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

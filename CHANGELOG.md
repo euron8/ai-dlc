@@ -34,6 +34,91 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.252.0] — 2026-08-04
+
+### Check 33 — the plan is compared to the ask, by something other than the agent that wrote both
+
+Every byte-level guarantee in this pipeline terminates at `product-brief.md`. Check 3b anchors
+stories to it; Check 30 joins capabilities through it. The brief is the **lead's restatement** of
+an ask it received across a hop with no mechanical join at all. So a plan can be perfectly
+self-consistent from the brief forward while sharing nothing with what was asked for, and every
+downstream check reads green.
+
+Measured: an operator request naming `ETH-REWARDS`, `CO-S293`, `CO-S295`, `LR-S299-0..11`,
+`CAP-1..10` and `Epic-FVS` produced a LOCKED block containing **none** of them, three unrelated
+stories, and four consecutive green gates. Replayed against that brief, Check 33 reports 5 of 7
+identifiers uncovered — including the two the operator explicitly said to author stories from —
+and correctly passes the two carry-over items the sprint did take. It fires at the **first**
+planning gate.
+
+### Why identifiers, and the limit stated rather than papered over
+
+Comparing an ask to a plan in general is a judgement, and a judgement needs an adjudicator —
+which is what Check 27 already was: `hard_block: true`, `enforcer: []`, passing four times on a
+routing record that pointed at the previous sprint. But operators write identifiers. Across 23
+substantive `/ai-dlc` requests on the reference consumer, **18 named at least one** `CO-`, `LR-`,
+`CAP-` or `Epic-` id (mean 4.0, max 13). That subset is machine-comparable and enough to catch a
+sprint that dropped its own topic.
+
+**5 of the 23 named none.** On those the check has no subject, prints `identifiers_scanned: 0`
+and returns NOT-APPLICABLE. It is not a general scope-fidelity check and the check body says so.
+
+Check 27 was left alone. Its subject is a subordinated *defect*, with its own title, fixture and
+rationale; widening it would have given one check two unrelated jobs and papered over the fact
+that it could never have caught this.
+
+### A mention is not a commitment — and the first draft got this wrong
+
+Briefs accumulate one LOCKED block per sprint, and blocks cite each other constantly. The first
+draft asked *"does the identifier appear in this sprint's block"* and reported the dropped work
+as **covered**, because the sprint's own block referred to the previous sprint's `LR-S299-` ids
+as background for why one of its defects mattered. That is the same confusion between referring
+to work and committing to it that produced the failure, reproduced inside the check written to
+catch it.
+
+Tightened twice, each time by an assertion written to catch exactly that:
+
+1. Coverage is measured only inside bullets **headed by an `LR-S<n>-` id of this sprint**. That
+   also removes any need to attribute a whole block to a sprint — the previous sprint's bullets
+   are headed by its own ids and contribute nothing.
+2. Then only against a bullet's **header** — up to the first `:**` — because a body that
+   mentioned `LR-S41-2` to say *"the failure mode resembles it"* was still enough to mark the
+   operator's whole `LR-S41-0..7` span covered. A bullet's header is where it declares what it
+   covers; its body cites whatever it needs to explain itself.
+
+### Declining work is allowed. Silence is not
+
+An identifier is excluded by a `<!-- NOT-IN-SCOPE: <id> — <reason> -->` line in the LOCKED
+blocks. The check demands an answer, not a yes. Cost measured at 4.0 dispositions per
+identifier-bearing request. And **do not resolve a failure by editing the captured request** —
+Rule 13 reserves WHAT-changes to the operator, and back-filling the ask to agree with the plan
+is the silent drop this catches, laundered.
+
+### Both exit-2 causes are FAILs
+
+No captured request means the hook is absent or the ask predates it — no evidence, which must
+never render as no problem. No LOCKED bullet declaring this sprint's id means there is no
+declared scope to compare against — an unanswerable question, not a clean one.
+
+### Added
+
+- `core/scripts/validate-request-coverage.sh`, bound as Check 33's enforcer in
+  `enforcement-map.yaml` (`adjudication: script`, `hard_block: true`) and added to the
+  `planning` GATE_MANIFEST row.
+- `--emit-blocks` on `validate-locked-anchor.sh`. The LOCKED sentinel has six measured
+  spellings, an unrecognised closer extracts as zero blocks, and that once read as a clean pass.
+  That grammar cost a release to get right, so the new check **calls it** rather than
+  re-deriving it — one grammar, one file.
+- `core/fixtures/request-coverage/` — 15 assertions over four briefs that differ only in their
+  sprint-42 bullets, sharing a byte-identical prior-sprint block that names every identifier the
+  failing sprint dropped. Unmutated control plus two unentangled mutants: reading whole blocks
+  (which makes the dropped epic pass, proving the trap assertions have teeth) and removing the
+  fail-closed arm.
+- **I54 caught this release's own fixture.** Seven `printf '%s' "$OUT" | grep -q` sites: under
+  `pipefail` the pipeline reports the writer's status, so past the pipe buffer the test answers
+  "not found" on input that contains the pattern. Converted to here-strings. The idiom came back
+  in new code written by someone who knew the rule; the invariant is why that cost nothing.
+
 ## [0.251.0] — 2026-08-04
 
 ### The operator's request is now written down by the harness, not recounted by the lead

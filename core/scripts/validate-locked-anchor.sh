@@ -58,6 +58,7 @@ set -u
 
 STORY_PATH="${1:-}"
 SOR_OVERRIDE=""
+EMIT_BLOCKS=0
 
 shift || true
 while [[ $# -gt 0 ]]; do
@@ -65,6 +66,18 @@ while [[ $# -gt 0 ]]; do
         --sor)
             SOR_OVERRIDE="${2:-}"
             shift 2
+            ;;
+        --emit-blocks)
+            # Print the delimited LOCKED_REQUIREMENTS block bodies of <file> and exit.
+            #
+            # WHY THIS MODE EXISTS HERE rather than in the caller. The sentinel has SIX
+            # measured spellings (see the grammar note above), an unrecognised closer
+            # extracts as NOTHING, and a non-greedy span match lets one block SWALLOW
+            # dozens of real ones. That grammar cost a release to get right. A second
+            # reader of the same blocks re-deriving it would be two grammars in two files
+            # drifting apart -- so validate-request-coverage.sh calls this instead.
+            EMIT_BLOCKS=1
+            shift
             ;;
         *)
             echo "ERROR: unknown argument: $1" >&2
@@ -75,6 +88,7 @@ done
 
 if [[ -z "$STORY_PATH" ]]; then
     echo "usage: ./scripts/ai-dlc/validate-locked-anchor.sh <story-file> [--sor <path>]" >&2
+    echo "       ./scripts/ai-dlc/validate-locked-anchor.sh <file> --emit-blocks" >&2
     exit 2
 fi
 
@@ -83,7 +97,7 @@ if [[ ! -f "$STORY_PATH" ]]; then
     exit 1
 fi
 
-python3 - "$STORY_PATH" "$SOR_OVERRIDE" <<'PYEOF'
+python3 - "$STORY_PATH" "$SOR_OVERRIDE" "$EMIT_BLOCKS" <<'PYEOF'
 import os
 import re
 import sys
@@ -161,6 +175,25 @@ def extract_blocks(text):
             dangling.append(i + 1)
         i += 1
     return out, dangling
+
+
+if sys.argv[3] == "1":
+    # --emit-blocks. Print each block body, separated by a form feed so a caller can split
+    # on a byte that cannot occur in a requirement bullet. A DANGLING opener is reported on
+    # stderr and exits 1 rather than silently contributing nothing: the whole reason this
+    # grammar admits six spellings is that an unrecognised closer once extracted as zero
+    # blocks and read as a clean pass.
+    _text = open(story_path, encoding="utf-8", errors="replace").read()
+    _blocks, _dangling = extract_blocks(_text)
+    if _dangling:
+        sys.stderr.write(
+            "ERROR: %d LOCKED_REQUIREMENTS opener(s) with no recognised closer at line(s) %s\n"
+            % (len(_dangling), ", ".join(str(n) for n in _dangling)))
+        sys.exit(1)
+    sys.stdout.write("\f".join(_blocks))
+    sys.exit(0)
+
+
 FULL_TEXT_RE = re.compile(r"^\s*full_text_source:\s*(\S+)\s*$")
 REQUIRES_CTX_RE = re.compile(r"^\s*requires_context:\s*\S")
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")

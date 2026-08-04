@@ -146,6 +146,7 @@ core_manifest:
   - fixtures/askuserquestion-citation/**
   - fixtures/command-args-citation/**
   - fixtures/operator-request-capture/**
+  - fixtures/request-coverage/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**
