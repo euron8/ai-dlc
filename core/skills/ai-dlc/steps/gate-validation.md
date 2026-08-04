@@ -273,7 +273,8 @@ operator adjudicated it — so the entry MUST carry
 
 **Check.** Invoke `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
 docs/escalations/pending.md --sprint <N> --transcript <this session's
-transcript_path>`; exit 0 required. It reads **this sprint's**
+transcript_path> --transcript-dir <the directory that transcript sits
+in>`; exit 0 required. It reads **this sprint's**
 RESOLVED/OVERRIDDEN entries (entries carry the sprint in their header;
 legacy sprints are out of scope, so the gate does not wedge on old data)
 and verifies each citation against the session transcript with the same
@@ -281,8 +282,19 @@ genuine-operator predicate Rule 29 uses (`validate-steering-budget.sh
 --cite`). A lead-authored "operator disposition" whose quote appears in no
 genuine operator message **FAILS**. If you made the call yourself, its status is
 `DECIDED_AUTONOMOUSLY` (informational, non-blocking, no citation). Fails
-**closed** if `--transcript` is omitted — a forgotten flag cannot silently
+**closed** if neither flag is given — a forgotten flag cannot silently
 disarm the check.
+
+**Pass `--transcript-dir` too, and prefer it.** A sprint spans sessions: an
+escalation adjudicated on Monday is re-gated on Friday, and `transcript_path`
+is always the session ASKING permission, never the one the operator spoke in.
+Checking one file therefore rejects adjudications that genuinely happened — and
+because this arm fails closed, the rejection is reported as the fabrication
+above, so an honest lead is named a forger and the gate stops. Measured on the
+reference consumer: the single-file invocation failed **4 of 4**
+operator-resolved HARD_BLOCKs whose quotes are every one of them present in the
+transcript corpus. The directory takes precedence over the single file when
+both are given. Supplying ground truth must never be worse than supplying none.
 
 ### 3. Requirement anchor integrity?
 <!-- CHECK_LOADED: 3 -->
@@ -1269,8 +1281,12 @@ A recorded tier mismatch is CLEARED when **all four** hold:
 2. That entry's `**Status:**` is `OVERRIDDEN`.
 3. `scripts/ai-dlc/validate-escalation-resolution.sh --escalations
    docs/escalations/pending.md --sprint <N> --transcript <this session's
-   transcript_path>` exits 0 — the SAME invocation Check 2a makes, all three
-   flags. It fails closed on a missing `--transcript` (a forgotten flag cannot
+   transcript_path> --transcript-dir <the directory that transcript sits in>`
+   exits 0 — the SAME invocation Check 2a makes, all four
+   flags, and `--transcript-dir` is required here for the same reason it is
+   there: a waiver adjudicated in an earlier session is not in the transcript
+   this one names, and the corpus is where its citation lives. It fails closed
+   when neither transcript flag is given (a forgotten flag cannot
    silently disarm it) and exits 2 on missing required args, so a truncated
    command verifies nothing rather than appearing to pass. That validator
    requires the entry's

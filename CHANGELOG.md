@@ -34,6 +34,54 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.255.0] — 2026-08-04
+
+### The escalation citation verifier could not see the session the operator spoke in
+
+`validate-escalation-resolution.sh` — the enforcer behind Check 2a and the spawn-ledger's
+`OVERRIDDEN` waiver arm — verified operator authorization citations against **one** transcript
+file. Both gate call sites pass *"this session's transcript_path"*, and `transcript_path` is
+always the session ASKING permission, never the one in which the operator spoke. A sprint spans
+sessions, so an escalation adjudicated on Monday and re-gated on Friday cited words that
+Friday's transcript does not contain.
+
+The arm fails **closed**, so the consequence is not a soft miss. The entry is reported as the
+S290 fabrication — *"appears in NO genuine operator message in the transcript. A lead-authored
+'operator disposition' is not an operator adjudication"* — and the gate stops. An honest lead is
+named a forger for a decision the operator really made, and the only remedy is for the operator
+to re-say the words in the session that happens to be current.
+
+**Measured on the reference consumer, not inferred.** The invocation `gate-validation.md`
+specifies, run against the live `pending.md` at the current sprint with the newest session
+transcript, failed **4 of 4** operator-resolved HARD_BLOCKs. All four quotes are genuine: a
+`--dir` scan of the 382-transcript corpus matches every one. Control: an invented phrase
+NOMATCHes, so the corpus scan discriminates rather than accepting everything. Three of the four
+are `AskUserQuestion` option labels — the shape a real adjudication takes when the lead offers
+choices.
+
+This is the same defect `validate-adversarial-convergence.sh` grew `--transcript-dir` for, in
+the sibling that shares its citation predicate. Fixing one door and not the other left the
+deadlock reachable through the other one.
+
+- `--transcript-dir <dir>` added, **taking precedence over `--transcript`** when both are given,
+  and forwarded to `validate-steering-budget.sh --dir` — the same genuine-operator predicate,
+  asked over the corpus the citation actually lives in. Scalars rather than an array, because
+  `arr=()` with `${#arr[@]}` under `set -u` is an unbound-variable error on the bash 3.2 macOS
+  ships. Fails closed when neither flag is given, as before.
+- Both call sites in `gate-validation.md` pass the directory and say why to prefer it.
+- The mode is added to the dispatch block **and** to a USAGE line, which is what I53's undoc arm
+  requires: a mode its own usage never names is one an operator cannot discover.
+- `core/fixtures/escalation-citation/` gains the cross-session corpus: (h) a genuine citation
+  with the wrong session named still FAILs, (i) the same citation verifies over the corpus,
+  (j) a fabrication over that same corpus still FAILs — the control proving the arm did not
+  widen into fail-open — and (k) the directory wins when both flags are given.
+- **Mutants, each killing exactly one assertion.** A disables the corpus arm and only (i) goes
+  red; C inverts precedence so the named file wins and only (k) goes red. Both are `cmp -s` and
+  `bash -n` guarded copies, and an **unmutated control copy** reproduces all four verdicts
+  first — the validator resolves its steering sibling from `dirname "$0"`, so both files are
+  copied, and a lone copy would die with "cannot verify the citation" in a way that reads as
+  the mutant working.
+
 ## [0.254.0] — 2026-08-04
 
 ### Check 30 told three different stories the same false thing

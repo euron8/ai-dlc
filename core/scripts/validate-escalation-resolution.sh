@@ -54,8 +54,29 @@
 # says the operator, not the lead, decided? It does NOT claim the citation covers any particular
 # change -- that is still the adjudicator's call, and --audit-diff still says so in its output.
 #
+# --transcript-dir: THE CORPUS THE CITATION ACTUALLY LIVES IN, and it takes precedence over
+# --transcript. A sprint spans sessions; an escalation resolved on Monday is re-gated on Friday,
+# and `transcript_path` is always the session ASKING permission -- never the one in which the
+# operator spoke. Checking a single file therefore rejected adjudications the operator really
+# made, and this arm fails CLOSED, so the rejection reads as an accusation: the entry is reported
+# as the S290 fabrication and the gate stops. Supplying ground truth was strictly worse than
+# supplying none, because a readable transcript merely LACKING the quote fails while an absent
+# one at least names its own ignorance.
+#
+# MEASURED ON THE REFERENCE CONSUMER, not inferred. The gate invocation gate-validation.md
+# specifies, run against the live pending.md at the current sprint with the newest session
+# transcript, failed 4 of 4 operator-resolved HARD_BLOCKs. All four quotes are GENUINE -- a
+# --dir scan of the 382-transcript corpus matches every one (control: an invented phrase
+# NOMATCHes, so the scan discriminates). Three of the four are AskUserQuestion option labels,
+# which is the shape a real adjudication takes when the lead offers choices.
+#
+# This is the same defect validate-adversarial-convergence.sh carries a dir arm for, in the
+# sibling that shares its citation predicate. Fixing one and not the other left the deadlock
+# reachable through the other door.
+#
 # USAGE
 #   validate-escalation-resolution.sh --escalations <pending.md> --sprint <N> [--transcript PATH]
+#   validate-escalation-resolution.sh --escalations <pending.md> --sprint <N> [--transcript-dir DIR]
 #   validate-escalation-resolution.sh --any-authorized <pending.md>
 #
 # EXIT
@@ -70,6 +91,7 @@ set -u
 ESCALATIONS=""
 SPRINT=""
 TRANSCRIPT=""
+TRANSCRIPT_DIR=""
 ANY_AUTHORIZED=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -77,6 +99,7 @@ while [ $# -gt 0 ]; do
     --escalations) ESCALATIONS="${2:-}"; shift 2 ;;
     --sprint)      SPRINT="${2:-}"; shift 2 ;;
     --transcript)  TRANSCRIPT="${2:-}"; shift 2 ;;
+    --transcript-dir) TRANSCRIPT_DIR="${2:-}"; shift 2 ;;
     --any-authorized) ANY_AUTHORIZED=1; ESCALATIONS="${2:-}"; shift 2 ;;
 # MODE_DISPATCH_END
     -h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
@@ -213,11 +236,23 @@ while IFS="$(printf '\t')" read -r header status authline; do
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
 
-  if [ -z "$TRANSCRIPT" ] || [ ! -r "$TRANSCRIPT" ]; then
+  # The corpus wins over the single file. A resolution OUTLIVES the session that recorded it,
+  # so the one transcript a caller can name is the least likely place the operator spoke.
+  # SCALARS, NOT AN ARRAY. `arr=()` then `${#arr[@]}` under `set -u` is an unbound-variable
+  # error on bash 3.2, which is what macOS ships and what this repo has already shipped a
+  # silent fail-open on once.
+  STEER_FLAG=""; STEER_ARG=""
+  if [ -n "$TRANSCRIPT_DIR" ] && [ -d "$TRANSCRIPT_DIR" ]; then
+    STEER_FLAG="--dir"; STEER_ARG="$TRANSCRIPT_DIR"
+  elif [ -n "$TRANSCRIPT" ] && [ -r "$TRANSCRIPT" ]; then
+    STEER_FLAG="--transcript"; STEER_ARG="$TRANSCRIPT"
+  fi
+  if [ -z "$STEER_FLAG" ]; then
     # Gate fails CLOSED: an operator-gated resolution cannot be accepted with no ground truth to
     # verify it against. (This runs at the gate; there is no fail-open hook tier here.)
     echo "FAIL: [$short] is $status and cites an operator, but no readable transcript was provided" >&2
-    echo "      (--transcript) to verify it. The gate cannot accept an unverifiable operator disposition." >&2
+    echo "      (--transcript-dir, or --transcript) to verify it. The gate cannot accept an" >&2
+    echo "      unverifiable operator disposition." >&2
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
   if [ ! -f "$STEER_SCRIPT" ]; then
@@ -225,7 +260,7 @@ while IFS="$(printf '\t')" read -r header status authline; do
     FAIL=1; FAILN=$((FAILN + 1)); continue
   fi
 
-  bash "$STEER_SCRIPT" --transcript "$TRANSCRIPT" --cite "$quote" --quiet >/dev/null 2>&1
+  bash "$STEER_SCRIPT" "$STEER_FLAG" "$STEER_ARG" --cite "$quote" --quiet >/dev/null 2>&1
   rc=$?
   if [ "$rc" -eq 2 ]; then
     echo "FAIL: [$short] operator authorization quotes \"${quote}\", which appears in NO genuine" >&2
