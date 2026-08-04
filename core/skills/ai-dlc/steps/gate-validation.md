@@ -709,11 +709,16 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   self-sufficient. This section also carries the **routing record**
   written once by `route.md` Step 6 and never rewritten after: the
   verbatim request and the routing signals Check 27 re-adjudicates —
-  `user_request_verbatim`, `bug_signal_present` (yes/no),
-  `carryover_or_sprint_signal_present` (yes/no), and `clarification_asked`
-  (yes/no/n-a). `user_request_verbatim` is the only on-disk copy of the
-  operator's original request; without it the fresh gate-adjudicator that
-  Check 27 escalates to cannot re-classify the routing decision.
+  `user_request_verbatim`, `user_request_cite`, `bug_signal_present`
+  (yes/no), `carryover_or_sprint_signal_present` (yes/no), and
+  `clarification_asked` (yes/no/n-a). `user_request_verbatim` is the only
+  on-disk copy of the operator's original request; without it the fresh
+  gate-adjudicator that Check 27 escalates to cannot re-classify the routing
+  decision. `user_request_cite` is the `SHA256:` of the
+  `operator-requests-history.md` entry it was copied from, or the literal
+  `none` — it is what distinguishes the operator's own bytes from a lead's
+  account of them, and a routing record whose verbatim field is a paraphrase,
+  a summary, or a pointer to another artifact cannot carry a resolving hash.
 - **Sprint Context** — sprint ID (or `none`); stories in scope with
   statuses, synced with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,

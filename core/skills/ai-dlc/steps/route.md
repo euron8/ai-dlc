@@ -402,9 +402,27 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
     branch from `git branch --show-current`; plus the **routing record**,
     which Check 27 re-adjudicates at the first planning gate:
     - `user_request_verbatim` — the operator's request text, verbatim.
-      Persist it because a fresh gate-adjudicator has no access to this
-      routing conversation and cannot re-classify what was never written
+      **Copy it out of the newest matching entry in
+      `_bmad-output/operator-requests-history.md`** — the fenced `text` block,
+      byte for byte. That file is written by the UserPromptSubmit hook before
+      any agent reads the request, so it is the operator's own bytes and not
+      an agent's account of them. Do not compose this field from memory, do
+      not summarize, and **do not write a pointer to another artifact in its
+      place**. Persist it because a fresh gate-adjudicator has no access to
+      this routing conversation and cannot re-classify what was never written
       to disk. `user_input` (Step 2) otherwise lives only in context.
+    - `user_request_cite` — the `SHA256:` value of that same entry, copied.
+      This is what makes the field above checkable: the hash resolves to a
+      hook-written record, and that record's body is independently citable
+      against the session transcript with
+      `validate-steering-budget.sh --cite`. Until this existed,
+      `user_request_verbatim` was prose the lead wrote about the request
+      rather than the request, and nothing could contradict it — a lead once
+      recorded it as a pointer to the PREVIOUS sprint's locked block, planned
+      a sprint sharing not one identifier with the ask, and passed four gates
+      green. **If no entry exists** — the hook is not installed, or the
+      request predates it — write `user_request_cite: none` and say which.
+      `none` is a gap a later check can count; a fabricated hash is not.
     - `bug_signal_present` — `yes`/`no`, as resolved in Step 2.
     - `carryover_or_sprint_signal_present` — `yes`/`no`, as resolved in Step 2.
     - `clarification_asked` — `yes`/`no`/`n-a`, as resolved in Step 4)

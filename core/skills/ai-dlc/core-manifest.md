@@ -145,6 +145,7 @@ core_manifest:
   - fixtures/apply-restamp-theirs/**
   - fixtures/askuserquestion-citation/**
   - fixtures/command-args-citation/**
+  - fixtures/operator-request-capture/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**

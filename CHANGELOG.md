@@ -34,6 +34,75 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.251.0] — 2026-08-04
+
+### The operator's request is now written down by the harness, not recounted by the lead
+
+`user_request_verbatim` in the pipeline snapshot is the field a fresh gate-adjudicator reads to
+re-classify the routing decision. It was prose the **lead** wrote about what the operator asked
+for. Nothing else produced it, so nothing could contradict it.
+
+On the reference consumer a lead recorded it as **a pointer to the previous sprint's locked
+block** — not the request, and not even a paraphrase of the request. It then planned three stories
+sharing not one identifier with what was actually asked, and passed four consecutive gates green.
+The operator's words existed: 1359 bytes, timestamped, naming six machine-readable identifiers.
+No artifact in the pipeline held them.
+
+`ai-dlc-pause.sh` is the only component in the system that sees an operator's message before any
+agent interprets it. It now writes it down.
+
+### The capture runs ABOVE the no-active-pipeline gate, and that placement is the release
+
+The hook's early exit skips when no snapshot exists, and its own comment names the case: *"the
+/ai-dlc invocation case: first message, no snapshot yet."* **That case is the sprint kickoff.**
+Capturing below the gate would miss the first request of every project — the one request no later
+artifact can reconstruct — while looking entirely correct, which is why the fixture's first
+assertion drives a project with no `_bmad-output/` at all and the mutant that reintroduces the
+gate is the one that proves it.
+
+### The command token is split off, because that is what makes the record citable
+
+The harness hands the hook the **raw typed text** (`/ai-dlc Sprint 300: ...`), while the session
+transcript stores the same message as an envelope whose `<command-args>` holds only the argument
+body. A record keeping the leading `/ai-dlc ` could not be cited against the transcript it came
+from. So the command token goes in the entry heading and the body is stored verbatim — verified
+end to end against the real S300 transcript: the captured body cites `MATCH
+2026-08-02T18:00:34.496Z`, and the same body with one word changed cites NOMATCH. This composes
+with v0.250.0; before that release neither form was citable at all.
+
+### Not a rename
+
+`user_request_verbatim` stays and gains a companion, `user_request_cite`, carrying the `SHA256:`
+of the entry the text was copied from (or the literal `none`, which is a countable gap — a
+fabricated hash is not). Renaming was considered and rejected: Check 27 classifies a routing
+decision **on the substance of the request**, so it needs the text, and the citation is a
+different job. Two fields, two jobs, and no broken joins across Check 14's schema, Check 27's
+body, and the `route-defect-classification` fixture.
+
+### Append-only by construction
+
+The file is `_bmad-output/operator-requests-history.md`. The suffix is load-bearing:
+`validate-artifact-budget.sh`'s `is_archive()` reads it, so there is no budget row, no rotation
+and no trim remedy. A provenance record that can be evicted to fit a budget is not a provenance
+record — and eviction with no durable home is a failure the same reference sprint suffered five
+times, twice losing the evicted content entirely.
+
+### Added
+
+- `core/fixtures/operator-request-capture/` — 14 assertions across two projects (one with no
+  pipeline, one live). Capture survives the no-snapshot gate; the body is the ask and not the
+  invocation; the command token is preserved in the heading; the SHA resolves to the body;
+  typed messages are captured and marked; empty, system-reminder-only and argument-less events
+  record nothing; the header seeds once; the pause flag still fires on a live pipeline. Plus an
+  unmutated control and two mutants — gating capture on a live pipeline, and dropping the
+  command-token split — each asserted to fail **only** its own assertion.
+- **`cmp -s` is not sufficient on its own, and this fixture is where that showed.** Mutant B's
+  first `sed` produced bytes that differed from the original and were *not a valid shell script*;
+  `cmp -s` passed it, the copy died before writing anything, and the absence scored as a kill. A
+  second attempt with `awk` matched two lines instead of one and broke a `case` arm the same way.
+  Both mutants now carry a `bash -n` validity gate beside the `cmp -s` difference gate: **cmp
+  proves a mutation happened, `bash -n` proves the mutant is still a program.**
+
 ## [0.250.0] — 2026-08-04
 
 ### The provenance verifier could not see a slash-command ask, so the sprint's own scope was the one thing no check could confirm
