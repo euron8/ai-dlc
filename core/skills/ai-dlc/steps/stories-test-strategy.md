@@ -317,6 +317,21 @@ citing a `CAP-<n>` that `SPEC.md` does not define — capability IDs are never
 renumbered, so a dangling reference is a typo or a stale copy, never a
 renumbering.
 
+**A story that genuinely delivers no capability declares that, rather than
+leaving the field blank.** `capabilities: []` on its own is an unexplained
+claim about the chain, and Check 30 FAILS it as one — distinctly from a story
+that carries no field at all, because those are different defects with
+different remedies. Say why instead:
+
+```
+capabilities: []
+capabilities_rationale: pipeline-infra only; implements no spec capability
+```
+
+That is a declared disposition, recorded in the gate log as a note. It is the
+same shape as Check 33's `NOT-IN-SCOPE` line: an explicit, visible, per-item
+disposition, which beats a blank nobody has to account for.
+
 For each story created, propagate the relevant locked requirements from
 the PRD's `LOCKED_REQUIREMENTS` block into the story file. Each story
 gets its own `LOCKED_REQUIREMENTS` block containing only the requirements

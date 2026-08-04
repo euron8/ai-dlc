@@ -2020,7 +2020,8 @@ retroactively spec-require a story written before the layer existed. Report
 `SKIPPED-PRE-ADOPTION s<story-sprint> < s<floor>` for those.
 
 **Check.** Run `scripts/ai-dlc/validate-spec-join.sh --spec <spec-folder>
---prd <prd> --story <each in-scope story>`, passing `--spine` with the
+--prd <prd> --story <each in-scope story>` (plus `--baseline <file>` if this project
+carries one), passing `--spine` with the
 `ARCHITECTURE-SPINE.md` path, `--spine-lint` with
 `lint_spine.py`'s JSON output and `--trace-verdict` with the
 `bmad-testarch-trace` gate decision. Exit 0 required.
@@ -2054,8 +2055,34 @@ CONCERNS. An absent or unreadable `gate_status` is DISARMED: `NOT_EVALUATED` run
 write no such file, and a gate that did not evaluate reads exactly like one that
 passed.
 
+**The story `capabilities:` field has THREE states, and they are three verdicts.** An
+empty field used to print *"carries no `capabilities:` frontmatter field"* — a sentence
+that is false whenever the field is sitting right there in the frontmatter. A wrong
+diagnosis on a hard block is how checks get turned off: the author reads it, looks at the
+field, and concludes the check is broken. Measured on the reference consumer, 3 of the 4
+in-scope stories were told a field they carry is absent.
+
+| State | Verdict |
+|---|---|
+| key absent | **FAIL** — nothing was claimed; add the field |
+| key present, empty, no `capabilities_rationale:` | **FAIL** — the story CLAIMS it implements no capability and does not say why. A different defect from a missing field, with a different remedy |
+| key present, empty, with `capabilities_rationale:` | **note** — a declared disposition, recorded in the gate log, not passed in silence |
+
+**`--baseline <file>` for adoption against an existing corpus, and it is a ledger, not a
+mute button.** Adopting this check inherits whatever orphans the chain already has — 15 in
+the reference consumer (5 `LR`→`CAP`, 10 `CAP`→`FR`), none of them caused by adopting it.
+The baseline names them, one namespaced key per line (`lr:` / `fr:` / `ad:` / `story:`,
+namespaced because joins (2) and (2a) both key on `CAP-<n>` and a bare id would suppress
+both on one line). **A baselined entry that does NOT reproduce is itself a FAIL** — the
+failure it excused is fixed, so the line now excuses nothing while standing ready to
+suppress the next real instance of that id, silently. That arm is what forces the line to
+be deleted when its cause is. The two borrowed verdicts are not baselineable: they publish
+no stable per-item key here, and muting another tool's finding from this side would be
+adopting a self-declared pass by omission.
+
 **Exit 2 is a FAIL, not a skip** — a zero-capability kernel, an absent
-`FR Coverage Map`, or an unreadable input closes every join vacuously.
+`FR Coverage Map`, or an unreadable input closes every join vacuously. So is an unreadable
+`--baseline`: a baseline this script cannot read is not an empty one.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a requirement that reaches no
 capability (a silent drop that leaves every downstream artifact internally

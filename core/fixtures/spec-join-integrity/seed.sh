@@ -88,6 +88,20 @@ printf -- '---\ncapabilities: [CAP-1, CAP-2]\n---\n# ok\n'  > "$ROOT/story-ok.md
 printf -- '---\ncapabilities: [CAP-9]\n---\n# dangling\n'   > "$ROOT/story-dangling.md"
 printf -- '---\nstory_id: s1\n---\n# no capabilities field\n' > "$ROOT/story-nofield.md"
 
+# --- the capabilities: TRICHOTOMY (v0.254.0) ----------------------------------
+# `story-nofield.md` above is the KEY-ABSENT arm. These are the other two. All three
+# used to print the SAME sentence -- "carries no 'capabilities:' frontmatter field" --
+# and for these two that sentence is factually false: the field is right there.
+printf -- '---\ncapabilities: []\n---\n# empty, unexplained\n' > "$ROOT/story-empty.md"
+printf -- '---\ncapabilities: []\ncapabilities_rationale: pipeline-infra only; implements no spec capability\n---\n# empty, declared\n' > "$ROOT/story-empty-declared.md"
+
+# --- baselines (v0.254.0) -----------------------------------------------------
+# LIVE: names the orphan-lr case's actual failure, so it suppresses and stays honest.
+printf '# pre-existing at adoption\nlr:LR-S300-2\n' > "$ROOT/baseline-live.txt"
+# STALE: a key nothing in this run produces. The failure it excused is gone, and the
+# entry would silently suppress the next real instance of that id.
+printf 'lr:LR-S300-2\nfr:CAP-404-GONE\n'            > "$ROOT/baseline-stale.txt"
+
 # borrowed verdicts.
 # The lint payloads are REAL `lint_spine.py` output, captured by running it. Its
 # envelope is {"ok","spine","total_findings","by_severity","findings":[{"category",

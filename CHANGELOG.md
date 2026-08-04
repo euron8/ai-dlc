@@ -34,6 +34,79 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.254.0] — 2026-08-04
+
+### Check 30 told three different stories the same false thing
+
+`validate-spec-join.sh`'s story arm reported an empty `capabilities:` frontmatter field as
+*"carries no `capabilities:` frontmatter field"*. That sentence is false whenever the field
+is present and empty — and **3 of the 4 in-scope stories in the reference consumer are
+exactly that shape.** Only one genuinely lacks the key.
+
+A wrong diagnosis on a hard block is how a check gets turned off. The author reads "carries
+no field", looks at the field sitting in the frontmatter, and concludes the check is broken
+— which, on that sentence, it is. The remedy it names does not apply and the real one is
+never stated.
+
+Three states, three verdicts:
+
+| State | Verdict |
+|---|---|
+| key absent | **FAIL** — nothing was claimed; add the field |
+| key present, empty, no `capabilities_rationale:` | **FAIL** — the story CLAIMS it implements no capability and does not say why. A different defect from a missing field, with a different remedy |
+| key present, empty, with `capabilities_rationale:` | **note** — a declared disposition, recorded, not passed in silence |
+
+The third is the same shape Check 33's `NOT-IN-SCOPE` disposition already establishes: an
+explicit, visible, per-item disposition beats a blank nobody has to account for.
+
+### `--baseline`, and why it is a ledger rather than a mute button
+
+Adopting this check against an existing corpus means inheriting whatever orphans the chain
+already has. Enumerated at HEAD in the reference consumer, the enforcer emits **19** FAILs:
+5 `LR`→`CAP` orphans, 10 `CAP`→`FR` orphans, and 4 on the story arm. The first **15** are
+pre-existing debt the check did not create; the 4 are this release's own subject and are
+deliberately not part of that set.
+
+`--baseline <file>` names the 15, one namespaced key per line — `lr:` / `fr:` / `ad:` /
+`story:`. The namespace is load-bearing: joins (2) and (2a) both key on `CAP-<n>`, so a bare
+`CAP-1` would suppress a capability missing its FR *and* the same capability missing its AD,
+on one line.
+
+**A baselined entry that does not reproduce is itself a FAIL.** Without that arm a baseline
+written once outlives the thing it excused — the orphan gets fixed, the line stays, and the
+next real instance of that id is silently suppressed by an entry whose cause is gone. It is
+a FAIL and not a note, because a note is what a stale baseline would accumulate for the rest
+of its life without anyone deleting a line.
+
+The two borrowed verdicts (`lint_spine.py`, `bmad-testarch-trace`) are **not** baselineable:
+they publish no stable per-item key here, and muting another tool's finding from this side
+would be adopting a self-declared pass by omission. An unreadable `--baseline` DISARMS
+(exit 2) — a baseline this script cannot read is not an empty one.
+
+### Fixture
+
+`core/fixtures/spec-join-integrity/` gains the three trichotomy stories, the two baselines,
+and four controls. **Exit code is the wrong instrument for two of the three states** —
+key-absent and empty-without-why both exit 1 before and after, so a fixture checking only
+`rc` scores a false pass against the collapsed version. Those assert on the sentence,
+including an over-fire control that the empty case is *not* told its field is absent.
+
+The pair that decides whether `--baseline` is a ledger: same tree, same failure, one file —
+suppressed when the cause is live, FAILED when it is gone. Either half alone is satisfied by
+a validator that always suppresses.
+
+Three mutants, each moving one arm, each guarded by `cmp -s` **and** `bash -n`; plus an
+unmutated control, since every mutant is a copy and a copy that misbehaves for any other
+reason makes all of them vacuous.
+
+### Measured, not assumed
+
+Check 30's scope floor is `s299` (`validate-spec-adoption.sh --verdict 300` → `IN-FORCE s300
+>= s299`), so the in-scope set is 4 of 991 stories. Control on that filter: only 235 stories
+carry a `sprint:` field at all, and the 756 without one top out at filename sprint 287 —
+below the floor, so none are wrongly excluded. Separately: **zero stories in the entire
+corpus carry a populated `capabilities:`.** Join (3) has never closed for any story anywhere.
+
 ## [0.253.0] — 2026-08-04
 
 ### Check 24 arm I — the adversarial cycle was never released more than once, and nothing counted
