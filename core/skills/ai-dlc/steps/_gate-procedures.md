@@ -279,6 +279,19 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
    | `RESTART_CYCLE` | abandon the series and start over | as above, **plus** the passes MOVED to an existing `archive:` dir |
    | `REOPEN_AFTER_MET` | the series had already stamped `EXIT_CONDITION_MET` and the artifact moved after it | sha changed; `scope_delta` names what moved |
 
+   **THE CYCLE GETS ONE SANCTIONED RESOLUTION; A SECOND MUST BE ANCHORED.** Arms C, D and E
+   each STOP the cycle and all three take this same exit, so a cycle stopped and released
+   repeatedly reads to every one of them as a cycle being legitimately resolved. Arm I counts
+   the records. Past the first, the newest one must declare `CUT_SCOPE` or `REVERT_REPAIR` —
+   the two kinds whose claim is checked against the bytes in the table above. A second
+   `CHANGE_APPROACH` or `RESTART_CYCLE` is the cycle trying again at the same size, nothing
+   can check the claim, and the hooks deny every dispatch until the kind changes.
+
+   The block lifts on the same pass the moment it does — it never denies the verification pass
+   a record was written to authorize — and it does not apply once the series stamps
+   `EXIT_CONDITION_MET`. If the operator judges a document genuinely needs more:
+   `AI_DLC_RESOLUTION_CEILING`.
+
    **`EXIT_CONDITION_MET` IS A FREEZE POINT, AND THE CYCLE IS ORDERED.** Rule 8's intensity
    arrow is a sequence — Party Mode → Advanced Elicitation → Adversarial Review — so
    elicitation runs BEFORE the convergence cycle, never after it. Once a series stamps

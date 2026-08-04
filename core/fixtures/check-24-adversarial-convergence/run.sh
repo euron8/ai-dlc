@@ -271,6 +271,122 @@ expect_state reopen-unrecorded s1-adversarial-p REOPENED  3 "the hooks must deny
 expect_state reopen-floor-pass s1-adversarial-p CONVERGED 0 "the floor pass must not be denied"
 expect_state reopen-recorded   s1-adversarial-p CONVERGED 0 "a declared re-open ran its sub-cycle to convergence -- never denied"
 echo
+# --- arm I: RESOLUTION CEILING -------------------------------------------------
+# The four cases carry the SAME five-pass series and differ only in the records beside
+# it. Any rung that reads the series cannot separate them; that is the point.
+expect_state ceiling-unanchored        s1-adversarial-p CEILING   3 "the exit taken TWICE, second release unanchored -- the hooks must deny"
+expect_state ceiling-anchored-release  s1-adversarial-p CONTINUE  0 "THE DOOR: same series, second release CUT_SCOPE (bytes fell) -- without this the arm wedges every twice-resolved cycle"
+expect_state ceiling-single-resolution s1-adversarial-p CONTINUE  0 "THE DECOY: ONE unanchored release is the SANCTIONED exit and must cost nothing"
+expect_state ceiling-converged         s1-adversarial-p CONVERGED 0 "two unanchored releases but the cycle TERMINATED -- no gate fails retroactively"
+
+expect ceiling-unanchored 1 "gate: a cycle released twice without an anchor does not pass" s1-adversarial-p
+expect ceiling-converged  0 "gate: it converged; the arm is suppressed by the terminal verdict" s1-adversarial-p
+expect_says ceiling-unanchored s1-adversarial-p "I-remedy" \
+  "I -- CEILING" "RELEASED too cheaply" "CUT_SCOPE" "REVERT_REPAIR"
+
+# I must PRE-EMPT D, for the same reason E does: a series told to "run another pass to a
+# clean verdict" has been handed the advice that produced the passes.
+ASSERTIONS=$((ASSERTIONS + 1))
+if bash "$VALIDATOR" --series "$ROOT/ceiling-unanchored/s1-adversarial-p" \
+     --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>&1 \
+   | grep -q "Either run another pass to a clean verdict"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s a CEILING series still got Check D generic advice. I must pre-empt D.\n' "ceiling-preempts-d"
+else
+  printf '  ok    %-28s I pre-empts D: the released-twice series is not told to run another pass\n' "ceiling-preempts-d"
+fi
+
+# --- MUTATION: each conjunct of arm I, one at a time ---------------------------
+# THE COPIES NEED A SIBLING. `STEER_SCRIPT` is resolved as `$(dirname "$0")/…`, so a
+# validator copied into $ROOT cannot find validate-steering-budget.sh, every
+# operator_authorization becomes UNVERIFIABLE, and --cycle-state FAILS OPEN on it. A
+# mutant that cannot check a citation is not testing this arm -- it is testing the copy.
+# Hence the sibling, and hence the unmutated control below, which must reproduce all four
+# real verdicts before any mutant's changed verdict is attributable to its mutation.
+cp "$(cd "$(dirname "$VALIDATOR")" && pwd)/validate-steering-budget.sh" "$ROOT/validate-steering-budget.sh" 2>/dev/null
+
+mstate() {  # mstate <script> <case-dir> -> the --cycle-state STATE
+  bash "$1" --series "$ROOT/$2/s1-adversarial-p" --cycle-state \
+    --transcript "$TRANSCRIPT" --transcript-dir "$ROOT" 2>/dev/null | cut -f1
+}
+
+CEIL_CASES="ceiling-unanchored ceiling-anchored-release ceiling-single-resolution ceiling-converged"
+CEIL_REAL="CEILING CONTINUE CONTINUE CONVERGED"
+
+# THE UNMUTATED CONTROL. A lone copy that dies sourcing or mis-resolves a sibling emits
+# nothing, and "no output" otherwise scores as a kill on every mutant below.
+CTRL="$ROOT/control-unmutated.sh"
+cp "$VALIDATOR" "$CTRL"
+ASSERTIONS=$((ASSERTIONS + 1))
+ctrl_got=""
+for c in $CEIL_CASES; do ctrl_got="$ctrl_got $(mstate "$CTRL" "$c")"; done
+if [ "$(echo $ctrl_got)" = "$(echo $CEIL_REAL)" ]; then
+  printf '  ok    %-28s %s\n' "CONTROL unmutated copy" "reproduces all four verdicts from \$ROOT, so a mutant's change is the mutation"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-28s got [%s] want [%s] -- the harness itself is what fails; every mutant below is vacuous\n' \
+    "CONTROL unmutated copy" "$(echo $ctrl_got)" "$(echo $CEIL_REAL)"
+fi
+
+# $1 label  $2 old-text  $3 new-text  $4 expected four states (space separated)
+# A mutant must fail ONLY its own assertion: two moved cases mean the conjuncts are
+# entangled and one of them is vacuous.
+mutate_ceiling() {
+  local label="$1" old="$2" new="$3" want="$4" got="" c
+  # `mut` on its own line: bash 3.2 expands every word of a `local` before assigning any
+  # of them, so `mut="$ROOT/mutant-$label.sh"` on the line above reads $label UNSET and
+  # dies under `set -u`.
+  local mut="$ROOT/mutant-$label.sh"
+  ASSERTIONS=$((ASSERTIONS + 1))
+  MUT_OLD="$old" MUT_NEW="$new" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$mut"
+  if cmp -s "$VALIDATOR" "$mut"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutation matched NOTHING -- this assertion proves nothing\n' "MUTATION $label"
+    return
+  fi
+  # cmp proves bytes moved; bash -n proves the mutant is still a PROGRAM. A mutant that
+  # dies on a syntax error emits nothing, and nothing scores as a kill.
+  if ! bash -n "$mut" 2>/dev/null; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s the mutant is not a valid shell script -- its silence is not a kill\n' "MUTATION $label"
+    return
+  fi
+  for c in $CEIL_CASES; do got="$got $(mstate "$mut" "$c")"; done
+  if [ "$(echo $got)" = "$(echo $want)" ]; then
+    printf '  ok    %-28s [%s]\n' "MUTATION $label" "$(echo $got)"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-28s got [%s] want [%s]\n' "MUTATION $label" "$(echo $got)" "$(echo $want)"
+  fi
+}
+
+# (1) The KIND conjunct. Anchored on `case "$CEILING_KIND" in`, which is UNIQUE --
+#     `CHANGE_APPROACH|RESTART_CYCLE)` alone appears TWICE in this file (validate_record's
+#     F5 arm is the other), and a bare replace would silently mutate that instead and
+#     come out green here.
+mutate_ceiling kind \
+  'case "$CEILING_KIND" in
+    CHANGE_APPROACH|RESTART_CYCLE)' \
+  'case "$CEILING_KIND" in
+    *)' \
+  "CEILING CEILING CONTINUE CONVERGED"
+
+# (2) The COUNT conjunct: the sanctioned single resolution stops being free.
+mutate_ceiling count \
+  'if [ "$CEILING_COUNT" -gt "$RESOLUTION_CEILING" ] && [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ]; then' \
+  'if [ "$CEILING_COUNT" -gt 0 ] && [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ]; then' \
+  "CEILING CONTINUE CEILING CONVERGED"
+
+# (3) The arm itself: no record is ever counted, so it can never fire. This is the mutant
+#     that proves arm I can fire at all -- without it the three cases above are consistent
+#     with an arm that is simply absent.
+mutate_ceiling counter \
+  '    CEILING_COUNT=$((CEILING_COUNT + 1))' \
+  '    : ' \
+  "CONTINUE CONTINUE CONTINUE CONVERGED"
+
+echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."
   exit 1

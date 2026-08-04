@@ -964,6 +964,115 @@ if [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ] && [ "$STALL_PEAK" -ge "$STALL_TH
 fi
 
 # =============================================================================
+# I. RESOLUTION CEILING -- the sanctioned exit, taken more than once.
+# =============================================================================
+# WHAT ARM E CANNOT SEE, BY CONSTRUCTION. Arms C, D and E all stop a cycle, and all
+# three take the SAME exit: a resolution record clears the state and the verification
+# pass resumes. `terminal_record_resolves` is what suppresses them. So a cycle that is
+# stopped, released, stopped again and released again presents to every one of those
+# rungs as a cycle that keeps being legitimately resolved. The rung fires each time and
+# is satisfied each time. Nothing counts how often.
+#
+# THIS ARM WAS SPECIFIED AS A PASS CEILING AND THE MEASUREMENT REFUTED THAT. Across the
+# reference consumer's 80 series, a ceiling of 4 passes fires 3 times: once on a series
+# where arm E ALREADY fires at the same pass (0 CRITICAL / 1,1,2 MAJOR over p4-p6 -- the
+# stall run is never reset, so E is live at p5, measured `rc=3 STALLED`), and twice on
+# cycles that converged one pass later. One duplicate, two false fires, no unique catch.
+# A pass count was the wrong noun. The 7-pass series did not run long because nothing
+# stopped it -- it was stopped and adjudicated THREE times, and each adjudication cited
+# operator words that pass --cite. What was unbounded was the RELEASE, not the cycle.
+#
+# THE SPLIT IS NOT A JUDGMENT CALL -- IT IS THIS FILE'S OWN, at the CHANGE_APPROACH arm
+# of validate_record: "if CHANGE_APPROACH + RESTART_CYCLE exceed CUT_SCOPE +
+# REVERT_REPAIR across two consecutive sprints, they are being used as an escape hatch
+# and need an anchor." That tightening condition was written down and never evaluated.
+# This arm is its per-series half; the cross-sprint count it actually describes is a
+# different mechanism and is NOT claimed here.
+#
+#   ANCHORED   CUT_SCOPE     -- bytes must FALL (F5). REVERT_REPAIR -- artifact_sha_after
+#              must match a sha an EARLIER PASS NOTARIZED (F5). Neither can be obtained
+#              by relabelling a field, which is what makes them a release rather than a
+#              second escape hatch.
+#   UNANCHORED CHANGE_APPROACH, RESTART_CYCLE -- "no byte-level predicate exists", as
+#              F5 says out loud. A second one of these is the cycle trying again at the
+#              same size, which is the shape that does not terminate.
+#
+# WHY IT DOES NOT WEDGE, WHICH IS THE WHOLE DESIGN. The obvious form -- "more than one
+# record -> exit 3" -- denies the verification pass the SECOND record exists to
+# authorize, at the moment it is written. That is v0.247.0/v0.248.0's deadlock reopened
+# one arm over, and it is why the predicate keys on the KIND of the newest record rather
+# than on the count alone: the release is always available, always one field, and
+# arithmetically closed. On the measured series the operator supplied CUT_SCOPE one pass
+# later of their own accord; this arm asks for it at the pass where the second
+# unanchored release was written instead.
+#
+#   Failure caught: a cycle takes the sanctioned exit repeatedly, each time with a kind
+#     nothing can check, and every rung reports RESOLVED.
+#   Measurement: 6 resolution records across 809 planning artifacts; exactly one series
+#     holds more than one, and it is the 20.3-hour architecture cycle -- 1 catch, 0 false
+#     fires over the whole corpus.
+#   False-positive cost: one operator turn, spent choosing an anchored kind.
+#   Removal condition: retire when two consecutive sprints record zero series holding
+#     more than one valid resolution record.
+RESOLUTION_CEILING="${AI_DLC_RESOLUTION_CEILING:-1}"
+CEILING_LIVE=0
+CEILING_COUNT=0
+CEILING_KIND=""
+CEILING_REC=""
+CEILING_AT=""
+if [ "$N" -gt 0 ]; then
+  ceil_top=-1
+  for ceil_rec in $(ls "$(dirname "${P_FILE[0]}")"/*-resolution-p*.md 2>/dev/null); do
+    # Records for OTHER series share the directory. Bind each one to a pass in THIS
+    # series by its own `resolves:` target; an unbindable record is not ours to count.
+    ceil_target="$(basename "$(record_field "$ceil_rec" 'resolves')")"
+    [ -n "$ceil_target" ] || continue
+    ceil_idx=-1
+    for ((ci = 0; ci < N; ci++)); do
+      if [ "$(basename "${P_FILE[$ci]}")" = "$ceil_target" ]; then ceil_idx=$ci; break; fi
+    done
+    [ "$ceil_idx" -ge 0 ] || continue
+    # Only a VALID record counts. An invalid one is arm F's failure, not a release, and
+    # counting it here would fail a cycle twice for one defect.
+    validate_record "$ceil_rec" "${P_FILE[$ceil_idx]}" "$ceil_idx" || continue
+    CEILING_COUNT=$((CEILING_COUNT + 1))
+    if [ "$ceil_idx" -gt "$ceil_top" ]; then
+      ceil_top="$ceil_idx"
+      CEILING_KIND="$(record_field "$ceil_rec" 'resolution')"
+      CEILING_REC="$ceil_rec"
+      CEILING_AT="$(basename "${P_FILE[$ceil_idx]}")"
+    fi
+  done
+fi
+# Suppressed by convergence for the same reason arm E is: this arm exists to stop cycles
+# that do not terminate, not to punish one that did. A gate over a converged series never
+# fires it, so no already-shipped cycle fails retroactively.
+if [ "$CEILING_COUNT" -gt "$RESOLUTION_CEILING" ] && [ "$LAST_VERDICT" != "EXIT_CONDITION_MET" ]; then
+  case "$CEILING_KIND" in
+    CHANGE_APPROACH|RESTART_CYCLE)
+      CEILING_LIVE=1
+      err "I -- CEILING" "this series has taken the sanctioned resolution exit $CEILING_COUNT times
+      (ceiling: $RESOLUTION_CEILING), and the most recent release -- $(basename "$CEILING_REC"), resolving
+      $CEILING_AT -- declares '$CEILING_KIND', which no byte-level predicate can check.
+      THE CYCLE IS NOT BEING STOPPED TOO LATE. It is being RELEASED too cheaply. Arms C, D
+      and E each stop this series and each is satisfied by a record; none of them counts how
+      many. The divergence contract sanctions ONE stop-adjudicate-resolve-verify per cycle.
+      Beyond it, 'change the approach' is the cycle trying again at the same size, and that
+      is the shape that does not terminate.
+      ANOTHER UNANCHORED RESOLUTION IS NOT THE REMEDY. Re-adjudicate to a kind that closes
+      by arithmetic, and the block lifts on the same pass:
+        CUT_SCOPE      -- the artifact must SHRINK, with 'scope_delta:' naming what went.
+                          This is the one the measured instance reached on its own, one
+                          pass later than here.
+        REVERT_REPAIR  -- 'artifact_sha_after:' must match bytes an EARLIER PASS in this
+                          series notarized. A revert lands on a state that was reviewed.
+      Neither can be obtained by editing the kind field, which is exactly why they are the
+      release and '$CEILING_KIND' is not.
+      (Operator override, for a document that genuinely needs it: AI_DLC_RESOLUTION_CEILING.)" ;;
+  esac
+fi
+
+# =============================================================================
 # J. RE-OPEN -- a pass ran after the series had already stamped EXIT_CONDITION_MET.
 # =============================================================================
 # THIS IS ARM F GENERALISED, AND ARM F SHOULD HAVE CAUGHT IT. Arm F's rule is that a
@@ -1034,6 +1143,13 @@ if [ "$CYCLE_STATE" -eq 1 ]; then
   RC=0
   if [ "$LAST_VERDICT" = "EXIT_CONDITION_MET" ]; then
     STATE="CONVERGED"
+  elif [ "$CEILING_LIVE" -eq 1 ]; then
+    # BEFORE the divergence and stall branches, and that ordering is the arm. Both of
+    # those consult RESOLVED_TERMINAL, which is TRUE here by construction -- a record
+    # exists, that is the whole finding -- so either branch reached first would report
+    # RESOLVED and the arm would never speak. A rung placed after the thing it polices
+    # cannot fire, and this file already paid for that once (arm E inside arm D's case).
+    STATE="CEILING"; RC=3
   elif [ "$LAST_VERDICT" = "DIVERGENT_HARD_BLOCK" ] || [ "$C_DIVERGED" -eq 1 ]; then
     if [ "$RESOLVED_TERMINAL" -eq 1 ]; then
       STATE="RESOLVED"
@@ -1171,7 +1287,7 @@ case "$LAST_VERDICT" in
   *)
     # E has already fired above if it applies; do not also hand this shape D's generic
     # "run another pass" advice, which on a repair-induced plateau IS the defect.
-    if [ "$STALL_LIVE" -eq 1 ]; then
+    if [ "$STALL_LIVE" -eq 1 ] || [ "$CEILING_LIVE" -eq 1 ]; then
       :
     elif [ "$SCOPE_GREW" -gt 0 ]; then
       # The cycle is not failing to converge. It is being asked to converge on a

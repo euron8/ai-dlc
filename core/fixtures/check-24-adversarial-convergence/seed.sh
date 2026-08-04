@@ -513,3 +513,92 @@ pass "$TARGET/reopen-recorded/s1-adversarial-p3.md" 3 1 2 1 EXIT_CONDITION_NOT_M
 pass "$TARGET/reopen-recorded/s1-adversarial-p4.md" 4 0 0 1 EXIT_CONDITION_MET         0 ccc3
 repair "$TARGET/reopen-recorded/s1-brief-repair-p1.md"
 repair "$TARGET/reopen-recorded/s1-brief-repair-p3.md"
+
+# =============================================================================
+# ARM I -- RESOLUTION CEILING: the sanctioned exit, taken more than once.
+# =============================================================================
+# All four cases carry the SAME five passes and differ only in the resolution records
+# beside them. That is deliberate and it is the assertion: arms C, D and E all read the
+# series, and the series is identical across every case here. Only a rung that reads the
+# RECORDS can separate them, which is why neutralizing arm I collapses them together.
+#
+# Each series takes the exit TWICE -- p2 diverges and is resolved, p4 diverges and is
+# resolved -- while the divergence contract sanctions ONE. Every record is VALID: this is
+# not a malformed-record case (that is `stalled-record-invalid`), it is the sanctioned
+# path used repeatedly, which every other rung reports as RESOLVED.
+
+# --- ceiling-unanchored: THE CATCH -------------------------------------------
+# Both releases declare CHANGE_APPROACH -- the kind F5 says out loud "cannot be anchored
+# arithmetically". Two unanchored releases and the cycle is still not converged.
+mkdir -p "$TARGET/ceiling-unanchored"
+pass "$TARGET/ceiling-unanchored/s1-adversarial-p1.md" 1 2 1 3 EXIT_CONDITION_NOT_MET 2 c001
+pass "$TARGET/ceiling-unanchored/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 c002
+record "$TARGET/ceiling-unanchored/s1-resolution-p2.md" \
+  s1-adversarial-p2.md CHANGE_APPROACH c002 c003 4000 4100 \
+  "reframed the disputed section" \
+  '2026-07-12T03:00:00Z | "Revert the p1 to p2 repair wholesale"'
+pass "$TARGET/ceiling-unanchored/s1-adversarial-p3.md" 3 1 1 2 EXIT_CONDITION_NOT_MET 1 c003 s1-resolution-p2.md
+pass "$TARGET/ceiling-unanchored/s1-adversarial-p4.md" 4 2 1 2 DIVERGENT_HARD_BLOCK   2 c004
+record "$TARGET/ceiling-unanchored/s1-resolution-p4.md" \
+  s1-adversarial-p4.md CHANGE_APPROACH c004 c005 4100 4200 \
+  "reframed it again" \
+  '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
+pass "$TARGET/ceiling-unanchored/s1-adversarial-p5.md" 5 1 1 2 EXIT_CONDITION_NOT_MET 1 c005 s1-resolution-p4.md
+
+# --- ceiling-anchored-release: THE DOOR --------------------------------------
+# BYTE-IDENTICAL passes to the case above; the ONLY difference on disk is that the
+# second release declares CUT_SCOPE, whose bytes must FALL (4100 -> 3900) and cannot be
+# obtained by editing the kind field.
+#
+# WITHOUT THIS CASE THE ARM HAS NO EXIT AND WEDGES EVERY TWICE-RESOLVED CYCLE -- the
+# deadlock v0.247.0/v0.248.0 fixed for the stall path, reopened one arm over. It is here
+# for the same reason `divergent-resolved` is here for arm C.
+mkdir -p "$TARGET/ceiling-anchored-release"
+pass "$TARGET/ceiling-anchored-release/s1-adversarial-p1.md" 1 2 1 3 EXIT_CONDITION_NOT_MET 2 c001
+pass "$TARGET/ceiling-anchored-release/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 c002
+record "$TARGET/ceiling-anchored-release/s1-resolution-p2.md" \
+  s1-adversarial-p2.md CHANGE_APPROACH c002 c003 4000 4100 \
+  "reframed the disputed section" \
+  '2026-07-12T03:00:00Z | "Revert the p1 to p2 repair wholesale"'
+pass "$TARGET/ceiling-anchored-release/s1-adversarial-p3.md" 3 1 1 2 EXIT_CONDITION_NOT_MET 1 c003 s1-resolution-p2.md
+pass "$TARGET/ceiling-anchored-release/s1-adversarial-p4.md" 4 2 1 2 DIVERGENT_HARD_BLOCK   2 c004
+record "$TARGET/ceiling-anchored-release/s1-resolution-p4.md" \
+  s1-adversarial-p4.md CUT_SCOPE c004 c005 4100 3900 \
+  "dropped the contested clause" \
+  '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
+pass "$TARGET/ceiling-anchored-release/s1-adversarial-p5.md" 5 1 1 2 EXIT_CONDITION_NOT_MET 1 c005 s1-resolution-p4.md
+
+# --- ceiling-single-resolution: THE DECOY ------------------------------------
+# ONE unanchored release, still unconverged. This is the SANCTIONED exit, and it must
+# cost nothing. A naive "an unanchored resolution is suspicious" reading fails it and
+# turns the contract's own single sanctioned resolution into a violation.
+mkdir -p "$TARGET/ceiling-single-resolution"
+pass "$TARGET/ceiling-single-resolution/s1-adversarial-p1.md" 1 2 1 3 EXIT_CONDITION_NOT_MET 2 c001
+pass "$TARGET/ceiling-single-resolution/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 c002
+record "$TARGET/ceiling-single-resolution/s1-resolution-p2.md" \
+  s1-adversarial-p2.md CHANGE_APPROACH c002 c003 4000 4100 \
+  "reframed the disputed section" \
+  '2026-07-12T03:00:00Z | "Revert the p1 to p2 repair wholesale"'
+pass "$TARGET/ceiling-single-resolution/s1-adversarial-p3.md" 3 1 1 2 EXIT_CONDITION_NOT_MET 1 c003 s1-resolution-p2.md
+
+# --- ceiling-converged: SUPPRESSED BY THE TERMINAL VERDICT -------------------
+# The `ceiling-unanchored` series plus a sixth pass that converges. Two unanchored
+# releases, and the arm stays silent -- it exists to stop cycles that do not terminate,
+# not to punish one that did. Without this, every already-shipped cycle that used the
+# exit twice would fail its gate retroactively.
+mkdir -p "$TARGET/ceiling-converged"
+pass "$TARGET/ceiling-converged/s1-adversarial-p1.md" 1 2 1 3 EXIT_CONDITION_NOT_MET 2 c001
+pass "$TARGET/ceiling-converged/s1-adversarial-p2.md" 2 3 1 2 DIVERGENT_HARD_BLOCK   3 c002
+record "$TARGET/ceiling-converged/s1-resolution-p2.md" \
+  s1-adversarial-p2.md CHANGE_APPROACH c002 c003 4000 4100 \
+  "reframed the disputed section" \
+  '2026-07-12T03:00:00Z | "Revert the p1 to p2 repair wholesale"'
+pass "$TARGET/ceiling-converged/s1-adversarial-p3.md" 3 1 1 2 EXIT_CONDITION_NOT_MET 1 c003 s1-resolution-p2.md
+pass "$TARGET/ceiling-converged/s1-adversarial-p4.md" 4 2 1 2 DIVERGENT_HARD_BLOCK   2 c004
+record "$TARGET/ceiling-converged/s1-resolution-p4.md" \
+  s1-adversarial-p4.md CHANGE_APPROACH c004 c005 4100 4200 \
+  "reframed it again" \
+  '2026-07-12T05:00:00Z | "Cut the claim and re-verify"'
+pass "$TARGET/ceiling-converged/s1-adversarial-p5.md" 5 1 1 2 EXIT_CONDITION_NOT_MET 1 c005 s1-resolution-p4.md
+pass "$TARGET/ceiling-converged/s1-adversarial-p6.md" 6 0 0 1 EXIT_CONDITION_MET      0 c006
+repair "$TARGET/ceiling-converged/s1-brief-repair-p5.md"
