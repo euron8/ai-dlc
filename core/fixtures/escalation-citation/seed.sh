@@ -55,4 +55,28 @@ cat > "$ROOT/silent.jsonl" <<'JSONL'
 {"type":"assistant","timestamp":"2026-07-12T02:30:00Z","message":{"content":[{"type":"text","text":"Two HARD_BLOCKs open; pausing for your adjudication."}]}}
 JSONL
 
+# --- the CROSS-SESSION corpus ---------------------------------------------------------------
+# A sprint spans sessions. The operator adjudicates on Monday (spoke.jsonl) and the gate re-runs
+# on Friday, when `transcript_path` names Friday's session (gate.jsonl) -- which by construction
+# does not contain Monday's words. A single-file check calls the honest lead a forger and stops
+# the gate; the corpus is where the citation actually lives.
+mkdir -p "$ROOT/corpus"
+cat > "$ROOT/corpus/spoke.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-12T03:00:00Z","message":{"content":"Cut the contested clause and proceed to stories."}}
+JSONL
+cat > "$ROOT/corpus/gate.jsonl" <<'JSONL'
+{"type":"user","timestamp":"2026-07-15T09:00:00Z","message":{"content":"/ai-dlc resume"}}
+{"type":"assistant","timestamp":"2026-07-15T09:01:00Z","message":{"content":[{"type":"text","text":"Resuming at the planning gate."}]}}
+JSONL
+
+CITE_CROSS='2026-07-12T03:00:00Z | "Cut the contested clause and proceed to stories."'
+CITE_CROSS_FAKE='2026-07-12T03:00:00Z | "zzz no operator ever typed this phrase zzz"'
+
+# (h) S50 RESOLVED citing a GENUINE operator message that lives in a session the gate cannot name.
+: > "$ROOT/pending-crosssession.md"; entry "$ROOT/pending-crosssession.md" S50-ITEM-6 RESOLVED "$CITE_CROSS"
+
+# (i) S50 RESOLVED citing words no operator typed ANYWHERE in the corpus. The corpus arm must not
+#     widen into fail-open: scanning more sessions must never turn a fabrication into a pass.
+: > "$ROOT/pending-crossfake.md";    entry "$ROOT/pending-crossfake.md"    S50-ITEM-7 RESOLVED "$CITE_CROSS_FAKE"
+
 printf '%s\n' "$ROOT"
