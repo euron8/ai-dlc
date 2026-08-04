@@ -175,7 +175,11 @@ script names per artifact — they are not interchangeable:
   fidelity-critical rewrite; it is supervised, never automatic).
 - `rotate` → a rotation was **missed**. Move the epoch to a dated archive
   (Rule 25(c)). Never rewrite a log.
-- `trim` → trim `pipeline-snapshot.md` to its seven-section schema (Rule 25(a)).
+- `trim` → **move** the superseded content verbatim to
+  `pipeline-snapshot-history.md` (write-only, Rule 25(a)), **then** delete it from
+  `pipeline-snapshot.md`. Never delete it outright. The live file keeps all seven
+  sections: a section is trimmed by moving its superseded entries out, never by
+  dropping the section.
 
 Then re-run the script. It must exit 0 before the sprint proceeds.
 

@@ -148,6 +148,7 @@ core_manifest:
   - fixtures/operator-request-capture/**
   - fixtures/request-coverage/**
   - fixtures/scope-confirmation/**
+  - fixtures/snapshot-conservation/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**

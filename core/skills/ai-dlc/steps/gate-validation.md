@@ -60,7 +60,7 @@ planning gate that edits `scripts/*.sh`.
 | Gate type      | Required checks                                                 |
 |----------------|-----------------------------------------------------------------|
 | universal      | 1, 2, 2a, 3, 4, 7, 12, 13, 14, 15, 16, 25, 26, H1, H2, failure  |
-| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34                          |
+| planning       | 1c, 17, 20, 23, 24, 27, 28, 29, 32, 33, 34, 35                      |
 | story          | 3a, 3b, 5, 17, 24, 30, 31                                       |
 | implementation | 5, 6, 8, 9, 10, 11, 11a, 19, 22                                 |
 | sprint-review  | 18, 21                                                          |
@@ -2281,6 +2281,60 @@ field is written once by `route.md` Step 6 and never rewritten, so the check rea
 back one line the router already had to write. Removal condition: retire when the
 scope confirmation becomes a harness-enforced precondition of loading the first
 planning step, so a sprint cannot reach a planning gate without it.
+
+### 35. Snapshot content that left the file went somewhere (all planning gates).
+<!-- CHECK_LOADED: 35 -->
+
+**Check.** Run `scripts/ai-dlc/validate-snapshot-conservation.sh`; exit 0 required.
+It diffs `pipeline-snapshot.md` from the last resolvable gate sha in
+`gate-metrics.jsonl` to the working tree, and reports every substantive line that
+left the file and is present in no tracked markdown file anywhere in the
+repository. At or above the floor of 40 destroyed lines it FAILS and names them.
+
+**What this catches.** A trim that deleted instead of moving. Rule 25(a) requires
+superseded snapshot content to move to `pipeline-snapshot-history.md`; nothing
+verified that it did.
+
+**Why the byte budget cannot answer this.** `validate-artifact-budget.sh` measures
+SIZE, and a snapshot that got smaller reads identically whether its content was
+relocated or dropped. The two remedies are the same remedy unless something checks.
+
+**Why the predicate is survival, not coverage.** A join requiring history additions
+to match snapshot deletions was measured against the reference consumer and does
+not work: six of the seven largest evictions wrote to the history file in the same
+commit, and four of those six still destroyed 75% or more of what they removed. The
+question Rule 25(a) asks is whether the text still exists, so that is the question
+this asks.
+
+**The floor is measured, not chosen.** Per-commit destroyed-line counts in the
+reference corpus run 1..35 and then jump to 62, so any floor in 36..62 selects the
+same set. Rewording lands below it; a trim that deleted a section lands above it.
+Override `AI_DLC_SNAPSHOT_CONSERVATION_FLOOR`. **A reworded line reads as destroyed
+here** — that is the false-positive class, and the floor is what bounds it.
+
+**Exit 2 is a FAIL.** No git history, or a `gate-metrics.jsonl` that exists and
+cannot be parsed, means the verdict would be about nothing. **NOT-APPLICABLE is
+exit 0 and prints why**: no snapshot, no metrics file at all, or no recorded gate
+sha this repository can resolve. `base_sha`, `lines_removed` and `lines_destroyed`
+print on every path, so a run that examined nothing cannot read like a run that
+found nothing.
+
+**On FAIL, recover from git — do not re-author.** `git show <base_sha>:<snapshot
+path>` holds the text verbatim; append the named lines to
+`pipeline-snapshot-history.md`. The history file is append-only, so adding to it
+cannot break a later read.
+
+Fixture: `tests/fixtures/snapshot-conservation/`.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: a gate passing after the
+sprint's own decision record was deleted rather than archived — measured at 2,141
+of 2,524 removed lines destroyed across one sprint, including its HARD_BLOCK
+resolutions and operator override citations. False-positive cost: a rewrite that
+rewords more than 40 substantive lines between two gates, which the reference
+corpus shows happening in 3 of 9 gate intervals, all three of them genuine
+destruction. Removal condition: retire when snapshot trimming is performed by a
+script that writes both files in one operation, making the lead unable to delete
+without moving.
 
 ## Gate Failure
 <!-- CHECK_LOADED: failure -->

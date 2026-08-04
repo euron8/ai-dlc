@@ -678,6 +678,39 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/scope-confirmation]
 
+  - id: "35"
+    title: Snapshot content that left the file went somewhere
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-snapshot-conservation.sh
+    call_sites:
+      - site: gate-validation.md Check 35
+        posture: FAILS the gate (exit 0 required; exit 2 is a FAIL because a check that
+          could not evaluate has not passed)
+        why: Rule 25(a) says superseded snapshot content MOVES to a history file and is
+          never deleted, and nothing verified the move. Every mechanism around that rule
+          measures the file's SIZE, and a file that got smaller looks identical whether
+          the bytes were relocated or dropped — so validate-artifact-budget.sh passes
+          either way. Measured in the reference consumer over one sprint: of 2,524
+          substantive lines removed from the snapshot, 2,141 exist nowhere in the
+          repository, and they are the sprint's own gate dispositions, operator override
+          citations and adversarial verdicts. The obvious join — deletions must be
+          matched by history additions — was measured and REFUTED: six of the seven
+          largest evictions did write to the history file in the same commit and four of
+          those still destroyed 75% or more, the clearest deleting 244 lines, moving 61,
+          and leaving a note saying the content had been moved and could be read there.
+          The predicate is therefore survival, not coverage. The floor of 40 is read off
+          a measured bimodal distribution rather than chosen: per-commit destroyed counts
+          run 1..35 and then jump to 62, so any floor in 36..62 selects the same commits.
+          Replayed across 9 gate intervals it fires on 3, covering 94% of all destroyed
+          lines, while the two LARGEST removals (551 and 452 lines) pass because their
+          content was genuinely conserved — it discriminates a bulk move from a bulk
+          deletion rather than flagging large diffs.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/snapshot-conservation]
+
 
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness
