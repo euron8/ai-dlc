@@ -1443,9 +1443,13 @@ resolution record's `operator_authorization` against ground truth; the gate **fa
 if a resolution cites an operator message the corpus does not contain — and fails closed
 too if `--transcript` is omitted, so a forgotten flag cannot silently disarm the check. It
 reads the `findings_critical` / `findings_major` / `artifact_sha` / `verdict` fields of every
-pass in the series (mapping in `team-roles/adversary.md`) and enforces eight arms:
+pass in the series (mapping in `team-roles/adversary.md`) and enforces ten arms:
 **A** VOCABULARY, **B** CONSISTENCY, **C** DIVERGENCE (scope-relative), **D** TERMINAL,
-**E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD. Each arm emits its own named failure
+**E** STALL, **F** RESOLUTION, **G** CHRONOLOGY, **H** REPAIR-RECORD, **I** RESOLUTION
+CEILING, **J** RE-OPEN. (This list is hand-maintained and nothing joins it to the script's
+own `err` labels, so it can drift — and had: it read "eight arms: A–H" for several releases
+while the script also carried arm J.)
+Each arm emits its own named failure
 with the offending pass and the concrete counts — `err "C -- DIVERGENCE" "<file> declares
 findings_critical_prior_scope=N but ..."` — so the remedy arrives with the verdict and is
 not restated here. Arm F is why `--transcript` is mandatory.
@@ -1475,6 +1479,19 @@ and the gate can never pass. (Freezing IS the remedy for a **moving artifact** �
 D's scope-grew branch. Different failure, opposite remedy; conflating them is what
 parked a live pipeline for a day.)
 
+**The cycle gets ONE sanctioned resolution (arm I).** Arms C, D and E each STOP a cycle,
+and all three take the same exit — a resolution record — so a cycle stopped and released
+repeatedly presents to every one of them as a cycle being legitimately resolved. Nothing
+counted how often. Arm I does: past the first, the newest record must declare a kind whose
+claim is checked against the bytes — `CUT_SCOPE` (the artifact must shrink) or
+`REVERT_REPAIR` (`artifact_sha_after` must match a sha an earlier pass notarized).
+`CHANGE_APPROACH` and `RESTART_CYCLE` cannot be anchored arithmetically, as arm F5 says of
+them, so a second one of those is the cycle trying again at the same size. The block lifts
+on the same pass the moment the kind changes — it never denies the verification pass a
+record was written to authorize — and it is suppressed entirely once the series stamps
+`EXIT_CONDITION_MET`, so no converged cycle fails a gate retroactively. Operator override:
+`AI_DLC_RESOLUTION_CEILING`.
+
 **The repair between passes is delegated and recorded (arm H).** A converging series
 proves findings FELL, which proves a repair happened — but not that a `remediator` did
 it. `carry-over-evaluation.md` §3a fences repair to a subagent (*"the lead does not
@@ -1494,10 +1511,15 @@ verification pass → MET must PASS: it is the sanctioned exit, and if it goes r
 cycle has no way out of a hard block). Arm H adds a **differential**: `repaired-delegated`
 and `repaired-inline-no-record` carry byte-identical pass series and differ only in whether
 the repair records exist on disk, so a validator that reads the series instead of the record
-cannot pass the fixture.
+cannot pass the fixture. Arm I adds a four-case set on ONE series: `ceiling-unanchored`
+(released twice, second release `CHANGE_APPROACH` — CEILING/3), `ceiling-anchored-release`
+(the same passes, second release `CUT_SCOPE` — CONTINUE/0, and **without it the arm has no
+exit and wedges every twice-resolved cycle**), `ceiling-single-resolution` (the sanctioned
+one, which must cost nothing), and `ceiling-converged` (suppressed by the terminal verdict).
 
 **PASS:** exit 0. **FAIL:** exit 1 — a pass with no verdict, a verdict
-contradicting its residue, an unescalated divergent pass, or a series whose last
+contradicting its residue, an unescalated divergent pass, a series released more than
+once without an anchored kind, or a series whose last
 pass is not `EXIT_CONDITION_MET`.
 
 **Minimum mechanism (Rule 26(c)).** Failure caught: a planning gate passing over
@@ -1512,7 +1534,8 @@ nothing it has not already computed. Arm H's own contract (existence + structure
 authorship) is stated at its block in `validate-adversarial-convergence.sh`. Removal
 condition: retire once the provenance block is GENERATED from the findings table rather
 than hand-stamped, so the verdict cannot disagree with the residue beside it — and, for
-arm H, once the `remediator` role retires under its own condition.
+arm H, once the `remediator` role retires under its own condition; for arm I, once two
+consecutive sprints record zero series holding more than one valid resolution record.
 
 ### 25. Rule 29 bounded-join conduct — the operator was reachable.
 <!-- CHECK_LOADED: 25 -->

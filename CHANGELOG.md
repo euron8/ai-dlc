@@ -34,6 +34,97 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.253.0] — 2026-08-04
+
+### Check 24 arm I — the adversarial cycle was never released more than once, and nothing counted
+
+This release was specified as a **pass ceiling**: cap the adversarial cycle at 4 passes,
+because one consumer's architecture cycle consumed 20.3 hours — 49% of the whole pipeline —
+across 7 passes while Check 24 reported PASS. Measured against that consumer's 80 series, the
+ceiling does not survive:
+
+- It fires 3 times. On the 7-pass series it exists for, **arm E already fires at the same
+  pass** (`--cycle-state` on the truncated series returns `STALLED`/rc 3 at p5; passes 4–6 hold
+  0 CRITICAL against 1, 1, 2 MAJOR, so nothing ever resets the stall run). The premise that
+  arm E "could never fire on that shape" was wrong.
+- The other 2 fires land on cycles that converged one pass later. One duplicate, two false
+  fires, no unique catch.
+
+The 7-pass cycle did not run long because nothing stopped it. It was stopped and adjudicated
+**three times** — three resolution records, each citing operator words that pass `--cite`
+against the real transcript corpus. What was unbounded was the **release**, not the cycle.
+
+### The arm that ships instead
+
+Arms C, D and E all stop a cycle and all three take the same exit: a resolution record, read
+by `terminal_record_resolves`. So a cycle that is stopped, released, stopped again and
+released again presents to every one of them as a cycle being legitimately resolved. Each
+rung fires each time and is satisfied each time. Nothing counted how often — and a rung that
+is suppressed by the very artifact whose repetition is the defect cannot, by construction, be
+the thing that catches it.
+
+Arm I counts. Past the first resolution, the newest record must declare a kind whose claim is
+checked against the bytes:
+
+| | Kind | What closes it |
+|---|---|---|
+| **anchored** | `CUT_SCOPE` | the artifact must SHRINK, with `scope_delta:` naming what went |
+| **anchored** | `REVERT_REPAIR` | `artifact_sha_after` must match a sha an EARLIER PASS notarized |
+| unanchored | `CHANGE_APPROACH`, `RESTART_CYCLE` | nothing — "no byte-level predicate exists", as arm F5 already says of them |
+
+The split is not a judgment call. It is this file's own, written at the `CHANGE_APPROACH` arm
+of `validate_record` and never evaluated: *"if CHANGE_APPROACH + RESTART_CYCLE exceed
+CUT_SCOPE + REVERT_REPAIR across two consecutive sprints, they are being used as an escape
+hatch and need an anchor."* Arm I is that clause's per-series half; the cross-sprint count it
+actually describes is a different mechanism and is not claimed here.
+
+### Why it does not wedge, which is the whole design
+
+The obvious form — *more than one record → exit 3* — denies the verification pass that the
+second record exists to authorize, at the moment it is written. That is the v0.247.0/v0.248.0
+deadlock reopened one arm over. So the predicate keys on the **kind** of the newest record,
+never on the count alone: the release is always available, always one field, and
+arithmetically closed. It is also suppressed entirely once the series stamps
+`EXIT_CONDITION_MET`, so no already-converged cycle fails its gate retroactively.
+
+On the measured series the operator reached `CUT_SCOPE` one pass later of their own accord.
+Arm I asks for it at the pass where the second unanchored release was written instead.
+
+### False-positive set, measured
+
+6 resolution records across 809 planning artifacts; exactly one series holds more than one.
+A truncation sweep — every prefix of every series, with every resolution record in the
+directory present, 132 probes across 47 series — fires **once**, on that series. Zero false
+fires. The sweep carries its own control: an earlier run of it returned 0 fires including for
+the series known to fire, because zsh aborted on unmatched globs before `ls` ran and only 29
+of the prefixes were probed. A bare zero was not the finding.
+
+### Fixture and mutants
+
+`core/fixtures/check-24-adversarial-convergence/` gains four cases carrying **the same
+five-pass series**, differing only in the records beside it — so no rung that reads the series
+can separate them: `ceiling-unanchored` (CEILING/3), `ceiling-anchored-release` (CONTINUE/0 —
+without it the arm has no exit and wedges every twice-resolved cycle), `ceiling-single-resolution`
+(the sanctioned one, which must cost nothing) and `ceiling-converged` (suppressed by the
+terminal verdict). Three mutants, each moving exactly one case; each guarded by `cmp -s`
+**and** `bash -n`, since a mutation can produce bytes that differ and are not a program, and
+the resulting silence scores as a kill.
+
+Two things the mutant harness needed and did not have. `CHANGE_APPROACH|RESTART_CYCLE)`
+appears **twice** in the validator — the other is `validate_record`'s F5 arm — so the kind
+mutation anchors on `case "$CEILING_KIND" in`, which is unique; a bare replace would silently
+mutate the wrong site and come out green. And `STEER_SCRIPT` resolves as
+`$(dirname "$0")/validate-steering-budget.sh`, so a validator copied into the fixture's temp
+root cannot verify any citation and `--cycle-state` fails open on it: the copies now get the
+sibling, and an **unmutated control** must reproduce all four real verdicts before any
+mutant's changed verdict is attributable to its mutation.
+
+### Also
+
+`gate-validation.md` said Check 24 "enforces eight arms: A–H" while the script has carried
+arm J since v0.245.0. Corrected to ten and labelled as hand-maintained, because nothing joins
+the prose list to the script's `err` labels and it can drift again.
+
 ## [0.252.0] — 2026-08-04
 
 ### Check 33 — the plan is compared to the ask, by something other than the agent that wrote both
