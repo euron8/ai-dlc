@@ -647,6 +647,37 @@ checks:
     ci_workflow: ~
     fixtures: [tests/fixtures/request-coverage]
 
+  - id: "34"
+    title: The operator saw the resolved scope before the sprint planned against it
+    gate_types: [planning]
+    adjudication: script
+    hard_block: true
+    enforcer:
+      - core/scripts/validate-scope-confirmation.sh
+    call_sites:
+      - site: gate-validation.md Check 34
+        posture: FAILS the gate (exit 0 required; exit 2 on an absent snapshot is also
+          a FAIL, exit 3 is PENDING and reported)
+        why: Rule 3(d) makes the sprint-scope pause point at route.md Step 6 mandatory,
+          and a mandate with no enforcer is a suggestion. Every other Rule 3 pause point
+          is downstream of implementation, so a sprint that never reaches implementation
+          had structurally nowhere to ask: one ran seven days, wrote zero lines of
+          product code, planned three stories sharing not one identifier with the ask,
+          passed four consecutive gates, and filed all three of its blocking questions on
+          day 7 — without breaking a single rule. The boolean alone would be worthless,
+          because the lead that misresolved the scope also writes the field attesting an
+          operator blessed it; scope_confirmed_cite resolves into
+          operator-answers-history.md, which the PostToolUse hook writes from its own
+          payload before any agent sees it and whose hash covers the ANSWER, never the
+          lead-authored question. Kept OUT of Check 33 deliberately: that check reports
+          NOT-APPLICABLE when the ask names no identifier, which was 5 of 23 measured
+          requests, so an arm inside it would go silent on a fifth of sprints while
+          printing a clean line. "No scope_confirmed field" is deliberately NOT a PENDING
+          cause — it is indistinguishable from a skipped pause point and would fail open
+          on the conduct the check exists to catch.
+    ci_workflow: ~
+    fixtures: [tests/fixtures/scope-confirmation]
+
 
   - id: "H1"
     title: Harness meta-check — self-test fixtures + manifest completeness

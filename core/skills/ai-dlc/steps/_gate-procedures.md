@@ -378,7 +378,7 @@ Check 1–15 sequence; it is only called from step files at the defined seams.
 
 Every defined safe seam is a clean step/sub-step boundary. Auto-handoff
 MUST fire only at such a boundary; it MUST NOT fire mid-sub-step.
-Auto-handoff is NOT a fourth Rule 3 pause point — it is a
+Auto-handoff is NOT a fifth Rule 3 pause point — it is a
 session-terminating action that executes the path (a) procedure
 (`steps/handoff.md`) unchanged.
 
@@ -456,9 +456,9 @@ effects, the step resumes.**
 
 7. **Not at any Rule 3 pause point.** Verify the lead is not
    currently in ambiguity resolution, the Production Validation
-   Checkpoint, the retro commentary prompt, or the post-compact
-   verification turn. If any pause point is active, return
-   CONTINUE.
+   Checkpoint, the retro commentary prompt, sprint-scope
+   confirmation, or the post-compact verification turn. If any
+   pause point is active, return CONTINUE.
 
 **These seven preconditions are EXHAUSTIVE — there is no eighth.**
 User activity, user presence, the recency of a user message, or the

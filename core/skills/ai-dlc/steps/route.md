@@ -272,6 +272,17 @@ operator pre-directed the priority.
 
 Do NOT ask if the variant is clear from the project state + input.
 
+**This allowance is about the VARIANT, and it does not reach Step 6's
+sprint-scope confirmation.** That one is unconditional and fires even when
+the variant was never in doubt — the two questions have different subjects.
+This step asks *which pipeline*, and a clear answer is a reason not to ask.
+Step 6 asks *is the scope I resolved the scope you asked for*, and a clear
+answer there is the lead's own reading of the request, which is exactly the
+thing that has been wrong while looking certain. Rule 11's "do not ask about
+matters resolvable by reading existing artifacts" does not reach it either,
+for the same reason: the artifact the lead would read to resolve it is the
+one the lead just wrote.
+
 ### Step 5: Branch Strategy
 
 Before starting the pipeline, determine the correct branch strategy:
@@ -393,6 +404,63 @@ Exit **3** is a HARD_BLOCK: the prior sprint is not closed (`status:` is
 not `done`), or a frozen archive already exists and differs from the
 canonical it would freeze. Surface it and wait — never freeze live state.
 
+**Confirm the resolved sprint scope (Rule 3 pause point (d) — MANDATORY).**
+Before initializing the snapshot, and before any planning step loads, ask the
+operator ONE `AskUserQuestion` that puts the scope you resolved in front of
+them to confirm or correct.
+
+WHY THIS PAUSE POINT EXISTS, AND WHY HERE. Every other Rule 3 pause point is
+downstream of implementation, so a sprint that never reaches implementation
+has structurally nowhere to ask. One ran seven days, produced zero lines of
+product code, planned three stories sharing not one identifier with what the
+operator asked for, passed four consecutive gates green, and then filed all
+three of its blocking questions on day 7. Nothing it did was a rule
+violation. It had simply resolved the scope wrongly at hour one and had no
+seam at which anyone would look at that reading before it hardened into a
+locked block. This is that seam, and it is the only one upstream of planning.
+
+**Ask about the scope you RESOLVED, never about what to build.** "What
+should this sprint do?" is a question the operator already answered — it is
+in `_bmad-output/operator-requests-history.md`, in their own bytes. Re-asking
+it discards the answer and invites a second, different one. State your
+reading and ask whether it is right.
+
+Compose the question from what you resolved, not from memory:
+
+- The **identifiers** the captured ask names — `CO-S\d+-[A-Z0-9-]+`,
+  `LR-S\d+-\d+`, `CAP-\d+`, `Epic-[A-Z]{2,}` and range forms like
+  `LR-S299-0..11`. These are the same identifiers Check 33 will join against
+  the LOCKED block at the first planning gate. Surfacing them here is the
+  difference between the operator correcting a misreading in one turn and
+  Check 33 hard-blocking on it after the planning work is already done.
+- The resolved `pipeline_variant` and `sprint_id`.
+- Anything in the ask you are deliberately NOT taking this sprint, named.
+
+**Option labels carry no recommendation.** Do not append `(Recommended)`, or
+any equivalent, to an option. That token appears nowhere in this skill — it
+was invented by a lead, and on the corpus where it was measured the operator
+took the option carrying it in 3 of 5 turns. A lead that has already
+misresolved the scope will label the misreading `(Recommended)`, and the
+badge does its most damage in exactly the case this pause point exists to
+catch. Present the options flat and let the operator choose.
+
+**No pause flag here.** Rule 3 tells you to `touch
+_bmad-output/pipeline-paused.flag` at a pause point; pause point (d) is the
+exception, and this is deliberate rather than an omission. The flag exists so
+the Stop hook can tell an intentional pause from a stall, and a solicited
+`AskUserQuestion` is neither — you have not ended the turn, the answer
+arrives as a tool result rather than a UserPromptSubmit, and no
+acknowledgement is owed because you already stopped and asked. Setting the
+flag here leaves a pause nobody clears. The same asymmetry is why
+`validate-steering-budget.sh` scores an AskUserQuestion answer as citable
+operator text but never as a steamroll.
+
+**Record the outcome in the routing record** (fields below): `scope_confirmed`
+and `scope_confirmed_cite`. Then proceed — a correction is not a re-route.
+Fold what the operator corrected into the scope you carry forward; only
+re-run Step 3 if the correction changes the pipeline VARIANT, which is rare
+and which you must say out loud if you conclude it.
+
 **Initialize the pipeline snapshot.** Before the READ AND FOLLOW, handle
 the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
 
@@ -425,7 +493,24 @@ the pipeline snapshot at `_bmad-output/pipeline-snapshot.md`:
       `none` is a gap a later check can count; a fabricated hash is not.
     - `bug_signal_present` — `yes`/`no`, as resolved in Step 2.
     - `carryover_or_sprint_signal_present` — `yes`/`no`, as resolved in Step 2.
-    - `clarification_asked` — `yes`/`no`/`n-a`, as resolved in Step 4)
+    - `clarification_asked` — `yes`/`no`/`n-a`, as resolved in Step 4.
+    - `scope_confirmed` — `confirmed` if the operator accepted the scope you
+      put to them at the pause point above, `corrected` if they changed it.
+      There is no third value: this pause point is unconditional, so `n-a`
+      would be a claim that it did not happen.
+    - `scope_confirmed_cite` — the `SHA256:` value of the matching entry in
+      `_bmad-output/operator-answers-history.md`, copied. That file is written
+      by the PostToolUse hook from the hook's own payload, before you write
+      anything, and its hash covers the ANSWER alone — never the question you
+      authored. This is what makes `scope_confirmed` checkable rather than a
+      second field the lead grades itself on: the hash resolves to a
+      hook-written record whose body is independently citable against the
+      session transcript with `validate-steering-budget.sh --cite`.
+      **If no entry exists** — the hook is not installed, or the operator
+      dismissed the prompt — write `scope_confirmed_cite: none` and say which.
+      `none` is a gap a later check can count; a fabricated hash is not. Do
+      not compute this hash yourself: a hash the lead computed over text the
+      lead chose is the self-declaration hole this field exists to close)
   - Sprint Context (`sprint_id` as resolved above — an integer, never
     `none`; remaining fields from `sprint-status.yaml` if it exists)
   - Recent Activity (empty — will be populated by `gate-validation.md`
