@@ -148,6 +148,63 @@ want 1 "join (2a): a capability no AD binds FAILS" \
 want 2 "DISARM: a file with no '- **Binds:**' entries exits 2, never 0" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --spine "$R/prd-ok.md"
 
+# --- the capabilities: TRICHOTOMY (v0.254.0) ----------------------------------
+# EXIT CODE IS NOT THE ASSERTION FOR TWO OF THESE. key-absent and empty-without-why
+# both FAIL(1) before and after, so a fixture checking only rc scores a FALSE PASS
+# against the collapsed version -- this repo's own defect class, reproduced inside the
+# test written to catch it. Assert on the SENTENCE.
+says() { # <label> <must-contain> <args...>
+  local lab="$1" want_s="$2"; shift 2
+  local out; out="$(bash "$V" "$@" 2>&1)"
+  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  else bad "$lab (message missing: \"$want_s\")"; fi
+}
+
+says "trichotomy: key ABSENT says the field is absent" \
+  "carries no 'capabilities:' frontmatter field at all" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-nofield.md"
+
+says "trichotomy: key EMPTY says the field IS present" \
+  "The field IS present" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md"
+
+# The over-fire control for the sentence above: the empty case must NOT be told the
+# field is missing. That is the exact false statement this release removes.
+ASSERT_OUT="$(bash "$V" --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md" 2>&1)"
+if grep -qF "carries no 'capabilities:' frontmatter field at all" <<<"$ASSERT_OUT"; then
+  bad "trichotomy: the EMPTY case is still told the field is absent — the false diagnosis survives"
+else
+  ok "trichotomy: the EMPTY case is NOT told the field is absent"
+fi
+
+want 0 "trichotomy: EMPTY + capabilities_rationale is a declared disposition, not a failure" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty-declared.md"
+
+says "trichotomy: the declared disposition is RECORDED, not silent" \
+  "declares no capability, with a rationale" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty-declared.md"
+
+# --- --baseline, and the arm that stops it outliving its cause (v0.254.0) ------
+want 1 "baseline control: the orphan LR fails with no baseline" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md"
+
+want 0 "baseline: a live entry suppresses the failure it names" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-live.txt"
+
+want 1 "baseline: an entry that STOPS REPRODUCING is itself a FAIL — a baseline must not outlive its cause" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt"
+
+says "baseline: the stale entry is named, so the remedy is one deletable line" \
+  "did NOT reproduce this run" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt"
+
+want 2 "baseline: an unreadable baseline DISARMS rather than reporting every failure as new" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/nonexistent-baseline.txt"
+
+# THE CASE THAT DECIDES WHETHER --baseline IS A LEDGER OR A MUTE BUTTON is the pair
+# above: same tree, same failure, one file — suppressed when the cause is live, FAILED
+# when it is gone. Either half alone is satisfied by a validator that always suppresses.
+
 # --- MUTATION controls: one per mechanical join -------------------------------
 # Copy, then `cmp -s` to prove the edit matched. A sed matching nothing yields a
 # mutant identical to the subject, which "fails as expected" for the wrong reason.
@@ -180,6 +237,54 @@ mut cap-off 'grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)"' "true" \
 mut story-off 'grep -qx -- "$r"' "true" \
   0 "MUTATION: neutering join (3) turns the dangling-CAP story green" \
   --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-dangling.md"
+
+# --- MUTATION controls for the v0.254.0 arms ----------------------------------
+# `mut` asserts on rc, which is the wrong instrument for the trichotomy: collapsing it
+# leaves every case exiting 1. This one asserts on the SENTENCE, and it is guarded the
+# same way — `cmp -s` proves the edit landed, plus `bash -n` proves the mutant is still
+# a program, because a mutant that dies on a syntax error emits nothing and nothing
+# reads as a kill.
+mut_says() { # <name> <literal-from> <literal-to> <must-contain> <label> <args...>
+  local n="$1" from="$2" to="$3" want_s="$4" lab="$5"; shift 5
+  local m="$R/mutant-$n.sh"
+  cp "$V" "$m"
+  FROM="$from" TO="$to" perl -pi -e 's/\Q$ENV{FROM}\E/$ENV{TO}/g' "$m"
+  if cmp -s "$V" "$m"; then
+    bad "FIXTURE ERROR: mutation '$n' matched nothing — its assertion would prove nothing"; return
+  fi
+  if ! bash -n "$m" 2>/dev/null; then
+    bad "FIXTURE ERROR: mutant '$n' is not a valid shell script — its silence is not a kill"; return
+  fi
+  local out; out="$(bash "$m" "$@" 2>&1)"
+  if grep -qF -- "$want_s" <<<"$out"; then ok "$lab"
+  else bad "$lab (mutant did not produce: \"$want_s\")"; fi
+}
+
+# THE SHIPPED DEFECT ON DEMAND. Sever the present-vs-absent discrimination and the
+# EMPTY story is told again that it carries no field — the false sentence this release
+# exists to remove. Both sides of one predicate flip together; that is the predicate,
+# not two entangled guards.
+mut_says tri-collapse 'if ! grep -q '"'"'^capabilities:'"'"' "$s"; then' 'if true; then' \
+  "carries no 'capabilities:' frontmatter field at all" \
+  "MUTATION: collapsing the trichotomy tells the EMPTY story its field is missing again" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty.md"
+
+mut tri-rationale-off 'elif [ -n "$cap_rationale" ]; then' 'elif false; then' \
+  1 "MUTATION: dropping the rationale branch fails the declared disposition" \
+  --spec "$R/ok" --prd "$R/prd-ok.md" --story "$R/story-empty-declared.md"
+
+# Without this arm --baseline is a mute button: the entry outlives its cause and stands
+# ready to suppress the next real instance of the same id, silently.
+mut baseline-forever 'if ! grep -qxF -- "$bk" <<<"$BASELINE_HIT"; then' 'if false; then' \
+  0 "MUTATION: dropping the did-not-reproduce arm turns the STALE baseline green" \
+  --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt"
+
+# UNMUTATED CONTROL. Every mutant above is a copy in $R; if a copy misbehaves there for
+# any reason other than its mutation, each of those assertions is vacuous.
+cp "$V" "$R/control-unmutated.sh"
+bash "$R/control-unmutated.sh" --spec "$R/orphan-lr" --prd "$R/prd-ok.md" --baseline "$R/baseline-stale.txt" >/dev/null 2>&1
+[ $? -eq 1 ] && ok "CONTROL: an unmutated copy in \$R still FAILS the stale baseline" \
+             || bad "CONTROL: an unmutated copy misbehaves in \$R — every mutation above is vacuous"
 
 echo
 if [ "$rc" -eq 0 ]; then echo "spec-join-integrity: PASS"; else echo "spec-join-integrity: FAILED" >&2; fi

@@ -62,7 +62,7 @@
 set -u
 
 PROG="validate-spec-join.sh"
-SPEC=""; PRD=""; SPINE=""; SPINE_MD=""; TRACE=""
+SPEC=""; PRD=""; SPINE=""; SPINE_MD=""; TRACE=""; BASELINE=""
 STORIES=()
 
 while [ $# -gt 0 ]; do
@@ -73,10 +73,59 @@ while [ $# -gt 0 ]; do
     --spine)         SPINE_MD="${2:-}"; shift 2 || exit 2 ;;
     --spine-lint)    SPINE="${2:-}"; shift 2 || exit 2 ;;
     --trace-verdict) TRACE="${2:-}"; shift 2 || exit 2 ;;
-    -h|--help) echo "usage: $PROG --spec DIR --prd FILE [--story FILE]... [--spine FILE] [--spine-lint JSON] [--trace-verdict FILE]" >&2; exit 2 ;;
+    --baseline)      BASELINE="${2:-}"; shift 2 || exit 2 ;;
+    -h|--help) echo "usage: $PROG --spec DIR --prd FILE [--story FILE]... [--spine FILE] [--spine-lint JSON] [--trace-verdict FILE] [--baseline FILE]" >&2; exit 2 ;;
     *) echo "$PROG: unexpected argument '$1'" >&2; exit 2 ;;
   esac
 done
+
+# --- the baseline, and the arm that stops it outliving its cause ---------------
+# A CORRECTED CHECK THAT BLOCKS ON DEBT IT DID NOT CREATE GETS TURNED OFF. Adopting
+# this check against an existing corpus means inheriting whatever orphans the chain
+# already has -- 15 in the reference consumer (5 LR->CAP, 10 CAP->FR), none of them
+# caused by adopting the check. `--baseline` names them so the gate reports them
+# without blocking on them.
+#
+# THE SECOND ARM IS WHY THIS IS NOT A MUTE BUTTON. A baseline entry that does NOT
+# reproduce is itself a FAIL. Without that, a baseline written once outlives the
+# thing it excused: the orphan gets fixed, the entry stays, and the next real
+# instance of the same id is silently suppressed by a line whose cause is gone. The
+# entry must be deleted when the failure it names is, and this is what forces it.
+#
+# KEYS ARE NAMESPACED because two joins key on the same identifier -- join (2) and
+# join (2a) both fail per CAP-<n>, so a bare `CAP-1` would suppress a capability
+# missing its FR *and* the same capability missing its AD, on one line.
+#
+#   lr:<LR-id>        join (1)  requirement reaches no capability
+#   fr:<CAP-id>       join (2)  capability cited by no functional requirement
+#   ad:<CAP-id>       join (2a) capability bound by no architecture decision
+#   story:<basename>  join (3)  story capabilities frontmatter
+#
+# THE BORROWED VERDICTS ARE NOT BASELINEABLE. `lint_spine.py` and
+# `bmad-testarch-trace` publish their own findings with no stable per-item key here,
+# and suppressing another tool's verdict from this side would be adopting a
+# self-declared pass by omission.
+BASELINE_KEYS=""
+BASELINE_HIT=""
+if [ -n "$BASELINE" ]; then
+  [ -f "$BASELINE" ] || { echo "$PROG: DISARMED — --baseline names an unreadable file: $BASELINE. An unreadable baseline is not an empty one; exiting rather than reporting every baselined failure as new." >&2; exit 2; }
+  BASELINE_KEYS="$(sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' "$BASELINE" | grep -v '^$' || true)"
+fi
+
+# fail_join <namespaced-key> <message>
+#   Emits FAIL and sets rc, unless the key is baselined -- in which case it records
+#   the hit so the did-not-reproduce arm below can tell a live baseline from a stale one.
+fail_join() {
+  local key="$1" msg="$2"
+  if [ -n "$BASELINE_KEYS" ] && grep -qxF -- "$key" <<<"$BASELINE_KEYS"; then
+    echo "  BASELINED  $key — pre-existing, suppressed by $BASELINE (still reproducing)"
+    BASELINE_HIT="${BASELINE_HIT}${key}
+"
+    return
+  fi
+  echo "FAIL: $msg" >&2
+  rc=1
+}
 
 [ -n "$SPEC" ] && [ -d "$SPEC" ] || { echo "$PROG: DISARMED — --spec must name the spec folder (holding SPEC.md and .memlog.md); got '${SPEC:-<none>}'." >&2; exit 2; }
 KERNEL="$SPEC/SPEC.md"
@@ -128,8 +177,7 @@ for lr in $LRS; do
   # A `(capability)` entry naming both this LR and a CAP-N is the join. Nothing else
   # counts -- see the note above on why scanning every line reads a self-report.
   if ! printf '%s\n' "$CAP_ENTRIES" | grep -E "(^|[^A-Za-z0-9-])$lr([^A-Za-z0-9-]|\$)" | grep -qE '\bCAP-[0-9]+\b'; then
-    echo "FAIL: $lr appears in the memlog but no capability entry cites it alongside a CAP-<n>. A locked requirement that reaches no capability is dropped, and every artifact downstream stays internally consistent while it is missing. Either map it to a capability or record an explicit SUPERSEDED/AMENDED disposition for it." >&2
-    rc=1
+    fail_join "lr:$lr" "$lr appears in the memlog but no capability entry cites it alongside a CAP-<n>. A locked requirement that reaches no capability is dropped, and every artifact downstream stays internally consistent while it is missing. Either map it to a capability or record an explicit SUPERSEDED/AMENDED disposition for it."
   fi
 done
 
@@ -154,8 +202,7 @@ if [ -z "$FR_LINES" ]; then
 fi
 for cap in $CAPS; do
   if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$FR_LINES"; then
-    echo "FAIL: $cap is defined in SPEC.md but no functional requirement in $PRD cites it. A capability with no FR behind it is specified and unplanned — it reaches no epic, no story and no test. Add the citation to the FR entry, in the form research-requirements.md mandates." >&2
-    rc=1
+    fail_join "fr:$cap" "$cap is defined in SPEC.md but no functional requirement in $PRD cites it. A capability with no FR behind it is specified and unplanned — it reaches no epic, no story and no test. Add the citation to the FR entry, in the form research-requirements.md mandates."
   fi
 done
 
@@ -164,9 +211,35 @@ if [ "${#STORIES[@]}" -gt 0 ]; then
   for s in "${STORIES[@]}"; do
     [ -f "$s" ] || { echo "$PROG: DISARMED — --story names an unreadable file: $s" >&2; exit 2; }
     refs="$(sed -n '/^capabilities:/{s/^capabilities:[[:space:]]*//; s/[][]//g; s/,/ /g; p; }' "$s" | head -1)"
+    # THREE STATES, NOT ONE. An empty `$refs` was reported as "carries no 'capabilities:'
+    # frontmatter field" regardless of why it was empty, and that sentence is FALSE for two
+    # of the three cases. Measured on the reference consumer: of the 4 in-scope stories, 3
+    # carry a `capabilities:` line that is EMPTY and were told they carry none.
+    #
+    # A WRONG DIAGNOSIS ON A HARD BLOCK IS HOW CHECKS GET TURNED OFF. The author reads
+    # "carries no field", looks at the field sitting in the frontmatter, and concludes the
+    # check is broken -- which, on that sentence, it is. The remedy it names does not apply
+    # and the real one is never stated.
+    #
+    #   key absent          the story predates the frontmatter contract or ignored it.
+    #                       Nothing was claimed. Add the field.
+    #   key empty, no why   the story CLAIMS it implements no capability. That is a real
+    #                       claim about the chain and it is unexplained -- which is a
+    #                       different defect with a different remedy, not a missing field.
+    #   key empty + why     the claim is DECLARED, in the pattern Check 33's
+    #                       `NOT-IN-SCOPE` disposition already establishes: an explicit,
+    #                       visible, per-item disposition beats an unexplained blank.
+    #                       Recorded as a note, not a pass in silence.
     if [ -z "$refs" ]; then
-      echo "FAIL: $s carries no 'capabilities:' frontmatter field. That field is the only mechanical link from a story to the spec; without it the story's place in the chain is prose." >&2
-      rc=1
+      cap_rationale="$(sed -n 's/^capabilities_rationale:[[:space:]]*//p' "$s" | head -1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      if ! grep -q '^capabilities:' "$s"; then
+        fail_join "story:$(basename "$s")" "$s carries no 'capabilities:' frontmatter field at all. That field is the only mechanical link from a story to the spec; without it the story's place in the chain is prose. Add it — with the CAP-<n> ids this story implements, or empty plus a 'capabilities_rationale:' saying why it implements none."
+      elif [ -n "$cap_rationale" ]; then
+        echo "  note  $(basename "$s") declares no capability, with a rationale: $cap_rationale"
+        note=$((note+1))
+      else
+        fail_join "story:$(basename "$s")" "$s declares 'capabilities:' EMPTY and gives no 'capabilities_rationale:'. The field IS present — this is not a missing field, it is an unexplained claim that this story implements none of the spec's capabilities. Either name the CAP-<n> ids it implements, or state why it implements none: 'capabilities_rationale: <reason>'."
+      fi
       continue
     fi
     for r in $refs; do
@@ -200,8 +273,7 @@ if [ -n "$SPINE_MD" ]; then
   else
     for cap in $CAPS; do
       if ! grep -qE "(^|[^A-Za-z0-9-])$cap([^A-Za-z0-9-]|\$)" <<<"$BINDS"; then
-        echo "FAIL: $cap is defined in SPEC.md but no architecture decision in $SPINE_MD binds it. A capability no AD governs was never designed — it reaches implementation with no invariant constraining how." >&2
-        rc=1
+        fail_join "ad:$cap" "$cap is defined in SPEC.md but no architecture decision in $SPINE_MD binds it. A capability no AD governs was never designed — it reaches implementation with no invariant constraining how."
       fi
     done
   fi
@@ -266,7 +338,28 @@ if [ -n "$TRACE" ]; then
   esac
 fi
 
+# --- the baseline must not outlive its cause ----------------------------------
+# THE ARM THAT MAKES --baseline A LEDGER RATHER THAN A MUTE BUTTON. A baselined key
+# that did not fire this run names a failure that is FIXED, and the line excusing it
+# is now excusing nothing -- while still standing ready to suppress the next real
+# instance of that same id, silently. That is a suppression with no lifetime, which is
+# the shape this repo has already had to fix elsewhere.
+#
+# It is deliberately a FAIL and not a note: a note is what a stale baseline would
+# accumulate for the rest of its life without anyone deleting a line.
+n_base=0
+if [ -n "$BASELINE_KEYS" ]; then
+  while IFS= read -r bk; do
+    [ -n "$bk" ] || continue
+    n_base=$((n_base + 1))
+    if ! grep -qxF -- "$bk" <<<"$BASELINE_HIT"; then
+      echo "FAIL: baseline entry '$bk' in $BASELINE did NOT reproduce this run. The failure it was written to excuse is gone, so the entry now excuses nothing — and would silently suppress the next real instance of that same id. Delete the line. A baseline must not outlive its cause." >&2
+      rc=1
+    fi
+  done <<<"$BASELINE_KEYS"
+fi
+
 if [ "$rc" -eq 0 ]; then
-  echo "$PROG: PASS ($NLRS locked requirement(s), $NCAPS capability(ies), ${#STORIES[@]} story(ies), $note recorded note(s))"
+  echo "$PROG: PASS ($NLRS locked requirement(s), $NCAPS capability(ies), ${#STORIES[@]} story(ies), $note recorded note(s), $n_base baselined)"
 fi
 exit $rc
