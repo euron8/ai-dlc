@@ -378,13 +378,13 @@ agent MUST output:
 The agent then proceeds immediately to the next pipeline action in
 the same response. The agent MUST NOT pause for user confirmation.
 
-**Content dropped by re-attachment budget.** Claude Code re-attaches
-the first 5,000 tokens of each invoked skill after compact. If after
-re-reading the snapshot the lead observes that operational rules or
-the handoff protocol appear missing from its context, the fallback is
-to ask the user to re-invoke `/ai-dlc` to restore full skill content.
-Do not guess at rules the skill should contain; state clearly that
-content may be missing and request re-invocation.
+**Most of this file is NOT in your context.** Claude Code re-attaches
+only the first ~5,000 tokens of a skill after a compact -- under a
+QUARTER of this one. Gone: most numbered rules, the handoff triggers,
+the snapshot schema. Nothing marks the cut, and the rules governing
+re-reads are past it. `Read .claude/skills/ai-dlc/SKILL.md` IN FULL
+in the verification turn. Never guess a rule and never ask to
+re-invoke `/ai-dlc` instead: it is on disk, one Read is the fix.
 
 ## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS
 
