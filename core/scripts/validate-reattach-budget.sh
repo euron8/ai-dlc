@@ -18,8 +18,10 @@
 #
 # WHAT IT MEASURES. Bytes from the start of SKILL.md through the END of the
 # `## POST-COMPACT RECOVERY PROTOCOL` section (the line before the next `## `
-# heading, which by design is `## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT
-# THRESHOLDS`). Bytes are converted to an estimated token count at a ratio
+# heading, whatever it happens to be — the protocol now sits directly above
+# `## AUTONOMY RULES`, near the top of the file, and the end boundary is
+# derived rather than named so a later reorder cannot silently mis-measure).
+# Bytes are converted to an estimated token count at a ratio
 # calibrated against the v0.35.0 measurement (17,990 bytes ≈ 4,439 tokens by
 # Claude's own tokenizer → ~4.05 bytes/token; the default divisor 4 is slightly
 # conservative, i.e. it over-counts tokens). The check FAILS if the estimate

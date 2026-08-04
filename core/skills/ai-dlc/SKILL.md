@@ -23,6 +23,52 @@ in a single conversation.
    via their role files (high for planning roles, medium for
    implementation roles).
 
+## POST-COMPACT RECOVERY PROTOCOL
+
+The `ai-dlc-recover.sh` hook re-injects the snapshot automatically on
+every compaction, as a block headed "AI/DLC POST-COMPACT RECOVERY".
+When that block is present, follow it -- it is authoritative and this
+section adds nothing. What follows is the fallback for when the hook
+is absent, disabled, or reports that its injection was truncated.
+
+If the previous user turn was `/compact` or an auto-compact event, OR
+if the agent observes signs the conversation history has been
+replaced by a summary (e.g., missing earlier turns referenced by the
+snapshot's Recent Activity, a summary-style opening rather than a
+user directive, or the agent cannot recall specifics that the
+snapshot records), the agent's FIRST action MUST be to read
+`_bmad-output/pipeline-snapshot.md` in full before any pipeline
+action. The first output line MUST acknowledge the recovery, naming
+the current step file and last gate passed. This supersedes the
+Rule 11(b) interpretation-preamble requirement for the first
+post-compact response only.
+
+**Verification turn.** Immediately after the acknowledgment line, the
+agent MUST output:
+
+- Current step file (from snapshot `Pipeline Position`)
+- Last completed gate with timestamp (from snapshot `Pipeline
+  Position`)
+- Any in-flight sub-step from `Recent Activity`, and every
+  `In-Flight Teammates` row with whether its deliverable exists
+  and is newer than its `dispatched-at`. Newer = DELIVERED:
+  consume it, never re-dispatch. Older = a prior sprint's file,
+  not delivery: resume the beat, as for absent. Unreachable
+  never means dead.
+- Current git branch and last commit (`git branch --show-current` and
+  `git log -1 --oneline`)
+
+The agent then proceeds immediately to the next pipeline action in
+the same response. The agent MUST NOT pause for user confirmation.
+
+**Most of this file is NOT in your context.** Claude Code re-attaches
+only the first ~5,000 tokens of a skill after a compact -- under a
+QUARTER of this one. Gone: most numbered rules, the handoff triggers,
+the snapshot schema. Nothing marks the cut, and the rules governing
+re-reads are past it. `Read .claude/skills/ai-dlc/SKILL.md` IN FULL
+in the verification turn. Never guess a rule and never ask to
+re-invoke `/ai-dlc` instead: it is on disk, one Read is the fix.
+
 ## AUTONOMY RULES
 
 These rules apply to ALL agents across ALL phases.
@@ -339,52 +385,6 @@ to resume (below); it never arms an automated re-entry with stale args
 and a stale snapshot. As defense-in-depth, a resume that appears to have
 been fired by the lead's own prior self-schedule rather than a human
 paste MUST be discarded.
-
-## POST-COMPACT RECOVERY PROTOCOL
-
-The `ai-dlc-recover.sh` hook re-injects the snapshot automatically on
-every compaction, as a block headed "AI/DLC POST-COMPACT RECOVERY".
-When that block is present, follow it -- it is authoritative and this
-section adds nothing. What follows is the fallback for when the hook
-is absent, disabled, or reports that its injection was truncated.
-
-If the previous user turn was `/compact` or an auto-compact event, OR
-if the agent observes signs the conversation history has been
-replaced by a summary (e.g., missing earlier turns referenced by the
-snapshot's Recent Activity, a summary-style opening rather than a
-user directive, or the agent cannot recall specifics that the
-snapshot records), the agent's FIRST action MUST be to read
-`_bmad-output/pipeline-snapshot.md` in full before any pipeline
-action. The first output line MUST acknowledge the recovery, naming
-the current step file and last gate passed. This supersedes the
-Rule 11(b) interpretation-preamble requirement for the first
-post-compact response only.
-
-**Verification turn.** Immediately after the acknowledgment line, the
-agent MUST output:
-
-- Current step file (from snapshot `Pipeline Position`)
-- Last completed gate with timestamp (from snapshot `Pipeline
-  Position`)
-- Any in-flight sub-step from `Recent Activity`, and every
-  `In-Flight Teammates` row with whether its deliverable exists
-  and is newer than its `dispatched-at`. Newer = DELIVERED:
-  consume it, never re-dispatch. Older = a prior sprint's file,
-  not delivery: resume the beat, as for absent. Unreachable
-  never means dead.
-- Current git branch and last commit (`git branch --show-current` and
-  `git log -1 --oneline`)
-
-The agent then proceeds immediately to the next pipeline action in
-the same response. The agent MUST NOT pause for user confirmation.
-
-**Most of this file is NOT in your context.** Claude Code re-attaches
-only the first ~5,000 tokens of a skill after a compact -- under a
-QUARTER of this one. Gone: most numbered rules, the handoff triggers,
-the snapshot schema. Nothing marks the cut, and the rules governing
-re-reads are past it. `Read .claude/skills/ai-dlc/SKILL.md` IN FULL
-in the verification turn. Never guess a rule and never ask to
-re-invoke `/ai-dlc` instead: it is on disk, one Read is the fix.
 
 ## HANDOFF PROTOCOL -- TRIGGERS AND CONTEXT THRESHOLDS
 
