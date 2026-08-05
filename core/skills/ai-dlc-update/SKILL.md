@@ -276,7 +276,9 @@ prose is itself generated rather than composed.
      `skill_version`/`skill_commit` to `theirs`** (rewrite the stamp in schema,
      preserving `version`/`commit`/`installed_at`/`upstream`), commit
      (`chore(ai-dlc-update): self-update <base-skill-ver> → <theirs-ver>`), **run the
-     derived fixtures and require green BEFORE the push**, push,
+     derived fixtures through
+     `reconcile/self-update-fixtures.sh <dist> <base> <theirs> <consumer> <fixture>...`
+     and require green BEFORE the push**, push,
      open a PR, and **auto-merge (squash, delete branch)** — no operator gate (the
      step-1 git preflight confirmed the branch is in sync with `origin`, so this
      merge cannot strand local commits). If there is no remote / push fails,
@@ -300,6 +302,18 @@ prose is itself generated rather than composed.
      the fixture name and its output — not a gate to bypass. Pushing a known-red suite so
      the reconcile can proceed leaves the next operator unable to tell this breakage from a
      real one.
+
+     **RUN THEM THROUGH `reconcile/self-update-fixtures.sh`, AND CITE THE LOG PATH IT
+     PRINTS IN THE STOP MESSAGE.** On red this cycle discards the branch and restores the
+     tree, so the state the fixtures ran against ceases to exist: `reconcile-log-<ts>.md`
+     is step-7 only, and `reconcile-report.md` is not written until step 5. Run them any
+     other way and the only record of WHY the self-update stopped is this agent's own
+     context, which the next invocation does not have. The helper writes
+     `_bmad-output/ai-dlc-update/self-update-fixtures-<ts>.md` as it goes — before the
+     branch can be discarded — and exits 2 rather than 0 if it could not run at all, so an
+     empty set cannot report as a green suite. Measured twice on the reference consumer,
+     where the evidence had to be recovered by re-staging the discarded slice the first
+     time and captured by hand the second.
    - **Then STOP this invocation and re-invoke `/ai-dlc-update` automatically —
      do NOT ask whether to.** The self-update landed, but THIS invocation is
      still executing the PRE-update logic — its reconcile/classify/apply behavior

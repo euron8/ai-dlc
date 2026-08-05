@@ -34,6 +34,59 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.264.0] — 2026-08-05
+
+### The reconcile run could not say what it had found, in two different ways
+
+Both surfaced from the same reference-consumer pull, and both are about a run whose output
+tells the reader less than the run knew.
+
+**`layer-drift.sh` degraded every adjudication row under a relative consumer root.**
+`adj_digest` hashes the consumer's entry with `git -C "$DIST" hash-object "$CONSUMER/$1"`,
+and `-C` moves git into the **distribution** before that path is read — so a relative
+consumer root resolved there and the hash failed. Every `ADJUDICATED` row then reported
+*"subject digest could not be computed (entry or target unreadable)"* in place of the digest
+the operator records a verdict against.
+
+What makes it a defect rather than a usage error is that **the blocking count is identical
+either way**. Measured on the reference consumer at `0.263.0`: **11** degraded messages under
+`.`, **0** under the absolute path, and **13 `HARD-` rows in both**. Nothing in the output
+tells the reader they are holding eleven unactionable messages — this repo's
+"a check that cannot fire reads exactly like one that passed", in its reporting form.
+
+Fixed at argument-parse time, in `preclassify.sh`'s existing donor form rather than a new
+one, so no later reader of `$CONSUMER` can reintroduce it. The `--adjudicated-codes` mode
+leaves the root empty by design and is left alone. **Swept:** this is the only site of the
+class in `reconcile/` — one match for a consumer path handed to a command running `-C` in the
+distribution, zero for the inverse.
+
+**Step 2's self-update cycle persisted nothing.** It cuts a branch, writes the machinery
+slice, runs the derived fixtures, and on red discards the branch and restores the tree —
+writing nothing. `reconcile-log-<ts>.md` is step-7 only and `reconcile-report.md` is not
+written until step 5, by which point the tree the fixtures ran against is gone. The failing
+output survived in the operating agent's context and nowhere else, and no command in the
+report reproduced the state that produced it. Observed twice: once recovered afterwards by
+re-staging the discarded slice on a throwaway branch, once captured by hand from inside the
+cycle — which is not something the skill instructs, and so not something the next operator
+will do.
+
+**Added** `reconcile/self-update-fixtures.sh`: runs the named derived fixtures from the
+consumer root — the directory both pre-push hooks use — appending each one's output and rc to
+`_bmad-output/ai-dlc-update/self-update-fixtures-<ts>.md` **as it goes**, so the record exists
+before the branch can be discarded. It exits 2 rather than 0 when it could not run at all,
+because an empty set reporting green is how a self-update ships having verified nothing. The
+fixture set is passed in rather than re-derived, so there is one derivation to keep honest.
+Step 2 now invokes it and cites the log path in its stop message.
+
+**Fixtures.** `core/fixtures/self-update-fixture-log/` — 8 assertions including the decisive
+one (a red fixture's own output is still readable *after* the tree is deleted), a mutant that
+neuters the empty-set guard, and an unmutated control. `layer-adjudication-tier` gains Part 7:
+relative and absolute roots must agree on both the digests and the row count, with a mutant
+that removes the absolutization, its pairing control on the absolute form, and an unmutated
+control — **built inside a copy of the whole `reconcile/` directory**, because a lone copy of
+`layer-drift.sh` dies sourcing `lib.sh` and a mutant that never ran reads exactly like one
+that survived.
+
 ## [0.263.0] — 2026-08-05
 
 ### Check 3b verified a story against whichever brief the caller's shell happened to be standing in

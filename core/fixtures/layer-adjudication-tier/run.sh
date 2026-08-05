@@ -194,6 +194,66 @@ else
   bad "a properly declared supersession still reported a contradiction. An operator who cannot change their mind will stop recording verdicts at all"
 fi
 
+# --- Part 7: the digest survives a RELATIVE consumer root -------------------------------
+# `adj_digest` hashes the consumer's entry with `git -C "$DIST" hash-object "$CONSUMER/$1"`,
+# and `-C` moves git into the DISTRIBUTION before that path is read. So a relative consumer
+# root resolved there, the hash failed, and every ADJUDICATED row degraded to "subject digest
+# could not be computed" instead of carrying the key the operator records a verdict against.
+#
+# WHAT MAKES IT ASSERTABLE RATHER THAN COSMETIC: the BLOCKING ROW COUNT IS THE SAME either
+# way, so the run looks identical while the messages have gone unactionable. Measured on the
+# reference consumer at 0.263.0 — 11 degraded messages under a relative root, 0 under an
+# absolute one, 13 HARD- rows in both. Both halves are asserted here: the message must be
+# actionable AND the count must not move, because a fix that changed the count would be
+# suppressing rows rather than keying them.
+: > "$REG"
+abs_deg="$(run | grep -c 'could not be computed')"
+abs_hard="$(run | grep -c '^HARD-')"
+rel_deg="$( (cd "$CONS" && bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null) | grep -c 'could not be computed')"
+rel_hard="$((cd "$CONS" && bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null) | grep -c '^HARD-')"
+if [ "$rel_deg" -eq "$abs_deg" ] && [ "$rel_hard" -eq "$abs_hard" ]; then
+  ok "a RELATIVE consumer root yields the same digests and the same $abs_hard HARD- row(s) as an absolute one"
+else
+  bad "consumer-root FORM changed the result: degraded messages abs=$abs_deg rel=$rel_deg, HARD- rows abs=$abs_hard rel=$rel_hard. The operator cannot record a verdict against a digest that was never computed"
+fi
+
+# MUTATION: remove the absolutization and require the relative form to degrade. Without it
+# the assertion above is satisfied by any build in which BOTH forms happen to work.
+# THE MUTANT IS BUILT INSIDE A COPY OF THE WHOLE reconcile/ DIRECTORY, not as a lone file.
+# `layer-drift.sh` sources `lib.sh` from its own directory, so a copy anywhere else dies at
+# the source line and emits NOTHING — and zero degraded messages from a script that never ran
+# reads exactly like a mutant that survived. That is this repo's lone-copy trap arriving from
+# the opposite direction, so the unmutated control below comes from the same copied directory.
+MUTDIR="$ROOT/reconcile-mutant"; mkdir -p "$MUTDIR"
+cp "$(dirname "$DRIFT")"/* "$MUTDIR"/ 2>/dev/null
+MUT="$MUTDIR/layer-drift.sh"
+CTL="$MUTDIR/layer-drift-unmutated.sh"; cp "$DRIFT" "$CTL" 2>/dev/null
+MUT_OLD='CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || { echo "layer-drift: consumer-root not a directory: ${4}" >&2; exit 2; }'
+MUT_OLD="$MUT_OLD" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],"true",1))' \
+  "$DRIFT" "$MUT" 2>/dev/null
+ctl_abs="$(bash "$CTL" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c '^HARD-')"
+if [ ! -s "$MUT" ] || cmp -s "$DRIFT" "$MUT"; then
+  bad "FIXTURE ERROR: the absolutization mutation matched nothing — Part 7 proves nothing. Update MUT_OLD to match layer-drift.sh's real parse-time absolutization"
+elif [ "$ctl_abs" -ne "$abs_hard" ]; then
+  bad "FIXTURE ERROR: the UNMUTATED copy in $MUTDIR reports $ctl_abs HARD- rows against $abs_hard in place — the copied directory is not a working harness, so no verdict below is attributable"
+else
+  ok "CONTROL: an unmutated copy in the same directory still reports $ctl_abs HARD- row(s) — the mutant verdicts below are its edit, not the copy"
+  mut_rel="$( (cd "$CONS" && bash "$MUT" "$DIST" "$BASE" "$THEIRS" . 2>/dev/null) | grep -c 'could not be computed')"
+  mut_abs="$(bash "$MUT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c 'could not be computed')"
+  if [ "$mut_rel" -ge 1 ]; then
+    ok "MUTATION — without the absolutization the relative form degrades ($mut_rel message(s)): the parse-time fix is what Part 7 tests"
+  else
+    bad "MUTATION — the relative form still resolved without the absolutization, so Part 7's assertion is vacuous"
+  fi
+  # Pairing: the mutant must still be CORRECT under an absolute root. A mutant that degrades
+  # both ways would satisfy the assertion above while testing nothing about the root FORM.
+  if [ "$mut_abs" -eq "$abs_deg" ]; then
+    ok "MUTATION PAIRING — the same mutant is unaffected under an absolute root: it died of the FORM, not of the edit"
+  else
+    bad "MUTATION PAIRING — the mutant also degraded under an absolute root ($mut_abs vs $abs_deg), so its verdict cannot be attributed to the consumer-root form"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "layer-adjudication-tier: PASS"
