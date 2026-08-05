@@ -88,7 +88,7 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # prompt carrying operator prose, because it fires only when there is none.
 #
 # DO NOT "COMPLETE" THIS by mirroring validate-steering-budget.sh's genuineOperatorText
-# prefix list (<task-notification, <local-command, <agent-message, ...). That list is a
+# prefix list. That list is a
 # hand-maintained enumeration of harness spellings, and re-homing it here in bash makes it
 # two lists in two languages that drift apart -- the exact duplication class this codebase
 # keeps paying for. It also trades the safe failure direction for the unsafe one: a
@@ -97,11 +97,55 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 #
 # The evidence for the wider arms is not clean and is not being acted on here. The
 # consumer's own RCA retracted one arm after a live negative control falsified it, and
-# recorded two later task-notification events that did NOT create the flag, contradicting
+# recorded two later background-completion events that did NOT create the flag, contradicting
 # its own rate. The empty-prompt arm is the part that survived.
-PROMPT_STRIPPED=$(printf '%s' "$PROMPT_RAW" \
+#
+# v0.265.0 -- THE BROADER PREDICATE IS NOW NEEDED, AND IT IS SINGLE-SOURCED, AS THE
+# PARAGRAPH ABOVE REQUIRED. The empty-prompt arm caught only the empty case, and a
+# background-completion event is not empty. Measured on the reference consumer live:
+# 4 of its 5 USER_PAUSE events carried a background-completion preview and ONE carried
+# operator prose, so four fifths of the pauses that sprint were raised by a background
+# command completing. That is the same failure this header says was root-caused, still
+# firing through the arm the narrow predicate does not cover.
+#
+# The prefixes are NOT written here. They are resolved from core/schemas/harness-origin.json,
+# which is also what validate-steering-budget.sh's genuineOperatorText is bound to by
+# invariant -- so there is one declaration and three readers, not three lists in three
+# languages. Matching is ANCHORED, after <system-reminder> stripping, for a reason that is
+# the difference between this and a mis-scoped filter: a prompt that MENTIONS a notification
+# is operator prose ABOUT a notification, and discarding it would be the false NON-pause this
+# header calls the dangerous direction.
+HARNESS_ORIGIN_SCHEMA=""
+for _hos in "${PROJECT_DIR}/.claude/schemas/harness-origin.json" \
+            "${PROJECT_DIR}/core/schemas/harness-origin.json"; do
+  [ -f "$_hos" ] && { HARNESS_ORIGIN_SCHEMA="$_hos"; break; }
+done
+
+# is_harness_origin <text> -> 0 when the text starts with a declared harness prefix.
+#
+# THE UNRESOLVED CASE ANSWERS "NO", AND THAT DIRECTION IS DELIBERATE. If the declaration
+# cannot be read, every prompt is treated as operator prose: the pause still fires and the
+# request is still captured. The alternative fails silent in the direction this whole hook
+# exists to prevent -- a real steer dropped because a JSON file was missing. The condition is
+# not hidden either; the caller logs HARNESS_ORIGIN_UNRESOLVED so a run that lost the
+# declaration does not read as a run with nothing to skip.
+is_harness_origin() {
+  [ -n "$HARNESS_ORIGIN_SCHEMA" ] || return 1
+  printf '%s' "$1" | jq -Rs --slurpfile s "$HARNESS_ORIGIN_SCHEMA" -e '
+    . as $t | ($s[0].prefixes // []) | any(. as $p | ($t | startswith($p)))
+  ' >/dev/null 2>&1
+}
+
+PROMPT_NO_REMINDERS=$(printf '%s' "$PROMPT_RAW" \
   | sed -e 's/<system-reminder>.*<\/system-reminder>//g' \
-  | tr -d '[:space:]')
+  | sed -e 's/^[[:space:]]*//')
+PROMPT_STRIPPED=$(printf '%s' "$PROMPT_NO_REMINDERS" | tr -d '[:space:]')
+if [ -n "$PROMPT_STRIPPED" ] && is_harness_origin "$PROMPT_NO_REMINDERS"; then
+  PROMPT_STRIPPED=""
+  HARNESS_ORIGIN=1
+else
+  HARNESS_ORIGIN=0
+fi
 
 # -----------------------------------------------------------------------------
 # Capture the operator's request -- a HARNESS artifact, not a lead artifact
@@ -254,7 +298,20 @@ if [ -z "$PROMPT_STRIPPED" ]; then
   {
     echo "## ${TIMESTAMP} -- PAUSE_SKIPPED"
     echo "- Session: ${SESSION_ID}"
-    echo "- Reason: UserPromptSubmit carried no operator prose (empty after stripping system-reminders)"
+    # THE TWO SKIP REASONS ARE NAMED SEPARATELY, because they have different remedies and
+    # a reader counting PAUSE_SKIPPED cannot otherwise tell "quiet sprint" from "the
+    # harness-origin declaration went missing and every prompt is being treated as prose".
+    if [ "${HARNESS_ORIGIN:-0}" = "1" ]; then
+      echo "- Reason: prompt was raised by the harness, not the operator (matched a prefix in schemas/harness-origin.json)"
+      echo "- Preview: ${PROMPT_PREVIEW}"
+    else
+      echo "- Reason: UserPromptSubmit carried no operator prose (empty after stripping system-reminders)"
+    fi
+    if [ -z "$HARNESS_ORIGIN_SCHEMA" ]; then
+      echo "- HARNESS_ORIGIN_UNRESOLVED: schemas/harness-origin.json was not found, so no prompt could be"
+      echo "  classified as harness-raised this run. Every prompt was treated as operator prose, which is the"
+      echo "  safe direction and the wrong answer. Reinstall ai-dlc."
+    fi
     echo ""
   } >> "$LOG_FILE"
   exit 0
@@ -275,6 +332,13 @@ seed_log_header
   echo "## ${TIMESTAMP} -- USER_PAUSE"
   echo "- Session: ${SESSION_ID}"
   echo "- Prompt (first 120 chars): ${PROMPT_PREVIEW}"
+  # Emitted on THIS path too, not only on the skip path. A missing declaration produces
+  # pauses, not skips -- so a note that appeared only where nothing was skipped would be
+  # absent from every run where the condition actually cost something.
+  if [ -z "$HARNESS_ORIGIN_SCHEMA" ]; then
+    echo "- HARNESS_ORIGIN_UNRESOLVED: schemas/harness-origin.json was not found, so this pause may have been"
+    echo "  raised by the harness rather than the operator and nothing could tell. Reinstall ai-dlc."
+  fi
   echo ""
 } >> "$LOG_FILE"
 

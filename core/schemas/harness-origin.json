@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "harness-origin.json",
+  "title": "Harness-origin prompt prefixes",
+  "description": "THE single declaration of what a UserPromptSubmit prompt looks like when the HARNESS raised it rather than a human. The harness raises UserPromptSubmit identically when a backgrounded task completes as when a person types, so origin cannot be read from the event -- only from the text. Every reader that must tell those apart resolves this file; none restates its literals. That constraint is mechanized: a numbered invariant in scripts/validate-enforcement-map.sh fails the build if a shipped file carries one of these strings outside this declaration, and it derives BOTH sides rather than hand-listing either. Written because ai-dlc-pause.sh's own header instructed it -- 'if a broader predicate is ever needed, single-source it, do not copy it' -- after a hand-maintained copy of this list in a second language was the failure it was warning about. Matching is ANCHORED at the start of the prompt, after <system-reminder> blocks are stripped: a prompt that MENTIONS a notification is operator prose about a notification, and dropping it would discard a real steer.",
+  "type": "object",
+  "required": ["prefixes"],
+  "additionalProperties": false,
+  "properties": {
+    "prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Anchored prefixes. A prompt whose text starts with any of these was raised by the harness. Measured on the reference consumer at v0.264.0: over its captured request history the set matched 4 of 6 entries and zero operator asks, and over its continuation log it accounted for 4 of 5 USER_PAUSE events."
+    },
+    "copy_scan_exempt": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Prefixes I76's copy-scan does NOT search for, with the exemption declared here rather than buried in the invariant so it is visible to the next reader. A prefix belongs here when the same literal is also an ordinary transcript-envelope token that unrelated code legitimately handles. Measured, not assumed: scanning for `<command-` reported core/hooks/ai-dlc-acknowledge.sh (greps `<command-name>/ai-dlc</command-name>` to find the last skill invocation) and scripts/ab-lead-model.js (tests `<command-name>/(clear|model|compact|resume)` and sets isOperator TRUE — the opposite polarity). Neither classifies prompt origin; both would be permanently red. The prefix stays in `prefixes` and is still enforced against genuineOperatorText — only the copy-scan skips it."
+    }
+  },
+  "prefixes": [
+    "<task-notification",
+    "<local-command",
+    "<command-",
+    "<agent-message",
+    "<teammate-message",
+    "Caveat:",
+    "[Request interrupted",
+    "## Context Usage",
+    "Stop hook feedback",
+    "Base directory",
+    "Another Claude session sent a message"
+  ],
+  "copy_scan_exempt": [
+    "<command-"
+  ]
+}

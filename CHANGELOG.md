@@ -34,6 +34,61 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.265.0] — 2026-08-05
+
+### A background command finishing could turn off the check that compares the plan to the ask
+
+The harness raises `UserPromptSubmit` identically when a backgrounded task completes as when a
+human types. `ai-dlc-pause.sh` knew that — its header says so, and root-causes the pause flag
+being raised by machine events — but the arm it shipped catches only the case where the prompt
+is EMPTY once `<system-reminder>` blocks are stripped. A background-completion event is not
+empty.
+
+**Two symptoms, one missing concept, both measured live on the reference consumer mid-sprint:**
+
+- **The ask capture recorded them as operator requests.** 4 of 6 entries in its
+  `operator-requests-history.md` were harness-raised, and **the newest three in a row were** —
+  shaped exactly like a typed one, same `(typed)` command, same SHA.
+- **The pause flag fired on them.** 4 of its 5 `USER_PAUSE` events that sprint carried a
+  background-completion preview and one carried operator prose. Four fifths of the sprint's
+  pauses were raised by a beat finishing.
+
+**The first symptom disarms Check 33, which is the join this project spent fifteen releases
+building.** Its enforcer takes the newest entry; a machine event names no identifier; no
+identifiers is `NOT-APPLICABLE`; `NOT-APPLICABLE` exits 0. Measured side by side against a
+seeded brief — newest entry: `NOT-APPLICABLE … rc=0`. Pinned to the operator's real ask:
+`rc=1`, naming an uncovered `CAP-`. The consumer's lead avoided it by pinning `--cite-sha` by
+hand, correctly, but nothing made them.
+
+**Added `core/schemas/harness-origin.json`** — one declaration of what a harness-raised prompt
+looks like, and the reason it is a file rather than a list in each reader is that
+`ai-dlc-pause.sh` left the instruction itself: *"if a broader predicate is ever needed,
+single-source it, do not copy it."* The broader predicate is now needed. Three readers resolve
+it — the hook (bash), Check 33's enforcer (Python), and `genuineOperatorText` (JS) — and
+**I76** binds them: both sides derived, the JS alternation extracted from its own source, and
+no shipped file permitted to restate a prefix. `genuineOperatorText` itself is bound, not
+rewritten; its blast radius is measured and this release does not spend it.
+
+**Matching is ANCHORED, and the over-fire control is the point.** A prompt that *mentions* a
+notification is operator prose about a notification; discarding it would be the false
+NON-pause the hook's own header calls the dangerous direction. Both fixtures assert both
+polarities.
+
+**The reader keeps its own filter, and it is not redundant with the hook fix.** The capture is
+append-only by design, so every consumer that ever ran an older hook still carries those
+entries at the end of its history, where they stay newest until the operator happens to type
+again. A routing record pinned to a harness-raised entry now errors by name rather than being
+quietly re-picked, and a capture holding *only* harness-raised entries exits 2 — "nothing was
+asked" and "nothing was recorded" are different answers.
+
+**Two things I76 caught while being written, both kept.** `<command-` is declared
+`copy_scan_exempt` with its measured false-positive set named in the declaration itself:
+`ai-dlc-acknowledge.sh` greps `<command-name>/ai-dlc</command-name>` to find the last skill
+invocation and `ab-lead-model.js` tests the same token and sets `isOperator` **true** — the
+opposite polarity, neither classifying origin. And **I54 caught this release's own
+`printf | grep -q`**, the EPIPE class this repo swept 300 sites for, on the invariant's
+exemption lookup.
+
 ## [0.264.0] — 2026-08-05
 
 ### The reconcile run could not say what it had found, in two different ways
