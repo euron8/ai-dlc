@@ -464,8 +464,8 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 (step 1 below) and derive the test strategy directly from the story
 acceptance criteria. Test strategy for ≤2 already-scoped stories is
 covered by the story validation cycle; the TEA sub-skill adds overhead
-without value. Still run the step-3 adversarial review on the derived
-strategy. Steps 2–3 below otherwise proceed.
+without value. Still run the step-2 adversarial review on the derived
+strategy. Steps 1a–2 below otherwise proceed.
 
 **Execute back-to-back without pausing:**
 
@@ -484,8 +484,7 @@ strategy. Steps 2–3 below otherwise proceed.
    of those four values. A `NOT_EVALUATED` run produces no such file, so its absence
    means the gate did not evaluate — Check 30 treats that as DISARMED, never as a
    pass. Do not synthesise the file to get past the gate.
-2. Tea quality gates — define quality gates and release criteria
-3. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
+2. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
    verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
    HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert

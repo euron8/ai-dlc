@@ -21,8 +21,9 @@
 #
 # THE SCHEMA IS NOT IN THIS FILE. Envelope, field order, and the `story-provenance` profile are
 # loaded from schemas/provenance-block.json — the same file validate-provenance-block.sh (the
-# reader) and validate-story-provenance.sh (the cross-check) load. Add a field to the profile
-# there and it appears in the writer, the reader, and the cross-check at once.
+# reader) loads, and the same file this script's own `--check` mode (the cross-check) re-reads.
+# Add a field to the profile there and it appears in the writer, the reader, and the cross-check
+# at once.
 #
 # SAFETY: refuses to stamp unless the terminal pass is EXIT_CONDITION_MET. Stamping a story with
 # an unconverged verdict would notarize a cycle that has not closed — the opposite of the

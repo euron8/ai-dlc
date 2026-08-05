@@ -716,6 +716,5 @@ point in a loop that must reach zero.
 /bmad-create-story         -- create a single story
 /bmad-dev-story            -- implement a single story
 /bmad-code-review          -- validate implementation quality
-/bmad-validate-story       -- automated story quality gate
 /bmad-correct-course       -- remediation when validation fails
 ```
