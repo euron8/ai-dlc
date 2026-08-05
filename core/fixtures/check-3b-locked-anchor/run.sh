@@ -122,6 +122,90 @@ BEGIN/END pair|<!-- LOCKED_REQUIREMENTS_BEGIN -->|<!-- LOCKED_REQUIREMENTS_END -
 whole block in one comment|<!-- LOCKED_REQUIREMENTS|END LOCKED_REQUIREMENTS -->
 SPELLINGS
 
+# --- CWD INVARIANCE: a citation is story-relative, not caller-relative -------------
+# EVERY ASSERTION ABOVE WAS CWD-DEPENDENT UNTIL v0.263.0, AND THE SUITE RUNNER'S CHOICE
+# OF CWD IS WHAT HID IT. `resolve_artifact` tried `os.getcwd()/<cited>` BEFORE the story's
+# own directory, and THIS DIRECTORY SHIPS A DECOY: `product-brief.md` here carries LR-1
+# and LR-2, not the LR-S1-1 the matrix above cites. Both pre-push hooks run `bash
+# "$d/run.sh"` from the repo root, where no `product-brief.md` exists, so the fixture was
+# green for years; run it from its own directory -- which is what a human does, and what
+# the reference consumer's differential harness did -- and the seven honest cases went red.
+#
+# The half that did not go red is the reason this block exists rather than a bug report.
+# The seven FABRICATED cases stayed green from the decoy cwd, because a story is rejected
+# for a dangling anchor exactly as it is rejected for fabricated text: same rc, different
+# reason. Half the matrix was asserting nothing, and its output said `ok`.
+#
+# So the invariant is asserted directly: the SAME story gets the SAME verdict from three
+# cwds, one of which is the decoy. Both polarities are run -- an honest story that stays
+# accepted proves resolution reached the right brief, and a fabricated one that stays
+# rejected proves the verdict came from the TEXT rather than from a failed lookup.
+DECOY="$DIR"
+EMPTY="$WORK/empty"; mkdir -p "$EMPTY"
+printf '# story\n\n<!-- LOCKED_REQUIREMENTS -->\nfull_text_source: product-brief.md:LR-S1-1\n- LR-S1-1 pool fee is 3000\n<!-- END LOCKED_REQUIREMENTS -->\n' \
+  > "$SP/cwd-honest.md"
+printf '# story\n\n<!-- LOCKED_REQUIREMENTS -->\nfull_text_source: product-brief.md:LR-S1-1\n- LR-S1-1 pool fee is 500 FABRICATED\n<!-- END LOCKED_REQUIREMENTS -->\n' \
+  > "$SP/cwd-fabricated.md"
+
+# The decoy must actually be a decoy. If this directory's brief ever gains LR-S1-1 the
+# assertions below still pass, having tested nothing -- so check, and fail loudly.
+if [ ! -f "$DECOY/product-brief.md" ] || grep -q 'LR-S1-1' "$DECOY/product-brief.md"; then
+  echo "FIXTURE ERROR: $DECOY/product-brief.md is no longer a decoy (missing, or it now carries LR-S1-1)." >&2
+  echo "  the cwd-invariance assertions below cannot distinguish anything. Restore a brief without LR-S1-1." >&2
+  rc=2
+else
+  cwd_case() { # cwd_case <validator> <label> <cwd> <story> <expected-rc> <what>
+    ( cd "$3" && bash "$1" "$4" >/dev/null 2>&1 )
+    local got=$?
+    if [ "$got" -eq "$5" ]; then
+      echo "ok: CWD INVARIANCE — $6 from cwd '$2'"
+      return 0
+    fi
+    echo "FAIL: CWD INVARIANCE — $6 from cwd '$2': expected rc=$5, got rc=$got" >&2
+    rc=1
+    return 1
+  }
+  while IFS='|' read -r cwd_label cwd_path; do
+    [ -n "$cwd_label" ] || continue
+    cwd_case "$VALIDATOR" "$cwd_label" "$cwd_path" "$SP/cwd-honest.md"     0 "an honest story is ACCEPTED"
+    cwd_case "$VALIDATOR" "$cwd_label" "$cwd_path" "$SP/cwd-fabricated.md" 1 "a fabricated story is REJECTED"
+  done <<CWDS
+decoy (this fixture dir)|$DECOY
+empty|$EMPTY
+story dir|$SP
+CWDS
+
+  # MUTATION: restore the shipped-until-v0.263.0 preference and require the decoy cwd to
+  # go red. Without this the block above is three copies of one passing assertion.
+  MUT3="$WORK/mutant-cwd-order.sh"
+  MUT_OLD='        candidates.append(os.path.join(story_dir, cited))
+        candidates.append(os.path.join(os.getcwd(), cited))'
+  MUT_NEW='        candidates.append(os.path.join(os.getcwd(), cited))
+        candidates.append(os.path.join(story_dir, cited))'
+  MUT_OLD="$MUT_OLD" MUT_NEW="$MUT_NEW" python3 -c 'import os,sys; s=open(sys.argv[1]).read(); open(sys.argv[2],"w").write(s.replace(os.environ["MUT_OLD"],os.environ["MUT_NEW"],1))' \
+    "$VALIDATOR" "$MUT3"
+  if cmp -s "$VALIDATOR" "$MUT3"; then
+    echo "FIXTURE ERROR: the resolution-order mutation matched nothing — the cwd assertions above prove nothing." >&2
+    echo "  update MUT_OLD in run.sh to match resolve_artifact's real candidate order." >&2
+    rc=2
+  else
+    if ( cd "$DECOY" && bash "$MUT3" "$SP/cwd-honest.md" >/dev/null 2>&1 ); then
+      echo "FAIL: MUTATION — cwd-first resolution still accepted the honest story from the decoy cwd; the invariance assertions prove nothing" >&2
+      rc=1
+    else
+      echo "ok: MUTATION — cwd-first resolution reds the honest story from the decoy cwd (the ORDER is what the assertions test)"
+    fi
+    # Pairing: the same mutant must still accept it from a cwd with no decoy. A mutant
+    # that reds everything would satisfy the assertion above while testing nothing.
+    if ( cd "$EMPTY" && bash "$MUT3" "$SP/cwd-honest.md" >/dev/null 2>&1 ); then
+      echo "ok: MUTATION PAIRING — the same mutant still accepts it from an empty cwd (it died of the decoy, not of the edit)"
+    else
+      echo "FAIL: MUTATION PAIRING — the mutant rejects the honest story from an empty cwd too; its verdict is unattributable" >&2
+      rc=1
+    fi
+  fi
+fi
+
 # --- the UNCLOSED-BLOCK guard ------------------------------------------------------
 # An opener with no closer must FAIL, not pass with zero blocks. Three real story files
 # in the reference consumer were in exactly this state and had been passing.

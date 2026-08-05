@@ -34,6 +34,43 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.263.0] — 2026-08-05
+
+### Check 3b verified a story against whichever brief the caller's shell happened to be standing in
+
+`validate-locked-anchor.sh` resolved a relative `full_text_source:` citation by trying
+`os.getcwd()/<cited>` **before** the story's own directory. A citation is a claim about the
+brief that sits beside the story; the process working directory belongs to whoever typed the
+command. So the same story, unchanged, verified against a different source of record
+depending on where it was invoked from. Shipped that way since `v0.40.0`.
+
+**The fixture that was supposed to catch this shipped the decoy that hid it.**
+`core/fixtures/check-3b-locked-anchor/` carries its own `product-brief.md` (`LR-1`, `LR-2`)
+in the directory it runs from, while its spelling matrix writes stories to a tempdir citing
+`LR-S1-1`. Both pre-push hooks run `bash "$d/run.sh"` from the repo root, where no
+`product-brief.md` exists, so the fixture was green. Run from its own directory it is **7 of
+14 spelling assertions red** — and the seven that stayed green are the reason this is a
+defect rather than untidiness: a **fabricated** requirement was being rejected for a dangling
+anchor rather than for the fabrication. Same exit code, different reason, `ok` either way.
+Half the matrix had been asserting nothing since `v0.244.0`.
+
+Found by an operator's `0.249.0 → 0.262.0` pull. The differential that was supposed to
+separate "rulebook lag" from "red upstream" ran both arms from the fixture's own directory,
+so the distribution arm agreed with the consumer arm for the same reason it was meant to
+rule out — a control that agrees with the verdict has told you nothing.
+
+**Fixed.** `resolve_artifact` tries the story's directory first. `os.getcwd()` is **kept** as
+a later candidate rather than dropped: reordering was measured, dropping would not have been.
+**FP set: 0.** Over the reference consumer's 59 citation-bearing artifacts, no verdict changes
+from either cwd — 28 of the story citations carry the full relative path and only 3 are bare
+basenames, which is the only shape the cwd candidate could ever capture.
+
+**Added.** A cwd-invariance block in the fixture: the same story, both polarities, from three
+cwds including the decoy, plus a mutant that restores the old order and must red the decoy cwd,
+its pairing control on an empty cwd, and a guard that fails loudly if the decoy ever stops
+being one. Reverting the fix now reds the fixture **at the suite's own cwd**, where the
+original defect was invisible.
+
 ## [0.262.0] — 2026-08-04
 
 ### The self-update slice could not be green without the rulebook, and nothing said so until a branch had been cut
