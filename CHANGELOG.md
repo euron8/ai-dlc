@@ -34,6 +34,44 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.270.0] — 2026-08-05
+
+### Check 30's traceability leg named a file the only run that could write it never writes
+
+The rulebook told the lead to pass `bmad-testarch-trace`'s `gate-decision.json` to Check 30 via
+`--trace-verdict`. That file has never existed in the reference consumer across ~300 sprints, and
+the reason is structural rather than accidental.
+
+**The trace runs at planning phase, where coverage is 0 by construction.** The pipeline's only
+invocation is `stories-test-strategy.md` §5 step 1a — before any story is implemented. The
+consumer's own `e2e-trace-summary.json`, which the tool writes unconditionally, records the run
+exactly: coverage `0/34`, every AC `PLANNED`, `phase: planning`, and a `gate` object reading
+`allow_gate: false`, `decision: NOT_EVALUATED`, `gate_decision_json_written: false`, and —
+decisively — **`gate_decision_json_absence_is_correct: true`**. Its own note: *"Zero S300 tests
+exist... collected coverage is 0 by construction and is NOT a coverage defect."*
+
+Neither ai-dlc nor the consumer sets `allow_gate`; the tool sets it for the phase. So no sprint at
+any point in the current pipeline can produce that file, and none ever did.
+
+**The instruction was not inert — it was a trap.** `validate-spec-join.sh:318` exits **2** when
+`--trace-verdict` names an unreadable file. Omitting the flag skips the block cleanly; passing it as
+instructed fails the gate. A lead following the rulebook literally would have blocked every story
+gate, and the evidence that none did is the absence of the file plus green gates.
+
+**Both sites now say so.** `stories-test-strategy.md` states that this run produces no gate decision,
+that the flag is not passed here, and that a zero is not a coverage defect — and points at the
+summary's `gate` object for the recorded rationale instead of inferring one from a missing file.
+Check 30 declares the leg **DISARMED by construction, not dormant**, which is the distinction this
+repo already draws elsewhere: a leg that cannot fire where it sits is not a leg that has been quiet.
+
+**The validator is unchanged.** `--trace-verdict` remains supported so a post-implementation trace —
+which the pipeline does not currently take — can arm it without a script change. That is the
+condition under which this leg becomes real, stated rather than left implicit.
+
+**Found without running anything.** The question was framed as needing a live trace run on a real
+sprint. It did not: the tool had already written the answer to disk, in a field named for exactly
+this question.
+
 ## [0.269.0] — 2026-08-05
 
 ### The release gate reported a pass over a commit that was not the work under test

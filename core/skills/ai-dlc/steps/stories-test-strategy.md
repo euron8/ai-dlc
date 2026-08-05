@@ -474,16 +474,25 @@ strategy. Steps 1a–2 below otherwise proceed.
 1a. `/bmad-testarch-trace` — generate the requirements-to-tests traceability
    matrix and its quality gate decision (PASS / CONCERNS / FAIL / WAIVED).
    This closes the last leg of the chain, `AC → test`, against the same
-   `CAP-<n>` IDs the spec and the PRD carry. It writes `gate-decision.json`
-   carrying `gate_status` in `{PASS, CONCERNS, FAIL, WAIVED}`; pass that FILE to
-   gate-validation Check 30 via `--trace-verdict`. **The decision is advisory
-   until that check reads it** — `FAIL` fails the gate, `CONCERNS`/`WAIVED` are
-   recorded with the matrix cited rather than dropped.
+   `CAP-<n>` IDs the spec and the PRD carry.
 
-   `gate-decision.json` is written ONLY when the gate was evaluated and reached one
-   of those four values. A `NOT_EVALUATED` run produces no such file, so its absence
-   means the gate did not evaluate — Check 30 treats that as DISARMED, never as a
-   pass. Do not synthesise the file to get past the gate.
+   **This run does NOT produce a gate decision, and no `--trace-verdict` is passed
+   at this step.** The trace runs here at PLANNING phase, before any story is
+   implemented, so collected coverage is 0 by construction — zero tests exist yet
+   and every AC is `PLANNED`. The tool answers that by setting `allow_gate=false`
+   for the run, recording `decision: NOT_EVALUATED`, and writing no
+   `gate-decision.json`. Its own summary states the absence is correct. A zero
+   here is not a coverage defect and MUST NOT be read as one.
+
+   What the run DOES produce is the traceability matrix and
+   `e2e-trace-summary.json`, which it writes unconditionally. Read the summary's
+   `gate` object for the recorded rationale rather than inferring one from the
+   missing file.
+
+   **Check 30's `--trace-verdict` leg is therefore DISARMED by construction at
+   this gate, not dormant.** It could only carry a real verdict from a trace run
+   taken AFTER implementation, when tests exist; the pipeline takes no such run
+   today. Do not synthesise `gate-decision.json` to arm it.
 2. `/bmad-review-adversarial-general` — review test strategy. Apply fixes.
    **ONE-SHOT — the bmad skill is correct here and stays.** Nothing loops, no
    verdict is stamped, no gate counts this residue, so the skill's "find ≥10,
