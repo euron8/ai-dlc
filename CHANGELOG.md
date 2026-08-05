@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.272.0] — 2026-08-05
+
+### The pull can now say an override is no longer NEEDED, not just that it drifted
+
+v0.271.0 made the snapshot's section set data, so the reference consumer's Check 14 override
+became unnecessary. Nothing told it. Every override status the pull emits asks whether the entry
+is still **correct**; none asked whether it is still **needed**, so a superseded entry presents as
+ordinary section drift — which reads as *re-adopt the new wording*, not *you can delete this*. The
+entry survives, and because an override replaces its whole section it goes on freezing every
+unrelated line in that span at its `base_sha`. That is precisely how v0.268.0's Check 14 fix
+failed to reach that consumer.
+
+**Core can now declare it.** `override_supersessions:` in `layer-contract.yaml` names the
+`shadows:` key that is superseded, the core version that superseded it, and the configuration that
+replaces it. `layer-drift.sh` matches a consumer entry against it — on the same normalised
+`shadows:` key the double-shadow arm uses, so a spelling difference cannot hide a supersession —
+and emits **`OVERRIDE-SUPERSEDED`**. `apply.sh` turns that into an `override-retire` worklist item
+carrying the replacement, instead of the `override-readopt` item that would have had the operator
+carefully re-adopt an entry they can delete.
+
+**Nothing new deletes anything.** `readopt-override.sh` already had a `retire` outcome and already
+gates a bare re-stamp behind a stale-text check. This release only lets core say *which* entries
+qualify; the retirement runs through the machinery that was already there.
+
+**The check is placed before anchor resolution deliberately.** A supersession is a property of the
+entry's declaration, not of whether its anchor still resolves upstream — an entry whose target has
+been renamed away is, if anything, more retirable, and the anchor-resolution early-return would
+have skipped exactly those.
+
+**Verified against the live consumer, not only a fixture.** Driven at its real stamp: **1** row,
+naming the Check 14 override; **0** with the declaration removed; **1** restored. Controls in the
+same run — 23 `EXTENSION-OK`, 11 `OVERRIDE-OK` — so the 1 is a real match rather than a live wire.
+Fixture adds three assertions: the declared entry is reported, an entry on an undeclared anchor
+stays silent, and a non-vacuity arm proving that silence is a real zero because the control appears
+in the output under another status.
+
+**`contract_version` 13 → 14**, which is how the clause reaches consumers: entries carrying
+`conforms_to: 13` enter the migration worklist, and for this consumer the migration IS the
+retirement.
+
+**Two of this repo's own invariants caught the change mid-flight, and both were right.** I36
+reverse refused a status no clause claimed; I42 refused a clause introduced above
+`contract_version`. A third, I78, refused the copyable example still declaring the old version.
+
+**One self-inflicted collision, recorded because the naming was the defect.** The declaration first
+used `since:` at the same indent as the clauses' own `since:`, and a fixture mutant that rewrites
+"the first `    since:`" then rewrote the wrong one — the I42 arms stopped firing. The two fields
+are different things: a clause's `since:` is a contract-version integer, this one is a core semver.
+It is now `since_core_version:`.
+
 ## [0.271.0] — 2026-08-05
 
 ### The snapshot's canonical section set is data, so a consumer no longer shadows a whole check to add one
