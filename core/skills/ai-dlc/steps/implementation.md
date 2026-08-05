@@ -273,7 +273,8 @@ Create tasks from sprint stories. For every dev task, create three
 follow-up tasks with dependencies:
 1. Code review task → assigned to code-reviewer, blocked by dev task
 2. QA validation task → assigned to qa, blocked by code review
-3. Story validation (`/validate-story`) → blocked by QA
+3. Story validation → blocked by QA. Gate 3 is a lead-run
+   `gate-validation.md` declared `[implementation]`; no sub-skill performs it.
 
 ### 4. Self-Validate Task List
 

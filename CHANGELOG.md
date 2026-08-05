@@ -34,6 +34,63 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.266.0] — 2026-08-05
+
+### A skill, a script, and a deliverable the rulebook names and nothing provides
+
+Found by reading the pipeline against the document it was built from, not by a validator. All three
+are the same shape: a line asserts that something exists elsewhere, and nothing joins the two.
+
+**`/validate-story` — gate 3 of three named an executor that does not exist.**
+`implementation.md:276` read ``3. Story validation (`/validate-story`) → blocked by QA``. There is
+nothing to rename it to: the reference consumer ships 131 skills and `bmad-validate-story` is not
+among them (explicit `ls` control), and `_bmad/` carries no story-validation workflow. `bmad-dev-story`
+exists and *implements* a story. Gate 3 already had a real definition four lines further down —
+`implementation.md:386-390`, a lead-run `gate-validation.md` declared `[implementation]` — so the
+line now says that. Controls: `gate3` appears nowhere outside `implementation.md`, and zero times in
+`core/schemas/` or `core/scripts/`.
+
+**Why Check 32 never saw it, corrected from what was assumed.** Check 32 is *not* file-scoped to
+planning gates. `validate-bmad-invocations.sh:105-110` roots at `core/skills/ai-dlc` and `grep -r`s
+the whole tree — `implementation.md` was always inside its file set. The only thing shielding the
+name was the literal `bmad-` in the enumerator regex at `:154`. **Widening the file set would have
+changed nothing, and widening the prefix is not shippable:** re-running the same call-site grammar
+without the prefix yields **1 true positive against 9–10 false positives**, four of them Claude Code
+builtins (`/clear`, `/compact`, `/context`, `/model`, `/effort`) and four path fragments (`/epics`,
+`/index`, `/story-`, `/bmad-`). Guarding that needs a hand-maintained builtin allowlist, which is the
+failure this project already names as *the list IS the bug*. Measured, then declined.
+
+Also removed: `/bmad-validate-story` from `templates/QUICKSTART.md.template`, a second dangling name
+that sits outside Check 32's rules root and had therefore never been read by anything. The other four
+commands in that block — `bmad-create-story`, `bmad-dev-story`, `bmad-code-review`,
+`bmad-correct-course` — were each checked and each resolves, so only the one line went.
+
+**`validate-story-provenance.sh` — a script credited with a guarantee, which does not exist.**
+`core/schemas/provenance-block.json` told readers it *"re-derives the same and fails closed on any
+drift"*, and `stamp-story-provenance.sh:24` called it *"the cross-check"*. `ls core/scripts/ | grep
+story` returns one file. The cross-check is real but lives as **`stamp-story-provenance.sh --check`**
+(`:62`, `:355-359` — prints `DRIFT` / `OK`), never as a separate script. Both references now name it.
+This is the worst of the three: a schema comment asserting a fail-closed property that no file
+provided.
+
+**Tea quality gates — a step with no producer and no reader, removed.**
+`stories-test-strategy.md` §5 step 2 read `Tea quality gates — define quality gates and release
+criteria`: prose, no command, no artifact path, no actor, no output contract — the only step in §5
+with none of those. Control grep for `release criteria` across `core/skills/`, `core/scripts/` and
+`core/team-roles/` returned **exactly one hit: that line itself.** Check 21 reads the test strategy
+only for *named tests*. `/bmad-testarch-trace`'s `gate-decision.json` is a coverage verdict — an
+output — not thresholds, which are an input. And `tea.md`, the role that would author criteria, is
+contractually read-only (`:22`, `:39-40`) and is never dispatched at §5.
+
+**The work was being done anyway, into a void.** Release-criteria prose appears in the reference
+consumer's test-strategy documents from sprint 138 through sprint 300 — written every sprint into a
+section nothing has ever consumed. Removing the step stops paying for it. **If release criteria are
+wanted, the reader comes first;** a step that emits where nothing reads is exactly what this line
+already was.
+
+§5's remaining steps renumber 1 → 1a → 2, and the `carry-over-single` intensity gate above them now
+names the adversarial review as step 2. Grep confirms no inbound pointer referenced the old numbering.
+
 ## [0.265.0] — 2026-08-05
 
 ### A background command finishing could turn off the check that compares the plan to the ask
