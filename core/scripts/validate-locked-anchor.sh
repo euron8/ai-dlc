@@ -215,8 +215,30 @@ def resolve_artifact(cited, story_path):
     if os.path.isabs(cited):
         candidates.append(cited)
     else:
-        candidates.append(os.path.join(os.getcwd(), cited))
+        # THE STORY'S OWN DIRECTORY IS TRIED FIRST, AND THE ORDER IS THE WHOLE POINT.
+        # A citation is a claim about the brief that sits BESIDE THE STORY; the process
+        # working directory is a property of whoever invoked the validator and has no
+        # relationship to either file. With `os.getcwd()` first -- the shipped order from
+        # v0.40.0 until v0.263.0 -- a bare `product-brief.md` resolved against the caller's
+        # cwd, so the same story verified against a DIFFERENT brief depending on where the
+        # command was typed.
+        #
+        # That is not hypothetical: `core/fixtures/check-3b-locked-anchor/` ships its own
+        # `product-brief.md` (carrying `LR-1`/`LR-2`) in the directory the fixture runs
+        # from, and the spelling matrix writes its stories to a tempdir holding a brief
+        # with `LR-S1-1`. Run from the repo root the fixture was green; run from its own
+        # directory the seven honest cases went red on `anchor not found`, and -- worse --
+        # the seven FABRICATED cases were rejected for the missing anchor rather than for
+        # the fabrication, so half the matrix asserted nothing. A check whose verdict
+        # depends on the caller's cwd reads exactly like one that passed.
+        #
+        # cwd is KEPT as a later candidate rather than dropped: it costs nothing once the
+        # story-relative reading has had its turn, and dropping it would be an unmeasured
+        # narrowing. Reordering was measured instead -- 59 real citation-bearing artifacts
+        # on the reference consumer, 0 verdict changes from either cwd, because 28 of the
+        # story citations carry the full relative path and only 3 are bare basenames.
         candidates.append(os.path.join(story_dir, cited))
+        candidates.append(os.path.join(os.getcwd(), cited))
         # Walk up from the story dir looking for the bare basename (stories
         # typically sit one level below the planning-artifacts dir that holds
         # the brief).
