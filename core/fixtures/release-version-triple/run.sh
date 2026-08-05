@@ -53,7 +53,7 @@ bad() { printf '  FAIL  %s\n' "$1"; made=$((made+1)); fails=$((fails+1)); }
 # PASS. Every assertion below reaches the validator through `$( )`, so the same
 # shape is available here. A failed assertion is loud; one that never executed is
 # not, and this is what tells them apart.
-EXPECTED_ASSERTIONS=18
+EXPECTED_ASSERTIONS=20
 
 cd "$WORK" || exit 2
 git init -q . 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
@@ -373,6 +373,34 @@ if [ "$status" = "0" ] \
   ok "with no origin/main the arm announces it did not run, in the NOTE and in the summary"
 else
   bad "an unevaluated arm passed silently -- exit $status"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 18. An EMPTY range falls back to HEAD, and the verdict names the substitution
+# With no commits of its own, a branch's HEAD is origin/main's tip -- somebody else's
+# already-merged release, whose triple agrees by construction. A bare `PASS 1 commit(s)`
+# there is a check that cannot fire reading exactly like one that passed, and it reads
+# that way at the moment a rehearsal is most likely: before the release commit exists.
+git checkout -q release/0.2.0
+git update-ref refs/remotes/origin/main "$(git rev-parse HEAD)"
+status="$(run0)"
+if [ "$status" = "0" ] && grep -q 'range origin/main..HEAD was EMPTY' "$WORK/out.txt"; then
+  ok "an empty range names the commit it fell back to instead of reporting a bare pass"
+else
+  bad "an empty range reported a pass without naming its substituted subject -- exit $status"
+  sed 's/^/        /' "$WORK/out.txt"
+fi
+
+# --- 19. CONTROL: the note is not unconditional --------------------------------
+# On main the fallback IS the intended subject, and `branch-base arm n/a on main`
+# already says where the run is. A note that printed everywhere would be noise, and
+# noise is how a real signal stops being read.
+git checkout -q main
+status="$(run0)"
+if [ "$status" = "0" ] && ! grep -q 'was EMPTY' "$WORK/out.txt"; then
+  ok "CONTROL: on main the same empty range prints no note (so assertion 18 is not unconditional)"
+else
+  bad "the empty-range note fired on main, where the fallback is the intended subject -- exit $status"
+  sed 's/^/        /' "$WORK/out.txt"
 fi
 
 echo ""
