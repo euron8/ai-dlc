@@ -2067,8 +2067,18 @@ retroactively spec-require a story written before the layer existed. Report
 --prd <prd> --story <each in-scope story>` (plus `--baseline <file>` if this project
 carries one), passing `--spine` with the
 `ARCHITECTURE-SPINE.md` path, `--spine-lint` with
-`lint_spine.py`'s JSON output and `--trace-verdict` with the
-`bmad-testarch-trace` gate decision. Exit 0 required.
+`lint_spine.py`'s JSON output. Exit 0 required.
+
+**`--trace-verdict` is NOT passed at this gate, and that is by construction rather
+than by omission.** The only `bmad-testarch-trace` run the pipeline takes is at
+`stories-test-strategy.md` §5, at planning phase, where no story is implemented yet:
+collected coverage is 0, the tool sets `allow_gate=false`, records
+`decision: NOT_EVALUATED`, and deliberately writes no `gate-decision.json`. Passing
+the flag here would name a file that run cannot produce, and this leg would report
+DISARMED at every gate forever. It carries a real verdict only from a trace taken
+AFTER implementation; the pipeline takes no such run today. The flag remains
+supported by the validator so that a post-implementation run can arm it without a
+script change.
 
 The joins: every locked requirement reaches a `CAP-<n>`; every `CAP-<n>` is bound by
 an architecture decision (`- **Binds:**` in the spine, where `all` binds every
