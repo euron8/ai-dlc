@@ -159,6 +159,24 @@ if [ "${1:-}" = "--adjudicated-codes" ]; then
 else
   [ $# -eq 4 ] || { echo "usage: layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>" >&2; exit 2; }
   DIST="$1"; BASE="$2"; THEIRS="$3"; CONSUMER="$4"
+  # ABSOLUTIZE, BECAUSE ONE READER OF $CONSUMER RUNS INSIDE THE OTHER REPO.
+  # `adj_digest` hashes the consumer's entry file with `git -C "$DIST" hash-object
+  # "$CONSUMER/$1"` -- and `-C` moves git into the DISTRIBUTION first, so a RELATIVE
+  # consumer root resolves there and the hash silently fails. Every ADJUDICATED row then
+  # reports "subject digest could not be computed (entry or target unreadable)" instead of
+  # carrying the digest the operator needs to record a verdict against.
+  #
+  # WHAT MAKES IT A DEFECT RATHER THAN A USAGE ERROR: the BLOCKER COUNT IS IDENTICAL either
+  # way. Measured on the reference consumer at 0.263.0 -- 11 "could not be computed" under
+  # `.`, 0 under the absolute path, and 13 HARD- rows in BOTH runs. Nothing in the output
+  # tells the reader they are holding eleven unactionable messages, which is this repo's
+  # "a check that cannot fire reads exactly like one that passed" in its reporting form.
+  #
+  # Fixed at parse time rather than at the call site so no LATER reader of $CONSUMER can
+  # reintroduce it, and in preclassify.sh's donor form rather than a new one -- it has
+  # absolutized both roots this way since it was written. The `codes` mode above leaves
+  # CONSUMER empty by design and must not be absolutized into the current directory.
+  CONSUMER="$(cd "$CONSUMER" 2>/dev/null && pwd)" || { echo "layer-drift: consumer-root not a directory: ${4}" >&2; exit 2; }
 fi
 
 SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
