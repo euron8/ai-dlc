@@ -108,6 +108,7 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null)" || {
 
 RANGE=""
 COMMIT=""
+SUBJECT_NOTE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --range)  RANGE="${2:-}"; shift 2 ;;
@@ -123,7 +124,22 @@ elif [ -n "$RANGE" ]; then
   COMMITS="$(git rev-list --no-merges "$RANGE" 2>/dev/null)"
 else
   COMMITS="$(git rev-list --no-merges origin/main..HEAD 2>/dev/null || true)"
-  [ -n "$COMMITS" ] || COMMITS="$(git rev-parse HEAD 2>/dev/null)"
+  # EMPTY RANGE FALLS BACK TO HEAD, AND THE VERDICT MUST SAY SO. With no commits of
+  # its own a branch's HEAD is origin/main's tip -- the PREVIOUS release, whose triple
+  # agrees by construction because it was validated when it merged. Reporting that as
+  # a bare `PASS 1 commit(s)` is a check that cannot fire reading exactly like one that
+  # passed, and it reads that way at the one moment a rehearsal is most likely: before
+  # the release commit exists. The fallback stays -- on main it is the intended subject
+  # -- but it is now named in the verdict.
+  if [ -z "$COMMITS" ]; then
+    COMMITS="$(git rev-parse HEAD 2>/dev/null)"
+    # Scoped to a BRANCH. On main the fallback is the intended subject -- HEAD is the
+    # release that just merged, and `branch-base arm n/a on main` already says where
+    # the run is. On a branch with no commits of its own it is somebody else's release.
+    if [ "$(git symbolic-ref -q --short HEAD 2>/dev/null)" != "main" ]; then
+      SUBJECT_NOTE=" [range origin/main..HEAD was EMPTY -- validated HEAD $(git rev-parse --short HEAD 2>/dev/null), the last merged release, NOT any commit on this branch]"
+    fi
+  fi
 fi
 
 fails=0
@@ -306,7 +322,7 @@ fi
 # The PASS line enumerates the arms that ACTUALLY RAN, and says so per arm. A
 # fixed summary would report an unevaluated arm as a green one, which is the
 # failure mode this file is a response to.
-summary="PASS  ${checked} commit(s): subject, VERSION and CHANGELOG heading agree"
+summary="PASS  ${checked} commit(s)${SUBJECT_NOTE}: subject, VERSION and CHANGELOG heading agree"
 if [ "$arm_c_ran" -eq 1 ]; then summary="$summary; one release in the range"
 else                            summary="$summary; MULTI-RELEASE ARM NOT EVALUATED"; fi
 if [ "$arm_d_ran" -eq 1 ]; then summary="$summary; no unpushed main commits inherited"

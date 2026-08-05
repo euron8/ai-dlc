@@ -34,6 +34,41 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.269.0] — 2026-08-05
+
+### The release gate reported a pass over a commit that was not the work under test
+
+Found while shipping v0.266.0, by noticing that the gate said `PASS 1 commit(s)` at a moment when
+`git rev-list --count origin/main..HEAD` said **0**.
+
+`validate-release-version.sh` resolves its subject from `origin/main..HEAD`, and when that range is
+empty it silently falls back to `HEAD`. On a branch with no commits of its own, `HEAD` is
+`origin/main`'s tip — **the previous, already-merged release**, whose triple agrees by construction
+because it was validated when it merged. So the gate reported a green triple over somebody else's
+release and said nothing about the substitution.
+
+**The moment this reads wrong is the moment it is most likely to be run.** A rehearsal before the
+release commit exists is exactly the empty-range case, and a bare `PASS 1 commit(s)` there is
+indistinguishable from having validated the pending work.
+
+**The file already held the doctrine it needed.** Its own summary block says the PASS line
+enumerates the arms that actually ran, because *"a fixed summary would report an unevaluated arm as
+a green one, which is the failure mode this file is a response to."* The same rule was never applied
+to the summary's **subject**. It is now: an empty range prints
+`[range origin/main..HEAD was EMPTY -- validated HEAD <sha>, the last merged release, NOT any commit
+on this branch]`.
+
+**The fallback stays, and the note is scoped to a branch.** On `main` the fallback is the intended
+subject — `HEAD` is the release that just merged — and `branch-base arm n/a on main` already says
+where the run is. A note that printed everywhere would be noise, and noise is how a real signal stops
+being read. Exit codes are unchanged on every path, so the false-positive risk is nil.
+
+**Two new fixture assertions, and the mutant proves they are not entangled.** Assertion 18 asserts
+the note appears on a branch with an empty range; assertion 19 is the control asserting it does
+**not** appear on main. Stripping `${SUBJECT_NOTE}` from the validator takes assertion 18 red and
+leaves 19 green — one mutant, one failure. The suite's `EXPECTED_ASSERTIONS` counter moves 18 → 20,
+which is what stops an arm from vanishing silently.
+
 ## [0.268.0] — 2026-08-05
 
 ### The step that assigns validation intensity could not assign one of the four
