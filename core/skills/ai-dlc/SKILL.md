@@ -421,10 +421,13 @@ MUST re-present that gate and obtain fresh in-session approval — even if
 the resume text says "execute ... on my approval" or "proceed once
 resumed." Approval is bound to the session that granted it; it does not
 survive into a new conversation. This applies to every human gate: the
-sprint-PR merge, the Production Validation Checkpoint, a
-`DEFERRAL_REQUEST`, a destructive one-time operation, and any HARD_BLOCK
-disposition. Treating resume text as standing approval is a rule
-violation.
+Production Validation Checkpoint, defined in `steps/deploy-validate.md`; a
+destructive one-time operation, defined in `steps/deploy-validate.md`; a
+`DEFERRAL_REQUEST`, defined in `escalations.md`; and any HARD_BLOCK
+disposition, defined in `escalations.md`. Every gate named here MUST cite
+the file defining its procedure. A gate with no procedure is not a gate,
+and the sprint-PR merge is not one — `steps/retro.md` merges it without
+asking. Treating resume text as standing approval is a rule violation.
 
 ### Reminder thresholds
 

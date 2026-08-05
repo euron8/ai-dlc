@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.267.0] — 2026-08-05
+
+### The list of human gates named one that is not a gate and one that has no procedure
+
+`SKILL.md`'s "pending operator approvals do not transfer across handoff" rule named five human
+gates. Checked against the rest of the rulebook, two did not hold up.
+
+**The sprint-PR merge is not a human gate, and three other places already said so.** The pipeline
+creates exactly one PR (`retro.md:846`), and `retro.md:905` merges it with *"Do NOT ask for
+approval."* Rule 3's **closed set of four pause points** (`SKILL.md:120-127`) does not contain it,
+and Rule 10 says production validation is the only human checkpoint. One sentence against three.
+Removed, and the rule now says plainly that the sprint-PR merge is not a gate and names where it is
+merged, so the next reader does not restore it as an oversight.
+
+**What that costs, stated rather than buried.** That phrase was the last surviving descendant of the
+founding document's *"YOUR GATE (Code): Review final PR(s) and sprint-level findings before merge to
+main."* Everything else about that gate had already been inverted, and the merge had already moved
+from before the retro to inside it. This closes it deliberately.
+
+**A destructive one-time operation was named as a gate with no procedure anywhere.** One mention,
+zero implementations. Control: "Production Validation Checkpoint" carries a mention **and** a
+procedure in `deploy-validate.md` **and** a presentation template — that is the shape a live gate
+has. Rule 13 is not the missing procedure: its carve-out enumerates a closed subject list that is
+entirely access-control, and it supplies a posture (stage / fire, per-action authorization) with no
+probe, no evidence, and no gate-log row.
+
+**Absorbed from the reference consumer, which had lived the incident.** Its
+`deploy-validate-domain.md` carries a probe-scope-validity procedure whose four rules are
+project-agnostic once the env-var and incident ids are stripped: scope not rate; liveness absolute
+not differential; wrong-tool refusal; and the falsification test *"can this probe read GREEN while
+the operation is actively failing?"* Core's `deploy-validate.md` had a **literal numbering hole** —
+`### 2. Deploy` followed by `### 2b.` — and the procedure now fills it as `### 2a`, self-skipping
+when the sprint fires no destructive operation. The consumer's own `Step 2a` lives inside its
+extension's `902` namespace, so there is no collision.
+
+**The join is enforced by an existing check, not a new one.** Every gate in the list now cites the
+file defining its procedure, in the cue-verb-plus-backtick form the tier-1 relocation-pointer class
+already resolves — so a gate added with a home that does not exist goes red without new machinery.
+**Proven able to fire, not assumed:** repointing one citation at `steps/deploy-destructive.md` takes
+`audit-rule-files.sh --fail-on=deterministic` from `rc=0 / DANGLING_POINTER: CLEAN` to
+`rc=1 / core/skills/ai-dlc/SKILL.md:425 DANGLING_POINTER`, and the mutation is guarded by an assert
+so a replace that matched nothing cannot pass as a mutation.
+
+**Residual gap, declared rather than papered over:** this catches a *wrong* citation, not a *missing*
+one. A future gate added to the list with no citation at all is still unenforced. Closing that needs
+a parser over the sentence's prose, which would be new machinery for a list of four.
+
 ## [0.266.0] — 2026-08-05
 
 ### A skill, a script, and a deliverable the rulebook names and nothing provides

@@ -48,6 +48,51 @@ If your project requires pre-deployment configuration checks (e.g.,
 environment selection, resource scaling, migration status), run those
 before deploying.
 
+### 2a. Destructive one-time operation (Hard Gate — only when the sprint fires one)
+
+**Placement: BEFORE the operation is fired.** Skip when the sprint fires
+none. A destructive one-time operation is any single mutating action whose
+blast radius is stored state rather than the deployed artifact — a bulk
+DELETE or prune, a TRUNCATE, a backfill, a mass-update, or a config lever
+that triggers one.
+
+The agent STAGES it and the operator FIRES it, per Rule 13's carve-out.
+Each firing needs explicit in-session operator authorization recorded per
+action; a standing "proceed" or a resume prompt is not authorization, and
+one acknowledgement never covers a batch.
+
+Before soliciting that authorization, the lead MUST verify the go/no-go
+probe exercises the operation's own blast radius, not a steady-state proxy:
+
+- **Scope, not rate.** The probe MUST estimate the work this one operation
+  performs — the row or byte count it will touch, and the single-operation
+  duration that implies — and gate on whether that exceeds the loop,
+  interval, or timeout budget it runs inside. A steady-state lag or rate
+  reading is NOT a valid probe for a one-time bulk operation.
+- **Liveness must be absolute, not differential.** A health signal used to
+  clear the operation MUST be an absolute progress reading against an
+  INDEPENDENT source, wall-clock-anchored. A delta between two
+  internally-sourced values reads healthy when both freeze together, and
+  cannot distinguish "caught up" from "both stopped."
+- **Wrong-tool refusal.** If the only safe way to run the operation is
+  offline or bounded, the in-line lever MUST NOT be flipped to do it.
+  Route to the offline tool.
+- **Falsify the probe: can it read GREEN while the operation is actively
+  failing?** If yes, the probe is invalid and this gate is not met.
+
+Record the probe-scope validation, or the offline-route decision, in the
+gate log. The operator-approval row MUST cite which operation the probe
+exercised. A probe-scope-invalid operator approval is a gate defect, not an
+operator error.
+
+**Minimum mechanism (Rule 26(c)).** Failure caught: an operator authorizing
+a destructive operation on a probe that cannot observe it, which is how a
+green go/no-go precedes a freeze. False-positive cost: none — the step
+self-skips when no destructive operation is fired, and when one is fired the
+probe statement is work the authorization already required. Removal
+condition: retire when the deploy path can only stage destructive operations
+through a bounded tool that cannot be run in-line.
+
 ### 2b. Deploy-freshness gate (Hard Gate — where deploy exposes a running-artifact digest)
 
 **Placement: AFTER deploy, BEFORE smoke tests.** For EVERY deployable
