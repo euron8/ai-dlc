@@ -194,6 +194,38 @@ else
   bad "the byte channel went SILENT -- writer and reader disagree on the temp path"
 fi
 
+# --- A PROJECT-DECLARED eighth section, and the two controls that keep it honest ---
+#
+# The closed set exists because a lead invented three sections mid-sprint. A project
+# that legitimately carries an eighth must be able to say so WITHOUT shadowing the
+# whole rule -- the reference consumer wrote an override replacing Check 14 in full to
+# do it, which also froze every other line of that section at its base_sha. So the set
+# is data now. These three assertions are the difference between a declaration and an
+# off-switch: undeclared still fails, the DECLARED name passes, and declaring some
+# OTHER name does not admit this one.
+seed "Deploy Baseline"
+
+got="$(run_validator)"
+if [ "$got" = "1" ] && grep -q 'unknown section: ## Deploy Baseline' "$WORK/out.txt"; then
+  ok "an UNDECLARED eighth section still fails (the closed set is intact by default)"
+else
+  bad "the eighth section passed with nothing declared -- exit $got"
+fi
+
+got="$(AI_DLC_SNAPSHOT_EXTRA_SECTIONS='Deploy Baseline' run_validator)"
+if [ "$got" = "0" ] && ! grep -q 'unknown section' "$WORK/out.txt"; then
+  ok "a PROJECT-DECLARED eighth section is admitted"
+else
+  bad "a declared section was still rejected -- exit $got"; sed 's/^/        /' "$WORK/out.txt"
+fi
+
+got="$(AI_DLC_SNAPSHOT_EXTRA_SECTIONS='Something Else' run_validator)"
+if [ "$got" = "1" ] && grep -q 'unknown section: ## Deploy Baseline' "$WORK/out.txt"; then
+  ok "CONTROL: declaring a DIFFERENT name does not admit this one (a declaration, not an off-switch)"
+else
+  bad "any non-empty declaration admitted an undeclared section -- exit $got"
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "snapshot-section-schema: PASS"

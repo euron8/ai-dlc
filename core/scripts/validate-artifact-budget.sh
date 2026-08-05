@@ -101,6 +101,12 @@
 #   AI_DLC_BUDGET_GRACE_PCT  block above budget + this %      (default 10)
 #   AI_DLC_BUDGET_<NAME>     per-artifact override in tokens, NAME upper-snaked
 #                            from the basename: AI_DLC_BUDGET_PRD_MD=90000
+#   AI_DLC_SNAPSHOT_EXTRA_SECTIONS
+#                            comma- or newline-separated snapshot section names this
+#                            PROJECT adds to the canonical set (default: none, i.e.
+#                            core's seven and nothing else). Prefix-matched, like the
+#                            core names. See is_canonical_section() for why this is a
+#                            declaration and not a loophole.
 #
 # EXIT
 #   0  nothing past the grace band (over-budget-but-within-grace is reported, not
@@ -382,8 +388,32 @@ is_canonical_section() {
     "Locked Decisions"*|\
     "In-Flight Teammates"*|\
     "Context Reminders"*) return 0 ;;
-    *) return 1 ;;
   esac
+
+  # PROJECT-DECLARED ADDITIONS -- data, not a case list, so a consumer whose snapshot
+  # legitimately carries an eighth section does not have to shadow the whole rule to
+  # say so. The reference consumer did exactly that: it wrote an override replacing
+  # Check 14 IN FULL to widen the set, recorded in its own text that this "does not
+  # unblock the validator" because the set is a hardcoded case statement, and asked
+  # for the list to become data. Restating a whole section to change one clause also
+  # freezes every other line in it at the override's base_sha, which is how a later
+  # core fix to an unrelated line in the same section stopped reaching that consumer.
+  #
+  # THIS IS A DECLARATION, NOT A LOOPHOLE, and the distinction is the whole design.
+  # The closed set exists because a lead invented three sections mid-sprint that no
+  # hook, step or script writes, and they grew 9 KB between gates on the artifact that
+  # is whole-read at every gate. A lead inventing a section at runtime cannot set the
+  # project's configuration; a project declaring one has stated it on the record. So
+  # the defect the closed set catches is still caught, and only the declared name is
+  # admitted.
+  [ -n "${AI_DLC_SNAPSHOT_EXTRA_SECTIONS:-}" ] || return 1
+  local want
+  while IFS= read -r want; do
+    want="${want#"${want%%[![:space:]]*}"}"; want="${want%"${want##*[![:space:]]}"}"
+    [ -n "$want" ] || continue
+    case "$1" in "$want"*) return 0 ;; esac
+  done <<< "$(printf '%s' "${AI_DLC_SNAPSHOT_EXTRA_SECTIONS}" | tr ',' '\n')"
+  return 1
 }
 
 # $1 = file path, $2 = path relative to ROOT (for the message)

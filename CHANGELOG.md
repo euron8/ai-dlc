@@ -34,6 +34,46 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.271.0] — 2026-08-05
+
+### The snapshot's canonical section set is data, so a consumer no longer shadows a whole check to add one
+
+v0.268.0 fixed a dropped intensity value in Check 14. The reference consumer will not receive it,
+and the reason generalises: it **overrides Check 14 in full**, so core's text never reaches its lead.
+
+**Why the override exists.** Its snapshot carries an eighth section, `Deploy Baseline`, written by
+its own extension at pipeline init and read at deploy-validate as the freshness baseline. Core
+declared seven as a CLOSED set and `is_canonical_section()` enforced it as a hardcoded case list.
+The entry states its own dead end: *"this entry does not unblock the validator… `scripts/ai-dlc/*`
+is machinery, not rulebook, and has no layer grain"*, and asks for exactly this change — *"the
+section list becoming data the consumer can extend, rather than a case statement"*.
+
+**The cost of shadowing a whole section, measured.** An override replaces the entire span, so every
+line it restates it now owns and freezes at `base_sha`. Across the consumer's 12 overrides, **one**
+carries a line core has since corrected — Check 14's, holding the pre-v0.268.0
+`(full | standard | lightweight)` — and it had already been **re-affirmed once** at the prior
+`base_sha` without anyone noticing, because a re-affirmation answers the entry's *reason* while the
+frozen line is unrelated to it.
+
+**A declaration, not an off-switch.** `AI_DLC_SNAPSHOT_EXTRA_SECTIONS` admits only the names a
+project declares. The closed set exists because a lead invented three sections mid-sprint that no
+hook, step or script writes and that grew 9 KB between gates on the artifact whole-read at every
+gate — and a lead inventing a section at runtime cannot set the project's configuration. So that
+defect is still caught. Unset, behaviour is byte-for-byte what it was.
+
+**Three fixture assertions, and the mutant proves they are not entangled.** Undeclared still fails;
+the declared name is admitted; declaring some *other* name does not admit this one. Turning the
+match into a blanket `return 0` reds the third and leaves the first two green — one mutant, one
+failure, assert-guarded so a replace matching nothing cannot score as a mutation.
+
+**Check 14 now names the sanctioned path** so the next consumer does not reach for an override:
+declare the section, and do not shadow the check to widen it.
+
+**Deliberately not built.** A reconcile arm reporting which restated lines drifted upstream was
+written and then dropped: with this change the reference consumer can retire the override entirely,
+which takes the population that arm would guard to zero. A rung that guards nothing is
+indistinguishable from no rung.
+
 ## [0.270.0] — 2026-08-05
 
 ### Check 30's traceability leg named a file the only run that could write it never writes

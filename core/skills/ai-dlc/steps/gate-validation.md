@@ -857,6 +857,12 @@ Exit 1 → **Check 14 FAILS**, on either of two independent verdicts:
   not recovered after compaction, not consumed at any gate, not part of the handoff
   contract.
 
+  **If a PROJECT legitimately carries an additional section** — one its own extension
+  layer writes and reads — declare it in `AI_DLC_SNAPSHOT_EXTRA_SECTIONS` rather than
+  shadowing this check. The canonical set is data, not a case list. Do NOT write an
+  override to widen it: an override replaces this section in full, so it freezes every
+  other line here at its `base_sha` and silently shadows away later fixes to them.
+
 Then re-run Check 14 and Check 15.
 
 A `warn` line (over budget, inside the grace band) does **not** fail the gate — trim
