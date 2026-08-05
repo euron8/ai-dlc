@@ -197,6 +197,75 @@ else
   fi
 fi
 
+# --- HARNESS-RAISED PROMPTS ARE NOT REQUESTS (v0.265.0) --------------------------------
+# The harness raises UserPromptSubmit identically when a backgrounded task completes as when
+# a human types. Until v0.265.0 the hook recorded those as `(typed)` operator requests, and
+# Check 33's enforcer takes the NEWEST entry — so a background command finishing before the
+# gate ran made the check compare the sprint plan against a machine event, which names no
+# identifier, which is NOT-APPLICABLE, which exits 0. Measured on the reference consumer:
+# 4 of 6 captured entries were harness-raised and the newest three in a row were; and 4 of
+# its 5 USER_PAUSE events that sprint were raised the same way.
+#
+# BOTH POLARITIES ARE ASSERTED, and the second is the one that keeps this honest. A filter
+# that drops anything MENTIONING a notification would be the false NON-pause the hook's own
+# header calls the dangerous direction — a real operator steer silently discarded.
+NOTIF='<task-notification>
+<task-id>abc</task-id>
+<status>completed</status>
+<summary>Background command "beat" completed (exit code 0)</summary>
+</task-notification>'
+MENTION="I saw a <task-notification> go by while you were working — was that expected?"
+
+before_req="$(entries "$LIVE_REQ")"
+rm -f "$LIVE_FLAG"
+fire "$HOOK" "$LIVE" "$NOTIF"
+if [ "$(entries "$LIVE_REQ")" = "$before_req" ]; then
+  ok "a harness-raised prompt is NOT captured as an operator request"
+else
+  bad "a harness-raised prompt was recorded as an operator request — Check 33 takes the newest entry, so a background task finishing before the gate disarms it"
+fi
+if [ ! -f "$LIVE_FLAG" ]; then
+  ok "a harness-raised prompt does NOT raise the pause flag — the lead no longer blocks on a pause no human initiated"
+else
+  bad "a harness-raised prompt created the pause flag; 4 of 5 pauses on the reference consumer were this"
+fi
+if grep -q 'raised by the harness, not the operator' "$LIVE/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "the skip names its own reason — a silent skip reads exactly like a pause the lead already cleared"
+else
+  bad "the skip was silent, or did not distinguish itself from the empty-prompt skip"
+fi
+
+before_req="$(entries "$LIVE_REQ")"
+rm -f "$LIVE_FLAG"
+fire "$HOOK" "$LIVE" "$MENTION"
+if [ "$(entries "$LIVE_REQ")" -gt "$before_req" ]; then
+  ok "OVER-FIRE CONTROL: operator prose MENTIONING a notification is still captured (matching is anchored)"
+else
+  bad "OVER-FIRE: a real operator steer was discarded because it mentioned a notification — the false NON-pause direction"
+fi
+if [ -f "$LIVE_FLAG" ]; then
+  ok "OVER-FIRE CONTROL: that same prose still raised the pause flag"
+else
+  bad "OVER-FIRE: prose mentioning a notification did not pause; the lead would execute straight through a real steer"
+fi
+
+# MUTATION: remove the declaration from the project and require the notification to be
+# captured again. Without this, every assertion above is satisfied by a hook that never
+# resolved the schema and skipped for some unrelated reason.
+C_MUT="$WORK/mut-noschema"; rm -rf "$C_MUT"; mkdir -p "$C_MUT/_bmad-output"
+cp "$LIVE/_bmad-output/pipeline-snapshot.md" "$C_MUT/_bmad-output/pipeline-snapshot.md"
+fire "$HOOK" "$C_MUT" "$NOTIF"
+if [ "$(entries "$C_MUT/_bmad-output/operator-requests-history.md")" -ge 1 ]; then
+  ok "MUTATION — with no declaration the notification IS captured again: the schema is what the assertions above test"
+else
+  bad "MUTATION — the notification was skipped with no declaration present, so the assertions above are not testing the schema"
+fi
+if grep -q 'HARNESS_ORIGIN_UNRESOLVED' "$C_MUT/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "MUTATION — the unresolved declaration is REPORTED, so a tree that lost it does not read as a tree with nothing to skip"
+else
+  bad "MUTATION — a missing declaration was silent; the hook fell back to the safe direction and said nothing"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "operator-request-capture: PASS"; exit 0; fi
 echo "operator-request-capture: $fails assertion(s) FAILED" >&2

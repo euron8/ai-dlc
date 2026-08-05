@@ -120,7 +120,19 @@ BLOCKS="$(bash "$ANCHOR" "$BRIEF" --emit-blocks)" || {
     exit 2
 }
 
-REQUESTS="$REQUESTS" BLOCKS="$BLOCKS" SPRINT="$SPRINT" CITE_SHA="$CITE_SHA" BRIEF="$BRIEF" python3 <<'PYEOF'
+# The harness-origin declaration is resolved HERE, in bash, and passed in. The Python below
+# runs from a heredoc, so it has no `__file__` to walk from -- a path derived there resolves
+# against the caller's cwd and finds nothing. Both layouts are tried, because install.sh
+# splits what shares a parent in core/.
+HARNESS_ORIGIN=""
+for _hoc in "$SELF_DIR/../schemas/harness-origin.json" \
+            "$SELF_DIR/../../.claude/schemas/harness-origin.json" \
+            "$SELF_DIR/../../core/schemas/harness-origin.json"; do
+  [ -f "$_hoc" ] && { HARNESS_ORIGIN="$_hoc"; break; }
+done
+
+REQUESTS="$REQUESTS" BLOCKS="$BLOCKS" SPRINT="$SPRINT" CITE_SHA="$CITE_SHA" BRIEF="$BRIEF" HARNESS_ORIGIN="$HARNESS_ORIGIN" python3 <<'PYEOF'
+import json
 import os
 import re
 import sys
@@ -160,6 +172,47 @@ if not entries:
         % requests_path)
     sys.exit(2)
 
+# ---- entries the HARNESS wrote are not requests -----------------------------
+# The capture hook records every UserPromptSubmit, and until v0.265.0 that included the
+# events the harness raises when a backgrounded task completes. Those entries are shaped
+# exactly like a typed one -- same `(typed)` command, same SHA -- so `entries[-1]` picked
+# them, and a background-completion body names no identifier, so this check answered
+# NOT-APPLICABLE and exited 0.
+#
+# MEASURED, because "would have" is not a finding: on the reference consumer's live capture,
+# 4 of 6 entries were harness-raised and the newest three in a row were. Against a seeded
+# brief the two paths were run side by side -- newest entry: `NOT-APPLICABLE ... rc=0`;
+# pinned to the operator's real ask: `rc=1`, naming an uncovered CAP-. A background command
+# finishing before the gate ran turned the check off, in the quiet direction.
+#
+# The hook no longer writes them, but this filter is not redundant with that fix and must not
+# be removed as though it were: the file is APPEND-ONLY by design, so every consumer that
+# ever ran an older hook still carries those entries at the end of its history, and they stay
+# newest until the operator happens to type again.
+#
+# Prefixes come from schemas/harness-origin.json -- the same declaration the hook reads. A
+# second copy here in Python is the drift this release exists to end.
+_prefix_home = os.environ.get("HARNESS_ORIGIN", "")
+_prefixes = []
+if _prefix_home and os.path.isfile(_prefix_home):
+    with open(_prefix_home, encoding="utf-8") as fh:
+        _prefixes = json.load(fh).get("prefixes") or []
+if not _prefixes:
+    # A zero here would silently restore the defect: no prefixes means nothing is filtered,
+    # and the run would look identical to one with nothing to filter.
+    sys.stderr.write(
+        "ERROR: schemas/harness-origin.json could not be resolved, so harness-raised entries\n"
+        "       cannot be told from operator requests. Refusing to pick an entry: the failure\n"
+        "       this guards against is a background task disarming the check, and it is\n"
+        "       invisible in the output. Reinstall ai-dlc.\n")
+    sys.exit(2)
+
+def _harness_raised(e):
+    body = "\n".join(e["body"]).lstrip()
+    return any(body.startswith(p) for p in _prefixes)
+
+operator_entries = [e for e in entries if not _harness_raised(e)]
+
 if cite_sha:
     picked = [e for e in entries if e["sha"] == cite_sha]
     if not picked:
@@ -168,8 +221,24 @@ if cite_sha:
             "       The routing record cites a hash that resolves to nothing.\n" % cite_sha)
         sys.exit(2)
     entry = picked[-1]
+    if _harness_raised(entry):
+        # A pinned hash is deliberate, which is exactly why this must be loud rather than
+        # silently re-picked: the routing record asserts the operator asked for this.
+        sys.stderr.write(
+            "ERROR: SHA256 %s resolves to a HARNESS-RAISED entry, not an operator request\n"
+            "       (its body starts with a prefix declared in %s).\n"
+            "       The routing record cites a background event as the sprint's ask.\n"
+            % (cite_sha, os.path.basename(_prefix_home)))
+        sys.exit(2)
 else:
-    entry = entries[-1]
+    if not operator_entries:
+        sys.stderr.write(
+            "ERROR: %s carries %d entr(ies), and every one of them was raised by the harness\n"
+            "       rather than typed by an operator. There is no ask to compare the plan\n"
+            "       against. This is not NOT-APPLICABLE -- it is a capture with no operator in it.\n"
+            % (requests_path, len(entries)))
+        sys.exit(2)
+    entry = operator_entries[-1]
 
 ask = "\n".join(entry["body"])
 

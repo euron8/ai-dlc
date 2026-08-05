@@ -182,6 +182,71 @@ else
   fi
 fi
 
+# --- A HARNESS-RAISED ENTRY IS NOT THE ASK (v0.265.0) ----------------------------------
+# THIS IS THE ONE THAT TURNED THE CHECK OFF. Entry selection took the newest record, and the
+# capture hook recorded the events the harness raises when a backgrounded task completes —
+# same `(typed)` command, same SHA, same shape. A machine event names no identifier, so the
+# check answered NOT-APPLICABLE and exited 0 on a sprint whose real ask named 22 of them.
+# Measured against a seeded brief before the fix: newest entry `NOT-APPLICABLE ... rc=0`;
+# pinned to the operator's own ask, `rc=1` naming an uncovered CAP-.
+#
+# The hook no longer writes such entries, and this is STILL not redundant: the file is
+# append-only, so every consumer that ran an older hook carries them at the end of its
+# history, where they stay newest until the operator happens to type again.
+HREQ="$WORK/requests-with-harness-tail.md"
+cp "$REQ" "$HREQ"
+cat >> "$HREQ" <<'HEOF'
+
+## 2026-08-05T23:59:59Z -- (typed)
+- Session: sess-h
+- Bytes: 180
+- SHA256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+
+```text
+<task-notification>
+<task-id>zzz</task-id>
+<status>completed</status>
+<summary>Background command "beat" completed (exit code 0)</summary>
+</task-notification>
+```
+HEOF
+
+run "$VALIDATOR" "$HREQ" "$DROPPED"
+if [ "$RC" = "1" ]; then
+  ok "a harness-raised NEWEST entry does not become the ask — the dropped epic still FAILS"
+else
+  bad "a background event appended after the ask changed the verdict to exit $RC. A task finishing before the gate ran turns this check off, in the quiet direction"
+fi
+
+# The pinned path is deliberate, so pointing it AT a machine event must be loud rather than
+# silently re-picked: the routing record asserts the operator asked for this.
+OUT="$(bash "$VALIDATOR" --requests "$HREQ" --brief "$DROPPED" --sprint 42         --cite-sha dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd 2>&1)"; RC=$?
+if [ "$RC" = "2" ] && grep -q 'HARNESS-RAISED' <<<"$OUT"; then
+  ok "a routing record pinned to a harness-raised entry ERRORS by name, rather than being quietly re-picked"
+else
+  bad "pinning the routing record to a background event exited $RC without naming the cause"
+fi
+
+# CONTROL: the same file, pinned to the OPERATOR's entry, behaves exactly as before. Without
+# it, an implementation that rejected every --cite-sha would satisfy the assertion above.
+OUT="$(bash "$VALIDATOR" --requests "$HREQ" --brief "$COVERED" --sprint 42 2>&1)"; RC=$?
+if [ "$RC" = "0" ]; then
+  ok "CONTROL: a covered brief still passes with the harness entry present — the filter selects, it does not reject"
+else
+  bad "CONTROL: the covered brief now fails (exit $RC); the harness filter is rejecting entries it should only skip"
+fi
+
+# MUTATION: a capture whose entries are ALL harness-raised must not read as NOT-APPLICABLE.
+# That is the same zero the defect produced, reached from the other side.
+AHREQ="$WORK/requests-all-harness.md"
+{ printf '# Operator Requests\n'; sed -n '/^## 2026-08-05T23:59:59Z/,$p' "$HREQ"; } > "$AHREQ"
+OUT="$(bash "$VALIDATOR" --requests "$AHREQ" --brief "$DROPPED" --sprint 42 2>&1)"; RC=$?
+if [ "$RC" = "2" ] && grep -q 'no operator in it' <<<"$OUT"; then
+  ok "a capture holding ONLY harness-raised entries exits 2 — 'nothing was asked' and 'nothing was recorded' are different answers"
+else
+  bad "a capture with no operator entry exited $RC; an empty ask reading as NOT-APPLICABLE is the defect this release closes"
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then echo "request-coverage: PASS"; exit 0; fi
 echo "request-coverage: $fails assertion(s) FAILED" >&2
