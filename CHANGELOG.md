@@ -34,6 +34,48 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.268.0] — 2026-08-05
+
+### The step that assigns validation intensity could not assign one of the four
+
+`route.md` classifies `validation_intensity` and listed three values. Rule 8 defines **four**. The
+missing one is `carry-over-single` — and the paragraph immediately below the list is the one that
+handles carry-over variants. A lead following the assignment step literally could not select the
+value that governs a carry-over sprint. Check 14's snapshot-content spec dropped the identical row.
+
+**Not theoretical.** `carry-over-single` is assigned in the reference consumer across at least eight
+sprints (224, 226, 261, 274, 278, 283, 289, 295) and is load-bearing there — it drives the TEA skip
+and the party-mode decision. Control: the other intensities appear in the same field in the same
+repo, so the grep shape is sound.
+
+**This is the second time the row dropped, and the first fix is why.** v0.74.0 found exactly this
+defect in Check 20 — *"Rule 8 defined four validation intensities and Check 20 could adjudicate
+three"* — repaired the **reader**, and shipped I19 as the guard. I19 binds the table's *minimums*
+column: it forbids restating what an intensity requires. It does not bind the **set**, and its own
+comment names `route.md` as a sanctioned shape. So the writer kept the drop, in a file the guard
+had explicitly whitelisted. Fixing the instance was not fixing the hole.
+
+**New invariant I80 binds the set.** An enumeration of two or more intensity names must name every
+member; a file that names ONE and branches on it is untouched, which is the common and correct
+shape. The set is **derived from Rule 8's table**, never hand-listed.
+
+**Two shapes, both of which wrap across source lines.** The tree's only enumerations are a
+pipe-separated inline list and a bullet list, and both wrap. A line-oriented scan sees neither and
+reports CLEAN on both — measured, not assumed: the first two detector drafts had false-positive
+rates of 100% and 60% against their own corpus and were discarded. Paragraphs are whitespace-
+flattened before matching.
+
+**False-positive set measured before shipping, per the standing rule.** On the repaired tree the
+detector returns **zero** hits; on the tree with both sites reverted it returns **exactly two**, each
+naming `carry-over-single` as the missing member.
+
+**Proven able to fire, three ways.** Reverting `route.md`'s row takes the validator to `FAIL … I80
+… bullet enumeration names 3 of 4 — missing carry-over-single` at the right line. Deleting Rule 8's
+table entirely produces `FAIL: I80 could not derive the intensity set: DISARMED` rather than a
+silent pass — an unreadable source is not an empty one. Both mutations are guarded by an assert so a
+replace matching nothing cannot score as a mutation, and the tree was restored and re-verified clean
+after each.
+
 ## [0.267.0] — 2026-08-05
 
 ### The list of human gates named one that is not a gate and one that has no procedure
