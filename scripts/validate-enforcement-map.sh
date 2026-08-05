@@ -4597,6 +4597,65 @@ EOF
 Resolve it from core/schemas/harness-origin.json instead. A second copy in a second language is the drift v0.265.0 exists to end, and the file that carried the last one warned about it in prose that nothing enforced."
 fi
 
+# --- I80: an enumeration of the intensity SET names every member of it -------------
+# I19 binds the intensity table's MINIMUMS column: it forbids a second copy of what an
+# intensity requires. It does not bind the SET. So the same row kept dropping out of the
+# other half — route.md, the file that ASSIGNS validation_intensity, listed three of four
+# and omitted carry-over-single, which meant the one value that governs a carry-over sprint
+# could not be selected by a lead following the assignment step literally. Check 14's
+# snapshot-content spec dropped the identical row.
+#
+# This is the second time this row has been dropped and the first fix is why: v0.74.0
+# repaired the READER (Check 20 now resolves the minimum from the table) and left the
+# WRITERS untouched, and I19's own comment names route.md as a sanctioned shape — naming an
+# intensity is fine, restating its minimum is not. A file may name ONE intensity and branch
+# on it; a file that enumerates two or more is claiming to present the set, and a partial
+# set is the defect.
+#
+# The set is DERIVED from Rule 8's table, never hand-listed. Two enumeration shapes exist in
+# the tree and both wrap across source lines, so paragraphs are whitespace-flattened before
+# matching — a line-oriented scan sees neither, and reports CLEAN on both.
+i80_out="$(python3 - "$REPO_ROOT" <<'PY' 2>&1
+import re, glob, io, os, sys
+root = os.path.join(sys.argv[1], 'core/skills/ai-dlc')
+skill_p = os.path.join(root, 'SKILL.md')
+if not os.path.isfile(skill_p):
+    print("DISARMED: %s unreadable" % skill_p); sys.exit(0)
+skill = io.open(skill_p, encoding='utf-8').read()
+tbl = re.search(r'\| Intensity \| Trigger.*?\n(?:\|.*\n)+', skill)
+if not tbl:
+    print("DISARMED: Rule 8 intensity table not found in SKILL.md"); sys.exit(0)
+names = re.findall(r'^\| `([a-z-]+)`', tbl.group(0), re.M)
+if len(names) < 2:
+    print("DISARMED: derived %d intensity name(s) from the table; need >=2" % len(names)); sys.exit(0)
+alt = '|'.join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+for f in sorted(glob.glob(os.path.join(root, 'steps/*.md'))) + [skill_p]:
+    raw = io.open(f, encoding='utf-8').read()
+    off = 0
+    for para in re.split(r'\n\s*\n', raw):
+        idx = raw.find(para, off)
+        line_no = raw[:idx].count('\n') + 1 if para.strip() else 0
+        off = idx + len(para)
+        if not para.strip() or para.lstrip().startswith('|'):
+            continue
+        flat = ' '.join(para.split())
+        pipe = re.findall(r'(?:`?(?:%s)`?\s*\|\s*)+`?(?:%s)`?' % (alt, alt), flat)
+        for grp, kind in ((set(re.findall(alt, ' '.join(pipe))), 'inline'),
+                          (set(re.findall(r'-\s+`(%s)`' % alt, flat)), 'bullet')):
+            if len(grp) >= 2 and grp != set(names):
+                print("  %s:%d  %s enumeration names %d of %d — missing %s"
+                      % (os.path.relpath(f, sys.argv[1]), line_no, kind,
+                         len(grp), len(names), ', '.join(sorted(set(names) - grp))))
+PY
+)"
+case "$i80_out" in
+  DISARMED:*) err "I80 could not derive the intensity set: $i80_out
+      The set is read from SKILL.md Rule 8's table. An unreadable table is not an empty one, so this reports rather than passing." ;;
+  ?*) err "I80: a validation-intensity enumeration is missing a member of the set:
+$i80_out
+      Rule 8's table is the set. A file may name ONE intensity and branch on it; enumerating two or more claims to present the set, and a partial set is how carry-over-single became unassignable in the step that assigns it." ;;
+esac
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"

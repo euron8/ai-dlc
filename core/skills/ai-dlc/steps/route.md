@@ -350,6 +350,8 @@ scope (or anticipated scope for carry-over/greenfield):
 
 - `full` — ≥3 stories touching service code paths
 - `standard` — 1-2 stories touching service code paths
+- `carry-over-single` — carry-over variant with ≤2 stories touching
+  service code paths; assignable only to carry-over variants
 - `lightweight` — all stories touch only pipeline-infra paths
   (scripts, config, docs, CI workflows)
 

@@ -763,7 +763,7 @@ the snapshot's shape (referenced by the SKILL.md Handoff Protocol and by
   statuses, synced with `sprint-status.yaml`
   (stories_completed_this_sprint, stories_in_progress,
   stories_not_started); `validation_intensity` (full | standard |
-  lightweight). Update sprint_id if it changed. If `is_ui_epic` was
+  carry-over-single | lightweight). Update sprint_id if it changed. If `is_ui_epic` was
   determined during this gate's step (set in `stories-test-strategy.md`
   Step 7), record it here so `deploy-validate.md` can read it from the
   snapshot after a handoff or `/compact` rather than re-detecting.
