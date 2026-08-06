@@ -315,6 +315,37 @@ override_supersessions:
       reaching PVC on the bug variant closes the interrupted sprint.
     verify: grep -qF 'Sprint boundary on bug-variant completion' .claude/skills/ai-dlc/steps/carry-over-evaluation.md
 
+  - shadows: steps/retro.md#4a. Close-Out Sweep
+    since_core_version: "0.281.0"
+    reason: >-
+      The entry restated no core text. It existed because core's retro budget run is
+      `--warn-only` with no way to say "hard on this one artifact", and because its
+      second arm mirrored core's `pipeline-snapshot.md|6000|trim` constant — a
+      dependency that forced an override rather than an extension, since an extension
+      carries no `base_sha` to track the constant with. Core now carries both halves:
+      `--fail-on <artifact>` takes a hard verdict on one artifact while the run stays
+      warn-only overall, and the supersession-marker arm runs inside
+      `validate-artifact-budget.sh`, scoped outside `## In-Flight Teammates` so a struck
+      dispatch row is still reported once, by the check that owns it. The mirrored
+      constant is then read from the one place that defines it, so the `base_sha`
+      dependency the entry was filed for no longer exists.
+      ONE OF THE ENTRY'S THREE SHAPES DID NOT COME UP WHOLESALE, AND THE KEY IS WHY.
+      Bare `~~strikethrough~~` is ordinary markdown emphasis, and core's own
+      `inflight-row-shape` fixture already held that a struck line outside the dispatch
+      ledger is out of scope because Recent Activity legitimately strikes superseded
+      entries. Absorbing that shape by default would have overruled a position core had
+      already taken with a fixture behind it. The two unambiguous status stamps are
+      core's default; the stricter posture is the key below.
+    replaces_with:
+      settings_env_key: AI_DLC_SNAPSHOT_STRIKETHROUGH
+      value_derivation: >-
+        `forbid` if this consumer treats bare `~~strikethrough~~` in
+        `_bmad-output/pipeline-snapshot.md` as supersession-by-marking rather than as
+        emphasis; `allow` (core's default) otherwise. A project that carried this
+        override was forbidding it. Derive it from the entry you are retiring; do not
+        ask, and do not copy the example.
+    verify: scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md
+
   - shadows: team-roles/dev.md#Identity
     since_core_version: "0.276.0"
     reason: >-

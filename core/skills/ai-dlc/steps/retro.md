@@ -516,19 +516,36 @@ inline during implementation)".
 
 **Artifact-size audit (Rule 25(d), warn-only here).** Run:
 
-    scripts/ai-dlc/validate-artifact-budget.sh --warn-only
+    scripts/ai-dlc/validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md
 
 The script owns the canonical budgets and the per-artifact remedy — the numbers
 are NOT restated here. A project overrides a budget with `AI_DLC_BUDGET_<NAME>`
 (see the script header), not by editing this paragraph.
 
-`--warn-only` is deliberate and is the ONLY posture retro takes. Retro reports on
-a sprint that has already paid for every oversized read; blocking it now helps
-nobody. **The blocking copy of this check runs at sprint start** (`route.md`
-Step 1a), which is the last moment an oversized artifact is still cheap to fix,
-plus at gate Check 14 for `pipeline-snapshot.md` — the one artifact that grows
-within a sprint. Retro NEVER runs the consolidation itself: it is a
-fidelity-critical rewrite and is operator-invoked.
+`--warn-only` is deliberate for the PLANNING artifacts. Retro reports on a sprint
+that has already paid for every oversized read; blocking it now helps nobody.
+**The blocking copy of this check runs at sprint start** (`route.md` Step 1a),
+which is the last moment an oversized artifact is still cheap to fix, plus at
+gate Check 14 for `pipeline-snapshot.md` — the one artifact that grows within a
+sprint. Retro NEVER runs the consolidation itself: it is a fidelity-critical
+rewrite and is operator-invoked.
+
+**`pipeline-snapshot.md` is the one exception, and `--fail-on` is how retro says
+so.** The warn-only reasoning is about artifacts whose growth is monotonic by
+construction — nothing retires a locked requirement, so blocking on them at retro
+offers no action. It does not transfer to the snapshot, which is trimmable BY
+DESIGN: its remedy is to move superseded entries to the write-only history file,
+and retro is the passage where that happens. A ceiling nobody is ever blocked by
+is a number, not a ceiling. So the snapshot takes a hard verdict while every
+other artifact in the same run stays a warning.
+
+That hard verdict covers three independent findings, and each carries its own
+remedy rather than being folded into a size number: over budget, a section
+outside the seven-section schema, and **superseded content marked in place rather
+than moved**. The third is the one nothing else catches — struck, bracketed, or
+all-caps-stamped content sits under a canonical heading at any size, so the schema
+check and the byte budget both pass it in silence, and the size remedy then says
+"trim" when the correct action is "relocate".
 
 Two breaches deserve a finding in their own right, not just a size warning:
 - A **`compaction-log.md`** over budget means the sprint compacted repeatedly, and
@@ -558,7 +575,7 @@ largest single writing cost for its least-read content.
 | `audit-rule-files.sh` | PASS / FINDINGS | exit code + each class's verdict line |
 | `validate-reattach-budget.sh` | PASS / FAIL | exit code + the slack figure, read against the guard's ceiling |
 | `validate-gate-manifest.sh` | PASS / FAIL | exit code + the `manifest source:` and `anchor sources:` lines + the MISSING/ORPHAN/UNLOADABLE lines |
-| `validate-artifact-budget.sh --warn-only` | CLEAN / BREACH | exit code + each breached artifact, or "within budgets" |
+| `validate-artifact-budget.sh --warn-only --fail-on pipeline-snapshot.md` | CLEAN / BREACH | exit code + each breached artifact, or "within budgets"; a nonzero exit here is the snapshot's hard verdict (budget, schema, or in-place supersession marker) |
 | `validate-layer-entries.sh` | CLEAN / N ERR, M WARN | exit code + the summary line, or "n/a (unlayered)" |
 
 **The evidence cell is mandatory and is never `—`.** An empty evidence cell is

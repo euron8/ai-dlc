@@ -152,6 +152,7 @@ core_manifest:
   - fixtures/suppression-lifetime/**
   - fixtures/self-update-join-gate/**
   - fixtures/self-update-fixture-log/**
+  - fixtures/snapshot-supersession-marker/**
   - fixtures/audit-anchors-schema/**
   - fixtures/blocker-adjudication-record/**
   - fixtures/bmad-invocation-resolve/**
