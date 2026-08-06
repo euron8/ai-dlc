@@ -62,6 +62,14 @@ step "no dead doc refs (core/ cites no unshipped dev-repo doc)" \
 step "release version triple (subject == VERSION == CHANGELOG heading)" \
   bash scripts/validate-release-version.sh
 
+# 1d. A plan in docs/plans/ is a handoff to a session that has never seen this one. Push
+#     is the seam: it is the last point before the file becomes the thing someone else is
+#     told to READ and FOLLOW. Measured on the first plan promoted here — two status
+#     records with the older one a release stale, and two merged releases still written
+#     in the imperative. Followed literally, that redoes shipped work.
+step "plan shape (docs/plans/ is resumable by a session that never saw this one)" \
+  bash scripts/validate-plan-shape.sh
+
 # 2. SKILL.md's first ~5000 tokens are whole-re-read on EVERY compaction. The resident
 #    region sits within a few hundred tokens of the ceiling, so an edit above the fold
 #    can silently push the post-compact recovery protocol below it.

@@ -71,6 +71,31 @@ final `OK:` line enumerates the ones currently live.
 Ship it only if you have run it and the set is empty or enumerated. An unmeasured
 lint is one the operator turns off, which is worse than none.
 
+## A plan that must survive the session lives in `docs/plans/`
+
+Plan mode writes to `~/.claude/plans/`, outside the repo, where nothing can check it and
+nobody else can read it. The moment a plan becomes a handoff — the thing a later session
+is told to READ and FOLLOW — promote it to `docs/plans/<slug>.md` and commit it. Then it
+is reviewable in the PR that does the work, and `scripts/validate-plan-shape.sh` holds it
+to a shape a stranger can act on.
+
+The shape, and the reason for each part, measured on this repo's first plan at the moment
+it was handed off:
+
+- **`## Start here`**, naming the repos and the read/write boundary. Without a declared
+  entry point a resuming session acts on whichever section it reads first.
+- **A numbered next-action list**, blocked items marked as blocked. A plan that records
+  state and never says what to do next is a report.
+- **One current status record.** It had two, and the older one predated a release; a
+  superseded section is fine, but it has to say so where the reader is, not elsewhere.
+- **Completed work marked completed.** Two release sections still read as work to do
+  after they had merged. A session told to FOLLOW the file would have redone them.
+- **Citations that resolve.** `path:line` is this repo's evidence form, and one that
+  cannot be located at resume time is a promissory note against evidence.
+
+None of that is about writing quality. Each one makes the file produce WRONG WORK when
+followed literally, which is the only thing a handoff is for.
+
 ## Releases
 
 Commit subject, `VERSION`, and the `CHANGELOG` heading are **one claim**, joined

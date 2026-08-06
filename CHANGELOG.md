@@ -34,6 +34,59 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.279.0] — 2026-08-06
+
+### A plan that must survive the session lives in the repo, and something checks it can be followed
+
+Plan mode writes to `~/.claude/plans/`, outside the repo, where nothing can check a plan and
+nobody else can read it. That was fine while a plan was scratch. It stops being fine the moment
+the plan becomes the thing a later session is told to READ and FOLLOW.
+
+**Measured on this repo's first plan, at the moment it was handed off** — not hypotheses, three
+defects in the live file:
+
+- **Two status records, and the older one predated a release.** A reader hitting it first gets a
+  world one release stale, with nothing saying which to believe.
+- **Two release sections describing work that had already merged, still in the imperative.** A
+  session told to FOLLOW the file would have redone v0.276.0 and v0.277.0.
+- **No statement of which repo it operates on, which it must never write, or what to do first.**
+
+None of that is a writing-quality complaint. Each one makes the file produce WRONG WORK when
+followed literally, which is the only thing a handoff is for.
+
+`docs/plans/<slug>.md` is now the home, `scripts/validate-plan-shape.sh` is the enforcer, and
+pre-push runs it. Six checks: a declared `## Start here`, a numbered next-action list, a
+read/write boundary (WARN), `path:line` citations that resolve **and** are in bounds, no
+identifier described as both shipped and not-started, and one current status record — a
+superseded one is fine, it just has to say so where the reader is.
+
+**Every check has no false-positive path by construction, and the reason that phrasing is used
+rather than "measured" is stated in the file.** The corpus is `docs/plans/*.md`, which at this
+release is ONE file. A one-file corpus measures nothing, and calling it a measurement would be
+the vacuous shape this repo names elsewhere. So the checks are absence-and-resolution checks
+with no opinion about wording, and that is the whole argument for them.
+
+**An empty `docs/plans/` exits 2, not 0.** A repo that lost its plans would otherwise report a
+clean run — the a-zero-is-not-a-finding rule applied to the corpus itself.
+
+### Two traps hit while building the checker, both from families this repo already names
+
+`[^\n]{0,80}` in a POSIX bracket expression is **not** "any character but newline" — it is "not
+a backslash and not the letter `n`". The contradiction check therefore never matched
+`R1 — the enabler — **SHIPPED`, because *enabler* contains an `n`. Same family as I71's
+`[ \t]`, found by the fixture rather than by review.
+
+And P6's section window was a flat `ln,ln+4`, which bled into the next section: the seeded
+negative case read *"does not say it is superseded"*, the window reached it, `supersed` matched,
+and the arm went silent on the exact defect it exists for. The window now stops at the next
+heading. I54b then caught the `awk | grep -q` that replaced it, under pipefail — the third
+instance of that family in two releases.
+
+Fixture `plan-shape` (`.dist-only` — consumers have no `docs/plans/`), 12 assertions: every arm
+proved able to fail against a seeded defect, a conforming control that must trip none of them,
+a non-vacuity assertion that the control actually contains a citation the arm resolves, and a
+control that marking a section superseded — the remedy the message prescribes — silences it.
+
 ## [0.278.0] — 2026-08-06
 
 ### A pull can be told where to stop, and a DEFER now says where that is
