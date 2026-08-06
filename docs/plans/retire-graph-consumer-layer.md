@@ -25,6 +25,11 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 2. **Fix `validate-locked-anchor.sh`** — the highest measured payoff in the file. Three OPEN
    push candidates, and the failure cost graph eight hand-run adversarial passes in one day.
    See §*Findings*.
+2b. **Absorb Rule 930's count-control discipline and give it an enforcer** — one layer earlier
+   than the citation drift: a bare `grep -c` yields a false number that becomes an AC, which
+   the adversary then spends a pass falsifying. **Do NOT build a shell-file linter for this.**
+   Measured: the defects are in markdown derivations, not in `*.sh`. See §*The shell-idiom
+   family IS in this sprint*.
 3. **Make the adversarial STALL rung reachable mid-cycle.** It fires correctly at p7 and goes
    silent once the cycle converges, so today it caught nothing.
 4. **R4 — snapshot ceiling** (`validate-artifact-budget.sh --fail-on`). Unblocked, mechanical.
@@ -46,6 +51,7 @@ sections in the design record below are labelled SHIPPED.
 | v0.276.0 | #362 | absorbs Check 7 non-vacuity, carry-over item-5 sprint boundary, `dev.md` conditional local-launch → **3 overrides retirable** |
 | v0.277.0 | #363 | absorbs qa gate-2 go-signal, code-reviewer context-*shape* severity, pm probabilistic-AC + numeric anchor → **2 extensions retirable** |
 | v0.278.0 | #364 | `ai-dlc-update <ref>` / `<ref> apply` target-ref argument, plus `self-update-gate.sh --safe-stop` and a `SELF-UPDATE-SAFE-STOP` row on every DEFER |
+| v0.279.0 | #365 | plans that must survive a session live in `docs/plans/`; `scripts/validate-plan-shape.sh` enforces a resumable shape and pre-push runs it. **This file is its first subject.** |
 
 **graph has received NONE of it.** Its stamp is still `version: 0.274.0 / commit: 9036e0d`.
 
@@ -166,6 +172,37 @@ Checked one by one, and the honest answer is none of them touch it:
 | v0.275.0, v0.278.0 | pull-time layer tooling — zero effect on sprint execution |
 | v0.276.0 | Check 7 non-vacuity ADDS a gate assertion; carry-over item 5 is the bug-variant boundary; `dev.md` is a launch bullet |
 | v0.277.0 | closest is pm.md's probabilistic-AC rule, but p1's findings were citation accuracy and Rule 26 waiver suppressors — not probabilistic ACs |
+
+### The shell-idiom family IS in this sprint — in the derivations, not the scripts
+
+Operator correction, checked and confirmed. A first probe over graph's **committed shell**
+found almost nothing: 183 consumer-owned files, 2 benign bracket-class hits, and **zero files
+even enable `pipefail`**, so the I54/I54b precondition never applies. That result is real and
+it is also the wrong corpus.
+
+The defects live in the **derivation commands the agents run and cite**, which sit in markdown
+prose, not in `*.sh`. In the s301 record: `grep -c` appears 214 times, `sed` 428, `wc -l` 85,
+`awk` 45 — and the passes are full of them going wrong:
+
+- `s301-epics-repair-p5d.md:115` — *"BSD `grep` has no `-P`; the first attempt at this
+  enumeration returned a vacuous `0`"*
+- `s301-stories-adversarial-p6.md:252` — *"not by the label grep whose zero could not be told
+  from a vacuous pattern"*
+- `s301-stories-repair-p5.md:581` — *"the grep would have produced a false finding. This is the
+  same silent-zero shape…"*
+- `s301-stories-adversarial-p2.md:327` — a confirming grep *"scoped to the wrong file"*
+
+**This changes what v0.280.0 should be, and the fresh session must not build the version
+described in the session transcript.** A shell-idiom validator over `*.sh` would have caught
+**none** of the above, because none of it is in a shell file. Every count and range citation in
+a story is produced by one of these commands; a vacuous grep yields a false number, the number
+becomes an AC, and the adversary then spends a pass falsifying it. That is the same loop as the
+citation drift — one layer earlier.
+
+The consumer already has the right rule and no enforcer: `SKILL-domain.md` Rule 930 says *"Pair
+every count with a control that proves the pattern CAN match. `grep -c` counts LINES, not
+entries… a bare count is indistinguishable from having examined nothing."* Unabsorbed, and
+unenforced on either side.
 
 **The real next work, in priority order:**
 
