@@ -34,6 +34,63 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.278.0] — 2026-08-06
+
+### A pull can be told where to stop, and a DEFER now says where that is
+
+**The dead end this ends.** `self-update-gate.sh` returns `SELF-UPDATE-DEFER` when the
+machinery slice cannot stand alone, and a deferred slice lands in the **gated apply at step 7
+— after step 3's classify**. So any improvement to the classifier arrives one phase too late to
+classify the pull that delivers it, and the operator gets a report written by the engine they
+were replacing. Measured on the reference consumer at 0.274.0 → 0.277.0: three overrides
+upstream had just ABSORBED came back as ordinary `HARD-OVERRIDE-DRIFT-SECTION` — *re-adopt the
+new wording* — which is the exact misreading `override_supersessions` exists to end. Zero
+`OVERRIDE-SUPERSEDED` rows, zero `EXTENSION-TITLE-MATCHES-CORE` rows, on a pull whose whole
+point was to produce them.
+
+The remedy was to stop at v0.275.0 first, where the slice is machinery-only. Nothing in the
+tree said so, and **nothing could be asked**: `/ai-dlc-update` documented `apply`, `untangle`
+and `untangle apply`, and `theirs` was upstream HEAD with no way to set it. The two `--theirs`
+strings anywhere in the skill both belong to a different script.
+
+**Two halves, because either alone is still a dead end.**
+
+`ai-dlc-update <ref>` and `ai-dlc-update <ref> apply` set `theirs`. `<ref>` is validated on four
+axes and a failure STOPS the run rather than falling back to HEAD: it must resolve in the
+DISTRIBUTION (resolving only in the consumer is the `base_sha` poisoning trap one layer up),
+`base` must be an ancestor of it (otherwise the pull is a downgrade), it must be reachable from
+the default branch, and it must differ from `base`. The step-2 re-invoke now carries the ref —
+dropping it would retarget at HEAD at the exact moment the split-pull is being executed.
+
+`self-update-gate.sh --safe-stop` derives the ref, and **every `DEFER` now carries a
+`SELF-UPDATE-SAFE-STOP` row** naming it — or stating that no such release exists, which is a
+different answer from silence. Candidates are **release commits**, since the stamp records a
+VERSION and a mid-release stop is not a state a consumer can hold. Each verdict comes from
+RUNNING the gate, never from re-deriving its arms.
+
+**Two defects found by writing the mutants rather than by review.**
+
+The walk originally stopped at the first candidate that deferred. That is wrong: each verdict
+is computed `base→candidate`, never incrementally, so a release that introduces a coupling and
+a later one that resolves it both sit in the range and `base→later` is a clean single hop that
+lands strictly more. Early stopping silently under-reported how far the operator could go.
+
+And the `safe-stop-bounded` assertion compared `"reached"` to `"reached"` — it passed whenever
+the fixture got that far and asserted nothing. It was written to cover the advisory's re-entry
+guard; the mutant removing that guard came back **green**, which is how the tautology surfaced.
+The guard is a COST measure (a nested walk covers a strictly shorter range, so the recursion
+terminates either way), it is now documented as one, and it is **deliberately left uncovered**
+because no observable output distinguishes the two.
+
+**Mutants: five, `cmp -s`-guarded copies, unmutated control at rc 0.** M1 THEIRS-skip, M2 early
+break, M3 advisory dropped from the DEFER terminal, M5 candidate set widened to every commit —
+all four red on their own assertion. M4 the re-entry guard, uncovered as above. M5 needed the
+seed to gain a NON-release commit after the last clean release: until then "releases" and "all
+commits" picked the same ref and the property was untestable.
+
+Verified against the operator's real range: `--safe-stop 9036e0d a2170e5` returns the v0.275.0
+commit — the ref that had to be found by hand.
+
 ## [0.277.0] — 2026-08-06
 
 ### Three role clauses the reference consumer was carrying alone, and a shape change reviewed as if it were not one
