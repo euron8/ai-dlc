@@ -317,8 +317,22 @@ while IFS="$TAB_CH" read -r ovr detail; do
   env_key="${detail#replaces_with=}"; env_key="${env_key%% ::*}"
   [ "$env_key" = "$detail" ] && env_key=""     # no structured token -> emit the single row
   if [ -n "$env_key" ]; then
-    say WORKLIST override-retire "$ovr" "1/2 ATOMIC — write ${env_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing 2/2 first re-imposes the core constraint this entry was widening and reds the next gate."
-    say WORKLIST override-retire "$ovr" "2/2 ATOMIC — readopt-override.sh --stamp retire ${ovr}. Same commit as 1/2."
+    # N keys, N+1 rows. The count is derived from the field rather than fixed at two,
+    # because a supersession needing a second key could not be expressed at all until
+    # `settings_env_keys:` existed, and hardcoding `1/2` here would have made the list
+    # form render a sequence whose own numbering lied about its length.
+    #
+    # THE RETIRE STAMP IS ALWAYS LAST, AND THAT ORDER IS THE WHOLE POINT OF `ATOMIC`.
+    # Stamping first re-imposes the core constraint this entry was widening, with the
+    # keys that replace it not yet written, and reds the next gate.
+    key_total=$(( $(printf '%s' "$env_key" | tr ',' '\n' | grep -c .) + 1 ))
+    key_n=0
+    printf '%s' "$env_key" | tr ',' '\n' | while IFS= read -r one_key; do
+      [ -n "$one_key" ] || continue
+      key_n=$(( key_n + 1 ))
+      say WORKLIST override-retire "$ovr" "${key_n}/${key_total} ATOMIC — write ${one_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing the retire stamp first re-imposes the core constraint this entry was widening and reds the next gate."
+    done
+    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — readopt-override.sh --stamp retire ${ovr}. Same commit as the row(s) above."
   else
     say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
   fi

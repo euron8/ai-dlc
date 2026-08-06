@@ -285,8 +285,25 @@ supersessions_of() {
       si=$0; sub(/^[[:space:]]*since_core_version:[[:space:]]*/,"",si); gsub(/"/,"",si); next
     }
     /^[[:space:]]*settings_env_key:[[:space:]]*/ {
-      en=$0; sub(/^[[:space:]]*settings_env_key:[[:space:]]*/,"",en); next
+      en=$0; sub(/^[[:space:]]*settings_env_key:[[:space:]]*/,"",en); inkeys=0; next
     }
+    # settings_env_keys: -- the LIST form, for a supersession that needs more than one
+    # key. One key per row was not a considered limit, it was the only shape anyone had
+    # needed; a retirement requiring two of them could not be expressed at all, so the
+    # entry stayed shadowed over a mechanism gap rather than over a disagreement.
+    #
+    # Collected into the SAME comma-joined field the single form fills, so the TSV shape
+    # and every reader of it are unchanged, and apply.sh splits on the comma. The item
+    # pattern is deliberately narrow -- a bare, deeper-indented, ALL-CAPS token with no
+    # colon -- because the rows of this block also begin with a dash, and a looser
+    # pattern would swallow the next `- shadows:` and attribute one set of keys to the
+    # wrong entry.
+    /^[[:space:]]*settings_env_keys:[[:space:]]*$/ { inkeys=1; next }
+    inkeys && /^[[:space:]]*-[[:space:]]*[A-Z][A-Z0-9_]*[[:space:]]*$/ {
+      k=$0; sub(/^[[:space:]]*-[[:space:]]*/,"",k); sub(/[[:space:]]*$/,"",k)
+      en = (en == "" ? k : en "," k); next
+    }
+    inkeys { inkeys=0 }
     END { if (sh != "") print sh TAB si TAB en }
   '
 }

@@ -843,6 +843,12 @@ override_supersessions:
   - shadows: steps/widget.md#5. Adopted section.
     since_core_version: "9.9.9"
     reason: core took this entry's paragraph verbatim; there is nothing to configure.
+  - shadows: steps/widget.md#6. Two-key section.
+    since_core_version: "9.9.9"
+    replaces_with:
+      settings_env_keys:
+        - AI_DLC_WIDGET_ALPHA
+        - AI_DLC_WIDGET_BETA
 absorbed_from:
   - path: core/skills/ai-dlc/extensions/README.md
 YML
@@ -852,7 +858,7 @@ YML
 
   # The MATCH and its CONTROL differ in one field: the anchor. Same file, same shape, same
   # base_sha -- so an arm that fires on both is matching "is an override", not "is superseded".
-  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section."; do
+  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section." "SUP__twokey:steps/widget.md#6. Two-key section."; do
     nm="${pair%%:*}"; sh_v="${pair#*:}"
     cat > "$CONS/.claude/skills/ai-dlc/overrides/${nm}.md" <<EOF
 ---
@@ -928,6 +934,30 @@ EOF
     replaces_with=*) bad "the env-keyless detail leads with replaces_with= anyway — apply.sh will emit a 1/2 ATOMIC row telling the operator to write an empty key: ${sup_adopted:0:70}" ;;
     "")              bad "the env-keyless supersession produced an empty detail" ;;
     *)               ok "  and its detail omits the replaces_with= token, so apply.sh renders the single retire row" ;;
+  esac
+
+  # A SUPERSESSION MAY NEED MORE THAN ONE KEY, AND ONE PER ROW WAS NEVER A DECISION.
+  # It was the only shape anyone had needed, so a retirement requiring two keys could not
+  # be expressed at all and the entry stayed shadowed over a mechanism gap rather than over
+  # a disagreement. The list form joins on a comma into the same field the single form
+  # fills, and apply.sh splits it into N+1 ATOMIC rows.
+  sup_twokey="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__twokey\.md$/ {print $4}')"
+  case "$sup_twokey" in
+    "replaces_with=AI_DLC_WIDGET_ALPHA,AI_DLC_WIDGET_BETA ::"*)
+      ok "  a settings_env_keys: LIST carries BOTH keys, comma-joined, in the token apply.sh parses" ;;
+    "") bad "the two-key supersession produced no detail at all" ;;
+    *)  bad "the settings_env_keys: list did not render both keys in order: ${sup_twokey:0:80}" ;;
+  esac
+
+  # THE LIST MUST NOT BLEED. Its items begin with a dash, exactly like the rows of the
+  # block itself, so a loose item pattern would swallow the next `- shadows:` and attribute
+  # one entry's keys to another. The single-key row that follows it in the contract is the
+  # control: if it still carries exactly its own key, the list terminated where it should.
+  sup_still="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__match\.md$/ {print $4}')"
+  case "$sup_still" in
+    "replaces_with=AI_DLC_WIDGET_EXTRA ::"*)
+      ok "  and the neighbouring single-key row still carries exactly its own key (the list did not bleed)" ;;
+    *)  bad "the single-key row was contaminated by the list above it: ${sup_still:0:80}" ;;
   esac
 fi
 

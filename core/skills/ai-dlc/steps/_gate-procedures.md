@@ -394,11 +394,20 @@ output line (e.g., `deploy-validate Step 0 pre-flight`,
 precondition returns CONTINUE immediately — no fire, no side
 effects, the step resumes.**
 
-1. **Mode gate.** Read `auto_handoff_mode` from SKILL.md Handoff
-   Protocol "Auto-handoff" section. If `off`, return CONTINUE. If
-   `deploy-only` and the seam is not `Seam A`, return CONTINUE. If
-   `safe-seam`, all defined seams (`Seam A` through `Seam E`) are
-   permitted. Proceed to precondition 2.
+1. **Mode gate.** Read `AI_DLC_AUTO_HANDOFF_MODE` from
+   `.claude/settings.json` "env"; unset means `off`. If `off`, return
+   CONTINUE. If `deploy-only` and the seam is not `Seam A`, return
+   CONTINUE. If `safe-seam`, all defined seams (`Seam A` through
+   `Seam E`) are permitted.
+
+   **Then the exclusion gate.** Read `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED`
+   — a comma-separated list of seam letters, unset meaning none. If this
+   seam's letter is in it, return CONTINUE regardless of mode. A project
+   that has ruled a particular seam unsafe declares it here rather than
+   shadowing this procedure, because a shadow freezes the whole span and
+   an exclusion is the only part it actually disagrees with.
+
+   Proceed to precondition 2.
 
 2. **Trigger basis (mode-dependent).** Exactly ONE of 2a / 2b applies:
    the one naming your `auto_handoff_mode`. Read that sub-item and stop.

@@ -34,6 +34,45 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.282.0] — 2026-08-06
+
+### Core was inviting the shadow it then had no way to retire
+
+`SKILL.md`'s auto-handoff section said, in as many words, *"projects override the default in
+this section directly."* A project pinning a mode did the only thing the text offered — and
+froze **every unrelated line of the section** at its `base_sha` to express one value. That is
+the documented failure mode of an override, invited by core, in a section whose other content
+kept changing underneath it.
+
+The mode is now `AI_DLC_AUTO_HANDOFF_MODE`, read by the Mode gate in `_gate-procedures.md`.
+Alongside it, `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED` carries the comma-separated seam letters a
+project has ruled unsafe — an exclusion set that a real consumer accumulated over four
+separate operator directives, each one an amendment to the same frozen shadow.
+
+**Two keys, which is why this release also carries the multi-key supersession.**
+`override_supersessions:` allowed exactly one `settings_env_key`, and that was never a
+decision — it was the only shape anyone had needed. A retirement requiring a second key could
+not be expressed at all, so the entry stayed shadowed over a *mechanism gap* rather than over
+a disagreement. `settings_env_keys:` takes a list, `supersessions_of()` joins it on a comma
+into the same TSV field the single form fills (so every reader of that field is unchanged),
+and `apply.sh` renders N+1 ordered ATOMIC rows instead of a hardcoded 1/2 and 2/2.
+
+The retire stamp is always last, and that ordering is the entire point of `ATOMIC`: stamping
+first re-imposes the core constraint the entry was widening, with its replacement keys not yet
+written, and reds the next gate. The old code hardcoded the count at two, so the list form
+would have rendered a sequence whose own numbering lied about its length.
+
+`layer-readopt-gate` gains the two-key arm and, next to it, the assertion that actually
+matters: the list's items begin with a dash exactly like the rows of the block itself, so a
+loose item pattern would swallow the following `- shadows:` and attribute one entry's keys to
+another. The neighbouring single-key row is the control — it must still carry exactly its own
+key.
+
+One incidental catch worth recording: `bash -n` rejected the first version of the new parser
+because two apostrophes in the awk comments terminated the single-quoted awk program. The
+parser was correct; the quoting was not. This is why the gate runs shell syntax over every
+shipped script.
+
 ## [0.281.0] — 2026-08-06
 
 ### Superseded content is MOVED, not marked — and retro can now block on one artifact without blocking on the rest
