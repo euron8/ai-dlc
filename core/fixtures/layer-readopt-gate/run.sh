@@ -878,6 +878,20 @@ EOF
     ok "  and an override on an undeclared anchor stays silent"
   fi
 
+  # THE TOKEN CONTRACT WITH apply.sh, which is where this can rot silently. apply.sh reads
+  # `replaces_with=<KEY> ::` off the front of the detail to expand ONE superseded row into an
+  # ORDERED, ATOMIC two-step worklist. If this prefix ever changes, apply falls back to a
+  # single unordered row -- still green, still emitted, and the ordering constraint that keeps
+  # a retire from re-imposing the core rule before its replacement is written is simply gone.
+  # A degradation that keeps passing is the shape this repo names; assert the join, not the row.
+  sup_detail="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__match\.md$/ {print $4}')"
+  case "$sup_detail" in
+    "replaces_with=AI_DLC_WIDGET_EXTRA ::"*)
+      ok "  the detail leads with the replaces_with= token apply.sh parses, carrying the declared key" ;;
+    *)
+      bad "the replaces_with= token is missing or malformed -- apply.sh silently drops to a single unordered row: ${sup_detail:0:60}" ;;
+  esac
+
   # NON-VACUITY. The two assertions above are both satisfied by a run that emitted nothing
   # at all for the control and something for the match; assert the run itself is alive.
   if [ "$(printf '%s\n' "$sup_out" | grep -c 'SUP__control')" -ge 1 ]; then

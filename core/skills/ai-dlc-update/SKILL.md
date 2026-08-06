@@ -925,6 +925,13 @@ prose is itself generated rather than composed.
      "migrate the drift" chore, automated), catalog relabels, and the version re-stamp.
    - `WORKLIST …` — the only things left for YOU: each `semantic-merge` (a BOTH-CHANGED 3-way PROSE
      merge, per `classify-block.md`) and each `override-readopt` (work it with the loop below).
+   - **A row whose detail begins `<i>/<n> ATOMIC` is one step of an ORDERED SEQUENCE.** Do every
+     step of that subject in the printed order and commit them together. Do not reorder them, do
+     not land one without the others, and do not treat the last step as the whole item. The order
+     is a safety property, not a preference: an `override-retire` sequence writes the replacement
+     configuration BEFORE deleting the entry, because deleting first re-imposes the core
+     constraint the entry was widening onto a consumer whose artifacts already violate it, and
+     the next gate then fails on a tree you just repaired. Each step states its own consequence.
    - `DECISION …` — a genuine operator call: an unknown drift's refile-vs-revert, a deletion, a
      token with no default. Ask ONE closed question per row.
 
