@@ -503,8 +503,13 @@ Auto-handoff is NOT a fifth pause point -- it is a session-terminating
 action that runs the path (a) procedure unchanged, and resume itself is
 never automated.
 
-`auto_handoff_mode` values (projects override the default in this
-section directly):
+`auto_handoff_mode` is read from `AI_DLC_AUTO_HANDOFF_MODE` in
+`.claude/settings.json` "env"; unset means `off`. A project that excludes
+particular seams sets `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED` to a
+comma-separated list of seam letters (e.g. `B,C,D`); unset excludes none.
+**Do not edit this section to change either value** — a project that
+shadows it to pin a mode freezes every unrelated line in the section at
+its `base_sha`, which is how an unrelated fix stops arriving. Values:
 
 - `off` (default) -- disabled; only human-requested handoff fires.
 - `deploy-only` -- fires only at `Seam A` (pre-deploy preflight in

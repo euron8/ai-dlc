@@ -315,6 +315,32 @@ override_supersessions:
       reaching PVC on the bug variant closes the interrupted sprint.
     verify: grep -qF 'Sprint boundary on bug-variant completion' .claude/skills/ai-dlc/steps/carry-over-evaluation.md
 
+  - shadows: SKILL.md#Auto-handoff (configurable via `auto_handoff_mode`)
+    since_core_version: "0.282.0"
+    reason: >-
+      Core was INVITING the shadow. The section said "projects override the default in
+      this section directly", so a project pinning a mode did the only thing the text
+      offered — and froze every unrelated line of the section at `base_sha` to express
+      one value. The mode is now `AI_DLC_AUTO_HANDOFF_MODE`, and the seam-exclusion set
+      a project accumulates alongside it is `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED`, read
+      by the Mode gate in `_gate-procedures.md`. TWO keys, which is why this row is the
+      first to use `settings_env_keys:` — a supersession needing a second key could not
+      be expressed at all before, so the entry stayed shadowed over a mechanism gap
+      rather than over a disagreement.
+    replaces_with:
+      settings_env_keys:
+        - AI_DLC_AUTO_HANDOFF_MODE
+        - AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED
+      value_derivation: >-
+        MODE: the `auto_handoff_mode` value your override pins — `off`, `deploy-only` or
+        `safe-seam`. Read it out of the entry you are retiring; an entry pinning core's
+        own default still needs the key written, because the pin exists precisely so a
+        future change to that default cannot flip this project silently.
+        SEAMS_EXCLUDED: the comma-separated seam letters your entry permanently excludes
+        (e.g. `B,C,D`), or empty if it excludes none. Derive both; do not ask, and do not
+        copy the examples.
+    verify: grep -qF 'AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED' .claude/skills/ai-dlc/steps/_gate-procedures.md
+
   - shadows: steps/retro.md#4a. Close-Out Sweep
     since_core_version: "0.281.0"
     reason: >-
