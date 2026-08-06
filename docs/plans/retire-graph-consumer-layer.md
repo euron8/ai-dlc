@@ -17,14 +17,29 @@ repo are in `/Users/n8/git/ai-dlc/CLAUDE.md` and they bind: one version per bran
 carries a same-run control; every mutant is a `cmp -s`-guarded copy with an unmutated control;
 measure a new check's false-positive set before shipping it.
 
+**OPERATOR STANDING DECISIONS, 2026-08-06. These override the per-step "ask first" notes
+below, and a session following this file must not re-ask them.**
+
+- **Merges are preapproved for the duration of this plan.** Cut the branch from `origin/main`,
+  open the PR, and merge it. Do not stop for merge approval on any release in this file.
+- **Do not pause between releases.** Run release to release without checking in unless the
+  operator is genuinely needed for a decision this file does not already record. Starting a
+  fresh session when context fidelity degrades is expected and cheap; pausing is not.
+- **s301 is being CLOSED and re-run from scratch as s302**, the way s300 was, and s302 does not
+  start until everything in this plan has landed and been pulled. The operator accepts the
+  rework because the re-run is itself the control test: it measures whether these changes have
+  their intended effect on a sprint that has already failed once without them. A close-out
+  prompt for the graph session is owed as part of this work.
+
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 
-1. **Confirm with the operator whether the two-hop graph pull has happened yet** (§*pull graph
-   in TWO hops*). It had not as of this writing. It is theirs to run, not yours.
-2. **Fix `validate-locked-anchor.sh`** — the highest measured payoff in the file. Three OPEN
-   push candidates, and the failure cost graph eight hand-run adversarial passes in one day.
-   See §*Findings*.
+1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
+   **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
+   that s302 starts on a fully-updated consumer. Still the operator's to run; still two hops
+   (§*pull graph in TWO hops*). graph's stamp was re-measured at `0.274.0 @ 9036e0d`.
+2. ~~**Fix `validate-locked-anchor.sh`.**~~ **COMPLETED — shipped as v0.280.0.** All three OPEN
+   `PC-S297-LOCKED-ANCHOR-*` candidates discharged. See §*What v0.280.0 measured*.
 2b. **Absorb Rule 930's count-control discipline and give it an enforcer** — one layer earlier
    than the citation drift: a bare `grep -c` yields a false number that becomes an AC, which
    the adversary then spends a pass falsifying. **Do NOT build a shell-file linter for this.**
@@ -33,10 +48,15 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 3. **Make the adversarial STALL rung reachable mid-cycle.** It fires correctly at p7 and goes
    silent once the cycle converges, so today it caught nothing.
 4. **R4 — snapshot ceiling** (`validate-artifact-budget.sh --fail-on`). Unblocked, mechanical.
-5. **R3 — auto-handoff.** Blocked on an operator decision about multi-key
-   `override_supersessions`; ask before building.
-6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** Blocked until graph burns down its
-   `EXTENSION-TITLE-MATCHES-CORE` set; premature promotion wedges first contact.
+5. **R3 — auto-handoff.** The multi-key `override_supersessions` question is answered by the
+   standing decision above — build the `settings_env_keys:` list form; do not re-ask.
+6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** Was blocked until graph burned down its
+   `EXTENSION-TITLE-MATCHES-CORE` set. **s301's closure changes the sequencing, not the
+   gate**: the burn-down still has to happen on the two-hop pull before promotion, or first
+   contact wedges on ~13 blocking rows. Ship it last.
+7. **Audit the steps s301 never reached** for the defect classes v0.280.0 found in the steps it
+   did reach. s301 stalled at `stories-test-strategy.md` §4, so every downstream step is
+   unexercised. The five measured classes are listed in §*What v0.280.0 measured*.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -52,8 +72,53 @@ sections in the design record below are labelled SHIPPED.
 | v0.277.0 | #363 | absorbs qa gate-2 go-signal, code-reviewer context-*shape* severity, pm probabilistic-AC + numeric anchor → **2 extensions retirable** |
 | v0.278.0 | #364 | `ai-dlc-update <ref>` / `<ref> apply` target-ref argument, plus `self-update-gate.sh --safe-stop` and a `SELF-UPDATE-SAFE-STOP` row on every DEFER |
 | v0.279.0 | #365 | plans that must survive a session live in `docs/plans/`; `scripts/validate-plan-shape.sh` enforces a resumable shape and pre-push runs it. **This file is its first subject.** |
+| v0.280.0 | #367 | Check 3b resolves the `requires_context:` load pointer, scopes the byte-match to the cited anchor, and stops spelling a zero-verification PASS like a verified one. Discharges all three OPEN `PC-S297-LOCKED-ANCHOR-*` candidates. |
 
-**graph has received NONE of it.** Its stamp is still `version: 0.274.0 / commit: 9036e0d`.
+**graph has received NONE of it.** Its stamp is still `version: 0.274.0 / commit: 9036e0d`,
+re-measured 2026-08-06 from `_bmad-output/ai-dlc-update/reconcile-report.md:3`.
+
+## What v0.280.0 measured, and the five defect classes it names
+
+Recorded here because item 7 above audits the unreached steps against exactly these, and
+because the numbers are the reason the release was worth cutting.
+
+Against graph's whole story corpus, with the SHIPPING script, before any edit:
+
+```
+998 story files
+  PASS, 0 claims verified   196     <- including 10 of 10 in the LIVE sprint
+  PASS, >=1 claim verified    0     <- never once, in the entire corpus
+  FAIL                      802
+```
+
+Every s301 block cited only `requires_context:`, which the script recognised as a presence and
+never resolved. The sprint's adversary hand-verified citations across eight passes because
+nothing mechanical did. **34 of 47 pointers in the corpus named an anchor absent from the
+artifact they cite.** The change moves 992 of 998 verdicts not at all; all six that move are
+dangling anchors confirmed with a same-file control returning non-zero.
+
+The classes, each measured rather than hypothesised:
+
+1. **Zero-verification PASS** — success has two roads, "everything verified" and "nothing to
+   check", sharing one exit code AND one report line.
+2. **A check that cannot fire** — an extractor that silently matches nothing.
+   `core/scripts/validate-ac-falsifiability.sh:244` extracts `prior_evidence:` citations
+   line-initial only, so a mid-sentence one is invisible.
+3. **Co-presence mistaken for anchoring** — a match scoped wider than the claim, succeeding on
+   text the claim does not name.
+4. **A count with no control** — a bare `grep -c` whose zero is indistinguishable from a
+   pattern that cannot match, whose false number becomes an AC. This is item 2b.
+5. **Entangled or cross-product assertions** — the bullet loop sat inside the citation loop,
+   demanding every bullet be present at every anchor.
+
+**One arm of the original plan was REFUTED by measurement and must not be rebuilt.** The plan's
+§*Findings* attributes the eight-pass cost to `validate-locked-anchor.sh` on the strength of
+p3's `MAJ-p3-2`. That finding actually names class 2 in a *different* script,
+`validate-ac-falsifiability.sh`, and the defect it reports **is already repaired in graph's
+tree**. Building the obvious fix — disarm on a `prior_evidence:` token that is not line-initial
+— was measured against the live sprint first: **8 occurrences, 8 of them false positives**, all
+prose quoting the token inside repair-history sections. It was not built. Class 2 is real and
+belongs in the item-7 audit; that particular enforcer is not the way to catch it.
 
 ## The one thing that must not be forgotten: pull graph in TWO hops
 

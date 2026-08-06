@@ -353,9 +353,15 @@ distinguish two citation forms — they are NOT interchangeable:
   every bullet in the block is present verbatim at the cited anchor and
   FAILS the gate on a mis-anchored or summarized claim.
 - `requires_context: <artifact>#<anchor>` — a dev-time load pointer.
-  Honest cite-by-reference; never byte-matched. Use this (not
-  `full_text_source:`) when the block text is an abridged restatement
-  and the full text is loaded from the brief at implementation time.
+  Honest cite-by-reference; the bullets under it are never byte-matched.
+  Use this (not `full_text_source:`) when the block text is an abridged
+  restatement and the full text is loaded from the brief at
+  implementation time. **The pointer is still resolved**: Check 3b fails
+  the gate when the artifact or the anchor is not there. Write an anchor
+  that is a LITERAL PRESENT IN THE TARGET (a heading's own text, an
+  `LR-` id, or a `<start>-<end>` line range) — a GitHub slug such as
+  `#probe-1` matches neither the heading it was derived from nor any
+  literal in the file, and is the measured way this dangles.
 
 Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
 "for full text" — the PRD's LR entries are §2a-propagated, and the
