@@ -293,6 +293,20 @@ done <<EOF
 $LD_HARD
 EOF
 
+# A SUPERSEDED override is RETIRED, not re-adopted. Emitted separately from the readopt
+# list above because an entry can be both -- the section moved AND core now provides the
+# affordance the entry was written to supply -- and in that case the readopt is work whose
+# result is an entry that still freezes its shadowed span. Each loop carries its own
+# heredoc: sharing one silently leaves the other reading stdin, which parses fine.
+TAB_CH="$(printf '\t')"
+LD_SUP="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"{print $2 "\t" $4}')"
+while IFS="$TAB_CH" read -r ovr detail; do
+  [ -n "$ovr" ] || continue
+  say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
+done <<EOF
+$LD_SUP
+EOF
+
 # EXTENSION-HOOK-DRIFT is NOT `HARD-`, and correctly so: an extension has no section anchor
 # (`hooks:` is file-grain), so nothing can prove the entry is now wrong and blocking the pull
 # on a suspicion would be a false gate. But "not blocking" was implemented as "not emitted",

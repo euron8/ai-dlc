@@ -252,6 +252,31 @@ rel() { printf '%s' "${1#"$CONSUMER"/}"; }
 git_show() { git -C "$DIST" show "$1:$2" 2>/dev/null; }
 have()     { git -C "$DIST" cat-file -e "$1:$2" 2>/dev/null; }
 
+# supersessions_of <ref> — TSV rows `shadows<TAB>since<TAB>settings_env_key` from core's
+# `override_supersessions:` block at that ref. PARSED, not sourced: the contract is data
+# the pull reads, and this file's HARD CONSTRAINT is that it shells to git and reads
+# frontmatter and headings, never interprets a pipeline rule. Read at THEIRS rather than
+# at the consumer's stamp, because the whole point is a supersession the consumer has not
+# seen yet. Top-level-key detection ends the block, so a later key cannot leak rows in.
+supersessions_of() {
+  git_show "$1" core/skills/ai-dlc/layer-contract.yaml | awk -v TAB="$TAB" '
+    /^override_supersessions:/ { inblk=1; next }
+    inblk && /^[a-z_]+:/       { inblk=0 }
+    !inblk                     { next }
+    /^[[:space:]]*-[[:space:]]*shadows:[[:space:]]*/ {
+      if (sh != "") print sh TAB si TAB en
+      sh=$0; sub(/^[[:space:]]*-[[:space:]]*shadows:[[:space:]]*/,"",sh); si=""; en=""; next
+    }
+    /^[[:space:]]*since_core_version:[[:space:]]*/ {
+      si=$0; sub(/^[[:space:]]*since_core_version:[[:space:]]*/,"",si); gsub(/"/,"",si); next
+    }
+    /^[[:space:]]*settings_env_key:[[:space:]]*/ {
+      en=$0; sub(/^[[:space:]]*settings_env_key:[[:space:]]*/,"",en); next
+    }
+    END { if (sh != "") print sh TAB si TAB en }
+  '
+}
+
 # ---------------------------------------------------------------------------
 # THE LAYER CONFORMANCE ADJUDICATION
 #
@@ -604,6 +629,25 @@ while IFS= read -r f; do
     continue
   fi
 
+  # The fourth separately-asked question, and the only one whose answer is DELETE THIS ENTRY.
+  # Every other status asks whether the override is still correct. This asks whether it is still
+  # NEEDED -- core may since have provided the thing the entry was written to work around. The
+  # pull could not previously tell the difference: a superseded override presents as ordinary
+  # section drift, which reads as "re-adopt the new wording", not "you can retire this". So the
+  # entry survives, and because an override replaces its whole section it goes on freezing every
+  # unrelated line in that span at its base_sha. That is how v0.268.0's Check 14 fix failed to
+  # reach the reference consumer. The declaration lives in core's layer-contract.yaml; matching
+  # is on the SAME normalised shadows: key the double-shadow arm uses, so a spelling difference
+  # cannot hide a supersession.
+  sup_env=""; sup_since=""; sup_reason=""
+  while IFS="$TAB" read -r s_shadows s_since s_env; do
+    [ -n "$s_shadows" ] || continue
+    [ "$(norm "$s_shadows")" = "$(norm "$shadows")" ] || continue
+    sup_env="$s_env"; sup_since="$s_since"; break
+  done <<< "$(supersessions_of "$THEIRS")"
+  [ -n "$sup_env" ] && emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+    "core ${sup_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${sup_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+
   have "$THEIRS" "$cp" || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "$tgt" "target absent at $THEIRS"; continue; }
 
   file_changed=no
@@ -741,7 +785,7 @@ while IFS= read -r f; do
       "the body asserts that the section(s) it shadows are unchanged and still govern. Precedence is overrides > extensions > core, so at load time this entry replaces the WHOLE shadowed span -- if the body rewrites one paragraph of it and states the rest still governs, that sentence is false about this entry's own effect, and the dropped text is exactly what nobody will look for. Narrow shadows: to the sub-heading actually rewritten, or restate the surviving text in this body. Report-only -- an override shadowing a sub-heading may be describing the surrounding PARENT section correctly."
   fi
 
-  # The third separately-asked question: not whether upstream moved, but whether this entry's
+  # The fifth separately-asked question: not whether upstream moved, but whether this entry's
   # own DECLARATION addresses what its author meant. E7 asks it at authoring time and errors;
   # that validator is consumer-run and skippable, and the pull is not.
   [ -n "$loose" ] && emit OVERRIDE-LOOSE-ANCHOR "$entry" "$tgt" \

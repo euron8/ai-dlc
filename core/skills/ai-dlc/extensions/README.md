@@ -83,7 +83,7 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
-conforms_to: 13                         # the contract version you migrated this entry to [LC-C1]
+conforms_to: 14                         # the contract version you migrated this entry to [LC-C1]
 ---
 
 <the additive rule / check / step body>

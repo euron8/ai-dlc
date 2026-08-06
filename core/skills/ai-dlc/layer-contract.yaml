@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 13
+contract_version: 14
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -259,6 +259,39 @@ consumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md
 # core-manifest.md is pinned `none` on measurement, not on the header's say-so: it names zero
 # contract codes and carries zero clause bullets. The four-site list this file inherited was
 # wrong about it, and recording that is cheaper than leaving a pin nobody can satisfy.
+# OVERRIDE SUPERSESSIONS — core declaring that an override is no longer needed.
+#
+# WHY THIS EXISTS. A consumer writes an override because core gave it no other way to
+# say something. When core later provides that way, nothing tells the consumer: the
+# pull compares text and finds the shadowed section changed, which reads as "re-adopt
+# the new wording," not as "you can delete this entry entirely." So the override stays,
+# and — because an override replaces its whole section — it goes on freezing every
+# unrelated line in that section at its `base_sha`. That is not hypothetical: it is how
+# v0.268.0's Check 14 fix failed to reach the reference consumer.
+#
+# WHAT THE PULL DOES WITH IT. `layer-drift.sh` matches a consumer override's `shadows:`
+# against `shadows:` here and emits OVERRIDE-SUPERSEDED. `apply.sh` turns that into a
+# `override-retire` worklist item carrying `replaces_with`, so the operator is handed
+# the replacement configuration and the retirement in one step instead of discovering
+# both. The retirement itself runs through `readopt-override.sh --stamp retire`, which
+# already deletes the file; nothing new deletes anything.
+#
+# `since_core_version` is the core release that made the override unnecessary — it is what lets a pull
+# skip a supersession the consumer has not yet reached.
+override_supersessions:
+  - shadows: steps/gate-validation.md#14. Update pipeline snapshot.
+    since_core_version: "0.271.0"
+    reason: >-
+      The snapshot's canonical section set is data. A project carrying an additional
+      section declares it instead of shadowing the check to widen the set.
+    replaces_with:
+      settings_env_key: AI_DLC_SNAPSHOT_EXTRA_SECTIONS
+      value_derivation: >-
+        The `## ` headings in this consumer's `_bmad-output/pipeline-snapshot.md` that
+        are not among core's seven canonical names, comma-separated. Derive it; do not
+        ask, and do not copy the example.
+    verify: scripts/ai-dlc/validate-artifact-budget.sh --only pipeline-snapshot.md
+
 absorbed_from:
   - path: core/skills/ai-dlc/extensions/README.md
     role: home
@@ -438,6 +471,22 @@ clauses:
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-LOOSE-ANCHOR
+    fixture: layer-readopt-gate
+
+  - id: LC-O15
+    subject: override
+    level: WARN
+    since: 14
+    normative: >-
+      An override whose `shadows:` matches a core `override_supersessions:` declaration is
+      reported as RETIRABLE, not merely drifted. Every other override status asks whether the
+      entry is still correct; this one asks whether it is still NEEDED, and it is the only one
+      whose answer is to delete the entry. Without it a superseded override presents as
+      ordinary section drift, which reads as re-adopt-the-new-wording, so the entry survives
+      and goes on freezing every unrelated line in its shadowed span at `base_sha`.
+    prose_home: core/skills/ai-dlc/overrides/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: OVERRIDE-SUPERSEDED
     fixture: layer-readopt-gate
 
   - id: LC-O13

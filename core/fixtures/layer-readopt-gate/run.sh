@@ -821,6 +821,72 @@ else
   fi
 fi
 
+# --- OVERRIDE-SUPERSEDED: core declaring an entry is no longer NEEDED ------------------
+#
+# Every other status asks whether the override is still CORRECT. This one asks whether it
+# is still needed, and it is the only status whose answer is "delete this entry". Without
+# it a superseded override presents as ordinary section drift -- which reads as "re-adopt
+# the new wording", not "you can retire this" -- so the entry survives and goes on freezing
+# every unrelated line in its shadowed span at base_sha. That is how a real core fix failed
+# to reach the reference consumer.
+if [ -z "$DRIFT" ]; then
+  bad "FIXTURE BROKEN — no layer-drift.sh; the supersession arm would pass by not running"
+else
+  mkdir -p "$DIST/core/skills/ai-dlc"
+  cat > "$DIST/core/skills/ai-dlc/layer-contract.yaml" <<'YML'
+contract_version: 13
+override_supersessions:
+  - shadows: steps/widget.md#3. Widget schema.
+    since_core_version: "9.9.9"
+    replaces_with:
+      settings_env_key: AI_DLC_WIDGET_EXTRA
+absorbed_from:
+  - path: core/skills/ai-dlc/extensions/README.md
+YML
+  git -C "$DIST" add -A >/dev/null 2>&1
+  git -C "$DIST" -c user.email=f@x -c user.name=f commit -qm "declare a supersession" >/dev/null 2>&1
+  THEIRS2="$(git -C "$DIST" rev-parse --short HEAD)"
+
+  # The MATCH and its CONTROL differ in one field: the anchor. Same file, same shape, same
+  # base_sha -- so an arm that fires on both is matching "is an override", not "is superseded".
+  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section."; do
+    nm="${pair%%:*}"; sh_v="${pair#*:}"
+    cat > "$CONS/.claude/skills/ai-dlc/overrides/${nm}.md" <<EOF
+---
+shadows: ${sh_v}
+base_sha: ${BASE}
+reason: fixture entry
+conforms_to: 13
+---
+
+# body
+EOF
+  done
+
+  sup_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>&1)"
+  sup_st() { printf '%s\n' "$sup_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
+
+  if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__match\.md$')"; then
+    ok "an override core declares SUPERSEDED is reported as retirable"
+  else
+    bad "a superseded override was not reported — it survives the pull and keeps freezing its shadowed span"
+  fi
+
+  if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__control\.md$')"; then
+    bad "CONTROL: an override on a DIFFERENT anchor was reported superseded — the arm matches any override"
+  else
+    ok "  and an override on an undeclared anchor stays silent"
+  fi
+
+  # NON-VACUITY. The two assertions above are both satisfied by a run that emitted nothing
+  # at all for the control and something for the match; assert the run itself is alive.
+  if [ "$(printf '%s\n' "$sup_out" | grep -c 'SUP__control')" -ge 1 ]; then
+    ok "  CONTROL is present in the output under some other status (so its silence above is a real zero)"
+  else
+    bad "the control entry produced NO row at all — its silence proves nothing"
+  fi
+fi
+
 rm -rf "$ROOT"
 echo ""
 if [ "$fails" -eq 0 ]; then echo "layer-readopt-gate: PASS"; exit 0; fi

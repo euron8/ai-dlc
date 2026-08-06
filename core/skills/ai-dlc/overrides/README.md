@@ -91,6 +91,14 @@ status that stops `apply`); **WARN** reports and never blocks.
 - **[LC-O12]** WARN — every `shadows:` anchor still FORWARD-matches at PULL time. LC-O11 asks the
   same question at authoring time, in a validator you run and can skip; the pull cannot be
   skipped, and it reads the anchor against the INCOMING core rather than the copy on disk.
+- **[LC-O15]** WARN — an entry whose `shadows:` matches a core `override_supersessions:`
+  declaration is reported RETIRABLE, not merely drifted. Every other status here asks whether
+  the entry is still correct; this one asks whether it is still NEEDED, and it is the only one
+  whose answer is to delete the entry. A superseded override otherwise presents as ordinary
+  section drift — which reads as re-adopt-the-new-wording — so it survives the pull and goes on
+  freezing every unrelated line in its shadowed span at `base_sha`. Retire it with
+  `readopt-override.sh --stamp retire` after applying the declared replacement.
+
 - **[LC-O13]** WARN — no two entries declare the same (target file, normalised anchor). Both
   bodies claim that span and precedence picks one silently, so which one governs is an ordering
   accident neither entry declares — and every upstream commit touching the span invalidates BOTH
