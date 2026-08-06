@@ -178,6 +178,7 @@ core_manifest:
   - fixtures/layer-crosswalk-home/**
   - fixtures/layer-reference-resolution/**
   - fixtures/layer-adjudication-tier/**
+  - fixtures/layer-title-join/**
   - fixtures/context-mode-protect/**
   - fixtures/context-sensor/**
   - fixtures/core-paths-audit-diff/**

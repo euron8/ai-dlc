@@ -344,6 +344,26 @@ done <<EOF
 $LD_HOOK
 EOF
 
+# EXTENSION-TITLE-MATCHES-CORE gets a row for the reason the block above records: a status
+# that reaches only the REPORT is an instruction, and an instruction names no actor and no
+# deadline. This one has a narrower disposition than a re-read — the entry's heading names a
+# core section, so either core carries the body and the entry retires, or it augments the
+# section and says so in `extends:` — and either answer ends the row. Left in the report
+# alone it would be carried as a follow-up, which is what happened to EXTENSION-HOOK-DRIFT
+# twice running on the reference consumer before it was given a row.
+#
+# Not `HARD-`, and not an adjudication duty either: the candidate set is mechanized but the
+# verdict needs the BODY read, and 12 blocking rows on first contact is how a check gets
+# turned off. It ships as work with an owner, and promotion to the register is a later
+# release's decision once this set has been burned down.
+LD_TITLE="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE"{print $2 "\t" $4}')"
+while IFS="$TAB_CH" read -r ext tdetail; do
+  [ -n "$ext" ] || continue
+  say WORKLIST extension-title-match "$ext" "$tdetail"
+done <<EOF
+$LD_TITLE
+EOF
+
 # ---------------------------------------------------------------- 4. catalog relabel (mechanical)
 if bash "$SELF/relabel-extension-checks.sh" "$CONSUMER" --apply --dist "$DIST" --theirs "$THEIRS" >/dev/null 2>&1; then
   say RESOLVED relabel "ext-check collisions labelled"

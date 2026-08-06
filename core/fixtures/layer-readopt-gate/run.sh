@@ -840,6 +840,9 @@ override_supersessions:
     since_core_version: "9.9.9"
     replaces_with:
       settings_env_key: AI_DLC_WIDGET_EXTRA
+  - shadows: steps/widget.md#5. Adopted section.
+    since_core_version: "9.9.9"
+    reason: core took this entry's paragraph verbatim; there is nothing to configure.
 absorbed_from:
   - path: core/skills/ai-dlc/extensions/README.md
 YML
@@ -849,7 +852,7 @@ YML
 
   # The MATCH and its CONTROL differ in one field: the anchor. Same file, same shape, same
   # base_sha -- so an arm that fires on both is matching "is an override", not "is superseded".
-  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section."; do
+  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section."; do
     nm="${pair%%:*}"; sh_v="${pair#*:}"
     cat > "$CONS/.claude/skills/ai-dlc/overrides/${nm}.md" <<EOF
 ---
@@ -899,6 +902,33 @@ EOF
   else
     bad "the control entry produced NO row at all — its silence proves nothing"
   fi
+
+  # A SUPERSESSION NEEDS NO CONFIGURATION TO BE ONE.
+  #
+  # Core stops needing an override two ways: it turns a hardcoded set into an AI_DLC_* key
+  # the consumer declares its value in (the row above), or it simply ADOPTS the entry's
+  # prose, where there is no key because there is nothing to configure. The emission used to
+  # be gated on `settings_env_key`, so the second kind could be authored in the contract and
+  # would silently never fire — a declaration with no reader, which is the cannot-fire class
+  # arriving through the data side where I36 does not look. Measured on the reference
+  # consumer: three of eleven overrides retire by adoption, none by configuration.
+  if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__adopted\.md$')"; then
+    ok "  a supersession declaring NO settings_env_key still fires (core adopted the prose)"
+  else
+    bad "an env-keyless supersession was not reported — the cheapest retirement class is undeclarable, and the contract row that declares it has no reader"
+  fi
+
+  # THE OTHER HALF OF THE apply.sh TOKEN CONTRACT. apply.sh strips a leading
+  # `replaces_with=<KEY> ::` and, finding none, emits the SINGLE worklist row. If the
+  # env-less detail carried the token with an empty key, apply would instead emit
+  # "1/2 ATOMIC — write  into .claude/settings.json" and hand the operator an instruction
+  # naming nothing. Assert the absence, because that failure is green on every other check.
+  sup_adopted="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__adopted\.md$/ {print $4}')"
+  case "$sup_adopted" in
+    replaces_with=*) bad "the env-keyless detail leads with replaces_with= anyway — apply.sh will emit a 1/2 ATOMIC row telling the operator to write an empty key: ${sup_adopted:0:70}" ;;
+    "")              bad "the env-keyless supersession produced an empty detail" ;;
+    *)               ok "  and its detail omits the replaces_with= token, so apply.sh renders the single retire row" ;;
+  esac
 fi
 
 rm -rf "$ROOT"
