@@ -44,12 +44,17 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
    than the citation drift: a bare `grep -c` yields a false number that becomes an AC, which
    the adversary then spends a pass falsifying. **Do NOT build a shell-file linter for this.**
    Measured: the defects are in markdown derivations, not in `*.sh`. See §*The shell-idiom
-   family IS in this sprint*.
+   family IS in this sprint*. **Measured since:** core's shipped `SKILL.md` carries 30 rules
+   and ZERO count-control discipline (control: the same grep finds all 30 rule headings), so
+   the absorption target is a new core rule, numbered in core's band — not 930, which is
+   inside the consumer band I45 reserves. Whether a mechanical enforcer is viable at all is
+   under measurement; if its false-positive set is large and unclassifiable, **ship the rule
+   and say so** rather than shipping a lint the operator turns off.
 3. **Make the adversarial STALL rung reachable mid-cycle.** It fires correctly at p7 and goes
    silent once the cycle converges, so today it caught nothing.
-4. **R4 — snapshot ceiling** (`validate-artifact-budget.sh --fail-on`). Unblocked, mechanical.
-5. **R3 — auto-handoff.** The multi-key `override_supersessions` question is answered by the
-   standing decision above — build the `settings_env_keys:` list form; do not re-ask.
+4. ~~**R4 — snapshot ceiling.**~~ **COMPLETED — shipped as v0.281.0 (#369).**
+5. ~~**R3 — auto-handoff.**~~ **COMPLETED — shipped as v0.282.0 (#370)**, carrying the
+   multi-key `settings_env_keys:` mechanism with it.
 6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** Was blocked until graph burned down its
    `EXTENSION-TITLE-MATCHES-CORE` set. **s301's closure changes the sequencing, not the
    gate**: the burn-down still has to happen on the two-hop pull before promotion, or first
@@ -57,6 +62,12 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 7. **Audit the steps s301 never reached** for the defect classes v0.280.0 found in the steps it
    did reach. s301 stalled at `stories-test-strategy.md` §4, so every downstream step is
    unexercised. The five measured classes are listed in §*What v0.280.0 measured*.
+8. **Triage graph's push-candidate ledger** — 123 `## PC-` entries, of which roughly 57 are
+   upstream-facing and OPEN. Re-run each `verify:` receipt against the current core tree
+   before proposing anything; several are documented as having gone blind, meaning the
+   substring is absent at base AND at theirs, so the entry can never close.
+9. **Write the s301 close-out prompt** for the operator to paste into the graph session,
+   mirroring what the s300 close-out did. Owed as a deliverable, not optional.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -73,6 +84,19 @@ sections in the design record below are labelled SHIPPED.
 | v0.278.0 | #364 | `ai-dlc-update <ref>` / `<ref> apply` target-ref argument, plus `self-update-gate.sh --safe-stop` and a `SELF-UPDATE-SAFE-STOP` row on every DEFER |
 | v0.279.0 | #365 | plans that must survive a session live in `docs/plans/`; `scripts/validate-plan-shape.sh` enforces a resumable shape and pre-push runs it. **This file is its first subject.** |
 | v0.280.0 | #367 | Check 3b resolves the `requires_context:` load pointer, scopes the byte-match to the cited anchor, and stops spelling a zero-verification PASS like a verified one. Discharges all three OPEN `PC-S297-LOCKED-ANCHOR-*` candidates. |
+| v0.281.0 | #369 | `validate-artifact-budget.sh --fail-on <artifact>` plus a supersession-marker arm. Retires `steps__retro__pipeline-snapshot-ceiling` as a CONFIGURED supersession (`AI_DLC_SNAPSHOT_STRIKETHROUGH`). |
+| v0.282.0 | #370 | `AI_DLC_AUTO_HANDOFF_MODE` + `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED`, and the `settings_env_keys:` multi-key supersession mechanism. Retires `SKILL__auto_handoff_mode`. |
+
+**Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
+A consumer override is evidence that a consumer needed something; it is not evidence that core
+is wrong. In v0.281.0 the override's bare-`~~strikethrough~~` arm turned `inflight-row-shape`
+red — a fixture that already held a struck line outside the dispatch ledger is out of scope,
+because Recent Activity legitimately strikes superseded entries. Core's position predated the
+work and had a fixture behind it, so it won by default and the stricter posture became a key.
+That is the better outcome anyway: it turns an adopted retirement into a CONFIGURED one, which
+is the shape the whole mechanism was built for. **Run the absorbing change against the full
+fixture suite before believing the absorption is clean** — the conflict surfaced as a
+red fixture, not as anything visible while reading the override.
 
 **graph has received NONE of it.** Its stamp is still `version: 0.274.0 / commit: 9036e0d`,
 re-measured 2026-08-06 from `_bmad-output/ai-dlc-update/reconcile-report.md:3`.
