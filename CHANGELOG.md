@@ -34,6 +34,68 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.280.0] — 2026-08-06
+
+### Check 3b verified nothing, on every story, for its entire life — the load pointer is now resolved and the byte-match is scoped to the anchor it cites
+
+`validate-locked-anchor.sh` is the deterministic half of requirement-anchor integrity. Measured
+against the reference consumer's whole story corpus with the shipping script, before any edit:
+
+```
+998 story files
+  PASS, 0 claims verified   196     <- including 10 of 10 in the LIVE sprint
+  PASS, >=1 claim verified    0     <- never once, in the entire corpus
+  FAIL                      802
+```
+
+`claims_checked >= 1` had never happened. Every block in the live sprint cited only
+`requires_context:`, which the script recognised as a PRESENCE and never resolved — so ten
+stories reported PASS having substantiated nothing, while the sprint's adversary hand-verified
+citations across eight passes because no mechanism did it.
+
+**Three defects, each filed OPEN against this script in the consumer's push-candidate ledger,
+all three closed here.**
+
+- **The load pointer is resolved.** A `requires_context: <artifact>#<anchor>` asserts exactly one
+  falsifiable fact — that the target is there to load — and nothing checked it. Its bullets are
+  still never byte-matched; that exemption is correct, because they are an abridged restatement by
+  design, and byte-matching them would red every honest cite-by-reference block. The script's
+  stated contract survives verbatim: an honest pointer resolves. In the corpus, **34 of 47
+  pointers named an anchor absent from the artifact they cite.**
+- **The byte-match is scoped to the cited anchor.** The anchor was consumed by the existence
+  check and then discarded, so a requirement bullet satisfied the check by matching text ANYWHERE
+  in the source of record. That proves co-presence, not anchoring. A bullet now has to be present
+  within the union of the anchors its block cites.
+- **The two roads to exit 0 print different lines.** "Every claim verified" and "there was nothing
+  to check" still share exit code 0 — a block that claims nothing has nothing to substantiate, and
+  failing it would red every legacy block in a consumer's history for a defect it does not have.
+  What was wrong is that they were spelled identically. A story that verified nothing now reports
+  `PASS — NOTHING VERIFIED`, which is the absence of evidence rather than evidence of correctness.
+
+**The union rule is a fix, not a loosening.** Scoping to the anchor exposed a pre-existing loop
+shape: the bullet loop sat INSIDE the citation loop, so a block with N citations and N bullets
+demanded every bullet be present at every anchor. Whole-file matching hid it, because the file
+contains all of them. Two real two-citation blocks went red on it before the union rule, for
+bullets sitting one line apart in the brief.
+
+**False-positive set, measured before shipping and enumerated.** Anchor-scoping plus the union
+rule was reconstructed against 290 revisions of the consumer's brief so that citations which have
+since gone stale could still be evaluated at a revision where they resolved: **23 of 23 blocks
+that pass whole-file also pass anchor-scoped — zero false positives.** On the live corpus the
+whole change moves **992 of 998 verdicts not at all**, and all six that move are dangling
+`requires_context:` anchors confirmed absent with a same-file control that returns non-zero. The
+live sprint's ten stories keep their verdict and flip from `NOTHING VERIFIED` to ten verified
+pointer sets.
+
+One dangling class worth naming, because it is how these fail in practice: a GitHub heading slug
+(`#probe-1`) matches neither the heading it was derived from nor any literal in the file.
+`stories-test-strategy.md` now says to write an anchor that is a literal present in the target.
+
+Fixture `check-3b-locked-anchor` gains three arms and three mutants — pointer resolution, anchor
+scoping, and the two PASS roads — each with a pairing assertion proving it fails only its own
+arm, alongside the existing unmutated control. One mutant's `sed` initially matched nothing and
+was caught by its `cmp -s` guard rather than scoring as a kill.
+
 ## [0.279.0] — 2026-08-06
 
 ### A plan that must survive the session lives in the repo, and something checks it can be followed

@@ -13,10 +13,19 @@
 # mis-anchored, summarized propagation. This script closes that hole
 # deterministically.
 #
-# It fires ONLY on a LOCKED_REQUIREMENTS block that makes a FULL-TEXT CLAIM via
-# a `full_text_source:` line. Honest cite-by-reference (`requires_context:`) is
-# a load pointer, not a full-text claim, and is never byte-matched — so honest
-# citation cannot fail this check.
+# The BYTE-MATCH fires ONLY on a LOCKED_REQUIREMENTS block that makes a FULL-TEXT
+# CLAIM via a `full_text_source:` line. Honest cite-by-reference (`requires_context:`)
+# is a load pointer, not a full-text claim, and its bullets are never byte-matched —
+# so honest citation cannot fail this check.
+#
+# THE POINTER ITSELF IS RESOLVED, AND THAT IS NOT THE SAME THING. A
+# `requires_context:` citation asserts exactly one fact — that the named artifact and
+# anchor are there for a dev to load — and until this checked it, a block could cite
+# nothing that exists and score identically to one that cited correctly. Measured on a
+# reference consumer: every story of the live sprint passed reporting `0 claim(s)
+# verified`, and across its 998-story corpus a nonzero claim count had never once
+# occurred, while 34 of 47 pointers named an absent anchor. Resolving the pointer
+# leaves the stated contract intact — an honest pointer resolves.
 #
 # Block schema (discovery.md §4a / stories-test-strategy.md §2a):
 #   <!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
@@ -33,13 +42,23 @@
 #       A citation resolving to any other artifact, or to one that self-declares
 #       `locked_requirements_fidelity: index` / a "condensed index" provenance,
 #       FAILS. Catches "cite prd.md for full text" when prd.md is an index.
-#   (b) Anchor existence — the <anchor> token must appear in the cited artifact.
-#   (c) Byte-verbatim — every requirement bullet in the block must be present in
-#       the cited artifact after whitespace collapse (a summarized/≤N-char
-#       restatement will not match). Catches tooling-threshold-driven
-#       summarization; the motive is unprovable from the file, but the lossy
-#       RESULT is deterministic, and lossy propagation is independently
-#       forbidden by Rule 13.
+#   (b) Anchor existence and SCOPE — the <anchor> must resolve in the cited
+#       artifact, either as a token appearing in it or as a line range within
+#       its length. What it resolves TO is the window (c) searches.
+#   (c) Byte-verbatim — every requirement bullet in the block must be present,
+#       after whitespace collapse, WITHIN THE UNION OF THE ANCHORS THE BLOCK
+#       CITES (a summarized/≤N-char restatement will not match). Catches
+#       tooling-threshold-driven summarization; the motive is unprovable from
+#       the file, but the lossy RESULT is deterministic, and lossy propagation
+#       is independently forbidden by Rule 13. Searching the whole artifact
+#       instead — what this did until the anchor window existed — proves
+#       co-presence, not anchoring: a bullet matched text the citation does not
+#       name and the check reported the citation verified.
+#
+# Exit code 0 has TWO roads and they now print DIFFERENT lines. A story that
+# verified nothing (no resolvable citation of either form) is reported as
+# `PASS — NOTHING VERIFIED`. It is not failed: a block that claims nothing has
+# nothing to substantiate. It is no longer spelled like a verified story.
 #
 # NOTE — category error this guards against: context/tool thresholds (e.g. the
 # ctx INTENT_SEARCH_THRESHOLD) gate what re-enters the conversation on an
@@ -196,7 +215,13 @@ if sys.argv[3] == "1":
 
 FULL_TEXT_RE = re.compile(r"^\s*full_text_source:\s*(\S+)\s*$")
 REQUIRES_CTX_RE = re.compile(r"^\s*requires_context:\s*\S")
+# The citation VALUE of a load pointer, as distinct from its mere PRESENCE above.
+# `requires_context:` was recognised only as a presence and its target was never
+# resolved -- see the pointer-resolution loop below for what that cost.
+REQUIRES_CTX_CITE_RE = re.compile(r"^\s*requires_context:\s*(\S+)\s*$")
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S)\s*$")
+LINE_RANGE_RE = re.compile(r"^(\d+)-(\d+)$")
+HEADING_RE = re.compile(r"^(#{1,6})\s")
 # An artifact that self-declares it is NOT the verbatim record.
 INDEX_MARKER_RE = re.compile(
     r"locked_requirements_fidelity:\s*index|condensed index|INDEXING, not weakening",
@@ -206,6 +231,71 @@ INDEX_MARKER_RE = re.compile(
 
 def collapse_ws(s):
     return re.sub(r"\s+", " ", s).strip()
+
+
+def split_citation(cite):
+    """Split a citation into (artifact, anchor); anchor is "" when there is no separator.
+
+    `#` WINS OVER `:` AND BOTH ARE ACCEPTED FOR BOTH KEYS. The schema spells a load
+    pointer `<artifact>#<anchor>` and a full-text claim `<artifact>:<anchor>`, but both
+    separators are in the field for both keys -- a story block citing
+    `product-brief.md#LR-S299-4` and a body line citing
+    `docs/architecture-proposed.md:440-806` were measured in the same sprint. Splitting
+    on the LAST separator is what makes a path containing neither ambiguous rather than
+    silently truncated.
+    """
+    cite = cite.strip("`")
+    if "#" in cite:
+        artifact, _, anchor = cite.rpartition("#")
+        return artifact, anchor
+    if ":" in cite:
+        artifact, _, anchor = cite.rpartition(":")
+        return artifact, anchor
+    return cite, ""
+
+
+def anchor_window(source_text, anchor):
+    """The section(s) an anchor names, or None when the anchor is not in the artifact.
+
+    THE BYTE-MATCH USED TO SEARCH THE WHOLE FILE, AND THAT IS WHY THIS EXISTS. The
+    anchor was consumed by the existence check at (b) and then discarded, so a
+    requirement bullet satisfied check (c) by matching text ANYWHERE in the source --
+    including a paragraph the citation does not name. A citation that resolves only
+    because the brief happens to contain the words somewhere is not an anchored
+    citation, and the check that was supposed to prove anchoring proved co-presence.
+
+    A LINE-RANGE anchor (`2423-2433`) selects exactly those lines, and a range that
+    runs past EOF is a dangling citation rather than a silently clamped one. A TOKEN
+    anchor selects, for every line carrying it, that line through the next markdown
+    heading at the same-or-shallower depth (EOF when there is none) -- so an anchor in
+    an unstructured brief widens to the whole remainder rather than to nothing.
+    """
+    lines = source_text.splitlines()
+    ranged = LINE_RANGE_RE.match(anchor)
+    if ranged:
+        lo, hi = int(ranged.group(1)), int(ranged.group(2))
+        if lo < 1 or lo > hi or hi > len(lines):
+            return None
+        return "\n".join(lines[lo - 1:hi])
+    hits = [i for i, ln in enumerate(lines) if anchor in ln]
+    if not hits:
+        return None
+    sections = []
+    for i in hits:
+        depth = 99
+        for j in range(i, -1, -1):
+            hm = HEADING_RE.match(lines[j])
+            if hm:
+                depth = len(hm.group(1))
+                break
+        end = len(lines)
+        for j in range(i + 1, len(lines)):
+            hm = HEADING_RE.match(lines[j])
+            if hm and len(hm.group(1)) <= depth:
+                end = j
+                break
+        sections.append("\n".join(lines[i:end]))
+    return "\n".join(sections)
 
 
 def resolve_artifact(cited, story_path):
@@ -262,6 +352,7 @@ with open(story_path, "r", encoding="utf-8") as fh:
 blocks, dangling = extract_blocks(content)
 failures = []
 claims_checked = 0
+pointers_checked = 0
 
 # THE UNMATCHED-SENTINEL GUARD. An opener with no closer is not "nothing to check" — it
 # is this script failing to parse a block that is right there, and it used to be
@@ -297,6 +388,42 @@ for bidx, block in enumerate(blocks, start=1):
             continue
         bullets.append(text)
 
+    # RESOLVE THE LOAD POINTERS. A `requires_context:` citation is correctly never
+    # byte-matched -- its bullets are an abridged restatement by design, and matching
+    # them would red every honest cite-by-reference block. But the POINTER ITSELF makes
+    # one falsifiable assertion, that the named artifact and anchor are there to load,
+    # and nothing checked it. Measured on a reference consumer before this was added:
+    # all ten stories of the live sprint reported PASS with `0 claim(s) verified`,
+    # because every block in that sprint cited only `requires_context:`; across its
+    # whole 998-story corpus `claims_checked >= 1` had NEVER ONCE occurred. Meanwhile
+    # 34 of 47 pointers in the corpus named an anchor absent from the artifact.
+    #
+    # Resolving the pointer keeps this script's stated contract intact -- "honest
+    # citation cannot fail this check" -- because an honest pointer resolves. What it
+    # removes is the road by which a block substantiates nothing and scores as clean.
+    for cite in [REQUIRES_CTX_CITE_RE.match(ln).group(1)
+                 for ln in lines if REQUIRES_CTX_CITE_RE.match(ln)]:
+        artifact, anchor = split_citation(cite)
+        resolved = resolve_artifact(artifact, story_path)
+        if resolved is None:
+            failures.append(
+                f"block #{bidx}: requires_context artifact '{artifact}' not found on "
+                f"disk (searched relative to the story file). A dev told to load this "
+                f"at implementation time gets nothing."
+            )
+            continue
+        pointers_checked += 1
+        if not anchor:
+            continue
+        with open(resolved, "r", encoding="utf-8") as pfh:
+            if anchor_window(pfh.read(), anchor) is None:
+                failures.append(
+                    f"block #{bidx}: requires_context anchor '{anchor}' is absent from "
+                    f"'{artifact}' (dangling load pointer). The file resolves and the "
+                    f"anchor does not, so the pointer names a section the artifact no "
+                    f"longer has."
+                )
+
     if not sources:
         # A block with requirement bullets and NEITHER citation form is
         # UNCHECKABLE: there is nothing to byte-verify it against. Passing it
@@ -322,17 +449,27 @@ for bidx, block in enumerate(blocks, start=1):
             )
         continue
 
+    # The anchor windows every full-text claim in THIS block resolved to. The byte-match
+    # at (c) runs once against their UNION, not once per citation.
+    #
+    # WHY THE UNION, AND IT IS NOT A LOOSENING. The bullet loop used to sit INSIDE the
+    # citation loop, so a block with N citations and N bullets demanded that EVERY
+    # bullet be present at EVERY anchor. Whole-file matching hid that: the file contains
+    # all of them, so it passed. Scoping to the anchor exposes it -- measured, two
+    # two-citation blocks on a reference consumer went red because bullet 1 is not at
+    # anchor 2, one line above it in the brief. That is the cross-product, not a
+    # mis-anchored story. A block's bullets must be present in what the block CITES,
+    # which is the union; requiring each at each is a defect of the old loop shape.
+    windows = []
     for cited in sources:
         claims_checked += 1
-        # Split on the LAST colon: <artifact>:<anchor>. Artifact paths do not
-        # contain ':' in this repo; the anchor (e.g. LR-S288-1) never does.
-        if ":" not in cited:
+        artifact, anchor = split_citation(cited)
+        if not anchor:
             failures.append(
                 f"block #{bidx}: full_text_source '{cited}' is not in "
                 f"<artifact>:<anchor> form"
             )
             continue
-        artifact, anchor = cited.rsplit(":", 1)
 
         # (a) Source-of-record.
         if os.path.basename(artifact) != sor_basename:
@@ -363,24 +500,30 @@ for bidx, block in enumerate(blocks, start=1):
             )
             continue
 
-        # (b) Anchor existence.
-        if anchor not in source_text:
+        # (b) Anchor existence -- and, now, anchor SCOPE. The window this returns is
+        # what (c) matches against; a None is the dangling citation check.
+        window = anchor_window(source_text, anchor)
+        if window is None:
             failures.append(
                 f"block #{bidx}: anchor '{anchor}' not found in '{artifact}' "
                 f"(dangling full_text_source citation)"
             )
             continue
+        windows.append(window)
 
-        # (c) Byte-verbatim (whitespace-collapsed substring).
-        source_norm = collapse_ws(source_text)
+    # (c) Byte-verbatim (whitespace-collapsed substring) WITHIN THE CITED ANCHORS.
+    if windows:
+        source_norm = collapse_ws("\n".join(windows))
+        cited_list = ", ".join(sources)
         for btext in bullets:
             bnorm = collapse_ws(btext)
             if bnorm and bnorm not in source_norm:
                 snippet = btext if len(btext) <= 80 else btext[:77] + "..."
                 failures.append(
-                    f"block #{bidx}: requirement not byte-present at "
-                    f"full_text_source '{cited}' — lossy/summarized propagation: "
-                    f"\"{snippet}\""
+                    f"block #{bidx}: requirement not byte-present at the cited "
+                    f"anchor(s) '{cited_list}' — lossy/summarized propagation, or "
+                    f"text that lives elsewhere in the artifact than where this "
+                    f"block says it does: \"{snippet}\""
                 )
 
 if failures:
@@ -389,9 +532,24 @@ if failures:
         print(f"  - {f}", file=sys.stderr)
     sys.exit(1)
 
-print(
-    f"VALIDATE-LOCKED-ANCHOR: PASS ({story_path}, {len(blocks)} block(s), "
-    f"{claims_checked} full_text_source claim(s) verified against '{sor_basename}')"
-)
+# THE TWO ROADS TO PASS NOW SAY WHICH ONE THEY TOOK. "Every claim verified" and "there
+# was nothing to check" still share exit code 0 -- a block that claims nothing has
+# nothing to substantiate, and failing it would red every legacy block in a consumer's
+# history for a defect it does not have. What was wrong was that they also shared one
+# REPORT LINE, so an operator reading a green gate could not tell a verified story from
+# an unverified one. They are separable now without moving the exit code.
+if claims_checked == 0 and pointers_checked == 0:
+    print(
+        f"VALIDATE-LOCKED-ANCHOR: PASS — NOTHING VERIFIED ({story_path}, "
+        f"{len(blocks)} block(s) carried no resolvable citation). This is not a "
+        f"defect on its own; it is the absence of evidence, and it is reported "
+        f"rather than spelled the same as a verified story."
+    )
+else:
+    print(
+        f"VALIDATE-LOCKED-ANCHOR: PASS ({story_path}, {len(blocks)} block(s), "
+        f"{claims_checked} full_text_source claim(s) verified against "
+        f"'{sor_basename}', {pointers_checked} requires_context pointer(s) resolved)"
+    )
 sys.exit(0)
 PYEOF

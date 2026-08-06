@@ -268,6 +268,127 @@ else
   fi
 fi
 
+# --- LOAD POINTERS ARE RESOLVED ----------------------------------------------------
+# `requires_context:` was recognised as a PRESENCE and its target never resolved. The
+# bullets under it are correctly never byte-matched — they are an abridged restatement
+# by design — but the POINTER asserts one falsifiable fact, that the artifact and anchor
+# are there to load, and nothing checked it. Measured on a reference consumer at the
+# moment this shipped: all ten stories of the live sprint reported PASS with `0 claim(s)
+# verified` because every block in that sprint cited only `requires_context:`, and
+# across its 998-story corpus a nonzero claim count had NEVER ONCE occurred. 34 of 47
+# pointers in that corpus named an anchor absent from the artifact they cite.
+#
+# The pair is the point. A dangling pointer must red AND an honest one must stay green
+# (asserted above at requires-context-story.md) — a validator that failed every
+# cite-by-reference block would satisfy the first alone.
+if "$VALIDATOR" "$DIR/dangling-pointer-story.md" >/dev/null 2>&1; then
+  echo "FAIL: dangling-pointer-story.md passed — a requires_context: anchor absent from the artifact is a load pointer to nothing" >&2
+  rc=1
+else
+  echo "ok: dangling-pointer-story.md rejected (dangling load pointer)"
+fi
+
+MUT3="$WORK/mut-no-pointer-resolution.sh"; cp "$VALIDATOR" "$MUT3"
+sed -i.bak 's|^REQUIRES_CTX_CITE_RE = re.compile(r"[^"]*")$|REQUIRES_CTX_CITE_RE = re.compile(r"^NEVER_MATCHES_ANY_LINE$")|' "$MUT3" && rm -f "$MUT3.bak"
+if cmp -s "$VALIDATOR" "$MUT3"; then
+  echo "FAIL: MUTATION setup — the pointer-citation regex was not mutated, so the arm below proves nothing" >&2
+  rc=1
+else
+  if bash "$MUT3" "$DIR/dangling-pointer-story.md" >/dev/null 2>&1; then
+    echo "ok: MUTATION — with pointer resolution reverted, the dangling pointer goes GREEN (resolution is what catches it)"
+  else
+    echo "FAIL: MUTATION — the dangling pointer still red with resolution reverted; some OTHER rejection is doing the work" >&2
+    rc=1
+  fi
+  # Pairing: the mutant must still accept the honest pointer, so it died of ITS OWN edit.
+  if bash "$MUT3" "$DIR/requires-context-story.md" >/dev/null 2>&1; then
+    echo "ok: MUTATION PAIRING — the same mutant still accepts an honest pointer (it fails only its own assertion)"
+  else
+    echo "FAIL: MUTATION PAIRING — the mutant reds the honest pointer too; the two assertions are entangled" >&2
+    rc=1
+  fi
+fi
+
+# --- THE BYTE-MATCH IS SCOPED TO THE CITED ANCHOR ----------------------------------
+# The anchor was consumed by the existence check and then discarded, so a requirement
+# bullet satisfied the byte-match by appearing ANYWHERE in the source of record. That
+# proves co-presence, not anchoring: a citation "verified" because the brief happens to
+# contain the words in a section the citation does not name.
+#
+# The discriminating pair is one story text against two citations. Citing the anchor the
+# text actually lives under must PASS; citing the OTHER section's anchor must FAIL. Only
+# the pair separates "the anchor is wrong" from "the text is absent" — the shipped defect
+# passed both, and a byte-match that rejected everything would pass the FAIL half alone.
+AW="$WORK/anchorwin"; mkdir -p "$AW"
+printf '# Brief\n\n## Section A\n\n- LR-A1: alpha requirement text, verbatim.\n\n## Section B\n\n- LR-B1: beta requirement text, verbatim.\n' \
+  > "$AW/product-brief.md"
+printf '# story\n\n<!-- LOCKED_REQUIREMENTS -->\nfull_text_source: product-brief.md:LR-B1\n- LR-B1: beta requirement text, verbatim.\n<!-- END LOCKED_REQUIREMENTS -->\n' \
+  > "$AW/on-anchor.md"
+printf '# story\n\n<!-- LOCKED_REQUIREMENTS -->\nfull_text_source: product-brief.md:LR-A1\n- LR-B1: beta requirement text, verbatim.\n<!-- END LOCKED_REQUIREMENTS -->\n' \
+  > "$AW/off-anchor.md"
+
+if bash "$VALIDATOR" "$AW/on-anchor.md" >/dev/null 2>&1; then
+  echo "ok: on-anchor story accepted (the bullet is inside the section it cites)"
+else
+  echo "FAIL: on-anchor story rejected — the anchor window is too narrow to hold its own section" >&2
+  rc=1
+fi
+if bash "$VALIDATOR" "$AW/off-anchor.md" >/dev/null 2>&1; then
+  echo "FAIL: off-anchor story passed — the bullet lives under Section B and the block cites Section A" >&2
+  rc=1
+else
+  echo "ok: off-anchor story rejected (byte-match is scoped to the cited anchor, not the whole file)"
+fi
+
+MUT4="$WORK/mut-whole-file-bytematch.sh"; cp "$VALIDATOR" "$MUT4"
+sed -i.bak 's/source_norm = collapse_ws("\\n".join(windows))/source_norm = collapse_ws(source_text)/' "$MUT4" && rm -f "$MUT4.bak"
+if cmp -s "$VALIDATOR" "$MUT4"; then
+  echo "FAIL: MUTATION setup — the byte-match window was not mutated, so the arm below proves nothing" >&2
+  rc=1
+else
+  if bash "$MUT4" "$AW/off-anchor.md" >/dev/null 2>&1; then
+    echo "ok: MUTATION — with the byte-match reverted to whole-file, the off-anchor story goes GREEN (the shipped defect, on demand)"
+  else
+    echo "FAIL: MUTATION — the off-anchor story still red against a whole-file match; the scoping is not what catches it" >&2
+    rc=1
+  fi
+  if bash "$MUT4" "$AW/on-anchor.md" >/dev/null 2>&1; then
+    echo "ok: MUTATION PAIRING — the same mutant still accepts the on-anchor story (it fails only its own assertion)"
+  else
+    echo "FAIL: MUTATION PAIRING — the whole-file mutant reds the honest story too; the assertions are entangled" >&2
+    rc=1
+  fi
+fi
+
+# --- THE TWO ROADS TO EXIT 0 PRINT DIFFERENT LINES ---------------------------------
+# "Every claim verified" and "there was nothing to check" still share exit code 0, and
+# they should: a block that claims nothing has nothing to substantiate. What was wrong
+# is that they also shared one REPORT LINE. The assertion is on the STRING.
+NV_OUT="$("$VALIDATOR" "$DIR/nothing-verified-story.md" 2>&1)"
+GD_OUT="$("$VALIDATOR" "$DIR/good-story.md" 2>&1)"
+case "$NV_OUT" in
+  *"NOTHING VERIFIED"*) echo "ok: a zero-verification story reports PASS — NOTHING VERIFIED" ;;
+  *) echo "FAIL: a zero-verification story reports the same line as a verified one: $NV_OUT" >&2; rc=1 ;;
+esac
+case "$GD_OUT" in
+  *"NOTHING VERIFIED"*) echo "FAIL: a VERIFIED story reported NOTHING VERIFIED — the two roads are swapped: $GD_OUT" >&2; rc=1 ;;
+  *) echo "ok: OVER-FIRE CONTROL: a verified story does NOT report NOTHING VERIFIED" ;;
+esac
+
+MUT5="$WORK/mut-one-pass-line.sh"; cp "$VALIDATOR" "$MUT5"
+sed -i.bak 's/^if claims_checked == 0 and pointers_checked == 0:$/if False:/' "$MUT5" && rm -f "$MUT5.bak"
+if cmp -s "$VALIDATOR" "$MUT5"; then
+  echo "FAIL: MUTATION setup — the two-road branch was not mutated, so the arm below proves nothing" >&2
+  rc=1
+else
+  if bash "$MUT5" "$DIR/nothing-verified-story.md" 2>&1 | grep -q "NOTHING VERIFIED"; then
+    echo "FAIL: MUTATION — the collapsed branch still distinguishes the two roads; the branch is not what does it" >&2
+    rc=1
+  else
+    echo "ok: MUTATION — with the branch collapsed, a zero-verification story spells like a verified one (the defect, on demand)"
+  fi
+fi
+
 # Unmutated control from the same directory.
 MC="$WORK/control-unmutated.sh"; cp "$VALIDATOR" "$MC"
 if bash "$MC" "$DIR/good-story.md" >/dev/null 2>&1; then

@@ -402,22 +402,36 @@ block distinguishes a full-text CLAIM from a load POINTER:
 - `full_text_source: <artifact>:<anchor>` — asserts the verbatim
   requirement lives at this anchor. Byte-enforced.
 - `requires_context: <artifact>#<anchor>` — a dev-time load pointer,
-  NOT a full-text claim. Never byte-matched (honest cite-by-reference
-  stays legal).
+  NOT a full-text claim. Its bullets are never byte-matched (honest
+  cite-by-reference stays legal), but THE POINTER ITSELF IS RESOLVED:
+  the artifact and the anchor must exist. A pointer that resolves to
+  nothing is a dev instructed to load a section that is not there.
 
 **Check.** For each story, invoke
 `scripts/ai-dlc/validate-locked-anchor.sh <story-file>`; exit 0 required. For
 every `full_text_source:` citation it asserts (a) the artifact is the
 byte-verbatim source of record — default `product-brief.md`, where
 discovery.md §4a extracts the block — and NOT a condensed index
-(e.g. prd.md, which is only §2a-propagated); (b) the anchor exists in
-that artifact; (c) every requirement bullet in the block is byte-present
-there (whitespace-collapsed). A block with only `requires_context:` or
-no full-text claim is untouched (Check 3 covers it).
+(e.g. prd.md, which is only §2a-propagated); (b) the anchor resolves in
+that artifact, as a token present in it or a line range within its
+length; (c) every requirement bullet in the block is byte-present
+(whitespace-collapsed) **within the union of the anchors the block
+cites** — not merely somewhere in the artifact, which proves co-presence
+rather than anchoring. For every `requires_context:` citation it asserts
+the artifact and anchor resolve, and byte-matches nothing.
 
 **PASS:** the script exits 0. **FAIL:** a `full_text_source` cites a
 non-source-of-record / index artifact, a dangling anchor, or a bullet
-not byte-present at the source of record.
+not byte-present at the cited anchor; or a `requires_context` names an
+artifact or anchor that is not there.
+
+**Read the PASS line, not just the exit code.** `PASS — NOTHING
+VERIFIED` means the story carried no resolvable citation of either form:
+a legal state for a block that claims nothing, and the absence of
+evidence rather than evidence of correctness. It is reported separately
+because the two roads to exit 0 used to be spelled identically —
+measured on a reference consumer, 196 of 998 stories took that road, 0
+had ever taken the other, and every gate had read green.
 
 **Category-error rider.** Context/tool thresholds (e.g. the ctx
 `INTENT_SEARCH_THRESHOLD`) gate what re-enters the conversation on an
