@@ -120,6 +120,115 @@ else
   printf '  FAIL  %-16s unmutated copy gave %s — a copy that cannot run scores as a kill\n' "mutation-control" "${c_broken:-<none>}"
 fi
 
+# --- --safe-stop: a DEFER must name the ref that ends it -------------------------------
+#
+# A DEFER is correct and it is a dead end. The deferred slice lands at step 7, AFTER step 3's
+# classify, so a classifier improvement anywhere in the range cannot classify the pull that
+# delivers it — the operator gets a report written by the engine they were replacing. The way
+# out is to stop at a release whose slice IS machinery-only, and that ref is derivable only by
+# running this gate per release. These arms assert it is derived, and derived CORRECTLY.
+#
+# Own miniature distribution: the seeded one has no release history, and `--safe-stop`'s
+# candidate set IS the release history.
+SS="$(dirname "$DIST")/ss"; rm -rf "$SS"; mkdir -p "$SS/dist/core/skills/ai-dlc/steps" "$SS/cons/.claude/skills/ai-dlc/steps"
+gvv() { printf '# gate\n'; for a in "$@"; do printf '<!-- CHECK_LOADED: %s -->\n' "$a"; done; }
+gvv 1 2 > "$SS/cons/.claude/skills/ai-dlc/steps/gate-validation.md"
+# The consumer's hook is the authority on what can block ITS push, and its ABSENCE is
+# UNDECIDED, not OK — correctly, since a gate that cannot see the hook cannot say what the
+# self-update would install. Without this the whole section ran on UNDECIDED and two arms
+# passed for a reason unrelated to what they assert; the precondition arms below exist
+# because that is exactly what happened.
+mkdir -p "$SS/cons/.githooks"
+printf '#!/usr/bin/env bash\n# invokes no scripts/ai-dlc/ validator, so the gating set is empty\nexit 0\n' > "$SS/cons/.githooks/pre-push"
+git -C "$SS/dist" init -q
+printf '1.0.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm base >/dev/null 2>&1
+SS_BASE="$(git -C "$SS/dist" rev-parse HEAD)"
+# r1 — a release that moves VERSION and nothing the consumer's rulebook is joined against.
+printf '1.1.0\n' > "$SS/dist/VERSION"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r1 >/dev/null 2>&1
+SS_R1="$(git -C "$SS/dist" rev-parse HEAD)"
+# r2 — a release that declares a check anchor the consumer's rulebook does not carry (ARM R1).
+printf '1.2.0\n' > "$SS/dist/VERSION"; gvv 1 2 3 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r2 >/dev/null 2>&1
+SS_R2="$(git -C "$SS/dist" rev-parse HEAD)"
+# r3 — the coupling is gone again, so base→r3 is a CLEAN single hop even though base→r2 is not.
+# This is the shape that proves the walk evaluates every candidate instead of stopping at the
+# first defer: r3 lands strictly more than r1 and an early-stopping walk can never name it.
+printf '1.3.0\n' > "$SS/dist/VERSION"; gvv 1 2 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r3 >/dev/null 2>&1
+SS_R3="$(git -C "$SS/dist" rev-parse HEAD)"
+# d3 — a NON-release commit after the last clean release, and the only reason it exists.
+# The candidate set is release commits because the stamp records a VERSION, so a mid-release
+# stop is not a state a consumer can hold. Without a commit that is clean, later than r3 and
+# NOT a release, "candidates are releases" and "candidates are all commits" pick the same ref
+# and the property is untestable — a mutation widening the candidate set came back green until
+# this commit existed.
+printf 'docs only, no VERSION change\n' > "$SS/dist/NOTES.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm d3 >/dev/null 2>&1
+# r4 — THEIRS. Needed so r3 is an INTERMEDIATE candidate rather than the target itself.
+printf '1.4.0\n' > "$SS/dist/VERSION"; gvv 1 2 3 4 > "$SS/dist/core/skills/ai-dlc/steps/gate-validation.md"
+git -C "$SS/dist" add -A >/dev/null 2>&1; git -C "$SS/dist" -c user.email=f@x -c user.name=f commit -qm r4 >/dev/null 2>&1
+SS_R4="$(git -C "$SS/dist" rev-parse HEAD)"
+
+ss_assert() { # ss_assert <label> <got> <want> <why>
+  ASSERTIONS=$((ASSERTIONS + 1))
+  if [ "$2" = "$3" ]; then printf '  ok    %-16s %s\n' "$1" "$4"
+  else FAILURES=$((FAILURES + 1)); printf '  FAIL  %-16s got=[%s] want=[%s]  %s\n' "$1" "$2" "$3" "$4"; fi
+}
+
+# PRECONDITION, or every arm below is vacuous: r2 must actually defer and r1 must not.
+ss_assert "safe-stop-pre" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | awk -F'\t' '$1 ~ /DEFER/ {print "defer"; exit}')" \
+  "defer" "the seeded r2 really does defer (without this the walk has nothing to stop at)"
+ss_assert "safe-stop-pre2" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$SS/cons" 2>&1 | awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}')" \
+  "" "and the seeded r1 does not — so a walk that returns r1 returned the CLEAN one"
+
+ss_assert "safe-stop" "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>/dev/null)" \
+  "$SS_R1" "the furthest cleanly-self-updating release in base..r2 is r1"
+
+# CONTROL: it is not simply echoing the newest release, nor THEIRS itself. With r1 as the
+# target there is no INTERMEDIATE release, so the honest answer is nothing.
+ss_out="$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R1" "$SS/cons" 2>/dev/null)"; ss_rc=$?
+ss_assert "safe-stop-none" "${ss_out}|${ss_rc}" "|1" \
+  "with no intermediate release the walk returns nothing and rc 1, rather than naming THEIRS"
+
+# The advisory reaches the caller on a DEFER, and names the ref rather than restating the problem.
+ss_assert "safe-stop-row" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>&1 | awk -F'\t' '$1=="SELF-UPDATE-SAFE-STOP" {print $2; exit}')" \
+  "$SS_R1" "a DEFER carries a SELF-UPDATE-SAFE-STOP row naming the ref"
+
+# CONTROL: a clean verdict must NOT carry one. Advice attached to every run is noise, and it
+# would also mean the arm above fires regardless of the verdict it claims to accompany.
+ss_assert "safe-stop-quiet" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R1" "$SS/cons" 2>&1 | grep -c 'SELF-UPDATE-SAFE-STOP')" \
+  "0" "a SELF-UPDATE-OK verdict carries no advisory"
+
+# THE LATEST CLEAN CANDIDATE WINS, NOT THE ONE BEFORE THE FIRST DEFER. base..r4 contains a
+# clean r1, a deferring r2 and a clean r3. Each verdict is computed BASE→candidate, so r3 is a
+# single clean hop that lands strictly more than r1 — a walk that stopped at the first defer
+# would answer r1 and quietly cost the operator two releases of progress.
+ss_assert "safe-stop-latest" "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R4" "$SS/cons" 2>/dev/null)" \
+  "$SS_R3" "the LATEST clean release wins, even with a deferring release before it"
+ss_assert "safe-stop-latest-pre" \
+  "$(bash "$GATE" "$SS/dist" "$SS_BASE" "$SS_R3" "$SS/cons" 2>&1 | awk -F'\t' '$1 ~ /DEFER|UNDECIDED/ {print "defer"; exit}')" \
+  "" "and r3 really is clean from base — without this the arm above proves nothing"
+
+# --safe-stop's stdout is a REF AND NOTHING ELSE, because the caller substitutes it into a
+# command. A leaked TSV row — the advisory re-entering through a nested classify, say — would
+# be pasted straight into `ai-dlc-update <ref>`.
+#
+# This replaced an assertion that compared "reached" to "reached", which passed whenever the
+# fixture got that far and therefore asserted nothing. It was written to cover the advisory's
+# re-entry guard; a mutant removing that guard came back GREEN, which is how the tautology was
+# found. The guard is a COST measure — a nested walk covers a strictly shorter range, so the
+# recursion terminates either way — and it is deliberately NOT covered by an assertion here,
+# because no observable output distinguishes the two.
+ss_assert "safe-stop-clean-stdout" \
+  "$(bash "$GATE" --safe-stop "$SS/dist" "$SS_BASE" "$SS_R2" "$SS/cons" 2>/dev/null | grep -c 'SELF-UPDATE-')" \
+  "0" "stdout carries the ref alone, with no status row that could be pasted into a command"
+
 echo
 if [ "$FAILURES" -gt 0 ]; then
   echo "FAIL: $FAILURES of $ASSERTIONS assertions wrong."

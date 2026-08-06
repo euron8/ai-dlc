@@ -34,8 +34,31 @@
 #                                               not silently become a defer verdict.
 #   incoming 0                    -> OK
 #
-# Usage:  self-update-gate.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
-#         (arg order matches layer-drift.sh)
+# MODES
+#   self-update-gate.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>
+#       classify. The only mode step 2 runs. (arg order matches layer-drift.sh)
+#   self-update-gate.sh --safe-stop <dist-repo> <base-sha> <theirs-ref> <consumer-root>
+#       print the FURTHEST release ref in base..theirs that still self-updates cleanly, or
+#       nothing (rc 1) if even the first one defers. See below for why this exists.
+#
+# WHY --safe-stop EXISTS. A DEFER verdict is correct and it is also a dead end: it says the
+# machinery slice cannot stand alone, so the slice folds into the gated apply at step 7 --
+# which runs AFTER step 3's classify. Any improvement to the CLASSIFIER therefore arrives one
+# phase too late to classify the pull that delivers it, and the operator sees a report written
+# by the engine they were trying to replace.
+#
+# Measured on the reference consumer at 0.274.0 -> 0.277.0: this gate returned DEFER, classify
+# ran the stale engine, and three overrides upstream had just ABSORBED were reported as
+# ordinary HARD-OVERRIDE-DRIFT-SECTION -- "re-adopt the new wording" -- which is the exact
+# misreading override_supersessions was built to end. The remedy was to stop at 0.275.0 first,
+# where the slice is machinery-only, and nothing in the tree said so or could be asked.
+#
+# THE CANDIDATES ARE RELEASE COMMITS, not every commit: the stamp records a VERSION, so a
+# mid-release stop is not a state a consumer can hold. And the verdict per candidate is
+# obtained by RUNNING THIS SCRIPT, never by re-deriving its arms -- a second implementation of
+# the predicate is the one whose bugs nobody finds, and the walk must agree with the gate by
+# construction rather than by review.
+#
 # Output: TSV — STATUS<TAB>SCRIPT<TAB>DETAIL
 #   SELF-UPDATE-OK        nothing in the slice can block the push; proceed autonomously.
 #   SELF-UPDATE-DEFER     an incoming script the consumer's pre-push runs fails on the consumer's
@@ -45,8 +68,64 @@
 #   SELF-UPDATE-UNDECIDED the differential could not attribute the failure. Report it; treat as
 #                         DEFER, because acting autonomously on an unattributable failure is the
 #                         one thing this gate exists to prevent.
+#   SELF-UPDATE-SAFE-STOP accompanies every DEFER: the furthest release in the range that DOES
+#                         self-update cleanly, so the operator can split the pull and land the
+#                         engine before it is used — or the explicit statement that no such
+#                         release exists, which is a different answer from silence.
 # Exit:   0 ALWAYS. A classifier, not a gate — the CALLER decides, same posture as layer-drift.sh.
 set -uo pipefail
+
+SELF_SRC="$0"
+
+if [ "${1:-}" = "--safe-stop" ]; then
+  shift
+  SS_DIST="${1:?usage: self-update-gate.sh --safe-stop <dist-repo> <base-sha> <theirs-ref> <consumer-root>}"
+  SS_BASE="${2:?}"; SS_THEIRS="${3:?}"; SS_CONSUMER="${4:?}"
+
+  # Release commits in base..theirs, OLDEST FIRST. A release is a commit that moves VERSION --
+  # derived, because any hand-list of release shas rots on the next release, and the file that
+  # defines a release is the one the release-triple validator already keys on.
+  ss_cands="$(git -C "$SS_DIST" rev-list --reverse "${SS_BASE}..${SS_THEIRS}" -- VERSION 2>/dev/null)"
+  if [ -z "$ss_cands" ]; then
+    # NOT A SILENT ZERO. No release boundary in the range is a real answer (a docs-only range),
+    # and it is also what a bad BASE looks like. Say which, on stderr, and return nothing.
+    if git -C "$SS_DIST" rev-parse -q --verify "${SS_BASE}^{commit}" >/dev/null 2>&1; then
+      printf 'self-update-gate --safe-stop: no commit touches VERSION in %s..%s, so there is no intermediate release to stop at.\n' "$SS_BASE" "$SS_THEIRS" >&2
+    else
+      printf 'self-update-gate --safe-stop: base %s does not resolve in %s — the range is unreadable, which is NOT the same as empty.\n' "$SS_BASE" "$SS_DIST" >&2
+    fi
+    exit 1
+  fi
+
+  # EVERY CANDIDATE IS EVALUATED, AND THE LATEST CLEAN ONE WINS. The first cut stopped at the
+  # first candidate that deferred, on the reasoning that a later clean ref sits "behind" the
+  # coupling — and that reasoning is wrong, because each verdict is computed BASE→candidate,
+  # never incrementally. A release that introduces a coupling and a later one that resolves it
+  # both sit in the range, and base→later is then a single clean hop that lands strictly more
+  # than the early stop would. Breaking early silently under-reports how far the operator can
+  # go, which is the same shape as any other check that answers before it has looked.
+  #
+  # The nested classify runs must not advise. This is a COST guard, not a termination one, and
+  # the distinction is worth stating because the first version of this comment claimed
+  # termination and a mutant removing the guard came back GREEN — the recursion is naturally
+  # bounded, since a nested walk covers a strictly shorter range. What it buys is that a
+  # deferring candidate does not trigger a full sub-walk of its own, which would make the whole
+  # thing quadratic in the number of releases in the range. Set before the loop so every child
+  # inherits it.
+  export AI_DLC_GATE_IN_SAFE_STOP=1
+  ss_best=""
+  for ss_c in $ss_cands; do
+    [ "$ss_c" = "$SS_THEIRS" ] && continue          # the full pull is what the caller already asked
+    ss_out="$(bash "$SELF_SRC" "$SS_DIST" "$SS_BASE" "$ss_c" "$SS_CONSUMER" 2>/dev/null)"
+    case "$ss_out" in
+      *SELF-UPDATE-DEFER*|*SELF-UPDATE-UNDECIDED*) continue ;;
+    esac
+    ss_best="$ss_c"
+  done
+  [ -n "$ss_best" ] || exit 1
+  printf '%s\n' "$ss_best"
+  exit 0
+fi
 
 DIST="${1:?usage: self-update-gate.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>}"
 BASE="${2:?}"
@@ -54,6 +133,21 @@ THEIRS="${3:?}"
 CONSUMER="${4:?}"
 
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3"; }
+
+# A DEFER WITHOUT A NEXT STEP IS A DEAD END, and the operator's next step is not obvious:
+# it is a REF, derivable only by running this gate against each release in the range. So
+# every DEFER terminal ends with the answer or with the explicit statement that there is
+# none. Suppressed under --safe-stop, which is what would otherwise re-enter this walk.
+advise_safe_stop() {
+  [ -n "${AI_DLC_GATE_IN_SAFE_STOP:-}" ] && return 0
+  _ss="$(bash "$SELF_SRC" --safe-stop "$DIST" "$BASE" "$THEIRS" "$CONSUMER" 2>/dev/null)"
+  if [ -n "$_ss" ]; then
+    _sv="$(git -C "$DIST" show "${_ss}:VERSION" 2>/dev/null | tr -d '[:space:]')"
+    emit SELF-UPDATE-SAFE-STOP "$_ss" "pull to ${_sv:-$_ss} FIRST — its slice self-updates cleanly, so the engine lands and step 2 re-invokes on it. Then pull again for the rest. Without the split, step 3 classifies this pull with the engine this pull was going to replace, and any classifier improvement in the range reports nothing. Run: ai-dlc-update ${_ss} apply, then ai-dlc-update apply."
+  else
+    emit SELF-UPDATE-SAFE-STOP "-" "no intermediate release in ${BASE}..${THEIRS} self-updates cleanly, so the split that would land the engine first does not exist here. Fold the slice into the gated apply and expect step 3 to classify on the CURRENT engine."
+  fi
+}
 
 # ---- THE MACHINERY SLICE CANNOT ALWAYS STAND ALONE -------------------------------------
 # Step 2's stated premise is "a fixture's subject is always machinery". It is FALSE, and the
@@ -157,6 +251,7 @@ fi
 
 if [ "${deferred_join:-0}" -eq 1 ]; then
   emit SELF-UPDATE-DEFER "-" "the machinery slice cannot be green on its own for this pull. Step 2's premise that a fixture's subject is always machinery does not hold here. Do NOT cut the self-update branch."
+  advise_safe_stop
   exit 0
 fi
 
@@ -229,5 +324,8 @@ done <<EOF
 $GATING
 EOF
 
-[ "$deferred" -eq 0 ] || emit SELF-UPDATE-DEFER "-" "at least one gating script defers; step 2 must not push. Fold the machinery slice into the gated apply."
+if [ "$deferred" -ne 0 ]; then
+  emit SELF-UPDATE-DEFER "-" "at least one gating script defers; step 2 must not push. Fold the machinery slice into the gated apply."
+  advise_safe_stop
+fi
 exit 0

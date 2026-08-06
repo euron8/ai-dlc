@@ -1,6 +1,6 @@
 ---
 name: ai-dlc-update
-description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile after review. Run with `untangle` (or `untangle apply`) for the one-time Phase-2 core/extensions/overrides migration on a still-tangled consumer. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", \"reconcile with distribution\", or \"untangle\"."
+description: "Reconcile upstream AI/DLC distribution changes into a diverged consumer project via a base-aware semantic three-way merge (the distribution→consumer pull path). Run bare for a dry-run report, or with `apply` to reconcile after review. Prefix either with a distribution ref (`<ref>`, `<ref> apply`) to stop short of upstream HEAD — needed when the self-update gate reports SELF-UPDATE-DEFER and names a SELF-UPDATE-SAFE-STOP ref, because a deferred machinery slice lands after the classify that would have used it. Run with `untangle` (or `untangle apply`) for the one-time Phase-2 core/extensions/overrides migration on a still-tangled consumer. Use when the user says \"ai-dlc-update\", \"pull upstream\", \"update ai-dlc\", \"reconcile with distribution\", or \"untangle\"."
 effort: high
 ---
 
@@ -48,9 +48,55 @@ STOP — you don't; you diff text and classify it.
   `X.Y.Z @ <sha>`: read `<sha>` as `commit`, `X.Y.Z` as `version`, treat
   `skill_version` as unknown; the next re-stamp/self-update rewrites the stamp in
   the schema above. Never drop `upstream`/`installed_at` when re-stamping.
-- **theirs** = distribution `core/` at the target ref (default upstream HEAD).
+- **theirs** = distribution `core/` at the **target ref**, which the operator may
+  name (see *Invocation* below). Default upstream HEAD.
 - **ours**  = the consumer's live tree (`.claude/…`, plus `scripts/` for
   `core/scripts/…`).
+
+## Invocation
+
+```
+ai-dlc-update                     dry-run report to upstream HEAD
+ai-dlc-update apply               reconcile to upstream HEAD
+ai-dlc-update <ref>               dry-run report to <ref>
+ai-dlc-update <ref> apply         reconcile to <ref>
+ai-dlc-update untangle [apply]    one-time Phase-2 migration (unaffected by <ref>)
+```
+
+`<ref>` is anything the DISTRIBUTION repo resolves — a sha, a tag, a branch. It
+sets `theirs` and nothing else; `base` still comes from the stamp.
+
+**WHY A CONSUMER WOULD EVER STOP SHORT OF HEAD.** Step 2's self-update lands the
+engine and re-invokes, so an improvement to the classifier normally classifies
+its own pull. But `self-update-gate.sh` returns `SELF-UPDATE-DEFER` when the
+machinery slice cannot stand alone, and a deferred slice lands in the **gated
+apply at step 7 — after step 3's classify**. On such a pull the report is written
+by the engine the pull was going to replace, and any new signal in the range
+reports nothing at all. Measured on the reference consumer at 0.274.0 → 0.277.0:
+three overrides upstream had just ABSORBED came back as ordinary
+`HARD-OVERRIDE-DRIFT-SECTION`, which reads as *re-adopt the new wording* — the
+exact misreading `override_supersessions` exists to end.
+
+The remedy is to stop at a release whose slice IS machinery-only, let the engine
+land, then pull the rest. **Do not hunt for that ref by hand:** every `DEFER`
+now carries a `SELF-UPDATE-SAFE-STOP` row naming it, derived by running the gate
+against each release in the range. Take the ref from that row.
+
+**VALIDATE `<ref>` BEFORE USING IT — all four, and report which failed:**
+
+1. It resolves in the **distribution** repo. A ref that resolves only in the
+   consumer is the `base_sha` poisoning trap one layer up.
+2. `base` is an ancestor of it (`git merge-base --is-ancestor <base> <ref>`).
+   Otherwise the pull is a DOWNGRADE, and the stamp would record a version the
+   consumer has already moved past.
+3. It is reachable from the distribution's default branch. Pinning to an
+   unmerged branch stamps the consumer to content that may never land.
+4. It is not equal to `base`. That is a no-op pull, and it must say so rather
+   than produce an empty report that reads like a clean one.
+
+A `<ref>` that fails any of these STOPS the run. Do not silently fall back to
+HEAD — the operator asked for a specific target, and substituting a different
+one is the class of failure this whole skill is written against.
 
 `base` and `theirs` are fetched from the distribution git repo. `ours` is the
 working tree. See §6.1 of the design record — this is a vendored-dep updater
@@ -321,9 +367,15 @@ prose is itself generated rather than composed.
      do NOT proceed to step 3 on stale logic. Instead: report in one line that
      the self-update landed (merged PR ref) + what changed (`reconcile/` — the
      engine — vs prose/docs), then **immediately re-invoke the `ai-dlc-update`
-     skill (Skill tool), carrying the operator's original argument** — a bare run
-     re-invokes bare (fresh dry-run), an `apply` run re-invokes `apply`. The fresh
-     invocation loads the updated logic and runs the reconcile on it.
+     skill (Skill tool), carrying the operator's original arguments IN FULL** — a
+     bare run re-invokes bare (fresh dry-run), an `apply` run re-invokes `apply`,
+     and **a run that named a `<ref>` re-invokes with that same `<ref>`**. The
+     fresh invocation loads the updated logic and runs the reconcile on it.
+
+     Dropping the `<ref>` on re-invoke silently retargets the pull at HEAD, which
+     is the one thing the operator ruled out by naming a ref — and it would do it
+     at the exact moment the split-pull remedy is being executed, turning a
+     deliberate two-step back into the single bundled pull it was working around.
 
      Re-invoking is the default and needs no confirmation: an operator who just
      updated the tool wants to run its latest iteration, and the re-invocation is
