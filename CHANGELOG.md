@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.277.0] — 2026-08-06
+
+### Three role clauses the reference consumer was carrying alone, and a shape change reviewed as if it were not one
+
+The role files are the part of the layer v0.275.0 could not see at all: none of the eight role
+entries on the reference consumer carries a numbered heading, so the absorption detector had
+never once looked at any of them. These are the first three absorptions that pass made
+reportable.
+
+**`qa.md` — gate-2 could start on task-graph state.** *"Gate-1 task completed"* and a story at
+status `review` both reliably precede approval, which is exactly why they get read as approval.
+Core now states the go-signal as a HARD start condition: `gate-2 go-signal: <story-id> @ <SHA>`,
+and a verdict produced on any other SHA is **VOID** rather than merely early — it attests to a
+tree nobody asked about.
+
+**`code-reviewer.md` — a return *shape* is not a return *type*, and only one of them was
+severity-classified.** Core already made a changed return type Critical with a mandatory
+Consumer Audit. A context builder — a dispatch-context factory, a request/safeguard context
+assembler, any function whose product is a dict consumers read by key — has a *shape*, so a
+renamed or retyped key slips past a type-focused reading while breaking every reader in exactly
+the same way. Two obligations follow from the shape being built in more than one place, and
+they are the reason a caller-grep is not enough: audit the **readers** of the shape, not only
+the callers of the builder, and audit **sibling call sites that build the same context type
+from a different trigger path**.
+
+**`pm.md` — two spec-authoring rules, filed by the consumer as domain and general in every
+word.** An AC whose only discharge path is an event neither dev nor QA controls is unverifiable
+BY CONSTRUCTION, not merely unverified, and must be tagged `probabilistic/passive-monitoring`
+at story-creation rather than discovered at gate time. And an AC citing a prior story's number
+as a scale anchor must link the artifact at authorship — a citation whose source cannot be
+located later is a promissory note against evidence that may never have existed in retrievable
+form. This also discharges the OPEN push-candidate `PC-S297-RETRO-UPSTREAM-PM-AC-PRECISION`.
+
+**Scoped by reading core, not by trusting the entries' own claims.** `code-reviewer-push.md`
+presents its field-verification half as net-new; core already carries it across
+`## Field Verification (API-Consuming Stories)`, `### Unverifiable API Field Names` and
+`### Missing Pre-Deploy Field Verification`. Only the context-shape clause was genuinely
+absent, so only it was absorbed. Absorbing the rest would have been core restating itself in
+three places to close a duplicate.
+
+**A gap this release does NOT close, stated because a clean pull would otherwise imply it
+does.** `pm-domain.md` carries no headings at all — only bullets. Both absorption arms join on
+headings, so **its retirement will not be reported by any pull**, and the operator retires it by
+hand. Bold-prose anchors were declared out of scope when the title arm shipped; this is the
+first case where that scope limit costs a real retirement signal. `qa-push.md` and
+`code-reviewer-push.md` are both reported.
+
 ## [0.276.0] — 2026-08-06
 
 ### Core adopts three clauses it was making a consumer carry, and declares each one retirable

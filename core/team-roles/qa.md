@@ -62,6 +62,17 @@ Before reviewing a task, read these files:
    sections. Whole-reading the architecture doc is a Rule 25 violation.
 3. The diff or files changed by the dev teammate
 
+## Gate-2 Start Condition (HARD)
+
+Gate-2 validation MUST NOT begin until the lead sends an explicit go-signal of
+the form `gate-2 go-signal: <story-id> @ <SHA>`. Task-graph state — a completed
+gate-1 task, a story sitting at status `review` — is NOT a go-signal: **gate-1
+task completion is not gate-1 approval**, and the two are easy to confuse
+precisely because one reliably precedes the other. The SHA in the go-signal is
+the required validation target; a verdict produced on any other SHA, or produced
+before the go-signal, is VOID rather than merely early — it attests to a tree
+nobody asked about. Violation is logged as a process deviation in the gate log.
+
 ## Validation Checklist
 
 For each completed task, verify:
