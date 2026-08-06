@@ -31,8 +31,19 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
+**WORK IN FLIGHT AT THE SESSION BOUNDARY, 2026-08-06.** Branch
+`feat/v0.283.0-unreached-step-verdicts` is pushed and gate-green at commit `70c9046`, subject
+`wip(unreached-steps)`. It carries two finished script edits and **no fixture coverage and no
+release triple** — do not merge it as-is. Finish it by adding the fixture arms below, then bump
+`VERSION`, write the CHANGELOG heading, and rename the commit to a `feat(v0.283.0):` subject.
+The two edits and the measurement behind each are in §*What the unreached-step audit found*.
+
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
+
+0. **Parallelize the mutant runs inside the six heavy fixtures.** Sequenced FIRST by operator
+   decision, because it compounds across every gate run that follows. See §*The suite critical
+   path*. Do the biggest fixture alone, measure it, and only then do the other five.
 
 1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
    **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
@@ -186,6 +197,146 @@ the reconcile PR unmerged until retro.
   supersession-marker arm. Retires `steps__retro__pipeline-snapshot-ceiling`.
 - **R6 promote LC-E6/LC-O15 to ADJUDICATED** — only after graph burns down the 13-row
   `EXTENSION-TITLE-MATCHES-CORE` set, or first contact wedges on ~13 blocking rows.
+
+## The suite critical path — measured, after two invalid measurements
+
+**The pool is not the problem and `FIXTURE_JOBS` cannot help.** From
+`.git/ai-dlc-fixture-durations`: 115 units, **2408s serial total**, longest single unit
+**282s**. A 16-way ideal makespan is `max(2408/16, 282) = 282s`; observed is **297s**, so the
+pool already runs at 95% of its theoretical best. The makespan is bounded below by the single
+longest unit.
+
+**`validate-enforcement-map.sh` has no hot spot.** 8.5s per call, and the cumulative curve from
+a cut-bisect is flat: 3.66s at 30% of the file, then 5.15 / 5.72 / 6.73 / 8.10 / 8.73. It is
+~76 invariants each scanning the tree. There is no cheap single-point fix, and one was
+attempted and reverted — a nested shell loop rewritten as a single `awk index()` pass produced
+**byte-identical output and 8.40s → 8.60s**, i.e. nothing.
+
+**THE LEVER IS THAT EACH HEAVY FIXTURE IS INTERNALLY SERIAL.** At 8.5s a call:
+
+| fixture | cost | ≈ validator calls |
+|---|---|---|
+| `enforcement-map-derivations` | 282s | 33 |
+| `enforcement-map-sites` | 240s | 28 |
+| `ledger-status-vocabulary` | 193s | 22 |
+| `consumer-machinery-home` | 186s | 21 |
+| `layer-contract-conformance` | 151s | 17 |
+| `crosswalk-home-declaration` | 151s | 17 |
+
+138 calls, ~1173s of the 2408s. The pre-push pool parallelizes ACROSS fixtures; each of these
+runs its 17–33 independent mutants SEQUENTIALLY inside one pool slot. Give each an inner pool
+and the biggest goes 282s → ~35s at 8-way, dropping the makespan toward `sum/16` = 150s.
+`.githooks/pre-push:99` already describes doing this for one case, so the shape exists.
+
+**Both failed measurements are recorded because each looked authoritative.**
+
+- `bash -x` charges every command a trace-write, so a 24,000-command trace ranked commands by
+  FREQUENCY and presented `IFS=`, `read -r` and `case` as the cost. They were the cheapest
+  commands in the file, run the most times. That is what aimed the reverted rewrite at the
+  wrong loop.
+- A cut-bisect whose copies ran from `/tmp` returned 0.02s at EVERY cut, including one at the
+  last line. `REPO_ROOT` is `dirname($0)/..`, so each copy failed root resolution immediately
+  and every timing was a script that did nothing. **A uniform result across a bisect is the
+  signature of a harness fault, not a flat profile** — the real flat profile, once the root was
+  pinned, still rises monotonically.
+
+## What the unreached-step audit found
+
+s301 stalled at `stories-test-strategy.md` §4, so everything downstream is unexercised. The
+unreached set, derived from `route.md` and the `GATE_MANIFEST`: `stories-test-strategy.md` §5–7,
+`ui-direction.md`, `implementation.md`, `sprint-review.md`, `sprint-review-next.md`,
+`deploy-validate.md`, `retro.md`, `artifact-consolidation.md`, `handoff.md`. Control on the
+"reachable only through those" claim: **10 of 31** `core/scripts/validate-*.sh` are absent from
+`gate-validation.md`, 21 present.
+
+**F1 — `validate-mandatory-rules.sh`, and it is the one that has been passing silently on every
+retro the reference consumer has ever closed.** Checks 2, 4 and 5 each have legitimate SKIP
+branches; **no SKIP branch touched a counter and no skip counter existed**. The summary printed
+`all 6 checks passed` whether six ran or three did, on the same exit code. Verified
+independently: `grep -cE 'SKIPS?=|SKIPPED='` → 0, control `grep -cE 'FAILURES='` → 4. On the
+consumer, two checks SKIP on **every sprint 296 through 302** because
+`validate-retro-prereq.sh` was never provided, and `retro.md` accepts this validator on its
+exit code alone. Old and new, side by side on one tree with a stubbed sibling:
+`all 6 checks passed` versus `3 of 6 checks verified; 3 SKIPPED (check 2 4 5)`, **both exit 0**.
+Fixed on the parked branch; exit code deliberately unchanged, because a skip is legitimate.
+
+**F2 — `validate-spawn-ledger.sh` asserts a pin it never compared.** Rule 19(a) is compared only
+where `EXPECT` is non-empty. Lose the `aiDlcRoles` block and every row falls to `UNPINNED`, the
+comparison runs zero times, and the OK sentence still says "a model matching their role's
+configured pin". The count already existed and its comment already named the hazard; **nothing
+read the count**. Measured with one ledger and two settings files differing only in the key
+name: intact gave `FAIL: 2 Rule 19 violation(s)` rc=1, renamed gave the full OK sentence rc=0.
+Fixed on the parked branch.
+
+**F3 — `validate-audit-anchors.sh` (Check 18), MEDIUM, NOT yet fixed.** The PASS line counts
+ENTRIES, never ASSERTIONS; the guard is `assert isinstance(fields, dict)`, which an empty dict
+satisfies while the field loop makes zero comparisons. The lower half needs no schema edit at
+all: the sha pattern is `^\S+$` and `PENDING` is rejected only in `--prior-sprint-sha` mode, so
+an anchors file whose every sha reads `PENDING` returns "entries PASS — 2 entries validated"
+rc=0. `retro.md` Step 5c runs the bare form and requires exit 0, so a wholly unbackfilled
+anchor ledger clears that step.
+
+**F4 — `validate-ci-gates.sh`, a deployment gap rather than a code defect, NOT yet fixed.** The
+script is correct (distinct VACUOUS wording, distinct rc=78). But on the consumer it has only
+ever emitted `VACUOUS: no enforcement surface to scan` rc=78, because there is no
+`.github/workflows` (control: `docs/retro` is present). Six unique CI gate names are declared
+across 14 of 299 retro files and none has ever been enforcement-checked. `retro.md` says a
+script-based consumer with no workflows "runs it locally", and the script cannot serve that
+path — without `AI_DLC_CI_SURFACE` it exits 78 before scanning. **Documented remedy and
+implemented behaviour disagree, and the consumer is exactly the case that sentence was written
+for.**
+
+**Not audited, highest-value remaining lead:** `validate-layer-entries.sh` (1694 lines, five
+line-initial `sed`/`grep` extractors — the exact shape that produced the
+`validate-ac-falsifiability.sh:244` defect), plus `validate-gate-manifest.sh` and
+`audit-rule-files.sh`. Mechanical sweep only, no mutants.
+
+**The shape to rewrite F1 and F2 into is already in the tree:**
+`validate-cycle-commits.sh` `audit-trunk` mode has five zero-verification exits, every one with
+distinct wording, and a control on the same line at the last.
+
+## Closing s301: what the s300 close-out actually did
+
+Reconstructed so the close-out prompt does not have to be invented. **It was TWO commits, not
+one**: `7ecd99dd1` (the archive) and `ff490ebd0` (the envelope), ~95 minutes apart, with three
+unrelated commits between them.
+
+`7ecd99dd1` — 4 added, 8 modified, **90 renamed R100, ZERO deleted**. Artifacts were `git mv`'d
+into six per-series `archive/s300-*` dirs; gate-log emptied; gate-metrics reduced 723→661; the
+S300 LOCKED block excised from `product-brief.md` reversibly. Verification recorded per file as
+`source-absent AND dest-readable AND sha256-identical`, **not a count**. Two deliberate
+NON-actions: no Check 33 `NOT-IN-SCOPE` disposition (it would assert a scope decision that never
+happened) and no `RESTART_CYCLE` record (all five series terminated `EXIT_CONDITION_MET`).
+
+`ff490ebd0` — ran `sprint-status.sh close` FIRST then `roll`, because `roll` exits 3 while the
+prior sprint is not `done`. Snapshot regenerated by script, not hand-authored. **The new branch
+was cut from HEAD, not `main`** — `main` does not carry `7ecd99dd1`, so branching from it would
+have resurrected all 90 archived artifacts.
+
+There is **no `abandoned` or `superseded` status value**. The machinery knows only
+`in_progress` / `done`; the abandonment lives entirely in the `closure_evidence` prose. And
+there is **no documented abandonment procedure in the distribution** — 22 hits for the search
+terms, every one either the retro close-out sweep or the adversarial-series `RESTART_CYCLE`
+(which abandons a SERIES, not a sprint, and is the pattern the archive dirs imitate). The s300
+close-out was improvised against `retro.md:501` + `route.md:394`.
+
+**Six differences an s301 prompt must handle:**
+
+1. **The S301 LOCKED block is an ALIAS of S299, not new content.** S300's was original and was
+   excised wholesale; excising S301's must not damage S299's still-live block.
+2. `_bmad-output/pipeline-paused.flag` exists and had no S300 counterpart.
+   `_bmad-output/.beat-inflight` does NOT exist (control: the pause flag in the same listing
+   does).
+3. Closing s301 makes s302 the **third** sprint carrying the same unbuilt ask, so S300's
+   reasoning about not dispositioning `LR-S299-0..11` has to be restated, not inherited.
+4. Volumes differ: 75 gate-metrics rows and a 293-line gate-log, vs 62 and 571 for S300; 97
+   planning artifacts vs 90.
+5. The branch-cut rule repeats — `main` still lacks `7ecd99dd1`.
+6. **`core.hooksPath` is unset**, so consumer git hooks will not fire during the close-out.
+
+Two inventory traps recorded in S300's own commit body, both of which will bite an s301 sweep:
+a prefix-only `^s300` glob gives 81 where `-name '*s300*'` gives 86, and `gate-metrics.jsonl`
+stores `sprint` as an **integer**, so `grep '"sprint": "301"'` reads 0 and looks clean.
 
 ## Known gaps, deliberately not closed
 
