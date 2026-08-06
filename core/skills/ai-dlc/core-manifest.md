@@ -199,6 +199,7 @@ core_manifest:
   - fixtures/layer-anchor-declaration/**
   - fixtures/layer-catalog-collision/**
   - fixtures/layer-contract-conformance/**
+  - fixtures/layer-debt-ledger/**
   - fixtures/layer-readopt-gate/**
   - fixtures/ledger-reverify/**
   - fixtures/ledger-status-vocabulary/**

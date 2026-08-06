@@ -2,11 +2,17 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "layer-adjudication-register.json",
   "title": "Layer conformance adjudication register",
-  "description": "One JSON object per line in _bmad-output/ai-dlc-update/layer-adjudication-register.jsonl. A record is the operator's verdict on ONE row of a layer-contract clause at `level: ADJUDICATED`, keyed by the SUBJECT DIGEST that row fired on rather than by the entry's path. Keying by path would let one verdict clear every future change to the same entry, which is a permanent exemption wearing an adjudication's clothes; keying by the subject state means the duty re-fires the moment either side of the comparison moves. `reconcile/layer-drift.sh` is the single home of the digest computation and prints the digest in the blocking row, so the operator copies a value rather than deriving one. THE VERDICT VOCABULARY LIVES ONCE, in properties.verdict.enum below, ONE VALUE PER LINE: layer-drift.sh reads that array to decide whether a record satisfies the duty, and it does not restate it. The one-per-line layout is load-bearing for that reader — keep it.",
-
+  "description": "One JSON object per line in _bmad-output/ai-dlc-update/layer-adjudication-register.jsonl. A record is the operator's verdict on ONE row of a layer-contract clause at `level: ADJUDICATED`, keyed by the SUBJECT DIGEST that row fired on rather than by the entry's path. Keying by path would let one verdict clear every future change to the same entry, which is a permanent exemption wearing an adjudication's clothes; keying by the subject state means the duty re-fires the moment either side of the comparison moves. `reconcile/layer-drift.sh` is the single home of the digest computation and prints the digest in the blocking row, so the operator copies a value rather than deriving one. THE VERDICT VOCABULARY LIVES ONCE, in properties.verdict.enum below, ONE VALUE PER LINE: layer-drift.sh reads that array to decide whether a record satisfies the duty, and it does not restate it. The one-per-line layout is load-bearing for that reader \u2014 keep it.",
   "type": "object",
   "additionalProperties": true,
-  "required": ["clause", "entry", "subject_digest", "verdict", "recorded_utc", "reason"],
+  "required": [
+    "clause",
+    "entry",
+    "subject_digest",
+    "verdict",
+    "recorded_utc",
+    "reason"
+  ],
   "properties": {
     "clause": {
       "type": "string",
@@ -43,6 +49,39 @@
     "supersedes": {
       "type": "string",
       "description": "Required only when this record states a DIFFERENT verdict from an earlier record under the same key. Names what it overturns. Without it, two records under one key are a HARD-REGISTER-CONTRADICTION: the register would answer a lookup with whichever record happened to be read last, so LC-A1's blocking half would depend on file order."
+    },
+    "owed": {
+      "type": "object",
+      "description": "OPTIONAL. Work this verdict LEAVES OWED. A `still-additive` verdict that is only true because somebody plans to fix something has recorded a decision and lost the obligation: measured on the reference consumer, 5 of 46 rows encoded owed work in FREE PROSE, findable only by grepping reason fields for words like 'deferred' and 'still owed'. One of them read \"Nothing but this reason field is tracking that debt.\" A debt nothing can enumerate cannot be acted on, and the register's three verdicts have no way to say 'keep it, and it is owed'.",
+      "required": [
+        "id",
+        "what"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^OWED-[A-Z0-9][A-Z0-9-]*$",
+          "description": "Stable id a later record closes by name. Never reused."
+        },
+        "what": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The obligation, in the imperative. Not why the verdict was reached \u2014 that is `reason`."
+        },
+        "closes_when": {
+          "type": "string",
+          "description": "OPTIONAL. The observable condition under which this is dischargeable, so a reader can tell an owed item that is ready from one that is waiting."
+        }
+      }
+    },
+    "closes_owed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^OWED-[A-Z0-9][A-Z0-9-]*$"
+      },
+      "description": "OPTIONAL. Ids this record discharges. The register is append-only, so a debt is closed by a LATER row naming it, never by editing the row that opened it \u2014 the same supersession model `supersedes` already uses for verdicts."
     }
   }
 }

@@ -34,6 +34,59 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.274.0] — 2026-08-05
+
+### A layer adjudication can now record what it leaves OWED, and the debt can be enumerated
+
+The adjudication register has three verdicts — `still-additive`, `contradicts-core`, `retire` —
+and none of them can say *"keep it, AND something is owed"*. So an adjudicator who reaches
+`still-additive` only because somebody intends to fix something writes the obligation into the
+free-text `reason`, where it stops existing the moment the row scrolls.
+
+**Measured on the reference consumer.** 46 rows; verdict distribution **45 `still-additive` / 1
+`contradicts-core` / 0 `retire`**. Four rows across three entries carry obligations reachable only
+by grepping prose for words like "deferred" and "follow-up". One says it outright: *"Nothing but
+this reason field is tracking that debt."* A register that only ever says "keep it" is a ratchet
+wearing a verdict, and this is the same shape v0.10.0 named — *the pipeline's ratchets only add,
+and nothing mandates removal*.
+
+**`owed` and `closes_owed`** are now schema fields. A row declares `{id, what, closes_when}`; a
+LATER row discharges it by naming the id — the register is append-only, so a debt is never closed
+by editing the row that opened it, which is the supersession model `supersedes` already uses.
+
+**`audit-layer-debt.sh` has two arms, and the second is why it is useful on the day it ships**
+rather than only for rows written afterwards. **OPEN** is declared-minus-closed: structured and
+exact. **UNDECLARED** is prose that reads like an obligation on a row declaring none — the
+migration backlog, and the only way the four existing ones ever become visible. They are reported
+apart and never summed: a prose match is a suspicion, an `owed` object is a commitment.
+
+**False-positive set of the prose arm, measured by reading every match** rather than estimated: of
+5 initial flags, 1 was `debt` inside the filename `test-check18-debt-audit` — excluded by an
+identifier rule — and of the remaining 4, three are genuine and one is prose describing *core's*
+behaviour. **1-in-4 is accepted deliberately.** This reports rather than gates, so a false positive
+costs a glance while a missed obligation costs the thing the file exists to prevent. Bias to recall,
+stated in the header.
+
+**Report-only, exit 0 on findings.** A debt is a normal state of a living consumer; gating a pull on
+having none would block every pull and get the reader switched off. An absent register exits **2
+DISARMED** — "no open debts" and "I could not read the ledger" are different claims and must not
+share an exit code, which is this file's own subject one level up.
+
+**Wired where the judgment happens.** `ai-dlc-update/SKILL.md` now tells the adjudicator to declare
+`owed` instead of burying it in `reason`, and to put the OPEN and UNDECLARED lists in the report
+every pull.
+
+**Fixture: 8 assertions including three controls and a mutant.** The controls are the point — a
+clean row is silent, a cue inside a longer identifier is not flagged, and a row that *declares* is
+not also counted as undeclared (or the backlog can never drain). The mutant drops the closed-set
+subtraction and demands the paid debt reappear, because assertion 2 is an ABSENCE and an absence
+passes for a reader that emitted nothing.
+
+**Two of the repo's own invariants caught this mid-build.** I75 refused a root-resolution chain that
+differed from the canonical one because I had folded a `--root` flag into it — the flag was unused,
+so it went. I54b refused a `awk … | grep -q` pipeline in the fixture: under `pipefail` the reader
+leaves at its first match and the answer becomes the writer's EPIPE. Both were mine.
+
 ## [0.273.0] — 2026-08-05
 
 ### A sequence-sensitive worklist item is emitted as an ordered sequence, not as a sentence

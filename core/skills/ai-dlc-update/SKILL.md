@@ -1068,6 +1068,25 @@ prose is itself generated rather than composed.
    {"clause":"LC-E4","entry":".claude/skills/ai-dlc/extensions/checks/gate-validation-domain.md","subject_digest":"<copied from the row>","verdict":"still-additive","recorded_utc":"2026-07-29T10:00:00Z","reason":"core's change was to the gate-type enum; this entry adds a check row and does not restate it"}
    ```
 
+   **If the verdict leaves work OWED, declare it — do not write it into `reason`.** A
+   `still-additive` that is only true because somebody intends to fix something has recorded a
+   decision and lost the obligation. Add an `owed` object (`id`, `what`, optional `closes_when`)
+   and a later row discharges it by naming the id in `closes_owed`; the register is append-only,
+   so a debt is never closed by editing the row that opened it. Measured on the reference
+   consumer before this existed: 46 rows, verdict distribution 45 `still-additive` / 1
+   `contradicts-core` / 0 `retire`, with four rows carrying obligations reachable only by
+   grepping prose — one of which said, in as many words, *"Nothing but this reason field is
+   tracking that debt."*
+
+   ```json
+   {"clause":"LC-E4","entry":"…","subject_digest":"…","verdict":"still-additive","recorded_utc":"…","reason":"…","owed":{"id":"OWED-921-SPLIT","what":"split Check 921 into an overrides/ entry shadowing core Check 20","closes_when":"after this pull's apply"}}
+   ```
+
+   **Run `scripts/ai-dlc/audit-layer-debt.sh` and put its OPEN and UNDECLARED lists in the
+   report, every pull.** OPEN is what this consumer owes; UNDECLARED is the migration backlog —
+   rows whose prose reads like an obligation while declaring none. A debt nothing enumerates is
+   a debt nobody acts on, which is the whole reason the field exists.
+
    The digest covers the entry AND the core file it hooks at `theirs`, so a verdict is spent the
    next time either one moves. It is a record of a reading, not an exemption for a path — which
    is why the register is keyed per SUBJECT and never per run. Changing your mind is allowed and
