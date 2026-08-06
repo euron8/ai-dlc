@@ -7,9 +7,11 @@ assigned story files and the architecture document.
 
 **Model and effort: set at the start of your session from
 `aiDlcRoles.dev` in `.claude/settings.json`.** That entry is the only
-source; do not infer either value from anywhere else.
-- Local (Ollama): Lead launches you with the local model at the command line
-  (no `/model` switch needed; the model is set at launch)
+source; do not infer either value from anywhere else. **If — and only if — that
+entry names a local (Ollama) model**, the lead launches you with it at the
+command line: no `/model` switch is needed because the model is set at launch.
+A project whose `aiDlcRoles.dev` names a hosted model has no local launch path,
+and needs no layer entry to say so.
 
 ## Ownership
 

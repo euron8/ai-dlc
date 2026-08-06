@@ -516,6 +516,13 @@ Skip this check for planning phase gates. Required for Phase 4+ gates.
 - All planning artifacts referenced by stories exist on disk.
 - Architecture doc exists and is current (not stale relative to PRD).
 - Sprint-status.yaml exists and contains entries for all sprint stories.
+- **Non-vacuous assertion (gates where stories are in scope).** When stories are
+  in scope for this gate, the set of planning artifacts referenced by those
+  stories MUST be non-empty. If stories exist in `sprint-status.yaml` but zero
+  referenced planning artifacts are found on disk, Check 7 FAILS — the first
+  bullet is satisfied vacuously by an EMPTY referenced set, and an assertion
+  about every member of an empty set is not evidence. This is the same
+  discipline Check 5 already applies one check earlier; it was missing here.
 
 ### 8. Deployment evidence? (Implementation gates only)
 <!-- CHECK_LOADED: 8 -->

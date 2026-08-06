@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 15
+contract_version: 16
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -291,6 +291,42 @@ override_supersessions:
         are not among core's seven canonical names, comma-separated. Derive it; do not
         ask, and do not copy the example.
     verify: scripts/ai-dlc/validate-artifact-budget.sh --only pipeline-snapshot.md
+
+  # THE THREE BELOW CARRY NO `replaces_with:`, AND THAT IS THE OTHER KIND OF SUPERSESSION.
+  # The row above is the CONFIGURED kind — core turned a hardcoded set into data and handed
+  # the consumer a key to declare its value in. These are the ADOPTED kind: core simply took
+  # the entry's clause, so there is nothing to configure and the pull emits a single retire
+  # row rather than the two ATOMIC ones. Undeclarable before v0.275.0, which is why the
+  # first row here is three releases older than these.
+  - shadows: steps/gate-validation.md#7. Artifact consistency?
+    since_core_version: "0.276.0"
+    reason: >-
+      Check 7 asserted that every planning artifact referenced by stories exists on disk,
+      which an EMPTY referenced set satisfies vacuously. Core now carries the non-empty
+      assertion itself — the same discipline Check 5 already applied one check earlier.
+    verify: grep -qF 'Non-vacuous assertion (gates where stories are in scope)' .claude/skills/ai-dlc/steps/gate-validation.md
+
+  - shadows: steps/carry-over-evaluation.md#2. Item Evaluation
+    since_core_version: "0.276.0"
+    reason: >-
+      Item 5's routing backstop said which pipeline to run on a dominant defect and nothing
+      about what happens to the pre-empted carry-over afterwards, so "reprioritized within
+      the sprint" was a reading the text permitted. Core now states the sprint boundary:
+      reaching PVC on the bug variant closes the interrupted sprint.
+    verify: grep -qF 'Sprint boundary on bug-variant completion' .claude/skills/ai-dlc/steps/carry-over-evaluation.md
+
+  - shadows: team-roles/dev.md#Identity
+    since_core_version: "0.276.0"
+    reason: >-
+      The local-launch note was written as an unconditional bullet in a section whose two
+      preceding lines make `aiDlcRoles.dev` the only source, so a project running no local
+      model had to shadow the whole Identity section to drop one line. It is now stated
+      conditionally on that same config entry, which is what the entry was working around.
+      ORDERING, because this verify goes red for a reason that is not a failure: role files
+      carry install.sh's template substitution, so `apply.sh` routes them to a
+      `semantic-merge` WORKLIST row instead of overwriting them. Run this AFTER that merge.
+      The other two rows here land automatically and verify green straight after `apply`.
+    verify: grep -qF 'has no local launch path' .claude/team-roles/dev.md
 
 absorbed_from:
   - path: core/skills/ai-dlc/extensions/README.md
