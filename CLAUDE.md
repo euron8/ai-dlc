@@ -50,6 +50,36 @@ the general form.
 - A mutant must fail **only** its own assertion. Two failures mean the
   assertions are entangled and one of them is vacuous.
 
+## Run the fixture suite the way the hook runs it, never a hand-rolled loop
+
+`.githooks/pre-push` is the runner. It dispatches through a worker pool
+(`xargs -P "$FIXTURE_JOBS"`, default 16), orders units by their own recorded costs so
+the longest starts first, content-keys the skip, and asserts that every dispatched
+fixture produced a verdict. Invariant **I66** binds that runner to be one program
+across both pre-push hooks. Reach for it — `git push` is the cheapest way to run it —
+rather than writing `for d in core/fixtures/*/`.
+
+**A hand-rolled loop is not merely slower, it FABRICATES FAILURES, and that is the
+reason this is a rule.** Measured on one branch, same tree, same fixtures, both ways:
+
+```
+for d in core/fixtures/*/; do (cd "$d" && bash run.sh); done   5 FAILED
+bash "$d/run.sh"   (from the repo root, as the hook does)      0 FAILED
+```
+
+All five — `consumer-machinery-home`, `enforcement-map-derivations`,
+`enforcement-map-sites`, `layer-contract-conformance`, `ledger-status-vocabulary` —
+resolve the repo root from the process working directory, so `cd`-ing into the fixture
+dir breaks their sanity arm. Four of the five said `FIXTURE BROKEN`, which reads
+exactly like a regression in the change under test. The whole suite through the pool is
+**4m57s at 949% CPU**; the serial loop was roughly ten times that and wrong.
+
+The inverse hazard is live too, and `core/fixtures/check-3b-locked-anchor/run.sh:125`
+carries it: a fixture that is green only from the repo root may be asserting nothing,
+because that is a cwd where its decoy files do not exist. A fixture that must hold from
+any cwd asserts cwd-invariance itself, in its own arms — it does not get that from how
+the suite is driven.
+
 ## Two layouts
 
 `install.sh` splits what shares a parent here: `core/scripts/<x>` →
