@@ -302,7 +302,26 @@ TAB_CH="$(printf '\t')"
 LD_SUP="$(printf '%s\n' "$LD_OUT" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"{print $2 "\t" $4}')"
 while IFS="$TAB_CH" read -r ovr detail; do
   [ -n "$ovr" ] || continue
-  say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
+  # ORDERED AND ATOMIC, AS ROWS RATHER THAN AS PROSE.
+  #
+  # Retiring a superseded override is two writes that MUST land together, and the order is
+  # not a preference. The override is what widens some core constraint; deleting it while
+  # the replacement configuration is unwritten re-imposes the narrow core rule on a consumer
+  # whose artifacts already violate it, and the next gate fails on a tree the operator just
+  # "fixed". The reverse order is safe, so the reverse order is the one emitted.
+  #
+  # This was previously carried as a sentence in a human-written report, which is to say it
+  # was carried by whoever happened to reason it out that pull. A constraint that only exists
+  # when someone notices it is not a constraint. Each step is its own row so the sequence is
+  # data the step-7 worker reads in order, and `ATOMIC` says they share one commit.
+  env_key="${detail#replaces_with=}"; env_key="${env_key%% ::*}"
+  [ "$env_key" = "$detail" ] && env_key=""     # no structured token -> emit the single row
+  if [ -n "$env_key" ]; then
+    say WORKLIST override-retire "$ovr" "1/2 ATOMIC — write ${env_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing 2/2 first re-imposes the core constraint this entry was widening and reds the next gate."
+    say WORKLIST override-retire "$ovr" "2/2 ATOMIC — readopt-override.sh --stamp retire ${ovr}. Same commit as 1/2."
+  else
+    say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
+  fi
 done <<EOF
 $LD_SUP
 EOF

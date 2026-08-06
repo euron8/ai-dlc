@@ -34,6 +34,40 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.273.0] — 2026-08-05
+
+### A sequence-sensitive worklist item is emitted as an ordered sequence, not as a sentence
+
+Retiring a superseded override is TWO writes that must land together, and the order is a safety
+property. The override is what widens some core constraint; deleting it while the replacement
+configuration is unwritten re-imposes the narrow core rule on a consumer whose artifacts already
+violate it, and the next gate fails on a tree the operator has just repaired. The reverse order is
+safe, so the reverse order is what is emitted.
+
+**Until now that constraint existed only when somebody noticed it.** On the reference consumer's
+0.265.0→0.272.0 dry run it was carried by a hand-written sentence in the report — correct, and
+present only because that pull's analysis reasoned it out. A constraint that depends on being
+re-derived each time is not a constraint.
+
+**It is now rows.** `apply.sh` expands one `OVERRIDE-SUPERSEDED` row into
+`1/2 ATOMIC — write <KEY> into settings.json` and `2/2 ATOMIC — --stamp retire`, each stating its
+own consequence. `say()` writes one tab-separated line per row, so a sequence is *rows* rather than
+an encoded blob, and the step-7 worker reads it in order like every other worklist item.
+`ai-dlc-update/SKILL.md` gains the general handling rule: a detail beginning `<i>/<n> ATOMIC` is one
+step of an ordered sequence — same order, same commit, and the last step is not the whole item.
+
+**The join between the two scripts is what can rot, so that is what is asserted.** `apply.sh` reads
+`replaces_with=<KEY> ::` off the front of the detail. Change that prefix and apply silently falls
+back to a single unordered row: still emitted, still green, ordering gone. The fixture asserts the
+token and the key it carries, and the mutant is the point — stripping the prefix leaves
+*"an override core declares SUPERSEDED is reported as retirable"* passing while the ordering
+assertion goes red. One mutant, one failure; the two are not entangled.
+
+**Scope, stated.** This is the retire sequence only. Nothing else in the worklist declares an
+ordering today, and inventing a general sequence grammar for one producer would be machinery ahead
+of its population — the `<i>/<n> ATOMIC` convention is documented so the next producer has a shape
+to reuse, and that is all.
+
 ## [0.272.0] — 2026-08-05
 
 ### The pull can now say an override is no longer NEEDED, not just that it drifted
