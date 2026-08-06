@@ -34,6 +34,100 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.275.0] — 2026-08-06
+
+### An absorption whose headings carry no number is now reported, and core can say it simply adopted an override's prose
+
+Two independent blind spots in the same file, both of which make "absorb it upstream so the
+consumer can retire its entry" a thing core cannot actually complete.
+
+**One: 27 of 38 extension entries were outside the absorption question entirely.**
+`reconcile/layer-drift.sh` gates its whole catalog reconciliation on `anchors_of_file`
+returning something, and both of that function's arms require a leading integer or a short
+uppercase id. An entry whose headings are prose yields nothing and the pass is skipped —
+silently, and indistinguishably from a clean result. Measured by running the shipping
+functions against the reference consumer: **11 of 38 entries yield an anchor, 27 yield none**,
+with a same-run control of 42 anchors on core's own `gate-validation.md` so the zero is a real
+absence and not a broken probe. Every role entry and every `SKILL` entry is in the blind 27.
+The consumer had already filed it — *"both duplications found this pull were found by hand."*
+
+Unnumbered headings are now matched on TEXT and reported as **`EXTENSION-TITLE-MATCHES-CORE`**
+[LC-E19, WARN]. It is deliberately weaker than `EXTENSION-RESTATES-CORE` and **prescribes no
+deletion**: a numbered anchor asserts *this is check N*, a prose heading asserts nothing, so a
+match may be a duplicate to retire **or** an entry naming the section it augments
+(`## Block: Step 1 Read Project State`). Reusing the stronger status would have turned a
+reporting tool into a data-loss suggestion — the trap `same_section` records paying for once
+already.
+
+**The false-positive set, measured and enumerated, as the authoring rule requires.** First
+contact produced **20** rows. Three classes, each excluded by derivation rather than by a list:
+
+- **6 skeleton headings** — `## Identity`, `## Responsibilities`, `## Context Loading`. A title
+  heading a section in **two or more** core rulebook files is the SHAPE of a document, not a
+  section a consumer could be duplicating. The rulebook set is read from `core-manifest.md`.
+- **2 double reports** — `## Handoff -- No self-scheduling skill re-entry` wrapping
+  `### No self-scheduling skill re-entry` is one claim at two levels. Deepest heading wins.
+- **1 resolved-state report** — `## XH1 (harness meta-check)` wrapping an already-labelled
+  `### XH1. [ext:…]`. A heading opening with an anchor the entry declares belongs to the
+  numbered arm. Reporting it flags the exact remedy core asks for as a defect.
+
+**12 rows remain, every one hand-verified as a true statement of what the status claims**, and
+at least five are absorptions core landed and nobody was told about: `SKILL-push` ×2 (core
+carries both `### No self-scheduling skill re-entry` and `### Pending operator approvals do not
+transfer across handoff`), `retro-push-sprint-ship-verification`, and both
+`stories-test-strategy` entries.
+
+**A fourth exclusion was tried and BACKED OUT, because it was the cannot-fire class.**
+Suppressing a match on the section an entry already declares in `extends:` looked right — the
+pointer reading is settled — and it removed a TRUE finding:
+`retro-push-sprint-ship-verification` declares `extends: '#Sprint-Ship Verification'` and core
+has since absorbed that section wholesale. `extends:` answers *which span do I augment*, never
+*does core now carry my body*.
+
+**Two: an env-keyless `override_supersessions:` row could never fire.** Core stops needing an
+override two ways — it turns a hardcoded set into an `AI_DLC_*` key (v0.271.0's precedent), or
+it simply **adopts** the entry's prose, where there is no key because there is nothing to
+configure. Emission was gated on `settings_env_key`, so the second kind could be authored in
+`layer-contract.yaml` and would silently never be read: a declaration with no reader, which is
+the cannot-fire class arriving through the data side where I36 does not look. Measured on the
+reference consumer, **three of eleven overrides retire by adoption and none by configuration**.
+`supersessions_of` already emitted the row and `apply.sh` already branched on the absent
+`replaces_with=` token to render the single retire row — both ends worked; only the guard did
+not. The env-less detail deliberately omits that token, or `apply.sh` parses an empty key out
+of it and tells the operator to write nothing into `settings.json`.
+
+**The two-layouts trap, hit and fixed in the same release.** The first cut of the rulebook
+derivation listed `core/skills/ai-dlc/` and matched the manifest's globs inside it, which drops
+every `team-roles/*.md` — `install.sh` splits what shares a parent. It did not error: it
+returned **24 files with the entire role set missing**, and a partial set reads exactly like a
+complete one. Every glob now resolves through `dist_path` (I33's rule), and a glob matching no
+file is reported **per glob**, because "did we get any files" cannot tell a partial set from a
+whole one.
+
+**Mutants — six, each a `cmp -s`-guarded copy, with an unmutated control at 0/0.** M1 env-keyless
+guard (as a FULL revert: reverting only the `if` left the `elif` firing and came out green — a
+partial revert proves the layer you left in place), M2 title arm re-gated on numbers, M3
+skeleton exclusion, M4 container exclusion, M5 per-glob coverage guard, M6 `dist_path` mapping.
+All six red on their own assertions. M2 and M6 each take a second assertion with them, and both
+are positive controls that depend on the mutated arm being alive — an entanglement by
+construction, not a vacuous assertion.
+
+**The new status gets a WORKLIST row, not just a report line.** Verified on a scratch copy of
+the reference consumer: the classifier emitted all 12 rows and `apply.sh` emitted **none** — so
+they reached the report and named no actor. That is the state `apply.sh`'s own
+`EXTENSION-HOOK-DRIFT` comment records being carried as a follow-up twice running before it was
+given a row. `extension-title-match` rows now carry the matched core heading, and `apply` is not
+clean while one is outstanding.
+
+`contract_version` **14 → 15**. New fixture `layer-title-join`, which also closes LC-E5's
+standing `fixture: none` gap. LC-E6 and LC-N4 stay `none`: this fixture asserts their absence
+and never makes them fire, and binding a clause to a fixture that cannot prove it is the gap
+wearing a receipt.
+
+**Machinery-only, deliberately.** `self-update-gate.sh` folds a slice into the operator-gated
+apply when the rulebook also moves, and that apply runs *after* the classify this release fixes
+— so a rulebook edit here would delay every finding above by a whole pull.
+
 ## [0.274.0] — 2026-08-05
 
 ### A layer adjudication can now record what it leaves OWED, and the debt can be enumerated

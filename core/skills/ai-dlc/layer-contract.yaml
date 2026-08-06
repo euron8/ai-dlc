@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 14
+contract_version: 15
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -703,7 +703,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-RESTATES-CORE
-    fixture: none
+    fixture: layer-title-join
 
   - id: LC-E6
     subject: extension
@@ -718,6 +718,25 @@ clauses:
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-RETIRE-CANDIDATE
     fixture: none
+
+  - id: LC-E19
+    subject: extension
+    level: WARN
+    since: 15
+    normative: >-
+      The two clauses above join catalogs on a NUMBER, so an entry whose headings are prose is
+      outside the absorption question entirely — measured at 27 of the reference consumer's 38
+      entries, including every role entry and every SKILL entry. A heading that names the same
+      section as a core heading is therefore reported on TEXT as well. It is deliberately
+      weaker than LC-E5/LC-E6 and prescribes no deletion: a numbered anchor asserts identity,
+      a prose heading does not, so the match may be a duplicate to retire OR an entry naming
+      the section it augments. Excluded, both by derivation and not by list: headings shared
+      by two or more core rulebook files, which are a document skeleton rather than a section,
+      and headings that open with an anchor the numbered join already owns.
+    prose_home: core/skills/ai-dlc/extensions/README.md
+    enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
+    code: EXTENSION-TITLE-MATCHES-CORE
+    fixture: layer-title-join
 
   - id: LC-E7
     subject: extension

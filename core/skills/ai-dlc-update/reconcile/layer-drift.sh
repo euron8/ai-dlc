@@ -112,6 +112,20 @@
 #                                    single pull that landed the absorption. Rule 27(c)
 #                                    forbids restating core: retire it, or refile as an
 #                                    override with a base_sha if it hardens core.
+#   EXTENSION-TITLE-MATCHES-CORE     the two above join on a NUMBER, and 27 of the
+#                                    reference consumer's 38 entries have none — every
+#                                    role entry, every SKILL entry — so the absorption
+#                                    pass was skipped for them entirely. This is the same
+#                                    question asked of prose headings, and it is WEAKER on
+#                                    purpose: a numbered anchor is an identity claim, a
+#                                    prose heading is not, so a match here may be a
+#                                    duplicate OR an entry naming the section it augments.
+#                                    It reports the match and prescribes no delete. Two
+#                                    exclusions, both derived: headings shared by two or
+#                                    more core rulebook files (a document skeleton, not a
+#                                    section), and headings that open with an anchor the
+#                                    numbered arm already owns. Tagged NEW-THIS-PULL /
+#                                    PRE-EXISTING.
 #   EXTENSION-CHECK-NUMBER-COLLISION theirs' core file defines this extension's check
 #                                    NUMBER with a DIFFERENT title -> one integer now
 #                                    names two unrelated checks in the merged document,
@@ -473,6 +487,163 @@ anchors_of_file() {
   } | grep -E '.' | sort -u
 }
 
+# --- THE UNNUMBERED ARM ---------------------------------------------------------------
+# EVERYTHING ABOVE JOINS ON A NUMBER, AND MOST OF A REAL LAYER HAS NONE.
+#
+# `anchors_of_file` harvests only headings whose text begins with an integer or a short
+# uppercase id, and the absorption block below is gated on its result being non-empty. An
+# entry whose headings are ordinary prose -- `### Sprint-Ship Verification`, `## Rule 931
+# -- Teammates deliver by file` -- yields nothing, so the ENTIRE catalog reconciliation is
+# skipped for it and the entry can never be reported as absorbed, no matter how exactly
+# core has since adopted it.
+#
+# Measured on the reference consumer with these very functions: 11 of its 38 extension
+# entries yield an anchor, 27 yield none. Every one of its 8 role entries is in the blind
+# 27, and so is every SKILL entry. The control is the same call against core's
+# gate-validation.md, which yields 42 -- so the harvester works and the 27 is a real
+# absence, not a broken probe. The consumer had already filed it
+# (PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS, "both duplications found
+# this pull were found by hand"), which is the shape of the whole defect: the tool whose
+# job is to find duplicates was being used as a reason to trust that there were none.
+#
+# WHY THIS IS A SECOND PASS AND NOT A WIDER ANCHOR_RE. Widening the anchor grammar to
+# accept prose would feed unnumbered headings into the number-keyed arms, and
+# EXTENSION-CHECK-NUMBER-COLLISION has no meaning without a number -- it would start
+# reporting that two sections "name TWO different checks" under an integer neither of them
+# has. The comment above ANCHOR_RE names the same hazard from the other side. So the
+# unnumbered set gets its own pass that can emit only the two absorption statuses.
+#
+# GRAIN LIMIT, STATED SO IT IS NOT MISTAKEN FOR COVERAGE: this pass reads markdown HEADINGS
+# only. A bold prose anchor (`**Falsification ladder.**`) is not a heading and stays
+# invisible here, so a clean run over an entry built out of bold labels is silence about a
+# question that was never asked. That is the next arm, not this one.
+
+# Every ##/###/#### heading in a stream as `depth<TAB>title`, normalized with any leading
+# anchor and any [ext:]/[core] catalog label stripped. Same normalization as heading_text_for,
+# because a title harvested one way and compared against a title harvested another way is two
+# predicates wearing one name -- this file has already been bitten three times by exactly that
+# (see heading_labelled_for).
+heading_titles_of_stream() {
+  awk '
+    function nrm(s){ s=tolower(s); gsub(/[`*]/,"",s); gsub(/[^a-z0-9]+/," ",s); gsub(/^ +| +$/,"",s); return s }
+    /^#{2,4}[ \t]+/ {
+      h=$0; sub(/^#+[ \t]+/,"",h)
+      d=0; while (substr($0, d+1, 1) == "#") d++
+      gsub(/\[ext:[A-Za-z0-9_.-]+\][ \t]*/, "", h); gsub(/\[core\][ \t]*/, "", h)
+      sub(/^(Check[ \t]+)?([0-9]+[a-z-]*|[A-Z]{1,3}[0-9]*)[ \t]*[.—][ \t]*/, "", h)
+      t = nrm(h); if (t != "") printf "%d\t%s\n", d, t
+    }' 2>/dev/null | sort -u
+}
+titles_only() { cut -f2 | sort -u; }
+
+# The extension's own heading titles MINUS the ones the numbered arm already owns.
+# Derived by subtraction against `anchors_of_file`/`heading_text_for` rather than by a second
+# "is this numbered" grammar, so the two passes cannot disagree about which headings they
+# each cover, and a heading can never be reported twice for one absorption.
+unnumbered_titles_of_file() {
+  _f="$1"; _claimed=""; _anchors="$(anchors_of_file "$_f")"
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    _t="$(heading_text_for "$_a" < "$_f")"
+    [ -n "$_t" ] && _claimed="${_claimed}${_t}
+"
+  done <<< "$_anchors"
+
+  # A CONTAINER FOR A NUMBERED SECTION BELONGS TO THE NUMBERED ARM.
+  #
+  # `## XH1 (harness meta-check)` wrapping `### XH1. [ext:gate-validation-domain] Harness
+  # meta-check — …` is one section written at two levels, and only the inner one carries the
+  # anchor. The outer one has no number, so it lands here, and its title still matches core's
+  # `### H1. Harness meta-check …` — a row against an entry that had ALREADY done the one
+  # thing core asks for, labelling its catalog at the point of use. That is the resolved state
+  # being reported as a defect, which is the failure `heading_labelled_for` was added to end,
+  # arriving through a heading that function never looks at.
+  #
+  # So an unnumbered heading that OPENS with an anchor this same file declares is the numbered
+  # arm's subject, not this one's. Derived from the same harvest, so the two arms cannot
+  # disagree about which heading each owns.
+  _anchor_re=""
+  while IFS= read -r _a; do
+    [ -n "$_a" ] || continue
+    _anchor_re="${_anchor_re}${_anchor_re:+|}$(printf '%s' "$_a" | sed 's/[][\.*^$(){}?+|/]/\\&/g')"
+  done <<< "$_anchors"
+
+  grep -nE '^#{2,4}[[:space:]]+' "$_f" 2>/dev/null | while IFS= read -r _line; do
+    _raw="${_line#*:}"
+    _bare="$(printf '%s' "$_raw" | sed -E 's/^#+[[:space:]]+//')"
+    # HERE-STRING, NOT A PIPE. `printf | grep -q` under pipefail answers with the WRITER's
+    # EPIPE once the value clears the pipe buffer, so the test reports 'not found' on input
+    # that contains the pattern — permanently, and here that would silently re-admit the
+    # container headings this block exists to drop. I54/I54b catch it; v0.207.0 and v0.231.0
+    # converted every prior site.
+    if [ -n "$_anchor_re" ] && grep -qE "^(Check[[:space:]]+)?(${_anchor_re})([^A-Za-z0-9]|$)" <<< "$_bare"; then
+      continue
+    fi
+    printf '%s\n' "$_raw"
+  done | heading_titles_of_stream | while IFS="$TAB" read -r _d _t; do
+    [ -n "$_t" ] || continue
+    grep -Fxq -- "$_t" <<< "$_claimed" || printf '%s\t%s\n' "$_d" "$_t"
+  done
+}
+
+# --- SKELETON HEADINGS ARE NOT SECTIONS -----------------------------------------------
+# `## Identity`, `## Responsibilities`, `## Context Loading`, `## Validation Checklist` are
+# the SHAPE of a role file, not the content of one. A consumer role extension that adds
+# bullets under `## Responsibilities` shares that heading with core because both are filling
+# in the same document skeleton -- it is not carrying a duplicate of core's section, and
+# telling the operator to retire it would be telling them to delete the only copy of the
+# consumer's own text.
+#
+# Measured: on the reference consumer this class was 6 of the 20 rows the title join produced
+# on first contact, and it is the class with no defensible reading at all -- `identity` vs
+# `identity` scores a perfect match and means nothing.
+#
+# DERIVED, NEVER LISTED. A title is skeletal iff it heads a section in TWO OR MORE core
+# rulebook files at `theirs`. That is what "part of a shared document shape" MEANS, and it
+# needs no judgement call: a section that exists once in the rulebook is a section, and one
+# that recurs across files is a form field. The rulebook set itself comes out of
+# core-manifest.md's `rulebook:` list rather than a glob written here, so a new rulebook
+# subtree is covered the release it is declared, not the release someone remembers this file.
+#
+# THE MANIFEST'S PATHS ARE CONSUMER-RELATIVE AND THE TWO LAYOUTS DO NOT SHARE A PARENT.
+# `team-roles/*.md` lives at `core/team-roles/` in the distribution while every other rulebook
+# glob lives under `core/skills/ai-dlc/`, so listing one subtree and matching the globs inside
+# it silently drops the entire role set. That is not a hypothetical: the first cut of this
+# function did exactly that, and the result was not an error — it was a set of 24 files with
+# every role file missing, which reads exactly like a complete one. `dist_path` is the single
+# home of that mapping (invariant I33 forbids walking up from one core file to find another),
+# so every glob goes through it.
+#
+# A GLOB THAT MATCHES NOTHING IS THE FAILURE, so it is reported per glob rather than by
+# checking whether the total is non-empty. A partial set and a complete set are both non-empty.
+rulebook_files_of() {
+  _globs="$(git_show "$1" core/skills/ai-dlc/core-manifest.md | awk '
+    /^rulebook:/ { inblk=1; next }
+    inblk && /^[a-z_]+:/ { inblk=0 }
+    !inblk { next }
+    /^[[:space:]]*-[[:space:]]*/ { g=$0; sub(/^[[:space:]]*-[[:space:]]*/,"",g); print g }')"
+  [ -n "$_globs" ] || return 1
+  _tree="$(git -C "$DIST" ls-tree -r --name-only "$1" -- core/ 2>/dev/null)"
+  [ -n "$_tree" ] || return 1
+  for _g in $_globs; do
+    _dg="$(dist_path "$_g")"
+    _n=0
+    while IFS= read -r _p; do
+      [ -n "$_p" ] || continue
+      case "$_p" in $_dg) printf '%s\n' "$_p"; _n=$((_n+1)) ;; esac
+    done <<< "$_tree"
+    [ "$_n" -gt 0 ] || printf '%s\n' \
+      "layer-drift: WARNING — core-manifest.md declares rulebook glob '${_g}' (distribution path '${_dg}') and it matches NO file at $1. The skeleton-heading exclusion is running on a PARTIAL rulebook set, which reads exactly like a complete one." >&2
+  done
+}
+
+skeleton_titles_of() {
+  rulebook_files_of "$1" | while IFS= read -r _p; do
+    [ -n "$_p" ] || continue
+    git_show "$1" "$_p" | heading_titles_of_stream | titles_only
+  done | sort | uniq -d
+}
+
 # Normalized heading TEXT for a given anchor, from a stream on stdin.
 # e.g. anchor "1a" in "### 1a. Prior-Decision Search (settled corpus)" -> "prior decision search settled corpus"
 heading_text_for() { # heading_text_for <anchor>  < stream
@@ -639,14 +810,39 @@ while IFS= read -r f; do
   # reach the reference consumer. The declaration lives in core's layer-contract.yaml; matching
   # is on the SAME normalised shadows: key the double-shadow arm uses, so a spelling difference
   # cannot hide a supersession.
-  sup_env=""; sup_since=""; sup_reason=""
+  # A SUPERSESSION NEEDS NO CONFIGURATION TO BE ONE, and gating the emission on
+  # `settings_env_key` made the cheapest retirement class UNDECLARABLE.
+  #
+  # The v0.271.0 precedent is the CONFIGURED shape: core turned a hardcoded set into data and
+  # handed the consumer an AI_DLC_* key to declare its own value in. That is one of two ways
+  # core stops needing an override. The other is simply ADOPTING the entry's prose -- core
+  # takes the paragraph, and the consumer's copy is now a duplicate that freezes its whole
+  # shadowed span for nothing. There is no key to write, because there is nothing to
+  # configure. That row could be authored in layer-contract.yaml and this line would silently
+  # never fire on it, so the contract would carry a declaration with no reader: exactly the
+  # cannot-fire class I36 exists to catch, arriving through the data side where I36 does not
+  # look. Measured against the reference consumer, three of its eleven overrides retire by
+  # adoption and none of them by configuration.
+  #
+  # `supersessions_of` already emits the row with an empty env field, and apply.sh already
+  # branches on the absence of the `replaces_with=` token to render the single worklist row
+  # instead of the two ATOMIC ones. Both ends worked; only this guard did not. So the flag is
+  # WHETHER A ROW MATCHED, and `sup_env` decides only which sentence the operator reads --
+  # and the env-less detail must not carry the token at all, or apply.sh parses an empty key
+  # out of it and emits a 1/2 row telling the operator to write nothing into settings.json.
+  sup_env=""; sup_since=""; sup_hit=""
   while IFS="$TAB" read -r s_shadows s_since s_env; do
     [ -n "$s_shadows" ] || continue
     [ "$(norm "$s_shadows")" = "$(norm "$shadows")" ] || continue
-    sup_env="$s_env"; sup_since="$s_since"; break
+    sup_env="$s_env"; sup_since="$s_since"; sup_hit=yes; break
   done <<< "$(supersessions_of "$THEIRS")"
-  [ -n "$sup_env" ] && emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-    "replaces_with=${sup_env} :: core ${sup_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${sup_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+  if [ -n "$sup_hit" ] && [ -n "$sup_env" ]; then
+    emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+      "replaces_with=${sup_env} :: core ${sup_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${sup_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+  elif [ -n "$sup_hit" ]; then
+    emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+      "core ${sup_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+  fi
 
   have "$THEIRS" "$cp" || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "$tgt" "target absent at $THEIRS"; continue; }
 
@@ -834,6 +1030,18 @@ fi
 # drifted, because a poisoned override sha does not resolve in the distribution.
 # ---------------------------------------------------------------------------
 unset base_sha
+
+# Hoisted: one derivation for the whole loop, not one per entry.
+#
+# ZERO IS NOT A FINDING HERE EITHER. An empty skeleton set is indistinguishable from "the
+# rulebook has no recurring headings", and it would make the title arm QUIETLY noisier rather
+# than quietly cleaner -- so the failure direction is loud by construction. Say so on stderr
+# and keep going: suppressing the arm on a failed derivation would trade visible noise for
+# invisible silence, which is the trade this whole file exists to refuse.
+SKELETON_TITLES="$(skeleton_titles_of "$THEIRS")"
+[ -n "$SKELETON_TITLES" ] || printf '%s\n' \
+  "layer-drift: WARNING — derived NO skeleton headings from core-manifest.md's rulebook: list at $THEIRS. The unnumbered title arm is running WITHOUT its shared-heading exclusion, so expect rows on structural headings (Identity, Responsibilities). Check that core-manifest.md is readable at that ref." >&2
+
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   entry="$(rel "$f")"
@@ -937,6 +1145,79 @@ while IFS= read -r f; do
         break
       done <<< "$theirs_anchors"
     done <<< "$ext_anchors"
+  fi
+
+  # The same absorption question, asked of the headings that carry no number. Deliberately
+  # NOT nested in the block above: an entry can have both kinds, and gating this on the
+  # numbered harvest succeeding is the exact bug being fixed.
+  #
+  # IT DOES NOT EMIT THE ABSORPTION STATUSES, AND THAT IS THE WHOLE DESIGN.
+  #
+  # A numbered check anchor is an IDENTITY claim -- `### 921.` asserts "this is check 921" --
+  # so two catalogs agreeing on number and title is duplication, and RESTATES-CORE's "retire
+  # it" follows. A prose heading asserts nothing of the kind. `## Block: Step 1 Read Project
+  # State` names the core step the entry AUGMENTS; it is a pointer, not a copy, and telling
+  # that operator to retire the entry would delete text core does not have. Measured on the
+  # reference consumer, 6 of 20 first-contact rows were exactly this. Reusing RESTATES-CORE
+  # here would have made a reporting tool into a data-loss suggestion -- the same trap the
+  # `same_section` comment above records paying for once already.
+  #
+  # So the unnumbered evidence gets its own weaker status that states the two dispositions and
+  # names the ONE remedy that silences it: declare `extends:`. That is not a consolation
+  # prize, it is the thing core already wants from these entries (an undeclared anchor is the
+  # 91%-noise default the drift arm below is written against), so the row drives the entry to
+  # the state that answers the question it raised. A detector that cannot be silenced by
+  # following its own advice teaches the operator to stop reading it.
+  ext_titles="$(unnumbered_titles_of_file "$f")"
+  if [ -n "$ext_titles" ]; then
+    theirs_titles="$(git_show "$THEIRS" "$cp" | heading_titles_of_stream | titles_only)"
+    base_titles="$(git_show "$BASE" "$cp" | heading_titles_of_stream | titles_only)"
+
+    # A DECLARED `extends:` ON THE MATCHED SECTION IS NOT A REASON TO STAY QUIET, and the
+    # first cut of this arm suppressed on exactly that. It looked right — the entry has
+    # already said "I augment this section", so the pointer reading is settled — and it
+    # removed a TRUE finding: `retro-push-sprint-ship-verification` declares
+    # `extends: '#Sprint-Ship Verification'` and core has since absorbed that section
+    # wholesale, which is the retirement case, silenced by the very declaration that makes it
+    # legible. `extends:` answers "which span do I augment", never "does core now carry my
+    # body". Only reading the body answers that, which is why the status below prescribes
+    # nothing and the promotion path for it is the adjudication register, not a suppression.
+    cand=""
+    while IFS="$TAB" read -r ud ut; do
+      [ -n "$ut" ] || continue
+      grep -Fxq -- "$ut" <<< "$SKELETON_TITLES" && continue
+      hit=""
+      while IFS= read -r ct; do
+        [ -n "$ct" ] || continue
+        same_section "$ut" "$ct" || continue
+        hit="$ct"; break
+      done <<< "$theirs_titles"
+      [ -n "$hit" ] || continue
+      cand="${cand}${ud}${TAB}${ut}${TAB}${hit}
+"
+    done <<< "$ext_titles"
+
+    # DEEPEST HEADING WINS. `## Handoff -- No self-scheduling skill re-entry` wrapping
+    # `### No self-scheduling skill re-entry` is ONE claim written at two levels; emitting
+    # both reports one duplication twice and inflates the count the operator triages by.
+    while IFS="$TAB" read -r ud ut hit; do
+      [ -n "$hit" ] || continue
+      was_at_base=""
+      while IFS= read -r bt; do
+        [ -n "$bt" ] || continue
+        same_section "$ut" "$bt" || continue
+        was_at_base=yes; break
+      done <<< "$base_titles"
+      # PRE-EXISTING is decided by the same predicate against BASE, not by a string compare:
+      # core may have reworded the heading between base and theirs while still having carried
+      # the section all along, and calling that NEW-THIS-PULL would date the duplication to
+      # this pull and hide how long it has been rotting.
+      if [ -n "$was_at_base" ]; then when="PRE-EXISTING"; extra="core carried it at base too, so this has been true for some number of releases and no number-keyed join could ever have said so"
+      else when="NEW-THIS-PULL"; extra="core did NOT carry it at base — upstream ${BASE}..${THEIRS} added it, so this is an absorption landing on this pull"
+      fi
+      emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
+        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. Two dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, declare it: add \`extends: '#${hit}'\` (spelled as the core heading actually reads) so the drift subject narrows to that span, and this row stops firing. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
+    done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
   fi
 
   # --- drift, at whichever grain the entry declared --------------------------

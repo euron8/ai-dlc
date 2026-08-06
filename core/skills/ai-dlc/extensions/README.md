@@ -83,7 +83,7 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
-conforms_to: 14                         # the contract version you migrated this entry to [LC-C1]
+conforms_to: 15                         # the contract version you migrated this entry to [LC-C1]
 ---
 
 <the additive rule / check / step body>
@@ -228,6 +228,20 @@ state of your tree, so a pull that changes nothing here still reports it.
   Upstream never writes this directory, so it cannot remove the entry for you. An
   absorbed-but-kept extension is the single most common way a layer rots: it starts as
   an exact duplicate and diverges from there.
+- **If your headings carry no number, the two signals above never looked at your entry.**
+  Both join catalogs on a check or rule NUMBER, and an entry whose headings are ordinary
+  prose (`### Sprint-Ship Verification`, `## Workflow Per Task`) supplies none — measured at
+  27 of the reference consumer's 38 entries, including every role entry and every `SKILL`
+  entry. Those are now matched on heading TEXT and reported as `EXTENSION-TITLE-MATCHES-CORE`
+  [LC-E19], a **warning, never a block**, and it deliberately does not tell you to delete
+  anything: a numbered anchor asserts *this is check N*, a prose heading asserts nothing, so a
+  text match may mean you are duplicating core's section **or** that you are naming the
+  section you augment. Read the body and pick: retire it if core now carries the content, or
+  declare `extends: '#<the core heading>'` if it augments — which also narrows this entry's
+  drift subject from the whole file to that one span. Two exclusions are applied for you, both
+  derived rather than listed: a heading appearing in two or more core rulebook files is a
+  document skeleton (`## Identity`, `## Context Loading`) and is never reported, and a heading
+  that opens with an anchor you already declared belongs to the numbered signals above.
 
 ## Catalog crosswalk table (every namespace)
 

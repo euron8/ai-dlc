@@ -103,6 +103,7 @@ core_manifest:
   - core/fixtures/layer-crosswalk-home/**
   - core/fixtures/layer-reference-resolution/**
   - core/fixtures/layer-adjudication-tier/**
+  - core/fixtures/layer-title-join/**
   - core/fixtures/context-mode-protect/**
   - core/fixtures/context-sensor/**
   - core/fixtures/core-paths-audit-diff/**
