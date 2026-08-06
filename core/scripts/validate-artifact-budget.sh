@@ -159,11 +159,25 @@ WARN_ONLY=0
 QUIET=0
 CHECK_EVIDENCE=0
 GATE_LOG=""
+FAIL_ON=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --root)           ROOT="${2:-}"; shift 2 ;;
     --only)           ONLY="${2:-}"; shift 2 ;;
+    # --fail-on <artifact>: take a HARD verdict on ONE artifact while the run stays
+    # --warn-only overall. Retro needs exactly this and had no way to say it.
+    #
+    # WHY THE POSTURE IS PER-ARTIFACT RATHER THAN PER-RUN. Retro's budget audit is
+    # --warn-only for a stated reason: the sprint has already paid for every oversized
+    # read, so blocking at retro helps nobody. That reasoning is about the PLANNING
+    # artifacts, whose growth is monotonic by construction. It does not transfer to
+    # `pipeline-snapshot.md`, which is trimmable by design -- its remedy is to move
+    # superseded entries to the write-only history file, an action available at retro
+    # and nowhere else. A ceiling nobody is ever blocked by is a number, not a ceiling.
+    #
+    # Repeatable. `--fail-on a --fail-on b` hardens both.
+    --fail-on)        FAIL_ON="$FAIL_ON ${2:-}"; shift 2 ;;
     --warn-only)      WARN_ONLY=1; shift ;;
     --quiet)          QUIET=1; shift ;;
     --check-evidence) CHECK_EVIDENCE=1; shift ;;
@@ -173,6 +187,26 @@ while [ $# -gt 0 ]; do
 done
 
 say() { [ "$QUIET" -eq 1 ] || printf '%s\n' "$*"; }
+
+# Is this artifact one the caller hardened with --fail-on? Matched on BASENAME, so
+# `--fail-on pipeline-snapshot.md` hardens it wherever under the root it sits.
+#
+# The leading/trailing spaces are load-bearing: without them `--fail-on snapshot.md`
+# would match `pipeline-snapshot.md` and harden an artifact the operator did not name.
+is_fail_on() {
+  case " $FAIL_ON " in
+    *" $(basename "$1") "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# The verdict posture for ONE artifact: hard when --fail-on names it, otherwise
+# whatever --warn-only says. Returns 0 when a breach must set RC=1.
+hard_verdict() {
+  is_fail_on "$1" && return 0
+  [ "$WARN_ONLY" -eq 1 ] && return 1
+  return 0
+}
 
 [ -d "$ROOT" ] || { echo "FAIL: project root not readable: $ROOT" >&2; exit 1; }
 
@@ -417,6 +451,57 @@ is_canonical_section() {
 }
 
 # $1 = file path, $2 = path relative to ROOT (for the message)
+# SUPERSESSION-BY-MARKING. Superseded content belongs in the write-only history file,
+# physically MOVED there -- not struck through, bracketed, or stamped in place. Marked
+# content passes every check that already exists: it sits under a canonical heading, so
+# the seven-section schema check is happy, and it costs bytes like any other prose, so
+# the budget only notices once the file is already too big. The trim remedy then reads
+# as "delete text" when the correct action is "relocate text", and the deletion loses
+# the record the history file exists to keep.
+#
+# SCOPED OUTSIDE `## In-Flight Teammates` DELIBERATELY. That section is the dispatch
+# ledger and `check_inflight_rows` already greps `~~` inside it; its row schema owns the
+# status column. Scoping this arm out of that section means a struck In-Flight row is
+# reported ONCE, by the check that owns it, rather than twice under two remedies.
+#
+# CASING IS THE DISCRIMINATOR, ON PURPOSE, AND THIS IS THE WHOLE FALSE-POSITIVE STORY.
+# All-caps SUPERSEDED is the deliberate status stamp. Lowercase "superseded" is ordinary
+# English -- "superseded by the short form" -- and appears many times per snapshot
+# legitimately; flagging it would red every clean retro run, which is the
+# safeguard-that-blocks-throughput failure. The one all-caps exception is the compound
+# category label `WONTFIX/SUPERSEDED`, a CLASS of backlog item rather than a mark on this
+# content, and the `/`-adjacency guard excludes it.
+#
+# BARE STRIKETHROUGH IS NOT IN THE DEFAULT SET, AND THAT IS A DECISION WITH A FIXTURE
+# BEHIND IT. `inflight-row-shape` asserts that a `~~struck~~` line outside the dispatch
+# ledger is out of scope, on the reasoning that Recent Activity LEGITIMATELY strikes
+# superseded entries and indicting them would make the check noise. That position is
+# core's and it is correct as a default: `~~` is ordinary markdown emphasis, whereas an
+# all-caps SUPERSEDED stamp is unambiguously a status claim. A project that has decided
+# strikethrough is never legitimate in its snapshot sets
+# `AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid` and gets the stricter arm; the default `allow`
+# leaves core's documented position untouched.
+STRIKETHROUGH_POSTURE="${AI_DLC_SNAPSHOT_STRIKETHROUGH:-allow}"
+case "$STRIKETHROUGH_POSTURE" in
+  allow|forbid) ;;
+  *) echo "FAIL: AI_DLC_SNAPSHOT_STRIKETHROUGH must be 'allow' or 'forbid', got '$STRIKETHROUGH_POSTURE'" >&2; exit 2 ;;
+esac
+
+check_supersession_markers() {
+  awk -v strike="$STRIKETHROUGH_POSTURE" '
+    /^## In-Flight Teammates/ { inflight=1; next }
+    /^## /                    { inflight=0 }
+    {
+      if (inflight) next
+      cls=""
+      if (strike == "forbid" && $0 ~ /~~[^~]*~~/)  cls = cls "strikethrough(~~...~~); "
+      if ($0 ~ /\*\*\[[^]]*SUPERSEDED[^]]*\]\*\*/) cls = cls "bracket-annotation(**[...SUPERSEDED...]**); "
+      else if ($0 ~ /(^|[^A-Za-z0-9\/])SUPERSEDED([^A-Za-z0-9\/]|$)/) cls = cls "bare-status-word(SUPERSEDED); "
+      if (cls != "") printf "  %s line %d: supersession marker [%s]\n", ART, NR, cls
+    }
+  ' ART="$2" "$1" >> "$MARKER_FILE"
+}
+
 check_snapshot_sections() {
   grep '^## ' "$1" 2>/dev/null \
     | sed -e 's/^##[[:space:]]*//' -e 's/[[:space:]]*$//' \
@@ -676,6 +761,7 @@ TMPROOT="$(mktemp -d 2>/dev/null)" || {
 trap 'rm -rf "$TMPROOT"' EXIT
 BREACH_FILE="$TMPROOT/breach"
 SCHEMA_FILE="$TMPROOT/schema"
+MARKER_FILE="$TMPROOT/marker"
 INFLIGHT_FILE="$TMPROOT/inflight"
 STATUS_FILE="$TMPROOT/inflight-status"
 
@@ -766,6 +852,7 @@ printf '%s\n' "$BUDGETS" | while IFS='|' read -r name budget remedy; do
       check_snapshot_sections "$f" "$rel"
       check_inflight_rows "$f" "$rel"
       check_inflight_status "$f" "$rel"
+      check_supersession_markers "$f" "$rel"
     fi
 
     if [ "$tokens" -gt "$ceiling" ]; then
@@ -825,7 +912,21 @@ if [ -s "$BREACH_FILE" ]; then
                        ledger, and deleting it is how a lead re-dispatches a teammate
                        that is still alive.
 EOF
-  [ "$WARN_ONLY" -eq 1 ] || RC=1
+  # --fail-on is checked per BREACHING artifact, not per run. A --warn-only run whose
+  # only breach is an artifact the caller hardened must still exit 1, and a --warn-only
+  # run whose breaches are all unhardened must still exit 0 -- both directions, or the
+  # flag is decoration. The breach lines are `OVER  <rel>  ...`, so field 2 is the path.
+  if [ "$WARN_ONLY" -eq 1 ]; then
+    while read -r _verdict brel _rest; do
+      [ -n "${brel:-}" ] || continue
+      if is_fail_on "$brel"; then
+        echo "FAIL: $brel is over budget and was hardened with --fail-on, so this run blocks despite --warn-only." >&2
+        RC=1
+      fi
+    done < "$BREACH_FILE"
+  else
+    RC=1
+  fi
 fi
 rm -f "$BREACH_FILE"
 
@@ -859,6 +960,40 @@ EOF
   [ "$WARN_ONLY" -eq 1 ] || RC=1
 fi
 rm -f "$SCHEMA_FILE"
+
+# A THIRD INDEPENDENT VERDICT, for the same reason the schema check is a second one.
+# Marked-superseded content is neither "over budget" nor "an invented section": it sits
+# under a canonical heading, at whatever size, and both existing checks pass it. Folding
+# it into either count would send the lead to the wrong remedy -- trimming BYTES out of
+# content whose defect is that it was never MOVED, and the trim then destroys the record
+# the write-only history file exists to keep.
+if [ -s "$MARKER_FILE" ]; then
+  say ""
+  if [ "$WARN_ONLY" -eq 1 ] && ! is_fail_on "pipeline-snapshot.md"; then
+    echo "WARN: pipeline-snapshot.md marks superseded content in place."
+  else
+    echo "FAIL: pipeline-snapshot.md marks superseded content in place." >&2
+    RC=1
+  fi
+  cat "$MARKER_FILE" >&2
+  cat >&2 <<'EOF'
+
+      Superseded content is MOVED, not marked. Strikethrough, a bracketed
+      SUPERSEDED annotation, or a bare all-caps SUPERSEDED stamp all leave dead
+      prose under a live heading, where the seven-section schema check and the
+      byte budget both pass it in silence.
+
+      Remedy: move each marked line's superseded content VERBATIM to
+      pipeline-snapshot-history.md (write-only, Rule 25a) and delete it here.
+
+      NOT flagged, deliberately: lowercase "superseded" as ordinary prose, and the
+      compound category label WONTFIX/SUPERSEDED, which names a class of backlog
+      item rather than marking this content. `## In-Flight Teammates` is out of
+      scope here -- its struck rows belong to the In-Flight row check, and
+      reporting them twice would offer two remedies for one line.
+EOF
+fi
+rm -f "$MARKER_FILE"
 
 # A THIRD independent verdict, for the same reason the schema one is separate: a
 # struck row is not "over budget", and sending the lead to `trim` would have it

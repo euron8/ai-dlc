@@ -77,6 +77,7 @@ core_manifest:
   - core/fixtures/suppression-lifetime/**
   - core/fixtures/self-update-join-gate/**
   - core/fixtures/self-update-fixture-log/**
+  - core/fixtures/snapshot-supersession-marker/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**

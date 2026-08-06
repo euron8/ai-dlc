@@ -34,6 +34,65 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.281.0] — 2026-08-06
+
+### Superseded content is MOVED, not marked — and retro can now block on one artifact without blocking on the rest
+
+Two halves of one gap, both absorbed from a reference consumer's override
+(`steps__retro__pipeline-snapshot-ceiling.md`), which restated **zero** core text and
+existed only because core had no way to express either half.
+
+**`--fail-on <artifact>`.** Retro's budget audit is `--warn-only`, for a stated and correct
+reason: the sprint has already paid for every oversized read, so blocking at retro helps
+nobody. That reasoning is about artifacts whose growth is monotonic by construction —
+nothing retires a locked requirement. It does not transfer to `pipeline-snapshot.md`, which
+is trimmable BY DESIGN: its remedy is to move superseded entries to the write-only history
+file, and retro is the passage where that happens. A ceiling nobody is ever blocked by is a
+number, not a ceiling. The flag is per-artifact and repeatable, matched on whole basenames —
+`--fail-on snapshot.md` does not harden `pipeline-snapshot.md`, because hardening an artifact
+the operator did not name is the same defect as failing to harden one they did.
+
+**The supersession-marker arm.** Superseded content struck through, wrapped in a bracketed
+annotation, or stamped with a bare all-caps `SUPERSEDED` sits under a canonical heading at
+any size — so the seven-section schema check passes it and the byte budget only notices once
+the file is already too big. The size remedy then reads "trim" when the correct action is
+"relocate", and the trim destroys the record the history file exists to keep. Reported as a
+third independent verdict, never folded into the budget count, for exactly that reason.
+
+Scoped outside `## In-Flight Teammates`, which is the dispatch ledger and already has its own
+`~~` check — a struck row is reported once, by the check that owns it, rather than twice under
+two remedies.
+
+**Casing is the discriminator, and that is the entire false-positive story.** All-caps
+`SUPERSEDED` is the deliberate status stamp. Lowercase "superseded" is ordinary English and
+appears many times per snapshot legitimately; flagging it would red every clean retro run. The
+one all-caps exception is the compound label `WONTFIX/SUPERSEDED`, a class of backlog item
+rather than a mark on this content, excluded by a `/`-adjacency guard. The fixture asserts
+both directions, because a validator that always fails is indistinguishable from one that
+works.
+
+**One of the override's three shapes did not come up wholesale, and the reason is worth
+recording.** Absorbing bare `~~strikethrough~~` by default turned `inflight-row-shape` red —
+a fixture that already asserts a struck line outside the dispatch ledger is out of scope,
+because Recent Activity legitimately strikes superseded entries and indicting them would make
+the check noise. That is core's position, it predates this work, and it had a fixture behind
+it, so it wins by default. The two unambiguous status stamps are core's; the stricter posture
+is `AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid`. That turns the retirement into the *configured*
+kind rather than the adopted kind — the consumer keeps its stricter behaviour by declaring a
+value instead of by shadowing a section, which is the shape the whole layer-retirement
+mechanism was built for.
+
+The override's second arm mirrored core's `pipeline-snapshot.md|6000|trim` constant, which is
+what forced it to be an override rather than an extension — an extension carries no `base_sha`
+to track a core constant with. With the ceiling now enforced where the constant is defined,
+that dependency evaporates, and the entry is declared retirable through an env-keyless
+`override_supersessions:` row.
+
+New fixture `snapshot-supersession-marker`: three marker shapes, two negative controls, both
+directions of `--fail-on`, a whole-basename assertion, and two `cmp -s`-guarded mutants — one
+removing the arm, one reverting the casing guard so ordinary prose goes red — plus an
+unmutated control.
+
 ## [0.280.0] — 2026-08-06
 
 ### Check 3b verified nothing, on every story, for its entire life — the load pointer is now resolved and the byte-match is scoped to the anchor it cites
