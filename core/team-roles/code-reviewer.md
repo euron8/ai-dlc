@@ -184,7 +184,7 @@ Assertion is invalid and MUST be reissued with evidence. The reviewer
 MUST NOT inherit the PR body's or the dispatch prompt's empirical
 claim as evidence.
 
-### Return Type Changes = Critical
+### Return Type or Context-Shape Changes = Critical
 
 Any finding involving a function return type change (e.g., returning
 a different type than before) MUST be classified as **Critical**. Never
@@ -192,6 +192,17 @@ downgrade to Important or Suggestion. The review MUST include a Consumer
 Audit: grep every caller of the changed function, verify each handles
 the new type correctly, especially at serialization boundaries.
 **Evidence required:** Log the grep command and caller list in the review doc.
+
+**A change to the KEY SET or value types of a context-build path carries the
+same severity and the same audit.** A context builder — a dispatch-context
+factory, a request/safeguard context assembler, any function whose product is a
+dict consumers read by key — has a return *shape* rather than a return *type*,
+so a renamed or retyped key slips past a type-focused reading while breaking
+every reader exactly as a changed return type would. Two extra obligations
+follow from the shape being built in more than one place: audit the **readers**
+of the changed shape, not only the callers of the builder, and audit **sibling
+call sites that build the same context type from a different trigger path** —
+those are the ones a caller-grep on one builder never reaches.
 
 ### Unit Conversion Changes = Important (minimum)
 

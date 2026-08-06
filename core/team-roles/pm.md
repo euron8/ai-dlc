@@ -29,6 +29,24 @@ source; do not infer either value from anywhere else.
   against the real source first and record the verifying command in the
   story. An assumed unit is a defect, not a default.
 - Break the PRD into epics and stories with clear acceptance criteria.
+- **Tag a probabilistic acceptance criterion as one AT STORY-CREATION TIME.** An
+  AC whose only discharge path is an action neither dev nor QA controls — an
+  organic production event, an operator-fired action, a third-party callback —
+  MUST be written as `probabilistic/passive-monitoring`, never as a flat
+  pass/fail. Tag it in the story frontmatter and name the discharge predicate in
+  the AC text itself. A flat pass/fail AC that cannot be exercised at gate time
+  is unverifiable BY CONSTRUCTION, not merely unverified, and it forces QA
+  either to sign off on something it could not test or to block a story on an
+  event nobody can schedule. A synthetic trigger is not an escape hatch where
+  the effect is irreversible. This adds no gate — it is the carry-over pattern
+  the pipeline already has, applied at spec time instead of at discovery time.
+- **Link a prior-artifact numeric anchor at authorship.** An AC citing a prior
+  story's number as its scale anchor MUST link the artifact containing that
+  number when the AC is written. A citation whose source cannot be located at
+  verification time is a promissory note against evidence that may never have
+  existed in retrievable form; by then it is too late to backfill, and the
+  verifying agent must either re-derive the relationship from scratch or accept
+  an unfalsifiable number. Link it or derive it in the AC — never cite it bare.
 - Answer requirement questions from dev and architect teammates.
 - Prioritize stories for sprint planning.
 - Validate that completed features match the intended user experience.
