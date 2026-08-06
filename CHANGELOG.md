@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.276.0] — 2026-08-06
+
+### Core adopts three clauses it was making a consumer carry, and declares each one retirable
+
+v0.275.0 made "core simply adopted your prose" *declarable*. These are the first three uses,
+and all three are deltas that were never consumer-specific — a project had to shadow a whole
+core section to say something core should have said itself.
+
+**Check 7 asserted a property of an empty set.** *"All planning artifacts referenced by stories
+exist on disk"* is satisfied vacuously when the referenced set is EMPTY, so a gate with stories
+in scope and zero artifacts on disk passed. Check 5 already applies exactly this discipline one
+check earlier (*"exit 4 … is never a pass"*), so this was a core-consistency gap, not a project
+fact. Check 7 now requires the referenced set to be non-empty when stories are in scope.
+
+**Item 5's routing backstop stopped at the re-route.** It says which pipeline to run when a
+defect is the sprint's dominant work, and says nothing about what happens to the pre-empted
+carry-over afterwards — so *"reprioritized within the sprint"* was a reading the text permitted.
+It was taken: a bug interrupt reached PVC clean and the same `sprint_id` went on to absorb a
+rule-file revert, a spec-adoption debate and an artifact-consolidation pass, while the
+carry-over track's declared scope never reached implementation. Item 5 now states the boundary
+— reaching PVC on the bug variant closes the interrupted sprint, and the carry-over evaluation
+re-enters fresh as the next sprint's own input.
+
+**`dev.md`'s local-launch note was unconditional in a section that had just said otherwise.**
+Two lines above it, `## Identity` makes `aiDlcRoles.dev` in `.claude/settings.json` *"the only
+source; do not infer either value from anywhere else"* — and then hardcoded a `Local (Ollama)`
+launch bullet. v0.175.0 moved model and effort into settings and left this behind, so a project
+running a hosted model had to shadow the entire Identity section to drop one line. The note is
+now conditional on that same config entry, which is what the override was working around. The
+information is not deleted — it is scoped to the case where it applies.
+
+**Three `override_supersessions:` rows, none carrying `replaces_with:`** — the shape v0.275.0
+unblocked. Each names its `shadows:` key, the release that adopted it, the reason core recorded,
+and a `verify:` that checks the adoption reached the consumer's own tree.
+
+**One verify carries an ordering note, because it goes red for a reason that is not a
+failure.** Role files carry `install.sh`'s template substitution, so `apply.sh` routes
+`team-roles/dev.md` to a `semantic-merge` WORKLIST row rather than overwriting it — the
+adoption arrives, but after a human step. Measured: the other two verify green immediately
+after `apply`, this one does not until the merge is done. Left undocumented, that red reads as
+a broken release.
+
+**Verified against the reference consumer, not predicted.** Its three entries
+(`steps__gate-validation__check-7.md`, `steps__carry-over-evaluation__item-5-bug-sprint-boundary.md`,
+`team-roles__dev__identity.md`) reproduce core verbatim and add exactly the clause absorbed here
+— checked line by line against core at HEAD, not inferred from their `reason:` fields.
+
+`contract_version` **15 → 16**.
+
 ## [0.275.0] — 2026-08-06
 
 ### An absorption whose headings carry no number is now reported, and core can say it simply adopted an override's prose

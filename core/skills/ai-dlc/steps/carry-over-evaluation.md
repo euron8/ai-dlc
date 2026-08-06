@@ -101,6 +101,22 @@ For each OPEN item in the backlog, evaluate:
      features, STOP and escalate to re-route (raise the pause flag): the
      pipeline MUST run the `bug` variant, not carry-over. Do not
      plan a fix on an unverified hypothesis.
+   - **Sprint boundary on bug-variant completion.** When the bug variant
+     reaches an operator-approved Production Validation Checkpoint, the
+     interrupted sprint closes at that point — run `retro.md` before resuming
+     anything else. The pre-empted carry-over evaluation MUST NOT resume under
+     the same `sprint_id`; it is evaluated fresh as the next sprint's own
+     Section 1 input. Any pipeline-machinery work unrelated to the bug fix
+     (rule-file edits, gate-declaration changes, artifact-consolidation passes)
+     that would otherwise ride the interrupted sprint MUST be logged as a
+     separate work item, never executed inside it. Catches: an interrupt that
+     reaches PVC clean but goes on absorbing unrelated same-session work under
+     a `sprint_id` that has already shipped its coherent unit of value — the
+     re-route above says which pipeline to run and says nothing about what
+     happens to the pre-empted one afterwards, so "reprioritized within the
+     sprint" was a reading the text permitted. False-positive cost: one retro
+     cycle per bug interrupt instead of a deferred one, and retro runs at every
+     sprint close anyway, so this reclassifies WHEN, not whether.
 
 **Process-exercise scoping.** For any item classified as a
 process exercise, the evaluation MUST define a fail-condition trigger:
