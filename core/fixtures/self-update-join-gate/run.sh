@@ -243,6 +243,61 @@ if [ "${CONTROL_OK:-0}" = "1" ]; then
   fi
 fi
 
+# ============================================================================
+# THE rc-PAIR TABLE. The gate probes each gating script BARE -- no arguments, no stdin --
+# because it cannot know what the hook passes. For a script whose bare form is a usage error
+# that probe asks nothing and gets "usage" back from BOTH sides, which used to land on the
+# both-non-zero arm and DEFER. Measured across every script the reference consumer's pre-push
+# invokes, three of five exit 2 bare (validate-audit-anchors, validate-layer-entries,
+# validate-provenance-block; validate-compact-window and validate-fixture-drivability exit 0),
+# so any machinery-only pull touching one of those three deferred permanently.
+#
+# THE WHOLE RISK OF THAT FIX IS THAT IT REMOVES THE GATE, so the table is driven directly here
+# rather than inferred: a purpose-built dist and consumer where the changed script is a stub
+# whose exit code is the input. `2,2` must now clear; every pair that represents a real change
+# in what the hook will run must still defer. `0,2` is the arm that keeps the fix honest --
+# an incoming version that NEWLY refuses its own invocation is a change, not a no-op.
+RCD="$WORK/rcpair"
+mkdir -p "$RCD/dist" "$RCD/consumer/scripts/ai-dlc" "$RCD/consumer/.githooks"
+(
+  cd "$RCD/dist" && git -c init.defaultBranch=main init -q . \
+    && git config user.email f@example.com && git config user.name Fixture \
+    && git config commit.gpgsign false && mkdir -p core/scripts
+) || { echo "FIXTURE ERROR: rc-pair dist init failed" >&2; exit 2; }
+printf 'exit 0\n' > "$RCD/dist/core/scripts/validate-probe.sh"
+( cd "$RCD/dist" && git add -A && git commit -q -m base ) || exit 2
+RC_BASE="$( cd "$RCD/dist" && git rev-parse HEAD )"
+printf 'scripts/ai-dlc/validate-probe.sh\n' > "$RCD/consumer/.githooks/pre-push"
+
+# rcpair <cur-rc> <new-rc> -> the gate's verdict token for validate-probe.sh
+rcpair() {
+  printf 'exit %s\n' "$1" > "$RCD/consumer/scripts/ai-dlc/validate-probe.sh"
+  printf 'exit %s\n' "$2" > "$RCD/dist/core/scripts/validate-probe.sh"
+  ( cd "$RCD/dist" && git add -A && git commit -q -m "new $2" --allow-empty ) >/dev/null 2>&1
+  local theirs; theirs="$( cd "$RCD/dist" && git rev-parse HEAD )"
+  bash "$GATE" "$RCD/dist" "$RC_BASE" "$theirs" "$RCD/consumer" 2>&1 \
+    | grep -oE 'SELF-UPDATE-(OK|DEFER|UNDECIDED)[[:space:]]+validate-probe\.sh' | head -1 \
+    | awk '{print $1}'
+}
+
+RC_22="$(rcpair 2 2)"; RC_01="$(rcpair 0 1)"; RC_02="$(rcpair 0 2)"; RC_11="$(rcpair 1 1)"
+if [ -z "$RC_22$RC_01$RC_02$RC_11" ]; then
+  bad "rc-pair harness produced no verdicts at all — the table below would be four silent passes"
+else
+  [ "$RC_22" = "SELF-UPDATE-OK" ] \
+    && ok "rc 2,2 (both refuse the bare probe) is OK — a usage error on both sides is not a differential signal, and deferring stranded every machinery pull touching one of the three scripts that exit 2 bare" \
+    || bad "rc 2,2 gave [$RC_22], expected SELF-UPDATE-OK — the three usage-error scripts still strand the machinery slice"
+  [ "$RC_01" = "SELF-UPDATE-DEFER" ] \
+    && ok "rc 0,1 still DEFERS — an incoming version that newly fails against this tree is the case the gate exists for, and the 2,2 arm did not swallow it" \
+    || bad "rc 0,1 gave [$RC_01], expected SELF-UPDATE-DEFER — the fix REMOVED the gate"
+  [ "$RC_02" = "SELF-UPDATE-DEFER" ] \
+    && ok "rc 0,2 still DEFERS — a version that NEWLY refuses its own invocation changed what the hook runs, so agreement-at-2 is scoped to BOTH sides and not to either" \
+    || bad "rc 0,2 gave [$RC_02], expected SELF-UPDATE-DEFER — the arm keyed on one side, so a newly-broken invocation reads as a no-op"
+  [ "$RC_11" = "SELF-UPDATE-UNDECIDED" ] \
+    && ok "rc 1,1 is still UNDECIDED — a genuine pre-existing failure remains unattributable, which is a different fact from a probe that asked nothing" \
+    || bad "rc 1,1 gave [$RC_11], expected SELF-UPDATE-UNDECIDED"
+fi
+
 echo
 if [ "$fails" -ne 0 ]; then
   echo "self-update-join-gate: $fails assertion(s) FAILED" >&2

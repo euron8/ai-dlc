@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.288.0] — 2026-08-07
+
+### The self-update gate deferred every machinery pull touching a script whose bare form is a usage error
+
+Found when v0.287.0's successor went red on `self-update-join-gate` — green on `main`, so
+attributable — and the blocker was not in the change under test.
+
+`self-update-gate.sh` runs each gating script twice, the consumer's current copy and the
+incoming one, and compares exit codes. It invokes them **bare: no arguments, no stdin**, because
+it cannot know what arguments the hook passes. For a script whose bare form is a usage error
+that probe asks nothing, and gets "usage" back from **both** sides. Measured across every script
+the reference consumer's pre-push invokes:
+
+```
+validate-audit-anchors.sh        rc=2      validate-compact-window.sh       rc=0
+validate-layer-entries.sh        rc=2      validate-fixture-drivability.sh  rc=0
+validate-provenance-block.sh     rc=2
+```
+
+**Three of five.** Those three fell to the both-non-zero arm and emitted
+`SELF-UPDATE-UNDECIDED … treat as defer`, so **any machinery-only pull touching one of them
+folded the machinery slice into the operator-gated apply** — the cost the two-hop pull exists to
+avoid, incurred for no rulebook reason and reported as an unattributable failure rather than as
+"this probe does not apply". `validate-audit-anchors.sh`'s own gate text names the distinction
+the gate could not make: *"Exit 2 is a malformed invocation, NOT a missing anchor."*
+
+`2` is this codebase's declared token for a fumbled invocation, so agreement **at 2** is the one
+disagreement-free outcome carrying no information. It is now its own `SELF-UPDATE-OK` arm, and
+scoped hard: **both** sides must be exactly 2. A 2 on one side against anything else still falls
+through, because a version that newly starts or stops refusing its own invocation IS a change to
+what the hook will run.
+
+**False-positive set, enumerated before shipping.** Exactly the three scripts above change arm;
+the two that exit 0 are untouched, and no pair representing a real change in what the hook runs
+changes verdict.
+
+**The whole risk of this fix is that it removes the gate, so the rc-pair table is driven
+directly** rather than inferred — a purpose-built dist and consumer whose changed script is a
+stub with a controlled exit code. Four new assertions in `self-update-join-gate`:
+
+| cur, new | verdict | why |
+|---|---|---|
+| 2, 2 | `OK` | the new arm — a usage error on both sides is not a signal |
+| 0, 1 | `DEFER` | the case the gate exists for, unswallowed |
+| 0, 2 | `DEFER` | **the arm that keeps the fix honest** — newly refusing its own invocation is a change |
+| 1, 1 | `UNDECIDED` | a genuine pre-existing failure is still unattributable |
+
+Two mutants, each killing exactly one arm and a different one: keying on the incoming side alone
+moves only `0,2`, and removing the arm moves only `2,2`.
+
 ## [0.287.0] — 2026-08-07
 
 ### Two retro-phase validators passed on runs where the thing they name was never tested
