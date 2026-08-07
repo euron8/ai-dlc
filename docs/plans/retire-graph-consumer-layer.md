@@ -41,20 +41,20 @@ below, and a session following this file must not re-ask them.**
 
 **NOTHING IS IN FLIGHT. The working tree is clean and every branch cut for this plan is
 merged** — v0.283.0 #373, v0.284.0 #374, plan corrections #375/#376/#378/#379/#380, v0.285.0
-#377, v0.286.0 #381. A resuming session starts from `origin/main` at **`0.286.0`** with no
-uncommitted work to reconcile.
+#377, v0.286.0 #381, v0.287.0 #383. A resuming session starts from `origin/main` at
+**`0.287.0`** with no uncommitted work to reconcile.
 
-**ONE BRANCH REMAINS PARKED, and it is NOT this session's.** Branch
-`feat/v0.283.0-unreached-step-verdicts` is pushed and gate-green at commit `70c9046`, subject
-`wip(unreached-steps)`. It carries two finished script edits and **no fixture coverage and no
-release triple** — do not merge it as-is. Finish it by adding the fixture arms below, then bump
-`VERSION`, write the CHANGELOG heading, and rename the commit to a **`feat(v0.287.0):`**
-subject — **its branch name still says 0.283.0, and 0.283.0, 0.285.0 and 0.286.0 are now taken;
-rename or ignore the branch name, the commit subject is what the release triple checks.** The
-two edits and the measurement behind each are in §*What the unreached-step audit found*.
+**NO BRANCH IS PARKED ANY MORE.** The previously-parked
+`feat/v0.283.0-unreached-step-verdicts` (commit `70c9046`, subject `wip(unreached-steps)`) was
+cherry-picked onto `origin/main`, given the fixture coverage it lacked, and shipped as
+**v0.287.0 (#383)**. Its two script edits went out with a **third** change neither the branch
+nor this plan had: the skip counter it carried was broken on the zero-skip input, and the
+regression lock for that is why the release has a new fixture rather than two new arms. See
+§*What v0.287.0 measured*.
 
-**NEXT ACTION: item 7.** Items 0, 1, 2, 2b, 3, 4 and 5 are closed; 6, 7, 8 and 9 remain open in
-the order listed.
+**NEXT ACTION: item 7, continued** — F3 and F4 below are still unfixed and the
+highest-value lead is still unaudited. Items 0, 1, 2, 2b, 3, 4 and 5 are closed; 6, 8 and 9
+remain open after it, in the order listed.
 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.** That instruction has now
@@ -107,6 +107,16 @@ before you write code.
 7. **Audit the steps s301 never reached** for the defect classes v0.280.0 found in the steps it
    did reach. s301 stalled at `stories-test-strategy.md` §4, so every downstream step is
    unexercised. The five measured classes are listed in §*What v0.280.0 measured*.
+   **PARTIALLY DONE — F1 and F2 shipped as v0.287.0 (#383); F3 and F4 are still unfixed and the
+   named lead is still unaudited.** All four findings, and the shape to rewrite them into, are
+   in §*What the unreached-step audit found*. What remains, in order:
+   - **F3 `validate-audit-anchors.sh` (Check 18), MEDIUM.** An anchors file whose every sha
+     reads `PENDING` returns `entries PASS` rc=0, and `retro.md` Step 5c runs the bare form.
+   - **F4 `validate-ci-gates.sh`, a deployment gap.** Documented remedy and implemented
+     behaviour disagree, and the reference consumer is the case the sentence was written for.
+   - **The unaudited lead: `validate-layer-entries.sh`** (1694 lines, five line-initial
+     extractors — the shape that produced the `validate-ac-falsifiability.sh:244` defect), then
+     `validate-gate-manifest.sh` and `audit-rule-files.sh`. Mechanical sweep, no mutants.
 8. **Triage graph's push-candidate ledger** — 123 `## PC-` entries, of which roughly 57 are
    upstream-facing and OPEN. Re-run each `verify:` receipt against the current core tree
    before proposing anything; several are documented as having gone blind, meaning the
@@ -119,7 +129,7 @@ sections in the design record below are labelled SHIPPED.
 
 ## Where things stand
 
-**ai-dlc is at `0.286.0`, `contract_version` 16.** Twelve releases shipped and merged to `main`:
+**ai-dlc is at `0.287.0`, `contract_version` 16.** Thirteen releases shipped and merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
@@ -135,6 +145,7 @@ sections in the design record below are labelled SHIPPED.
 | v0.284.0 | #374 | `validate-enforcement-map.sh` spawn reduction: 1582 → 1156 external commands, **8.36s → 7.02s**. Suite makespan **238s → 214s**. Byte-identical on the failing paths as well as the passing one. |
 | v0.285.0 | #377 | **plan item 2b.** Core **Rule 31** — a countable assertion carries the derivation that produced it. Absorbs the consumer's Rule 930 count discipline, which core had nowhere. The enforcer was built, measured and NOT shipped; `**Carrier:** none` is a declared I79 gap (5 → 6). |
 | v0.286.0 | #381 | **plan item 3.** The live adversarial series is derived by filtering INSIDE the pick, so a filename that defeats the pass-suffix strip can no longer become a one-pass series the stall guard reports as `CONTINUE`. `I81` binds the expression across both hooks and asserts it is the filtering form. |
+| v0.287.0 | #383 | **plan item 7, first two findings.** `validate-mandatory-rules.sh` reports a skipped check as skipped (`PASS WITH SKIPS`, named numbers, verified floor) instead of folding three SKIPs into `all 6 checks passed`; `validate-spawn-ledger.sh` gets an `OK WITH NO PIN COMPARED` verdict so it stops asserting a pin it never fetched. New fixture `mandatory-rules-skip-accounting` (6 arms, 6 mutants); `check-22-spawn-ledger` 13 → 16 assertions. |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
 A consumer override is evidence that a consumer needed something; it is not evidence that core
@@ -331,6 +342,37 @@ identity rather than from the filesystem, fail CLOSED (or say so) when the prefi
 no-op, and carry a same-run control that the reader can still see a multi-pass series. Measure
 the false-positive set on all 135 files before shipping.
 
+## What v0.287.0 measured (plan item 7, first two findings)
+
+Two things a later session must not re-derive, and one it must not repeat.
+
+**The parked branch's own fix was broken, and the fixture is what found it.** Its skip counter
+was `printf … | sort -u | grep -c . || echo 0`. On the empty (zero-skip) input `grep -c` prints
+`0` **and exits 1**, so `||` appended a second `0`; `[ -eq 0 ]` died with `integer expression
+expected`, fell through to the skip branch on a tree where nothing had skipped, and
+`$((6 - SKIPPED_UNIQUE))` then hit a multi-line operand — which bash treats as a **fatal**
+arithmetic syntax error, aborting the shell mid-summary with no verdict line and **rc=1**.
+`retro.md` Step 5c reads this script on its exit code alone, so the fix for a summary that could
+not tell a skip from a pass would have hard-failed every retro that skipped nothing. **The
+branch was pushed and gate-green in that state** — the pre-push suite had nothing that ran this
+validator on a tree where all six checks execute, because none existed until this release.
+That is the general lesson: *a finished script edit with no fixture is not a finished change,
+and "gate-green" measures the fixtures that exist.*
+
+**Two mutants had to be re-aimed, and both re-aimings are the recorded trap.** The first
+`zeroskipbug` expectation asserted a wrong summary string; the real behaviour is no summary at
+all plus rc=1, so a mutant asserted only on missing wording would have scored the abort as a
+kill for the wrong reason. Assert the positive outcome, not the absence of the old one.
+
+**Fixture shape, for the next one.** `mandatory-rules-skip-accounting` drives six arms over one
+git-backed project tree — zero skips, each of checks 2/4/5 skipping alone, all three at once,
+and a skip alongside a real failure — and each mutant lives in **its own toolchain directory**
+(the script resolves siblings from `dirname $0`, so a shared mutant dir cannot express a
+per-arm sibling toggle). One summary line serves several arms, so a per-check counter mutant
+legitimately moves two of them; each mutant therefore declares its **exact moved-set**, and no
+two mutants share one. That is the anti-vacuity property when strict one-arm isolation is not
+available.
+
 ## The one thing that must not be forgotten: pull graph in TWO hops
 
 A bundled `0.274.0 → 0.278.0` pull returns `SELF-UPDATE-DEFER`, so the machinery slice lands at
@@ -481,7 +523,7 @@ consumer, two checks SKIP on **every sprint 296 through 302** because
 `validate-retro-prereq.sh` was never provided, and `retro.md` accepts this validator on its
 exit code alone. Old and new, side by side on one tree with a stubbed sibling:
 `all 6 checks passed` versus `3 of 6 checks verified; 3 SKIPPED (check 2 4 5)`, **both exit 0**.
-Fixed on the parked branch; exit code deliberately unchanged, because a skip is legitimate.
+**SHIPPED as v0.287.0 (#383)**; exit code deliberately unchanged, because a skip is legitimate.
 
 **F2 — `validate-spawn-ledger.sh` asserts a pin it never compared.** Rule 19(a) is compared only
 where `EXPECT` is non-empty. Lose the `aiDlcRoles` block and every row falls to `UNPINNED`, the
@@ -489,7 +531,7 @@ comparison runs zero times, and the OK sentence still says "a model matching the
 configured pin". The count already existed and its comment already named the hazard; **nothing
 read the count**. Measured with one ledger and two settings files differing only in the key
 name: intact gave `FAIL: 2 Rule 19 violation(s)` rc=1, renamed gave the full OK sentence rc=0.
-Fixed on the parked branch.
+**SHIPPED as v0.287.0 (#383).**
 
 **F3 — `validate-audit-anchors.sh` (Check 18), MEDIUM, NOT yet fixed.** The PASS line counts
 ENTRIES, never ASSERTIONS; the guard is `assert isinstance(fields, dict)`, which an empty dict
