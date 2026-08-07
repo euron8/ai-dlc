@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.291.0] — 2026-08-07
+
+### v0.290.0 corrected the sentence and left the mechanism inert, which is worse than the wrong sentence was
+
+Caught by the reference consumer, who did not take the corrected text on faith and ran the
+mechanism against it:
+
+```
+$ layer-drift.sh --adjudicated-codes <dist> <theirs>
+EXTENSION-HOOK-DRIFT
+EXTENSION-ANCHOR-DRIFT
+```
+
+`EXTENSION-TITLE-MATCHES-CORE` is absent from that set, so no `subject_digest` was published and
+**no conforming register record could be written at all.** v0.290.0 told the operator to record a
+verdict in a register that structurally could not key the row. Their control that the mechanism
+itself works: `EXTENSION-HOOK-DRIFT` **is** in the set, and 18 recorded verdicts took its count
+to zero on the previous pull.
+
+**A corrected sentence in front of an inert mechanism reads as actionable, which is the worse
+failure.** The original wrong remedy at least failed visibly when the operator tried it.
+
+**The row is now keyed.** It publishes `subject_digest` in its own message, copyable verbatim
+the way the adjudicated rows already do, and a matching register verdict silences it.
+
+**This is NOT the suppression this arm deleted, and the difference is why it is safe.** The old
+one keyed on a declared `extends:`, which answers "which span do I augment" and says nothing
+about whether core carries the body — it removed true findings, and
+`retro-push-sprint-ship-verification` is the recorded example. A verdict keyed on `adj_digest` is
+a human having **read the body**, and the digest is (entry blob + core target blob at theirs), so
+it is spent the moment either side moves. It cannot go stale into silence.
+
+**The level stays `WARN`.** Promoting to `ADJUDICATED` was the obvious remedy and it is wrong:
+`ADJUDICATED` blocks until adjudicated, so it would convert 13 harmless rows into 13 first-contact
+blockers for every consumer with prose-headed extensions. `level` controls blocking and
+`subject_digest` controls keying, and this release stops treating them as one switch.
+
+**Fixture, and one of its arms is load-bearing.** `layer-title-join` gains four: the row
+publishes a digest; a recorded verdict takes the count **3 → 2** and leaves the others; **editing
+the entry re-arms the row with the verdict still on file** (the expiry — without it the other
+arms would be asserting an exemption for the path rather than a record of a reading); and a
+verdict for an unrelated digest changes nothing, so the match is on the digest and not on the
+register being non-empty.
+
+**The fixture was also under-seeded, and that is why the first run of these arms failed.** Its
+synthetic distribution never shipped `core/schemas/layer-adjudication-register.json`, so
+`ADJ_VERDICTS` resolved EMPTY and every register lookup missed — indistinguishable from "no
+verdict was recorded". The seed now copies the real schema rather than restating the enum, since
+a second copy of the vocabulary is exactly what the reader was written to avoid.
+
 ## [0.290.0] — 2026-08-07
 
 ### The title-match row told the operator to do something that stopped working, ten lines under the block that stopped it

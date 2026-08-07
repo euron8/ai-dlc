@@ -1246,8 +1246,31 @@ while IFS= read -r f; do
       if [ -n "$was_at_base" ]; then when="PRE-EXISTING"; extra="core carried it at base too, so this has been true for some number of releases and no number-keyed join could ever have said so"
       else when="NEW-THIS-PULL"; extra="core did NOT carry it at base — upstream ${BASE}..${THEIRS} added it, so this is an absorption landing on this pull"
       fi
+      # KEYED, SO THE READING CAN BE RECORDED AND CAN EXPIRE. v0.290.0 corrected this row's
+      # remedy text to say a register verdict clears it, and left the mechanism untouched --
+      # the code is not in ADJ_CODES, so nothing emitted a digest and NO CONFORMING RECORD
+      # COULD BE WRITTEN AT ALL. The reference consumer proved it by running
+      # `--adjudicated-codes` (EXTENSION-HOOK-DRIFT, EXTENSION-ANCHOR-DRIFT; this code absent),
+      # with the control that the mechanism does work -- HOOK-DRIFT is in the set and 18
+      # recorded verdicts took its count to zero. A corrected sentence in front of an inert
+      # mechanism is worse than the wrong sentence was: it reads as actionable.
+      #
+      # SUPPRESSING ON A REGISTER VERDICT IS NOT THE SUPPRESSION THIS ARM DELETED, and the
+      # difference is the whole reason this is safe. That one keyed on a declared `extends:`,
+      # which answers "which span do I augment" and says nothing about whether core now carries
+      # the body -- so it removed true findings. A verdict keyed on `adj_digest` is a human
+      # having READ the body, and the digest is (entry blob + core target blob at theirs), so
+      # it is spent the moment either side moves. It cannot go stale into silence.
+      #
+      # The level stays WARN. This row still blocks nothing; recording a verdict makes a
+      # considered entry stop being re-raised cold on every pull, which is the only thing the
+      # consumer was asking for.
+      tm_digest="$(adj_digest "$entry" "$hooks" 2>/dev/null || true)"
+      if [ -n "$tm_digest" ] && adj_lookup "$tm_digest"; then
+        continue
+      fi
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
-        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. Two dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record an adjudication for it in the layer register -- that is what clears this row, and it is the only thing that does. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
+        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. Two dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record it in ${ADJ_REGISTER#"$CONSUMER"/} with subject_digest ${tm_digest:-<unkeyable: entry or target unreadable>} and a verdict of $(printf '%s' "$ADJ_VERDICTS" | tr '\n' '|' | sed 's/|$//'), plus a reason -- that is what clears this row, and it is the only thing that does. The digest covers this entry AND the core file it hooks at ${THEIRS}, so the verdict is spent the next time either one moves; it is a record of a reading, not an exemption for the path. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
     done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
   fi
 

@@ -55,6 +55,15 @@ echo "layer-title-join:"
 mkdir -p "$DIST/core/skills/ai-dlc/steps" "$DIST/core/team-roles" "$CONS/.claude/skills/ai-dlc/extensions"
 git -C "$DIST" init -q 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&2; exit 2; }
 
+# THE ADJUDICATION VOCABULARY IS READ FROM THE SCHEMA AT THEIRS, so a synthetic dist that
+# omits it yields an EMPTY verdict set — and an empty set makes every register lookup miss,
+# which reads exactly like "no verdict was recorded". Part 6 below could not tell those apart.
+# Copy the REAL schema in rather than restating an enum here; a second copy of the vocabulary
+# is the thing the reader was written to avoid.
+mkdir -p "$DIST/core/schemas"
+cp "$HERE/../../schemas/layer-adjudication-register.json" "$DIST/core/schemas/" 2>/dev/null \
+  || { echo "FIXTURE ERROR: cannot seed layer-adjudication-register.json" >&2; exit 2; }
+
 cat > "$DIST/core/skills/ai-dlc/core-manifest.md" <<'MD'
 <!-- CORE_MANIFEST v1 -->
 machinery:
@@ -299,6 +308,68 @@ if grep -q "matches NO file" "$ROOT/err"; then
   bad "CONTROL: the healthy manifest also warned — the guard fires unconditionally and proves nothing"
 else
   ok "  and a manifest whose globs all resolve stays quiet"
+fi
+
+# =======================================================================================
+# Part 6: THE ROW IS KEYABLE, AND A RECORDED READING SILENCES IT UNTIL EITHER SIDE MOVES.
+#
+# v0.290.0 corrected this row's remedy to say a register verdict clears it and left the
+# mechanism inert: the code is not in ADJ_CODES, so no digest was published and no conforming
+# record could be written. A corrected sentence in front of an inert mechanism reads as
+# actionable, which is worse than the wrong sentence was.
+#
+# The suppression asserted here is NOT the one this arm deleted years ago. That one keyed on a
+# declared `extends:`, which says nothing about whether core carries the body, and it removed
+# true findings. This one keys on (entry blob + core target blob at theirs), which is a human
+# having read the body, and it expires when either side moves. Arm 6c is that expiry, and
+# without it 6b would be an exemption for the path rather than a record of a reading.
+# =======================================================================================
+REG="$CONS/_bmad-output/ai-dlc-update/layer-adjudication-register.jsonl"
+mkdir -p "$(dirname "$REG")"
+rerun() { bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null; }
+tm_rows() { printf '%s\n' "$1" | awk -F'\t' '$1=="EXTENSION-TITLE-MATCHES-CORE"' | grep -c . ; }
+
+BASE_ROWS="$(tm_rows "$OUT")"
+DIG="$(detail 'MATCH\.md$' EXTENSION-TITLE-MATCHES-CORE | grep -oE 'subject_digest [0-9a-f]{40}' | awk '{print $2}' | head -1)"
+
+# 6a. the row publishes a digest the operator can copy verbatim
+if [ -n "$DIG" ]; then
+  ok "the row publishes a subject_digest, so a conforming register record can be written at all"
+else
+  bad "the row publishes NO subject_digest — the remedy it prescribes is unwritable (the v0.290.0 defect)"
+fi
+
+if [ -z "$DIG" ] || [ "$BASE_ROWS" -lt 1 ]; then
+  bad "FIXTURE BROKEN: no keyed title-match row to record against (rows=$BASE_ROWS)"
+else
+  # 6b. a recorded verdict silences THAT row and no other
+  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"read the body; augments"}\n' "$DIG" > "$REG"
+  AFTER="$(rerun)"; A_ROWS="$(tm_rows "$AFTER")"
+  if [ "$A_ROWS" -eq $((BASE_ROWS - 1)) ]; then
+    ok "a recorded still-additive verdict silences exactly that row ($BASE_ROWS -> $A_ROWS), leaving the others"
+  else
+    bad "recording one verdict took the count $BASE_ROWS -> $A_ROWS; expected $((BASE_ROWS - 1))"
+  fi
+
+  # 6c. THE EXPIRY, and without it 6b is an exemption rather than a record. Move the entry;
+  #     the digest changes and the row must come back with the SAME register in place.
+  printf '\n<!-- entry edited after the verdict was recorded -->\n' >> "$CONS/.claude/skills/ai-dlc/extensions/MATCH.md"
+  MOVED="$(rerun)"; M_ROWS="$(tm_rows "$MOVED")"
+  if [ "$M_ROWS" -eq "$BASE_ROWS" ]; then
+    ok "editing the entry re-arms the row with the verdict still on file — the digest is spent, not an exemption for the path"
+  else
+    bad "after editing the entry the count is $M_ROWS, expected $BASE_ROWS — a stale verdict is silencing a changed body"
+  fi
+
+  # 6d. CONTROL: a register holding a verdict for a DIFFERENT digest silences nothing.
+  printf '{"clause":"LC-E19","entry":"x","subject_digest":"%s","verdict":"still-additive","recorded_utc":"2026-08-07T00:00:00Z","reason":"unrelated"}\n' \
+    "0000000000000000000000000000000000000000" > "$REG"
+  CTL="$(rerun)"; C_ROWS="$(tm_rows "$CTL")"
+  if [ "$C_ROWS" -eq "$BASE_ROWS" ]; then
+    ok "CONTROL: a verdict for an unrelated digest silences nothing — the match is on the digest, not on the register being non-empty"
+  else
+    bad "CONTROL: an unrelated verdict changed the count to $C_ROWS; the lookup is not keying on the digest"
+  fi
 fi
 
 echo ""
