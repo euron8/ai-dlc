@@ -70,8 +70,10 @@ graph session for it while item 10 is the critical path is churn. Take it when g
 open for another reason.
 
 **~~NEXT ACTION: item 15~~ / ~~10a + 10b~~ — BOTH DONE (v0.296.0 #405, v0.298.0 #408).
-NEXT ACTION IS ITEM 7's REMAINDER, the `validate-layer-entries.sh` sweep**, per the order
-table below. It is path-independent and it feeds 10c.
+~~NEXT ACTION IS ITEM 7's REMAINDER~~ — SWEPT, NEGATIVE, no release; **item 7 is CLOSED**.
+NEXT ACTION IS 10c**, per the order table below. Read §*What v0.298.0 shipped* first: 10c must move
+the SKILL.md pointer, the step-file prescriptions and the reader sites TOGETHER, and it empties
+`artifact-path-grammar.md`'s 24-entry migration ledger as it goes.
 
 **A GATE DEFECT WAS FOUND AND CLEARED IN BETWEEN, and it is worth knowing about because it will
 recur.** The 10a+10b push went red on `self-update-join-gate` — not from that work, but because
@@ -104,8 +106,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~4~~ | ~~F3, the parked branch~~ | **DONE** — shipped in the v0.289.0–v0.292.0 chain after two renumbers |
 | ~~4b~~ | ~~**15** — the consumer notification hook~~ | **DONE** — v0.296.0 (#405). See §*What v0.296.0 shipped* |
 | ~~5~~ | ~~**10a + 10b** — declare the path grammar, bind core to it~~ | **DONE** — v0.298.0 (#408), with v0.297.0 (#407) cut first to clear a gate defect the push exposed. See §*What v0.298.0 shipped* |
-| **6** | **7's remainder** — the `validate-layer-entries.sh` sweep | **← START HERE.** Path-independent, and it surfaces more reader sites for 10c |
-| 7 | **10c – 10e**, with **F4 folded into 10c** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
+| ~~6~~ | ~~**7's remainder** — the `validate-layer-entries.sh` sweep~~ | **DONE, and it found NOTHING — measured, with a control.** See §*What item 7's remaining sweep measured*. Item 7 is closed |
+| **7** | **10c – 10e**, with **F4 folded into 10c** | **← START HERE.** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
 | 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
 | 9 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
 | — | **12**, **13** | neither gates anything; take them when convenient |
@@ -206,10 +208,10 @@ before you write code.
    - **F4 `validate-ci-gates.sh` — RE-HOMED, do not ship it standalone.** It is a `docs/retro/**`
      reader-site fix and item 10c moves those paths, so it ships as part of 10c or it is written
      twice.
-   - **The unaudited lead: `validate-layer-entries.sh`** (1694 lines, five line-initial
-     extractors — the shape that produced the `validate-ac-falsifiability.sh:244` defect), then
-     `validate-gate-manifest.sh` and `audit-rule-files.sh`. Mechanical sweep, no mutants.
-     Path-independent, so it runs before 10c and feeds it.
+   - ~~**The unaudited lead: `validate-layer-entries.sh`**~~ **SWEPT 2026-08-07 — NEGATIVE, and
+     the lead's premise was wrong.** No release. See §*What item 7's remaining sweep measured*.
+     **Item 7 is now CLOSED**: F1/F2 shipped (v0.287.0), F3 shipped (v0.288.0), F4 is re-homed
+     into 10c, and the lead is refuted.
 8. **Triage graph's push-candidate ledger** — 123 `## PC-` entries, of which roughly 57 are
    upstream-facing and OPEN. Re-run each `verify:` receipt against the current core tree
    before proposing anything; several are documented as having gone blind, meaning the
@@ -759,6 +761,42 @@ v0.288.0's both-non-zero arm called that unattributable and deferred. A probe ca
 question without earning a usage error, which is why scoping the exemption to `2` was too narrow.
 
 **Expect this class again on any release that edits a script the consumer's pre-push invokes.**
+
+## What item 7's remaining sweep measured (NEGATIVE — the lead's premise was wrong)
+
+The lead read: *"`validate-layer-entries.sh` (1694 lines, five line-initial extractors — the shape
+that produced the `validate-ac-falsifiability.sh:244` defect), then `validate-gate-manifest.sh` and
+`audit-rule-files.sh`."* **The count was wrong and the shape is not there.** Measured 2026-08-07
+with one expression across every core validator, so the population is derived rather than guessed.
+
+```
+anchored extractors  (sed/grep/awk with a leading ^)
+  validate-layer-entries.sh                     13     <- the lead said five
+  validate-gate-manifest.sh                      0
+  audit-rule-files.sh                            0
+  control, same grep, same run: the sibling     13     <- the zero is not a false zero
+```
+
+**All 13 anchor against a grammar that genuinely IS line-initial**, which is the opposite of the
+`:244` defect. Markdown headings (`^#{2,4}`, `^\*\*`), YAML keys (`^contract_version:`, `^  - id:`,
+`^consumer_*_file:`), whole-value tests on a here-string (`^[0-9]+$`, `^[0-9a-f]{7,40}$`), a diff
+prefix (`^+`), a fence marker. **Not one extracts a citation token out of PROSE**, which is the
+only place a leading `^` can silently match nothing.
+
+**The one surviving prose-anchored extractor in core is `validate-ac-falsifiability.sh:244` itself,
+and it is already dispositioned — do not reopen it.** §*What v0.280.0 measured* records that the
+obvious fix was built as a probe and measured against the live sprint: **8 occurrences, 8 false
+positives**, all prose quoting the token inside repair-history sections. It was deliberately not
+shipped.
+
+**One NOTE, recorded as a note and not elevated.** `validate-gate-manifest.sh`'s final line is
+`PASS — both directions resolve.` and does not name how many resolved. That is the class v0.287.0
+fixed elsewhere — but this script already dies on `GATE_MANIFEST parsed zero rows`, dies on a
+missing `universal` row, and refuses an ambiguous manifest rather than picking one (*"Picking one
+would make this scan's PASS unattributable"*). A vacuous PASS is structurally unreachable, so the
+missing count is cosmetic.
+
+**No release. A measured absence with a control is the deliverable here**, and item 7 closes on it.
 
 ## Item 11 — the self-update gate compares two usage errors
 
