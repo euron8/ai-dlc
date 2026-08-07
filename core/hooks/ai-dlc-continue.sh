@@ -268,9 +268,35 @@ CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-adversarial-conver
 
 CYCLE_STATE=""; CYCLE_RC=0; CYCLE_PASS=""
 # --- LIVE-SERIES DERIVATION -- ONE definition; I81 asserts both hooks carry it verbatim ---
-# `sed -n 's/.../p'` PRINTS ONLY WHERE THE SUBSTITUTION SUCCEEDED, and that is the whole fix.
-# The previous form picked the newest glob match FIRST and stripped it SECOND, so a filename
-# the strip could not match produced a SERIES that was the entire filename. `--series
+# TWO HALVES. The first is the SCOPE, and it is what this hook could not have before
+# `artifact-path-grammar.md`: the sprint is DECLARED (`sprint-status.sh sprint-id`, the one
+# home for that answer) and the glob runs inside that sprint's own directory, so "which cycle
+# is live" is asked of one sprint's candidate set. It used to be asked of every series the
+# project had ever written -- measured on the reference consumer at 135 files spanning 56
+# series (s288..s301) in one never-pruned directory, where any touch on a long-converged
+# series redirected the guard. The reason it stood for so long is that there was no
+# naming-safe filter to add: series took the sprint as a filename SUFFIX
+# (`architecture-adversarial-s288-`) as often as a prefix, so an `s<N>-` filter would have
+# silently EXCLUDED real series -- a worse failure than the one it fixed. The directory slot
+# is what makes the scope expressible.
+#
+# NO CROSS-SPRINT FALLBACK, deliberately. When the sprint does not resolve, the glob is
+# pointed at a name that cannot exist and the caller logs the state as unadjudicable. A
+# fallback to the unscoped glob would restore the exact defect this replaces, and would do it
+# precisely when the pipeline's declared state is already broken.
+#
+# AND THE SCOPE CARRIES ITS OWN CONTROL, because `sprint-id` NEVER FAILS. With no envelope
+# on disk it returns 1 -- route.md Step 6 rule 2, greenfield, and correct there. So an
+# unreadable envelope does not produce an empty SPRINT_N; it produces a CONFIDENT WRONG ONE,
+# and the guard would then scope to `s1/`, find nothing, adjudicate nothing and allow the
+# dispatch in silence. That is the defect class this release removes, arriving through the
+# repair. `SERIES_UNSCOPED` is the same control Check 6 uses: a sprint directory that does
+# not exist is only suspicious when OTHER sprint directories do. A project before its first
+# adversarial pass has none, and stays quiet.
+#
+# The second half is the FILTER. `sed -n 's/.../p'` PRINTS ONLY WHERE THE SUBSTITUTION
+# SUCCEEDED. The previous form picked the newest glob match FIRST and stripped it SECOND, so a
+# filename the strip could not match produced a SERIES that was the entire filename. `--series
 # <whole-filename>` then resolved exactly ONE file, and a one-pass series can never be STALLED
 # or DIVERGENT -- so the stall guard adjudicated nothing, reported a clean state, and allowed
 # the dispatch. Measured on the reference consumer: 6 of 135 files matching this glob defeat
@@ -279,14 +305,31 @@ CYCLE_STATE=""; CYCLE_RC=0; CYCLE_PASS=""
 # the state unrepresentable -- a non-conforming name is never a candidate and the newest
 # CONFORMING series wins -- rather than detecting it afterwards, which is a second thing to
 # keep in sync. `head -1` closing the pipe early is safe here: no hook sets `pipefail`.
-#
-# STILL NOT FIXED, and deliberately: the pick is by mtime across EVERY adversarial series in
-# this one directory (56 series, s288 through s301, on the reference consumer), so a touch on
-# a long-converged series redirects the guard. There is no naming-safe scope to add -- series
-# names take the sprint as a SUFFIX as well as a prefix (`architecture-adversarial-s288-`,
-# `prd-adversarial-sprint-150.md`), so an `s<N>-` filter would silently exclude real series.
-# Retro archiving is the live mitigation and it is partial (29 archived, 135 still in reach).
-SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | sed -E -n 's/(pass|p)[0-9]+\.md$//p' | head -1)"
+# >>> I81 LIVE-SERIES BLOCK >>>
+SPRINT_N="$("${PROJECT_DIR}/scripts/ai-dlc/sprint-status.sh" sprint-id --root "${PROJECT_DIR}" 2>/dev/null | head -1)"
+case "$SPRINT_N" in ''|*[!0-9]*) SPRINT_N="" ;; esac
+SPRINT_DIR="${ART_DIR}/s${SPRINT_N:-.no-sprint-resolved}"
+SERIES_UNSCOPED=0
+[ -d "$SPRINT_DIR" ] || for _d in "${ART_DIR}"/s[0-9]*/; do [ -d "$_d" ] && SERIES_UNSCOPED=1; done
+SERIES="$(ls -t "${SPRINT_DIR}"/*adversarial*p*.md 2>/dev/null | sed -E -n 's/(pass|p)[0-9]+\.md$//p' | head -1)"
+# <<< I81 LIVE-SERIES BLOCK <<<
+if [ -z "$SPRINT_N" ] || [ "$SERIES_UNSCOPED" -eq 1 ]; then
+  # LOUD, not silent. A reader that finds nothing and says nothing is the defect this whole
+  # release removes; retro's Rule 25(c) audit reads this log.
+  {
+    echo "## ${TIMESTAMP} -- ADVERSARIAL_STATE_UNADJUDICABLE"
+    echo "- Session: ${SESSION_ID}"
+    echo "- The live adversarial series could not be scoped to a sprint directory."
+    echo "  sprint-id resolved: '${SPRINT_N:-<none>}'"
+    echo "  scope directory:    ${SPRINT_DIR} (absent, while other s<N>/ directories exist)"
+    echo "  The Rule 8 divergence/stall hard block is NOT armed for this turn."
+    echo "  sprint-id never fails -- with no envelope on disk it returns 1 (greenfield,"
+    echo "  route.md Step 6 rule 2), so the failure shape here is a CONFIDENT WRONG sprint,"
+    echo "  not an empty one. Fix the declared sprint; there is deliberately no fallback to"
+    echo "  an unscoped glob, which is the mtime-across-every-sprint defect this replaced."
+    echo ""
+  } >> "$LOG_FILE"
+fi
 if [ -n "$SERIES" ]; then
   if [ ! -f "$CONVERGENCE_VALIDATOR" ]; then
     # A partial install must not SILENTLY disable the hard block. That is the

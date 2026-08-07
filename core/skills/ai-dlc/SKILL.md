@@ -997,15 +997,19 @@ delivered draft). Build no detector for this; the lead's read of the
 expected path is the check (Rule 26: audit before adding mechanism).
 
 **Sprint-stamped drafts.** A per-sprint analyst draft is written to a
-sprint-stamped path — `s<N>-<base>.md`, where `<N>` is `sprint_id` from
-the pipeline snapshot's Sprint Context (resolved at `route.md` Step 6).
-This applies to the four per-sprint drafts: `s<N>-carry-over-evaluation.md`,
-`s<N>-discovery-context.md`, `s<N>-research-notes.md`,
-`s<N>-architecture-context.md`. It does NOT apply to the one-shot
-onboarding artifacts (`codebase-analysis.md`, `brownfield-inventory.md`,
-`doc-reconciliation.md`) — those are written once, are read by path
-downstream, and have no sprint key — nor to `bug-analysis.md`, which is
-bug-keyed rather than sprint-keyed.
+sprint-stamped path — `<area>/s<N>/<base>.md`, where `<N>` is `sprint_id`
+from the pipeline snapshot's Sprint Context (resolved at `route.md`
+Step 6). **The stamp is the DIRECTORY, not the basename.**
+`artifact-path-grammar.md` is the whole rule — the directory is the only
+sprint slot, and a basename carrying a sprint token is what forces a
+reader to search — and this is one application of it. This applies to the four
+per-sprint drafts: `carry-over-evaluation.md`, `discovery-context.md`,
+`research-notes.md`, `architecture-context.md`. It does NOT apply to the
+one-shot onboarding artifacts (`codebase-analysis.md`,
+`brownfield-inventory.md`, `doc-reconciliation.md`) — those are written
+once at the area root, are read by path downstream, and have no sprint
+key — nor to `bug-analysis.md`, which is bug-keyed rather than
+sprint-keyed.
 
 An unstamped write silently destroys the prior sprint's draft: these
 drafts have no reader in the pipeline and no archive pair, so an
@@ -1055,6 +1059,17 @@ sprint becomes larger than the context window, so reading it forces
 compaction and dominates cache-read. Living artifacts MUST stay
 current-state; historical and superseded content MUST move out of the
 read path.
+
+**Where an artifact LIVES is a separate rule, and it has one home.** The
+path grammar — the directory is the only sprint slot, `<area>/s<N>/`, and
+no basename may carry a sprint token — lives in
+`artifact-path-grammar.md` alongside this file. READ AND FOLLOW it before
+writing a pipeline artifact to a path this rulebook does not already
+name. A basename carrying the sprint forces every reader to SEARCH for
+the current one, and search means mtime: that is how both pipeline hooks
+came to pick the live adversarial series by modification time across 56
+sprints in one directory, and how Check 6 verified two closed sprints
+against zero story files.
 
 **(a) Current-state live, history archive — move, never delete.** The
 live artifact holds what is *currently true*, consolidated. Superseded

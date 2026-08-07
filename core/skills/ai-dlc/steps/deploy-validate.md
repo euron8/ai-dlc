@@ -23,7 +23,7 @@ to implementation.
 sprint-overall PR was assembled incrementally throughout the sprint,
 not post-hoc at sprint-close. Audit: carry-over candidates and
 partial-close accounting MUST appear in
-`_bmad-output/implementation-artifacts/sprint-<N>-*.md` files
+`_bmad-output/implementation-artifacts/s<N>/*.md` files
 committed during the sprint, not added in the final sprint-overall
 commit. Final sprint-overall PR assembly MUST be merge + diff check
 only, not composition. This rule applies UNIVERSALLY to all

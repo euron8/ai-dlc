@@ -69,11 +69,16 @@ consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, 
 graph session for it while item 10 is the critical path is churn. Take it when graph is next
 open for another reason.
 
-**~~NEXT ACTION: item 15~~ / ~~10a + 10b~~ — BOTH DONE (v0.296.0 #405, v0.298.0 #408).
-~~NEXT ACTION IS ITEM 7's REMAINDER~~ — SWEPT, NEGATIVE, no release; **item 7 is CLOSED**.
-NEXT ACTION IS 10c**, per the order table below. Read §*What v0.298.0 shipped* first: 10c must move
-the SKILL.md pointer, the step-file prescriptions and the reader sites TOGETHER, and it empties
-`artifact-path-grammar.md`'s 24-entry migration ledger as it goes.
+**~~NEXT ACTION: item 15~~ / ~~10a + 10b~~ / ~~item 7's remainder~~ / ~~10c~~ — ALL DONE.
+10c shipped as v0.299.0: the ledger is EMPTY, the readers compose, the `SKILL.md` pointer is live,
+and F4 shipped inside it. NEXT ACTION IS 10d**, per the order table below. Read
+§*What v0.299.0 shipped* first — it records two things 10d depends on and one new item it created.
+
+**10d IS THE ONE ITEM IN THIS PLAN THAT WRITES TO THE CONSUMER, and its window is now open and
+costly to leave open.** Core's readers expect the new shape as of v0.299.0, so between the pull and
+the migration a consumer's gate-time readers FAIL — loudly and by construction, which is the
+designed behaviour, not a defect. graph is quiescent, so **the operator should pull and run the
+migration in the same sitting.**
 
 **A GATE DEFECT WAS FOUND AND CLEARED IN BETWEEN, and it is worth knowing about because it will
 recur.** The 10a+10b push went red on `self-update-join-gate` — not from that work, but because
@@ -107,9 +112,11 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~4b~~ | ~~**15** — the consumer notification hook~~ | **DONE** — v0.296.0 (#405). See §*What v0.296.0 shipped* |
 | ~~5~~ | ~~**10a + 10b** — declare the path grammar, bind core to it~~ | **DONE** — v0.298.0 (#408), with v0.297.0 (#407) cut first to clear a gate defect the push exposed. See §*What v0.298.0 shipped* |
 | ~~6~~ | ~~**7's remainder** — the `validate-layer-entries.sh` sweep~~ | **DONE, and it found NOTHING — measured, with a control.** See §*What item 7's remaining sweep measured*. Item 7 is closed |
-| **7** | **10c – 10e**, with **F4 folded into 10c** | **← START HERE.** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
-| 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
-| 9 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
+| ~~7~~ | ~~**10c**, with **F4** folded in~~ | **DONE** — v0.299.0. Ledger emptied, readers composed, pointer landed, F4 shipped. See §*What v0.299.0 shipped* |
+| **8** | **10d – 10e** | **← START HERE.** 10d is the consumer migration the OPERATOR runs; 10e is the pre-push validator on real filenames, and it ships AFTER 10d has run once |
+| 9 | **16** — move `planning-artifacts/stories/` under `s<N>/` | split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
+| 10 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to |
+| 11 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
 | — | **12**, **13** | neither gates anything; take them when convenient |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
 
@@ -312,6 +319,26 @@ before you write code.
       is the inert-mechanism class this repo keeps shipping.
     - Reference implementation to copy from: `~/.claude/hooks/notify-input-needed.sh`.
 
+16. **Move `_bmad-output/planning-artifacts/stories/` under `s<N>/`.** SPLIT OUT OF 10c on
+    2026-08-07, deliberately, and it is the one area the artifact path grammar does not yet
+    govern. The directory is syntactically conforming — it carries no sprint token — and the
+    sprint hides in the FILENAMES (`story-<N>-<M>-slug.md`, `story-S<N>-<M>-slug.md`), which
+    is precisely the limit §*What a syntactic check CANNOT catch* documents in
+    `artifact-path-grammar.md`. **Check 6's SILENCE was fixed in v0.299.0; its PATH was not.**
+
+    Why it is not a folding-in: `stories_dir` is a **SCHEMA declaration**
+    (`core/schemas/sprint-status.json:101`), and **three shipped readers restate the literal
+    rather than resolving it** — `validate-mandatory-rules.sh:249`, `validate-locked-anchor.sh`
+    and `ai-dlc-protect.sh` (plus `install.sh`). Making it sprint-scoped means making it a
+    template the schema owns and every reader resolves, which is an I-invariant's worth of work
+    on its own. And `resolve_story_file()` (`sprint-status.sh:608`) resolves a story FILE from
+    the entry KEY (`story-S299-1`); under the grammar the file is `story-<M>-<slug>.md` and the
+    sprint comes from the directory, so Check 5's whole join has to be re-derived rather than
+    re-pointed.
+
+    Do it AFTER 10d/10e or the consumer migrates twice. **Re-measure the story corpus before
+    writing anything** — the 786/73/139 split in §*Item 10* is from 2026-08-07.
+
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
 
@@ -347,7 +374,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.298.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.299.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -371,6 +398,7 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.299.0 | #TBD | **plan item 10c, with item 7's F4 folded in.** Readers compose the path from the declared sprint instead of searching it; core's 24 excused prescriptions are rewritten and the migration ledger is **EMPTY**, with both I82 arms re-proven by guarded mutant because an empty join reads like a dead one. Both hooks scope the live-series glob to `s<sprint-id>/` — 135 files across 56 sprints down to one sprint's candidate set — and I81 now binds the whole derivation as a marked BLOCK asserting two properties. Check 6's zero-verification PASS is closed with the corpus count as its control. F4: `validate-ci-gates.sh` reports its inventory on a vacuum and adjudicates via the alias table with no CI directory at all. `I82` added to the `OK:` line. |
 | v0.298.0 | #408 | **plan item 10a + 10b.** `artifact-path-grammar.md` declares one convention — the directory is the only sprint slot — and `validate-enforcement-map.sh` **I82** binds core's own prescriptions to it. Measured first: **65 prescribed paths, 41 conforming, 24 carrying a sprint token outside the reserved slot**, in 4 positions and 5 spellings. The 24 are a migration ledger bound in BOTH directions, so it can only shrink. `contract_version` does NOT move; the precedent was measured. No path moves. |
 | v0.297.0 | #407 | The self-update gate stops reading AGREEMENT as an unattributable failure. Found by the 10a+10b push: a machinery-only pull touching `audit-rule-files.sh` deferred, because bare it defaults to `--fail-on=any` while the hook passes `--fail-on=deterministic` — it fails a threshold the hook never applies, identically on both sides. v0.288.0's fix, one layer up, scoped to `2` alone. Re-measured over **seven** scripts, not five. |
 | v0.296.0 | #405 | **plan item 15.** `core/hooks/ai-dlc-notify.sh` on the `Notification` event — the mechanism behind the plan-shape rule's ping requirement. Platforms decided rather than left open: macOS `osascript`, Linux `notify-send`, anything else no channel, and `install.sh` PROBES and REPORTS which, so the no-channel case is not the inert-mechanism class. New fixture `notify-hook-channel` (9 assertions, 4 mutants, 1 control) shims `$PATH` so the Linux and no-channel branches are driven by the shipping code on a macOS suite. |
@@ -735,6 +763,44 @@ is the main thing 10c must respect.
 **A syntactic check over prescriptions cannot see a sprint a PLACEHOLDER conceals.**
 `story-<id>-<slug>.md` passes rule 2 — and it is the exact form Check 6's glob broke on. 10e, which
 reads real filenames, is where that is caught. Do not read I82 as covering it.
+
+## What v0.299.0 shipped (item 10c, with F4 folded in)
+
+**The ledger is EMPTY and both of I82's arms were re-proven against it**, because an empty join
+reads exactly like a dead one. Guarded mutants: reintroducing one retired spelling fires the
+violation arm, one obsolete ledger row fires the stale arm, the unmutated tree is green. Control
+that the extractor still sees anything: **74 distinct prescribed paths**.
+
+**THREE THINGS A LATER SESSION MUST NOT RE-DERIVE.**
+
+1. **`sprint-status.sh sprint-id` NEVER FAILS.** With no envelope on disk it returns `1` —
+   greenfield, `route.md` Step 6 rule 2, and correct there. So any reader that composes a path from
+   it gets a CONFIDENT WRONG sprint rather than an empty one when state is broken, and scoping to
+   `s1/` finds nothing, adjudicates nothing and passes in silence. Both hooks therefore carry the
+   same control Check 6 uses: a missing sprint directory is only suspicious when OTHER sprint
+   directories exist. **Any future reader built on `sprint-id` needs that control too.**
+2. **`sprint-status.sh` resolves its root from the PROCESS CWD unless given `--root`.** The hooks
+   shipped without it and returned `1` against a tree declaring `7`. Found by a fixture, not by
+   reading — `divergence-hard-block`'s new no-envelope arm.
+3. **`s*` is now a declared spelling of the reserved slot**, exempt only as a whole component. A
+   cross-sprint read is not a currency question. `s*-retro.md` is still rejected.
+
+**F4 is closed, and the fix was an ORDERING, not new logic.** `validate-ci-gates.sh` returned
+`78 VACUOUS` before reading a retro, so the "runs it locally" path `retro.md` documents produced no
+inventory. The alias-table path that serves a locally-enforced project already existed and touches
+no workflow directory — it was simply unreachable behind a check that returned first. The vacuum now
+reports every gate it could not check, and vacuous means no surface AND no alias table.
+
+**ONE ITEM WAS SPLIT OUT rather than done badly — item 16, below.**
+`planning-artifacts/stories/` did NOT move. It is syntactically conforming (the directory carries no
+sprint token) and the sprint hides in the FILENAMES, which is exactly the limit the grammar
+documents. Check 6's *silence* was fixed here; its *path* was not.
+
+**v0.298.0's "what each becomes" table claimed 10c had no design work left and was INCOMPLETE.** It
+had no row for either log at `_bmad-output/` root — those sit under a scan root but under no area,
+so no row could be composed without a decision nobody had made. The table now carries the rule
+(every rotation archive lands at `implementation-artifacts/s<N>/<basename>-archive.md`) and 10d
+works from it.
 
 ## What v0.297.0 measured (a gate defect the 10a+10b push exposed)
 

@@ -401,7 +401,27 @@ with open(artifact_path, "r", encoding="utf-8") as fh:
     content = fh.read()
 
 blocks = BLOCK_RE.findall(content)
-is_retro = bool(re.search(r"docs/retro/sprint-\d+\.md$", artifact_path))
+# THE RETRO CLASSIFIER, AND IT IS THE KIND OF LINE THAT GOES QUIET WITHOUT A SOUND.
+# Three requirements below fire only when it is true (party-mode block required, a
+# `transcript_path` field required, at least one party-mode block present), so a regex
+# that stops matching does not FAIL anything -- it silently exempts every retro. The
+# same-run probes underneath assert the pattern still recognises a retro path and still
+# refuses a non-retro one; without them this line's silence is indistinguishable from a
+# tree that happens to contain no retros.
+RETRO_PATH_RE = re.compile(r"docs/retro/s\d+/retro\.md$")
+if not RETRO_PATH_RE.search("docs/retro/s301/retro.md"):
+    sys.stderr.write(
+        "validate-provenance-block: FAIL — the retro-path classifier does not recognise "
+        "docs/retro/s301/retro.md. Every retro-only requirement below would be skipped "
+        "and this run would exit 0 having checked none of them.\n")
+    sys.exit(2)
+if RETRO_PATH_RE.search("docs/retro/s301/retro-draft.md"):
+    sys.stderr.write(
+        "validate-provenance-block: FAIL — the retro-path classifier matched "
+        "docs/retro/s301/retro-draft.md, which is not the retro document. A classifier "
+        "that cannot tell them apart imposes the retro contract on drafts.\n")
+    sys.exit(2)
+is_retro = bool(RETRO_PATH_RE.search(artifact_path))
 
 # MALFORMED != ABSENT, and they must never share an exit code.
 #

@@ -222,7 +222,7 @@ artifact path under review, the canonical output path, the pass number, and — 
 PRIOR pass's findings and the repair record, because pass 2+ reviews the REPAIR, not the document
 again.
 
-It writes findings to `_bmad-output/planning-artifacts/s<N>-<artifact>-adversarial-p<M>.md`
+It writes findings to `_bmad-output/planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block with `skill: ai-dlc-adversary-review`,
 `mode: subagent`, the `tool_use_id` of THIS Agent dispatch, `artifact` + `artifact_sha`, the four
 `findings_*` counts, and the `verdict:`. Filename numbering is load-bearing: Check 24 orders the
@@ -251,7 +251,7 @@ PreToolUse hook denies every `Agent` / `Skill` / `Task` dispatch until step 3 ha
 3. **RESOLVE.** *A repair edits the artifact to close findings on UNCHANGED scope. A resolution
    changes WHAT IS UNDER REVIEW.* The LEAD writes the record — not the adversary (it would only be
    echoing the lead's claim) and not the remediator (it authors repairs, which is the thing being
-   stopped). Write it to `_bmad-output/planning-artifacts/s<N>-<artifact>-resolution-p<M>.md`
+   stopped). Write it to `_bmad-output/planning-artifacts/s<N>/<artifact>-resolution-p<M>.md`
    (`<M>` = the pass being resolved). **This write is permitted while paused**; it is the one write
    the pause is waiting for.
 
@@ -355,7 +355,7 @@ document and parallel editors contradict each other. Agent tool, bound to
 standing role-contract Read line). It takes that pass's WHOLE finding set.
 
 It writes the repaired artifact in place plus a **repair record** at
-`_bmad-output/planning-artifacts/s<N>-<artifact>-repair-p<M>.md` (`<M>` = the pass repaired):
+`_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` (`<M>` = the pass repaired):
 per finding, the disposition, the edit site, and the command that derives every factual claim
 the repair asserts, with its output. The next adversarial pass verifies against that record.
 

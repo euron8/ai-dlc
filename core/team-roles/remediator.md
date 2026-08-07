@@ -25,7 +25,7 @@ source; do not infer either value from anywhere else.
 2. **Repair every CRITICAL and MAJOR.** MINOR/NIT at your discretion; say which you
    skipped and why.
 3. **Write the repaired artifact in place**, and write a **repair record** to
-   `_bmad-output/planning-artifacts/s<N>-<artifact>-repair-p<M>.md` (`<M>` = the pass
+   `_bmad-output/planning-artifacts/s<N>/<artifact>-repair-p<M>.md` (`<M>` = the pass
    you are repairing). The record is your deliverable and the next pass verifies against
    it. Rule 20: the file IS the deliverable.
 4. **Return `{artifact_path, repair_record_path, repaired, escalated}`** — counts, not prose.

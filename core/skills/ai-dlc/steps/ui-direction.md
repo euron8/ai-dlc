@@ -21,7 +21,7 @@ Rule 28 they are delegated. Spawn a `ux` subagent (Agent tool, bound to
 scoped to sections 1, 2, and 4: it generates the ASCII wireframes and copy
 for each new UI surface, confirms each introduced CSS class against the
 stylesheet, runs the accessibility/device check, writes the result to
-`_bmad-output/planning-artifacts/ui-mockups-sprint-N.md`, and returns only
+`_bmad-output/planning-artifacts/s<N>/ui-mockups.md`, and returns only
 `{artifact_path, summary, decisions}`. The lead resumes at section 3
 (present) and section 5 (proceed). **Sections 3 and 5 stay inline** — reading
 the artifact, presenting it non-blocking to the human, and routing to
@@ -65,7 +65,7 @@ implementation. Interrupt at any point if you want to steer the direction."
 
 ### 4. Document Mockups
 
-Write mockups to `_bmad-output/planning-artifacts/ui-mockups-sprint-N.md`
+Write mockups to `_bmad-output/planning-artifacts/s<N>/ui-mockups.md`
 for reference during implementation and production validation.
 
 ### 5. Proceed (Do Not Wait)

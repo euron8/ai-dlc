@@ -431,7 +431,7 @@ checks:
           ordering (mtime picks the SERIES; the validator picks the PASS)
     resume_contract:
       states: [CONTINUE, CONVERGED, RESOLVED, DIVERGENT, STALLED]
-      record: planning-artifacts/s<N>-<artifact>-resolution-p<M>.md
+      record: planning-artifacts/s<N>/<artifact>-resolution-p<M>.md
       kinds: [REVERT_REPAIR, CHANGE_APPROACH, CUT_SCOPE, RESTART_CYCLE]
       why_no_freeze: a hard block means CRITICALs rose in text a previous pass had
         already reviewed — text that is ALREADY frozen. Freezing it again removes

@@ -135,7 +135,7 @@ rm -rf "$W"
 # pipeline against itself and the only way out is to switch off a hook.
 W="$(bash "$HERE/seed.sh" divergent)"
 drive_stop "$W" >/dev/null                      # raises the pause flag
-REC="$W/_bmad-output/planning-artifacts/s1-brief-resolution-p2.md"
+REC="$W/_bmad-output/planning-artifacts/s7/brief-resolution-p2.md"
 OUT="$(drive_ack "$W" Write "$REC")"
 if denied "$OUT"; then bad "the resolution record was DENIED while paused — the pause denies its own exit"
 else ok "the resolution record is WRITEABLE while paused (the one write the pause waits for)"; fi
@@ -222,9 +222,9 @@ drive_stop "$W" >/dev/null
 [ -f "$W/_bmad-output/.adversarial-stop" ] || bad "no .adversarial-stop written on a STOP"
 # the operator resolves it; the state must self-heal on the next turn
 bash "$HERE/seed.sh" divergent-resolved >/dev/null 2>&1 || true
-cat > "$W/_bmad-output/planning-artifacts/s1-brief-resolution-p2.md" <<'EOF'
+cat > "$W/_bmad-output/planning-artifacts/s7/brief-resolution-p2.md" <<'EOF'
 <!-- ADVERSARIAL_RESOLUTION v1
-resolves: s1-brief-adversarial-p2.md
+resolves: brief-adversarial-p2.md
 resolution: REVERT_REPAIR
 adjudicated_by: operator
 artifact: product-brief.md
@@ -259,6 +259,34 @@ if grep -q 'ADVERSARIAL_STATE_UNADJUDICABLE' "$W/_bmad-output/pipeline-continuat
   ok "...but says so in the flow log — a disarmed guard must never be silent"
 else
   bad "the hard block was disarmed SILENTLY. A check that cannot fire reads exactly like one that passed."
+fi
+rm -rf "$W"
+
+# =============================================================================
+# 8. NO DECLARED SPRINT — the other way this guard can go quiet.
+# =============================================================================
+# Both hooks now scope the live-series glob to `s<sprint-id>/`, and the sprint comes from
+# `sprint-status.sh sprint-id`. That buys the scope the old mtime pick could not have, and
+# it buys a NEW way to resolve nothing: an unreadable envelope. The tempting repair is a
+# fallback to the unscoped glob, which is exactly the defect the scope replaced — so there
+# is deliberately none, and the state is reported instead.
+#
+# THE SERIES IS INTACT IN EVERY OTHER RESPECT. Only the envelope is removed, so a hook that
+# quietly widened its glob would still find the DIVERGENT series and still deny. An arm that
+# also deleted the pass files could not tell "found nothing because unscoped-and-empty" from
+# "found nothing because correctly scoped".
+W="$(bash "$HERE/seed.sh" divergent)"
+rm -f "$W/_bmad-output/implementation-artifacts/sprint-status.yaml" \
+      "$W/_bmad-output/planning-artifacts/sprint-status.yaml"
+[ -f "$W/_bmad-output/planning-artifacts/s7/brief-adversarial-p2.md" ] \
+  || bad "FIXTURE BROKEN: the pass series was removed along with the envelope; this arm proves nothing"
+OUT="$(drive_ack "$W" Agent)"
+if denied "$OUT"; then bad "an unresolvable sprint DENIED the dispatch — hooks must fail OPEN on their own breakage"
+else ok "an unresolvable sprint fails OPEN (as a missing validator does)"; fi
+if grep -q 'ADVERSARIAL_STATE_UNADJUDICABLE' "$W/_bmad-output/pipeline-continuation-log.md" 2>/dev/null; then
+  ok "...and says so in the flow log — no silent fallback to an unscoped glob"
+else
+  bad "no sprint resolved, nothing scoped, nothing logged: the guard went quiet exactly where the old mtime pick did"
 fi
 rm -rf "$W"
 

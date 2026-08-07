@@ -55,14 +55,17 @@ Some obligations are not a fixed command. If your retro check is
 audited, and no literal in this file can supply it.
 
     class: retro
-    paths: ^docs/retro/sprint-[0-9]+\.md$
-    capture: sprint ^docs/retro/sprint-([0-9]+)\.md$
+    paths: ^docs/retro/s[0-9]+/retro\.md$
+    capture: sprint ^docs/retro/s([0-9]+)/retro\.md$
     validator: scripts/ai-dlc/validate-mandatory-rules.sh {sprint}
 
+The sprint is read from the DIRECTORY, not the basename — `artifact-path-grammar.md` makes the
+directory the only sprint slot, so `s([0-9]+)/` is where the group goes.
+
 The regex is matched against the commit's **changed paths** and **must be anchored `^...$`**,
-because it extracts rather than tests — `sprint-([0-9]+)` against `docs/retro/sprint-168.md`
-would yield `docs/retro/168.md`. Group 1 is the value; `{sprint}` in any `validator:` line of
-the same class is replaced by it.
+because it extracts rather than tests — an unanchored `s([0-9]+)/` against
+`docs/retro/s168/retro.md` would yield `docs/retro/retro.md`. Group 1 is the value; `{sprint}`
+in any `validator:` line of the same class is replaced by it.
 
 **Exactly one value, or it is a finding.** If no changed path matches, the class's stated
 obligation cannot be run against that commit and the audit says so. If two changed paths yield
@@ -94,7 +97,7 @@ Delete it or adapt it — it is prose here, not part of the block above, and the
 read it.
 
     class: retro
-    paths: ^docs/retro/sprint-[0-9]+\.md$
+    paths: ^docs/retro/s[0-9]+/retro\.md$
     validator: scripts/ai-dlc/validate-retro-evidence.sh
     validator: scripts/ai-dlc/validate-provenance-block.sh docs/retro/
 

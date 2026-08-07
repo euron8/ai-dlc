@@ -229,7 +229,7 @@ if [ "${1:-}" = "--audit-trunk" ]; then
             case "$_cre" in
               '^'*'$') ;;
               *)
-                decl_err "class '$_cls' capture '$_cnm' has regex '$_cre', which is not anchored ^...\$. paths: TESTS a path and may match part of one; a capture EXTRACTS from it, and an unanchored regex leaves the unmatched remainder in the value -- 'sprint-([0-9]+)' against docs/retro/sprint-168.md yields docs/retro/168.md, silently. Anchor it so the regex describes the whole path."
+                decl_err "class '$_cls' capture '$_cnm' has regex '$_cre', which is not anchored ^...\$. paths: TESTS a path and may match part of one; a capture EXTRACTS from it, and an unanchored regex leaves the unmatched remainder in the value -- 's([0-9]+)/' against docs/retro/s168/retro.md yields docs/retro/retro.md, silently. Anchor it so the regex describes the whole path."
                 continue
                 ;;
             esac

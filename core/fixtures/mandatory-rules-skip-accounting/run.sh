@@ -99,6 +99,14 @@ PRIOR_SHA="$(git rev-parse HEAD)"
 
 # The sprint's web/** change, so Check 5 has something to verify once its base resolves.
 mkdir -p web/src; echo "console.log('ui')" > web/src/app.js
+# Check 6 needs a story corpus for THIS sprint. Without one it now reports SKIP rather than
+# the zero-verification PASS it used to print, which would move the verified floor in every
+# arm below and make this fixture's subject -- the skip accounting for checks 2, 4 and 5 --
+# unreadable through a sixth skip it is not testing. Seeding a conforming story keeps the
+# arms isolated AND drives Check 6's live path instead of its skip path.
+mkdir -p _bmad-output/planning-artifacts/stories
+printf '# Story 900-1\n\n## Dev Agent Record\n\ndev (delegated) implemented this.\n' \
+  > _bmad-output/planning-artifacts/stories/story-900-1-fixture.md
 git add -A && git commit -q -m "Sprint 900 web change"
 git checkout -q -b ai-dlc/retro/sprint-900
 

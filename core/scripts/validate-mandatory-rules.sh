@@ -342,11 +342,28 @@ echo "[Check 6] Dev Agent Record compliance (no lead self-execution without waiv
 ESCALATIONS_FILE="docs/escalations/pending.md"
 CHECK6_FAILURES=0
 
+# THE GLOB'S ZERO CARRIES A SAME-RUN CONTROL, and it is here because the zero was real.
+# Measured on the reference consumer: for sprints 298 and 299 this glob matched ZERO files,
+# the loop body never ran, CHECK6_FAILURES stayed 0 and the check printed PASS -- while 73
+# story files for those sprints sat in the same directory spelled `story-S<N>-` with a
+# capital S. Control on the same directory in the same read: `story-297-*` matched 11. Two
+# closed sprints had their Dev Agent Record compliance verified against nothing.
+#
+# The control is the corpus itself. A sprint with no stories in a directory that has none
+# at all is a project before its first story -- reported as a SKIP, not a pass. A sprint
+# with no stories in a directory that HAS them is this defect, and it fails.
+CHECK6_MATCHED=0
+CHECK6_CORPUS=0
+CHECK6_SKIPPED=0
 if [ -d "$STORIES_DIR" ]; then
+  for _s in "${STORIES_DIR}"/story-*.md; do
+    [ -f "$_s" ] && CHECK6_CORPUS=$((CHECK6_CORPUS + 1))
+  done
   for story_file in "${STORIES_DIR}/story-${SPRINT_N}-"*.md; do
     if [ ! -f "$story_file" ]; then
       continue
     fi
+    CHECK6_MATCHED=$((CHECK6_MATCHED + 1))
 
     # Extract story ID from filename (story-<n>-<slug>) — filename format
     story_basename=$(basename "$story_file" .md)
@@ -389,10 +406,22 @@ if [ -d "$STORIES_DIR" ]; then
       fi
     fi
   done
+else
+  CHECK6_SKIPPED=1
 fi
 
-if [ $CHECK6_FAILURES -eq 0 ]; then
-  echo "  CHECK 6: PASS"
+if [ "$CHECK6_SKIPPED" -eq 1 ]; then
+  echo "  CHECK 6: SKIP — no ${STORIES_DIR} directory"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 6"
+elif [ "$CHECK6_MATCHED" -eq 0 ] && [ "$CHECK6_CORPUS" -gt 0 ]; then
+  fail "Check6_GLOB_MATCHED_NOTHING" "no story file matches '${STORIES_DIR}/story-${SPRINT_N}-*.md', but ${CHECK6_CORPUS} story file(s) sit in that directory for other sprints. Check 6 would have verified NOTHING and printed PASS. This is the measured 298/299 defect: those stories are spelled 'story-S${SPRINT_N}-' with a capital S. Rename them to the derived form, or the sprint's Dev Agent Record compliance is unverified."
+  CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
+  echo "  CHECK 6: FAIL — 0 of ${CHECK6_CORPUS} story file(s) matched this sprint"
+elif [ "$CHECK6_MATCHED" -eq 0 ]; then
+  echo "  CHECK 6: SKIP — the story corpus is empty (0 story files on disk)"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 6"
+elif [ $CHECK6_FAILURES -eq 0 ]; then
+  echo "  CHECK 6: PASS — ${CHECK6_MATCHED} story file(s) verified"
 else
   echo "  CHECK 6: FAIL"
 fi

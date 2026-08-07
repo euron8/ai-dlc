@@ -268,14 +268,16 @@ stories with clear acceptance criteria. Four things MUST be supplied explicitly;
 none of them can be left to the skill's own resolution:
 
 - **The PRD path, named.** Its discovery globs are `{planning_artifacts}/*prd*.md`
-  and `{planning_artifacts}/*prd*/index.md` — non-recursive, and in a mature
-  consumer the first matches dozens of files (`prd.md`,
-  `s<N>-prd-adversarial-p1.md`, `review-consolidation-prd.md`, …) with no
-  disambiguation rule. Name the file.
+  and `{planning_artifacts}/*prd*/index.md` — non-recursive, with no
+  disambiguation rule when more than one matches. The per-sprint working files
+  that used to collide with it now sit under `s<N>/`, out of a non-recursive
+  glob's reach, but the durable area root still holds several PRD-named files
+  (`prd.md`, `prd-history.md`, `review-consolidation-prd.md`, …) and the skill
+  would still pick among them arbitrarily. Name the file.
 - **A sprint-scoped output path.** Its default is a single fixed
   `{planning_artifacts}/epics.md`, and no step checks whether that file exists.
   Writing there overwrites the previous sprint's epics silently. Direct it to
-  `{planning_artifacts}/s<N>-epics/epics.md`.
+  `{planning_artifacts}/s<N>/epics/epics.md`.
 - **The spec package and the architecture spine, by path.** Its step 1 lists
   `architecture.md` as a required prerequisite and mines it for additional
   requirements; `SPEC.md` and the spine appear in none of its search patterns, so a
@@ -505,7 +507,7 @@ strategy. Steps 1a–2 below otherwise proceed.
    HALT on zero" contract costs nothing and buys a cynical sweep. Do NOT convert
    this to the native review; the native review exists for cycles that must reach
    zero. Write its findings under a path that does NOT share the stories series'
-   `s<N>-stories-adversarial-p` prefix — Check 24 globs that prefix, and a
+   `s<N>/stories-adversarial-p` prefix — Check 24 globs that prefix, and a
    verdict-less one-shot swept into the series fails rung A.
    **When done, immediately proceed to Commit Planning Artifacts:**
 

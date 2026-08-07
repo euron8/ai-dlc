@@ -12,8 +12,8 @@
 # current blob.
 #
 # Markers (per Story 137-5 AC2, minus the commit-subject marker -- see below):
-#   1. docs/retro/sprint-<N>.md cites the canonical transcript path
-#      _bmad-output/party-mode-transcripts/sprint-<N>-retro.md
+#   1. docs/retro/s<N>/retro.md cites the canonical transcript path
+#      _bmad-output/party-mode-transcripts/s<N>/retro.md
 #   2. Transcript file exists at canonical path AND is committed to the
 #      retro branch (verified via `git ls-tree`)
 #   3. Transcript file is non-empty
@@ -51,7 +51,7 @@
 # Transcript SHA citation sub-check (Sprint 138 Story 138-3 / Item 326 A.3,
 # per LR-S138-21):
 #   4a. retro doc citation has @<sha> suffix form
-#       (path like _bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>)
+#       (path like _bmad-output/party-mode-transcripts/s<N>/retro.md@<sha>)
 #   4b. `git cat-file -p <sha>:<path>` successfully reads the transcript at
 #       the cited commit
 #   4c. Blob at cited SHA matches `git show HEAD:<path>` byte-for-byte
@@ -176,8 +176,8 @@ assert MIN_CHARS >= FLOOR_MIN_CHARS, "MIN_CHARS below floor guard"
 assert MIN_PERSONAS >= FLOOR_MIN_PERSONAS, "MIN_PERSONAS below floor guard"
 assert MIN_PHASES >= FLOOR_MIN_PHASES, "MIN_PHASES below floor guard"
 
-retro_doc = f"docs/retro/sprint-{sprint_n}.md"
-transcript_path = f"_bmad-output/party-mode-transcripts/sprint-{sprint_n}-retro.md"
+retro_doc = f"docs/retro/s{sprint_n}/retro.md"
+transcript_path = f"_bmad-output/party-mode-transcripts/s{sprint_n}/retro.md"
 
 # ---- Resolve merge-base <retro-branch> main --------------------------------
 # Audit locator only. Nothing branches on it since the commit-subject marker was removed
@@ -212,8 +212,14 @@ try:
                     )
                     if sha_match:
                         citation_sha = sha_match.group(1)
+    retro_doc_present = True
 except FileNotFoundError:
+    # DISTINCT FROM "present but does not cite". Both used to report CITATION_MISSING,
+    # and after the path grammar moved this file the two are the failures an operator
+    # most needs told apart: an unmigrated tree has no file at all, and "does not cite"
+    # sends them looking for a missing line in a file that is not there.
     citation_line = None
+    retro_doc_present = False
 
 # ---- Marker 2: transcript file committed to retro branch -------------------
 ls = subprocess.run(
@@ -337,10 +343,19 @@ if transcript_text:
 # ---- Aggregate pass/fail ---------------------------------------------------
 failures = []
 if citation_line is None:
-    failures.append(
-        ("CITATION_MISSING",
-         f"{retro_doc} does not cite {transcript_path}")
-    )
+    if not retro_doc_present:
+        failures.append(
+            ("RETRO_DOC_MISSING",
+             f"{retro_doc} does not exist. The retro document is composed from the "
+             f"declared sprint, never searched for; a tree that has not been migrated "
+             f"to the artifact path grammar still has it at docs/retro/sprint-"
+             f"{sprint_n}.md.")
+        )
+    else:
+        failures.append(
+            ("CITATION_MISSING",
+             f"{retro_doc} does not cite {transcript_path}")
+        )
 if not transcript_tracked:
     failures.append(
         ("TRANSCRIPT_MISSING",
