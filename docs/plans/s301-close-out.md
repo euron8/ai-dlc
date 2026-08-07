@@ -95,7 +95,15 @@ pause flag        _bmad-output/pipeline-paused.flag  PRESENT
 1. Run `sprint-status.sh close` **first**, then `roll`. `roll` exits 3 while the prior sprint is
    not `done`.
 2. Let the script regenerate the snapshot. **Do not hand-author it.**
-3. **Do not cut the s302 branch yet.** That is commit 3's job.
+3. **Do not cut an s302 branch. Not now, not in commit 3, not at all.** Creating it is the
+   PIPELINE's job — `route.md`'s branch-strategy step runs `git checkout -b` at s302 kickoff,
+   from `main`. Three reasons this close-out must not pre-empt it, any one of them sufficient:
+   **(a)** the branch name is `ai-dlc/<variant>/<2-4 words derived from the user's request>`,
+   and the s302 request does not exist yet, so the name is not derivable here; **(b)** the
+   two-hop ai-dlc pull lands BETWEEN this close-out and s302 kickoff and must land on `main` —
+   an s302 branch sitting checked out is how the pull lands somewhere else and recreates the
+   stale-`main` problem commit 3 exists to end; **(c)** `sprint-status.sh roll` touches no git
+   at all (verified: zero `git` invocations in it), so nothing in the envelope needs a branch.
 4. Write `closure_evidence` prose stating: s301 is **abandoned, not completed**; where it
    stalled; that it re-runs as s302; and — **restate, do not cite** — s300's reasoning for
    leaving `LR-S299-0..11` undispositioned. s302 is the **third** sprint carrying that same
@@ -128,5 +136,8 @@ grep '"sprint": *301' gate-metrics.jsonl                     0   (control: total
 find _bmad-output -name '*s301*' -not -path '*/archive/*'    0   (control: the same find WITH archive still returns 99)
 ```
 
-**Then, and only then: cut s302 from `main`.** After that, the operator runs the two-hop
-ai-dlc pull — graph is at `0.274.0` against the distribution's `0.288.0` — before s302 begins.
+**Then stop, and stay on `main`.** Do not create an s302 branch — see commit 2 step 3. The next
+thing that happens is the operator's two-hop ai-dlc pull (graph is at `0.274.0` against the
+distribution's `0.288.0`), which lands on `main`. s302's branch is cut by the pipeline itself,
+from `main`, when s302 is actually kicked off — which is what makes landing this close-out worth
+doing: the pipeline's own `git checkout -b` finally gets a current base.

@@ -33,7 +33,9 @@ numbers are NOT transferable.
 1. **Operator: read §*The prompt* and paste it into the graph session.** Nothing in this file
    is run from the distribution.
 2. **The close-out MUST reach `main`** — commit 3. `main` is 143 commits behind the sprint
-   branch and carries neither of s300's close-out commits. s302 is cut from `main`, not HEAD.
+   branch and carries neither of s300's close-out commits. **The close-out does NOT cut an s302
+   branch** — `route.md`'s branch-strategy step does that at kickoff, from `main`. s300's
+   close-out cut its successor itself, and that was a one-off, not a rule.
 3. **After the close-out lands, run the two-hop pull** (§*pull graph in TWO hops* in the parent
    plan). Hop 2 carries six rulebook files and wants exactly the sprint boundary this close-out
    creates.
@@ -93,7 +95,8 @@ Six were recorded in the parent plan and re-verified here; the seventh is new.
    ```
 
    Both of s300's close-out commits, and every artifact archived by them, exist only on this
-   branch. **Land the close-out on `main` and cut s302 from `main`.** The merge is a clean
+   branch. **Land the close-out on `main`; the PIPELINE cuts s302 from `main` later.** Landing
+   it is what makes the pipeline's own `git checkout -b` get a current base. The merge is a clean
    fast-forward, and because the archive commits `git mv` artifacts into `archive/s30N-*`
    before it, what reaches `main` is the archived state — not two sprints of live clutter.
    Verified: `archive/s300-*` already exists on the branch.
