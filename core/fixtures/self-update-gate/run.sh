@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Exercise reconcile/self-update-gate.sh.
 #
-# THE DIFFERENTIAL IS THE WHOLE MECHANISM. `gate-defer` and `gate-broken` both exit non-zero on the
-# incoming side. A gate reading the incoming exit code alone calls them the same thing — and calling
-# a pre-existing failure a "defer" strands the machinery slice for a reason unrelated to the pull.
-# Only comparing against the consumer's CURRENT copy separates a new finding from an old one, and
-# the mutation below removes exactly that comparison.
+# THE DIFFERENTIAL IS THE WHOLE MECHANISM. `gate-defer`, `gate-broken` and `gate-agree` all exit
+# non-zero on the incoming side. A gate reading the incoming exit code alone calls them the same
+# thing — and calling a pre-existing failure a "defer" strands the machinery slice for a reason
+# unrelated to the pull. Only comparing against the consumer's CURRENT copy separates a new finding
+# from an old one, and the mutation below removes exactly that comparison.
+#
+# The three then split by what the comparison SAYS: 0 -> 1 is a new finding (DEFER), 1 -> 1 is
+# agreement and therefore no signal at all (OK, v0.297.0), 1 -> 2 is a real change nobody can
+# attribute (UNDECIDED).
 set -u
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -55,7 +59,13 @@ echo
 
 row gate-pass.sh   SELF-UPDATE-OK        "incoming passes against the consumer tree, so installing it cannot block the push"
 row gate-defer.sh  SELF-UPDATE-DEFER     "current 0, incoming 1 — a genuinely new finding on pre-existing state"
-row gate-broken.sh SELF-UPDATE-UNDECIDED "BOTH exit non-zero, so the failure is not attributable to this pull"
+# v0.297.0: agreement is not a differential signal, whatever the code. Both sides exit 1 here, so
+# the incoming version fails nowhere the current one passes. Falsified by MUTANT C in
+# self-update-join-gate, which narrows the arm back to 2-and-2 and watches 1,1 defer again.
+row gate-broken.sh SELF-UPDATE-OK        "both exit 1 — equal codes carry no differential, and this bare probe cannot pass what the pre-push passes"
+# ...and DISAGREEING non-zero codes are the only remaining route to UNDECIDED. Without this row
+# that verdict would have no subject at all.
+row gate-agree.sh  SELF-UPDATE-UNDECIDED "current 1, incoming 2 — two non-zero codes that DISAGREE, so the change is real but unattributable"
 
 # The gating set comes from the HOOK, not from the changed-path list. not-invoked.sh changed AND its
 # incoming version exits 1, so a gate deriving the set from the diff would emit a spurious defer.
@@ -83,9 +93,14 @@ else
 fi
 
 # --- MUTATION: drop the differential, read the incoming exit code alone --------------
-# gate-broken then reads as a DEFER, which is the false positive that strands a machinery slice for
-# a pre-existing failure. It must ALSO leave gate-defer's real verdict intact, or the mutant is
-# entangled and proves nothing about which half did the work.
+# gate-agree then reads as a DEFER, which is the false positive that strands a machinery slice for
+# a failure nobody can attribute. It must ALSO leave gate-defer's real verdict intact, or the mutant
+# is entangled and proves nothing about which half did the work.
+#
+# THE SUBJECT MOVED IN v0.297.0, from gate-broken to gate-agree, and the reason is that gate-broken
+# is no longer reachable by this mutation: 1-and-1 now settles on the equality arm ABOVE the
+# differential, so dropping the differential cannot move it. Aiming a mutant at a case the mutation
+# can no longer reach is how a kill becomes a coincidence.
 MUT="$(dirname "$DIST")/mut-nodiff"
 rm -rf "$MUT"; mkdir -p "$MUT"
 sed 's/^  elif \[ "$rc_cur" -eq 0 \]; then$/  elif true; then/' "$GATE" > "$MUT/gate.sh"
@@ -95,13 +110,13 @@ if cmp -s "$GATE" "$MUT/gate.sh"; then
   printf '  FAIL  %-16s the mutation matched nothing, so the UNDECIDED assertion is unproven\n' "mutation"
 else
   m="$(bash "$MUT/gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1)"
-  m_broken="$(printf '%s\n' "$m" | awk -F'\t' '$2 == "gate-broken.sh" {print $1; exit}')"
+  m_broken="$(printf '%s\n' "$m" | awk -F'\t' '$2 == "gate-agree.sh" {print $1; exit}')"
   m_defer="$(printf '%s\n' "$m"  | awk -F'\t' '$2 == "gate-defer.sh"  {print $1; exit}')"
   if [ "$m_broken" = SELF-UPDATE-DEFER ] && [ "$m_defer" = SELF-UPDATE-DEFER ]; then
     printf '  ok    %-16s without the differential a pre-existing failure reads as a defer\n' "mutation"
   elif [ "$m_broken" != SELF-UPDATE-DEFER ]; then
     FAILURES=$((FAILURES + 1))
-    printf '  FAIL  %-16s mutant still classified gate-broken as %s, so the differential assertion is vacuous\n' "mutation" "${m_broken:-<none>}"
+    printf '  FAIL  %-16s mutant still classified gate-agree as %s, so the differential assertion is vacuous\n' "mutation" "${m_broken:-<none>}"
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-16s mutant also changed gate-defer to %s, so it is entangled\n' "mutation" "${m_defer:-<none>}"
@@ -112,7 +127,7 @@ fi
 # would score as a kill above.
 CTL="$(dirname "$DIST")/ctl"; rm -rf "$CTL"; mkdir -p "$CTL"; cp "$GATE" "$CTL/gate.sh"
 ASSERTIONS=$((ASSERTIONS + 1))
-c_broken="$(bash "$CTL/gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 | awk -F'\t' '$2 == "gate-broken.sh" {print $1; exit}')"
+c_broken="$(bash "$CTL/gate.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>&1 | awk -F'\t' '$2 == "gate-agree.sh" {print $1; exit}')"
 if [ "$c_broken" = SELF-UPDATE-UNDECIDED ]; then
   printf '  ok    %-16s unmutated copy reproduces UNDECIDED (harness is sound)\n' "mutation-control"
 else

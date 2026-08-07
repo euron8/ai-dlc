@@ -7,7 +7,8 @@
 #
 #   gate-pass.sh    changed base->theirs; incoming exits 0            -> SELF-UPDATE-OK
 #   gate-defer.sh   changed base->theirs; current 0, incoming 1       -> SELF-UPDATE-DEFER
-#   gate-broken.sh  changed base->theirs; BOTH versions exit 1        -> SELF-UPDATE-UNDECIDED
+#   gate-broken.sh  changed base->theirs; BOTH versions exit 1        -> SELF-UPDATE-OK
+#   gate-agree.sh   changed base->theirs; current 1, incoming 2       -> SELF-UPDATE-UNDECIDED
 #
 # And two controls that must produce no gating row at all:
 #
@@ -18,6 +19,12 @@
 # gate that read the incoming exit code alone would call them the same thing, and calling a
 # pre-existing failure a defer strands the machinery slice for a reason that has nothing to do with
 # the pull. Only the differential against the consumer's current copy separates them.
+#
+# `gate-agree.sh` ARRIVED IN v0.297.0 AND IT IS WHAT KEEPS UNDECIDED TESTABLE. That release made
+# AGREEMENT on any exit code a non-signal -- the probe is bare and cannot pass what the pre-push
+# passes, so a shared non-zero says the probe asked the wrong question. `gate-broken` (1 and 1) is
+# therefore OK now, and the only remaining route to UNDECIDED is two non-zero codes that DISAGREE.
+# Without this script that verdict would have no subject and its arm would pass by finding nothing.
 #
 # Usage: seed.sh -> prints "<dist> <base> <theirs> <consumer>" on one line.
 set -eu
@@ -34,6 +41,7 @@ git -C "$DIST" config user.name seed
 printf '#!/bin/sh\nexit 0\n'                      > "$DIST/core/scripts/gate-pass.sh"
 printf '#!/bin/sh\nexit 0\n'                      > "$DIST/core/scripts/gate-defer.sh"
 printf '#!/bin/sh\nexit 1\n'                      > "$DIST/core/scripts/gate-broken.sh"
+printf '#!/bin/sh\nexit 1\n'                      > "$DIST/core/scripts/gate-agree.sh"
 printf '#!/bin/sh\nexit 0\n'                      > "$DIST/core/scripts/not-invoked.sh"
 printf '#!/bin/sh\nexit 0\n'                      > "$DIST/core/scripts/unchanged.sh"
 printf '0.100.0\n'                                > "$DIST/VERSION"
@@ -45,6 +53,7 @@ BASE="$(git -C "$DIST" rev-parse HEAD)"
 printf '#!/bin/sh\n# reworded, still passes\nexit 0\n' > "$DIST/core/scripts/gate-pass.sh"
 printf '#!/bin/sh\n# the new check finds something\nexit 1\n' > "$DIST/core/scripts/gate-defer.sh"
 printf '#!/bin/sh\n# still broken, differently\nexit 1\n' > "$DIST/core/scripts/gate-broken.sh"
+printf '#!/bin/sh\n# now refuses its own invocation\nexit 2\n' > "$DIST/core/scripts/gate-agree.sh"
 printf '#!/bin/sh\n# changed but nobody runs it\nexit 1\n' > "$DIST/core/scripts/not-invoked.sh"
 printf '0.101.0\n'                                > "$DIST/VERSION"
 git -C "$DIST" add -A
@@ -57,6 +66,7 @@ THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 printf '#!/bin/sh\nexit 0\n' > "$CONS/scripts/ai-dlc/gate-pass.sh"
 printf '#!/bin/sh\nexit 0\n' > "$CONS/scripts/ai-dlc/gate-defer.sh"
 printf '#!/bin/sh\nexit 1\n' > "$CONS/scripts/ai-dlc/gate-broken.sh"
+printf '#!/bin/sh\nexit 1\n' > "$CONS/scripts/ai-dlc/gate-agree.sh"
 printf '#!/bin/sh\nexit 0\n' > "$CONS/scripts/ai-dlc/not-invoked.sh"
 printf '#!/bin/sh\nexit 0\n' > "$CONS/scripts/ai-dlc/unchanged.sh"
 chmod +x "$CONS/scripts/ai-dlc"/*.sh
@@ -70,6 +80,7 @@ set -uo pipefail
 bash scripts/ai-dlc/gate-pass.sh
 bash scripts/ai-dlc/gate-defer.sh
 bash scripts/ai-dlc/gate-broken.sh
+bash scripts/ai-dlc/gate-agree.sh
 bash scripts/ai-dlc/unchanged.sh
 HOOK
 chmod +x "$CONS/.githooks/pre-push"

@@ -34,6 +34,83 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.297.0] — 2026-08-07
+
+### The self-update gate stops reading AGREEMENT as an unattributable failure
+
+Found by a machinery-only pull that touched `audit-rule-files.sh` and deferred. v0.288.0 fixed the
+same class one layer up and scoped its fix too narrowly.
+
+The gate probes each gating script **bare — no arguments, no stdin — because it cannot know what
+arguments the hook passes**, then compares the consumer's current copy against the incoming one.
+v0.288.0 exempted agreement at exit **2** alone, on the ground that 2 is this codebase's declared
+token for a fumbled invocation and the bare probe IS the fumbled caller. That reasoning was right;
+the scope was too narrow, because **a probe can ask the wrong question without earning a usage
+error.**
+
+Re-measured against a consumer built by running `install.sh` into an empty tree, over every script
+that consumer's pre-push actually invokes — **seven, not the five v0.288.0 had**:
+
+```
+script                           bare rc   how the pre-push invokes it
+validate-audit-anchors.sh              2   --trunk-push, with refs on stdin
+validate-provenance-block.sh           2   --strays
+audit-rule-files.sh                    1   --fail-on=deterministic
+validate-layer-entries.sh              0   bare
+validate-compact-window.sh             0
+validate-fixture-drivability.sh        0
+sync-taught-schema.sh                  0
+```
+
+**Three of seven take arguments the probe cannot pass, and the third is the case the 2-and-2 scope
+could not reach.** `audit-rule-files.sh` bare defaults to `--fail-on=any` while the hook passes
+`--fail-on=deterministic`, so it exits 1 while printing `tier-1 findings: 0` — **it fails a
+threshold the hook never applies**, identically on both sides. The old both-non-zero arm called
+that an unattributable failure and deferred, folding the machinery slice into the operator-gated
+apply for no rulebook reason. The cost `pull graph in TWO hops` exists to avoid, arriving through a
+**different default** rather than through a usage error.
+
+**The rule is now equality, not a list of blessed codes.** This gate asks exactly one question —
+does the incoming version fail where the current one passes — and two runs returning the same code
+answer it with "no". Reading more into an equal pair requires knowing WHY each side failed, which
+an exit code cannot supply.
+
+**What keeps the widening from removing the gate is unchanged**, and it is asserted rather than
+argued. The full matrix, driven directly through a purpose-built dist and consumer whose changed
+script is a stub returning the exit code under test:
+
+```
+cur,new   verdict                what it means
+0,1       SELF-UPDATE-DEFER      the case the gate exists for
+0,2       SELF-UPDATE-DEFER      a version that NEWLY refuses its own invocation is a change
+2,1       SELF-UPDATE-UNDECIDED  two non-zero codes that DISAGREE are not agreement
+1,1       SELF-UPDATE-OK         changed here
+2,2       SELF-UPDATE-OK         unchanged from v0.288.0
+3,3       SELF-UPDATE-OK         the exemption is EQUALITY, not particular values
+1,0       SELF-UPDATE-OK         an incoming version that FIXES a failure cannot block a push
+```
+
+`3,3` is in there deliberately: it fails if the arm is ever rewritten as a set of blessed codes,
+which is how the next script with its own exit vocabulary would get stranded.
+
+**Two fixture repairs, and both are the recorded trap rather than tidying.**
+
+- **`self-update-join-gate` gained MUTANT C** — the arm narrowed back to `2 and 2` on a `cmp -s`
+  guarded copy — which must move `1,1` and **only** `1,1`. A mutant that also moved `2,2` would
+  mean the two arms are one assertion wearing two labels.
+- **Its rc-pair harness could not express `<cur>,0` at all, and that was invisible.** The gating set
+  is *invoked AND changed in `BASE..THEIRS`*, and the harness's BASE ships `exit 0` — so the pair
+  `1,0` wrote a file byte-identical to BASE, the script fell out of the changed set, the gate
+  emitted nothing, and the arm read an empty verdict rather than a result. Every pair now carries a
+  unique marker line, so every pair is a real change.
+- **`self-update-gate`'s mutation had to be re-aimed, and the reason is the trap.** It drops the
+  differential and watches a verdict move; its old subject `gate-broken` (1 and 1) is **no longer
+  reachable by that mutation**, because 1-and-1 now settles on the equality arm ABOVE the
+  differential. Aiming a mutant at a case the mutation can no longer reach is how a kill becomes a
+  coincidence. New seed script `gate-agree.sh` (current 1, incoming 2) carries both the UNDECIDED
+  verdict and the mutant — without it, UNDECIDED would have had no subject and its arm would have
+  passed by finding nothing.
+
 ## [0.296.0] — 2026-08-07
 
 ### The consumer gets a desktop alert when the session is waiting on it

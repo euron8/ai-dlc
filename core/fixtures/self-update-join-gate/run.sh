@@ -272,30 +272,73 @@ printf 'scripts/ai-dlc/validate-probe.sh\n' > "$RCD/consumer/.githooks/pre-push"
 # rcpair <cur-rc> <new-rc> -> the gate's verdict token for validate-probe.sh
 rcpair() {
   printf 'exit %s\n' "$1" > "$RCD/consumer/scripts/ai-dlc/validate-probe.sh"
-  printf 'exit %s\n' "$2" > "$RCD/dist/core/scripts/validate-probe.sh"
+  # THE MARKER IS LOAD-BEARING. The gating set is `invoked AND changed in BASE..THEIRS`, and
+  # BASE ships `exit 0`. Without it, the pair `<cur> 0` writes a file byte-identical to BASE,
+  # the script is not in the range's changed set, the gate emits nothing for it, and the arm
+  # reads as an empty verdict rather than as a result. Every pair must be a real change.
+  printf '# pair %s-%s\nexit %s\n' "$1" "$2" "$2" > "$RCD/dist/core/scripts/validate-probe.sh"
   ( cd "$RCD/dist" && git add -A && git commit -q -m "new $2" --allow-empty ) >/dev/null 2>&1
   local theirs; theirs="$( cd "$RCD/dist" && git rev-parse HEAD )"
-  bash "$GATE" "$RCD/dist" "$RC_BASE" "$theirs" "$RCD/consumer" 2>&1 \
+  bash "${3:-$GATE}" "$RCD/dist" "$RC_BASE" "$theirs" "$RCD/consumer" 2>&1 \
     | grep -oE 'SELF-UPDATE-(OK|DEFER|UNDECIDED)[[:space:]]+validate-probe\.sh' | head -1 \
     | awk '{print $1}'
 }
 
 RC_22="$(rcpair 2 2)"; RC_01="$(rcpair 0 1)"; RC_02="$(rcpair 0 2)"; RC_11="$(rcpair 1 1)"
-if [ -z "$RC_22$RC_01$RC_02$RC_11" ]; then
-  bad "rc-pair harness produced no verdicts at all — the table below would be four silent passes"
+RC_33="$(rcpair 3 3)"; RC_21="$(rcpair 2 1)"; RC_10="$(rcpair 1 0)"
+if [ -z "$RC_22$RC_01$RC_02$RC_11$RC_33$RC_21$RC_10" ]; then
+  bad "rc-pair harness produced no verdicts at all — the table below would be seven silent passes"
 else
   [ "$RC_22" = "SELF-UPDATE-OK" ] \
-    && ok "rc 2,2 (both refuse the bare probe) is OK — a usage error on both sides is not a differential signal, and deferring stranded every machinery pull touching one of the three scripts that exit 2 bare" \
+    && ok "rc 2,2 (both refuse the bare probe) is OK — a usage error on both sides is not a differential signal; two of the seven scripts the pre-push invokes exit 2 bare" \
     || bad "rc 2,2 gave [$RC_22], expected SELF-UPDATE-OK — the three usage-error scripts still strand the machinery slice"
   [ "$RC_01" = "SELF-UPDATE-DEFER" ] \
     && ok "rc 0,1 still DEFERS — an incoming version that newly fails against this tree is the case the gate exists for, and the 2,2 arm did not swallow it" \
     || bad "rc 0,1 gave [$RC_01], expected SELF-UPDATE-DEFER — the fix REMOVED the gate"
   [ "$RC_02" = "SELF-UPDATE-DEFER" ] \
-    && ok "rc 0,2 still DEFERS — a version that NEWLY refuses its own invocation changed what the hook runs, so agreement-at-2 is scoped to BOTH sides and not to either" \
+    && ok "rc 0,2 still DEFERS — a version that NEWLY refuses its own invocation changed what the hook runs, so the exemption is scoped to BOTH sides agreeing and not to either side alone" \
     || bad "rc 0,2 gave [$RC_02], expected SELF-UPDATE-DEFER — the arm keyed on one side, so a newly-broken invocation reads as a no-op"
-  [ "$RC_11" = "SELF-UPDATE-UNDECIDED" ] \
-    && ok "rc 1,1 is still UNDECIDED — a genuine pre-existing failure remains unattributable, which is a different fact from a probe that asked nothing" \
-    || bad "rc 1,1 gave [$RC_11], expected SELF-UPDATE-UNDECIDED"
+  # 1,1 CHANGED VERDICT IN v0.297.0 AND THE REASON IS MEASURED, NOT PREFERRED. It used to read
+  # as "a genuine pre-existing failure, unattributable, defer". `audit-rule-files.sh` is the
+  # counter-example: bare it defaults to `--fail-on=any` while the pre-push passes
+  # `--fail-on=deterministic`, so it exits 1 while printing `tier-1 findings: 0` — failing a
+  # threshold the hook never applies, identically on both sides. Agreement carries no
+  # differential information whatever the code; only DISAGREEMENT does.
+  [ "$RC_11" = "SELF-UPDATE-OK" ] \
+    && ok "rc 1,1 is OK — equal codes are not a differential signal, and deferring on them stranded every pull touching a script whose bare default differs from the hook's flag" \
+    || bad "rc 1,1 gave [$RC_11], expected SELF-UPDATE-OK — a pull touching audit-rule-files.sh still folds the machinery slice into the gated apply"
+  # Equality, not a whitelist of codes. If the arm were written as a set of blessed exit codes
+  # this would fail, and that is the point of testing a code no script in the tree returns.
+  [ "$RC_33" = "SELF-UPDATE-OK" ] \
+    && ok "rc 3,3 is OK — the exemption is EQUALITY, not a list of blessed codes" \
+    || bad "rc 3,3 gave [$RC_33], expected SELF-UPDATE-OK — the arm is keyed on particular values, so the next script with its own exit vocabulary strands again"
+  # THE ARMS THAT KEEP THE WIDENING FROM REMOVING THE GATE. Both sides non-zero but DIFFERENT is
+  # still a disagreement, and a disagreement is the only thing this gate can read.
+  [ "$RC_21" = "SELF-UPDATE-UNDECIDED" ] \
+    && ok "rc 2,1 still defers — two non-zero codes that DISAGREE are not agreement, so widening to equality did not swallow the both-non-zero arm" \
+    || bad "rc 2,1 gave [$RC_21], expected SELF-UPDATE-UNDECIDED — the widening reaches unequal pairs and the gate is gone"
+  [ "$RC_10" = "SELF-UPDATE-OK" ] \
+    && ok "rc 1,0 is OK — an incoming version that FIXES a pre-existing failure cannot block the push" \
+    || bad "rc 1,0 gave [$RC_10], expected SELF-UPDATE-OK"
+
+  # MUTANT C — the equality arm narrowed back to v0.288.0's `2 and 2`. A copy, cmp -s guarded,
+  # driven through the same rc-pair harness. It must move 1,1 and ONLY 1,1: 2,2 was already
+  # covered by the narrow form, so a mutant that moved both would mean the two arms are one
+  # assertion wearing two labels.
+  GATE_C="$WORK/gate-narrow.sh"
+  sed 's|^  if \[ "\$rc_cur" -eq "\$rc_new" \]; then|  if [ "$rc_cur" -eq 2 ] \&\& [ "$rc_new" -eq 2 ]; then|' "$GATE" > "$GATE_C"
+  if cmp -s "$GATE" "$GATE_C"; then
+    bad "FIXTURE STALE: could not build MUTANT C — the equality arm's condition was reworded, so the widening is asserted by nothing"
+  elif ! bash -n "$GATE_C" 2>/dev/null; then
+    bad "MUTANT C is not a valid program — its silence would have scored as a kill"
+  else
+    C_11="$(rcpair 1 1 "$GATE_C")"; C_22="$(rcpair 2 2 "$GATE_C")"
+    if [ "$C_11" = "SELF-UPDATE-UNDECIDED" ] && [ "$C_22" = "SELF-UPDATE-OK" ]; then
+      ok "MUTANT C killed — narrowed back to 2-and-2, rc 1,1 defers again while 2,2 does not move: the widening is what the 1,1 arm tests"
+    else
+      bad "MUTANT C moved the wrong set — 1,1 gave [$C_11] (expected SELF-UPDATE-UNDECIDED) and 2,2 gave [$C_22] (expected SELF-UPDATE-OK). Either the 1,1 arm is vacuous or it is entangled with the 2,2 arm."
+    fi
+  fi
 fi
 
 echo
