@@ -141,7 +141,50 @@ read `artifact-path-grammar` as covering it.
 | core's own prescriptions | `validate-enforcement-map.sh` **I82** — every artifact path core prescribes conforms or is in the ledger below | **LIVE** |
 | core's readers | readers compose a path from the declared sprint instead of searching | **LIVE** (10c) |
 | an authoring agent | `SKILL.md` Rule 25 points here — READ AND FOLLOW before writing an artifact to a path the rulebook does not already name | **LIVE** (10c) |
-| the consumer's tree | a migration, then a pre-push validator on real filenames | 10d / 10e, not yet shipped |
+| the consumer's tree | `scripts/ai-dlc/migrate-artifact-paths.sh` — dry run by default, `--apply` to move | **LIVE** (10d) |
+| the consumer's tree, ongoing | a pre-push validator reading real filenames | 10e, not yet shipped |
+
+### Running the migration
+
+**Dry run first, and read the refusals.** The script writes nothing without `--apply`.
+
+```
+scripts/ai-dlc/migrate-artifact-paths.sh              # plan + refusals, writes nothing
+scripts/ai-dlc/migrate-artifact-paths.sh --apply      # git mv, verified per file
+```
+
+It moves with `git mv` only, never deletes, and never edits a file's content. Each move is
+confirmed as *source absent AND destination readable AND sha256 identical to the pre-move
+source*, per file — a count of moved files cannot see whether the right bytes arrived, which is
+the only failure a migration really has. It aborts at the first failure, and a clean tree
+(required for `--apply`) makes `git checkout -- .` a complete undo of a partial run.
+
+**Rehearsed on a clone of the reference consumer before shipping**, 5145 tracked files scanned:
+
+```
+moves planned / applied / verified      2667  (git reported 2670 renames, 0 content changes,
+                                               tracked file count identical either side)
+REFUSED                                   48  45 ambiguous, 3 with no derivable area
+DEFERRED (stories/, see below)          1001
+destinations still carrying a token        0  <- the script's own self-check, both roads
+re-run after applying                   rc=3  <- nothing left to migrate; it is idempotent
+```
+
+**Three things it will not do, each reported rather than guessed:**
+
+- **A path naming two different sprints** (`story-S246-1-s11-...`, `gate-log-archive-s291-s292.md`)
+  is REFUSED. Which sprint owns it is not derivable, and picking one silently files an artifact
+  under the wrong sprint forever.
+- **A sprint directory directly under a scan root that is not an area** (`_bmad-output/s177/`) is
+  REFUSED. There is no area to anchor the slot to.
+- **`stories/` is DEFERRED WHOLESALE.** The sprint is spelled two ways there and one of them is a
+  bare number indistinguishable from the story index the grammar itself prescribes, so a run that
+  took the directory would move `story-S298-1-…` and leave `story-297-1-…` — splitting one
+  sprint's stories across two conventions. It moves in its own release.
+
+**Areas it had to INFER are reported too.** The grammar declared eight; the reference consumer
+holds sprint-tokened files in eight more. They migrate under a derived area and the report names
+each one, because inferring silently would leave this file wrong while the tree moved on.
 
 **The pointer landed with the release that emptied the ledger, and that ordering was the point.**
 A `SKILL.md` line saying "artifact paths follow this file" would, before 10c, have told an agent to
