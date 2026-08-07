@@ -106,7 +106,7 @@ corpus = []
 for p in ("CLAUDE.md", "docs/coding-conventions.md"):
     if os.path.isfile(p):
         corpus.append(p)
-for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "core-manifest.md"):
+for p in ("SKILL.md", "escalations.md", "rule-authoring.md", "artifact-path-grammar.md", "core-manifest.md"):
     fp = f"{SKILL}/{p}"
     if os.path.isfile(fp):
         corpus.append(fp)

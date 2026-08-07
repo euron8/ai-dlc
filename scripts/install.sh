@@ -182,7 +182,7 @@ cp "$SCRIPT_DIR/../core/skills/ai-dlc/steps/"*.md "$PROJECT_ROOT/.claude/skills/
 # probe install AND is claimed by core_manifest:, or carries a `<name>.not-shipped`
 # marker and is claimed by neither. The ship side is measured by RUNNING this loop, so
 # the list cannot drift from what it delivers.
-for doc in escalations.md rule-authoring.md core-manifest.md enforcement-map.yaml layer-contract.yaml; do
+for doc in escalations.md rule-authoring.md artifact-path-grammar.md core-manifest.md enforcement-map.yaml layer-contract.yaml; do
   [ -f "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" ] && \
     cp "$SCRIPT_DIR/../core/skills/ai-dlc/$doc" "$PROJECT_ROOT/.claude/skills/ai-dlc/"
 done
@@ -291,6 +291,23 @@ if [ ! -f "$PROJECT_ROOT/$STORYF_REL" ]; then
   echo "  $STORYF_REL scaffolded"
 else
   echo "  $STORYF_REL preserved (consumer-owned)"
+fi
+
+# The artifact kinds and areas rule 4 of artifact-path-grammar.md reads. Same rule as the four
+# above: scaffolded once, never overwritten, path read from the declaration rather than spelled
+# here so the installer and the reader cannot drift apart.
+ARTPATH_REL="$(sed -n 's/^consumer_artifact_paths_file:[[:space:]]*//p' \
+  "$SCRIPT_DIR/../core/skills/ai-dlc/layer-contract.yaml" | head -1 | sed 's/[[:space:]]*$//')"
+if [ -z "$ARTPATH_REL" ]; then
+  echo "  ERROR: layer-contract.yaml declares no 'consumer_artifact_paths_file:' — cannot scaffold the artifact kind set." >&2
+  exit 1
+fi
+mkdir -p "$PROJECT_ROOT/$(dirname "$ARTPATH_REL")"
+if [ ! -f "$PROJECT_ROOT/$ARTPATH_REL" ]; then
+  cp "$SCRIPT_DIR/../core/skills/ai-dlc/templates/artifact-paths.md" "$PROJECT_ROOT/$ARTPATH_REL"
+  echo "  $ARTPATH_REL scaffolded"
+else
+  echo "  $ARTPATH_REL preserved (consumer-owned)"
 fi
 
 # Copy setup skill (always overwrite with AI/DLC versions)

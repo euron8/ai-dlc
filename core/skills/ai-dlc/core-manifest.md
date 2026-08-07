@@ -130,6 +130,7 @@ core_manifest:
   - steps/*.md
   - escalations.md
   - rule-authoring.md
+  - artifact-path-grammar.md
   - templates/*.md
   - team-roles/*.md
   - hooks/ai-dlc-*.sh
@@ -267,6 +268,7 @@ rulebook:
   - steps/*.md
   - escalations.md
   - rule-authoring.md
+  - artifact-path-grammar.md
   - team-roles/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/

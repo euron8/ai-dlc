@@ -716,6 +716,31 @@ elif [ ! -f "$CONSUMER/$SF_REL" ]; then
   fi
 fi
 
+# The artifact kinds and areas rule 4 of artifact-path-grammar.md reads, on the same terms and
+# with the same scoping as the four blocks above.
+AP_REL="$(git -C "$DIST" show "${THEIRS}:${CW_LC}" 2>/dev/null \
+  | sed -n 's/^consumer_artifact_paths_file:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')"
+if ! git -C "$DIST" cat-file -e "${THEIRS}:${CW_LC}" 2>/dev/null; then
+  : # THEIRS predates the layer contract; nothing declared, nothing to scaffold.
+elif [ -z "$AP_REL" ]; then
+  : # THEIRS predates the artifact-paths declaration specifically. Rule 4 is silent in that
+    # state too, so a consumer updating across the boundary is not wedged by either.
+elif [ ! -f "$CONSUMER/$AP_REL" ]; then
+  ap_tpl="core/skills/ai-dlc/templates/$(basename "$AP_REL")"
+  ap_tmp="$CONSUMER/$AP_REL.incoming.$$"
+  mkdir -p "$(dirname "$CONSUMER/$AP_REL")" 2>/dev/null || true
+  if git -C "$DIST" show "${THEIRS}:${ap_tpl}" > "$ap_tmp" 2>/dev/null && [ -s "$ap_tmp" ]; then
+    mv "$ap_tmp" "$CONSUMER/$AP_REL"
+    say RESOLVED artifact-paths-scaffold "$AP_REL" \
+      "created from ${ap_tpl}; the contract declares this path and nothing was there. It is YOURS from here — no pull writes it again. Declare the artifact kinds and any extra area roots this project uses, or leave the literal 'none': until you do, rule 4 of artifact-path-grammar.md (kind comes from a declared closed set) has nothing to check against. The other four rules do not depend on it."
+  else
+    rm -f "$ap_tmp"
+    say DECISION artifact-paths-template-missing "$ap_tpl" \
+      "THEIRS declares '$AP_REL' but ships no template to scaffold it from, so the declared path would stay empty while the grammar says it is the kind set's home."
+    mech_fail=$((mech_fail+1))
+  fi
+fi
+
 # -----------------------------------------------------------------------------
 # EXEC-BIT AUDIT. Every file upstream ships as 100755 must be executable in the
 # consumer tree once this driver is done.

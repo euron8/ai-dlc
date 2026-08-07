@@ -55,6 +55,7 @@ core_manifest:
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
+  - core/skills/ai-dlc/artifact-path-grammar.md
   - core/skills/ai-dlc/templates/*.md
   - core/team-roles/*.md
   - core/hooks/ai-dlc-*.sh
@@ -192,6 +193,7 @@ rulebook:
   - core/skills/ai-dlc/steps/*.md
   - core/skills/ai-dlc/escalations.md
   - core/skills/ai-dlc/rule-authoring.md
+  - core/skills/ai-dlc/artifact-path-grammar.md
   - core/team-roles/*.md
 
 consumer_machinery_home: scripts/ai-dlc-local/
