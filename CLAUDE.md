@@ -122,6 +122,12 @@ it was handed off:
   after they had merged. A session told to FOLLOW the file would have redone them.
 - **Citations that resolve.** `path:line` is this repo's evidence form, and one that
   cannot be located at resume time is a promissory note against evidence.
+- **An operator-ping instruction.** The plan is executed by a session the operator cannot see,
+  where "still working" and "stopped, waiting on you" look identical from outside — so silence
+  is a stall found only by polling. Every plan tells its executor to ping on any question, on
+  any decision, and on completion (including an early stop). Measured across this repo's own
+  runs: every consumer-session stall ended with the operator asking rather than the session
+  reporting, including one sitting on a blocking question and one that had already FINISHED.
 
 None of that is about writing quality. Each one makes the file produce WRONG WORK when
 followed literally, which is the only thing a handoff is for.

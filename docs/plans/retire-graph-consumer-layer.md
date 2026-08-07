@@ -238,6 +238,15 @@ before you write code.
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
 
+
+**PING THE OPERATOR — on any question, on any decision, and when this plan completes.** The
+operator cannot see this session. From outside, "still working" and "stopped, waiting on you"
+look identical, so silence is not a neutral state: it is a stall the operator can only find by
+polling. Say something when you need a decision, when you hit a premise that does not hold, and
+when you are done — including when "done" means you stopped early. **This instruction is carried
+forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
+plan that omits it fails the build.**
+
 ## Where things stand
 
 **ai-dlc is at `0.287.0`, `contract_version` 16.** Thirteen releases shipped and merged to `main`:
