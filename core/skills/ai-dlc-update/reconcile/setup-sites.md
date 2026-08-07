@@ -134,6 +134,7 @@ core_manifest:
   - core/fixtures/fixture-drivability/**
   - core/fixtures/ledger-rotate/**
   - core/fixtures/mandatory-rules-clean-tree/**
+  - core/fixtures/mandatory-rules-skip-accounting/**
   - core/fixtures/mutation-red-replay/**
   - core/fixtures/trunk-audit-classes/**
   - core/fixtures/story-fields-derive/**

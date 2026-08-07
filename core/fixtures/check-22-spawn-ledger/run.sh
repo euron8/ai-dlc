@@ -66,6 +66,16 @@ chmod 000 "$WORK/unreadable.json" 2>/dev/null || :
 printf '{}\n' > "$WORK/unreadable.json"
 chmod 000 "$WORK/unreadable.json"
 
+# A READABLE settings.json that has simply lost its role block — the key renamed, or the block
+# dropped in a merge. `pin_key` returns empty for every role, so Rule 19(a) is compared zero
+# times, and the readability refusal above cannot see this because the file reads fine.
+cat > "$WORK/norolepins.json" <<'JSON'
+{
+  "aiDlcModels": { "opus": "claude-opus-5[1m]", "sonnet": "claude-sonnet-5" },
+  "aiDlcRolesXX": { "dev": { "model": "sonnet", "effort": "high" } }
+}
+JSON
+
 row() { # role bound requested cited readable name
   jq -nc --arg r "$1" --arg b "$2" --arg q "$3" --argjson c "$4" --argjson k "$5" --arg n "$6" \
     '{v:1, sprint:900, name:$n, role:$r,
@@ -129,17 +139,46 @@ battery() {
   bash "$S" --ledger "$WORK/clean.jsonl" --sprint 900 >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 2 ]; then t="$t A:usage"; else t="$t A:$rc"; fi
 
+  # A ledger of genuinely mismatched rows, against a readable settings.json whose role block
+  # has been renamed away. Every row resolves, cites its contract, and pins nothing, so 19(a)
+  # runs zero comparisons — and the verdict must say that rather than claim the pin matched.
+  run mismatch.jsonl norolepins.json
+  if [ "$rc" -eq 0 ] && grep -q '^OK WITH NO PIN COMPARED:' <<<"$out"; then t="$t U:nopin"; else t="$t U:$rc"; fi
+
   printf '%s' "$t"
 }
 
-EXPECTED="C:ok R:named B:named M:named T:ok P:preledger N:noted F:aligned S:refused J:refused A:usage"
+EXPECTED="C:ok R:named B:named M:named T:ok P:preledger N:noted F:aligned S:refused J:refused A:usage U:nopin"
 
 # --- 1. the shipping validator answers every arm ------------------------------
 GOT="$(battery "$VSL")"
 if [ "$GOT" = "$EXPECTED" ]; then
-  ok "all eleven arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, and a fumbled invocation"
+  ok "all twelve arms: clean, unreadable role file, missing 19(b) citation, tier mismatch, the containment tolerance, PRE-LEDGER, a guard-corrected request, a null field, an unreadable settings.json, an unparseable ledger, a fumbled invocation, and a readable settings.json that pins no role at all"
 else
   bad "battery: expected [$EXPECTED], got [$GOT]"
+fi
+
+# --- 1b. THE OK SENTENCE MAY ONLY CLAIM WHAT WAS TESTED -----------------------
+# Rule 19(a) is compared only where the role pins a model, and the unpinned rows were already
+# counted — the count was here, its comment already named the hazard, and NOTHING READ IT. So
+# the closing sentence went on asserting "a model matching their role's configured pin" over a
+# run in which the pin was never fetched. The two arms below are the same ledger under two
+# readable configs, and they must not produce the same claim.
+out="$(bash "$VSL" --ledger "$WORK/mismatch.jsonl" --sprint 900 --settings "$WORK/norolepins.json" 2>&1)"
+if grep -q 'Rule 19(a) was NOT tested on any row' <<<"$out" \
+   && grep -q 'the comparison ran zero times' <<<"$out" \
+   && ! grep -q 'a model matching their role' <<<"$out"; then
+  ok "a settings.json with its role block renamed away clears every row and SAYS the pin was never compared — it does not borrow the verified sentence"
+else
+  bad "the no-pin run reused the verified OK wording — got: $out"
+fi
+
+out="$(bash "$VSL" --ledger "$WORK/clean.jsonl" --sprint 900 --settings "$WORK/settings.json" 2>&1)"
+if grep -q 'a model matching their role' <<<"$out" \
+   && grep -q '1 row(s) pin no model and were not compared' <<<"$out"; then
+  ok "and the genuinely-verified sentence still carries its own exception — 1 of the 2 clean rows pinned nothing, and the OK line names that rather than folding it into the claim"
+else
+  bad "the verified OK sentence did not qualify its uncompared rows — got: $out"
 fi
 
 # --- 2. an absent ledger is PRE-LEDGER, not a clean pass ----------------------
@@ -281,6 +320,12 @@ mutant sentinel 's/if \. == null then "__NONE__"/if . == null then ""/' F \
 #    moves eight arms, which is a broken mutant reading as a strong kill.
 mutant corrupt 's@"\$LEDGER" 2>/dev/null)" || {@"$LEDGER" 2>/dev/null || echo 0)" || {@' J \
   "swallowing a parse failure reports a truncated ledger as zero rows, which reads as a sprint that predates the guard"
+
+# 8. the untested-pin verdict. Removing it is not a byte-different no-op: the run falls through
+#    to the plain OK sentence, which is the exact claim the run cannot support. It moves only
+#    the U arm — the clean arm still has a pinned row, so its sentence is still earned.
+mutant nopincompared 's/^if \[ "\$CHECKED" -gt 0 \] && \[ "\$UNPINNED" -eq "\$CHECKED" \]; then$/if false; then/' U \
+  "dropping the untested-pin verdict lets a settings.json that lost its role block clear a mismatched ledger under the sentence that says the pin matched"
 
 echo
 if [ "$fails" -eq 0 ]; then

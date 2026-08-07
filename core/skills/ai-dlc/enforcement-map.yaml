@@ -887,6 +887,43 @@ non_catalog_units:
     fixtures: [tests/fixtures/validate-mandatory-rules-revive]
     ci_workflow: core/ci-templates/validate-retro-compliance.yml
 
+  - id: mandatory-rules-skip-accounting
+    title: Retro-compliance summary — a SKIPPED check is not a PASSED one
+    adjudication: script
+    enforcer:
+      - core/scripts/validate-mandatory-rules.sh
+    call_sites:
+      - site: retro.md Step 5c (validate-mandatory-rules.sh <N>)
+        posture: still exits 0 on a skip; the VERDICT LINE changes, not the gate
+        why: the un-poisoning above made Checks 2/4/5 SKIP rather than fail, which was
+          correct and left the summary saying `all 6 checks passed` on a run where
+          three of them had not executed. Both roads to exit 0 shared one sentence, and
+          retro.md accepts this validator on its exit code alone, so nothing downstream
+          could tell them apart. Measured on the reference consumer: two checks SKIPPED
+          on every sprint 296 through 302 because `validate-retro-prereq.sh` was never
+          provided, so seven consecutive retros closed against a six-verified claim
+          whose true floor was four.
+    checks:
+      - id: skip-floor-is-reported
+        asserts: a run with N distinct skips prints `PASS WITH SKIPS`, names the skipped
+          check numbers, and states a verified floor of 6-N; a run with none prints the
+          unqualified `all 6 checks passed` and neither the headline nor the word SKIPPED
+        protects: against the pre-fix state where the two roads to exit 0 were one
+          sentence, and against the inverse — a zero-skip run reported as a skipping one
+      - id: a-failure-still-wins
+        asserts: a run carrying both a skip and a real check failure exits 1 under the
+          FAIL summary and never reaches the skip accounting
+        protects: the gate itself — the accounting must buy a truer sentence, not a
+          softer verdict
+      - id: the-count-survives-the-empty-case
+        asserts: the zero-skip count is derived by word, not by a `grep -c` whose
+          `|| echo 0` fallback appends a second line to an already-`0` output
+        protects: against the draft spelling, which made `[ -eq 0 ]` and then
+          `$(( ))` fatal and aborted the script at rc=1 on exactly the clean retros
+          it was not written for
+    fixtures: [tests/fixtures/mandatory-rules-skip-accounting]
+    ci_workflow: core/ci-templates/validate-retro-compliance.yml
+
   - id: ci-gate-dormancy
     title: Dormant CI-gate detector (retro-declared gates vs workflows)
     adjudication: script
