@@ -39,22 +39,51 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**NOTHING IS IN FLIGHT. The working tree is clean and every branch cut for this plan is
-merged** — v0.283.0 #373, v0.284.0 #374, plan corrections #375/#376/#378/#379/#380, v0.285.0
-#377, v0.286.0 #381, v0.287.0 #383. A resuming session starts from `origin/main` at
-**`0.287.0`** with no uncommitted work to reconcile.
+**The working tree is clean and every merged branch is listed here** — v0.283.0 #373, v0.284.0
+#374, plan corrections #375/#376/#378/#379/#380/#384/#385, v0.285.0 #377, v0.286.0 #381,
+v0.287.0 #383. `origin/main` is at **`0.287.0`**.
 
-**NO BRANCH IS PARKED ANY MORE.** The previously-parked
-`feat/v0.283.0-unreached-step-verdicts` (commit `70c9046`, subject `wip(unreached-steps)`) was
-cherry-picked onto `origin/main`, given the fixture coverage it lacked, and shipped as
-**v0.287.0 (#383)**. Its two script edits went out with a **third** change neither the branch
-nor this plan had: the skip counter it carried was broken on the zero-skip input, and the
-regression lock for that is why the release has a new fixture rather than two new arms. See
-§*What v0.287.0 measured*.
+**ONE BRANCH IS PARKED AND IT IS GATE-BLOCKED, NOT UNFINISHED.**
+`feat/v0.288.0-anchors-assertion-count`, commit `603b584`, carries plan item 7's **F3** —
+complete, with its fixture at 12 assertions and both new arms mutation-tested to a single-arm
+kill. **It cannot be pushed**, and the blocker is not in the change: `self-update-join-gate`
+goes red because the self-update gate invokes each gating script BARE, and three of the five
+exit 2 on a bare invocation. See §*Item 11 — the self-update gate compares two usage errors*.
+**Ship item 11 first, then this branch pushes unmodified.** Do not weaken F3 to get it green.
 
-**NEXT ACTION: item 7, continued** — F3 and F4 below are still unfixed and the
-highest-value lead is still unaudited. Items 0, 1, 2, 2b, 4 and 5 are closed; 6, 8, 9 and the
-new 10 remain open after it, in the order listed.
+**NEXT ACTION: item 9** — write the s301 close-out prompt. **The execution order was
+re-sequenced on 2026-08-07 and is no longer the order the numbered list is written in.** Read
+§*Order of execution* below before starting anything; the numbered list is now a REGISTRY of
+stable item ids, not a running order. Items 0, 1, 2, 2b, 4 and 5 are closed.
+
+### Order of execution
+
+Re-sequenced 2026-08-07 on the operator's question *"should we close out sprint 301 and update
+ai-dlc so we have a more current base?"* — the answer is yes, and re-deriving the order changed
+more than that one item. **The prior order was wrong** and the reason it was wrong is worth
+keeping: it sequenced on *finish what is started* rather than on *which work invalidates which*.
+
+| # | item | why here |
+|---|---|---|
+| 1 | **9** — s301 close-out prompt | owed anyway, and it creates the sprint boundary hop 2 needs |
+| 2 | **operator: close s301, then the TWO-HOP pull** | graph is at `0.274.0` against our `0.287.0` — thirteen releases. Manual, and permanent once done |
+| 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
+| 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
+| 5 | **v0.288.0** (parked branch) | pushes unmodified once 11 lands |
+| 6 | **7's remainder** — the `validate-layer-entries.sh` sweep | path-independent, and it surfaces more reader sites for 10c |
+| 7 | **10c – 10e**, with **F4 folded into 10c** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
+| 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
+| 9 | **6** — promote LC-E6/LC-O15 | still gated on the burn-down the pull performs |
+
+**Two constraints, and neither is a preference.** **10b before 10d**: a migration without the
+binding is undone by the next sprint's writes. **The pull before 10d/10e**: 10e wires a
+validator into the consumer pre-push, so migrating a consumer whose engine cannot enforce the
+new convention means migrating twice.
+
+**And one deadline that is not ours to move: s302 has not started.** The plan already holds it
+until this work lands and is pulled. If the convention lands before s302, s302 writes conforming
+artifacts from its first file and the migration is paid once. If it lands after, s302 adds
+roughly another hundred non-conforming files and the migration is paid again.
 
 **Item 3 is closed as an ITEM and half-open as a DEFECT, and the two must not be confused.**
 v0.286.0 shipped the fix for the strip its measurement found defeated on 6 of 135 filenames.
@@ -115,16 +144,24 @@ before you write code.
 7. **Audit the steps s301 never reached** for the defect classes v0.280.0 found in the steps it
    did reach. s301 stalled at `stories-test-strategy.md` §4, so every downstream step is
    unexercised. The five measured classes are listed in §*What v0.280.0 measured*.
-   **PARTIALLY DONE — F1 and F2 shipped as v0.287.0 (#383); F3 and F4 are still unfixed and the
-   named lead is still unaudited.** All four findings, and the shape to rewrite them into, are
-   in §*What the unreached-step audit found*. What remains, in order:
-   - **F3 `validate-audit-anchors.sh` (Check 18), MEDIUM.** An anchors file whose every sha
-     reads `PENDING` returns `entries PASS` rc=0, and `retro.md` Step 5c runs the bare form.
-   - **F4 `validate-ci-gates.sh`, a deployment gap.** Documented remedy and implemented
-     behaviour disagree, and the reference consumer is the case the sentence was written for.
+   **F1 and F2 shipped as v0.287.0 (#383). F3 is DONE and PARKED as v0.288.0. F4 is
+   RE-HOMED into item 10c. The named lead is still unaudited.** All four findings are in
+   §*What the unreached-step audit found*. State of each:
+   - **F3 `validate-audit-anchors.sh` — DONE, parked on `feat/v0.288.0-anchors-assertion-count`,
+     blocked by item 11.** **Half of F3's premise was REFUTED and must not be rebuilt**: an
+     all-`PENDING` anchors file passing `--entries` is correct by design — the schema documents
+     `sha` as "a PENDING placeholder until merged" and says the fail-closed belongs to
+     `--prior-sprint-sha`; `retro.md` Step 5c claims schema conformance only and points forward
+     at Check 18; Check 18 runs `--prior-sprint-sha`, which names a PENDING placeholder as one
+     of four fail-closed causes, and `check5-anchor-base`'s `placeholder` mutant already locks
+     it. The CONFIRMED half is in §*What v0.288.0 measured*.
+   - **F4 `validate-ci-gates.sh` — RE-HOMED, do not ship it standalone.** It is a `docs/retro/**`
+     reader-site fix and item 10c moves those paths, so it ships as part of 10c or it is written
+     twice.
    - **The unaudited lead: `validate-layer-entries.sh`** (1694 lines, five line-initial
      extractors — the shape that produced the `validate-ac-falsifiability.sh:244` defect), then
      `validate-gate-manifest.sh` and `audit-rule-files.sh`. Mechanical sweep, no mutants.
+     Path-independent, so it runs before 10c and feeds it.
 8. **Triage graph's push-candidate ledger** — 123 `## PC-` entries, of which roughly 57 are
    upstream-facing and OPEN. Re-run each `verify:` receipt against the current core tree
    before proposing anything; several are documented as having gone blind, meaning the
@@ -136,10 +173,18 @@ before you write code.
     **migrating pre-existing files is a MUST**; breaking historical traceability is
     **accepted**, on the stated ground that *a declared convention is itself the guide to
     where to look, and without one nothing has improved*. The full measurement, the proposed
-    grammar and the five sub-releases are in §*Item 10 — the artifact path convention*. Do
-    **not** start it before item 7 closes: it rewrites the paths F3's and F4's evidence cites.
+    grammar and the five sub-releases are in §*Item 10 — the artifact path convention*.
+    **SEQUENCING CORRECTED 2026-08-07 — this item previously read "do not start it before item 7
+    closes", and that was backwards.** 10c rewrites the very reader sites item 7's remaining
+    sweep would audit, so ordering 7 first means auditing files 10c then replaces. 10a and 10b
+    move no paths and now run EARLY; F4 is folded into 10c. See §*Order of execution*.
     It is also the one item in this plan that **writes to the consumer**, via a migration
     script core ships and the OPERATOR runs — the read-only boundary at the top still binds.
+11. **Fix the self-update gate's bare-invocation probe.** It runs each gating script with no
+    arguments and no stdin and compares exit codes, but **three of the five gating scripts exit
+    2 — a usage error — when invoked that way**, so the differential compares two usage errors,
+    lands on `SELF-UPDATE-UNDECIDED` and defers. Any machinery-only pull touching one of those
+    three defers permanently. Blocks the parked v0.288.0 branch. See §*Item 11*.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -389,6 +434,75 @@ per-arm sibling toggle). One summary line serves several arms, so a per-check co
 legitimately moves two of them; each mutant therefore declares its **exact moved-set**, and no
 two mutants share one. That is the anti-vacuity property when strict one-arm isolation is not
 available.
+
+## What v0.288.0 measured (item 7's F3 — one half refuted, one half confirmed)
+
+**REFUTED, and the refutation is the reusable part.** F3 read "an all-`PENDING` anchors file
+returns `entries PASS` rc=0" as a defect. It is the documented design, stated in three places
+that all agree: the schema's own prose (`sha` is "a PENDING placeholder until merged", and a
+stricter pattern here would be wrong because the fail-closed belongs to `--prior-sprint-sha`),
+`retro.md` Step 5c (*"No SHA for the prior sprint = audit-gate fails closed at the next
+sprint's per-class test-debt audit (Check 18)"*), and gate-validation Check 18 itself, which
+runs `--prior-sprint-sha` and names *"a `sha` still on its PENDING placeholder"* as one of four
+fail-closed causes. `check5-anchor-base`'s `placeholder` mutant already locks that arm. **That
+is three of six item premises in this plan now refuted by re-measurement** (2b's mechanism, 3's
+premise, F3's lower half). The instruction at the top of this file has paid for itself again.
+
+**CONFIRMED — a schema that asserts nothing passes every entry and calls it validated.** The
+entry loop is `for name, spec in fields.items()`; the guard was `assert isinstance(fields, dict)`,
+which `{}` satisfies. Same file, two schemas:
+
+```
+entry: `sprint: forty-two`, no `sha`
+  shipped schema   FAIL rc=1
+  fields = {}      PASS rc=0   "entries PASS — 1 entry validated"
+```
+
+Reachable without editing a core-guarded file — the schema path is `AI_DLC_AUDIT_ANCHORS_SCHEMA`.
+Fixed by refusing an empty `fields` by name, and by reporting the unit the claim is made in:
+`1 entry validated … (4 field comparisons against 4 declared fields)`. The entry count was
+always how much was READ.
+
+**The first measurement of this established nothing, and the fixture now carries the trap.** Its
+"bad" entry was `sha: %%NOT-A-SHA%%`, which the shipped schema **accepts** — no whitespace, so
+`^\S+$` matches. Both runs passed, the control AGREED with the subject, and agreement proves
+nothing. Assertion 7 is that control, rebuilt from an entry the shipped schema genuinely
+rejects; without it assertions 8 and 9 are unfalsifiable.
+
+## Item 11 — the self-update gate compares two usage errors
+
+Found 2026-08-07 when v0.288.0's push went red on `self-update-join-gate` (green on `main`, so
+attributable). **The blocker is not in v0.288.0.**
+
+`self-update-gate.sh` runs each gating script twice — the consumer's current copy and the
+incoming one — and compares exit codes. It invokes them **bare: no arguments, no stdin.**
+Measured on `main`, every script the consumer's pre-push invokes:
+
+```
+validate-audit-anchors.sh        rc=2   <- usage error
+validate-layer-entries.sh        rc=2   <- usage error
+validate-provenance-block.sh     rc=2   <- usage error
+validate-compact-window.sh       rc=0
+validate-fixture-drivability.sh  rc=0
+```
+
+**Three of five.** For those, the differential compares two usage errors, both non-zero, so the
+gate emits `SELF-UPDATE-UNDECIDED … both versions exit non-zero … treat as defer`. The verdict
+is right on its own terms and the probe is worthless: **any machinery-only pull touching one of
+those three defers permanently**, folding the machinery slice into the operator-gated apply —
+the exact cost §*pull graph in TWO hops* exists to avoid, arriving by accident rather than by a
+rulebook change.
+
+`validate-audit-anchors.sh`'s own gate text names the distinction the gate cannot make:
+*"Exit 2 is a malformed invocation, NOT a missing anchor."* This is the session's recurring
+class again — a verdict that cannot tell two things apart, reading as the safe one.
+
+**Shape, not yet built.** The probe needs an invocation each script can actually answer, or an
+explicit exemption for scripts whose bare form is a usage error — and `rc=2` is already the
+declared token for that, so the cheapest arm is to treat "both sides exit 2" as *not a
+differential signal* rather than as an unattributable failure. **Measure the false-positive set
+across all five gating scripts before shipping**, and add a `self-update-join-gate` arm proving
+a genuinely-newly-failing incoming script still DEFERS — otherwise the fix removes the gate.
 
 ## Item 10 — the artifact path convention
 
