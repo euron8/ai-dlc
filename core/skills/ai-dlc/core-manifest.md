@@ -209,6 +209,7 @@ core_manifest:
   - fixtures/fixture-drivability/**
   - fixtures/ledger-rotate/**
   - fixtures/mandatory-rules-clean-tree/**
+  - fixtures/mandatory-rules-skip-accounting/**
   - fixtures/mutation-red-replay/**
   - fixtures/trunk-audit-classes/**
   - fixtures/story-fields-derive/**

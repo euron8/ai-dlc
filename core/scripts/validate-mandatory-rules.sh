@@ -89,6 +89,7 @@ esac
 RETRO_BRANCH="ai-dlc/retro/sprint-${SPRINT_N}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FAILURES=0
+SKIPPED_CHECKS=""
 FAILURE_MSGS=""
 
 # Helper: append a failure message
@@ -141,8 +142,10 @@ if [ ! -f "$CYCLE_LOG" ]; then
   # opt-in — keying on the validator's presence instead would force-enforce on
   # every consumer once core ships the sibling.
   echo "  CHECK 2: SKIP (no ${CYCLE_LOG} — per-artifact-changelog model)"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 2"
 elif [ ! -f "$CYCLE_COMMITS_SH" ]; then
   echo "  CHECK 2: SKIP (validation-cycle-log.md present but no validate-cycle-commits.sh sibling)"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 2"
 else
   C2_OUT=$("$CYCLE_COMMITS_SH" "$RETRO_BRANCH" 2>&1)
   C2_EXIT=$?
@@ -223,6 +226,7 @@ if [ ! -f "$RETRO_PREREQ_SH" ]; then
   # own sibling and this check runs; absent it, SKIP loudly rather than fail the gate (the other half
   # of the S138 dead-delegation poison).
   echo "  CHECK 4: SKIP (no validate-retro-prereq.sh — consumer-provided)"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 4"
 else
   C4_OUT=$("$RETRO_PREREQ_SH" "$SPRINT_N" 2>&1)
   C4_EXIT=$?
@@ -289,8 +293,10 @@ fi
 
 if [ -z "$CHECK5_BASE" ]; then
   echo "  CHECK 5: SKIP (cannot resolve diff base: ${CHECK5_ANCHOR_ERR})"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
 elif [ -z "$(git diff --name-only "${CHECK5_BASE}..HEAD" -- 'web/**' 'web/src/**' 'web/tests/**' 2>/dev/null | head -20)" ]; then
   echo "  CHECK 5: SKIP (no web/** file changes in ${CHECK5_BASE}..HEAD for Sprint ${SPRINT_N})"
+  SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
 else
   if [ ! -f "$GATE_LOG" ]; then
     fail "Check5_VISUAL_UI" "gate-log.md not found at ${GATE_LOG} (required for web/** sprint ${SPRINT_N})"
@@ -306,6 +312,7 @@ else
       # means "cannot determine", not "no visual evidence". SKIP rather than fail on an unparseable
       # format; a consumer whose gate-log uses this header still gets the real check below.
       echo "  CHECK 5: SKIP (could not isolate Sprint ${SPRINT_N} section in gate-log.md — consumer-defined format)"
+      SKIPPED_CHECKS="$SKIPPED_CHECKS 5"
     else
       VISUAL_OK=0
       if grep -qi 'USER-CONFIRMED' <<<"$SPRINT_SECTION"; then
@@ -393,10 +400,58 @@ fi
 # ============================================================================
 # Final summary
 # ============================================================================
+#
+# A SKIPPED CHECK IS NOT A PASSED CHECK, AND THIS LINE USED TO SAY IT WAS.
+# Checks 2, 4 and 5 each have legitimate SKIP branches -- a consumer on the
+# per-artifact-changelog model ships no cycle log, `validate-retro-prereq.sh` is
+# consumer-provided, and a sprint touching no `web/**` file has no UI to verify.
+# None of those is a failure. But no SKIP branch touched a counter, and the summary
+# read "all 6 checks passed" whether six ran or three did, on the same exit code.
+#
+# Measured on a reference consumer before this was fixed: two checks SKIPPED on
+# EVERY sprint from 296 through 302, because the consumer never provided
+# `validate-retro-prereq.sh`. The retro step accepts this validator on its exit code
+# alone, so seven consecutive retros closed against a line asserting six verified
+# checks when the true floor was four.
+#
+# The exit code does NOT change -- a skip is legitimate and blocking on it would be
+# wrong. What changes is that the two roads to exit 0 no longer share one sentence.
+#
+# Counted by check NUMBER, de-duplicated. Checks 2 and 5 each have more than one SKIP
+# branch, but those branches are `if`/`elif` arms of one chain, so no check can emit
+# twice in a single run and the `sort -u` cannot fire today -- it is there so that a
+# check which later grows a second, non-exclusive skip path still reports a floor
+# rather than a tally. That is a deliberately dormant guard, not a live one, and this
+# comment says so rather than crediting it with work it does not do.
+#
+# COUNTED BY WORD, NOT BY `grep -c`. The first spelling was
+# `... | grep -c . || echo 0`, and on the empty (zero-skip) input `grep -c` prints "0"
+# AND exits 1, so the `||` appended a SECOND "0". The variable held "0\n0", `[ -eq 0 ]`
+# died with "integer expression expected" and fell through to the skip-reporting branch
+# on a tree where nothing had skipped -- and then `$((6 - SKIPPED_UNIQUE))` hit a
+# multi-line operand, which bash treats as a FATAL arithmetic syntax error: the shell
+# aborted right there, printing no summary and never reaching `exit 0`.
+#
+# So the draft did not merely mis-word the clean case, it turned it into rc=1. `retro.md`
+# accepts this validator on its exit code alone, which means the fix for a summary that
+# could not distinguish a skip would have HARD-FAILED every retro that skipped nothing --
+# the one population it was not written for. The zero-skip arm of
+# `mandatory-rules-skip-accounting` is the regression lock, and the `zeroskipbug` mutant
+# there restores that exact spelling and asserts the rc=1 abort.
+SKIPPED_LIST="$(printf '%s\n' $SKIPPED_CHECKS | sort -u | tr '\n' ' ' | sed 's/  */ /g; s/^ //; s/ $//')"
+SKIPPED_UNIQUE=0
+for _skipped in $SKIPPED_LIST; do SKIPPED_UNIQUE=$((SKIPPED_UNIQUE + 1)); done
 echo ""
 if [ $FAILURES -eq 0 ]; then
-  echo "VALIDATE-MANDATORY-RULES: PASS"
-  echo "  Sprint ${SPRINT_N}: all 6 checks passed"
+  if [ "$SKIPPED_UNIQUE" -eq 0 ]; then
+    echo "VALIDATE-MANDATORY-RULES: PASS"
+    echo "  Sprint ${SPRINT_N}: all 6 checks passed"
+  else
+    echo "VALIDATE-MANDATORY-RULES: PASS WITH SKIPS"
+    echo "  Sprint ${SPRINT_N}: $((6 - SKIPPED_UNIQUE)) of 6 checks verified; ${SKIPPED_UNIQUE} SKIPPED (check ${SKIPPED_LIST})."
+    echo "  A skipped check is not a passed one. Each skip is legitimate on its own terms,"
+    echo "  but the verified floor here is $((6 - SKIPPED_UNIQUE)), not 6 -- read the CHECK lines above."
+  fi
   exit 0
 else
   echo "VALIDATE-MANDATORY-RULES: FAIL"

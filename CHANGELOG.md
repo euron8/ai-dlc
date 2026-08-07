@@ -34,6 +34,68 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.287.0] — 2026-08-07
+
+### Two retro-phase validators passed on runs where the thing they name was never tested
+
+Plan item 7 audits the steps sprint 301 never reached. It stalled at `stories-test-strategy.md`
+§4, so `retro.md` and everything downstream is unexercised, and the two validators below are the
+first findings from reading them against the classes v0.280.0 measured. Both are the same class —
+**zero-verification PASS**: success has two roads, "everything was checked" and "there was nothing
+to check", and they shared one sentence and one exit code.
+
+**`validate-mandatory-rules.sh` — a skipped check was reported as a passed one.** Checks 2, 4 and
+5 each have a legitimate SKIP branch, added when the validator was un-poisoned: a consumer on the
+per-artifact-changelog model ships no `validation-cycle-log.md`, `validate-retro-prereq.sh` is
+consumer-provided, and an unresolvable diff base means "cannot determine the web/** change set".
+None of those is a failure. But no SKIP branch touched a counter, and the summary read
+`all 6 checks passed` whether six checks ran or three did. Measured on the reference consumer, two
+checks SKIP on **every sprint from 296 through 302** because that sibling was never provided, and
+`retro.md` Step 5c accepts this validator on its exit code alone — so seven consecutive retros
+closed against a line asserting six verified checks when the true floor was four. Independent
+control on the absence: `grep -cE 'SKIPS?=|SKIPPED='` → 0, against `grep -cE 'FAILURES='` → 4.
+
+A skipping run now prints its own headline, the skipped check numbers, and the floor:
+
+```
+VALIDATE-MANDATORY-RULES: PASS WITH SKIPS
+  Sprint 900: 3 of 6 checks verified; 3 SKIPPED (check 2 4 5).
+```
+
+**The exit code is deliberately unchanged.** A skip is legitimate and blocking on one would be
+wrong; what changes is that the two roads to exit 0 stop sharing a sentence.
+
+**`validate-spawn-ledger.sh` asserted a pin it had never fetched.** Rule 19(a) is compared only
+where the role pins a model, and rows whose role pins nothing were already counted — the count was
+there and its comment already named the hazard. **Nothing read the count.** Lose the `aiDlcRoles`
+block from `settings.json` (a renamed key, a bad merge) and every row falls to unpinned, the
+comparison runs zero times, and the closing line still says "a model matching their role's
+configured pin". Measured with one ledger and two settings files differing only in the key name,
+both rows carrying a genuine tier mismatch: intact gave `FAIL: 2 Rule 19 violation(s)` rc=1, the
+renamed key gave the full OK sentence rc=0. There is now a distinct `OK WITH NO PIN COMPARED`
+verdict for the all-unpinned case, and the ordinary OK sentence names its own exception
+(`N row(s) pin no model and were not compared`).
+
+**A defect found inside the fix, which is why the zero-skip case has its own mutant.** The first
+spelling of the skip counter was `printf … | sort -u | grep -c . || echo 0`. On the empty input
+`grep -c` prints `0` **and exits 1**, so `||` appended a second `0`; `[ -eq 0 ]` then died with
+`integer expression expected` and fell through to the skip branch on a tree where nothing had
+skipped — and `$((6 - SKIPPED_UNIQUE))` hit a multi-line operand, which bash treats as a **fatal**
+arithmetic syntax error. The shell aborted mid-summary: no verdict line, **rc=1**. Since `retro.md`
+accepts this script on its exit code alone, the fix for a summary that could not tell a skip from a
+pass would have hard-failed every retro that skipped nothing — the one population it was not
+written for. The count is now derived by word.
+
+**Fixtures.** New `core/fixtures/mandatory-rules-skip-accounting/`: six arms over one git-backed
+project tree — zero skips, each of checks 2/4/5 skipping alone, all three at once, and a skip
+alongside a real failure. Six mutants, each in its own toolchain directory beside an unmutated
+control, each declaring the exact set of arms it moves; no two share a moved-set. `zeroskipbug`
+restores the `grep -c` spelling and asserts the empty summary **and** the rc=1 abort, because a
+mutant asserted only on missing wording would have scored the abort as a kill for the wrong reason.
+`check-22-spawn-ledger` gains a twelfth battery arm (a readable `settings.json` with its role block
+renamed away), two wording assertions, and the `nopincompared` mutant — 16 assertions, up from 13,
+every mutant still moving exactly one arm.
+
 ## [0.286.0] — 2026-08-07
 
 ### The stall guard was asking the wrong cycle, because "which series is live" was answered by mtime and a regex

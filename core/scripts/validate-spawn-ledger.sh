@@ -263,6 +263,28 @@ if [ "$VIOL" -gt 0 ]; then
   echo "FAIL: ${VIOL} Rule 19 violation(s) across ${CHECKED} S${SPRINT_NUM} spawn row(s)." >&2
   exit 1
 fi
+# THE PIN CLAUSE OF THAT SENTENCE HAS TO HAVE BEEN TESTED TO BE SAID.
+# Rule 19(a) is compared only where `EXPECT` is non-empty; a row whose role pins no
+# model is COUNTED as UNPINNED and correctly not treated as a finding, because the party
+# personas legitimately carry an effort and no model. The counting was already here, and
+# the comment beside it already named the hazard -- a settings.json that lost its
+# aiDlcRoles block clears every row in silence. But nothing ever READ the count, so the
+# hazard it was counting for still ended in this sentence, which asserts every row's
+# model matched a pin that was never fetched.
+#
+# Measured with one ledger, two settings files differing only in the key name
+# (`aiDlcRoles` -> `aiDlcRolesXX`), both rows carrying a genuine tier mismatch:
+# the intact settings gave `FAIL: 2 Rule 19 violation(s)` rc=1, and the renamed key gave
+# the full OK sentence rc=0.
+if [ "$CHECKED" -gt 0 ] && [ "$UNPINNED" -eq "$CHECKED" ]; then
+  echo "OK WITH NO PIN COMPARED: all ${CHECKED} S${SPRINT_NUM} spawn row(s) carry a resolvable"
+  echo "  role file and a Rule 19(b) contract citation. Rule 19(a) was NOT tested on any row:"
+  echo "  every role pinned no model in ${SETTINGS}, so the comparison ran zero times."
+  echo "  If that file is meant to carry an aiDlcRoles block, this is the shape a lost or"
+  echo "  renamed key takes -- it clears every row rather than failing any."
+  exit 0
+fi
 echo "OK: all ${CHECKED} S${SPRINT_NUM} spawn row(s) carry a resolvable role file, a Rule 19(b)"
-echo "  contract citation, and a model matching their role's configured pin."
+echo "  contract citation, and a model matching their role's configured pin"
+echo "  (${UNPINNED} row(s) pin no model and were not compared)."
 exit 0
