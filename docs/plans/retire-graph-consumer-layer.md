@@ -52,7 +52,7 @@ exit 2 on a bare invocation. See §*Item 11 — the self-update gate compares tw
 **Ship item 11 first, then this branch pushes unmodified.** Do not weaken F3 to get it green.
 
 **NEXT ACTION: the OPERATOR runs the s301 close-out, then the two-hop pull.** The prompt is
-written and re-measured: `docs/plans/s301-close-out-prompt.md`. **The next thing a SESSION does
+written, re-measured and split: `docs/plans/s301-close-out.md` is executable, `s301-close-out-derivation.md` is the record. **The next thing a SESSION does
 is 10a** — declare the artifact path grammar — which needs no consumer state and can start
 before the pull returns. **The execution order was
 re-sequenced on 2026-08-07 and is no longer the order the numbered list is written in.** Read
@@ -68,7 +68,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 
 | # | item | why here |
 |---|---|---|
-| 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out-prompt.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
+| 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
 | 2 | **operator: close s301, LAND IT ON `main`, then the TWO-HOP pull** | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
 | 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
 | 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
@@ -170,7 +170,7 @@ before you write code.
    before proposing anything; several are documented as having gone blind, meaning the
    substring is absent at base AND at theirs, so the entry can never close.
 9. ~~**Write the s301 close-out prompt** for the operator to paste into the graph session,
-   mirroring what the s300 close-out did.~~ **DONE — `docs/plans/s301-close-out-prompt.md`.**
+   mirroring what the s300 close-out did.~~ **DONE — `docs/plans/s301-close-out.md` is the executable procedure the operator runs; `docs/plans/s301-close-out-derivation.md` is how each figure was measured.**
    Every figure in it was re-measured against the consumer on 2026-08-07. It records a
    SEVENTH difference from s300 the plan below did not have (the gate log's headings are
    `## Gate: planning — Sprint 301 (…)`, not the `## Gate Log: Sprint N` s300's sweep assumed,
