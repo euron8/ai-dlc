@@ -9,6 +9,14 @@
 **This file is the plan of record. Everything above `## Context` is current; everything below
 it is the original design record, kept for rationale. Where they disagree, the top wins.**
 
+**CITATIONS BELOW `## Context` ARE HISTORICAL AND SOME NO LONGER RESOLVE TO THEIR SUBJECT.**
+They were written before the releases that shipped them, and the releases moved the lines.
+Checked at handoff: `layer-drift.sh:648` was the env-key guard and is now other code (v0.275.0
+changed it), and `SKILL.md:506` described the invitation sentence v0.282.0 deleted. Both sit in
+sections marked SHIPPED, so they are records of why a thing was done, not instructions. Every
+`path:line` ABOVE `## Context` was re-checked at handoff and resolves. Re-verify any citation
+below it against the tree before acting on it.
+
 Working repo: `/Users/n8/git/ai-dlc` (the distribution). Reference consumer:
 `/Users/n8/git/graph` — **read it, never write it.** The operator owns every consumer-side
 action: running `/ai-dlc-update`, merging its PR, retiring layer entries. House rules for this
@@ -31,12 +39,22 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**WORK IN FLIGHT AT THE SESSION BOUNDARY, 2026-08-06.** Branch
+**NOTHING IS IN FLIGHT. The working tree is clean and every branch this session cut is
+merged** (v0.283.0 #373, v0.284.0 #374, the plan correction #375). A resuming session starts
+from `origin/main` at `0.284.0` with no uncommitted work to reconcile.
+
+**ONE BRANCH REMAINS PARKED, and it is NOT this session's.** Branch
 `feat/v0.283.0-unreached-step-verdicts` is pushed and gate-green at commit `70c9046`, subject
 `wip(unreached-steps)`. It carries two finished script edits and **no fixture coverage and no
 release triple** — do not merge it as-is. Finish it by adding the fixture arms below, then bump
-`VERSION`, write the CHANGELOG heading, and rename the commit to a `feat(v0.283.0):` subject.
-The two edits and the measurement behind each are in §*What the unreached-step audit found*.
+`VERSION`, write the CHANGELOG heading, and rename the commit to a **`feat(v0.285.0):`**
+subject — **its branch name still says 0.283.0 and that number is taken; rename or ignore the
+branch name, the commit subject is what the release triple checks.** The two edits and the
+measurement behind each are in §*What the unreached-step audit found*.
+
+**NEXT ACTION: item 2b.** Operator decision at handoff, 2026-08-06 — the next session starts
+there. Items 0, 1, 2, 4 and 5 are closed; 3, 6, 7, 8 and 9 remain open behind it in the order
+listed.
 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
@@ -87,7 +105,7 @@ sections in the design record below are labelled SHIPPED.
 
 ## Where things stand
 
-**ai-dlc is at `0.278.0`, `contract_version` 16.** Four releases shipped and merged to `main`:
+**ai-dlc is at `0.284.0`, `contract_version` 16.** Ten releases shipped and merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
@@ -99,6 +117,8 @@ sections in the design record below are labelled SHIPPED.
 | v0.280.0 | #367 | Check 3b resolves the `requires_context:` load pointer, scopes the byte-match to the cited anchor, and stops spelling a zero-verification PASS like a verified one. Discharges all three OPEN `PC-S297-LOCKED-ANCHOR-*` candidates. |
 | v0.281.0 | #369 | `validate-artifact-budget.sh --fail-on <artifact>` plus a supersession-marker arm. Retires `steps__retro__pipeline-snapshot-ceiling` as a CONFIGURED supersession (`AI_DLC_SNAPSHOT_STRIKETHROUGH`). |
 | v0.282.0 | #370 | `AI_DLC_AUTO_HANDOFF_MODE` + `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED`, and the `settings_env_keys:` multi-key supersession mechanism. Retires `SKILL__auto_handoff_mode`. |
+| v0.283.0 | #373 | **plan item 0.** Inner pools for six internally-serial fixtures; `enforcement-map-sites` sharded into three directories. Suite makespan **268s → 238s**. Output byte-identical, 21 driver mutants green. |
+| v0.284.0 | #374 | `validate-enforcement-map.sh` spawn reduction: 1582 → 1156 external commands, **8.36s → 7.02s**. Suite makespan **238s → 214s**. Byte-identical on the failing paths as well as the passing one. |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
 A consumer override is evidence that a consumer needed something; it is not evidence that core
