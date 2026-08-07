@@ -278,11 +278,45 @@ and the cycle ran on to p8. The rung spoke, paused the pipeline, and the cycle c
 Zero `ADVERSARIAL_STOP_DENIED` on 2026-08-06, against 8 in s299 — the Stop hook adjudicated but
 the PreToolUse deny never refused a dispatch.
 
-**What is genuinely unknown, and why this is blocked rather than in progress.** Whether the lead
-cleared the pause, whether `ALLOWED_BY_PAUSE` is a legitimate carve-out that swallows an
-adversarial stop, or whether the PreToolUse arm never ran, cannot be settled from the artifacts.
-It needs the s301 session transcript, which is consumer-side. Reframe item 3 before building:
-the question is **why a STALLED pause did not stop the cycle**, not how to make the rung audible.
+**RESOLVED without the transcript, and the answer clears three suspects and names two real
+defects.**
+
+*Cleared.* `ALLOWED_BY_PAUSE` following `ADVERSARIAL_STOP` is not a bypass — it is the SAME
+event. `ai-dlc-continue.sh:315` raises the pause flag as the way it stops the pipeline, and the
+pause branch at `:379` then allows the session to stop. The PreToolUse deny in
+`ai-dlc-acknowledge.sh:200` has **no carve-out** and says so in its own message: *"Clearing the
+pause flag does NOT lift this."* And the 7 role spawns recorded after 17:17 (adversary,
+remediator, tea, general-purpose, against 37 before it) were **correctly allowed** — `p8` stamped
+`EXIT_CONDITION_MET` at 15:02, so `--cycle-state` returned `CONVERGED` rc=0 by then. Nothing in
+the deny path is broken.
+
+*The real defects, both in how the hooks answer "which cycle is live".* Both hooks pick the live
+series by **mtime across every adversarial series in one never-pruned directory**, then derive
+the prefix with `sed -E 's/(pass|p)[0-9]+\.md$//'`.
+
+```
+files matching the hook's glob *adversarial*p*.md      135
+distinct series they span (s288 -> s301)                56
+filenames the prefix strip FAILS to strip                6
+control: the strip on a well-formed name               s301-stories-adversarial-p6.md -> s301-stories-adversarial-
+```
+
+1. **The strip is defeated by 6 real filenames** — `s289-adversarial-pass1-discovery.md`,
+   `prd-adversarial-sprint-150.md` and four siblings. For those the "series" is one whole
+   filename matching exactly one file, and a one-pass series can never be STALLED or DIVERGENT.
+   The guard then evaluates nothing and allows the dispatch. **A check that cannot fire, in the
+   class `CLAUDE.md` names as this repo's recurring one.**
+2. **mtime spans 14 sprints.** Any touch on any of the 135 files — an archive sweep, a reformat,
+   a repair — moves the live-series pick to an unrelated, long-converged series, and the stall
+   guard silently adjudicates the wrong cycle. The blast radius grows with every sprint because
+   nothing prunes that directory.
+
+**This is the shippable core release, and it is NOT what item 3 asked for.** The rung does not
+need to be made audible; the series resolution underneath it needs to stop being answerable by
+mtime and a regex. Suggested shape: derive the live series from the sprint's own declared
+identity rather than from the filesystem, fail CLOSED (or say so) when the prefix strip is a
+no-op, and carry a same-run control that the reader can still see a multi-pass series. Measure
+the false-positive set on all 135 files before shipping.
 
 ## The one thing that must not be forgotten: pull graph in TWO hops
 
