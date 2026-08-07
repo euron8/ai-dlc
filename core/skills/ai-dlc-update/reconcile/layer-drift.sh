@@ -1179,12 +1179,26 @@ while IFS= read -r f; do
   # here would have made a reporting tool into a data-loss suggestion -- the same trap the
   # `same_section` comment above records paying for once already.
   #
-  # So the unnumbered evidence gets its own weaker status that states the two dispositions and
-  # names the ONE remedy that silences it: declare `extends:`. That is not a consolation
-  # prize, it is the thing core already wants from these entries (an undeclared anchor is the
-  # 91%-noise default the drift arm below is written against), so the row drives the entry to
-  # the state that answers the question it raised. A detector that cannot be silenced by
-  # following its own advice teaches the operator to stop reading it.
+  # So the unnumbered evidence gets its own weaker status that states the dispositions.
+  #
+  # THIS COMMENT USED TO CALL `extends:` THE ONE REMEDY THAT SILENCED THIS ROW, AND THE EMIT
+  # BELOW PROMISED THE SAME, TEN LINES UNDER THE BLOCK THAT DELETED THAT SUPPRESSION.
+  # (Paraphrased deliberately: a comment carrying the retired sentence verbatim is what a later
+  # grep for the behaviour finds, and this repo has shipped that mistake before.)
+  # Both were true of the first cut and neither survived it. The reference consumer followed the
+  # row's own instruction on 13 rows, declared `extends:`, and every row kept firing --
+  # `retro-push-sprint-ship-verification` had already declared it and was still in the set, which
+  # is the exact entry the block below names as the reason for removing the suppression. The only
+  # disposition left that cleared a row was `retire`, and the affected entries state their own
+  # additivity, so a literal reading of "burn this set to zero" meant deleting augmenting content.
+  # The consumer stopped and filed rather than comply, which is the only reason nothing was lost.
+  #
+  # A detector that cannot be silenced by following its own advice teaches the operator to stop
+  # reading it -- and that is an argument for ACCURATE advice, not for a suppression that removes
+  # true findings. The row is report-only. It clears by DISPOSITION: retire if the body
+  # duplicates core's section, or record an adjudication if it augments one. `extends:` is still
+  # worth declaring and the emit still says so, because it narrows the DRIFT subject to that
+  # span -- it just was never what stops this row.
   ext_titles="$(unnumbered_titles_of_file "$f")"
   if [ -n "$ext_titles" ]; then
     theirs_titles="$(git_show "$THEIRS" "$cp" | heading_titles_of_stream | titles_only)"
@@ -1233,7 +1247,7 @@ while IFS= read -r f; do
       else when="NEW-THIS-PULL"; extra="core did NOT carry it at base — upstream ${BASE}..${THEIRS} added it, so this is an absorption landing on this pull"
       fi
       emit EXTENSION-TITLE-MATCHES-CORE "$entry" "$hooks" \
-        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. Two dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, declare it: add \`extends: '#${hit}'\` (spelled as the core heading actually reads) so the drift subject narrows to that span, and this row stops firing. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
+        "${when}: this entry's heading '$ut' names the same section as core's '$hit' in '$hooks', matched on TEXT because neither side carries a number. ${extra}. Two dispositions, and the entry decides which: if the body DUPLICATES core's section, retire it per Rule 27(b) — an absorbed-but-kept entry starts as an exact copy and diverges from there. If it AUGMENTS that section, record an adjudication for it in the layer register -- that is what clears this row, and it is the only thing that does. Declaring \`extends: '#${hit}'\` (spelled as the core heading actually reads) is worth doing anyway because it narrows the DRIFT subject to that span, but it does NOT silence this row and never has: \`extends:\` answers 'which span do I augment', never 'does core now carry my body'. Weaker than EXTENSION-RESTATES-CORE on purpose: a numbered anchor is an identity claim, a prose heading is not, so this reports the match and does not prescribe the delete."
     done <<< "$(printf '%s' "$cand" | awk -F"$TAB" 'NF>=3 { if ($1 > d[$3]) { d[$3]=$1; r[$3]=$0 } } END { for (k in r) print r[k] }')"
   fi
 

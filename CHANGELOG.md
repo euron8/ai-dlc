@@ -34,6 +34,53 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.290.0] — 2026-08-07
+
+### The title-match row told the operator to do something that stopped working, ten lines under the block that stopped it
+
+Reported from the reference consumer's two-hop pull. `EXTENSION-TITLE-MATCHES-CORE` emitted 13
+rows, and every one of them said: *if it augments that section, declare `extends:` … and this
+row stops firing.* The operator declared it. Every row kept firing.
+
+**The file contradicted itself across ten lines.** A comment above the arm called `extends:` the
+one remedy that silenced the row. The block immediately below it removed that suppression on
+purpose, and says why in its own words — the first cut suppressed on a declared `extends:`, and
+that *removed a true finding*, because `retro-push-sprint-ship-verification` declares
+`extends: '#Sprint-Ship Verification'` and core has since absorbed that section wholesale. The
+reasoning is right. The remedy text was simply never updated to match, and neither was the
+comment above it.
+
+**What that cost.** Following the row's own instruction cleared nothing, so the only disposition
+left that cleared a row was `retire` — and the affected entries state their own additivity, so a
+literal reading of "burn this set to zero" meant deleting augmenting content. The consumer
+stopped and filed rather than comply. **That is the only reason nothing was lost**, and it should
+not be what stands between this instruction and a deletion. `retro-push-sprint-ship-verification`
+— the entry the comment names as the reason for removing the suppression — was still in the 13,
+which the consumer observed independently.
+
+The row is report-only and clears by **disposition**: retire if the body duplicates core's
+section, record an adjudication if it augments one. `extends:` is still worth declaring and the
+emit still says so, because it narrows the DRIFT subject to that span — it just was never what
+stops this row. `extends:` answers "which span do I augment", never "does core now carry my body".
+
+The retired sentence is **paraphrased, not quoted**, in the comment that records it: a comment
+carrying the old wording verbatim is what a later grep for the behaviour finds, and this repo has
+shipped that mistake before.
+
+**Two plan corrections ride with it, both of them mine.**
+
+`docs/plans/graph-two-hop-pull.md` told the operator that `HARD-OVERRIDE-DRIFT-SECTION` rows
+should be absent and that their presence meant the stale engine had classified. **False, and it
+was a stop condition in an executable handoff.** `OVERRIDE-SUPERSEDED` is emitted from a block
+that does not `continue`, so flow reaches the drift loop and an override that is both superseded
+and drifted emits both rows by construction — 5 of the consumer's 6 did. The stale-engine
+signature is the superseded or title-match count reading **zero**, never the presence of drift
+rows. The consumer re-derived instead of halting a correct run; the file now says so.
+
+R6's gate in the parent plan said "after graph burns down the 13-row set". That is not
+achievable and never was, for the reason above. **The real precondition is that the 13 rows are
+ADJUDICATED, not absent.**
+
 ## [0.289.0] — 2026-08-07
 
 ### Three snapshot fixtures read the consumer's settings.json and called it core's default

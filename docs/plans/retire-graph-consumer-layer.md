@@ -139,7 +139,16 @@ before you write code.
 4. ~~**R4 — snapshot ceiling.**~~ **COMPLETED — shipped as v0.281.0 (#369).**
 5. ~~**R3 — auto-handoff.**~~ **COMPLETED — shipped as v0.282.0 (#370)**, carrying the
    multi-key `settings_env_keys:` mechanism with it.
-6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** Was blocked until graph burned down its
+6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** **The gate was stated wrongly and is
+   corrected here: "burn the `EXTENSION-TITLE-MATCHES-CORE` set down to zero" is not achievable
+   and never was.** The row's own remedy told the operator to declare `extends:`, and the
+   suppression that would have honoured it was deliberately removed upstream — so following the
+   instruction cleared nothing, and the only disposition left that cleared a row was `retire`,
+   which on entries that state their own additivity means deleting augmenting content. The
+   reference consumer hit this on all 13 rows, stopped rather than comply, and filed it.
+   v0.290.0 corrects the remedy text: the row clears by **adjudication**, not by suppression.
+   **The real precondition for R6 is therefore that the 13 rows are ADJUDICATED, not absent.**
+   Was blocked until graph burned down its
    `EXTENSION-TITLE-MATCHES-CORE` set. **s301's closure changes the sequencing, not the
    gate**: the burn-down still has to happen on the two-hop pull before promotion, or first
    contact wedges on ~13 blocking rows. Ship it last.
@@ -189,6 +198,15 @@ before you write code.
     move no paths and now run EARLY; F4 is folded into 10c. See §*Order of execution*.
     It is also the one item in this plan that **writes to the consumer**, via a migration
     script core ships and the OPERATOR runs — the read-only boundary at the top still binds.
+13. **Verify the reference consumer's step-7 finding, then fix it.** REPORTED BY THE CONSUMER,
+    NOT YET REPRODUCED HERE — record it as theirs until it is. They report that step 7's
+    post-apply re-run instruction disarms its own check: passing `theirs` as the base makes
+    `EXTENSION-HOOK-DRIFT` unable to fire, so `hard-blockers.sh` printed `0 HARD blockers.`
+    while all 18 adjudications were unrecorded. They caught it by running both bases side by
+    side. The emit at `layer-drift.sh:1296` keys on `${BASE}..${THEIRS}`, so a base equal to
+    theirs compares a range to itself — the mechanism is plausible on its face. **Reproduce it
+    against a scratch consumer before writing the fix**, because a gate that prints zero is the
+    exact shape this repo keeps shipping, and a fix aimed at the wrong layer would leave it.
 12. **Bind the fixture ambient-env guard, once the join is derivable.** v0.289.0 fixed three
     fixtures that inherited a consumer's `AI_DLC_*` tunables and tested the CONFIG instead of the
     CODE. The guard that would prevent recurrence is not shippable as written: requiring the
