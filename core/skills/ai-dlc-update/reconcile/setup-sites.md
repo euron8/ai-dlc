@@ -172,6 +172,7 @@ core_manifest:
   - core/fixtures/verdict-pass-content/**
   - core/fixtures/wait-stale-deliverable/**
   - core/fixtures/whole-read-pool/**
+  - core/fixtures/notify-hook-channel/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md
