@@ -124,83 +124,12 @@ Six were recorded in the parent plan and re-verified here; the seventh is new.
 
 ---
 
-## The prompt
+## The executable procedure lives in its own file
 
-*Paste everything below this line into the graph session.*
+**[`s301-close-out.md`](s301-close-out.md) is what the operator runs.** It is self-contained —
+every figure derived above is restated inline there, deliberately, because a procedure whose
+numbers live in another document gets followed literally and wrongly.
 
----
-
-Close out sprint 301. It is being **abandoned, not completed** — it stalled at
-`stories-test-strategy.md` §4 after eight adversarial passes and never reached implementation.
-It will be re-run from scratch as s302. Mirror the s300 close-out (`7ecd99dd1` + `ff490ebd0`),
-which is the only precedent; there is no documented abandonment procedure.
-
-**Do it as THREE commits, in this order.** s300's close-out was two; the third is the step it
-skipped, and skipping it is why `main` is now two sprints stale.
-
-**Commit 1 — the archive.** `git mv` only. **Never delete.**
-
-- Enumerate the artifact set with `find _bmad-output -name '*s301*' -type f`, **not** a
-  `s301-*` prefix glob. The prefix form returns 69 files; the substring form returns 99. Report
-  both numbers in the commit body so the gap is on the record.
-- Create one `archive/s301-<series>` directory per series and `git mv` its artifacts in. The
-  series are: `s301-stories` (17), `s301-coe` (8), `s301-architecture` (7), `s301-prd` (6),
-  `s301-product-brief` (5), `s301-epics`, `s301-carry-over-evaluation`, and the two
-  `s301-test-strategy-*` files. **Nine directories** — s300 needed six.
-- **Verify per file, not by count**: for each moved file assert `source-absent AND
-  dest-readable AND sha256-identical`, and record that phrasing. A count of 99 moved files
-  proves nothing about which 99.
-- Empty the gate log. **Its headings are `## Gate: planning — Sprint 301 (…)`, NOT
-  `## Gate Log: Sprint N`** — a sweep keyed on the latter matches nothing and exits clean.
-- Reduce `gate-metrics.jsonl`. The sprint field is an **integer**: `grep '"sprint": *301'`
-  finds **75** rows of 736. `grep '"sprint": "301"'` finds **0** and looks clean. Report the
-  before/after row totals.
-- Excise the S301 LOCKED block from `product-brief.md`, reversibly. **S301's block is an ALIAS
-  of S299's, and S299's is the sole surviving in-force block (`product-brief.md:33`). Do not
-  touch S299's.** Diff the file afterwards and confirm the S299 body is byte-unchanged.
-- Clear `_bmad-output/pipeline-paused.flag`. (`.beat-inflight` does not exist — do not create
-  or look for it.)
-
-**Two deliberate NON-actions, both of which must be stated in the commit body as decisions:**
-
-- **No Check 33 `NOT-IN-SCOPE` disposition.** Writing one asserts a scope decision that never
-  happened.
-- **No `RESTART_CYCLE` record.** Twenty-two series terminated `EXIT_CONDITION_MET`. Grepping
-  the corpus for `RESTART_CYCLE` returns one hit, in
-  `s301-carry-over-evaluation-resolution-p4.md`, and it is prose saying RESTART_CYCLE **was not
-  warranted**. That is a negation, not a record.
-
-**Commit 2 — the envelope.**
-
-- Run `sprint-status.sh close` **first**, then `roll`. `roll` exits 3 while the prior sprint is
-  not `done`.
-- Let the script regenerate the snapshot. Do not hand-author it.
-- **Do NOT cut the s302 branch yet.** s300's close-out cut its successor from HEAD because
-  `main` was stale, and that is why `main` is now stale by two sprints. Commit 3 ends it.
-- The `closure_evidence` prose is where the abandonment lives — there is no `abandoned` status
-  value. State in it: that s301 is abandoned rather than completed, where it stalled, that it
-  re-runs as s302, and **restate (do not cite) S300's reasoning for leaving `LR-S299-0..11`
-  undispositioned** — s302 is the third sprint carrying that same unbuilt ask, so a reader will
-  not go looking for the reasoning in a commit body two sprints back.
-
-**Commit 3 — land it on `main`, and this is the step s300 skipped.**
-
-`origin/main` is at `3cf225628` (s299's retro, 2026-08-02). This branch is **143 commits ahead
-and 0 behind** — 72 tagged s300, 18 tagged s301, 53 untagged — and **neither of s300's close-out
-commits (`7ecd99dd1`, `ff490ebd0`) is on `main`.** s300 worked around that by cutting its
-successor from HEAD. Repeating the workaround makes s302 the third sprint built on a base
-nothing merges to.
-
-- Merge this branch to `main`. It is a clean **fast-forward** — `main` is a strict ancestor
-  (verified) — so there is nothing to resolve.
-- What reaches `main` is the **archived** state, not two sprints of live artifacts, because
-  commit 1 `git mv`'d them into `archive/s301-*` first and `archive/s300-*` is already on the
-  branch. Confirm both directory sets are present on `main` after the merge.
-- **Then cut s302 from `main`.** Verify before starting: `git merge-base --is-ancestor <s301
-  close-out commit> origin/main` must succeed, and `origin/main` must contain `archive/s300-*`
-  and `archive/s301-*`. If either fails, do not start s302 — the base is still stale and the
-  problem has recurred rather than been fixed.
-
-**One environment note:** `core.hooksPath` is unset in this repo, so the git hooks will not fire
-during any of the three commits. Nothing here is checked mechanically — the per-file
-verification in commit 1 is the only thing standing in for it.
+**This file is the DERIVATION and is not executable.** It records how each figure was measured,
+which s300 facts are and are not transferable, and the three traps and their controls. Read it
+when a step's premise looks wrong; do not paste it into a session.
