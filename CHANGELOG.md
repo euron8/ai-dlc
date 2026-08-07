@@ -34,6 +34,80 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.294.0] — 2026-08-07
+
+### The fixture suite runs the fixtures a change can actually affect
+
+`scripts/suite-content-key.sh` already skips the WHOLE suite when nothing moved, and what it
+cannot do is skip PART of it — so one changed file has always cost the full makespan. This adds
+a finer skip inside that outer one, keyed on each fixture's MEASURED read-set. The content key
+is untouched: it remains the safe outer gate, and when the finer skip is in any doubt the
+fallback is the full run.
+
+**The declared bindings could not have been the map, and that is measured rather than argued.**
+118 drivable fixtures; 40 named in an enforcement-map `fixtures:` binding; **78 named nowhere**.
+A skip built on declarations would have skipped those 78 blind. The 40 that are bound declare
+1–3 paths each while reading 5–31, because a binding names what a CLAUSE is proven by, not what
+the fixture READS. **Paths a declaration-based skip would have missed: ~8000.**
+
+**"Unchanged fixture" is not "unaffected fixture."** v0.293.0 changed
+`scripts/validate-plan-shape.sh` and touched zero fixtures; `plan-shape` went red because its
+SUBJECT moved. A filter keyed on "did this fixture's own files change" would have skipped
+exactly the fixture that caught the regression. `scripts/derive-fixture-readsets.sh` asserts
+that case as a control and refuses to write a map without it.
+
+**Two tracers, disjoint blind spots, unioned.** `fs_usage` sees `open()` AND `stat64()` — a
+dependency reached only by `[ -f x ]`, or a NEGATIVE lookup on a path that does not exist, is
+invisible to any read-based method — but it needs root and drops events under load. `atime`
+sees reads only, cannot drop, and is independent of how the path was SPELLED. Neither is
+sufficient alone. `dtruss` is not usable at all: SIP restricts `/bin/bash` and root does not
+lift it.
+
+**APFS is relatime-like, which disqualifies the obvious method.** Measured here, a second read
+of a file does NOT advance its atime, so a before/after watermark misses every file read twice —
+the fatal under-record. atime is forced to 2001 before each fixture, defeating relatime by
+construction, with an unread control proving it each run.
+
+**Fixtures are traced UNPRIVILEGED, and that is not hygiene.** `check-22-spawn-ledger` passes
+16/16 as a normal user and fails 9/16 as root, because one arm asserts a settings-readability
+REFUSAL and root reads regardless of permissions. The red verdict is the harmless half; the
+dangerous half is that an arm root SKIPS reads fewer files, so the read-set comes back short and
+that fixture is skipped silently forever after.
+
+**Everything that cannot justify a skip runs everything.** No map, no verified state, an
+unreadable either, a changed path in NO fixture's read-set, a fixture with no entry of its own,
+or `AI_DLC_FIXTURE_NO_SKIP=1`. Absence of evidence is spelled "run it" at every step, because
+under-recording one path does not make the suite slow — it makes it silently short, and a
+fixture that never ran reports nothing while the summary still says green.
+
+**The verified state is published only on a fully green run.** It records "every fixture's
+verdict is known good at these file contents". Writing it after a red run would mark the failing
+state as verified, and the next push would skip the still-broken fixture and report green. It
+lives under `.git/` for I55 arm 4's reason: a cross-run record inside the tree would change the
+key that decides whether the suite runs at all.
+
+**A parent directory rides along only on an appearance or a disappearance**, never on a plain
+edit — adding or removing an entry changes what a listing returns; rewriting a file does not.
+Doing it for every changed path put synthesised parents into the *changed* set, which then
+failed the "no fixture reads this" test, so **the skip fell back to the full suite in every
+scenario while announcing it in wording that read like caution.** It was inert, green, and
+invisible to any test asserting "nothing regressed". The new `readset-skip` fixture catches it
+only because its arms assert a POSITIVE outcome — this exact set was selected — with four
+mutants each declaring the exact arm it must move, plus an unmutated control.
+
+**The map lives at the repo root, not under `core/`.** It records every path a fixture read,
+including dev-repo `docs/v0.*.md` design specs — and `validate-no-dead-doc-refs.sh` correctly
+fires on a `core/**` file citing a doc `install.sh` never ships. The premise of that guard is
+"dead in every consumer tree", and it does not hold here for a reason that also settles where
+the file belongs: this map is DEV-REPO-SPECIFIC and is not shipped. A consumer's fixtures live
+at `tests/fixtures/**` and read `scripts/ai-dlc/**`, so the distribution's map would be wrong
+there; a consumer derives its own, and until it does it has no map and runs the whole suite.
+Moving the file out of `core/` rather than exempting it from the guard also makes the
+`READSET_MAP` literal identical in both hooks, so I66 needs no path mapping for it.
+
+Added: `scripts/derive-fixture-readsets.sh`, `.ai-dlc-fixture-readsets.tsv`,
+`core/fixtures/readset-skip/`. Both pre-push hooks carry the runner change as one program (I66).
+
 ## [0.293.0] — 2026-08-07
 
 ### A plan now has to tell its executor to speak

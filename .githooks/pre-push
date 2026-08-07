@@ -128,6 +128,155 @@ step "rule-file audit (origin tags, dates, dangling pointers)" \
 # FIXTURE_POOL_BEGIN
 FIXTURE_JOBS="${AI_DLC_FIXTURE_JOBS:-16}"
 DURATIONS_RECORD=".git/ai-dlc-fixture-durations"
+READSET_MAP=".ai-dlc-fixture-readsets.tsv"
+# THE VERIFIED-STATE RECORD LIVES UNDER .git FOR I55 ARM 4'S REASON EXACTLY: the content key
+# hashes the working tree, so a cross-run record inside it would change the key that decides
+# whether this suite runs at all.
+VERIFIED_RECORD=".git/ai-dlc-fixture-verified"
+
+# Reduce "$1" (the dispatch list) to the fixtures a change can actually affect, using the
+# trace-derived read-sets in $READSET_MAP. Announces what it skipped and why; leaves the list
+# untouched whenever it cannot justify a reduction.
+#
+# WHY THIS EXISTS BESIDE THE CONTENT KEY. `scripts/suite-content-key.sh` already skips the
+# WHOLE suite when nothing moved, and it is NOT touched here -- it stays the safe outer gate.
+# What it cannot do is skip PART of the suite, so one changed file costs the full makespan.
+# This is the finer skip inside that outer one, and when it is in any doubt the fallback is
+# the full run.
+#
+# EVERY BRANCH THAT CANNOT JUSTIFY A SKIP RUNS EVERYTHING. Under-recording one path does not
+# make the suite slow, it makes it SILENTLY SHORT: a fixture that never ran reports nothing
+# and the summary still says green. So absence of evidence is spelled "run it" at every step
+# -- no map, no state, an unreadable either, a changed path no fixture is known to read, or a
+# fixture with no entry of its own.
+# Hash every path whose change could matter, into "$1/.now" as `path<TAB>sha`.
+#
+# THE SUBJECT IS TRACKED FILES *PLUS* EVERY PATH THE MAP NAMES. Tracked files are in it so a
+# change to something NO fixture is known to read is still SEEN -- otherwise a validator that
+# started reading a new file would drift out of the map with nothing able to notice. Measured
+# on this tree: 1% of changed files across 40 commits fell outside every read-set, and that
+#1% is exactly the population this arm exists for.
+#
+# `.git/**` IS DELIBERATELY OUT OF SCOPE, and it is a measurement rather than a convenience.
+# Fixtures read git internals constantly -- 33 of 118 name some `.git` path, because validators
+# they invoke resolve a root or ask `git status`. But `.git/HEAD`, `.git/index` and the refs
+# move on EVERY commit, so honouring them would select those fixtures on every push and take
+# the suite-wide win from 42% down to 12%, with two of the heaviest units running every time.
+# Measured before excluding them: five fixtures read git HISTORY pointers (refs/HEAD/logs), and
+# running all five across an empty commit -- HEAD moved, tree byte-identical -- changed NOT ONE
+# verdict, with controls proving HEAD really moved and that the comparison could detect a
+# difference. Their git reads are incidental to their verdicts. Excluded here rather than in the
+# map so the map stays a faithful record of what was actually read.
+readset_manifest() {
+  local out="$1"
+  { git ls-files 2>/dev/null
+    [ -s "$READSET_MAP" ] && grep -v '^#' "$READSET_MAP" | cut -f2
+  } | grep -v '^\.git/' | grep -v '^\.git$' | sort -u > "$out/.paths"
+  while IFS= read -r p; do [ -f "$p" ] && printf '%s\n' "$p"; done < "$out/.paths" > "$out/.files"
+  xargs -n 200 shasum -a 256 < "$out/.files" 2>/dev/null \
+    | awk '{ path = $0; sub(/^[0-9a-f]+  /, "", path); print path "\t" $1 }' | sort > "$out/.now"
+}
+
+apply_readset_skip() {
+  local list="$1" out="$2" n_all n_sel n_skip
+
+  n_all="$(grep -c . "$list" 2>/dev/null)"; case "$n_all" in ''|*[!0-9]*) n_all=0 ;; esac
+
+  # THE MANIFEST IS BUILT FIRST, BEFORE ANY EARLY RETURN, because the run that cannot skip is
+  # exactly the run that must leave a state behind for the next one. Computed only here and
+  # copied by the caller on a green run: if it were built after the early returns, the first
+  # run would write nothing, the second would find no state, and the skip could never
+  # bootstrap -- a mechanism that is always inert and never says so.
+  readset_manifest "$out"
+
+  if [ "${AI_DLC_FIXTURE_NO_SKIP:-}" = "1" ]; then
+    printf '   ..    read-set skip OFF (AI_DLC_FIXTURE_NO_SKIP=1) -- running all %s\n' "$n_all"
+    return 0
+  fi
+  if [ ! -s "$READSET_MAP" ]; then
+    printf '   ..    no read-set map at %s -- running all %s\n' "$READSET_MAP" "$n_all"; return 0
+  fi
+  if [ ! -s "$VERIFIED_RECORD" ]; then
+    printf '   ..    no verified-state record yet -- running all %s (this run writes one)\n' "$n_all"; return 0
+  fi
+
+  [ -s "$out/.now" ] || { printf '   ..    could not hash the working tree -- running all %s\n' "$n_all"; return 0; }
+
+  # A path is changed if its hash moved, if it appeared, or if it vanished. comm -3 reports
+  # exactly those three, and the parent directory rides along because adding or removing an
+  # entry changes what a listing of that directory returns -- which is how a fixture that
+  # globs a directory depends on it.
+  comm -3 "$VERIFIED_RECORD" "$out/.now" 2>/dev/null | sed 's/^\t//' | cut -f1 | sort -u > "$out/.changed"
+
+  # TWO SETS, AND CONFLATING THEM MAKES THE SKIP INERT. `.changed` is what actually moved and
+  # is the ONLY thing the orphan test below may consider. `.match` adds each changed path's
+  # parent directory, because adding or removing an entry changes what a listing of that
+  # directory returns -- which is how a fixture that globs a directory depends on it.
+  # A synthesised parent is not itself a change, so putting it in `.changed` made every run
+  # report "a changed path no fixture reads" and fall back to the full suite: measured, the
+  # skip could never fire once, in any scenario, and said so in wording that read like caution.
+  # A PARENT RIDES ALONG ONLY FOR AN APPEARANCE OR A DISAPPEARANCE, never for a plain edit.
+  # Adding or removing an entry changes what a listing of that directory returns, which is how
+  # a fixture that globs a directory depends on it; rewriting a file's contents does not. Doing
+  # it for every changed path instead selects every fixture that ever stat'd the enclosing
+  # directory, which quietly turns the skip back into a full run.
+  cut -f1 "$VERIFIED_RECORD" | sort > "$out/.was"
+  cut -f1 "$out/.now"        | sort > "$out/.is"
+  { comm -23 "$out/.was" "$out/.is"; comm -13 "$out/.was" "$out/.is"; } | sort -u > "$out/.appeared"
+  { cat "$out/.changed"; sed -n 's|/[^/]*$||p' "$out/.appeared" | grep -v '^$'; } \
+    | sort -u > "$out/.match"
+
+  if [ ! -s "$out/.changed" ]; then
+    printf '   ..    read-set map: nothing changed since the last verified state -- running all %s (the content key owns that case)\n' "$n_all"
+    return 0
+  fi
+
+  # A changed path no fixture is known to read cannot be reasoned about: either it genuinely
+  # affects nothing, or the map is stale and a fixture reads it without our knowing. The two
+  # are indistinguishable from here, so this runs everything.
+  # Same exclusion as the manifest, and it has to be the same or the two disagree: a `.git`
+  # path left in the universe but absent from the manifest can never be compared, while one in
+  # the manifest but not the universe would read as "changed, and no fixture reads it" and
+  # force a full run on every commit -- the failure this exclusion exists to prevent, arriving
+  # through the other side of the same join.
+  grep -v '^#' "$READSET_MAP" | cut -f2 | grep -v '^\.git/' | grep -v '^\.git$' | sort -u > "$out/.universe"
+  comm -23 "$out/.changed" "$out/.universe" > "$out/.orphan"
+  if [ -s "$out/.orphan" ]; then
+    printf '   ..    read-set map: %s changed path(s) are in NO fixture read-set (e.g. %s) -- running all %s\n' \
+      "$(grep -c . "$out/.orphan")" "$(head -1 "$out/.orphan")" "$n_all"
+    return 0
+  fi
+
+  # Selected = every fixture naming a changed path, PLUS every fixture with no map entry.
+  # The second half is the fail-closed one: absence from the map means "unknown", never
+  # "depends on nothing".
+  awk -F'\t' 'NR==FNR { ch[$0]=1; next } /^#/ { next } ch[$2] { sel[$1]=1 }
+              END { for (f in sel) print f }' "$out/.match" "$READSET_MAP" | sort -u > "$out/.sel"
+  grep -v '^#' "$READSET_MAP" | cut -f1 | sort -u > "$out/.mapped"
+  while IFS= read -r d; do
+    b="${d%/}"; b="${b##*/}"
+    if ! grep -qxF "$b" "$out/.mapped"; then printf '%s\n' "$b" >> "$out/.sel"; fi
+  done < "$list"
+  sort -u -o "$out/.sel" "$out/.sel"
+
+  : > "$out/.list.sel"
+  while IFS= read -r d; do
+    b="${d%/}"; b="${b##*/}"
+    if grep -qxF "$b" "$out/.sel"; then printf '%s\n' "$d" >> "$out/.list.sel"; fi
+  done < "$list"
+
+  n_sel="$(grep -c . "$out/.list.sel" 2>/dev/null)"; case "$n_sel" in ''|*[!0-9]*) n_sel=0 ;; esac
+  n_skip=$(( n_all - n_sel ))
+  if [ "$n_sel" -eq 0 ]; then
+    printf '   ..    read-set map selected NOTHING from %s changed path(s) -- running all %s rather than trusting an empty selection\n' \
+      "$(grep -c . "$out/.changed")" "$n_all"
+    return 0
+  fi
+  mv "$out/.list.sel" "$list"
+  printf '   ..    read-set map: %s changed path(s) select %s of %s fixtures; SKIPPING %s\n' \
+    "$(grep -c . "$out/.changed")" "$n_sel" "$n_all" "$n_skip"
+  return 0
+}
 
 run_fixtures() {
   local rc=0 d b out n_expected n_actual n_ordered verdict
@@ -149,6 +298,11 @@ run_fixtures() {
   # how the empty-suite guard below shipped UNABLE TO FIRE: the line was present,
   # the mechanism was not, and a fixture driving the real hook is what found it.
   # Normalise to a bare integer instead of rescuing a failed exit status.
+  # Reduce the list to what a change can affect BEFORE the count is taken, so `n_expected` and
+  # the verdict-completeness assertion below both speak about the set actually dispatched. A
+  # skip applied after the count would make every skipped fixture read as a dropped worker.
+  apply_readset_skip "$out/list" "$out"
+
   n_expected="$(grep -c . "$out/list" 2>/dev/null)"
   case "$n_expected" in ''|*[!0-9]*) n_expected=0 ;; esac
   if [ "$n_expected" -eq 0 ]; then
@@ -260,6 +414,13 @@ run_fixtures() {
   # ordering as well.
   cat "$out"/.dur/* > "$out/.durations" 2>/dev/null
   [ -s "$out/.durations" ] && cp "$out/.durations" "$DURATIONS_RECORD" 2>/dev/null
+
+  # PUBLISH THE VERIFIED STATE ONLY ON A FULLY GREEN RUN, and that condition is the whole
+  # safety of the skip. The record means "every fixture's verdict is known good at these file
+  # contents". Writing it after a red run would mark the failing state as verified, and the
+  # next push -- changing something else entirely -- would skip the fixture that is still
+  # broken and report green.
+  if [ "$rc" -eq 0 ] && [ -s "$out/.now" ]; then cp "$out/.now" "$VERIFIED_RECORD" 2>/dev/null; fi
 
   rm -rf "$out"
   return $rc
