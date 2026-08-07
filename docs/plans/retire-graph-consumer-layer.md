@@ -45,14 +45,22 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.292.0`**, working tree
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.295.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
 lists all eighteen with their PR numbers. The previously-parked F3 branch shipped after two
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
 **graph is at `0.292.0 / c5e7daa` and is QUIESCENT.** s301 is closed and landed on its `main`;
-s302 has not started and is held until item 10 lands and is pulled. Nothing in the consumer is
-waiting on this repo, and no graph session is running.
+s302 has not started. Nothing in the consumer is waiting on this repo, and no graph session is
+running.
+
+**s302 IS NO LONGER A DEADLINE, by operator direction 2026-08-07.** Earlier revisions of this
+file treated "s302 is held until item 10 lands" as the thing setting the pace, and item 10's
+own section still argues from it. That pressure is withdrawn: *"We don't need to start s302 in
+graph right away so I'd prefer to keep plowing through the plan."* Item 10's technical
+sequencing constraints are unchanged and still binding — 10b before any migration, readers and
+writers together — but "get it done before s302" is not a reason to cut corners on any of them.
+Work the order below to completion instead of racing a sprint that is not waiting.
 
 **Two consumer obligations are open and NEITHER GATES ANYTHING** — `OWED-DEVPUSH-RESTATES-CORE`
 and `OWED-STS-DOMAIN-AB-ABSORBED`, both enumerable in graph's debt audit, both re-raised by every
@@ -61,7 +69,16 @@ consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, 
 graph session for it while item 10 is the critical path is churn. Take it when graph is next
 open for another reason.
 
-**NEXT ACTION: 10a + 10b, shipped as ONE release.** Everything ahead of them in the execution
+**NEXT ACTION: item 15, the notification hook — then STRAIGHT ON to 10a + 10b without stopping.**
+Operator direction 2026-08-07: *"It will be first to do once we start the fresh session and then
+continue into item 10 and keep going until you need me for something."* Item 15 is small and
+self-contained, which is why it goes first; it is not a prerequisite for anything else. **Do not
+pause between 15 and 10a.**
+
+The paragraph below is the ORIGINAL next-action note and is superseded by the two sentences
+above. It is kept because its reasoning about 10a and 10b still holds once you reach them.
+
+**~~NEXT ACTION: 10a + 10b, shipped as ONE release.~~** Everything ahead of them in the execution
 order is closed: the close-out landed, the pull is done, item 11 shipped as v0.288.0, the parked
 F3 work shipped as v0.289.0's successor chain. **Item 10 is now the only thing holding s302.**
 10a and 10b ship together because `CLAUDE.md` fails builds on a declaration with no enforcer,
@@ -80,13 +97,14 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~2~~ | ~~operator: close s301, land on `main`, TWO-HOP pull~~ | **DONE** — graph at `0.292.0 / c5e7daa`, 25 HARD in / 0 out, layer debt 2 → 0 |
 | ~~3~~ | ~~**11** — the self-update gate's bare-invocation probe~~ | **DONE** — v0.288.0 (#388) |
 | ~~4~~ | ~~F3, the parked branch~~ | **DONE** — shipped in the v0.289.0–v0.292.0 chain after two renumbers |
-| **5** | **10a + 10b** — declare the path grammar, bind core to it. **ONE release.** | **← START HERE.** No path moves, so nothing item 7 depends on changes. **10b MUST precede any migration**, and `CLAUDE.md` fails builds on a declaration with no enforcer, which is why they are not split |
+| **4b** | **15** — the consumer notification hook | **← START HERE.** Small, self-contained, blocks nothing and is blocked by nothing. First only because the operator asked for it first; go straight on to the next row without pausing |
+| **5** | **10a + 10b** — declare the path grammar, bind core to it. **ONE release.** | No path moves, so nothing item 7 depends on changes. **10b MUST precede any migration**, and `CLAUDE.md` fails builds on a declaration with no enforcer, which is why they are not split |
 | 6 | **7's remainder** — the `validate-layer-entries.sh` sweep | path-independent, and it surfaces more reader sites for 10c |
 | 7 | **10c – 10e**, with **F4 folded into 10c** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
 | 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
 | 9 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
 | — | **12**, **13** | neither gates anything; take them when convenient |
-| — | **14** — the dependency map | **after item 10**, by operator direction. Scoped, not started; read its section before coding |
+| ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
 
 
 **Two constraints, and neither is a preference.** **10b before 10d**: a migration without the
@@ -247,9 +265,65 @@ before you write code.
     merely its verdict; and the wall-clock win is **42%, not the 76% of work removed**, because
     the suite is pole-bound.
 
+15. **Ship the input-needed notification hook to consumers.** SCOPED, NOT STARTED.
+    Operator-requested 2026-08-07; **do this FIRST in the fresh session**, then continue
+    without pausing.
+
+    **The premise was checked and one objection was WRONG, so do not re-raise it.** The concern
+    was that core must not write into a consumer's `settings.json` (I44). Measured: `install.sh`
+    already ships hook wiring at scale — **nine hook events** and a dozen-plus commands, through
+    a merge engine deliberately shared with `ai-dlc-update`'s reconcile, because *"two copies of
+    this jq is how an installed consumer and a reconciled consumer silently diverge"*. A block
+    counts as ai-dlc-owned when its command references `.claude/hooks/ai-dlc-*.sh`, so stale
+    entries are stripped and replaced on reinstall. There is no new machinery to build.
+
+    **WHY IT BELONGS IN THIS DISTRIBUTION, and it is this repo's own argument.** The plan-shape
+    rule already requires every plan to tell its executor to ping, because *"still working" and
+    "stopped, waiting on you" look identical from outside, so silence is a stall found only by
+    polling* — measured across this repo's runs, EVERY consumer-session stall ended with the
+    operator asking rather than the session reporting, including one sitting on a blocking
+    question and one that had already FINISHED. That rule is prose. This is its mechanism, and
+    `CLAUDE.md` prefers mechanisms to prose.
+
+    **The shape, already proven on the operator's own machine 2026-08-07:**
+    - `core/hooks/ai-dlc-notify.sh`. The `ai-dlc-*.sh` prefix is LOAD-BEARING — it is what marks
+      the settings block ai-dlc-owned.
+    - A `Notification` entry in `templates/settings.json.template`. That event fires on
+      permission prompts and idle-waiting. **Do NOT use `Stop`**: it fires at the end of every
+      response and trains the operator to ignore it.
+    - Pass the message to `osascript` as an ARGUMENT, never interpolated into the script text.
+      A payload containing quotes, backslashes or `$(...)` otherwise breaks the AppleScript or
+      executes inside it; the reference implementation carries an injection control proving it
+      does neither.
+    - macOS-only as written. Decide explicitly whether a non-macOS consumer gets a no-op or a
+      platform branch, and say which in the release — a hook that silently does nothing on Linux
+      is the inert-mechanism class this repo keeps shipping.
+    - Reference implementation to copy from: `~/.claude/hooks/notify-input-needed.sh`.
+
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
 
+
+**NOTIFY AFTER EVERY NUMBERED STEP, AND DO NOT STOP FOR IT.** Operator direction 2026-08-07:
+send a notification when each numbered item completes — *"but don't stop processing, these
+would just be informational"*. Send it and carry straight on to the next item. These are a
+progress feed, not checkpoints, and treating one as a checkpoint is the stall this plan exists
+to prevent.
+
+**HOW TO REACH THIS OPERATOR, measured 2026-08-07 — the obvious call is the one that fails.**
+`PushNotification` REFUSES to send while the terminal is active: *"this terminal is active, so
+your output here already reaches the user."* So the ping fired the instant you get blocked —
+seconds after they last spoke — never arrives, and you will wrongly conclude the channel is
+broken. Two earlier diagnoses of exactly that (Remote Control unpaired; Apple Terminal
+swallowing it) were both wrong, and both were guesses published as findings.
+
+- **Informational, after a numbered step** → `PushNotification`, then keep working. If it comes
+  back "not sent", that is fine and expected: the operator is present and has already read it.
+- **You need something from them** — a decision, a `sudo` command only they can run → use
+  `AskUserQuestion`. It reaches them regardless of terminal state. Do not use it for progress;
+  that abuse is what makes the channel worthless.
+- Desktop alerting is now automatic on the operator's machine via a `Notification` hook, so it
+  does not depend on you remembering. Mobile still does.
 
 **PING THE OPERATOR — on any question, on any decision, and when this plan completes.** The
 operator cannot see this session. From outside, "still working" and "stopped, waiting on you"
@@ -261,7 +335,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.287.0`, `contract_version` 16.** Thirteen releases shipped and merged to `main`:
+**ai-dlc is at `0.295.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -283,6 +357,9 @@ plan that omits it fails the build.**
 | v0.290.0 | #393 | `EXTENSION-TITLE-MATCHES-CORE` told the operator to declare `extends:` and promised the row would stop firing, ten lines under the block that deliberately removed that suppression. Remedy text corrected. |
 | v0.291.0 | #395 | …and v0.290.0's correction was itself inert: the code is not in `ADJ_CODES`, so no `subject_digest` was published and **no conforming record could be written at all**. The row is now keyed; a recorded verdict silences it until entry or core section moves. Level stays `WARN`. |
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
+| v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
+| v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.295.0 | #403 | `--list` MERGES instead of rewriting the map. v0.294.0's version dropped every untraced fixture — SAFE (unmapped means always-run) and therefore invisible: the suite stayed correct and merely stopped skipping. Verified on the real map, 118 preserved + 1 added. |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
 A consumer override is evidence that a consumer needed something; it is not evidence that core
