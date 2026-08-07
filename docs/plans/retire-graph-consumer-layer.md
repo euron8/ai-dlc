@@ -51,7 +51,10 @@ goes red because the self-update gate invokes each gating script BARE, and three
 exit 2 on a bare invocation. See §*Item 11 — the self-update gate compares two usage errors*.
 **Ship item 11 first, then this branch pushes unmodified.** Do not weaken F3 to get it green.
 
-**NEXT ACTION: item 9** — write the s301 close-out prompt. **The execution order was
+**NEXT ACTION: the OPERATOR runs the s301 close-out, then the two-hop pull.** The prompt is
+written and re-measured: `docs/plans/s301-close-out-prompt.md`. **The next thing a SESSION does
+is 10a** — declare the artifact path grammar — which needs no consumer state and can start
+before the pull returns. **The execution order was
 re-sequenced on 2026-08-07 and is no longer the order the numbered list is written in.** Read
 §*Order of execution* below before starting anything; the numbered list is now a REGISTRY of
 stable item ids, not a running order. Items 0, 1, 2, 2b, 4 and 5 are closed.
@@ -65,7 +68,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 
 | # | item | why here |
 |---|---|---|
-| 1 | **9** — s301 close-out prompt | owed anyway, and it creates the sprint boundary hop 2 needs |
+| 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out-prompt.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
 | 2 | **operator: close s301, then the TWO-HOP pull** | graph is at `0.274.0` against our `0.287.0` — thirteen releases. Manual, and permanent once done |
 | 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
 | 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
@@ -166,8 +169,15 @@ before you write code.
    upstream-facing and OPEN. Re-run each `verify:` receipt against the current core tree
    before proposing anything; several are documented as having gone blind, meaning the
    substring is absent at base AND at theirs, so the entry can never close.
-9. **Write the s301 close-out prompt** for the operator to paste into the graph session,
-   mirroring what the s300 close-out did. Owed as a deliverable, not optional.
+9. ~~**Write the s301 close-out prompt** for the operator to paste into the graph session,
+   mirroring what the s300 close-out did.~~ **DONE — `docs/plans/s301-close-out-prompt.md`.**
+   Every figure in it was re-measured against the consumer on 2026-08-07. It records a
+   SEVENTH difference from s300 the plan below did not have (the gate log's headings are
+   `## Gate: planning — Sprint 301 (…)`, not the `## Gate Log: Sprint N` s300's sweep assumed,
+   so a sweep keyed on the latter empties nothing and exits clean) and a THIRD inventory trap
+   (grepping the corpus for `RESTART_CYCLE` returns 1, and it is prose saying RESTART_CYCLE was
+   NOT warranted — control: 22 `EXIT_CONDITION_MET` in the same corpus). **Awaiting the
+   operator: paste it into graph, then take the two-hop pull.**
 10. **Declare ONE artifact path convention, mechanise it, and migrate every existing file to
     it.** OPERATOR DIRECTIVE, 2026-08-07: one generic folder AND file naming convention;
     **migrating pre-existing files is a MUST**; breaking historical traceability is
