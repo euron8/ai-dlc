@@ -86,6 +86,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
 | 9 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
 | — | **12**, **13** | neither gates anything; take them when convenient |
+| — | **14** — the dependency map | **after item 10**, by operator direction. Scoped, not started; read its section before coding |
 
 
 **Two constraints, and neither is a preference.** **10b before 10d**: a migration without the
@@ -234,6 +235,11 @@ before you write code.
     theirs compares a range to itself — the mechanism is plausible on its face. **Reproduce it
     against a scratch consumer before writing the fix**, because a gate that prints zero is the
     exact shape this repo keeps shipping, and a fix aimed at the wrong layer would leave it.
+
+14. **Trace-derive a per-fixture dependency map, so the pre-push runs the fixtures a change can
+    actually affect.** SCOPED, NOT STARTED. Operator-requested 2026-08-07; **do it after item
+    10**, and read §*Item 14 — the dependency map* for the measurement and the hazard before
+    writing any code.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -571,6 +577,67 @@ declared token for that, so the cheapest arm is to treat "both sides exit 2" as 
 differential signal* rather than as an unattributable failure. **Measure the false-positive set
 across all five gating scripts before shipping**, and add a `self-update-join-gate` arm proving
 a genuinely-newly-failing incoming script still DEFERS — otherwise the fix removes the gate.
+
+## Item 14 — the dependency map, scoped
+
+**The question that produced it.** *"Why does the pre-push gate need to validate unchanged
+fixtures?"* The answer is that it largely does not — `scripts/suite-content-key.sh` hashes a
+superset of everything the suite can read and skips the whole run on a hit, announcing the skip
+and naming the key. What it cannot do is skip PART of the suite, so any change to anything pays
+the full makespan.
+
+**"Unchanged fixture" is not "unaffected fixture", and v0.293.0 is the proof.** That release
+changed `scripts/validate-plan-shape.sh` and touched zero fixtures; `plan-shape` went red,
+correctly, because its SUBJECT moved. A filter keyed on "did this fixture's own files change"
+would have skipped exactly the fixture that caught the regression.
+
+**Why the declared bindings cannot be the map. Measured 2026-08-07:**
+
+```
+fixtures on disk                                        120
+named in an enforcement-map `fixtures:` binding          42
+NOT named in any binding                                 78     <- 65% of the suite
+```
+
+A per-fixture skip built on declared bindings would skip those 78 blind. And even for the 42, the
+binding names what a CLAUSE is proven by, not what the fixture READS — `plan-shape` reads the
+validator, every file under `docs/plans/`, and the directory listing itself, while its binding
+names one clause.
+
+**The design.** Run each fixture once under a syscall trace, record every path it opens, and key
+a per-fixture skip on that measured read-set. On macOS the tracer is `dtruss`/`fs_usage` (both
+need elevated privileges — establish that is workable before anything else, it is the single
+point that can kill the approach); on Linux, `strace -f -e trace=openat`.
+
+**THE HAZARD, and it is the reason this is scoped rather than just built.** Under-record one path
+and the result is not a slow suite — it is a **silently skipped** one. That is this repo's named
+defect class aimed at its own gate, and it is invisible by construction: a fixture that never ran
+reports nothing, and the summary says green. Any implementation must therefore:
+
+- **Fail CLOSED on an unmapped fixture.** No read-set recorded, no skip — run it. A fixture whose
+  trace failed must never be treated as "depends on nothing".
+- **Re-derive the map when the fixture itself changes**, or the map describes a program that no
+  longer exists.
+- **Announce every skip and name the read-set that justified it**, the way the content key
+  already does. A silent partial run is the defect.
+- **Carry a periodic full run** — a scheduled or flagged `AI_DLC_FIXTURE_NO_SKIP` sweep whose
+  verdicts are compared against what the map predicted. A map that has drifted is only findable
+  by running what it said to skip.
+
+**The prerequisite measurement, and it is the deliverable of the first pass:** trace all 120,
+then **diff the trace-derived read-sets against the 42 declared bindings. That gap is the risk,
+quantified** — every path a fixture reads that its binding never mentioned is a path a
+declaration-based skip would have missed. Do not write the skip until that number exists.
+
+**What the payoff is, honestly.** The content key already skips 100% of the suite when nothing
+moved, so this buys nothing on a no-op push. It buys on every REAL push, where one changed file
+currently costs the full 214s makespan. The suite is pole-bound and not CPU-saturated (2876
+CPU-seconds over ~240s wall, system time beating user 2:1), so the win here is not more
+parallelism — it is not starting the units at all.
+
+**Out of scope: do not touch the content key.** It is the safe outer skip and I55 keeps its
+exclusions honest. This is a second, finer skip inside it, and if the finer one is ever in doubt
+the correct fallback is the full run.
 
 ## Item 10 — the artifact path convention
 
