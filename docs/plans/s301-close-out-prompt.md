@@ -32,11 +32,13 @@ numbers are NOT transferable.
 
 1. **Operator: read §*The prompt* and paste it into the graph session.** Nothing in this file
    is run from the distribution.
-2. **After the close-out lands, run the two-hop pull** (§*pull graph in TWO hops* in the parent
+2. **The close-out MUST reach `main`** — commit 3. `main` is 143 commits behind the sprint
+   branch and carries neither of s300's close-out commits. s302 is cut from `main`, not HEAD.
+3. **After the close-out lands, run the two-hop pull** (§*pull graph in TWO hops* in the parent
    plan). Hop 2 carries six rulebook files and wants exactly the sprint boundary this close-out
    creates.
-3. **Do not start s302 until both are done.** That ordering is the point of the control test.
-4. BLOCKED — **do not disposition `LR-S299-0..11`** during this close-out. See difference 3.
+4. **Do not start s302 until both are done.** That ordering is the point of the control test.
+5. BLOCKED — **do not disposition `LR-S299-0..11`** during this close-out. See difference 3.
 
 ## What s300's close-out actually did
 
@@ -79,8 +81,22 @@ Six were recorded in the parent plan and re-verified here; the seventh is new.
    | planning artifacts | 90 | **99** |
    | per-series archive dirs needed | 6 | **9** |
 
-5. **The branch-cut rule repeats.** `main` still does not contain `7ecd99dd1` (re-verified).
-   Cut the new branch from **HEAD**.
+5. **`main` IS TWO SPRINTS STALE, AND THIS CLOSE-OUT IS WHERE THAT ENDS.** S300's close-out
+   worked around it by cutting the next branch from HEAD; repeating that makes s302 the third
+   sprint built on a base nothing has merged to. Measured 2026-08-07:
+
+   ```
+   origin/main            3cf225628  chore(s299): retire cross-check B …   2026-08-02
+   sprint branch          143 commits AHEAD, 0 behind   (72 s300, 18 s301, 53 untagged)
+   7ecd99dd1 / ff490ebd0  s300's close-out — NEITHER is on main
+   fast-forwardable       YES — main is a strict ancestor
+   ```
+
+   Both of s300's close-out commits, and every artifact archived by them, exist only on this
+   branch. **Land the close-out on `main` and cut s302 from `main`.** The merge is a clean
+   fast-forward, and because the archive commits `git mv` artifacts into `archive/s30N-*`
+   before it, what reaches `main` is the archived state — not two sprints of live clutter.
+   Verified: `archive/s300-*` already exists on the branch.
 6. **`core.hooksPath` is unset** (re-verified), so consumer git hooks will not fire during the
    close-out. Nothing will catch a mistake mechanically.
 7. **NEW — the gate log's heading grammar is not the one s300's procedure assumed.** It carries
@@ -119,7 +135,8 @@ Close out sprint 301. It is being **abandoned, not completed** — it stalled at
 It will be re-run from scratch as s302. Mirror the s300 close-out (`7ecd99dd1` + `ff490ebd0`),
 which is the only precedent; there is no documented abandonment procedure.
 
-**Do it as TWO commits, in this order.**
+**Do it as THREE commits, in this order.** s300's close-out was two; the third is the step it
+skipped, and skipping it is why `main` is now two sprints stale.
 
 **Commit 1 — the archive.** `git mv` only. **Never delete.**
 
@@ -158,14 +175,32 @@ which is the only precedent; there is no documented abandonment procedure.
 - Run `sprint-status.sh close` **first**, then `roll`. `roll` exits 3 while the prior sprint is
   not `done`.
 - Let the script regenerate the snapshot. Do not hand-author it.
-- **Cut the new branch from HEAD, not `main`.** `main` does not contain commit 1, so branching
-  from `main` resurrects every archived artifact.
+- **Do NOT cut the s302 branch yet.** s300's close-out cut its successor from HEAD because
+  `main` was stale, and that is why `main` is now stale by two sprints. Commit 3 ends it.
 - The `closure_evidence` prose is where the abandonment lives — there is no `abandoned` status
   value. State in it: that s301 is abandoned rather than completed, where it stalled, that it
   re-runs as s302, and **restate (do not cite) S300's reasoning for leaving `LR-S299-0..11`
   undispositioned** — s302 is the third sprint carrying that same unbuilt ask, so a reader will
   not go looking for the reasoning in a commit body two sprints back.
 
+**Commit 3 — land it on `main`, and this is the step s300 skipped.**
+
+`origin/main` is at `3cf225628` (s299's retro, 2026-08-02). This branch is **143 commits ahead
+and 0 behind** — 72 tagged s300, 18 tagged s301, 53 untagged — and **neither of s300's close-out
+commits (`7ecd99dd1`, `ff490ebd0`) is on `main`.** s300 worked around that by cutting its
+successor from HEAD. Repeating the workaround makes s302 the third sprint built on a base
+nothing merges to.
+
+- Merge this branch to `main`. It is a clean **fast-forward** — `main` is a strict ancestor
+  (verified) — so there is nothing to resolve.
+- What reaches `main` is the **archived** state, not two sprints of live artifacts, because
+  commit 1 `git mv`'d them into `archive/s301-*` first and `archive/s300-*` is already on the
+  branch. Confirm both directory sets are present on `main` after the merge.
+- **Then cut s302 from `main`.** Verify before starting: `git merge-base --is-ancestor <s301
+  close-out commit> origin/main` must succeed, and `origin/main` must contain `archive/s300-*`
+  and `archive/s301-*`. If either fails, do not start s302 — the base is still stale and the
+  problem has recurred rather than been fixed.
+
 **One environment note:** `core.hooksPath` is unset in this repo, so the git hooks will not fire
-during either commit. Nothing here is checked mechanically — the per-file verification above is
-the only thing standing in for it.
+during any of the three commits. Nothing here is checked mechanically — the per-file
+verification in commit 1 is the only thing standing in for it.

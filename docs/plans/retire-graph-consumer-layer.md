@@ -69,7 +69,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | # | item | why here |
 |---|---|---|
 | 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out-prompt.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
-| 2 | **operator: close s301, then the TWO-HOP pull** | graph is at `0.274.0` against our `0.287.0` — thirteen releases. Manual, and permanent once done |
+| 2 | **operator: close s301, LAND IT ON `main`, then the TWO-HOP pull** | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
 | 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
 | 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
 | 5 | **v0.288.0** (parked branch) | pushes unmodified once 11 lands |
