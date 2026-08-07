@@ -39,9 +39,10 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**NOTHING IS IN FLIGHT. The working tree is clean and every branch this session cut is
-merged** (v0.283.0 #373, v0.284.0 #374, the plan correction #375, v0.285.0 #377). A resuming
-session starts from `origin/main` at `0.285.0` with no uncommitted work to reconcile.
+**NOTHING IS IN FLIGHT. The working tree is clean and every branch cut for this plan is
+merged** — v0.283.0 #373, v0.284.0 #374, plan corrections #375/#376/#378/#379/#380, v0.285.0
+#377, v0.286.0 #381. A resuming session starts from `origin/main` at **`0.286.0`** with no
+uncommitted work to reconcile.
 
 **ONE BRANCH REMAINS PARKED, and it is NOT this session's.** Branch
 `feat/v0.283.0-unreached-step-verdicts` is pushed and gate-green at commit `70c9046`, subject
@@ -56,7 +57,12 @@ two edits and the measurement behind each are in §*What the unreached-step audi
 the order listed.
 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
-true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
+true at 2026-08-06T20:05Z and are worth re-verifying before acting.** That instruction has now
+paid for itself twice in one session: item 2b's stated MECHANISM was wrong (the defect is an
+underived count, not a miscounted `grep -c`) and item 3's PREMISE was wrong outright (the rung
+was already reachable and already firing). Both were caught by re-measuring before building,
+and in each case the thing worth shipping was one layer away from what the item named. Re-derive
+before you write code.
 
 0. ~~**Parallelize the mutant runs inside the six heavy fixtures.**~~ **COMPLETED — shipped as
    v0.283.0.** Suite makespan **268s → 238s**. See §*What v0.283.0 measured about the suite*
