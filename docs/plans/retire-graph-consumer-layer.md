@@ -44,7 +44,8 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 0. ~~**Parallelize the mutant runs inside the six heavy fixtures.**~~ **COMPLETED — shipped as
    v0.283.0.** Suite makespan **268s → 238s**. See §*What v0.283.0 measured about the suite*
    for the numbers, including the three the plan got wrong. **`feat/v0.283.0-unreached-step-verdicts`
-   must be renumbered to `v0.284.0`** — this release took 0.283.0.
+   must be renumbered to `v0.285.0`** — 0.283.0 went to this release and 0.284.0 to the
+   validator spawn reduction that followed it.
 
 1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
    **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
@@ -230,8 +231,12 @@ from tens of thousands of short-lived processes and ~60 repo-tree copies per run
 hypotheses were tested and both are dead ends: `TMPDIR` on a 24 GB RAM disk left system time
 unchanged (1914s → 1970s) and the makespan at 245s, because the copies were already served
 from the page cache; and there is nothing here a GPU can take, since the bottleneck is the
-kernel's per-process and per-file cost rather than arithmetic. **The only remaining lever is
-doing fewer validator invocations** — `validate-enforcement-map.sh` is ~8.5s a call with no
+kernel's per-process and per-file cost rather than arithmetic. **The remaining lever was NOT storage or scheduling but SPAWN COUNT INSIDE the validator**,
+and v0.284.0 took it: 1582 external commands per run became 1156 and the run went 8.36s to
+7.02s, byte-identical on the failing paths as well as the passing one. Suite makespan across
+both releases: **268s → 214s**. What is left there is `i75_norm` (`awk | grep | sed` twice per
+subject file, ~60 forks). The older sentence below said the lever was fewer validator
+INVOCATIONS; it is fewer PROCESSES per invocation — `validate-enforcement-map.sh` is ~8.5s a call with no
 hot spot (a cut-bisect rises monotonically across ~76 invariants) and the suite makes ~140 of
 them.
 
