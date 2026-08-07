@@ -34,6 +34,72 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.286.0] — 2026-08-07
+
+### The stall guard was asking the wrong cycle, because "which series is live" was answered by mtime and a regex
+
+Plan item 3 asked to make the adversarial STALL rung reachable mid-cycle. Measured, **it
+already was** — `--cycle-state` is a documented in-progress mode of
+`validate-adversarial-convergence.sh`, both `ai-dlc-continue.sh` (Stop) and
+`ai-dlc-acknowledge.sh` (PreToolUse) call it, `enforcement-map.yaml:420` declares a runtime
+DENY of `Agent/Task/Skill/TaskCreate` on exit 3, and the reference consumer's own flow log
+records it firing mid-sprint: `STALLED at s301-stories-adversarial-p6.md; pipeline paused
+(Rule 8)`. Nothing needed to be made audible.
+
+**The defect is one question earlier.** Both hooks picked the newest glob match FIRST and
+stripped the pass suffix SECOND:
+
+```
+NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md | head -1)"
+SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
+```
+
+A filename the strip cannot match yields a `SERIES` that is the **whole filename**.
+`--series <whole-filename>` then resolves exactly ONE file, and a one-pass series can never
+be `STALLED` or `DIVERGENT` — so the guard returns `CONTINUE` rc=0 and the PreToolUse hook
+**allows the dispatch** while a real multi-pass series sits stalled. A check that cannot
+fire, in the class `CLAUDE.md` names as this repo's recurring one.
+
+Measured on the reference consumer, with the divergent set fully enumerated:
+
+```
+files matching the glob *adversarial*p*.md      135
+conforming (old form == new form)               129
+NON-conforming, where the old form goes vacuous   6
+  prd-adversarial-sprint-150.md, s289-adversarial-pass1-discovery.md,
+  s289-adversarial-pass2-{capital,scope,validators}.md,
+  s289-rr-adversarial-pass4-verification.md
+current tree: old and new derive the SAME series   (zero behaviour change today)
+```
+
+The fix filters **inside** the pick — `sed -n 's/.../p'` emits only where the substitution
+succeeded, so a non-conforming name is never a candidate and the newest CONFORMING series
+wins. Making the state unrepresentable beats detecting it afterwards, which would be a
+second thing to keep in sync.
+
+Demonstrated end to end, driving the expression extracted from the shipped hook rather than
+a copy of it:
+
+```
+shipped derivation, decoy present   STALLED  rc=3   (denies)
+OLD form,           decoy present   CONTINUE rc=0   (allows — the silent pass)
+OLD form,           decoy removed   STALLED  rc=3   (control: the decoy is the variable)
+```
+
+**`I81` keeps it one expression.** Both sides are extracted from the two hooks, so the
+invariant cannot pass by agreeing with a literal kept in the validator. Byte-identity alone
+is not enough — two copies of the *vulnerable* form agree with each other — so I81 also
+asserts the expression IS the filtering form, and carries a probe, deliberately independent
+of the shipped value, proving that test rejects the old form. One hook reverted fires one
+assertion; both reverted fires one assertion; the control is clean.
+
+**Not fixed, and named rather than dropped:** the pick is still by mtime across every
+adversarial series in one directory — 56 series, s288 through s301. There is no naming-safe
+scope to add, because series names take the sprint as a **suffix** as well as a prefix
+(`architecture-adversarial-s288-`, `prd-adversarial-sprint-150.md`), so an `s<N>-` filter
+would silently exclude real series. Retro archiving is the live mitigation and it is partial
+(29 archived, 135 still in reach). Both hooks say so at the derivation.
+
 ## [0.285.0] — 2026-08-06
 
 ### Rule 31: a countable assertion carries the derivation that produced it — and the enforcer that would have carried it does not survive its own measurement
