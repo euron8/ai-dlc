@@ -34,6 +34,40 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.292.0] — 2026-08-07
+
+### v0.291.0's fixture seed resolved one layout, and the reference consumer is the other one
+
+Reported from the graph session: the 0.291.0 self-update was stopped by a red covering fixture
+whose red was *"provably a seed-layout bug, not a defect in the machinery being pulled."* That
+read is exactly right, and the bug is mine.
+
+v0.291.0 seeded the adjudication schema into the fixture's synthetic distribution with
+`$HERE/../../schemas/...`. From `core/fixtures/<name>/` that resolves to `core/schemas/` and
+works. From a consumer's `tests/fixtures/<name>/` the same walk lands on `tests/schemas/`, which
+does not exist — so the fixture died **in its seed**, before asserting anything.
+
+**This is invariant I33 — never locate one core file by walking up from another — broken three
+lines below a `pick()` helper the same file already defines for exactly this**, and uses to
+resolve `layer-drift.sh` across both layouts. The helper was right there and I hard-coded past it.
+
+The seed now goes through `pick`. Verified in both layouts, the consumer one built by running
+`install.sh` into an empty directory rather than simulated:
+
+```
+distribution layout                     layer-title-join: PASS
+consumer layout (install.sh-built)      layer-title-join: PASS
+MUTANT — single-layout path restored, same consumer
+                                        FIXTURE ERROR: cannot seed the adjudication schema
+shipped version, same consumer          PASS
+```
+
+**Nothing about the pulled machinery was wrong.** The four arms v0.291.0 added were green in the
+distribution the whole time; only the fixture's own consumer-layout seed was broken, which is
+what the consumer's control run showed before they asked. A covering fixture that dies in its
+seed reports the same red as one that caught a defect, and telling those apart cost a session's
+worth of judgment that the fixture should have supplied.
+
 ## [0.291.0] — 2026-08-07
 
 ### v0.290.0 corrected the sentence and left the mechanism inert, which is worse than the wrong sentence was

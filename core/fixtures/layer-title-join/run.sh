@@ -60,9 +60,19 @@ git -C "$DIST" init -q 2>/dev/null || { echo "FIXTURE ERROR: git init failed" >&
 # which reads exactly like "no verdict was recorded". Part 6 below could not tell those apart.
 # Copy the REAL schema in rather than restating an enum here; a second copy of the vocabulary
 # is the thing the reader was written to avoid.
+# BOTH LAYOUTS, VIA THE `pick` HELPER ALREADY DEFINED ABOVE FOR layer-drift.sh. The first
+# cut of this seed was `$HERE/../../schemas/...`, which resolves to core/schemas only in the
+# DISTRIBUTION; from a consumer's tests/fixtures/<name>/ the same walk lands on tests/schemas,
+# which does not exist, and the fixture died in the seed. That is invariant I33's rule -- never
+# locate one core file by walking up from another -- broken three lines under a helper written
+# for exactly this, and it turned a green machinery pull into a red covering fixture on the
+# reference consumer.
 mkdir -p "$DIST/core/schemas"
-cp "$HERE/../../schemas/layer-adjudication-register.json" "$DIST/core/schemas/" 2>/dev/null \
-  || { echo "FIXTURE ERROR: cannot seed layer-adjudication-register.json" >&2; exit 2; }
+ADJ_SRC="$(pick "$HERE/../../schemas/layer-adjudication-register.json" \
+                "$HERE/../../../core/schemas/layer-adjudication-register.json" \
+                "$HERE/../../../.claude/schemas/layer-adjudication-register.json")"
+[ -n "$ADJ_SRC" ] || { echo "FIXTURE ERROR: layer-adjudication-register.json not found in either layout" >&2; exit 2; }
+cp "$ADJ_SRC" "$DIST/core/schemas/" || { echo "FIXTURE ERROR: cannot seed the adjudication schema" >&2; exit 2; }
 
 cat > "$DIST/core/skills/ai-dlc/core-manifest.md" <<'MD'
 <!-- CORE_MANIFEST v1 -->
