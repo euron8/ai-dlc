@@ -1597,6 +1597,54 @@ its own findings.
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
      or declares `none` and is counted as a gap. A compacted lead does not hold this
      rule; whatever is named here is what survives instead of its memory. -->
+### Rule 31 -- A countable assertion carries the derivation that produced it
+
+Any sentence asserting a count over a corpus -- "N sites", "all N", "N of M",
+"every one of the N" -- MUST carry, in the same block, the command or the
+citation set that produced the number. A count authored without one is a fact
+the reader cannot check and the author did not run, and it is indistinguishable
+from a guess.
+
+**This binds prose, not only acceptance criteria.** A count in a disposition,
+scope note, out-of-scope declaration, investigation baseline, or dependency
+statement is load-bearing: a reviewer reads it as established and reasons from
+it. Prose asserting something about a corpus OUTSIDE the criterion's own test is
+where an underived count survives longest, because review passes and mechanical
+enforcers alike read criterion bodies hardest and that prose least.
+
+**The derivation MUST test the proposition the sentence asserts.** A citation
+that resolves proves its target exists; it does not prove the claim made about
+that target. Confirming a range begins where it says it begins does not test the
+word "full". Derive the predicate, not the pointer.
+
+**A zero carries a control proving the pattern CAN match.** `grep -c` counts
+LINES, not entries; a malformed pattern, a wrong path, and a genuine absence all
+return the same zero. Report the count and the control together. Check 12 in
+`steps/gate-validation.md` requires this of gate evidence rows; this rule
+requires it wherever a number is authored.
+
+**A corrected number puts every artifact stating it inside the blast radius.**
+When a repair changes a count, an upstream artifact carrying the same count is
+in scope for that repair, not outside it.
+
+**A prescriptive count is not an assertion.** A number specifying what an
+implementation or a test MUST do is a requirement and derives nothing. This rule
+binds descriptive counts: claims about what a corpus already contains.
+
+Violation is a MAJOR adversary finding and a `code-reviewer` finding.
+
+**Carrier:** none -- no mechanical detector survived its own false-positive
+measurement. A block-grain detector for "a cardinal applied to a plural noun
+with no command or citation in the same block" was built and run: it fires on a
+reconstructed real defect and stays silent on that defect's repair, but it flags
+6074 blocks across 890 of 998 story files, it cannot trigger at all on a
+non-numeric claim, and it is silent whenever the block carries any unrelated
+citation -- which the measured cases satisfy. That last property makes it
+passable by adding a citation without making the sentence truer, so it was not
+shipped. Declared a GAP.
+<!-- I79: every rule below the re-attach cut declares what mechanically carries it,
+     or declares `none` and is counted as a gap. A compacted lead does not hold this
+     rule; whatever is named here is what survives instead of its memory. -->
 
 ## INITIALIZATION
 

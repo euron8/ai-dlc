@@ -179,8 +179,8 @@
 #        remedy is renumbering, which rewrites the consumer's own durable audit key and
 #        needs a crosswalk row per number; blocking a pull on five of those would wedge
 #        a consumer out of taking a fix over its own catalog, and blocking on
-#        twenty-seven would wedge it flat. Core is AT 32 checks and 30 rules, so
-#        `Rule 31` is literally the next integer core will allocate — the pending
+#        twenty-seven would wedge it flat. Core is AT 32 checks and 31 rules, so
+#        `Rule 32` is literally the next integer core will allocate — the pending
 #        warnings have a live detonation date and the other twenty-five have a past one.
 #
 # Rule 26(c) contract — catches: a layer entry silently duplicating, restricting,
