@@ -34,6 +34,41 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.295.0] — 2026-08-07
+
+### `--list` refreshes one fixture instead of rewriting the whole map
+
+v0.294.0 shipped `--list` as the cheap path — refresh one fixture for its own runtime rather
+than paying a ~50-minute full derivation. It did not work: the deriver wrote the map from only
+the fixtures it had just traced, so `--list "plan-shape"` silently dropped the other 117.
+
+**The failure is invisible by construction, which is why it survived review.** A dropped entry
+makes that fixture unmapped, unmapped means always-run, so the suite stays CORRECT and merely
+stops skipping. Nothing goes red. It reads as the feature underperforming rather than as a bug,
+and the only symptom is a number nobody is watching.
+
+`--list` now MERGES: it replaces the entries of the fixtures it traced and leaves every other
+fixture's entries untouched. Two properties are asserted rather than assumed:
+
+- **A traced fixture's old entries go even when it produced none.** That is the case that
+  matters. A fixture which was mapped and is now OMITTED — its trace failed, it wrote into the
+  tree, tracing never settled — must lose its stale read-set, or the map goes on asserting a
+  dependency set nothing re-verified. Dropping it makes the fixture unmapped, which is the
+  fail-closed direction.
+- **The merge may not lose a fixture it was never asked about.** The deriver now refuses to
+  write a map missing any untouched fixture, rather than trusting the merge that produced it.
+
+**The merge is a standalone function between sentinels, and that shape is the point.** The rest
+of the deriver needs root and cannot run in the fixture suite, so a fixture testing a
+restatement of the logic would prove nothing about the shipped logic. `readset-skip` extracts
+THIS block and drives it directly — three arms plus two mutants, one killing the old-map read
+(every untouched fixture disappears) and one killing the traced filter (the re-traced fixture
+keeps its stale entry).
+
+**The deriver is dist-only, so on a consumer those arms are reported as a SKIP** and the
+fixture's expected-assertion count adjusts. A vanished arm and a passing arm look identical in
+a summary; this is the same accounting v0.287.0 added to `validate-mandatory-rules.sh`.
+
 ## [0.294.0] — 2026-08-07
 
 ### The fixture suite runs the fixtures a change can actually affect
