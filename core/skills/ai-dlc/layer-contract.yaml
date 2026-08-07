@@ -240,6 +240,28 @@ consumer_pr_class_file: .claude/skills/ai-dlc/pr-classes.md
 # declare its way out of it. The declaration ADDS to that floor; it cannot subtract from it.
 consumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md
 
+# THE CONSUMER'S ARTIFACT KINDS AND AREAS. Fifth declaration on the same terms as the four
+# above, and the split it makes is the same one, measured the same way.
+#
+# WHAT READS IT. Rule 4 of `artifact-path-grammar.md` — `kind` comes from a declared closed set.
+# The other four rules of that grammar are facts about how a reader composes a path and core
+# states them outright: the directory is the only sprint slot, `s<N>` is the only spelling,
+# an area root is durable, `p<M>` is the only pass marker. Rule 4 is the one that needs a fact
+# about THIS project, because core cannot know it produces a `datastack-import-plan`.
+#
+# WHY THE GRAMMAR ITSELF IS NOT HERE. It is core's, it ships as
+# `.claude/skills/ai-dlc/artifact-path-grammar.md`, and it is bound to core's own prescriptions
+# by `validate-enforcement-map.sh` I82 — core prescribed FIVE spellings across four positions
+# before that existed, and the consumer's four-position mess is that grammar faithfully
+# executed. A convention core does not itself obey is a suggestion.
+#
+# NO LC- CLAUSE GOVERNS ITS CONTENTS, exactly as with the PR-class taxonomy above: the kind set
+# is DATA a rule reads, not a clause this contract enforces. `contract_version` therefore does
+# NOT move for this declaration, and the precedent is measured rather than assumed —
+# `consumer_story_fields_file:` was introduced in v0.237.0 (#321) and that commit changed no
+# `contract_version` line.
+consumer_artifact_paths_file: .claude/skills/ai-dlc/artifact-paths.md
+
 # THE FILES THIS CONTRACT ABSORBED, and what each one is NOW. Held to the tree by I63; the
 # codes any of them names are held to their clauses by I62.
 #

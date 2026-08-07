@@ -34,6 +34,94 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.298.0] — 2026-08-07
+
+### One artifact path convention, declared in core and enforced against core's own prescriptions
+
+The question that produced this: *"none of that addresses how you know which one is the current,
+and this is happening in other folders, not just `_bmad-output/`."* Both halves were right.
+
+**Currency is DECLARED, never searched.** The chain that works has three links — declared identity
+→ a **TOTAL** function from `N` to a path → no search — and link 2 is where it breaks. Flatness is
+not the defect; a filename grammar with no reserved slot for the sprint is. `docs/retro/` is the
+control that proves it: 299 files, flat, 288 matching `sprint-<N>.md` exactly, six core programs
+reading it, and not one of them ever asks which is newest.
+
+**The grammar.** `core/skills/ai-dlc/artifact-path-grammar.md`. The directory is the only sprint
+slot: `<area>/s<N>/<kind>[-<subject>][-p<M>].md`, no basename carrying a sprint token, area roots
+durable, `p<M>` the only pass marker, `kind` from a declared closed set. That collapses four
+positions into one and makes conformance a single rule instead of a union of patterns.
+
+**Rule 4's set is the consumer's**, on the same terms as `pr-classes.md` and `story-fields.md`:
+`consumer_artifact_paths_file:` in `layer-contract.yaml`, template scaffolded once by both
+`install.sh` and the reconcile driver, never overwritten. `none` is a legal answer and leaves rule
+4 unenforced; the other four rules do not depend on it. **`contract_version` does NOT move** — the
+kind set is data a rule reads, not a clause the contract enforces, and the precedent was measured
+rather than assumed: `consumer_story_fields_file:` arrived in v0.237.0 (#321) and that commit
+changed no `contract_version` line.
+
+**THE INCONSISTENCY ORIGINATES IN CORE, which is why this is a core release.** Measured across
+core's own shipped rule files before any edit:
+
+```
+artifact paths core prescribes                         65
+  conforming                                           41
+  sprint token outside the reserved slot                24   <- 4 positions, 5 spellings
+```
+
+The consumer's four-position mess is core's grammar faithfully executed. Two live defects were
+already measured downstream of it: both hooks pick the live adversarial series by **mtime across
+135 files spanning 56 sprints**, and Check 6's story glob matched **zero files for sprints 298 and
+299** — 73 stories spelled with a capital `S` — so the loop never ran and the check printed PASS.
+Control in the same read: `story-297-*` matches 11.
+
+**`validate-enforcement-map.sh` I82 binds core to its own grammar.** Every artifact path core
+prescribes either conforms or is named in the grammar file's migration ledger. Three properties
+are what make it a ratchet rather than a carve-out:
+
+- **An unlisted violation fails the build.** That is the arm that stops a sixth spelling.
+- **A ledger entry core no longer prescribes ALSO fails the build.** A ledger that can outlive
+  what it excuses is a carve-out; one that must shrink is a ratchet, and the difference is exactly
+  that direction of the join.
+- **The grammar file is excluded from its own corpus, and the exclusion is load-bearing.** The
+  ledger lists the offending paths verbatim; scanned, every entry would be "still prescribed" by
+  the ledger itself, the stale-entry arm could never fire, and the ratchet would be a carve-out
+  wearing its clothes.
+
+Corpus, area roots and scan roots are all DERIVED — from the tree and from the grammar's own
+blocks — so a new step file or a new area moves the enforcement with it. Scan roots are
+deliberately WIDER than areas: rule 2 governs paths that are not sprint artifacts at all, and
+`gate-log-archive-s<N>.md` is still a sprint token in a filename. Every area is asserted to sit
+under a scan root, so widening one cannot orphan the other.
+
+**Measured before shipping, per `CLAUDE.md`.** False-positive set on the 24 flagged: **zero** —
+every one genuinely carries a sprint token in a non-reserved component. Two controls in the same
+run: the reserved slot `s<N>` is not flagged, and `sprint-<N>-retro.md` is. Six probes run on
+every invocation, one negative and five positive, one per measured position; disabling the
+predicate fires all five.
+
+The join arms were mutation-tested rather than assumed — copies, `cmp -s`-guarded, baseline and
+restore both clean at 0:
+
+```
+baseline                                          I82 failures 0
+new unlisted nonconforming prescription           I82 failures 1
+a ledger line deleted (its path becomes unlisted) I82 failures 1
+a ledger entry nothing prescribes                 I82 failures 1
+restored                                          I82 failures 0
+```
+
+**What this release deliberately does NOT do.** It moves no path and it points no authoring agent
+at the grammar. A `SKILL.md` line saying "artifact paths follow this file" would tell an agent to
+obey a grammar the step files it is executing still break in 24 places, and an instruction that
+contradicts the step being followed is worse than none — the agent resolves it by guessing, and a
+guess is a sixth spelling. The pointer lands with 10c, in the release that empties the ledger.
+
+**And one limit, stated rather than discovered later.** `story-<id>-<slug>.md` PASSES rule 2 as
+written, because `<id>` is a placeholder concealing the sprint — and that is the exact form Check
+6's glob broke on. A syntactic check over prescriptions cannot see a sprint number a placeholder
+hides. It is 10e, reading real filenames, that catches it.
+
 ## [0.297.0] — 2026-08-07
 
 ### The self-update gate stops reading AGREEMENT as an unattributable failure

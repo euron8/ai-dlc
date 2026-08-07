@@ -4791,6 +4791,120 @@ The PreToolUse hook is the one that DENIES a dispatch; if it resolves a differen
   fi
 fi
 
+# --- I82: core's own artifact-path prescriptions obey core's own grammar --------
+# artifact-path-grammar.md declares that the DIRECTORY is the only sprint slot: `s<N>/`, and no
+# basename may carry a sprint token. Core prescribed FIVE spellings across four positions before
+# this existed, and the consumer's four-position mess is that grammar faithfully executed — so a
+# declaration with no enforcer here would be re-broken by the next step file anyone writes.
+#
+# WHAT IT ASSERTS, in both directions:
+#   * every artifact path core prescribes either conforms, or is named in the grammar file's
+#     migration ledger. This is the arm that stops a SIXTH spelling.
+#   * every ledger entry is still prescribed somewhere. A ledger that can outlive what it
+#     excuses is a carve-out; one that must shrink is a ratchet, and the difference is exactly
+#     this direction of the join.
+#
+# THE GRAMMAR FILE IS EXCLUDED FROM ITS OWN CORPUS, and that exclusion is load-bearing rather
+# than tidy. The ledger lists the offending paths verbatim; if the file were scanned, every entry
+# would be "still prescribed" by the ledger itself, the stale-entry arm could never fire, and the
+# ratchet would be a carve-out wearing its clothes.
+I82_GRAMMAR="$REPO_ROOT/core/skills/ai-dlc/artifact-path-grammar.md"
+if [ ! -r "$I82_GRAMMAR" ]; then
+  err "I82 cannot read core/skills/ai-dlc/artifact-path-grammar.md. It is the declared home of the artifact path grammar and of the migration ledger this invariant joins against; absent it, every prescription core makes is unchecked and this invariant's silence is indistinguishable from conformance."
+else
+  # A path component carries a sprint token when it names a sprint ANYWHERE but the reserved
+  # slot. Placeholder (`<N>`, bare `N`, `*`) and literal digits alike, prefix and suffix alike,
+  # both capitalisations of `s` — the four positions measured in the tree.
+  i82_is_sprint_token() { # <component> -> 0 when it carries one
+    [ "$1" = 's<N>' ] && return 1                       # the reserved directory slot
+    grep -qE '(^|-)[sS](<N>|N|\*|[0-9]+)($|[-.])' <<<"$1" && return 0
+    grep -qE '(^|-)sprint-(<N>|N|\*|[0-9]+)($|[-.])' <<<"$1" && return 0
+    return 1
+  }
+
+  # THE CORPUS IS DERIVED, never listed: every step file, every skill-root rule file except the
+  # grammar itself, and every role file. A hand list here would be a second declaration of what
+  # core's rulebook is, and the one thing added to it would be the one thing not scanned.
+  i82_corpus=()
+  for f in "$REPO_ROOT"/core/skills/ai-dlc/steps/*.md "$REPO_ROOT"/core/skills/ai-dlc/*.md "$REPO_ROOT"/core/team-roles/*.md; do
+    [ -f "$f" ] || continue
+    [ "$f" = "$I82_GRAMMAR" ] && continue
+    i82_corpus+=("$f")
+  done
+
+  # Both roots lists come from the grammar's own blocks, so widening either moves the
+  # enforcement with it rather than leaving the new prefix unscanned. They answer different
+  # questions -- `areas:` is where an `s<N>/` directory may live, `scan-roots` is what this
+  # invariant READS -- and scan-roots is the wider of the two by construction, because rule 2
+  # governs paths that are not sprint artifacts at all (a rotation archive of a live log).
+  i82_areas="$(awk '/^areas:$/{f=1;next} f&&/^[^ ]/{f=0} f&&/^  [^ ]/{gsub(/^  /,"");print}' "$I82_GRAMMAR")"
+  i82_roots="$(awk '/^```scan-roots$/{f=1;next} f&&/^```/{f=0} f' "$I82_GRAMMAR" | grep -E '.')"
+  i82_narea="$(printf '%s\n' "$i82_areas" | grep -c .)"
+  i82_nroot="$(printf '%s\n' "$i82_roots" | grep -c .)"
+  if [ "${#i82_corpus[@]}" -eq 0 ] || [ "$i82_narea" -eq 0 ] || [ "$i82_nroot" -eq 0 ]; then
+    err "I82 derived ${#i82_corpus[@]} corpus file(s), $i82_narea area root(s) and $i82_nroot scan root(s); all three must be non-zero. A zero on any of them makes this invariant scan nothing and report conformance."
+  else
+    # An area outside every scan root is an area nothing reads, and it would go unenforced
+    # while the grammar went on declaring it. Widen one, widen the other.
+    i82_orphan=""
+    while IFS= read -r a; do
+      [ -n "$a" ] || continue
+      i82_under=0
+      while IFS= read -r r; do
+        [ -n "$r" ] || continue
+        case "$a/" in "$r"/*) i82_under=1 ;; esac
+      done <<<"$i82_roots"
+      [ "$i82_under" -eq 1 ] || i82_orphan="${i82_orphan} $a"
+    done <<<"$i82_areas"
+    [ -n "$i82_orphan" ] && err "I82 artifact-path-grammar.md declares area root(s) that sit under no scan root:${i82_orphan}. The grammar would govern them and this invariant would never read them — a declared area nothing enforces."
+
+    i82_alt="$(printf '%s\n' "$i82_roots" | sed 's#/*$##' | paste -sd'|' -)"
+    i82_seen="$(grep -rhoE "(${i82_alt})/[A-Za-z0-9_./<>{}*-]*" "${i82_corpus[@]}" 2>/dev/null \
+      | sed -e 's/[.,)]*$//' -e 's#/$##' | grep -E '.' | sort -u)"
+    i82_ledger="$(awk '/^```legacy-artifact-paths$/{f=1;next} f&&/^```/{f=0} f' "$I82_GRAMMAR" | grep -E '.' | sort -u)"
+
+    if [ -z "$i82_seen" ]; then
+      err "I82 extracted ZERO artifact paths from ${#i82_corpus[@]} rule file(s) under $i82_narea area root(s). Core prescribes dozens; zero means the extractor no longer matches how they are written, and an extractor that matches nothing reports every prescription as conforming."
+    else
+      i82_viol=""
+      while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        i82_bad=""
+        while IFS= read -r c; do
+          [ -n "$c" ] || continue
+          i82_is_sprint_token "$c" && i82_bad="$c"
+        done < <(printf '%s\n' "$p" | tr '/' '\n')
+        [ -n "$i82_bad" ] || continue
+        grep -qxF "$p" <<<"$i82_ledger" && continue
+        i82_viol="${i82_viol}
+  $p    (component '$i82_bad')"
+      done <<<"$i82_seen"
+
+      [ -n "$i82_viol" ] && err "I82 core prescribes artifact path(s) carrying a sprint token outside the reserved \`s<N>/\` directory slot, and they are not in artifact-path-grammar.md's migration ledger:${i82_viol}
+
+The directory is the only sprint slot. A basename that carries one makes the reader search — and search means mtime, which is how both hooks came to pick the live adversarial series across 56 sprints in one directory. Rewrite it as <area>/s<N>/<kind>.md, or, if the readers cannot move yet, add it to the ledger with the sub-release that removes it."
+
+      # The other direction. A ledger entry no prescription still makes is an excuse for nothing,
+      # and leaving it lets the ledger stop shrinking without anyone seeing it stop.
+      i82_stale=""
+      while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        grep -qxF "$e" <<<"$i82_seen" || i82_stale="${i82_stale} $e"
+      done <<<"$i82_ledger"
+      [ -n "$i82_stale" ] && err "I82 artifact-path-grammar.md's migration ledger names path(s) core no longer prescribes:${i82_stale}. The ledger is a ratchet, not a carve-out: an entry outliving the prescription it excuses is how the list stops shrinking. Delete the entry."
+
+      # PROVE IT CAN FIRE. The predicate above is the whole invariant, and a predicate that
+      # matched nothing would produce this same silence. Both probes, every run.
+      i82_is_sprint_token 's<N>' \
+        && err "I82's own probe: the reserved slot \`s<N>\` was flagged as a violation. The predicate rejects the one spelling the grammar requires, so conformance and violation are the same verdict."
+      for i82_p in 'sprint-<N>-retro.md' 's<N>-research-notes.md' 'gate-log-archive-s<N>.md' 'ui-mockups-sprint-N.md' 'spec-s<N>-<slug>'; do
+        i82_is_sprint_token "$i82_p" \
+          || err "I82's own probe: '$i82_p' was NOT flagged. That is one of the four positions measured in the tree, so the predicate cannot see the defect it exists to catch and every PASS above means nothing."
+      done
+    fi
+  fi
+fi
+
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
