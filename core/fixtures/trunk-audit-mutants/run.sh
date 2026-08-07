@@ -40,33 +40,39 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-mut_reds() {
-  local label="$1" prog="$2" copy="$MUT/$1.sh"
-  if [ -z "$prog" ]; then cp "$VAL" "$copy"; else
-    sed "$prog" "$VAL" > "$copy" 2>/dev/null
-    if cmp -s "$VAL" "$copy"; then printf 'UNMUTATED\n'; return 0; fi
-  fi
-  AI_DLC_TAC_VALIDATOR="$copy" bash "$SUBJ" 2>/dev/null | grep '^  FAIL  ' | sed 's/^  FAIL  //'
-}
-expect_set() { # $1 label, $2 expected count, $3 ERE every red must match, $4 sed
-  local reds n unmatched
-  reds="$(mut_reds "$1" "$4")"
-  if [ "$reds" = "UNMUTATED" ]; then
-    bad "MUTANT $1: the sed matched nothing — no mutation was applied, so nothing was proven"
-    return
-  fi
-  n="$(grep -c . <<<"$reds" || true)"
-  unmatched="$(grep -vE "$3" <<<"$reds" | grep -c . || true)"
-  if [ "$n" -eq "$2" ] && [ "$unmatched" -eq 0 ]; then
-    ok "MUTANT $1 moves exactly the $2 assertion(s) it should, and no others"
-  else
-    bad "MUTANT $1: expected $2 red(s) matching '$3', got ${n} (${unmatched} unexpected): $(tr '\n' ';' <<<"$reds")"
-  fi
+# EVERY MUTANT RUN IS INDEPENDENT, SO THEY GO THROUGH A POOL, and the reason is the suite's
+# critical path rather than this fixture in isolation. Each `expect_set` below builds one copy
+# of the validator and drives the SIBLING fixture against it; the nineteen runs share nothing,
+# and run end to end they cost 67s standalone and ~198s inside the 16-way pre-push suite. That
+# suite is POLE-BOUND — its makespan tracks its longest single unit, measured 268s against a
+# 268s wall clock — so an internally-serial fixture sets the wall clock for the whole push no
+# matter what AI_DLC_FIXTURE_JOBS is.
+#
+# The file is therefore in three phases, and the middle section is deliberately UNCHANGED from
+# the serial version: `expect_set` now REGISTERS a run instead of performing it, the call sites
+# and their reasoning are byte-for-byte what they were, and a third phase evaluates them in
+# declaration order. Rendering from the registry rather than from completion order is what
+# keeps this fixture's stdout byte-comparable against the serial version it replaces.
+
+RUNS="$WORK/runs"; : > "$RUNS"
+OUTD="$WORK/out"; mkdir -p "$OUTD"
+
+# expect_set <label> <expected count> <ERE every red must match> <sed>
+#
+# The sed program goes to a FILE rather than into the registry. These programs carry tabs,
+# backslashes and both quote characters — M18's is a bracket class whose whole subject is a
+# backslash-t — and a registry that stored them inline would have to survive one round of
+# field-splitting each. A program that arrived at the worker subtly re-quoted would still
+# apply, still satisfy `cmp -s`, and prove something other than what its call site says.
+expect_set() {
+  printf '%s' "$4" > "$MUT/$1.sed"
+  printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$RUNS"
 }
 
-ctl="$(mut_reds control "")"
-[ -z "$ctl" ] && ok "CONTROL: an unmutated copy of the script passes every assertion" \
-              || bad "CONTROL: an unmutated copy FAILED ($(tr '\n' ';' <<<"$ctl")) — every kill below is unearned"
+# The control is registered like any other run and REPORTED first. Its own arm is what
+# licenses every kill below, so an empty sed program is the whole of its mutation: the worker
+# copies the validator untouched.
+expect_set control "" ""  ""
 
 # M1 — an unresolved class becomes a skip. Fail-closed becomes fail-open, which is the
 # whole mechanism: the commits it cannot classify are the ones it exists to surface.
@@ -190,6 +196,75 @@ expect_set capture-duplicate-name-accepted 1 'declared twice in one class is ref
 # A mutation that lands and does not mutate the behaviour is the shape `cmp -s` cannot catch.
 expect_set decl-line-trailing-t-eaten 1 'name-only capture was misreported' \
   "s@| sed 's/\^\[\[:space:\]\]\*//; s/\[\[:space:\]\]\*\\\$//'@| sed 's/^[ \\\\t]*//; s/[ \\\\t]*\$//'@"
+
+# ==================== PHASE 2: build and drive every mutant, in a pool ====================
+# The zero guard is this fixture's own subject one level out: a registration grammar that
+# stopped filling yields an empty list, and an empty list passes every assertion it never made.
+N_RUNS="$(grep -c . "$RUNS" || true)"
+if [ "$N_RUNS" -lt 10 ]; then
+  echo "FIXTURE ERROR: registered only $N_RUNS mutant run(s) — the registry did not fill, so nothing below is evidence" >&2
+  exit 2
+fi
+
+# EIGHT, AND FIXED RATHER THAN TUNABLE — the same number and the same reasoning the sibling
+# pools state in place: this pool nests inside the pre-push suite's own, so a knob here
+# multiplies against the knob there and the PRODUCT is what lands on the machine.
+#
+# The `cmp -s` guard stays INSIDE the worker, where the copy is made. It is the guard that
+# stops a sed which matched nothing from scoring as a kill, and moving it to the parent would
+# put it on the wrong side of the thing it checks.
+TAM_JOBS=8
+TAM_VAL="$VAL" TAM_SUBJ="$SUBJ" TAM_MUT="$MUT" TAM_OUT="$OUTD" \
+  xargs -P "$TAM_JOBS" -I{} bash -c '
+    l="$1"; copy="$TAM_MUT/$l.sh"; prog="$TAM_MUT/$l.sed"
+    if [ -s "$prog" ]; then
+      sed -f "$prog" "$TAM_VAL" > "$copy" 2>/dev/null
+      if cmp -s "$TAM_VAL" "$copy"; then
+        printf UNMUTATED > "$TAM_OUT/$l.state"
+        printf done      > "$TAM_OUT/$l.done"
+        exit 0
+      fi
+    else
+      cp "$TAM_VAL" "$copy"
+    fi
+    AI_DLC_TAC_VALIDATOR="$copy" bash "$TAM_SUBJ" 2>/dev/null \
+      | grep "^  FAIL  " | sed "s/^  FAIL  //" > "$TAM_OUT/$l.reds"
+    printf done > "$TAM_OUT/$l.done"
+  ' _ {} < <(cut -f1 "$RUNS")
+
+# ================= PHASE 3: evaluate, serially, in DECLARATION order =================
+while IFS=$'\t' read -r label want ere; do
+  [ -n "$label" ] || continue
+
+  # A MISSING VERDICT IS A FAILURE, not a gap. `.done` is written after the run, so its
+  # absence means the pool dropped the job — which otherwise contributes exactly what a
+  # passing mutant contributes: nothing.
+  if [ ! -f "$OUTD/$label.done" ]; then
+    bad "MUTANT $label produced no verdict — the pool dropped work, and a short green run reads exactly like a passing one"
+    continue
+  fi
+
+  if [ -f "$OUTD/$label.state" ]; then
+    bad "MUTANT $label: the sed matched nothing — no mutation was applied, so nothing was proven"
+    continue
+  fi
+
+  reds="$(cat "$OUTD/$label.reds" 2>/dev/null)"
+
+  if [ "$label" = control ]; then
+    [ -z "$reds" ] && ok "CONTROL: an unmutated copy of the script passes every assertion" \
+                   || bad "CONTROL: an unmutated copy FAILED ($(tr '\n' ';' <<<"$reds")) — every kill below is unearned"
+    continue
+  fi
+
+  n="$(grep -c . <<<"$reds" || true)"
+  unmatched="$(grep -vE "$ere" <<<"$reds" | grep -c . || true)"
+  if [ "$n" -eq "$want" ] && [ "$unmatched" -eq 0 ]; then
+    ok "MUTANT $label moves exactly the $want assertion(s) it should, and no others"
+  else
+    bad "MUTANT $label: expected $want red(s) matching '$ere', got ${n} (${unmatched} unexpected): $(tr '\n' ';' <<<"$reds")"
+  fi
+done < "$RUNS"
 
 if [ "$fails" -eq 0 ]; then echo "PASS trunk-audit-mutants"; exit 0; fi
 echo "FAIL trunk-audit-mutants ($fails)"; exit 1

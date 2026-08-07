@@ -41,9 +41,10 @@ The two edits and the measurement behind each are in §*What the unreached-step 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 
-0. **Parallelize the mutant runs inside the six heavy fixtures.** Sequenced FIRST by operator
-   decision, because it compounds across every gate run that follows. See §*The suite critical
-   path*. Do the biggest fixture alone, measure it, and only then do the other five.
+0. ~~**Parallelize the mutant runs inside the six heavy fixtures.**~~ **COMPLETED — shipped as
+   v0.283.0.** Suite makespan **268s → 238s**. See §*What v0.283.0 measured about the suite*
+   for the numbers, including the three the plan got wrong. **`feat/v0.283.0-unreached-step-verdicts`
+   must be renumbered to `v0.284.0`** — this release took 0.283.0.
 
 1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
    **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
@@ -197,6 +198,48 @@ the reconcile PR unmerged until retro.
   supersession-marker arm. Retires `steps__retro__pipeline-snapshot-ceiling`.
 - **R6 promote LC-E6/LC-O15 to ADJUDICATED** — only after graph burns down the 13-row
   `EXTENSION-TITLE-MATCHES-CORE` set, or first contact wedges on ~13 blocking rows.
+
+## What v0.283.0 measured about the suite (SUPERSEDES the section below in three places)
+
+The section below is kept for its reasoning, which was right about the SHAPE — the suite is
+pole-bound, its makespan equals its longest unit, and the lever is that each heavy fixture is
+internally serial. Three of its specifics were wrong, and each was wrong in a way that would
+have mis-aimed the next session:
+
+1. **The durations it quoted were contention-inflated, not unit costs.** `run_fixtures`
+   rewrites `.git/ai-dlc-fixture-durations` on every run with each unit's wall clock *under
+   16-way load*. `enforcement-map-derivations` was recorded at 282s and later 508s; its actual
+   standalone cost was **137s**. Read that file as a scheduling input, never as a cost model.
+2. **Two of the six named fixtures already had inner pools** (`enforcement-map-sites`,
+   `layer-contract-conformance`), and two fixtures NOT on the list were bigger than most of it
+   (`self-update-join-gate` 105s, `trunk-audit-mutants` 67s). The list was assembled from the
+   inflated numbers.
+3. **"The biggest goes 282s → ~35s, dropping the makespan toward `sum/16` = 150s" did not
+   happen, and could not.** Removing one pole exposes the next one, and there were seven units
+   clustered between 130s and 250s. Measured end to end: **268s → 238s**, about 11%.
+
+`enforcement-map-sites` was the pole no inner pool could reach — its unit duration EQUALLED
+the makespan at every outer pool size from 4 to 16 — so it is now sharded across three
+directories. The outer knob was re-derived on the sharded tree and stays at 16: lower is
+monotonically worse (236s at 8, 247s at 6, 260s at 5, 272s at 4).
+
+**Where the remaining time actually goes, so nobody re-runs these.** The suite is 2876
+CPU-seconds over ~240s wall, at 1165% of a possible 1800% — **not CPU-saturated**, and
+**system time beats user time 2:1** (1914s vs 962s). That is `fork`/`exec` and VFS overhead
+from tens of thousands of short-lived processes and ~60 repo-tree copies per run. Two hardware
+hypotheses were tested and both are dead ends: `TMPDIR` on a 24 GB RAM disk left system time
+unchanged (1914s → 1970s) and the makespan at 245s, because the copies were already served
+from the page cache; and there is nothing here a GPU can take, since the bottleneck is the
+kernel's per-process and per-file cost rather than arithmetic. **The only remaining lever is
+doing fewer validator invocations** — `validate-enforcement-map.sh` is ~8.5s a call with no
+hot spot (a cut-bisect rises monotonically across ~76 invariants) and the suite makes ~140 of
+them.
+
+**One intermittent is now on the record.** Four fixtures went red once each across this
+release's ~20 measurement runs — `crosswalk-home-declaration`, `apply-drift-refile`,
+`enforcement-map-sites`, `suite-dispatch-order` — every one green on standalone re-run.
+`.githooks/pre-push` documents the class. More nested pools can only make it likelier. If a
+push is blocked by a single red fixture, re-run that fixture alone before believing it.
 
 ## The suite critical path — measured, after two invalid measurements
 

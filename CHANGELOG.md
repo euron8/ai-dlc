@@ -34,6 +34,109 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.283.0] — 2026-08-06
+
+### Six fixtures were internally serial, and the suite's wall clock was whichever one was longest
+
+The pre-push fixture suite is **pole-bound**, and that is the whole finding. Its makespan
+tracks its single longest DIRECTORY — `core/fixtures/*/run.sh` is what the outer pool globs —
+so a fixture that runs its own assertions one after another sets the wall clock for every
+push no matter what `AI_DLC_FIXTURE_JOBS` is. Measured on this tree, same commit, the only
+difference being whether `enforcement-map-derivations` used an inner pool:
+
+```
+serial     makespan 268s   longest unit: enforcement-map-derivations 268s
+inner pool makespan 249s   longest unit: self-update-join-gate       248s
+```
+
+The makespan **equalled the longest unit in both runs**. That is the signature of a
+pole-bound pool, and it is why `sum/16` — 153s at the time — was never reachable by tuning
+the pool size.
+
+Each of these fixtures already re-seeded a pristine tree per assertion and shared no state
+between them; they were independent before this release, and the serial sequence was only the
+cheapest way to write them down. Each now registers its runs, drives them through a fixed
+inner pool, and evaluates them **in declaration order** — so every one of them emits output
+**byte-identical** to the serial version it replaces, which is the differential this refactor
+had to produce.
+
+| fixture | standalone | | validator runs |
+|---|---|---|---|
+| `enforcement-map-derivations` | 137s → **40s** | | 15 |
+| `self-update-join-gate` | 105s → **26s** | | 6 |
+| `trunk-audit-mutants` | 67s → **14s** | | 19 |
+| `ledger-status-vocabulary` | 61s → **14s** | | 7 |
+| `consumer-machinery-home` | 58s → **12s** | | 7 |
+| `crosswalk-home-declaration` | 40s → **10s** | | 5 |
+
+`enforcement-map-sites` was the pole that no inner pool could reach: it already had an 8-way
+one and still cost 130s with the machine to itself, and its unit duration **equalled the
+suite makespan at every outer pool size from 4 to 16** (256/256/248/246s). So it is sharded
+across directories — the same move, and the same reason, as `trunk-audit-mutants` being split
+out of `trunk-audit-classes`. Three shards of 62/70/61s that the outer pool starts
+independently, partitioned **round-robin** because these assertions differ by an order of
+magnitude in cost and a contiguous cut rebuilds the pole inside one shard.
+
+Suite makespan across the release: **268s → 238s**.
+
+**The shard split is where this release could have shipped a hole, so it is joined in three
+places.** Sharding moves assertions out of a directory, and the failure mode it introduces is
+a shard that is deleted, renamed or never installed: the suite then runs fewer assertions and
+reports a *shorter green run*. Shard `a` therefore derives the sibling directories that exist
+beside it and refuses to run if a declared shard has no driver; the partition is derived from
+the same assertion list the control comes off, so a new assertion lands in a shard without a
+table to update; and each shard runs the control itself, because a shard without it reports
+kills earned against a tree nobody checked. The union of the three shards was verified equal
+to the original 69 assertion lines, in **both** directions, with neither `comm` leg returning
+a row.
+
+Both new shard directories carry their own `.dist-only` marker. The marker is derived per
+directory by four independent readers, so a shard without one is shippable by every reader
+that matters and would land in a consumer as a directory whose subject is not there — which
+is the exact failure the parent's marker was written after. The tree-wide validator caught
+this immediately and named all three consequences, because a new fixture directory is joined
+to `install.sh` and to both manifest copies.
+
+**The shard argument is positional, not an environment variable, and that is load-bearing.**
+`enforcement-map-sites` scrubs every ambient `AI_DLC_*` name near the top for I10. An
+`AI_DLC_EMS_GROUP` would have been unset before the line that reads it, every shard would
+have silently fallen back to `a`, and the suite would have run shard `a` three times while
+reporting three green fixtures.
+
+**What was proven, and how.** A byte-identical differential shows the verdicts are unchanged
+on a tree where everything passes; it cannot show the assertions still have teeth, because a
+driver that renders a stored `ok` and never runs anything produces exactly the same bytes.
+So each new driver was mutated: six mutants against `enforcement-map-derivations` (collapsed
+assertion-list grammar, dropped verdict, single regression charged exactly once, worker dying
+silently, `rc=2` not collapsing into `rc=1`, control veto stopping the run), and two against
+each of the other five (a worker that records no verdict must be charged; an unapplied
+mutation must be refused rather than scored as a kill), each with an unmutated control from
+the same directory. Twenty-one arms, all green.
+
+One of those batteries was wrong on its first run and is worth recording: the "no mutation"
+mutant substituted `cp SRC > DST`, which truncates `DST` and ignores its argument — so it did
+not stop mutating, it emptied the file, the copy genuinely differed, `cmp -s` correctly passed
+it through, and three arms failed for a reason that had nothing to do with what was under
+test. The guard has to be fed a copy that is **byte-identical** to its source; that is the
+only input on which it is supposed to speak.
+
+**Two things this release did NOT do, stated because the measurements exist.**
+`AI_DLC_FIXTURE_JOBS` stays at 16: re-swept on the sharded tree it gives 236s at 8, 247s at 6,
+260s at 5 and 272s at 4, so lower is monotonically worse and 8 is within noise of 16. An
+earlier reading of 180s at J=4 was discarded rather than banked — that run finished 113 of 115
+verdicts, and a unit that aborts early is not a unit that ran fast. And the suite is not
+I/O-bound: with `TMPDIR` moved to a 24 GB RAM disk the system time did not fall (1914s → 1970s)
+and the makespan moved 247s → 245s, because the tree copies were already being served from the
+page cache. The 2:1 system-to-user ratio is `fork`/`exec` and VFS overhead, which no storage
+tier and no pool size removes — only doing fewer validator invocations would.
+
+**Known, and not introduced here: the concurrency-correlated intermittent.** Four different
+fixtures went red once each across the release's measurement runs
+(`crosswalk-home-declaration`, `apply-drift-refile`, `enforcement-map-sites`,
+`suite-dispatch-order`), every one of them green on every standalone re-run. `.githooks/pre-push`
+already documents this class in place. Nesting more pools raises the process count and can only
+make it likelier, so it is named here rather than left for the next person to rediscover.
+
 ## [0.282.0] — 2026-08-06
 
 ### Core was inviting the shadow it then had no way to retire
