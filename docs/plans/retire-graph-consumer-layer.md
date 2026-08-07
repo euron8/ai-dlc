@@ -51,12 +51,11 @@ goes red because the self-update gate invokes each gating script BARE, and three
 exit 2 on a bare invocation. See §*Item 11 — the self-update gate compares two usage errors*.
 **Ship item 11 first, then this branch pushes unmodified.** Do not weaken F3 to get it green.
 
-**NEXT ACTION: the OPERATOR runs the two-hop pull** — `docs/plans/graph-two-hop-pull.md`, an
-executable handoff. The s301 close-out is **DONE and landed on graph's `main`** at `1c72823af`
-(`docs/plans/s301-close-out.md` was the procedure, `-derivation.md` the record); nine of its ten
-Done-when checks passed and the tenth, a stale local pause flag, is step 0 of the pull file.
-**The next thing a SESSION does is 10a+10b**, which need no consumer state — but ai-dlc's working
-tree must be left alone while hop 1 has it in detached HEAD.
+**NEXT ACTION: 10a + 10b, shipped as ONE release.** Everything ahead of them in the execution
+order is closed: the close-out landed, the pull is done, item 11 shipped as v0.288.0, the parked
+F3 work shipped as v0.289.0's successor chain. **Item 10 is now the only thing holding s302.**
+10a and 10b ship together because `CLAUDE.md` fails builds on a declaration with no enforcer,
+and 10b IS 10a's enforcer.
 
 ### Order of execution
 
@@ -68,7 +67,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | # | item | why here |
 |---|---|---|
 | 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
-| 2 | **operator: ~~close s301, LAND IT ON `main`~~ DONE, then the TWO-HOP pull — `graph-two-hop-pull.md`** | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
+| 2 | ~~**operator: close s301, land on `main`, TWO-HOP pull**~~ **DONE** — graph at `0.292.0 / c5e7daa` | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
 | 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
 | 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
 | 5 | **v0.288.0** (parked branch) | pushes unmodified once 11 lands |
@@ -109,7 +108,8 @@ before you write code.
    must be renumbered to `v0.287.0`** — 0.283.0 went to this release, 0.284.0 to the
    validator spawn reduction that followed it, 0.285.0 to item 2b and 0.286.0 to item 3.
 
-1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
+1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~ **DONE — the
+   pull ran and graph is at `0.292.0`. See §*Where things stand*.**
    **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
    that s302 starts on a fully-updated consumer. Still the operator's to run; still two hops
    (§*pull graph in TWO hops*). graph's stamp was re-measured at `0.274.0 @ 9036e0d`.
@@ -257,8 +257,13 @@ is the shape the whole mechanism was built for. **Run the absorbing change again
 fixture suite before believing the absorption is clean** — the conflict surfaced as a
 red fixture, not as anything visible while reading the override.
 
-**graph has received NONE of it.** Its stamp is still `version: 0.274.0 / commit: 9036e0d`,
-re-measured 2026-08-06 from `_bmad-output/ai-dlc-update/reconcile-report.md:3`.
+**THE PULL IS DONE.** graph is at **`0.292.0 / c5e7daa`**, all four stamp fields, taken as the
+two-hop split this plan prescribed (hop 1 `SELF-UPDATE-OK`, hop 2 the rulebook) plus three
+single hops as later releases landed. 25 HARD blockers in and 0 out; 5 overrides retired, 1
+readopted clean, 18 adjudications recorded. Layer debt OPEN 2 → 0. The `EXTENSION-TITLE-MATCHES-CORE`
+queue is at **zero with a control proving the zero is real**. Two obligations are now enumerable
+rather than buried in prose — `OWED-DEVPUSH-RESTATES-CORE` and `OWED-STS-DOMAIN-AB-ABSORBED` —
+and **neither gates anything**.
 
 ## What v0.280.0 measured, and the five defect classes it names
 
