@@ -311,7 +311,30 @@ while IFS= read -r name; do
   ( cd "$CONSUMER" && bash "$TMP/cur-$name" >/dev/null 2>&1 ); rc_cur=$?
   ( cd "$CONSUMER" && bash "$TMP/new-$name" >/dev/null 2>&1 ); rc_new=$?
 
-  if [ "$rc_new" -eq 0 ]; then
+  # EXIT 2 IS A MALFORMED INVOCATION, NOT A FINDING, AND THIS PROBE IS THE MALFORMED CALLER.
+  # Both runs above are bare -- no arguments, no stdin -- because the gate cannot know what
+  # arguments the hook passes each script. For a script whose bare form is a usage error that
+  # probe asks nothing, and the answer it gets back is "usage", from BOTH sides. Measured on
+  # every script the reference consumer's pre-push invokes:
+  #
+  #   validate-audit-anchors.sh        rc=2      validate-compact-window.sh       rc=0
+  #   validate-layer-entries.sh        rc=2      validate-fixture-drivability.sh  rc=0
+  #   validate-provenance-block.sh     rc=2
+  #
+  # THREE OF FIVE. Those three fell to the both-non-zero arm below and deferred, so any
+  # machinery-only pull touching one of them folded the machinery slice into the operator-gated
+  # apply -- the cost `pull graph in TWO hops` exists to avoid, incurred for no rulebook reason
+  # and reported as an unattributable failure rather than as "this probe does not apply".
+  #
+  # 2 is the DECLARED token for a fumbled invocation across this codebase; validate-audit-anchors
+  # says so in its own gate text ("Exit 2 is a malformed invocation, NOT a missing anchor"). So
+  # agreement AT 2 is the one disagreement-free outcome that carries no information, and it is
+  # scoped hard: BOTH sides must be exactly 2. A 2 on one side against anything else still falls
+  # through, because a version that newly starts or stops refusing its own invocation IS a
+  # change to what the hook will run.
+  if [ "$rc_cur" -eq 2 ] && [ "$rc_new" -eq 2 ]; then
+    emit SELF-UPDATE-OK "$name" "both versions exit 2 -- a malformed invocation, which is what this bare probe is. The probe cannot pass the arguments the hook passes, so it asks this script nothing and neither version's answer is evidence. Not a differential signal, and NOT an unattributable failure: deferring here would strand the machinery slice on every pull touching a script whose bare form is a usage error."
+  elif [ "$rc_new" -eq 0 ]; then
     emit SELF-UPDATE-OK "$name" "the incoming version passes against this consumer's existing tree (current version rc=$rc_cur), so installing it cannot block the push."
   elif [ "$rc_cur" -eq 0 ]; then
     deferred=1
