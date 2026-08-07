@@ -40,21 +40,20 @@ below, and a session following this file must not re-ask them.**
   prompt for the graph session is owed as part of this work.
 
 **NOTHING IS IN FLIGHT. The working tree is clean and every branch this session cut is
-merged** (v0.283.0 #373, v0.284.0 #374, the plan correction #375). A resuming session starts
-from `origin/main` at `0.284.0` with no uncommitted work to reconcile.
+merged** (v0.283.0 #373, v0.284.0 #374, the plan correction #375, v0.285.0 #377). A resuming
+session starts from `origin/main` at `0.285.0` with no uncommitted work to reconcile.
 
 **ONE BRANCH REMAINS PARKED, and it is NOT this session's.** Branch
 `feat/v0.283.0-unreached-step-verdicts` is pushed and gate-green at commit `70c9046`, subject
 `wip(unreached-steps)`. It carries two finished script edits and **no fixture coverage and no
 release triple** — do not merge it as-is. Finish it by adding the fixture arms below, then bump
-`VERSION`, write the CHANGELOG heading, and rename the commit to a **`feat(v0.285.0):`**
-subject — **its branch name still says 0.283.0 and that number is taken; rename or ignore the
-branch name, the commit subject is what the release triple checks.** The two edits and the
-measurement behind each are in §*What the unreached-step audit found*.
+`VERSION`, write the CHANGELOG heading, and rename the commit to a **`feat(v0.286.0):`**
+subject — **its branch name still says 0.283.0, and both 0.283.0 and 0.285.0 are now taken;
+rename or ignore the branch name, the commit subject is what the release triple checks.** The
+two edits and the measurement behind each are in §*What the unreached-step audit found*.
 
-**NEXT ACTION: item 2b.** Operator decision at handoff, 2026-08-06 — the next session starts
-there. Items 0, 1, 2, 4 and 5 are closed; 3, 6, 7, 8 and 9 remain open behind it in the order
-listed.
+**NEXT ACTION: item 3.** Items 0, 1, 2, 2b, 4 and 5 are closed; 3, 6, 7, 8 and 9 remain open in
+the order listed.
 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
@@ -62,8 +61,8 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 0. ~~**Parallelize the mutant runs inside the six heavy fixtures.**~~ **COMPLETED — shipped as
    v0.283.0.** Suite makespan **268s → 238s**. See §*What v0.283.0 measured about the suite*
    for the numbers, including the three the plan got wrong. **`feat/v0.283.0-unreached-step-verdicts`
-   must be renumbered to `v0.285.0`** — 0.283.0 went to this release and 0.284.0 to the
-   validator spawn reduction that followed it.
+   must be renumbered to `v0.286.0`** — 0.283.0 went to this release, 0.284.0 to the
+   validator spawn reduction that followed it, and 0.285.0 to item 2b.
 
 1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
    **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
@@ -71,16 +70,14 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
    (§*pull graph in TWO hops*). graph's stamp was re-measured at `0.274.0 @ 9036e0d`.
 2. ~~**Fix `validate-locked-anchor.sh`.**~~ **COMPLETED — shipped as v0.280.0.** All three OPEN
    `PC-S297-LOCKED-ANCHOR-*` candidates discharged. See §*What v0.280.0 measured*.
-2b. **Absorb Rule 930's count-control discipline and give it an enforcer** — one layer earlier
-   than the citation drift: a bare `grep -c` yields a false number that becomes an AC, which
-   the adversary then spends a pass falsifying. **Do NOT build a shell-file linter for this.**
-   Measured: the defects are in markdown derivations, not in `*.sh`. See §*The shell-idiom
-   family IS in this sprint*. **Measured since:** core's shipped `SKILL.md` carries 30 rules
-   and ZERO count-control discipline (control: the same grep finds all 30 rule headings), so
-   the absorption target is a new core rule, numbered in core's band — not 930, which is
-   inside the consumer band I45 reserves. Whether a mechanical enforcer is viable at all is
-   under measurement; if its false-positive set is large and unclassifiable, **ship the rule
-   and say so** rather than shipping a lint the operator turns off.
+2b. ~~**Absorb Rule 930's count-control discipline and give it an enforcer.**~~ **COMPLETED —
+   shipped as v0.285.0 (#377)** as core **Rule 31**, with the enforcer measured and
+   deliberately NOT shipped. See §*What v0.285.0 measured about the count-assertion class*,
+   which corrects this item's stated mechanism. Two things a later session must not re-derive:
+   the absorption premise HELD (core's `SKILL.md` had 0 statements of the discipline against
+   two same-read controls), but **the defect is not a miscounted `grep -c`** — it is an
+   underived count in prose that asserts facts outside the criterion's own test. The carrier
+   is a declared I79 gap, taking core's gap count 5 → 6.
 3. **Make the adversarial STALL rung reachable mid-cycle.** It fires correctly at p7 and goes
    silent once the cycle converges, so today it caught nothing.
 4. ~~**R4 — snapshot ceiling.**~~ **COMPLETED — shipped as v0.281.0 (#369).**
@@ -105,7 +102,7 @@ sections in the design record below are labelled SHIPPED.
 
 ## Where things stand
 
-**ai-dlc is at `0.284.0`, `contract_version` 16.** Ten releases shipped and merged to `main`:
+**ai-dlc is at `0.285.0`, `contract_version` 16.** Eleven releases shipped and merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
@@ -119,6 +116,7 @@ sections in the design record below are labelled SHIPPED.
 | v0.282.0 | #370 | `AI_DLC_AUTO_HANDOFF_MODE` + `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED`, and the `settings_env_keys:` multi-key supersession mechanism. Retires `SKILL__auto_handoff_mode`. |
 | v0.283.0 | #373 | **plan item 0.** Inner pools for six internally-serial fixtures; `enforcement-map-sites` sharded into three directories. Suite makespan **268s → 238s**. Output byte-identical, 21 driver mutants green. |
 | v0.284.0 | #374 | `validate-enforcement-map.sh` spawn reduction: 1582 → 1156 external commands, **8.36s → 7.02s**. Suite makespan **238s → 214s**. Byte-identical on the failing paths as well as the passing one. |
+| v0.285.0 | #377 | **plan item 2b.** Core **Rule 31** — a countable assertion carries the derivation that produced it. Absorbs the consumer's Rule 930 count discipline, which core had nowhere. The enforcer was built, measured and NOT shipped; `**Carrier:** none` is a declared I79 gap (5 → 6). |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
 A consumer override is evidence that a consumer needed something; it is not evidence that core
@@ -177,6 +175,61 @@ tree**. Building the obvious fix — disarm on a `prior_evidence:` token that is
 prose quoting the token inside repair-history sections. It was not built. Class 2 is real and
 belongs in the item-7 audit; that particular enforcer is not the way to catch it.
 
+## What v0.285.0 measured about the count-assertion class (CORRECTS item 2b's stated mechanism)
+
+Item 2b said the defect was "a bare `grep -c` yields a false number that becomes an AC". The
+target case was right and the mechanism was wrong, in a way that would have aimed an enforcer at
+nothing. Recorded here so item 7's audit does not inherit the wrong shape.
+
+**The absorption premise HELD.** Core's shipped `SKILL.md` before the edit carried **0**
+statements of the discipline, with two controls in the same read: 30 rule headings, and 29
+mentions of `grep`/`count`. It discusses counting constantly and never says to control one.
+
+**Core was not silent, and where it spoke is the point.** `steps/gate-validation.md` Check 12
+already requires an absence claim to carry its control. That clause is scoped to **gate log
+evidence rows**, and `gate-validation.md` is sliced-loaded under Rule 21, so it is in context
+only while a gate is being logged. Story work never loads it, and story work is where the
+defects are authored. A rule can be present in core and still absent everywhere it is needed.
+
+**The three real findings, and not one is a miscounted grep.** Across three consecutive
+adversarial passes in the live sprint:
+
+| finding | what it actually was |
+|---|---|
+| `MAJ-p4-1` | a scope exclusion asserted about a sibling story the sibling does not contain — not a count at all |
+| `MAJ-p5-1` | an AC asserting "five of the thirteen call sites" where the derived count is thirteen |
+| `MAJ-p6-1` | a cited range called "full prose" that the citation does not test |
+
+`MAJ-p5-1`'s "five" corresponded to nothing derivable — authored with no command behind it. All
+three survived four adversarial passes and two mechanical enforcers, and the consumer's own retro
+synthesis names one shared cause: they sit in **prose asserting facts outside the criterion's own
+test**, which passes and enforcers alike read least.
+
+**The four sites this plan cited as evidence do not say what it read them as saying.** Re-read,
+**three of the four are the discipline WORKING** — a `ZZQQ` control that correctly returned zero,
+a label grep deliberately not trusted, a control labelled as such. Only
+`s301-stories-adversarial-p2.md:327` (a grep scoped to the wrong file) is an escape. Graph's Rule
+930 is effective; the gap was that core lacked it, not that graph's rule was failing.
+
+**The enforcer was built and measured, and is why the carrier is `none`.** A block-grain detector
+— a cardinal applied to a plural noun with no command and no `path:line` in the same block:
+
+```
+positive control   reconstructed MAJ-p5-1 defect (cmp -s guarded mutant)   1 flag, correct block
+negative control   the same file, repaired                                 0 flags
+false positives    whole story corpus                    6074 flags / 890 of 998 files
+                   live sprint only                        13 flags /   5 of  10 files
+```
+
+The live-sprint flags are prescriptive counts ("a test driving two new mints at different
+blocks") and in-block enumerations — requirements that derive nothing. **The disqualifying
+property is the shape, not the volume:** the detector goes silent whenever the block carries any
+unrelated citation, and `MAJ-p6-1`'s block carries three. It is blind to two of the three real
+findings, and clears on the third as soon as an author adds a citation without making the
+sentence truer. **Do not rebuild it.** If a mechanical enforcer is attempted again, the only
+shapes not already refuted are count-versus-enumeration arity and cross-artifact number
+agreement — both narrower than the rule, neither catching `MAJ-p5-1`.
+
 ## The one thing that must not be forgotten: pull graph in TWO hops
 
 A bundled `0.274.0 → 0.278.0` pull returns `SELF-UPDATE-DEFER`, so the machinery slice lands at
@@ -211,14 +264,15 @@ the reconcile PR unmerged until retro.
 
 ## Still open
 
-- **R3 auto-handoff** — blocked on a decision: `override_supersessions` allows one
-  `settings_env_key` and auto-handoff needs two (`AI_DLC_AUTO_HANDOFF_MODE` +
-  `AI_DLC_AUTO_HANDOFF_SEAMS_EXCLUDED`). Prefer a `settings_env_keys:` list rendering N ATOMIC
-  worklist rows. Retires `SKILL__auto_handoff_mode`.
-- **R4 snapshot ceiling** — `validate-artifact-budget.sh --fail-on <artifact>` + a
-  supersession-marker arm. Retires `steps__retro__pipeline-snapshot-ceiling`.
-- **R6 promote LC-E6/LC-O15 to ADJUDICATED** — only after graph burns down the 13-row
-  `EXTENSION-TITLE-MATCHES-CORE` set, or first contact wedges on ~13 blocking rows.
+**R3 and R4 are NOT open — they shipped.** R3 is v0.282.0 (#370), carrying the multi-key
+`settings_env_keys:` mechanism and retiring `SKILL__auto_handoff_mode`; R4 is v0.281.0 (#369),
+`--fail-on <artifact>` plus the supersession-marker arm, retiring
+`steps__retro__pipeline-snapshot-ceiling` as a CONFIGURED supersession. Their design text
+survives below under §*Release sequence* as rationale only.
+
+- **R6 promote LC-E6/LC-O15 to ADJUDICATED** — the one release item still open. Only after graph
+  burns down the 13-row `EXTENSION-TITLE-MATCHES-CORE` set, or first contact wedges on ~13
+  blocking rows. Ship it last.
 
 ## What v0.283.0 measured about the suite (SUPERSEDES the section below in three places)
 
@@ -488,9 +542,17 @@ found almost nothing: 183 consumer-owned files, 2 benign bracket-class hits, and
 even enable `pipefail`**, so the I54/I54b precondition never applies. That result is real and
 it is also the wrong corpus.
 
+**PARTLY REFUTED by v0.285.0's measurement — read §*What v0.285.0 measured about the
+count-assertion class* before acting on this section.** The corpus claim below is right: the
+derivation commands sit in markdown prose, not in `*.sh`, and a shell-file linter would catch
+none of it. The reading of the four quoted sites is wrong. **Three of the four are the discipline
+WORKING**, not going wrong — they are the agent writing a control, or refusing to trust a grep,
+and saying so. Only the fourth is an escape. The real class is an underived count in prose
+asserting facts outside the criterion's own test, which is a wider target than a shell idiom.
+
 The defects live in the **derivation commands the agents run and cite**, which sit in markdown
 prose, not in `*.sh`. In the s301 record: `grep -c` appears 214 times, `sed` 428, `wc -l` 85,
-`awk` 45 — and the passes are full of them going wrong:
+`awk` 45:
 
 - `s301-epics-repair-p5d.md:115` — *"BSD `grep` has no `-P`; the first attempt at this
   enumeration returned a vacuous `0`"*
