@@ -34,22 +34,31 @@ right; the remedy text was never updated. It now says what actually clears a row
 
 1. **Unblock step 4 and mark PR #872 as dispositioned upstream** — fixed in ai-dlc v0.290.0, no
    consumer change required by it.
-2. Run §*Step A — single-hop pull to 0.290.0*.
+2. Run §*Step A — pull to current `main`*.
 3. Run §*Step B — work the 13 as a queue*, at whatever pace suits. **It gates nothing.**
 4. Confirm §*Done when*.
 5. **Do not start s302.** Item 10 of the parent plan still has to land and be pulled.
 
-## Step A — single-hop pull to 0.290.0
+## Step A — pull to current `main`
 
-You are at `0.288.0`. Two releases landed after your pull, and one of them is the reason your
-snapshot fixtures were red:
+**A HELD 0.291.0 SELF-UPDATE BRANCH MUST BE DISCARDED, NOT LANDED.** If the previous attempt
+left one, delete it and re-run. v0.291.0 shipped a fixture whose seed resolved only the
+DISTRIBUTION layout, so on a consumer it died in its seed and blocked the push. Landing 0.291.0
+puts that broken fixture in your tree and needs a second pull to clear it; re-running goes
+straight to a `main` where **v0.292.0 has already fixed it**, and the covering fixture is green
+on arrival. Verified upstream against a consumer built by running `install.sh`, not simulated.
+
+**Do not file a push-candidate for it.** Already closed upstream as v0.292.0.
+
+Releases in this slice, whatever `main` is when you run it:
 
 - **v0.289.0** — three snapshot fixtures inherited ambient `AI_DLC_*` from `settings.json` and
-  tested the CONFIG instead of the CODE. 33 sibling fixtures already carried the guard; these
-  three did not. **This is what lets you keep `AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid` with no
-  `--no-verify` and no local fixture edits.** Your `PC-S302-SNAPSHOT-FIXTURES-LEAK-AMBIENT-ENV`
-  filing is discharged by it.
-- **v0.290.0** — the LC-E19 remedy correction above.
+  tested the CONFIG instead of the CODE. **This is what lets you keep
+  `AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid` with no `--no-verify` and no local fixture edits.**
+- **v0.290.0** — the LC-E19 remedy correction.
+- **v0.291.0** — the row now publishes `subject_digest`, which is what makes Step B executable
+  at all, and a recorded verdict silences it until the entry or the core section moves.
+- **v0.292.0** — the seed-layout fix above.
 
 **This is an ordinary single hop, not another two-hop split.** The split was needed because the
 `0.274.0` engine had to be replaced before it classified; you are past that.
@@ -83,7 +92,7 @@ the set — but read the body and decide, do not take that as the verdict.
 ## Done when
 
 ```
-graph stamp                                    version: 0.290.0
+graph stamp                                    whatever `main` was at pull time (>= 0.292.0)
 inflight-row-shape, snapshot-supersession-marker, snapshot-section-schema
   with AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid    all green, no --no-verify
 PR #872                                        closed as dispositioned upstream
