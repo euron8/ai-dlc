@@ -69,18 +69,17 @@ consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, 
 graph session for it while item 10 is the critical path is churn. Take it when graph is next
 open for another reason.
 
-**NEXT ACTION: item 15, the notification hook — then STRAIGHT ON to 10a + 10b without stopping.**
-Operator direction 2026-08-07: *"It will be first to do once we start the fresh session and then
-continue into item 10 and keep going until you need me for something."* Item 15 is small and
-self-contained, which is why it goes first; it is not a prerequisite for anything else. **Do not
-pause between 15 and 10a.**
+**~~NEXT ACTION: item 15, the notification hook~~ — DONE, shipped as v0.296.0 (#405).
+NEXT ACTION IS NOW 10a + 10b, per the paragraph below, which was never superseded on its
+merits — only postponed by one release.**
 
-The paragraph below is the ORIGINAL next-action note and is superseded by the two sentences
-above. It is kept because its reasoning about 10a and 10b still holds once you reach them.
+**NOTHING FURTHER IS BLOCKED BY 15.** It was first only because the operator asked for it
+first, and it was a prerequisite for nothing.
 
-**~~NEXT ACTION: 10a + 10b, shipped as ONE release.~~** Everything ahead of them in the execution
+**NEXT ACTION: 10a + 10b, shipped as ONE release.** Everything ahead of them in the execution
 order is closed: the close-out landed, the pull is done, item 11 shipped as v0.288.0, the parked
-F3 work shipped as v0.289.0's successor chain. **Item 10 is now the only thing holding s302.**
+F3 work shipped as v0.289.0's successor chain, item 15 shipped as v0.296.0. **Item 10 is now the
+only thing holding s302** — though s302 is no longer a deadline; see the paragraph above.
 10a and 10b ship together because `CLAUDE.md` fails builds on a declaration with no enforcer,
 and 10b IS 10a's enforcer.
 
@@ -97,8 +96,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~2~~ | ~~operator: close s301, land on `main`, TWO-HOP pull~~ | **DONE** — graph at `0.292.0 / c5e7daa`, 25 HARD in / 0 out, layer debt 2 → 0 |
 | ~~3~~ | ~~**11** — the self-update gate's bare-invocation probe~~ | **DONE** — v0.288.0 (#388) |
 | ~~4~~ | ~~F3, the parked branch~~ | **DONE** — shipped in the v0.289.0–v0.292.0 chain after two renumbers |
-| **4b** | **15** — the consumer notification hook | **← START HERE.** Small, self-contained, blocks nothing and is blocked by nothing. First only because the operator asked for it first; go straight on to the next row without pausing |
-| **5** | **10a + 10b** — declare the path grammar, bind core to it. **ONE release.** | No path moves, so nothing item 7 depends on changes. **10b MUST precede any migration**, and `CLAUDE.md` fails builds on a declaration with no enforcer, which is why they are not split |
+| ~~4b~~ | ~~**15** — the consumer notification hook~~ | **DONE** — v0.296.0 (#405). See §*What v0.296.0 shipped* |
+| **5** | **10a + 10b** — declare the path grammar, bind core to it. **ONE release.** | **← START HERE.** No path moves, so nothing item 7 depends on changes. **10b MUST precede any migration**, and `CLAUDE.md` fails builds on a declaration with no enforcer, which is why they are not split |
 | 6 | **7's remainder** — the `validate-layer-entries.sh` sweep | path-independent, and it surfaces more reader sites for 10c |
 | 7 | **10c – 10e**, with **F4 folded into 10c** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
 | 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
@@ -265,9 +264,11 @@ before you write code.
     merely its verdict; and the wall-clock win is **42%, not the 76% of work removed**, because
     the suite is pole-bound.
 
-15. **Ship the input-needed notification hook to consumers.** SCOPED, NOT STARTED.
-    Operator-requested 2026-08-07; **do this FIRST in the fresh session**, then continue
-    without pausing.
+15. ~~**Ship the input-needed notification hook to consumers.**~~ **COMPLETED — shipped as
+    v0.296.0 (#405).** Everything the scope below predicted held: the I44 objection was already
+    refuted, and there was no new machinery to build. See §*What v0.296.0 shipped* for the two
+    decisions the scope left open and how each was closed. What follows is the pre-work scope,
+    kept for its reasoning.
 
     **The premise was checked and one objection was WRONG, so do not re-raise it.** The concern
     was that core must not write into a consumer's `settings.json` (I44). Measured: `install.sh`
@@ -335,7 +336,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.295.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.296.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -359,6 +360,7 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.296.0 | #405 | **plan item 15.** `core/hooks/ai-dlc-notify.sh` on the `Notification` event — the mechanism behind the plan-shape rule's ping requirement. Platforms decided rather than left open: macOS `osascript`, Linux `notify-send`, anything else no channel, and `install.sh` PROBES and REPORTS which, so the no-channel case is not the inert-mechanism class. New fixture `notify-hook-channel` (9 assertions, 4 mutants, 1 control) shims `$PATH` so the Linux and no-channel branches are driven by the shipping code on a macOS suite. |
 | v0.295.0 | #403 | `--list` MERGES instead of rewriting the map. v0.294.0's version dropped every untraced fixture — SAFE (unmapped means always-run) and therefore invisible: the suite stayed correct and merely stopped skipping. Verified on the real map, 118 preserved + 1 added. |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
@@ -625,6 +627,54 @@ always how much was READ.
 `^\S+$` matches. Both runs passed, the control AGREED with the subject, and agreement proves
 nothing. Assertion 7 is that control, rebuilt from an entry the shipped schema genuinely
 rejects; without it assertions 8 and 9 are unfalsifiable.
+
+## What v0.296.0 shipped (item 15 — the two decisions the scope left open)
+
+The scope was accurate: no new machinery, and the I44 objection was already refuted before the
+work started. Two things it deliberately left for the release to decide, and both are recorded
+here so they are not re-litigated.
+
+**1. NON-macOS IS A PLATFORM BRANCH PLUS A PROBE, NOT A NO-OP.** macOS takes `osascript`, Linux
+takes `notify-send`, and anything else has no channel and exits 0. The branch alone would still
+have been the inert-mechanism class on a platform with no channel — the hook's stderr at
+notification time is not somewhere an operator looks. So the resolution is REPORTABLE:
+`--probe` prints `channel=` and `platform=`, and `scripts/install.sh` runs it and prints the
+answer in the install output. Measured on a fresh install into an empty tree:
+
+```
+  hooks installed
+  input-needed notifier: desktop channel = osascript (Darwin)
+```
+
+The report is a PROBE of the hook that will run later, not a claim about it, so a platform
+branch that stops resolving cannot keep reporting that it does. `resolve_channel()` is one
+function for the same reason: a probe and a notification path that each resolved separately
+could disagree.
+
+**2. THE $PATH SEAM IS WHAT MAKES THE OTHER BRANCHES TESTABLE, and it is the fixture's whole
+design.** The suite runs on macOS, so the Linux branch and the no-channel branch would have
+shipped unexercised and an operator on Linux would have been the first to run them — a check
+that cannot fire, aimed at the branch rather than the assertion. `notify-hook-channel` shims
+`uname`, `osascript` and `notify-send` onto `$PATH`, which drives the SHIPPING code rather than
+a test-only env var, and the shims RECORD instead of notifying (a fixture that popped a real
+desktop notification on every push gets turned off).
+
+**The injection arm needed a second half, and the second is the one that holds.** Asserting
+that the hostile body is absent from the AppleScript text is satisfied by an implementation that
+escapes only quotes. The arm therefore also asserts the script text is **byte-identical across
+two different payloads** — no part of the body is derived from the message at all. The
+`interpolate` mutant moves that half alone, because argv still carries the message.
+
+**One mutant moves two arms, declared.** `none-to-osascript` mutates `resolve_channel()`'s
+fallback, so it moves both the no-channel arm and the probe arm. That is unavoidable given
+decision 1 above, and it is declared rather than hidden: each mutant states its exact moved-set
+and no two share one.
+
+**The `install.sh` join is DISTRIBUTION-ONLY and says so.** `scripts/install.sh` does not ship,
+so on a consumer that assertion prints `skip` with its reason and the verdict reads
+`PASS WITH 1 SKIP(S)` — v0.287.0's lesson applied at the point it would otherwise have passed
+quietly. Verified by running the fixture in a tree built by `scripts/install.sh` into an empty
+directory, not only in `core/`.
 
 ## Item 11 — the self-update gate compares two usage errors
 
