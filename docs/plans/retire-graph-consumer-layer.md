@@ -78,8 +78,13 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
    two same-read controls), but **the defect is not a miscounted `grep -c`** — it is an
    underived count in prose that asserts facts outside the criterion's own test. The carrier
    is a declared I79 gap, taking core's gap count 5 → 6.
-3. **Make the adversarial STALL rung reachable mid-cycle.** It fires correctly at p7 and goes
-   silent once the cycle converges, so today it caught nothing.
+3. **BLOCKED — PREMISE REFUTED BY MEASUREMENT, needs an operator decision before any code.**
+   The item read "make the adversarial STALL rung reachable mid-cycle; it fires correctly at p7
+   and goes silent once the cycle converges, so today it caught nothing." **Every clause of that
+   is false.** The rung is already reachable mid-cycle, it already fired mid-cycle during s301,
+   and it fired at p6, not p7. See §*What item 3's measurement found*. Do NOT build the stated
+   remedy — a per-pass validator call in the step file — it is a second copy of a mechanism that
+   already exists and already ran.
 4. ~~**R4 — snapshot ceiling.**~~ **COMPLETED — shipped as v0.281.0 (#369).**
 5. ~~**R3 — auto-handoff.**~~ **COMPLETED — shipped as v0.282.0 (#370)**, carrying the
    multi-key `settings_env_keys:` mechanism with it.
@@ -229,6 +234,55 @@ findings, and clears on the third as soon as an author adds a citation without m
 sentence truer. **Do not rebuild it.** If a mechanical enforcer is attempted again, the only
 shapes not already refuted are count-versus-enumeration arity and cross-artifact number
 agreement — both narrower than the rule, neither catching `MAJ-p5-1`.
+
+## What item 3's measurement found (REFUTES item 3 as written)
+
+Measured 2026-08-07, read-only against the consumer. Every arm carries a control.
+
+**The mechanism already exists and is already wired mid-cycle.** `--cycle-state` is a documented
+mode of `validate-adversarial-convergence.sh` that "adjudicates an IN-PROGRESS cycle for the
+hooks". Both `core/hooks/ai-dlc-continue.sh` (Stop) and `core/hooks/ai-dlc-acknowledge.sh`
+(PreToolUse) call it, and `enforcement-map.yaml:420` states the posture: **runtime DENY of
+Agent/Task/Skill/TaskCreate on `--cycle-state` exit 3**. The gate-only arms (D, H) are excluded
+from that mode by construction, so it is safe on an in-flight cycle — a synthetic healthy series
+returns `CONVERGED` rc=0 where the full gate run returns `H -- REPAIR-RECORD` failures.
+
+**It fires on a partial, unterminated series.** A synthetic three-pass plateau with no terminal
+verdict returns `STALLED` rc=3; the control — same length, MAJOR strictly decreasing — returns
+`CONVERGED` rc=0.
+
+**Replaying the hook's OWN derivation on s301's real files at p6/p7 returns `STALLED` rc=3.** The
+glob, the mtime pick and the `sed -E 's/(pass|p)[0-9]+\.md$//'` prefix strip all resolve
+correctly against `s301-stories-adversarial-p*.md`. The consumer's installed validator is
+**byte-identical** to core's (`cmp -s`) and returns the same verdict, so this is not a version
+skew.
+
+**And it did fire, in the live sprint, mid-cycle.** From the consumer's own
+`_bmad-output/pipeline-continuation-log.md`:
+
+```
+2026-08-06T12:54:10Z -- ADVERSARIAL_STOP
+- DIVERGENT at s301-stories-adversarial-p2.md; pipeline paused (Rule 8)
+2026-08-06T17:17:12Z -- ADVERSARIAL_STOP
+- STALLED at s301-stories-adversarial-p6.md; pipeline paused (Rule 8)
+```
+
+Control that the reader can see other record types on the same day: 202 entries dated
+2026-08-06, of which 99 `ALLOWED_BY_LIVE_BEAT`, 47 `PAUSE_SKIPPED`, 26 `ALLOWED_BY_PAUSE`, 20
+`USER_PAUSE`, 6 `ACK_DENIED`, 2 `BLOCKED`. Control that the DENY path is not dead: s299's
+archived log carries 8 `ADVERSARIAL_STOP_DENIED` records, each naming the Agent tool it refused.
+
+**So the defect is NOT reachability. It is that the pause did not hold.** 54 seconds after each
+`ADVERSARIAL_STOP` the same log records `ALLOWED_BY_PAUSE -- Pause flag present; stop allowed`,
+and the cycle ran on to p8. The rung spoke, paused the pipeline, and the cycle continued anyway.
+Zero `ADVERSARIAL_STOP_DENIED` on 2026-08-06, against 8 in s299 — the Stop hook adjudicated but
+the PreToolUse deny never refused a dispatch.
+
+**What is genuinely unknown, and why this is blocked rather than in progress.** Whether the lead
+cleared the pause, whether `ALLOWED_BY_PAUSE` is a legitimate carve-out that swallows an
+adversarial stop, or whether the PreToolUse arm never ran, cannot be settled from the artifacts.
+It needs the s301 session transcript, which is consumer-side. Reframe item 3 before building:
+the question is **why a STALLED pause did not stop the cycle**, not how to make the rung audible.
 
 ## The one thing that must not be forgotten: pull graph in TWO hops
 
