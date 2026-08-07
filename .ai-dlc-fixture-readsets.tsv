@@ -5,7 +5,11 @@
 # 'run it', never 'depends on nothing'. Re-derive after changing a fixture or anything
 # it reads: a stale entry is safe only in the direction of running too much.
 #
-# fixtures mapped: 118    entries: 9557
+# A --list run MERGES: it replaces the entries of the fixtures it traced and leaves
+# every other fixture's entries alone, so refreshing one fixture costs its own runtime
+# rather than a full re-derivation.
+#
+# fixtures mapped: 119    entries: 9578
 adversarial-citation	.git/HEAD
 adversarial-citation	.git/config
 adversarial-citation	.git/index
@@ -7086,6 +7090,27 @@ provenance-not-accessible	core/scripts/lib/meta-gate.sh
 provenance-not-accessible	core/scripts/validate-provenance-block.sh
 provenance-not-accessible	core/skills/ai-dlc/extensions/known-skills.json
 provenance-not-accessible	skills/ai-dlc/extensions/known-skills.json
+readset-skip	.git
+readset-skip	.git/HEAD
+readset-skip	.git/commondir
+readset-skip	.git/config
+readset-skip	.git/index
+readset-skip	.git/info/exclude
+readset-skip	.git/objects
+readset-skip	.git/objects/2f/793e36b09526504eddba8aca31762fbfbc71a6
+readset-skip	.git/objects/b9/e81c3fae27a734ddfcc35a1fbb2bfdfc747f94
+readset-skip	.git/objects/info/commit-graphs/commit-graph-chain
+readset-skip	.git/objects/info/commit-graphs/graph-0eb491c0cb71c04a897932c57e554611d18cf05f.graph
+readset-skip	.git/objects/info/commit-graphs/graph-83fdc3ee6f65756931c63be14ea0f58eb16b6081.graph
+readset-skip	.git/objects/pack/multi-pack-index
+readset-skip	.git/packed-refs
+readset-skip	.git/refs
+readset-skip	.git/refs/heads/feat/v0.295.0-readset-map-merge
+readset-skip	.githooks/pre-push
+readset-skip	.gitignore
+readset-skip	VERSION
+readset-skip	core/fixtures/readset-skip/run.sh
+readset-skip	scripts/derive-fixture-readsets.sh
 reconcile-blocking-list	.git/HEAD
 reconcile-blocking-list	.git/config
 reconcile-blocking-list	.git/index

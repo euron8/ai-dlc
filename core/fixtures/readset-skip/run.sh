@@ -237,12 +237,81 @@ else
   bad "CONTROL: the unmutated copy did not reproduce the baseline ('$(sel_of "$R")') — every mutant above is unattributable"
 fi
 
+# ------------------------------------------------------- the deriver's map merge ----
+# `--list` exists so refreshing ONE fixture costs its own runtime instead of a full
+# re-derivation. Its first version rewrote the map from only the fixtures it had just traced,
+# silently dropping every other entry. That is SAFE -- an unmapped fixture always runs -- and
+# therefore invisible: the suite stays correct and merely stops skipping, which reads as the
+# feature underperforming rather than as a bug. These arms are why it cannot come back.
+#
+# THE DERIVER IS DIST-ONLY and a consumer never has it, so its absence is reported as a SKIP
+# rather than passing silently. A vanished arm and a passing arm look identical in a summary.
+MERGE_ARMS=0
+DERIVER="$ROOT/scripts/derive-fixture-readsets.sh"
+if [ ! -f "$DERIVER" ]; then
+  printf '  SKIP  map-merge arms: scripts/derive-fixture-readsets.sh is not in this tree (dist-only)\n'
+else
+  M="$WORK/merge.sh"
+  sed -n '/# READSET_MERGE_BEGIN/,/# READSET_MERGE_END/p' "$DERIVER" > "$M"
+  grep -q 'readset_merge_map()' "$M" || broken "extracted no readset_merge_map from $DERIVER"
+  # shellcheck disable=SC1090
+  . "$M"
+  printf 'alpha\tsrc/a\nalpha\tsrc/x\nbeta\tsrc/b\ngamma\tsrc/g\n' > "$WORK/old.map"
+  printf 'alpha\tsrc/NEW\n' > "$WORK/new.map"
+  : > "$WORK/empty.map"
+
+  G="$(readset_merge_map "$WORK/old.map" "$WORK/new.map" "alpha" | LC_ALL=C sort | tr '\n' ' ')"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  case "$G" in
+    *"beta	src/b"*) ok "a --list run leaves an UNTRACED fixture's entries alone — refreshing one fixture does not cost the rest of the map" ;;
+    *) bad "merging dropped an untraced fixture's entries: $G" ;;
+  esac
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  case "$G" in
+    *"alpha	src/x"*) bad "merging kept a STALE entry for the fixture it just re-traced: $G" ;;
+    *"alpha	src/NEW"*) ok "  and it REPLACES the traced fixture's entries rather than adding to them" ;;
+    *) bad "the traced fixture's new entry is missing after the merge: $G" ;;
+  esac
+  # The case that matters most: a fixture that WAS mapped and is now omitted must lose its
+  # read-set, or the map keeps asserting a dependency set nothing re-verified.
+  G2="$(readset_merge_map "$WORK/old.map" "$WORK/empty.map" "beta" | LC_ALL=C sort | tr '\n' ' ')"
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  case "$G2" in
+    *"beta	"*) bad "a traced fixture that produced NO read-set kept its stale entries — it would go on being skipped on evidence nothing re-verified: $G2" ;;
+    *"gamma	src/g"*) ok "a traced fixture that produced nothing loses its entries and becomes unmapped, which means it always runs" ;;
+    *) bad "the merge lost an untraced fixture while dropping the omitted one: $G2" ;;
+  esac
+
+  # MUTANTS on the merge, each a cmp -s guarded copy of the extracted block.
+  merge_mutant() {
+    local name="$1" expr="$2" mm="$WORK/merge.$1.sh"
+    sed "$expr" "$M" > "$mm"
+    if cmp -s "$M" "$mm"; then bad "MERGE MUTANT $name: the edit matched nothing"; return; fi
+    ( . "$mm"; readset_merge_map "$WORK/old.map" "$WORK/new.map" "alpha" | LC_ALL=C sort | tr '\n' ' ' ) > "$WORK/mm.out" 2>/dev/null
+  }
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  merge_mutant rewrite 's|if \[ -s "$old" \]; then|if false; then|'
+  if grep -q 'beta' "$WORK/mm.out"; then
+    bad "MERGE MUTANT rewrite: untraced entries survived a merge that no longer reads the old map — arm 1 does not depend on that read"
+  else
+    ok "MERGE MUTANT rewrite moves arm 1: dropping the old-map read loses every untraced fixture"
+  fi
+  MERGE_ARMS=$((MERGE_ARMS+1))
+  merge_mutant keepstale 's|if (index(traced, " " fx " ") == 0) print|print|'
+  if grep -q 'src/x' "$WORK/mm.out"; then
+    ok "MERGE MUTANT keepstale moves arm 2: without the traced filter the re-traced fixture keeps its stale entry"
+  else
+    bad "MERGE MUTANT keepstale: the stale entry did not survive — arm 2 does not depend on the traced filter"
+  fi
+fi
+
 # THE SUMMARY IS ALSO A COMPLETENESS CHECK. This fixture once ended mid-file after an editing
 # mistake: it printed two thirds of its arms, never reached a verdict line, and exited 0 --
 # which the suite's worker records as `ok`. A fixture that dies silently reads exactly like one
 # that passed, so the arm count is asserted against the number this file actually carries.
-if [ "$asserts" -lt 15 ]; then
-  printf '  FAIL  only %s assertions ran; this fixture carries 15 — it exited early and a short green run reads exactly like a passing one\n' "$asserts"
+EXPECTED=$(( 15 + MERGE_ARMS ))
+if [ "$asserts" -lt "$EXPECTED" ]; then
+  printf '  FAIL  only %s assertions ran; this fixture carries %s — it exited early and a short green run reads exactly like a passing one\n' "$asserts" "$EXPECTED"
   fails=$((fails+1))
 fi
 
