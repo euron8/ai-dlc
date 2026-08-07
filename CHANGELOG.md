@@ -34,6 +34,69 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.296.0] — 2026-08-07
+
+### The consumer gets a desktop alert when the session is waiting on it
+
+The plan-shape rule already requires every plan to tell its executor to ping, because *"still
+working" and "stopped, waiting on you" look identical from outside, so silence is a stall found
+only by polling.* Measured across this repo's own runs, EVERY consumer-session stall ended with
+the operator asking rather than the session reporting — including one sitting on a blocking
+question and one that had already FINISHED. That rule is prose, and `CLAUDE.md` prefers
+mechanisms to prose. This is the mechanism.
+
+`core/hooks/ai-dlc-notify.sh`, wired to the `Notification` event in
+`templates/settings.json.template`. **Not `Stop`** — `Stop` fires at the end of every response,
+which trains the operator to ignore the alert, and an alert nobody reads is worse than none.
+`Notification` is raised for permission prompts and idle-waiting: the two states that ARE
+"waiting on you".
+
+**Why a hook rather than the assistant calling `PushNotification`.** The harness runs the hook;
+it cannot be forgotten, and it does not depend on a lead holding a rule a compaction may have
+dropped. `PushNotification` self-suppresses while the terminal is active (*"this terminal is
+active, so your output here already reaches the user"*), so the ping sent the instant a session
+gets blocked is exactly the one that never arrives. The hook covers the desktop;
+`PushNotification` still covers mobile.
+
+**No new machinery.** `install.sh` copies `core/hooks/*.sh` by glob and `settings-merge.sh` — the
+same merge `ai-dlc-update`'s reconcile runs — upserts any block whose command references
+`.claude/hooks/ai-dlc-*.sh`. Invariants I13 and I14 already bind a shipped hook to its template
+registration and to a committed `100755` mode, so both directions of the new wiring were enforced
+before it existed.
+
+**PLATFORMS, DECIDED RATHER THAN LEFT OPEN.** macOS takes `osascript`; Linux takes `notify-send`;
+anything else, or the tool absent, has **no channel** and the hook exits 0 having raised nothing.
+A hook that silently does nothing on an unsupported platform is the inert-mechanism class this
+repo keeps shipping, so the no-channel case is REPORTABLE: `--probe` prints the resolved channel
+and platform, and `install.sh` RUNS it and prints the answer in the install output. That is where
+an operator on an unsupported platform finds out — once, while they are watching — rather than by
+noticing over weeks that nothing has ever arrived. The probe runs the hook that will run later,
+so a platform branch that stops resolving cannot keep reporting that it does.
+
+**The message is passed as an ARGUMENT, never interpolated into the script text.** The
+notification body is untrusted text the harness composes; in the AppleScript source, a body
+containing a quote breaks the script and one containing `do shell script` runs.
+
+New fixture `notify-hook-channel` — 9 assertions, 4 mutants and an unmutated control. Two things
+about its shape are the point:
+
+- **The seam is `$PATH`.** `uname`, `osascript` and `notify-send` are shimmed, so the Linux
+  branch and the no-channel branch are driven by the SHIPPING code on a suite that runs on macOS.
+  A branch only one platform can reach is a branch that cannot fire, which is this repo's
+  recurring defect. The shims RECORD rather than notify: a fixture that popped a real desktop
+  notification on every push would be turned off within a week.
+- **The injection arm asserts both halves, and the second is the stronger one.** The hostile body
+  must arrive byte-exact in `argv`, AND the AppleScript text must be byte-identical across two
+  different payloads. An implementation that escaped only quotes passes a substring check and
+  fails the `cmp`.
+
+Each mutant declares its exact moved-set and no two share one: `interpolate` moves the
+script-text arm alone (argv still carries the message, so the argv arm still holds),
+`linux-disabled` moves the Linux arm alone, `no-default-message` moves the default-text arm
+alone, and `none-to-osascript` moves the no-channel arm AND the probe arm — declared, and
+unavoidable, because `resolve_channel()` is deliberately ONE function so the probe and the
+notification path cannot disagree about what this machine has.
+
 ## [0.295.0] — 2026-08-07
 
 ### `--list` refreshes one fixture instead of rewriting the whole map

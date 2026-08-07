@@ -247,6 +247,7 @@ core_manifest:
   - fixtures/verdict-pass-content/**
   - fixtures/wait-stale-deliverable/**
   - fixtures/whole-read-pool/**
+  - fixtures/notify-hook-channel/**
 
 machinery:
   - core-manifest.md

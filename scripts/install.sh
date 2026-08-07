@@ -342,6 +342,30 @@ cp "$SCRIPT_DIR/../core/hooks/"*.sh "$PROJECT_ROOT/.claude/hooks/"
 chmod +x "$PROJECT_ROOT/.claude/hooks/"*.sh
 echo "  hooks installed"
 
+# REPORT the notifier's resolved channel, because the no-channel case is otherwise INVISIBLE.
+# ai-dlc-notify.sh is macOS (osascript) and Linux (notify-send); on anything else, or with the
+# tool absent, it exits 0 having raised nothing. A hook that silently does nothing is the
+# inert-mechanism class this repo keeps shipping, and its stderr at notification time is not
+# somewhere an operator looks. This is the one moment they are watching, so it is said here.
+# PROBED, never assumed: the answer comes from running the hook that will run later, so a
+# platform branch that stops resolving cannot keep reporting that it does.
+NOTIFY_HOOK="$PROJECT_ROOT/.claude/hooks/ai-dlc-notify.sh"
+if [ -x "$NOTIFY_HOOK" ]; then
+  NOTIFY_PROBE="$(bash "$NOTIFY_HOOK" --probe 2>/dev/null)"
+  NOTIFY_CHANNEL="$(printf '%s\n' "$NOTIFY_PROBE" | sed -n 's/^channel=//p' | head -1)"
+  NOTIFY_PLATFORM="$(printf '%s\n' "$NOTIFY_PROBE" | sed -n 's/^platform=//p' | head -1)"
+  case "${NOTIFY_CHANNEL:-none}" in
+    none)
+      echo "  input-needed notifier: NO desktop channel on ${NOTIFY_PLATFORM:-this platform}."
+      echo "    ai-dlc-notify.sh will exit 0 without raising anything. Supported: macOS"
+      echo "    (osascript) and Linux with notify-send installed."
+      ;;
+    *)
+      echo "  input-needed notifier: desktop channel = ${NOTIFY_CHANNEL} (${NOTIFY_PLATFORM:-unknown})"
+      ;;
+  esac
+fi
+
 # Install the auto session-chaining driver (operator-run tmux launcher)
 mkdir -p "$PROJECT_ROOT/.claude/session-driver"
 cp "$SCRIPT_DIR/../core/session-driver/"*.sh "$PROJECT_ROOT/.claude/session-driver/"
@@ -560,7 +584,7 @@ done
 # Install test fixture templates (always overwrite with AI/DLC versions)
 echo "Installing test fixture templates..."
 mkdir -p "$PROJECT_ROOT/tests/fixtures"
-for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation extension-check-adoption check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-anchor-declaration layer-catalog-collision layer-contract-conformance layer-readopt-gate layer-debt-ledger handoff-resume-guard divergence-hard-block taught-schema gate-adjudication self-update-gate setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation command-args-citation operator-request-capture request-coverage pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive mandatory-rules-clean-tree mandatory-rules-skip-accounting check5-anchor-base check-22-spawn-ledger cycle-commits-enforce ledger-reverify ledger-status-vocabulary ledger-reverify-unfalsifiable ledger-rotate snapshot-section-schema resume-whole-read retired-contract-token retired-layer-contract retired-fixture-orphan consumer-machinery-inventory retro-audit-scans context-mode-protect verdict-pass-content provenance-not-accessible snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary apply-legacy-script-path validator-path-resolution relocation-preclassify ci-gates-resolution shadowed-local-validators h2-attest-scripts-dir gate-verdict-grep-shape blocker-adjudication-record bmad-invocation-resolve check-31-ac-falsifiability spec-adoption-floor spec-join-integrity consumer-machinery-home layer-qualifier-grain layer-extends-grain layer-retired-id-crosswalk layer-crosswalk-home layer-reference-resolution layer-conforms-to layer-adjudication-tier layer-title-join stray-party-mode-provenance core-paths-audit-diff mutation-red-replay trunk-push-bound trunk-audit-classes story-fields-derive fixture-drivability consumer-suite-pool postcompact-rulebook-recovery scope-confirmation snapshot-conservation suppression-lifetime self-update-join-gate self-update-fixture-log snapshot-supersession-marker readset-skip; do
+for fixture_dir in check-1c-bypass check-15-bypass check-17-bypass check-17-counts check-3b-locked-anchor check-23-draft-stamps check-24-adversarial-convergence adversarial-citation escalation-citation extension-check-adoption check-25-steering-conduct check-h1-recursion check-manifest-bypass context-sensor layer-anchor-declaration layer-catalog-collision layer-contract-conformance layer-readopt-gate layer-debt-ledger handoff-resume-guard divergence-hard-block taught-schema gate-adjudication self-update-gate setup-config-drift relabel-theirs-collision known-skills-extension reconcile-blocking-list reconcile-emit-report apply-drift-refile apply-drift-after-write apply-restamp-theirs escalation-status-vocabulary askuserquestion-citation command-args-citation operator-request-capture request-coverage pause-hook-origin core-write-guard audit-anchors-schema dispatch-model-guard subagent-probe sprint-status-lifecycle route-defect-classification story-provenance implementation-join-yield wait-stale-deliverable validate-mandatory-rules-revive mandatory-rules-clean-tree mandatory-rules-skip-accounting check5-anchor-base check-22-spawn-ledger cycle-commits-enforce ledger-reverify ledger-status-vocabulary ledger-reverify-unfalsifiable ledger-rotate snapshot-section-schema resume-whole-read retired-contract-token retired-layer-contract retired-fixture-orphan consumer-machinery-inventory retro-audit-scans context-mode-protect verdict-pass-content provenance-not-accessible snapshot-evidence-cell inflight-row-shape whole-read-pool release-version-triple core-script-boundary apply-legacy-script-path validator-path-resolution relocation-preclassify ci-gates-resolution shadowed-local-validators h2-attest-scripts-dir gate-verdict-grep-shape blocker-adjudication-record bmad-invocation-resolve check-31-ac-falsifiability spec-adoption-floor spec-join-integrity consumer-machinery-home layer-qualifier-grain layer-extends-grain layer-retired-id-crosswalk layer-crosswalk-home layer-reference-resolution layer-conforms-to layer-adjudication-tier layer-title-join stray-party-mode-provenance core-paths-audit-diff mutation-red-replay trunk-push-bound trunk-audit-classes story-fields-derive fixture-drivability consumer-suite-pool postcompact-rulebook-recovery scope-confirmation snapshot-conservation suppression-lifetime self-update-join-gate self-update-fixture-log snapshot-supersession-marker readset-skip notify-hook-channel; do
   if [ -d "$SCRIPT_DIR/../core/fixtures/$fixture_dir" ]; then
     mkdir -p "$PROJECT_ROOT/tests/fixtures/$fixture_dir"
     cp "$SCRIPT_DIR/../core/fixtures/$fixture_dir/"* "$PROJECT_ROOT/tests/fixtures/$fixture_dir/"
