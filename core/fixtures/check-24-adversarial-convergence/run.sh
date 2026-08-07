@@ -22,6 +22,10 @@
 # exactly like one that passed) reproduced inside the test written to catch it. So: every
 # v0.59.0 case asserts on the MESSAGE.
 set -u
+# Scrub ambient AI_DLC_* — the live-series arm below reads an expression out of a shipped
+# hook, and a consumer that tunes any AI_DLC_* variable in settings.json would otherwise
+# fail this fixture against a hook behaving correctly, wedging its pre-push on every push.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 VALIDATOR=""
@@ -385,6 +389,90 @@ mutate_ceiling counter \
   '    CEILING_COUNT=$((CEILING_COUNT + 1))' \
   '    : ' \
   "CONTINUE CONTINUE CONTINUE CONVERGED"
+
+# =============================================================================
+# v0.286.0: the LIVE-SERIES DERIVATION the two hooks share (I81)
+# =============================================================================
+# The validator was never the problem here -- every arm above already worked. What was
+# broken is the question asked BEFORE it: "which adversarial cycle is live". Both hooks
+# picked the newest glob match and stripped the pass suffix afterwards, so a filename the
+# strip could not match became a SERIES that was the whole filename -- which resolves as a
+# ONE-PASS series. A one-pass series can never be STALLED or DIVERGENT, so the guard
+# returned CONTINUE and the PreToolUse hook allowed the dispatch while a real multi-pass
+# series sat stalled. Measured on the reference consumer: 6 of 135 files matching the glob
+# defeat the strip.
+#
+# THIS ARM DRIVES THE SHIPPED EXPRESSION, not a copy of it. The derivation is extracted from
+# ai-dlc-acknowledge.sh -- the hook that owns the DENY -- and eval'd. A fixture carrying its
+# own copy of the expression would pass while the hook shipped something else, which is the
+# defect this whole release is about.
+HOOK=""
+for cand in \
+  "$DIR/../../hooks/ai-dlc-acknowledge.sh" \
+  "$DIR/../../../.claude/hooks/ai-dlc-acknowledge.sh" \
+  "$DIR/../../core/hooks/ai-dlc-acknowledge.sh"; do
+  [ -f "$cand" ] && HOOK="$cand" && break
+done
+
+if [ -z "$HOOK" ]; then
+  FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+  printf '  FAIL  %-28s (cannot locate ai-dlc-acknowledge.sh from %s)\n' "live-series-derivation" "$DIR"
+else
+  # Seed: a STALLED 3-pass series, and a NEWER file that matches the glob but defeats the
+  # strip. The decoy is a real filename from the reference consumer, not an invented one.
+  SD="$ROOT/live-series"; mkdir -p "$SD"
+  sp() { printf '# pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: stories-test-strategy\ninvoked_at: 2026-08-07T0%s:00:00Z\ntool_use_id: toolu_ls%s\nfindings: 0 CRITICAL, 2 MAJOR, 0 MINOR\nfindings_critical: 0\nfindings_major: 2\nfindings_minor: 0\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$1" "$1" "$1" > "$SD/s9-stories-adversarial-p$1.md"; }
+  sp 1; sp 2; sp 3
+  sleep 1
+  cp "$SD/s9-stories-adversarial-p3.md" "$SD/s289-adversarial-pass1-discovery.md"
+
+  # $1 label  $2 the derivation expression  $3 expected STATE  $4 expected rc  $5 why
+  ls_expect() {
+    local label="$1" expr="$2" want_state="$3" want_rc="$4" why="$5"
+    local ART_DIR="$SD" SERIES="" out state rc
+    ASSERTIONS=$((ASSERTIONS + 1))
+    eval "$expr"
+    if [ -z "$SERIES" ]; then
+      state="(empty)"; rc="-"
+    else
+      out="$(bash "$VALIDATOR" --series "$SERIES" --cycle-state 2>/dev/null)"; rc=$?
+      state="$(printf '%s' "$out" | cut -f1)"
+    fi
+    if [ "$state" = "$want_state" ] && [ "$rc" = "$want_rc" ]; then
+      printf '  ok    %-28s %s rc=%s  (%s)\n' "$label" "$state" "$rc" "$why"
+    else
+      FAILURES=$((FAILURES + 1))
+      printf '  FAIL  %-28s %s rc=%s  want %s rc=%s  (%s)\n' "$label" "$state" "$rc" "$want_state" "$want_rc" "$why"
+    fi
+  }
+
+  SHIPPED="$(sed -n 's/^[[:space:]]*SERIES="\$(ls -t .*adversarial.*$/&/p' "$HOOK" | sed 's/^[[:space:]]*//')"
+  if [ -z "$SHIPPED" ]; then
+    FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
+    printf '  FAIL  %-28s (extracted no derivation from %s -- the arm below would test nothing)\n' "live-series-derivation" "$(basename "$HOOK")"
+  else
+    # THE ASSERTION: the shipped expression sees past the decoy to the stalled series.
+    ls_expect "live-series-shipped" "$SHIPPED" "STALLED" "3" \
+      "the shipped derivation reaches the 3-pass stalled series despite a newer non-conforming file"
+
+    # THE MUTANT, which is the OLD form. Without it the arm above is consistent with a decoy
+    # that never mattered. It must reach a DIFFERENT verdict, and CONTINUE rc=0 is exactly
+    # the silent allow this release exists to remove.
+    ls_expect "live-series-old-form" \
+      'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1 | sed -E '"'"'s/(pass|p)[0-9]+\.md$//'"'"')"' \
+      "CONTINUE" "0" \
+      "MUTANT: newest-then-strip resolves the decoy as a one-pass series and reports a clean cycle"
+
+    # UNMUTATED CONTROL, same directory minus the decoy: both forms must agree there, which
+    # is what pins the difference above on the decoy rather than on the two expressions
+    # disagreeing about everything.
+    rm -f "$SD/s289-adversarial-pass1-discovery.md"
+    ls_expect "live-series-no-decoy" \
+      'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1 | sed -E '"'"'s/(pass|p)[0-9]+\.md$//'"'"')"' \
+      "STALLED" "3" \
+      "CONTROL: with no decoy present the OLD form is correct too, so the decoy is the variable"
+  fi
+fi
 
 echo
 if [ "$FAILURES" -gt 0 ]; then

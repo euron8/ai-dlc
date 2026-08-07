@@ -267,8 +267,27 @@ ART_DIR="${LOG_DIR}/planning-artifacts"
 CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-adversarial-convergence.sh"
 
 CYCLE_STATE=""; CYCLE_RC=0; CYCLE_PASS=""
-NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"
-if [ -n "$NEWEST_PASS" ]; then
+# --- LIVE-SERIES DERIVATION -- ONE definition; I81 asserts both hooks carry it verbatim ---
+# `sed -n 's/.../p'` PRINTS ONLY WHERE THE SUBSTITUTION SUCCEEDED, and that is the whole fix.
+# The previous form picked the newest glob match FIRST and stripped it SECOND, so a filename
+# the strip could not match produced a SERIES that was the entire filename. `--series
+# <whole-filename>` then resolved exactly ONE file, and a one-pass series can never be STALLED
+# or DIVERGENT -- so the stall guard adjudicated nothing, reported a clean state, and allowed
+# the dispatch. Measured on the reference consumer: 6 of 135 files matching this glob defeat
+# the strip (`s289-adversarial-pass1-discovery.md`, `prd-adversarial-sprint-150.md` and four
+# siblings), each one a live opportunity for that silent pass. Filtering INSIDE the pick makes
+# the state unrepresentable -- a non-conforming name is never a candidate and the newest
+# CONFORMING series wins -- rather than detecting it afterwards, which is a second thing to
+# keep in sync. `head -1` closing the pipe early is safe here: no hook sets `pipefail`.
+#
+# STILL NOT FIXED, and deliberately: the pick is by mtime across EVERY adversarial series in
+# this one directory (56 series, s288 through s301, on the reference consumer), so a touch on
+# a long-converged series redirects the guard. There is no naming-safe scope to add -- series
+# names take the sprint as a SUFFIX as well as a prefix (`architecture-adversarial-s288-`,
+# `prd-adversarial-sprint-150.md`), so an `s<N>-` filter would silently exclude real series.
+# Retro archiving is the live mitigation and it is partial (29 archived, 135 still in reach).
+SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | sed -E -n 's/(pass|p)[0-9]+\.md$//p' | head -1)"
+if [ -n "$SERIES" ]; then
   if [ ! -f "$CONVERGENCE_VALIDATOR" ]; then
     # A partial install must not SILENTLY disable the hard block. That is the
     # `core/git-hooks/`-at-a-dead-path failure -- an enforcer at a path nothing reads, and
@@ -281,7 +300,6 @@ if [ -n "$NEWEST_PASS" ]; then
       echo ""
     } >> "$LOG_FILE"
   else
-    SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
     # Pass the transcript so RESOLVED requires a VERIFIED operator citation (arm F6): the stop
     # state must not self-heal on a resolution the operator never authorized. Fails open when
     # no transcript is readable (acknowledge.sh, PreToolUse, is where the dispatch is denied).

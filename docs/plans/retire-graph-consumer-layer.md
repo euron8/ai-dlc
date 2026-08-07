@@ -47,12 +47,12 @@ session starts from `origin/main` at `0.285.0` with no uncommitted work to recon
 `feat/v0.283.0-unreached-step-verdicts` is pushed and gate-green at commit `70c9046`, subject
 `wip(unreached-steps)`. It carries two finished script edits and **no fixture coverage and no
 release triple** — do not merge it as-is. Finish it by adding the fixture arms below, then bump
-`VERSION`, write the CHANGELOG heading, and rename the commit to a **`feat(v0.286.0):`**
-subject — **its branch name still says 0.283.0, and both 0.283.0 and 0.285.0 are now taken;
+`VERSION`, write the CHANGELOG heading, and rename the commit to a **`feat(v0.287.0):`**
+subject — **its branch name still says 0.283.0, and 0.283.0, 0.285.0 and 0.286.0 are now taken;
 rename or ignore the branch name, the commit subject is what the release triple checks.** The
 two edits and the measurement behind each are in §*What the unreached-step audit found*.
 
-**NEXT ACTION: item 3.** Items 0, 1, 2, 2b, 4 and 5 are closed; 3, 6, 7, 8 and 9 remain open in
+**NEXT ACTION: item 7.** Items 0, 1, 2, 2b, 3, 4 and 5 are closed; 6, 7, 8 and 9 remain open in
 the order listed.
 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
@@ -61,8 +61,8 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
 0. ~~**Parallelize the mutant runs inside the six heavy fixtures.**~~ **COMPLETED — shipped as
    v0.283.0.** Suite makespan **268s → 238s**. See §*What v0.283.0 measured about the suite*
    for the numbers, including the three the plan got wrong. **`feat/v0.283.0-unreached-step-verdicts`
-   must be renumbered to `v0.286.0`** — 0.283.0 went to this release, 0.284.0 to the
-   validator spawn reduction that followed it, and 0.285.0 to item 2b.
+   must be renumbered to `v0.287.0`** — 0.283.0 went to this release, 0.284.0 to the
+   validator spawn reduction that followed it, 0.285.0 to item 2b and 0.286.0 to item 3.
 
 1. ~~Confirm with the operator whether the two-hop graph pull has happened yet.~~
    **ANSWERED 2026-08-06: it has not, and it is now sequenced AFTER this plan's releases**, so
@@ -78,7 +78,13 @@ true at 2026-08-06T20:05Z and are worth re-verifying before acting.**
    two same-read controls), but **the defect is not a miscounted `grep -c`** — it is an
    underived count in prose that asserts facts outside the criterion's own test. The carrier
    is a declared I79 gap, taking core's gap count 5 → 6.
-3. **BLOCKED — PREMISE REFUTED BY MEASUREMENT, needs an operator decision before any code.**
+3. ~~**Make the adversarial STALL rung reachable mid-cycle.**~~ **CLOSED — the premise was
+   refuted and the REAL defect shipped as v0.286.0 (#381).** The rung was already reachable
+   and already firing; the live-series derivation underneath it was vacuous on 6 of 135
+   filenames. What follows is the record of that measurement, kept because item 7 audits
+   against the same class.
+
+   **PREMISE REFUTED BY MEASUREMENT — the original text, for the record.**
    The item read "make the adversarial STALL rung reachable mid-cycle; it fires correctly at p7
    and goes silent once the cycle converges, so today it caught nothing." **Every clause of that
    is false.** The rung is already reachable mid-cycle, it already fired mid-cycle during s301,
@@ -107,7 +113,7 @@ sections in the design record below are labelled SHIPPED.
 
 ## Where things stand
 
-**ai-dlc is at `0.285.0`, `contract_version` 16.** Eleven releases shipped and merged to `main`:
+**ai-dlc is at `0.286.0`, `contract_version` 16.** Twelve releases shipped and merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
@@ -122,6 +128,7 @@ sections in the design record below are labelled SHIPPED.
 | v0.283.0 | #373 | **plan item 0.** Inner pools for six internally-serial fixtures; `enforcement-map-sites` sharded into three directories. Suite makespan **268s → 238s**. Output byte-identical, 21 driver mutants green. |
 | v0.284.0 | #374 | `validate-enforcement-map.sh` spawn reduction: 1582 → 1156 external commands, **8.36s → 7.02s**. Suite makespan **238s → 214s**. Byte-identical on the failing paths as well as the passing one. |
 | v0.285.0 | #377 | **plan item 2b.** Core **Rule 31** — a countable assertion carries the derivation that produced it. Absorbs the consumer's Rule 930 count discipline, which core had nowhere. The enforcer was built, measured and NOT shipped; `**Carrier:** none` is a declared I79 gap (5 → 6). |
+| v0.286.0 | #381 | **plan item 3.** The live adversarial series is derived by filtering INSIDE the pick, so a filename that defeats the pass-suffix strip can no longer become a one-pass series the stall guard reports as `CONTINUE`. `I81` binds the expression across both hooks and asserts it is the filtering form. |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
 A consumer override is evidence that a consumer needed something; it is not evidence that core

@@ -151,10 +151,28 @@ case "$TOOL_NAME" in Agent|Task|Skill|TaskCreate) ADVANCING_TOOL=1 ;; esac
 if [ "$ADVANCING_TOOL" -eq 1 ] && [ "$UPDATER_SESSION" -eq 0 ]; then
   ART_DIR="${LOG_DIR}/planning-artifacts"
   CONVERGENCE_VALIDATOR="${PROJECT_DIR}/scripts/ai-dlc/validate-adversarial-convergence.sh"
-  NEWEST_PASS="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1)"
+  # --- LIVE-SERIES DERIVATION -- ONE definition; I81 asserts both hooks carry it verbatim ---
+  # `sed -n 's/.../p'` PRINTS ONLY WHERE THE SUBSTITUTION SUCCEEDED, and that is the whole fix.
+  # The previous form picked the newest glob match FIRST and stripped it SECOND, so a filename
+  # the strip could not match produced a SERIES that was the entire filename. `--series
+  # <whole-filename>` then resolved exactly ONE file, and a one-pass series can never be STALLED
+  # or DIVERGENT -- so the stall guard adjudicated nothing, reported a clean state, and allowed
+  # the dispatch. Measured on the reference consumer: 6 of 135 files matching this glob defeat
+  # the strip (`s289-adversarial-pass1-discovery.md`, `prd-adversarial-sprint-150.md` and four
+  # siblings), each one a live opportunity for that silent pass. Filtering INSIDE the pick makes
+  # the state unrepresentable -- a non-conforming name is never a candidate and the newest
+  # CONFORMING series wins -- rather than detecting it afterwards, which is a second thing to
+  # keep in sync. `head -1` closing the pipe early is safe here: no hook sets `pipefail`.
+  #
+  # STILL NOT FIXED, and deliberately: the pick is by mtime across EVERY adversarial series in
+  # this one directory (56 series, s288 through s301, on the reference consumer), so a touch on
+  # a long-converged series redirects the guard. There is no naming-safe scope to add -- series
+  # names take the sprint as a SUFFIX as well as a prefix (`architecture-adversarial-s288-`,
+  # `prd-adversarial-sprint-150.md`), so an `s<N>-` filter would silently exclude real series.
+  # Retro archiving is the live mitigation and it is partial (29 archived, 135 still in reach).
+  SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | sed -E -n 's/(pass|p)[0-9]+\.md$//p' | head -1)"
 
-  if [ -n "$NEWEST_PASS" ] && [ -f "$CONVERGENCE_VALIDATOR" ]; then
-    SERIES="$(printf '%s' "$NEWEST_PASS" | sed -E 's/(pass|p)[0-9]+\.md$//')"
+  if [ -n "$SERIES" ] && [ -f "$CONVERGENCE_VALIDATOR" ]; then
     # Feed the validator the harness-owned transcript so arm F6 (operator-citation) can verify
     # a resolution record's operator_authorization against ground truth -- the S290 fix: a lead
     # cannot release an operator-gated HARD_BLOCK by quoting an operator who never spoke. If the
@@ -261,7 +279,7 @@ Clearing the pause flag does NOT lift this. It is not a stall and Rule 3 does no
         }'
       exit 0
     fi
-  elif [ -n "$NEWEST_PASS" ]; then
+  elif [ -n "$SERIES" ]; then
     # A partial install must not SILENTLY disable the hard block -- that is the
     # `core/git-hooks/`-at-a-dead-path failure, an enforcer at a path nothing reads with
     # nothing saying so. Leave a trace retro's Rule 25(c) audit reads, and fail open.
