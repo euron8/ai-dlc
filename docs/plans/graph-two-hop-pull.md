@@ -98,7 +98,8 @@ this range, and quoting a number I did not measure is how a wrong expectation be
 condition on a run that was working. Report what you actually get.
 
 **Zero of either is a stop condition.** That is the signature of the stale engine having done
-the classifying, which is the exact failure the two-hop split exists to prevent.
+the classifying, which is the exact failure the two-hop split exists to prevent. **Drift rows
+appearing alongside them is not** — see item 3 of §*What to report*.
 
 ## Step 3 — merge the reconcile PR
 
@@ -136,8 +137,12 @@ work depends on:
 
 1. `OVERRIDE-SUPERSEDED` count at hop 2 (recorded floor: 3).
 2. `EXTENSION-TITLE-MATCHES-CORE` count at hop 2 (recorded floor: 13).
-3. Any `HARD-OVERRIDE-DRIFT-SECTION` rows — these should be **absent**; their presence means the
-   stale engine classified.
+3. Any `HARD-OVERRIDE-DRIFT-SECTION` rows. **Their presence is NORMAL and is not a stop
+   condition** — an earlier draft of this file said it was, and that was wrong.
+   `OVERRIDE-SUPERSEDED` is emitted from a block that does not `continue`, so flow reaches the
+   drift loop and an override that is both superseded AND drifted emits **both** rows, by
+   construction. The stale-engine signature is item 1 or item 2 reading **zero**, never the
+   presence of drift rows.
 4. Anything the gate emitted other than `SELF-UPDATE-OK` at hop 1.
 
 ## Why s302 still waits
