@@ -69,14 +69,20 @@ consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, 
 graph session for it while item 10 is the critical path is churn. Take it when graph is next
 open for another reason.
 
-**~~NEXT ACTION: item 15, the notification hook~~ — DONE, shipped as v0.296.0 (#405).
-NEXT ACTION IS NOW 10a + 10b, per the paragraph below, which was never superseded on its
-merits — only postponed by one release.**
+**~~NEXT ACTION: item 15~~ / ~~10a + 10b~~ — BOTH DONE (v0.296.0 #405, v0.298.0 #408).
+NEXT ACTION IS ITEM 7's REMAINDER, the `validate-layer-entries.sh` sweep**, per the order
+table below. It is path-independent and it feeds 10c.
 
-**NOTHING FURTHER IS BLOCKED BY 15.** It was first only because the operator asked for it
-first, and it was a prerequisite for nothing.
+**A GATE DEFECT WAS FOUND AND CLEARED IN BETWEEN, and it is worth knowing about because it will
+recur.** The 10a+10b push went red on `self-update-join-gate` — not from that work, but because
+touching `audit-rule-files.sh` put it in the self-update gate's probe set, where its BARE default
+(`--fail-on=any`) differs from the flag the hook passes (`--fail-on=deterministic`). It exits 1
+while printing `tier-1 findings: 0`, identically on both sides, and the gate deferred. Shipped
+separately as v0.297.0 (#407): agreement on ANY exit code is now a non-signal. **Expect any future
+release that edits a script the consumer's pre-push invokes to surface this class again** — the
+probe is bare and cannot pass what the hook passes.
 
-**NEXT ACTION: 10a + 10b, shipped as ONE release.** Everything ahead of them in the execution
+**~~NEXT ACTION: 10a + 10b, shipped as ONE release.~~ DONE — v0.298.0.** Everything ahead of them in the execution
 order is closed: the close-out landed, the pull is done, item 11 shipped as v0.288.0, the parked
 F3 work shipped as v0.289.0's successor chain, item 15 shipped as v0.296.0. **Item 10 is now the
 only thing holding s302** — though s302 is no longer a deadline; see the paragraph above.
@@ -97,8 +103,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~3~~ | ~~**11** — the self-update gate's bare-invocation probe~~ | **DONE** — v0.288.0 (#388) |
 | ~~4~~ | ~~F3, the parked branch~~ | **DONE** — shipped in the v0.289.0–v0.292.0 chain after two renumbers |
 | ~~4b~~ | ~~**15** — the consumer notification hook~~ | **DONE** — v0.296.0 (#405). See §*What v0.296.0 shipped* |
-| **5** | **10a + 10b** — declare the path grammar, bind core to it. **ONE release.** | **← START HERE.** No path moves, so nothing item 7 depends on changes. **10b MUST precede any migration**, and `CLAUDE.md` fails builds on a declaration with no enforcer, which is why they are not split |
-| 6 | **7's remainder** — the `validate-layer-entries.sh` sweep | path-independent, and it surfaces more reader sites for 10c |
+| ~~5~~ | ~~**10a + 10b** — declare the path grammar, bind core to it~~ | **DONE** — v0.298.0 (#408), with v0.297.0 (#407) cut first to clear a gate defect the push exposed. See §*What v0.298.0 shipped* |
+| **6** | **7's remainder** — the `validate-layer-entries.sh` sweep | **← START HERE.** Path-independent, and it surfaces more reader sites for 10c |
 | 7 | **10c – 10e**, with **F4 folded into 10c** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
 | 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
 | 9 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
@@ -218,7 +224,10 @@ before you write code.
    NOT warranted — control: 22 `EXIT_CONDITION_MET` in the same corpus). **Awaiting the
    operator: paste it into graph, then take the two-hop pull.**
 10. **Declare ONE artifact path convention, mechanise it, and migrate every existing file to
-    it.** OPERATOR DIRECTIVE, 2026-08-07: one generic folder AND file naming convention;
+    it.** **10a AND 10b ARE DONE — v0.298.0 (#408). 10c, 10d and 10e remain**, and 10c is where
+    the readers move, the step files are rewritten and the migration ledger is emptied. Do not
+    read the grammar as adopted until then: nothing points an authoring agent at it, deliberately.
+    OPERATOR DIRECTIVE, 2026-08-07: one generic folder AND file naming convention;
     **migrating pre-existing files is a MUST**; breaking historical traceability is
     **accepted**, on the stated ground that *a declared convention is itself the guide to
     where to look, and without one nothing has improved*. The full measurement, the proposed
@@ -336,7 +345,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.296.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.298.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -360,6 +369,8 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.298.0 | #408 | **plan item 10a + 10b.** `artifact-path-grammar.md` declares one convention — the directory is the only sprint slot — and `validate-enforcement-map.sh` **I82** binds core's own prescriptions to it. Measured first: **65 prescribed paths, 41 conforming, 24 carrying a sprint token outside the reserved slot**, in 4 positions and 5 spellings. The 24 are a migration ledger bound in BOTH directions, so it can only shrink. `contract_version` does NOT move; the precedent was measured. No path moves. |
+| v0.297.0 | #407 | The self-update gate stops reading AGREEMENT as an unattributable failure. Found by the 10a+10b push: a machinery-only pull touching `audit-rule-files.sh` deferred, because bare it defaults to `--fail-on=any` while the hook passes `--fail-on=deterministic` — it fails a threshold the hook never applies, identically on both sides. v0.288.0's fix, one layer up, scoped to `2` alone. Re-measured over **seven** scripts, not five. |
 | v0.296.0 | #405 | **plan item 15.** `core/hooks/ai-dlc-notify.sh` on the `Notification` event — the mechanism behind the plan-shape rule's ping requirement. Platforms decided rather than left open: macOS `osascript`, Linux `notify-send`, anything else no channel, and `install.sh` PROBES and REPORTS which, so the no-channel case is not the inert-mechanism class. New fixture `notify-hook-channel` (9 assertions, 4 mutants, 1 control) shims `$PATH` so the Linux and no-channel branches are driven by the shipping code on a macOS suite. |
 | v0.295.0 | #403 | `--list` MERGES instead of rewriting the map. v0.294.0's version dropped every untraced fixture — SAFE (unmapped means always-run) and therefore invisible: the suite stayed correct and merely stopped skipping. Verified on the real map, 118 preserved + 1 added. |
 
@@ -675,6 +686,79 @@ so on a consumer that assertion prints `skip` with its reason and the verdict re
 `PASS WITH 1 SKIP(S)` — v0.287.0's lesson applied at the point it would otherwise have passed
 quietly. Verified by running the fixture in a tree built by `scripts/install.sh` into an empty
 directory, not only in `core/`.
+
+## What v0.298.0 shipped (item 10a + 10b)
+
+**The premise was re-measured before any code, and it HELD** — unlike three earlier items in this
+plan. Against core's own shipped rule files, before any edit:
+
+```
+artifact paths core prescribes                         65
+  conforming                                           41
+  sprint token outside the reserved slot                24   <- 4 positions, 5 spellings
+```
+
+Two corrections to the scope's own numbers, both from a wider and better-derived corpus (every step
+file, every skill-root rule file except the grammar itself, every role file):
+
+- The scope listed 21 step files and five spellings. The five hold. The count of PATHS was never
+  stated and is 65, of which 24 violate.
+- The scope did not list `_bmad-output/specs/spec-s<N>-<slug>/`, `_bmad-output/party-mode-transcripts/sprint-<N>-retro.md`
+  or `_bmad-output/implementation-artifacts/sprint-<N>-*.md`. All three are in the ledger.
+
+**`contract_version` does NOT move, and the scope said it would.** The scope's *"`contract_version`
+bumps here"* was checked rather than followed: no LC- clause governs the kind set — it is DATA a
+rule reads, exactly as the PR-class taxonomy is — and the precedent was measured, not assumed.
+`consumer_story_fields_file:` was introduced in v0.237.0 (#321) and **that commit changed no
+`contract_version` line**.
+
+**The key is named `consumer_artifact_paths_file:` as the scope said, but the CORE grammar file is
+`artifact-path-grammar.md`, not `artifact-paths.md`.** Two distinct basenames on purpose: one file
+is core's and overwritten on pull, the other is the consumer's and never overwritten, and
+`CLAUDE.md`'s own opening warning is about exactly that collision.
+
+**I82's ledger is a ratchet and the second direction is what makes it one.** An unlisted violation
+fails the build; **a ledger entry core no longer prescribes ALSO fails the build**. And the grammar
+file is excluded from its own corpus — load-bearing, not tidy: the ledger lists the offending paths
+verbatim, so scanning it would make every entry "still prescribed" by the ledger itself and the
+stale arm could never fire.
+
+**Nothing points an authoring agent at the grammar yet, deliberately.** A `SKILL.md` pointer would
+tell an agent to obey a grammar the step files it is executing still break in 24 places. **10c is
+where the pointer, the step-file rewrite and the reader moves all land together** — and they have
+to, because rewriting a prescription while `ai-dlc-continue.sh` still globs the old shape breaks
+the hook on the next sprint's first artifact. That sequencing hazard is not in the scope below and
+is the main thing 10c must respect.
+
+**A syntactic check over prescriptions cannot see a sprint a PLACEHOLDER conceals.**
+`story-<id>-<slug>.md` passes rule 2 — and it is the exact form Check 6's glob broke on. 10e, which
+reads real filenames, is where that is caught. Do not read I82 as covering it.
+
+## What v0.297.0 measured (a gate defect the 10a+10b push exposed)
+
+**Not attributable to item 10.** Touching `audit-rule-files.sh` — required by I23, which binds every
+shipped rule file into the audit corpus — put it in the self-update gate's probe set, and the gate
+deferred. Re-measured over every script the consumer's pre-push actually invokes, on a consumer
+built by running `install.sh` into an empty tree — **SEVEN, not the five v0.288.0 had**:
+
+```
+validate-audit-anchors.sh         bare rc=2   hook passes --trunk-push + stdin
+validate-provenance-block.sh      bare rc=2   hook passes --strays
+audit-rule-files.sh               bare rc=1   hook passes --fail-on=deterministic
+validate-layer-entries.sh         bare rc=0   hook invokes it bare
+validate-compact-window.sh        bare rc=0
+validate-fixture-drivability.sh   bare rc=0
+sync-taught-schema.sh             bare rc=0
+```
+
+`validate-layer-entries.sh` is **rc=0** here, not the rc=2 v0.288.0 recorded — that measurement was
+taken from a different cwd. **The new case is `audit-rule-files.sh`: bare it defaults to
+`--fail-on=any` while the hook passes `--fail-on=deterministic`, so it exits 1 while printing
+`tier-1 findings: 0`.** It fails a threshold the hook never applies, identically on both sides, and
+v0.288.0's both-non-zero arm called that unattributable and deferred. A probe can ask the wrong
+question without earning a usage error, which is why scoping the exemption to `2` was too narrow.
+
+**Expect this class again on any release that edits a script the consumer's pre-push invokes.**
 
 ## Item 11 — the self-update gate compares two usage errors
 
