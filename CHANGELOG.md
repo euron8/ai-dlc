@@ -34,6 +34,77 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.284.0] — 2026-08-06
+
+### `validate-enforcement-map.sh` spent half its system time starting processes to answer questions bash can answer
+
+Follow-on to v0.283.0, and it exists because that release's closing claim was too vague. It
+said the only remaining lever was "doing fewer validator invocations". Measured, the lever is
+one level down: **fewer processes inside the validator**.
+
+The profile, taken with a counting `PATH` shim rather than guessed:
+
+```
+external commands in ONE run   1582      of which grep 643, basename 342, awk 212
+fork+exec on this box          1.48ms    (idle; a contended reading of 15.8ms was discarded)
+=> pure spawn cost             2.34s     of the run's 4.70s of SYSTEM time
+across ~140 runs per suite     ~221,000 processes, ~328 CPU-seconds
+```
+
+Nothing there is compute. The files are small and every pattern is a literal.
+
+**The worst shape was an exact-line membership test against a string already in memory** —
+`grep -qxF -- "$x" <<<"$list"` — which forks a process and builds a here-string to answer a
+question a glob answers. Measured over 2000 iterations: **3.717s against 0.007s, about 530x**.
+Three of those became `in_lines`, a helper that wraps both sides in newlines so the match is a
+whole line and never a substring of one (`E1` must not satisfy a list holding only `E10` — the
+same two-digit hazard I36 reverse already carried a comment about).
+
+The rest were file reads: `grep -qF -- x FILE` once per clause, over a handful of distinct
+files. Those became `$(<file)` into a last-file memo plus an `in_body` glob — `$(<file)`
+measured 0.83ms against 2.04ms for `$(cat file)`. **A memo, not a sort:** grouping the clauses
+by enforcer would read each file once but would also reorder the findings, and the order errors
+come out in is the reader's only route back to the clause. Interleaved clauses degrade to one
+read each, still cheaper than the grep replaced and never worse. The memo is a string pair
+rather than an associative array because this runs under **bash 3.2**, which macOS still ships;
+the same string-memo idiom was already in the file at `w2_cache`.
+
+`basename` was 342 forks, almost all of them one per directory inside a walk, and every one is
+`${x##*/}` — a pure expansion. Two `find … -exec basename {} \;` calls over `core/fixtures/`
+and `core/` were forking once per entry.
+
+```
+external commands   1582 -> 1156   (-27%)
+validator run       8.36s -> 7.02s (-16%, mean of three, idle)
+```
+
+**Byte-identical, on the failing paths as well as the passing one.** The clean-tree output
+matches to the byte, and so does the output of all seven fixtures that drive this validator —
+which matters more, because those mutate the tree and exercise the error branches this change
+touched. `enforcement-map-sites` a/b/c, `enforcement-map-derivations`, `consumer-machinery-home`,
+`ledger-status-vocabulary` and `crosswalk-home-declaration` are unchanged and green.
+
+Byte-identical output is still not proof a predicate can fire, so the three rewritten ones were
+mutated on a mirrored tree: a clause code its enforcer never emits (I36 forward, `in_body`), an
+emitted code no clause claims (I36 reverse, `in_lines`), and a prose home that does not mention
+its clause (I38, `in_body`), each with an unmutated control.
+
+The I38 mutant **failed on its first run and the fixture was right**: it pointed `prose_home` at
+`VERSION`, which the mirror does not contain, so I38 fired through its *other* arm
+("does not exist") and the arm under test was never reached. A mutant that exercises a
+different branch than the one it names proves nothing about that branch.
+
+**Two `set -u` notes, since both would have shipped as a crash rather than a wrong answer.** The
+memo pairs are initialised explicitly, because a memo is by definition read before it is first
+written. And the I65 index is read into memory *after* `lc_i65_index` rebuilds it — the probe
+run before it deliberately writes a fake enforcer list and restores it, so loading any earlier
+would answer every lookup from the probe's index instead of the real one.
+
+**Not done.** `grep` is still 506 calls. The largest remaining cluster is `i75_norm`, which runs
+`awk | grep | sed` twice per subject file; memoising it is a further ~60 forks. It is left
+because the returns are falling and the risk is not, and this file's error paths are the ones
+the whole layer contract rests on.
+
 ## [0.283.0] — 2026-08-06
 
 ### Six fixtures were internally serial, and the suite's wall clock was whichever one was longest
