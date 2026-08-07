@@ -248,6 +248,7 @@ core_manifest:
   - fixtures/verdict-pass-content/**
   - fixtures/wait-stale-deliverable/**
   - fixtures/whole-read-pool/**
+  - fixtures/artifact-path-migration/**
   - fixtures/notify-hook-channel/**
 
 machinery:

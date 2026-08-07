@@ -1,0 +1,250 @@
+#!/usr/bin/env bash
+# artifact-path-migration — migrate-artifact-paths.sh moves every path onto the declared
+# grammar, REFUSES what it cannot derive, and its own output conforms to the rule it enforces.
+#
+# THE DEFECTS THIS EXISTS TO CATCH, every one of them measured on the reference consumer while
+# the script was being written. None was found by reading it.
+#
+#  - MATCHING THE WHOLE PATH WITH A COMPONENT REGEX. The token boundary is `^` or `-`, and a
+#    path separator is neither, so `docs/retro/sprint-299.md` matched NOTHING. 668 files were
+#    detected instead of 2551 and `docs/retro` was absent from the plan entirely.
+#  - ADJACENT TOKENS HIDING EACH OTHER. `grep -o` and `sed ...g` both consume the separator the
+#    next token needs, so `gate-log-archive-s291-s292.md` reported ONE sprint. That is not a
+#    cosmetic miss: a file naming two sprints was planned as if it named one, and would have
+#    been filed under the wrong sprint permanently.
+#  - THE SLOT NESTED INSIDE THE TOKEN IT REPLACES. A basename-only transform produced
+#    `implementation-artifacts/sprint-287/smoke-evidence/s287/foo.md` on 53 directories --
+#    output that breaks the grammar the script exists to impose.
+#  - A HALF-MIGRATED STORY CORPUS. `story-S298-1-x.md` carries a matchable token and
+#    `story-297-1-x.md` does not, so a run over `stories/` moves one sibling and leaves the
+#    other. Split conventions inside one sprint are worse than one wrong convention.
+#
+# THE VERDICT IS NEVER TRUSTED. Every assertion below reads the TREE -- what exists, what does
+# not, and whether the bytes survived -- rather than the script's own summary line. A migration
+# that printed "2670 verified" while moving nothing would pass a report-reading fixture.
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+pick() { for c in "$@"; do [ -n "$c" ] && [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
+
+# install.sh maps core/scripts/<x> -> scripts/ai-dlc/<x>; core/skills/ai-dlc/ -> .claude/skills/ai-dlc/.
+MIG="$(pick "$HERE/../../scripts/migrate-artifact-paths.sh" \
+            "$HERE/../../../scripts/ai-dlc/migrate-artifact-paths.sh" \
+            "$HERE/../../core/scripts/migrate-artifact-paths.sh")"
+GRAMMAR="$(pick "$HERE/../../skills/ai-dlc/artifact-path-grammar.md" \
+                "$HERE/../../../.claude/skills/ai-dlc/artifact-path-grammar.md" \
+                "$HERE/../../core/skills/ai-dlc/artifact-path-grammar.md")"
+[ -n "$MIG" ] && [ -n "$GRAMMAR" ] \
+  || { echo "FIXTURE ERROR: cannot locate migrate-artifact-paths.sh and/or artifact-path-grammar.md" >&2; exit 2; }
+
+fails=0; asserts=0
+ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
+bad() { asserts=$((asserts+1)); fails=$((fails+1)); printf '  FAIL  %s\n' "$1"; }
+has() { [ -f "$1/$2" ]; }
+
+echo "artifact-path-migration:"
+
+# =============================================================================
+# 1. DRY RUN WRITES NOTHING. The default must be safe, or the first run of a
+#    2600-file mover on a real tree is an experiment.
+# =============================================================================
+W="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+BEFORE="$(cd "$W" && git status --porcelain | wc -l | tr -d ' ')"
+OUT="$(bash "$MIG" --root "$W" 2>&1)"; RC=$?
+AFTER="$(cd "$W" && git status --porcelain | wc -l | tr -d ' ')"
+[ "$RC" -eq 0 ] && ok "dry run exits 0 when there is work to do" \
+                || bad "dry run exited $RC, expected 0"
+[ "$BEFORE" = "0" ] && [ "$AFTER" = "0" ] \
+  && ok "dry run left the work tree untouched (git reports no change)" \
+  || bad "dry run MODIFIED the tree — porcelain went '$BEFORE' -> '$AFTER'"
+has "$W" "docs/retro/sprint-301.md" \
+  && ok "...and the source files are all still where they were" \
+  || bad "a source file moved during a DRY RUN"
+case "$OUT" in *"DRY RUN"*) ok "the dry run says so in its own output" ;;
+               *) bad "the dry run does not announce itself; an operator cannot tell the two modes apart" ;; esac
+
+# THE SELF-CHECK MUST BE PRESENT AND ZERO. It is the one arm that catches the script writing
+# paths its own grammar rejects, and it reports on both roads.
+case "$OUT" in
+  *"outside the slot: 0"*) ok "self-check: no planned destination carries a token outside the slot" ;;
+  *) bad "self-check missing or non-zero — the plan contains paths the grammar rejects" ;;
+esac
+
+# =============================================================================
+# 2. APPLY — every transform property, asserted against the TREE.
+# =============================================================================
+OUT="$(bash "$MIG" --root "$W" --apply 2>&1)"; RC=$?
+[ "$RC" -eq 0 ] && ok "apply exits 0" || { bad "apply exited $RC"; printf '%s\n' "$OUT" | tail -5 | sed 's/^/        /'; }
+
+# $1 label  $2 destination that MUST exist  $3 source that MUST be gone  $4 why
+moved() {
+  asserts=$((asserts+1))
+  if has "$W" "$2" && ! has "$W" "$3"; then printf '  ok    %-26s %s\n' "$1" "$4"
+  else fails=$((fails+1)); printf '  FAIL  %-26s %s\n           dest %s: %s / src %s: %s\n' "$1" "$4" \
+       "$2" "$(has "$W" "$2" && echo present || echo MISSING)" \
+       "$3" "$(has "$W" "$3" && echo STILL-THERE || echo gone)"; fi
+}
+
+moved "basename-prefix"  "_bmad-output/planning-artifacts/s301/research-notes.md" \
+                         "_bmad-output/planning-artifacts/s301-research-notes.md" \
+                         "s<N>- prefix moves into the directory"
+moved "basename-word"    "_bmad-output/party-mode-transcripts/s301/retro.md" \
+                         "_bmad-output/party-mode-transcripts/sprint-301-retro.md" \
+                         "the sprint-<N>- word form too"
+moved "basename-suffix"  "_bmad-output/implementation-artifacts/s301/gate-log-archive.md" \
+                         "_bmad-output/implementation-artifacts/gate-log-archive-s301.md" \
+                         "and the SUFFIX position, which is why a prefix filter was never enough"
+moved "strips-to-nothing" "docs/retro/s301/retro.md" \
+                         "docs/retro/sprint-301.md" \
+                         "a nameless basename takes the name of what contained it"
+moved "strips-to-nothing-2" "_bmad-output/implementation-artifacts/s301/sprint-status.yaml" \
+                         "_bmad-output/implementation-artifacts/sprint-status/sprint-301.yaml" \
+                         "...and the promoted directory does not also remain a directory"
+moved "directory-token"  "_bmad-output/implementation-artifacts/s301/smoke-evidence/shot.png" \
+                         "_bmad-output/implementation-artifacts/sprint-301/smoke-evidence/shot.png" \
+                         "a token in a DIRECTORY moves too, subdirectories intact"
+moved "dir-and-basename" "_bmad-output/planning-artifacts/s301/archive/cycle-1/prd-adversarial-p2.md" \
+                         "_bmad-output/planning-artifacts/archive/s301-cycle-1/prd-adversarial-s301-p2.md" \
+                         "both at once collapse to ONE slot under the area"
+moved "root-log-archive" "_bmad-output/implementation-artifacts/s301/pipeline-continuation-log-archive.md" \
+                         "_bmad-output/pipeline-continuation-log-archive-s301.md" \
+                         "a rotation archive at _bmad-output/ root lands in implementation-artifacts"
+moved "inferred-area"    "_bmad-output/brainstorming/s301/brainstorm-ideas.md" \
+                         "_bmad-output/brainstorming/brainstorm-s301-ideas.md" \
+                         "an UNDECLARED area still migrates"
+moved "inferred-area-token" "_bmad-output/party-verdicts-retro/s301/pm.md" \
+                         "_bmad-output/party-verdicts-s301-retro/pm.md" \
+                         "an inferred area's OWN token is stripped before it anchors the slot"
+moved "uppercase-S"      "docs/reviews/s301/1-code-review.md" \
+                         "docs/reviews/S301-1-code-review.md" \
+                         "S<N> normalises to the one legal spelling"
+
+# ALREADY CONFORMING FILES ARE NOT TOUCHED. A migration that rewrites correct paths churns the
+# tree and breaks citations for nothing.
+has "$W" "_bmad-output/planning-artifacts/s301/architecture-context.md" \
+  && ok "a path already in the slot is left alone" \
+  || bad "an ALREADY CONFORMING path was moved"
+has "$W" "_bmad-output/planning-artifacts/prd.md" \
+  && ok "a durable area-root file with no sprint is left alone" \
+  || bad "a durable file with no sprint token was moved"
+
+# =============================================================================
+# 3. REFUSALS — each one stays put, and is NAMED.
+# =============================================================================
+# $1 label  $2 path that must still exist  $3 reason token in the report  $4 why
+refused() {
+  asserts=$((asserts+1))
+  if has "$W" "$2" && grep -q "$3" <<<"$OUT"; then printf '  ok    %-26s %s\n' "$1" "$4"
+  else fails=$((fails+1)); printf '  FAIL  %-26s %s\n           still present: %s / report names %s: %s\n' "$1" "$4" \
+       "$(has "$W" "$2" && echo yes || echo NO-IT-MOVED)" "$3" \
+       "$(grep -q "$3" <<<"$OUT" && echo yes || echo NO)"; fi
+}
+
+refused "adjacent-tokens" "_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" \
+        "AMBIGUOUS" "two ADJACENT tokens are seen as two sprints, not one"
+refused "tokens-disagree" "_bmad-output/planning-artifacts/archive/s300-cycle-1/notes-s295.md" \
+        "AMBIGUOUS" "a directory and a basename naming different sprints is refused"
+refused "no-area"         "_bmad-output/s177/wave-1-dispatch-status.md" \
+        "NO-AREA" "a sprint dir under a non-area scan root has nothing to anchor to"
+
+# THE STORY CORPUS: BOTH SPELLINGS STAY, OR NEITHER. This is the anti-half-migration arm.
+asserts=$((asserts+1))
+if has "$W" "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" \
+   && has "$W" "_bmad-output/planning-artifacts/stories/story-297-1-beta.md"; then
+  printf '  ok    %-26s %s\n' "stories-deferred" "BOTH story spellings stay put — the corpus is not split"
+else
+  fails=$((fails+1))
+  printf '  FAIL  %-26s %s\n' "stories-deferred" "the story corpus was HALF migrated: S301 moved=$(has "$W" "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" && echo no || echo YES), 297 moved=$(has "$W" "_bmad-output/planning-artifacts/stories/story-297-1-beta.md" && echo no || echo YES)"
+fi
+case "$OUT" in *DEFERRED*) ok "...and the deferral is REPORTED, so the gap is known not silent" ;;
+               *) bad "1000+ story files were skipped with no mention — a silent partial migration" ;; esac
+
+# =============================================================================
+# 4. NOTHING WAS LOST. git is the witness, not the script's own verdict.
+# =============================================================================
+STATUS="$(cd "$W" && git status --porcelain=1 | cut -c1-2 | sort -u | tr -d ' \n')"
+[ "$STATUS" = "R" ] && ok "git sees ONLY renames — no deletions, no additions, no content edits" \
+                    || bad "git status letters were '$STATUS', expected only 'R' (renames)"
+N_BEFORE="$(cd "$W" && git ls-files | wc -l | tr -d ' ')"
+[ "$N_BEFORE" -gt 0 ] && ok "tracked file count is non-zero ($N_BEFORE) — the control on the arm above" \
+                      || bad "zero tracked files; every assertion above is vacuous"
+
+# =============================================================================
+# 5. IDEMPOTENT. A second run must find nothing, or the transform is not a function.
+# =============================================================================
+(cd "$W" && git add -A && git commit -q -m migrated)
+bash "$MIG" --root "$W" >/dev/null 2>&1; RC=$?
+[ "$RC" -eq 3 ] && ok "a second run exits 3 (nothing to migrate) — the transform is idempotent" \
+                || bad "a second run exited $RC, expected 3; the first run left work behind"
+rm -rf "$W"
+
+# =============================================================================
+# 6. MUTANTS. Each removes ONE mechanism and must flip exactly its own arm.
+# =============================================================================
+MUT="$(mktemp -d "${TMPDIR:-/tmp}/apmig-mut-XXXXXX")"
+# $1 tag  $2 sed program  $3 shell test over $w that must be TRUE on the mutant  $4 claim
+# Each mutant is a guarded COPY, and a sed that matches nothing is a failure rather than a
+# silent pass. Each asserts a property of the TREE the mutant produced, not of its report.
+mutate() {
+  # Split, not one `local`: `local a="$1" d="$MUT/$a"` expands $a while it is still being
+  # declared, which under `set -u` aborts the fixture with "unbound variable" — a harness
+  # failure that reads like a mutant result.
+  local tag="$1" prog="$2" test_expr="$3" claim="$4"
+  local d="$MUT/$tag" w
+  asserts=$((asserts+1))
+  mkdir -p "$d"
+  sed -E "$prog" "$MIG" > "$d/m.sh"
+  if cmp -s "$MIG" "$d/m.sh"; then
+    fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' "$tag"; return
+  fi
+  w="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+  bash "$d/m.sh" --root "$w" --apply >/dev/null 2>&1
+  if eval "$test_expr"; then printf '  ok    MUTANT %-18s %s\n' "$tag" "$claim"
+  else fails=$((fails+1)); printf '  FAIL  MUTANT %-18s did NOT flip: %s\n' "$tag" "$claim"; fi
+  rm -rf "$w"
+}
+
+# Scan the whole path with the component regex instead of splitting on `/`. Every token a `/`
+# precedes goes invisible, so `docs/retro/sprint-301.md` is never even seen.
+mutate 'whole-path-scan' \
+  "s@[|] tr '/' '.n' [|]@|@" \
+  '[ -f "$w/docs/retro/sprint-301.md" ]' \
+  'scanning the whole path leaves docs/retro/sprint-301.md unmigrated — the 668-vs-2551 defect'
+
+# Disarm the ambiguity refusal. The file naming TWO sprints is then filed under one of them,
+# which is the silently-wrong outcome, not a loud one.
+mutate 'ambiguity-allowed' \
+  's@^  if \[ "\$nhits" -gt 1 \]; then@  hits="$(printf "%s" "$hits" | head -1)"; nhits=1\n  if [ "$nhits" -gt 1 ]; then@' \
+  '[ ! -f "$w/_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" ]' \
+  'collapsing to the FIRST sprint instead of refusing files a two-sprint path under a guess'
+
+# Drop the story deferral. The corpus then splits: the capital-S file moves, its lowercase
+# sibling does not.
+mutate 'stories-not-deferred' \
+  's@\*/stories/\*\)@*/NOT-A-REAL-DIR/*)@' \
+  '[ ! -f "$w/_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" ] && [ -f "$w/_bmad-output/planning-artifacts/stories/story-297-1-beta.md" ]' \
+  'without the deferral one sprint\x27s stories split across two conventions'
+
+# UNMUTATED CONTROL, from the same directory: the harness itself must not be what fails. A lone
+# copy that dies sourcing something emits nothing, and "no output" otherwise scores as a kill.
+asserts=$((asserts+1))
+mkdir -p "$MUT/control"; cp "$MIG" "$MUT/control/m.sh"
+wc="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+# HERE-STRING, NOT A PIPE, and this arm is where that was learned the hard way: as a pipe it
+# reported the control BROKEN precisely when the control was working. `... | grep -q` under
+# `pipefail` returns NON-ZERO on a MATCH -- grep leaves at its first hit, the writer takes
+# SIGPIPE, and pipefail answers with the writer. It is a SIZE threshold, not a race, so the
+# small greps above survived it and the one reading a whole migration report did not. I54/I54b
+# bind the idiom across every shipped shell file.
+ctl_out="$(bash "$MUT/control/m.sh" --root "$wc" 2>&1)"
+if grep -q "outside the slot: 0" <<<"$ctl_out"; then
+  ok "CONTROL: an unmutated copy in the mutant directory still passes its own self-check"
+else
+  bad "CONTROL: an unmutated copy FAILED — the mutant harness is what is broken, not the mutants"
+fi
+rm -rf "$wc" "$MUT"
+
+echo
+if [ "$fails" -eq 0 ]; then echo "artifact-path-migration: PASS ($asserts assertions)"; exit 0; fi
+echo "artifact-path-migration: $fails of $asserts assertion(s) FAILED" >&2
+exit 1

@@ -69,10 +69,15 @@ consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, 
 graph session for it while item 10 is the critical path is churn. Take it when graph is next
 open for another reason.
 
-**~~NEXT ACTION: item 15~~ / ~~10a + 10b~~ / ~~item 7's remainder~~ / ~~10c~~ — ALL DONE.
-10c shipped as v0.299.0: the ledger is EMPTY, the readers compose, the `SKILL.md` pointer is live,
-and F4 shipped inside it. NEXT ACTION IS 10d**, per the order table below. Read
-§*What v0.299.0 shipped* first — it records two things 10d depends on and one new item it created.
+**~~NEXT ACTION: … 10c~~ / ~~10d~~ — ALL DONE.** 10d shipped as v0.300.0:
+`migrate-artifact-paths.sh` is in core, dry-run by default, rehearsed end to end on a clone of the
+consumer. **NEXT ACTION IS 10e** — the consumer-side validator on real filenames — and it ships
+AFTER the operator has run the migration once, per §*Sub-releases*.
+
+**THE OPERATOR'S MOVE IS NOW UNBLOCKED AND IS THE CRITICAL PATH.** Pull, then run
+`scripts/ai-dlc/migrate-artifact-paths.sh` (dry run first, read the refusals), then commit. Measured
+on a clone of graph at `655fd3acf`: **2667 moves, 48 refused, 1001 deferred, idempotent on a second
+run.** Between the pull and the migration graph's gate-time readers FAIL — loudly and by design.
 
 **10d IS THE ONE ITEM IN THIS PLAN THAT WRITES TO THE CONSUMER, and its window is now open and
 costly to leave open.** Core's readers expect the new shape as of v0.299.0, so between the pull and
@@ -113,10 +118,12 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~5~~ | ~~**10a + 10b** — declare the path grammar, bind core to it~~ | **DONE** — v0.298.0 (#408), with v0.297.0 (#407) cut first to clear a gate defect the push exposed. See §*What v0.298.0 shipped* |
 | ~~6~~ | ~~**7's remainder** — the `validate-layer-entries.sh` sweep~~ | **DONE, and it found NOTHING — measured, with a control.** See §*What item 7's remaining sweep measured*. Item 7 is closed |
 | ~~7~~ | ~~**10c**, with **F4** folded in~~ | **DONE** — v0.299.0. Ledger emptied, readers composed, pointer landed, F4 shipped. See §*What v0.299.0 shipped* |
-| **8** | **10d – 10e** | **← START HERE.** 10d is the consumer migration the OPERATOR runs; 10e is the pre-push validator on real filenames, and it ships AFTER 10d has run once |
-| 9 | **16** — move `planning-artifacts/stories/` under `s<N>/` | split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
-| 10 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to |
-| 11 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
+| ~~8~~ | ~~**10d**~~ | **DONE** — v0.300.0. See §*What v0.300.0 measured* |
+| **8b** | **operator: pull, then run the migration** | **← THE CRITICAL PATH.** 10e cannot ship until this has run once, or first contact wedges on ~2700 non-conforming files |
+| **9** | **10e** — the consumer pre-push validator | after 8b |
+| 10 | **16** — move `planning-artifacts/stories/` under `s<N>/` | split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
+| 11 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to |
+| 12 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
 | — | **12**, **13** | neither gates anything; take them when convenient |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
 
@@ -374,7 +381,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.299.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.300.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -398,6 +405,7 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.300.0 | #TBD | **plan item 10d.** `migrate-artifact-paths.sh`: dry run by default, `git mv` only, verified per file as source-absent AND dest-readable AND sha256-identical. Rehearsed on a CLONE of the consumer and the rehearsal found four defects reading could not — a component regex run against whole paths (668 detected instead of 2551, `docs/retro` absent entirely), adjacent tokens hiding each other (a two-sprint file planned as unambiguous), the slot nested inside the token it replaces (53 directories), and a half-migrated story corpus. 2667 moves / 48 refused / 1001 deferred / self-check 0 / idempotent. Every refusal and every inferred area is reported. New fixture `artifact-path-migration` (32 assertions, 3 mutants, 1 control). |
 | v0.299.0 | #TBD | **plan item 10c, with item 7's F4 folded in.** Readers compose the path from the declared sprint instead of searching it; core's 24 excused prescriptions are rewritten and the migration ledger is **EMPTY**, with both I82 arms re-proven by guarded mutant because an empty join reads like a dead one. Both hooks scope the live-series glob to `s<sprint-id>/` — 135 files across 56 sprints down to one sprint's candidate set — and I81 now binds the whole derivation as a marked BLOCK asserting two properties. Check 6's zero-verification PASS is closed with the corpus count as its control. F4: `validate-ci-gates.sh` reports its inventory on a vacuum and adjudicates via the alias table with no CI directory at all. `I82` added to the `OK:` line. |
 | v0.298.0 | #408 | **plan item 10a + 10b.** `artifact-path-grammar.md` declares one convention — the directory is the only sprint slot — and `validate-enforcement-map.sh` **I82** binds core's own prescriptions to it. Measured first: **65 prescribed paths, 41 conforming, 24 carrying a sprint token outside the reserved slot**, in 4 positions and 5 spellings. The 24 are a migration ledger bound in BOTH directions, so it can only shrink. `contract_version` does NOT move; the precedent was measured. No path moves. |
 | v0.297.0 | #407 | The self-update gate stops reading AGREEMENT as an unattributable failure. Found by the 10a+10b push: a machinery-only pull touching `audit-rule-files.sh` deferred, because bare it defaults to `--fail-on=any` while the hook passes `--fail-on=deterministic` — it fails a threshold the hook never applies, identically on both sides. v0.288.0's fix, one layer up, scoped to `2` alone. Re-measured over **seven** scripts, not five. |
@@ -763,6 +771,45 @@ is the main thing 10c must respect.
 **A syntactic check over prescriptions cannot see a sprint a PLACEHOLDER conceals.**
 `story-<id>-<slug>.md` passes rule 2 — and it is the exact form Check 6's glob broke on. 10e, which
 reads real filenames, is where that is caught. Do not read I82 as covering it.
+
+## What v0.300.0 measured (item 10d — the migration, rehearsed on a clone)
+
+**THE REHEARSAL IS THE FINDING.** Four defects in the migration script, none of which reading it
+would have caught, all of them found by running it against a clone of the reference consumer:
+
+1. **A component regex run against whole paths.** The token boundary is `^` or `-`; `/` is neither,
+   so `docs/retro/sprint-299.md` matched NOTHING. **668 files detected instead of 2551**, with
+   `docs/retro` absent from the plan entirely.
+2. **Adjacent tokens hide each other.** `grep -o` and `sed …g` consume the separator the next token
+   needs, so `gate-log-archive-s291-s292.md` reported ONE sprint — a two-sprint file planned as
+   unambiguous, which would have filed it under the wrong sprint permanently. Fixed by stripping
+   one token at a time to a fixed point.
+3. **The slot nested inside the token it replaces.** A basename-only transform wrote
+   `implementation-artifacts/sprint-287/smoke-evidence/s287/foo.md` on **53** directories.
+4. **A half-migrated story corpus.** `story-S298-1-x.md` carries a matchable token and
+   `story-297-1-x.md` uses a bare number the transform cannot tell from a story index, so a run
+   over `stories/` moves one sibling and leaves the other.
+
+**THE NUMBERS THE OPERATOR NEEDS**, measured on a clone of graph at `655fd3acf`:
+
+```
+tracked files scanned                  5145
+moves planned / applied / verified     2667      git: 2670 renames, 0 content changes,
+                                                 tracked file count identical either side
+REFUSED                                  48      45 ambiguous, 3 with no derivable area
+DEFERRED (stories/, item 16)           1001
+destinations still carrying a token        0
+second run                            rc=3       idempotent
+```
+
+**THE GRAMMAR DECLARES EIGHT AREAS; THE CONSUMER HOLDS SPRINT-TOKENED FILES IN EIGHT MORE** —
+`brainstorming`, `test-artifacts`, `party-mode`, `gate-adjudication`, `party-verdicts-retro`,
+`party-review`, `ai-dlc-update`, `sprint-review-transcripts`. They migrate under an inferred area
+and the run REPORTS each one. **The grammar file should declare them**; until it does, the
+enforcement in 10e will not govern them.
+
+**The generic rule reproduces the grammar's hand-written destination table with no lookup table in
+the script.** That is the control on both — they were derived independently and agree.
 
 ## What v0.299.0 shipped (item 10c, with F4 folded in)
 

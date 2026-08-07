@@ -34,6 +34,62 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.300.0] — 2026-08-07
+
+### A migration the operator runs, verified per file, that reports everything it refuses
+
+Plan item **10d**. `core/scripts/migrate-artifact-paths.sh` moves a consumer's artifacts onto the
+grammar v0.298.0 declared and v0.299.0's readers now expect. **Dry run by default**; `--apply` moves
+with `git mv` only, never deletes, and never edits a file's content.
+
+**REHEARSED ON A CLONE OF THE REFERENCE CONSUMER BEFORE SHIPPING, and the rehearsal is the reason
+this release is not the first draft.** Four defects, none of which reading the script would have
+found:
+
+| defect | what it did | how it showed |
+|---|---|---|
+| whole-path match with a component regex | the token boundary is `^` or `-`, and `/` is neither, so `docs/retro/sprint-299.md` matched NOTHING | **668 files detected instead of 2551**, `docs/retro` absent from the plan entirely |
+| adjacent tokens hiding each other | `grep -o` and `sed …g` consume the separator the next token needs | `gate-log-archive-s291-s292.md` reported ONE sprint — a two-sprint file planned as if unambiguous, and it would have been filed under the wrong sprint permanently |
+| the slot nested inside the token it replaces | basename-only transform | `implementation-artifacts/sprint-287/smoke-evidence/s287/foo.md`, on **53** directories — output that breaks the grammar the script imposes |
+| a half-migrated story corpus | `story-S298-1-x.md` carries a matchable token, `story-297-1-x.md` uses a bare number | one sprint's stories split across two conventions |
+
+**VERIFICATION IS PER FILE AND IS NOT A COUNT.** Each move is confirmed as *source absent AND
+destination readable AND sha256 identical to the pre-move source*, aborting at the first failure. A
+count of moved files cannot see whether the right bytes arrived, which is the only failure a
+migration really has. Measured on the clone:
+
+```
+tracked files scanned                  5145
+moves planned / applied / verified     2667      git: 2670 renames, 0 content changes,
+                                                 tracked file count identical either side
+REFUSED                                  48      45 ambiguous, 3 with no derivable area
+DEFERRED (stories/)                    1001
+destinations still carrying a token        0      <- the script's own self-check, both roads
+second run                            rc=3       <- idempotent
+```
+
+**IT REPORTS EVERYTHING IT WILL NOT DO.** A migration that silently covers most of a tree is worse
+than none: the operator reads "done" and the remainder is found by whatever breaks next. Three
+refusal classes, each named with its file — a path naming two different sprints, a sprint directory
+under a scan root that is not an area, and the deferred story corpus — plus the areas it had to
+INFER. The grammar declares eight areas; the consumer holds sprint-tokened files in eight more, and
+inferring them silently would have left this file wrong while the tree moved on.
+
+**The generic rule reproduces the grammar's hand-written destination table with no lookup table in
+the script**, which is the control on both: `docs/retro/sprint-299.md` → `docs/retro/s299/retro.md`,
+`gate-log-archive-s299.md` → `s299/gate-log-archive.md`, `sprint-status/sprint-187.yaml` →
+`s187/sprint-status.yaml`. The table and the transform were derived independently and agree.
+
+**I54/I54b caught the EPIPE idiom coming back, in this release's own fixture.** `bash … | grep -q`
+under `pipefail` returns non-zero on a MATCH — grep leaves at its first hit, the writer takes
+SIGPIPE. It reported the fixture's unmutated control BROKEN precisely when the control was working.
+It is a size threshold, not a race, so the small greps survived and the one reading a whole
+migration report did not. All three converted to here-strings.
+
+New fixture `artifact-path-migration`: **32 assertions, 3 mutants, 1 unmutated control**, every
+assertion reading the TREE rather than the script's own verdict — a migration that printed
+"2670 verified" while moving nothing would pass a report-reading fixture.
+
 ## [0.299.0] — 2026-08-07
 
 ### Readers compose the path from the declared sprint, core's prescriptions conform, and the migration ledger is empty
