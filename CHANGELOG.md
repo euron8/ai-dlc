@@ -34,6 +34,47 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.289.0] — 2026-08-07
+
+### Three snapshot fixtures read the consumer's settings.json and called it core's default
+
+Reported from the reference consumer while retiring `steps__retro__pipeline-snapshot-ceiling`.
+That retirement is a CONFIGURED supersession, so discharging it means writing
+`AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid` into the consumer's `settings.json` — the posture the
+retired override enforced. The pre-push gate inherits every `AI_DLC_*` tunable, and three
+fixtures then went red on a **correct** configuration.
+
+**33 sibling fixtures already carry the one-line guard; these three carried none.** Reproduced
+here, ambient value against a clean environment, with two loop-carrying fixtures as the control:
+
+```
+inflight-row-shape            AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid    rc 0 -> 1
+snapshot-supersession-marker  AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid    rc 0 -> 1
+snapshot-section-schema       AI_DLC_SNAPSHOT_EXTRA_SECTIONS=…        rc 0 -> 1
+control: snapshot-conservation, check-22-spawn-ledger                 unchanged
+```
+
+**A red suite is the mild half of this.** The arms in these files set those same keys
+*themselves*, to test both postures. An ambient value silently rewrites the arm that tests the
+DEFAULT into a second copy of the arm that tests the override — so the run that stays green is
+asserting the same thing twice and the default is no longer covered at all. The consumer saw the
+red; nobody would have seen the vacated arm.
+
+All three now clear ambient `AI_DLC_*` before driving anything. Verified green under each key
+and under both at once, and each goes red again with the loop removed.
+
+**No invariant shipped, and the reason is measured.** A guard requiring the loop wherever a
+fixture names an `AI_DLC_*` key flags **19** fixtures, and most are naming keys they set
+themselves as worker-pool plumbing (`AI_DLC_LCC_OUT`, `AI_DLC_SFD_SCRIPT`, `AI_DLC_TAC_VALIDATOR`
+…) — clearing those would break the fixture. The false-positive set is neither empty nor
+enumerable as written, so the check is not shippable yet. The correct join is against the
+declared set of *consumer-settable* tunables rather than any `AI_DLC_*` token; recorded as a plan
+follow-up rather than guessed at here.
+
+**Consumer guidance: keep `forbid`.** The posture is a real policy choice and this release
+removes the cost that made it look expensive — no `--no-verify`, and no local fixture edits,
+which would have been unregistered core drift the next pull offers to revert.
+
 ## [0.288.0] — 2026-08-07
 
 ### The self-update gate deferred every machinery pull touching a script whose bare form is a usage error

@@ -42,6 +42,22 @@
 
 set -uo pipefail
 
+# THE PRE-PUSH GATE INHERITS EVERY AI_DLC_* TUNABLE A CONSUMER SET IN settings.json, and a
+# fixture that drives a validator while inheriting them tests the CONFIG, not the CODE. 33
+# sibling fixtures already carry this loop; these three did not, and it cost a real consumer a
+# red suite on a legitimate configuration.
+#
+# THE FAILURE IS WORSE THAN A RED SUITE, because the arms here set these keys THEMSELVES to test
+# both postures. An ambient value silently rewrites the arm that tests the DEFAULT into a second
+# copy of the arm that tests the override -- so the pass that remains is asserting the same
+# thing twice and the default is no longer covered at all. Measured, ambient vs clean:
+#   inflight-row-shape            AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid   rc 0 -> 1
+#   snapshot-supersession-marker  AI_DLC_SNAPSHOT_STRIKETHROUGH=forbid   rc 0 -> 1
+#   snapshot-section-schema       AI_DLC_SNAPSHOT_EXTRA_SECTIONS=...     rc 0 -> 1
+# Control, two fixtures that already carry the loop: unchanged under both.
+for _v in $(env | sed -n 's/^\(AI_DLC_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$_v"; done
+
+
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." 2>/dev/null && pwd || true)"
 
