@@ -189,6 +189,15 @@ before you write code.
     move no paths and now run EARLY; F4 is folded into 10c. See §*Order of execution*.
     It is also the one item in this plan that **writes to the consumer**, via a migration
     script core ships and the OPERATOR runs — the read-only boundary at the top still binds.
+12. **Bind the fixture ambient-env guard, once the join is derivable.** v0.289.0 fixed three
+    fixtures that inherited a consumer's `AI_DLC_*` tunables and tested the CONFIG instead of the
+    CODE. The guard that would prevent recurrence is not shippable as written: requiring the
+    clearing loop wherever a fixture names an `AI_DLC_*` token flags **19** fixtures, most of
+    them naming keys they set THEMSELVES as worker-pool plumbing (`AI_DLC_LCC_OUT`,
+    `AI_DLC_SFD_SCRIPT`, `AI_DLC_TAC_VALIDATOR`, `AI_DLC_RFO_DETECT`, `AI_DLC_CMI_VALIDATOR`),
+    where clearing would break the fixture. Control: **36** fixtures already carry the loop. The
+    correct subject set is the declared *consumer-settable* tunables, not any `AI_DLC_*` token —
+    derive that side first, then measure the false-positive set again before shipping.
 11. **Fix the self-update gate's bare-invocation probe.** It runs each gating script with no
     arguments and no stdin and compares exit codes, but **three of the five gating scripts exit
     2 — a usage error — when invoked that way**, so the differential compares two usage errors,
