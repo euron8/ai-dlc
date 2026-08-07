@@ -1,0 +1,231 @@
+# graph: pull 0.300.0, then migrate every artifact path — EXECUTE THIS
+
+## Start here
+
+**You are working in `/Users/n8/git/graph`. Every write below lands there.** This file lives in
+the ai-dlc distribution: read `/Users/n8/git/ai-dlc`, and **do not write to it**.
+
+**This file is self-contained. Follow it top to bottom.** Every number in it was measured on
+2026-08-07 and is stated inline on purpose — a procedure whose figures live in another document
+gets followed literally and wrongly. Where a number is a PRE-PULL baseline rather than a
+prediction, it says so.
+
+**TWO STEPS, IN THIS ORDER, AND THE ORDER IS NOT A PREFERENCE.** The migration script
+(`scripts/ai-dlc/migrate-artifact-paths.sh`) and the grammar it reads
+(`.claude/skills/ai-dlc/artifact-path-grammar.md`) BOTH ship in the pull. The script refuses to
+run without the grammar. So the pull lands first, or step 2 cannot start.
+
+**WHAT THIS IS FOR.** ai-dlc now declares ONE artifact path convention: the directory is the only
+sprint slot (`<area>/s<N>/<name>.md`), and no basename may carry a sprint token. Core's own
+prescriptions and readers moved in 0.299.0. graph's ~2700 existing files have not, and until they
+do, graph's gate-time readers compose paths that do not exist.
+
+**graph is QUIESCENT — s301 is closed and s302 has not started. That is why this is safe now and
+will not be later.** Between step 1 and step 2 graph's gate-time readers expect the new layout
+while the tree is still old. They fail LOUDLY by construction rather than finding nothing
+silently, and nothing exercises them while no sprint is running. **Do not start s302 in that
+gap.** If s302 starts first it writes ~100 more non-conforming files and the migration is paid
+twice.
+
+**`core.hooksPath` is UNSET in graph** (verified 2026-08-07), so git hooks do not fire on any
+commit you make here. Nothing below is checked mechanically at commit time. The migration's own
+per-file verification is what stands in for it.
+
+**graph's working tree had 6 uncommitted changes when this was written.** `--apply` REFUSES to run
+on a dirty tree, deliberately: a clean tree is what makes `git checkout -- .` a complete undo of a
+partial run. Commit or stash them before step 2.
+
+
+**PING THE OPERATOR — on any question, on any decision, and when this plan completes.** The
+operator cannot see this session. From outside, "still working" and "stopped, waiting on you"
+look identical, so silence is not a neutral state: it is a stall the operator can only find by
+polling. Say something when you need a decision, when you hit a premise that does not hold, and
+when you are done — including when "done" means you stopped early. **This instruction is carried
+forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
+plan that omits it fails the build.**
+
+## Next actions
+
+1. Read §*Before you start* and confirm all three preconditions.
+2. Run §*Step 1 — take the pull* — TWO hops, `apply` on both — and MERGE each PR.
+3. Run §*Step 2 — dry run* and read the refusals against §*Dispositioning the refusals*.
+4. Run §*Step 3 — apply and commit*.
+5. Report to the operator per §*Done when*, including the four numbers.
+
+**Nothing here is blocked.** Both steps are yours end to end.
+
+## Before you start
+
+1. **graph is on `main`, up to date with `origin/main`, and the tree is CLEAN.**
+   `git checkout main && git pull --ff-only && git status --porcelain` → empty.
+2. **No sprint is in flight.** `_bmad-output/implementation-artifacts/sprint-status.yaml` shows
+   s301 `done` and no s302. If a sprint IS running, STOP and ping the operator — the ordering
+   argument above no longer holds.
+3. **graph's installed ai-dlc is 0.292.0** (`.claude/.ai-dlc-version` → `0.292.0 / c5e7daa`).
+   `contract_version` is 16 on both sides, so this pull carries **no contract migration**.
+
+## Step 1 — take the pull
+
+**TWO HOPS, AND `apply` IS REQUIRED ON BOTH.** An earlier revision of this file said "one hop,
+not two" and told you to run bare `/ai-dlc-update`. **Both were wrong**, and a real dry run
+against graph on 2026-08-07T23:38Z is what corrected them:
+
+- **Bare `/ai-dlc-update` is a DRY RUN.** It writes nothing, branches nothing, commits nothing.
+  The word `apply` is what makes it act.
+- **The gate DEFERRED this pull's machinery slice**, on `rulebook-coupled-fixtures`: the range
+  changes fourteen rulebook files and 26 fixtures assert against a rulebook file resolved in the
+  live tree, so the machinery cannot be green on its own. `--safe-stop` then did its job and
+  NAMED the split. It exists to identify the two-hop, not to remove it — which is the inference
+  the earlier revision got backwards.
+
+Run exactly this:
+
+    /ai-dlc-update ef37564caa437f29409229a40c197ff048462023 apply     # engine to 0.297.0, auto-re-invokes
+    /ai-dlc-update apply                                              # then the rest
+
+`ef37564` is v0.297.0, the SAFE-STOP the gate derived itself — its slice self-updates cleanly, so
+the engine lands and step 2 re-invokes on it. **Merge the PR each hop opens before starting the
+next.**
+
+**A single `/ai-dlc-update apply` from 0.292.0 is not wrong, only BLIND**: it would classify
+0.293.0→0.300.0 using the 0.292.0 classifier, so any detector improvement in the range does not
+run and the signal it would have raised reports as nothing. graph's own ledger already carries two
+live entries describing exactly that failure surface.
+
+**The range is 0.293.0 → 0.300.0.** `contract_version` is **16 on both sides** (verified), so no
+contract migration. The semantic worklist came back at **1 file** — `deploy-validate.md`, bucket
+*apply via mask/reinject*, no conflict, no operator confirmation needed.
+
+**Two things that should NOT alarm you.**
+
+- The self-update gate probes each gating script bare. `validate-provenance-block.sh` exits 2 that
+  way on BOTH sides, which 0.288.0 made its own `OK` arm — that is not the defer above.
+- `validate-provenance-block.sh`'s retro classifier now matches `docs/retro/s<N>/retro.md`. On the
+  unmigrated tree it matches nothing, so retro-specific provenance requirements do not apply
+  during this window. Not a failure; the pull lands through it.
+
+## Step 2 — dry run, and READ IT
+
+    scripts/ai-dlc/migrate-artifact-paths.sh
+
+**It writes nothing without `--apply`.** Expect roughly this shape. **These are PRE-PULL baseline
+figures measured on a clone of graph at `655fd3acf` — use the numbers YOUR run prints, not these.**
+They are here so a wildly different answer is visible as wildly different:
+
+```
+tracked files scanned                  5145
+moves planned                          2667
+REFUSED                                  48      45 ambiguous, 3 with no derivable area
+DEFERRED (stories/)                    1001
+destinations still carrying a token        0      <- must be 0; non-zero aborts the apply
+```
+
+**If `moves planned` is 0 and `REFUSED` is 0, STOP.** That is either an already-migrated tree or a
+scan that resolved nothing, and the script distinguishes them in its verdict line — read it.
+
+**If the self-check line is not 0, STOP and ping the operator.** It means the script would write
+paths its own grammar rejects. `--apply` refuses in that state anyway.
+
+## Dispositioning the refusals
+
+**Refused files are NOT migrated and remain non-conforming. They are not blockers for step 3** —
+apply the 2667, then come back to these. Measured breakdown of the 48:
+
+**A. 28 × `s253-execution-health-evidence.md`**, one under each of
+`sprint-254 … sprint-281`, `sprint-287`. The DIRECTORY names the sprint whose smoke run it is; the
+`s253` in the basename is a stale copy artifact from whenever the file was first cloned forward.
+**The directory is right.** Rename the basename to drop `s253-` and re-run; they then migrate
+normally. Do not "resolve" them by trusting the basename.
+
+**B. 3 × genuinely multi-sprint log archives** —
+`_bmad-output/context-mode-protection-log-archive-s294-s295.md`,
+`_bmad-output/implementation-artifacts/gate-log-archive-s291-s292.md`,
+`.../gate-log-archive-s293-s294.md`. These really do cover two sprints. Under the grammar
+(0.299.0) an archive covering more than its own sprint is filed under the sprint it was rotated at
+— the LATER number — and **states the span in its first line**, e.g. `<!-- covers s291..s292 -->`.
+Add that line, rename to drop the first sprint token, re-run.
+
+**C. 14 × a low `s1`–`s99` token that is part of a SLUG, not a sprint** —
+`s289-10-s9-ack-resets-timer.md`, `sprint-246/pvc-s11-strip.md`,
+`s295-safeguard-state-s7.md` and siblings. The real sprint is the large number; the small one
+names a story or a state. **Rename the slug fragment** (`s9-ack-resets-timer` → `ack-resets-timer`,
+`pvc-s11-strip` → `pvc-strip`) rather than guessing which token is the sprint.
+
+**D. 3 × NO-AREA** — `_bmad-output/sprint-177/ac5-graphql-gap-density-evidence.md`,
+`.../sprint-177/wave-1-dispatch-status.md`, `_bmad-output/sprint-178/carry-over-evaluation-step2.md`.
+A sprint directory sitting directly under `_bmad-output/`, which is declared NOT an area (it holds
+live singletons). **Decide which area they belong to** — most likely
+`_bmad-output/implementation-artifacts/` — `git mv` them under it, and re-run.
+
+**The 1001 DEFERRED story files are a KNOWN gap, not an oversight.** `planning-artifacts/stories/`
+carries the sprint in two spellings, one of which (`story-297-1-slug.md`) uses a bare number the
+transform cannot tell from a story index. Migrating would move `story-S298-1-…` and leave
+`story-297-1-…`, splitting one sprint's stories across two conventions. **Leave them. Do not
+hand-migrate them.** They move in a later ai-dlc release that also moves the `stories_dir` schema
+declaration and Check 5's story-id join.
+
+**The AREAS INFERRED list is a message for the distribution, not a problem for you.** The grammar
+declares eight areas; graph holds sprint-tokened files in eight more (`brainstorming`,
+`test-artifacts`, `party-mode`, `gate-adjudication`, `party-verdicts-retro`, `party-review`,
+`ai-dlc-update`, `sprint-review-transcripts`). They migrate correctly under a derived area.
+**Report the list back to the operator** so the grammar can declare them.
+
+## Step 3 — apply and commit
+
+    scripts/ai-dlc/migrate-artifact-paths.sh --apply
+
+It moves with `git mv` only, never deletes, and never edits a file's content. Every move is
+verified as *source absent AND destination readable AND sha256 identical to the pre-move source*,
+and it aborts at the first failure. **If it aborts, `git checkout -- .` restores the tree** — that
+is what the clean-tree precondition buys.
+
+Then verify independently, because the script's own verdict is not evidence:
+
+    git status --porcelain=1 | cut -c1-2 | sort | uniq -c     # expect ONLY R (renames)
+    git diff --cached --numstat | awk '$1!="0"&&$1!="-"'       # expect empty (no content change)
+    git ls-files | wc -l                                       # expect UNCHANGED from before
+
+**`-` in numstat is git's BINARY marker, not a content change.** Two `.png` files under
+`smoke-evidence/` show it and are pure renames. An `awk` that treats `-` as non-zero reports two
+false positives; the command above excludes it deliberately.
+
+Then commit:
+
+    git add -A
+    git commit -m "chore(artifact-paths): migrate every artifact onto the s<N>/ path grammar"
+
+**Historical traceability breaks here, and that is ACCEPTED by operator directive.** Citations
+into the old paths stop resolving. Nothing rewrites links: the declared convention is the guide to
+where to look, and a link-rewriting pass over 2600 files would be a second, unverifiable migration
+riding on this one.
+
+## Two traps. Each returns a clean-looking result that is wrong.
+
+**A count is not verification.** "2667 moved" cannot see whether the right bytes arrived. The
+per-file sha256 check is the only thing that can, which is why the independent `git status` /
+`numstat` / `ls-files` triple above exists and why you run it rather than reading the summary.
+
+**A second run must exit 3, and a 0 means work was left behind.** After committing, run the dry
+run once more:
+
+    scripts/ai-dlc/migrate-artifact-paths.sh; echo "rc=$?"
+
+`rc=3` is "nothing to migrate" and is the pass. `rc=0` means the transform is not idempotent and
+something did not move — ping the operator with the plan it printed.
+
+## Done when
+
+- The reconcile PR is merged and `git log` shows it on `main`.
+- The migration is committed, and the independent triple showed **only renames, no content
+  changes, an unchanged tracked-file count**.
+- A second dry run exits **3**.
+
+**Report these five things to the operator**, because the distribution needs them:
+
+1. `moves applied` and `tracked files scanned` from your run.
+2. `REFUSED` count, and which of classes A–D you dispositioned versus left.
+3. `DEFERRED` count.
+4. The full **AREAS INFERRED** list.
+5. Anything in the pull's classify you had to adjudicate.
+
+**Then s302 may start.** Not before — a sprint started mid-migration writes into the old layout.
