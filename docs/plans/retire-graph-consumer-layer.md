@@ -139,19 +139,20 @@ before you write code.
 4. ~~**R4 — snapshot ceiling.**~~ **COMPLETED — shipped as v0.281.0 (#369).**
 5. ~~**R3 — auto-handoff.**~~ **COMPLETED — shipped as v0.282.0 (#370)**, carrying the
    multi-key `settings_env_keys:` mechanism with it.
-6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** **The gate was stated wrongly and is
-   corrected here: "burn the `EXTENSION-TITLE-MATCHES-CORE` set down to zero" is not achievable
-   and never was.** The row's own remedy told the operator to declare `extends:`, and the
-   suppression that would have honoured it was deliberately removed upstream — so following the
-   instruction cleared nothing, and the only disposition left that cleared a row was `retire`,
-   which on entries that state their own additivity means deleting augmenting content. The
-   reference consumer hit this on all 13 rows, stopped rather than comply, and filed it.
-   v0.290.0 corrects the remedy text: the row clears by **adjudication**, not by suppression.
-   **The real precondition for R6 is therefore that the 13 rows are ADJUDICATED, not absent.**
-   Was blocked until graph burned down its
-   `EXTENSION-TITLE-MATCHES-CORE` set. **s301's closure changes the sequencing, not the
-   gate**: the burn-down still has to happen on the two-hop pull before promotion, or first
-   contact wedges on ~13 blocking rows. Ship it last.
+6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** **THIS ITEM'S GATE HAS BEEN WRONG TWICE AND
+   IS NOW STATED AS UNMEASURED RATHER THAN GUESSED A THIRD TIME.** It originally read "blocked
+   until graph burns down its `EXTENSION-TITLE-MATCHES-CORE` set, or first contact wedges on ~13
+   blocking rows." Both halves are false:
+   - **Those rows cannot block.** LC-E19 is `level: WARN`, and `hard-blockers.sh:48` selects with
+     `awk -F'\t' '$1 ~ /^HARD-/'` — a prefix match the status does not carry. Proven with a
+     control in which a `HARD-` row IS selected. `audit-layer-debt.sh` is report-only, exit 0.
+   - **They are also the wrong clause.** R6 promotes **LC-E6** and **LC-O15**, both currently
+     `WARN`. The title-match rows are **LC-E19**, which R6 does not touch.
+   The real exposure is that `level: ADJUDICATED` means "a mechanized candidate set and a HUMAN
+   verdict", so promoting LC-E6/LC-O15 makes THEIR rows require a register record to clear.
+   **How many rows that is has NOT been counted.** Count the LC-E6 and LC-O15 candidate sets
+   against the consumer before scheduling this item; the ~13 figure referred to a different
+   clause and must not be reused.
 7. **Audit the steps s301 never reached** for the defect classes v0.280.0 found in the steps it
    did reach. s301 stalled at `stories-test-strategy.md` §4, so every downstream step is
    unexercised. The five measured classes are listed in §*What v0.280.0 measured*.
