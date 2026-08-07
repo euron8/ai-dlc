@@ -34,6 +34,67 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.285.0] — 2026-08-06
+
+### Rule 31: a countable assertion carries the derivation that produced it — and the enforcer that would have carried it does not survive its own measurement
+
+Absorbs the count discipline the reference consumer carries as its Rule 930, which core had
+nowhere. Measured against core's shipped `SKILL.md` before the edit: **0 hits** for any
+statement of the discipline, with two controls in the same read — the same file yields 30 rule
+headings and mentions `grep`/`count` 29 times. It talks about counting constantly and never once
+says to control one.
+
+Core was not empty on the subject, and the one place it spoke turned out to be the reason the
+absorption is worth taking. `steps/gate-validation.md` Check 12 already requires an absence claim
+to carry its control. That clause is scoped to **gate log evidence rows**, and `gate-validation.md`
+is sliced-loaded (Rule 21), so it is in context only while a gate is being logged. Every defect
+this rule addresses was authored during story work, which never loads it.
+
+**What the defect class actually is, which is not what it was assumed to be.** The working
+assumption was a bare `grep -c` yielding a false number. Traced to the reference consumer's live
+sprint, the three findings in the class across three consecutive adversarial passes are:
+
+```
+MAJ-p4-1   a scope exclusion asserted about a sibling story that the sibling does not contain
+MAJ-p5-1   an AC asserting "five of the thirteen call sites" where the derived count is thirteen
+MAJ-p6-1   a cited range called "full prose" that the citation does not test
+```
+
+None came from a miscounted grep. `MAJ-p5-1`'s "five" corresponded to nothing derivable — it was
+authored with no command behind it at all. All three "survived four adversarial passes and two
+mechanical enforcers", and the consumer's own retro synthesis names the shared cause: they sit in
+**prose asserting facts outside the criterion's own test**, which every pass and every enforcer
+reads least. That is what the rule binds, and it is a wider target than a shell idiom.
+
+Four of the sprint's derivation sites were cited as evidence the discipline was failing. Re-read,
+three of them are the discipline **working** — a `ZZQQ` control that correctly returned zero, a
+label grep deliberately not trusted, a control labelled as such. The consumer's rule is load-bearing
+and effective; core simply did not have it.
+
+**Why the carrier is `none`, stated with the numbers rather than asserted.** A block-grain detector
+was built and run — a cardinal applied to a plural noun, with no command and no `path:line` in the
+same block, outside changelog sections, excluding identifier artifacts such as `Story 1.4 names`:
+
+```
+positive control  reconstructed MAJ-p5-1 defect (cmp -s guarded mutant)   1 flag, correct block
+negative control  the same file, repaired                                 0 flags
+false positives   whole story corpus                     6074 flags across 890 of 998 files
+                  live sprint only                       13 flags across 5 of 10 files
+```
+
+The live-sprint flags read as prescriptive counts ("a test driving two new mints at different
+blocks") and in-block enumerations — requirements that derive nothing. Worse than the volume is the
+shape: the detector is silent whenever the block carries **any** unrelated citation, and
+`MAJ-p6-1`'s block carries three. It is blind to two of the three real findings, and the one it
+catches it catches through a guard an author clears by adding a citation without making the
+sentence truer. A lint that rewards decoration is worse than none, so it was not shipped and Rule 31
+declares an I79 gap.
+
+Rule 31 is free to allocate: the reference consumer has migrated its own rules into the reserved
+band and holds 913–932, so nothing collides. Three calibration comments that hard-code "30 rules"
+are updated, and the `enforcement-map-sites` fixture comment claiming the consumer "already carries
+31 and 32" is corrected — measured false.
+
 ## [0.284.0] — 2026-08-06
 
 ### `validate-enforcement-map.sh` spent half its system time starting processes to answer questions bash can answer

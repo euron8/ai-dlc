@@ -74,7 +74,7 @@ core_num_stream() { grep -oE "$ANCHOR_RE" | sed -E 's/^#+[[:space:]]+(Check[[:sp
 
 # RULE numbers are a SECOND namespace and need their own grammar: a rule heading
 # (`### Rule 29 -- Steering budget`) carries no `[.—]` terminator, so ANCHOR_RE
-# above matches none of the 30 rules in core's SKILL.md — verified, 0 of 30. That
+# above matches none of the 31 rules in core's SKILL.md — verified, 0 of 31. That
 # is why this pass exists separately rather than as a widened ANCHOR_RE: teaching
 # the check grammar the word `Rule` would fold `Rule 29` and check `29` into one
 # id and start relabelling across two unrelated catalogs.
@@ -129,7 +129,7 @@ while IFS= read -r ext; do
   [ -n "$theirs_blob" ] && rules_theirs="$(printf '%s\n' "$theirs_blob" | core_rule_stream)"
   core_rules="$(printf '%s\n%s\n' "$rules_installed" "$rules_theirs" | grep -E '.' | sort -u)"
 
-  # NOT `[ -n "$core_nums" ] || continue`. Core's SKILL.md defines 30 rules and ZERO
+  # NOT `[ -n "$core_nums" ] || continue`. Core's SKILL.md defines 31 rules and ZERO
   # check anchors, so gating both passes on the check set skipped every SKILL.md-hooking
   # entry — which is exactly where every rule collision lives. The gate has to admit an
   # entry that collides in either namespace, or the rule pass can never fire.

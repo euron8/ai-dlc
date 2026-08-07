@@ -605,8 +605,11 @@ VLE="$ROOT/core/scripts/validate-layer-entries.sh"
 # two failures and neither one isolates I45. Measured, not assumed — 2 FAIL lines. The
 # rulebook has no such second reader, so this mutation fires exactly one assertion.
 #
-# It is also the arm with the live detonation date: core is AT Rule 30, so Rule 31 is
-# the next integer core allocates and the reference consumer already carries 31 and 32.
+# It is also the arm with the live detonation date: core is AT Rule 31, so Rule 32 is
+# the next integer core allocates. The reference consumer no longer collides there — it
+# has migrated its own rules into the reserved band (913-932), so the numbers it once
+# held at 31 and 32 are free and core took 31. Re-measure before quoting this: the
+# detonation is real only while a consumer still allocates below the floor.
 cp "$SKB" "$SKB.orig"
 printf '\n### Rule 900 -- A core rule allocated inside the consumer band\n\nBody.\n' >> "$SKB"
 if cmp -s "$SKB.orig" "$SKB"; then
