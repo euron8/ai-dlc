@@ -170,6 +170,56 @@ done
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
 
+# --- Fork-free membership, and the reason it is worth a helper ------------------
+# THIS SCRIPT'S COST IS PROCESS SPAWN, MEASURED RATHER THAN ASSUMED. One run of it forks
+# 1582 external commands — 643 of them `grep` — and at 1.48ms per fork+exec on the reference
+# box that is 2.34s of its 4.70s of SYSTEM time. The suite runs it ~140 times, so the spawns
+# alone are ~221,000 processes and ~328 CPU-seconds. Nothing here is compute: the files are
+# small and the patterns are literals.
+#
+# The single worst shape is an exact-line membership test against a string ALREADY IN MEMORY,
+# written as `grep -qxF -- "$x" <<<"$list"`. That forks a process and builds a here-string to
+# answer a question bash can answer with a glob. Measured, 2000 iterations of each:
+#
+#     grep -qxF -- b <<<"$L"    3.717s        case "$L" in ... 0.007s      ~530x
+#
+# `in_lines` is that glob. It wraps both sides in newlines so the match is a WHOLE LINE and
+# never a substring of one — `E1` must not satisfy a list containing only `E10`, which is the
+# same two-digit hazard I36 reverse already carries a comment about.
+#
+# A NEEDLE MUST NOT BE EMPTY. An empty needle becomes "\n\n", which matches any list holding a
+# blank line, so every caller either guards for emptiness first or is reading from a generator
+# that cannot emit one. Stated because the failure would be a silent PASS, which is this
+# repository's whole subject.
+in_lines() {
+  case "
+$2
+" in
+    *"
+$1
+"*) return 0 ;;
+  esac
+  return 1
+}
+
+# `in_body <needle> <file-contents>` — the substring form, replacing `grep -qF -- x FILE`
+# once the file has been read into a variable. Callers read with `$(<file)`, which measured
+# 0.83ms against 2.04ms for `$(cat file)`; where a loop revisits one file they hold the body
+# in a last-file memo, so a run of clauses sharing an enforcer reads it once. The memo is a
+# plain string pair rather than an associative array because this must run under bash 3.2,
+# which macOS still ships and which has no `declare -A`. The same string-memo idiom is already
+# in this file at w2_cache.
+in_body() {
+  case "$2" in *"$1"*) return 0 ;; esac
+  return 1
+}
+
+# The memo pairs, declared here because this script runs under `set -u` and a memo is by
+# definition read before it is first written. Empty is the correct initial value: no path
+# equals "", so the first clause of every loop takes the read branch.
+_i36_body_of=""; _i36_body=""
+_i38_body_of=""; _i38_body=""
+
 # --- Catalog anchor set -------------------------------------------------------
 # Real anchors sit at column 0 directly under a check heading. Inline format
 # EXAMPLES in the manifest/H1 prose are mid-line (backtick-prefixed) and carry
@@ -295,7 +345,10 @@ if [ -f "$SEED" ]; then
         n=split(ids, a, ","); for (i=1;i<=n;i++) if (a[i] != "") print a[i]
       }' "$GV"
   }
-  seed_has() { grep -qF "<!-- CHECK_LOADED: $1 -->" "$SEED"; }
+  # Read once, then match in-shell: this is called once per check id and $SEED does not
+  # change underneath the loop.
+  _seed_body="$(<"$SEED")"
+  seed_has() { in_body "<!-- CHECK_LOADED: $1 -->" "$_seed_body"; }
 
   # The universal half of that sentence was a hand-maintained copy too, and it had
   # rotted the same way every other copy of this set rotted: the seed carried the
@@ -334,7 +387,7 @@ fixture_list() { # fixture_list <script> -> dir names, one per line
   awk '/^for fixture_dir in /{ sub(/^for fixture_dir in /,""); sub(/; do.*$/,""); print }' "$1" \
     | tr ' ' '\n' | grep -E '.' | sort -u
 }
-on_disk="$(find "$REPO_ROOT/core/fixtures" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null | sort -u)"
+on_disk="$( { for _d in "$REPO_ROOT"/core/fixtures/*/; do _d="${_d%/}"; [ -d "$_d" ] || continue; printf '%s\n' "${_d##*/}"; done; } 2>/dev/null | sort -u)"
 in_install="$(fixture_list "$REPO_ROOT/scripts/install.sh")"
 in_uninstall="$(fixture_list "$REPO_ROOT/scripts/uninstall.sh")"
 
@@ -625,8 +678,16 @@ else
     [ -n "$cid" ] || continue
     if [ ! -f "$REPO_ROOT/$cenf" ]; then
       err "I36 $cid: declared enforcer '$cenf' does not exist. A clause bound to a missing script is unenforced with a citation, which reads better than nothing and is worth less."
-    elif ! grep -qF -- "$ccode" "$REPO_ROOT/$cenf"; then
+    else
+    # LAST-FILE MEMO, not a sort. Grouping the clauses by enforcer would read each file once,
+    # but it would also reorder the findings, and the order errors come out in is the only
+    # thing a reader has to walk back to the clause. Clauses already arrive grouped in
+    # practice, so this reads each enforcer once; when they interleave it degrades to one
+    # `$(<file)` per clause, which is still cheaper than the grep it replaces and never worse.
+    if [ "$cenf" != "$_i36_body_of" ]; then _i36_body_of="$cenf"; _i36_body="$(<"$REPO_ROOT/$cenf")"; fi
+    if ! in_body "$ccode" "$_i36_body"; then
       err "I36 $cid: '$cenf' never emits the code '$ccode' this clause claims. The clause cannot fire, and a clause that cannot fire reads exactly like one that passed. Fix the code, or point the clause at the script that does emit it."
+    fi
     fi
   done <<EOF
 $(awk '
@@ -671,7 +732,7 @@ EOF
       err "I36 reverse: found NO codes in declared enforcer '$enf'. Either the extraction pattern no longer matches that script's vocabulary or the script changed shape; a zero here silently retires this whole direction of the join."
     fi
     for code in $emitted; do
-      if ! grep -qxF -- "$code" <<<"$lc_claimed"; then
+      if ! in_lines "$code" "$lc_claimed"; then
         err "I36 reverse: '$enf' emits '$code' but NO clause in layer-contract.yaml claims it. An operator can be handed that verdict with no stated rule behind it. Add the clause, or stop emitting the code."
       fi
     done
@@ -693,8 +754,11 @@ EOF
     [ -n "$cid" ] || continue
     if [ ! -f "$REPO_ROOT/$chome" ]; then
       err "I38 $cid: declared prose_home '$chome' does not exist."
-    elif ! grep -qF -- "$cid" "$REPO_ROOT/$chome"; then
+    else
+    if [ "$chome" != "$_i38_body_of" ]; then _i38_body_of="$chome"; _i38_body="$(<"$REPO_ROOT/$chome")"; fi
+    if ! in_body "$cid" "$_i38_body"; then
       err "I38 $cid: '$chome' never mentions '$cid'. The contract points a reader at prose that does not carry the clause, so the human-readable side and the enforced side have already diverged."
+    fi
     fi
   done <<EOF
 $(awk '
@@ -749,7 +813,7 @@ EOF
         lc_bdecl="$(awk -v w="$lc_bid" '$1==w{print $2; exit}' <<<"$lc_levels")"
         if [ -z "$lc_bdecl" ]; then
           err "I61: '$lc_home' carries a clause bullet for '$lc_bid' that layer-contract.yaml does not declare. A reader is being handed a rule with no enforcer behind it — the exact state the contract was created to end, arriving from the prose side."
-        elif [ -z "$lc_btok" ] || ! grep -qxF -- "$lc_btok" <<<"$lc_vocab"; then
+        elif [ -z "$lc_btok" ] || ! in_lines "$lc_btok" "$lc_vocab"; then
           err "I61: '$lc_home' states clause $lc_bid with no severity from the contract's own vocabulary [$(printf '%s' "$lc_vocab" | tr '\n' ' ')]. Every clause bullet leads with its severity; one that does not is a bullet this join cannot check, and an unchecked bullet is how the three live mismatches this invariant shipped for got there."
         elif [ "$lc_btok" != "$lc_bdecl" ]; then
           err "I61: '$lc_home' states clause $lc_bid as $lc_btok but layer-contract.yaml declares it $lc_bdecl. The enforced side and the reader-facing side disagree about whether this blocks, so an author reads a severity their own pre-push does not apply. The contract is the source of truth; fix the prose."
@@ -1003,7 +1067,7 @@ EOF
       err "I64: found NO attributable emission sites in declared enforcer '$cenf'. Either that script changed shape or the extraction above no longer matches its vocabulary; a zero here silently retires this invariant for every clause bound to it, which is the state it exists to report."
       continue
     fi
-    grep -qxF -- "$ccode" <<<"$lc_i64_emitted" \
+    in_lines "$ccode" "$lc_i64_emitted" \
       || err "I64 $cid: '$cenf' never emits '$ccode' at a site a run can attribute — the token appears only in prose there, if at all. I36 forward passes on that, because it greps the whole file including comments. A finding that cannot name its clause cannot be joined back to this contract by the operator who receives it, and a code no code path prints is a clause that cannot fire while reading exactly like one that passed. Pass the code to err/warn at the site that reports it, or print it in the row."
   done <<EOF
 $(awk '
@@ -1080,7 +1144,7 @@ EOF
     : > "$TMPDIR_I65/drv"
     for d in "$root"/*/; do
       [ -f "${d}run.sh" ] || continue
-      printf '%s\n' "$(basename "${d%/}")" >> "$TMPDIR_I65/drv"
+      _db="${d%/}"; printf '%s\n' "${_db##*/}" >> "$TMPDIR_I65/drv"
     done
     [ -s "$TMPDIR_I65/drv" ] || return 0
 
@@ -1181,6 +1245,12 @@ EOF
     if [ ! -s "$TMPDIR_I65/triples" ]; then
       err "I65 indexed core/fixtures/ and found ZERO (directory, enforcer, code) triples. The probe above proves the indexer works, so an empty result here means the fixture corpus moved out from under it — and an empty index makes every declared fixture fail and every 'none' pass, which is loud in one direction and silent in the other."
     fi
+    # HELD IN MEMORY, and read HERE rather than earlier: `lc_i65_index` above rewrites both of
+    # these files, and the probe run before it deliberately writes a fake enforcer list and
+    # restores it. Loading them any sooner would answer every lookup below from the probe's
+    # index instead of the real one. Two reads replace two greps per clause.
+    _i65_enf="$(<"$TMPDIR_I65/enf")"
+    _i65_triples="$(<"$TMPDIR_I65/triples")"
     while IFS='|' read -r fid fenf fcode ffx; do
       [ -n "$fid" ] || continue
       if [ -z "$ffx" ]; then
@@ -1208,11 +1278,11 @@ EOF
         err "I65 $fid: fixture '$ffx' has no run.sh. The pre-push loop skips a driverless directory in silence (I20's finding), so this clause cites a proof that never executes and reads exactly like one that passes every push."
         continue
       fi
-      if ! grep -qxF "$ffx	$fenf_base" "$TMPDIR_I65/enf"; then
+      if ! in_lines "$ffx	$fenf_base" "$_i65_enf"; then
         err "I65 $fid: fixture '$ffx' never names '$fenf_base', the enforcer this clause declares. A fixture that does not drive the script the clause binds cannot be evidence about that clause — the two W1/W2 vocabularies in this repo collide on the token, so naming the code alone is satisfied by a fixture for a different enforcer entirely."
         continue
       fi
-      grep -qxF "$ffx|$fenf_base|$fcode" "$TMPDIR_I65/triples" \
+      in_lines "$ffx|$fenf_base|$fcode" "$_i65_triples" \
         || err "I65 $fid: fixture '$ffx' drives '$fenf_base' but names '$fcode' nowhere a run can attribute — only in comments, or only on a seeded contract 'code:' line. A fixture header sentence listing the checks it covers is prose about the proof, not the proof; when this shipped, six fixtures were in exactly that state for codes they do exercise. Name the code in the assertion that proves it, so the fixture's own output says which clause it closed."
     done < "$lc_i65_pairs"
   fi
@@ -1873,7 +1943,7 @@ fi
 # distribution layout by design (comparing core/ to .claude/), fixtures build real core/ trees
 # on disk, and enforcement-map.yaml's `core/scripts/...` values are DATA this very script greps
 # in that exact shape at I9. Markdown-only + the core-manifest exclusion keeps all of them out.
-core_dirs="$(find "$REPO_ROOT/core" -maxdepth 1 -mindepth 1 -type d -exec basename {} \; | sort | paste -sd'|' -)"
+core_dirs="$( { for _d in "$REPO_ROOT"/core/*/; do _d="${_d%/}"; [ -d "$_d" ] || continue; printf '%s\n' "${_d##*/}"; done; } | sort | paste -sd'|' -)"
 if [ -z "$core_dirs" ]; then
   err "I16 derived an EMPTY core/ directory list — the prose-path check just went vacuous and would pass over any dead citation. Expected core/*/ subtrees to exist."
 else
@@ -2059,7 +2129,7 @@ SITES
   # (a) Completeness: every core/<dir>/ on disk is accounted for.
   for d in "$REPO_ROOT"/core/*/; do
     [ -d "$d" ] || continue
-    cdir="$(basename "$d")"
+    cdir="${d%/}"; cdir="${cdir##*/}"
     grep -q "^${cdir}|" <<<"$SITES_TABLE" || err "core/${cdir}/ has no destination row in I8's site table. map_consumer()'s \`core/*\` catch-all will file it under '.claude/${cdir}/' — add a row stating where install.sh actually writes it (or '.claude/${cdir}' if the catch-all is right). This is the check core/git-hooks/ slipped past by being absent."
   done
   # (b) Agreement + (c) installer binding.
@@ -2758,8 +2828,8 @@ POL
   ud_scanned="$(awk '/ls-tree -r --name-only/{f=1} f{print} /2>\/dev\/null/{f=0}' "$UD" \
     | grep -oE 'core/skills/[A-Za-z0-9_-]+|core/[A-Za-z0-9_-]+' | sed 's#^core/##' | sort -u)"
   # Units on disk: each skill under core/skills/, plus each other core/<dir>.
-  ud_units="$( { for d in "$REPO_ROOT"/core/skills/*/; do [ -d "$d" ] && echo "skills/$(basename "$d")"; done
-                 for d in "$REPO_ROOT"/core/*/; do b="$(basename "$d")"; [ "$b" = skills ] && continue; [ -d "$d" ] && echo "$b"; done; } | sort -u)"
+  ud_units="$( { for d in "$REPO_ROOT"/core/skills/*/; do d="${d%/}"; [ -d "$d" ] && echo "skills/${d##*/}"; done
+                 for d in "$REPO_ROOT"/core/*/; do d="${d%/}"; b="${d##*/}"; [ "$b" = skills ] && continue; [ -d "$d" ] && echo "$b"; done; } | sort -u)"
 
   # COMPLETENESS — every unit on disk is classified.
   while IFS= read -r u; do
@@ -2929,7 +2999,7 @@ fi
 EXEMPT_MARKER='No `run.sh`, deliberately'
 for d in "$REPO_ROOT"/core/fixtures/*/; do
   [ -d "$d" ] || continue
-  name="$(basename "$d")"
+  name="${d%/}"; name="${name##*/}"
   [ -f "$d/run.sh" ] && continue
   if [ ! -f "$d/README.md" ]; then
     err "I20 fixture '$name' has neither run.sh nor a README. pre-push skips it silently, so it is indistinguishable from a fixture that passed. Add a driver, or a README stating why one is impossible (marker: '$EXEMPT_MARKER')."
@@ -2984,7 +3054,7 @@ else
     # tree the old shape forked ~600 greps here.
     for f in "$REPO_ROOT"/core/skills/ai-dlc-update/reconcile/*.sh; do
       [ -f "$f" ] || continue
-      fbase="$(basename "$f")"
+      fbase="${f##*/}"
       [ "$fbase" = "lib.sh" ] && continue
       # Comment lines are stripped: every classifier documents WHY it sources lib.sh,
       # and a check that reads its own documentation as a violation is a check that
@@ -3053,7 +3123,7 @@ SETTINGS_TMPL="$REPO_ROOT/templates/settings.json.template"
 if [ ! -f "$SETTINGS_TMPL" ]; then
   err "I22 cannot find templates/settings.json.template. The check that keeps every role's model and effort resolvable just went vacuous — it must locate the shipped config or fail loudly, never pass by finding nothing to compare."
 else
-  role_files="$(ls "$REPO_ROOT"/core/team-roles/*.md 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.md$//' | sort -u)"
+  role_files="$( { for _f in "$REPO_ROOT"/core/team-roles/*.md; do [ -f "$_f" ] || continue; _f="${_f##*/}"; printf '%s\n' "${_f%.md}"; done; } 2>/dev/null | sort -u)"
   declared="$(jq -r '.aiDlcRoles // {} | keys[]' "$SETTINGS_TMPL" 2>/dev/null | sort -u)"
   model_keys="$(jq -r '.aiDlcModels // {} | keys[]' "$SETTINGS_TMPL" 2>/dev/null | sort -u)"
 
@@ -3536,7 +3606,7 @@ i74_listed="$(sed -n '/^for fixture_dir in /p' "$REPO_ROOT/scripts/install.sh" 2
 i74_ship=""; i74_dist=""
 for _fd in "$REPO_ROOT"/core/fixtures/*/; do
   [ -d "$_fd" ] || continue
-  _fn="$(basename "$_fd")"
+  _fn="${_fd%/}"; _fn="${_fn##*/}"
   if [ -f "$_fd/.dist-only" ]; then i74_dist="${i74_dist}${_fn}
 "; else i74_ship="${i74_ship}${_fn}
 "; fi
