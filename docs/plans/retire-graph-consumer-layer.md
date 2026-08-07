@@ -236,10 +236,16 @@ before you write code.
     against a scratch consumer before writing the fix**, because a gate that prints zero is the
     exact shape this repo keeps shipping, and a fix aimed at the wrong layer would leave it.
 
-14. **Trace-derive a per-fixture dependency map, so the pre-push runs the fixtures a change can
-    actually affect.** SCOPED, NOT STARTED. Operator-requested 2026-08-07; **do it after item
-    10**, and read §*Item 14 — the dependency map* for the measurement and the hazard before
-    writing any code.
+14. ~~**Trace-derive a per-fixture dependency map, so the pre-push runs the fixtures a change can
+    actually affect.**~~ **SHIPPED as v0.294.0.** Taken out of order on operator direction
+    2026-08-07, ahead of item 10. The first pass's prerequisite measurement is done and its
+    answer is in §*What v0.294.0 measured*: **~8000 paths a declaration-based skip would have
+    missed**, 78 of 118 fixtures named in no binding at all. Four things a later session must
+    not re-derive: `dtruss` is unusable under SIP and **root does not lift that**, while
+    `fs_usage` works; APFS is **relatime-like**, so a before/after atime watermark
+    under-records by construction; tracing a fixture **as root corrupts its read-set**, not
+    merely its verdict; and the wall-clock win is **42%, not the 76% of work removed**, because
+    the suite is pole-bound.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -577,6 +583,52 @@ declared token for that, so the cheapest arm is to treat "both sides exit 2" as 
 differential signal* rather than as an unattributable failure. **Measure the false-positive set
 across all five gating scripts before shipping**, and add a `self-update-join-gate` arm proving
 a genuinely-newly-failing incoming script still DEFERS — otherwise the fix removes the gate.
+
+## What v0.294.0 measured (item 14 — SHIPPED; the section below is the pre-work scope)
+
+**The section that follows is the SCOPE as written before the work, kept for its reasoning.
+Where the two disagree this one wins.** Three of its statements were refuted by measurement.
+
+**REFUTED: "both need elevated privileges — establish that is workable before anything else,
+it is the single point that can kill the approach."** Half right. `dtruss` is dead and root
+does NOT lift it — SIP restricts `/bin/bash` itself (`dtrace: failed to execute /bin/bash:
+Operation not permitted`), so disabling SIP is the only route and it buys nothing, because
+`fs_usage` already reports the same opens and stats. `fs_usage` needs root and works. **Do not
+disable SIP for this.**
+
+**REFUTED by measurement, and it disqualifies the obvious privilege-free method:** APFS is
+**relatime-like**. A second read of a file does NOT advance its atime, so a before/after
+watermark misses every file read twice — the fatal under-record. Forcing atime to 2001 before
+each fixture defeats relatime by construction.
+
+**THE PREREQUISITE NUMBER, which the scope below says must exist before any skip is written:**
+
+```
+drivable fixtures                                          118   (120 dirs; 2 are seed.sh-only)
+  named in an enforcement-map `fixtures:` binding           40
+  named NOWHERE                                             78
+paths read but not declared, bound fixtures               ~515
+paths read by fixtures with no binding at all             7477
+TOTAL a declaration-based skip would have missed         ~8000
+```
+
+**THE PAYOFF IS 42% OF WALL CLOCK, NOT THE 76% OF WORK REMOVED**, and quoting the larger number
+alone is wrong: makespan equals the longest SELECTED unit, so removing 100 cheap fixtures that
+ran in parallel anyway moves little. Mean 15.7 of 118 fixtures selected across 40 real commits.
+
+**THE HAZARD ARRIVED THROUGH A ROUTE THE SCOPE DID NOT ANTICIPATE.** It warned that
+under-recording one path yields a silently skipped suite. It does — but the largest source was
+not a tracer missing an event, it was **the harness changing the program it measured**:
+`check-22-spawn-ledger` passes 16/16 as a normal user and fails 9/16 as root, because an arm
+asserts a settings-readability REFUSAL and root reads regardless of permissions. An arm root
+skips READS FEWER FILES. Trace fixtures unprivileged or the map is corrupt.
+
+**Read-sets are effectively deterministic**: two independent traces of 20 fixtures gave 17
+identical and 3 differing by one path — two of those were a branch ref that genuinely moved
+between runs, one a negative lookup on a nonexistent file. One variable path in ~4000.
+
+**Maintenance is per-fixture, not a full re-run** — `--list "<fixtures>"` costs a fixture's
+runtime plus ~9s. A fixture whose own directory changed has no valid entry and runs by default.
 
 ## Item 14 — the dependency map, scoped
 

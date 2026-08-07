@@ -172,6 +172,7 @@ core_manifest:
   - fixtures/ci-gates-resolution/**
   - fixtures/consumer-machinery-home/**
   - fixtures/consumer-suite-pool/**
+  - fixtures/readset-skip/**
   - fixtures/layer-qualifier-grain/**
   - fixtures/layer-conforms-to/**
   - fixtures/layer-extends-grain/**
