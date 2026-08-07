@@ -34,6 +34,36 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.293.0] — 2026-08-07
+
+### A plan now has to tell its executor to speak
+
+Operator directive: a session running a plan must ping on any question, on any decision, and when
+execution completes — and the instruction must be carried forward into every future plan,
+including ones written here for a graph session to run.
+
+**Why it is a check and not a sentence in a template.** A convention with no enforcer is a
+suggestion, and this one has to survive into plans nobody here writes. `validate-plan-shape.sh`
+gains a REQUIRED clause, `P3b`, alongside the entry point and the numbered action list.
+
+**The defect it closes is the repo's usual one, pointed at a human.** A plan is executed by a
+session the operator cannot see. From outside, *still working* and *stopped, waiting on you* are
+indistinguishable, so silence is not a neutral state — it is a stall findable only by polling.
+Measured across this repo's own plan runs: **every consumer-session stall ended with the operator
+asking rather than the session reporting**, including one that was sitting on a genuine blocking
+question and one that had already finished.
+
+**The grammar is deliberately loose.** Any phrasing naming pinging, notifying, or reporting to the
+operator satisfies it. Pinning an exact sentence would make this a copy-paste ritual rather than
+an instruction the author meant.
+
+**False-positive set measured before shipping, as `CLAUDE.md` requires: it fired on all five
+existing plans, and all five now carry the clause, so the set is zero.** Mutation-tested —
+stripping the clause from one plan fires the check on exactly that one.
+
+`CLAUDE.md`'s documented plan shape gains the same bullet, so the prose and the enforcer do not
+drift apart.
+
 ## [0.292.0] — 2026-08-07
 
 ### v0.291.0's fixture seed resolved one layout, and the reference consumer is the other one

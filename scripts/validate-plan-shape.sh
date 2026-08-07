@@ -89,6 +89,28 @@ for f in "${FILES[@]}"; do
     warn "$rel" "states no read/write boundary. If this plan touches a tree it must not write, say so here — the operator's repo is the usual one."
   fi
 
+  # --- P3b: the operator ping ------------------------------------------------------
+  # A PLAN IS EXECUTED BY A SESSION THE OPERATOR CANNOT SEE. Without an explicit
+  # instruction to speak, the two states "still working" and "stopped, needs a decision"
+  # look identical from outside, and the only way to tell them apart is to poll. Measured
+  # across this repo's own plan runs: every stall in a consumer session ended with the
+  # operator asking, not the session reporting -- including one that sat on a genuine
+  # blocking question, and one that had FINISHED.
+  #
+  # This is the same class the repo names everywhere else: a state that cannot be
+  # distinguished from a healthy one reads as healthy. Here the undistinguishable pair is
+  # progress versus a silent block, and the reader paying for it is a human.
+  #
+  # REQUIRED, not advisory, and it must survive into plans nobody here writes -- a
+  # convention with no enforcer is a suggestion, which is why this is a check and not a
+  # sentence in a template. The grammar is deliberately loose: any phrasing that names
+  # pinging/notifying/reporting to the operator satisfies it, because pinning an exact
+  # sentence would make this a copy-paste ritual instead of an instruction the author
+  # meant.
+  if ! grep -qiE '(ping|notify|report (back )?to|surface (it |them )?to|check in with)[^.]{0,40}(the )?operator|operator[^.]{0,40}(ping|notified|informed)' "$f"; then
+    err "$rel" "no operator-ping instruction. A session executing this plan must be told to ping the operator on any question or decision, and when execution completes — otherwise 'still working' and 'stopped, needs you' are indistinguishable from outside and the operator has to poll."
+  fi
+
   # --- P4: citations resolve -------------------------------------------------------
   # `path:line` is this repo's evidence form, and a plan is mostly evidence. A citation
   # that cannot be located at resume time is the promissory-note defect the pm role file

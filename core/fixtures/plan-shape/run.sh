@@ -40,6 +40,8 @@ conforming() {
 
 Working repo: `/some/repo`. Reference consumer: `/other/repo` — read it, never write it.
 
+Ping the operator on any question or decision, and when this plan completes.
+
 1. Do the first thing.
 2. Do the second thing.
 
@@ -65,6 +67,24 @@ if grep -qE 'scripts/validate-plan-shape\.sh:[0-9]+' "$T/good.md"; then
 else
   bad "the control has no citation — the citation arm's silence on it proves nothing"
 fi
+
+# --- P3b the operator ping ---------------------------------------------------------
+# A plan is executed by a session the operator cannot see, so "still working" and "stopped,
+# waiting on you" are indistinguishable from outside and silence is a stall found only by
+# polling. REQUIRED, not advisory: the instruction has to survive into plans nobody in this
+# repo writes, and a convention with no enforcer is a suggestion.
+conforming | grep -v '^Ping the operator' > "$T/p3b.md"
+if ! cmp -s "$T/good.md" "$T/p3b.md"; then
+  grep -q 'no operator-ping instruction' <<<"$(run "$T/p3b.md")" \
+    && ok "P3b fires when the plan never tells its executor to speak" \
+    || bad "P3b did not fire on a plan with no ping instruction"
+else
+  bad "FIXTURE BROKEN: stripping the ping line changed nothing, so P3b's arm has no subject"
+fi
+# CONTROL: it is an ERROR and not a warning, or a plan can ship without the clause.
+grep -qE '^ERROR .*operator-ping' <<<"$(run "$T/p3b.md")" \
+  && ok "  and it is an ERROR — a plan that omits it fails the build rather than nagging" \
+  || bad "  the ping finding is not an ERROR, so the instruction is optional in practice"
 
 # --- P1 entry point ---------------------------------------------------------------
 conforming | grep -v '^## Start here$' > "$T/p1.md"
