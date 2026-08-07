@@ -53,8 +53,16 @@ regression lock for that is why the release has a new fixture rather than two ne
 §*What v0.287.0 measured*.
 
 **NEXT ACTION: item 7, continued** — F3 and F4 below are still unfixed and the
-highest-value lead is still unaudited. Items 0, 1, 2, 2b, 3, 4 and 5 are closed; 6, 8 and 9
-remain open after it, in the order listed.
+highest-value lead is still unaudited. Items 0, 1, 2, 2b, 4 and 5 are closed; 6, 8, 9 and the
+new 10 remain open after it, in the order listed.
+
+**Item 3 is closed as an ITEM and half-open as a DEFECT, and the two must not be confused.**
+v0.286.0 shipped the fix for the strip its measurement found defeated on 6 of 135 filenames.
+The second defect that measurement named — the live-series pick being an `ls -t` across 56
+series in one directory — is **still live, and both hooks say so in their own comments**
+(`core/hooks/ai-dlc-continue.sh:283`, `core/hooks/ai-dlc-acknowledge.sh:167`). It is not
+fixable at the hook, because the filename grammar has no sprint slot to scope on. **Item 10 is
+where it gets fixed**, and until then item 3 should not be quoted as fully discharged.
 
 **Do these in order. Stop and ask if a step's premise no longer holds — several below were
 true at 2026-08-06T20:05Z and are worth re-verifying before acting.** That instruction has now
@@ -123,6 +131,15 @@ before you write code.
    substring is absent at base AND at theirs, so the entry can never close.
 9. **Write the s301 close-out prompt** for the operator to paste into the graph session,
    mirroring what the s300 close-out did. Owed as a deliverable, not optional.
+10. **Declare ONE artifact path convention, mechanise it, and migrate every existing file to
+    it.** OPERATOR DIRECTIVE, 2026-08-07: one generic folder AND file naming convention;
+    **migrating pre-existing files is a MUST**; breaking historical traceability is
+    **accepted**, on the stated ground that *a declared convention is itself the guide to
+    where to look, and without one nothing has improved*. The full measurement, the proposed
+    grammar and the five sub-releases are in §*Item 10 — the artifact path convention*. Do
+    **not** start it before item 7 closes: it rewrites the paths F3's and F4's evidence cites.
+    It is also the one item in this plan that **writes to the consumer**, via a migration
+    script core ships and the OPERATOR runs — the read-only boundary at the top still binds.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -372,6 +389,174 @@ per-arm sibling toggle). One summary line serves several arms, so a per-check co
 legitimately moves two of them; each mutant therefore declares its **exact moved-set**, and no
 two mutants share one. That is the anti-vacuity property when strict one-arm isolation is not
 available.
+
+## Item 10 — the artifact path convention
+
+Raised by the operator 2026-08-07 after v0.287.0, as a question this plan had answered badly:
+*"none of that addresses how you know which one is the current, and this is happening in other
+folders, not just `_bmad-output/`."* Both halves were right. Everything below is measured.
+
+### The principle the measurement produced
+
+**Currency is DECLARED, never searched.** One home: `_bmad-output/implementation-artifacts/
+sprint-status.yaml`, key `sprint: N`, resolved by `sprint-status.sh sprint-id`
+(`core/scripts/sprint-status.sh:152`). Every place that instead asks the filesystem is a second
+answer that can disagree with the first, and the chain that works has three links:
+
+1. declared identity → `N`
+2. a **TOTAL** function from `N` to a path
+3. **no search**
+
+**Flatness is not the defect — a filename grammar with no reserved slot for the sprint is.**
+`docs/retro/` is the control that proves it: 299 files, flat, **288 matching `sprint-<N>.md`
+exactly**, six core programs reading it, and not one of them ever asks which is newest, because
+each composes the path from a sprint number it was given. Where link 2 is total, flat is fine.
+Where it is partial, the reader must search, and search means mtime.
+
+### What is actually in the tree
+
+Measured on the reference consumer, read-only, 2026-08-07.
+
+```
+_bmad-output/planning-artifacts/*.md    805 files, 56 distinct sprints (s7 -> s301)
+  sprint token as PREFIX  s<N>-         369   s289-adversarial-pass1-discovery.md
+  sprint token as SUFFIX  -s<N>         173   architecture-adversarial-s288-pass2.md
+  sprint token as WORD    sprint-<N>    169   prd-adversarial-sprint-150.md
+  no sprint token at all                 95   aws-cost-analysis.md   (counts overlap)
+```
+
+**`stories/` alone carries at least six spellings of one idea**, and the split is live:
+
+```
+998 story files
+  story-<N>-<M>-slug.md      786   sprints ... 294 295 296 297
+  story-S<N>-<M>-slug.md      73   sprints ... 287 298 299        <- capital S
+  neither                    139   S<N>-, s<N>-, sprint-<N>-, bug-, hotfix-, 6 with no prefix
+```
+
+**That split has already produced a live zero-verification PASS.** Check 6 of
+`validate-mandatory-rules.sh` globs `"${STORIES_DIR}/story-${SPRINT_N}-"*.md`
+(`core/scripts/validate-mandatory-rules.sh:346`). For **sprints 298 and 299 the glob matches
+zero files**, the loop body never runs, `CHECK6_FAILURES` stays 0 and the check prints PASS.
+Control on the same directory in the same read: `story-297-*` matches **11**. Two of the last
+four closed sprints had their Dev Agent Record compliance verified against nothing. This is the
+same class v0.287.0 just shipped two fixes for, arriving through the naming grammar instead of
+through a counter.
+
+*(Recording the miss as well as the finding: the first pass at this counted the capital-S form
+as zero, because the grep was lowercase. That is the exact false-zero source `CLAUDE.md` lists
+second. The numbers above are the re-measurement.)*
+
+**Outside `_bmad-output/`, 6177 tracked files, the same shape with different exposure:**
+
+| directory | files | naming function | who reads it | status |
+|---|---|---|---|---|
+| `planning-artifacts/` | 805 | partial, 4 positions | **hooks, by mtime** | **live defect** |
+| `stories/` | 998 | partial, 6 spellings | **Check 6, by glob** | **live defect** |
+| `docs/reviews/` | 1032 | none — 183 carry `s<N>-`, **849 carry no token** | prose only, LLM-read | latent |
+| `docs/retro/` | 299 | **total** (`sprint-<N>.md`) | 6 programs, all composing | safe |
+
+And the convention is **already split in the consumer's own tree**: `scripts/s272-1-datastack-import/`,
+`docs/evidence/s271-2/`, `test-results/s287-ff5-evidence/` and
+`scripts/tests/fixtures/s278-2-floor-verify/` all use per-sprint directories, while
+`docs/reviews/` and `planning-artifacts/` do not. Nothing chooses between them.
+
+### The inconsistency ORIGINATES IN CORE, which is why this is a core release
+
+Core's own step files prescribe **five** sprint-token spellings across 21 files:
+
+```
+s<N>- prefix        s<N>-bug-fix-oneshot.md, s<N>-research-notes.md,
+                    s<N>-<artifact>-adversarial-p<M>.md, s<N>-coe-adversarial-p<M>.md, +3
+sprint-<N>- prefix  sprint-<N>-retro.md, sprint-<N>-retro-draft.md,
+                    sprint-<N>-next-inputs.md, sprint-<N>-closeout-tables.md
+-sprint-N suffix    ui-mockups-sprint-N.md            <- and it is bare `N`, not `<N>`
+-s<N> suffix        gate-log-archive-s<N>.md
+no token            prd.md, architecture.md, product-brief.md, test-strategy.md, ...
+```
+
+The consumer's four-position mess is **core's grammar faithfully executed**. Fixing the
+consumer without fixing the prescription re-creates it next sprint.
+
+### The proposed grammar
+
+**The directory is the ONLY sprint slot. No filename may carry a sprint token.** That collapses
+four positions into one and makes conformance a single checkable rule instead of a union of
+patterns.
+
+```
+<area>/                          area root = DURABLE, sprint-independent, never moves
+  <name>.md                        prd.md, architecture.md, product-brief.md, active-epics.md
+  s<N>/                          every artifact PRODUCED BY sprint N
+    <kind>[-<subject>][-p<M>].md   architecture-adversarial-p2.md, retro.md
+    stories/
+      story-<M>-<slug>.md          the sprint comes from the directory; <M> is the story index
+```
+
+Five rules, each mechanically checkable:
+
+1. **`s<N>` is the only spelling** — lowercase `s`, no zero padding, never `S<N>`, never
+   `sprint-<N>`, never a bare number.
+2. **No basename may match a sprint token** (`s?[0-9]{2,4}` or `sprint-[0-9]+`). Anywhere.
+3. **A file at an area root carries no sprint token and no `s<N>/` parent** — that is what
+   makes it durable, and it is the predicate a close-out sweep has never had (the 95).
+4. **`kind` comes from a declared closed set**, the way `pr-classes.md` and `story-fields.md`
+   already work.
+5. **`p<M>` is the only pass marker** — no `pass<M>`, no `-pass-<M>`. Ordering stays
+   `order_key()`'s job, never mtime's.
+
+Applies to `docs/retro/` and `docs/reviews/` too, per the operator's "one generic convention":
+`docs/retro/s<N>/retro.md`, `docs/reviews/s<N>/<subject>.md`. **`docs/retro/` is the one place
+this is a net loss in isolation** — its function is already total — and it is included anyway
+because a convention with a carve-out is two conventions. Cost is named here so the sub-release
+that changes `validate-retro-evidence.sh:179` and `validate-provenance-block.sh:404` knows it is
+paying a known price, not fixing a defect.
+
+**What this buys, concretely.** `ai-dlc-continue.sh:289` and `ai-dlc-acknowledge.sh:173` stop
+being `ls -t` over 135 files spanning 56 series and become a composed path under
+`s<N>/` — the pick has one candidate set, scoped by construction. Both hooks currently carry the
+confession in their own comment (`ai-dlc-continue.sh:283`, `ai-dlc-acknowledge.sh:167`): *"STILL
+NOT FIXED, and deliberately: the pick is by mtime across EVERY adversarial series in this one
+directory … There is no naming-safe scope to add — series names take the sprint as a SUFFIX as
+well as a prefix."* **That sentence is the case for this item, written by the release that
+could not fix it.** v0.286.0 closed the strip-defeated half of item 3's measurement; this closes
+the other half, and item 3 should not be read as fully discharged until it does.
+
+### Sub-releases, in order
+
+**10a — DECLARE.** `core/skills/ai-dlc/artifact-paths.md`, one home for the grammar, the `kind`
+set and the durable/per-sprint predicate, plus `consumer_artifact_paths_file:` in
+`layer-contract.yaml` — exactly the shape `consumer_pr_class_file:` (`:220`) and
+`consumer_story_fields_file:` (`:241`) already have. No behaviour change. `contract_version`
+bumps here.
+
+**10b — BIND CORE TO ITS OWN GRAMMAR.** A new `validate-enforcement-map.sh` invariant deriving
+every `_bmad-output/…` write path core prescribes across the 21 step files and asserting each
+conforms. Fails the build on a sixth spelling. This is the arm that stops the regrowth, and it
+must ship before any migration or the migration is undone by the next sprint's writes.
+**Measure the false-positive set on all 21 step files before shipping it** (`CLAUDE.md`).
+
+**10c — READERS COMPOSE, NEVER SEARCH.** Rewrite the search sites onto composed paths: both
+hooks' `SERIES` derivation, Check 6's story glob, `validate-spec-adoption.sh:172`,
+`validate-retro-evidence.sh:179`, `validate-provenance-block.sh:404`. Each gets a fixture arm
+proving it fails when the composed path is absent — a reader that silently finds nothing is the
+defect being removed, so it must not be reintroduced as the fix.
+
+**10d — MIGRATE.** A core-shipped `scripts/ai-dlc/migrate-artifact-paths.sh`: `git mv` only,
+never delete, per-file verification recorded as *source-absent AND dest-readable AND
+sha256-identical* — the s300 close-out's form, which is per-file and not a count. Dry-run
+default, `--apply` to write. **The OPERATOR runs it on the consumer**; this session never writes
+that tree. Historical traceability breakage is accepted by operator directive, so the script
+does **not** attempt link rewriting — the declared convention is the guide.
+
+**10e — ENFORCE ON THE CONSUMER.** A validator wired into the consumer pre-push that fails on a
+non-conforming artifact path, with `--report` for the migration's before/after. Ship last, after
+10d has run once, or first contact wedges on ~2200 non-conforming files.
+
+**Sequencing constraints.** After item 7 (it rewrites the paths F3/F4 evidence cites) and after
+the two-hop pull (a rulebook change of this size must not ride a stale engine). Cheapest order
+to interleave with item 8 is 10a→10b, then item 8's ledger triage, then 10c→10e, because 10c
+changes files several push-candidate `verify:` receipts anchor to.
 
 ## The one thing that must not be forgotten: pull graph in TWO hops
 
