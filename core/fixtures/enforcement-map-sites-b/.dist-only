@@ -1,0 +1,14 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is shard 'b' of enforcement-map-sites, and it inherits that fixture's reason without
+qualification: the subject is scripts/validate-enforcement-map.sh, which is not shipped to
+consumers. A fixture whose subject is absent cannot run. It is permanently dormant, and a
+dormant fixture in the consumer's suite is worse than no fixture, because the catalog then
+claims the check is self-tested when nothing tests it there.
+
+A SHARD INHERITS ITS SIBLING'S MARKER BY CARRYING ITS OWN, NOT BY POINTING AT IT. The
+exemption is DERIVED per directory — I8, I74, install.sh and preclassify.sh's map_consumer()
+each read the marker beside the fixture — so a shard without one is shippable by every
+reader that matters, and would land in a consumer as a directory whose subject is not there.
+That is the exact failure the parent's marker was written after, and adding a directory is
+precisely when it can happen again.
