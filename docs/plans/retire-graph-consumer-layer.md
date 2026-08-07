@@ -51,13 +51,12 @@ goes red because the self-update gate invokes each gating script BARE, and three
 exit 2 on a bare invocation. See §*Item 11 — the self-update gate compares two usage errors*.
 **Ship item 11 first, then this branch pushes unmodified.** Do not weaken F3 to get it green.
 
-**NEXT ACTION: the OPERATOR runs the s301 close-out, then the two-hop pull.** The prompt is
-written, re-measured and split: `docs/plans/s301-close-out.md` is executable, `s301-close-out-derivation.md` is the record. **The next thing a SESSION does
-is 10a** — declare the artifact path grammar — which needs no consumer state and can start
-before the pull returns. **The execution order was
-re-sequenced on 2026-08-07 and is no longer the order the numbered list is written in.** Read
-§*Order of execution* below before starting anything; the numbered list is now a REGISTRY of
-stable item ids, not a running order. Items 0, 1, 2, 2b, 4 and 5 are closed.
+**NEXT ACTION: the OPERATOR runs the two-hop pull** — `docs/plans/graph-two-hop-pull.md`, an
+executable handoff. The s301 close-out is **DONE and landed on graph's `main`** at `1c72823af`
+(`docs/plans/s301-close-out.md` was the procedure, `-derivation.md` the record); nine of its ten
+Done-when checks passed and the tenth, a stale local pause flag, is step 0 of the pull file.
+**The next thing a SESSION does is 10a+10b**, which need no consumer state — but ai-dlc's working
+tree must be left alone while hop 1 has it in detached HEAD.
 
 ### Order of execution
 
@@ -69,7 +68,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | # | item | why here |
 |---|---|---|
 | 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
-| 2 | **operator: close s301, LAND IT ON `main`, then the TWO-HOP pull** | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
+| 2 | **operator: ~~close s301, LAND IT ON `main`~~ DONE, then the TWO-HOP pull — `graph-two-hop-pull.md`** | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
 | 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
 | 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
 | 5 | **v0.288.0** (parked branch) | pushes unmodified once 11 lands |
