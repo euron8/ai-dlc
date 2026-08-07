@@ -310,7 +310,7 @@ and verifiable; (b) NEEDS_REWORK naming the missing element(s).
 
 ### Missing Skill-Invocation Provenance Block = Critical
 
-A retro doc (`docs/retro/sprint-*.md`), PRD
+A retro doc (`docs/retro/s*/retro.md`), PRD
 (`_bmad-output/planning-artifacts/prd.md`), or story file that
 should carry a `SKILL_INVOCATION_PROVENANCE v1` block (schema in
 SKILL.md Rule 3) but does not is a **Critical** finding.

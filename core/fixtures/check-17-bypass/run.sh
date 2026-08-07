@@ -60,7 +60,7 @@ echo
 
 # ---- V1..V4 must FAIL the lightweight validator -------------------------------
 for v in 901 902 903 904; do
-  if bash "$PROV" "$WORK/docs/retro/sprint-$v.md" >/dev/null 2>&1; then
+  if bash "$PROV" "$WORK/docs/retro/s$v/retro.md" >/dev/null 2>&1; then
     note "BAD" "sprint-$v.md" "PASSED validate-provenance-block.sh — expected FAIL"
     fails=$((fails + 1))
   else
@@ -70,7 +70,7 @@ done
 
 # ---- V5 must PASS the lightweight validator -----------------------------------
 # This is the assertion that was silently false for the life of the fixture.
-if bash "$PROV" "$WORK/docs/retro/sprint-905.md" >/dev/null 2>&1; then
+if bash "$PROV" "$WORK/docs/retro/s905/retro.md" >/dev/null 2>&1; then
   note "ok" "sprint-905.md" "passes validate-provenance-block.sh (as it must)"
 else
   note "BAD" "sprint-905.md" "FAILED validate-provenance-block.sh — the forgery floor is UNTESTED"
@@ -79,7 +79,7 @@ else
   echo "      lightweight script first means the byte-match assertion never runs and" >&2
   echo "      H2 reports PASS on a property it never checked. This is exactly the bug" >&2
   echo "      the fixture was rewritten to fix (it used to carry mode: solo)." >&2
-  bash "$PROV" "$WORK/docs/retro/sprint-905.md" 2>&1 | sed 's/^/        /' >&2
+  bash "$PROV" "$WORK/docs/retro/s905/retro.md" 2>&1 | sed 's/^/        /' >&2
   fails=$((fails + 1))
 fi
 
@@ -234,7 +234,7 @@ if [ ! -f "$EVID" ]; then
   fails=$((fails + 1))
 else
   REPO="$WORK/repo"
-  mkdir -p "$REPO/_bmad-output/party-mode-transcripts" "$REPO/docs/retro"
+  mkdir -p "$REPO/_bmad-output/party-mode-transcripts/s999" "$REPO/docs/retro"
   (
     cd "$REPO"
     git init -q .
@@ -254,8 +254,8 @@ else
         printf 'Detail line for %s.\n%.0s' "$p" $(seq 1 40)
         echo
       done
-    } > _bmad-output/party-mode-transcripts/sprint-999-retro.md
-    cp "$WORK/docs/retro/sprint-905.md" docs/retro/sprint-999.md
+    } > _bmad-output/party-mode-transcripts/s999/retro.md
+    mkdir -p docs/retro/s999 && cp "$WORK/docs/retro/s905/retro.md" docs/retro/s999/retro.md
     git add -A
     git commit -q -m "Sprint 999 retro party-mode transcript"
   ) >/dev/null 2>&1

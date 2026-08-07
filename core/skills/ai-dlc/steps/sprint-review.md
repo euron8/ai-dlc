@@ -19,7 +19,7 @@ between them:
 
 Sprint-overall PR MUST be assembled incrementally throughout the sprint:
 carry-over candidates and partial-close accounting are drafted in
-`_bmad-output/implementation-artifacts/sprint-<N>-*.md` as anchors close,
+`_bmad-output/implementation-artifacts/s<N>/*.md` as anchors close,
 not post-hoc at sprint-close. Final sprint-overall PR assembly = merge +
 diff check only, not composition.
 

@@ -561,7 +561,8 @@ visual surfaces.
 
 - Agent must fetch the deployed production URL and verify rendering.
 - Compare each new surface against the documented mockup (from
-  ui-direction step or `_bmad-output/planning-artifacts/ui-mockups-*.md`).
+  ui-direction step or `_bmad-output/planning-artifacts/s<N>/ui-mockups.md`,
+  composed from `sprint_id` — not globbed).
 - **Gate FAILS** if visual verification was not performed or drift was
   found and not fixed.
 - **Evidence:** Include in gate log:
@@ -676,8 +677,12 @@ unrecorded. Verification catches this before the pipeline moves on.
 
 **Rotation (Rule 25(c)).** When the live gate-log exceeds its size
 threshold (default 25k tokens) or at an epoch boundary, move the
-closed-epoch entries to `gate-log-archive-<epoch>.md` (cut-and-paste,
-verbatim) so the live log holds only the current epoch. The archive is
+closed-epoch entries to
+`_bmad-output/implementation-artifacts/s<N>/gate-log-archive.md`
+(cut-and-paste, verbatim) so the live log holds only the current epoch.
+`<N>` is `sprint_id`; the directory is the only sprint slot
+(`artifact-path-grammar.md`), and a second rotation inside one sprint
+appends `-2`, `-3` — an ordinal, never a sprint token. The archive is
 write-only and never re-read in the hot path.
 
 **Structured metrics emission (`GATE_METRIC v1`).** After the prose entry
@@ -685,7 +690,7 @@ is written and verified above, ALSO append — for every **validation** check
 evaluated at this gate — one JSON object per line to
 `_bmad-output/implementation-artifacts/gate-metrics.jsonl` (append-only,
 machine-read only, never loaded verbatim; rotates with the gate-log epoch
-to `gate-metrics-archive-<epoch>.jsonl`). This is the same per-check
+to `_bmad-output/implementation-artifacts/s<N>/gate-metrics-archive.jsonl`). This is the same per-check
 verdict data the prose entry already carries, emitted machine-readable so
 consumer history yields decisive efficacy/cost data (no prose parsing, no
 cross-catalog confound). Per-line schema:
@@ -1048,7 +1053,7 @@ the values, and a genuine zero is a valid reading. Fixture:
 gate's primary artifact.
 
 - **Retro gate:** run `scripts/ai-dlc/validate-provenance-block.sh
-  docs/retro/sprint-<N>.md` AND `scripts/ai-dlc/validate-retro-evidence.sh
+  docs/retro/s<N>/retro.md` AND `scripts/ai-dlc/validate-retro-evidence.sh
   <N>`. Both must exit 0. validate-retro-evidence.sh additionally
   enforces transcript file presence, byte-match against the cited
   SHA, and non-triviality floors (MIN_CHARS, MIN_PERSONAS,
@@ -1090,7 +1095,7 @@ gate's primary artifact.
   `scripts/ai-dlc/validate-provenance-block.sh <story-file> --require-skill
   bmad-review-adversarial-general`, then the CROSS-CHECK
   `scripts/ai-dlc/stamp-story-provenance.sh --terminal
-  _bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md --profile
+  _bmad-output/planning-artifacts/s<N>/bug-fix-oneshot.md --profile
   bug-story-provenance --check <story-file>`; exit 0 required for both.
   The bug variant's §4 review is a ONE-SHOT, so the block carries NO `verdict`
   and cites the bmad skill rather than the native one — which is why it needs its
@@ -1444,10 +1449,13 @@ implementation, sprint-review, and retro gates.
 
 **Check.** Invoke `scripts/ai-dlc/validate-draft-stamps.sh`; exit 0 required.
 It asserts the four per-sprint analyst drafts (Rule 24) are written to
-their sprint-stamped paths — `s<N>-carry-over-evaluation.md`,
-`s<N>-discovery-context.md`, `s<N>-research-notes.md`,
-`s<N>-architecture-context.md`, where `<N>` is `sprint_id` from the
-pipeline snapshot's Sprint Context (resolved at `route.md` Step 6).
+their sprint-stamped paths — `planning-artifacts/s<N>/carry-over-evaluation.md`,
+`planning-artifacts/s<N>/discovery-context.md`,
+`planning-artifacts/s<N>/research-notes.md`,
+`planning-artifacts/s<N>/architecture-context.md`, where `<N>` is
+`sprint_id` from the pipeline snapshot's Sprint Context (resolved at
+`route.md` Step 6). **The stamp is the DIRECTORY** — the basename carries
+no sprint token (`artifact-path-grammar.md`).
 
 Two halves, because the drift has two surfaces:
 - **Disk.** No unstamped draft may exist in
@@ -1536,7 +1544,7 @@ every legitimate `standard` / `lightweight` single-pass cycle.
 
 **The resume contract — STOP → ADJUDICATE → RESOLVE → VERIFY.** A hard block does not
 end the cycle; it stops it until the operator adjudicates. The exit is a **resolution
-record**, `planning-artifacts/s<N>-<artifact>-resolution-p<M>.md`, and arm F reads it.
+record**, `planning-artifacts/s<N>/<artifact>-resolution-p<M>.md`, and arm F reads it.
 *A repair edits the artifact to close findings on UNCHANGED scope — that is what
 diverged. A resolution changes WHAT IS UNDER REVIEW:* `REVERT_REPAIR` |
 `CHANGE_APPROACH` | `CUT_SCOPE` | `RESTART_CYCLE`. The verification pass is the next
@@ -1566,7 +1574,7 @@ record was written to authorize — and it is suppressed entirely once the serie
 **The repair between passes is delegated and recorded (arm H).** A converging series
 proves findings FELL, which proves a repair happened — but not that a `remediator` did
 it. `carry-over-evaluation.md` §3a fences repair to a subagent (*"the lead does not
-repair the artifact itself"*), delivered as `planning-artifacts/s<N>-<artifact>-repair-p<M>.md`
+repair the artifact itself"*), delivered as `planning-artifacts/s<N>/<artifact>-repair-p<M>.md`
 that the next pass verifies against. Arm H asserts that record exists and is structured
 (a `disposition:`, an `edit:` site, a `derivation:` per finding) for every pass whose
 findings a later pass measured as repaired. It proves the record EXISTS, not who authored
@@ -2045,7 +2053,7 @@ consumer predates the spec layer.
 **Scope.** Skip unless Check 28 reported `IN-FORCE`; on
 `SKIPPED-PRE-ADOPTION` report that token and move on.
 
-**Check.** Read `_bmad-output/specs/spec-s<N>/SPEC.md` and re-grade it against
+**Check.** Read `_bmad-output/specs/s<N>/<slug>/SPEC.md` and re-grade it against
 BMAD's Spec Law in a fresh `gate-adjudicator` subagent (Rule 20). Read the
 `.memlog.md` verdict entries but do NOT adopt them: BMAD's Self-Validate is run by
 the agent that authored the spec, and a law graded by its own author is a law with

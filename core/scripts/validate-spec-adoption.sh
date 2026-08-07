@@ -168,15 +168,20 @@ if [ -f "$DECL" ]; then
     fi
     # (3) IRREVOCABLE ONCE IN FORCE. In force for a committed sprint == a retro
     # exists for a sprint at or past the floor.
+    # THE SPRINT COMES FROM THE DIRECTORY, not the basename. This is a
+    # cross-sprint question -- "is there ANY committed retro at or past the
+    # floor" -- so `s*` is the right quantifier and the reserved slot accepts
+    # it (artifact-path-grammar.md rule 1). It is not a currency question, so
+    # nothing here asks which retro is newest.
     inforce=""
-    for r in "$ROOT"/docs/retro/sprint-*.md; do
+    for r in "$ROOT"/docs/retro/s*/retro.md; do
       [ -f "$r" ] || continue
-      n="$(basename "$r" .md)"; n="${n#sprint-}"
+      n="$(basename "$(dirname "$r")")"; n="${n#s}"
       is_num "$n" || continue
       [ "$n" -ge "$PREV" ] && { inforce="$n"; break; }
     done
     if [ -n "$inforce" ] && [ "$ARG" != "$PREV" ]; then
-      echo "$PROG: REFUSED — the floor s$PREV has already been in force for a committed sprint (docs/retro/sprint-$inforce.md exists). Changing it now rewrites which sprints were held to the spec layer, after the fact. A project that needs the checks softened from here takes an overrides/ entry with a stated removal condition, not a redeclaration." >&2
+      echo "$PROG: REFUSED — the floor s$PREV has already been in force for a committed sprint (docs/retro/s$inforce/retro.md exists). Changing it now rewrites which sprints were held to the spec layer, after the fact. A project that needs the checks softened from here takes an overrides/ entry with a stated removal condition, not a redeclaration." >&2
       exit 1
     fi
   else

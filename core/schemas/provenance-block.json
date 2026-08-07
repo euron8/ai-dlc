@@ -200,7 +200,7 @@
         "artifact_is_retro": true
       },
       "pattern_ref": "transcript_citation",
-      "placeholder": "<_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>>",
+      "placeholder": "<_bmad-output/party-mode-transcripts/s<N>/retro.md@<sha>>",
       "doc": "required for retro party-mode; byte-matched by validate-retro-evidence.sh."
     },
     {

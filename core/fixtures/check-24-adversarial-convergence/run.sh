@@ -418,18 +418,32 @@ if [ -z "$HOOK" ]; then
   FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
   printf '  FAIL  %-28s (cannot locate ai-dlc-acknowledge.sh from %s)\n' "live-series-derivation" "$DIR"
 else
-  # Seed: a STALLED 3-pass series, and a NEWER file that matches the glob but defeats the
-  # strip. The decoy is a real filename from the reference consumer, not an invented one.
-  SD="$ROOT/live-series"; mkdir -p "$SD"
-  sp() { printf '# pass %s\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: stories-test-strategy\ninvoked_at: 2026-08-07T0%s:00:00Z\ntool_use_id: toolu_ls%s\nfindings: 0 CRITICAL, 2 MAJOR, 0 MINOR\nfindings_critical: 0\nfindings_major: 2\nfindings_minor: 0\nverdict: EXIT_CONDITION_NOT_MET\nSKILL_INVOCATION_PROVENANCE_END -->\n' "$1" "$1" "$1" > "$SD/s9-stories-adversarial-p$1.md"; }
-  sp 1; sp 2; sp 3
+  # Seed, under the artifact path grammar: the sprint is the DIRECTORY.
+  #   s9/  the LIVE sprint -- a STALLED 3-pass series, plus a NEWER file that matches the
+  #        glob and DEFEATS the pass-suffix strip. The decoy keeps the shape of a real
+  #        reference-consumer filename (`...adversarial-pass1-...`), not an invented one.
+  #   s8/  a DIFFERENT, older sprint whose files are NEWEST by mtime and whose series has
+  #        CONVERGED. Nothing about the live sprint is wrong; s8 exists only so that a
+  #        reader which forgets to scope by sprint has somewhere wrong to land.
+  SD="$ROOT/live-series"; mkdir -p "$SD/s9" "$SD/s8"
+  prov() { # <path> <hour> <major-count> <verdict>
+    printf '# pass\n\n<!-- SKILL_INVOCATION_PROVENANCE v1\nskill: ai-dlc-adversary-review\nmode: subagent\nlead_role: stories-test-strategy\ninvoked_at: 2026-08-07T0%s:00:00Z\ntool_use_id: toolu_ls%s\nfindings: 0 CRITICAL, %s MAJOR, 0 MINOR\nfindings_critical: 0\nfindings_major: %s\nfindings_minor: 0\nverdict: %s\nSKILL_INVOCATION_PROVENANCE_END -->\n' \
+      "$2" "$2" "$3" "$3" "$4" > "$1"
+  }
+  for i in 1 2 3; do prov "$SD/s9/stories-adversarial-p$i.md" "$i" 2 EXIT_CONDITION_NOT_MET; done
   sleep 1
-  cp "$SD/s9-stories-adversarial-p3.md" "$SD/s289-adversarial-pass1-discovery.md"
+  cp "$SD/s9/stories-adversarial-p3.md" "$SD/s9/adversarial-pass1-discovery.md"
+  sleep 1
+  prov "$SD/s8/prd-adversarial-p1.md" 1 2 EXIT_CONDITION_NOT_MET
+  prov "$SD/s8/prd-adversarial-p2.md" 2 0 EXIT_CONDITION_MET
 
   # $1 label  $2 the derivation expression  $3 expected STATE  $4 expected rc  $5 why
+  # SPRINT_N is the DECLARED sprint, supplied here the way the hook supplies it from
+  # `sprint-status.sh sprint-id`. An expression that ignores it is exactly the unscoped
+  # regression the second mutant below drives.
   ls_expect() {
     local label="$1" expr="$2" want_state="$3" want_rc="$4" why="$5"
-    local ART_DIR="$SD" SERIES="" out state rc
+    local ART_DIR="$SD" SPRINT_N="9" SERIES="" out state rc
     ASSERTIONS=$((ASSERTIONS + 1))
     eval "$expr"
     if [ -z "$SERIES" ]; then
@@ -446,7 +460,22 @@ else
     fi
   }
 
-  SHIPPED="$(sed -n 's/^[[:space:]]*SERIES="\$(ls -t .*adversarial.*$/&/p' "$HOOK" | sed 's/^[[:space:]]*//')"
+  # THE WHOLE MARKED BLOCK, not one line of it. The derivation stopped being a single
+  # assignment when it gained a sprint scope, and a fixture that kept extracting only the
+  # `SERIES=` line would eval it with `$SPRINT_DIR` unset -- resolving nothing, every arm
+  # reporting `(empty)`, and the mutants below "differing" from a shipped form that never ran.
+  #
+  # ONE LINE IS DROPPED: the `sprint-status.sh` shell-out. This fixture's subject is what the
+  # hook does WITH a declared sprint -- the glob's scope and its filter. Resolving the sprint
+  # from an envelope is `divergence-hard-block`'s subject, and it drives the real hooks
+  # end-to-end to do it. Supplying SPRINT_N here is the same substitution this harness already
+  # makes for ART_DIR.
+  SHIPPED="$(awk '/>>> I81 LIVE-SERIES BLOCK >>>/{f=1;next} /<<< I81 LIVE-SERIES BLOCK <<</{f=0} f' "$HOOK" \
+             | grep -v 'sprint-status.sh' | sed 's/^[[:space:]]*//')"
+  case "$SHIPPED" in
+    *adversarial*) : ;;
+    *) SHIPPED="" ;;   # extracted something, but not the glob -- treat as no extraction
+  esac
   if [ -z "$SHIPPED" ]; then
     FAILURES=$((FAILURES + 1)); ASSERTIONS=$((ASSERTIONS + 1))
     printf '  FAIL  %-28s (extracted no derivation from %s -- the arm below would test nothing)\n' "live-series-derivation" "$(basename "$HOOK")"
@@ -455,22 +484,37 @@ else
     ls_expect "live-series-shipped" "$SHIPPED" "STALLED" "3" \
       "the shipped derivation reaches the 3-pass stalled series despite a newer non-conforming file"
 
-    # THE MUTANT, which is the OLD form. Without it the arm above is consistent with a decoy
-    # that never mattered. It must reach a DIFFERENT verdict, and CONTINUE rc=0 is exactly
-    # the silent allow this release exists to remove.
-    ls_expect "live-series-old-form" \
-      'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1 | sed -E '"'"'s/(pass|p)[0-9]+\.md$//'"'"')"' \
+    # MUTANT 1 -- REVERT THE FILTER. Scoped correctly, but newest-then-strip. Without it the
+    # arm above is consistent with a decoy that never mattered. CONTINUE rc=0 is exactly the
+    # silent allow this whole line of work exists to remove.
+    ls_expect "live-series-unfiltered" \
+      'SERIES="$(ls -t "${ART_DIR}/s${SPRINT_N}"/*adversarial*p*.md 2>/dev/null | head -1 | sed -E '"'"'s/(pass|p)[0-9]+\.md$//'"'"')"' \
       "CONTINUE" "0" \
       "MUTANT: newest-then-strip resolves the decoy as a one-pass series and reports a clean cycle"
 
-    # UNMUTATED CONTROL, same directory minus the decoy: both forms must agree there, which
-    # is what pins the difference above on the decoy rather than on the two expressions
-    # disagreeing about everything.
-    rm -f "$SD/s289-adversarial-pass1-discovery.md"
-    ls_expect "live-series-no-decoy" \
-      'SERIES="$(ls -t "${ART_DIR}"/*adversarial*p*.md 2>/dev/null | head -1 | sed -E '"'"'s/(pass|p)[0-9]+\.md$//'"'"')"' \
+    # MUTANT 2 -- REVERT THE SCOPE. Filters correctly, but asks every sprint instead of the
+    # declared one, so mtime hands it s8's CONVERGED series while s9 sits stalled. This is
+    # the defect both hooks confessed to in their own comments for four releases: a clean
+    # verdict read off a cycle that is not the live one.
+    ls_expect "live-series-unscoped" \
+      'SERIES="$(ls -t "${ART_DIR}"/s*/*adversarial*p*.md 2>/dev/null | sed -E -n '"'"'s/(pass|p)[0-9]+\.md$//p'"'"' | head -1)"' \
+      "CONVERGED" "0" \
+      "MUTANT: an unscoped glob adjudicates the newest sprint on disk (s8, converged), not the declared one"
+
+    # UNMUTATED CONTROL. Remove BOTH variables -- the decoy and the other sprint -- and all
+    # three forms must agree. That is what pins each difference above on its own variable
+    # rather than on three expressions that disagree about everything.
+    rm -f "$SD/s9/adversarial-pass1-discovery.md"; rm -rf "$SD/s8"
+    ls_expect "live-series-control-shipped" "$SHIPPED" "STALLED" "3" \
+      "CONTROL: one sprint, no decoy — the shipped form is correct here too"
+    ls_expect "live-series-control-unfiltered" \
+      'SERIES="$(ls -t "${ART_DIR}/s${SPRINT_N}"/*adversarial*p*.md 2>/dev/null | head -1 | sed -E '"'"'s/(pass|p)[0-9]+\.md$//'"'"')"' \
       "STALLED" "3" \
-      "CONTROL: with no decoy present the OLD form is correct too, so the decoy is the variable"
+      "CONTROL: with no decoy the unfiltered form is correct too, so the decoy is the variable"
+    ls_expect "live-series-control-unscoped" \
+      'SERIES="$(ls -t "${ART_DIR}"/s*/*adversarial*p*.md 2>/dev/null | sed -E -n '"'"'s/(pass|p)[0-9]+\.md$//p'"'"' | head -1)"' \
+      "STALLED" "3" \
+      "CONTROL: with only one sprint on disk the unscoped form is correct too, so s8 is the variable"
   fi
 fi
 

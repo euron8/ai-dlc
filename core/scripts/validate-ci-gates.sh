@@ -110,16 +110,6 @@ if [ ! -d "${RETRO_DIR}" ]; then
   echo "Scanned 0 retros, 0 gates declared, 0 dormant (no ${RETRO_DIR})"
   exit 0
 fi
-if [ ! -d "${WORKFLOW_DIR}" ]; then
-  # VACUOUS, not FAIL. The check cannot run — there is no surface to scan. exit 78
-  # so this never shares an exit code with a clean scan (0) or a specific dormant
-  # gate (1). Today's RC=2 was the old guard firing; that conflated "cannot check"
-  # with "tool missing", so a consumer who disabled Actions got a permanent FAIL.
-  echo "VACUOUS: no enforcement surface to scan — ${WORKFLOW_DIR} does not exist." >&2
-  echo "  If this project's gates live elsewhere, set AI_DLC_CI_SURFACE to that directory." >&2
-  exit 78
-fi
-
 retro_count=0
 dormant_count=0
 # Match backtick-quoted gate name preceded by the explicit "CI gate"
@@ -180,6 +170,39 @@ code_hits() {
 # A blank line or one beginning with '#' is skipped; enforcing_file is resolved
 # relative to REPO_ROOT when not absolute. See the header for the two legs.
 ALIAS_TABLE_FILE="${AI_DLC_CI_ALIAS_TABLE:-}"
+
+# --- The surface check runs HERE, after the declarations are counted ---------
+# It used to run before the retro scan, and that ordering is what made this script
+# unable to serve the consumer its own step file was written for. `retro.md` says a
+# script-based consumer with no `.github/workflows/` "runs it locally"; the script
+# returned 78 before reading a single retro, so "locally" produced no inventory, no
+# gate names and nothing to act on. Measured on the reference consumer: SIX unique CI
+# gate names declared across 14 of 299 retro files, and the only thing this script had
+# ever emitted there was `VACUOUS: no enforcement surface to scan`.
+#
+# TWO CORRECTIONS, and the second is the one that makes the documented path real.
+#   (1) A vacuum still REPORTS. The declaration scan needs no enforcement surface, so
+#       the count and the names are always available and are now always printed.
+#   (2) A MISSING SURFACE IS NOT AUTOMATICALLY A VACUUM. `alias_resolves` reads the
+#       consumer's own alias table and consults the files it names; it never touches
+#       WORKFLOW_DIR. A script-based consumer that declares its enforcers there can be
+#       adjudicated in full without `.github/workflows/` existing at all — the local
+#       path retro.md documents, which was already implemented and merely unreachable.
+# Vacuous is now what it says: NO surface AND NO alias table, so nothing could decide
+# any gate either way.
+SURFACE_PRESENT=0; [ -d "${WORKFLOW_DIR}" ] && SURFACE_PRESENT=1
+ALIAS_PRESENT=0;   [ -n "$ALIAS_TABLE_FILE" ] && [ -f "$ALIAS_TABLE_FILE" ] && ALIAS_PRESENT=1
+if [ "$SURFACE_PRESENT" -eq 0 ] && [ "$ALIAS_PRESENT" -eq 0 ]; then
+  vac_count=$(printf '%s\n' "$unique_gates" | awk 'NF' | wc -l | tr -d ' ')
+  echo "VACUOUS: ${retro_count} retros scanned, ${vac_count} CI gate(s) declared, 0 adjudicable." >&2
+  printf '%s\n' "$unique_gates" | awk 'NF' | sed 's/^/  declared, unchecked: /' >&2
+  echo "  No enforcement surface (${WORKFLOW_DIR} does not exist) and no alias table." >&2
+  echo "  A consumer whose gates live elsewhere sets AI_DLC_CI_SURFACE to that directory." >&2
+  echo "  A consumer with no CI at all declares its LOCAL enforcers in an alias table and" >&2
+  echo "  points AI_DLC_CI_ALIAS_TABLE at it — rows are 'gate|enforcer_id|file|anchor'." >&2
+  echo "  Until one of those exists these gate(s) are declared and enforced by nothing." >&2
+  exit 78
+fi
 
 # alias_resolves <declared_gate> — 0 iff some row for this gate satisfies BOTH legs.
 alias_resolves() {

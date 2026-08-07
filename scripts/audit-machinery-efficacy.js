@@ -92,7 +92,12 @@ const enfCell = id => {
 // ---------- 2. Consumer fire evidence ----------
 function ls(glob) { try { return cp.execSync(`ls ${glob} 2>/dev/null || true`).toString().trim().split('\n').filter(Boolean); } catch (e) { return []; } }
 const glFiles = ls(`${GRAPH}/_bmad-output/implementation-artifacts/gate-log*.md`);
-const retroFiles = ls(`${GRAPH}/docs/retro/sprint-*.md`);
+// BOTH SHAPES, for as long as the consumer straddles the migration. The artifact path
+// grammar moves this to `docs/retro/s<N>/retro.md`; core's readers moved in v0.299.0 and the
+// consumer's tree moves when the operator runs the migration. A one-shape glob here reports
+// "0 retros" on whichever side of that it is not on, and a zero from this audit is indistin-
+// guishable from a machine nothing fires. Drop the legacy half once the migration has run.
+const retroFiles = ls(`${GRAPH}/docs/retro/s*/retro.md`).concat(ls(`${GRAPH}/docs/retro/sprint-*.md`));
 const escPath = path.join(GRAPH, 'docs/escalations/pending-archive.md');
 const esc = fs.existsSync(escPath) ? fs.readFileSync(escPath, 'utf8') : '';
 

@@ -87,7 +87,27 @@ g=$(rcof --declare 250 --current 299 "$WORK")
 grep -q 'adopted_from_sprint: 300' "$DECL" || bad "the refused --declare mutated the floor anyway"
 
 # --- irrevocable once in force ------------------------------------------------
-touch "$WORK/docs/retro/sprint-300.md"
+# THE OLD SHAPE FIRST, and it must count for NOTHING. `docs/retro/sprint-300.md` is where
+# this file lived before the artifact path grammar; the reader now composes
+# `docs/retro/s<N>/retro.md` and reads the sprint from the DIRECTORY. A reader that still
+# accepted the legacy name would make the in-force assertion below pass without the new
+# path existing at all, so this arm is what tells "the move happened" from "both work".
+#
+# IN ITS OWN TREE, deliberately. `--declare` WRITES on success, so running this arm against
+# $WORK would leave the floor at 301 and turn the next two assertions into a re-declaration
+# of the same value -- both would then report the wrong thing for the right reason.
+LEGACY="$WORK.legacy"
+rm -rf "$LEGACY"; mkdir -p "$LEGACY/_bmad-output/planning-artifacts" "$LEGACY/docs/retro"
+touch "$LEGACY/docs/retro/sprint-300.md"
+[ "$(rcof --declare 300 --current 299 "$LEGACY")" -eq 0 ] \
+  || bad "FIXTURE ERROR: the legacy-shape control could not establish its own floor"
+g=$(rcof --declare 301 --current 301 "$LEGACY")
+[ "$g" -eq 0 ] && ok "a retro at the PRE-GRAMMAR path does not put the floor in force" \
+               || bad "the legacy docs/retro/sprint-300.md was read as an in-force retro (exit $g); the reader has not moved to docs/retro/s<N>/retro.md"
+rm -rf "$LEGACY"
+
+mkdir -p "$WORK/docs/retro/s300"
+touch "$WORK/docs/retro/s300/retro.md"
 g=$(rcof --declare 301 --current 301 "$WORK")
 [ "$g" -eq 1 ] && ok "REFUSED: moving a floor that has been in force for a committed sprint" \
                || bad "moving an in-force floor exited $g, expected 1 — it rewrites which sprints were held to the spec layer, after the fact"

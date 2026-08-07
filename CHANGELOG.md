@@ -34,6 +34,100 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.299.0] — 2026-08-07
+
+### Readers compose the path from the declared sprint, core's prescriptions conform, and the migration ledger is empty
+
+Plan item 10c, with item 7's F4 folded in. v0.298.0 declared the grammar and bound core's own
+prescriptions to it, leaving 24 of them excused in a migration ledger because the readers had not
+moved. This moves the readers and the prescriptions together — which is not a preference: rewriting
+a prescription while a hook still globs the old shape breaks that hook on the next sprint's first
+artifact, and moving a reader while the prescription stands does the same in reverse.
+
+**The ledger is EMPTY, and both of I82's arms were re-proven against it.** An empty join reads
+exactly like a dead one, so each direction was driven with a `cmp -s`-guarded mutant: reintroducing
+one retired spelling into `retro.md` fires the violation arm; adding one obsolete ledger row fires
+the stale arm; the unmutated tree is green. Same-run control that the extractor still sees anything
+at all: **74 distinct prescribed paths**.
+
+**Both hooks stopped asking the filesystem which cycle is live.** The live-series glob is now scoped
+to `s<sprint-id>/` — 135 files across 56 sprints in one never-pruned directory, down to one sprint's
+candidate set. Both hooks carried the confession in their own comments for four releases (*"There is
+no naming-safe scope to add — series names take the sprint as a SUFFIX as well as a prefix"*), and
+the directory slot is what made the scope expressible. I81 now binds the whole derivation as a
+MARKED BLOCK rather than one assignment, and asserts two properties, each with its own probe: it is
+the filtering form, and it is sprint-scoped.
+
+**`sprint-id` never fails, and that is the trap this release nearly shipped.** With no envelope on
+disk it returns `1` — greenfield, `route.md` Step 6 rule 2, correct there. So an unreadable envelope
+does not yield an empty sprint; it yields a CONFIDENT WRONG one, and the guard would have scoped to
+`s1/`, found nothing, adjudicated nothing and allowed the dispatch in silence — the defect class
+this work removes, arriving through its own repair. The hooks now carry the same control Check 6
+uses: a missing sprint directory is only suspicious when OTHER sprint directories exist, so a
+project before its first adversarial pass stays quiet. There is deliberately no cross-sprint
+fallback.
+
+**A second real bug, caught by a fixture rather than by reading.** The hooks invoked
+`sprint-status.sh sprint-id` without `--root`, so it resolved the sprint from the hook process's
+cwd instead of the project — returning `1` against a tree declaring `7`. `divergence-hard-block`'s
+new no-envelope arm is what surfaced it.
+
+**Check 6's zero-verification PASS is closed.** Measured on the reference consumer: for sprints 298
+and 299 its glob matched ZERO story files, the loop body never ran, the failure counter stayed 0 and
+it printed PASS — while 73 stories for those sprints sat in the same directory spelled `story-S<N>-`
+with a capital S. Control in the same read: `story-297-*` matched 11. Four outcomes are now
+distinct, and the corpus count is the control: a sprint with no stories in a directory that HAS them
+for other sprints FAILS; a directory with no stories at all is a reported SKIP.
+
+**Readers moved, each with an absence that is loud rather than silent:**
+
+| reader | was | is |
+|---|---|---|
+| `ai-dlc-continue.sh`, `ai-dlc-acknowledge.sh` | `ls -t` over every adversarial series in one directory | glob inside `s<N>/`, `<N>` from `sprint-status.sh sprint-id --root` |
+| `validate-mandatory-rules.sh` Check 6 | a zero-match glob printed PASS | zero-with-a-corpus FAILS; zero-without-one SKIPs, named |
+| `validate-retro-evidence.sh` | `docs/retro/sprint-<N>.md` | `docs/retro/s<N>/retro.md`; `RETRO_DOC_MISSING` is no longer reported as `CITATION_MISSING` |
+| `validate-spec-adoption.sh` | `docs/retro/sprint-*.md`, sprint from the basename | `docs/retro/s*/retro.md`, sprint from the directory |
+| `validate-provenance-block.sh` | a retro-path regex whose silence exempted every retro | same test on the new shape, with same-run probes both ways |
+| `validate-draft-stamps.sh` | a missing artifact directory reported as PASS | `PASS WITH SKIPS`, naming what ran |
+
+**`s*` is declared as the all-sprints spelling of the reserved slot.** A cross-sprint read
+(discovery reading prior retros, a reviewer naming the retro class) is not a currency question, so
+it is not the search rule 2 forbids. It is exempt only as a WHOLE component — `s*-retro.md` is still
+rejected, and I82's probe set asserts exactly that boundary.
+
+**F4 — `validate-ci-gates.sh` can finally serve the consumer its own step file was written for.**
+`retro.md` said a script-based consumer with no `.github/workflows/` "runs it locally"; the script
+returned `78 VACUOUS` before reading a single retro, so "locally" produced no inventory and nothing
+to act on. Measured on the reference consumer: six unique gate names declared across 14 of 299 retro
+files, none ever enforcement-checked. Two corrections. The declaration scan needs no enforcement
+surface, so the vacuum now REPORTS every gate it could not check. And a missing surface is no longer
+automatically a vacuum: the alias-table path consults only the files its rows name and never touches
+the workflow directory, so a locally-enforced project is adjudicated in full — that path was already
+implemented and merely unreachable behind a check that returned first. Vacuous now means what it
+says: no surface AND no alias table. Control: an alias table whose rows do not resolve still reports
+DORMANT rc=1, so the table cannot whitewash.
+
+**Rotation archives got the destination rule v0.298.0's table did not have.** That table claimed to
+leave 10c "no design work" and had no row for either log at `_bmad-output/` ROOT — they sit under a
+scan root but under no area. All rotation archives now land at
+`implementation-artifacts/s<N>/<basename>-archive.md`, one rule rather than one per log. An archive
+spanning several sprints states the span in its first line instead of its filename
+(`gate-log-archive-pre-s<N+1>.md` is retired); a second rotation within a sprint takes an ordinal.
+
+**`I82` was missing from the `OK:` verdict line** that `CLAUDE.md` says enumerates the live
+invariants. Measured: `grep -o I82` on that line returned 0, same-run control `I81` returned 1.
+
+**One area deliberately does NOT move, and the grammar says so rather than letting it be
+discovered.** `planning-artifacts/stories/` is still flat and shared across sprints. It is
+syntactically conforming — the directory carries no sprint token — and the sprint hides inside the
+FILENAMES, which is precisely the limit the grammar already documents a syntactic check cannot
+catch. Moving it means moving `stories_dir`, a SCHEMA declaration three shipped readers restate
+rather than resolve, and re-deriving Check 5's story-id-to-file join. That is its own release.
+
+**No consumer path moves in this release.** Core's readers now expect the new shape, so between the
+pull and 10d's migration a consumer's gate-time readers will fail — loudly, by construction, rather
+than silently finding nothing. graph is quiescent; run the migration in the same sitting as the pull.
+
 ## [0.298.0] — 2026-08-07
 
 ### One artifact path convention, declared in core and enforced against core's own prescriptions

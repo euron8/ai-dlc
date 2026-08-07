@@ -56,7 +56,12 @@ executed. Fixing a consumer without fixing the prescription re-creates it next s
 Five rules, each mechanically checkable:
 
 1. **`s<N>` is the only spelling of a sprint** — lowercase `s`, no zero padding, never `S<N>`,
-   never `sprint-<N>`, never a bare number.
+   never `sprint-<N>`, never a bare number. **`s*` is the same slot quantified over every
+   sprint**, and it is the ONLY wildcard the slot accepts. A cross-sprint read (discovery
+   reading prior retros, a reviewer naming the retro class) is not a currency question, so it
+   is not the search this grammar forbids — what is forbidden is asking the filesystem WHICH
+   ONE IS CURRENT. Both spellings are whole components: `s*-retro.md` is a basename carrying a
+   sprint token and rule 2 still rejects it.
 2. **No basename may carry a sprint token.** The directory is the only sprint slot. That is what
    collapses four positions into one and makes conformance a single rule rather than a union of
    patterns.
@@ -134,68 +139,79 @@ read `artifact-path-grammar` as covering it.
 | where | what | status |
 |---|---|---|
 | core's own prescriptions | `validate-enforcement-map.sh` **I82** — every artifact path core prescribes conforms or is in the ledger below | **LIVE** |
-| core's readers | readers compose a path from the declared sprint instead of searching | 10c, not yet shipped |
+| core's readers | readers compose a path from the declared sprint instead of searching | **LIVE** (10c) |
+| an authoring agent | `SKILL.md` Rule 25 points here — READ AND FOLLOW before writing an artifact to a path the rulebook does not already name | **LIVE** (10c) |
 | the consumer's tree | a migration, then a pre-push validator on real filenames | 10d / 10e, not yet shipped |
 
-**Nothing points an AUTHORING agent at this file yet, and that is deliberate.** The obvious next
-move — a line in `SKILL.md` saying "artifact paths follow `artifact-path-grammar.md`" — would tell
-an agent to obey a grammar that the step files it is executing still break in 24 places. An
-instruction that contradicts the step being followed is worse than no instruction: the agent
-resolves it by guessing, and a guess is a sixth spelling. The pointer lands in 10c, in the same
-release that empties the ledger, so that the first agent told to follow this file is the first
-agent whose step file already does.
+**The pointer landed with the release that emptied the ledger, and that ordering was the point.**
+A `SKILL.md` line saying "artifact paths follow this file" would, before 10c, have told an agent to
+obey a grammar the step files it was executing broke in 24 places. An instruction that contradicts
+the step being followed is worse than no instruction: the agent resolves it by guessing, and a
+guess is a sixth spelling. The first agent told to follow this file is the first agent whose step
+file already does.
+
+**The readers that moved in 10c, and what each stopped doing:**
+
+| reader | was | is |
+|---|---|---|
+| `ai-dlc-continue.sh`, `ai-dlc-acknowledge.sh` | `ls -t` over every adversarial series in one directory — 135 files, 56 sprints | glob inside `s<N>/`, `<N>` from `sprint-status.sh sprint-id`; no cross-sprint fallback |
+| `validate-mandatory-rules.sh` Check 6 | a zero-match glob printed PASS | a zero match with stories on disk for other sprints FAILS, and the corpus count is the control |
+| `validate-retro-evidence.sh` | `docs/retro/sprint-<N>.md` | `docs/retro/s<N>/retro.md`, with absent distinguished from uncited |
+| `validate-spec-adoption.sh` | `docs/retro/sprint-*.md`, sprint parsed from the basename | `docs/retro/s*/retro.md`, sprint read from the directory |
+| `validate-provenance-block.sh` | a retro-path regex whose silence exempted every retro | same regex on the new shape, with same-run probes both ways |
+| `validate-draft-stamps.sh` | a missing artifact directory reported as PASS | `PASS WITH SKIPS`, naming what ran |
 
 ## Migration ledger
 
-**Every path below is a prescription core makes TODAY that this grammar forbids.** They are
-listed rather than fixed because the readers have not moved yet: rewriting a prescription while
-`ai-dlc-continue.sh` still globs the old shape would break the hook on the next sprint's first
-artifact. 10c moves readers and writers together; this ledger is what it empties.
+**EMPTY, and it is empty because 10c rewrote every entry rather than because anything was
+excused.** What follows is what the list was for, kept because the ledger will be used again.
+
+A path listed here is a prescription core makes TODAY that this grammar forbids — listed rather
+than fixed when the readers cannot move in the same release, since rewriting a prescription while
+a hook still globs the old shape breaks that hook on the next sprint's first artifact.
 
 **The list is bound in BOTH directions by I82.** A prescription that is neither conforming nor
 listed fails the build — that is the arm that stops a sixth spelling. A listed path that core no
 longer prescribes ALSO fails the build, so the ledger cannot outlive what it excuses. It is a
-ratchet, not a carve-out: it can only shrink.
+ratchet, not a carve-out: it can only shrink. Both arms were re-proven against the empty list with
+guarded mutants, because an empty ledger is exactly the shape in which a dead join and a satisfied
+one read the same.
 
 ```legacy-artifact-paths
-_bmad-output/context-mode-protection-log-archive-s<N>.md
-_bmad-output/implementation-artifacts/gate-log-archive-s<N>.md
-_bmad-output/implementation-artifacts/sprint-<N>-*.md
-_bmad-output/party-mode-transcripts/sprint-<N>-retro.md
-_bmad-output/pipeline-continuation-log-archive-s<N>.md
-_bmad-output/planning-artifacts/s<N>-<artifact>-adversarial-p<M>.md
-_bmad-output/planning-artifacts/s<N>-<artifact>-repair-p<M>.md
-_bmad-output/planning-artifacts/s<N>-<artifact>-resolution-p<M>.md
-_bmad-output/planning-artifacts/s<N>-architecture-context.md
-_bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md
-_bmad-output/planning-artifacts/s<N>-carry-over-evaluation.md
-_bmad-output/planning-artifacts/s<N>-coe-adversarial-p<M>.md
-_bmad-output/planning-artifacts/s<N>-discovery-context.md
-_bmad-output/planning-artifacts/s<N>-research-notes.md
-_bmad-output/planning-artifacts/ui-mockups-sprint-N.md
-_bmad-output/retro-artifacts/sprint-<N>-closeout-tables.md
-_bmad-output/retro-artifacts/sprint-<N>-next-inputs.md
-_bmad-output/retro-artifacts/sprint-<N>-retro-draft.md
-_bmad-output/specs/spec-s<N>-<slug>
-_bmad-output/specs/spec-s<N>-<slug>/SPEC.md
-_bmad-output/specs/spec-s<N>/SPEC.md
-docs/retro/sprint-*.md
-docs/retro/sprint-<N>.md
-docs/retro/sprint-N.md
 ```
 
-**What each becomes**, so 10c has no design work left to do:
+**What each became.** This is now the map 10d's migration script works from, and it is complete —
+**the version 10a shipped was not, and it said it was.** Its header read *"so 10c has no design
+work left to do"*, and it had no row for either log at `_bmad-output/` ROOT: those two sit under a
+scan root but under no AREA, so no row in the table could be composed for them without a decision
+nobody had made. The rule below is that decision, and it is one rule rather than a row per log.
 
 | today | under this grammar |
 |---|---|
 | `planning-artifacts/s<N>-<artifact>-adversarial-p<M>.md` | `planning-artifacts/s<N>/<artifact>-adversarial-p<M>.md` |
 | `planning-artifacts/s<N>-research-notes.md` | `planning-artifacts/s<N>/research-notes.md` |
 | `planning-artifacts/ui-mockups-sprint-N.md` | `planning-artifacts/s<N>/ui-mockups.md` |
+| `planning-artifacts/s<N>-epics/epics.md` | `planning-artifacts/s<N>/epics/epics.md` |
 | `retro-artifacts/sprint-<N>-retro-draft.md` | `retro-artifacts/s<N>/retro-draft.md` |
-| `implementation-artifacts/gate-log-archive-s<N>.md` | `implementation-artifacts/s<N>/gate-log-archive.md` |
 | `specs/spec-s<N>-<slug>/SPEC.md` | `specs/s<N>/<slug>/SPEC.md` |
 | `party-mode-transcripts/sprint-<N>-retro.md` | `party-mode-transcripts/s<N>/retro.md` |
 | `docs/retro/sprint-<N>.md` | `docs/retro/s<N>/retro.md` |
+| **every rotation archive**, wherever its live log sits — `implementation-artifacts/gate-log-archive-s<N>.md`, `pipeline-continuation-log-archive-s<N>.md`, `context-mode-protection-log-archive-s<N>.md`, `compaction-log-archive-s<N>.md` | `implementation-artifacts/s<N>/<basename>-archive.md` |
+
+**Rotation archives all land in `implementation-artifacts/s<N>/`**, including the logs whose LIVE
+copy sits at `_bmad-output/` root. One destination rule rather than one per log, and it agrees
+with the only archive 10a did place. A second rotation inside one sprint appends an ordinal
+(`-2`, `-3`) — never a sprint token, and never the span (`gate-log-archive-pre-s<N+1>.md` is
+retired; an archive covering more than its own sprint states the span in its first line, where a
+reader can act on it, instead of in a filename nothing parses).
 
 Three spellings of one `docs/retro/` path (`sprint-<N>.md`, `sprint-N.md`, `sprint-*.md`) collapse
 to one entry when they move, which is the whole argument in miniature.
+
+**One area does NOT move in 10c and says so here rather than being discovered later:**
+`planning-artifacts/stories/` is still flat and shared across sprints. It is syntactically
+conforming — the directory carries no sprint token — and the sprint hides inside the FILENAMES
+(`story-<N>-<M>-slug.md`, `story-S<N>-<M>-slug.md`), which is precisely the limit §*What a
+syntactic check CANNOT catch* documents. Moving it to `s<N>/stories/` means moving `stories_dir`,
+which is a SCHEMA declaration (`sprint-status.json`) that three shipped readers restate rather
+than resolve, and re-deriving Check 5's story-id-to-file join. That is its own release.

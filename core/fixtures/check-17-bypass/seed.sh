@@ -43,14 +43,14 @@
 set -euo pipefail
 
 OUT="${1:-${OUT:-$(mktemp -d)}}"
-mkdir -p "$OUT/docs/retro"
+mkdir -p "$OUT/docs/retro/s901" "$OUT/docs/retro/s902" "$OUT/docs/retro/s903" "$OUT/docs/retro/s904" "$OUT/docs/retro/s905"
 
 TS="2026-07-11T12:00:00Z"
 TID="toolu_01ABCDEFGHIJKLMNOPQRSTUV"
-TRANSCRIPT="_bmad-output/party-mode-transcripts/sprint-999-retro.md"
+TRANSCRIPT="_bmad-output/party-mode-transcripts/s999/retro.md"
 
 # --- V1: no provenance block at all ------------------------------------------
-cat > "$OUT/docs/retro/sprint-901.md" <<'EOF'
+cat > "$OUT/docs/retro/s901/retro.md" <<'EOF'
 # Sprint 901 Retrospective
 
 Party mode was convened and the personas agreed the sprint went well.
@@ -61,7 +61,7 @@ There is no SKILL_INVOCATION_PROVENANCE block anywhere in this document.
 EOF
 
 # --- V2: tool_use_id stripped -------------------------------------------------
-cat > "$OUT/docs/retro/sprint-902.md" <<EOF
+cat > "$OUT/docs/retro/s902/retro.md" <<EOF
 # Sprint 902 Retrospective
 
 <!-- SKILL_INVOCATION_PROVENANCE v1
@@ -76,7 +76,7 @@ The tool_use_id is absent: nothing ties this block to a real Skill tool response
 EOF
 
 # --- V3: unknown skill --------------------------------------------------------
-cat > "$OUT/docs/retro/sprint-903.md" <<EOF
+cat > "$OUT/docs/retro/s903/retro.md" <<EOF
 # Sprint 903 Retrospective
 
 <!-- SKILL_INVOCATION_PROVENANCE v1
@@ -92,7 +92,7 @@ SKILL_INVOCATION_PROVENANCE_END -->
 EOF
 
 # --- V4: transcript_path missing the @<sha> suffix ----------------------------
-cat > "$OUT/docs/retro/sprint-904.md" <<EOF
+cat > "$OUT/docs/retro/s904/retro.md" <<EOF
 # Sprint 904 Retrospective
 
 <!-- SKILL_INVOCATION_PROVENANCE v1
@@ -124,7 +124,7 @@ EOF
 # the interesting one, and it must still be caught by the SHA rung and not by looking
 # suspicious. V5 tests the forgery floor, never the counts rule; check-17-counts owns
 # that.
-cat > "$OUT/docs/retro/sprint-905.md" <<EOF
+cat > "$OUT/docs/retro/s905/retro.md" <<EOF
 # Sprint 905 Retrospective
 
 <!-- SKILL_INVOCATION_PROVENANCE v1

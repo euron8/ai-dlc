@@ -96,7 +96,7 @@ nothing). The native `adversary` review is for CONVERGENCE cycles only.
 - **Source fidelity pass:** Does the story address the specific issue
   described? Does the fix approach match what was requested?
 
-It writes findings to `_bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md`
+It writes findings to `_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot.md`
 carrying a `SKILL_INVOCATION_PROVENANCE v1` block with
 `skill: bmad-review-adversarial-general`, `mode: subagent`, and the three
 `findings_*` counts — and **no `verdict`**, which a one-shot never stamps. The
@@ -110,7 +110,7 @@ story-readiness gate requires a `SKILL_INVOCATION_PROVENANCE` block on the story
 itself, and nothing else writes one. Run:
 
 `scripts/ai-dlc/stamp-story-provenance.sh --terminal
-_bmad-output/planning-artifacts/s<N>-bug-fix-oneshot.md --profile
+_bmad-output/planning-artifacts/s<N>/bug-fix-oneshot.md --profile
 bug-story-provenance <story-file>`
 
 `--profile bug-story-provenance` is load-bearing: the default profile pins the

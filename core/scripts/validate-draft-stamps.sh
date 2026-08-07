@@ -93,24 +93,39 @@ ARTIFACT_DIR="$PROJECT_ROOT/_bmad-output/planning-artifacts"
 LAYER_DIRS="$PROJECT_ROOT/.claude/skills/ai-dlc/extensions $PROJECT_ROOT/.claude/skills/ai-dlc/overrides"
 
 ERRORS=0
+DISK_CHECKED=0
+LAYER_FILES=0
+SKIPS=""
 
 # ---------------------------------------------------------------------------
 # Half 1 — DISK. An unstamped draft in planning-artifacts means a Section 0
 # write path is unstamped somewhere in the RENDERED pipeline.
+#
+# THE ABSENT-DIRECTORY CASE IS A SKIP, NOT A PASS. It used to fall out of the
+# `if` with nothing checked and land on the same success line as a full run --
+# success by two roads sharing one exit code AND one report line, which is the
+# defect class this repo keeps shipping. Half 2 can still find a layer
+# violation on such a tree, so the exit code is unchanged; what changes is that
+# the verdict says which half ran.
 # ---------------------------------------------------------------------------
 if [ -d "$ARTIFACT_DIR" ]; then
   for draft in $DRAFTS; do
+    DISK_CHECKED=$((DISK_CHECKED + 1))
     unstamped="$ARTIFACT_DIR/$draft.md"
     if [ -f "$unstamped" ]; then
       echo "ERROR: unstamped analyst draft on disk:"
       echo "         _bmad-output/planning-artifacts/$draft.md"
       echo "       Rule 24 requires the sprint-stamped path:"
-      echo "         _bmad-output/planning-artifacts/s<N>-$draft.md"
+      echo "         _bmad-output/planning-artifacts/s<N>/$draft.md"
       echo "       (<N> = sprint_id from the pipeline snapshot, route.md Step 6)"
-      echo "       An unstamped write destroys the prior sprint's draft."
+      echo "       THE STAMP IS THE DIRECTORY, not the basename — see"
+      echo "       artifact-path-grammar.md. An unstamped write destroys the"
+      echo "       prior sprint's draft."
       ERRORS=$((ERRORS + 1))
     fi
   done
+else
+  SKIPS="${SKIPS} disk(no $ARTIFACT_DIR)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -122,8 +137,11 @@ fi
 # placeholder as written in the step files; an unstamped one is `.../<draft>.md`
 # with nothing between the directory separator and the basename.
 # ---------------------------------------------------------------------------
+LAYER_DIRS_SEEN=0
 for layer_dir in $LAYER_DIRS; do
   [ -d "$layer_dir" ] || continue
+  LAYER_DIRS_SEEN=$((LAYER_DIRS_SEEN + 1))
+  LAYER_FILES=$((LAYER_FILES + $(find "$layer_dir" -type f 2>/dev/null | grep -c . || true)))
   for draft in $DRAFTS; do
     # The directory prefix is the anchor: a stamped path has `s<N>-` between the
     # separator and the basename, so it cannot contain this literal substring.
@@ -131,7 +149,7 @@ for layer_dir in $LAYER_DIRS; do
     if [ -n "$hits" ]; then
       echo "ERROR: consumer layer declares an UNSTAMPED analyst-draft write path:"
       echo "$hits" | sed 's/^/         /'
-      echo "       Rule 24 requires: _bmad-output/planning-artifacts/s<N>-$draft.md"
+      echo "       Rule 24 requires: _bmad-output/planning-artifacts/s<N>/$draft.md"
       echo "       A step-domain layer restates its step's Section 0 verbatim, so"
       echo "       an unstamped path here reverts the stamp in the rendered"
       echo "       pipeline even when core is correct."
@@ -139,6 +157,7 @@ for layer_dir in $LAYER_DIRS; do
     fi
   done
 done
+[ "$LAYER_DIRS_SEEN" -eq 0 ] && SKIPS="${SKIPS} layer(no extensions/ or overrides/)"
 
 if [ "$ERRORS" -gt 0 ]; then
   echo ""
@@ -146,5 +165,12 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
-echo "PASS: all per-sprint analyst drafts are sprint-stamped."
+# THE VERDICT NAMES ITS OWN WORK. "all drafts are stamped" is true of a tree with
+# no drafts, no planning-artifacts directory and no consumer layer, and it was the
+# same sentence either way.
+if [ -n "$SKIPS" ]; then
+  echo "PASS WITH SKIPS: $DISK_CHECKED draft name(s) checked on disk, $LAYER_FILES layer file(s) scanned; SKIPPED:${SKIPS}"
+  exit 0
+fi
+echo "PASS: all per-sprint analyst drafts are sprint-stamped ($DISK_CHECKED draft name(s) checked on disk, $LAYER_FILES layer file(s) scanned)."
 exit 0

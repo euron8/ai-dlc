@@ -19,7 +19,7 @@ If `planning_offload: on` (default), do NOT run section 1 inline. Spawn
 an `analyst` subagent (Agent tool, bound to the analyst role file `.claude/team-roles/analyst.md` per SKILL.md Rule 19 — both bindings: `model` and the standing role-contract Read line) scoped to section 1
 — it reads the input artifacts and any codebase context the brief
 needs and writes a context digest to
-`_bmad-output/planning-artifacts/s<N>-discovery-context.md` (Rule 24
+`_bmad-output/planning-artifacts/s<N>/discovery-context.md` (Rule 24
 sprint stamp: `<N>` is `sprint_id` from the pipeline snapshot's Sprint
 Context, resolved at `route.md` Step 6), returning only
 `{artifact_path, summary, gaps}`. Then resume at section 2.
@@ -53,7 +53,7 @@ discovery evidence:
   `RESOLVED` or `DECIDED_AUTONOMOUSLY` terminal marker — a search
   filtered to only OPEN entries misses settled answers
 - `docs/adr/` (Architecture Decision Records) and
-  `docs/retro/sprint-*.md` for prior decisions on the same subsystem
+  `docs/retro/s*/retro.md` for prior decisions on the same subsystem
 
 If the project keeps no such files, the corpus is the
 archived-escalation / ADR / retro corpus wherever it lives; the search
@@ -156,7 +156,10 @@ verbatim or as close to verbatim as the source allows.
 
 Dispatch ONE `pm-escalated` subagent, bound per Rule 19 (model +
 role-contract line), to invoke `bmad-spec` **headless** with the product brief
-and its `LOCKED_REQUIREMENTS` block as input and slug `s<N>-<sprint-slug>`.
+and its `LOCKED_REQUIREMENTS` block as input and slug `<sprint-slug>` —
+**no sprint token in the slug**, because `bmad-spec` composes its output
+directory from it and the sprint belongs in the directory this step then
+files it under, not in the name.
 
 **The escalated route, not standard `pm`.** The kernel is the one artifact every
 later step reads — the PRD cites its capabilities, the architecture spine takes
@@ -183,9 +186,22 @@ context. `pm` owns the write (`pm.md`: "Produce and maintain the product
 brief and PRD via BMAD workflows"). `analyst` MUST NOT be used — it is
 read-only and cannot write `SPEC.md` or `.memlog.md`.
 
-**Output.** `_bmad-output/specs/spec-s<N>-<slug>/` holding `SPEC.md`, an
+**Output.** `_bmad-output/specs/s<N>/<slug>/` holding `SPEC.md`, an
 append-only `.memlog.md`, and any companions. The lead reads the returned
 paths, not the content.
+
+**File the package under the sprint directory before anything downstream
+cites it.** `bmad-spec` owns where it writes; this pipeline owns where the
+artifact LIVES (Rule 30, and `artifact-path-grammar.md`). If the returned
+paths are not already under `_bmad-output/specs/s<N>/<slug>/`, relocate the
+whole package there in one move and cite the new paths from here on:
+
+    mkdir -p _bmad-output/specs/s<N>
+    git mv <returned-package-dir> _bmad-output/specs/s<N>/<slug>
+
+Relocate BEFORE the PRD step reads `SPEC.md` (`research-requirements.md`
+§2) — a citation written against the pre-move path is a citation that stops
+resolving the moment the package is filed.
 
 **Every capability's `success` field MUST be in EARS form** — one of
 `THE <system> SHALL <response>`; `WHILE <state>, THE <system> SHALL …`;

@@ -10,26 +10,52 @@
 #
 # The real layout, which install.sh produces:
 #   <root>/_bmad-output/pipeline-snapshot.md          the hooks' "is a pipeline running" gate
-#   <root>/_bmad-output/planning-artifacts/*.md       the pass series
+#   <root>/_bmad-output/planning-artifacts/s<N>/*.md  the pass series, under the sprint slot
+#   <root>/_bmad-output/implementation-artifacts/sprint-status.yaml  the DECLARED sprint
 #   <root>/scripts/ai-dlc/validate-adversarial-convergence.sh  core/scripts/ -> consumer scripts/
+#   <root>/scripts/ai-dlc/sprint-status.sh + <root>/.claude/schemas/sprint-status.json
+#
+# THE DECLARED SPRINT IS PART OF THE LAYOUT NOW, and leaving it out is not a smaller seed —
+# it is a different test. Both hooks scope the live-series glob to `s<sprint-id>/`, so a tree
+# with no envelope resolves no sprint, logs ADVERSARIAL_STATE_UNADJUDICABLE and arms nothing.
+# That path has its own arm in run.sh; every arm here needs the sprint to actually resolve.
 set -eu
 
 CASE="${1:?case}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-VALIDATOR=""
-for c in "$HERE/../../scripts/validate-adversarial-convergence.sh" \
-         "$HERE/../../../scripts/ai-dlc/validate-adversarial-convergence.sh" \
-         "$HERE/../../core/scripts/validate-adversarial-convergence.sh"; do
-  [ -f "$c" ] && VALIDATOR="$c" && break
-done
+pick_one() { for c in "$@"; do [ -f "$c" ] && { printf '%s' "$c"; return; }; done; }
+VALIDATOR="$(pick_one "$HERE/../../scripts/validate-adversarial-convergence.sh" \
+                      "$HERE/../../../scripts/ai-dlc/validate-adversarial-convergence.sh" \
+                      "$HERE/../../core/scripts/validate-adversarial-convergence.sh")"
 [ -n "$VALIDATOR" ] || { echo "FIXTURE ERROR: cannot locate the validator" >&2; exit 2; }
+SPRINT_STATUS="$(pick_one "$HERE/../../scripts/sprint-status.sh" \
+                          "$HERE/../../../scripts/ai-dlc/sprint-status.sh" \
+                          "$HERE/../../core/scripts/sprint-status.sh")"
+[ -n "$SPRINT_STATUS" ] || { echo "FIXTURE ERROR: cannot locate sprint-status.sh" >&2; exit 2; }
+STATUS_SCHEMA="$(pick_one "$HERE/../../schemas/sprint-status.json" \
+                          "$HERE/../../../.claude/schemas/sprint-status.json" \
+                          "$HERE/../../core/schemas/sprint-status.json")"
+[ -n "$STATUS_SCHEMA" ] || { echo "FIXTURE ERROR: cannot locate sprint-status.json" >&2; exit 2; }
 
+# NOT 1. `sprint-id` returns 1 for a greenfield tree (route.md Step 6 rule 2), so a
+# fixture seeded at sprint 1 cannot tell a RESOLVED sprint from the default -- and the
+# no-envelope arm in run.sh would land on the same directory either way and prove nothing.
+SPRINT=7
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/divergence-XXXXXX")"
-ART="$WORK/_bmad-output/planning-artifacts"
-mkdir -p "$ART" "$WORK/scripts/ai-dlc"
+ART="$WORK/_bmad-output/planning-artifacts/s${SPRINT}"
+mkdir -p "$ART" "$WORK/scripts/ai-dlc" "$WORK/.claude/schemas"
 touch "$WORK/_bmad-output/pipeline-snapshot.md"
 cp "$VALIDATOR" "$WORK/scripts/ai-dlc/validate-adversarial-convergence.sh"
+cp "$SPRINT_STATUS" "$WORK/scripts/ai-dlc/sprint-status.sh"
+cp "$STATUS_SCHEMA" "$WORK/.claude/schemas/sprint-status.json"
+bash "$WORK/scripts/ai-dlc/sprint-status.sh" roll --sprint "$SPRINT" --intensity full --root "$WORK" >/dev/null 2>&1 \
+  || { echo "FIXTURE ERROR: sprint-status.sh roll failed; no declared sprint to scope on" >&2; exit 2; }
+# The seed asserts its own precondition. Without this the hooks below would resolve no
+# sprint, adjudicate nothing, and every ALLOW assertion in run.sh would pass for the wrong
+# reason -- a fixture green because its subject never ran.
+[ "$(cd "$WORK" && bash scripts/ai-dlc/sprint-status.sh sprint-id 2>/dev/null)" = "$SPRINT" ] \
+  || { echo "FIXTURE ERROR: sprint-id does not resolve to $SPRINT in the seeded tree" >&2; exit 2; }
 
 # $1 n  $2 crit  $3 prior  $4 major  $5 verdict  $6 sha  $7 resolves(optional)
 pass() {
@@ -49,7 +75,7 @@ pass() {
     printf 'findings_minor: 2\n'
     printf 'verdict: %s\n' "$v"
     printf 'SKILL_INVOCATION_PROVENANCE_END -->\n'
-  } > "$ART/s1-brief-adversarial-p${n}.md"
+  } > "$ART/brief-adversarial-p${n}.md"
 }
 
 # $1 resolves-basename  $2 kind  $3 sha_before  $4 sha_after  $5 bytes_before  $6 bytes_after
@@ -68,7 +94,7 @@ record() {
     printf 'scope_delta: reverted the p1->p2 repair wholesale\n'
     printf 'operator_authorization: 2026-07-12T03:00:00Z | "revert the p1 to p2 repair wholesale"\n'
     printf 'ADVERSARIAL_RESOLUTION_END -->\n'
-  } > "$ART/s1-brief-resolution-p2.md"
+  } > "$ART/brief-resolution-p2.md"
 }
 
 case "$CASE" in
@@ -82,7 +108,7 @@ case "$CASE" in
   divergent-resolved)
     pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
     pass 2 3 3 1 DIVERGENT_HARD_BLOCK   bbb2
-    record s1-brief-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000
+    record brief-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000
     ;;
 
   # A nonzero MAJOR held at zero CRITICAL. Neither converging nor diverging.
@@ -109,10 +135,10 @@ case "$CASE" in
   resolved-then-touched)
     pass 1 2 2 1 EXIT_CONDITION_NOT_MET aaa1
     pass 2 3 3 1 DIVERGENT_HARD_BLOCK   bbb2
-    record s1-brief-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000
-    pass 3 0 0 0 EXIT_CONDITION_MET     aaa1 s1-brief-resolution-p2.md
+    record brief-adversarial-p2.md REVERT_REPAIR bbb2 aaa1 4200 4000
+    pass 3 0 0 0 EXIT_CONDITION_MET     aaa1 brief-resolution-p2.md
     sleep 1
-    touch "$ART/s1-brief-adversarial-p2.md"
+    touch "$ART/brief-adversarial-p2.md"
     ;;
 
   *) echo "FIXTURE ERROR: unknown case '$CASE'" >&2; exit 2 ;;

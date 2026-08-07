@@ -88,7 +88,7 @@ the discussion:
 
 2. **Transcript file commit.** The party-mode transcript (all agent
    responses in full, not summarized) is committed to
-   `_bmad-output/party-mode-transcripts/sprint-<N>-retro.md`. This
+   `_bmad-output/party-mode-transcripts/s<N>/retro.md`. This
    file is the byte-for-byte authoritative record; the retro doc's
    "Agent findings" section in Step 3 summarizes but does not
    replace it.
@@ -135,7 +135,7 @@ invoked_at: <ISO 8601 UTC, to the second>   # Check 24 orders the pass series on
 tool_use_id: <toolu_... — from the Skill tool response, or the Agent dispatch that spawned you> # the id of the Skill/Agent call that ran this evaluation. CHECKED FOR SHAPE ONLY — nothing verifies it against a transcript, so it is not proof the evaluation ran.
 mode: subagent                              # never solo.
 lead_role: <the step file that invoked or dispatched the evaluation> # which step owns this pass.
-transcript_path: <_bmad-output/party-mode-transcripts/sprint-<N>-retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.
+transcript_path: <_bmad-output/party-mode-transcripts/s<N>/retro.md@<sha>> # required for retro party-mode; byte-matched by validate-retro-evidence.sh.
 findings_critical: <int>                    # the residue the verdict is adjudicated against. Required of EVERY known evaluation, not only verdict-bearing ones — see rules.counts_always.
 findings_major: <int>                       # omit it and the stall rung goes silent for the ENTIRE series.
 findings_minor: <int>                       # the nitpick bucket. Does not block the exit condition.
@@ -168,7 +168,7 @@ summary**. It reads:
 - The committed party-mode transcript from Step 2
 
 and writes the draft to
-`_bmad-output/retro-artifacts/sprint-<N>-retro-draft.md`. Two hard
+`_bmad-output/retro-artifacts/s<N>/retro-draft.md`. Two hard
 constraints on that draft:
 - The Agent-findings summary MUST cite the existing `transcript_path:
   path@<sha>` verbatim and summarize that already-byte-cited transcript.
@@ -185,7 +185,7 @@ and the Step-4
 5-layer enforcement decisions. The lead assembles the analyst draft and
 its own prescriptive sections into the final retro doc.
 
-Write the retro to `docs/retro/sprint-N.md` with:
+Write the retro to `docs/retro/s<N>/retro.md` with:
 - Sprint summary (planned vs delivered, rework cycles, autonomous decisions)
 - `hard_block_count` (integer): total HARD_BLOCKs encountered this sprint
 - `hard_block_class[]`: list of HARD_BLOCK classifications (e.g., requirement-divergence, scope-conflict, infra-outage)
@@ -340,15 +340,29 @@ within that window fails the next retro. Shipping a gate wired to no workflow
 trigger, or wired only to a workflow that does not run on any PR in the
 exercise window, is the dormant-gate anti-pattern.
 
-Enforcement (conditional on the consumer shipping CI): where
-`.github/workflows/validate-ci-gates.yml` is present, `scripts/ai-dlc/validate-ci-gates.sh`
-runs on every pull request; a script-based consumer with no `.github/workflows/`
-runs it locally. The script scans `docs/retro/**/*.md`
-for declared gate names and grep's `.github/workflows/**` for each; any
-declared gate with zero workflow matches is flagged as DORMANT and the
-workflow exits non-zero, failing the PR check. Retro authors MUST ship the
-gate's workflow wiring in the same PR as the retro's gate declaration, or
-cite the wiring PR that did.
+Enforcement: `scripts/ai-dlc/validate-ci-gates.sh` scans `docs/retro/**/*.md`
+for declared gate names and matches each against an enforcement surface; any
+declared gate with no match is flagged as DORMANT and the run exits non-zero.
+Retro authors MUST ship the gate's wiring in the same PR as the retro's gate
+declaration, or cite the wiring PR that did.
+
+**A consumer with no `.github/workflows/` MUST declare its surface, and doing
+nothing is not the local option.** The script has two ways to adjudicate a gate
+and a project needs at least one of them:
+
+- `AI_DLC_CI_SURFACE` — the directory that actually holds the gates, when CI
+  lives somewhere other than `.github/workflows/`.
+- `AI_DLC_CI_ALIAS_TABLE` — a file of `gate|enforcer_id|enforcing_file|anchor`
+  rows, for a project whose gates are enforced LOCALLY (a pre-push hook, a
+  script). This path consults only the files the rows name, so it adjudicates
+  in full with no CI directory present at all.
+
+With neither, the run is VACUOUS (exit 78) and **prints every declared gate
+name it could not check** — that inventory is the deliverable in that case, and
+§4's unexercised-gate audit reads it. Measured on the reference consumer before
+this was so: six unique gate names declared across 14 retro files, none of them
+ever enforcement-checked, because the validator returned 78 before reading a
+single retro and named nothing.
 
 Declaration convention: when a retro adds a new CI gate, name it using the
 canonical form `` CI gate `<gate-name>` `` (the gate name enclosed in
@@ -365,7 +379,7 @@ ensures no sprint ends with stale OPEN/IN_SPRINT state.
 
 **Close-Out gather (Dispatch B).** Dispatch an `analyst` to RUN and MATCH —
 never to dispose. It writes its tables to
-`_bmad-output/retro-artifacts/sprint-<N>-closeout-tables.md`:
+`_bmad-output/retro-artifacts/s<N>/closeout-tables.md`:
 - **Deferral reconciliation.** For each deferral / re-affirmed deferral /
   passive monitor, the analyst RUNS the live condition (the cited test,
   query, or observable) and returns the reconciliation table: item,
@@ -500,7 +514,7 @@ gate.
 
        scripts/ai-dlc/sprint-status.sh close \
          --evidence "<what proves the sprint closed: PR/merge, deploy, smoke>" \
-         --retro-doc docs/retro/sprint-<N>.md
+         --retro-doc docs/retro/s<N>/retro.md
 
    This flips `status: done` and writes the `sprint_<N>_housekeeping:` block
    (`envelope_status: done` + non-empty `closure_evidence`) that Step 5c's
@@ -641,8 +655,14 @@ this sprint.
 After the audit is recorded, rotate — the last write to the log before sprint
 close:
 
+    mkdir -p _bmad-output/implementation-artifacts/s<N>
     mv _bmad-output/pipeline-continuation-log.md \
-       _bmad-output/pipeline-continuation-log-archive-s<N>.md
+       _bmad-output/implementation-artifacts/s<N>/pipeline-continuation-log-archive.md
+
+**Every rotation archive lands at `implementation-artifacts/s<N>/<log>-archive.md`,
+including the logs whose live copy sits at `_bmad-output/` root.** The directory is
+the only sprint slot (`artifact-path-grammar.md`), so the archive's basename carries
+no sprint token and there is one destination rule rather than one per log.
 
 The live log is NOT recreated by hand. All three hooks (`ai-dlc-pause.sh`,
 `ai-dlc-continue.sh`, `ai-dlc-acknowledge.sh`) re-seed the header on their next
@@ -658,8 +678,9 @@ scoped to one.
 at §1 of this step) is append-only and hook-written; Rule 25(d)'s budget check covers
 the class, and this rotates the instance:
 
+    mkdir -p _bmad-output/implementation-artifacts/s<N>
     mv _bmad-output/context-mode-protection-log.md \
-       _bmad-output/context-mode-protection-log-archive-s<N>.md
+       _bmad-output/implementation-artifacts/s<N>/context-mode-protection-log-archive.md
 
 Same contract: the hook re-seeds the header on its next write, the archive is
 write-only, rotation is unconditional and per-sprint.
@@ -667,7 +688,7 @@ write-only, rotation is unconditional and per-sprint.
 **Discard the retro scratch directory.** `_bmad-output/retro-artifacts/` holds
 this step's dispatch inputs — the retro draft, the close-out tables, the
 next-sprint bundle. Every one of them has already been consumed and its
-conclusions committed in `docs/retro/sprint-<N>.md`, which is the record. They
+conclusions committed in `docs/retro/s<N>/retro.md`, which is the record. They
 are scratch, not a log, so Rule 25(a)'s no-loss archive duty does not apply and
 they are deleted rather than rotated:
 
@@ -830,7 +851,7 @@ This typically includes:
 - `docs/escalations/pending.md` (escalation entries)
 
 **Retro artifacts** (produced in steps 3-5 above):
-- `docs/retro/sprint-N.md` (the retro document)
+- `docs/retro/s<N>/retro.md` (the retro document)
 - Any files modified by process improvements (CLAUDE.md, team roles,
   coding-conventions.md, pipeline step files)
 - `docs/ai-dlc-feedback.md` (if updated)
@@ -960,19 +981,24 @@ follow their audit, these must follow the merge.
    entry; deploy-validate's was the last write.
 3. Archive the WHOLE live log verbatim:
 
+       mkdir -p _bmad-output/implementation-artifacts/s<N>
        git mv _bmad-output/implementation-artifacts/gate-log.md \
-              _bmad-output/implementation-artifacts/gate-log-archive-s<N>.md
+              _bmad-output/implementation-artifacts/s<N>/gate-log-archive.md
 
    If it holds more than this sprint — a missed prior rotation — archive all of
-   it and name the file for the span it covers
-   (`gate-log-archive-pre-s<N+1>.md`), not just the latest sprint.
+   it under the sprint you are closing and **state the span in the archive's
+   first line** (`<!-- covers s<first>..s<N> -->`). The span does NOT go in the
+   filename: a basename carrying a sprint token is what forces a reader to
+   search, and there is exactly one `gate-log-archive.md` per sprint directory
+   so nothing needs disambiguating.
 4. Recreate the live log with only the header line `# Gate Log` and a trailing
    newline. No retained entries: no step reads a prior sprint's gate entries,
    counters carry forward in the retro doc, and the cluster audit is git-derived.
 5. **Rotate `compaction-log.md` the same way, IF IT EXISTS.** Most sprints never
    compact and the file is absent — that absence is a pass, not a missed
    rotation; record "no compactions this sprint" and skip to 6. Otherwise
-   `git mv` it to `compaction-log-archive-s<N>.md` and recreate it empty; the
+   `git mv` it to `implementation-artifacts/s<N>/compaction-log-archive.md` and
+   recreate it empty; the
    `PostCompact` hook re-seeds its header on the next write. Confirm §4a's
    artifact-size audit already read it first — its `recovery_injected: no`
    entries must reach the retro doc, because after rotation the live log no
@@ -991,7 +1017,7 @@ Issued AFTER the 7a merge (no dispatch before Step 5 can cover post-merge
 inputs, §2 blocker 2). Dispatch an `analyst` —
 **Dispatch C** — to gather all six input classes below (including the
 relatedness analysis in input 6) and write the structured bundle to
-`_bmad-output/retro-artifacts/sprint-<N>-next-inputs.md`. The lead derives
+`_bmad-output/retro-artifacts/s<N>/next-inputs.md`. The lead derives
 the theme (7c) and authors the paste-able prompt (7d) from that bundle
 **plus its own retained retro findings** — the Step-3 improvements and
 Step-4 dispositions stay resident because the lead decided them; only the
@@ -1012,12 +1038,12 @@ summarize prematurely:
    have a rationale indicating they should return in a future sprint.
 3. **Open escalations.** From `docs/escalations/pending.md`, list any
    entries not resolved during this sprint.
-4. **Unexercised gates.** Any CI gate declared in `docs/retro/sprint-N.md`
+4. **Unexercised gates.** Any CI gate declared in `docs/retro/s<N>/retro.md`
    (this sprint's retro) that has not yet run green on a PR — these must
    be exercised in the exercise window or the next retro fails (see
    "Empirical gate validation" above).
 5. **Retro improvements with sprint-N+1 follow-ups.** Any action items
-   in `docs/retro/sprint-N.md` tagged for the next sprint (e.g.,
+   in `docs/retro/s<N>/retro.md` tagged for the next sprint (e.g.,
    "Sprint N+1 task to add weekly schedule cron" from the path-filter
    dormancy scan).
 6. **Related-epic scope candidates.** From the broader epics list in
