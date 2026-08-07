@@ -14,7 +14,13 @@ They were written before the releases that shipped them, and the releases moved 
 Checked at handoff: `layer-drift.sh:648` was the env-key guard and is now other code (v0.275.0
 changed it), and `SKILL.md:506` described the invitation sentence v0.282.0 deleted. Both sit in
 sections marked SHIPPED, so they are records of why a thing was done, not instructions. Every
-`path:line` ABOVE `## Context` was re-checked at handoff and resolves. Re-verify any citation
+`path:line` ABOVE `## Context` was re-checked at handoff: **26 citations into THIS repo, 0 past
+end-of-file.** Four more point into the CONSUMER — `s301-stories-adversarial-p2.md:327`,
+`s301-epics-repair-p5d.md:115`, `s301-stories-adversarial-p6.md:252`,
+`s301-stories-repair-p5.md:581` — and **the s301 close-out archived all four**, so they now live
+under `_bmad-output/planning-artifacts/archive/s301-<series>/` rather than at the paths quoted.
+The content is unchanged (the archive was `git mv` with per-file sha verification); only the
+prefix moved. Re-verify any citation
 below it against the tree before acting on it.
 
 Working repo: `/Users/n8/git/ai-dlc` (the distribution). Reference consumer:
@@ -39,17 +45,21 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**The working tree is clean and every merged branch is listed here** — v0.283.0 #373, v0.284.0
-#374, plan corrections #375/#376/#378/#379/#380/#384/#385, v0.285.0 #377, v0.286.0 #381,
-v0.287.0 #383. `origin/main` is at **`0.287.0`**.
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.292.0`**, working tree
+clean, and every release this plan produced is merged — the table under §*Where things stand*
+lists all eighteen with their PR numbers. The previously-parked F3 branch shipped after two
+renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
-**ONE BRANCH IS PARKED AND IT IS GATE-BLOCKED, NOT UNFINISHED.**
-`feat/v0.288.0-anchors-assertion-count`, commit `603b584`, carries plan item 7's **F3** —
-complete, with its fixture at 12 assertions and both new arms mutation-tested to a single-arm
-kill. **It cannot be pushed**, and the blocker is not in the change: `self-update-join-gate`
-goes red because the self-update gate invokes each gating script BARE, and three of the five
-exit 2 on a bare invocation. See §*Item 11 — the self-update gate compares two usage errors*.
-**Ship item 11 first, then this branch pushes unmodified.** Do not weaken F3 to get it green.
+**graph is at `0.292.0 / c5e7daa` and is QUIESCENT.** s301 is closed and landed on its `main`;
+s302 has not started and is held until item 10 lands and is pulled. Nothing in the consumer is
+waiting on this repo, and no graph session is running.
+
+**Two consumer obligations are open and NEITHER GATES ANYTHING** — `OWED-DEVPUSH-RESTATES-CORE`
+and `OWED-STS-DOMAIN-AB-ABSORBED`, both enumerable in graph's debt audit, both re-raised by every
+pull until discharged. The `dev-push.md` split is the real work behind the first. It is
+consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, and opening a
+graph session for it while item 10 is the critical path is churn. Take it when graph is next
+open for another reason.
 
 **NEXT ACTION: 10a + 10b, shipped as ONE release.** Everything ahead of them in the execution
 order is closed: the close-out landed, the pull is done, item 11 shipped as v0.288.0, the parked
@@ -66,15 +76,17 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 
 | # | item | why here |
 |---|---|---|
-| 1 | ~~**9** — s301 close-out prompt~~ **DONE**, `s301-close-out.md` | owed anyway, and it creates the sprint boundary hop 2 needs. **Now waiting on the operator to run it** |
-| 2 | ~~**operator: close s301, land on `main`, TWO-HOP pull**~~ **DONE** — graph at `0.292.0 / c5e7daa` | graph is at `0.274.0` against our `0.288.0`. **`main` is 143 commits stale** — s300 AND s301 live only on the sprint branch, and neither of s300's close-out commits reached `main`. Landing the close-out is what gives s302 a clean base; without it the pull and the migration both run against a branch nothing merges to |
-| 3 | **10a + 10b** — declare the path grammar, bind core to it | pure additions, no path moves, so nothing item 7 depends on changes. **10b is what stops the regrowth and MUST precede any migration** |
-| 4 | **11** — the self-update gate's bare-invocation probe | unblocks the parked branch |
-| 5 | **v0.288.0** (parked branch) | pushes unmodified once 11 lands |
+| ~~1~~ | ~~**9** — s301 close-out prompt~~ | **DONE** — `s301-close-out.md`, landed on graph's `main` at `1c72823af` |
+| ~~2~~ | ~~operator: close s301, land on `main`, TWO-HOP pull~~ | **DONE** — graph at `0.292.0 / c5e7daa`, 25 HARD in / 0 out, layer debt 2 → 0 |
+| ~~3~~ | ~~**11** — the self-update gate's bare-invocation probe~~ | **DONE** — v0.288.0 (#388) |
+| ~~4~~ | ~~F3, the parked branch~~ | **DONE** — shipped in the v0.289.0–v0.292.0 chain after two renumbers |
+| **5** | **10a + 10b** — declare the path grammar, bind core to it. **ONE release.** | **← START HERE.** No path moves, so nothing item 7 depends on changes. **10b MUST precede any migration**, and `CLAUDE.md` fails builds on a declaration with no enforcer, which is why they are not split |
 | 6 | **7's remainder** — the `validate-layer-entries.sh` sweep | path-independent, and it surfaces more reader sites for 10c |
 | 7 | **10c – 10e**, with **F4 folded into 10c** | F4 is a `docs/retro/**` reader-site fix and 10c moves those paths |
 | 8 | **8** — push-candidate ledger triage | 10c changes files several `verify:` receipts anchor to |
-| 9 | **6** — promote LC-E6/LC-O15 | still gated on the burn-down the pull performs |
+| 9 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
+| — | **12**, **13** | neither gates anything; take them when convenient |
+
 
 **Two constraints, and neither is a preference.** **10b before 10d**: a migration without the
 binding is undone by the next sprint's writes. **The pull before 10d/10e**: 10e wires a
@@ -199,15 +211,11 @@ before you write code.
     move no paths and now run EARLY; F4 is folded into 10c. See §*Order of execution*.
     It is also the one item in this plan that **writes to the consumer**, via a migration
     script core ships and the OPERATOR runs — the read-only boundary at the top still binds.
-13. **Verify the reference consumer's step-7 finding, then fix it.** REPORTED BY THE CONSUMER,
-    NOT YET REPRODUCED HERE — record it as theirs until it is. They report that step 7's
-    post-apply re-run instruction disarms its own check: passing `theirs` as the base makes
-    `EXTENSION-HOOK-DRIFT` unable to fire, so `hard-blockers.sh` printed `0 HARD blockers.`
-    while all 18 adjudications were unrecorded. They caught it by running both bases side by
-    side. The emit at `layer-drift.sh:1296` keys on `${BASE}..${THEIRS}`, so a base equal to
-    theirs compares a range to itself — the mechanism is plausible on its face. **Reproduce it
-    against a scratch consumer before writing the fix**, because a gate that prints zero is the
-    exact shape this repo keeps shipping, and a fix aimed at the wrong layer would leave it.
+11. **Fix the self-update gate's bare-invocation probe.** It runs each gating script with no
+    arguments and no stdin and compares exit codes, but **three of the five gating scripts exit
+    2 — a usage error — when invoked that way**, so the differential compares two usage errors,
+    lands on `SELF-UPDATE-UNDECIDED` and defers. Any machinery-only pull touching one of those
+    three defers permanently. Blocks the parked v0.288.0 branch. See §*Item 11*.
 12. **Bind the fixture ambient-env guard, once the join is derivable.** v0.289.0 fixed three
     fixtures that inherited a consumer's `AI_DLC_*` tunables and tested the CONFIG instead of the
     CODE. The guard that would prevent recurrence is not shippable as written: requiring the
@@ -217,11 +225,15 @@ before you write code.
     where clearing would break the fixture. Control: **36** fixtures already carry the loop. The
     correct subject set is the declared *consumer-settable* tunables, not any `AI_DLC_*` token —
     derive that side first, then measure the false-positive set again before shipping.
-11. **Fix the self-update gate's bare-invocation probe.** It runs each gating script with no
-    arguments and no stdin and compares exit codes, but **three of the five gating scripts exit
-    2 — a usage error — when invoked that way**, so the differential compares two usage errors,
-    lands on `SELF-UPDATE-UNDECIDED` and defers. Any machinery-only pull touching one of those
-    three defers permanently. Blocks the parked v0.288.0 branch. See §*Item 11*.
+13. **Verify the reference consumer's step-7 finding, then fix it.** REPORTED BY THE CONSUMER,
+    NOT YET REPRODUCED HERE — record it as theirs until it is. They report that step 7's
+    post-apply re-run instruction disarms its own check: passing `theirs` as the base makes
+    `EXTENSION-HOOK-DRIFT` unable to fire, so `hard-blockers.sh` printed `0 HARD blockers.`
+    while all 18 adjudications were unrecorded. They caught it by running both bases side by
+    side. The emit at `layer-drift.sh:1296` keys on `${BASE}..${THEIRS}`, so a base equal to
+    theirs compares a range to itself — the mechanism is plausible on its face. **Reproduce it
+    against a scratch consumer before writing the fix**, because a gate that prints zero is the
+    exact shape this repo keeps shipping, and a fix aimed at the wrong layer would leave it.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -245,6 +257,11 @@ sections in the design record below are labelled SHIPPED.
 | v0.285.0 | #377 | **plan item 2b.** Core **Rule 31** — a countable assertion carries the derivation that produced it. Absorbs the consumer's Rule 930 count discipline, which core had nowhere. The enforcer was built, measured and NOT shipped; `**Carrier:** none` is a declared I79 gap (5 → 6). |
 | v0.286.0 | #381 | **plan item 3.** The live adversarial series is derived by filtering INSIDE the pick, so a filename that defeats the pass-suffix strip can no longer become a one-pass series the stall guard reports as `CONTINUE`. `I81` binds the expression across both hooks and asserts it is the filtering form. |
 | v0.287.0 | #383 | **plan item 7, first two findings.** `validate-mandatory-rules.sh` reports a skipped check as skipped (`PASS WITH SKIPS`, named numbers, verified floor) instead of folding three SKIPs into `all 6 checks passed`; `validate-spawn-ledger.sh` gets an `OK WITH NO PIN COMPARED` verdict so it stops asserting a pin it never fetched. New fixture `mandatory-rules-skip-accounting` (6 arms, 6 mutants); `check-22-spawn-ledger` 13 → 16 assertions. |
+| v0.288.0 | #388 | **plan item 11.** The self-update gate probes each gating script BARE; three of five exit 2 (usage error) that way, so the differential compared two usage errors, landed on `UNDECIDED` and deferred every machinery pull touching them. Agreement AT 2 is now its own `OK` arm, scoped so BOTH sides must be 2. |
+| v0.289.0 | #392 | Three snapshot fixtures inherited ambient `AI_DLC_*` from a consumer's `settings.json` and tested the CONFIG, not the CODE. 33 siblings already carried the guard. Reported by the consumer while retiring `steps__retro__pipeline-snapshot-ceiling`. |
+| v0.290.0 | #393 | `EXTENSION-TITLE-MATCHES-CORE` told the operator to declare `extends:` and promised the row would stop firing, ten lines under the block that deliberately removed that suppression. Remedy text corrected. |
+| v0.291.0 | #395 | …and v0.290.0's correction was itself inert: the code is not in `ADJ_CODES`, so no `subject_digest` was published and **no conforming record could be written at all**. The row is now keyed; a recorded verdict silences it until entry or core section moves. Level stays `WARN`. |
+| v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 
 **Two absorptions did NOT come up wholesale, and both refusals are worth carrying forward.**
 A consumer override is evidence that a consumer needed something; it is not evidence that core
@@ -902,6 +919,12 @@ line-initial `sed`/`grep` extractors — the exact shape that produced the
 distinct wording, and a control on the same line at the last.
 
 ## Closing s301: what the s300 close-out actually did
+
+**SUPERSEDED — s301 IS CLOSED and this section is history.** The close-out ran, landed on graph's
+`main` at `1c72823af`, and the executable procedure it fed is `docs/plans/s301-close-out.md` with
+its measurements in `-derivation.md`. Two claims below are now FALSE and are kept only as the
+record of what was true beforehand: difference 5 says `main` still lacks `7ecd99dd1` (it has it),
+and the whole section presumes s301 is open. Do not act on it.
 
 Reconstructed so the close-out prompt does not have to be invented. **It was TWO commits, not
 one**: `7ecd99dd1` (the archive) and `ff490ebd0` (the envelope), ~95 minutes apart, with three
