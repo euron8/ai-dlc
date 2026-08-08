@@ -221,6 +221,78 @@ else
   bad "override gave pool '$(pool_of)' and/or did not name its source"
 fi
 
+# --- 10. AN ARCHIVED PER-SPRINT COPY IS NOT A POOL MEMBER ----------------------
+# The pool finds its members by BASENAME across two whole trees. That was safe
+# until the artifact-path migration renamed every historical `architecture-s251.md`
+# to `s251/architecture.md` -- the live basename -- at which point the search began
+# summing the archive. Measured on the reference consumer: 30 files summed under a
+# label reading "(4 planning artifacts)", 275,812 tok against 117,379 live, and the
+# consumer was told to consolidate while sitting at 36% of its pool.
+#
+# THE DECOY IS THE POINT OF THIS ARM. `s301-close-out/` begins with `s` and three
+# digits and is NOT a sprint slot; excluding it would silently drop a live artifact
+# from a budget, which fails OPEN on a HARD_BLOCK. The slot is a whole path
+# COMPONENT, and the arm asserts both directions in one run.
+role 'claude-sonnet-5[1m]'
+artifacts 1
+mkdir -p "$WORK/_bmad-output/planning-artifacts/s251" \
+         "$WORK/_bmad-output/planning-artifacts/s271/party-mode-transcripts" \
+         "$WORK/_bmad-output/planning-artifacts/s301-close-out" || exit 2
+head -c 200000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s251/architecture.md"
+head -c 200000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s271/party-mode-transcripts/prd.md"
+head -c 200000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s301-close-out/prd.md"
+run >/dev/null
+pool_rows() { awk '/^whole-read pool/{i=1;next} i&&/^$/{exit} i' "$WORK/out.txt"; }
+
+if ! grep -qE 's251/architecture\.md|s271/party-mode-transcripts/prd\.md' <<<"$(pool_rows)"; then
+  ok "an archived s<N>/ copy is excluded from the pool"
+else
+  bad "an archived s<N>/ copy was summed into the pool -- the migration's basenames are being counted"
+  sed 's/^/        /' <<<"$(pool_rows)"
+fi
+# The decoy control. Without it the arm above passes for a checker that excludes
+# anything starting with `s` and a digit.
+if grep -q 's301-close-out/prd\.md' <<<"$(pool_rows)"; then
+  ok '  and s301-close-out/ is NOT read as a slot -- a live artifact is still summed'
+else
+  bad "  a non-slot directory beginning s<digits> was excluded -- the budget fails OPEN"
+fi
+# The label is derived from the same rows it sums. 5 = the four + the decoy.
+if grep -qE 'WHOLE-READ POOL \(5 planning artifacts\)' "$WORK/out.txt"; then
+  ok "  and the label counts the rows it summed, not a literal"
+else
+  bad "  the label disagrees with the row set: $(grep -oE 'WHOLE-READ POOL \([^)]*\)' "$WORK/out.txt" | head -1)"
+fi
+
+# --- 11. THE MUTATION TEST — prove assertion 10 measures the exclusion ---------
+# Drop the exclusion call on a COPY and demand the archived copies come back. An
+# arm asserting an ABSENCE is exactly the shape that passes when the files were
+# never written, and this is what separates the two.
+MUTANT2="$WORK/mutant2.sh"
+sed 's/^\([[:space:]]*\)is_sprint_slotted "\${f#"\$ROOT"\/}" \&\& continue$/\1:/' "$VALIDATOR" > "$MUTANT2" || exit 2
+if cmp -s "$VALIDATOR" "$MUTANT2"; then
+  echo "FIXTURE ERROR: mutation matched nothing -- the pool's exclusion call was rewritten" >&2
+  echo "  update the sed pattern in assertion 11 to match the real call site" >&2
+  exit 2
+fi
+bash "$MUTANT2" --root "$WORK" >"$WORK/out.txt" 2>&1
+if grep -q 's251/architecture\.md' <<<"$(pool_rows)"; then
+  ok "MUTATION: removing the exclusion brings the archived copy back into the pool"
+else
+  bad "MUTATION: the archived copy stayed out with the exclusion removed -- assertion 10 proves nothing"
+  sed 's/^/        /' <<<"$(pool_rows)"
+fi
+# An UNMUTATED control from the same copy step. A mutant that dies sourcing
+# anything emits no rows at all, and "no rows" would otherwise score as a kill.
+CONTROL="$WORK/control.sh"
+cp "$VALIDATOR" "$CONTROL" || exit 2
+bash "$CONTROL" --root "$WORK" >"$WORK/out.txt" 2>&1
+if grep -q 'planning-artifacts/prd\.md' <<<"$(pool_rows)"; then
+  ok "  and an unmutated copy run the same way still emits pool rows"
+else
+  bad "  the unmutated copy emitted no pool rows -- assertion 11's kill is the harness, not the mutation"
+fi
+
 echo ""
 if [ "$fails" -eq 0 ]; then
   echo "whole-read-pool: PASS"

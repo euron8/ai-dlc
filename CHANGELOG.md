@@ -34,6 +34,56 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.317.0] — 2026-08-08
+
+### The whole-read pool summed 30 files under a label reading "(4 planning artifacts)"
+
+The pool finds its members by basename across `_bmad-output/` and `docs/`. That was correct until
+item 10's artifact-path migration renamed every historical `architecture-s251.md` to
+`s251/architecture.md` — the **live** basename — at which point the same `find -name` started
+summing the archive alongside the live file. The check was right; the corpus moved under it.
+
+Measured against the reference consumer, with a summation control:
+
+```
+pool rows                          30      (the label said 4)
+  LIVE                    4    117,379 tok
+  per-sprint archive     23    153,353 tok
+  party-mode transcript   3      5,080 tok
+                              -----------
+  control: sum                 275,812 tok  == the reported figure, exactly
+```
+
+The consumer was being told `OVER … 417% of it → consolidate` while its four live artifacts sat at
+**36% of its correctly-resolved pool**. A remedy no amount of correct execution can satisfy is the
+inert-mechanism class, and it trains an operator to ignore the row.
+
+**All 26 spurious rows carried an `s<N>` path component**, so one rule excludes all of them:
+`is_sprint_slotted()` matches `s[0-9]+` against a whole path **component**, reusing the artifact-path
+grammar's own spelling (`validate-artifact-paths.sh:167,241`) rather than inventing a second one.
+The filename is dropped before the search, because a file is never a slot.
+
+**The decoy is the part that had to be measured.** `s301-close-out/` begins with `s` and three
+digits and is **not** a slot; excluding it would silently drop a live artifact from a HARD_BLOCK
+budget, which fails **open**. A component match gets this right and a prefix match does not, and the
+fixture asserts both directions in the same run.
+
+The label is now **derived from the rows it summed** rather than carrying the literal `4` — core
+Rule 31, in the validator that enforces budgets.
+
+**This release deliberately does not fix the pool's other defect.** The reader-window resolver reads
+a role-file line format deleted at v0.174.0 and falls back to 200,000 on every consumer. Fixing that
+first would flip this consumer to `ok … 83% of it` while still summing 30 files — a **pass reported
+for the wrong reason** that would hide this defect permanently. Numerator first: the reading goes to
+`OVER … 177%`, still correct against a pool that is still understated. No intermediate state fails
+open.
+
+`whole-read-pool` gains assertions 10 and 11: the exclusion, the decoy control, the derived label, a
+mutant that drops the exclusion call and must bring the archived copy back, and an unmutated control
+from the same copy step so that "no rows" cannot score as a kill.
+
+Full finding: `docs/reviews/graph-artifact-budget-attainability.md`.
+
 ## [0.316.0] — 2026-08-08
 
 ### The resolution driver overwrote itself mid-run, and bash resumed at its saved offset inside the new file
