@@ -66,7 +66,7 @@ random — `v0.283.0`, `v0.288.0`, `v0.225.0`, `v0.57.0` — all have their CHAN
 do not re-derive this**; two of those branch names are still described as "parked" further down
 this file, in sections that predate their release.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.316.0`**, working tree
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.318.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
 lists them with their PR numbers. **Count them there; do not carry a number in this sentence.**
 It said "eighteen" for eighteen releases after that stopped being true, which is the same
@@ -167,18 +167,26 @@ entry after recording its verdict spends that verdict, because the digest covers
 re-recorded against the moved subject. That is the digest design working, and it is the
 reason the done-when list is re-run post-merge rather than remembered.
 
-**A PULL IS OWED AND ITS SHAPE IS NOW UNMEASURED. Re-measure it; do not reuse the figures
-below.** They were taken when `main` was at 0.315.0 and read *"4 files, ZERO rulebook files (so
-one hop), 0 `HARD-*` rows over `f9b8aa4..HEAD`"*. **v0.316.0 has landed since**, and it changes
-`reconcile/apply.sh` — a machinery file the self-update gate reasons about — so both the hop
-count and the blocking set have to be taken again. The rule this plan already states applies:
-**do not reason about a pull's shape from the distribution side; run the dry run and read what
-the gate says.**
+**A PULL IS OWED AND ITS SHAPE IS UNMEASURED. Re-measure it; do not reuse any figure in this
+paragraph's history.** An early reading taken at 0.315.0 said *"4 files, ZERO rulebook files (so one
+hop)"*; **v0.316.0, v0.317.0 and v0.318.0 have all landed since**, and 0.316.0 changes
+`reconcile/apply.sh` — a machinery file the self-update gate reasons about — so both the hop count
+and the blocking set have to be taken again. The rule this plan already states applies: **do not
+reason about a pull's shape from the distribution side; run the dry run and read what the gate
+says.**
 
-The pull carries two things worth naming for the operator: item 20's fixture fix (v0.315.0),
-verified by running that fixture from graph's own `tests/fixtures/`; and item 21's self-overwrite
-fix (v0.316.0), which **protects the pull AFTER this one, not this one** — the driver that runs
-during this pull is the copy graph already has.
+The pull carries four things worth naming for the operator:
+
+- **item 20's fixture fix (v0.315.0)**, verified by running that fixture from graph's own
+  `tests/fixtures/`.
+- **item 21's self-overwrite fix (v0.316.0)**, which **protects the pull AFTER this one, not this
+  one** — the driver that runs during this pull is the copy graph already has.
+- **item 23a's two budget fixes (v0.317.0, v0.318.0).** **The operator should expect graph's budget
+  row to go from `OVER … 417% of it → consolidate` to `ok … 117,379 tok (pool 330,000, 35% of it)`,
+  and that is the CORRECTION, not a threshold being relaxed.** Both defects were core's: a sum over
+  30 files under a label reading 4, and a reader-window resolver reading a role-file line format
+  core deleted at v0.174.0. **No consolidation is owed on the strength of that row.** See §*What
+  item 23a measured*.
 
 **SUPERSEDED, kept for the runbook it points at.** Runbook:
 [`graph-0300-to-0314-pull.md`](graph-0300-to-0314-pull.md). **The reason is not the diff size** —
@@ -203,14 +211,23 @@ the item's text ran two of them together; the counterfactual is settled (**96.1%
 truth with a control** and the report's attribution is EXACT — the second in a row, after three
 that named the wrong program. See §*What item 21 measured*.
 
-**NEXT ACTION FOR THIS REPO: item 23a** — whether the budget thresholds are attainable by
-consolidation at all. **The first measurement says no** (four live artifacts at 117379 tok
-against a 66000-tok pool, 178%, after a 96.1% reduction), and it can invalidate 23b/23c/23d, so
-it goes first. Then 23b — the artifact-consolidation refactor, added 2026-08-08 on operator request out
-of item 19. Read the review before scoping it: **the reduction is not the defect and must not be
-touched**; the residue is. 23b (the inlet) is the real methodology change and is **explicitly not
-sized** — it opens with a derivation, not with code. Item 12 and item 22 remain available and gate
-nothing.
+**~~NEXT ACTION FOR THIS REPO: item 23a~~ — DONE 2026-08-08, and THE ANSWER IS YES: graph already
+passes.** Two releases: v0.317.0 (#449), v0.318.0 (#450). The finding is
+[`docs/reviews/graph-artifact-budget-attainability.md`](../reviews/graph-artifact-budget-attainability.md).
+**The 417% breach was an INSTRUMENT READING, not a size**, and both numbers in it were wrong,
+independently, in the same direction — the pool understated 5x by a resolver reading a role-file
+line format deleted at v0.174.0, the sum overstated 2.35x by a basename sweep counting 26 archived
+copies. Corrected on both sides the four live artifacts are **36% of the pool**. See §*What item 23a
+measured*. **Do not reuse this plan's "178% / the answer looks like no" framing anywhere below** —
+it is refuted, and the paragraph that carried it is struck in item 23's own text.
+
+**NEXT ACTION FOR THIS REPO: item 23b** — the artifact-consolidation refactor, added 2026-08-08 on
+operator request out of item 19. Read the review before scoping it: **the reduction is not the defect
+and must not be touched**; the residue is. 23a's outcome does NOT change 23b — its two defects are a
+missing sprint slot and a missing cleanup sentence, and neither was ever a size argument. It DOES
+re-price 23c, which loses its urgency argument and keeps its correctness one. 23c (the inlet) is the
+real methodology change and is **explicitly not sized** — it opens with a derivation, not with code.
+Item 12, item 22 and item 24 remain available and gate nothing.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -285,9 +302,9 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~14~~ | ~~**6** — promote LC-E6/LC-O15~~ | **DONE** — v0.311.0 (#434), v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). Both zeros were unreadable: LC-O15's was FALSE, LC-E6's was a SILENCE. Two unrelated `apply.sh` defects fell out of driving it. See §*What item 6 measured* |
 | ~~15~~ | ~~**19** — review graph's artifact consolidation~~ | **DONE — no release, by the item's own terms.** `docs/reviews/graph-artifact-consolidation-review.md`. Consolidation is load-bearing and the recurrence is structural; the defects are core's step leaving 33 working files (1.80 MB, 13.7%) in the durable area root and prescribing area-root paths for per-sprint work. See §*What item 19 measured* |
 | ~~16~~ | ~~**21** — `apply.sh` overwrites itself mid-run~~ | **DONE — v0.316.0.** **REPRODUCED at ground truth with a control**, and the report's attribution is EXACT — the second in a row. bash resumes at its saved byte offset inside the new file; the fix is the `.incoming.$$` + `mv` idiom the file already used at five sites. One fixture arm was **removed for being vacuous** rather than shipped. See §*What item 21 measured* |
-| **17** | **23a** — are the budget thresholds attainable at all? | **← THE NEXT ITEM.** Operator request 2026-08-08. **First measurement says NO**: after 19 passes and a 96.1% reduction the four live artifacts are **117379 tok against a 66000 pool — 178%**. It can invalidate everything below it, which is why it is first |
-| — | **23b** — artifact-consolidation's residue | Bounded and core-side: give the step's outputs a sprint slot, and say whether the drafts are retired or retained. **Derive the re-home refusal set first — at least two of the 33 files carry no recoverable sprint** |
-| — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first |
+| ~~17~~ | ~~**23a** — are the budget thresholds attainable at all?~~ | **DONE — v0.317.0 (#449) + v0.318.0 (#450). THE ANSWER IS YES and graph already passes at 36%.** The 417% breach was an instrument reading: pool understated 5x, sum overstated 2.35x, both defects core's. The floors were derived anyway, because at a genuine 200K window the threshold IS unattainable (130–151%). See §*What item 23a measured* |
+| **18** | **23b** — artifact-consolidation's residue | **← THE NEXT ITEM.** Bounded and core-side: give the step's outputs a sprint slot, and say whether the drafts are retired or retained. **Derive the re-home refusal set first — at least two of the 33 files carry no recoverable sprint.** 23a does not change it; neither of its defects was ever a size argument |
+| — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first. **23a removed its urgency argument** — the pool does not breach — and left its correctness one intact |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
@@ -654,7 +671,20 @@ before you write code.
     consolidating less often. **And the recurrence is not the defect** — a fix aimed at "make it
     stop happening so often" is aimed at the wrong half.
 
-    **23a — ARE THE BUDGET THRESHOLDS EVEN ATTAINABLE BY CONSOLIDATION? TAKE THIS FIRST.**
+    **~~23a — ARE THE BUDGET THRESHOLDS EVEN ATTAINABLE BY CONSOLIDATION?~~ DONE 2026-08-08 —
+    v0.317.0 (#449) and v0.318.0 (#450). THE ANSWER IS YES; GRAPH ALREADY PASSES AT 36%.**
+    Finding: [`docs/reviews/graph-artifact-budget-attainability.md`](../reviews/graph-artifact-budget-attainability.md).
+    **Everything below this paragraph is REFUTED as an argument and kept only as the record of what
+    the item asked.** Specifically: the "178% after a 96.1% reduction" reading, the sentence "THE
+    ANSWER LOOKS LIKE NO", and the inference that the threshold, share or artifact set is wrong.
+    Both numbers in that reading were defects in `validate-artifact-budget.sh` — a reader-window
+    resolver reading a role-file line format deleted at v0.174.0 (pool understated 5x) and a
+    basename sweep counting 26 archived copies (sum overstated 2.35x). **Two things below SURVIVED
+    and are worth keeping**: the first bullet's diagnosis of the 30-file sum was CORRECT and is what
+    v0.317.0 fixed; and the demand to derive the floors rather than estimate them was right, because
+    at a genuine 200K window the threshold IS unattainable (floors 130–151% of pool). **The second
+    bullet was WRONG** — see §*What item 23a measured*. What follows is the original text.
+    **ARE THE BUDGET THRESHOLDS EVEN ATTAINABLE BY CONSOLIDATION? TAKE THIS FIRST.**
     **OPERATOR REQUEST, 2026-08-08**, and it names a real gap in item 19's review: *"I did not
     see an analysis of the maximum artifact sizes that are required to pass gate check and
     whether or not they are feasible to attain … The maximum size constraints need to be
@@ -844,6 +874,103 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 23a measured (the 417% breach was an instrument reading, and both halves were core's)
+
+Full finding: [`docs/reviews/graph-artifact-budget-attainability.md`](../reviews/graph-artifact-budget-attainability.md).
+Two releases: **v0.317.0 (#449)** and **v0.318.0 (#450)**. Measured against graph at `a8ef9412c`,
+read-only, on the tracked (clean) copies of all four artifacts.
+
+**THE ITEM EXPECTED "NO" AND THE ANSWER IS "YES, ALREADY".** Both numbers in the reading were
+wrong, independently, in the same direction:
+
+```
+                                    reported     true      error
+whole-read pool (denominator)         66,000   330,000    5.00x too small
+summed artifacts (numerator)         275,812   117,379    2.35x too large
+                                ------------------------------------------
+                                          417%       36%
+```
+
+**NEITHER DEFECT IS THE CONSUMER'S, and the consumer could not have seen either from the row it was
+handed.** It was told `OVER … 417% of it → consolidate` while sitting at 36% of its pool — the
+inert-mechanism class, arrived at from the opposite direction to the one this plan usually catches.
+
+- **The numerator.** `:796` finds pool members by basename across two whole trees. Correct until
+  item 10's migration renamed every `architecture-s251.md` to `s251/architecture.md` — the LIVE
+  basename — at which point the same search summed the archive. 30 rows under a label reading
+  `(4 planning artifacts)`: 4 live, 23 per-sprint archives, 3 party-mode transcripts, control sum
+  275,812 exactly. **The check was right and the corpus moved under it.** All 26 spurious rows
+  carried an `s<N>` component, so one rule excludes all of them, reusing the grammar's own
+  `s[0-9]+` component match rather than a second spelling of it. The `s301-close-out/` decoy is the
+  load-bearing half: a prefix match would exclude a LIVE artifact from a HARD_BLOCK budget, which
+  fails OPEN.
+- **The denominator.** `resolve_reader_window()` shipped at v0.124.0 greping `^- Personal:` out of
+  `team-roles/analyst.md`; **v0.174.0 (`989939a`) deleted that line from every role file core
+  ships**. Fifty releases of an unreachable `1000000` arm and a `200000` fallback that was designed
+  as the tightening default for the UNKNOWN case and became the only reachable branch. Controlled:
+  `^- Personal:` rc=1 under `core/team-roles/` (control: `^- ` bullets in every role file), `[1m]`
+  rc=1 there, and the ONLY occurrence of `Personal:` across `core/`, `templates/`, `scripts/` and
+  `install.sh` was the grep itself. graph's analyst resolves `sonnet` → `claude-sonnet-5[1m]`
+  through the config block — a 1M window.
+
+**THE COMMENT NAMED THE RIGHT SOURCE AND THE CODE NEVER READ IT.** `:244` already said the window
+comes from `aiDlcModels`; the only occurrence of that string in the file was that sentence. The
+working two-hop idiom was twenty lines away in `ai-dlc-dispatch-guard.sh:203-205`. **A prose
+statement of where a value comes from is not a reader of it** — the same shape as this repo's
+`grep -qF` over a whole file being satisfied by a comment.
+
+**AND THE FIXTURE KEPT IT GREEN BY RECONSTRUCTING THE DELETED FORMAT.** `whole-read-pool:63` wrote
+its own role file with a `- Personal:` line. Four assertions exercised the resolver against a shape
+core had not shipped for fifty releases, and every one passed. **A fixture that builds its own input
+can outlive the world its input came from** — a variant of the cannot-fire class in which the check
+*does* fire, against a world that no longer exists.
+
+**ORDER MATTERED AND WAS DERIVED, NOT PREFERRED.** Fixing the window alone gives
+`ok … 275,812 tok (pool 330,000, 83% of it)` — a PASS reported for the wrong reason that would hide
+the numerator defect permanently. Numerator first leaves `OVER … 177%`, still correct against a
+still-understated pool. **No intermediate state fails open**, which is why they are two releases in
+this order rather than one.
+
+**THE FLOORS WERE DERIVED ANYWAY, AND THE ANSWER FLIPS AT A 200K WINDOW.** Bytes on the tracked
+copies, tokens at the validator's own `BPT=4`:
+
+```
+                          live tok   floor   relocatable and why
+carry-over-backlog.md       42,554  38,949   only 4 of 49 item blocks are CLOSED (14,422 B, 8.5%);
+                                             37 OPEN + 7 IN SPRINT + 1 DOWNGRADED are live work
+prd.md                      32,619  31,533   changelog + validation pass; S301's full-text LOCKED
+                                             section can go to pointer form now the sprint is closed
+                                             (measured density 390-422 B/id over S296/S297)
+docs/architecture.md        21,524  20,719   AT ITS FLOOR — ADR prose already relocated 2026-08-05;
+                                             what remains is a 286-ADR census table with a Basis column
+product-brief.md            20,682   8,219   60% relocatable: changelog 17,306 B + a 32,543 B S301
+                                             section that DECLARES itself "not a LOCKED block"
+                          --------  ------
+                           117,379  99,420      vs  66,000 pool -> 151%   vs 330,000 -> 30%
+```
+
+**At a genuine 200K window the threshold is unattainable** — 130–151% after every byte consolidation
+may move has moved, with `carry-over-backlog.md`'s floor alone at 59% of the pool. **At the 1M window
+graph runs, it is attainable and already met.** So the item's premise was right about the shape of
+the risk and wrong about whether graph is in it.
+
+**TWO THINGS MEASURED AND DELIBERATELY NOT ACTED ON.**
+
+- **7 carry-over items marked `IN SPRINT` name sprints that have since closed** (S290, S295, S299;
+  41,638 B). Consolidation cannot dispose of them; carry-over-evaluation can. **Graph's triage, not
+  core's** — reported, not scheduled.
+- **The item's second bullet was WRONG.** "The four artifacts are in no `BUDGETS` table row" is
+  true and is the DESIGN, stated at `:313-314` with its derivation at `:232-237`: four per-file
+  limits bounded nothing real, and the binding quantity is the sum against one window. The
+  consequence drawn from it — that no single artifact has a quotable threshold — is correct and is
+  not an omission.
+
+**A FIFTH QUESTION IS NOW ON THE TABLE AND IS NOT IN THIS PLAN.** The pool's **33% share** and its
+**artifact set** were derived against a hypothetical, because until v0.318.0 no consumer had ever
+been measured with a correctly-resolved window. graph is the first data point — 36% of 330,000.
+Whether 33% is the right share is now answerable with real numbers and was not before. **Not
+scheduled; recorded so it is not mistaken for settled.**
 
 ## What item 21 measured (reproduced, attribution exact, and one fixture arm was vacuous)
 
