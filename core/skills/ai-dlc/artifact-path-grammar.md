@@ -182,9 +182,20 @@ re-run after applying                   rc=3  <- nothing left to migrate; it is 
   took the directory would move `story-S298-1-…` and leave `story-297-1-…` — splitting one
   sprint's stories across two conventions. It moves in its own release.
 
-**Areas it had to INFER are reported too.** The grammar declared eight; the reference consumer
-holds sprint-tokened files in eight more. They migrate under a derived area and the report names
-each one, because inferring silently would leave this file wrong while the tree moved on.
+**Areas it had to INFER are reported too, and the report sends you to YOUR file, not this one.**
+This grammar declares eight. The reference consumer held sprint-tokened files in **nine** more —
+the pre-run estimate said eight and the real run also found `_bmad-output/research`, on a single
+file, which is the direction a count taken from a sample always misses in. They migrate under a
+derived area and the report names each one, because inferring silently would leave the declaration
+wrong while the tree moved on.
+
+**Those nine are CONSUMER areas and do not belong in this file.** They go in the file named by
+`consumer_artifact_paths_file:`, per the rule at the top of this page, and the migration READS
+that file and joins its areas to the eight above — so declaring one is what stops it being
+inferred. Before that join existed the report said *"the grammar file is INCOMPLETE and should
+declare them"*, which named a core file that a pull overwrites; a consumer session followed it
+literally and proposed adding nine consumer-specific areas to core. The remedy now names the
+consumer's own path, resolved from the contract rather than restated.
 
 **The pointer landed with the release that emptied the ledger, and that ordering was the point.**
 A `SKILL.md` line saying "artifact paths follow this file" would, before 10c, have told an agent to

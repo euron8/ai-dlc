@@ -34,6 +34,42 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.304.0] — 2026-08-08
+
+### The migration told the operator to fix core's file, and a consumer session did exactly that
+
+Reported by the reference consumer after the migration ran for real. The `AREAS INFERRED` block
+said *"the grammar file is INCOMPLETE and should declare them"* — naming **core's**
+`artifact-path-grammar.md`, which a pull overwrites, and which by that same file's own line 4 is
+the wrong home: *"Core prescribes the grammar; the consumer declares its own areas and kinds in the
+file named by `consumer_artifact_paths_file:`."* The consumer session followed the instruction
+literally and came back proposing that core absorb **nine consumer-specific areas**. `CLAUDE.md`'s
+opening warning is about exactly this pair of files.
+
+**The wording fix alone would have been worse than the wrong wording.** Measured on the reference
+consumer: its `.claude/skills/ai-dlc/artifact-paths.md` was **byte-identical to the scaffolded
+template** — nothing had ever been declared there — and nothing read it, so declaring the areas
+would have changed no later verdict. The same nine would be inferred again, with a corrected
+sentence in front of an inert mechanism, which reads as done.
+
+So the consumer's areas are now **read and joined** to core's eight. Declaring an area is the act
+that stops it being inferred, which is what makes the report's instruction followable. The path is
+resolved from `consumer_artifact_paths_file:` in the contract rather than restated — the drift I67,
+I70 and I73 exist to prevent — and one `areas_of()` extractor serves both files, because two copies
+of that awk is how core and the consumer start disagreeing about what an area is.
+
+**NINE, NOT EIGHT.** The pre-run estimate said eight; the real run also found
+`_bmad-output/research`, on a single file. A count taken from a sample of a tree is not a count of
+the tree, and the one it missed was the smallest — the direction that miss always runs in. Both
+sites carrying the old figure are corrected.
+
+`artifact-path-migration` **32 → 37 assertions**, with the pair that proves the join is live: one
+arm with nothing declared (the state the reference consumer was actually in) asserting the remedy
+names the consumer's file and no longer names core's, and one arm declaring a single area and
+asserting it drops out of the inferred set **while the other undeclared area stays in it** — a run
+that simply stopped reporting would satisfy a one-sided assertion. The mutant that stops reading
+the consumer's file puts the declared area back in the inferred set.
+
 ## [0.303.0] — 2026-08-07
 
 ### The step that says a clean sheet must be earned was prescribing an unearnable one

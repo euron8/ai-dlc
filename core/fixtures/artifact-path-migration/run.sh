@@ -244,6 +244,72 @@ else
 fi
 rm -rf "$wc" "$MUT"
 
+# =============================================================================
+# AREAS INFERRED — the remedy names the CONSUMER's file, and declaring an area
+# there actually stops it being inferred.
+#
+# THE DEFECT. The report said "the grammar file is INCOMPLETE and should declare them", naming
+# CORE's artifact-path-grammar.md — a file a pull overwrites, and the wrong home by core's own
+# rule (the grammar's line 4 says the consumer declares its areas in the file named by
+# `consumer_artifact_paths_file:`). A consumer session followed it literally and proposed adding
+# nine consumer-specific areas to core.
+#
+# AND THE WORDING FIX ALONE WOULD HAVE BEEN WORSE THAN THE WRONG WORDING. Nothing read the
+# consumer's file, so "declare them there" would have changed no verdict on any later run: the
+# same areas would be inferred again, with a corrected sentence in front of an inert mechanism.
+# The pair below is what proves the join is live.
+# =============================================================================
+wi="$(bash "$HERE/seed.sh" "$GRAMMAR")"
+
+# ARM A — nothing declared, which is the state the reference consumer was in.
+a_out="$(bash "$MIG" --root "$wi" 2>&1)"
+grep -q "_bmad-output/brainstorming" <<<"$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$a_out")" \
+  && ok "undeclared area is reported as inferred" \
+  || bad "an undeclared area was NOT reported as inferred — the remaining arms cannot be attributed"
+if grep -q "\.claude/skills/ai-dlc/artifact-paths.md" <<<"$a_out"; then
+  ok "the remedy names the CONSUMER's own file, resolved from the contract"
+else
+  bad "the remedy did not name the consumer's declaration file"
+fi
+grep -q "INCOMPLETE and should declare them" <<<"$a_out" \
+  && bad "the report still sends the operator to CORE's grammar, which a pull overwrites" \
+  || ok "the report no longer sends the operator to core's grammar"
+
+# ARM B — declare ONE of them in the consumer's own file. It must drop out of the inferred set,
+# and the OTHER undeclared area must stay in it: a run that simply stopped reporting would
+# satisfy a one-sided assertion.
+mkdir -p "$wi/.claude/skills/ai-dlc"
+cat > "$wi/.claude/skills/ai-dlc/artifact-paths.md" <<'EOF'
+# consumer artifact paths
+
+areas:
+  _bmad-output/brainstorming
+EOF
+b_inf="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(bash "$MIG" --root "$wi" 2>&1)")"
+if grep -q "_bmad-output/brainstorming" <<<"$b_inf"; then
+  bad "declaring the area in the consumer's file did NOT stop it being inferred — the remedy is inert"
+elif ! grep -q "party-verdicts-retro" <<<"$b_inf"; then
+  bad "the whole inferred set vanished, so the assertion above is satisfied by a report that stopped reporting"
+else
+  ok "declaring an area in the consumer's file removes it from the inferred set, and only it"
+fi
+
+# MUTATION — stop reading the consumer's file. ARM B must regress and ARM A must not move.
+MUTI="$wi-mut"; rm -rf "$MUTI"; mkdir -p "$MUTI"
+sed 's@^\[ -n "\$CONSUMER_AREAS_FILE" \] && CONSUMER_AREAS="\$(areas_of "\$CONSUMER_AREAS_FILE")"@CONSUMER_AREAS=""@' \
+  "$MIG" > "$MUTI/m.sh"
+if cmp -s "$MIG" "$MUTI/m.sh"; then
+  bad "FIXTURE ERROR: the consumer-areas mutation matched nothing, so ARM B proves nothing"
+else
+  m_inf="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(bash "$MUTI/m.sh" --root "$wi" 2>&1)")"
+  if grep -q "_bmad-output/brainstorming" <<<"$m_inf"; then
+    ok "MUTATION — without the consumer read, a declared area is inferred again: the join is load-bearing"
+  else
+    bad "MUTATION — the declared area stayed out even without reading the consumer's file, so ARM B is vacuous"
+  fi
+fi
+rm -rf "$wi" "$MUTI"
+
 echo
 if [ "$fails" -eq 0 ]; then echo "artifact-path-migration: PASS ($asserts assertions)"; exit 0; fi
 echo "artifact-path-migration: $fails of $asserts assertion(s) FAILED" >&2

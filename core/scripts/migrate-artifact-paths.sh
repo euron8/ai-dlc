@@ -94,7 +94,55 @@ fi
                        echo "  guessing them would move files the grammar does not govern." >&2; exit 2; }
 
 SCAN_ROOTS="$(awk '/^```scan-roots$/{f=1;next} f&&/^```/{f=0} f' "$GRAMMAR" | grep -E '.')"
-DECLARED_AREAS="$(awk '/^areas:$/{f=1;next} f&&/^[^ ]/{f=0} f&&/^  [^ ]/{gsub(/^  /,"");print}' "$GRAMMAR")"
+
+# ONE EXTRACTOR FOR BOTH FILES. Core's grammar and the consumer's declaration carry the same
+# `areas:` block in the same shape, and two copies of this awk is how they start disagreeing
+# about what an area is -- the fork this repo has already paid for in three other pairs.
+areas_of() { awk '/^areas:$/{f=1;next} f&&/^[^ ]/{f=0} f&&/^  [^ ]/{gsub(/^  /,"");print}' "$1"; }
+
+DECLARED_AREAS="$(areas_of "$GRAMMAR")"
+
+# --- THE CONSUMER'S OWN AREAS ARE READ, NOT ONLY POINTED AT -------------------------------
+#
+# Core prescribes the grammar; the CONSUMER declares its own areas, in the file named by
+# `consumer_artifact_paths_file:` in `layer-contract.yaml` (grammar, line 4). This script read
+# only core's list, so every consumer-specific area was "undeclared" no matter what the consumer
+# had written, and the report told the operator to fix **the grammar** — a core file, overwritten
+# on the next pull, and the wrong home by core's own rule. `CLAUDE.md`'s opening warning is about
+# exactly this pair of files.
+#
+# MEASURED, and it is the reason this is a code change and not a wording change: on the reference
+# consumer the migration inferred NINE areas and reported them; that consumer's
+# `.claude/skills/ai-dlc/artifact-paths.md` was byte-identical to the scaffolded template, so
+# nothing had ever been declared there — and declaring it would have changed nothing, because
+# nothing read it. A remedy pointing at a file no reader consults is the inert-mechanism class,
+# and a corrected sentence in front of an inert mechanism is worse than the wrong sentence: it
+# reads as done.
+#
+# So the consumer's areas JOIN core's. Declaring an area is now the act that stops it being
+# inferred, which is what makes the report's instruction followable.
+#
+# PATH DERIVED FROM THE CONTRACT, never restated. The literal lives once, in
+# `layer-contract.yaml`; a second copy here is the drift I67/I70/I73 exist to prevent.
+CONTRACT=""
+for c in ".claude/skills/ai-dlc/layer-contract.yaml" "core/skills/ai-dlc/layer-contract.yaml"; do
+  [ -f "$c" ] && CONTRACT="$c" && break
+done
+CONSUMER_AREAS_FILE=""
+if [ -n "$CONTRACT" ]; then
+  CONSUMER_AREAS_REL="$(sed -n 's/^consumer_artifact_paths_file:[[:space:]]*//p' "$CONTRACT" \
+                        | head -1 | sed 's/[[:space:]]*$//' | tr -d '"')"
+  [ -n "$CONSUMER_AREAS_REL" ] && [ -f "$CONSUMER_AREAS_REL" ] && CONSUMER_AREAS_FILE="$CONSUMER_AREAS_REL"
+fi
+CONSUMER_AREAS=""
+[ -n "$CONSUMER_AREAS_FILE" ] && CONSUMER_AREAS="$(areas_of "$CONSUMER_AREAS_FILE")"
+if [ -n "$CONSUMER_AREAS" ]; then
+  DECLARED_AREAS="$(printf '%s\n%s\n' "$DECLARED_AREAS" "$CONSUMER_AREAS" | grep -E '.' | sort -u)"
+fi
+# Where the report sends the operator. Falls back to the contract's declared path even when the
+# file does not exist yet, because "go write this file" is the correct remedy then; only a
+# missing CONTRACT leaves it unnamed, and that is a broken install, not a paperwork gap.
+REMEDY_FILE="${CONSUMER_AREAS_FILE:-${CONSUMER_AREAS_REL:-}}"
 [ -n "$SCAN_ROOTS" ] || { echo "$PROG: extracted ZERO scan roots from $GRAMMAR. An empty root set" >&2
                           echo "  would report a fully-conforming tree without reading one file." >&2; exit 2; }
 [ -n "$DECLARED_AREAS" ] || { echo "$PROG: extracted ZERO areas from $GRAMMAR. Without them every" >&2
@@ -225,9 +273,14 @@ EOF
   if [ -z "$area" ]; then
     # Not under any DECLARED area. Infer one -- the scan root, plus one component when the scan
     # root is a container of areas rather than an area itself -- and REPORT it. On the reference
-    # consumer this fires on EIGHT directories the grammar never declares. Inferring silently
-    # would migrate them and leave the grammar wrong; refusing outright would strand a chunk of
-    # the tree for a paperwork reason.
+    # consumer this fires on NINE directories no area declares. Inferring silently would migrate
+    # them and leave the declaration wrong; refusing outright would strand a chunk of the tree
+    # for a paperwork reason.
+    #
+    # NINE, NOT EIGHT: the pre-run estimate said eight and the real run found `_bmad-output/research`
+    # as well, on a single file. A count derived from a sample of a tree is not a count of the tree,
+    # and the one it missed is the one with the fewest files -- which is the direction that kind of
+    # miss always runs in.
     for r in $SCAN_ROOTS; do
       case "$src/" in
         "$r"/*)
@@ -341,9 +394,18 @@ if [ "$DEFERRED_STORIES" -gt 0 ]; then
 fi
 
 if [ -s "$INFERRED" ]; then
-  echo "AREAS INFERRED — the grammar declares no area for these, so one was derived from the scan"
-  echo "root. They migrate, but the grammar file is INCOMPLETE and should declare them:"
+  echo "AREAS INFERRED — no area is declared for these, so one was derived from the scan root."
+  echo "They migrate correctly, but nothing has declared them:"
   sort "$INFERRED" | uniq -c | sort -rn | sed 's/^/  /'
+  if [ -n "$REMEDY_FILE" ]; then
+    echo ""
+    echo "  DECLARE THEM IN YOUR OWN FILE, NOT IN CORE'S GRAMMAR:"
+    echo "    $REMEDY_FILE"
+    echo "  Add each under its 'areas:' block. That file is consumer-owned and survives a pull;"
+    echo "  core's artifact-path-grammar.md is overwritten by one, so an area added there is"
+    echo "  gone at the next update. This run READ your file and joined its areas to core's, so"
+    echo "  declaring them is what stops them being inferred here again."
+  fi
   echo ""
 fi
 

@@ -73,6 +73,17 @@ if [ -n "$GRAMMAR_SRC" ]; then
   cp "$GRAMMAR_SRC" .claude/skills/ai-dlc/artifact-path-grammar.md
 fi
 
+# THE CONTRACT, because the migration resolves the CONSUMER's own area declaration through it
+# rather than restating the path. Seeded with the key alone: the file it names is deliberately
+# NOT created here, so the fixture's first arm is a consumer that has declared nothing — which
+# is the state the reference consumer was actually in, its artifact-paths.md byte-identical to
+# the scaffolded template. The second arm writes it.
+mkdir -p .claude/skills/ai-dlc
+cat > .claude/skills/ai-dlc/layer-contract.yaml <<'EOF'
+contract_version: 16
+consumer_artifact_paths_file: .claude/skills/ai-dlc/artifact-paths.md
+EOF
+
 git add -A
 git commit -q -m "seed"
 printf '%s\n' "$WORK"
