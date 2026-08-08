@@ -119,19 +119,29 @@ surfaced exactly one CLOSE-CANDIDATE and it was FALSE — a migration-moved rece
 there: 24 of 24 `theirs_has` receipts are undecided, so the 53 STILL-LIVE set is still not a work
 queue.
 
-**NEXT ACTION FOR THIS REPO: item 6** — promote LC-E6/LC-O15 to ADJUDICATED. Its gate is now
-takeable: graph is quiescent and post-migration, so the LC-E6 and LC-O15 candidate sets can be
-counted. **Establish first that LC-E6's code can fire at all** — `fixture: none` is a declared I65
-gap, and promoting a clause whose zero has never been shown to mean anything promotes a silence.
+**~~NEXT ACTION FOR THIS REPO: item 6~~ — DONE.** Four releases: v0.311.0 (#434), v0.312.0 (#435),
+v0.313.0 (#436), v0.314.0 (#437). **The gate was takeable and BOTH of its zeros were unreadable,
+in different ways** — one FALSE, one a SILENCE — and taking the measurement first is the only
+reason the promotion is worth anything. It also surfaced two defects in `apply.sh` that had nothing
+to do with item 6 and everything to do with whether ANY of this reaches the operator. See
+§*What item 6 measured*.
+
+**NEXT ACTION FOR THIS REPO: item 19** — review graph's recent artifact-consolidation attempts.
+Operator request, 2026-08-08. Item 12 remains available and gates nothing.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
 finding: **three of the five `STILL-LIVE` verdicts were false, not one.** See §*What item 8c
 measured*. Two things now sit with the OPERATOR, and neither is core's to do.
 
-**NEXT ACTION FOR THIS REPO: item 6's UNMEASURED gate** — count the LC-E6 and LC-O15 candidate
-sets. **BLOCKED UNTIL THE PULL SETTLES**, because the count is against the consumer and graph is
-mid-apply; see the block above. A first reading taken during the pull returned **0 and 0** with a
+**~~NEXT ACTION FOR THIS REPO: item 6's UNMEASURED gate~~ — SUPERSEDED, and the paragraph below is
+kept only because its instinct was right.** It said a first reading of **0 and 0** taken mid-pull
+was UNUSABLE rather than an answer. The re-take, on a quiescent post-migration graph, returned
+**0 and 0 again with a working control — and BOTH zeros were still unreadable.** LC-O15's was
+FALSE (the join could not see a multi-anchor override, and graph carries one). LC-E6's was a
+SILENCE (no fixture anywhere had ever made the code fire). A control proving the RUN worked says
+nothing about whether the ARM could have fired. What follows is the original text.
+A first reading taken during the pull returned **0 and 0** with a
 working control (50 rows across 9 other statuses from the same run), and it is recorded here as
 UNUSABLE rather than as an answer. Two things worth carrying into the re-take: LC-E6's code
 `EXTENSION-RETIRE-CANDIDATE` has **`fixture: none`** in the contract — a declared I65 gap — so
@@ -189,7 +199,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~11~~ | ~~**16** — move `planning-artifacts/stories/` under `s<N>/`~~ | **DONE** — v0.307.0 (#427) readers, v0.308.0 (#428) files. The corpus is **988** flat, not 1024; the restating-reader count was **two**, not three; and the deferral's premise was true about the NAME and never asked about the POSITION. See §*What item 16 measured* |
 | ~~12~~ | ~~**18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift~~ | **DONE** — v0.309.0 (#430). Reproduced with a control; **28 files** exposed (control: 72 machinery files outside the scan). Half the report's attribution is REFUTED and left open. See §*What item 18 measured* |
 | ~~13~~ | ~~**8** — push-candidate ledger triage~~ | **CORE'S HALF DONE** — v0.310.0 (#432). The run's only CLOSE-CANDIDATE was FALSE; the guard against it existed as a NOTE, not a mechanism. The remaining triage needs the receipts re-anchored, which is the operator's. See §*What item 8's core half measured* | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
-| **14** | **6** — promote LC-E6/LC-O15 | **← THE NEXT ITEM.** | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
+| ~~14~~ | ~~**6** — promote LC-E6/LC-O15~~ | **DONE** — v0.311.0 (#434), v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). Both zeros were unreadable: LC-O15's was FALSE, LC-E6's was a SILENCE. Two unrelated `apply.sh` defects fell out of driving it. See §*What item 6 measured* |
+| **15** | **19** — review graph's artifact consolidation | **← THE NEXT ITEM.** Operator request 2026-08-08. Read-only against the consumer; nothing in this repo gates it |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
 | — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
@@ -258,7 +269,13 @@ before you write code.
 4. ~~**R4 — snapshot ceiling.**~~ **COMPLETED — shipped as v0.281.0 (#369).**
 5. ~~**R3 — auto-handoff.**~~ **COMPLETED — shipped as v0.282.0 (#370)**, carrying the
    multi-key `settings_env_keys:` mechanism with it.
-6. **R6 — promote LC-E6/LC-O15 to ADJUDICATED.** **THIS ITEM'S GATE HAS BEEN WRONG TWICE AND
+6. ~~**R6 — promote LC-E6/LC-O15 to ADJUDICATED.**~~ **DONE — four releases, and the gate was the
+   whole item.** v0.311.0 (#434), v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). The count
+   came back **0 and 0 with a working control, and BOTH zeros were unreadable** — LC-O15's was
+   FALSE and LC-E6's was a SILENCE. **Do not reuse this section's framing of the gate as "count
+   the sets": counting was necessary and nowhere near sufficient.** See §*What item 6 measured*.
+   What follows is the original text.
+   **THIS ITEM'S GATE HAS BEEN WRONG TWICE AND
    IS NOW STATED AS UNMEASURED RATHER THAN GUESSED A THIRD TIME.** It originally read "blocked
    until graph burns down its `EXTENSION-TITLE-MATCHES-CORE` set, or first contact wedges on ~13
    blocking rows." Both halves are false:
@@ -462,6 +479,35 @@ before you write code.
     pull was three). The two stamp fields and which one each reader consults is the derivation to
     start from.
 
+19. **Review graph's recent attempts at artifact consolidation, and decide whether the process
+    improves or the methodology changes.** **OPERATOR REQUEST, 2026-08-08**, verbatim: *"would
+    like to add to the plan a review of graph consumers recent attempts at artifact consolidation
+    and determine if there are improvements we can make with that process or even a different
+    methodology altogether."*
+
+    **THIS IS A REVIEW, NOT A RELEASE, AND IT MUST NOT OPEN BY PROPOSING A MECHANISM.** The
+    deliverable is a written finding: what graph actually did, what it cost, what it achieved,
+    and whether the approach is the right one. A core release may follow it; none is authorised
+    by this item on its own.
+
+    **Read-only against `/Users/n8/git/graph`** — the boundary at the top of this file binds, and
+    nothing in this repo gates the item. Where to start, and each of these is a POINTER to be
+    verified rather than a finding: the artifact-path migration this plan's item 10 produced
+    (2667 moves, 48 refusals, 1001 deferred — §*Where things stand*), item 16's story-corpus move
+    (988 files, §*What item 16 measured*), the s301 close-out and its archive sweep, and whatever
+    consolidation graph has attempted on its own since. **The 48 refusals are still owed and
+    unresolved**; they are the most likely place a methodology question is hiding, because each
+    one needs a basename renamed and an area decided, which is exactly the work a path grammar
+    cannot do for you.
+
+    **RE-DERIVE EVERY FIGURE.** Item 16 is this plan's own worked example of why: its predicted
+    corpus size was wrong in BOTH directions and the difficulty it named was the wrong one. Any
+    number quoted below `## Context` is historical.
+
+    **State the counterfactual.** "Was consolidation worth it" is only answerable against what
+    the alternative would have cost, and this plan has the numbers for the migration side but
+    not for the do-nothing side. Derive it or say plainly that it is underived.
+
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
 
@@ -494,6 +540,76 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 6 measured (both zeros were unreadable, and the gate was the whole item)
+
+Four releases. The promotion itself is nine lines of YAML; everything else is what the gate turned up.
+
+**THE COUNT, taken on a quiescent post-migration graph over its real pull range, with a working
+control (66 rows across ten other statuses from the same run):**
+
+```
+LC-O15  OVERRIDE-SUPERSEDED          0     <- FALSE
+LC-E6   EXTENSION-RETIRE-CANDIDATE   0     <- a SILENCE
+```
+
+**A CONTROL PROVING THE RUN WORKED SAYS NOTHING ABOUT WHETHER THE ARM COULD HAVE FIRED.** That is
+the transferable finding, and this plan already had the same shape twice under other names.
+
+**LC-O15's zero was FALSE — v0.312.0 (#435).** The supersession join compared `norm()` of the
+WHOLE `shadows:` value against the declaration's, while every drift arm below it reads the value
+through `shadow_parts`, lib.sh's one reading of `shadows:`. So an entry bundling anchors could
+never match a declaration naming one — and the more anchors an entry bundles the more unrelated
+core text it freezes, which is exactly the population the clause exists for. Reproduced one field
+apart, same consumer, same range:
+
+```
+shadows: steps/retro.md#3. …, #4a. Close-Out Sweep, #5. …, #7. …   0 rows
+shadows: steps/retro.md#4a. Close-Out Sweep                        1 row
+```
+
+The live miss is `overrides/steps__retro__domain-sections.md`: core declared `#4a. Close-Out
+Sweep` superseded at **0.281.0** with `AI_DLC_SNAPSHOT_STRIKETHROUGH`, and the entry's own
+`reason:` records two successive re-adoptions of that very section, one of which it calls WRONG.
+**And the remedy is not the same remedy** — `--stamp retire` deletes the whole file, so a
+multi-anchor hit carries a `retire_anchor=` token and prescribes narrowing `shadows:`.
+
+**LC-E6's zero was a SILENCE — v0.313.0 (#436).** `fixture: none`, honestly declared, and
+v0.273.0's note gives the reason the obvious home was refused: `layer-title-join` asserts the
+code's ABSENCE and never makes it fire. So no run anywhere had produced the status, and its 0 was
+evidence of nothing. New fixture `layer-absorption-retire` fires it on both emit sites. The
+control is the sharp part: LC-E6 and LC-E5 come out of the SAME comparison and differ on ONE bit,
+whether the core anchor existed at BASE.
+
+**TWO `apply.sh` DEFECTS FELL OUT OF DRIVING IT, and neither has anything to do with item 6 —
+v0.311.0 (#434).** They were found because measuring the supersession set meant actually running
+the thing that renders it.
+
+- **`say()` printed THREE fields while EIGHTEEN call sites pass FOUR.** Every `WORKLIST` and
+  `DECISION` detail was computed and discarded. The operator's row was
+  `WORKLIST<TAB>override-retire<TAB><path>` and nothing else, while `SKILL.md` step 7 tells the
+  reader to obey a detail beginning `<i>/<n> ATOMIC`.
+- **`printf '%s' | while read` dropped its last element,** so a one-key supersession — every keyed
+  supersession core has ever declared — emitted ZERO of its key rows. The sequence printed only
+  `2/2 … --stamp retire` while its own numbering advertised a `1/2` that never existed: the exact
+  reverse of the order the block exists to enforce. `key_total` was right throughout, which is how
+  the numbering kept advertising a row nobody printed.
+
+**No fixture drove `apply.sh`'s worklist rendering at all.** The one fixture that greps a
+`WORKLIST` row matches field 3, which survived both defects. `apply-worklist-rows` now drives the
+shipped script with a stubbed `layer-drift.sh`.
+
+**THE PROMOTION'S COST, MEASURED — v0.314.0 (#437).** `HARD-LAYER-ADJUDICATION-MISSING` on graph
+goes **12 → 13**: one row, the LC-O15 true positive. LC-E6 contributes 0. `contract_version`
+16 → 17.
+
+**AND THE PROMOTION BROKE A SENTENCE IN THREE FILES.** `layer-drift.sh`'s
+`DRIFT-RANGE-DEGENERATE` row, its header comment and `SKILL.md` step 7 each hand-listed the two
+ADJUDICATED clauses and asserted a degenerate range disarms every one of them. **LC-O15 is not
+range-keyed** — it compares a declaration at THEIRS against the entry on disk — so that stopped
+being true the moment the level changed. All three now point at `--adjudicated-codes`, the
+derivation I58 already joins at build time. **A hand-list of a derivable set is a defect waiting
+for the release that changes the set**, and this one waited exactly one release.
 
 ## What item 8's core half measured (the run's one close was false, and its guard was prose)
 
