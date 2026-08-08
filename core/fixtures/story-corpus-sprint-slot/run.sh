@@ -23,8 +23,11 @@
 # blind spot had the same shape as the defect it was fixing.
 set -uo pipefail
 
+# No distribution-root walk here: this file needs none. It had one — assigned, never read — and a
+# dead `../../..` beside a seed that really did depend on one is how the next reader concludes the
+# resolution is fine because two files agree. The seed names its sources in both layouts; this
+# file resolves nothing but itself.
 HERE="$(cd "$(dirname "$0")" && pwd)"
-D_ROOT="$(cd "$HERE/../../.." && pwd)"
 
 fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
