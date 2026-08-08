@@ -593,12 +593,19 @@ clauses:
     level: WARN
     since: 14
     normative: >-
-      An override whose `shadows:` matches a core `override_supersessions:` declaration is
-      reported as RETIRABLE, not merely drifted. Every other override status asks whether the
-      entry is still correct; this one asks whether it is still NEEDED, and it is the only one
-      whose answer is to delete the entry. Without it a superseded override presents as
+      An override ANY ONE of whose `shadows:` anchors matches a core `override_supersessions:`
+      declaration is reported as RETIRABLE, not merely drifted. Every other override status asks
+      whether the entry is still correct; this one asks whether it is still NEEDED, and it is the
+      only one whose answer is to stop shadowing. Without it a superseded override presents as
       ordinary section drift, which reads as re-adopt-the-new-wording, so the entry survives
       and goes on freezing every unrelated line in its shadowed span at `base_sha`.
+      THE JOIN IS PER (file, anchor) PAIR, on both sides, through the same `shadow_parts` reading
+      every other anchor question uses. A whole-string comparison cannot match an entry that
+      bundles anchors against a declaration that names one, and the more anchors an entry bundles
+      the more unrelated core text it freezes -- so the blind spot was exactly the population the
+      clause exists for. The remedy differs with the count and the row states which applies: a
+      one-anchor entry is retired, a multi-anchor entry has that anchor removed from `shadows:`
+      and the rest left byte-untouched, because the retire stamp deletes the whole file.
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-SUPERSEDED

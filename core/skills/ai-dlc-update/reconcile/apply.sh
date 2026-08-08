@@ -335,8 +335,38 @@ while IFS="$TAB_CH" read -r ovr detail; do
   # was carried by whoever happened to reason it out that pull. A constraint that only exists
   # when someone notices it is not a constraint. Each step is its own row so the sequence is
   # data the step-7 worker reads in order, and `ATOMIC` says they share one commit.
-  env_key="${detail#replaces_with=}"; env_key="${env_key%% ::*}"
-  [ "$env_key" = "$detail" ] && env_key=""     # no structured token -> emit the single row
+  # THE TOKENS ARE AN ORDERED PREFIX, SO THEY ARE PARSED POSITIONALLY.
+  #
+  # This read `env_key` unconditionally and nulled it only when the result equalled the whole
+  # detail -- a guard that fires when the detail contains no ` ::` AT ALL, not when it lacks the
+  # `replaces_with=` prefix. Latent while `replaces_with=` was the only token: the env-less
+  # detail carried no ` ::` and the equality caught it. `retire_anchor=` makes it live, and an
+  # env-less multi-anchor detail would otherwise yield `env_key=retire_anchor=<anchor>` and hand
+  # the operator "write retire_anchor=steps/retro.md#4a. Close-Out Sweep into settings.json".
+  # A `case` on the prefix is what the guard was always trying to say.
+  env_key=""
+  case "$detail" in
+    replaces_with=*) env_key="${detail#replaces_with=}"; env_key="${env_key%% ::*}" ;;
+  esac
+
+  # `retire_anchor=` — THE LAST ROW IS NOT ALWAYS `--stamp retire`, AND GETTING THAT WRONG
+  # DESTROYS CONSUMER TEXT. That stamp deletes the whole override file; there is no per-anchor
+  # retire. When core supersedes ONE anchor of a multi-anchor `shadows:`, obeying a retire row
+  # throws away the anchors core did NOT supersede, and every section they shadowed silently
+  # reverts to core. layer-drift.sh emits this token on exactly that case and omits it otherwise,
+  # so the single-anchor sequence below is byte-for-byte what it always was.
+  det_rest="$detail"
+  [ -n "$env_key" ] && det_rest="${det_rest#*" :: "}"
+  drop_anchor=""
+  case "$det_rest" in
+    retire_anchor=*) drop_anchor="${det_rest#retire_anchor=}"; drop_anchor="${drop_anchor%% ::*}" ;;
+  esac
+  if [ -n "$drop_anchor" ]; then
+    last_act="remove the anchor \`${drop_anchor}\` from ${ovr}'s shadows: and leave its other anchors byte-untouched. NOT --stamp retire: that deletes the whole file, and core superseded only this one anchor."
+  else
+    last_act="readopt-override.sh --stamp retire ${ovr}."
+  fi
+
   if [ -n "$env_key" ]; then
     # N keys, N+1 rows. The count is derived from the field rather than fixed at two,
     # because a supersession needing a second key could not be expressed at all until
@@ -368,7 +398,13 @@ while IFS="$TAB_CH" read -r ovr detail; do
       key_n=$(( key_n + 1 ))
       say WORKLIST override-retire "$ovr" "${key_n}/${key_total} ATOMIC — write ${one_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing the retire stamp first re-imposes the core constraint this entry was widening and reds the next gate."
     done <<< "$(printf '%s' "$env_key" | tr ',' '\n')"
-    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — readopt-override.sh --stamp retire ${ovr}. Same commit as the row(s) above."
+    say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — ${last_act} Same commit as the row(s) above."
+  elif [ -n "$drop_anchor" ]; then
+    # No key to write, so there is no ordering to enforce and no ATOMIC sequence — but the action
+    # still is not a retire, and the single row has to SAY so rather than repeat the detail and
+    # leave the operator to notice the difference between "delete this entry" and "delete one of
+    # its anchors".
+    say WORKLIST override-retire "$ovr" "core supersedes ONE anchor of this entry: ${last_act} Full reason: $detail"
   else
     say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
   fi

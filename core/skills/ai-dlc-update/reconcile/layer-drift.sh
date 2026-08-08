@@ -895,22 +895,74 @@ while IFS= read -r f; do
   # `supersessions_of` already emits the row with an empty env field, and apply.sh already
   # branches on the absence of the `replaces_with=` token to render the single worklist row
   # instead of the two ATOMIC ones. Both ends worked; only this guard did not. So the flag is
-  # WHETHER A ROW MATCHED, and `sup_env` decides only which sentence the operator reads --
+  # WHETHER A ROW MATCHED, and `s_env` decides only which sentence the operator reads --
   # and the env-less detail must not carry the token at all, or apply.sh parses an empty key
   # out of it and emits a 1/2 row telling the operator to write nothing into settings.json.
-  sup_env=""; sup_since=""; sup_hit=""
+  #
+  # THE JOIN IS PER (file, anchor) PAIR. IT WAS AGAINST THE WHOLE `shadows:` STRING, WHICH IS A
+  # CHECK THAT CANNOT FIRE ON THE ENTRIES MOST WORTH FIRING ON. `norm` of
+  # `steps/retro.md#3. A, #4a. B, #5. C` is not `norm` of `steps/retro.md#4a. B`, so an entry
+  # bundling four anchors could never match a declaration naming one of them -- and the more
+  # anchors an entry bundles the more unrelated core text it freezes, which is exactly the entry
+  # a retirement signal exists for. Every drift arm below already reads this value through
+  # `shadow_parts` (lib.sh, the ONE reading of `shadows:`, and its own header records two prior
+  # forks of that reading); this arm alone did not.
+  #
+  # MEASURED ON THE REFERENCE CONSUMER AT 0.310.0, AND IT IS A LIVE MISS, NOT A HYPOTHETICAL:
+  # `overrides/steps__retro__domain-sections.md` shadows four retro anchors, one of which is
+  # `steps/retro.md#4a. Close-Out Sweep` -- declared superseded by core at 0.281.0 with
+  # `AI_DLC_SNAPSHOT_STRIKETHROUGH`. Whole-string join, real tree, real pull range: 0 rows. Same
+  # tree, same range, that one anchor alone in `shadows:`: 1 row. The entry's own `reason:`
+  # records two successive re-adoptions of that very section, one of which it calls WRONG, so
+  # the signal it never received is the one it needed most.
+  #
+  # AND A MULTI-ANCHOR HIT PRESCRIBES A DIFFERENT ACTION, so this could not be a one-line join
+  # fix. `readopt-override.sh --stamp retire` DELETES THE FILE -- there is no per-anchor retire --
+  # and on that entry it would throw away three anchors core has NOT superseded. A multi-anchor
+  # hit therefore carries a `retire_anchor=` token and prescribes NARROWING `shadows:`. The
+  # single-anchor detail is unchanged byte for byte: apply.sh's `replaces_with=` prefix contract
+  # is asserted downstream, and for a single-anchor entry deleting the file really is the remedy.
+  #
+  # Both sides go through `shadow_parts` and `norm`, so a single-part entry matches exactly what
+  # it matched before. The key is `norm(file)#norm(anchor)`; `norm` collapses everything outside
+  # [a-z0-9] to spaces, so its output can never contain a `#` and neither side can forge the
+  # separator out of its own text.
+  ent_keys=""
+  while IFS="$TAB" read -r p_file p_anchor; do
+    [ -n "$p_file$p_anchor" ] || continue
+    ent_keys="${ent_keys}$(norm "$p_file")#$(norm "$p_anchor")${TAB}${p_file}#${p_anchor}
+"
+  done <<< "$(shadow_parts "$shadows")"
+  ent_nparts="$(awk 'NF{n++} END{print n+0}' <<< "$ent_keys")"
+
   while IFS="$TAB" read -r s_shadows s_since s_env; do
     [ -n "$s_shadows" ] || continue
-    [ "$(norm "$s_shadows")" = "$(norm "$shadows")" ] || continue
-    sup_env="$s_env"; sup_since="$s_since"; sup_hit=yes; break
+    while IFS="$TAB" read -r d_file d_anchor; do
+      [ -n "$d_file$d_anchor" ] || continue
+      sup_raw="$(awk -F"$TAB" -v k="$(norm "$d_file")#$(norm "$d_anchor")" '$1==k {print $2; exit}' <<< "$ent_keys")"
+      [ -n "$sup_raw" ] || continue
+
+      # ONE ROW PER SUPERSEDED ANCHOR, which is why the old `break` is gone. Two anchors of one
+      # entry can be superseded by two different core releases needing two different keys;
+      # collapsing them to one row would hand the operator one of the two actions and drop the
+      # other silently. For a single-anchor entry nothing changes -- there is one key to match.
+      if [ "$ent_nparts" -gt 1 ]; then
+        if [ -n "$s_env" ]; then
+          emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+            "replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+        else
+          emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+            "retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+        fi
+      elif [ -n "$s_env" ]; then
+        emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+          "replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+      else
+        emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
+          "core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+      fi
+    done <<< "$(shadow_parts "$s_shadows")"
   done <<< "$(supersessions_of "$THEIRS")"
-  if [ -n "$sup_hit" ] && [ -n "$sup_env" ]; then
-    emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-      "replaces_with=${sup_env} :: core ${sup_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${sup_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
-  elif [ -n "$sup_hit" ]; then
-    emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-      "core ${sup_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
-  fi
 
   have "$THEIRS" "$cp" || { emit OVERRIDE-ANCHOR-UNRESOLVED "$entry" "$tgt" "target absent at $THEIRS"; continue; }
 

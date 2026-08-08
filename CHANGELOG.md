@@ -34,6 +34,62 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.312.0] — 2026-08-08
+
+### The supersession join read the whole `shadows:` string, so it was blind to exactly the entries it exists for
+
+Found taking plan item 6's gate measurement — count the LC-O15 candidate set on the reference
+consumer before promoting the clause. The count came back **0**, with a working control (66 rows
+across ten other statuses from the same run). **That zero was false.**
+
+**MEASURED AT GROUND TRUTH, one field apart.** Same scratch consumer built from the reference
+consumer's own layer directories, same core, same `2bc7aa4..HEAD` range:
+
+```
+shadows: steps/retro.md#3. …, #4a. Close-Out Sweep, #5. …, #7. …   0 OVERRIDE-SUPERSEDED
+shadows: steps/retro.md#4a. Close-Out Sweep                        1 OVERRIDE-SUPERSEDED
+```
+
+`layer-drift.sh` compared `norm()` of the WHOLE `shadows:` value against `norm()` of the
+declaration's, while every drift arm below it reads the value through `shadow_parts` — lib.sh's
+ONE reading of `shadows:`, whose own header records two prior forks of exactly that reading. So
+an entry bundling four anchors could never match a declaration naming one of them, and the more
+anchors an entry bundles the more unrelated core text it freezes at `base_sha`. **The blind spot
+was the population the clause exists for.**
+
+The live miss is not hypothetical. `overrides/steps__retro__domain-sections.md` shadows
+`steps/retro.md#4a. Close-Out Sweep` among four anchors; core declared that anchor superseded at
+**0.281.0** with `AI_DLC_SNAPSHOT_STRIKETHROUGH`. The signal has been silent on every pull since,
+and that entry's own `reason:` records two successive re-adoptions of that very section — one of
+which it calls WRONG.
+
+**AND THE REMEDY IS NOT THE SAME REMEDY, which is why this could not be a one-line join fix.**
+`readopt-override.sh --stamp retire` DELETES THE OVERRIDE FILE; there is no per-anchor retire. On
+that entry it would throw away three anchors core has not superseded, and every section they
+shadowed would silently revert to core. A multi-anchor hit therefore carries a `retire_anchor=`
+token and prescribes NARROWING `shadows:`; `apply.sh` renders that as the last worklist step
+instead of the retire stamp. The single-anchor detail is unchanged byte for byte — for a
+one-anchor entry deleting the file really is the remedy.
+
+**A latent parse became live with the second token.** `apply.sh` read `env_key` unconditionally
+and nulled it only when the result equalled the whole detail — a guard that fires when the detail
+contains no ` :: ` at all, not when it lacks the `replaces_with=` prefix. Harmless while that was
+the only token. An env-less multi-anchor detail leads with `retire_anchor=`, and the old form
+would have yielded `env_key=retire_anchor=steps/retro.md#4a. Close-Out Sweep` and rendered a
+`1/2 ATOMIC` row telling the operator to write that string into `settings.json` as an environment
+key. Both tokens are now parsed as the ordered prefix they are.
+
+**False-positive set: empty, and derived rather than sampled.** On the reference consumer the fix
+produces exactly ONE new row — the true positive above — and every other status count is
+identical to the pre-fix run, status for status.
+
+`layer-readopt-gate` gains the multi-anchor pair (declared anchor listed FIRST, so the mutant can
+discriminate), its non-vacuity control, the token-order assertion, an assertion that the
+single-anchor detail did NOT gain the token, and a `cmp -s`-guarded mutant that keeps only the
+last harvested part — silencing the multi-anchor entry while leaving the single-anchor one
+firing, which is the disentanglement. `apply-worklist-rows` gains the two rendering assertions
+and two more mutants, each killing exactly one arm.
+
 ## [0.311.0] — 2026-08-08
 
 ### Every worklist row printed its subject and discarded its instruction, and the ordered sequence never printed its first step

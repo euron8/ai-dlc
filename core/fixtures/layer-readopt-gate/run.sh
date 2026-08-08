@@ -858,7 +858,14 @@ YML
 
   # The MATCH and its CONTROL differ in one field: the anchor. Same file, same shape, same
   # base_sha -- so an arm that fires on both is matching "is an override", not "is superseded".
-  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section." "SUP__twokey:steps/widget.md#6. Two-key section."; do
+  #
+  # SUP__multi and SUP__multictl are the MULTI-ANCHOR pair, and they are the case the join was
+  # blind to. The declared anchor is deliberately FIRST in SUP__multi's list -- see the mutant
+  # below, which keeps only the LAST part and must therefore silence THIS entry while leaving
+  # single-anchor SUP__match firing. Their own difference is one anchor: SUP__multictl bundles
+  # two anchors core declares nothing about, so an arm that fires on it is matching "shadows more
+  # than one thing", not "shadows something core superseded".
+  for pair in "SUP__match:steps/widget.md#3. Widget schema." "SUP__control:steps/widget.md#4. Other section." "SUP__adopted:steps/widget.md#5. Adopted section." "SUP__twokey:steps/widget.md#6. Two-key section." "SUP__multi:steps/widget.md#3. Widget schema., #4. Other section." "SUP__multictl:steps/widget.md#4. Other section., #7. Also undeclared."; do
     nm="${pair%%:*}"; sh_v="${pair#*:}"
     cat > "$CONS/.claude/skills/ai-dlc/overrides/${nm}.md" <<EOF
 ---
@@ -959,6 +966,93 @@ EOF
       ok "  and the neighbouring single-key row still carries exactly its own key (the list did not bleed)" ;;
     *)  bad "the single-key row was contaminated by the list above it: ${sup_still:0:80}" ;;
   esac
+
+  # --- A MULTI-ANCHOR OVERRIDE IS THE CASE THIS ARM WAS BLIND TO ------------------------------
+  #
+  # The join compared `norm` of the WHOLE `shadows:` value against `norm` of the declaration's,
+  # so an entry bundling several anchors could never match a declaration naming ONE of them --
+  # and the more anchors an entry bundles the more unrelated core text it freezes, which is
+  # exactly the entry a retirement signal exists for. Measured on the reference consumer at
+  # 0.310.0 and it was a LIVE miss: `overrides/steps__retro__domain-sections.md` shadows four
+  # retro anchors, one of which core declared superseded at 0.281.0. Whole-string join on the
+  # real tree over the real pull range: 0 rows. Same tree, that anchor alone in `shadows:`: 1.
+  if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__multi\.md$')"; then
+    ok "a MULTI-anchor override is reported when core supersedes ONE of its anchors"
+  else
+    bad "a multi-anchor override naming a declared supersession went unreported — the join reads the whole shadows: string, so the entries that freeze the most core text are the ones it cannot see"
+  fi
+
+  if grep -qx OVERRIDE-SUPERSEDED <<<"$(sup_st 'SUP__multictl\.md$')"; then
+    bad "CONTROL: a multi-anchor override with NO declared anchor was reported — the arm is matching 'shadows more than one thing', not 'shadows something superseded'"
+  else
+    ok "  and a multi-anchor override with no declared anchor stays silent"
+  fi
+
+  # NON-VACUITY for that control, same reasoning as SUP__control's above.
+  if [ "$(printf '%s\n' "$sup_out" | grep -c 'SUP__multictl')" -ge 1 ]; then
+    ok "  CONTROL is present under some other status (so its silence is a real zero)"
+  else
+    bad "the multi-anchor control produced NO row at all — its silence proves nothing"
+  fi
+
+  # THE REMEDY IS NOT THE SAME REMEDY, AND SAYING SO IS THE POINT OF THE TOKEN.
+  # `readopt-override.sh --stamp retire` DELETES THE FILE; there is no per-anchor retire. On a
+  # multi-anchor entry that discards the anchors core has NOT superseded, and every section they
+  # shadowed silently reverts to core. apply.sh renders the last worklist row off `retire_anchor=`
+  # (asserted end to end in apply-worklist-rows), so a lost token is a row telling the operator
+  # to delete an entry core asked them to narrow.
+  sup_multi="$(printf '%s\n' "$sup_out" | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED" && $2 ~ /SUP__multi\.md$/ {print $4}')"
+  case "$sup_multi" in
+    "replaces_with=AI_DLC_WIDGET_EXTRA :: retire_anchor=steps/widget.md#3. Widget schema. ::"*)
+      ok "  its detail carries retire_anchor= after replaces_with=, naming the entry's OWN spelling of the superseded anchor" ;;
+    *retire_anchor=*)
+      bad "the retire_anchor= token is present but not in the ordered prefix apply.sh parses: ${sup_multi:0:100}" ;;
+    *)
+      bad "the multi-anchor detail carries NO retire_anchor= token, so apply.sh renders '--stamp retire' and tells the operator to delete an entry core asked them to narrow: ${sup_multi:0:100}" ;;
+  esac
+
+  # AND THE SINGLE-ANCHOR DETAIL MUST NOT GAIN THE TOKEN. For a one-anchor entry deleting the
+  # file really IS the remedy, and a token there would turn the correct instruction into
+  # "remove the only anchor", leaving an override that shadows nothing.
+  case "$sup_still" in
+    *retire_anchor=*) bad "the SINGLE-anchor detail gained a retire_anchor= token — apply.sh would tell the operator to strip the entry's only anchor instead of retiring it" ;;
+    *)                ok "  and the single-anchor detail is unchanged: no token, so its remedy is still the retire stamp" ;;
+  esac
+
+  # --- MUTANT: the entry side back to ONE part ------------------------------------------------
+  # A COPY of the whole reconcile directory (layer-drift sources lib.sh from beside it, and a
+  # lone script copy dies before printing anything), `cmp -s`-guarded so a sed that matched
+  # nothing cannot pass as a mutation. Dropping the accumulator keeps only the LAST harvested
+  # part, and SUP__multi lists its declared anchor FIRST — so this mutant must silence SUP__multi
+  # while leaving single-anchor SUP__match firing. Two verdicts from one mutant, and they are the
+  # disentanglement: a mutation that killed both would be testing "the arm runs", not the join.
+  SMUT="$ROOT/supmut"; rm -rf "$SMUT"; mkdir -p "$SMUT"
+  cp "$(dirname "$DRIFT")"/*.sh "$SMUT/" 2>/dev/null || true
+  cp "$DRIFT" "$SMUT/layer-drift.sh"
+  sctl="$(bash "$SMUT/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null | awk -F'\t' '$1=="OVERRIDE-SUPERSEDED"' | wc -l | tr -d ' ')"
+  if [ "$sctl" -ge 2 ]; then
+    ok "CONTROL: an unmutated copy in a fresh directory still reports both the single- and multi-anchor entries ($sctl rows)"
+  else
+    bad "CONTROL: the unmutated copy reported $sctl supersession row(s) — the mutant verdict below would be unreadable"
+  fi
+
+  sed 's@^    ent_keys="\${ent_keys}\$(norm @    ent_keys="$(norm @' "$DRIFT" > "$SMUT/layer-drift.sh"
+  if cmp -s "$DRIFT" "$SMUT/layer-drift.sh"; then
+    bad "the multi-anchor MUTANT did not apply — the ent_keys accumulator has been respelled, so it proves nothing"
+  else
+    smut_out="$(bash "$SMUT/layer-drift.sh" "$DIST" "$BASE" "$THEIRS2" "$CONS" 2>/dev/null)"
+    smut_st() { printf '%s\n' "$smut_out" | awk -F'\t' -v e="$1" '$2 ~ e {print $1}'; }
+    if grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__multi\.md$')"; then
+      bad "MUTANT SURVIVED: SUP__multi is still reported with only its last anchor harvested, so the multi-anchor assertion is not testing the per-part join"
+    else
+      ok "MUTANT (entry side keeps one part): the multi-anchor entry goes silent — the accumulation is what makes every anchor joinable"
+    fi
+    if grep -qx OVERRIDE-SUPERSEDED <<<"$(smut_st 'SUP__match\.md$')"; then
+      ok "  and the single-anchor entry still fires under it — the two arms are not entangled"
+    else
+      bad "  the mutant also silenced the single-anchor entry: it is testing whether the arm RUNS, not how it joins"
+    fi
+  fi
 fi
 
 rm -rf "$ROOT"
