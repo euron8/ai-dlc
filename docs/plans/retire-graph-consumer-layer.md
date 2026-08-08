@@ -113,9 +113,16 @@ and was never in the POSITION, and one line of that realisation replaced the who
 with a control, and **half its attribution was wrong the same way item 17's was**: `setup-sites.md`
 is not in that script's scan set at all. See §*What item 18 measured*.
 
-**NEXT ACTION FOR THIS REPO: item 8** — push-candidate ledger triage, re-scoped by 8c to the
-entries whose subject is core. Item 6 follows it, and its gate is now takeable (graph is quiescent
-and post-migration).
+**~~NEXT ACTION FOR THIS REPO: item 8~~ — CORE'S HALF IS DONE.** v0.310.0 (#432). The re-verify
+surfaced exactly one CLOSE-CANDIDATE and it was FALSE — a migration-moved receipt subject. See
+§*What item 8's core half measured*. **What remains of item 8 is the OPERATOR's** and is stated
+there: 24 of 24 `theirs_has` receipts are undecided, so the 53 STILL-LIVE set is still not a work
+queue.
+
+**NEXT ACTION FOR THIS REPO: item 6** — promote LC-E6/LC-O15 to ADJUDICATED. Its gate is now
+takeable: graph is quiescent and post-migration, so the LC-E6 and LC-O15 candidate sets can be
+counted. **Establish first that LC-E6's code can fire at all** — `fixture: none` is a declared I65
+gap, and promoting a clause whose zero has never been shown to mean anything promotes a silence.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -181,8 +188,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~10~~ | ~~**17** — a line retained outside the declared setup-site spans~~ | **DONE** — v0.306.0 (#425). **Reproduced at ground truth**, and the report's attribution was WRONG: `apply.sh` has no mask/reinject at all. See §*What item 17 measured* |
 | ~~11~~ | ~~**16** — move `planning-artifacts/stories/` under `s<N>/`~~ | **DONE** — v0.307.0 (#427) readers, v0.308.0 (#428) files. The corpus is **988** flat, not 1024; the restating-reader count was **two**, not three; and the deferral's premise was true about the NAME and never asked about the POSITION. See §*What item 16 measured* |
 | ~~12~~ | ~~**18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift~~ | **DONE** — v0.309.0 (#430). Reproduced with a control; **28 files** exposed (control: 72 machinery files outside the scan). Half the report's attribution is REFUTED and left open. See §*What item 18 measured* |
-| **13** | **8** — push-candidate ledger triage | **← THE NEXT ITEM.** | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
-| 14 | **6** — promote LC-E6/LC-O15 | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
+| ~~13~~ | ~~**8** — push-candidate ledger triage~~ | **CORE'S HALF DONE** — v0.310.0 (#432). The run's only CLOSE-CANDIDATE was FALSE; the guard against it existed as a NOTE, not a mechanism. The remaining triage needs the receipts re-anchored, which is the operator's. See §*What item 8's core half measured* | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
+| **14** | **6** — promote LC-E6/LC-O15 | **← THE NEXT ITEM.** | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
 | — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
@@ -488,6 +495,44 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What item 8's core half measured (the run's one close was false, and its guard was prose)
+
+Re-ran `ledger-reverify.sh` over graph's 56-entry ledger against current core, read-only:
+
+```
+STILL-LIVE          53
+HAND-REVIEW         15
+NAMED-UPSTREAM       5
+RECEIPTS-UNDECIDED   1   <- 24 of 24 `theirs_has` receipts, undecided
+CLOSE-CANDIDATE      1   <- and it was FALSE
+```
+
+**THE ONE CLOSE WAS FALSE, AND THE CONSUMER'S OWN MIGRATION CAUSED IT.**
+`PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH`'s receipt names `docs/retro/sprint-249.md`,
+which the artifact-path migration moved to `docs/retro/s249/retro.md`. Its `&&` chain
+short-circuits on the missing file and exits 1 — the same status a real fix produces. Verified by
+hand at the path that exists now: relative rc=0, absolute rc=1, reproducing exactly as filed.
+
+**The guard for it already existed as a SENTENCE** in the close's own detail, telling the operator
+to check the subject paths before draining. That is the same shape item 17 found in §7v criterion
+5, two releases earlier.
+
+**WHAT REMAINS IS THE OPERATOR'S, and the numbers say why.** 24 of 24 `theirs_has` receipts are
+undecided — this pull moved neither side of them — so the 53 STILL-LIVE set is still a mixture of
+live entries and entries whose anchor cannot tell fixed from broken. **Re-anchoring those receipts
+is graph's, not core's.** Do not treat the 53 as a work queue until it is done.
+
+**Receipt kinds, measured rather than assumed: 31 `manual`, 26 `theirs_has`, 21 `sh`, 13
+`theirs_lacks`.** Five NAMED-UPSTREAM entries are named by upstream history at v0.153.0, v0.172.0,
+v0.247.0, v0.248.0 and v0.300.0 and each needs a human confirmation this file cannot give.
+
+**TWO OF THIS SESSION'S OWN MEASUREMENTS HERE WERE WRONG and were caught before being quoted.** A
+receipt-kind tally reported *52 of 53 entries carry no receipt* — receipts are spelled
+`<br>verify:`, so the field index was off. A path sweep reported *37 of 65 named paths no longer
+exist* — it swept distribution paths into a consumer-side question. Precisely scoped, exactly ONE
+`verify: sh` receipt names a migration-moved artifact path, with a control showing the same
+receipts name paths that do exist. Both errors are the same class this item exists to audit.
+
 ## What item 18 measured (reproduced — and half the report was again the wrong program)
 
 **THE MECHANISM IS REAL AND WAS REPRODUCED AT GROUND TRUTH**, on this repo's own history rather
@@ -650,7 +695,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 
 ## Where things stand
 
-**ai-dlc is at `0.309.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.310.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -674,6 +719,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.310.0 | #432 | **plan item 8, core's half.** The re-verify over graph's 56-entry ledger produced exactly ONE `CLOSE-CANDIDATE` and it was FALSE: the receipt named `docs/retro/sprint-249.md`, which the artifact-path migration moved, so its `&&` chain short-circuited on a missing file and read as a fix. By hand at the path that exists now: relative rc=0, absolute rc=1 — the defect reproduces as filed. The guard for this case existed as a NOTE in the close's own detail text, telling the operator to check the paths themselves. Now a program, and one that can only DOWNGRADE a close, never create one — which answers the false-confidence objection the code had recorded against path-parsing. False positives: exactly one row moved, the one proved false by hand. 67 → 69 assertions. |
 | v0.309.0 | #430 | **plan item 18.** The consumer's stamp carries TWO advancing shas and the drift scan only ever read one: step 2's autonomous self-update rewrites the whole MACHINERY set and advances `skill_commit`, so on a multi-hop pull those files sit at an INTERMEDIATE ref while `commit` — what every predicate measures against — stays put. Reproduced on this repo's own history: the same file at the intermediate ref gives `HARD-CORE-DRIFT-ABSORBED`, whose remedy is a REVERT of upstream's own content; at base it gives `CORE-OK`. **28 files** in both the machinery set and the scan (control: 72 outside). New non-blocking `CORE-AT-SELF-UPDATE`, with the ref READ FROM THE STAMP rather than passed in — a fifth argument is a fifth thing a caller can omit. `apply-drift-after-write` 11 → 15 assertions. |
 | v0.308.0 | #428 | **plan item 16, second half.** The story corpus migrates. The deferral rested on a TRUE sentence about the NAME and never asked about the POSITION: the grammar places `stories/` only under `s<N>/`, so a `stories/` directory without one predates the grammar and its leading number IS the sprint. A legacy basename is normalised to the explicit `s<N>` spelling and then handled by the SAME transform as every other artifact, rather than by a second one that could drift invisibly. Corroborated first: 786 of 786 leading numbers inside the tree's sprint range, control the 73 explicit-token files. `STORY-NO-SPRINT` replaces `DEFERRED-STORIES` — per FILE, cleared by a rename. **The migration and the pre-push validator agreed EXACTLY on 5148 real files: 951/951 blocking, 72/72, 3/3, 23/23.** |
 | v0.307.0 | #427 | **plan item 16, first half.** `stories_dir` becomes a TEMPLATE the schema owns, carrying the sprint slot; **I84** forbids a second copy and requires every reader to substitute it. The literal had FOUR copies and three would have failed SILENTLY — a protected-path pattern that matches nothing ALLOWS, a story glob that matches nothing prints PASS. Check 6's name-keyed glob is replaced by the sprint's own DIRECTORY, so the 298/299 capital-S defect cannot recur. The story-id join is re-derived: the DECLARED sprint is stripped from the entry key to give the index. **The replacement corpus control was itself blind to an unmigrated tree and reported 988 files as an empty corpus — caught by running it, not by reading it.** New fixture (10 assertions, 5 mutants, 1 control). |
