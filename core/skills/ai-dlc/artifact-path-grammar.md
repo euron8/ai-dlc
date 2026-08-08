@@ -139,10 +139,23 @@ used to claim all of it.** `<story-id>-review.md` expands to `S292-ff-s3-…-rev
 caught. `story-<id>-<slug>.md` expands two ways, and only one of them carries a token anything can
 see: on the reference consumer **761 of 1024 story files spell the sprint as a bare leading
 number** (`story-297-1-slug.md`), which is character-for-character the `story-<M>-<slug>.md` this
-grammar itself prescribes. No expression can separate those two without knowing which sprints
-exist, and the whole corpus is deferred for that reason rather than half-judged. **The remaining
-263 are visible and reported.** The release that moves `stories/` under `s<N>/` is what removes
-the ambiguity, by taking the number out of the filename entirely.
+grammar itself prescribes. No expression can separate those two **from the name**.
+
+**AND THE NAME WAS NEVER WHERE THE ANSWER WAS.** That corpus was deferred for a whole release on
+the strength of the sentence above, which is true and was the wrong question. This grammar places
+`stories/` **only under `s<N>/`**, so a `stories/` directory with no `s<N>/` component above it
+cannot hold a conforming file *whatever the file is called*: everything in one predates the
+grammar, by construction, and its leading number is the sprint. Both the migration and the
+pre-push validator read it positionally, and the licence is corroborated rather than assumed — of
+the 786 basenames matching `story-<A>-<B>`, **all 786** have `A` inside the sprint range the tree
+actually uses (7–302) and `B` distributed as a story index. Control, in the form where the sprint
+is not in doubt: all **73** `story-S<N>-<M>` files carry that same structure in those same two
+positions.
+
+What survives is per-FILE rather than per-directory. A story basename giving no sprint at all
+(`bug-mobile-layout.md`, `192-ff-A-…`, `story-168-process-A.md`) is reported as
+`STORY-NO-SPRINT` and leaves the class the moment it is renamed. **23 on the reference consumer,
+against 951 the migration moves.**
 
 ## Enforcement
 
@@ -226,6 +239,23 @@ destinations still carrying a token        0  <- the script's own self-check, bo
 re-run after applying                   rc=3  <- nothing left to migrate; it is idempotent
 ```
 
+**And the story corpus, measured on the same consumer once the deferral was lifted** — a second
+dry run, after the first migration had already been applied for real:
+
+```
+tracked files scanned                   5148
+moves planned                            951  <- the story corpus, in every derivable spelling
+REFUSED                                   98  72 ambiguous, 3 with no area,
+                                               23 story files with no sprint in the name
+in a stories/ dir outside the slot       1001  the subject; 23 of the 1024 under any stories/
+                                               directory were already conforming
+```
+
+**The pre-push validator's blocking set and this plan agreed EXACTLY** on that run — 951 and 951,
+72 and 72, 3 and 3, 23 and 23. That agreement is the point of stating both here: they are two
+programs reading one grammar, and the failure that matters is not either being wrong alone but the
+two disagreeing, which leaves a push blocked on a path its own remedy will not move.
+
 **Three things it will not do, each reported rather than guessed:**
 
 - **A path naming two different sprints** (`story-S246-1-s11-...`, `gate-log-archive-s291-s292.md`)
@@ -233,10 +263,12 @@ re-run after applying                   rc=3  <- nothing left to migrate; it is 
   under the wrong sprint forever.
 - **A sprint directory directly under a scan root that is not an area** (`_bmad-output/s177/`) is
   REFUSED. There is no area to anchor the slot to.
-- **`stories/` is DEFERRED WHOLESALE.** The sprint is spelled two ways there and one of them is a
-  bare number indistinguishable from the story index the grammar itself prescribes, so a run that
-  took the directory would move `story-S298-1-…` and leave `story-297-1-…` — splitting one
-  sprint's stories across two conventions. It moves in its own release.
+- **A story file with no sprint anywhere in its name** (`bug-mobile-layout.md`, `192-ff-A-…`,
+  `story-168-process-A.md`) is REFUSED. It is non-conforming — the `stories/` directory it sits in
+  has no `s<N>/` above it — but there is nothing to derive a destination from, and a guess would
+  file it under a sprint that never produced it. Rename it and the next run moves it. **23 on the
+  reference consumer.** This replaced the wholesale `stories/` deferral: the class is no longer
+  *this directory is hard*, it is *this file cannot be placed*, and it empties one rename at a time.
 
 **Areas it had to INFER are reported too, and the report sends you to YOUR file, not this one.**
 This grammar declares eight. The reference consumer held sprint-tokened files in **nine** more —

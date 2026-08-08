@@ -84,11 +84,15 @@ allows "_bmad-output/brainstorming/s301/discovery-brainstorming.md"             
 allows "_bmad-output/planning-artifacts/prd.md"                                  "durable at an area root, no sprint anywhere"
 allows "_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md"     "AMBIGUOUS: the migration refuses it, so nothing here can clear it"
 allows "_bmad-output/s177/wave-1-dispatch-status.md"                             "NO-AREA: the migration refuses it, so nothing here can clear it"
-allows "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md"           "DEFERRED: core defers the whole story corpus"
+allows "_bmad-output/planning-artifacts/stories/bug-mobile-layout.md"            "STORY-NO-SPRINT: the migration cannot place it, so nothing here can clear it"
+allows "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md"       "a conforming story under s<N>/ — its leading number is not a sprint slot"
+
+blocks "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md"           "a story outside the slot, explicit token"
+blocks "_bmad-output/planning-artifacts/stories/story-297-1-beta.md"             "and its BARE-number sibling, or the corpus blocks by half"
 
 # The non-blocking classes are REPORTED. Silence about them is this repo's own named defect one
 # layer out, so each is asserted to appear with its own name.
-for cls in AMBIGUOUS NO-AREA DEFERRED-STORIES; do
+for cls in AMBIGUOUS NO-AREA STORY-NO-SPRINT; do
   grep -q "$cls" <<<"$OUT" && ok "$cls is reported by name, not silently exempted" \
                            || bad "$cls does not appear in the output at all"
 done
@@ -160,7 +164,7 @@ R_OUT="$(bash "$VAL" --root "$W3" --report 2>&1)"; R_REP=$?
 grep -q 'REPORT —' <<<"$R_OUT" && ok "--report actually adds the census" \
                                || bad "--report added nothing, so the flag is inert"
 grep -q 'Story-corpus spelling split' <<<"$R_OUT" \
-  && ok "the census names the story-corpus spelling split the deferral turns on" \
+  && ok "the census names the story-corpus spelling split the migration has to read" \
   || bad "the census omits the story spelling split"
 rm -rf "$W3"
 

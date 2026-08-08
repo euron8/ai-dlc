@@ -34,6 +34,69 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.308.0] — 2026-08-08
+
+### The name could not settle it and the position always could
+
+Plan item 16, second half. v0.307.0 moved the READERS onto the grammar; this moves the FILES. The
+story corpus is no longer deferred by the migration or exempted by the pre-push validator.
+
+**THE DEFERRAL RESTED ON A TRUE SENTENCE AND THE WRONG QUESTION.** `story-297-1-slug.md` reads
+equally as sprint 297 story 1 and as story INDEX 297 with slug `1-slug` — the form the grammar
+itself prescribes — and no expression over that string separates the two. That is correct, and it
+is about the NAME. The grammar places `stories/` **only under `s<N>/`**, so a `stories/` directory
+with no `s<N>/` component above it cannot hold a conforming file whatever the file is called:
+everything in one predates the grammar, by construction, and its leading number is the sprint. Both
+programs now read it positionally.
+
+**The licence is corroborated, not assumed.** Of the 786 reference-consumer basenames matching
+`story-<A>-<B>`, **all 786** have `A` inside the sprint range the tree actually uses (7–302), with
+`B` distributed as a story index (212 ones, 176 twos, 133 threes). Control, in the form where the
+sprint is not in doubt: all **73** `story-S<N>-<M>` files carry that same structure in those same
+two positions.
+
+**Normalise, then reuse.** A legacy story basename spelling the sprint as a bare number is
+rewritten to the explicit `s<N>` form *before* the general transform sees it, so the sprint scan,
+the token strip, the collision check and the destination composition are the same code that
+handles every other artifact. A second transform for one directory is a second place for the
+destination rule to drift — and the drift would be invisible, because both would still produce a
+path under `s<N>/`.
+
+**MEASURED ON THE REFERENCE CONSUMER, READ-ONLY, AND THE TWO SIDES AGREED EXACTLY:**
+
+```
+                        migration dry run    pre-push validator
+moves planned / blocking          951                951
+AMBIGUOUS                          72                 72
+NO-AREA                             3                  3
+STORY-NO-SPRINT                    23                 23
+```
+
+That agreement is the release's evidence. They are two programs reading one grammar, and the
+failure that matters is not either being wrong alone but the two disagreeing — which leaves a push
+blocked on a path its own printed remedy will not move. The fixture asserts the equality in both
+directions; this run confirms it on 5148 real files.
+
+**What survives is per-FILE, not per-directory.** `STORY-NO-SPRINT` replaces `DEFERRED-STORIES`: a
+story basename giving no sprint at all (`bug-mobile-layout.md`, `192-ff-A-…`,
+`story-168-process-A.md`) is reported, never blocked and never guessed at, and leaves the class the
+moment it is renamed. The class empties one rename at a time instead of waiting on a release.
+
+**Both directions of the positional test are locked by mutants**, because each fails silently in
+its own way: without the bare-number normalisation the corpus HALF-migrates (the capital-S file
+moves, its sibling stays) — the exact split the wholesale deferral existed to prevent; without the
+`s<N>/`-above-it test a story already on the grammar is re-read and its leading number becomes a
+sprint slot.
+
+- `core/scripts/migrate-artifact-paths.sh` — `legacy_story()`, `story_normalize()`; the deferral
+  and its counter replaced by a reported `STORIES` line and a named `STORY-NO-SPRINT` refusal.
+- `core/scripts/validate-artifact-paths.sh` — the same two predicates in awk, mirrored
+  deliberately; rows report the ORIGINAL path, never the normalised one.
+- `core/skills/ai-dlc/artifact-path-grammar.md` — the deferral paragraph replaced by the positional
+  licence and its corroboration; the second migration's five numbers recorded.
+- `artifact-path-migration` +4 story arms and 2 mutants (40 assertions);
+  `artifact-path-conformance` seeds the four story cases and joins them both ways (40 assertions).
+
 ## [0.307.0] — 2026-08-08
 
 ### The sprint moves out of the story filename and into the directory, and the readers go first

@@ -69,9 +69,17 @@ else
   # --- NO-AREA: reported, never blocking -----------------------------------------
   mk _bmad-output/s177/wave-1-dispatch-status.md                            "no area to anchor to"
 
-  # --- DEFERRED stories, in BOTH spellings ---------------------------------------
+  # --- the story corpus. BLOCKING in both spellings, because both are migratable ---
+  # The corpus is no longer deferred as a class: a `stories/` directory with no `s<N>/` above it
+  # predates the grammar whatever its files are called, so the leading number IS the sprint.
   mk _bmad-output/planning-artifacts/stories/story-S301-1-alpha.md          "explicit token"
   mk _bmad-output/planning-artifacts/stories/story-297-1-beta.md            "bare leading number"
+  # ...and the one shape that survives, per FILE rather than per directory: no sprint anywhere in
+  # the name, so the migration has nowhere to put it and nothing here can clear it.
+  mk _bmad-output/planning-artifacts/stories/bug-mobile-layout.md           "no sprint in the name"
+  # A story ALREADY on the grammar whose basename leads with a number. Conforming, and it must not
+  # be re-read: the `s<N>/` above it is what says so.
+  mk _bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md      "conforming story"
 fi
 
 if [ -n "$GRAMMAR_SRC" ]; then
