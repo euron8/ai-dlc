@@ -126,8 +126,23 @@ reason the promotion is worth anything. It also surfaced two defects in `apply.s
 to do with item 6 and everything to do with whether ANY of this reaches the operator. See
 §*What item 6 measured*.
 
+**NEXT ACTION FOR THE OPERATOR: take the 0.300.0 → 0.314.0 pull in graph.** Runbook:
+[`graph-0300-to-0314-pull.md`](graph-0300-to-0314-pull.md). **The reason is not the diff size** —
+graph migrated 2667 artifacts onto the path grammar and has NO validator enforcing it, because
+that shipped in v0.305.0 and graph is at 0.300.0. Measured with a control: core has
+`core/scripts/validate-artifact-paths.sh`, graph has neither the script nor a pre-push reference
+to it, while a control validator (`validate-draft-stamps.sh`) IS present. Every artifact written
+in graph since the migration is unchecked, and s302 would start that way.
+
+**Expect exactly one NEW blocking row and do not read it as a regression:**
+`HARD-LAYER-ADJUDICATION-MISSING` on `overrides/steps__retro__domain-sections.md`, because
+v0.314.0 promoted LC-O15. Graph's count goes 12 → 13. The runbook states both legitimate verdicts
+and why `--stamp retire` is the WRONG remedy there.
+
 **NEXT ACTION FOR THIS REPO: item 19** — review graph's recent artifact-consolidation attempts.
-Operator request, 2026-08-08. Item 12 remains available and gates nothing.
+Operator request, 2026-08-08. Item 12 remains available and gates nothing. **Item 19 is read-only
+and historical, so it works either side of the pull; prefer AFTER**, so the review reports against
+the engine graph will actually run.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
