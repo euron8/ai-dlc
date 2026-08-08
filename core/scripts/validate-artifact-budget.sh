@@ -374,6 +374,33 @@ is_archive() {
   esac
 }
 
+# A copy under the artifact-path grammar's reserved `s<N>/` slot is that sprint's
+# ARCHIVED artifact, not the live one, and the whole-read pool must not sum it.
+#
+# THIS IS A MIGRATION-INDUCED REGRESSION, and the sweep was correct before it.
+# Every historical copy used to carry a per-sprint BASENAME (`architecture-s251.md`),
+# which the pool's `find -name architecture.md` could not match. Item 10's migration
+# moved them all to `s251/architecture.md` -- the live basename -- and the same search
+# started counting every one of them.
+#
+# Measured on the reference consumer when this shipped: 30 files summed under a label
+# reading "(4 planning artifacts)" -- 23 per-sprint `architecture.md` archives, 3
+# party-mode transcript copies, 4 live. 275,812 tok reported against 117,379 live, a
+# 2.35x overstatement that reported OVER on a consumer sitting at 36% of its pool.
+# ALL 26 spurious rows carried an `s<N>` component; one rule excludes all of them.
+#
+# `s[0-9]+` matched against a whole path COMPONENT is the grammar's own spelling of
+# the slot (validate-artifact-paths.sh:167,241), reused rather than re-invented. It is
+# a component match and not a substring, so `s301-close-out/` is not a slot; and the
+# FILENAME is dropped before the search, because a file is never a slot.
+is_sprint_slotted() {
+  case "$1" in
+    */*) ;;
+    *)   return 1 ;;
+  esac
+  printf '%s\n' "${1%/*}" | tr '/' '\n' | grep -qxE 's[0-9]+'
+}
+
 # Not a live artifact, however it is named. `architecture.md` is the trap: the
 # ai-dlc STEP FILE is also called architecture.md, so a bare basename search finds
 # the skill's own source under .claude/skills/ and under every pre-ai-dlc snapshot
@@ -796,22 +823,31 @@ if [ "$POOL_APPLIES" -eq 1 ]; then
     find "$ROOT/_bmad-output" "$ROOT/docs" -type f -name "$name" 2>/dev/null | while read -r f; do
       is_archive "$f" && continue
       is_not_artifact "$f" && continue
+      is_sprint_slotted "${f#"$ROOT"/}" && continue
       bytes="$(wc -c < "$f" | tr -d ' ')"
       printf '%s|%s\n' "$(( bytes / BPT ))" "${f#"$ROOT"/}" >> "$POOL_TMP"
     done
   done
 
   POOL_TOTAL=0
+  POOL_FILES=0
   say "whole-read pool     : ${WHOLE_READ_POOL} tok  (${ARTIFACT_SHARE_PCT}% of the analyst's ${READER_WINDOW_TOKENS}-tok window, resolved from ${WINDOW_SOURCE})"
   if [ -s "$POOL_TMP" ]; then
     while IFS='|' read -r tokens rel; do
       POOL_TOTAL=$(( POOL_TOTAL + tokens ))
+      POOL_FILES=$(( POOL_FILES + 1 ))
       [ "$QUIET" -eq 1 ] || printf '      %-44s %8s tok\n' "$rel" "$tokens"
     done < "$POOL_TMP"
   fi
   rm -f "$POOL_TMP"
 
-  POOL_LABEL="WHOLE-READ POOL (4 planning artifacts)"
+  # DERIVED, not the literal "4" this label carried. The count and the sum come from
+  # the same rows, so a label reading "4" while the sum covered 30 files cannot recur
+  # -- and if a consumer legitimately holds one of the four at two live paths (the
+  # sprint-status.yaml lesson below), the label says so instead of lying about it.
+  # Core Rule 31: a count asserted in prose beside a number derived from a different
+  # set is the defect, not the number.
+  POOL_LABEL="WHOLE-READ POOL (${POOL_FILES} planning artifact$([ "$POOL_FILES" -eq 1 ] || printf s))"
   POOL_CEILING=$(( WHOLE_READ_POOL + (WHOLE_READ_POOL * GRACE_PCT / 100) ))
   POOL_PCT=$(( POOL_TOTAL * 100 / WHOLE_READ_POOL ))
   if [ "$POOL_TOTAL" -gt "$POOL_CEILING" ]; then
