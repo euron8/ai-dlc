@@ -34,6 +34,74 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.302.0] — 2026-08-07
+
+### A STILL-LIVE this pull did not measure now says so, once, with a number
+
+Plan item **8c**, second half. Re-verifying the five entries graph filed against
+`ledger-reverify.sh` found something larger than the two defects v0.301.0 fixed: **three of the
+five `STILL-LIVE` verdicts were false**, and the plan had recorded only one of them.
+
+```
+PC-S299-…-SIGPIPE-FALSE-ABSENT             anchored `grep -qF -- `, which IS the repaired line
+PC-S299-…-MISATTRIBUTES-ABSORBING-VERSION  anchored prose the corrected emit still prints
+PC-S316-ABSORPTION-DETECTOR-…-ANCHORS      anchored a guard the fix deliberately KEPT
+```
+
+The third was verified by measurement rather than by reading, because `layer-drift.sh` had grown
+an unnumbered arm that names the entry id in its own comment: of the 7 entries carrying an
+absorption row against the reference consumer, **6 are in the 26-entry set that yields no
+numbered anchor** — including `SKILL-push.md`, which that entry named by name as unreachable.
+Control: core's `gate-validation.md` yields 42 anchors, so the harvester works and the 26 is a
+real absence. Every one of the three had anchored on text its own fix keeps, and only one was
+visible to `NAMED-UPSTREAM`.
+
+**`SKILL.md` step 3f already states the rule that would prevent this** — *anchor a `theirs_has`
+receipt on a token the FIX MUST REMOVE* — and says in the same breath that it *"has no guard at
+all, and it is the verb most receipts use"*. This release gives it the only mechanism two refs
+can support.
+
+`RECEIPTS-UNDECIDED`, one row per run, emitted only when the count is non-zero: how many
+`theirs_has` receipts reported `STILL-LIVE` on a substring present at **base as well as theirs**.
+Nothing in `base..theirs` moved either side of those predicates, so their verdicts are
+restatements of the previous run rather than new measurements. On the reference consumer that is
+**24 of 24** — every `theirs_has` receipt it carries.
+
+**A COUNT, NOT A VERDICT, AND THE PREDICATE THAT WOULD HAVE BEEN A VERDICT IS MEASURED AND NOT
+SHIPPED.** "Present at both refs" is also the normal state of a genuinely live entry, so it
+cannot decide any single row — the same undecidability the `theirs_lacks` unfalsifiable case has,
+except there is no third ref here: the question is *would the fix have had to remove this token*,
+which two trees cannot answer. The narrowed predicate (same bucket, restricted to entries whose
+cited file changed in range) **fires on 15 of 23 and includes entries confirmed live**, so it is
+recorded as refuted rather than shipped. Do not rebuild it.
+
+The row reaches the operator precisely because it is not `STILL-LIVE`: `emit-report.sh` filters
+that one status out, which is why this confidence has been invisible — the report shows closes,
+and zero closes reads as nothing to close.
+
+**Silent at zero**, so a well-anchored ledger says nothing and the row does not become decoration
+the operator learns to skip; the denominator is the control that makes that silence readable.
+
+Two mechanical notes, both of which the fixtures caught rather than review:
+
+- The main loop was fed by a **pipe**, so it ran in a subshell and a counter incremented inside
+  it was discarded at the closing `done` — zero for the same reason a check that cannot fire
+  reads as one that passed. The extraction is now captured into a variable and the loop reads a
+  herestring, which rewires it without moving a hundred lines of awk. `mapfile` is still out:
+  bash 3.2.
+- The row's entry column is a **constant**, not the ledger path. `ledger-reverify-unfalsifiable`
+  asserts a verdict cannot depend on how the ledger is addressed, and it went red: the same run
+  reached via `<consumer>/./_bmad-…` and via an arg-5 copy is one run and must produce one set of
+  rows.
+
+`ledger-reverify` **61 → 67 assertions** (derived: the driver reports `PASS: all 61` at
+`0.301.0` and `all 67` here), with a seed pair — `TH-UNDECIDED` anchored at both refs and
+`TH-DECIDED` anchored on a token that arrived inside the range — that are **both `STILL-LIVE`**,
+so the status alone cannot separate them. Numerator and denominator are both asserted (`1 of 3`),
+and the mutant that drops the base-side test sweeps the control in and reads `2 of 3`: still a
+number that looks like a finding, which is what makes it worth having. Every other row on the
+reference consumer is byte-identical to `0.301.0`.
+
 ## [0.301.0] — 2026-08-07
 
 ### A caller error stops reading as a clean corpus, and the consumer root stops deciding verdicts

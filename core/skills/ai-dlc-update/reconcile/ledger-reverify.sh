@@ -532,7 +532,7 @@ TV="$(theirs_show VERSION | tr -d '[:space:]')"
 # closing `**` there. That is complete and greppable and visibly not an id, which is the honest
 # output for a malformed entry. Narrowing the bullet predicate to "closing ** on this line" would
 # instead DROP such an entry, and the reference consumer has a live one.
-awk -v DASH=' — ' "$(ledger_entry_awk)"'
+ENTRIES="$(awk -v DASH=' — ' "$(ledger_entry_awk)"'
   # An ENTRY LINE closes its own entry two ways. A marker anywhere on it is one: the withdrawal
   # lives in the heading (`## PC-FOO — **WITHDRAWN …**`) and the fork-retirement records are
   # bullets whose title ends `→ ADOPTED UPSTREAM (v…)`. The retained-copy parenthetical is the
@@ -651,7 +651,18 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
     dn++; dv[dn]=directive
   }
   END { flush() }
-' "$LEDGER" | while IFS="$(printf '\t')" read -r label ord directive; do
+' "$LEDGER")"
+
+# A HERESTRING, NOT A PIPE, AND THE REASON IS THE TALLY BELOW. `awk … | while read` runs the
+# loop body in a SUBSHELL, so a counter incremented inside it is discarded at the closing
+# `done` — a variable that reads as zero for the same reason a check that cannot fire reads as
+# one that passed. Capturing the extraction into a variable (rather than moving the awk program
+# down into a `< <(…)`) keeps every line of that program where it is, so this change is a
+# rewiring and not a hundred-line move. `mapfile` is still not an option: bash 3.2 on macOS.
+#
+# An EMPTY extraction herestrings as one empty line, which the guard on the first line of the
+# body already drops — the same guard that has always dropped awk's blank output.
+while IFS="$(printf '\t')" read -r label ord directive; do
   [ -n "$directive" ] || continue
   # Empty suffix for a single-receipt entry, so those rows are unchanged.
   case "$ord" in
@@ -740,7 +751,13 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
           fi
         fi
       else # theirs_has
+        th_total=$((${th_total:-0} + 1))
         if [ "$present" -eq 1 ]; then
+          # THE STILL-LIVE ROW IS BYTE-UNCHANGED. The tally is taken here and reported once at
+          # the end; suffixing this DETAIL would rewrite every still-live row in every consumer
+          # report to say something the summary says better, and these rows are filtered out of
+          # that report anyway. See RECEIPTS-UNDECIDED at the foot of this file.
+          base_holds "$path" "$subs" && th_undecided=$((${th_undecided:-0} + 1))
           emit STILL-LIVE "$label" "theirs:$path still has \"$sub\"$note"
         else
           if base_holds "$path" "$subs"; then
@@ -795,7 +812,60 @@ awk -v DASH=' — ' "$(ledger_entry_awk)"'
       emit NEEDS-REVIEW "$label" "unresolved: unknown verify verb '$verb' (expected theirs_lacks | theirs_has | sh | manual)"
       ;;
   esac
-done
+done <<< "$ENTRIES"
+
+# --- RECEIPTS-UNDECIDED: how much of the STILL-LIVE column this pull actually measured ------
+#
+# THE STATE THIS MAKES VISIBLE. `theirs_has` reports STILL-LIVE when the substring is present at
+# theirs. If it was present at BASE too, then nothing in `base..theirs` moved the predicate, and
+# this run's STILL-LIVE is a RESTATEMENT of the last run's, not a new measurement. The entry may
+# be live or long fixed; this pull did not distinguish them.
+#
+# That is not a hypothetical. Every guard in this file tests the receipt, and SKILL.md step 3f
+# already carries the rule that would prevent the failure — *anchor a `theirs_has` receipt on a
+# token the FIX MUST REMOVE* — while stating in the same breath that it *"has no guard at all,
+# and it is the verb most receipts use"*. MEASURED on the reference consumer at 0.301.0, five
+# `STILL-LIVE` verdicts re-checked against the code by hand: THREE were false, and all three had
+# anchored on text their own fix keeps —
+#   PC-S299-…-SIGPIPE-FALSE-ABSENT           anchored `grep -qF -- `, which IS the repaired line
+#   PC-S299-…-MISATTRIBUTES-ABSORBING-VERSION anchored prose the corrected emit still prints
+#   PC-S316-ABSORPTION-DETECTOR-…-ANCHORS     anchored a guard the fix deliberately KEPT, adding
+#                                             a second pass beside it — which that entry's own
+#                                             receipt note predicted it would miss
+# Only ONE of the three was visible to `named_absorbed`; the other two are invisible to every
+# other signal here. And this file's own tally, run against that ledger, is **24 of 24** — every
+# `theirs_has` receipt it carries. (A standalone probe of the same question said 23 of 23: it
+# skipped a receipt whose path resolves only through the basename fallback this file implements.
+# The number above is the SHIPPING code's, which is the only one that can be quoted.)
+#
+# WHY A COUNT AND NOT A VERDICT. "Present at both refs" is ALSO the normal state of a genuinely
+# live entry, so it cannot decide any single row — the same undecidability the `theirs_lacks`
+# unfalsifiable case has, and there the answer was a third ref. There is no third ref for this
+# verb: the question is *would the fix have had to remove this token*, which is not answerable
+# from two trees. A predicate WAS built and measured — the bucket, narrowed to entries whose
+# cited FILE changed in `base..theirs` — and it is NOT SHIPPED: measured by that same standalone
+# probe it fires on 15 of the 23 it could see, including
+# entries confirmed live (`PC-S302-…-DISARMS-LC-A1`, whose subject sentence is still in
+# SKILL.md). An unmeasured lint is one the operator turns off. Do not rebuild it.
+#
+# So this claims only what it can carry: a COUNT of a defined set, with no per-entry accusation
+# and therefore no false-positive set. It reaches the operator because it is not `STILL-LIVE` —
+# `emit-report.sh` filters that one status out, which is precisely why the false confidence has
+# been invisible: the report shows closes, and zero closes reads as nothing to close.
+#
+# SILENT AT ZERO, AND THE ZERO IS EARNED. The row is emitted only when the bucket is non-empty,
+# so a ledger whose receipts are all well-anchored says nothing — and $th_total is the control
+# that makes that silence readable, because a run with no `theirs_has` receipts at all has an
+# empty bucket for a completely different reason.
+if [ "${th_undecided:-0}" -gt 0 ]; then
+  # THE ENTRY COLUMN IS A CONSTANT, NOT `$LEDGER`, AND THAT IS NOT COSMETIC. This row is
+  # run-scoped, so it has no entry to name — and the obvious filler is the ledger path, which is
+  # spelled differently depending on how the caller addressed the same file. The
+  # `ledger-reverify-unfalsifiable` fixture asserts precisely that a verdict cannot depend on the
+  # addressing, and it caught this: `<consumer>/./_bmad-…/push-candidate-ledger.md` and an arg-5
+  # copy elsewhere are the same run and must produce the same rows.
+  emit RECEIPTS-UNDECIDED "(theirs_has receipts)" "$th_undecided of $th_total 'theirs_has' receipt(s) reported STILL-LIVE on a substring present at BASE as well as at theirs ($TV), so THIS PULL MOVED NEITHER SIDE OF THEM: those verdicts are restatements of the previous run, not new measurements. A STILL-LIVE here is not evidence the defect survives — an anchor on text the fix KEEPS survives the fix, and the entry can then never close. Re-anchor each on a token the fix must REMOVE (step 3f), or read the code. Do not treat a zero CLOSE-CANDIDATE count from this run as evidence that nothing was absorbed."
+fi
 
 # ---------------------------------------------------------------------------
 # ENTRY-SWALLOWED — a bold-bullet annotation that became its own entry

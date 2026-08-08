@@ -191,6 +191,26 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry TH-UNDECIDED anchors `theirs_has` on text that is present at BASE as well.** Nothing
+  in `base..theirs` moved either side of this predicate, so its STILL-LIVE is a restatement of
+  the previous run, not a new measurement. `rule two` is in SKILL.md at both refs.
+  <br>This is the shape SKILL.md step 3f warns about and has no guard for — an anchor on text
+  a fix would KEEP survives the fix, so the entry can never close. Measured on the reference
+  consumer at 0.301.0: three of five hand-checked STILL-LIVE verdicts were false, every one of
+  them this shape, and 24 of 24 `theirs_has` receipts there sit in this bucket.
+  verify: theirs_has core/skills/ai-dlc/SKILL.md "rule two"
+
+---
+
+- **Entry TH-DECIDED is the CONTROL, and without it the tally counts everything.** Same verb,
+  same file, also STILL-LIVE — but `MARKER_B` arrived at 0.101.0, INSIDE `base..theirs`, so this
+  predicate demonstrably moved in range and its verdict IS a measurement this pull made. It must
+  NOT be counted. A tally that cannot tell these two apart is a row-count wearing a finding's
+  name.
+  verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_B"
+
+---
+
 ## PC-FIXTURE-HEADING-ABSORBED — the heading entry shape (filed for the fixture)
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"
