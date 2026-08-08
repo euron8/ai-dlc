@@ -341,6 +341,117 @@ else
   bad "  the label disagrees with the row set: $(grep -oE 'WHOLE-READ POOL \([^)]*\)' "$WORK/out.txt" | head -1)"
 fi
 
+# --- 10b. THE LIVE SPRINT'S SLOT IS POOLED; EVERY OTHER SPRINT'S IS NOT --------
+# Assertion 10 exists because a slot copy of a DURABLE basename is that sprint's
+# archive. The LOCKED_REQUIREMENTS block is the opposite case: discovery.md §4a
+# writes it to `s<N>/locked-requirements.md` and the analyst reads the CURRENT
+# sprint's block whole, every sprint. Without this arm the move that put it there
+# would have graded itself -- 54% of the reference consumer's brief leaving the
+# pooled sum with the same bytes still read.
+#
+# BOTH DIRECTIONS IN ONE RUN, because either alone is satisfied by a wrong rule: a
+# glob over `s*/` pools every sprint that ever ran, and no arm at all pools none.
+# BOTH canonical copies, because sprint-id reads both and HARD_BLOCKs when they
+# disagree -- seeding one leaves the other absent, which resolves to greenfield and
+# would make 10b pass or fail for a reason unrelated to the arm.
+sprint_status() { # sprint_status <n>
+  mkdir -p "$WORK/_bmad-output/implementation-artifacts" \
+           "$WORK/_bmad-output/planning-artifacts" || exit 2
+  for v in implementation-artifacts planning-artifacts; do
+    printf 'sprint: %s\nstatus: in_progress\nstories:\n' "$1" \
+      > "$WORK/_bmad-output/$v/sprint-status.yaml"
+  done
+}
+sprint_status_clear() {
+  rm -f "$WORK/_bmad-output/implementation-artifacts/sprint-status.yaml" \
+        "$WORK/_bmad-output/planning-artifacts/sprint-status.yaml"
+}
+settings 'sonnet' 'claude-sonnet-5[1m]'
+artifacts 1
+sprint_status 302
+mkdir -p "$WORK/_bmad-output/planning-artifacts/s302" \
+         "$WORK/_bmad-output/planning-artifacts/s288" || exit 2
+head -c 120000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s302/locked-requirements.md"
+head -c 120000 /dev/zero | tr '\0' 'x' > "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
+run >/dev/null
+if grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
+  ok "the LIVE sprint's locked-requirements.md is pooled"
+else
+  bad "the live sprint's locked-requirements.md was NOT pooled -- the move would grade itself"
+  sed 's/^/        /' <<<"$(pool_rows)"
+fi
+if ! grep -q 's288/locked-requirements\.md' <<<"$(pool_rows)"; then
+  ok "  and an EARLIER sprint's copy is not -- the arm resolves sprint_id, it does not glob s*/"
+else
+  bad "  a closed sprint's locked-requirements.md was summed -- this is a glob, not a resolution"
+fi
+
+# --- 10c. AN UNRESOLVED LIVE SPRINT SAYS SO RATHER THAN CONTRIBUTING ZERO ------
+# The whole reason 10b exists is that a pool row can go quiet for a reason unrelated
+# to size. A resolver that fails and prints nothing recreates that defect one level
+# down, so the absence has to announce itself.
+sprint_status_clear
+mv "$WORK/_bmad-output/planning-artifacts/s302" "$WORK/_bmad-output/planning-artifacts/s1" || exit 2
+run >/dev/null
+if grep -q 's1/locked-requirements\.md' <<<"$(pool_rows)"; then
+  ok "  greenfield resolves to sprint 1 and pools its slot rather than falling silent"
+else
+  bad "  a greenfield tree pooled nothing from the sprint arm and said nothing about it"
+  sed 's/^/        /' <<<"$(pool_rows)"
+fi
+mv "$WORK/_bmad-output/planning-artifacts/s1" "$WORK/_bmad-output/planning-artifacts/s302" || exit 2
+sprint_status 302
+rm -f "$WORK/_bmad-output/planning-artifacts/s288/locked-requirements.md"
+
+# --- 10d. MUTATION: revert the sprint arm --------------------------------------
+# Prove 10b measures the arm rather than the file merely existing. Built as a COPY
+# and guarded with cmp -s.
+#
+# THE COPY NEEDS A SIBLING. The arm resolves the live sprint through
+# `$AI_DLC_SELF_DIR/sprint-status.sh`, so a lone copy in a scratch directory would
+# find no resolver, contribute nothing, and score as a kill for the wrong reason.
+# Both the mutant and its control are therefore staged in a scratch BIN directory
+# holding a copy of sprint-status.sh -- outside the repo tree, so a crashed run
+# cannot leave a stray script where the core-script-boundary checks would read it.
+# AND THE SIBLING HAS A SIBLING OF ITS OWN. sprint-status.sh reads
+# `<its dir>/../schemas/sprint-status.json` and refuses to guess without it, so a BIN
+# holding only the two scripts makes the resolver exit 1 -- the control then pools
+# nothing and the mutation above scores a kill it did not earn. This was the state
+# this arm was first written in; the unmutated control is what caught it.
+BIN="$WORK/bin"
+mkdir -p "$BIN" "$WORK/schemas" || exit 2
+SCRIPTS_DIR="$(dirname "$VALIDATOR")"
+SPRINT_STATUS="$SCRIPTS_DIR/sprint-status.sh"
+SPRINT_SCHEMA="$SCRIPTS_DIR/../schemas/sprint-status.json"
+[ -f "$SPRINT_STATUS" ] || { echo "FIXTURE ERROR: sprint-status.sh not beside $VALIDATOR" >&2; exit 2; }
+[ -f "$SPRINT_SCHEMA" ] || { echo "FIXTURE ERROR: sprint-status.json not at $SPRINT_SCHEMA" >&2; exit 2; }
+cp "$SPRINT_STATUS" "$BIN/sprint-status.sh" || exit 2
+cp "$SPRINT_SCHEMA" "$WORK/schemas/sprint-status.json" || exit 2
+MUTANT3="$BIN/validate-artifact-budget.sh"
+sed 's/^SPRINT_WHOLE_READ_SET=.*/SPRINT_WHOLE_READ_SET=""/' "$VALIDATOR" > "$MUTANT3" || exit 2
+if cmp -s "$VALIDATOR" "$MUTANT3"; then
+  echo "FIXTURE ERROR: mutation matched nothing -- SPRINT_WHOLE_READ_SET was rewritten" >&2
+  echo "  update the sed pattern in assertion 10d to match the real declaration" >&2
+  exit 2
+fi
+bash "$MUTANT3" --root "$WORK" >"$WORK/out.txt" 2>&1
+if ! grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
+  ok "MUTATION: emptying the sprint set drops the live slot from the pool"
+else
+  bad "MUTATION: the live slot was pooled with the sprint set empty -- 10b proves nothing"
+fi
+# UNMUTATED control, staged the same way in the same directory, so a mutant that
+# died of the staging cannot score as a kill.
+CONTROL3="$BIN/control-budget.sh"
+cp "$VALIDATOR" "$CONTROL3" || exit 2
+bash "$CONTROL3" --root "$WORK" >"$WORK/out.txt" 2>&1
+if grep -q 's302/locked-requirements\.md' <<<"$(pool_rows)"; then
+  ok "  control: an unmutated copy staged the same way still pools the live slot"
+else
+  bad "  the unmutated copy did not pool it -- 10d's kill is the harness, not the mutation"
+fi
+run >/dev/null
+
 # --- 11. THE MUTATION TEST — prove assertion 10 measures the exclusion ---------
 # Drop the exclusion call on a COPY and demand the archived copies come back. An
 # arm asserting an ABSENCE is exactly the shape that passes when the files were

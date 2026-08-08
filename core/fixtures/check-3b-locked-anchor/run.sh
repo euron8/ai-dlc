@@ -389,6 +389,79 @@ else
   fi
 fi
 
+# --- THE SOURCE OF RECORD IS TWO NAMES, AND THE SECOND IS ON ITS WAY OUT -----------
+# discovery.md §4a used to append each sprint's LOCKED block to the durable brief and
+# now writes it to `s<N>/locked-requirements.md`. Both names are accepted: refusing the
+# legacy one would fail every story written before the move -- 31 of 62 anchored
+# citations on the reference consumer, all resolvable, none defective -- which is this
+# check reporting a migration as a fabrication.
+#
+# THREE ARMS, BECAUSE ACCEPTING TWO NAMES IS ONLY SAFE IF IT IS STILL REFUSING THE
+# THIRD. A widening that also lets `prd.md` through has not widened, it has broken.
+SOR="$WORK/sor"; mkdir -p "$SOR/s302/stories" || exit 2
+cat > "$SOR/s302/locked-requirements.md" <<'SOREOF'
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+<!-- Source: user input -->
+## LR-S302-1
+- Rebalancing must never exceed a 2% slippage bound.
+<!-- END LOCKED_REQUIREMENTS -->
+SOREOF
+cp "$SOR/s302/locked-requirements.md" "$SOR/product-brief.md"
+cp "$SOR/s302/locked-requirements.md" "$SOR/s302/prd.md"
+sor_story() { # sor_story <file> <cited-basename>
+  cat > "$1" <<STOREOF
+# Story
+<!-- LOCKED_REQUIREMENTS -->
+full_text_source: $2#LR-S302-1
+- Rebalancing must never exceed a 2% slippage bound.
+<!-- END LOCKED_REQUIREMENTS -->
+STOREOF
+}
+sor_story "$SOR/s302/stories/new-sor.md"    "locked-requirements.md"
+sor_story "$SOR/s302/stories/legacy-sor.md" "product-brief.md"
+sor_story "$SOR/s302/stories/index-sor.md"  "prd.md"
+
+if "$VALIDATOR" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
+  echo "ok: SoR — a citation at s<N>/locked-requirements.md is accepted"
+else
+  echo "FAIL: SoR — the sprint slot's locked-requirements.md was refused as a source of record" >&2
+  rc=1
+fi
+if LEG_OUT="$("$VALIDATOR" "$SOR/s302/stories/legacy-sor.md" 2>&1)" \
+   && grep -q "legacy 'product-brief.md'" <<<"$LEG_OUT"; then
+  echo "ok: SoR — the legacy product-brief.md is still accepted AND counted on the PASS line"
+else
+  echo "FAIL: SoR — the legacy citation was refused or went uncounted: $LEG_OUT" >&2
+  rc=1
+fi
+if "$VALIDATOR" "$SOR/s302/stories/index-sor.md" >/dev/null 2>&1; then
+  echo "FAIL: SoR — prd.md was accepted as a full-text source; the widening broke the refusal" >&2
+  rc=1
+else
+  echo "ok: SoR — CONTROL: prd.md is still refused, so accepting two names has not weakened (a)"
+fi
+
+# MUTATION: collapse the pair back to one name and demand the OTHER one reds. Built as
+# a copy and guarded with cmp -s so a sed that matched nothing cannot pass as a change.
+MUT6="$WORK/mut-single-sor.sh"; cp "$VALIDATOR" "$MUT6"
+sed -i.bak 's/^DEFAULT_SOR_BASENAMES = .*/DEFAULT_SOR_BASENAMES = ("locked-requirements.md",)/' "$MUT6" && rm -f "$MUT6.bak"
+if cmp -s "$VALIDATOR" "$MUT6"; then
+  echo "FAIL: MUTATION setup — DEFAULT_SOR_BASENAMES was not mutated, so the arm below proves nothing" >&2
+  rc=1
+elif bash "$MUT6" "$SOR/s302/stories/legacy-sor.md" >/dev/null 2>&1; then
+  echo "FAIL: MUTATION — the legacy citation passed with the legacy name removed; the pair is not what accepts it" >&2
+  rc=1
+else
+  echo "ok: MUTATION — dropping the legacy name reds the legacy citation (the acceptance is the pair, not the resolver)"
+fi
+# PAIRING: the same mutant must still accept the NEW name, or it died of something else.
+if bash "$MUT6" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts locked-requirements.md (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant rejected the new name too; the two assertions are entangled" >&2
+  rc=1
+fi
+
 # Unmutated control from the same directory.
 MC="$WORK/control-unmutated.sh"; cp "$VALIDATOR" "$MC"
 if bash "$MC" "$DIR/good-story.md" >/dev/null 2>&1; then

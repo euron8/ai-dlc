@@ -113,8 +113,16 @@ Invoke `/bmad-brainstorming` — structured CIS ideation:
 
 ### 4a. Extract Locked Requirements (Rule 13)
 
-After the brief is created/updated, extract all user-specified requirements
-into a `LOCKED_REQUIREMENTS` block at the top of the artifact:
+After the brief is created/updated, extract all user-specified requirements into a
+`LOCKED_REQUIREMENTS` block and write it to **this sprint's slot**, never into the
+brief:
+
+```
+_bmad-output/planning-artifacts/s<N>/locked-requirements.md
+```
+
+`<N>` is `sprint_id` (`scripts/ai-dlc/sprint-status.sh sprint-id`). The file holds
+this sprint's block and nothing else:
 
 ```markdown
 <!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
@@ -124,13 +132,28 @@ into a `LOCKED_REQUIREMENTS` block at the top of the artifact:
 <!-- END LOCKED_REQUIREMENTS -->
 ```
 
-**A brief accumulates one block per sprint, and the closer may carry a
-discriminator so they can be told apart:**
+**THE BRIEF USED TO ACCUMULATE ONE BLOCK PER SPRINT AND THAT WAS THE DEFECT, NOT A
+CONVENTION.** A durable artifact carries no sprint token by rule 3 of the artifact
+path grammar, and that is what makes it durable — so a per-sprint block appended to
+it is sprint-scoped content at a sprint-independent path. Measured on the reference
+consumer: its live brief was 1030 lines, of which **564 (54%) were the in-force
+LOCKED section** and only **182 (17%) were durable current-state**. Rule 13 makes
+locked requirements cumulative and nothing retires them, so the accumulation could
+only grow.
+
+**The in-force set is the UNION over the sprint slots**, one file each, which is
+what makes a single sprint's block readable on its own without a discriminator. A
+block that carries one anyway is still parsed (`<!-- END S<N> LOCKED_REQUIREMENTS -->`),
+because six sentinel spellings exist in the field.
+
+**The brief keeps a POINTER, not a copy.** Where the blocks used to sit, write:
 
 ```markdown
-<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
-- [S<N> requirement]
-<!-- END S<N> LOCKED_REQUIREMENTS -->
+## Locked requirements
+
+Each sprint's `LOCKED_REQUIREMENTS` block lives in that sprint's slot,
+`_bmad-output/planning-artifacts/s<N>/locked-requirements.md`. The in-force set is
+the union across slots; no block is copied here.
 ```
 
 **Every block MUST be closed.** `validate-locked-anchor.sh` (Check 3b) parses
@@ -213,7 +236,7 @@ can catch a mechanism that was set and did nothing. `intent` stays free
 prose. Gate-validation Check 29 re-grades this in a fresh adjudicator.
 
 **The spec does not become an anchor target.** Story `full_text_source:`
-citations keep pointing at the product brief, which §4a made the byte-verbatim
+citations point at `s<N>/locked-requirements.md`, which §4a made the byte-verbatim
 source of record; the spec is derived from it, so citing the spec for full text
 is the same category error as citing `prd.md`. `SPEC.md` in particular is never
 a legal anchor — `bmad-spec` re-renders it from the memlog on every run, so an

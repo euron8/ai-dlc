@@ -410,9 +410,10 @@ block distinguishes a full-text CLAIM from a load POINTER:
 **Check.** For each story, invoke
 `scripts/ai-dlc/validate-locked-anchor.sh <story-file>`; exit 0 required. For
 every `full_text_source:` citation it asserts (a) the artifact is the
-byte-verbatim source of record — default `product-brief.md`, where
-discovery.md §4a extracts the block — and NOT a condensed index
-(e.g. prd.md, which is only §2a-propagated); (b) the anchor resolves in
+byte-verbatim source of record — `locked-requirements.md` in the sprint slot,
+where discovery.md §4a writes the block, or transitionally the legacy
+`product-brief.md`, whose remaining claims the PASS line counts — and NOT a
+condensed index (e.g. prd.md, which is only §2a-propagated); (b) the anchor resolves in
 that artifact, as a token present in it or a line range within its
 length; (c) every requirement bullet in the block is byte-present
 (whitespace-collapsed) **within the union of the anchors the block
@@ -2246,15 +2247,18 @@ can diff against.
 <!-- CHECK_LOADED: 33 -->
 
 **Check.** Run `scripts/ai-dlc/validate-request-coverage.sh --requests
-_bmad-output/operator-requests-history.md --brief <brief> --sprint <n>
---cite-sha <user_request_cite>`; exit 0 required. Every `CO-`, `LR-`, `CAP-` and
-`Epic-` identifier in the operator's captured request must appear inside a LOCKED
-bullet this sprint commits to, or carry a `<!-- NOT-IN-SCOPE: <id> — <reason> -->`
-disposition in the brief's LOCKED blocks.
+_bmad-output/operator-requests-history.md --brief
+_bmad-output/planning-artifacts/s<N>/locked-requirements.md --sprint <n>
+--cite-sha <user_request_cite>`; exit 0 required. **`--brief` names whatever carries
+this sprint's LOCKED blocks**, which since discovery.md §4a moved them is the sprint
+slot's `locked-requirements.md`, not the durable brief. Every `CO-`, `LR-`, `CAP-`
+and `Epic-` identifier in the operator's captured request must appear inside a
+LOCKED bullet this sprint commits to, or carry a
+`<!-- NOT-IN-SCOPE: <id> — <reason> -->` disposition in those same blocks.
 
 **What this catches that nothing else did.** Every byte-level guarantee in the
-pipeline terminates at `product-brief.md` — Check 3b anchors stories to it, Check
-30 joins capabilities through it. The brief is the LEAD's restatement of the ask,
+pipeline terminates at the LOCKED blocks — Check 3b anchors stories to them, Check
+30 joins capabilities through them. They are the LEAD's restatement of the ask,
 authored across a hop with no mechanical join at all. So a plan can be perfectly
 self-consistent from the brief forward while sharing nothing with what was asked
 for, and every downstream check reads green. Measured: a sprint whose operator

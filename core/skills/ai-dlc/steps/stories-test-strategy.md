@@ -349,8 +349,9 @@ technical stories, migration stories) do not need the block.
 distinguish two citation forms — they are NOT interchangeable:
 - `full_text_source: <artifact>:<anchor>` — asserts the verbatim
   requirement text lives at this anchor. The artifact MUST be the
-  byte-verbatim **source of record** (the product brief, where §4a
-  extracts the block), NOT a condensed index. `gate-validation.md`
+  byte-verbatim **source of record** —
+  `_bmad-output/planning-artifacts/s<N>/locked-requirements.md`, where §4a
+  writes the block — NOT a condensed index. `gate-validation.md`
   Check 3b (`scripts/ai-dlc/validate-locked-anchor.sh`) byte-verifies that
   every bullet in the block is present verbatim at the cited anchor and
   FAILS the gate on a mis-anchored or summarized claim.
@@ -366,15 +367,23 @@ distinguish two citation forms — they are NOT interchangeable:
   literal in the file, and is the measured way this dangles.
 
 Do NOT cite a condensed index (e.g. `prd.md`) as `full_text_source`
-"for full text" — the PRD's LR entries are §2a-propagated, and the
-brief remains the byte-verbatim source of record.
+"for full text" — the PRD's LR entries are §2a-propagated, and
+`s<N>/locked-requirements.md` is the byte-verbatim source of record.
 
-**The spec layer does not add an anchor target.** `full_text_source` still
-resolves to the product brief and nothing else. Locked-requirement text
-originates in the brief at `discovery.md` §4a; the spec is DERIVED from it, so
+**The spec layer does not add an anchor target.** `full_text_source` resolves to
+the sprint's `locked-requirements.md` and nothing else. Locked-requirement text
+originates there, written by `discovery.md` §4a; the spec is DERIVED from it, so
 a spec artifact is a downstream restatement — the same category as `prd.md`,
 which is already forbidden here. Cite the spec with `requires_context:` when a
 dev needs it loaded.
+
+**`product-brief.md` is still ACCEPTED and is on its way out.** §4a used to append
+each sprint's block to the durable brief, so stories written before that changed
+cite it — 31 of 62 anchored citations on the reference consumer, all resolvable and
+none defective. `validate-locked-anchor.sh` accepts both names and reports how many
+claims are still at the legacy one, so the migration is something a run measures
+rather than something an operator estimates. **Write new citations against
+`locked-requirements.md`.**
 
 `SPEC.md` is the worst possible anchor: `bmad-spec` is its sole writer and
 re-renders it from `.memlog.md` on every run, so an anchor there holds until

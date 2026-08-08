@@ -270,6 +270,26 @@ hard_verdict() {
 # -----------------------------------------------------------------------------
 WHOLE_READ_SET="prd.md product-brief.md architecture.md carry-over-backlog.md"
 
+# Whole-read artifacts that live in the CURRENT SPRINT'S SLOT rather than at an area
+# root, and are pooled from there.
+#
+# THIS ARM EXISTS BECAUSE THE CHANGE THAT NEEDED IT WOULD OTHERWISE HAVE GRADED ITSELF.
+# is_sprint_slotted() below exempts every `s<N>/` path from the pool, and it is right to
+# for the four basenames above: a slot copy of `architecture.md` is that sprint's
+# archive, and counting it is the 2.35x overstatement v0.317.0 fixed. But
+# `discovery.md` §4a now writes the sprint's LOCKED_REQUIREMENTS block to
+# `s<N>/locked-requirements.md`, and the analyst reads that block whole every sprint.
+# Left to the exemption, moving 54% of the reference consumer's brief into the slot
+# would have dropped the pooled sum by three quarters of that artifact with the same
+# bytes still read -- a row going green for a reason unrelated to anything getting
+# smaller.
+#
+# ONLY THE LIVE SPRINT'S COPY IS POOLED. Every earlier sprint's block is a closed
+# record nothing reads whole, so the resolution below asks `sprint-status.sh sprint-id`
+# rather than globbing `s*/`. A glob would sum every sprint that ever ran, which is the
+# same defect one level along.
+SPRINT_WHOLE_READ_SET="locked-requirements.md"
+
 # The analyst's context window, resolved through `aiDlcRoles.analyst` -> `aiDlcModels`
 # in the consumer's settings.json. `[1m]` is Claude Code's own suffix for the
 # 1M-context variant, which is why it is the token matched rather than a model-name
@@ -861,6 +881,28 @@ if [ "$POOL_APPLIES" -eq 1 ]; then
       printf '%s|%s\n' "$(( bytes / BPT ))" "${f#"$ROOT"/}" >> "$POOL_TMP"
     done
   done
+
+  # The live sprint's slot-resident whole-read artifacts. Resolved through the sibling
+  # sprint-status.sh, which is where sprint_id is defined -- a second reading of the
+  # canonicals here would be a second implementation of route.md Step 6.
+  LIVE_SPRINT=""
+  if [ -x "$AI_DLC_SELF_DIR/sprint-status.sh" ] || [ -f "$AI_DLC_SELF_DIR/sprint-status.sh" ]; then
+    LIVE_SPRINT="$(bash "$AI_DLC_SELF_DIR/sprint-status.sh" sprint-id --root "$ROOT" 2>/dev/null | tr -dc '0-9')"
+  fi
+  if [ -z "$LIVE_SPRINT" ]; then
+    # NOT SILENT. A pool arm that contributes nothing because its resolver failed reads
+    # exactly like one whose subject is absent, and this whole arm exists because a
+    # silently-zero pool row is the defect it was written against.
+    say "  note: live sprint unresolved (sprint-status.sh sprint-id) -- ${SPRINT_WHOLE_READ_SET} not pooled"
+  else
+    for name in $SPRINT_WHOLE_READ_SET; do
+      f="$ROOT/_bmad-output/planning-artifacts/s${LIVE_SPRINT}/$name"
+      [ -f "$f" ] || continue
+      is_archive "$f" && continue
+      bytes="$(wc -c < "$f" | tr -d ' ')"
+      printf '%s|%s\n' "$(( bytes / BPT ))" "${f#"$ROOT"/}" >> "$POOL_TMP"
+    done
+  fi
 
   POOL_TOTAL=0
   POOL_FILES=0

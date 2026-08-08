@@ -342,10 +342,20 @@ reads much larger than the pooled effect: across all durable artifacts the LIVE 
 lines are in `-history.md` files `is_archive()` already exempts. **23c-2's case is correctness, not
 size** — the size is in 23c-3, which moves the brief's 564-line LOCKED section.
 
-**NEXT ACTION FOR THIS REPO: 23c-3 together with 23c-1** — `discovery.md` §4a writes the sprint's
-LOCKED block to the slot, `DEFAULT_SOR_BASENAME` and both prose restatements move with it, and the
-pool gains its live-slot arm in the same release so the change does not grade itself. **23c-4
-(cross-sprint anchoring) follows.**
+**~~NEXT ACTION FOR THIS REPO: 23c-3 together with 23c-1~~ — DONE 2026-08-08. v0.322.0 (#462).**
+§4a writes `s<N>/locked-requirements.md` and the brief keeps a pointer; the SoR is now a PAIR
+(`locked-requirements.md` + the legacy `product-brief.md`) because refusing the legacy name would
+fail **31 of 62** anchored citations on the reference consumer, all resolvable and none defective;
+and the pool gained `SPRINT_WHOLE_READ_SET`, resolved through `sprint-status.sh sprint-id` and
+counted from the LIVE slot only. **The legacy name has a removal TEST, not a date** — the PASS line
+counts the claims still at it. **Owed to the operator: ONE block** (S299, 169 lines) moved into
+`s299/`, and nothing breaks until it is.
+
+**NEXT ACTION FOR THIS REPO: 23c-4** — cross-sprint anchoring. Establish the rule rather than
+leaving today's zero to stand: **260 of 4019 `LR-S<n>-` tokens in graph's stories name a different
+sprint than the story's slot, and 0 of the 62 ANCHORED citations do**, so per-sprint walk-up
+resolution is correct by accident. Either refuse a cross-sprint `full_text_source` with a message,
+or resolve `LR-S<n>-` to `s<n>/`. **It closes item 23.**
 
 **THIS WAS THE HANDOFF POINT AND THE HANDOFF WORKED** — everything 23c's first step needed was
 written into the item, and the derivation ran without re-opening the work above it. The lesson item
@@ -1285,12 +1295,17 @@ the original struck rather than deleted because the reason it was wrong is the u
   artifacts is **260 lines** (223 brief, 37 `docs/architecture.md`, 0 `prd.md`), the rest sitting in
   `-history.md` files `is_archive()` already exempts. **The case is correctness, not size.** New
   fixture `changelog-sprint-slot`, red on the pre-fix tree naming all **6** sites.
-- **23c-3 — the writer, the pin AND the pool arm, in one release.** `discovery.md` §4a writes to
-  the slot; the default and BOTH prose restatements (`stories-test-strategy.md:372-373`,
-  `gate-validation.md:411-415`) move with it, or 23c re-creates item 27's defect exactly —
-  contradicting prose over one mechanised branch; and the pool gains its live-slot arm the day the
-  file it counts starts being written. **This is the release the size is in** — the brief's
-  564-line in-force LOCKED section, 54% of it.
+- **23c-3 + 23c-1 — the writer, the pin AND the pool arm, in one release. DONE — v0.322.0 (#462).**
+  §4a writes `s<N>/locked-requirements.md`; the brief keeps a pointer. **The SoR became a PAIR
+  rather than a replacement** — refusing the legacy `product-brief.md` would fail 31 of 62 anchored
+  citations on the reference consumer, all resolvable and none defective, which is the check
+  reporting a migration as a fabrication. `prd.md` stays refused and the fixture asserts that in the
+  same run as the widening. The prose restatements moved WITH the default, not after it. The pool's
+  `SPRINT_WHOLE_READ_SET` resolves `sprint-status.sh sprint-id` and counts the LIVE slot only —
+  a `s*/` glob would sum every sprint that ever ran. **The unmutated control earned its keep on the
+  first run**: a mutant staged in a scratch dir could not reach `sprint-status.sh` and scored an
+  unearned kill, and staging the resolver alone was still short, because it reads
+  `../schemas/sprint-status.json` and refuses to guess.
 - **23c-4 — cross-sprint anchoring.** Either forbid it at the validator with a message, or resolve
   `LR-S<n>-` to `s<n>/`. Today's zero is not a licence to leave it undecided.
 
@@ -2028,6 +2043,7 @@ Every release below is merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
+| v0.322.0 | #462 | **plan items 23c-3 + 23c-1, together.** `discovery.md` §4a writes the sprint's `LOCKED_REQUIREMENTS` block to `_bmad-output/planning-artifacts/s<N>/locked-requirements.md` and the brief keeps a pointer; core had PRESCRIBED the accumulation (*"a brief accumulates one block per sprint"*) into an artifact that is 17% durable. The SoR is now a PAIR, because refusing the legacy name would fail **31 of 62** anchored citations, all resolvable — with a removal TEST (the PASS line counts legacy claims) rather than a date, and `prd.md` still refused in the same run. `SPRINT_WHOLE_READ_SET` pools the LIVE slot only, resolved via `sprint-status.sh sprint-id`, so the move cannot grade itself. Owed to the operator: **one** block (S299, 169 lines). |
 | v0.321.0 | #461 | **plan item 23c-2.** Rule 15's changelog now goes to `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md`, declared ONCE in `_gate-procedures.md` with four convergence lines pointing at it rather than restating the path. Six sites prescribed one; four named a durable target. **Live effect measured at 260 lines** (223 in graph's brief, 37 in `docs/architecture.md`, 0 in `prd.md`) — the "21% of the brief" figure reads larger than the pooled effect and the release says so. **MOVED, never deleted**: nothing in core reads a changelog, which is a reason to home them, not to drop them. New fixture `changelog-sprint-slot`, site set derived not hand-listed, red on the pre-fix tree naming all 6. |
 | v0.320.0 | #458 | **plan item 27.** `ai-dlc-update/SKILL.md` told step 7 to PRESERVE `skill_version`/`skill_commit` and step 2 to ADVANCE them with that same apply, 1100 lines apart; `apply.sh` mechanised preserve by never writing the fields — **0 mentions against 2 for the rulebook pair**, and nothing in the whole distribution wrote either. Both instructions are right for different runs, so the branch is a flag the caller passes: `apply.sh --carried-machinery-slice`. **No new invariant — I60 already binds it**, proven by mutating the case arm until it fails by name. Three silent-success paths closed (absent fields inserted in schema order, unreadable VERSION and legacy stamps reported as rows, result read back). New fixture `apply-machinery-stamp` (19 arms, 2 mutants, 1 control), filling a gap measured at **0** skill-field assertions suite-wide. |
 | v0.319.0 | #452 | **plan item 23b.** `artifact-consolidation.md` homes all four working files in `_bmad-output/planning-artifacts/s<N>/` and retires its drafts at a new Step 6. The re-home refusal set is **EMPTY — all 33 resolve, 24 with no inference** — and the plan's `S999` premise is refuted. New fixture `consolidation-residue`; no existing check could have caught it, because both the area-root and the slotted path are syntactically conforming. |
