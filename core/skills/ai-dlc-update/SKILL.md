@@ -1350,6 +1350,33 @@ prose is itself generated rather than composed.
    line. Match the same idea for non-role manifest files (`steps/*.md`), whose
    sites are commands and paths rather than `/model` strings.
 
+   **Setup-site drift gate — the OTHER direction, and it is a script.** The gate
+   above catches theirs' `{token}` surviving where the consumer's value belonged.
+   This catches the reverse: OURS surviving where THEIRS's content belonged.
+
+   ```
+   reconcile/setup-site-drift.sh <dist> <consumer> <theirs>
+   ```
+
+   Exit 0 required, same place in the sequence — after the last write, before the
+   re-stamp. It asserts that every file declaring a setup site equals `theirs`
+   byte-for-byte outside that file's declared spans, and names the file and line
+   where it does not.
+
+   **Its failure direction is upstream content NOT ARRIVING**, which is why it is
+   worth a program: the pull reports success and the consumer is quietly behind,
+   with nothing downstream disagreeing. Measured on the reference consumer during
+   the 0.297.0 → 0.300.0 hop, `deploy-validate.md` kept OURS at line 26 — outside
+   both of that file's declared spans — and the line it kept prescribed the OLD
+   artifact-path grammar that release had just replaced. It surfaced only because
+   `HARD-CORE-BEHIND` flagged it independently: the safety net working, not the
+   mechanism working.
+
+   **This existed as prose and the prose was not enough.** §7v criterion 5 states
+   exactly this rule, was untangle-only, and has already reported PASS on an
+   instance of it (`dev.md`, three of theirs' model-option comment lines) — because
+   the agent asked to check the transform is the agent that just performed it.
+
    *Why this exists.* `untangle`'s §7v criterion 4 already asserts "zero remaining
    `{...}` tokens in any team-role file" — but 7v is untangle-only, and the
    ORDINARY pull had no equivalent, so a manifest miss landed silently on the one
@@ -1654,18 +1681,23 @@ is exactly what the reverted attempt got wrong). Before delivery:
    of those, so a role would dispatch with nothing bound — silently. This is the
    concrete proof teammate dispatch will not break, the exact failure the
    reverted attempt caused.
-5. Diff every overwritten core file against `theirs` **over the WHOLE file,
-   line by line**, and confirm every differing line falls INSIDE a span
-   declared for that file in `reconcile/setup-sites.md` (a single-line site's
-   matched line, or a heading-block site's span). A difference at ANY line
-   outside a declared span — a dropped `<!-- {token} -->` config comment, a
-   removed blank line, reordered prose — is a FAIL, even if the setup values
-   themselves reinjected correctly: it means the overwrite kept `ours`'s
-   structure instead of `theirs`'s and core is no longer byte-reconcilable.
-   Do NOT check only the value lines and declare pass (a real run did exactly
-   that: `dev.md` lost three of theirs' model-option HTML comment lines and
-   this criterion still reported PASS — the check must diff the whole file,
-   not just confirm the values look right).
+5. **Run `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>`; exit 0
+   required.** It diffs every file declaring a setup site against `theirs` over
+   the WHOLE file and confirms every differing line falls INSIDE a span declared
+   for that file in `reconcile/setup-sites.md` (a single-line site's matched
+   line, or a heading-block site's span). A difference at ANY line outside a
+   declared span — a dropped `<!-- {token} -->` config comment, a removed blank
+   line, reordered prose — is a FAIL, even if the setup values themselves
+   reinjected correctly: it means the overwrite kept `ours`'s structure instead
+   of `theirs`'s and core is no longer byte-reconcilable.
+
+   **This criterion was prose, and the prose was not enough.** A
+   real run checked only the value lines and declared pass: `dev.md` lost three
+   of theirs' model-option HTML comment lines and this criterion still reported
+   PASS. Asking the agent that just performed the transform whether the transform
+   was correct is not a check. The script is now the criterion, it also runs on
+   the ORDINARY pull (step 7's post-write gate, where nothing equivalent existed
+   at all), and a site it cannot locate FAILS rather than being skipped.
 
 Any failure here STOPS the run before delivery — the branch holds the
 in-progress state for inspection/fix, nothing is delivered. This gate is not
