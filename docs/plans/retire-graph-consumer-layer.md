@@ -177,10 +177,16 @@ in graph since the migration is unchecked, and s302 would start that way.
 v0.314.0 promoted LC-O15. Graph's count goes 12 → 13. The runbook states both legitimate verdicts
 and why `--stamp retire` is the WRONG remedy there.
 
-**NEXT ACTION FOR THIS REPO: item 19** — review graph's recent artifact-consolidation attempts.
-Operator request, 2026-08-08. Item 12 remains available and gates nothing. **Item 19 is read-only
-and historical, so it works either side of the pull; prefer AFTER**, so the review reports against
-the engine graph will actually run.
+**~~NEXT ACTION FOR THIS REPO: item 19~~ — DONE 2026-08-08.** The finding is
+[`docs/reviews/graph-artifact-consolidation-review.md`](../reviews/graph-artifact-consolidation-review.md).
+**No release**, by the item's own terms. Three different operations are called "consolidation" and
+the item's text ran two of them together; the counterfactual is settled (**96.1%** reduction, 12.0 MB
+→ 470 KB) and the defects are all in the RESIDUE and all core's. See §*What item 19 measured*.
+
+**NEXT ACTION FOR THIS REPO: item 21** — `apply.sh` overwrites itself mid-run. It is a reported live
+defect in the one program that delivers every pull, and the plan already states how to open it:
+settle by EXPERIMENT whether bash re-reads a replaced script mid-execution, before touching
+anything. Item 12 and item 22 remain available and gate nothing.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -253,7 +259,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~12~~ | ~~**18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift~~ | **DONE** — v0.309.0 (#430). Reproduced with a control; **28 files** exposed (control: 72 machinery files outside the scan). Half the report's attribution is REFUTED and left open. See §*What item 18 measured* |
 | ~~13~~ | ~~**8** — push-candidate ledger triage~~ | **CORE'S HALF DONE** — v0.310.0 (#432). The run's only CLOSE-CANDIDATE was FALSE; the guard against it existed as a NOTE, not a mechanism. The remaining triage needs the receipts re-anchored, which is the operator's. See §*What item 8's core half measured* | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | ~~14~~ | ~~**6** — promote LC-E6/LC-O15~~ | **DONE** — v0.311.0 (#434), v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). Both zeros were unreadable: LC-O15's was FALSE, LC-E6's was a SILENCE. Two unrelated `apply.sh` defects fell out of driving it. See §*What item 6 measured* |
-| **15** | **19** — review graph's artifact consolidation | **← THE NEXT ITEM.** Operator request 2026-08-08. Read-only against the consumer; nothing gates it, and it is now better positioned: graph is at 0.314.0, so the review reports against the engine it actually runs |
+| ~~15~~ | ~~**19** — review graph's artifact consolidation~~ | **DONE — no release, by the item's own terms.** `docs/reviews/graph-artifact-consolidation-review.md`. Consolidation is load-bearing and the recurrence is structural; the defects are core's step leaving 33 working files (1.80 MB, 13.7%) in the durable area root and prescribing area-root paths for per-sprint work. See §*What item 19 measured* |
+| **16** | **21** — `apply.sh` overwrites itself mid-run | **← THE NEXT ITEM.** A reported live defect in the program that delivers every pull. Settle the bash-re-reads question by experiment FIRST |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
 | — | **21** — `apply.sh` overwrites itself mid-run | REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
 | — | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
@@ -535,7 +542,13 @@ before you write code.
     pull was three). The two stamp fields and which one each reader consults is the derivation to
     start from.
 
-19. **Review graph's recent attempts at artifact consolidation, and decide whether the process
+19. ~~**Review graph's recent attempts at artifact consolidation.**~~ **DONE 2026-08-08 —
+    `docs/reviews/graph-artifact-consolidation-review.md`. No release.** Two things below are
+    WRONG: this item treats "consolidation" as one operation when it is THREE with different
+    owners, and **its "48 refusals" figure is stale — the owed set is 98** (72 AMBIGUOUS + 3
+    NO-AREA + 23 STORY-NO-SPRINT), and was already 72/3/23 at v0.308.0 by this plan's own record.
+    See §*What item 19 measured*. What follows is the original scope.
+    **Review graph's recent attempts at artifact consolidation, and decide whether the process
     improves or the methodology changes.** **OPERATOR REQUEST, 2026-08-08**, verbatim: *"would
     like to add to the plan a review of graph consumers recent attempts at artifact consolidation
     and determine if there are improvements we can make with that process or even a different
@@ -625,6 +638,75 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 19 measured (the reduction is fine; the residue is the defect, and it is core's)
+
+Full finding: [`docs/reviews/graph-artifact-consolidation-review.md`](../reviews/graph-artifact-consolidation-review.md).
+**No release**, by the item's own terms — it forbade opening with a mechanism, and nothing here is
+authorised. Everything re-derived against graph at `a8ef9412c`, read-only.
+
+**THREE OPERATIONS ARE CALLED "CONSOLIDATION" AND THIS ITEM RAN TWO OF THEM TOGETHER.** (A)
+current-state consolidation, core's `steps/artifact-consolidation.md`, 19 passes over 4 artifacts in
+66 days. (B) the artifact-path migration, item 10/16. (C) archive-and-reset — s300 and s301 moving a
+whole sprint's corpus into `s<N>/archive/`, **graph's own invention and the only one that PREVENTS
+accumulation rather than draining it.**
+
+**THE COUNTERFACTUAL IS SETTLED AND DOES NOT NEED RE-ASKING.** The sinks are content that would
+otherwise still be live, because the step builds the history draft from lines removed from live:
+
+```
+                        live today      sink        never-consolidated
+four durable artifacts     469,522  11,568,150          12,037,672 B
+                          ~117k tok                        ~3.0M tok   <- 96.1% reduction
+```
+
+**AND THE RECURRENCE IS STRUCTURAL, NOT SLOPPY.** `product-brief.md` went 360 → 1030 lines in the
+six days after its 08-02 pass, and **7 of 7 headings added in that window are sprint-scoped** (five
+carry an explicit `S301` token; the other two are their containers). Sprint output is written into a
+sprint-independent file by design. Nothing here argues for consolidating less often.
+
+**THE DEFECTS ARE IN THE RESIDUE AND BOTH ARE CORE'S.**
+
+- **The step writes working files to disk and never says to remove them.** `:51` dispatches two
+  drafts, `:41` a manifest, `:62` a coverage report; `:93` replaces the live artifact and the draft
+  is never mentioned again. Control on the absence: `delete|remove|rm|clean ?up|discard|retire|unlink`
+  returns **rc=1** over the step and matches three sibling step files. Result on graph: **33 of 96
+  root-level files in `planning-artifacts/` are byproduct — 1.80 MB, 13.7% of the directory —
+  against 383 KB, 2.9%, for the three live artifacts they exist to protect.**
+  `consolidation-draft-prd-live.md` is a 1383-line near-duplicate of the 1530-line live PRD,
+  differing on 155 lines, with nothing saying which is authoritative.
+- **The step prescribes AREA-ROOT paths for per-sprint work products.** Control: `s<N>|sprint slot`
+  returns **rc=1** over the step and matches five sibling steps. Live consequence, both tracked
+  today: `consolidation-manifest-prd.md` (root, latest token S297) and
+  `s300/consolidation-manifest-prd.md` — **same basename, two homes, nothing declaring which is
+  current, which is the exact condition item 10 was opened to eliminate.** Eleven basenames now sit
+  in both places (control: 85 root basenames in no slot). `validate-artifact-paths.sh` cannot see it
+  and is not wrong not to: both paths conform. A syntactic grammar cannot separate a durable artifact
+  from a per-sprint one that omitted its sprint.
+
+**THE SINKS ARE NOT A FINDING.** 110,591 lines / 11.6 MB, and nothing reads them — deliberately.
+`validate-artifact-budget.sh:367-372` declares `*-history.md`/`*-archive.md` write-only via
+`is_archive()` and excludes them, reason at `:62`. Content-level duplication inside them was NOT
+measured and is stated as unmeasured.
+
+**ONE PLAN FIGURE WAS STALE AND THIS ITEM REPEATED IT.** "The 48 refusals are still owed" — the owed
+set is **98**: 72 AMBIGUOUS + 3 NO-AREA + 23 STORY-NO-SPRINT, from running core's validator against
+graph (5054 conforming of 5152, **0 migratable non-conforming**, corpus proved non-empty in the same
+run). 72/3/23 was already this plan's recorded v0.308.0 figure; 48 was the FIRST migration's refusal
+count over a pre-story subject set. Size the cleanup at 98.
+
+**A MEASUREMENT DEFECT CAUGHT MID-REVIEW, worth carrying: a git pathspec `*` MATCHES `/`.**
+`git ls-files '_bmad-output/planning-artifacts/*.md'` returns the whole subtree, not the root level,
+so the first duplicate-basename join returned **1395** where the depth-filtered answer is **11**.
+Filter depth with `awk -F/ 'NF==3'`, never with a pathspec glob.
+
+**THE METHODOLOGY ANSWER, and it is larger than either fix.** The durable artifacts refill because
+sprint-scoped content is written into them. Move a sprint's LOCKED block and changelog into `s<N>/`
+and consolidation degenerates from a 19-pass recurring cost into a rare genuine refactor — graph has
+already proven the containment half in (C). **NOT SIZED.** `LOCKED_REQUIREMENTS` is read by four core
+validators and ten step files; `validate-locked-anchor.sh:129` already parameterises the
+source-of-record (`DEFAULT_SOR_BASENAME`, overridable `--sor`), but whether the other thirteen sites
+move is UNDERIVED, and deriving it is the prerequisite to proposing anything.
 
 ## What item 6 measured (both zeros were unreadable, and the gate was the whole item)
 
