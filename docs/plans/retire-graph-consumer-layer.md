@@ -254,13 +254,26 @@ the plan's *"at least two carry no recoverable sprint (they say `S999`)"* is ref
 content in a carry-over ID list, and a byproduct's sprint was never in its content. Two measurement
 traps fell out and are recorded in the step itself. See §*What item 23b measured*.
 
-**NEXT ACTION FOR THIS REPO: item 23d**, then 23c. The plan's own order is *23a → 23b → 23c, with
-23d after 23b* — 23a and 23b have now both reported, which is the precondition 23d was waiting on.
-**23d is a DECISION, not a build**, and a "yes" produces implementation that must be written into
-this plan as its own sequenced item(s) before it starts. 23c (the inlet) is the real methodology
-change and is **explicitly not sized** — it opens with a derivation, not with code, and **23a
-removed its urgency argument while leaving its correctness one intact**. Item 12, item 22, item 24
-and the new item 25 remain available and gate nothing.
+**~~NEXT ACTION FOR THIS REPO: item 23d~~ — DECIDED 2026-08-08: NO. No release, and NOTHING is added
+to §*Order of execution*, which is what a "no" is supposed to look like under this item's own
+terms.** `artifact-consolidation` stays a step. The item's own strongest argument FOR survived its
+control — it is the only step `route.md` HANDS OVER rather than enters — but three of the four gains
+a skill was said to bring buy nothing here, measured, and the decider is the subject boundary:
+`ai-dlc-setup` and `ai-dlc-update` reference `planning-artifacts` **0** times each, the pipeline
+**70**. See §*What item 23d decided*, **which also states the three things that would re-open it**,
+so the answer is falsifiable rather than permanent.
+
+**NEXT ACTION FOR THIS REPO: item 23c** — the inlet, and the last of item 23. It is the real
+methodology change and is **explicitly NOT SIZED**: it opens with a derivation over 4 validators and
+10 step files, not with code, and if that derivation says the sites do not move cheaply the correct
+outcome is to say so and stop. **23a removed its urgency argument — the pool does not breach — and
+left its correctness one intact.** Item 12, item 22, item 24 and item 25 remain available and gate
+nothing.
+
+**THIS IS THE HANDOFF POINT THE SESSION THAT WROTE 23a/23b/23d RECOMMENDED.** 23c shares almost
+nothing with them: its subject is `LOCKED_REQUIREMENTS` across four core validators and ten step
+files, not the consolidation step or the budget validator. Starting it in a fresh session costs
+little and buys a clean read of this file.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -337,9 +350,9 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~16~~ | ~~**21** — `apply.sh` overwrites itself mid-run~~ | **DONE — v0.316.0.** **REPRODUCED at ground truth with a control**, and the report's attribution is EXACT — the second in a row. bash resumes at its saved byte offset inside the new file; the fix is the `.incoming.$$` + `mv` idiom the file already used at five sites. One fixture arm was **removed for being vacuous** rather than shipped. See §*What item 21 measured* |
 | ~~17~~ | ~~**23a** — are the budget thresholds attainable at all?~~ | **DONE — v0.317.0 (#449) + v0.318.0 (#450). THE ANSWER IS YES and graph already passes at 36%.** The 417% breach was an instrument reading: pool understated 5x, sum overstated 2.35x, both defects core's. The floors were derived anyway, because at a genuine 200K window the threshold IS unattainable (130–151%). See §*What item 23a measured* |
 | ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
-| **19** | **23d** — its own skill? | **← THE NEXT ITEM.** Its precondition is met: 23a and 23b have both reported. **A DECISION, not a build** — a "yes" is new sequenced work in this plan before it starts, a "no" is recorded so it is not re-opened |
+| ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
+| **20** | **23c** — the inlet | **← THE NEXT ITEM.** **NOT SIZED.** Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
-| — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first. **23a removed its urgency argument** — the pool does not breach — and left its correctness one intact |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
@@ -813,6 +826,19 @@ before you write code.
     other thirteen sites move is **UNDERIVED, and deriving it is the whole of 23c's first step.**
     If the derivation says they do not move cheaply, say so and stop — 23b stands alone.
 
+    **~~23d — SHOULD `artifact-consolidation` BE ITS OWN SKILL?~~ ANSWERED 2026-08-08: NO. No
+    release; no implementation authorised; nothing added to §*Order of execution*.** The derivation
+    this item demanded was run and is in §*What item 23d decided*, together with the three
+    conditions that would re-open the question. **Two things in the text below did NOT survive
+    measurement and must not be re-argued from it.** The item lists four things a separate skill
+    gets: **three of them buy nothing here** — no skill defines its own rules (all 31 are ai-dlc's,
+    and `ai-dlc-update` cites seven of them while being a skill anyway), the step already HAS a
+    fixture as of v0.319.0, and only `ai-dlc-update` carries a `skill_version`, for the specific
+    reason that it performs the version transition. The item also invites the argument that a
+    separate skill would have to restate ai-dlc's rulebook; **that argument is refuted by
+    `ai-dlc-update` and was dropped.** What the item got RIGHT is that operator-invocation on its own
+    cadence is the strongest case FOR, and it survived its control. What follows is the original
+    text.
     **23d — SHOULD `artifact-consolidation` BE ITS OWN SKILL (`ai-dlc-artifact-consolidation`)?**
     **OPERATOR REQUEST, 2026-08-08.** A DECISION, not a build, and **it must not be answered
     before 23a and 23b report** — the right packaging follows from what the thing turns out to be,
@@ -943,6 +969,105 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 23d decided (NO — and the FOR argument was right, it just is not enough)
+
+**DECISION: `artifact-consolidation` does NOT become its own skill. No release, and this question is
+now CLOSED — do not re-open it without new evidence of the kind listed at the end.** Decided
+2026-08-08 on the derivation below, all of it measured against the tree at `aa7100b`.
+
+**THE ITEM'S OWN STRONGEST ARGUMENT SURVIVED ITS CONTROL, WHICH IS WHY THIS IS A JUDGEMENT AND NOT A
+DISMISSAL.** The plan said the strongest case FOR is that the step is operator-invoked on its own
+cadence. That is true and it is genuinely discriminating. Of the 20 pipeline steps, six are entered
+from `route.md` rather than by a predecessor's `nextStepFile`, and **`artifact-consolidation` is the
+only one route HANDS OVER rather than enters**:
+
+```
+artifact-consolidation   - `consolidate` → the operator runs `artifact-consolidation.md`
+bug-investigation        | bug | bug-investigation → implementation → deploy-validate → retro
+codebase-inventory       | brownfield-a | codebase-inventory → discovery → …
+doc-reconciliation       | brownfield-c | doc-reconciliation → doc-repair-backfill → …
+carry-over-evaluation    | carry-over | carry-over-evaluation → discovery → …
+handoff                  (a resume mechanism, not a variant)
+```
+
+The other four are pipeline VARIANTS that chain onward. **A first attempt at this control was WRONG
+and is worth recording**: `retro.md:545` matches "operator-invoked", which read as a second such step
+— but the sentence is *about consolidation* (*"Retro NEVER runs the consolidation itself"*), and
+retro's own frontmatter says *"agent runs autonomously"*. A grep hit inside a file is not a statement
+about that file.
+
+**NOW THE FOUR THINGS THE ITEM SAID A SKILL GETS, TESTED ONE AT A TIME. Three buy nothing here, and
+that is measured rather than argued.**
+
+| claimed gain | measured | verdict |
+|---|---|---|
+| its own resident rulebook | **No skill has one.** All **31** numbered rules live in `ai-dlc/SKILL.md`; `ai-dlc-setup` and `ai-dlc-update` define **0** each and both CITE ai-dlc's — setup Rule 4, update Rules 4, 5, 8, 25(d), 27, 29, 931 | buys nothing |
+| its own fixtures | it **already has one** — `consolidation-residue`, shipped v0.319.0, as a step | buys nothing |
+| its own version story | only `ai-dlc-update` carries `skill_version`, and its own SKILL.md says why: it is *"the ai-dlc-update tool itself"*, advanced by the autonomous self-update, because update is the thing that PERFORMS the version transition and must move ahead of the rulebook. `ai-dlc-setup` has none | not a skill property — specific to the self-updating tool |
+| its own invocation surface | **real, and the only real gain.** Core ships **no `commands/` directory**; skills ARE the invocation surface, so there is no cheaper way to get `/ai-dlc-artifact-consolidation` | real |
+
+**THE RULE-DEPENDENCY ARGUMENT WAS TESTED AND REFUTED — RECORDED SO IT IS NOT RE-RAISED.** "A
+separate skill would have to carry or restate ai-dlc's rules" looks decisive until you check whether
+the existing skills manage it: `ai-dlc-update` cites seven of ai-dlc's numbered rules and is a
+separate skill anyway. **Depending on the rulebook does not make something a step.** The control
+killed the argument.
+
+**WHAT DOES SEPARATE A SKILL FROM A STEP TODAY IS THE SUBJECT, AND IT IS ONE CLEAN NUMBER.**
+
+```
+references to `_bmad-output/planning-artifacts/`
+  ai-dlc-setup       0
+  ai-dlc-update      0
+  ai-dlc            70
+```
+
+**Both existing skills act on the INSTALLATION. The pipeline acts on the PROJECT'S ARTIFACTS.**
+`artifact-consolidation` acts entirely on the project's artifacts — the same four
+`carry-over-evaluation` whole-reads and `route.md` Step 1a gates on — and since v0.319.0 it resolves
+its sprint slot from the pipeline snapshot's `sprint_id`. **setup and update can each run with no
+pipeline state at all; consolidation cannot.**
+
+**THAT IS THE DECIDING ARGUMENT, AND IT IS ABOUT COHERENCE RATHER THAN COST.** Promoting
+consolidation would create the first skill that reads the pipeline snapshot and writes into
+`_bmad-output/planning-artifacts/s<N>/`. The skill/step boundary would then predict nothing, and
+that boundary is currently the only thing telling an author where new work belongs. **A distinction
+that stops discriminating is worse than the packaging it was meant to improve** — this repo has
+shipped that failure under other names and this is the cheap moment to not ship it again.
+
+**AND THE COST IS REAL, though it is the weaker half of the case.** Declaration-site references for
+an existing skill, counted across the five sites that would all need entries:
+
+```
+                install.sh  uninstall.sh  core-manifest  setup-sites  enforcement-map  TOTAL
+ai-dlc-setup             8             2              2            6                7     25
+ai-dlc-update           14             2              6            6               45     73
+```
+
+Plus its own fixtures, plus migrating the **5** core files that reference the step today
+(`core/team-roles/architect.md`, `core/scripts/validate-artifact-budget.sh`,
+`core/skills/ai-dlc/SKILL.md`, `steps/carry-over-evaluation.md`, `steps/route.md` — the plan's own
+figure, re-derived and unchanged), plus a permanent second surface to install, reconcile,
+drift-check and pull. **v0.319.0 is the live measurement of that overhead**: adding ONE fixture cost
+four ship-list edits and a failed push to learn which four (item 24). A skill is that shape, larger,
+forever.
+
+**SO: one real gain — an invocation surface — against 25–73 declaration sites, a second reconcile
+surface, and the loss of the only boundary that currently means anything. NO.**
+
+**WHAT WOULD RE-OPEN THIS, stated so the answer is falsifiable rather than permanent.** Any one of:
+
+- **Consolidation stops depending on pipeline state.** If 23c moves sprint-scoped content out of the
+  durable artifacts and consolidation degenerates into a rare genuine refactor with no `sprint_id`
+  to resolve, the subject argument weakens and this is worth re-asking.
+- **A second operator-invoked, project-artifact-scoped operation appears.** One such operation is a
+  step; two with shared machinery is a skill, and the shared machinery would be the thing being
+  packaged rather than the file.
+- **Core grows a `commands/` surface.** The one real gain would then be available without a skill,
+  which settles it in the other direction — the answer stays no and gets cheaper to act on.
+
+**NO IMPLEMENTATION IS AUTHORISED BY THIS AND NONE IS ADDED TO THE ORDER OF EXECUTION**, which is
+what a "no" is supposed to look like under this item's own terms.
 
 ## What item 23b measured (the refusal set is EMPTY, and two instruments were wrong on the way there)
 
