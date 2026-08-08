@@ -51,6 +51,14 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
+**`git branch --no-merged origin/main` LISTS 17 BRANCHES AND NONE OF THEM IS PARKED WORK.**
+This repo squash-merges, which rewrites the commit and breaks ancestry, so every branch it has
+ever merged reports as unmerged forever. Measured before this was written: four sampled at
+random — `v0.283.0`, `v0.288.0`, `v0.225.0`, `v0.57.0` — all have their CHANGELOG heading on
+`main` (control: a fabricated `0.999.0` returns 0). **Do not read that list as a backlog, and
+do not re-derive this**; two of those branch names are still described as "parked" further down
+this file, in sections that predate their release.
+
 **NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.315.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
 lists them with their PR numbers. **Count them there; do not carry a number in this sentence.**
