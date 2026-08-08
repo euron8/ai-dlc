@@ -34,6 +34,65 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.318.0] — 2026-08-08
+
+### The reader-window resolver read a role-file line format deleted fifty releases ago
+
+`resolve_reader_window()` decides the analyst's context window, and therefore the whole-read pool
+every consumer's planning artifacts are measured against. It shipped at **v0.124.0** greping
+`^- Personal:` out of `team-roles/analyst.md`, back when setup filled that line in. **v0.174.0**
+(`989939a`, *"model strings move to one consumer-owned config block"*) deleted the line from every
+role file core ships, and v0.175.0 finished the move.
+
+So for fifty releases the `1000000` arm has been unreachable and every consumer has silently taken
+the `200000` fallback — the branch this derivation deliberately made the **tightening** default for
+the **unknown** case, used instead as the only reachable one. Controlled:
+
+```
+'^- Personal:' in core/team-roles/analyst.md            rc=1   (control: 57 lines present)
+'^- Personal:' anywhere under core/team-roles/          rc=1   (control: '^- ' bullets in every role file)
+'[1m]'        anywhere under core/team-roles/           rc=1
+'Personal:'   in core/ templates/ scripts/ install.sh   ONE hit — the grep on line 290 itself
+```
+
+**The function's own comment already named the right source and the code never read it** (`:244`:
+*"the consumer's `aiDlcModels` block maps that key to whatever model this project runs"*). The only
+occurrence of `aiDlcModels` in the file was that sentence. It now resolves the two hops
+`aiDlcRoles.analyst.model` → `aiDlcModels[key]` → `[1m]`, using the idiom
+`core/hooks/ai-dlc-dispatch-guard.sh:203-205` already performs rather than a second reading of the
+same config.
+
+Against the reference consumer: `aiDlcRoles.analyst.model = "sonnet"` → `aiDlcModels.sonnet =
+"claude-sonnet-5[1m]"` → a 1M window → **pool 330,000**, where the validator had been reporting
+**66,000**. With v0.317.0's numerator fix already in, the row goes from `OVER … 417% of it →
+consolidate` to `ok … 117,379 tok (pool 330,000, 35% of it)`.
+
+**The unknown case still tightens, and now there are five of them** — no settings.json, no `jq`, no
+`aiDlcRoles.analyst`, a key absent from `aiDlcModels`, an unrecognised model string. The failure
+modes are not symmetric: resolving unknown to 1M fails **open** on a HARD_BLOCK, while resolving a
+genuine 1M consumer to 200K — what this did for fifty releases — is a gate that cannot be passed,
+which trains the operator to ignore the row.
+
+### The fixture kept it green by reconstructing the deleted format
+
+`whole-read-pool:63` wrote its own role file with
+`printf '…- Personal: \`/model %s\`…'`, so four assertions went on exercising the resolver against a
+role-file shape core had not shipped since v0.174.0. **A fixture that builds its own input can
+outlive the world its input came from.** The window arms now drive the config block a consumer
+actually holds, and two arms are added that fail for different reasons:
+
+- **assertion 6** — a role file carrying `- Personal: /model claude-sonnet-5[1m]` against a config
+  saying the analyst runs a non-1m model must resolve to **66,000**. If it ever reports 330,000
+  something is reading a model out of a role file again.
+- **assertion 8b** — the `^- Personal:` grep is gone from the source, with a control asserting the
+  validator reads `aiDlcRoles.analyst.model`, so the absence is not merely a grep that ran.
+
+Mutation-red replay against the v0.317.0 validator: assertion 1 fails `resolved to '66000',
+expected 330000`, assertion 6 fails `a role file's model line was honoured ('330000')`, and the
+four-site mutation guard exits 2 on the old two-site function.
+
+Full finding: `docs/reviews/graph-artifact-budget-attainability.md`.
+
 ## [0.317.0] — 2026-08-08
 
 ### The whole-read pool summed 30 files under a label reading "(4 planning artifacts)"

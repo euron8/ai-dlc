@@ -253,6 +253,34 @@ artifacts at 36% and their floors at 26%.
 
 ---
 
+## What shipped
+
+Both defects are fixed, in the order derived above — numerator first, so no intermediate state
+reports a pass for the wrong reason.
+
+| release | fixes | reading against graph afterwards |
+|---|---|---|
+| **v0.317.0** (#449) | the pool sums only live artifacts; `is_sprint_slotted()` reuses the grammar's `s[0-9]+` component match; the label is derived from the rows it summed | `OVER … 117,379 tok (pool 66,000, 177%)` — correct numerator, still-understated pool |
+| **v0.318.0** | `resolve_reader_window()` resolves `aiDlcRoles.analyst` → `aiDlcModels`, the block its own comment already named | `ok … 117,379 tok (pool 330,000, 35% of it)` |
+
+`whole-read-pool` grew from 11 assertions to 20. The four window arms now drive the **config
+block** instead of a role file the fixture wrote itself; assertion 6 is the anti-regression that a
+role file claiming `[1m]` does **not** override the config; assertion 8b asserts the dead grep is
+gone from the source with a control proving the absence is real; assertions 10–11 cover the pool
+set, the `s301-close-out/` decoy, the derived label, a mutant, and an unmutated control.
+
+**Mutation-red replay, run before shipping v0.318.0** — the new fixture against the v0.317.0
+validator:
+
+```
+FAIL  a [1m] analyst resolved to '66000', expected 330000
+FAIL  a role file's model line was honoured ('330000') -- the deleted format is being read again
+FIXTURE ERROR: mutation hit fewer than 4 fallback sites -- a path is uncovered   (exit 2)
+```
+
+Both new arms are red on the old code and green on the new, and they fail for **different**
+reasons — one that the config is not read, one that the role file still is.
+
 ## What this means for 23b / 23c / 23d
 
 23a was sequenced first because it could invalidate the rest. It does not — but it re-prices them.

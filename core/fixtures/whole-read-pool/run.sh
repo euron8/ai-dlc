@@ -25,14 +25,25 @@
 # The consumer that derived this wrote the window in as a literal 1,000,000, with
 # a comment telling a human "if that model line changes, THIS NUMBER CHANGES.
 # Re-derive; do not inherit." Core cannot execute an instruction to a human, and
-# the number is not core's to inherit: core ships team-roles/analyst.md as a
-# TEMPLATE that setup fills per project. A hardcoded 1,000,000 would hand a
-# 200K-window analyst a pool 1.65x its entire context -- a fail-open at a
-# HARD_BLOCK, on the very gate that exists to stop the analyst blowing its window
+# the number is not core's to inherit: the model a role runs is a per-project fact
+# held in the consumer's `aiDlcRoles`/`aiDlcModels` config. A hardcoded 1,000,000
+# would hand a 200K-window analyst a pool 1.65x its entire context -- a fail-open at
+# a HARD_BLOCK, on the very gate that exists to stop the analyst blowing its window
 # one step later.
 #
-# Assertions 1-4 are that resolution. Assertion 4 is the one that matters: unknown
-# must fall to the SMALLER window, never the larger.
+# Assertions 1-6 are that resolution, and assertion 4 is the one that matters:
+# unknown must fall to the SMALLER window, never the larger.
+#
+# THESE ASSERTIONS USED TO WRITE A ROLE FILE, AND THAT IS WHY THEY STAYED GREEN
+# THROUGH A DEAD RESOLVER. `resolve_reader_window()` shipped at v0.124.0 reading
+# `^- Personal:` out of team-roles/analyst.md. v0.174.0 deleted that line from every
+# role file core ships. This fixture kept RECONSTRUCTING the deleted format with its
+# own `printf`, so four assertions went on exercising a resolver against a role-file
+# shape core had not shipped for fifty releases, and the reference consumer sat on a
+# 5x-understated pool and a 417% breach the whole time. A fixture that builds its own
+# input can outlive the world its input came from; the arms below drive the CONFIG
+# BLOCK the consumer actually holds, and assertion 6 is the anti-regression that the
+# role file is no longer consulted at all.
 
 set -uo pipefail
 
@@ -58,9 +69,19 @@ fails=0
 ok()  { printf '  ok    %s\n' "$1"; }
 bad() { printf '  FAIL  %s\n' "$1"; fails=$((fails+1)); }
 
-# The analyst role file, in the layout install.sh writes (.claude/team-roles/).
-role() { # role <personal-model-line>
-  printf '# Analyst\n\n## Model\n\n- Personal: `/model %s`\n- Bedrock: `/model x`\n' "$1" \
+# The consumer's config block, in the layout install.sh writes. `aiDlcRoles.<role>.model`
+# is a KEY into `aiDlcModels`, never a model string -- the same two-hop resolution
+# ai-dlc-dispatch-guard.sh performs.
+settings() { # settings <role-model-key> <model-string-that-key-maps-to>
+  printf '{\n  "aiDlcRoles": { "analyst": { "model": "%s", "effort": "high" } },\n  "aiDlcModels": { "%s": "%s" }\n}\n' \
+    "$1" "$1" "$2" > "$WORK/.claude/settings.json"
+}
+
+# The role file as core ACTUALLY ships it since v0.174.0: it names the config entry and
+# carries no model string of its own. Written so the resolver has a role file present
+# and still cannot get a window out of it.
+role_file_as_shipped() {
+  printf '# Role: Analyst\n\n**Model and effort: set at the start of your session from\n`aiDlcRoles.analyst` in `.claude/settings.json`.**\n' \
     > "$WORK/.claude/team-roles/analyst.md"
 }
 
@@ -85,18 +106,22 @@ echo "whole-read-pool"
 artifacts 1
 
 # --- 1. A [1m] analyst resolves to the 1M window -------------------------------
-# Reproduces the reference consumer exactly: its analyst.md carries
-# `claude-sonnet-5[1m]` and its pool is 330,000.
-role 'claude-sonnet-5[1m]'
+# Reproduces the reference consumer exactly, and this is the arm that was RED before
+# the fix: `aiDlcRoles.analyst.model = "sonnet"`, `aiDlcModels.sonnet =
+# "claude-sonnet-5[1m]"`, a role file present and carrying no model of its own. Two
+# hops, key then string -- a resolver that only reads the key gets `sonnet`, which
+# has no `[1m]` in it, and lands on 66000.
+role_file_as_shipped
+settings 'sonnet' 'claude-sonnet-5[1m]'
 run >/dev/null
 if [ "$(pool_of)" = "330000" ]; then
-  ok "a [1m] analyst resolves to a 330000-tok pool"
+  ok "a [1m] analyst resolves to a 330000-tok pool through aiDlcRoles -> aiDlcModels"
 else
   bad "a [1m] analyst resolved to '$(pool_of)', expected 330000"
 fi
 
 # --- 2. A plain analyst resolves to the 200K window ----------------------------
-role 'claude-sonnet-5'
+settings 'sonnet' 'claude-sonnet-5'
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
   ok "a non-1m analyst resolves to a 66000-tok pool"
@@ -104,32 +129,63 @@ else
   bad "a non-1m analyst resolved to '$(pool_of)', expected 66000"
 fi
 
-# --- 3. AN UNFILLED TEMPLATE FALLS TO THE SMALLER WINDOW -----------------------
-# This is what core itself ships. Getting 1,000,000 here would mean every consumer
-# inherits the reference consumer's window until setup happens to fill the file.
-role '{analyst_model_personal}'
+# --- 3. A DANGLING KEY FALLS TO THE SMALLER WINDOW -----------------------------
+# `aiDlcRoles.analyst.model` names a key that `aiDlcModels` does not define. The
+# config is incoherent, so the window is unknown -- and unknown tightens.
+printf '{\n  "aiDlcRoles": { "analyst": { "model": "opus" } },\n  "aiDlcModels": { "sonnet": "claude-sonnet-5[1m]" }\n}\n' \
+  > "$WORK/.claude/settings.json"
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
-  ok "an unfilled {analyst_model_personal} template falls back to 66000, not 330000"
+  ok "a key absent from aiDlcModels falls back to 66000, not to the 1m sibling in the block"
 else
-  bad "an unfilled template resolved to '$(pool_of)' -- core is shipping an inherited window"
+  bad "a dangling key resolved to '$(pool_of)' -- an incoherent config opened the gate"
 fi
 
-# --- 4. A MISSING ROLE FILE FALLS TO THE SMALLER WINDOW ------------------------
+# --- 4. NO CONFIG AT ALL FALLS TO THE SMALLER WINDOW ---------------------------
 # The direction of the unknown case is the whole safety property. Unknown must
 # tighten the gate; resolving unknown to 1M is a fail-open at a HARD_BLOCK.
-rm -f "$WORK/.claude/team-roles/analyst.md"
+rm -f "$WORK/.claude/settings.json"
 run >/dev/null
 if [ "$(pool_of)" = "66000" ]; then
-  ok "a missing role file falls back to 66000 -- unknown tightens, never opens"
+  ok "a missing settings.json falls back to 66000 -- unknown tightens, never opens"
 else
-  bad "a missing role file resolved to '$(pool_of)' -- unknown opened the gate"
+  bad "a missing settings.json resolved to '$(pool_of)' -- unknown opened the gate"
 fi
+
+# --- 4b. NO aiDlcRoles.analyst ENTRY FALLS TO THE SMALLER WINDOW ---------------
+# A settings.json that exists and simply says nothing about the analyst. Distinct
+# from assertion 4: the file is readable and parses, so a resolver that only guards
+# on readability walks past this one.
+printf '{\n  "aiDlcModels": { "sonnet": "claude-sonnet-5[1m]" }\n}\n' > "$WORK/.claude/settings.json"
+run >/dev/null
+if [ "$(pool_of)" = "66000" ]; then
+  ok "a settings.json with no aiDlcRoles.analyst falls back to 66000"
+else
+  bad "a missing analyst entry resolved to '$(pool_of)' -- unknown opened the gate"
+fi
+
+# --- 6. THE ROLE FILE IS NOT CONSULTED — THE ANTI-REGRESSION -------------------
+# This is the arm that would have caught the original defect from the other side, and
+# the one that stops the old grep coming back. A role file carrying the pre-v0.174.0
+# `- Personal:` line WITH a [1m] model, against a config saying plainly that the
+# analyst runs a non-1m model. The config wins. If this ever reports 330000, something
+# is reading a model out of a role file again -- which is the state that reported 66000
+# on a 1M consumer for fifty releases, in the other direction.
+printf '# Analyst\n\n## Model\n\n- Personal: `/model claude-sonnet-5[1m]`\n' \
+  > "$WORK/.claude/team-roles/analyst.md"
+settings 'sonnet' 'claude-sonnet-5'
+run >/dev/null
+if [ "$(pool_of)" = "66000" ]; then
+  ok "a role file claiming [1m] does not override the config -- the role file is not a model source"
+else
+  bad "a role file's model line was honoured ('$(pool_of)') -- the deleted format is being read again"
+fi
+role_file_as_shipped
 
 # --- 5. The pool actually BINDS ------------------------------------------------
 # A budget that cannot fail is not a budget. Controls in both directions, so
 # neither verdict is an accident of the fixture's file sizes.
-role 'claude-sonnet-5[1m]'
+settings 'sonnet' 'claude-sonnet-5[1m]'
 artifacts 1
 status="$(run)"
 if [ "$status" = "0" ] && grep -q '  ok  WHOLE-READ POOL' "$WORK/out.txt"; then
@@ -177,12 +233,12 @@ else
   bad "--only pipeline-snapshot.md exit $only_status and/or reported the pool -- gates would fail on the wrong artifact"
 fi
 
-# --- 8. THE MUTATION TEST — prove assertions 3/4 measure the resolver ----------
-# Flip BOTH fallback sites to 1M on a COPY and demand the two unknown inputs now
-# report 330000. There are two sites -- a missing role file returns early, an
-# unrecognised model falls through the case -- and a mutation covering only one
-# leaves the other's green unexplained. The first draft of this fixture mutated
-# only the case arm and this assertion correctly refused to pass.
+# --- 8. THE MUTATION TEST — prove assertions 3/4/4b measure the resolver -------
+# Flip EVERY fallback site to 1M on a COPY and demand each unknown input now reports
+# 330000. There are four -- unreadable settings.json, no jq, no aiDlcRoles.analyst,
+# and an unrecognised model falling through the case -- and a mutation covering only
+# some leaves the rest's green unexplained. An earlier draft of this fixture mutated
+# one arm and this assertion correctly refused to pass.
 MUTANT="$WORK/mutant.sh"
 sed "s/printf '200000'/printf '1000000'/g" "$VALIDATOR" > "$MUTANT" || exit 2
 if cmp -s "$VALIDATOR" "$MUTANT"; then
@@ -190,29 +246,50 @@ if cmp -s "$VALIDATOR" "$MUTANT"; then
   echo "  update the sed pattern in assertion 8 to match the real fallback arms" >&2
   exit 2
 fi
-if [ "$(grep -c "printf '1000000'" "$MUTANT")" -lt 2 ]; then
-  echo "FIXTURE ERROR: mutation hit fewer than 2 fallback sites -- one path is uncovered" >&2
+if [ "$(grep -c "printf '1000000'" "$MUTANT")" -lt 4 ]; then
+  echo "FIXTURE ERROR: mutation hit fewer than 4 fallback sites -- a path is uncovered" >&2
   exit 2
 fi
 artifacts 1
 mut_fails=0
-rm -f "$WORK/.claude/team-roles/analyst.md"
+rm -f "$WORK/.claude/settings.json"
 bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
-[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        missing role file still reports %s\n' "$(pool_of)"; }
-role '{analyst_model_personal}'
+[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        missing settings.json still reports %s\n' "$(pool_of)"; }
+printf '{\n  "aiDlcModels": { "sonnet": "claude-sonnet-5[1m]" }\n}\n' > "$WORK/.claude/settings.json"
 bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
-[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        unfilled template still reports %s\n' "$(pool_of)"; }
+[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        missing analyst entry still reports %s\n' "$(pool_of)"; }
+settings 'sonnet' 'claude-sonnet-5'
+bash "$MUTANT" --root "$WORK" >"$WORK/out.txt" 2>&1
+[ "$(pool_of)" = "330000" ] || { mut_fails=1; printf '        non-1m model still reports %s\n' "$(pool_of)"; }
 if [ "$mut_fails" -eq 0 ]; then
-  ok "MUTATION: pinning both fallbacks to 1M makes BOTH unknown cases report 330000"
+  ok "MUTATION: pinning every fallback to 1M makes ALL THREE unknown cases report 330000"
 else
-  bad "MUTATION: an unknown case is not produced by the fallback -- assertions 3-4 prove nothing there"
+  bad "MUTATION: an unknown case is not produced by the fallback -- assertions 3-4b prove nothing there"
+fi
+
+# --- 8b. THE ROLE-FILE GREP IS GONE, ASSERTED ON THE SOURCE --------------------
+# Assertion 6 catches the behaviour; this catches the code, and the two fail for
+# different reasons. `^- Personal:` has not existed in a shipped role file since
+# v0.174.0, so a resolver that greps for it cannot fire -- and a check that cannot
+# fire reads exactly like one that passed.
+if grep -q "'\^- Personal:'" "$VALIDATOR"; then
+  bad "the validator still greps '^- Personal:' -- a line format deleted at v0.174.0"
+else
+  ok "no '^- Personal:' grep remains in the validator"
+fi
+# Control on that absence: the string the resolver DOES read must be present, or the
+# grep above proves only that greps run.
+if grep -q 'aiDlcRoles.analyst.model' "$VALIDATOR"; then
+  ok "  control: the validator reads aiDlcRoles.analyst.model, so the absence above is real"
+else
+  bad "  control failed: the validator reads neither the old line nor the config block"
 fi
 
 # --- 9. The env override still works, and says so ------------------------------
 # The escape hatch survives, but it must be visible: a pool the operator raised is
 # a different claim from a pool the reader derived, and the output must not
 # conflate them.
-role 'claude-sonnet-5'
+settings 'sonnet' 'claude-sonnet-5'
 artifacts 1
 AI_DLC_READER_WINDOW_TOKENS=600000 bash "$VALIDATOR" --root "$WORK" >"$WORK/out.txt" 2>&1
 if [ "$(pool_of)" = "198000" ] && grep -q 'AI_DLC_READER_WINDOW_TOKENS' "$WORK/out.txt"; then
@@ -233,7 +310,7 @@ fi
 # digits and is NOT a sprint slot; excluding it would silently drop a live artifact
 # from a budget, which fails OPEN on a HARD_BLOCK. The slot is a whole path
 # COMPONENT, and the arm asserts both directions in one run.
-role 'claude-sonnet-5[1m]'
+settings 'sonnet' 'claude-sonnet-5[1m]'
 artifacts 1
 mkdir -p "$WORK/_bmad-output/planning-artifacts/s251" \
          "$WORK/_bmad-output/planning-artifacts/s271/party-mode-transcripts" \
