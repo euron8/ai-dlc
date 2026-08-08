@@ -34,6 +34,71 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.306.0] — 2026-08-08
+
+### The rule was right, it was untangle-only, and it was prose the author checks on themselves
+
+Plan item **17**, reported by the consumer during the 0.297.0 → 0.300.0 hop: `deploy-validate.md`
+kept OURS at line 26 — a line outside both of that file's declared setup-site spans — so the one
+line upstream added there never landed. The line it kept prescribed
+`_bmad-output/implementation-artifacts/sprint-<N>-*.md`, the OLD artifact-path grammar, against
+theirs' `s<N>/*.md`: **the consumer's own step file went on teaching the convention item 10 had
+just replaced.** It surfaced only because `HARD-CORE-BEHIND` flagged it independently — the
+safety net working, not the mechanism working.
+
+**Its failure direction is upstream content NOT ARRIVING.** The pull reports success, the
+consumer is quietly behind, and nothing downstream disagrees. That is what makes it worth a
+program rather than a stricter sentence.
+
+**`apply.sh` IS NOT THE SUBJECT, and the report said it was.** `apply.sh` contains no
+mask/reinject: its two matches for "mask" are both `umask`, against fourteen in `SKILL.md`. The
+transform is prose an agent executes. A fix aimed at `apply.sh` would have been a fix aimed at
+nothing, and the plan's own instruction — reproduce before touching it — is what caught that.
+
+**The check already existed, and both reasons it did not fire are the point:**
+
+- **§7v criterion 5 says exactly the right thing and is UNTANGLE-ONLY.** An ordinary pull runs the
+  same mask/reinject transform at step 7 and had no equivalent gate at all.
+- **It is prose, executed by the agent that just performed the transform**, and it has already
+  reported PASS on an instance of this defect: `SKILL.md` records `dev.md` losing three of theirs'
+  model-option HTML comment lines with criterion 5 green.
+
+New `reconcile/setup-site-drift.sh <dist> <consumer> <theirs>` is that criterion as a program. It
+diffs every file declaring a setup site against theirs over the whole file and requires every
+differing line to fall inside a declared span — naming the file, the line, and what theirs has
+there. It runs at **both** gates now: §7v criterion 5 is its invocation, and the ordinary pull's
+post-write gate gained it beside the leftover-token check, which catches the opposite direction.
+
+**REPRODUCED AGAINST GROUND TRUTH, not a synthetic case.** Run against the consumer's corrected
+tree it is silent (`5 declared sites across 4 files, 1379 lines compared`); run against the
+reconstructed pre-correction file it reports
+`deploy-validate.md:26 — differs from theirs OUTSIDE every declared span`, the exact line the
+consumer reported.
+
+**A declared span no program could find.** `deploy-command`'s `match` is `^(.+)$` and its only
+locator was `anchor_context` PROSE — readable by an agent and by nothing else. The first
+implementation resolved it greedily and picked a `{token}` HTML comment ten lines above the real
+site, then reported the correctly-reinjected value line as drift. It now carries `after_line`, a
+machine-readable anchor, and **a site the script cannot pin to one line FAILS as `UNLOCATABLE`
+rather than being guessed at** — picking plausibly is the same defect one level in.
+
+**Two silent-field defects found while building it, both worth naming because neither announces
+itself:**
+
+- **`IFS=$'\t' read -r a b c` COLLAPSES RUNS OF TABS**, because tab is an IFS *whitespace*
+  character. A single-line site has empty `heading`/`next_heading`, so its regex shifted two
+  fields left and every site came back with an EMPTY match — which matches every line. Fields are
+  cut explicitly now.
+- **A candidate list built with `tr '\n' ' '` carries a TRAILING SPACE.** Written to the allow
+  list unstripped it became the line `"162 "`, which no `grep -qxF 162` will ever match, so a
+  correctly-resolved site protected nothing.
+
+- New fixture `setup-site-drift`: **15 assertions, 3 mutants, 1 control**, including the measured
+  defect reproduced line-for-line, the added-line and removed-line directions a changed-line-only
+  check sees neither of, and a heading block legitimately changing length.
+- The `values-only` mutant is the shape §7v criterion 5 actually failed in: allow every changed
+  line, and a tree that lost an upstream line passes.
+
 ## [0.305.0] — 2026-08-08
 
 ### A migration is an event; a convention needs an arm that runs every push

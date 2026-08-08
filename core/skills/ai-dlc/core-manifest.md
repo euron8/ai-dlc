@@ -250,6 +250,7 @@ core_manifest:
   - fixtures/whole-read-pool/**
   - fixtures/artifact-path-migration/**
   - fixtures/artifact-path-conformance/**
+  - fixtures/setup-site-drift/**
   - fixtures/notify-hook-channel/**
 
 machinery:

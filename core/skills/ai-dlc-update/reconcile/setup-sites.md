@@ -23,7 +23,14 @@ do without being wired into any setup STEP (see "Explicitly NOT sites"
 below). Re-derive this file whenever those STEPs change.
 
 **Matching.** `single-line` sites carry a `match` regex with exactly one
-capture group — the captured group is the live consumer value. Masking and
+capture group — the captured group is the live consumer value. A site whose
+`match` alone cannot pick out ONE line also carries `after_line`, a regex for
+the nearest preceding line that IS distinctive; the site is then the first
+matching line at or after it. `deploy-command`'s `match` is `^(.+)$` and its
+`anchor_context` prose was, until `setup-site-drift.sh` shipped, the ONLY
+locator — readable by an agent and by nothing else. A declared span no program
+can find is a span no program can check, and the checker that could not find it
+silently picked the wrong line rather than saying so. Masking and
 reinjection, and the gate-validation line-level check, operate ONLY on the
 captured span, never the whole line, wherever the site shares its line with
 fixed core prose. `heading-block` sites span everything between `heading`
@@ -81,6 +88,7 @@ core_manifest:
   - core/fixtures/snapshot-supersession-marker/**
   - core/fixtures/artifact-path-migration/**
   - core/fixtures/artifact-path-conformance/**
+  - core/fixtures/setup-site-drift/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**
@@ -246,6 +254,7 @@ sites:
       the fenced line directly under "Run the project's deployment
       command:" in "### 2. Deploy" — this fence has no other content,
       whole line is the captured value
+    after_line: '^Run the project.s deployment command:$'
     match: '^(.+)$'
   - id: deploy-validate-smoke-command
     file: core/skills/ai-dlc/steps/deploy-validate.md
