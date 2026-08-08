@@ -252,6 +252,7 @@ core_manifest:
   - fixtures/artifact-path-conformance/**
   - fixtures/setup-site-drift/**
   - fixtures/story-corpus-sprint-slot/**
+  - fixtures/apply-worklist-rows/**
   - fixtures/notify-hook-channel/**
 
 machinery:
