@@ -100,11 +100,17 @@ merged as #413. The operator pastes one line into a graph session; nothing there
 **10e cannot ship until that has run once** — a validator landing on ~2700 non-conforming files
 wedges first contact.
 
-**NEXT ACTION FOR THIS REPO: item 16 — move `planning-artifacts/stories/` under `s<N>/`.**
-10e shipped as v0.305.0 (#423) and item 17 as v0.306.0 (#425); both merged, nothing in flight.
-**Re-measure the story corpus before writing anything** — it is **1024** files, not the 1001 this
-plan carried, and **761 of them spell the sprint as a bare leading number** indistinguishable
-from the story index the grammar itself prescribes. That is the whole difficulty of the item.
+**~~NEXT ACTION FOR THIS REPO: item 16~~ — DONE.** v0.307.0 (#427) moved the READERS, v0.308.0
+(#428) moved the FILES. Both merged, nothing in flight. See §*What item 16 measured*.
+
+**AND THIS PLAN'S OWN FIGURES FOR IT WERE WRONG IN BOTH DIRECTIONS, so do not reuse them.** The
+flat corpus is **988** files, not 1001 and not 1024 — 1025 is the count under *any* `stories/`
+directory and 25 of those already sat under `s<N>/`. The bare-leading-number share is **781**, not
+761. The difficulty this file predicted was also the wrong one: the ambiguity is real in the NAME
+and was never in the POSITION, and one line of that realisation replaced the whole deferral.
+
+**NEXT ACTION FOR THIS REPO: item 18** — `unregistered-drift.sh` reading an intermediate
+self-update ref as consumer drift. It is next by the order table, and items 8 and 6 follow it.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -168,8 +174,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~8c~~ | ~~**`ledger-reverify.sh`'s own filed defects**~~ | **DONE** — v0.301.0 (#415) fixed the two that were live; v0.302.0 (#416) shipped the mechanism for the class the other three exposed. The plan said "five entries filed against one core file": it is **four plus one** — the fifth is in `layer-drift.sh`. See §*What item 8c measured* |
 | ~~9~~ | ~~**10e** — the consumer pre-push validator~~ | **DONE** — v0.305.0 (#423). Blocks on exactly the set the migration would move (0 on graph today), reports the 48 refusals and the 1024 deferred stories rather than wedging them. See §*What v0.305.0 measured* |
 | ~~10~~ | ~~**17** — a line retained outside the declared setup-site spans~~ | **DONE** — v0.306.0 (#425). **Reproduced at ground truth**, and the report's attribution was WRONG: `apply.sh` has no mask/reinject at all. See §*What item 17 measured* |
-| **11** | **16** — move `planning-artifacts/stories/` under `s<N>/` | **← THE NEXT ITEM. UNBLOCKED** (10e landed and deliberately does not block on `stories/`). The deferred story files are exactly its subject — **re-measure: 1024, not the 1001 this file recorded, and 761 of them spell the sprint as a bare leading number.** Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
-| 12 | **18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift | Lower severity than 17 — it produces FALSE work, not lost content — but multi-hop is now the norm and it costs adjudication time on every pull |
+| ~~11~~ | ~~**16** — move `planning-artifacts/stories/` under `s<N>/`~~ | **DONE** — v0.307.0 (#427) readers, v0.308.0 (#428) files. The corpus is **988** flat, not 1024; the restating-reader count was **two**, not three; and the deferral's premise was true about the NAME and never asked about the POSITION. See §*What item 16 measured* |
+| **12** | **18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift | **← THE NEXT ITEM.** Lower severity than 17 — it produces FALSE work, not lost content — but multi-hop is now the norm and it costs adjudication time on every pull |
 | 13 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | 14 | **6** — promote LC-E6/LC-O15 | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
@@ -387,7 +393,11 @@ before you write code.
       is the inert-mechanism class this repo keeps shipping.
     - Reference implementation to copy from: `~/.claude/hooks/notify-input-needed.sh`.
 
-16. **Move `_bmad-output/planning-artifacts/stories/` under `s<N>/`.** SPLIT OUT OF 10c on
+16. ~~**Move `_bmad-output/planning-artifacts/stories/` under `s<N>/`.**~~ **DONE — v0.307.0 (#427)
+    and v0.308.0 (#428). Three things below are WRONG and are corrected in §*What item 16
+    measured*: the corpus size, the count of restating readers, and — the one that mattered — the
+    claim that the syntactic limit is what made this hard.** What follows is the original scope.
+    SPLIT OUT OF 10c on
     2026-08-07, deliberately, and it is the one area the artifact path grammar does not yet
     govern. The directory is syntactically conforming — it carries no sprint token — and the
     sprint hides in the FILENAMES (`story-<N>-<M>-slug.md`, `story-S<N>-<M>-slug.md`), which
@@ -470,6 +480,56 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What item 16 measured (the hard part was not the one this plan named)
+
+**THE DEFERRAL'S PREMISE WAS TRUE AND WAS THE WRONG QUESTION, and that is the whole item.** This
+plan, the grammar file and the migration script all said the same thing: `story-297-1-slug.md`
+reads equally as sprint 297 story 1 and as story INDEX 297, no expression separates them, so the
+corpus cannot be judged. Every word of that is correct **about the name**. The grammar places
+`stories/` only under `s<N>/`, so a `stories/` directory with no `s<N>/` above it cannot hold a
+conforming file whatever the file is called — everything in one predates the grammar, by
+construction. **The answer was in the position and three files had written down why it could not
+be in the name.** Corroborated before shipping: of the 786 basenames matching `story-<A>-<B>`, all
+786 have `A` in the sprint range the tree uses, control being the 73 `story-S<N>-<M>` files where
+the sprint is not in doubt.
+
+**THREE FIGURES IN THIS PLAN WERE WRONG:**
+
+- **The corpus is 988 flat files**, not 1001 and not 1024. 1025 is the count under *any* `stories/`
+  directory; 25 of those already sat under `s<N>/` (party-mode transcripts and two archives), and
+  one is outside the scan roots.
+- **781 spell the sprint as a bare leading number**, not 761. There are at least **eleven**
+  spellings, not the two the migration's comment named: `S223-1-`, `s289-1-`, `sprint-208-1-`,
+  `bug-`, `hotfix-`, `192-ff-A-`, `story-131b-1-`, and five files with no number at all.
+- **Two shipped readers restated the corpus literal, not three.** `validate-locked-anchor.sh` is
+  not one — the path appears there in a single usage-example COMMENT and is that file's only
+  `_bmad-output` reference at all, because it takes the story file as an argument. The real set was
+  `validate-mandatory-rules.sh`, `ai-dlc-protect.sh`, `install.sh`, and the schema itself.
+
+**THE FIX'S OWN BLIND SPOT HAD THE SHAPE OF THE DEFECT IT WAS FIXING, and only running it found
+that.** Check 6's replacement corpus control, written the obvious way — count stories under the
+declared `s*/stories/` — is blind to a tree that has not migrated yet, so an unmigrated consumer
+holding 988 story files reported *the corpus is empty* and SKIPped. That is the zero-verification
+pass the whole item exists to remove, re-introduced by its own remedy. The control now spans the
+whole area, derived by cutting the template at its own placeholder.
+
+**AND I84 FIRED ON ITSELF ON ITS FIRST RUN, twice, which is what the false-positive measurement is
+for.** Its reader arm scored `migrate-artifact-paths.sh` as a reader that had forgotten to
+substitute — the file MENTIONS `stories_dir` in the comment explaining why it deferred the corpus.
+A mention is not a read. And I54 caught the invariant's own `printf | grep -qF` on the same run,
+the EPIPE-under-pipefail idiom this repo converted away from in v0.207.0.
+
+**THE TWO PROGRAMS AGREED EXACTLY ON THE REFERENCE CONSUMER**, read-only, 5148 tracked files:
+951 moves planned / 951 blocking, 72 ambiguous either way, 3 with no area either way, 23 with no
+derivable sprint either way. That is the join the plan asked for, taken on real filenames rather
+than on the fixture's seeds.
+
+**Three things a later session should not re-derive:** a `case` glob, never `printf | grep`, for
+testing whether a template contains its own placeholder; `IFS`-free `${var//"$pat"/$rep}` works on
+bash 3.2 with a quoted pattern (probed); and a fixture that NAMES a path under `core/hooks/ai-dlc-`
+enters I10's hook-driving set even when it only mutates the file — `enforcement-map-derivations`
+assembles such paths from halves for exactly that reason and the control caught the regression.
+
 ## What item 17 measured (the report named the wrong program, and the right check already existed)
 
 **THE DEFECT IS REAL AND WAS REPRODUCED AT GROUND TRUTH**, not synthesised. graph's own pull
@@ -550,7 +610,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 
 ## Where things stand
 
-**ai-dlc is at `0.306.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.308.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -574,6 +634,8 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.308.0 | #428 | **plan item 16, second half.** The story corpus migrates. The deferral rested on a TRUE sentence about the NAME and never asked about the POSITION: the grammar places `stories/` only under `s<N>/`, so a `stories/` directory without one predates the grammar and its leading number IS the sprint. A legacy basename is normalised to the explicit `s<N>` spelling and then handled by the SAME transform as every other artifact, rather than by a second one that could drift invisibly. Corroborated first: 786 of 786 leading numbers inside the tree's sprint range, control the 73 explicit-token files. `STORY-NO-SPRINT` replaces `DEFERRED-STORIES` — per FILE, cleared by a rename. **The migration and the pre-push validator agreed EXACTLY on 5148 real files: 951/951 blocking, 72/72, 3/3, 23/23.** |
+| v0.307.0 | #427 | **plan item 16, first half.** `stories_dir` becomes a TEMPLATE the schema owns, carrying the sprint slot; **I84** forbids a second copy and requires every reader to substitute it. The literal had FOUR copies and three would have failed SILENTLY — a protected-path pattern that matches nothing ALLOWS, a story glob that matches nothing prints PASS. Check 6's name-keyed glob is replaced by the sprint's own DIRECTORY, so the 298/299 capital-S defect cannot recur. The story-id join is re-derived: the DECLARED sprint is stripped from the entry key to give the index. **The replacement corpus control was itself blind to an unmigrated tree and reported 988 files as an empty corpus — caught by running it, not by reading it.** New fixture (10 assertions, 5 mutants, 1 control). |
 | v0.306.0 | #425 | **plan item 17.** `reconcile/setup-site-drift.sh` — §7v criterion 5 as a program, on BOTH the ordinary pull's post-write gate (which had nothing) and untangle's §7v (which had prose the transform's own author checks on themselves, already green on one instance of this defect). Reproduced at ground truth: silent on the corrected consumer, `deploy-validate.md:26` on the reconstructed one. **`apply.sh` was NOT the subject** — its two `mask` matches are both `umask`. `deploy-command`'s span had no machine-readable locator and now carries `after_line`; a site that cannot be pinned to one line FAILS rather than being guessed at. New fixture (15 assertions, 3 mutants, 1 control). |
 | v0.305.0 | #423 | **plan item 10e.** `validate-artifact-paths.sh` on the consumer pre-push — real filenames, every push, because a migration is an event and a convention with only one behind it has a half-life. Blocks on exactly the set the migration would move (**0** on graph); reports the **48** refusals and **1024** deferred stories with computed, never listed, reasons. Both sides of that join asserted EQUAL. **92 false positives** caught by measurement before shipping. `artifact-path-config.sh` becomes the ONE reader of the grammar's blocks and **I83** forbids a second, false-positive set measured at zero. Self-probes each run; an empty subject is `NOT-APPLICABLE`, never PASS. New fixture (37 assertions, 4 mutants, 1 control). |
 | v0.304.0 | #421 | **from the migration running for real.** The `AREAS INFERRED` remedy named CORE's grammar — a file a pull overwrites, and the wrong home by that file's own rule — and a consumer session followed it literally, proposing core absorb nine consumer-specific areas. Fixing the wording alone would have been WORSE: the consumer's `artifact-paths.md` was byte-identical to the scaffolded template and **nothing read it**, so declaring the areas would have changed no later verdict. The consumer's areas are now READ and joined to core's eight, path resolved from the contract, one `areas_of()` for both files. **Nine, not eight** — the real run also found `_bmad-output/research`, one file, the smallest. 32 → 37 assertions. |
