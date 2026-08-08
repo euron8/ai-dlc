@@ -34,6 +34,92 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.305.0] — 2026-08-08
+
+### A migration is an event; a convention needs an arm that runs every push
+
+Plan item **10e**. `artifact-path-grammar.md` makes the directory the only sprint slot. I82 binds
+core's own prescriptions to it and `migrate-artifact-paths.sh` moves a consumer's tree onto it
+ONCE — and nothing stopped the tree drifting back off it the next sprint. This is the standing
+arm: `validate-artifact-paths.sh`, on the consumer pre-push, reading REAL tracked filenames rather
+than prescriptions.
+
+**What it blocks on is measured, not chosen for comfort.** On the reference consumer the day this
+was written, immediately after the migration ran for real:
+
+```
+paths the migration would still MOVE            0     <- what a push blocks on
+REFUSED by the migration, still non-conforming  48    45 ambiguous, 3 with no derivable area
+under a stories/ directory, DEFERRED          1024    263 of them carry a visible token
+```
+
+Blocking on all 1072 would wedge first contact on a tree whose operator had already done
+everything core asked, and the stories deferral is CORE's own — a gate demanding it be cleared
+demands something no core tool provides. So the blocking set is exactly **the set the migration
+would move**: empty on a migrated tree, non-empty the moment a sprint writes `s302-foo.md` at an
+area root, and clearable by one command the failure message prints.
+
+**Nothing is exempted by a list.** Every non-blocking class is computed from the path — a name
+mentioning two sprints, a sprint directory with no area to anchor it, a file under `stories/`.
+There is no ledger to fall out of date, nothing that can be added by hand, and an entry leaves its
+class the instant the obstruction is removed. All of them are printed every run, with reasons.
+
+**THE 92 FALSE POSITIVES, and they are the reason a false-positive measurement is this repo's bar
+for a new lint.** The first version resolved the reserved slot against DECLARED areas alone. On
+the reference consumer that reported **92 already-conforming paths as violations** —
+`_bmad-output/brainstorming/s166/…`, filed exactly right, under an area nobody had declared yet —
+on a tree whose migration planned ZERO moves. An undeclared area is a paperwork gap the migration
+REPORTS; it is not a path defect. Reading it out of the script would not have found this.
+
+**The blocking set and the migration's move set are asserted EQUAL, in both directions.** Two
+programs reading one grammar do not fail interestingly alone; they fail by disagreeing, which
+leaves a push blocked on a path its own remedy will not move.
+
+**One reader for the grammar's blocks, and a new invariant that keeps it that way.**
+`migrate-artifact-paths.sh` and I82 each carried their own copy of the `areas:` / ```scan-roots
+extraction, byte-identical — what a fork looks like the day before it stops being one — and this
+validator would have been the third. All three now go through
+`core/scripts/artifact-path-config.sh`, which also owns the consumer-area join and the
+sprint-token expression. **I83** forbids a second copy: corpus derived by `find`, the resolver
+itself asserted still to carry the extraction, and the expression proven each run against a
+positive and a negative probe. False-positive set measured at **zero** before shipping.
+
+**It probes itself every run.** The verdict rides on one expression resolved at runtime out of a
+file on disk, and an expression matching nothing returns the same empty blocking set as a migrated
+tree. Six paths with known answers go through the same classifier first; a wrong answer exits 2
+rather than reporting a clean tree. Two of the four mutants are killed by that probe, and they are
+told apart by DIRECTION — one turns a conforming path into a violation, the other turns every
+violation conforming — because an assertion on "the probe fired" would be satisfied by either.
+
+**An empty subject is not a pass.** A consumer with nothing under any scan root gets
+`NOT-APPLICABLE` and exit 0. Failing a greenfield tree makes the grammar unadoptable; printing
+PASS over nothing is the zero-verification pass this repo keeps finding. Proven on a consumer
+built by running `install.sh` into an empty directory.
+
+**A defect the refactor exposed in the migration, found by running it the way an operator does.**
+`SELF_DIR` was resolved AFTER the `cd` into the consumer, so `bash core/scripts/migrate-…` — the
+relative invocation everyone types — looked for its sibling inside the consumer and died at
+`cd: core/scripts: No such file or directory`. The absolute path the fixture used worked. Both
+scripts now resolve their own directory before the `cd`, and the fixture asserts a relative call
+from two different cwds.
+
+- New `core/scripts/validate-artifact-paths.sh`, wired into `core/git-hooks/pre-push` as arm 3c.
+  `--report` adds a census by area plus the story-corpus spelling split, and changes no verdict
+  and no exit code — a reporting flag that also relaxes the gate is a gate with an off switch in
+  its own usage line.
+- New `core/scripts/artifact-path-config.sh` — `--scan-roots`, `--areas`, `--token-re`,
+  `--grammar-file`, `--consumer-file`.
+- New fixture `artifact-path-conformance`: **37 assertions, 4 mutants, 1 control**, including the
+  both-directions join with the migration and the 92-false-positive case as its own arm.
+- `artifact-path-migration` stays at 37 assertions; its mutant harness now lays down the
+  script and its resolver as a PAIR, because a lone copy exits 2 at its first line and emits
+  nothing — which otherwise scores as a kill. The unmutated control is what caught that.
+- Migration output on the reference consumer verified **byte-identical** across the refactor.
+- `artifact-path-grammar.md` corrects its own claim about what a real-filename reader catches:
+  **761 of 1024** story files spell the sprint as a bare leading number, character-for-character
+  the `story-<M>-<slug>.md` the grammar prescribes. No expression separates those without knowing
+  which sprints exist, which is why the corpus is deferred rather than half-judged.
+
 ## [0.304.0] — 2026-08-08
 
 ### The migration told the operator to fix core's file, and a consumer session did exactly that

@@ -34,8 +34,19 @@ MIG="$(pick "$HERE/../../scripts/migrate-artifact-paths.sh" \
 GRAMMAR="$(pick "$HERE/../../skills/ai-dlc/artifact-path-grammar.md" \
                 "$HERE/../../../.claude/skills/ai-dlc/artifact-path-grammar.md" \
                 "$HERE/../../core/skills/ai-dlc/artifact-path-grammar.md")"
-[ -n "$MIG" ] && [ -n "$GRAMMAR" ] \
-  || { echo "FIXTURE ERROR: cannot locate migrate-artifact-paths.sh and/or artifact-path-grammar.md" >&2; exit 2; }
+# The migration resolves the grammar, the areas and the sprint-token expression through this
+# sibling rather than carrying its own copy, so every mutant tree below has to hold BOTH files.
+# A lone copy exits 2 at its first line, emits nothing, and "no output" otherwise scores as a
+# kill -- which is what the unmutated control exists to catch, and did.
+CONFIG="$(pick "$HERE/../../scripts/artifact-path-config.sh" \
+               "$HERE/../../../scripts/ai-dlc/artifact-path-config.sh" \
+               "$HERE/../../core/scripts/artifact-path-config.sh")"
+[ -n "$MIG" ] && [ -n "$GRAMMAR" ] && [ -n "$CONFIG" ] \
+  || { echo "FIXTURE ERROR: cannot locate migrate-artifact-paths.sh, artifact-path-config.sh and/or artifact-path-grammar.md" >&2; exit 2; }
+
+# Lay down a runnable PAIR: the migration and the resolver it calls, side by side the way
+# install.sh puts them. Mutants sed one of the two in place afterwards.
+lay_pair() { mkdir -p "$1"; cp "$MIG" "$1/m.sh"; cp "$CONFIG" "$1/artifact-path-config.sh"; }
 
 fails=0; asserts=0
 ok()  { asserts=$((asserts+1)); printf '  ok    %s\n' "$1"; }
@@ -192,7 +203,7 @@ mutate() {
   local tag="$1" prog="$2" test_expr="$3" claim="$4"
   local d="$MUT/$tag" w
   asserts=$((asserts+1))
-  mkdir -p "$d"
+  lay_pair "$d"
   sed -E "$prog" "$MIG" > "$d/m.sh"
   if cmp -s "$MIG" "$d/m.sh"; then
     fails=$((fails+1)); printf '  FAIL  MUTANT %-18s sed matched NOTHING — the mutant IS the original\n' "$tag"; return
@@ -228,7 +239,7 @@ mutate 'stories-not-deferred' \
 # UNMUTATED CONTROL, from the same directory: the harness itself must not be what fails. A lone
 # copy that dies sourcing something emits nothing, and "no output" otherwise scores as a kill.
 asserts=$((asserts+1))
-mkdir -p "$MUT/control"; cp "$MIG" "$MUT/control/m.sh"
+lay_pair "$MUT/control"
 wc="$(bash "$HERE/seed.sh" "$GRAMMAR")"
 # HERE-STRING, NOT A PIPE, and this arm is where that was learned the hard way: as a pipe it
 # reported the control BROKEN precisely when the control was working. `... | grep -q` under
@@ -295,10 +306,14 @@ else
 fi
 
 # MUTATION — stop reading the consumer's file. ARM B must regress and ARM A must not move.
-MUTI="$wi-mut"; rm -rf "$MUTI"; mkdir -p "$MUTI"
-sed 's@^\[ -n "\$CONSUMER_AREAS_FILE" \] && CONSUMER_AREAS="\$(areas_of "\$CONSUMER_AREAS_FILE")"@CONSUMER_AREAS=""@' \
-  "$MIG" > "$MUTI/m.sh"
-if cmp -s "$MIG" "$MUTI/m.sh"; then
+# THE SUBJECT IS THE RESOLVER, not the migration: the consumer-area join moved into
+# artifact-path-config.sh so the conformance validator could not grow a second copy of it. The
+# mutant therefore replaces the RESOLVER beside an unmutated migration, which is also the arm
+# that proves the migration really goes through it rather than carrying a private fallback.
+MUTI="$wi-mut"; rm -rf "$MUTI"; lay_pair "$MUTI"
+sed 's@^  CONSUMER_AREAS="\$(areas_of "\$CONSUMER_AREAS_REL")"@  CONSUMER_AREAS=""@' \
+  "$CONFIG" > "$MUTI/artifact-path-config.sh"
+if cmp -s "$CONFIG" "$MUTI/artifact-path-config.sh"; then
   bad "FIXTURE ERROR: the consumer-areas mutation matched nothing, so ARM B proves nothing"
 else
   m_inf="$(sed -n '/AREAS INFERRED/,/^$/p' <<<"$(bash "$MUTI/m.sh" --root "$wi" 2>&1)")"

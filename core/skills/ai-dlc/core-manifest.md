@@ -249,6 +249,7 @@ core_manifest:
   - fixtures/wait-stale-deliverable/**
   - fixtures/whole-read-pool/**
   - fixtures/artifact-path-migration/**
+  - fixtures/artifact-path-conformance/**
   - fixtures/notify-hook-channel/**
 
 machinery:

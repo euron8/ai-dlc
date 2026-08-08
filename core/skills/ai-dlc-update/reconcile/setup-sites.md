@@ -80,6 +80,7 @@ core_manifest:
   - core/fixtures/self-update-fixture-log/**
   - core/fixtures/snapshot-supersession-marker/**
   - core/fixtures/artifact-path-migration/**
+  - core/fixtures/artifact-path-conformance/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**

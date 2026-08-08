@@ -121,6 +121,29 @@ if [ -f scripts/ai-dlc/audit-rule-files.sh ]; then
     bash scripts/ai-dlc/audit-rule-files.sh --fail-on=deterministic
 fi
 
+# 3c. THE ARTIFACT PATH GRAMMAR, HELD AGAINST REAL FILENAMES. `artifact-path-grammar.md` makes
+#     the DIRECTORY the only sprint slot. Core's own prescriptions are bound to that by I82 in
+#     the distribution, and `migrate-artifact-paths.sh` moves a consumer's tree onto it ONCE —
+#     but nothing stopped the tree drifting back off it the next sprint, and a convention with
+#     only a one-time migration behind it has a half-life. This is the standing arm.
+#
+#     IT BLOCKS ON EXACTLY WHAT THE MIGRATION WOULD MOVE, and that scope is measured rather than
+#     chosen for comfort. On the reference consumer the day it shipped: 0 movable, 48 the
+#     migration REFUSES (a basename naming two sprints, a sprint directory under no area) and
+#     1024 under `stories/`, which core defers because the sprint is spelled two ways there and
+#     one of them is the bare number this grammar's own story form uses as the story INDEX.
+#     Blocking on all 1072 would wedge first contact on a tree whose operator had already done
+#     everything core asked. Every one of them is still PRINTED, with its reason, and the class
+#     is computed from the path rather than read from a list — so nothing can fall out of date
+#     and nothing can be added to it by hand.
+#
+#     Decidable from disk, which is why it belongs here and not at a gate. Its remedy is one
+#     command and the hook prints it.
+if [ -f scripts/ai-dlc/validate-artifact-paths.sh ]; then
+  step "artifact paths (the directory is the only sprint slot)" \
+    bash scripts/ai-dlc/validate-artifact-paths.sh
+fi
+
 # 4. A shipped script with a syntax error is a gate that cannot run at all.
 #    The glob set below is the consumer image of the distribution hook's set, one
 #    entry per class after the core/ -> consumer mapping. validate-enforcement-map.sh
