@@ -25,6 +25,12 @@ both in range, so the audit stayed green over a citation that had gone stale. Re
 just the count.
 The audit is one loop: extract `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above
 `## Context`, resolve each against `git ls-files`, and compare the line number to `wc -l`.
+**Re-run after v0.323.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0
+ambiguous, 5 into the CONSUMER.** The run before that fix found **1 ambiguous**, and it was a bare
+`SKILL.md` + line number written into this file the same day the paragraph above warned about
+exactly that. **The warning does not enforce itself; the loop does.** Note that quoting a bad
+citation as an EXAMPLE makes the loop flag the example — write it without the line number, as here.
+Re-run the loop; do not carry 50/45/5.
 
 **THE AMBIGUOUS ONE IS THE LESSON: this repo has THREE `SKILL.md` files** (`ai-dlc/`,
 `ai-dlc-setup/`, `ai-dlc-update/`), so a bare `SKILL.md` + line number resolves to whichever the reader
@@ -117,6 +123,18 @@ it is distinguishing the two kinds rather than reporting everything.) **The pull
 nothing in this plan, and it changes nothing observable on graph** — graph's stamp is already
 correct by hand, and v0.320.0's whole subject is the NEXT deferred-slice apply. Take it whenever
 graph is next open.
+
+**RE-MEASURED 2026-08-08 AFTER v0.321.0–v0.323.0, AND THE SHAPE HAS CHANGED — this is now a pull
+that alters what the pipeline WRITES.** Same derivation, same base: `abfab65..HEAD` is **18 `core/`
+files, 2 `scripts/`, plus `VERSION` and `CHANGELOG.md`** (control: exactly 2 paths under `docs/`, so
+the command still separates the two kinds). **Do not carry those numbers forward — re-run the
+command**; they were 7/2 one release earlier. **Two homing jobs come with it, both small, neither
+blocking:** graph's live brief holds exactly **ONE** in-force LOCKED block (S299, 169 lines) to move
+into `s299/locked-requirements.md`, and its 223-line `## Changelog` section to move into
+`s<N>/changelog-product-brief.md`. Control on that count of one: `product-brief-history.md` carries
+**440** `LOCKED_REQUIREMENTS` mentions, so the live reading is real and not a failed grep. **Nothing
+breaks before either is done** — the legacy `product-brief.md` is still an accepted source of
+record, and the changelog change governs future passes only.
 
 **~~THE SKILL STAMP AGREEING IS A HAND-FIX, NOT A WORKING MECHANISM.~~ FIXED — v0.320.0 (item 27).**
 The operator set `skill_version`/`skill_commit` by hand during the 0.319.0 apply because `apply.sh`
@@ -218,10 +236,11 @@ entry after recording its verdict spends that verdict, because the digest covers
 re-recorded against the moved subject. That is the digest design working, and it is the
 reason the done-when list is re-run post-merge rather than remembered.
 
-**~~A PULL IS OWED~~ — NO PULL IS OWED. Both were taken 2026-08-08**, to 0.318.0 (#885/#886) and then
-to 0.319.0 (#887); graph is current on every shipped file, per the status block above. Everything
-the paragraphs below predicted is spent, and they are kept only as the record of what each pull
-delivered and of two predictions worth not repeating.
+**~~A PULL IS OWED~~ ~~NO PULL IS OWED. Both were taken 2026-08-08~~ — A PULL IS OWED AGAIN, to
+0.323.0.** The two that were taken (0.318.0 via #885/#886, then 0.319.0 via #887) left graph current
+at the time, and four releases have landed since. **The scope and the two homing jobs are in the
+status block above; do not re-derive them from this paragraph.** What follows is kept only as the
+record of what those pulls delivered and of two predictions worth not repeating.
 
 **THE 0.319.0 PULL'S DEFERRED MACHINERY SLICE LANDED WITH THE RULEBOOK ON ONE BRANCH, WHICH IS WHAT
 THE DEFER WAS FOR.** The full pre-push fixture suite went green with machinery and rulebook together
@@ -1260,7 +1279,7 @@ under sprint-token headings; `prd.md` is 265 of 1530 (**17%**). And the delimite
 discovery narrative behind.
 
 **THE CHANGELOG HAS NO READER ANYWHERE IN CORE.** Six sites prescribe appending one —
-`SKILL.md:554`, `_gate-procedures.md:205`, and four convergence lines naming a durable target
+`core/skills/ai-dlc/SKILL.md:554`, `_gate-procedures.md:205`, and four convergence lines naming a durable target
 (`discovery.md:245` the brief, `research-requirements.md:127` the PRD, `architecture.md:289` the
 architecture doc, `doc-repair-backfill.md:45` all modified artifacts). Over `core/scripts/` and
 `core/hooks/` the only matches are five lines in `validate-mandatory-rules.sh`, all about the
