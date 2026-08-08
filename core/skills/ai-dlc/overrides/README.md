@@ -91,13 +91,18 @@ status that stops `apply`); **WARN** reports and never blocks.
 - **[LC-O12]** WARN — every `shadows:` anchor still FORWARD-matches at PULL time. LC-O11 asks the
   same question at authoring time, in a validator you run and can skip; the pull cannot be
   skipped, and it reads the anchor against the INCOMING core rather than the copy on disk.
-- **[LC-O15]** WARN — an entry whose `shadows:` matches a core `override_supersessions:`
-  declaration is reported RETIRABLE, not merely drifted. Every other status here asks whether
-  the entry is still correct; this one asks whether it is still NEEDED, and it is the only one
-  whose answer is to delete the entry. A superseded override otherwise presents as ordinary
-  section drift — which reads as re-adopt-the-new-wording — so it survives the pull and goes on
-  freezing every unrelated line in its shadowed span at `base_sha`. Retire it with
-  `readopt-override.sh --stamp retire` after applying the declared replacement.
+- **[LC-O15]** WARN — an entry ANY ONE of whose `shadows:` anchors matches a core
+  `override_supersessions:` declaration is reported RETIRABLE, not merely drifted. Every other
+  status here asks whether the entry is still correct; this one asks whether it is still NEEDED,
+  and it is the only one whose answer is to stop shadowing. A superseded override otherwise
+  presents as ordinary section drift — which reads as re-adopt-the-new-wording — so it survives
+  the pull and goes on freezing every unrelated line in its shadowed span at `base_sha`.
+  **The join is per anchor, and the remedy depends on how many you declare.** A one-anchor entry
+  is retired outright with `readopt-override.sh --stamp retire`, after applying the declared
+  replacement. A multi-anchor entry is NARROWED instead: remove the superseded anchor from
+  `shadows:` and leave the rest byte-untouched, because that stamp deletes the whole file and
+  core has superseded only one of the anchors. The row tells you which case you are in, and
+  `apply.sh` renders the action rather than the choice.
 
 - **[LC-O13]** WARN — no two entries declare the same (target file, normalised anchor). Both
   bodies claim that span and precedence picks one silently, so which one governs is an ordering

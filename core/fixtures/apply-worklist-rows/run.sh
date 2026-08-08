@@ -66,24 +66,39 @@ mk_repo "$W/dist" || { bad "FIXTURE BROKEN — could not build the dist repo"; e
 mk_repo "$W/cons" || { bad "FIXTURE BROKEN — could not build the consumer repo"; exit 2; }
 
 OVR='.claude/skills/ai-dlc/overrides/one-key.md'
+OVR_M='.claude/skills/ai-dlc/overrides/multi-key.md'
+OVR_A='.claude/skills/ai-dlc/overrides/multi-adopted.md'
+ANCHOR='steps/w.md#4a. Close-Out Sweep'
 
-# Build a reconcile directory: every shipped script, with layer-drift replaced by a stub that
-# emits ONE keyed supersession. One key is the case that emitted zero rows, and it is also the
-# only shape core has ever declared with a key.
+# Build a reconcile directory: every shipped script, with layer-drift replaced by a stub emitting
+# the three detail shapes whose rendering differs.
+#
+#   one-key       `replaces_with=` only          -> 1/2 write the key, 2/2 --stamp retire
+#   multi-key     `replaces_with=` + `retire_anchor=` -> 1/2 write the key, 2/2 NARROW shadows:
+#   multi-adopted `retire_anchor=` alone         -> one row, NARROW shadows:, no ATOMIC sequence
+#
+# One key is the case that emitted zero rows, and it is also the only shape core has ever
+# declared with a key. `multi-adopted` is the shape that makes the token parse POSITIONAL: read
+# with the old `${detail#replaces_with=}` + equality guard it yields `env_key=retire_anchor=<...>`
+# and instructs the operator to write that string into settings.json as an environment key.
 build_rec() { # build_rec <dir>
   mkdir -p "$1" && cp "$REC"/*.sh "$1"/ || return 1
   cat > "$1/layer-drift.sh" <<STUB
 #!/usr/bin/env bash
 printf 'OVERRIDE-SUPERSEDED\t${OVR}\tsteps/w.md\treplaces_with=AI_DLC_ONE_KEY :: core 0.1.0 provides what this entry was written to work around.\n'
+printf 'OVERRIDE-SUPERSEDED\t${OVR_M}\tsteps/w.md\treplaces_with=AI_DLC_ONE_KEY :: retire_anchor=${ANCHOR} :: core 0.1.0 provides what this entry'"'"'s shadow was written to work around.\n'
+printf 'OVERRIDE-SUPERSEDED\t${OVR_A}\tsteps/w.md\tretire_anchor=${ANCHOR} :: core 0.1.0 ADOPTED what this entry says under that anchor.\n'
 STUB
   chmod +x "$1/layer-drift.sh"
 }
 
-# Rows for the entry under test, one per line, TAB-separated as apply.sh prints them.
-retire_rows() { # retire_rows <rec-dir>
+# Rows for ONE entry, one per line, TAB-separated as apply.sh prints them. The whole manifest is
+# regenerated per call rather than cached, so a mutant is always read from its own run.
+rows_for() { # rows_for <rec-dir> <entry>
   bash "$1/apply.sh" "$W/dist" HEAD "$W/cons" HEAD 2>/dev/null \
-    | awk -F'\t' -v o="$OVR" '$1=="WORKLIST" && $2=="override-retire" && $3==o'
+    | awk -F'\t' -v o="$2" '$1=="WORKLIST" && $2=="override-retire" && $3==o'
 }
+retire_rows() { rows_for "$1" "$OVR"; }
 
 build_rec "$W/rec" || { bad "FIXTURE BROKEN — could not stage reconcile/"; echo; echo "apply-worklist-rows: FIXTURE BROKEN" >&2; exit 2; }
 
@@ -125,6 +140,41 @@ case "$D_LAST" in
   *"ATOMIC"*) ok "  and the row carries its detail — the step the operator must perform is printed, not just its subject" ;;
   "")         bad "the worklist row printed NO detail field at all: the key to write, the ordering constraint and the reason were computed and discarded, and SKILL.md tells the reader to obey a field that is not there" ;;
   *)          bad "the detail field is present but does not name the ordered step: ${D_LAST:0:70}" ;;
+esac
+
+# --- ASSERTION 3: a superseded ANCHOR is narrowed, never retired -----------------------------
+#
+# `readopt-override.sh --stamp retire` DELETES THE OVERRIDE FILE; there is no per-anchor retire.
+# When core supersedes ONE anchor of a multi-anchor `shadows:`, an operator obeying a retire row
+# throws away the anchors core did NOT supersede, and every section they shadowed silently
+# reverts to core. This is the one row in the file whose failure direction is destroying consumer
+# text, so it is asserted on the RENDERED row rather than on the token layer-drift emits.
+M_ROWS="$(rows_for "$W/rec" "$OVR_M")"
+M_LAST="$(last_detail "$M_ROWS")"
+case "$M_LAST" in
+  *"remove the anchor"*"$ANCHOR"*) ok "a multi-anchor supersession's LAST step narrows shadows: and names the anchor" ;;
+  *"--stamp retire"*)              bad "the last step is still a retire stamp on a multi-anchor entry — obeying it deletes the anchors core did NOT supersede" ;;
+  *)                               bad "the multi-anchor last step names no action this fixture recognises: ${M_LAST:0:80}" ;;
+esac
+case "$M_LAST" in
+  *"NOT --stamp retire"*) ok "  and it says outright that the retire stamp is the wrong action here" ;;
+  *)                      bad "  the row narrows the shadow but never warns off --stamp retire, which is the instruction the operator already knows" ;;
+esac
+
+# --- ASSERTION 4: the token prefix is parsed positionally, not searched for -------------------
+# An env-LESS multi-anchor detail leads with `retire_anchor=`. Read by the old
+# `${detail#replaces_with=}` + "equals the whole detail" guard, that yields
+# `env_key=retire_anchor=steps/w.md#4a. Close-Out Sweep` and renders a 1/2 ATOMIC row telling the
+# operator to write that string into settings.json "env" as a key. There is no such key.
+A_ROWS="$(rows_for "$W/rec" "$OVR_A")"
+if [ "$(printf '%s\n' "$A_ROWS" | grep -c 'ATOMIC' || true)" -eq 0 ]; then
+  ok "an env-less supersession renders NO ATOMIC sequence — there is no key to write, so there is no order to enforce"
+else
+  bad "an env-less detail rendered an ATOMIC sequence: the token after the prefix was parsed as an environment key, and the operator is told to write it into settings.json"
+fi
+case "$(last_detail "$A_ROWS")" in
+  *"remove the anchor"*"$ANCHOR"*) ok "  and its single row still narrows shadows: rather than retiring the entry" ;;
+  *)                               bad "  the env-less multi-anchor row does not narrow the shadow: $(last_detail "$A_ROWS" | cut -c1-80)" ;;
 esac
 
 # --- MUTANTS -------------------------------------------------------------------------------
@@ -182,6 +232,47 @@ else
   case "$(last_detail "$M2")" in
     *ATOMIC*) ok "  and the DETAIL assertion stays green under it — the two arms are not entangled" ;;
     *)        bad "  MUTANT 2 also killed the detail assertion: the two arms are entangled and one of them proves nothing on its own" ;;
+  esac
+fi
+
+# MUTANT 3 — drop the `retire_anchor=` branch, so the last step is a retire stamp again.
+# Assertion 3 must go red; assertions 1 and 2 must NOT, because the one-key entry carries no
+# token and its two rows are untouched.
+build_rec "$W/mut3"
+sed 's@^    retire_anchor=\*) drop_anchor="\${det_rest#retire_anchor=}"; drop_anchor="\${drop_anchor%% ::\*}" ;;@    retire_anchor=*) : ;;@' \
+  "$REC/apply.sh" > "$W/mut3/apply.sh"
+if cmp -s "$REC/apply.sh" "$W/mut3/apply.sh"; then
+  bad "MUTANT 3 did not apply — the retire_anchor= parse it targets has been respelled, so this mutant proves nothing"
+else
+  case "$(last_detail "$(rows_for "$W/mut3" "$OVR_M")")" in
+    *"--stamp retire"*) ok "MUTANT 3 (retire_anchor= unparsed): the multi-anchor row reverts to a retire stamp — the token is what redirects the action" ;;
+    *)                  bad "MUTANT 3 SURVIVED: the row still narrows the shadow without parsing the token, so assertion 3 is not testing the parse" ;;
+  esac
+  M3_ONE="$(rows_for "$W/mut3" "$OVR")"
+  if assert_count "$M3_ONE" && case "$(last_detail "$M3_ONE")" in *ATOMIC*) true ;; *) false ;; esac; then
+    ok "  and the one-key entry's count and detail are untouched by it — the arms are not entangled"
+  else
+    bad "  MUTANT 3 also moved the one-key entry's rows: assertions 1 and 2 are entangled with the token parse"
+  fi
+fi
+
+# MUTANT 4 — the token parse back to the un-anchored `${detail#...}` + equality guard. Assertion 4
+# must go red; assertion 3 must NOT, because the multi-KEY detail does lead with `replaces_with=`
+# and still parses correctly under the old form.
+build_rec "$W/mut4"
+sed 's@^  case "\$detail" in$@  env_key="${detail#replaces_with=}"; env_key="${env_key%% ::*}"; [ "$env_key" = "$detail" ] \&\& env_key=""; case "" in@' \
+  "$REC/apply.sh" > "$W/mut4/apply.sh"
+if cmp -s "$REC/apply.sh" "$W/mut4/apply.sh"; then
+  bad "MUTANT 4 did not apply — the env_key prefix case it targets has been respelled, so this mutant proves nothing"
+else
+  if [ "$(rows_for "$W/mut4" "$OVR_A" | grep -c 'ATOMIC' || true)" -ge 1 ]; then
+    ok "MUTANT 4 (env_key read without its prefix): the env-less row renders an ATOMIC sequence naming a key that does not exist"
+  else
+    bad "MUTANT 4 SURVIVED: the env-less detail stayed key-less without the prefix guard, so assertion 4 is not testing it"
+  fi
+  case "$(last_detail "$(rows_for "$W/mut4" "$OVR_M")")" in
+    *"remove the anchor"*) ok "  and the multi-KEY row still narrows the shadow under it — the arms are not entangled" ;;
+    *)                     bad "  MUTANT 4 also broke the multi-key row: assertions 3 and 4 are entangled" ;;
   esac
 fi
 
