@@ -309,17 +309,30 @@ case arm's name makes it FAIL by name. The fixture gap the item named is measure
 asserted either skill field after an apply, against a control of 3 assertions on the rulebook pair in
 `apply-restamp-theirs` alone.** See §*What item 27 measured*.
 
-**NEXT ACTION FOR THIS REPO: item 23c** — the inlet, and the last of item 23. It is the real
-methodology change and is **explicitly NOT SIZED**: it opens with a derivation over 4 validators and
-10 step files, not with code, and if that derivation says the sites do not move cheaply the correct
-outcome is to say so and stop. **23a removed its urgency argument — the pool does not breach — and
-left its correctness one intact.** Item 12, item 22, item 24, item 25, item 26 and item 28 remain available
-and gate nothing.
+**~~NEXT ACTION FOR THIS REPO: item 23c~~ — ITS DERIVATION IS DONE 2026-08-08, no release, and the
+item's own stop condition is NOT met, so 23c proceeds.** The finding is
+[`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md).
+**The sites move cheaply and that was the wrong question on its own.** Of the four validators the
+item named, `validate-spec-join.sh` is **not a site at all** (it anchors on the spec's `.memlog.md`),
+`validate-request-coverage.sh` and `validate-artifact-budget.sh` move for free, and
+`validate-locked-anchor.sh` moves on a one-word default because its SoR pin is a **basename equality
+test**. **The step-file count is neither 10 nor derivable as 10** — 8 name the token, 13 name a
+durable artifact by path. **THE ONE THING THE ITEM DID NOT NAME IS THE WORK:**
+`validate-artifact-budget.sh:859` excludes every `s<N>/` path from the whole-read pool, so moving the
+block into a sprint slot drops the pooled sum by three quarters of the brief **with the same bytes
+still read whole at gate time** — the change would grade itself. **Do not reuse the item's two-part
+framing ("the LOCKED block and changelog"); it is four changes** and the sequencing is in the table.
+Item 12, item 22, item 24, item 25, item 26 and item 28 remain available and gate nothing.
 
-**THIS IS THE HANDOFF POINT.** 23c shares almost nothing with the work above it: its subject is
-`LOCKED_REQUIREMENTS` across four core validators and ten step files. **Start a fresh session at item
-23c.** Item 27's handoff paragraph is discharged and its lesson held: everything the fix needed was
-written into the item, and the fix took one release with no re-derivation of the report.
+**NEXT ACTION FOR THIS REPO: 23c-1** — make the whole-read pool count the LIVE sprint's slot. It is
+first because every later 23c release is measured by the row it fixes. **23c-2 (the changelog) is
+independent of all of it and stands alone as a release** if 23c-3 turns out to cost more than it
+looks: six core sites prescribe appending a changelog to a durable artifact, **nothing in core reads
+one**, and it is 21% of graph's live brief.
+
+**THIS WAS THE HANDOFF POINT AND THE HANDOFF WORKED** — everything 23c's first step needed was
+written into the item, and the derivation ran without re-opening the work above it. The lesson item
+27 recorded holds a second time.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -398,7 +411,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
 | ~~20~~ | ~~**27** — the skill stamp has two contradictory instructions and no writer~~ | **DONE — v0.320.0 (#458).** The branch is a flag, `apply.sh --carried-machinery-slice`, and both prose sites now point at it. **No new invariant: I60 already binds the join**, proven by mutating the case-arm name until it fails by name. New fixture `apply-machinery-stamp`; the gap it fills is measured at **0** skill-field assertions across the whole fixture set against a control of 3 on the rulebook pair. See §*What item 27 measured* |
-| **21** | **23c** — the inlet | **← THE NEXT ITEM. NOT SIZED**, and the recommended fresh-session start. Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
+| **21** | **23c** — the inlet | **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four sub-releases: **23c-1** pool liveness, **23c-2** the changelog (6 writers, 0 readers, 21% of the brief), **23c-3** writer + pin, **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
 | — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
 | — | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
@@ -861,6 +874,17 @@ before you write code.
     coverage-*` and `consolidation-validation-*` cite the draft paths as their no-loss evidence,
     so deletion breaks the record the pass produced. This is a HOMING problem, not a garbage one.
 
+    **23c — THE INLET. ITS DERIVATION IS DONE 2026-08-08 (no release) AND THE STOP CONDITION IS NOT
+    MET, so 23c proceeds as FOUR sub-releases.** Finding:
+    [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md),
+    §*What item 23c's derivation measured*. **Three things below did not survive.** The site count is
+    wrong in both halves — one of the four validators (`validate-spec-join.sh`) is **not a site at
+    all**, and the step-file figure is **8 by token or 13 by path, never 10**. The `--sor` datum is
+    stronger than the item knew: the pin is a **basename equality test** and the resolver **already**
+    walks up from the story's own directory, so per-sprint resolution is the existing behaviour. And
+    the item's two-part framing — *"the LOCKED block and changelog"* — **omits the work**:
+    `validate-artifact-budget.sh:859` exempts every `s<N>/` path from the whole-read pool, so the
+    move grades itself green with the same bytes still read whole. What follows is the original text.
     **23c — THE INLET. The real methodology change, and it is NOT SIZED.** The durable artifacts
     refill because every sprint writes its own output into them: **7 of 7 headings added to
     `product-brief.md` in the six days after its 08-02 pass are sprint-scoped**, five carrying an
@@ -1145,6 +1169,101 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 23c's derivation measured (the sites move; the instrument does not)
+
+Full finding:
+[`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md).
+**No release.** Measured against ai-dlc `main` at `0.320.0` and graph at `54e71012a`, read-only.
+Every figure was derived in this pass.
+
+**THE STOP CONDITION IS NOT MET.** The item said *"if the derivation says they do not move cheaply,
+say so and stop."* They move cheaply. The four validators cost, between them, one default-value
+change and one prose edit — and one of the four is not a site at all.
+
+| validator | verdict |
+|---|---|
+| `validate-locked-anchor.sh` | The SoR pin is a **basename equality test** at `:475` against `DEFAULT_SOR_BASENAME` (`:129`), already overridable by `--sor`. `resolve_artifact` (`:301-346`) tries the story's own directory FIRST and then walks up six levels for the bare basename — so a story in `s<N>/stories/` reaches `s<N>/<sor>` before the area root **without any change at all** |
+| `validate-request-coverage.sh` | Takes `--brief <file>` from the caller (`:79`). Its only caller is prose, `gate-validation.md:2248`, and that already writes `--brief <brief>` as a placeholder. **Free** |
+| `validate-spec-join.sh` | **NOT A SITE.** It anchors join (1) on the spec folder's `.memlog.md` (`:132`) and reads no artifact the move touches. It names the token in two comments |
+| `validate-artifact-budget.sh` | **Free — and that is the defect.** See below |
+
+**THE STEP-FILE COUNT IS NEITHER 10 NOR DERIVABLE AS 10.** **8** step files name
+`LOCKED_REQUIREMENTS`; **13** name one of the durable artifacts by path (control: a fabricated
+basename returns rc=1 over the same pathspec). Ten is between the two and matches neither, which is
+the underived-count class core Rule 31 exists for, in this plan's own text.
+
+**THE WORK THE ITEM DID NOT NAME.** `is_sprint_slotted()` (`validate-artifact-budget.sh:429`, called
+at `:859`) excludes **every** `s<N>/` path from the whole-read pool. It shipped in v0.317.0 for a
+good reason — after item 10's migration the pool was summing 26 archived copies as live, a 2.35x
+overstatement. But it is path-shaped, not sprint-aware, and cannot say *"the CURRENT sprint's slot is
+live."* So a 23c that moves the sprint's LOCKED block into `s<N>/` drops the pooled sum by three
+quarters of the brief **while the analyst still reads the same bytes whole at gate time.** The row
+goes green for a reason unrelated to anything getting smaller. **A 23c release that reports its win
+from the budget row is measuring its own exemption**, which is the inert-instrument class arriving
+through the change meant to fix what the instrument measures.
+
+**WHAT THE MOVE IS WORTH — and item 19's datum understated it.** Partitioning graph's live brief by
+heading, span to the next same-or-shallower heading:
+
+```
+product-brief.md   1030 lines
+  ## Synthesized Current-State                        182   17%   DURABLE
+  ## In-Force LOCKED_REQUIREMENTS Blocks              564   54%   SPRINT
+       ### LOCKED block: S299                          180
+       ### Discovery Findings & Implementation — S301   377   <- filed under the LOCKED
+  ## Changelog (4 entries, all 2026-08-05, all S301)   223   21%   SPRINT      heading, not
+                                              -----------------                a LOCKED block
+  sprint-scoped                                        787   76%
+```
+
+**17% of the durable artifact is durable.** `carry-over-backlog.md` is 1528 of 1647 lines (**92%**)
+under sprint-token headings; `prd.md` is 265 of 1530 (**17%**). And the delimited block is only
+**169 lines** (`:253-421`) — an edit keyed on the sentinels moves 169 and leaves the 377-line
+discovery narrative behind.
+
+**THE CHANGELOG HAS NO READER ANYWHERE IN CORE.** Six sites prescribe appending one —
+`SKILL.md:554`, `_gate-procedures.md:205`, and four convergence lines naming a durable target
+(`discovery.md:245` the brief, `research-requirements.md:127` the PRD, `architecture.md:289` the
+architecture doc, `doc-repair-backfill.md:45` all modified artifacts). Over `core/scripts/` and
+`core/hooks/` the only matches are five lines in `validate-mandatory-rules.sh`, all about the
+*validation-cycle-log* model, one of which says it outright: *"in per-artifact changelogs (freeform
+prose, not countable here)"* (`:139`). Positive control on the same paths: `LOCKED_REQUIREMENTS`
+matches in five files.
+
+**A FALSE ZERO FELL OUT OF PRODUCING THAT FIGURE AND THE CONTROL AGREED WITH IT.**
+`git grep -in 'change ?log'` without `-E` treats `?` literally in BRE and returned **nothing**; the
+fabricated-token control returned rc=1 as well, so the control could not distinguish. The `-E` form
+matches in twenty files. **A control has to be a token you know is PRESENT**, and this is the second
+shape of unreadable zero this plan has recorded.
+
+**CROSS-SPRINT REFERENCE IS REAL IN PROSE AND ABSENT FROM ANCHORS.** Across graph's 988 story files
+`LR-S<n>-` resolves to the story's own slot **3759** times and to a different sprint **260** (141
+more in unslotted stories). But the anchored set is **62 citation lines in 46 of 988 files** (26
+`full_text_source:`, 36 `requires_context:`) and **0 of them cross a sprint.** Per-sprint walk-up
+resolution is correct on today's corpus — **by accident**, since nothing forbids a cross-sprint
+`full_text_source:` and Rule 13 makes locked requirements cumulative. 31 of the 62 cite the full
+area-root path and would dangle after a move; they are never re-validated, so that is an acceptance
+rather than a blocker. **No sprint slot holds a competing copy today** — `s<N>/product-brief.md` 0,
+`s<N>/prd.md` 0, `s<N>/carry-over-backlog.md` 0, `s<N>/architecture.md` 23 (the archives
+`is_sprint_slotted` exists to exclude).
+
+**AND CORE PRESCRIBES THE ACCUMULATION.** `discovery.md:127-128`: *"A brief accumulates one block
+per sprint, and the closer may carry a discriminator so they can be told apart."* The inlet is the
+design, not consumer drift.
+
+**23c IS FOUR RELEASES, IN THIS ORDER, AND THE ORDER IS NOT PREFERENCE.**
+
+- **23c-1 — the pool counts the live sprint's slot.** First, because every later release is graded
+  by the row it fixes.
+- **23c-2 — the changelog.** Independent of the rest and the cheapest real reduction available.
+  **Stands alone if 23c-3 turns out to cost more than it looks.**
+- **23c-3 — the writer and the pin together.** `discovery.md` §4a writes to the slot; the default
+  and BOTH prose restatements (`stories-test-strategy.md:372-373`, `gate-validation.md:411-415`)
+  move with it, or 23c re-creates item 27's defect exactly — contradicting prose over one
+  mechanised branch.
+- **23c-4 — cross-sprint anchoring.** Either forbid it at the validator with a message, or resolve
+  `LR-S<n>-` to `s<n>/`. Today's zero is not a licence to leave it undecided.
 
 ## What item 27 measured (the item was right; two things it did not predict)
 
