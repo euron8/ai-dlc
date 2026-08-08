@@ -23,14 +23,16 @@
 #     under a stories/ directory, DEFERRED             1024
 #
 # Blocking on all 1072 would wedge first contact on a tree whose operator has already done
-# everything core asked of them -- and the stories deferral is CORE's own decision, taken in
-# `migrate-artifact-paths.sh` because the sprint is spelled two ways there and one of them is a
-# bare number this grammar's own story form uses for the story index. The release that moves
-# `stories/` under `s<N>/` is what removes it. A gate that fires on a tree nobody can clean is a
-# gate the operator turns off, and then nothing is enforced at all.
+# everything core asked of them. A gate that fires on a tree nobody can clean is a gate the
+# operator turns off, and then nothing is enforced at all.
+#
+# THE STORY DEFERRAL IS GONE as of the release that moved the corpus under `s<N>/`; what remains
+# of it is `STORY-NO-SPRINT`, the individual files whose name gives the migration no sprint to
+# move them to. Same principle, one grain finer: the class is no longer "this directory is hard",
+# it is "this file cannot be placed", and it leaves the moment the file is renamed.
 #
 # So the blocking set is exactly THE SET THE MIGRATION WOULD MOVE: non-conforming, unambiguous,
-# with a derivable area, outside `stories/`. That set is empty on a migrated tree and grows the
+# with a derivable area and a derivable sprint. That set is empty on a migrated tree and grows the
 # moment a sprint writes `s302-foo.md` at an area root -- which is the regrowth this exists to
 # stop. Its remedy is one command.
 #
@@ -149,6 +151,29 @@ N_SUBJECT="$(grep -c . "$TMP/paths" || true)"
 # the predicate proves the copy.
 classify() { # <paths-file> -> CLASS<TAB>path<TAB>detail, one row per path
 awk -v areas_file="$TMP/areas" -v tokenre="$TOKEN_RE" -v roots="$(printf '%s ' $SCAN_ROOTS)" '
+# A LEGACY STORY PATH IS NON-CONFORMING BY POSITION, WHATEVER IT IS CALLED. The grammar places
+# `stories/` only under `s<N>/`, so a `stories/` directory with no `s<N>/` component above it
+# cannot hold a conforming file. That is what replaced the whole-corpus deferral: the ambiguity
+# that forced it -- `story-297-1-slug.md` reads equally as sprint 297 story 1 and as story INDEX
+# 297 -- lives in the NAME, and position never had it.
+#
+# THIS MIRRORS migrate-artifact-paths.sh AND MUST, in both directions: the blocking set here is
+# asserted EQUAL to that script`s move set, so a path one of them normalises and the other does
+# not is a disagreement about a file, not a difference of opinion about a rule.
+function legacy_story(p,   head, f, m, k) {
+  if (p !~ /(^|\/)stories\//) return 0
+  head = p; sub(/\/stories\/.*$/, "", head)
+  m = split(head, f, "/")
+  for (k = 1; k <= m; k++) if (f[k] ~ /^s[0-9]+$/) return 0
+  return 1
+}
+# `story-297-1-…` -> `story-s297-1-…`, so the ONE token expression below reads it. Both numbers
+# must be numeric: `story-168-process-A.md` and a basename already in the `story-<M>-<slug>` form
+# are left alone rather than having an index read as a sprint.
+function story_norm(b) {
+  if (b !~ /^story-[0-9]+-[0-9]+/) return b
+  return "story-s" substr(b, 7)
+}
 function comp_numbers(comp,   norm, f, m, j, out) {
   # `sprint-247` and `s247` are one token in two spellings; normalising collapses them so the
   # split below sees one form. `sprint-status` normalises to `sstatus` and matches nothing,
@@ -166,6 +191,14 @@ BEGIN {
 {
   p = $0
   if (p == "") next
+  # Every row prints `orig`. `p` may carry a normalised story basename, and reporting that back to
+  # the operator would name a file that is not on disk.
+  orig = p
+  if (legacy_story(p)) {
+    b = p; sub(/.*\//, "", b)
+    nb = story_norm(b)
+    if (nb != b) p = substr(orig, 1, length(orig) - length(b)) nb
+  }
   n = split(p, c, "/")
 
   # THE ANCHOR IS THE AREA, DECLARED OR INFERRED, AND INFERRED COUNTS. Resolving the slot against
@@ -209,17 +242,24 @@ BEGIN {
     nbad++
     if (bad == "") bad = c[i]
   }
-  if (nbad == 0 && noarea == "") { print "CONFORMING\t" p "\t"; next }
+  if (nbad == 0 && noarea == "") {
+    # Nothing in the NAME is wrong, but a legacy story path is wrong by POSITION. The migration
+    # cannot derive a sprint for it either, so it is reported rather than blocked -- blocking a
+    # path no command can clean is what makes an operator turn a gate off.
+    if (legacy_story(orig)) {
+      print "STORY-NO-SPRINT\t" orig "\tsits in a stories/ directory with no `s<N>/` above it, and its name gives no sprint to move it to"
+      next
+    }
+    print "CONFORMING\t" orig "\t"; next
+  }
 
-  if (mismatch) { print "SELF-CHECK\t" p "\tcomponent carries a sprint token the number enumeration could not read"; next }
+  if (mismatch) { print "SELF-CHECK\t" orig "\tcomponent carries a sprint token the number enumeration could not read"; next }
 
-  # THE ORDER MIRRORS migrate-artifact-paths.sh AND MUST. It defers stories/ before it reads the
-  # sprint at all, so a two-sprint story path is DEFERRED there and has to be DEFERRED here, or
-  # the two disagree about a file neither of them will touch.
-  if (p ~ /(^|\/)stories\//) { print "DEFERRED-STORIES\t" p "\t" substr(nums, 2); next }
-  if (ndistinct > 1)         { print "AMBIGUOUS\t" p "\tnames" nums; next }
-  if (noarea != "")          { print "NO-AREA\t" p "\t" noarea " is a sprint directory directly under a scan root that is not an area"; next }
-  print "NONCONFORMING\t" p "\tcomponent " bad
+  # THE ORDER MIRRORS migrate-artifact-paths.sh AND MUST, so that a path the two would classify
+  # differently cannot exist. Ambiguity is read before the area, there and here.
+  if (ndistinct > 1) { print "AMBIGUOUS\t" orig "\tnames" nums; next }
+  if (noarea != "")  { print "NO-AREA\t" orig "\t" noarea " is a sprint directory directly under a scan root that is not an area"; next }
+  print "NONCONFORMING\t" orig "\tcomponent " bad
 }
 ' "$1"
 }
@@ -261,10 +301,10 @@ n_of() { cls "$1" | grep -c . || true; }
 N_BLOCK="$(n_of NONCONFORMING)"
 N_AMBIG="$(n_of AMBIGUOUS)"
 N_NOAREA="$(n_of NO-AREA)"
-N_STORY="$(n_of DEFERRED-STORIES)"
+N_STORY="$(n_of STORY-NO-SPRINT)"
 N_CONF="$(n_of CONFORMING)"
 N_SELF="$(n_of SELF-CHECK)"
-# The whole story corpus, conforming rows included. It is the denominator the deferral is
+# The whole story corpus, conforming rows included. It is the denominator the refusal count is
 # stated against, and printing the flagged count alone would read as the corpus size.
 N_STORY_CORPUS="$(awk -F'\t' '$2 ~ /(^|\/)stories\//' "$TMP/rows" | grep -c . || true)"
 
@@ -310,13 +350,11 @@ if [ "$N_AMBIG" -gt 0 ] || [ "$N_NOAREA" -gt 0 ] || [ "$N_STORY" -gt 0 ]; then
     echo "                        an area. Declare the area in $(bash "$CONFIG" --consumer-file 2>/dev/null || echo 'your artifact-paths file'), or move it under one."
   }
   [ "$N_STORY" -gt 0 ] && {
-    echo "  DEFERRED-STORIES  $N_STORY  of $N_STORY_CORPUS file(s) under a stories/ directory — and the GAP between"
-    echo "                        those two numbers is the finding, not a rounding: the rest spell the sprint"
-    echo "                        as a bare leading number this expression cannot see at all."
-    echo "                        CORE defers the whole directory: the sprint is spelled"
-    echo "                        two ways there and one is a bare number indistinguishable from the story"
-    echo "                        index this grammar itself prescribes. The release that moves stories/"
-    echo "                        under s<N>/ is what removes this class; nothing here can."
+    echo "  STORY-NO-SPRINT   $N_STORY  of $N_STORY_CORPUS file(s) under a stories/ directory sit outside the"
+    echo "                        reserved \`s<N>/\` slot AND give no sprint in their name, so the migration"
+    echo "                        has nowhere to put them. The corpus itself is no longer deferred — these"
+    echo "                        are the individual leftovers, named rather than counted as a class."
+    echo "                        Rename to story-<sprint>-<index>-<slug>.md and the next push judges it."
   }
   echo ""
 fi
@@ -326,7 +364,7 @@ if [ "$REPORT" -eq 1 ]; then
   awk -F'\t' '$1!="CONFORMING" { p=$2; sub("/[^/]*$", "", p); print $1 "\t" p }' "$TMP/rows" \
     | sort | uniq -c | sort -rn | head -25 | sed 's/^/    /'
   echo ""
-  echo "  Story-corpus spelling split (what the deferral is about):"
+  echo "  Story-corpus spelling split (the shapes the migration has to read):"
   awk -F'\t' '$2 ~ /(^|\/)stories\// { b=$2; sub(/.*\//, "", b)
         if (b ~ /^story-[sS][0-9]+-/)      k="story-S<N>-… (explicit token)"
         else if (b ~ /^story-[0-9]+-[0-9]+-/) k="story-<N>-<M>-… (bare leading number)"
@@ -334,14 +372,16 @@ if [ "$REPORT" -eq 1 ]; then
         else                                k="other"
         n[k]++ } END { for (k in n) printf "    %6d  %s\n", n[k], k }' "$TMP/rows" | sort -rn
   echo ""
-  echo "  A bare leading number is why this grammar cannot judge the story corpus syntactically:"
-  echo "  story-297-1-slug.md and story-<index>-<slug>.md are the same shape."
+  echo "  A bare leading number cannot be read from the NAME alone — story-297-1-slug.md and"
+  echo "  story-<index>-<slug>.md are the same shape. It is read from POSITION: a stories/"
+  echo "  directory with no s<N>/ above it predates the grammar, so its files are legacy by"
+  echo "  construction and the leading number is the sprint."
   echo ""
 fi
 
 if [ "$N_BLOCK" -eq 0 ]; then
   echo "VERDICT: PASS — no MIGRATABLE non-conforming path under the scan roots."
-  echo "  $N_CONF conforming, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY deferred stories,"
+  echo "  $N_CONF conforming, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY story file(s) with no derivable sprint,"
   echo "  out of $N_SUBJECT tracked file(s) read. The zero above is a zero over that corpus, not"
   echo "  over an empty one."
   exit 0
@@ -359,5 +399,5 @@ echo ""
 echo "  scripts/ai-dlc/migrate-artifact-paths.sh              # plan, writes nothing"
 echo "  scripts/ai-dlc/migrate-artifact-paths.sh --apply      # git mv, verified per file"
 echo ""
-echo "VERDICT: FAIL — $N_BLOCK blocking, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY deferred."
+echo "VERDICT: FAIL — $N_BLOCK blocking, $N_AMBIG ambiguous, $N_NOAREA with no area, $N_STORY story file(s) with no derivable sprint."
 exit 1

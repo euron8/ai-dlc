@@ -200,6 +200,50 @@ is_nameless() { # <stripped-component> -> 0 when nothing but an extension surviv
   esac
 }
 
+# --- the story corpus, and the licence for reading a bare number as a sprint ---
+#
+# THE AMBIGUITY THAT DEFERRED THIS DIRECTORY FOR A RELEASE IS A NAME AMBIGUITY, AND THE NAME WAS
+# NEVER WHERE THE ANSWER WAS. `story-297-1-slug.md` reads equally as sprint 297 story 1 and as
+# story INDEX 297 with slug `1-slug` -- the form the grammar itself prescribes -- and no
+# expression over that string can separate the two. POSITION separates them: the grammar places
+# `stories/` only under `s<N>/`, so a `stories/` directory with no `s<N>/` component above it
+# cannot hold a conforming file whatever the file is called. Everything in such a directory
+# predates the grammar, by construction.
+#
+# Corroborated on the reference consumer before this shipped, because a licence is not a
+# measurement: of the 786 basenames matching `story-<A>-<B>`, ALL 786 have `A` inside the sprint
+# range the tree actually uses (7..302) and `B` distributed as a story index (212 ones, 176 twos).
+# Control, the form where the sprint is NOT in doubt: all 73 `story-S<N>-<M>` files have exactly
+# that structure in exactly those two positions.
+legacy_story() { # <path> -> 0 when it sits in a stories/ dir carrying no `s<N>/` slot above it
+  case "$1" in */stories/*) ;; *) return 1 ;; esac
+  local head="${1%/stories/*}" c oldIFS parts
+  oldIFS="$IFS"; IFS='/'; set -f; parts=($head); set +f; IFS="$oldIFS"
+  for c in "${parts[@]}"; do
+    case "$c" in
+      s[0-9]*) case "${c#s}" in *[!0-9]*) ;; *) return 1 ;; esac ;;
+    esac
+  done
+  return 0
+}
+
+# NORMALISE, THEN REUSE. A legacy story basename spelling the sprint as a bare leading number is
+# rewritten to the explicit `s<N>` spelling BEFORE the general transform sees it, so the sprint
+# scan, the token strip, the collision check and the destination composition are all the SAME code
+# that handles every other artifact. A second transform for this one directory is a second place
+# for the destination rule to drift, and the drift would be invisible: both would still produce a
+# path under `s<N>/`.
+#
+# BOTH numbers must be numeric. `story-131b-1-…` and `story-168-process-A.md` are refused rather
+# than resolved, and a basename that is ALREADY `story-<M>-<slug>` (one number, then a word) is
+# left alone rather than having its index read as a sprint.
+story_normalize() { # <path> -> the path with a bare leading sprint number spelt `s<N>`
+  local b="${1##*/}" nb
+  case "$b" in story-[0-9]*) ;; *) printf '%s' "$1"; return ;; esac
+  nb="$(printf '%s' "$b" | sed -E 's/^story-([0-9]+)-([0-9]+)/story-s\1-\2/')"
+  if [ "$nb" = "$b" ]; then printf '%s' "$1"; else printf '%s/%s' "${1%/*}" "$nb"; fi
+}
+
 # --- build the plan -----------------------------------------------------------
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/apmig-XXXXXX")" || exit 2
 trap 'rm -rf "$TMP"' EXIT
@@ -207,7 +251,7 @@ PLAN="$TMP/plan"; REFUSE="$TMP/refuse"; INFERRED="$TMP/inferred"
 : > "$PLAN"; : > "$REFUSE"; : > "$INFERRED"
 
 SCANNED=0
-DEFERRED_STORIES=0
+STORIES_SEEN=0
 while IFS= read -r src; do
   [ -n "$src" ] || continue
   SCANNED=$((SCANNED + 1))
@@ -215,22 +259,28 @@ while IFS= read -r src; do
   # THE SPRINT IS ONE FACT ABOUT THE FILE. Read it from every component at once, so a path whose
   # directory and basename disagree is refused rather than silently resolved by whichever the
   # code happened to look at first.
-  # THE STORY CORPUS IS DEFERRED, EXPLICITLY, and leaving it in would half-migrate it. The
-  # sprint appears in two spellings there: `story-S298-1-slug.md` carries a token this
-  # transform matches, while `story-297-1-slug.md` uses a BARE number, which rule 1 forbids
-  # but which is indistinguishable from `story-<index>-<slug>` -- the very form the grammar
-  # prescribes. So a run that took this directory would move the capital-S files and leave
-  # their lowercase siblings, splitting one sprint's stories across two conventions. Moving
-  # the directory needs `stories_dir` (a SCHEMA declaration three shipped readers restate)
-  # and a re-derived story-id join; that is its own release, and this reports rather than
-  # half-does it.
-  case "$src" in
-    */stories/*) DEFERRED_STORIES=$((DEFERRED_STORIES + 1)); continue ;;
-  esac
+  #
+  # `scan` is the path the DERIVATION reads; `src` stays the real path `git mv` moves. They differ
+  # only for a legacy story basename, whose bare leading sprint number is spelt `s<N>` first so
+  # that everything below is the one transform rather than two.
+  scan="$src"
+  if legacy_story "$src"; then
+    STORIES_SEEN=$((STORIES_SEEN + 1))
+    scan="$(story_normalize "$src")"
+  fi
 
-  hits="$(sprints_in "$src")"
+  hits="$(sprints_in "$scan")"
   nhits="$(printf '%s\n' "$hits" | grep -c .)"
-  [ "$nhits" -eq 0 ] && continue
+  if [ "$nhits" -eq 0 ]; then
+    # A legacy story path is NON-CONFORMING by position whatever its name, so a sprint this cannot
+    # derive is a refusal that must be named -- not the silent skip every other tokenless path
+    # gets, which is correct for them because they are already conforming.
+    if legacy_story "$src"; then
+      printf 'STORY-NO-SPRINT\t%s\tsits in a stories/ directory with no `s<N>/` above it, so it is not on the grammar -- but its name gives no sprint to move it to. Rename it `story-<sprint>-<index>-<slug>.md` (or `s<N>-...`) and the next run moves it.\n' \
+        "$src" >> "$REFUSE"
+    fi
+    continue
+  fi
   if [ "$nhits" -gt 1 ]; then
     printf 'AMBIGUOUS\t%s\tpath names %s different sprints (%s); which one owns it is not derivable\n' \
       "$src" "$nhits" "$(printf '%s' "$hits" | tr '\n' ' ')" >> "$REFUSE"
@@ -296,12 +346,13 @@ EOF
   fi
 
   # `rel` comes off the ORIGINAL prefix, since an inferred area may have been stripped and no
-  # longer prefixes the source path.
-  rel="${src#"$src_area_prefix"/}"
+  # longer prefixes the source path. It is taken from `scan`, not `src`, so a normalised story
+  # basename reaches the component rebuild below and its bare number is stripped like any token.
+  rel="${scan#"$src_area_prefix"/}"
   # `_bmad-output/` root: not an area. Its sprint-tokened files are log rotation archives.
   if [ "$area" = "_bmad-output" ]; then
     area="$ARCHIVE_HOME"
-    rel="${src##*/}"
+    rel="${scan##*/}"
   fi
 
   # Rebuild every component with its token removed. A component that strips to nothing is
@@ -362,12 +413,14 @@ echo "  moves planned:         $N_PLAN"
 echo "  REFUSED:               $N_REFUSE"
 echo ""
 
-if [ "$DEFERRED_STORIES" -gt 0 ]; then
-  echo "DEFERRED — $DEFERRED_STORIES file(s) under a stories/ directory were NOT considered."
-  echo "  The sprint is spelled two ways there and one of them is a bare number this transform"
-  echo "  cannot tell from a story index, so migrating would split one sprint's stories across"
-  echo "  two conventions. The stories move is a separate release; they stay non-conforming"
-  echo "  until it lands, and that is a KNOWN gap rather than a silent one."
+# THE STORY CORPUS IS NO LONGER DEFERRED, and the count is printed rather than dropped because a
+# corpus this size moving in silence is indistinguishable from one that did not move. The previous
+# release reported 1001 files here as a KNOWN gap; this one reports how many it saw and, in
+# REFUSED above, every one it could not place.
+if [ "$STORIES_SEEN" -gt 0 ]; then
+  echo "STORIES — $STORIES_SEEN file(s) sit in a stories/ directory carrying no \`s<N>/\` slot,"
+  echo "  which is what makes them legacy whatever they are called. The sprint is taken from the"
+  echo "  name; where the name does not give one they are REFUSED above by path, never guessed."
   echo ""
 fi
 

@@ -158,17 +158,30 @@ refused "tokens-disagree" "_bmad-output/planning-artifacts/archive/s300-cycle-1/
 refused "no-area"         "_bmad-output/s177/wave-1-dispatch-status.md" \
         "NO-AREA" "a sprint dir under a non-area scan root has nothing to anchor to"
 
-# THE STORY CORPUS: BOTH SPELLINGS STAY, OR NEITHER. This is the anti-half-migration arm.
+# THE STORY CORPUS: BOTH SPELLINGS MOVE, OR NEITHER. Still the anti-half-migration arm; what
+# changed is which side of it is correct. The explicit-token file and the bare-number file must
+# reach the SAME shape under their own sprints, and the sprint must be gone from both basenames.
+moved "story-token"      "_bmad-output/planning-artifacts/s301/stories/story-1-alpha.md" \
+                         "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" \
+                         "an explicit-token story lands under its sprint, sprint out of the name"
+moved "story-bare-number" "_bmad-output/planning-artifacts/s297/stories/story-1-beta.md" \
+                         "_bmad-output/planning-artifacts/stories/story-297-1-beta.md" \
+                         "a BARE-number story lands the same way — read from position, not name"
+
+# A story already on the grammar is untouched, and its INDEX is not read as a sprint. Without the
+# `s<N>/`-above-it test this file would be "migrated" to s12/, which is the reading the deferral
+# was afraid of — correctly, just in the wrong place.
 asserts=$((asserts+1))
-if has "$W" "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" \
-   && has "$W" "_bmad-output/planning-artifacts/stories/story-297-1-beta.md"; then
-  printf '  ok    %-26s %s\n' "stories-deferred" "BOTH story spellings stay put — the corpus is not split"
+if has "$W" "_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md" \
+   && ! has "$W" "_bmad-output/planning-artifacts/s299/stories/story-3-gamma.md"; then
+  printf '  ok    %-26s %s\n' "story-index-not-sprint" "a conforming story is left alone; its index is not read as a sprint"
 else
   fails=$((fails+1))
-  printf '  FAIL  %-26s %s\n' "stories-deferred" "the story corpus was HALF migrated: S301 moved=$(has "$W" "_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" && echo no || echo YES), 297 moved=$(has "$W" "_bmad-output/planning-artifacts/stories/story-297-1-beta.md" && echo no || echo YES)"
+  printf '  FAIL  %-26s %s\n' "story-index-not-sprint" "a story ALREADY under s299/ was re-read: index 12 became a sprint slot"
 fi
-case "$OUT" in *DEFERRED*) ok "...and the deferral is REPORTED, so the gap is known not silent" ;;
-               *) bad "1000+ story files were skipped with no mention — a silent partial migration" ;; esac
+
+refused "story-no-sprint" "_bmad-output/planning-artifacts/stories/bug-mobile-layout.md" \
+        "STORY-NO-SPRINT" "a story basename with no sprint in it is refused by path, not guessed"
 
 # =============================================================================
 # 4. NOTHING WAS LOST. git is the witness, not the script's own verdict.
@@ -229,12 +242,23 @@ mutate 'ambiguity-allowed' \
   '[ ! -f "$w/_bmad-output/implementation-artifacts/gate-log-archive-s298-s299.md" ]' \
   'collapsing to the FIRST sprint instead of refusing files a two-sprint path under a guess'
 
-# Drop the story deferral. The corpus then splits: the capital-S file moves, its lowercase
-# sibling does not.
-mutate 'stories-not-deferred' \
-  's@\*/stories/\*\)@*/NOT-A-REAL-DIR/*)@' \
+# Stop normalising the bare leading number. The corpus then SPLITS — exactly the half-migration
+# the whole-corpus deferral existed to prevent: the capital-S file moves, its bare-number sibling
+# stays behind under a different convention.
+# The anchor is the `s` in the REPLACEMENT half of the normalising expression — one occurrence in
+# the whole file, checked. Removing it makes the rewrite an identity, which is precisely "the bare
+# number is no longer read as a sprint" and nothing else.
+mutate 'stories-half-migrated' \
+  's@/story-s@/story-@' \
   '[ ! -f "$w/_bmad-output/planning-artifacts/stories/story-S301-1-alpha.md" ] && [ -f "$w/_bmad-output/planning-artifacts/stories/story-297-1-beta.md" ]' \
-  'without the deferral one sprint\x27s stories split across two conventions'
+  'without the bare-number normalisation one sprint\x27s stories split across two conventions'
+
+# Break the POSITIONAL test, so a story already under `s<N>/` is treated as legacy. Its INDEX is
+# then read as a sprint and a conforming file is moved to a slot named after its own index.
+mutate 'story-slot-blind' \
+  's@^  local head=@  return 0\n  local head=@' \
+  '[ ! -f "$w/_bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md" ]' \
+  'a conforming story is re-migrated once the s<N>/-above-it test stops firing'
 
 # UNMUTATED CONTROL, from the same directory: the harness itself must not be what fails. A lone
 # copy that dies sourcing something emits nothing, and "no output" otherwise scores as a kill.

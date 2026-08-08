@@ -62,11 +62,21 @@ mk _bmad-output/planning-artifacts/archive/s300-cycle-1/notes-s295.md     "dir s
 # a sprint directory directly under a scan root that is NOT an area
 mk _bmad-output/s177/wave-1-dispatch-status.md                            "no area to anchor to"
 
-# --- DEFERRED: the story corpus, in BOTH spellings ----------------------------
-# `story-S301-1` carries a token this transform matches; `story-297-1` uses a bare number it
-# cannot tell from a story index. Migrating would move one and leave the other.
+# --- the story corpus, in THREE spellings -------------------------------------
+# `story-S301-1` carries a token the transform matches directly; `story-297-1` spells the sprint
+# as a bare number, readable only because the directory has no `s<N>/` above it and therefore
+# predates the grammar. Both must land, and land the same way, or one sprint's stories end up
+# split across two conventions — which is what the whole-corpus deferral existed to prevent.
 mk _bmad-output/planning-artifacts/stories/story-S301-1-alpha.md          "story"
 mk _bmad-output/planning-artifacts/stories/story-297-1-beta.md            "story"
+# ...and one that gives no sprint at all. It is REFUSED by path rather than moved under a guess.
+mk _bmad-output/planning-artifacts/stories/bug-mobile-layout.md           "story"
+# A story ALREADY on the grammar, whose basename happens to lead with a number. It must not be
+# touched: the `s<N>/` above it is what says so, and without that test the leading number would be
+# re-read as a sprint. The number MATCHES the parent slot deliberately — with any other value the
+# path would name two sprints and the mutant would produce an AMBIGUOUS refusal instead of a move,
+# and this fixture's mutants assert on the TREE, never on the report.
+mk _bmad-output/planning-artifacts/s299/stories/story-299-3-gamma.md     "story"
 
 if [ -n "$GRAMMAR_SRC" ]; then
   mkdir -p .claude/skills/ai-dlc
