@@ -51,7 +51,12 @@ lists all eighteen with their PR numbers. The previously-parked F3 branch shippe
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
 **~~graph is at `0.292.0 / c5e7daa` and is QUIESCENT.~~ ~~NO LONGER TRUE — 8b IS IN FLIGHT.~~
-8b IS DONE. graph is at `0.300.0 / 2bc7aa4`, migrated, on `main`, tree clean, gates green.**
+~~8b IS DONE. graph is at `0.300.0 / 2bc7aa4`~~ **SUPERSEDED — graph is at `0.314.0 / f9b8aa4`**
+on all four stamp fields, on `main`, migrated, gates green. Two hops (#882 self-update, #883
+hop-1, #884 hop-2 + the 951-move story migration). VERIFIED FROM THIS SIDE, not taken on the
+report: `layer-drift.sh` over `2bc7aa4..f9b8aa4` against graph returns **0 `HARD-*`** with 49
+rows across 9 statuses and no `DRIFT-RANGE-DEGENERATE` — so the zero is a real absence, not a
+disarmed run.**
 s301 is closed; s302 has not started but MAY now start.
 
 **THE MIGRATION RAN. The five numbers, as reported and worth not re-deriving:**
@@ -126,7 +131,19 @@ reason the promotion is worth anything. It also surfaced two defects in `apply.s
 to do with item 6 and everything to do with whether ANY of this reaches the operator. See
 §*What item 6 measured*.
 
-**NEXT ACTION FOR THE OPERATOR: take the 0.300.0 → 0.314.0 pull in graph.** Runbook:
+**~~NEXT ACTION FOR THE OPERATOR: take the 0.300.0 → 0.314.0 pull~~ — DONE 2026-08-08.** 18
+adjudications recorded, all with verdicts; one new obligation (`OWED-RETRO-4A-NARROW`) beside
+6 pre-existing. One authorised `--no-verify`, naming the unit and its EXIT=2, for the fixture
+item 20 records. **The session caught a blocker it had reintroduced itself** — editing an
+entry after recording its verdict spends that verdict, because the digest covers the entry;
+re-recorded against the moved subject. That is the digest design working, and it is the
+reason the done-when list is re-run post-merge rather than remembered.
+
+**The next pull is small and clean, measured: 4 files, ZERO rulebook files (so one hop), and
+0 `HARD-*` rows over `f9b8aa4..HEAD`.** It carries v0.315.0, which is where item 20's fix
+gets verified by running that fixture from graph's own `tests/fixtures/`.
+
+**SUPERSEDED, kept for the runbook it points at.** Runbook:
 [`graph-0300-to-0314-pull.md`](graph-0300-to-0314-pull.md). **The reason is not the diff size** —
 graph migrated 2667 artifacts onto the path grammar and has NO validator enforcing it, because
 that shipped in v0.305.0 and graph is at 0.300.0. Measured with a control: core has
@@ -522,6 +539,35 @@ before you write code.
     **State the counterfactual.** "Was consolidation worth it" is only answerable against what
     the alternative would have cost, and this plan has the numbers for the migration side but
     not for the do-nothing side. Derive it or say plainly that it is underived.
+
+20. ~~**A shipped fixture could not run on any consumer.**~~ **DONE — v0.315.0 (#440).**
+    `story-corpus-sprint-slot/seed.sh` walked `../../..` and required `core/`-prefixed sources, so
+    installed it landed on the consumer repo root and exited 2 before any assertion. **REPORTED BY
+    THE CONSUMER AND REPRODUCED HERE with a control** (distribution rc=0, install-shaped tree
+    `seed: missing core/scripts/sprint-status.sh`) — the first consumer report in this plan whose
+    attribution was exact. The class sweep found 8 more suspects by text and **all 8 passed when
+    RUN in a consumer-shaped tree**, so the obvious lint has a false-positive set of 8 of 8 and was
+    deliberately not shipped. The honest mechanism — running the shipped fixture set inside an
+    install-shaped tree — costs a second full suite and is a declared gap.
+
+21. **`apply.sh` overwrites itself mid-run.** **REPORTED BY THE CONSUMER 2026-08-08 with receipts,
+    NOT YET REPRODUCED HERE — record it as theirs until it is.** This plan has been wrong about a
+    consumer report's attribution three times (items 13, 17, 18), and in two of those the named
+    program was not the one at fault. **Reproduce it on a scratch consumer before touching
+    `apply.sh`.** Start from the fact that phase 1 overwrites every pure-apply core file from
+    THEIRS, and `apply.sh` is itself an upstream-owned file under `reconcile/` — so the running
+    script can be replaced underneath its own interpreter mid-execution. Whether bash re-reads the
+    file is the question to settle FIRST, by experiment, not by recall: the answer decides whether
+    this is a live defect or a latent one, and a fix aimed at the wrong half leaves it.
+
+22. **A stale path inside a layer entry goes undetected.** **REPORTED BY THE CONSUMER 2026-08-08,
+    NOT YET REPRODUCED HERE.** They cite `tea-consumer.md:18` in their own tree as an entry body
+    naming a path that no longer resolves, with nothing reporting it. **The citation is into the
+    CONSUMER and must be re-read there before acting.** The layer contract checks `hooks:`,
+    `shadows:` and `extends:` targets; a path in an entry's BODY is outside all three. Before
+    building anything, derive the false-positive set: entry bodies quote paths for many reasons —
+    historical notes, examples, other repos — and a checker that resolves every path-shaped token
+    in a body is the unmeasured lint this repo keeps refusing to ship.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
