@@ -551,11 +551,14 @@ production checkpoint before the next sprint begins.
      rule; whatever is named here is what survives instead of its memory. -->
 ### Rule 15 -- Document what you changed
 
-After each validation cycle, append a brief changelog to the artifact
-noting what was improved and why.
+After each validation cycle, append a brief changelog noting what was improved
+and why to `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md` -- the
+sprint's slot, NEVER the durable artifact. A story's changelog stays inline in the
+story, which already carries its sprint in its directory. See `steps/_gate-procedures.md`,
+"Where a changelog is written".
 
 
-**Carrier:** none -- the rule governs commit and CHANGELOG prose, which no gate reads and no artifact schema holds. Declared a GAP, not a decision that prose suffices.
+**Carrier:** none -- WHETHER a changelog is written is still unmechanised: no gate reads one and no artifact schema holds it. Declared a GAP, not a decision that prose suffices. WHERE it is written is carried, by `tests/fixtures/changelog-sprint-slot/`, which fails if any prescribing site names a durable target again -- that is the path, not the rule.
 <!-- I79: every rule below the re-attach cut declares what mechanically carries it,
      or declares `none` and is counted as a gap. A compacted lead does not hold this
      rule; whatever is named here is what survives instead of its memory. -->

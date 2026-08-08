@@ -202,7 +202,40 @@ Execute the sub-skills back-to-back, with no pause for human input between them:
    ends the session, otherwise continue until the terminal pass stamps
    `EXIT_CONDITION_MET`. A `DIVERGENT_HARD_BLOCK` or STALL does not end the loop:
    follow "Divergence resolution dispatch" below.
-4. Append the step's changelog, then proceed to the step's next action.
+4. Append the step's changelog ("Where a changelog is written" below), then proceed to
+   the step's next action.
+
+## Where a changelog is written (referenced by step files)
+
+**A changelog entry is a record of one sprint's passes over an artifact, so it is written
+to that sprint's slot and never appended to the durable artifact itself:**
+
+```
+_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md
+```
+
+`<N>` is `sprint_id` (`scripts/ai-dlc/sprint-status.sh sprint-id`); `<artifact>` is the
+stem of the artifact the entry is about — `changelog-product-brief.md`, `changelog-prd.md`,
+`changelog-architecture.md`. Append to the file if the sprint has already opened one. A
+story file's changelog stays INLINE in the story: a story already lives in `s<N>/stories/`,
+so it carries its own sprint and has no durable artifact to pollute.
+
+**Why this is not a preference.** A durable artifact carries no sprint token by rule 3 of
+the artifact path grammar, and that is what makes it durable. Appending per-sprint prose to
+it puts sprint-scoped content at a sprint-independent path — the same defect
+`artifact-consolidation.md` had for its four working files, which is why it now writes them
+to `s<N>/` too. Measured on the reference consumer before this changed: the live product
+brief was 1030 lines, of which **223 (21%) were four changelog entries carrying the same date
+and all belonging to ONE sprint**, sitting inside an artifact the whole-read budget pools.
+
+**AND NOTHING IN CORE READS ONE, WHICH IS THE REASON TO HOME IT RATHER THAN TO DROP IT.**
+`change[ -]?log` over `scripts/ai-dlc/` and `.claude/hooks/` matches only the
+*validation-cycle-log* model — one of those lines says per-artifact changelogs are "freeform
+prose, not countable here" (`validate-mandatory-rules.sh:139`). The entries are evidence a human reads when asking
+what a sprint did to an artifact, and a coverage report can cite one; deleting them breaks a
+record the pass produced. **Existing entries already inside a durable artifact are MOVED into
+the slot of the sprint they describe, never removed** — the same disposition item 23b took for
+the 33 byproduct files.
 
 ## Adversarial review dispatch (referenced by step files)
 

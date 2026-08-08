@@ -124,7 +124,9 @@ dispatch** sub-routines. Parameters:
   pass (Check 24's scope includes `research-requirements`), so it stamps a
   `verdict:`; a single pass is not a one-shot review.
 - **`Seam D` label:** `research-requirements adversarial pass <N>`.
-- **on convergence:** append a changelog to the PRD, then proceed to gate
+- **on convergence:** append a changelog to
+  `_bmad-output/planning-artifacts/s<N>/changelog-prd.md` (`_gate-procedures.md` —
+  "Where a changelog is written"; NOT the PRD itself), then proceed to gate
   validation.
 
 ### 5. Gate Validation and Proceed

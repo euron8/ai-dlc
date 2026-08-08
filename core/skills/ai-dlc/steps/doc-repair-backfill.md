@@ -42,8 +42,10 @@ dispatch** and **Adversarial repair dispatch** sub-routines. Parameters:
   codebase: do they accurately represent reality?
 - **adversarial focus:** none beyond the adversary's default contract.
 - **`Seam D` label:** `doc-repair-backfill adversarial pass <N>`.
-- **on convergence:** append changelogs to all modified artifacts, then proceed to
-  gate validation.
+- **on convergence:** append a changelog for each modified artifact to
+  `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md` (`_gate-procedures.md` —
+  "Where a changelog is written"; one file per artifact, NOT the artifacts themselves),
+  then proceed to gate validation.
 
 ### 4. Gate Validation and Proceed
 

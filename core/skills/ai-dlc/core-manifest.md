@@ -254,6 +254,7 @@ core_manifest:
   - fixtures/story-corpus-sprint-slot/**
   - fixtures/apply-worklist-rows/**
   - fixtures/apply-self-overwrite/**
+  - fixtures/changelog-sprint-slot/**
   - fixtures/consolidation-residue/**
   - fixtures/apply-machinery-stamp/**
   - fixtures/layer-absorption-retire/**

@@ -324,11 +324,28 @@ still read whole at gate time** — the change would grade itself. **Do not reus
 framing ("the LOCKED block and changelog"); it is four changes** and the sequencing is in the table.
 Item 12, item 22, item 24, item 25, item 26 and item 28 remain available and gate nothing.
 
-**NEXT ACTION FOR THIS REPO: 23c-1** — make the whole-read pool count the LIVE sprint's slot. It is
-first because every later 23c release is measured by the row it fixes. **23c-2 (the changelog) is
-independent of all of it and stands alone as a release** if 23c-3 turns out to cost more than it
-looks: six core sites prescribe appending a changelog to a durable artifact, **nothing in core reads
-one**, and it is 21% of graph's live brief.
+**~~NEXT ACTION FOR THIS REPO: 23c-1~~ — 23c-2 WAS TAKEN FIRST AND THE ORDER ABOVE WAS CORRECTED,
+NOT IGNORED. v0.321.0 (#461).** Two things forced it, both measured after the derivation merged:
+
+- **23c-1 has no subject until 23c-3 writes one.** The right pool change is not "stop exempting the
+  live slot" — a live-slot copy of a POOLED basename (`s302/architecture.md`) is a snapshot of the
+  durable artifact, and counting it double-counts; graph has 23 such copies historically, latest
+  `s288`. The honest change is a second pool arm for a per-sprint whole-read basename in the LIVE
+  slot only, and that basename does not exist until 23c-3. Shipping the arm first is a check with no
+  subject on any consumer. **23c-1 and 23c-3 therefore ship together.**
+- **23c-2 is graded by content leaving the whole-read path, not by the pool arm**, because nothing
+  reads a changelog — so it needed nothing from 23c-1 and was clear to go first.
+
+**AND ITS SIZE WAS OVERSTATED IN THE PARAGRAPH ABOVE.** "21% of graph's live brief" is true and
+reads much larger than the pooled effect: across all durable artifacts the LIVE changelog total is
+**260 lines** (223 brief, 37 `docs/architecture.md`, **0 `prd.md`**). The other ~9,800 changelog
+lines are in `-history.md` files `is_archive()` already exempts. **23c-2's case is correctness, not
+size** — the size is in 23c-3, which moves the brief's 564-line LOCKED section.
+
+**NEXT ACTION FOR THIS REPO: 23c-3 together with 23c-1** — `discovery.md` §4a writes the sprint's
+LOCKED block to the slot, `DEFAULT_SOR_BASENAME` and both prose restatements move with it, and the
+pool gains its live-slot arm in the same release so the change does not grade itself. **23c-4
+(cross-sprint anchoring) follows.**
 
 **THIS WAS THE HANDOFF POINT AND THE HANDOFF WORKED** — everything 23c's first step needed was
 written into the item, and the derivation ran without re-opening the work above it. The lesson item
@@ -411,7 +428,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
 | ~~20~~ | ~~**27** — the skill stamp has two contradictory instructions and no writer~~ | **DONE — v0.320.0 (#458).** The branch is a flag, `apply.sh --carried-machinery-slice`, and both prose sites now point at it. **No new invariant: I60 already binds the join**, proven by mutating the case-arm name until it fails by name. New fixture `apply-machinery-stamp`; the gap it fills is measured at **0** skill-field assertions across the whole fixture set against a control of 3 on the rulebook pair. See §*What item 27 measured* |
-| **21** | **23c** — the inlet | **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four sub-releases: **23c-1** pool liveness, **23c-2** the changelog (6 writers, 0 readers, 21% of the brief), **23c-3** writer + pin, **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
+| **21** | **23c** — the inlet | **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four changes in THREE releases: **23c-2** the changelog — **DONE, v0.321.0 (#461)**, taken first because nothing reads a changelog so it needs no pool arm; **23c-1 + 23c-3** the pool arm with the writer and pin, together because the arm has no subject until the writer creates one; **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
 | — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
 | — | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
@@ -1252,16 +1269,28 @@ rather than a blocker. **No sprint slot holds a competing copy today** — `s<N>
 per sprint, and the closer may carry a discriminator so they can be told apart."* The inlet is the
 design, not consumer drift.
 
-**23c IS FOUR RELEASES, IN THIS ORDER, AND THE ORDER IS NOT PREFERENCE.**
+**23c IS FOUR CHANGES, AND THIS SECTION'S FIRST ORDERING OF THEM WAS WRONG — CORRECTED BELOW, with
+the original struck rather than deleted because the reason it was wrong is the useful part.**
 
-- **23c-1 — the pool counts the live sprint's slot.** First, because every later release is graded
-  by the row it fixes.
-- **23c-2 — the changelog.** Independent of the rest and the cheapest real reduction available.
-  **Stands alone if 23c-3 turns out to cost more than it looks.**
-- **23c-3 — the writer and the pin together.** `discovery.md` §4a writes to the slot; the default
-  and BOTH prose restatements (`stories-test-strategy.md:372-373`, `gate-validation.md:411-415`)
-  move with it, or 23c re-creates item 27's defect exactly — contradicting prose over one
-  mechanised branch.
+- **~~23c-1 — the pool counts the live sprint's slot. First, because every later release is graded
+  by the row it fixes.~~** **NOT SHIPPABLE ALONE.** "Stop exempting the live slot" is the wrong
+  change: a live-slot copy of a POOLED basename is a snapshot of the durable artifact and counting
+  it double-counts — graph holds **23** historical `s<N>/architecture.md` copies (latest `s288`,
+  live sprint 302). The right change is a second pool arm for a per-sprint whole-read basename in
+  the LIVE slot only, and **that basename does not exist until 23c-3 writes it.** An arm with no
+  subject on any consumer is the check-that-cannot-fire class. **23c-1 ships WITH 23c-3.**
+- **23c-2 — the changelog. TAKEN FIRST — v0.321.0 (#461).** It needed nothing from 23c-1 because
+  nothing reads a changelog, so it is graded by content leaving the whole-read path rather than by
+  the pool row. **Its size was overstated as "21% of the brief"**: the LIVE total across durable
+  artifacts is **260 lines** (223 brief, 37 `docs/architecture.md`, 0 `prd.md`), the rest sitting in
+  `-history.md` files `is_archive()` already exempts. **The case is correctness, not size.** New
+  fixture `changelog-sprint-slot`, red on the pre-fix tree naming all **6** sites.
+- **23c-3 — the writer, the pin AND the pool arm, in one release.** `discovery.md` §4a writes to
+  the slot; the default and BOTH prose restatements (`stories-test-strategy.md:372-373`,
+  `gate-validation.md:411-415`) move with it, or 23c re-creates item 27's defect exactly —
+  contradicting prose over one mechanised branch; and the pool gains its live-slot arm the day the
+  file it counts starts being written. **This is the release the size is in** — the brief's
+  564-line in-force LOCKED section, 54% of it.
 - **23c-4 — cross-sprint anchoring.** Either forbid it at the validator with a message, or resolve
   `LR-S<n>-` to `s<n>/`. Today's zero is not a licence to leave it undecided.
 
@@ -1999,6 +2028,7 @@ Every release below is merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
+| v0.321.0 | #461 | **plan item 23c-2.** Rule 15's changelog now goes to `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md`, declared ONCE in `_gate-procedures.md` with four convergence lines pointing at it rather than restating the path. Six sites prescribed one; four named a durable target. **Live effect measured at 260 lines** (223 in graph's brief, 37 in `docs/architecture.md`, 0 in `prd.md`) — the "21% of the brief" figure reads larger than the pooled effect and the release says so. **MOVED, never deleted**: nothing in core reads a changelog, which is a reason to home them, not to drop them. New fixture `changelog-sprint-slot`, site set derived not hand-listed, red on the pre-fix tree naming all 6. |
 | v0.320.0 | #458 | **plan item 27.** `ai-dlc-update/SKILL.md` told step 7 to PRESERVE `skill_version`/`skill_commit` and step 2 to ADVANCE them with that same apply, 1100 lines apart; `apply.sh` mechanised preserve by never writing the fields — **0 mentions against 2 for the rulebook pair**, and nothing in the whole distribution wrote either. Both instructions are right for different runs, so the branch is a flag the caller passes: `apply.sh --carried-machinery-slice`. **No new invariant — I60 already binds it**, proven by mutating the case arm until it fails by name. Three silent-success paths closed (absent fields inserted in schema order, unreadable VERSION and legacy stamps reported as rows, result read back). New fixture `apply-machinery-stamp` (19 arms, 2 mutants, 1 control), filling a gap measured at **0** skill-field assertions suite-wide. |
 | v0.319.0 | #452 | **plan item 23b.** `artifact-consolidation.md` homes all four working files in `_bmad-output/planning-artifacts/s<N>/` and retires its drafts at a new Step 6. The re-home refusal set is **EMPTY — all 33 resolve, 24 with no inference** — and the plan's `S999` premise is refuted. New fixture `consolidation-residue`; no existing check could have caught it, because both the area-root and the slotted path are syntactically conforming. |
 | v0.318.0 | #450 | **plan item 23a, second half.** The whole-read sum was overstated 2.35x by a basename sweep counting 26 archived copies. |

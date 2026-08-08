@@ -242,7 +242,9 @@ product brief — its passes use the **Adversarial review dispatch** and
   flag any generalization.
 - **adversarial focus:** none beyond the adversary's default contract.
 - **`Seam D` label:** `discovery adversarial pass <N>`.
-- **on convergence:** append a changelog to the brief summarizing improvements,
+- **on convergence:** append a changelog summarizing improvements to
+  `_bmad-output/planning-artifacts/s<N>/changelog-product-brief.md`
+  (`_gate-procedures.md` — "Where a changelog is written"; NOT the brief itself),
   then proceed to gate validation.
 
 ### 6. Gate Validation and Proceed
