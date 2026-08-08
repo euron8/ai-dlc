@@ -28,15 +28,64 @@
 #                                         so the stamp was NOT advanced — this one is a bug in
 #                                         THIS file, not a call the operator can make
 #
-# Usage:  apply.sh <dist> <base> <consumer> <theirs>
+# Usage:  apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>
 # Exit:   0 = mechanical resolution completed (a residual WORKLIST/DECISION is normal, not failure)
 #         1 = an error while resolving; 2 = usage.
 set -uo pipefail
 
-DIST="${1:?usage: apply.sh <dist> <base> <consumer> <theirs>}"
-BASE="${2:?}"
-CONSUMER="${3:?}"
-THEIRS="${4:?}"
+# --- ARGUMENTS: four positionals, and ONE flag that changes what the re-stamp CLAIMS ---------
+#
+# `--carried-machinery-slice` says: step 2's self-update DEFERRED and handed its machinery slice
+# to this run, so the machinery this apply just wrote is theirs' and the stamp's
+# `skill_version`/`skill_commit` must advance with `version`/`commit`. Without the flag they are
+# PRESERVED — the ordinary case, and the correct one: a rulebook-only apply must not claim a
+# machinery version it did not install.
+#
+# WHY A FLAG AND NOT A DEFAULT EITHER WAY. `ai-dlc-update/SKILL.md` carried BOTH instructions,
+# 1100 lines apart: step 2's defer branch said advance the skill pair with the step-7 apply,
+# step 7's re-stamp said preserve it. Whichever the agent read, the other was disobeyed, and
+# this file implemented preserve by never touching the fields at all — so the pair was advanced
+# by hand on every pull, or not at all. Neither instruction is wrong; they describe different
+# runs, and the CALLER is the only thing that knows which run this is. It says so here instead
+# of leaving two prose sites to contradict each other.
+#
+# THE FAILURE A STALE `skill_commit` PRODUCES is `unregistered-drift.sh`'s. Its
+# `CORE-AT-SELF-UPDATE` suppression — "not drift, no action" — holds a machinery file
+# byte-identical to the distribution at `skill_commit`, read from this same stamp. Leave the
+# field behind and the machinery files this apply wrote from THEIRS are no longer identical to
+# that ref, so each reads as consumer drift and draws a status whose printed remedy is to revert
+# upstream's own text. That is verbatim the failure v0.309.0 fixed, arriving through the stamp
+# instead of through the scan.
+#
+# POSITION-INDEPENDENT, and documented FIRST at both call sites, matching the shape
+# `emit-report.sh --verify <report> …` already uses. Measured before shipping: 21 invocation
+# sites, every one exactly four positional arguments, NONE passing a fifth — so no existing
+# caller changes behaviour. (Control: the same extraction reports four redirection-carrying
+# lines as non-four, so it is not an argument counter stuck on the answer it was looking for.)
+CARRIED_MACHINERY=0
+_pos_n=0
+for _a in "$@"; do
+  case "$_a" in
+    --carried-machinery-slice) CARRIED_MACHINERY=1 ;;
+    --*)
+      echo "apply: unknown option: $_a" >&2
+      echo "usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
+      exit 2 ;;
+    *)
+      _pos_n=$((_pos_n+1))
+      case "$_pos_n" in
+        1) _p1="$_a" ;; 2) _p2="$_a" ;; 3) _p3="$_a" ;; 4) _p4="$_a" ;;
+        *) echo "apply: too many arguments: $_a" >&2
+           echo "usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>" >&2
+           exit 2 ;;
+      esac ;;
+  esac
+done
+
+DIST="${_p1:?usage: apply.sh [--carried-machinery-slice] <dist> <base> <consumer> <theirs>}"
+BASE="${_p2:?}"
+CONSUMER="${_p3:?}"
+THEIRS="${_p4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
 
@@ -942,8 +991,17 @@ fi
 
 # version landed when it did not costs a silent divergence nobody looks for.
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
+# BOTH PAIRS OR NEITHER. The skill pair is written inside the same branch as the rulebook pair,
+# so a withheld re-stamp withholds it too. Advancing `skill_version` over a tree that is missing
+# machinery files is the same false claim as advancing `version` over it -- and it is the worse
+# half, because `unregistered-drift.sh` reads `skill_commit` as a suppression ref: a stamp
+# naming a ref the tree does not match turns the NEXT pull's report into false drift work.
+withheld_extra=""
+if [ "$CARRIED_MACHINERY" = 1 ]; then
+  withheld_extra=" This run carried step 2's deferred machinery slice, so \`skill_version\`/\`skill_commit\` are withheld with it — both pairs or neither."
+fi
 if [ "$mech_fail" -gt 0 ]; then
-  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically — the stamp would claim ${THEIRS} while the tree lacks them. Left at ${BASE}; fix the paths above and re-run."
+  say DECISION restamp-withheld "$STAMP" "${mech_fail} file(s) could not be placed mechanically — the stamp would claim ${THEIRS} while the tree lacks them. Left at ${BASE}; fix the paths above and re-run.${withheld_extra}"
 elif [ -f "$STAMP" ]; then
   theirs_sha="$(git -C "$DIST" rev-parse --short "$THEIRS" 2>/dev/null || echo "$THEIRS")"
   # From THEIRS, not the working tree. Every file copy above resolves through
@@ -958,6 +1016,43 @@ elif [ -f "$STAMP" ]; then
   sed -i.bak -E "s/^(commit:).*/\1 ${theirs_sha}/" "$STAMP" 2>/dev/null || true
   [ -n "$ver" ] && sed -i.bak -E "s/^(version:).*/\1 ${ver}/" "$STAMP" 2>/dev/null || true
   rm -f "$STAMP.bak"
+
+  # THE DEFERRED-SLICE CASE. Only here does this run install machinery, so only here may the
+  # stamp say the installed TOOL moved. The write is guarded three ways, because every one of
+  # them is a way for it to report success and do nothing:
+  #   - `ver` empty means VERSION was unreadable at theirs; write nothing and say so.
+  #   - fields ABSENT (a stamp predating the v0.17.0 schema, or a partial one) cannot be
+  #     rewritten by a `sed` keyed on them -- the substitution matches nothing and exits 0,
+  #     which is indistinguishable from having written. So they are INSERTED, in schema order,
+  #     immediately after `commit:`.
+  #   - the result is READ BACK. A stamp with no `commit:` line at all leaves nowhere to insert,
+  #     and that case must reach the operator as a row rather than as a silent preserve.
+  # Written through `.incoming.$$` + `mv` rather than in place: the idiom this file already uses
+  # at five sites, and v0.316.0's lesson about rewriting a file a running program is reading.
+  if [ "$CARRIED_MACHINERY" = 1 ]; then
+    if [ -z "$ver" ]; then
+      say DECISION skill-restamp-withheld "$STAMP" "this run carried the deferred machinery slice, but VERSION could not be read at ${THEIRS}, so \`skill_version\` has no value to take. \`skill_commit\` is left with it — half a machinery stamp is a stamp nothing can trust. Set both by hand to theirs, or re-run against a resolvable ref."
+    else
+      if grep -q '^skill_version:' "$STAMP" && grep -q '^skill_commit:' "$STAMP"; then
+        sed -i.bak -E "s/^(skill_version:).*/\1 ${ver}/; s/^(skill_commit:).*/\1 ${theirs_sha}/" "$STAMP" 2>/dev/null || true
+        rm -f "$STAMP.bak"
+      else
+        awk -v v="$ver" -v s="$theirs_sha" '
+          $0 !~ /^skill_version:/ && $0 !~ /^skill_commit:/ { print }
+          /^commit:/ && !ins { print "skill_version: " v; print "skill_commit: " s; ins=1 }
+        ' "$STAMP" > "$STAMP.incoming.$$" 2>/dev/null && mv -f "$STAMP.incoming.$$" "$STAMP"
+        rm -f "$STAMP.incoming.$$"
+      fi
+      got_sv="$(sed -n 's/^skill_version:[[:space:]]*//p' "$STAMP" | head -1)"
+      got_sc="$(sed -n 's/^skill_commit:[[:space:]]*//p' "$STAMP" | head -1)"
+      if [ "$got_sv" = "$ver" ] && [ "$got_sc" = "$theirs_sha" ]; then
+        say RESOLVED restamp-machinery "$BASE -> $theirs_sha" "step 2 deferred its self-update and this apply carried the machinery slice, so \`skill_version\`/\`skill_commit\` advance to ${ver} @ ${theirs_sha} with the rulebook pair. Without this the next pull reads every machinery file this run wrote as consumer drift."
+      else
+        say DECISION skill-restamp-failed "$STAMP" "this run carried the deferred machinery slice, but the stamp still reads \`skill_version: ${got_sv:-<absent>}\` / \`skill_commit: ${got_sc:-<absent>}\` rather than ${ver} @ ${theirs_sha}. The stamp has no \`commit:\` line to write beside — a legacy single-line stamp. Rewrite it in schema (version/commit/skill_version/skill_commit/installed_at/upstream) and re-run."
+      fi
+    fi
+  fi
+
   say RESOLVED restamp "$BASE -> $theirs_sha"
   # The tree is consistent again, and ONLY here. Cleared beside the re-stamp rather than
   # in a trap, so an exit that withholds the stamp also leaves the marker: a partially

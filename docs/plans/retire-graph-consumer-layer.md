@@ -106,10 +106,12 @@ budget validator returned `ok  WHOLE-READ POOL (4 planning artifacts)  117379 to
 `docs`). **So graph is CURRENT on every shipped file and no pull is owed.** Do not read the version
 gap as debt; re-derive it the same way if it matters.
 
-**THE SKILL STAMP AGREEING IS A HAND-FIX, NOT A WORKING MECHANISM.** The operator set
-`skill_version`/`skill_commit` by hand during the 0.319.0 apply because `apply.sh` never writes them
-— **item 27**. The stamp is correct on this consumer and the defect is untouched for every other.
-s301 is closed; s302 has not started but MAY now start.
+**~~THE SKILL STAMP AGREEING IS A HAND-FIX, NOT A WORKING MECHANISM.~~ FIXED — v0.320.0 (item 27).**
+The operator set `skill_version`/`skill_commit` by hand during the 0.319.0 apply because `apply.sh`
+never wrote them. It writes them now, on the one run that may claim them:
+`apply.sh --carried-machinery-slice`. **The stamp on this consumer is already correct, so this
+release changes nothing there and is owed to the NEXT deferred-slice pull** — do not expect a
+visible difference on graph from it. s301 is closed; s302 has not started but MAY now start.
 
 **FOUR THINGS CARRIED FORWARD BY THE 0.318.0 PULL, ALL THE CONSUMER'S, NONE BLOCKING** — reported by
 the operator and recorded here so a later session does not read them as this repo's queue:
@@ -287,26 +289,25 @@ a skill was said to bring buy nothing here, measured, and the decider is the sub
 **70**. See §*What item 23d decided*, **which also states the three things that would re-open it**,
 so the answer is falsifiable rather than permanent.
 
-**NEXT ACTION FOR THIS REPO: item 27**, then 23c. **27 jumps the queue and 28 does not.** 27 was
-reported and REPRODUCED on 2026-08-08: a stale `skill_commit` makes 28 machinery files read as
-consumer drift on the NEXT pull, with a printed remedy that reverts upstream's own text — verbatim
-the failure v0.309.0 fixed, arriving through the stamp instead of through the scan. It is on the
-delivery path, where items 17, 18 and 21 all landed. **Item 28 gates nothing and can wait.**
+**~~NEXT ACTION FOR THIS REPO: item 27~~ — DONE 2026-08-08. v0.320.0 (#458).** The fix is a flag,
+`apply.sh --carried-machinery-slice`, with both contradicting prose sites now pointing at it instead
+of at each other. **No new invariant was needed and that was PROVEN rather than assumed**: I60
+already binds "prose names a mode the script does not dispatch", both sides derived, and mutating the
+case arm's name makes it FAIL by name. The fixture gap the item named is measured — **0 fixtures
+asserted either skill field after an apply, against a control of 3 assertions on the rulebook pair in
+`apply-restamp-theirs` alone.** See §*What item 27 measured*.
 
-**THEN: item 23c** — the inlet, and the last of item 23. It is the real
+**NEXT ACTION FOR THIS REPO: item 23c** — the inlet, and the last of item 23. It is the real
 methodology change and is **explicitly NOT SIZED**: it opens with a derivation over 4 validators and
 10 step files, not with code, and if that derivation says the sites do not move cheaply the correct
 outcome is to say so and stop. **23a removed its urgency argument — the pool does not breach — and
 left its correctness one intact.** Item 12, item 22, item 24, item 25, item 26 and item 28 remain available
 and gate nothing.
 
-**THIS IS THE HANDOFF POINT, AND ITEM 27 REINFORCES IT RATHER THAN REPLACING IT.** The session that
-filed 27 and 28 reproduced both and stopped deliberately before building: 27 edits `apply.sh`'s stamp
-write, which is the delivery path items 17, 18 and 21 all landed in, and where a fix aimed at the
-wrong half is expensive. **Everything a fix needs is written into item 27** — both prose sites, the
-failure direction, the branch the fix must have, and the fixture gap that let it ship. 23c likewise
-shares almost nothing with the work above it: its subject is `LOCKED_REQUIREMENTS` across four core
-validators and ten step files. **Start a fresh session at item 27.**
+**THIS IS THE HANDOFF POINT.** 23c shares almost nothing with the work above it: its subject is
+`LOCKED_REQUIREMENTS` across four core validators and ten step files. **Start a fresh session at item
+23c.** Item 27's handoff paragraph is discharged and its lesson held: everything the fix needed was
+written into the item, and the fix took one release with no re-derivation of the report.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -384,8 +385,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~17~~ | ~~**23a** — are the budget thresholds attainable at all?~~ | **DONE — v0.317.0 (#449) + v0.318.0 (#450). THE ANSWER IS YES and graph already passes at 36%.** The 417% breach was an instrument reading: pool understated 5x, sum overstated 2.35x, both defects core's. The floors were derived anyway, because at a genuine 200K window the threshold IS unattainable (130–151%). See §*What item 23a measured* |
 | ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
-| **20** | **27** — the skill stamp has two contradictory instructions and no writer | **← THE NEXT ITEM. REPORTED + REPRODUCED, attribution exact.** `ai-dlc-update/SKILL.md:308` says advance, `:1414` says preserve, `apply.sh` implements preserve by never touching them. **Failure direction is item 18's, re-created through the stamp**: a stale `skill_commit` makes 28 machinery files read as consumer drift with a remedy that reverts upstream text. **Take it before 23c** |
-| **21** | **23c** — the inlet | **NOT SIZED**, and the recommended fresh-session start after 27. Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
+| ~~20~~ | ~~**27** — the skill stamp has two contradictory instructions and no writer~~ | **DONE — v0.320.0 (#458).** The branch is a flag, `apply.sh --carried-machinery-slice`, and both prose sites now point at it. **No new invariant: I60 already binds the join**, proven by mutating the case-arm name until it fails by name. New fixture `apply-machinery-stamp`; the gap it fills is measured at **0** skill-field assertions across the whole fixture set against a control of 3 on the rulebook pair. See §*What item 27 measured* |
+| **21** | **23c** — the inlet | **← THE NEXT ITEM. NOT SIZED**, and the recommended fresh-session start. Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
 | — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
 | — | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
@@ -1022,8 +1023,12 @@ before you write code.
     the moment anyone touches it** — which is the property that makes deferring safe rather than
     permanent.
 
-27. **`ai-dlc-update/SKILL.md` tells step 7 two incompatible things about the skill stamp, and `apply.sh`
-    mechanises one of them.** **REPORTED BY THE CONSUMER 2026-08-08 with a control, and REPRODUCED
+27. ~~**`ai-dlc-update/SKILL.md` tells step 7 two incompatible things about the skill stamp, and
+    `apply.sh` mechanises one of them.**~~ **DONE — v0.320.0 (#458).** Everything below held: the
+    attribution was exact, the fix is the flag this item specified, and the fixture gap it named
+    was real and is now measured. Two things it did NOT predict are in §*What item 27 measured* —
+    no new invariant was owed, and the write had three silent-success paths rather than one.
+    What follows is the original report. **REPORTED BY THE CONSUMER 2026-08-08 with a control, and REPRODUCED
     HERE — the attribution is EXACT, the third consumer report in a row that is.**
 
     **THE REPORT.** `apply.sh` said `RESOLVED restamp` while leaving `skill_version`/`skill_commit`
@@ -1124,6 +1129,52 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 27 measured (the item was right; two things it did not predict)
+
+**v0.320.0 (#458).** The report's attribution was exact for the third consumer report in a row, and
+the fix is the one this item specified: a flag, not a write. Nothing below re-derives the report —
+it held.
+
+**THE THREE DERIVATIONS THE ITEM DEMANDED BEFORE BUILDING, with their controls:**
+
+| derivation | answer | control |
+|---|---|---|
+| would any existing caller change behaviour? | **NO** — 21 invocation sites, every one exactly four positional arguments, none passing a fifth | the same extraction reports four redirection-carrying lines as non-four, so it is not an argument counter stuck on the answer |
+| does `mech_fail` interact? | **YES, and it is structural** — the machinery write sits inside the same branch as the rulebook write, so a withheld re-stamp withholds both | the fixture drives the withheld path with the flag ON and asserts all four fields unmoved |
+| is `apply.sh` in the self-update gate's bare-invocation probe (item 11's class)? | **NO** — the gating set is what the consumer's pre-push INVOKES, and both pre-push hooks name `apply.sh` **0** times | 3 for `validate-enforcement-map.sh` in the same grep; and bare exit code is unchanged at 1, measured against `origin/main`'s copy |
+
+**THE FIRST THING THE ITEM DID NOT PREDICT: NO NEW INVARIANT WAS OWED, AND THAT IS A MEASUREMENT
+RATHER THAN A JUDGEMENT.** The join that failed is *prose names a mode the target script does not
+dispatch* — which is **I60**, shipped at v0.216.0, both sides derived rather than hand-listed. It
+covers this for free provided the citation is spelt with the flag adjacent to the script name, which
+is the shape `emit-report.sh --verify <report> …` already uses. Both `SKILL.md` sites are written
+that way. **Proven by breaking it**: renaming the case arm on a `cmp -s`-guarded copy produces
+`FAIL: I60 found shipped file(s) naming a mode the target script does not dispatch: apply.sh
+--carried-machinery-slice`, and the restored tree passes. A new I85 here would have been a third
+hand-listing of a join that already derives itself.
+
+**THE SECOND: THE WRITE HAD THREE SILENT-SUCCESS PATHS, NOT ONE.** A `sed` keyed on
+`^skill_version:` over a stamp that has no such line **matches nothing and exits 0**, which is
+byte-identical in every observable way to having written. So is a `sed` over a legacy single-line
+stamp, and so is a write whose value came from an unreadable `VERSION`. All three now either insert
+in schema order or emit a row (`skill-restamp-withheld`, `skill-restamp-failed`), and the result is
+**read back** rather than trusted.
+
+**THE FIXTURE GAP THE ITEM NAMED IS REAL AND NOW HAS A NUMBER.** Two fixtures SEED a four-field
+stamp (`apply-drift-after-write`, `core-write-guard`); **0 assert `skill_version` or `skill_commit`
+after an apply.** Control: 3 assertions on `version:`/`commit:` in `apply-restamp-theirs` alone. New
+fixture `apply-machinery-stamp`, 19 arms, with two mutants — the flag defaulting on, and the write
+reverted at **both** guards, checked for partiality so a half-revert cannot score — an unmutated
+control copy from the same directory, and an arm asserting that the second mutant leaves the first
+assertion GREEN, because two arms dying on one mutant means one of them is vacuous.
+
+**IT SHIPS AND IT RUNS INSTALLED**, which is item 20's class: `scripts/install.sh` into an empty tree,
+then the fixture from the consumer root — PASS, with the mutant arms firing, so it is not green by
+skipping.
+
+**NOTHING VISIBLE CHANGES ON GRAPH.** Its stamp was already correct, set by hand during the 0.319.0
+apply. This release is owed to the next deferred-slice pull, on this consumer or any other.
 
 ## What item 23d decided (NO — and the FOR argument was right, it just is not enough)
 
@@ -1813,6 +1864,10 @@ Every release below is merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
+| v0.320.0 | #458 | **plan item 27.** `ai-dlc-update/SKILL.md` told step 7 to PRESERVE `skill_version`/`skill_commit` and step 2 to ADVANCE them with that same apply, 1100 lines apart; `apply.sh` mechanised preserve by never writing the fields — **0 mentions against 2 for the rulebook pair**, and nothing in the whole distribution wrote either. Both instructions are right for different runs, so the branch is a flag the caller passes: `apply.sh --carried-machinery-slice`. **No new invariant — I60 already binds it**, proven by mutating the case arm until it fails by name. Three silent-success paths closed (absent fields inserted in schema order, unreadable VERSION and legacy stamps reported as rows, result read back). New fixture `apply-machinery-stamp` (19 arms, 2 mutants, 1 control), filling a gap measured at **0** skill-field assertions suite-wide. |
+| v0.319.0 | #452 | **plan item 23b.** `artifact-consolidation.md` homes all four working files in `_bmad-output/planning-artifacts/s<N>/` and retires its drafts at a new Step 6. The re-home refusal set is **EMPTY — all 33 resolve, 24 with no inference** — and the plan's `S999` premise is refuted. New fixture `consolidation-residue`; no existing check could have caught it, because both the area-root and the slotted path are syntactically conforming. |
+| v0.318.0 | #450 | **plan item 23a, second half.** The whole-read sum was overstated 2.35x by a basename sweep counting 26 archived copies. |
+| v0.317.0 | #449 | **plan item 23a, first half.** The 417% budget breach was an INSTRUMENT READING: the pool was understated 5x by a resolver reading a role-file line format deleted at v0.174.0. Corrected on both sides, graph's four live artifacts are **36%** of the pool. The floors were derived anyway, because at a genuine 200K window the threshold IS unattainable. |
 | v0.316.0 | #445 | **plan item 21.** The resolution driver overwrote ITSELF mid-run: `overwrite_from_theirs()` wrote with `git show > "$cons"` — open+truncate+write, same inode — and `apply.sh` is in the set it writes, on the copy step 7 tells the session to run. **Settled by experiment first**: bash resumes at its saved byte offset inside the new text and **can exit rc=0 having run the replacement's tail**. Reproduced at ground truth, control differing only in where the running copy lived (own copy rc=2 + stamp withheld + tree partial; out-of-tree rc=0 clean). Fixed with the `.incoming.$$` + `mv` idiom already used at five sites; also removes a truncate-before-fetch that left an EMPTY core file on a failed `git show`. New `driver-self-update` row. **One fixture arm was DELETED for being vacuous** after a mutant survived it. |
 | v0.315.0 | #440 | A fixture in `install.sh`'s ship list resolved its SOURCES only in the distribution, so it exited 2 on **every** consumer before an assertion ran, on a file byte-identical to upstream. Reported by the consumer and **reproduced here with a control**. Class sweep: 8 further text-suspects, **all 8 pass when RUN in a consumer-shaped tree**, so the obvious lint (FP set 8 of 8) was deliberately NOT shipped. |
 | v0.314.0 | #437 | **plan item 6.** LC-E6 and LC-O15 promoted to `ADJUDICATED`; `contract_version` 16 → 17. Cost measured on graph: `HARD-LAYER-ADJUDICATION-MISSING` 12 → 13. Promoting them **broke a hand-list in three files** — LC-O15 is not range-keyed, so "a degenerate range disarms every adjudicated arm" stopped being true; all three now derive via `--adjudicated-codes`. |

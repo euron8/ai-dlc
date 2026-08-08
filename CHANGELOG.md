@@ -34,6 +34,86 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.320.0] — 2026-08-08
+
+### The skill stamp had two contradictory instructions, no writer, and a failure direction that reverts upstream's own text
+
+Item 27, reported by the reference consumer with a control and reproduced here. `apply.sh` printed
+`RESOLVED restamp` while leaving `skill_version`/`skill_commit` at the previous release and writing
+the new release's machinery files. **The count is the report's:** `apply.sh` names those two fields
+**0** times, against **2** for the rulebook pair it does write. Widened here — **nothing in the
+distribution writes either field.** Only two files name them at all: `ai-dlc-update/SKILL.md` (10
+mentions, all prose) and `self-update-gate.sh` (1). The pair was advanced by an agent following
+prose, which is a duty with no mechanism, and the reference consumer's operator had been setting it
+by hand on every pull for eleven releases.
+
+**THE PROSE CONTRADICTED ITSELF, 1100 LINES APART, AND THAT IS THE DEFECT.**
+`ai-dlc-update/SKILL.md` step 2's defer branch said *"Advance `skill_version`/`skill_commit` with
+that apply rather than here."* Step 7's re-stamp said *"set `version`/`commit` = theirs, **preserving
+`skill_version`/`skill_commit`**."* Step 7 was told to preserve exactly the fields step 2 delegated
+to it; whichever the agent read, the other was disobeyed.
+
+**Neither instruction is wrong — they describe different runs, and only the caller knows which.**
+A rulebook-only apply must not claim a machinery version it did not install; an apply that carried
+step 2's deferred machinery slice must. So the branch is a flag rather than a default:
+`reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>`, with both prose
+sites now pointing at the flag instead of at each other. Filing this as "add a write to `apply.sh`"
+would have satisfied step 2 and broken step 7.
+
+**THE FAILURE DIRECTION IS v0.309.0's, RE-CREATED THROUGH THE STAMP.**
+`unregistered-drift.sh` suppresses a machinery file as `CORE-AT-SELF-UPDATE` — *"Not drift, and no
+action"* — when it is byte-identical to the distribution at `skill_commit`, which it reads from the
+stamp itself. With a stale `skill_commit` the machinery files the apply just wrote from theirs are
+no longer identical to that ref, the suppression does not apply, and **each one reads as consumer
+drift and draws a HARD status whose printed remedy is to revert upstream's own text.** **28 files
+are in both the machinery set and that scan** (control: 72 machinery files outside it).
+
+### Both pairs or neither, and three ways the write could have reported success and done nothing
+
+The machinery write sits inside the same branch as the rulebook write, so `mech_fail > 0` withholds
+it too — a stamp naming a `skill_commit` the tree does not match turns the NEXT pull's report into
+false drift work, which is the worse half to overstate. The withheld row names the machinery pair
+rather than leaving the operator to infer it.
+
+Each of the three silent-success paths is closed and asserted:
+
+- **VERSION unreadable at theirs** — nothing is written and a `DECISION skill-restamp-withheld` row
+  says so. Half a machinery stamp is a stamp nothing can trust.
+- **Fields absent** (a stamp predating the v0.17.0 schema, or a partial one) — a `sed` keyed on
+  `^skill_version:` matches nothing and exits 0, which is indistinguishable from having written. The
+  pair is INSERTED instead, in schema order, immediately after `commit:`.
+- **No `commit:` line to insert beside** (a legacy single-line stamp) — the result is READ BACK and
+  a `DECISION skill-restamp-failed` row reaches the operator.
+
+### The fixture gap that let it ship, measured
+
+**No fixture anywhere read either field back.** Two fixtures SEED a four-field stamp
+(`apply-drift-after-write`, `core-write-guard`); **0 assert `skill_version` or `skill_commit` after
+an apply**, against a control of 3 assertions on `version:`/`commit:` in `apply-restamp-theirs`
+alone. New fixture `apply-machinery-stamp` drives the shipped `apply.sh` both ways, with two
+mutants — the flag defaulting on, and the write reverted at BOTH guards — plus an unmutated control
+copy from the same directory, and an assertion that the second mutant leaves the first arm green so
+the two are not one assertion counted twice.
+
+### No new invariant: I60 already binds the join, and that was proven by breaking it
+
+The join that failed is prose naming a mode a script does not dispatch, which is exactly I60, whose
+two sides are derived rather than hand-listed. Both `SKILL.md` sites spell the flag adjacent to the
+script name — the shape `emit-report.sh --verify <report> …` already uses — so I60 sees them with no
+edit to `validate-enforcement-map.sh`. Verified by mutating the case arm's name on a `cmp -s`-guarded
+copy: `FAIL: I60 found shipped file(s) naming a mode the target script does not dispatch: apply.sh
+--carried-machinery-slice`, green when restored.
+
+### Derived before building, since the fix lands on the delivery path
+
+- **Callers**: 21 invocation sites, every one exactly four positional arguments, **none** passing a
+  fifth — so an optional flag changes no existing caller. (Control: the same extraction reports four
+  redirection-carrying lines as non-four, so it is not an argument counter stuck on its answer.)
+- **The bare-invocation probe**: `apply.sh` is not in the self-update gate's gating set — that set is
+  the scripts the consumer's pre-push INVOKES, and both pre-push hooks name it **0** times (control:
+  3 for `validate-enforcement-map.sh`). Bare exit code is unchanged at 1, measured against
+  `origin/main`'s copy.
+
 ## [0.319.0] — 2026-08-08
 
 ### `artifact-consolidation.md` left its working files in the durable area and never said what became of them
