@@ -1321,6 +1321,44 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What PC-S320 measured (a remediation that ran the operator's own answer)
+
+v0.326.0. **Filed by the consumer, reproduced here exactly, and it is core's.** Not a plan item —
+it surfaced while reviewing graph's 0.320.0 → 0.325.0 reconcile report, which reported it still
+live.
+
+**THE DEFECT.** Backticks inside a double-quoted shell string are command substitution.
+`reconcile/layer-drift.sh` lines **960, 963, 967, 970** each wrapped the token `still-additive`,
+which is the VERDICT an operator must record to clear an `OVERRIDE-SUPERSEDED` row — and that row
+is ADJUDICATED, so it BLOCKS the pull. The shell ran the word, printed
+`still-additive: command not found`, and substituted nothing:
+
+```
+a consumer that still wants it for its own reasons records  with a reason and the block clears
+```
+
+**The blocking row named a verdict as its remedy and deleted which verdict.** The same file already
+carried four correctly-escaped backticks, so the idiom was known and four sites were missed.
+
+**VERIFIED BEHAVIOURALLY, not by the absence of backticks** — the four message strings were expanded
+before and after: 4 of 4 printed `records <BLANK> with a reason` at `origin/main`, 4 of 4 carry the
+word now.
+
+**THE FALSE-POSITIVE SET DECIDED THE SHAPE OF THE ENFORCER.** A crude backtick grep flags **seven**
+shipped scripts; **six are inert** — every one Python inside a `<<'PY'` QUOTED heredoc, where the
+shell expands nothing and a backtick is literal. Exactly one executed. I85 therefore resolves
+heredoc quoting rather than grepping, and its NEGATIVE probe is what keeps that narrowing.
+
+**PROVEN THREE WAYS, because a scanner that has stopped seeing the defect prints the same clean line
+as a clean tree:** restoring `origin/main`'s file makes I85 fire with all four rows; blinding the
+scanner's match character makes it FAIL CLOSED on its own positive probe; removing the heredoc
+narrowing trips its negative probe. Suite assertions `enforcement-map-derivations` A23–A25.
+
+**SEQUENCING, and it is the reason this could ship mid-pull.** The release moves no hooked core file
+and ships no rulebook change, and `subject_digest` covers the entry plus the core file it hooks
+(`layer-drift.sh:486`). `layer-drift.sh` is neither, so a consumer holding recorded verdicts keeps
+them.
+
 ## What item 24 measured (the sites were five, and only one of them could derive)
 
 v0.325.0. **Three of the item's figures are corrected, and the correction is the item.**

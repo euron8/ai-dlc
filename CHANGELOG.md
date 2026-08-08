@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.326.0] — 2026-08-08
+
+### A blocking row's remedy ran the operator's own answer as a command and deleted it from the sentence
+
+`PC-S320`, reported by the reference consumer and reproduced here exactly. Backticks inside a
+double-quoted shell string are **command substitution**: the shell runs the quoted word, prints
+`<word>: command not found` on stderr, and substitutes the empty output.
+
+`reconcile/layer-drift.sh` carried four of them — lines **960, 963, 967, 970** — and every one
+wrapped the token `still-additive`. That token is the **verdict an operator must record** to clear
+an `OVERRIDE-SUPERSEDED` row, and that row is `ADJUDICATED`, so it **blocks the pull**. What the
+operator actually read was:
+
+```
+a consumer that still wants it for its own reasons records  with a reason and the block clears
+```
+
+It named a verdict as the remedy and deleted which verdict. Fixed by escaping all four; the same
+file already carried correctly-escaped backticks, so the idiom was known and four sites were
+missed — which is the shape a lint catches and review does not.
+
+**Verified behaviourally, not by the absence of backticks.** The four message strings were
+expanded before and after: all four printed `records <BLANK> with a reason` at `origin/main`, all
+four print `records \`still-additive\` with a reason` now.
+
+**New invariant I85**, because a prohibition with no enforcer is a suggestion. No shipped script may
+command-substitute inside an operator-facing message.
+
+**Its false-positive set was measured before it shipped, and it is why the scan resolves heredoc
+quoting rather than grepping for a backtick.** A crude probe flags **seven** files; **six are
+inert** — every one Python inside a `<<'PY'`-style quoted heredoc, where the shell expands nothing.
+Exactly one executed. Shipping the crude form would have put six correct files into the finding
+set, which is how a lint gets turned off.
+
+**Proven three ways, because a scanner that has stopped seeing the defect reports the same clean
+line as a clean tree:**
+
+- restoring `origin/main`'s `layer-drift.sh` makes I85 fire with all four rows;
+- breaking the character the scanner matches on makes it **fail closed** — *"I85's own positive
+  probe was NOT reported"* — instead of reporting clean;
+- removing the quoted-heredoc narrowing trips its **negative** probe, refusing the six-file
+  false-positive set in the same run.
+
+All three are suite assertions (`enforcement-map-derivations` A23–A25).
+
+**This release ships no consumer-facing rulebook change and moves no hooked core file**, so a
+consumer mid-pull keeps every `subject_digest` it has already recorded — the digest covers the
+entry and the core file it hooks, and `layer-drift.sh` is neither.
+
 ## [0.325.0] — 2026-08-08
 
 ### The fixture ship-list stops being a hand-list on the one side that can derive, and the criterion behind it is written down
