@@ -45,7 +45,7 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.295.0`**, working tree
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.305.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
 lists all eighteen with their PR numbers. The previously-parked F3 branch shipped after two
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
@@ -99,6 +99,12 @@ is in [`graph-artifact-path-pull-and-migration.md`](graph-artifact-path-pull-and
 merged as #413. The operator pastes one line into a graph session; nothing there needs this repo.
 **10e cannot ship until that has run once** — a validator landing on ~2700 non-conforming files
 wedges first contact.
+
+**NEXT ACTION FOR THIS REPO: item 17 — `apply.sh`'s mask/reinject.** 10e shipped as v0.305.0
+(#423) and is merged; nothing is in flight. Item 17 is taken ahead of item 16 on severity: its
+failure direction is upstream content NOT ARRIVING, and every remaining item in this plan reaches
+the consumer through that same pull. **Reproduce it on a scratch consumer before touching
+`apply.sh`** — a mask that keeps a non-site line is a different bug from a mis-derived site span.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -160,10 +166,12 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~8~~ | ~~**10d**~~ | **DONE** — v0.300.0. See §*What v0.300.0 measured* |
 | ~~8b~~ | ~~operator: pull, then run the migration~~ | **DONE 2026-08-08.** Three hops, four PRs. 2667 moves verified per file, 48 refused, 1001 deferred, self-check 0, second dry run exits 3. See §*Where things stand* |
 | ~~8c~~ | ~~**`ledger-reverify.sh`'s own filed defects**~~ | **DONE** — v0.301.0 (#415) fixed the two that were live; v0.302.0 (#416) shipped the mechanism for the class the other three exposed. The plan said "five entries filed against one core file": it is **four plus one** — the fifth is in `layer-drift.sh`. See §*What item 8c measured* |
-| **9** | **10e** — the consumer pre-push validator | **← UNBLOCKED. THE NEXT ITEM.** The migration has run once, so a validator can land without wedging first contact |
-| 10 | **16** — move `planning-artifacts/stories/` under `s<N>/` | **BLOCKED behind 10e only now.** The 1001 deferred story files are exactly its subject. Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
-| 11 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
-| **12** | **6** — promote LC-E6/LC-O15 | **← THE NEXT UNBLOCKED ITEM IN THIS REPO.** Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
+| ~~9~~ | ~~**10e** — the consumer pre-push validator~~ | **DONE** — v0.305.0 (#423). Blocks on exactly the set the migration would move (0 on graph today), reports the 48 refusals and the 1024 deferred stories rather than wedging them. See §*What v0.305.0 measured* |
+| **10** | **17** — `apply.sh` retains a line outside the declared setup-site spans | **← THE NEXT ITEM, and it is taken ahead of 16 by severity rather than by the old order.** Its failure direction is upstream content NOT ARRIVING: the pull reports success and the consumer is quietly behind. Every later item in this plan is delivered THROUGH that pull, item 16 included, so fixing the deliverer before adding to what it must deliver is the cheaper order. Not yet reproduced here — record it as theirs until it is |
+| 11 | **16** — move `planning-artifacts/stories/` under `s<N>/` | **UNBLOCKED** (10e landed and deliberately does not block on `stories/`). The deferred story files are exactly its subject — **re-measure: 1024, not the 1001 this file recorded, and 761 of them spell the sprint as a bare leading number.** Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
+| 12 | **18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift | Lower severity than 17 — it produces FALSE work, not lost content — but multi-hop is now the norm and it costs adjudication time on every pull |
+| 13 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
+| 14 | **6** — promote LC-E6/LC-O15 | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
 | — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
@@ -281,7 +289,9 @@ before you write code.
    NOT warranted — control: 22 `EXIT_CONDITION_MET` in the same corpus). **Awaiting the
    operator: paste it into graph, then take the two-hop pull.**
 10. **Declare ONE artifact path convention, mechanise it, and migrate every existing file to
-    it.** **10a AND 10b ARE DONE — v0.298.0 (#408). 10c, 10d and 10e remain**, and 10c is where
+    it.** **ITEM 10 IS COMPLETE — 10a/10b v0.298.0 (#408), 10c v0.299.0, 10d v0.300.0, 10e
+    v0.305.0 (#423). The paragraph below is the record of the item as it was scoped, kept for its
+    reasoning; do not read it as work outstanding.** 10c is where
     the readers move, the step files are rewritten and the migration ledger is emptied. Do not
     read the grammar as adopted until then: nothing points an authoring agent at it, deliberately.
     OPERATOR DIRECTIVE, 2026-08-07: one generic folder AND file naming convention;
@@ -457,9 +467,49 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What v0.305.0 measured (item 10e — and what a gate must NOT block on)
+
+Taken against the reference consumer, read-only, immediately after the migration ran for real.
+**The numbers are the release's design, not its decoration:**
+
+```
+tracked files under the scan roots            5148
+paths the migration would still MOVE             0   <- the blocking set, and it is EMPTY today
+REFUSED by the migration                        48   45 ambiguous, 3 with no derivable area
+under a stories/ directory                    1024   263 carry a token an expression can see;
+                                                     761 spell the sprint as a BARE leading number
+```
+
+**Blocking on all 1072 would have wedged first contact**, on a tree whose operator had already
+done everything core asked. So the blocking predicate is *the set the migration would move* —
+empty on a migrated tree, non-empty the moment a sprint writes `s302-foo.md` at an area root, and
+clearable by one command the failure message prints. **No class is exempted by a list**; each is
+computed from the path, so nothing can go stale and nothing can be hand-added.
+
+**THE 92 FALSE POSITIVES, and this is the item's transferable finding.** The first working version
+resolved the reserved slot against DECLARED areas only. It reported **92 already-conforming paths
+as violations** — `_bmad-output/brainstorming/s166/…`, filed exactly right, under an area nobody
+had declared — while the migration on the same tree planned ZERO moves. An undeclared area is a
+paperwork gap the migration REPORTS; it is not a path defect. **Nothing in reading the code found
+this**; the false-positive measurement `CLAUDE.md` requires did, on the first real run.
+
+**Three things a later session should not re-derive:**
+
+- **`migrate-artifact-paths.sh` is far too slow to be a gate.** Minutes on 5148 files (a subshell
+  per component); the validator is **0.23s** on the same tree. That is why 10e is a second reader
+  and not a wrapper, and why the two are joined by an asserted set equality instead.
+- **The story corpus cannot be judged syntactically and the grammar file used to imply it could.**
+  761 of 1024 story basenames are `story-297-1-slug.md`, character-for-character the
+  `story-<M>-<slug>.md` the grammar prescribes. Item 16 removes the ambiguity by taking the number
+  out of the filename; nothing before it can.
+- **`SELF_DIR` resolved after a `cd` is a live defect class, not a style note.** The migration
+  resolved its own directory after `cd`-ing into the consumer, so `bash core/scripts/migrate-…`
+  died at `cd: core/scripts: No such file or directory` while the absolute path the fixture used
+  worked. Any core script that gains a sibling dependency inherits this.
+
 ## Where things stand
 
-**ai-dlc is at `0.304.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.305.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -483,6 +533,7 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.305.0 | #423 | **plan item 10e.** `validate-artifact-paths.sh` on the consumer pre-push — real filenames, every push, because a migration is an event and a convention with only one behind it has a half-life. Blocks on exactly the set the migration would move (**0** on graph); reports the **48** refusals and **1024** deferred stories with computed, never listed, reasons. Both sides of that join asserted EQUAL. **92 false positives** caught by measurement before shipping. `artifact-path-config.sh` becomes the ONE reader of the grammar's blocks and **I83** forbids a second, false-positive set measured at zero. Self-probes each run; an empty subject is `NOT-APPLICABLE`, never PASS. New fixture (37 assertions, 4 mutants, 1 control). |
 | v0.304.0 | #421 | **from the migration running for real.** The `AREAS INFERRED` remedy named CORE's grammar — a file a pull overwrites, and the wrong home by that file's own rule — and a consumer session followed it literally, proposing core absorb nine consumer-specific areas. Fixing the wording alone would have been WORSE: the consumer's `artifact-paths.md` was byte-identical to the scaffolded template and **nothing read it**, so declaring the areas would have changed no later verdict. The consumer's areas are now READ and joined to core's eight, path resolved from the contract, one `areas_of()` for both files. **Nine, not eight** — the real run also found `_bmad-output/research`, one file, the smallest. 32 → 37 assertions. |
 | v0.303.0 | #418 | **plan item 13.** Step 7 told the operator to re-run BOTH drift scripts with `theirs` as the base; that is right for `unregistered-drift.sh` and disarms `layer-drift.sh`, whose two ADJUDICATED clauses are computed over `base..theirs`, so `HARD-LAYER-ADJUDICATION-MISSING` cannot be demanded and `hard-blockers.sh` prints a clean sheet on a tree where every verdict is owed. Reproduced on a scratch consumer with both arms and a control. The instruction is split per script AND `DRIFT-RANGE-DEGENERATE` makes the wrong invocation self-announcing. Resolved commit ids, not argument strings — theirs is a ref and base a sha in every real call. |
 | v0.302.0 | #416 | **plan item 8c, second half.** `RECEIPTS-UNDECIDED` — one row per run counting the `theirs_has` receipts whose substring is present at BASE as well as theirs, so this pull moved neither side of them and their STILL-LIVE is a restatement rather than a measurement. **24 of 24** on graph. A COUNT, not a verdict: the stronger predicate was built, fires on **15 of 23** including entries confirmed live, and is REFUTED rather than shipped. Silent at zero. Two defects the fixtures caught and review did not — the loop ran in a subshell so the counter was discarded, and the row's entry column was the ledger path, which made a verdict depend on how the ledger was addressed. 61 → 67 assertions. |
