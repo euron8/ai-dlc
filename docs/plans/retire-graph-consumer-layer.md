@@ -6,8 +6,19 @@
 
 ## Start here
 
-**This file is the plan of record. Everything above `## Context` is current; everything below
-it is the original design record, kept for rationale. Where they disagree, the top wins.**
+**FRESH SESSION: your entry point is §*THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS FILE*.**
+Read this section for the boundaries and the standing operator decisions, then go straight there. It
+carries the numbered next-action list; nothing else in this file is an instruction to you.
+
+**This file is the plan of record. Everything below `## Context` is the original design record, kept
+for rationale, and where the two disagree the top wins.**
+
+**BUT "ABOVE `## Context`" IS NOT THE SAME AS "CURRENT", AND THIS SENTENCE USED TO SAY IT WAS.**
+Above the cut there is one live status block (this section), one live next-action section, and
+several sections that are SPENT — §*SPENT — session handoff of 2026-08-07* most of all, whose title
+read live for eighteen releases. **The marker is the text, not the position**: a heading or a
+paragraph saying SPENT, SUPERSEDED, DONE, or wrapped in `~~strikethrough~~` is a record, and
+everything else above the cut is live. Check the marker before acting on anything here.
 
 **CITATIONS BELOW `## Context` ARE HISTORICAL AND SOME NO LONGER RESOLVE TO THEIR SUBJECT.**
 They were written before the releases that shipped them, and the releases moved the lines.
@@ -377,18 +388,71 @@ the block in the sprint slot, a `s302/` story citing `LR-S299-4` would have been
 `anchor not found`, a true statement about the wrong file. Nothing widened: a fabricated bullet
 under a cross-sprint anchor still reds, asserted in the fixture.
 
-**NEXT ACTION FOR THIS REPO: nothing gates. Item 12, 22, 24, 25, 26 and 28 are all available and
-none of them blocks another.** Recommended next by value: **item 25** — `test-strategy.md` at 73
-homes is 23b's defect at scale and the measurement is already done. **A PULL IS OWED** and is the
-operator's: v0.321.0–v0.323.0 change what the pipeline writes, and **the one homing job is small** —
-graph's live brief holds exactly ONE in-force LOCKED block (S299, 169 lines) to move into `s299/`,
-plus its changelog section into `s<N>/changelog-product-brief.md`. Nothing breaks before either is
-done: the legacy source-of-record name is still accepted, and the changelog change governs future
-passes only.
+## THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS FILE
 
-**THIS WAS THE HANDOFF POINT AND THE HANDOFF WORKED** — everything 23c's first step needed was
-written into the item, and the derivation ran without re-opening the work above it. The lesson item
-27 recorded holds a second time.
+**START HERE IF YOU ARE A FRESH SESSION.** Read §*Start here* above for the boundaries, then this
+section, then the numbered list below. **Everything else in this file is either a record of
+completed work or a scoped item you will be sent to by name.**
+
+**SEVENTEEN OTHER PARAGRAPHS IN THIS FILE ANNOUNCE A `NEXT ACTION`, AND ALL SEVENTEEN ARE STRUCK
+THROUGH** — fifteen of them opening `NEXT ACTION FOR THIS REPO`, one `FOR THE OPERATOR`, one bare.
+They are kept because each records what its item measured, and several correct a premise this plan
+got wrong. **Do not act on any of them. This section is the live one**, and a `~~strikethrough~~`
+is this file's only marker that an action is spent — check for it before acting on anything that
+looks like an instruction. Derive the count rather than trusting it: `grep -c 'NEXT ACTION'` against
+`grep -c '~~NEXT ACTION'`, and the difference should be exactly the three occurrences in THIS
+section.
+
+**NOTHING IS IN FLIGHT AND NOTHING GATES.** Working tree clean, `main` == `origin/main`, every
+branch this plan produced is merged. **Read the version from `VERSION`, never from this file.**
+Item 23 is closed; §*Order of execution* lists what remains and none of it blocks any of the rest.
+
+### The numbered next-action list
+
+**Do these in the order that suits the session; none blocks another. Stop and re-measure before
+building — this plan's own record is that a re-derivation changed the work in item 3, item 2b,
+item 16, item 17, item 18 and item 23c.**
+
+**THE NUMBERS BELOW ARE THIS LIST'S OWN 1–6 AND THE TABLE IN §*Order of execution* CARRIES THE SAME
+SIX AS ROWS 22–27, IN THE SAME ORDER.** They are two views of one sequence, not two sequences: this
+list says what to do next, the table says where each item sits in the whole plan's history. **If
+they ever disagree, the table is the one to fix** — every completed row in it is a receipt with a
+PR number, and this list is derived from what is left.
+
+1. **Item 25 — `test-strategy.md` is prescribed at a durable path with 73 homes.** RECOMMENDED
+   FIRST, because it is item 23b's defect at scale and **the measurement is already done and must
+   not be re-derived** (§*What item 23b measured*). **NOT a general lint** — the general form has a
+   false-positive set of 12 of 17 on today's tree. Three of the five files in scope are decisions,
+   not sweeps, and "leave it and say why" is a legitimate outcome for two of them.
+2. **Item 24 — the fixture ship-list is four hand-lists.** Ergonomic, not correctness: the join
+   already FIRES. Two things must be settled before any code, and both are written into the item.
+   Re-derive the 129/117/12 counts; they are from v0.316.0.
+3. **Item 28 — a `subject_digest` is unreadable once its row stops blocking.** REPRODUCED here,
+   attribution exact. Derive the caller set first so a listing mode does not become a second
+   implementation of the candidate join.
+4. **Item 12 — bind the fixture ambient-env guard.** BLOCKED ON A DERIVATION, not on another item:
+   the guard is unshippable until the *declared consumer-settable tunables* are derived as a set.
+   Requiring the clearing loop wherever a fixture names an `AI_DLC_*` token flags 19 fixtures, most
+   of them naming keys they set themselves.
+5. **Item 22 — a stale path in a layer entry BODY goes undetected.** **REPRODUCE IT FIRST; it is
+   the consumer's report, and its one citation points into the CONSUMER.** Then derive the
+   false-positive set before building: entry bodies quote paths for many reasons.
+6. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
+   — reported mid-pull, never reproduced here. **Its first step is to establish whether an arm is
+   addressable at all**, and if it is not, the honest outcome is a smaller change than a new join.
+
+**THE OPERATOR'S SIDE, and neither is yours to do:** take the pull (scope and derivation in the
+status block above), and the two homing jobs it carries. **Nothing breaks before either is done** —
+the legacy source-of-record basename is still accepted, and the changelog change governs future
+passes only. **Do not schedule work in this repo behind them.**
+
+**s302 HAS NOT STARTED AND IS NOT A DEADLINE** (operator direction 2026-08-07, recorded above).
+It MAY start whenever the operator chooses.
+
+**THE PRIOR HANDOFF WORKED AND ITS LESSON IS WHY THIS SECTION EXISTS.** Item 27 and item 23c were
+both handed to a fresh session with everything the work needed written into the item, and both ran
+without re-opening anything above them. **What neither had was one place to start**: this file
+carried its live next action in a paragraph indistinguishable in shape from sixteen spent ones.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -413,10 +477,18 @@ whose zero has never been shown to mean anything. LC-O15's `OVERRIDE-SUPERSEDED`
 **Item 13 was taken ahead of item 6 for exactly that reason** — it needed a scratch consumer, not
 graph — and it shipped as v0.303.0.
 
-## Session handoff — 2026-08-07, written because context depth was becoming the risk
+## SPENT — session handoff of 2026-08-07, kept only for the two errors it records
 
-**Nothing is in flight. The tree is clean, `main` is at `0.300.0` + #413, and every branch this
-session cut is merged and deleted.** A fresh session starts from `origin/main` with nothing parked.
+**THIS IS NOT THE HANDOFF. The live one is §*THE NEXT ACTION, AND IT IS THE ONLY LIVE ONE IN THIS
+FILE*, above.** This section was the handoff at `0.300.0` and every figure in it is superseded;
+its title read live for eighteen releases, which is the same defect the discharged runbooks in
+`docs/plans/` carried. **The two errors below are why it is kept at all** — both are of the class
+this repo audits for, and both still bind.
+
+**~~Nothing is in flight. The tree is clean, `main` is at `0.300.0` + #413, and every branch this
+session cut is merged and deleted.~~ SUPERSEDED — read the status block under §*Start here*.**
+A fresh session starts from `origin/main` with nothing parked, which is still true and is stated
+where the reader is.
 
 **TWO ERRORS THIS SESSION MADE, both of the class this repo audits for, recorded so the next one
 does not repeat them:**
@@ -467,17 +539,17 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
 | ~~20~~ | ~~**27** — the skill stamp has two contradictory instructions and no writer~~ | **DONE — v0.320.0 (#458).** The branch is a flag, `apply.sh --carried-machinery-slice`, and both prose sites now point at it. **No new invariant: I60 already binds the join**, proven by mutating the case-arm name until it fails by name. New fixture `apply-machinery-stamp`; the gap it fills is measured at **0** skill-field assertions across the whole fixture set against a control of 3 on the rulebook pair. See §*What item 27 measured* |
-| **21** | **23c** — the inlet | **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four changes in THREE releases: **23c-2** the changelog — **DONE, v0.321.0 (#461)**, taken first because nothing reads a changelog so it needs no pool arm; **23c-1 + 23c-3** the pool arm with the writer and pin, together because the arm has no subject until the writer creates one; **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
-| — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
-| — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
-| — | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
-| — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
-| — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
+| ~~21~~ | ~~**23c** — the inlet~~ | **CLOSED — derivation + three releases, v0.321.0 (#461), v0.322.0 (#462), v0.323.0 (#463). ITEM 23 IS CLOSED.** Original row text follows. **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four changes in THREE releases: **23c-2** the changelog — **DONE, v0.321.0 (#461)**, taken first because nothing reads a changelog so it needs no pool arm; **23c-1 + 23c-3** the pool arm with the writer and pin, together because the arm has no subject until the writer creates one; **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
+| **22** | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
+| **23** | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
+| **24** | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
+| **25** | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
+| **26** | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
+| **27** | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
+| ~~—~~ | ~~**23d** — its own skill?~~ | **ANSWERED — NO, 2026-08-08. See row 19 and §*What item 23d decided*.** This row is the ORIGINAL scoping and its instruction is spent; a session acting on it would re-open a settled question. What follows is that original text. Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
-| — | **21** — `apply.sh` overwrites itself mid-run | REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
-| — | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
+| ~~—~~ | ~~**21** — `apply.sh` overwrites itself mid-run~~ | **DONE — v0.316.0 (#445). See row 16.** This row is the ORIGINAL report and its instruction — *reproduce it first* — is DISCHARGED; it reproduced, and the attribution was exact. What follows is that original text. REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
-| — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
 
 
@@ -2736,7 +2808,9 @@ missing count is cosmetic.
 
 **No release. A measured absence with a control is the deliverable here**, and item 7 closes on it.
 
-## Item 11 — the self-update gate compares two usage errors
+## SPENT — Item 11, shipped as v0.288.0 (#388)
+
+**This is the SCOPE, not work outstanding.** Kept for the derivation; the fix is in the release.
 
 Found 2026-08-07 when v0.288.0's push went red on `self-update-join-gate` (green on `main`, so
 attributable). **The blocker is not in v0.288.0.**
@@ -2817,7 +2891,9 @@ between runs, one a negative lookup on a nonexistent file. One variable path in 
 **Maintenance is per-fixture, not a full re-run** — `--list "<fixtures>"` costs a fixture's
 runtime plus ~9s. A fixture whose own directory changed has no valid entry and runs by default.
 
-## Item 14 — the dependency map, scoped
+## SPENT — Item 14's pre-work scope, shipped as v0.294.0 (#402) + v0.295.0 (#403)
+
+**This is the SCOPE, not work outstanding.** What it MEASURED, including four things not to re-derive, is in §*What v0.294.0 measured* above — read that first; this section is the plan it was written against.
 
 **The question that produced it.** *"Why does the pre-push gate need to validate unchanged
 fixtures?"* The answer is that it largely does not — `scripts/suite-content-key.sh` hashes a
@@ -2878,7 +2954,9 @@ parallelism — it is not starting the units at all.
 exclusions honest. This is a second, finer skip inside it, and if the finer one is ever in doubt
 the correct fallback is the full run.
 
-## Item 10 — the artifact path convention
+## SPENT — Item 10, complete across five sub-releases (10a/10b v0.298.0, 10c v0.299.0, 10d v0.300.0, 10e v0.305.0)
+
+**This is the SCOPE, not work outstanding, and it is the longest section above `## Context` that used to read live.** Kept because the measurement and the grammar derivation behind the convention are here and nowhere else. **The convention itself now lives in `core/skills/ai-dlc/artifact-path-grammar.md`, which is the shipped artifact and the thing to read** — this section is why it says what it says.
 
 Raised by the operator 2026-08-07 after v0.287.0, as a question this plan had answered badly:
 *"none of that addresses how you know which one is the current, and this is happening in other
@@ -3046,7 +3124,9 @@ the two-hop pull (a rulebook change of this size must not ride a stale engine). 
 to interleave with item 8 is 10a→10b, then item 8's ledger triage, then 10c→10e, because 10c
 changes files several push-candidate `verify:` receipts anchor to.
 
-## The one thing that must not be forgotten: pull graph in TWO hops
+## SPENT AND REFUTED — "pull graph in TWO hops"
+
+**DO NOT FOLLOW THE HOP COUNT IN THIS TITLE.** The 0.292.0 → 0.300.0 pull took THREE hops and four PRs, and this plan predicted a hop count from the distribution side twice and was wrong both times. **The rule that replaced it: run the dry run and read what the gate says.** What survives here is the MECHANISM — why a bundled pull defers its machinery slice to step 7 and what a stale engine then misclassifies — which is worth reading before any multi-release pull.
 
 A bundled `0.274.0 → 0.278.0` pull returns `SELF-UPDATE-DEFER`, so the machinery slice lands at
 step 7 — *after* step 3's classify. The stale engine then classifies, and the three absorbed
@@ -3078,7 +3158,15 @@ Practical split: **hop 1 is safe mid-sprint** (machinery only, nothing a sprint 
 **Hop 2 carries all six rulebook files** — take it at a sprint boundary, or `apply` and leave
 the reconcile PR unmerged until retro.
 
-## Still open
+## SPENT — "Still open", and NOTHING in it is still open
+
+**EVERY ITEM THIS SECTION LISTS HAS SHIPPED, AND ITS ONE REMAINING BULLET ALSO REPEATS A PREMISE
+THIS PLAN LATER REFUTED.** R6 shipped as plan item 6 across four releases — v0.311.0 (#434),
+v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). **Do not act on its stated gate**: "only after
+graph burns down the 13-row `EXTENSION-TITLE-MATCHES-CORE` set" is false twice over — those rows
+are `level: WARN` and cannot block, and they belong to LC-E19, which R6 does not touch. The
+measured account is in §*What item 6 measured*, including that **both zeros the gate turned on were
+unreadable** — one FALSE, one a SILENCE. What follows is the original text.
 
 **R3 and R4 are NOT open — they shipped.** R3 is v0.282.0 (#370), carrying the multi-key
 `settings_env_keys:` mechanism and retiring `SKILL__auto_handoff_mode`; R4 is v0.281.0 (#369),
@@ -3291,7 +3379,9 @@ stores `sprint` as an **integer**, so `grep '"sprint": "301"'` reads 0 and looks
   measure, not a termination one, and is deliberately uncovered by any assertion — no
   observable output distinguishes the two. Documented in the script and the fixture.
 
-## Open thread at the end of the session
+## SPENT — open thread at the end of the 2026-08-06 session; s301 is CLOSED and being re-run as s302
+
+**Nothing here is outstanding.** s301 was closed out (`docs/plans/s301-close-out.md`, landed on graph's `main`) and the operator's standing decision is that it is re-run from scratch as s302. Kept as the record of the stall that produced the close-out.
 
 The operator issued a handoff in graph and the sprint has not reached implementation after
 hours. Sprint 301 (`eth-rewards-base-v4-pool-indexing`, variant `carry-over`, intensity
