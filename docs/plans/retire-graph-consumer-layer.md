@@ -14,11 +14,15 @@ They were written before the releases that shipped them, and the releases moved 
 Checked at handoff: `layer-drift.sh:648` was the env-key guard and is now other code (v0.275.0
 changed it), and `core/skills/ai-dlc/SKILL.md:506` described the invitation sentence v0.282.0 deleted. Both sit in
 sections marked SHIPPED, so they are records of why a thing was done, not instructions. Every
-`path:line` ABOVE `## Context` was re-checked at handoff. **Re-measured 2026-08-08, AFTER the fixes below: 41 distinct
-citations — 36 resolve into THIS repo and are in range, 0 past end-of-file, 5 point into the
-CONSUMER, 0 ambiguous.** The pre-fix reading was 40/34/5/**3 ambiguous**. Do not carry these numbers
-forward; re-run the audit, because the last recorded figure said "26 into this repo" and "four into
-the consumer" and both had drifted.
+`path:line` ABOVE `## Context` was re-checked at handoff. **Re-measured 2026-08-08 after v0.320.0:
+40 distinct citations — 35 resolve into THIS repo and are in range, 0 past end-of-file, 0 ambiguous,
+5 point into the CONSUMER.** The readings before it were 41/36/0/5 and, before the fixes that
+produced those, 40/34/5/**3 ambiguous**. Do not carry these numbers forward; re-run the audit, because
+the last recorded figure said "26 into this repo" and "four into the consumer" and both had drifted.
+**AND THE COUNT IS THE WEAKER HALF OF THE CHECK.** It reports whether a citation RESOLVES, never
+whether it still resolves to its subject — v0.320.0 moved two lines item 27 quotes while leaving
+both in range, so the audit stayed green over a citation that had gone stale. Read the line, not
+just the count.
 The audit is one loop: extract `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above
 `## Context`, resolve each against `git ls-files`, and compare the line number to `wc -l`.
 
@@ -81,8 +85,9 @@ random — `v0.283.0`, `v0.288.0`, `v0.225.0`, `v0.57.0` — all have their CHAN
 do not re-derive this**; two of those branch names are still described as "parked" further down
 this file, in sections that predate their release.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.319.0`**, working tree
-clean, and every release this plan produced is merged — the table under §*Where things stand*
+**NOTHING IS IN FLIGHT. No branch is parked.** Working tree clean, and every release this plan
+produced is merged. **Read the current version from `VERSION`, never from this sentence** — it
+carried `0.319.0` for exactly as long as it took the next release to land — the table under §*Where things stand*
 lists them with their PR numbers. **Count them there; do not carry a number in this sentence.**
 It said "eighteen" for eighteen releases after that stopped being true, which is the same
 underived-count defect core Rule 31 exists for, in the file that documents it. The previously-parked F3 branch shipped after two
@@ -101,10 +106,17 @@ budget validator returned `ok  WHOLE-READ POOL (4 planning artifacts)  117379 to
 35% of it)` after 0.318.0, and `layer-drift.sh` over `2bc7aa4..f9b8aa4` returned **0 `HARD-*`** with
 49 rows across 9 statuses and no `DRIFT-RANGE-DEGENERATE` after 0.314.0.
 
-**ai-dlc `main` HAS MOVED TWO COMMITS PAST WHAT GRAPH HAS, AND NEITHER SHIPS ANYTHING.** #455 and
-#456 touch `docs/` only (controlled: `git diff --name-only 88bac6f~1 HEAD` yields the single top-level
-`docs`). **So graph is CURRENT on every shipped file and no pull is owed.** Do not read the version
-gap as debt; re-derive it the same way if it matters.
+**~~ai-dlc `main` HAS MOVED TWO COMMITS PAST WHAT GRAPH HAS, AND NEITHER SHIPS ANYTHING.~~
+SUPERSEDED 2026-08-08 BY v0.320.0 — A PULL IS OWED AGAIN.** That paragraph was true of #455/#456,
+which touch `docs/` only, and it stopped being true the moment a release landed. **The derivation,
+not the answer, is what to carry forward:** `git diff --name-only <graph's stamped sha> HEAD` and
+read the top-level directories. Measured against graph's `abfab65` after v0.320.0 — **7 shipped
+files across `core/` (5) and `scripts/` (2), plus `VERSION` and `CHANGELOG.md`** — so this is a real
+pull, not a version-number gap. (Control: the same command puts exactly one path under `docs/`, so
+it is distinguishing the two kinds rather than reporting everything.) **The pull is small, it gates
+nothing in this plan, and it changes nothing observable on graph** — graph's stamp is already
+correct by hand, and v0.320.0's whole subject is the NEXT deferred-slice apply. Take it whenever
+graph is next open.
 
 **~~THE SKILL STAMP AGREEING IS A HAND-FIX, NOT A WORKING MECHANISM.~~ FIXED — v0.320.0 (item 27).**
 The operator set `skill_version`/`skill_commit` by hand during the 0.319.0 apply because `apply.sh`
@@ -1028,7 +1040,11 @@ before you write code.
     attribution was exact, the fix is the flag this item specified, and the fixture gap it named
     was real and is now measured. Two things it did NOT predict are in §*What item 27 measured* —
     no new invariant was owed, and the write had three silent-success paths rather than one.
-    What follows is the original report. **REPORTED BY THE CONSUMER 2026-08-08 with a control, and REPRODUCED
+    **BOTH CITATIONS BELOW ARE NOW HISTORICAL: the fix moved the lines it quotes.** `:308` still
+    lands in step 2's defer bullet but the sentence there now names the flag; `:1414` lands on
+    unrelated prose, and the "preserving" sentence it quoted is at `:1421`. They are a record of
+    why the fix was made, not an instruction — the same status this file's header gives
+    `layer-drift.sh:648`. What follows is the original report. **REPORTED BY THE CONSUMER 2026-08-08 with a control, and REPRODUCED
     HERE — the attribution is EXACT, the third consumer report in a row that is.**
 
     **THE REPORT.** `apply.sh` said `RESOLVED restamp` while leaving `skill_version`/`skill_commit`
