@@ -66,7 +66,7 @@ random — `v0.283.0`, `v0.288.0`, `v0.225.0`, `v0.57.0` — all have their CHAN
 do not re-derive this**; two of those branch names are still described as "parked" further down
 this file, in sections that predate their release.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.318.0`**, working tree
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.319.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
 lists them with their PR numbers. **Count them there; do not carry a number in this sentence.**
 It said "eighteen" for eighteen releases after that stopped being true, which is the same
@@ -74,13 +74,27 @@ underived-count defect core Rule 31 exists for, in the file that documents it. T
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
 **~~graph is at `0.292.0 / c5e7daa` and is QUIESCENT.~~ ~~NO LONGER TRUE — 8b IS IN FLIGHT.~~
-~~8b IS DONE. graph is at `0.300.0 / 2bc7aa4`~~ **SUPERSEDED — graph is at `0.314.0 / f9b8aa4`**
-on all four stamp fields, on `main`, migrated, gates green. Two hops (#882 self-update, #883
-hop-1, #884 hop-2 + the 951-move story migration). VERIFIED FROM THIS SIDE, not taken on the
-report: `layer-drift.sh` over `2bc7aa4..f9b8aa4` against graph returns **0 `HARD-*`** with 49
-rows across 9 statuses and no `DRIFT-RANGE-DEGENERATE` — so the zero is a real absence, not a
-disarmed run.**
+~~8b IS DONE. graph is at `0.300.0 / 2bc7aa4`~~ ~~SUPERSEDED — graph is at `0.314.0 / f9b8aa4`~~
+**SUPERSEDED AGAIN 2026-08-08 — graph is at `0.318.0 / 5e0f3b2`**, and the rulebook base and the
+tool version, **which had been split since the self-update, are now the same**. Two PRs: **#885**
+(self-update, machinery slice + 31 covering fixtures, one widened and stated) and **#886**
+(reconcile, stamp-only bump + 3 recorded LC-E19 verdicts + ledger work). **VERIFIED FROM THIS SIDE,
+not taken on the report:** graph's OWN installed
+`scripts/ai-dlc/validate-artifact-budget.sh`, run against graph, returns
+`ok  WHOLE-READ POOL (4 planning artifacts)  117379 tok  (pool 330000, 35% of it)` — which is
+v0.317.0 + v0.318.0 landing, on the consumer, as measured rather than as claimed. The earlier
+`0.314.0 / f9b8aa4` verification stands as the record of that hop: `layer-drift.sh` over
+`2bc7aa4..f9b8aa4` returned **0 `HARD-*`** with 49 rows across 9 statuses and no
+`DRIFT-RANGE-DEGENERATE`.
 s301 is closed; s302 has not started but MAY now start.
+
+**FOUR THINGS CARRIED FORWARD BY THE 0.318.0 PULL, ALL THE CONSUMER'S, NONE BLOCKING** — reported by
+the operator and recorded here so a later session does not read them as this repo's queue:
+the `#4a` anchor **stays** (`OWED-RETRO-4A-NARROW` tracks the narrowing); layer debt at **9 OPEN /
+8 UNDECLARED**; `gate-validation-push.md`'s `921.`/`20.` duplication awaiting a **retire-or-refile**
+call; and **`PC-S318` filed against upstream's slice derivation**. **The last of those is the only
+one facing THIS repo** — it is a push candidate, it is not adjudicated here yet, and it belongs to
+the next push-candidate triage rather than to any item below.
 
 **THE MIGRATION RAN. The five numbers, as reported and worth not re-deriving:**
 
@@ -167,26 +181,38 @@ entry after recording its verdict spends that verdict, because the digest covers
 re-recorded against the moved subject. That is the digest design working, and it is the
 reason the done-when list is re-run post-merge rather than remembered.
 
-**A PULL IS OWED AND ITS SHAPE IS UNMEASURED. Re-measure it; do not reuse any figure in this
-paragraph's history.** An early reading taken at 0.315.0 said *"4 files, ZERO rulebook files (so one
-hop)"*; **v0.316.0, v0.317.0 and v0.318.0 have all landed since**, and 0.316.0 changes
-`reconcile/apply.sh` — a machinery file the self-update gate reasons about — so both the hop count
-and the blocking set have to be taken again. The rule this plan already states applies: **do not
-reason about a pull's shape from the distribution side; run the dry run and read what the gate
-says.**
+**~~A PULL IS OWED~~ — TAKEN 2026-08-08. graph is at 0.318.0 / `5e0f3b2`; see the status block
+above.** Everything the paragraph below predicted about that pull is spent. **A NEW pull is owed for
+v0.319.0 and its shape is unmeasured.** Two things about it that are worth stating and one that is
+not: 0.319.0 changes **`steps/artifact-consolidation.md`, a RULEBOOK file**, so it is not the
+machinery-only shape the 0.315→0.318 range had; and it adds a fixture, which means the four
+ship-list sites and the self-update's covering-fixture set both move. **Do not turn either of those
+into a hop-count prediction** — this plan has been wrong doing that twice, and the rule stands: run
+the dry run and read what the gate says.
 
-The pull carries four things worth naming for the operator:
+**The v0.319.0 pull carries one thing worth naming for the operator, and it is a HOMING job, not a
+delete.** The step now writes its four working files to `_bmad-output/planning-artifacts/s<N>/` and
+deletes its drafts at Step 6. **That governs FUTURE passes only.** The 33 byproduct files already at
+graph's area root must be MOVED into the sprint slot of the pass that produced them, never removed:
+older coverage reports cite draft paths as their no-loss evidence, so deleting them breaks a record
+that was already written. **The full 33-row derivation — 24 direct, 9 inferred, 0 refused, with the
+destination slot for each — is in §*What item 23b measured*, and the two instruments that get it
+wrong are written into the step itself.** Nothing about this blocks; it is bookkeeping the operator
+can take whenever graph is next open.
+
+**~~The pull carries four things worth naming for the operator~~ — DISCHARGED, kept as the record of
+what the 0.318.0 pull delivered:**
 
 - **item 20's fixture fix (v0.315.0)**, verified by running that fixture from graph's own
   `tests/fixtures/`.
 - **item 21's self-overwrite fix (v0.316.0)**, which **protects the pull AFTER this one, not this
-  one** — the driver that runs during this pull is the copy graph already has.
-- **item 23a's two budget fixes (v0.317.0, v0.318.0).** **The operator should expect graph's budget
-  row to go from `OVER … 417% of it → consolidate` to `ok … 117,379 tok (pool 330,000, 35% of it)`,
-  and that is the CORRECTION, not a threshold being relaxed.** Both defects were core's: a sum over
-  30 files under a label reading 4, and a reader-window resolver reading a role-file line format
-  core deleted at v0.174.0. **No consolidation is owed on the strength of that row.** See §*What
-  item 23a measured*.
+  one** — the driver that ran during that pull was the copy graph already had. **That protection is
+  now live for the v0.319.0 pull.**
+- **item 23a's two budget fixes (v0.317.0, v0.318.0).** Predicted: the budget row goes from
+  `OVER … 417% of it → consolidate` to `ok … (pool 330,000, 35% of it)`. **CONFIRMED against graph's
+  own installed validator after the pull** — `ok  WHOLE-READ POOL (4 planning artifacts)  117379 tok
+  (pool 330000, 35% of it)`. That was the CORRECTION, not a threshold being relaxed, and **no
+  consolidation was or is owed on the strength of that row.** See §*What item 23a measured*.
 
 **SUPERSEDED, kept for the runbook it points at.** Runbook:
 [`graph-0300-to-0314-pull.md`](graph-0300-to-0314-pull.md). **The reason is not the diff size** —
@@ -221,13 +247,20 @@ copies. Corrected on both sides the four live artifacts are **36% of the pool**.
 measured*. **Do not reuse this plan's "178% / the answer looks like no" framing anywhere below** —
 it is refuted, and the paragraph that carried it is struck in item 23's own text.
 
-**NEXT ACTION FOR THIS REPO: item 23b** — the artifact-consolidation refactor, added 2026-08-08 on
-operator request out of item 19. Read the review before scoping it: **the reduction is not the defect
-and must not be touched**; the residue is. 23a's outcome does NOT change 23b — its two defects are a
-missing sprint slot and a missing cleanup sentence, and neither was ever a size argument. It DOES
-re-price 23c, which loses its urgency argument and keeps its correctness one. 23c (the inlet) is the
-real methodology change and is **explicitly not sized** — it opens with a derivation, not with code.
-Item 12, item 22 and item 24 remain available and gate nothing.
+**~~NEXT ACTION FOR THIS REPO: item 23b~~ — DONE 2026-08-08. v0.319.0 (#452).** The step now homes
+all four working files in `s<N>/` and retires the drafts at a new Step 6. **The re-home refusal set
+the item demanded is EMPTY — all 33 resolve**, 24 directly from the adding commit's own subject, and
+the plan's *"at least two carry no recoverable sprint (they say `S999`)"* is refuted: `S999` is
+content in a carry-over ID list, and a byproduct's sprint was never in its content. Two measurement
+traps fell out and are recorded in the step itself. See §*What item 23b measured*.
+
+**NEXT ACTION FOR THIS REPO: item 23d**, then 23c. The plan's own order is *23a → 23b → 23c, with
+23d after 23b* — 23a and 23b have now both reported, which is the precondition 23d was waiting on.
+**23d is a DECISION, not a build**, and a "yes" produces implementation that must be written into
+this plan as its own sequenced item(s) before it starts. 23c (the inlet) is the real methodology
+change and is **explicitly not sized** — it opens with a derivation, not with code, and **23a
+removed its urgency argument while leaving its correctness one intact**. Item 12, item 22, item 24
+and the new item 25 remain available and gate nothing.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -303,7 +336,9 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~15~~ | ~~**19** — review graph's artifact consolidation~~ | **DONE — no release, by the item's own terms.** `docs/reviews/graph-artifact-consolidation-review.md`. Consolidation is load-bearing and the recurrence is structural; the defects are core's step leaving 33 working files (1.80 MB, 13.7%) in the durable area root and prescribing area-root paths for per-sprint work. See §*What item 19 measured* |
 | ~~16~~ | ~~**21** — `apply.sh` overwrites itself mid-run~~ | **DONE — v0.316.0.** **REPRODUCED at ground truth with a control**, and the report's attribution is EXACT — the second in a row. bash resumes at its saved byte offset inside the new file; the fix is the `.incoming.$$` + `mv` idiom the file already used at five sites. One fixture arm was **removed for being vacuous** rather than shipped. See §*What item 21 measured* |
 | ~~17~~ | ~~**23a** — are the budget thresholds attainable at all?~~ | **DONE — v0.317.0 (#449) + v0.318.0 (#450). THE ANSWER IS YES and graph already passes at 36%.** The 417% breach was an instrument reading: pool understated 5x, sum overstated 2.35x, both defects core's. The floors were derived anyway, because at a genuine 200K window the threshold IS unattainable (130–151%). See §*What item 23a measured* |
-| **18** | **23b** — artifact-consolidation's residue | **← THE NEXT ITEM.** Bounded and core-side: give the step's outputs a sprint slot, and say whether the drafts are retired or retained. **Derive the re-home refusal set first — at least two of the 33 files carry no recoverable sprint.** 23a does not change it; neither of its defects was ever a size argument |
+| ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
+| **19** | **23d** — its own skill? | **← THE NEXT ITEM.** Its precondition is met: 23a and 23b have both reported. **A DECISION, not a build** — a "yes" is new sequenced work in this plan before it starts, a "no" is recorded so it is not re-opened |
+| — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
 | — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first. **23a removed its urgency argument** — the pool does not breach — and left its correctness one intact |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
@@ -733,6 +768,14 @@ before you write code.
     threshold, the pool share, or the artifact set is wrong** — not that graph consolidated
     badly.
 
+    **~~23b — THE RESIDUE.~~ DONE 2026-08-08 — v0.319.0 (#452).** Both edits shipped, plus a third
+    the item did not know about: **the step prescribed NO path at all for three of its four working
+    files**, so the drafts and the coverage report had no home to be wrong about. **The re-home
+    refusal set is EMPTY** and this item's stated premise for it — *"at least two carry no
+    recoverable sprint at all (they say `S999`)"* — is **REFUTED**: `S999` appears in two of the 33
+    as CONTENT, inside a carry-over ID list, and a byproduct's sprint was never in its content.
+    Both controls this item quoted (`s<N>|sprint slot` rc=1, the retire vocabulary rc=1) now flip.
+    See §*What item 23b measured*. What follows is the original text.
     **23b — THE RESIDUE. Bounded, core-side, and shippable on its own.** Two edits to the step,
     both with their control already measured in item 19:
     - **Give the step's outputs a sprint slot.** `:41` prescribes
@@ -842,6 +885,32 @@ before you write code.
       riskier than maintaining it, the honest outcome is to keep the four lists and ship only the
       written criterion. **That is a legitimate result of this item, not a failure of it.**
 
+25. **Five more per-sprint artifacts are prescribed at durable area paths, and one of them is the
+    same defect at 73 homes.** Surfaced 2026-08-08 while measuring the false-positive set for a
+    general version of 23b's check, **and deliberately left out of v0.319.0** — 23b's scope was two
+    edits to one step, and five per-file decisions each needing their own evidence is separate work.
+    The measurement is done; do not re-derive it. It is in §*What item 23b measured*.
+
+    **`test-strategy.md` IS THE ITEM.** root=1, `s<N>/` slots=**72**. Identical in kind to
+    `consolidation-manifest-prd.md` — same basename, two homes, nothing declaring which is current —
+    and invisible to `validate-artifact-paths.sh` for the same reason: both paths conform.
+    `bug-analysis.md` (1 and 1) is the same thing small.
+
+    **THREE OF THE FIVE ARE NOT OBVIOUSLY DEFECTS AND MUST BE DECIDED, NOT SWEPT.**
+    `brownfield-inventory.md` (root=1, slots=0) is plausibly a genuine one-time durable inventory.
+    `codebase-analysis.md` and `doc-reconciliation.md` are prescribed by a step and **written
+    nowhere in the reference consumer** (0 and 0), so there is no evidence either way and the honest
+    outcome for those two may be "leave it and say why". Control that the measurement is real:
+    `prd.md` reads root=1, slots=0, the durable case behaving as expected.
+
+    **DO NOT SHIP A GENERAL LINT FOR THIS.** The general form — every `_bmad-output` path a step
+    prescribes must carry `s<N>/` unless the target is declared durable — has a false-positive set of
+    **12 of 17** on today's tree, all of them real durable artifacts and logs. What the general form
+    actually needs first is a DECLARATION of which artifacts are durable, derived rather than
+    hand-listed, and that declaration does not exist. **Producing it is most of this item**, and if
+    it turns out to cost more than the five per-file fixes are worth, fixing `test-strategy.md` alone
+    and writing down the criterion is a legitimate result.
+
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
 
@@ -874,6 +943,99 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 23b measured (the refusal set is EMPTY, and two instruments were wrong on the way there)
+
+v0.319.0 (#452). Measured against graph at `5e0f3b2`, read-only. **The reduction was not touched**,
+as item 23's own terms require.
+
+**THE ITEM NAMED TWO DEFECTS AND THERE WERE THREE.** The third is the one that explains the other
+two: `:41` prescribed the manifest at the area root, and **`:51` and `:62` prescribed no path at
+all** for the two drafts and the coverage report. An unprescribed path is not a wrong path — it is
+the analyst choosing, every pass, with nothing to be consistent with. Item 19 read the area-root
+manifest and did not ask what the other three files were told.
+
+**THE REFUSAL SET IS EMPTY, AND THE PREMISE BEHIND IT WAS A CONTENT TOKEN READ AS PROVENANCE.**
+
+```
+33 byproduct files at the area root   (re-derived; unchanged since a8ef9412c)
+  DIRECT   24   the adding commit's own subject names the sprint — zero inference
+  INFERRED  9   nearest sprint-naming commit in first-parent order
+                  7 at walk-back distance 1
+                  2 at distance 6 and 7, both BRACKETED s298 back / s299 forward
+  REFUSED   0
+destination slots: s243 s244 s247 s248 s249 s268 s272 s274 s280 s287 s293 s298 s301
+```
+
+The plan's *"at least two carry no recoverable sprint at all (they say `S999`)"* is refuted. `S999`
+**does** occur in two of the 33 — in a carry-over ID list, as content — and both of those files
+resolve: one DIRECT to `s293`, one INFERRED to `s268`. **The plan read a token in the file as the
+file's sprint, and the file's sprint was never in its content.** Same shape as item 16's finding
+that the claim was true about the NAME and never asked about the POSITION.
+
+**TWO INSTRUMENTS WERE WRONG, AND BOTH ARE NOW WRITTEN INTO THE STEP so the next re-home does not
+repeat them.**
+
+- **Content frequency is a FALSE signal, by construction.** A consolidation byproduct's content IS
+  other sprints — that is what it is consolidating — so the modal sprint token is the sprint being
+  consolidated, not the one doing it. `consolidation-manifest-carry-over-backlog.md`, first
+  committed **2026-06-05**, has S297 (×35) as its modal token. **S297 began 2026-07-22.**
+- **`git log --follow` walks a draft into its SOURCE's history.** A consolidation draft is a
+  near-copy of the live artifact, so rename detection follows the similarity: three drafts reported
+  creation dates of **2026-02-27, 2026-03-05 and 2026-03-08** — months before consolidation existed
+  — and `--diff-filter=AR` shows **no rename row at all**. Bare `--diff-filter=A` is correct for
+  these files because the migration did not move them; `--follow` is correct for the files it did.
+  **Neither instrument is right for both, and the discriminator is whether a rename happened.**
+  Worked control: every `s<N>/sprint-status.yaml` reports an add date of **2026-08-07** — the
+  migration date — under bare `--diff-filter=A`, which is the same trap pointing the other way.
+
+**AND THE FIRST JOIN WAS WRONG, WHICH IS WHY IT HAD A CONTROL.** Joining on commit DATE against a
+subject-derived sprint timeline agreed on 13 of 15 and **disagreed on 2, both by exactly one sprint
+in the same direction**. Cause: **graph starts more than one sprint per day** (s243 and s244 both
+first appear 2026-06-05; s248 and s249 both 2026-06-09), so "latest sprint on or before D" picks the
+higher one. Re-derived on first-parent ANCESTRY POSITION instead of the calendar: **24 of 24 agree.**
+The second control was caught being vacuous before it was believed — comparing a join that reads the
+add commit against that same commit's subject is a tautology — and was split into DIRECT (no
+inference) and INFERRED (with its walk-back distance reported).
+
+**NO EXISTING CHECK COULD HAVE CAUGHT THE DEFECT, and the reason generalises.** I82 binds every
+artifact path core prescribes to the grammar, and `validate-artifact-paths.sh` enforces it on the
+consumer — but the grammar's rule is *the directory is the only sprint slot*, so what both detect is
+a sprint TOKEN outside the slot. **An area-root path carrying no token is syntactically conforming,
+and so is the slotted one. Both pass, and neither checker is wrong.** A syntactic grammar cannot
+separate a durable artifact from a per-sprint one that omitted its sprint; only the step that writes
+the file knows which it is. The new fixture therefore asserts against the STEP, and its assertion 4
+is a **join** — Step 6's removal set derived from Step 2's write set, compared both ways — rather
+than a second hand-list.
+
+**RED REPLAY against the pre-23b step file:** 4 assertions fail and the mutation guard exits 2.
+Verified drivable in the **consumer** layout as well as the distribution — red on graph's installed
+0.318.0 step, green on the fixed one, which is the item-20 class covered rather than assumed.
+
+**THE `install.sh`/`uninstall.sh` JOIN FIRED on the one ship-list site I missed** —
+`FAIL: install.sh and uninstall.sh fixture loops disagree … consolidation-residue`. That is **item
+24's cost demonstrated live**: the ratchet works, and it costs four edits and one failed run to
+learn which four.
+
+**FIVE MORE PER-SPRINT ARTIFACTS ARE PRESCRIBED AT DURABLE PATHS. NOT ACTED ON — this is item 25.**
+Measured while deriving the false-positive set for a general check, over all 39 `_bmad-output` paths
+core's step files prescribe:
+
+```
+                          root copies   s<N>/ slots   reading
+test-strategy.md                    1            72   the same defect at 73 homes
+bug-analysis.md                     1             1   the same defect, small
+brownfield-inventory.md             1             0   plausibly durable — a one-time inventory
+codebase-analysis.md                0             0   prescribed, never written — undecidable
+doc-reconciliation.md               0             0   prescribed, never written — undecidable
+prd.md            (control)         1             0   the durable case, behaving as expected
+```
+
+**`test-strategy.md` is the strongest instance in the repo and it is not the consolidation step.**
+It is the identical condition to `consolidation-manifest-prd.md` at 72x the scale, and it was
+invisible for the same reason. **Deliberately not absorbed into 23b**, whose scope was two edits to
+one step: five per-file decisions, each needing its own evidence, is a separate item and this repo's
+rule is that scope arriving unsequenced is the defect.
 
 ## What item 23a measured (the 417% breach was an instrument reading, and both halves were core's)
 
