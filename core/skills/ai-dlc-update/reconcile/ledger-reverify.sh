@@ -388,6 +388,30 @@ EOF
 # still-live side was ever reachable — see VACUOUS PREDICATES in the header.
 base_holds() { all_present "$(base_show "$1")" "$2"; }
 
+# receipt_absent_subjects <sh-receipt> -> " <path>" for each consumer-relative path the receipt
+# names that is NOT on disk under $CONSUMER. Empty when every path it can see is present.
+#
+# DELIBERATELY CONSERVATIVE IN THE ONLY DIRECTION THAT MATTERS. Its caller uses it to WITHHOLD a
+# CLOSE-CANDIDATE, never to produce one, so a path it fails to recognise costs nothing beyond the
+# status quo. The prefix set is the consumer's own top-level homes, which is what a `cd
+# "$CONSUMER"` receipt addresses; a `$CONSUMER/`-prefixed spelling is normalised to the same thing
+# so the two forms cannot disagree about one file. Anything else -- a path built from a variable,
+# a glob, a distribution path -- is simply not seen, and the verdict is what it was before.
+receipt_absent_subjects() {
+  local rest="$1" p out=""
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    p="${p#\$CONSUMER/}"
+    case "$p" in
+      docs/*|_bmad-output/*|scripts/*|.claude/*) ;;
+      *) continue ;;
+    esac
+    case "$p" in *'*'*|*'?'*|*'$'*) continue ;; esac
+    [ -e "$CONSUMER/$p" ] || case " $out " in *" $p "*) ;; *) out="$out $p" ;; esac
+  done < <(printf '%s\n' "$rest" | grep -oE '(\$CONSUMER/)?(docs|_bmad-output|scripts|\.claude)/[A-Za-z0-9_./-]+' || true)
+  printf '%s' "$out"
+}
+
 # Every path at THEIRS whose basename equals $1. Compared as a fixed string after splitting
 # on "/", so a basename carrying '.' or '-' needs no regex escaping to get wrong.
 theirs_basename_matches() {
@@ -790,9 +814,31 @@ while IFS="$(printf '\t')" read -r label ord directive; do
       # hatch that runs arbitrary consumer-side commands, where paths are MOST volatile,
       # and it was the one verb without the guard.
       #
-      # Status-based, not path-parsing: a subject inside a longer `&&` chain does not
-      # surface as a distinguishable status, so a parser would give false confidence. This
-      # arm claims only what the status can carry, and says so.
+      # ...AND THE `&&` CHAIN CASE IS NOW A PROGRAM RATHER THAN A NOTE. The paragraph above
+      # rejected path-parsing on the ground that a parser gives false confidence, and left the
+      # residue as a sentence in the CLOSE-CANDIDATE detail telling the operator to check the
+      # subject paths themselves. That sentence was correct and it was not a mechanism, which is
+      # this repo's own recurring shape.
+      #
+      # MEASURED, on the reference consumer's 56-entry ledger the day this shipped: exactly ONE
+      # CLOSE-CANDIDATE in the whole run, and it was FALSE. `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-
+      # ABSOLUTE-PATH` names `docs/retro/sprint-249.md`, which the artifact-path migration moved
+      # to `docs/retro/s249/retro.md`. The receipt's first arm exits non-zero on the missing file,
+      # the `&&` short-circuits, and the entry reads "no longer reproduces". Re-run by hand
+      # against the path that exists now: relative rc=0, absolute rc=1 — the defect reproduces
+      # exactly as filed. A migration in the consumer had silently proposed closing a live entry.
+      #
+      # THE PARSE CAN ONLY DOWNGRADE A CLOSE, NEVER CREATE ONE, which is what answers the
+      # false-confidence objection rather than dismissing it. A path it fails to spot leaves the
+      # verdict exactly where it is today; a path it does spot, and that is absent, turns a close
+      # into a review. It adds no confidence in either direction — it only withholds the one
+      # verdict that loses data. A receipt deliberately asserting a file is GONE is downgraded
+      # too, and that is the safe direction: NEEDS-REVIEW costs a read, a false close costs an
+      # entry.
+      #
+      # Status-based first, then path-based: a subject inside a longer `&&` chain does not
+      # surface as a distinguishable status, so the status arms below claim only what a status
+      # can carry.
       DIST="$DIST" BASE="$BASE" THEIRS="$THEIRS" CONSUMER="$CONSUMER" \
         bash -c "$rest" >/dev/null 2>&1
       sh_rc=$?
@@ -802,7 +848,12 @@ while IFS="$(printf '\t')" read -r label ord directive; do
         126|127)
           emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc (command not found / not executable), which is what a RENAMED or DELETED subject looks like — not a fix. A close here would record an absorption that never happened. Re-anchor the receipt at the subject's current path, then re-run. If the subject really is gone, say so in the entry rather than letting the exit status say it." ;;
         *)
-          emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. NOTE: exit $sh_rc cannot distinguish 'fixed' from 'subject moved' inside an && chain — check the receipt's subject paths still exist before draining." ;;
+          _gone="$(receipt_absent_subjects "$rest")"
+          if [ -n "$_gone" ]; then
+            emit NEEDS-REVIEW "$label" "unresolved: the receipt exited $sh_rc, but consumer-relative path(s) it names DO NOT EXIST:${_gone}. Inside an \`&&\` chain a missing subject short-circuits the whole receipt, so this exit cannot mean 'fixed' — it means the receipt is anchored at a path that moved. Re-anchor it and re-run. Measured on this ledger: an artifact-path migration moved one subject and the entry proposed closing a defect that still reproduced at the new path."
+          else
+            emit CLOSE-CANDIDATE "$label" "verify sh: no longer reproduces at theirs ($TV) — likely absorbed. Confirm, then annotate 'ADOPTED UPSTREAM (v$TV, verified <date>)'. Do NOT delete the entry. Every consumer-relative path this receipt names still exists, so the exit is not a moved subject; a subject named in a form this cannot see is still possible, so confirm before draining."
+          fi ;;
       esac
       ;;
     manual)
