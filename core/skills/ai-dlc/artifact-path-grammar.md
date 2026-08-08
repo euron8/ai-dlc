@@ -130,9 +130,19 @@ The grammar governs artifacts a sprint PRODUCES. It does not govern:
 placeholder and the sprint is hidden inside it — and `story-<id>-` is the exact form Check 6's
 glob broke on. **A syntactic check on the prescription cannot see a sprint number that a
 placeholder conceals.** That is a real limit of the enforcement, not a gap in the rule: rule 2
-still forbids the expanded form, and it is 10e — the consumer-side validator, which reads real
-filenames rather than prescriptions — that catches it. Stated here so a later session does not
-read `artifact-path-grammar` as covering it.
+still forbids the expanded form, and it is `validate-artifact-paths.sh` — the consumer-side
+validator, which reads real filenames rather than prescriptions — that sees it. Stated here so a
+later session does not read `artifact-path-grammar` as covering it.
+
+**And that validator closes MOST of the gap, not all of it — measured, because the sentence above
+used to claim all of it.** `<story-id>-review.md` expands to `S292-ff-s3-…-review.md` and is
+caught. `story-<id>-<slug>.md` expands two ways, and only one of them carries a token anything can
+see: on the reference consumer **761 of 1024 story files spell the sprint as a bare leading
+number** (`story-297-1-slug.md`), which is character-for-character the `story-<M>-<slug>.md` this
+grammar itself prescribes. No expression can separate those two without knowing which sprints
+exist, and the whole corpus is deferred for that reason rather than half-judged. **The remaining
+263 are visible and reported.** The release that moves `stories/` under `s<N>/` is what removes
+the ambiguity, by taking the number out of the filename entirely.
 
 ## Enforcement
 
@@ -142,7 +152,53 @@ read `artifact-path-grammar` as covering it.
 | core's readers | readers compose a path from the declared sprint instead of searching | **LIVE** (10c) |
 | an authoring agent | `SKILL.md` Rule 25 points here — READ AND FOLLOW before writing an artifact to a path the rulebook does not already name | **LIVE** (10c) |
 | the consumer's tree | `scripts/ai-dlc/migrate-artifact-paths.sh` — dry run by default, `--apply` to move | **LIVE** (10d) |
-| the consumer's tree, ongoing | a pre-push validator reading real filenames | 10e, not yet shipped |
+| the consumer's tree, ongoing | `scripts/ai-dlc/validate-artifact-paths.sh` on the consumer pre-push — real filenames, every push | **LIVE** (10e) |
+| all four of the above | `scripts/ai-dlc/artifact-path-config.sh` — the ONE reader of the blocks below, bound by **I83** | **LIVE** (10e) |
+
+### Staying on the grammar: what the pre-push validator blocks, and what it does not
+
+A migration is a one-time event and a convention with only a migration behind it has a half-life.
+`validate-artifact-paths.sh` is the standing arm, wired into the consumer pre-push:
+
+```
+scripts/ai-dlc/validate-artifact-paths.sh            # verdict, as the hook runs it
+scripts/ai-dlc/validate-artifact-paths.sh --report   # …plus the census, same verdict
+```
+
+**IT BLOCKS ON EXACTLY THE SET THE MIGRATION WOULD MOVE, and that scope is measured rather than
+chosen for comfort.** On the reference consumer, immediately after the migration ran for real:
+
+```
+paths the migration would still MOVE            0     <- what a push blocks on
+REFUSED by the migration, still non-conforming  48    45 ambiguous, 3 with no derivable area
+under a stories/ directory, DEFERRED          1024    263 of them carry a visible token
+```
+
+Blocking on all 1072 would wedge first contact on a tree whose operator had already done
+everything core asked, and the stories deferral is CORE's own decision — so a gate demanding it be
+cleared demands something no core tool provides. A gate that fires on a tree nobody can clean is a
+gate the operator turns off, and then nothing is enforced at all.
+
+**NOTHING IS EXEMPTED BY A LIST.** Every non-blocking class is computed from the path itself:
+a name that mentions two sprints, a sprint directory with no area to anchor it, a file under
+`stories/`. There is no ledger to fall out of date and nothing that can be added to it by hand,
+and an entry leaves its class the moment the obstruction is removed — rename an ambiguous file
+badly and the next push blocks on it. All of them are PRINTED every run, with their reason and
+their counts.
+
+**The blocking set and the migration's move set are asserted EQUAL, in both directions**, by
+the `artifact-path-conformance` fixture. Two programs reading one grammar do not fail
+interestingly on their own; they fail by disagreeing, which leaves a push blocked on a path its
+own stated remedy will not move.
+
+**It probes itself every run.** The verdict rides on one expression resolved at runtime out of
+this file, and an expression that matched nothing would report the same empty blocking set as a
+fully-migrated tree. Six paths with known answers go through the same classifier first; a wrong
+answer on any of them exits 2 rather than reporting a clean tree.
+
+**An empty subject is NOT a pass.** A consumer with no tracked file under any scan root gets
+`NOT-APPLICABLE` and exit 0 — failing a greenfield tree would make this grammar unadoptable, and
+printing PASS over nothing is the zero-verification pass this repo keeps finding.
 
 ### Running the migration
 

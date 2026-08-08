@@ -68,6 +68,18 @@ if [ -n "$GRAMMAR_ARG" ]; then
   case "$GRAMMAR_ARG" in /*) : ;; *) GRAMMAR_ARG="$(pwd)/$GRAMMAR_ARG" ;; esac
 fi
 
+# AND RESOLVE THIS SCRIPT'S OWN DIRECTORY BEFORE THE cd, FOR THE SAME REASON ONE LINE UP.
+# `${BASH_SOURCE[0]}` is `core/scripts/migrate-artifact-paths.sh` when it is invoked relatively,
+# and re-resolving that after the cd looks for `core/scripts/` INSIDE the consumer -- which is
+# not a place it has any reason to be. Measured: the absolute invocation the fixture uses worked
+# and the relative one every operator types died at `cd: core/scripts: No such file or directory`.
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="$SELF_DIR/artifact-path-config.sh"
+[ -f "$CONFIG" ] || { echo "$PROG: no artifact-path-config.sh beside this script at '$CONFIG'." >&2
+                      echo "  It is the single home of the scan roots, the areas and the sprint-token" >&2
+                      echo "  expression. Guessing them would move files the grammar never governed." >&2
+                      exit 2; }
+
 [ -d "$ROOT" ] || { echo "$PROG: not a directory: $ROOT" >&2; exit 2; }
 cd "$ROOT" || exit 2
 ROOT_ABS="$(pwd)"
@@ -77,76 +89,39 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 \
        echo "  bad run is recoverable with \`git checkout\`; without git there is no undo." >&2; exit 2; }
 
 # --- the scan roots and the areas come from the grammar, not from here -------
-# The same two blocks I82 reads, so enforcement and migration can never disagree about which part
-# of the tree the rule governs or where a sprint directory may live.
-GRAMMAR=""
-if [ -n "$GRAMMAR_ARG" ]; then
-  [ -f "$GRAMMAR_ARG" ] || { echo "$PROG: --grammar names no readable file: $GRAMMAR_ARG" >&2; exit 2; }
-  GRAMMAR="$GRAMMAR_ARG"
-else
-  for c in ".claude/skills/ai-dlc/artifact-path-grammar.md" \
-           "core/skills/ai-dlc/artifact-path-grammar.md"; do
-    [ -f "$c" ] && GRAMMAR="$c" && break
-  done
-fi
-[ -n "$GRAMMAR" ] || { echo "$PROG: cannot find artifact-path-grammar.md under $ROOT_ABS." >&2
-                       echo "  It declares the scan roots and areas this migration works from;" >&2
-                       echo "  guessing them would move files the grammar does not govern." >&2; exit 2; }
-
-SCAN_ROOTS="$(awk '/^```scan-roots$/{f=1;next} f&&/^```/{f=0} f' "$GRAMMAR" | grep -E '.')"
-
-# ONE EXTRACTOR FOR BOTH FILES. Core's grammar and the consumer's declaration carry the same
-# `areas:` block in the same shape, and two copies of this awk is how they start disagreeing
-# about what an area is -- the fork this repo has already paid for in three other pairs.
-areas_of() { awk '/^areas:$/{f=1;next} f&&/^[^ ]/{f=0} f&&/^  [^ ]/{gsub(/^  /,"");print}' "$1"; }
-
-DECLARED_AREAS="$(areas_of "$GRAMMAR")"
-
-# --- THE CONSUMER'S OWN AREAS ARE READ, NOT ONLY POINTED AT -------------------------------
 #
-# Core prescribes the grammar; the CONSUMER declares its own areas, in the file named by
-# `consumer_artifact_paths_file:` in `layer-contract.yaml` (grammar, line 4). This script read
-# only core's list, so every consumer-specific area was "undeclared" no matter what the consumer
-# had written, and the report told the operator to fix **the grammar** — a core file, overwritten
-# on the next pull, and the wrong home by core's own rule. `CLAUDE.md`'s opening warning is about
-# exactly this pair of files.
+# RESOLVED BY artifact-path-config.sh, WHICH IS THE ONLY PLACE THAT READS THE GRAMMAR'S BLOCKS.
+# This script used to carry its own copy of that extraction, byte-identical to the one in
+# validate-enforcement-map.sh's I82 -- which is what a fork looks like the day before it stops
+# being one. The conformance validator would have been the third copy. There is now one, and the
+# consumer-area join, the contract lookup and the sprint-token expression live there with it.
 #
-# MEASURED, and it is the reason this is a code change and not a wording change: on the reference
-# consumer the migration inferred NINE areas and reported them; that consumer's
-# `.claude/skills/ai-dlc/artifact-paths.md` was byte-identical to the scaffolded template, so
-# nothing had ever been declared there — and declaring it would have changed nothing, because
-# nothing read it. A remedy pointing at a file no reader consults is the inert-mechanism class,
-# and a corrected sentence in front of an inert mechanism is worse than the wrong sentence: it
-# reads as done.
-#
-# So the consumer's areas JOIN core's. Declaring an area is now the act that stops it being
-# inferred, which is what makes the report's instruction followable.
-#
-# PATH DERIVED FROM THE CONTRACT, never restated. The literal lives once, in
-# `layer-contract.yaml`; a second copy here is the drift I67/I70/I73 exist to prevent.
-CONTRACT=""
-for c in ".claude/skills/ai-dlc/layer-contract.yaml" "core/skills/ai-dlc/layer-contract.yaml"; do
-  [ -f "$c" ] && CONTRACT="$c" && break
-done
-CONSUMER_AREAS_FILE=""
-if [ -n "$CONTRACT" ]; then
-  CONSUMER_AREAS_REL="$(sed -n 's/^consumer_artifact_paths_file:[[:space:]]*//p' "$CONTRACT" \
-                        | head -1 | sed 's/[[:space:]]*$//' | tr -d '"')"
-  [ -n "$CONSUMER_AREAS_REL" ] && [ -f "$CONSUMER_AREAS_REL" ] && CONSUMER_AREAS_FILE="$CONSUMER_AREAS_REL"
-fi
-CONSUMER_AREAS=""
-[ -n "$CONSUMER_AREAS_FILE" ] && CONSUMER_AREAS="$(areas_of "$CONSUMER_AREAS_FILE")"
-if [ -n "$CONSUMER_AREAS" ]; then
-  DECLARED_AREAS="$(printf '%s\n%s\n' "$DECLARED_AREAS" "$CONSUMER_AREAS" | grep -E '.' | sort -u)"
-fi
-# Where the report sends the operator. Falls back to the contract's declared path even when the
-# file does not exist yet, because "go write this file" is the correct remedy then; only a
-# missing CONTRACT leaves it unnamed, and that is a broken install, not a paperwork gap.
-REMEDY_FILE="${CONSUMER_AREAS_FILE:-${CONSUMER_AREAS_REL:-}}"
-[ -n "$SCAN_ROOTS" ] || { echo "$PROG: extracted ZERO scan roots from $GRAMMAR. An empty root set" >&2
-                          echo "  would report a fully-conforming tree without reading one file." >&2; exit 2; }
-[ -n "$DECLARED_AREAS" ] || { echo "$PROG: extracted ZERO areas from $GRAMMAR. Without them every" >&2
-                              echo "  area would be inferred and the report would say nothing." >&2; exit 2; }
+# WHAT THE JOIN IS FOR, kept here because it is this script's report that acts on it: core
+# prescribes the grammar and the CONSUMER declares its own areas, so declaring one is the act
+# that stops it being inferred. That is only true because the declaration is READ. On the
+# reference consumer the file was byte-identical to the scaffolded template and nothing consulted
+# it, so the remedy this report prints would have changed no later verdict -- a corrected sentence
+# in front of an inert mechanism reads as done, which is worse than the wrong sentence.
+cfg() { # <mode> -> the resolver's answer, or die carrying its own message
+  local out rc
+  if [ -n "$GRAMMAR_ARG" ]; then out="$(bash "$CONFIG" "$1" --grammar "$GRAMMAR_ARG" 2>&1)"; rc=$?
+  else                           out="$(bash "$CONFIG" "$1" 2>&1)"; rc=$?; fi
+  if [ "$rc" -ne 0 ]; then
+    echo "$PROG: artifact-path-config.sh $1 failed (rc=$rc):" >&2
+    printf '%s\n' "$out" >&2
+    exit 2
+  fi
+  printf '%s\n' "$out"
+}
+
+GRAMMAR="$(cfg --grammar-file)"
+SCAN_ROOTS="$(cfg --scan-roots)"
+DECLARED_AREAS="$(cfg --areas)"
+
+# Where the report sends the operator. The contract's declared path even when the file does not
+# exist yet, because "go write this file" is the correct remedy then; only a missing CONTRACT
+# leaves it unnamed, and that is a broken install, not a paperwork gap.
+REMEDY_FILE="$(bash "$CONFIG" --consumer-file 2>/dev/null || true)"
 
 if [ "$APPLY" -eq 1 ] && [ -n "$(git status --porcelain 2>/dev/null)" ]; then
   echo "$PROG: the work tree is DIRTY. Commit or stash first." >&2
@@ -163,7 +138,10 @@ fi
 # implementation-artifacts/s<N>/.
 ARCHIVE_HOME="_bmad-output/implementation-artifacts"
 
-TOKEN_RE='(^|-)(s|S|sprint-)[0-9]+($|[-.])'
+# The sprint-token expression, from the same resolver, for the same reason: the validator that
+# blocks a push on it and the migration that clears the block must not be able to disagree about
+# what a sprint token is.
+TOKEN_RE="$(cfg --token-re)"
 
 # ONE REGEX, APPLIED PER COMPONENT, ONE TOKEN AT A TIME, TO A FIXED POINT. Three properties,
 # and the drafts that lacked each of them are the reason all three are spelled out here.
