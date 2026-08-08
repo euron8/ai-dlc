@@ -39,6 +39,18 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
+
+# The running script AS A FILE, not as the directory above. Used only to notice that this
+# driver is among the files it is about to replace -- see overwrite_from_theirs().
+#
+# COMPARED WITH `-ef`, WHICH IS device+inode, NEVER BY PATH STRING. `$0` is whatever the caller
+# typed, `consumer_path()` builds `$CONSUMER/<rel>`, and the two spell the same file differently
+# on every real invocation (`.claude/skills/...` against an absolute consumer root, with `..`
+# and symlinks possible in either). A string compare here would silently never match, which is
+# the shape of check this repo keeps shipping: it would read exactly like "the driver was not
+# in the set."
+SELF_FILE="$SELF/$(basename "$0")"
+self_replaced=0
 # say — ONE ROW OF THE MANIFEST, AND IT CARRIES ITS DETAIL.
 #
 # This printed THREE fields while EIGHTEEN of its call sites passed FOUR, so every WORKLIST and
@@ -142,11 +154,59 @@ sync_mode_from_theirs() { # <core-rel> <consumer-path>
   esac
 }
 
+# WRITE A NEW INODE, NEVER TRUNCATE THE OLD ONE -- because THIS FILE is one of the files
+# this function writes, and it is running while it does it.
+#
+# `skills/*` maps to `.claude/%s` (core-paths.sh), so `core/skills/ai-dlc-update/reconcile/
+# apply.sh` lands at `.claude/skills/ai-dlc-update/reconcile/apply.sh`; it is UPSTREAM-ONLY
+# on any range that changed it, so phase 1 writes it; and SKILL.md step 7 tells the session
+# to run `reconcile/apply.sh <dist> <base> <consumer> <theirs>` -- a relative path inside the
+# installed skill, i.e. that exact copy. The driver overwrites itself mid-run.
+#
+# `git show > "$cons"` is a shell redirect: open+truncate+write, SAME INODE. bash executes a
+# script by reading it incrementally and keeping a byte offset, so after the truncate its next
+# read lands at the same offset in DIFFERENT content.
+#
+# MEASURED, not recalled -- the question "does bash re-read a replaced script" was settled by
+# experiment first, because the answer decides whether this is live or latent:
+#
+#   in-place overwrite (cp, same inode)  -> bash resumed inside the NEW text, ran the
+#                                           replacement's tail, and exited rc=0
+#   atomic replace (mv, new inode)       -> unaffected, original ran to completion
+#   no replacement (control)             -> unaffected
+#
+# Then reproduced at ground truth on a scratch consumer installed at 0.310.0 and pulled to
+# 0.312.0 (apply.sh's first differing byte is 2830 of 50463, well before bash's read offset at
+# phase 1). Same dist, same range, same tree, same 8 pure-applies; the ONLY variable is where
+# the running copy lives:
+#
+#   running copy = the consumer's own      rc=2, `line 251: syntax error near ';;'`,
+#                                          stamp withheld, .ai-dlc-applying LEFT, tree partial
+#   running copy = out-of-tree (control)   rc=0, no stderr, re-stamped 0.312.0, marker cleared
+#
+# THE ABORT IS THE LUCKY END OF THE BAND. Whether the shifted bytes fail to parse or merely
+# parse into something else is not under anyone's control -- the bash arm above shows the same
+# mechanism producing rc=0 with the wrong code executed. A driver that silently skips phases
+# and then re-stamps is the failure this one must not have.
+#
+# The fix is the idiom this file already uses at five other write sites (`.incoming.$$` + mv):
+# rename(2) swaps the directory entry and leaves the old inode alive for whoever holds it open,
+# so the run finishes on the version the operator invoked and the next run uses the new one.
+# It also removes a second, quieter defect: the redirect truncated `$cons` BEFORE `git show`
+# ran, so a failed show left an EMPTY core file where the old one had been.
 overwrite_from_theirs() { # <core-rel>
-  local cp="$1" cons; cons="$(consumer_path "$cp")" || return 1
+  local cp="$1" cons tmp; cons="$(consumer_path "$cp")" || return 1
   mkdir -p "$(dirname "$cons")"
-  git -C "$DIST" show "${THEIRS}:core/${cp}" > "$cons" 2>/dev/null || return 1
-  sync_mode_from_theirs "$cp" "$cons"
+  tmp="$cons.incoming.$$"
+  # Recorded BEFORE the write, because after the rename the old inode no longer has this name.
+  [ -e "$cons" ] && [ "$cons" -ef "$SELF_FILE" ] && self_replaced=1
+  if ! git -C "$DIST" show "${THEIRS}:core/${cp}" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"; return 1
+  fi
+  # chmod the TEMP, so the mode swaps atomically with the content rather than existing as a
+  # window where the file is in place with the wrong bit. Same derivation, same function.
+  sync_mode_from_theirs "$cp" "$tmp"
+  mv "$tmp" "$cons" || { rm -f "$tmp"; return 1; }
 }
 
 # A file that SHOULD have been applied mechanically but could not be. NOT the same as the
@@ -263,6 +323,21 @@ done <<EOF
 $PC
 EOF
 
+# THE DRIVER REPLACED ITSELF, AND THE OPERATOR IS TOLD SO RATHER THAN LEFT TO INFER IT.
+# The rename above makes this SAFE -- the run finishes on the version that was invoked -- but
+# it does not make it invisible, and the difference matters: every row below this point was
+# produced by the OLD driver, so a range that changed how apply.sh classifies or orders work
+# was adjudicated by the pre-range rules. Re-running is cheap and idempotent (every pure-apply
+# file already equals THEIRS, so a second run has nothing to place) and is the only way to see
+# the new driver's own reading of the same range.
+#
+# Not a DECISION row: nothing is owed. The re-stamp below is still correct either way, because
+# it asserts the TREE is at THEIRS, which it is.
+if [ "$self_replaced" -eq 1 ]; then
+  say RESOLVED driver-self-update "${SELF_FILE#"$CONSUMER"/}" \
+    "this range updates apply.sh itself; the new copy is in place and this run continued on the version you invoked. Rows below were produced by the previous driver. Re-run it to see the new one's reading of the same range — it is idempotent."
+fi
+
 # ---------------------------------------------------------------- 2. drift refile (known patterns)
 # provenance-block.json known_skills: the consumer added skill names in place. Refile them to the
 # sanctioned extension point (extensions/known-skills.json) and revert the schema to theirs.
@@ -291,8 +366,11 @@ if os.path.isfile(path):
 merged = list(dict.fromkeys([str(x) for x in cur] + new))
 open(path, "w").write(json.dumps({"known_skills": merged}, indent=2) + "\n")
 PY
-        git -C "$DIST" show "${THEIRS}:core/${rel}" > "$cons" 2>/dev/null
-        sync_mode_from_theirs "$rel" "$cons"
+        # Through the helper, not a second redirect. This one is not the self-overwrite case --
+        # provenance-block.json is data, not the running script -- but it carried the other half
+        # of the same defect: `>` truncates before `git show` runs, so a failed show replaced the
+        # consumer's schema with an EMPTY file. One writer, one set of guarantees.
+        overwrite_from_theirs "$rel" || { say DECISION drift "$rel" "could not place theirs"; mech_fail=$((mech_fail+1)); continue; }
         say RESOLVED drift-refile "$rel" "-> extensions/known-skills.json ($(echo $added | tr '\n' ' '))"
       else
         say DECISION drift "$rel" "in-place schema edit is not an additive known_skills entry — refile-vs-revert"

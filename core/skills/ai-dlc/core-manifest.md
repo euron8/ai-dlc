@@ -253,6 +253,7 @@ core_manifest:
   - fixtures/setup-site-drift/**
   - fixtures/story-corpus-sprint-slot/**
   - fixtures/apply-worklist-rows/**
+  - fixtures/apply-self-overwrite/**
   - fixtures/layer-absorption-retire/**
   - fixtures/notify-hook-channel/**
 

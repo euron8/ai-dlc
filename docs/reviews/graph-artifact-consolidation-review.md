@@ -316,6 +316,20 @@ proposing anything.
 
 ## What this review did NOT establish
 
+- **WHETHER THE BUDGET THRESHOLD IS ATTAINABLE AT ALL — the largest omission, raised by the
+  operator on reading this, and now plan item 23a.** This review measured what consolidation
+  *achieved* and never asked what it *must* achieve. A first measurement, taken when the question
+  landed: the whole-read pool is **66,000 tok** (33% of the analyst's 200,000-tok window) and the
+  four live artifacts sum to **117,379 tok — 178% of it**, after 19 passes and a 96.1% reduction;
+  `carry-over-backlog.md` alone is 64% of the pool. `validate-artifact-budget.sh` reports the
+  breach as **275,812 tok / 417%** because its basename-keyed sweep now counts 30 files —
+  including 25-plus per-sprint `s<N>/architecture.md` archives the path migration created — under
+  a label reading `(4 planning artifacts)`. And none of the four sits in the `BUDGETS` table, so
+  no single one has a threshold to be measured against. **A gate whose remedy cannot reach its
+  threshold is worse than no gate**, and item 23a is where that is settled. Treat every figure in
+  this bullet as a pointer to re-derive.
+- **Whether the step should be its own skill (`ai-dlc-artifact-consolidation`).** Operator
+  question, 2026-08-08; plan item 23d. Not answerable before 23a and 23b report.
 - **Content-level duplication inside the history sinks.** Heading repetition was measured;
   duplicated prose was not.
 - **The wall-clock or token cost of a single consolidation pass.** Commits, byproduct file counts
