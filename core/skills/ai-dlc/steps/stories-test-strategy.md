@@ -377,6 +377,23 @@ a spec artifact is a downstream restatement — the same category as `prd.md`,
 which is already forbidden here. Cite the spec with `requires_context:` when a
 dev needs it loaded.
 
+**A CROSS-SPRINT ANCHOR IS LEGAL, AND THE ANCHOR IS WHAT PICKS THE SLOT.** Rule 13
+makes locked requirements cumulative, so a story can honestly cite a requirement
+locked in an earlier sprint. Write the anchor as that sprint's id —
+`full_text_source: locked-requirements.md:LR-S299-4` from a story in `s302/` — and
+Check 3b reads `s299/locked-requirements.md`, **before** the story's own slot, which
+would otherwise shadow it by basename. Nothing else changes: the bullet is still
+byte-matched against the window the anchor names, so a summarized cross-sprint
+propagation fails exactly as a same-sprint one does.
+
+**Prefer re-extracting to citing across sprints.** `discovery.md` §4a extracts from
+carry-over items into THIS sprint's block, and `carry-over-evaluation.md` routes them
+there, so a carried requirement normally appears verbatim in the current sprint's
+file and the citation is local. The cross-sprint form exists because the corpus
+already contains cross-sprint `LR-S<n>-` references — **260 of 4019 on the reference
+consumer**, against **0 of 62** in anchored citations — so the first one anchored
+would otherwise have been rejected for the wrong reason.
+
 **`product-brief.md` is still ACCEPTED and is on its way out.** §4a used to append
 each sprint's block to the durable brief, so stories written before that changed
 cite it — 31 of 62 anchored citations on the reference consumer, all resolvable and

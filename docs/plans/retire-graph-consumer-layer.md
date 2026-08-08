@@ -351,11 +351,21 @@ counted from the LIVE slot only. **The legacy name has a removal TEST, not a dat
 counts the claims still at it. **Owed to the operator: ONE block** (S299, 169 lines) moved into
 `s299/`, and nothing breaks until it is.
 
-**NEXT ACTION FOR THIS REPO: 23c-4** — cross-sprint anchoring. Establish the rule rather than
-leaving today's zero to stand: **260 of 4019 `LR-S<n>-` tokens in graph's stories name a different
-sprint than the story's slot, and 0 of the 62 ANCHORED citations do**, so per-sprint walk-up
-resolution is correct by accident. Either refuse a cross-sprint `full_text_source` with a message,
-or resolve `LR-S<n>-` to `s<n>/`. **It closes item 23.**
+**~~NEXT ACTION FOR THIS REPO: 23c-4~~ — DONE 2026-08-08. v0.323.0 (#463). ITEM 23 IS CLOSED.**
+The answer was RESOLVE, not refuse: `resolve_artifact` takes the anchor and tries the sibling
+`s<n>/` first when it carries `LR-S<n>-`. **v0.322.0 had made the accident into a defect** — with
+the block in the sprint slot, a `s302/` story citing `LR-S299-4` would have been told
+`anchor not found`, a true statement about the wrong file. Nothing widened: a fabricated bullet
+under a cross-sprint anchor still reds, asserted in the fixture.
+
+**NEXT ACTION FOR THIS REPO: nothing gates. Item 12, 22, 24, 25, 26 and 28 are all available and
+none of them blocks another.** Recommended next by value: **item 25** — `test-strategy.md` at 73
+homes is 23b's defect at scale and the measurement is already done. **A PULL IS OWED** and is the
+operator's: v0.321.0–v0.323.0 change what the pipeline writes, and **the one homing job is small** —
+graph's live brief holds exactly ONE in-force LOCKED block (S299, 169 lines) to move into `s299/`,
+plus its changelog section into `s<N>/changelog-product-brief.md`. Nothing breaks before either is
+done: the legacy source-of-record name is still accepted, and the changelog change governs future
+passes only.
 
 **THIS WAS THE HANDOFF POINT AND THE HANDOFF WORKED** — everything 23c's first step needed was
 written into the item, and the derivation ran without re-opening the work above it. The lesson item
@@ -1306,8 +1316,14 @@ the original struck rather than deleted because the reason it was wrong is the u
   first run**: a mutant staged in a scratch dir could not reach `sprint-status.sh` and scored an
   unearned kill, and staging the resolver alone was still short, because it reads
   `../schemas/sprint-status.json` and refuses to guess.
-- **23c-4 — cross-sprint anchoring.** Either forbid it at the validator with a message, or resolve
-  `LR-S<n>-` to `s<n>/`. Today's zero is not a licence to leave it undecided.
+- **23c-4 — cross-sprint anchoring. DONE — v0.323.0 (#463), and the answer was RESOLVE.**
+  `resolve_artifact` takes the anchor and tries the sibling `s<n>/` first when it carries
+  `LR-S<n>-`. **Refusing would have been wrong**: Rule 13 makes locked requirements cumulative, so
+  the citation is honest and the text is genuinely there. **And leaving it would have been worse
+  than the accident it started as** — while the block sat in the durable brief a cross-sprint anchor
+  resolved by construction; v0.322.0's move made the walk-up reach the story's own slot and report
+  `anchor not found`. Nothing widened: a fabricated bullet under a cross-sprint anchor still reds.
+  **Item 23 is closed.**
 
 ## What item 27 measured (the item was right; two things it did not predict)
 
@@ -2043,6 +2059,7 @@ Every release below is merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
+| v0.323.0 | #463 | **plan item 23c-4 — item 23 is CLOSED.** `resolve_artifact` takes the anchor and tries the sibling `s<n>/` first when it carries `LR-S<n>-`. Rule 13 makes locked requirements cumulative, so a cross-sprint citation is honest — and **v0.322.0 turned an accident into a defect**: with the block in the sprint slot the walk-up reaches the story's OWN slot and reports `anchor not found`, a true statement about the wrong file. Measured: **260 of 4019** `LR-S<n>-` tokens cross a sprint, **0 of 62** anchored citations did. Nothing widened — a fabricated bullet under a cross-sprint anchor still reds, asserted in the fixture with a mutant and a pairing arm. |
 | v0.322.0 | #462 | **plan items 23c-3 + 23c-1, together.** `discovery.md` §4a writes the sprint's `LOCKED_REQUIREMENTS` block to `_bmad-output/planning-artifacts/s<N>/locked-requirements.md` and the brief keeps a pointer; core had PRESCRIBED the accumulation (*"a brief accumulates one block per sprint"*) into an artifact that is 17% durable. The SoR is now a PAIR, because refusing the legacy name would fail **31 of 62** anchored citations, all resolvable — with a removal TEST (the PASS line counts legacy claims) rather than a date, and `prd.md` still refused in the same run. `SPRINT_WHOLE_READ_SET` pools the LIVE slot only, resolved via `sprint-status.sh sprint-id`, so the move cannot grade itself. Owed to the operator: **one** block (S299, 169 lines). |
 | v0.321.0 | #461 | **plan item 23c-2.** Rule 15's changelog now goes to `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md`, declared ONCE in `_gate-procedures.md` with four convergence lines pointing at it rather than restating the path. Six sites prescribed one; four named a durable target. **Live effect measured at 260 lines** (223 in graph's brief, 37 in `docs/architecture.md`, 0 in `prd.md`) — the "21% of the brief" figure reads larger than the pooled effect and the release says so. **MOVED, never deleted**: nothing in core reads a changelog, which is a reason to home them, not to drop them. New fixture `changelog-sprint-slot`, site set derived not hand-listed, red on the pre-fix tree naming all 6. |
 | v0.320.0 | #458 | **plan item 27.** `ai-dlc-update/SKILL.md` told step 7 to PRESERVE `skill_version`/`skill_commit` and step 2 to ADVANCE them with that same apply, 1100 lines apart; `apply.sh` mechanised preserve by never writing the fields — **0 mentions against 2 for the rulebook pair**, and nothing in the whole distribution wrote either. Both instructions are right for different runs, so the branch is a flag the caller passes: `apply.sh --carried-machinery-slice`. **No new invariant — I60 already binds it**, proven by mutating the case arm until it fails by name. Three silent-success paths closed (absent fields inserted in schema order, unreadable VERSION and legacy stamps reported as rows, result read back). New fixture `apply-machinery-stamp` (19 arms, 2 mutants, 1 control), filling a gap measured at **0** skill-field assertions suite-wide. |
