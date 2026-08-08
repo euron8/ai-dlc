@@ -383,13 +383,25 @@ norm_core_manifest() {
 # uninstall. A fixture missing from install never reaches a consumer at all — it is an
 # adversarial self-test that silently does not exist, which is strictly worse than no
 # fixture, because the catalog claims it is covered. Glob the truth and compare.
+#
+# INSTALL.SH NO LONGER HOLDS A LIST -- it derives the ship set from `core/fixtures/*/`
+# minus `.dist-only`, which is the same derivation `shippable` is below. So the arms that
+# used to join install.sh against disk are GONE rather than kept as tautologies: comparing
+# a derivation to itself passes for a reason unrelated to anything being right, and a
+# tautology reads exactly like a check that holds. What replaces them is I74(b), which
+# asserts the derivation is still THERE and still excludes the marker. uninstall.sh keeps
+# its list -- it runs on a consumer where core/fixtures/ does not exist, and it bounds a
+# DESTRUCTIVE loop that must not glob the consumer's own tests/fixtures/ -- so it is the
+# side this block now joins.
 fixture_list() { # fixture_list <script> -> dir names, one per line
   awk '/^for fixture_dir in /{ sub(/^for fixture_dir in /,""); sub(/; do.*$/,""); print }' "$1" \
     | tr ' ' '\n' | grep -E '.' | sort -u
 }
 on_disk="$( { for _d in "$REPO_ROOT"/core/fixtures/*/; do _d="${_d%/}"; [ -d "$_d" ] || continue; printf '%s\n' "${_d##*/}"; done; } 2>/dev/null | sort -u)"
-in_install="$(fixture_list "$REPO_ROOT/scripts/install.sh")"
 in_uninstall="$(fixture_list "$REPO_ROOT/scripts/uninstall.sh")"
+if [ "$(grep -c . <<<"$in_uninstall" || true)" -lt 10 ]; then
+  err "I8's uninstall.sh fixture extractor read fewer than ten names. It stopped matching, and an empty set agrees with every other set -- this fails closed rather than reporting an agreement it did not compute."
+fi
 
 # DIST-ONLY fixtures. A fixture is shipped so it can RUN on the consumer. One whose
 # subject is not shipped cannot run there, and shipping it anyway plants a fixture that
@@ -411,23 +423,21 @@ DIST_ONLY="$(cd "$REPO_ROOT/core/fixtures" 2>/dev/null && for d in */; do
   [ -f "${d}.dist-only" ] && printf '%s\n' "${d%/}"
 done | sort -u)"
 for f in $DIST_ONLY; do
-  grep -qx "$f" <<<"$in_install" && err "fixture '$f' carries a .dist-only marker but install.sh ships it. Either delete the marker or stop shipping it — as written, it is excused from the install/uninstall sync check for no reason."
+  grep -qx "$f" <<<"$in_uninstall" && err "fixture '$f' carries a .dist-only marker but uninstall.sh names it. install.sh never copies a marked fixture, so this is a removal loop reaching for a path no consumer was ever given."
   [ -d "$REPO_ROOT/core/fixtures/$f" ] || err "fixture '$f' carries a .dist-only marker but does not exist in core/fixtures/ — stale marker."
 done
 
 shippable="$(comm -23 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$DIST_ONLY"))"
-miss_install="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$in_install"))"
-[ -n "$miss_install" ] && err "fixture(s) in core/fixtures/ that install.sh never ships (so no consumer has them): $(echo $miss_install)"
-ghost_install="$(comm -13 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_install"))"
-[ -n "$ghost_install" ] && err "install.sh ships fixture(s) that do not exist in core/fixtures/: $(echo $ghost_install)"
-drift_uninstall="$(comm -3 <(printf '%s\n' "$in_install") <(printf '%s\n' "$in_uninstall") | tr -d '\t')"
-[ -n "$drift_uninstall" ] && err "install.sh and uninstall.sh fixture loops disagree (uninstall would orphan or over-remove): $(echo $drift_uninstall)"
+miss_uninstall="$(comm -23 <(printf '%s\n' "$shippable") <(printf '%s\n' "$in_uninstall"))"
+[ -n "$miss_uninstall" ] && err "fixture(s) install.sh ships that uninstall.sh never names, so an uninstall orphans them in the consumer's tests/fixtures/ forever: $(echo $miss_uninstall)"
+ghost_uninstall="$(comm -13 <(printf '%s\n' "$on_disk") <(printf '%s\n' "$in_uninstall"))"
+[ -n "$ghost_uninstall" ] && err "uninstall.sh names fixture(s) that do not exist in core/fixtures/: $(echo $ghost_uninstall). Its loop guards on \`[ -d ]\`, so a renamed or deleted fixture is a silent no-op rather than a failure."
 
 # The manifest CLAIMS these fixtures for the core layer, and the claim must equal the
 # set a consumer actually RECEIVES -- which is $shippable above, already computed and
-# already bound to both install loops. One derivation, four readers: a .dist-only marker
-# or an install-loop edit moves all of them together, so the manifest's fixture entries
-# cannot become a fifth hand-list. Both directions:
+# already bound to uninstall's loop. One derivation, four readers: a .dist-only marker moves
+# all of them together, so the manifest's fixture entries cannot become a fifth hand-list.
+# Both directions:
 #
 #   a shipped fixture with NO entry -> ai-dlc-core-guard.sh permits an in-place edit to
 #     upstream test data, and Check 16 audits it as consumer-authored -- a marker in a
@@ -3584,53 +3594,55 @@ else
     err "I70 core ships no templates/$(basename "$PCF_DECL") to scaffold the declared taxonomy from. install.sh names that template literally and reconcile/apply.sh derives it from the declaration's basename; with the file absent the installer fails loudly and the pull driver files 'pr-class-template-missing', and a consumer that never runs install.sh again sees only the second."
 fi
 
-# --- I74: install.sh's fixture list IS the shipped fixture set, both directions -----
-# `install.sh` copies fixtures from a HAND-WRITTEN list of directory names, and nothing compared
-# that list to what `core/fixtures/` actually holds. A new shipping fixture omitted from it never
-# reaches a consumer at all — the distribution's own suite stays green, because the fixture is
-# right there in core/, and the omission first surfaces as a drivable-count that did not move in
-# some later pull brief, several rows and possibly several releases later.
+# --- I74: install.sh DERIVES the ship set, and every `.dist-only` says why ----------
+# The shipped set is `core/fixtures/*/` minus every directory carrying a `.dist-only` marker.
+# That is the only definition, and the marker is the fixture's own colocated declaration.
 #
-# MEASURED WHEN THIS WAS WRITTEN: 93 listed, 94 shipped, exactly ONE unlisted — the fixture the
-# release adding this invariant had just written. Nothing caught it; the consumer install did,
-# by not having it. Controls in the same probe: 0 listed-but-absent, and 0 of the 9 `.dist-only`
-# fixtures leaked into the list.
+# THIS INVARIANT USED TO JOIN install.sh's HAND-WRITTEN LIST against the tree, in both
+# directions. install.sh now derives, so that join would compare a derivation to itself and
+# pass for a reason unrelated to anything being right. **A tautology reads exactly like a
+# check that holds**, so the join was not kept -- it was replaced by (b), which asserts the
+# derivation is still there and still excludes the marker, and the list-vs-tree joins that
+# remain live in I8 over uninstall.sh, which still has a list and needs one.
 #
-# BOTH DIRECTIONS, because they are different defects. A shipped fixture missing from the list
-# never reaches a consumer; a listed directory that does not exist is a silent no-op the `[ -d ]`
-# guard swallows, so a rename leaves the fixture uninstalled and says nothing. And a `.dist-only`
-# fixture appearing in the list is the packaging defect from the opposite side — v0.230.0's, where
-# a distribution-only fixture became the CONSUMER's pole.
-i74_listed="$(sed -n '/^for fixture_dir in /p' "$REPO_ROOT/scripts/install.sh" 2>/dev/null \
-  | sed 's/^for fixture_dir in //; s/; do$//' | tr ' ' '\n' | grep -E '.' | sort -u)"
-i74_ship=""; i74_dist=""
-for _fd in "$REPO_ROOT"/core/fixtures/*/; do
-  [ -d "$_fd" ] || continue
-  _fn="${_fd%/}"; _fn="${_fn##*/}"
-  if [ -f "$_fd/.dist-only" ]; then i74_dist="${i74_dist}${_fn}
-"; else i74_ship="${i74_ship}${_fn}
-"; fi
-done
-i74_ship="$(printf '%s' "$i74_ship" | grep -E '.' | sort -u)"
-i74_dist="$(printf '%s' "$i74_dist" | grep -E '.' | sort -u)"
-i74_nl="$(grep -c . <<<"$i74_listed" || true)"
-i74_ns="$(grep -c . <<<"$i74_ship" || true)"
-if [ "$i74_nl" -lt 10 ] || [ "$i74_ns" -lt 10 ]; then
-  err "I74's extractors read $i74_nl listed and $i74_ns shipped fixture(s). Fewer than ten on either side means an extractor stopped matching, not that the suite shrank — and an empty set agrees with every other set, so this fails closed rather than reporting an agreement it did not compute."
+# MEASURED WHEN THE ORIGINAL WAS WRITTEN: 93 listed, 94 shipped, exactly ONE unlisted -- the
+# fixture the release adding this invariant had just written. Nothing caught it; the consumer
+# install did, by not having it. Re-measured at the derivation: 132 on disk, 120 shipped, 12
+# `.dist-only`, all three remaining declarations agreeing at 120, and ground-truthed by running
+# install.sh into an empty tree: 120 fixture directories, 0 marked ones leaked.
+#
+# THE MARKER MUST CARRY A REASON. A zero-byte `.dist-only` is a decision nobody can audit, and
+# seven of the twelve were zero bytes until this arm existed. The criterion for writing one is in
+# CLAUDE.md; the marker states why THIS fixture has one.
+# I74(b) -- install.sh must DERIVE, and this arm exists because the arm above stopped
+# watching it. If the hand-list ever comes back, or the `.dist-only` exclusion is dropped
+# from the derivation, install.sh ships the wrong set and every join above still agrees --
+# they are all joined to the DERIVED set, which the derivation is what produces.
+i74_iloop="$(sed -n '/^for fixture_dir in /,/^); do$/p' "$REPO_ROOT/scripts/install.sh" 2>/dev/null)"
+if [ -z "$i74_iloop" ]; then
+  err "I74(b) could not find install.sh's fixture loop at all. Either it was renamed -- in which case every arm above is joining against a set nothing installs -- or this extractor is looking at the wrong shape, and its silence means nothing."
 else
-  i74_unlisted="$(comm -23 <(printf '%s\n' "$i74_ship") <(printf '%s\n' "$i74_listed") | tr '\n' ' ')"
-  i74_absent="$(comm -13 <(printf '%s\n' "$i74_ship") <(printf '%s\n' "$i74_listed") | tr '\n' ' ')"
-  i74_leak="$(comm -12 <(printf '%s\n' "$i74_dist") <(printf '%s\n' "$i74_listed") | tr '\n' ' ')"
-  if [ -n "${i74_unlisted// /}" ]; then
-    err "I74 fixture(s) core ships that install.sh's list does not name: ${i74_unlisted}. They exist in core/fixtures/ so this repository's own suite runs them and stays green, and they reach NO consumer. The gap surfaces as a drivable-fixture count that did not move, in whichever pull brief is written next."
-  fi
-  if [ -n "${i74_absent// /}" ]; then
-    err "I74 install.sh names fixture director(ies) that do not exist: ${i74_absent}. The copy loop guards on \`[ -d ]\`, so a renamed or deleted fixture is a silent no-op rather than an installer failure."
-  fi
-  if [ -n "${i74_leak// /}" ]; then
-    err "I74 install.sh's list names \`.dist-only\` fixture(s): ${i74_leak}. Those are distribution-only by declaration; shipping one puts a fixture the consumer cannot need into the consumer's own suite schedule, which is how a distribution-only battery became the reference consumer's pole in v0.230.0."
-  fi
+  case "$i74_iloop" in
+    *'core/fixtures/'*) : ;;
+    *) err "I74(b) install.sh's fixture loop does not read core/fixtures/. It is no longer deriving the ship set from the tree." ;;
+  esac
+  case "$i74_iloop" in
+    *'.dist-only'*) : ;;
+    *) err "I74(b) install.sh's fixture loop does not exclude \`.dist-only\`. Every distribution-only fixture would be copied into the consumer's suite schedule -- the v0.230.0 defect, and the joins above cannot see it because they all resolve the same marker themselves." ;;
+  esac
 fi
+
+# I74(d) -- every `.dist-only` marker carries a reason. A zero-byte marker is a decision
+# nobody can audit: it excludes a fixture from every consumer and says nothing about why,
+# and seven of the twelve were zero bytes when this arm was written.
+i74_mute=""
+for _fd in "$REPO_ROOT"/core/fixtures/*/; do
+  [ -f "$_fd.dist-only" ] || continue
+  if [ ! -s "$_fd.dist-only" ]; then
+    _fn="${_fd%/}"; i74_mute="${i74_mute} ${_fn##*/}"
+  fi
+done
+[ -n "${i74_mute// /}" ] && err "I74(d) \`.dist-only\` marker(s) with an EMPTY body:${i74_mute}. The marker excludes the fixture from every consumer; with no reason written in it, the next author cannot tell a considered exclusion from one copied by pattern-match. The criterion is in CLAUDE.md."
 
 # --- I79: every rule below the re-attach cut declares what CARRIES it -------------
 # A compacted lead holds only the rules that survive the harness's skill re-attach cut.
@@ -5120,7 +5132,7 @@ rm -rf "$i84_probe_dir"
 # --- Verdict ------------------------------------------------------------------
 if [ "$fail" -eq 0 ]; then
   n="$(printf '%s\n' "$map_ids" | grep -c .)"
-  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70), and no sed or grep expression strips whitespace with a bracket class containing a backslash and the letter t, which in a POSIX bracket expression is those two characters and silently truncates any value ending in one of them — proven each run against both a positive and a negative probe the invariant writes itself, since awk's identical-looking class is correct (I71), and the PR-class taxonomy's grammar is ONE key set across the parser that dispatches it and the template a consumer writes from, both sides derived and neither hand-listed (I72), and the consumer's derivable story-field list is declared once with the derive, the installer and the pull driver each deriving its location, the template named by that declaration's basename, and \`status\` read from the SCHEMA rather than from the list so no consumer can declare its way out of the one field Check 5 depends on (I73), and install.sh's hand-written fixture list IS the shipped fixture set — no fixture core ships is missing from it, no name in it is absent from the tree, and no \`.dist-only\` fixture appears in it (I74), and every core validator that consults a project root consults it through ONE canonical resolution block — the subject set derived from the scripts that mention a root token and the required text derived as the modal span across those same scripts, so no donor is named, proven each run against a positive and a negative probe the invariant writes itself; scripts taking the root as an argument are out of scope by decision (I75), and the harness-origin prefix set is ONE declaration — the capture hook, Check 33's enforcer and genuineOperatorText all resolving it, with no shipped file permitted to restate a prefix (I76), and the live adversarial series is derived by ONE marked block across the Stop hook and the PreToolUse hook that denies on it — asserted to be the FILTERING form AND to be scoped to the DECLARED sprint's own directory, since two copies of the vulnerable unscoped newest-then-strip form agree with each other, each property proven each run against a probe the invariant writes itself (I81), and every artifact path core prescribes obeys core's own grammar — the directory is the only sprint slot — or is named in artifact-path-grammar.md's migration ledger, which is bound in BOTH directions so an entry cannot outlive the prescription it excuses, with the grammar file excluded from its own corpus and the predicate proven each run against the reserved slot, its all-sprints form and seven measured violations (I82), and the grammar's own \`areas:\` and scan-roots blocks have exactly ONE reader — artifact-path-config.sh — with the corpus derived by find, the resolver itself asserted still to carry the extraction, and the expression proven each run against a positive and a negative probe the invariant writes itself (I83), and the story corpus location is ONE declaration — a template in schemas/sprint-status.json carrying the sprint slot, which no shipped program may restate and which every reader of must substitute, both sides derived and the restatement expression proven each run against a positive probe and a negative one carrying the same path in a comment (I84)."
+  echo "OK: enforcement-map.yaml in sync with gate-validation.md ($n catalog checks), all bindings live, core_manifest copies match, drift-scan set bound (I12), every fixture driven or declared undrivable (I20), reconcile helpers single-homed (I21), every role has a resolvable aiDlcRoles entry (I22) whose blocks the dispatch guard actually reads (I22b), every shipped rule file in the audit corpus (I23), H1 fixture set derived not restated (I24), core-path derivation byte-identical across guard and resolver (I25), core-layer-immutability derives the core set rather than restating it (I26), the mid-pull marker is one path across writer and reader (I27), layer grain declared and partitioning the manifest (I28), ai-dlc-update cites no helper outside reconcile/ (I29), both pre-push syntax globs one mapped set (I30), every scan-marked core subtree has a register-drift disposition (I31), every Check 17 bmad pin names the skill its own step file invokes (I32), no fixture reaches a core subtree by walking up from a resolved script (I33), rule grammar byte-identical across the W4 reporter and the relabeller (I34), H1's fixture criterion quotes I20's exemption marker (I35), every layer-contract clause names a code its enforcer emits and every emitted code is claimed (I36), no clause ships without a mechanism (I37), every clause id appears in its declared prose home (I38), the ledger status vocabulary is one set across its emitter, step 3f and the report heading (I39), the anchor reading is byte-identical across the authoring linter and the pull classifier (I40), every clause id is unique (I41), no clause is introduced above contract_version (I42), the consumer machinery home is one string across every surface that advertises it (I43), core writes nothing under it (I44), core allocates no check or rule number inside the band reserved for the consumer (I45), the extension kind vocabulary is one set across the linter's enum and the entry contract (I46), the check-heading grammar is byte-identical across the authoring linter and the manifest resolver (I47), the generated-region name is read from the schema by both its writer and the stray scan (I48), every core-paths.sh mode a rule file names is one the script dispatches and documents (I49), every scripts/ai-dlc/ validator a shipped file names is one core ships (I50), the subject of the one commit Step 5b licenses is one form across the step file and the schema that matches it (I51), the fixture-drivability exemption marker is one string across I20 and the validator shipped to consumers (I52), every escalation-citation mode one core script invokes on another is dispatched and documented there (I53), and no shipped script writes a shell variable into a reader that stops at its first match (I54), nor feeds one from a PIPELINE — a command upstream, or a variable with a filter in between, both of which sat outside I54's grammar by construction — narrowed to files that enable pipefail and lines whose status is load-bearing, each narrowing derived from the file and proven each run against probes the invariant builds itself (I54b), the fixture suite's content key excludes only paths no fixture reads and every cross-run record the hook keeps sits outside the tree it hashes (I55), the model pin is one rule, defined once in each file, across the dispatch guard and the gate-time ledger validator (I56), and every check whose body makes a validator's exit code decide the gate has that validator bound in the map (I57), and the ADJUDICATED level is one token across the contract that declares it and the classifier that acts on it, proven by running that classifier's own reader against a mutated copy (I58), and every mode a shipped script dispatches is named in that same script's own prose, proven each run against a probe the invariant writes itself (I59), and every mode one shipped file names on another shipped script is one that script dispatches, both sides derived rather than hand-listed, proven each run against a probe carrying both dispatch forms (I60), and every clause bullet in a declared prose home states the same severity the contract declares, against a vocabulary derived from the contract itself (I61), and prose that names a contract code cites the clause that claims it, scoped per file by the role the contract pins it at and proven each run against a probe the invariant writes itself (I62), and every file the contract claims to have absorbed is pinned as home, pointer or none and still is that, in both directions (I63), and every clause's code reaches a site in its enforcer that a run can attribute to it, rather than a comment I36's whole-file grep is satisfied by (I64), and every clause names the fixture that proves its code fires — a directory with a driver, that drives the clause's own enforcer, and that names the code where a run can attribute it — or the literal 'none', which is a counted gap no fixture is allowed to satisfy in silence (I65), and the fixture-suite runner is ONE program across both pre-push hooks — pool, empty-suite guard and verdict-completeness assertion alike — compared on executable lines so no comment can satisfy it, with the fixture root mapped rather than exempted (I66), and the consumer's crosswalk file is one string across the contract that declares it and ai-dlc-update's own copy, with neither the validator, the installer nor the pull driver that scaffolds it permitted to restate the literal (I67), and core's own shipped files yield ZERO crosswalk rows so no consumer inherits a resolution its operator never wrote, each zero carrying a same-run control that the reader can still see a row (I68), and every piece of prose naming where that declaration LIVES names a file that carries it, so a remedy read mid-migration can be followed literally (I69), and the PR-class taxonomy the trunk audit reads is declared once with the audit, the installer and the pull driver each deriving its location rather than restating it, and the template they scaffold from named by that same declaration's basename (I70), and no sed or grep expression strips whitespace with a bracket class containing a backslash and the letter t, which in a POSIX bracket expression is those two characters and silently truncates any value ending in one of them — proven each run against both a positive and a negative probe the invariant writes itself, since awk's identical-looking class is correct (I71), and the PR-class taxonomy's grammar is ONE key set across the parser that dispatches it and the template a consumer writes from, both sides derived and neither hand-listed (I72), and the consumer's derivable story-field list is declared once with the derive, the installer and the pull driver each deriving its location, the template named by that declaration's basename, and \`status\` read from the SCHEMA rather than from the list so no consumer can declare its way out of the one field Check 5 depends on (I73), and install.sh DERIVES the shipped fixture set from the tree rather than hand-listing it — asserted to still read core/fixtures/ and to still exclude \`.dist-only\`, with the list-vs-tree joins that remain carried by I8 over uninstall.sh, which runs where the tree does not exist — and every \`.dist-only\` marker carries a non-empty reason, since a marker excluding a fixture from every consumer without saying why is a decision nobody can audit (I74), and every core validator that consults a project root consults it through ONE canonical resolution block — the subject set derived from the scripts that mention a root token and the required text derived as the modal span across those same scripts, so no donor is named, proven each run against a positive and a negative probe the invariant writes itself; scripts taking the root as an argument are out of scope by decision (I75), and the harness-origin prefix set is ONE declaration — the capture hook, Check 33's enforcer and genuineOperatorText all resolving it, with no shipped file permitted to restate a prefix (I76), and the live adversarial series is derived by ONE marked block across the Stop hook and the PreToolUse hook that denies on it — asserted to be the FILTERING form AND to be scoped to the DECLARED sprint's own directory, since two copies of the vulnerable unscoped newest-then-strip form agree with each other, each property proven each run against a probe the invariant writes itself (I81), and every artifact path core prescribes obeys core's own grammar — the directory is the only sprint slot — or is named in artifact-path-grammar.md's migration ledger, which is bound in BOTH directions so an entry cannot outlive the prescription it excuses, with the grammar file excluded from its own corpus and the predicate proven each run against the reserved slot, its all-sprints form and seven measured violations (I82), and the grammar's own \`areas:\` and scan-roots blocks have exactly ONE reader — artifact-path-config.sh — with the corpus derived by find, the resolver itself asserted still to carry the extraction, and the expression proven each run against a positive and a negative probe the invariant writes itself (I83), and the story corpus location is ONE declaration — a template in schemas/sprint-status.json carrying the sprint slot, which no shipped program may restate and which every reader of must substitute, both sides derived and the restatement expression proven each run against a positive probe and a negative one carrying the same path in a comment (I84)."
   exit 0
 fi
 exit 1

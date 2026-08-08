@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind the shipped `trunk-audit-classes` fixture -- same shape
+and same reason as story-fields-derive-mutants: it edits copies of the distribution's own
+sources, and its runtime is why the assertions and the mutants are separate directories.

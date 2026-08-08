@@ -352,8 +352,8 @@ durable artifact by path. **THE ONE THING THE ITEM DID NOT NAME IS THE WORK:**
 block into a sprint slot drops the pooled sum by three quarters of the brief **with the same bytes
 still read whole at gate time** — the change would grade itself. **Do not reuse the item's two-part
 framing ("the LOCKED block and changelog"); it is four changes** and the sequencing is in the table.
-Item 12, item 22, item 24, item 26 and item 28 remain available and gate nothing. (Item 25 shipped
-as v0.324.0.)
+Item 12, item 22, item 26 and item 28 remain available and gate nothing. (Item 25 shipped as
+v0.324.0; item 24 as v0.325.0.)
 
 **~~NEXT ACTION FOR THIS REPO: 23c-1~~ — 23c-2 WAS TAKEN FIRST AND THE ORDER ABOVE WAS CORRECTED,
 NOT IGNORED. v0.321.0 (#461).** Two things forced it, both measured after the derivation merged:
@@ -426,9 +426,11 @@ PR number, and this list is derived from what is left.
    twice over and had already decided four of the five, with reasons. What it had was a HOLE, because
    it enumerated PRODUCERS and `test-strategy.md` is a TEA deliverable rather than an analyst draft.
    See §*What item 25 measured*.
-2. **Item 24 — the fixture ship-list is four hand-lists.** Ergonomic, not correctness: the join
-   already FIRES. Two things must be settled before any code, and both are written into the item.
-   Re-derive the 129/117/12 counts; they are from v0.316.0.
+2. **~~Item 24 — the fixture ship-list is four hand-lists.~~ — DONE 2026-08-08. v0.325.0.**
+   The counts were **132/120/12**, not 129/117/12. **A colocated per-fixture declaration already
+   existed** (`.dist-only`) and 5 of 12 already carried a reason, so *"the criterion is stated
+   nowhere"* was half wrong; **7 of 12 were zero bytes**, which was the real half. One of the four
+   derives now — the one that can, and the one that broke. See §*What item 24 measured*.
 3. **Item 28 — a `subject_digest` is unreadable once its row stops blocking.** REPRODUCED here,
    attribution exact. Derive the caller set first so a listing mode does not become a second
    implementation of the candidate join.
@@ -442,6 +444,8 @@ PR number, and this list is derived from what is left.
 6. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
    — reported mid-pull, never reproduced here. **Its first step is to establish whether an arm is
    addressable at all**, and if it is not, the honest outcome is a smaller change than a new join.
+
+**RECOMMENDED NEXT: item 28**, then 12, 22, 26. None blocks another.
 
 **THE OPERATOR'S SIDE, and none of it is yours to do:** take the pull (scope and derivation in the
 status block above), and the **three** homing jobs it now carries — the S299 LOCKED block, the
@@ -551,7 +555,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~20~~ | ~~**27** — the skill stamp has two contradictory instructions and no writer~~ | **DONE — v0.320.0 (#458).** The branch is a flag, `apply.sh --carried-machinery-slice`, and both prose sites now point at it. **No new invariant: I60 already binds the join**, proven by mutating the case-arm name until it fails by name. New fixture `apply-machinery-stamp`; the gap it fills is measured at **0** skill-field assertions across the whole fixture set against a control of 3 on the rulebook pair. See §*What item 27 measured* |
 | ~~21~~ | ~~**23c** — the inlet~~ | **CLOSED — derivation + three releases, v0.321.0 (#461), v0.322.0 (#462), v0.323.0 (#463). ITEM 23 IS CLOSED.** Original row text follows. **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four changes in THREE releases: **23c-2** the changelog — **DONE, v0.321.0 (#461)**, taken first because nothing reads a changelog so it needs no pool arm; **23c-1 + 23c-3** the pool arm with the writer and pin, together because the arm has no subject until the writer creates one; **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
 | ~~22~~ | ~~**25** — five more per-sprint artifacts prescribed at durable paths~~ | **DONE — v0.324.0.** `test-strategy.md` moves to `s<N>/`; Check 23 rescoped from producer to path shape; the criterion written down. **The item's premise that no durable declaration exists is REFUTED** — two independent pairs of carriers already agreed, and four of the five were already decided with reasons. **74 homes, not 73.** `bug-analysis` stays out on a stated disagreement rather than a quiet widening. Two pre-existing fixture defects fell out, one of them a vacuous arm caught before it shipped. See §*What item 25 measured* |
-| **23** | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
+| ~~23~~ | ~~**24** — the fixture ship-list is four hand-lists~~ | **DONE — v0.325.0.** `install.sh` derives from `.dist-only`; the criterion is in `CLAUDE.md`; all 7 empty markers filled and I74(d) requires a body. **The other three lists STAY, with the blast radius measured** — uninstall bounds a destructive loop on a tree where `core/fixtures/` does not exist, and the two glob declarations are read by ~20 programs. **I74's old join could not survive and was replaced rather than kept as a tautology.** A second extractor (I8) was found by RUNNING. See §*What item 24 measured* |
 | **24** | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
 | **25** | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | **26** | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
@@ -1081,8 +1085,13 @@ before you write code.
     somewhere else entirely. 23b before 23c because 23c changes what a sprint writes, so doing it
     first means re-homing residue 23c would have stopped producing.
 
-24. **The fixture ship-list is hand-written in FOUR places, and the criterion behind it is written
-    in NONE.** Surfaced by v0.316.0: adding one fixture required four edits, and the two I missed
+24. ~~**The fixture ship-list is hand-written in FOUR places, and the criterion behind it is written
+    in NONE.**~~ **DONE — v0.325.0. What follows is the ORIGINAL scoping and its instruction is
+    spent.** Three of its figures are corrected by the work: the counts are **132/120/12**, the
+    criterion was NOT written nowhere (`.dist-only` existed and 5 of 12 carried a reason), and the
+    sites are **five**, not four — I8 parsed `install.sh`'s loop line independently of I74 and was
+    found by running. See §*What item 24 measured*. Original text follows.
+    Surfaced by v0.316.0: adding one fixture required four edits, and the two I missed
     were found by a failed push rather than by anything at authoring time.
 
     **BE PRECISE ABOUT WHAT IS AND IS NOT BROKEN, because the obvious framing is wrong.** The set
@@ -1311,6 +1320,77 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 24 measured (the sites were five, and only one of them could derive)
+
+v0.325.0. **Three of the item's figures are corrected, and the correction is the item.**
+
+```
+                        item said      measured 2026-08-08
+fixtures on disk            129                132
+shipped                     117                120
+.dist-only                   12                 12
+declaring sites               4                  5   <- I8 parses install.sh's loop line
+                                                        INDEPENDENTLY of I74, and was found
+                                                        by RUNNING, not by reading
+`.dist-only` with a reason    0 (implied)        5 of 12   <- 7 were zero bytes
+```
+
+**THE COLOCATED DECLARATION THE ITEM ASKS FOR ALREADY EXISTED.** `.dist-only` is a marker file
+in the fixture's own directory, I74 already derived the ship set from it, and 5 of the 12
+already opened with the same sentence — *"This fixture is DISTRIBUTION-ONLY. It must never be
+copied to a consumer."* The item's *"the criterion is stated NOWHERE"* is true of the GENERAL
+rule and false of the per-fixture one. **Same shape as item 25 one release earlier: the
+declaration exists and has a hole.**
+
+**BOTH PRE-CODE QUESTIONS SETTLED, AND THE BLAST RADIUS IS ASYMMETRIC — that is what decided
+the scope.**
+
+- **`install.sh` can derive.** It reads from `$SCRIPT_DIR/../core/fixtures/`, the SOURCE tree,
+  which is present whenever it runs. It is also one of the two lists that actually disagreed at
+  v0.316.0.
+- **`uninstall.sh` CANNOT, and not for a cost reason.** It runs on a consumer where
+  `core/fixtures/` does not exist, and its list bounds a **DESTRUCTIVE** loop. Globbing the
+  consumer's `tests/fixtures/` would delete fixtures the consumer wrote. **That safety property
+  is why the list is there and it was written down nowhere** — which is item 24's own complaint,
+  pointing at item 24's own evidence.
+- **`core-manifest.md` and `setup-sites.md` are read by ~20 programs** — the core guard hook,
+  `core-paths.sh`, `validate-layer-entries.sh`, the drift scan, and a dozen fixtures. Changing
+  their glob grammar to a wildcard-with-exclusion touches every reader. **Riskier than
+  maintaining them**, which is the outcome the item names as legitimate.
+
+**GROUND TRUTH, on a tree built by running `install.sh` into an empty directory** rather than
+in `core/`: **120 fixture directories installed, 0 `.dist-only` leaked** (control: two known
+shippers present, four known marked ones absent).
+
+**I74's JOIN COULD NOT SURVIVE THE CHANGE, AND WAS NOT PRETENDED INTO SURVIVING IT.** It read
+install.sh's hand-written list. With install.sh deriving, that join compares a derivation to
+itself and passes for a reason unrelated to anything being right. **A tautology reads exactly
+like a check that holds** — this repo's recurring defect, arriving as a consequence of a fix
+rather than as an authoring mistake. So: I74 becomes **(b)** the derivation is still there and
+still excludes the marker, plus **(d)** every marker carries a body; and the list-vs-tree joins
+moved to **I8**, retargeted onto `uninstall.sh`, which still has a list and needs one.
+
+**THE FIFTH SITE WAS FOUND BY RUNNING.** I8's `fixture_list()` awk-parses
+`^for fixture_dir in …` out of install.sh, independently of I74's own `sed` doing the same
+thing, and it read the literal `$(` out of the new derivation. Neither the item nor the reading
+of the four declared sites showed it; the validator did, on the first run after the edit.
+
+**MUTATION REPLAY — four mutants, each failing EXACTLY ONE assertion, against an unmutated
+control from the same tree:**
+
+```
+derivation repointed at core/schemas/        -> "does not read core/fixtures/"
+`.dist-only` guard deleted from the loop     -> "does not exclude"
+plan-shape/.dist-only truncated to 0 bytes   -> "EMPTY body: plan-shape"
+one name dropped from uninstall.sh's list    -> "uninstall.sh never names"
+```
+
+**All four are now SUITE assertions** (`enforcement-map-derivations` A19–A22). **I74 had no
+fixture coverage at all** before this release — an I65-class gap in the invariant that packages
+every fixture.
+
+**Adding a fixture now costs THREE edits, not four**, and the removed one is the one that broke.
 
 ## What item 25 measured (the declaration existed; it enumerated PRODUCERS and the defect was not one)
 

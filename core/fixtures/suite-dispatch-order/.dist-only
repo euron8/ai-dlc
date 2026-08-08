@@ -1,0 +1,6 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is the distribution pre-push pool's longest-first dispatch and its durations
+record. These arms were originally written inside `consumer-suite-pool`, which IS shipped;
+splitting them out is what keeps the shipped fixture's subject the consumer's own pool.
+See this fixture's run.sh header for the measurement that put it here.

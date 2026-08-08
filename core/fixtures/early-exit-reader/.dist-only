@@ -1,0 +1,7 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is a SHELL IDIOM the distribution's own validators must not use -- a check
+written over a first-match reader that stops firing once its input outgrows the pipe
+buffer (I54/I54b). The corpus it scans is scripts/ and core/scripts/ as they exist HERE.
+A consumer holds only the installed subset, so the same run would scan a smaller corpus
+and report the same clean line -- a narrower check reading identically to a full one.

@@ -375,6 +375,68 @@ A18_i84_declaration_missing() {
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------
+# --- Assertion 19: I74(b) — install.sh must still DERIVE the ship set ---------
+# install.sh's fixture loop was a hand-written list of 120 names until it became a
+# derivation over `core/fixtures/*/` minus `.dist-only`. The invariant that used to join
+# that list against the tree could not survive the change — joining a derivation to itself
+# passes for a reason unrelated to anything being right — so what replaced it is an
+# assertion that the derivation is THERE. Break the tree read.
+A19_i74_install_derives() {
+  t="$(fresh)"
+  if edit "$t/scripts/install.sh" \
+       '{ gsub(/core\/fixtures\/"\*\//, "core/schemas/\"*/") } { print }'; then
+    assert_fires "I74 install.sh no longer deriving the ship set from core/fixtures/ is REPORTED" \
+                 "does not read core/fixtures/"
+  fi
+}
+
+# --- Assertion 20: I74(b) — and must still EXCLUDE the marker -----------------
+# The other half, and the one that fails in the shipping direction: a derivation that
+# reads the right directory but drops the `.dist-only` guard copies every
+# distribution-only fixture into the consumer's suite schedule. That is v0.230.0's defect,
+# where a distribution-only battery became the reference consumer's pole, and no join can
+# see it because every join resolves the same marker this loop stopped resolving.
+A20_i74_install_excludes_marker() {
+  t="$(fresh)"
+  if edit "$t/scripts/install.sh" \
+       '{ sub(/\[ -f "\$_fd\.dist-only" \] && continue/, "") } { print }'; then
+    assert_fires "I74 an install derivation that stops excluding .dist-only is REPORTED" \
+                 "does not exclude"
+  fi
+}
+
+# --- Assertion 21: I74(d) — a `.dist-only` marker with no reason --------------
+# The marker excludes a fixture from every consumer. Empty, it says nothing about why, and
+# the next author cannot tell a considered exclusion from one copied by pattern-match.
+# Seven of the twelve were zero bytes when this arm was written. Truncation is the
+# mutation, so `edit` is not the helper — it rewrites through awk and an empty result is
+# what we want.
+A21_i74_marker_with_no_reason() {
+  t="$(fresh)"
+  local m="$t/core/fixtures/plan-shape/.dist-only"
+  if [ ! -s "$m" ]; then
+    bad "FIXTURE BROKEN — plan-shape/.dist-only is already empty in the seed, so truncating it is not a mutation and the assertion below would test an unchanged tree."
+    return 1
+  fi
+  : > "$m"
+  assert_fires "I74 a .dist-only marker with an EMPTY body is REPORTED" \
+               "EMPTY body"
+}
+
+# --- Assertion 22: I8 — uninstall.sh's list vs the derived ship set -----------
+# uninstall.sh keeps a hand-written list on purpose: it runs on a consumer where
+# core/fixtures/ does not exist, and it bounds a DESTRUCTIVE loop that must not glob the
+# consumer's own tests/fixtures/. That is why it is the side I8 joins now that install.sh
+# derives. Drop one name and the fixture is orphaned in every consumer's tree forever.
+A22_i8_uninstall_orphan() {
+  t="$(fresh)"
+  if edit "$t/scripts/uninstall.sh" \
+       '{ sub(/ check-23-draft-stamps /, " ") } { print }'; then
+    assert_fires "I8  a fixture install ships that uninstall.sh does not name is REPORTED" \
+                 "uninstall.sh never names"
+  fi
+}
+
 # `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
 # tree. It is the unit the pool schedules and it is also how a human runs a single
 # assertion while working on it.

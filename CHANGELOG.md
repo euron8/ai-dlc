@@ -34,6 +34,62 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.325.0] — 2026-08-08
+
+### The fixture ship-list stops being a hand-list on the one side that can derive, and the criterion behind it is written down
+
+Plan item 24. **The counts had drifted and the item's central claim was half wrong.**
+Re-derived: **132 fixtures on disk, 120 shipped, 12 distribution-only** — not 129/117/12. And
+the item's *"the criterion is stated NOWHERE"* is only true of the general rule: a colocated
+per-fixture declaration already existed as the `.dist-only` marker, and 5 of the 12 already
+carried a written reason in a consistent form. **7 of 12 were zero bytes**, which is the half
+that was real.
+
+**Both pre-code questions the item required are settled, by measurement.**
+
+- **The win is ERGONOMIC, confirmed.** The join fires; nothing is silently rotting.
+- **The blast radius decides the scope, and it is asymmetric.** `install.sh` reads from the
+  SOURCE tree, so it can derive — and it is one of the two lists that actually disagreed at
+  v0.316.0. `uninstall.sh` runs on a consumer where `core/fixtures/` does not exist, and its
+  list bounds a **destructive** loop: globbing the consumer's `tests/fixtures/` would delete
+  fixtures the consumer wrote. `core-manifest.md` and `setup-sites.md` are glob declarations
+  read by roughly twenty programs — the core guard hook, `core-paths.sh`,
+  `validate-layer-entries.sh`, the drift scan, a dozen fixtures — so changing their grammar
+  touches every one of those readers. **Deriving those three is riskier than maintaining them,
+  which is the outcome the item names as legitimate.**
+
+**Shipped:**
+
+- **`install.sh` derives**, from `core/fixtures/*/` minus `.dist-only`. Ground-truthed by
+  running it into an empty tree: **120 fixture directories installed, 0 marked ones leaked**,
+  controls on both sides.
+- **The criterion is in `CLAUDE.md`** — a fixture is `.dist-only` when its SUBJECT is not
+  present on a consumer, in three measured shapes — together with the reason each of the three
+  remaining hand-lists stays hand-written.
+- **All 7 empty markers now carry their reason**, and **I74(d)** requires a non-empty body.
+
+**I74 could not survive the change and was not pretended into surviving it.** Its join read
+install.sh's list; with install.sh deriving, that join would compare a derivation to itself and
+pass for a reason unrelated to anything being right. **A tautology reads exactly like a check
+that holds.** So the join was replaced by **I74(b)** — the derivation is still there and still
+excludes the marker — and the list-vs-tree joins moved to **I8**, retargeted from install.sh
+onto uninstall.sh, which still has a list and needs one.
+
+**A second extractor was found by running, not by reading.** I8 parsed `install.sh`'s
+`for fixture_dir in …` line independently of I74 and read the literal `$(` out of the new
+derivation. That is the blast radius the item told us to derive, surfacing one level deeper
+than the four declared sites.
+
+**Mutation replay — four mutants, each failing exactly one assertion, against an unmutated
+control:** the derivation pointed at another directory (`does not read core/fixtures/`); the
+`.dist-only` guard removed (`does not exclude`); a marker truncated (`EMPTY body: plan-shape`);
+one name dropped from uninstall's list (`uninstall.sh never names`). All four are now suite
+assertions in `enforcement-map-derivations` (A19–A22), which had **no I74 coverage at all**
+before this release.
+
+**Adding a fixture now costs three edits, not four**, and the one edit removed is the one that
+broke.
+
 ## [0.324.0] — 2026-08-08
 
 ### A per-sprint artifact sat at the durable root for 72 sprints because the check that would have caught it was scoped by PRODUCER

@@ -1,0 +1,8 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind the shipped `story-fields-derive` fixture. A mutation
+battery edits copies of core's own sources to prove the shipped fixture's assertions can
+fail; those sources are the distribution's, and the battery's runtime is the reason the
+assertions and the mutants are separate directories at all. Shipping it would put a unit
+the consumer cannot need into the consumer's suite schedule -- the v0.230.0 defect, where
+a distribution-only battery became the reference consumer's pole.

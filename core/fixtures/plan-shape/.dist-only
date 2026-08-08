@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/validate-plan-shape.sh and the docs/plans/ corpus, both of which
+are this repository's own. Neither is installed, so on a consumer this fixture would
+resolve no validator and no corpus and could only pass.
