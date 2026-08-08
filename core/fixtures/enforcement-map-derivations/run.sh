@@ -437,6 +437,51 @@ A22_i8_uninstall_orphan() {
   fi
 }
 
+# --- Assertion 23: I85 — a backtick that runs the operator's own answer -------
+# Backticks inside a double-quoted string are command substitution: the shell runs the
+# quoted word and substitutes its empty output, so the word DISAPPEARS from the message
+# and the sentence still reads like a sentence. Measured live as PC-S320 — four sites in
+# reconcile/layer-drift.sh, every one wrapping `still-additive`, which is the VERDICT an
+# operator must record to clear a BLOCKING adjudication row. The row told them a verdict
+# clears the block and deleted which verdict.
+A23_i85_backtick_in_message() {
+  t="$(fresh)"
+  if edit "$t/core/skills/ai-dlc-update/reconcile/layer-drift.sh" \
+       '{ gsub(/\\`still-additive\\`/, "`still-additive`") } { print }'; then
+    assert_fires "I85 an unescaped backtick inside an operator-facing message is REPORTED" \
+                 "command-substitute inside an operator-facing message"
+  fi
+}
+
+# --- Assertion 24: I85 — the scanner must FAIL CLOSED when blinded -----------
+# THE ASSERTION THAT MATTERS MOST HERE. A23 proves the scanner sees the defect; this
+# proves that a scanner which has stopped seeing it says so instead of reporting clean.
+# Break the character it matches on: the invariant's own positive probe must catch that
+# in the same run, because "no findings" and "an instrument that cannot find anything"
+# are the same output otherwise.
+A24_i85_fails_closed_when_blind() {
+  t="$(fresh)"
+  if edit "$t/scripts/validate-enforcement-map.sh" \
+       '{ sub(/if \(c == "`" && p != "\\\\"\) \{/, "if (c == \"~\" \&\& p != \"\\\\\\\\\") {") } { print }'; then
+    assert_fires "I85 a BLINDED scanner reports its own probe rather than a clean tree" \
+                 "positive probe was NOT reported"
+  fi
+}
+
+# --- Assertion 25: I85 — the heredoc narrowing is load-bearing ---------------
+# The crude form of this scan flags SEVEN files; six are Python inside `<<'PY'` quoted
+# heredocs, where the shell expands nothing and a backtick is literal. Drop the heredoc
+# tracking and those six correct files enter the finding set — which is how a lint gets
+# turned off. The negative probe is what refuses that, so break the skip and require it.
+A25_i85_heredoc_narrowing_holds() {
+  t="$(fresh)"
+  if edit "$t/scripts/validate-enforcement-map.sh" \
+       '{ sub(/hd != "" \{ if \(\$0 == hd\) \{ hd = ""; hdq = 0 \} ; next \}/, "hd != \"\" { if ($0 == hd) { hd = \"\" } }") } { print }'; then
+    assert_fires "I85 losing the quoted-heredoc narrowing is REPORTED by its own negative probe" \
+                 "negative probe WAS reported"
+  fi
+}
+
 # `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
 # tree. It is the unit the pool schedules and it is also how a human runs a single
 # assertion while working on it.
