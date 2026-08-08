@@ -1,4 +1,14 @@
-# Sprint 301 close-out — the prompt to paste into the graph session
+# Sprint 301 close-out — DISCHARGED, DO NOT EXECUTE
+
+**DISCHARGED 2026-08-07. s301 was closed by abandonment and its artifacts archived; graph landed
+the close-out on `main` at `1c72823af`, and the parent plan records s302 as free to start.
+Read this only as a RECORD of how each figure was derived. Do not run it.** It carried no banner
+until 2026-08-08 while its sibling `s301-close-out.md` did, which made the parent plan's claim
+that "every other file there is a DISCHARGED runbook and each now says so in its own title"
+false about this one file — the discharged-runbook hazard, found by auditing the claim instead of
+trusting it.
+
+What follows is the original text.
 
 ## Start here
 
