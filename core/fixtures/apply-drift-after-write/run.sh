@@ -134,6 +134,56 @@ else
   fi
 fi
 
+# --- Assertion 3c: THE INTERMEDIATE SELF-UPDATE REF is not consumer drift -----
+# Step 2's autonomous self-update rewrites the whole MACHINERY set on its own cycle and advances
+# `skill_commit`, while `commit` — the base every predicate here measures against — stays put. On
+# a multi-hop pull the machinery therefore sits at a ref that is NEITHER base nor theirs.
+# Reproduced at ground truth on the distribution's own history before this arm existed: the file
+# drew HARD-CORE-DRIFT-ABSORBED, whose printed remedy is to REVERT — deleting upstream's own text
+# as though the consumer had written it. 28 files are in both the machinery set and this scan.
+PRE="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null)"
+GROW="$(printf '%s\n' "$PRE" | grep 'gamma' || true)"
+if grep -q '^CORE-AT-SELF-UPDATE' <<<"$GROW"; then
+  ok "a machinery file at the intermediate \`skill_commit\` reads CORE-AT-SELF-UPDATE, not drift"
+else
+  bad "the self-update guard did not fire. Got: ${GROW:-<no gamma row at all>}"
+fi
+# ...and it must not BLOCK. A HARD- prefix here would turn false work into a stopped pull.
+case "$GROW" in
+  HARD-*) bad "the self-update row is HARD- — it blocks a pull over upstream's own content" ;;
+  *)      ok "...and it is non-blocking: nothing consumer-authored is at stake" ;;
+esac
+
+# Assertion 3d: ANTI-VACUITY, same shape as 3b. Strip ONLY the new guard and the hazard must
+# return, or 3c is passing because the seed picked a file the detector never reaches.
+NOSU="$WORK/drift-nosu.sh"
+awk '/^      if \[ -n "\$SELF_UPDATE_REF" \] && git -C "\$DIST" cat-file -e "\$\{SELF_UPDATE_REF\}:\$\{cp\}" 2>\/dev\/null \\$/ {skip=5}
+     skip > 0 {skip--; next}
+     {print}' "$DRIFT" > "$NOSU"
+if grep -q 'emit CORE-AT-SELF-UPDATE' "$NOSU"; then
+  bad "FIXTURE STALE: could not strip the CORE-AT-SELF-UPDATE guard — unregistered-drift.sh was reshaped"
+elif cmp -s "$DRIFT" "$NOSU"; then
+  bad "FIXTURE STALE: the strip changed nothing, so assertion 3c is tested against the original"
+else
+  RAWSU="$(bash "$NOSU" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep 'gamma' || true)"
+  case "$RAWSU" in
+    HARD-*) ok "guard removed: the same file returns as ${RAWSU%%$'\t'*} — the guard is what suppresses it" ;;
+    *)      bad "FIXTURE VACUOUS — with the guard stripped the file did not become a HARD row, so 3c proves nothing. Got: ${RAWSU:-<nothing>}" ;;
+  esac
+fi
+
+# Assertion 3e: the guard is INERT without the stamp field, and it reads that field itself. A
+# stamp carrying no `skill_commit` (a legacy single-line stamp, or a consumer that has never
+# self-updated) must behave exactly as before — the guard must not invent a ref.
+SAVED="$(cat "$STAMP")"
+printf 'version: 0.0.1\ncommit: %s\n' "$BASE" > "$STAMP"
+NOFIELD="$(bash "$DRIFT" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | grep 'gamma' || true)"
+printf '%s\n' "$SAVED" > "$STAMP"
+case "$NOFIELD" in
+  HARD-*) ok "with no \`skill_commit\` in the stamp the guard is inert — the ref is READ, never guessed" ;;
+  *)      bad "a stamp with no \`skill_commit\` still suppressed the row, so the guard is matching something it did not read. Got: ${NOFIELD:-<nothing>}" ;;
+esac
+
 # --- Assertion 4: MUTANT — put the capture back below phase 1 and it must fire -
 # A FRESH seed is load-bearing. The run above already applied both files, so a mutant pointed
 # at that tree finds every bucket ALREADY-AT-THEIRS, writes nothing, and cannot reproduce the

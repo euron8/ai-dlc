@@ -640,6 +640,18 @@ prose is itself generated rather than composed.
    - `CORE-OK` → byte-identical to the distribution at base.
    - `CORE-AT-THEIRS` → byte-identical to the distribution at `theirs`: already applied,
      never drift. A row here is the tell that the base passed in was stale.
+   - `CORE-AT-SELF-UPDATE` → byte-identical to the distribution at `skill_commit`, the OTHER
+     sha in this consumer's own stamp. **Not drift, and no action.** Step 2's autonomous
+     self-update rewrites the whole MACHINERY set, so on a multi-hop pull those files sit at
+     an INTERMEDIATE ref while `commit` — the base every predicate here measures against —
+     stays where it was. **28 files are in both the machinery set and this scan** (control:
+     72 machinery files are outside it), and without this row each one reads as a consumer
+     edit and draws a HARD status whose printed remedy is to revert upstream's own text.
+     Reproduced at ground truth on the distribution's own history: the same file at the
+     intermediate ref gives `HARD-CORE-DRIFT-ABSORBED`, and at base gives `CORE-OK`.
+     The script reads `skill_commit` from the stamp ITSELF rather than taking it as an
+     argument — a fifth argument is a fifth thing a caller can omit, and step 7 below records
+     what that cost the last time one instruction had to be remembered for two scripts.
    - `HARD-DRIFT-SCAN-UNAVAILABLE` → **blocks `apply`**. The scan could not load its path
      mapper, so it scanned NOTHING and its empty output is not a clean tree. Restore
      `reconcile/preclassify.sh` beside `unregistered-drift.sh` and re-run.
