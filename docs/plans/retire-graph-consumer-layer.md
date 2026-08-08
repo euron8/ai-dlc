@@ -12,15 +12,30 @@ it is the original design record, kept for rationale. Where they disagree, the t
 **CITATIONS BELOW `## Context` ARE HISTORICAL AND SOME NO LONGER RESOLVE TO THEIR SUBJECT.**
 They were written before the releases that shipped them, and the releases moved the lines.
 Checked at handoff: `layer-drift.sh:648` was the env-key guard and is now other code (v0.275.0
-changed it), and `SKILL.md:506` described the invitation sentence v0.282.0 deleted. Both sit in
+changed it), and `core/skills/ai-dlc/SKILL.md:506` described the invitation sentence v0.282.0 deleted. Both sit in
 sections marked SHIPPED, so they are records of why a thing was done, not instructions. Every
-`path:line` ABOVE `## Context` was re-checked at handoff: **26 citations into THIS repo, 0 past
-end-of-file.** Four more point into the CONSUMER — `s301-stories-adversarial-p2.md:327`,
+`path:line` ABOVE `## Context` was re-checked at handoff. **Re-measured 2026-08-08, AFTER the fixes below: 41 distinct
+citations — 36 resolve into THIS repo and are in range, 0 past end-of-file, 5 point into the
+CONSUMER, 0 ambiguous.** The pre-fix reading was 40/34/5/**3 ambiguous**. Do not carry these numbers
+forward; re-run the audit, because the last recorded figure said "26 into this repo" and "four into
+the consumer" and both had drifted.
+The audit is one loop: extract `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above
+`## Context`, resolve each against `git ls-files`, and compare the line number to `wc -l`.
+
+**THE AMBIGUOUS ONE IS THE LESSON: this repo has THREE `SKILL.md` files** (`ai-dlc/`,
+`ai-dlc-setup/`, `ai-dlc-update/`), so a bare `SKILL.md` + line number resolves to whichever the reader
+reaches first — and `ai-dlc-setup/SKILL.md` has 1065 lines, so the wrong pick reads as past-EOF
+rather than as the wrong line. Every `SKILL.md` citation above is now written with its skill
+directory. **A citation that a stranger cannot resolve unambiguously is not evidence**, which is the
+same standard as one that cannot be located at all.
+
+**FIVE citations point into the CONSUMER, not four.** `s301-stories-adversarial-p2.md:327`,
 `s301-epics-repair-p5d.md:115`, `s301-stories-adversarial-p6.md:252`,
-`s301-stories-repair-p5.md:581` — and **the s301 close-out archived all four**, so they now live
-under `_bmad-output/planning-artifacts/archive/s301-<series>/` rather than at the paths quoted.
-The content is unchanged (the archive was `git mv` with per-file sha verification); only the
-prefix moved. Re-verify any citation
+`s301-stories-repair-p5.md:581` — **the s301 close-out archived all four**, so they now live
+under `_bmad-output/planning-artifacts/archive/s301-<series>/` rather than at the paths quoted; the
+content is unchanged (`git mv` with per-file sha verification), only the prefix moved. The fifth is
+**`tea-consumer.md:18`**, item 22's, which the old four-item list did not include — a hand-listed
+set going stale, in the paragraph that exists to keep citations honest. Re-verify any citation
 below it against the tree before acting on it.
 
 **WHICH PLANS IN `docs/plans/` ARE LIVE: THIS ONE, AND ONLY THIS ONE.** Every other file there
@@ -75,17 +90,25 @@ renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
 **~~graph is at `0.292.0 / c5e7daa` and is QUIESCENT.~~ ~~NO LONGER TRUE — 8b IS IN FLIGHT.~~
 ~~8b IS DONE. graph is at `0.300.0 / 2bc7aa4`~~ ~~SUPERSEDED — graph is at `0.314.0 / f9b8aa4`~~
-**SUPERSEDED AGAIN 2026-08-08 — graph is at `0.318.0 / 5e0f3b2`**, and the rulebook base and the
-tool version, **which had been split since the self-update, are now the same**. Two PRs: **#885**
-(self-update, machinery slice + 31 covering fixtures, one widened and stated) and **#886**
-(reconcile, stamp-only bump + 3 recorded LC-E19 verdicts + ledger work). **VERIFIED FROM THIS SIDE,
-not taken on the report:** graph's OWN installed
-`scripts/ai-dlc/validate-artifact-budget.sh`, run against graph, returns
-`ok  WHOLE-READ POOL (4 planning artifacts)  117379 tok  (pool 330000, 35% of it)` — which is
-v0.317.0 + v0.318.0 landing, on the consumer, as measured rather than as claimed. The earlier
-`0.314.0 / f9b8aa4` verification stands as the record of that hop: `layer-drift.sh` over
-`2bc7aa4..f9b8aa4` returned **0 `HARD-*`** with 49 rows across 9 statuses and no
-`DRIFT-RANGE-DEGENERATE`.
+~~SUPERSEDED AGAIN 2026-08-08 — graph is at `0.318.0 / 5e0f3b2`~~ **CURRENT AS OF 2026-08-08: graph
+is at `54e71012a`, stamped `0.319.0 / abfab65` on ALL FOUR fields** (#887). The rulebook base and the
+tool version, which had been split since the self-update, agree. **VERIFIED FROM THIS SIDE, not taken
+on the report:** graph's stamp reads `version`/`commit`/`skill_version`/`skill_commit` =
+`0.319.0`/`abfab65` ×2; `.claude/skills/ai-dlc/steps/artifact-consolidation.md` carries the
+`s<N>/consolidation-manifest` prescription; and `tests/fixtures/consolidation-residue/run.sh` is
+installed. The earlier pulls' verifications stand as their own record — graph's OWN installed
+budget validator returned `ok  WHOLE-READ POOL (4 planning artifacts)  117379 tok  (pool 330000,
+35% of it)` after 0.318.0, and `layer-drift.sh` over `2bc7aa4..f9b8aa4` returned **0 `HARD-*`** with
+49 rows across 9 statuses and no `DRIFT-RANGE-DEGENERATE` after 0.314.0.
+
+**ai-dlc `main` HAS MOVED TWO COMMITS PAST WHAT GRAPH HAS, AND NEITHER SHIPS ANYTHING.** #455 and
+#456 touch `docs/` only (controlled: `git diff --name-only 88bac6f~1 HEAD` yields the single top-level
+`docs`). **So graph is CURRENT on every shipped file and no pull is owed.** Do not read the version
+gap as debt; re-derive it the same way if it matters.
+
+**THE SKILL STAMP AGREEING IS A HAND-FIX, NOT A WORKING MECHANISM.** The operator set
+`skill_version`/`skill_commit` by hand during the 0.319.0 apply because `apply.sh` never writes them
+— **item 27**. The stamp is correct on this consumer and the defect is untouched for every other.
 s301 is closed; s302 has not started but MAY now start.
 
 **FOUR THINGS CARRIED FORWARD BY THE 0.318.0 PULL, ALL THE CONSUMER'S, NONE BLOCKING** — reported by
@@ -181,17 +204,18 @@ entry after recording its verdict spends that verdict, because the digest covers
 re-recorded against the moved subject. That is the digest design working, and it is the
 reason the done-when list is re-run post-merge rather than remembered.
 
-**~~A PULL IS OWED~~ — TAKEN 2026-08-08. graph is at 0.318.0 / `5e0f3b2`; see the status block
-above.** Everything the paragraph below predicted about that pull is spent. **A NEW pull is owed for
-v0.319.0 and its shape is unmeasured.** Two things about it that are worth stating and one that is
-not: 0.319.0 changes **`steps/artifact-consolidation.md`, a RULEBOOK file**, so it is not the
-machinery-only shape the 0.315→0.318 range had; and it adds a fixture, which means the four
-ship-list sites and the self-update's covering-fixture set both move. **Do not turn either of those
-into a hop-count prediction** — this plan has been wrong doing that twice, and the rule stands: run
-the dry run and read what the gate says.
+**~~A PULL IS OWED~~ — NO PULL IS OWED. Both were taken 2026-08-08**, to 0.318.0 (#885/#886) and then
+to 0.319.0 (#887); graph is current on every shipped file, per the status block above. Everything
+the paragraphs below predicted is spent, and they are kept only as the record of what each pull
+delivered and of two predictions worth not repeating.
 
-**The v0.319.0 pull carries one thing worth naming for the operator, and it is a HOMING job, not a
-delete.** The step now writes its four working files to `_bmad-output/planning-artifacts/s<N>/` and
+**THE 0.319.0 PULL'S DEFERRED MACHINERY SLICE LANDED WITH THE RULEBOOK ON ONE BRANCH, WHICH IS WHAT
+THE DEFER WAS FOR.** The full pre-push fixture suite went green with machinery and rulebook together
+— the outcome the split ordering could not have produced. Recorded because this plan twice predicted
+hop counts from the distribution side and was twice wrong; the rule stands unchanged: **run the dry
+run and read what the gate says.**
+
+**ONE THING THAT PULL CARRIED IS STILL OWED, AND IT IS A HOMING JOB, NOT A DELETE.** The step now writes its four working files to `_bmad-output/planning-artifacts/s<N>/` and
 deletes its drafts at Step 6. **That governs FUTURE passes only.** The 33 byproduct files already at
 graph's area root must be MOVED into the sprint slot of the pass that produced them, never removed:
 older coverage reports cite draft paths as their no-loss evidence, so deleting them breaks a record
@@ -360,10 +384,10 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~17~~ | ~~**23a** — are the budget thresholds attainable at all?~~ | **DONE — v0.317.0 (#449) + v0.318.0 (#450). THE ANSWER IS YES and graph already passes at 36%.** The 417% breach was an instrument reading: pool understated 5x, sum overstated 2.35x, both defects core's. The floors were derived anyway, because at a genuine 200K window the threshold IS unattainable (130–151%). See §*What item 23a measured* |
 | ~~18~~ | ~~**23b** — artifact-consolidation's residue~~ | **DONE — v0.319.0 (#452).** Four working files homed in `s<N>/`, drafts retired at a new Step 6, and the step prescribed **no path at all** for three of the four — which item 19 did not state. **The refusal set is EMPTY: all 33 resolve, 24 with no inference**, and the `S999` premise is refuted. New fixture `consolidation-residue`; **no existing check could have caught this**, because both the area-root and the slotted path are syntactically conforming. See §*What item 23b measured* |
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
-| **20** | **23c** — the inlet | **← THE NEXT ITEM.** **NOT SIZED.** Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
+| **20** | **27** — the skill stamp has two contradictory instructions and no writer | **← THE NEXT ITEM. REPORTED + REPRODUCED, attribution exact.** `ai-dlc-update/SKILL.md:308` says advance, `:1414` says preserve, `apply.sh` implements preserve by never touching them. **Failure direction is item 18's, re-created through the stamp**: a stale `skill_commit` makes 28 machinery files read as consumer drift with a remedy that reverts upstream text. **Take it before 23c** |
+| **21** | **23c** — the inlet | **NOT SIZED**, and the recommended fresh-session start after 27. Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
 | — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
-| **20b** | **27** — the skill stamp has two contradictory instructions and no writer | **REPORTED + REPRODUCED, attribution exact.** `SKILL.md:308` says advance, `:1414` says preserve, `apply.sh` implements preserve by never touching them. **Failure direction is item 18's, re-created through the stamp**: a stale `skill_commit` makes 28 machinery files read as consumer drift with a remedy that reverts upstream text. **Take it before 23c** |
 | — | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
@@ -998,7 +1022,7 @@ before you write code.
     the moment anyone touches it** — which is the property that makes deferring safe rather than
     permanent.
 
-27. **`SKILL.md` tells step 7 two incompatible things about the skill stamp, and `apply.sh`
+27. **`ai-dlc-update/SKILL.md` tells step 7 two incompatible things about the skill stamp, and `apply.sh`
     mechanises one of them.** **REPORTED BY THE CONSUMER 2026-08-08 with a control, and REPRODUCED
     HERE — the attribution is EXACT, the third consumer report in a row that is.**
 
@@ -1011,9 +1035,9 @@ before you write code.
     fields are advanced by the AGENT following prose, which is a duty with no mechanism.
 
     **AND THE PROSE CONTRADICTS ITSELF, 1100 LINES APART. THIS IS THE ACTUAL DEFECT.**
-    - `SKILL.md:308` — step 2's defer branch: *"Advance `skill_version`/`skill_commit` with that
+    - `core/skills/ai-dlc-update/SKILL.md:308` — step 2's defer branch: *"Advance `skill_version`/`skill_commit` with that
       apply rather than here."*
-    - `SKILL.md:1414` — step 7's re-stamp: *"set `version`/`commit` = theirs, **preserving
+    - `core/skills/ai-dlc-update/SKILL.md:1414` — step 7's re-stamp: *"set `version`/`commit` = theirs, **preserving
       `skill_version`/`skill_commit`**."*
 
     Step 7 is told to PRESERVE exactly the fields step 2 delegated to it. Whichever the agent reads,
