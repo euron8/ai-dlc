@@ -34,6 +34,90 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.319.0] — 2026-08-08
+
+### `artifact-consolidation.md` left its working files in the durable area and never said what became of them
+
+Item 23b, out of item 19's review. **The reduction is not the defect and is untouched** — 19 passes
+over 4 artifacts in 66 days is a drain matched to an inlet, and the counterfactual is a 96.1%
+reduction. The residue is the defect, and both halves of it are core's.
+
+**The step prescribed ONE path, at the durable area root, and named no path at all for the other
+three.** The second half is what item 19 did not state and the red replay found: the drafts had no
+prescribed location, so the analyst chose one. Measured in the reference consumer: **33 of 96
+root-level files in `planning-artifacts/` were this step's byproduct — 1.80 MB, 13.7% of the
+directory**, against 383 KB (2.9%) for the three live artifacts they exist to protect. Eleven
+basenames sat at both the root and a sprint slot with nothing declaring which was current.
+
+All four working files now go to `_bmad-output/planning-artifacts/s<N>/`, declared once in a new
+section rather than repeated per step.
+
+**RESOLVING `<N>` IS GENUINELY DIFFERENT HERE AND IS SPELT OUT.** Every sibling step runs inside a
+sprint and takes `sprint_id` from the snapshot's Sprint Context at `route.md` Step 6. This step is
+operator-invoked at a quiescent point — *between* sprints — so the step now says to use the
+`sprint_id` the snapshot holds when the pass runs (the sprint that produced the growth, not the one
+about to begin), and to **stop and ask rather than fall back to the area root** if there is none.
+
+### The drafts are retired at a new Step 6, and the reason is the step's own sentence
+
+The silence is how eleven drafts accumulated, one of them a 1383-line near-duplicate of the
+1530-line live PRD differing on 155 lines with nothing declaring which was authoritative. **Two
+files claiming to be the same artifact is the failure mode this step exists to end, and the step
+was manufacturing it.**
+
+Both drafts are deleted; the manifest and coverage report are kept. After the swap the live draft
+IS the live artifact and the history draft IS the tail of the companion — Step 5 already named the
+audit trail as *"the manifest + coverage report"*, which the drafts were never part of. The
+coverage report now cites the swap commit's sha rather than the draft paths, because a citation to
+a file the next step deletes is a dangling one by construction.
+
+**This does not license deleting byproduct an earlier pass already left behind** — older coverage
+reports cite draft paths, so those drafts are a HOMING problem, not a garbage one.
+
+### Two measurement traps, both hit while deriving the re-home set, both recorded in the step
+
+The plan expected *"at least two carry no recoverable sprint at all (they say `S999`)"`*. **Refuted:
+all 33 resolve.** `S999` does occur in two of the files — as content, inside a carry-over ID list —
+and a byproduct's sprint was never in its content.
+
+- **Recover the sprint from the commit that ADDED the file, never from its content.** A consolidation
+  byproduct's content is other sprints by construction, so the most-frequent sprint token in it is
+  the sprint being consolidated, not the sprint doing the consolidating. A file first committed
+  2026-06-05 carried S297 (×35) as its modal token; S297 began 2026-07-22.
+- **`git log --follow` is the wrong instrument here.** A draft is a near-copy of its source artifact,
+  so rename detection walks into the source's history: three drafts reported creation dates in
+  February–March 2026, months before consolidation existed, and `--diff-filter=AR` shows no rename
+  row at all. Bare `--diff-filter=A` is correct for these files because the migration did not move
+  them; `--follow` is correct for the files it did move. **Neither instrument is right for both, and
+  the discriminator is whether a rename actually happened.**
+
+Result: **24 of 33 resolve directly from the adding commit's own subject** and 9 by walking back in
+first-parent order — 7 at distance 1, 2 bracketed between S298 and S299. **The refusal set is
+empty.** A first attempt joined on commit DATE and its control caught 2 of 15 disagreeing by exactly
+one sprint, because graph starts more than one sprint per day; the ancestry join agrees 24 of 24.
+
+### New fixture `consolidation-residue`, and why no existing check could have caught this
+
+I82 binds every artifact path core prescribes to the grammar, and `validate-artifact-paths.sh`
+enforces it on the consumer — but the grammar's rule is *the directory is the only sprint slot*, so
+what they detect is a sprint TOKEN outside the slot. **An area-root path carrying no sprint token is
+syntactically conforming, and so is the slotted one. Both pass.** A syntactic grammar cannot tell a
+durable artifact from a per-sprint one that omitted its sprint; only the step that writes the file
+knows which it is, so the assertion lives against the step.
+
+8 assertions, 2 mutants, an unmutated control. **Assertion 4 is a join, not two hand-lists**: Step
+6's removal set is derived from Step 2's write set and compared both ways, so a draft written and
+not removed, or removed and not written, both fail. The two mutants are checked against their own
+assertion only and asserted NOT to trip each other's, because two entangled failures mean one of
+them is vacuous.
+
+Red replay against the pre-23b step file: 4 assertions fail and the mutation guard exits 2. Verified
+drivable in the consumer layout as well as the distribution — red on graph's installed 0.318.0 step,
+green on the fixed one.
+
+Full finding: `docs/reviews/graph-artifact-consolidation-review.md` (item 19) and
+`docs/plans/retire-graph-consumer-layer.md` §*What item 23b measured*.
+
 ## [0.318.0] — 2026-08-08
 
 ### The reader-window resolver read a role-file line format deleted fifty releases ago
