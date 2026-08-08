@@ -100,11 +100,11 @@ merged as #413. The operator pastes one line into a graph session; nothing there
 **10e cannot ship until that has run once** — a validator landing on ~2700 non-conforming files
 wedges first contact.
 
-**NEXT ACTION FOR THIS REPO: item 17 — `apply.sh`'s mask/reinject.** 10e shipped as v0.305.0
-(#423) and is merged; nothing is in flight. Item 17 is taken ahead of item 16 on severity: its
-failure direction is upstream content NOT ARRIVING, and every remaining item in this plan reaches
-the consumer through that same pull. **Reproduce it on a scratch consumer before touching
-`apply.sh`** — a mask that keeps a non-site line is a different bug from a mis-derived site span.
+**NEXT ACTION FOR THIS REPO: item 16 — move `planning-artifacts/stories/` under `s<N>/`.**
+10e shipped as v0.305.0 (#423) and item 17 as v0.306.0 (#425); both merged, nothing in flight.
+**Re-measure the story corpus before writing anything** — it is **1024** files, not the 1001 this
+plan carried, and **761 of them spell the sprint as a bare leading number** indistinguishable
+from the story index the grammar itself prescribes. That is the whole difficulty of the item.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -167,8 +167,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~8b~~ | ~~operator: pull, then run the migration~~ | **DONE 2026-08-08.** Three hops, four PRs. 2667 moves verified per file, 48 refused, 1001 deferred, self-check 0, second dry run exits 3. See §*Where things stand* |
 | ~~8c~~ | ~~**`ledger-reverify.sh`'s own filed defects**~~ | **DONE** — v0.301.0 (#415) fixed the two that were live; v0.302.0 (#416) shipped the mechanism for the class the other three exposed. The plan said "five entries filed against one core file": it is **four plus one** — the fifth is in `layer-drift.sh`. See §*What item 8c measured* |
 | ~~9~~ | ~~**10e** — the consumer pre-push validator~~ | **DONE** — v0.305.0 (#423). Blocks on exactly the set the migration would move (0 on graph today), reports the 48 refusals and the 1024 deferred stories rather than wedging them. See §*What v0.305.0 measured* |
-| **10** | **17** — `apply.sh` retains a line outside the declared setup-site spans | **← THE NEXT ITEM, and it is taken ahead of 16 by severity rather than by the old order.** Its failure direction is upstream content NOT ARRIVING: the pull reports success and the consumer is quietly behind. Every later item in this plan is delivered THROUGH that pull, item 16 included, so fixing the deliverer before adding to what it must deliver is the cheaper order. Not yet reproduced here — record it as theirs until it is |
-| 11 | **16** — move `planning-artifacts/stories/` under `s<N>/` | **UNBLOCKED** (10e landed and deliberately does not block on `stories/`). The deferred story files are exactly its subject — **re-measure: 1024, not the 1001 this file recorded, and 761 of them spell the sprint as a bare leading number.** Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
+| ~~10~~ | ~~**17** — a line retained outside the declared setup-site spans~~ | **DONE** — v0.306.0 (#425). **Reproduced at ground truth**, and the report's attribution was WRONG: `apply.sh` has no mask/reinject at all. See §*What item 17 measured* |
+| **11** | **16** — move `planning-artifacts/stories/` under `s<N>/` | **← THE NEXT ITEM. UNBLOCKED** (10e landed and deliberately does not block on `stories/`). The deferred story files are exactly its subject — **re-measure: 1024, not the 1001 this file recorded, and 761 of them spell the sprint as a bare leading number.** Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
 | 12 | **18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift | Lower severity than 17 — it produces FALSE work, not lost content — but multi-hop is now the norm and it costs adjudication time on every pull |
 | 13 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | 14 | **6** — promote LC-E6/LC-O15 | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
@@ -407,8 +407,11 @@ before you write code.
     Do it AFTER 10d/10e or the consumer migrates twice. **Re-measure the story corpus before
     writing anything** — the 786/73/139 split in §*Item 10* is from 2026-08-07.
 
-17. **`apply.sh`'s mask/reinject retains a line OUTSIDE the declared setup-site spans, so upstream
-    content silently fails to land.** REPORTED BY THE CONSUMER 2026-08-08, during the 0.297.0 →
+17. ~~**`apply.sh`'s mask/reinject retains a line OUTSIDE the declared setup-site spans, so upstream
+    content silently fails to land.**~~ **DONE — v0.306.0 (#425). REPRODUCED at ground truth, and
+    BOTH halves of the attribution were wrong: `apply.sh` implements no mask/reinject, and the
+    check that catches it already existed as untangle-only prose. See §*What item 17 measured*.**
+    What follows is the original report. REPORTED BY THE CONSUMER 2026-08-08, during the 0.297.0 →
     0.300.0 hop, and **not yet reproduced here** — record it as theirs until it is. Verbatim:
     *"`deploy-validate.md` — `apply.sh`'s mask/reinject retained OURS at line 26, a line OUTSIDE
     both declared setup-site spans, so the one artifact-path line upstream added to this file
@@ -467,6 +470,44 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What item 17 measured (the report named the wrong program, and the right check already existed)
+
+**THE DEFECT IS REAL AND WAS REPRODUCED AT GROUND TRUTH**, not synthesised. graph's own pull
+commit `188a4b006` shows the hand correction: `deploy-validate.md` line 26 read
+`_bmad-output/implementation-artifacts/sprint-<N>-*.md` (OURS, the OLD grammar) where theirs had
+`_bmad-output/implementation-artifacts/s<N>/*.md`. The consumer's step file was teaching the
+convention item 10 had just replaced.
+
+**TWO THINGS IN THE REPORT WERE WRONG, and a session acting on it literally would have fixed
+neither:**
+
+- **`apply.sh` does not implement mask/reinject.** Its two matches for `mask` are both `umask`,
+  against fourteen in `SKILL.md`. The transform is PROSE an agent executes. Checked with a
+  control, because a zero from a grep is not a finding.
+- **The check that catches it already existed and was correct.** §7v criterion 5 states it
+  exactly — and §7v is **untangle-only**, so the ordinary pull, which runs the same transform at
+  step 7, had no equivalent gate at all. Worse, criterion 5 is prose executed by the agent that
+  just performed the transform, and `SKILL.md` itself records it reporting PASS on an instance of
+  this defect (`dev.md`, three of theirs' model-option comment lines).
+
+So the fix was neither a code change to `apply.sh` nor a stricter sentence: it was making the
+existing rule a program and running it on both paths.
+
+**A DECLARED SPAN NO PROGRAM COULD FIND, and this is the transferable finding.**
+`deploy-command`'s `match` is `^(.+)$`; its only locator was `anchor_context` PROSE. The first
+implementation resolved it greedily, picked a `{token}` HTML comment ten lines above the real
+site, and then reported the correctly-reinjected value line as drift. **A declaration written for
+an agent to read is not a declaration a checker can use**, and the checker that cannot find its
+subject picks plausibly rather than saying so — the same defect one level in.
+
+**Two silent-field defects, neither of which announces itself:** `IFS=$'\t' read -r a b c`
+COLLAPSES RUNS OF TABS (tab is IFS *whitespace*), so a record with empty middle fields shifts
+every later field left — here it produced an EMPTY regex, which matches every line; and a
+candidate list built with `tr '\n' ' '` carries a TRAILING SPACE, so `"162 "` went into a lookup
+that only ever compares `162`.
+
+**ITEM 18 IS STILL OPEN** and is the other half of the same pull's report.
+
 ## What v0.305.0 measured (item 10e — and what a gate must NOT block on)
 
 Taken against the reference consumer, read-only, immediately after the migration ran for real.
@@ -509,7 +550,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 
 ## Where things stand
 
-**ai-dlc is at `0.305.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.306.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -533,6 +574,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.306.0 | #425 | **plan item 17.** `reconcile/setup-site-drift.sh` — §7v criterion 5 as a program, on BOTH the ordinary pull's post-write gate (which had nothing) and untangle's §7v (which had prose the transform's own author checks on themselves, already green on one instance of this defect). Reproduced at ground truth: silent on the corrected consumer, `deploy-validate.md:26` on the reconstructed one. **`apply.sh` was NOT the subject** — its two `mask` matches are both `umask`. `deploy-command`'s span had no machine-readable locator and now carries `after_line`; a site that cannot be pinned to one line FAILS rather than being guessed at. New fixture (15 assertions, 3 mutants, 1 control). |
 | v0.305.0 | #423 | **plan item 10e.** `validate-artifact-paths.sh` on the consumer pre-push — real filenames, every push, because a migration is an event and a convention with only one behind it has a half-life. Blocks on exactly the set the migration would move (**0** on graph); reports the **48** refusals and **1024** deferred stories with computed, never listed, reasons. Both sides of that join asserted EQUAL. **92 false positives** caught by measurement before shipping. `artifact-path-config.sh` becomes the ONE reader of the grammar's blocks and **I83** forbids a second, false-positive set measured at zero. Self-probes each run; an empty subject is `NOT-APPLICABLE`, never PASS. New fixture (37 assertions, 4 mutants, 1 control). |
 | v0.304.0 | #421 | **from the migration running for real.** The `AREAS INFERRED` remedy named CORE's grammar — a file a pull overwrites, and the wrong home by that file's own rule — and a consumer session followed it literally, proposing core absorb nine consumer-specific areas. Fixing the wording alone would have been WORSE: the consumer's `artifact-paths.md` was byte-identical to the scaffolded template and **nothing read it**, so declaring the areas would have changed no later verdict. The consumer's areas are now READ and joined to core's eight, path resolved from the contract, one `areas_of()` for both files. **Nine, not eight** — the real run also found `_bmad-output/research`, one file, the smallest. 32 → 37 assertions. |
 | v0.303.0 | #418 | **plan item 13.** Step 7 told the operator to re-run BOTH drift scripts with `theirs` as the base; that is right for `unregistered-drift.sh` and disarms `layer-drift.sh`, whose two ADJUDICATED clauses are computed over `base..theirs`, so `HARD-LAYER-ADJUDICATION-MISSING` cannot be demanded and `hard-blockers.sh` prints a clean sheet on a tree where every verdict is owed. Reproduced on a scratch consumer with both arms and a control. The instruction is split per script AND `DRIFT-RANGE-DEGENERATE` makes the wrong invocation self-announcing. Resolved commit ids, not argument strings — theirs is a ref and base a sha in every real call. |
