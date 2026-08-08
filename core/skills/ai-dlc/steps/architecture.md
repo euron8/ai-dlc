@@ -286,8 +286,10 @@ architecture doc — its passes use the **Adversarial review dispatch** and
   assessment is NO CHANGES NEEDED, skip this cycle entirely (Rule 5 fast-track)
   and proceed to Step 5; otherwise run the full cycle.
 - **`Seam D` label:** `architecture adversarial pass <N>`.
-- **on convergence:** append a changelog to the architecture doc, then proceed to
-  index regeneration (§4a).
+- **on convergence:** append a changelog to
+  `_bmad-output/planning-artifacts/s<N>/changelog-architecture.md`
+  (`_gate-procedures.md` — "Where a changelog is written"; NOT the architecture doc
+  itself), then proceed to index regeneration (§4a).
 
 ### 4a. Regenerate the architecture index (Rule 25(b) slice enabler)
 

@@ -34,6 +34,65 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.321.0] — 2026-08-08
+
+### A changelog entry records one sprint's passes and was being appended to the durable artifact
+
+Item 23c-2, the first release out of item 23c's derivation
+(`docs/reviews/artifact-inlet-locked-block-derivation.md`). Rule 15 says *"append a brief changelog
+to the artifact"*, and six core sites restated it — four of them naming a DURABLE target: the brief,
+the PRD, the architecture doc, and "all modified artifacts". A changelog entry is a record of one
+sprint's passes over an artifact, so a durable target puts sprint-scoped content at a
+sprint-independent path. That is the same defect `artifact-consolidation.md` had for its four
+working files at v0.319.0, and the same one item 10 was opened to eliminate.
+
+**Measured on the reference consumer.** Its live `product-brief.md` is 1030 lines, of which **223
+(21%) are four changelog entries all dated 2026-08-05 and all belonging to one sprint** — inside an
+artifact `validate-artifact-budget.sh` pools as a whole read. Across the durable artifacts the live
+total is **260 lines** (223 in the brief, 37 in `docs/architecture.md`, **0 in `prd.md`**); a further
+~9,800 changelog lines sit in `-history.md` files that `is_archive()` already exempts and that are
+not this release's subject. **The honest reduction is 260 lines, not 10,050**, and it is stated that
+way because the 21%-of-the-brief figure reads much larger than the pooled effect.
+
+**The destination, declared once.** `_bmad-output/planning-artifacts/s<N>/changelog-<artifact>.md`,
+with `<N>` = `sprint_id`. The declaration lives in `steps/_gate-procedures.md` under *"Where a
+changelog is written"* and the four convergence lines POINT at it rather than restating the path —
+restating it in five places is how these sites came to disagree in the first place. A story file's
+changelog stays INLINE: a story already lives in `s<N>/stories/`, so it carries its own sprint and
+has no durable artifact to pollute.
+
+**MOVED, NEVER DELETED, and this is the part to read before tidying.** Nothing in core reads a
+changelog — `change[ -]?log` over `scripts/ai-dlc/` and `.claude/hooks/` matches only the
+*validation-cycle-log* model, one of those lines saying per-artifact changelogs are *"freeform
+prose, not countable here"* (`validate-mandatory-rules.sh:139`). **That is a reason to home them,
+not to drop them**: they are what a human reads when asking what a sprint did to an artifact, and a
+consolidation coverage report can cite one. Entries already inside a durable artifact are the
+operator's to MOVE into the slot of the sprint they describe — the same disposition item 23b took
+for its 33 byproduct files. **This release governs future passes only.**
+
+**A false zero fell out of measuring this and its control agreed with it.** `grep -in 'change ?log'`
+without `-E` treats `?` literally in BRE and matched **nothing**; the fabricated-token control also
+returned rc=1, so the control could not tell a real absence from a broken pattern. The `-E` form
+matches in twenty files. **A control has to be a token you know is PRESENT** — a fabricated one only
+proves the command ran.
+
+### New fixture `changelog-sprint-slot`, and why no existing check could have caught this
+
+Same reason `consolidation-residue` gave at v0.319.0, and worth restating rather than
+cross-referencing: I82 binds every prescribed artifact path to the grammar, but what the grammar
+detects is a sprint TOKEN outside the slot. *"the brief"* is not a path at all, and
+`s<N>/changelog-prd.md` and `planning-artifacts/prd.md` are BOTH syntactically conforming. Only the
+site that writes the file knows which it is, so the assertion lives against the sites.
+
+**The site set is derived, never hand-listed** — the fixture finds every prescribing site by
+searching for the instruction and then classifies each as slotted, story-inline, or a finding. A
+hand-list would go stale the first time a step file gained a convergence line, which is exactly how
+four of these six came to disagree. Replayed against the pre-fix tree it reports **6 offenders and
+names all six**, with its own control reading `0 slotted`.
+
+Rule 15's carrier declaration stays `none` and its reason is narrowed rather than removed: **whether**
+a changelog is written is still unmechanised, and only **where** it goes is now carried.
+
 ## [0.320.0] — 2026-08-08
 
 ### The skill stamp had two contradictory instructions, no writer, and a failure direction that reverts upstream's own text
