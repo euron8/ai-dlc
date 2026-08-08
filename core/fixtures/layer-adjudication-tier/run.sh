@@ -254,6 +254,79 @@ else
   fi
 fi
 
+# --- Part 8: a DEGENERATE RANGE disarms every ADJUDICATED arm, and must say so --------------
+#
+# Both ADJUDICATED clauses are computed base..theirs, and LC-A1's duty is demanded only on rows
+# they produce. So `base == theirs` yields no drift, no duty, and a clean sheet on a tree where
+# every verdict is owed — reported by the reference consumer as `0 HARD blockers.` against
+# eighteen unrecorded adjudications, and reproduced here.
+#
+# THE PAIR IS THE TEST. Asserting only that the degenerate run emits the row would pass against a
+# script that emits it always; asserting only that the real run does not would pass against one
+# that never emits it. Both arms, same seed, same tree.
+echo
+echo "Part 8 — a degenerate base..theirs range announces the arms it cannot fire"
+
+deg_out="$(bash "$DRIFT" "$DIST" "$THEIRS" "$THEIRS" "$CONS" 2>/dev/null)"
+real_out="$(bash "$DRIFT" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+
+deg_row="$(printf '%s\n' "$deg_out"  | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
+real_row="$(printf '%s\n' "$real_out" | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
+deg_hard="$(printf '%s\n' "$deg_out"  | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"{c++} END{print c+0}')"
+real_hard="$(printf '%s\n' "$real_out" | awk -F'\t' '$1=="HARD-LAYER-ADJUDICATION-MISSING"{c++} END{print c+0}')"
+deg_rows="$(printf '%s\n' "$deg_out" | grep -c .)"
+
+# The disarm itself, with the control that makes the zero readable: the degenerate run still
+# emits rows, so a missing adjudication duty is a real absence and not a dead invocation.
+if [ "$real_hard" -ge 1 ] && [ "$deg_hard" -eq 0 ] && [ "$deg_rows" -ge 2 ]; then
+  ok "the disarm reproduces: pull's base demands $real_hard adjudication(s), theirs-as-base demands 0 — and the degenerate run still emitted $deg_rows row(s), so the zero is a real absence"
+else
+  bad "the disarm did not reproduce (real=$real_hard degenerate=$deg_hard rows=$deg_rows) — Part 8's remaining assertions cannot be attributed"
+fi
+
+if [ "$deg_row" -eq 1 ]; then
+  ok "the degenerate run emits exactly one DRIFT-RANGE-DEGENERATE row"
+else
+  bad "the degenerate run emitted $deg_row DRIFT-RANGE-DEGENERATE row(s), want 1 — a silent disarm reads exactly like a clean layer"
+fi
+
+if [ "$real_row" -eq 0 ]; then
+  ok "CONTROL: a real base..theirs range emits none, so the row discriminates rather than always firing"
+else
+  bad "a real range also emitted the row, so the assertion above is satisfied by a script that always emits it"
+fi
+
+# RESOLVED COMMIT IDS, NOT ARGUMENT STRINGS. In every real invocation `theirs` is a ref name and
+# `base` a sha, so a string comparison would never fire on the one case this exists for.
+git -C "$DIST" branch -f fixture-tip "$THEIRS" >/dev/null 2>&1
+ref_row="$(bash "$DRIFT" "$DIST" "$THEIRS" fixture-tip "$CONS" 2>/dev/null | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
+if [ "$ref_row" -eq 1 ]; then
+  ok "fires when the same commit is named as a sha on one side and a REF on the other"
+else
+  bad "did not fire on sha-vs-ref ($ref_row rows) — a string compare would miss every real invocation"
+fi
+
+# MUTATION — compare the argument strings instead of the resolved ids. The sha-vs-ref arm must go
+# dark and the sha-vs-sha arm must not, or the mutant is testing something else.
+MUT8DIR="$MUTDIR-degenerate"
+rm -rf "$MUT8DIR"; mkdir -p "$MUT8DIR"
+cp "$(dirname "$DRIFT")"/*.sh "$MUT8DIR/" 2>/dev/null
+MUT8="$MUT8DIR/layer-drift.sh"
+sed 's@^  if \[ -n "\$_b" \] && \[ "\$_b" = "\$_t" \]; then@  if [ -n "$BASE" ] \&\& [ "$BASE" = "$THEIRS" ]; then@' "$DRIFT" > "$MUT8"
+if cmp -s "$DRIFT" "$MUT8"; then
+  bad "FIXTURE ERROR: the resolved-id mutation matched nothing, so the sha-vs-ref assertion is unproven"
+else
+  m8_ref="$(bash "$MUT8" "$DIST" "$THEIRS" fixture-tip "$CONS" 2>/dev/null | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
+  m8_sha="$(bash "$MUT8" "$DIST" "$THEIRS" "$THEIRS" "$CONS" 2>/dev/null | awk -F'\t' '$1=="DRIFT-RANGE-DEGENERATE"{c++} END{print c+0}')"
+  if [ "$m8_ref" -ne 0 ]; then
+    bad "MUTATION — the string compare still fired on sha-vs-ref, so the resolved-id assertion is vacuous"
+  elif [ "$m8_sha" -ne 1 ]; then
+    bad "MUTATION — the string compare also lost the sha-vs-sha case ($m8_sha), so it is not a clean mutation of the resolution alone"
+  else
+    ok "MUTATION — comparing the argument strings loses sha-vs-ref and keeps sha-vs-sha: resolving the ids is load-bearing"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "layer-adjudication-tier: PASS"

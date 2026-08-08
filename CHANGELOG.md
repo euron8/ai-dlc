@@ -34,6 +34,60 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.303.0] — 2026-08-07
+
+### The step that says a clean sheet must be earned was prescribing an unearnable one
+
+Plan item **13**, which the plan recorded as *"REPORTED BY THE CONSUMER, NOT YET REPRODUCED
+HERE — record it as theirs until it is"* and required be reproduced against a scratch consumer
+before any fix. **It reproduces.**
+
+Step 7 told the operator to re-run `layer-drift.sh` and `unregistered-drift.sh` and require zero
+`HARD-*` rows, and then — in one instruction covering both scripts — to *"pass `theirs` as the
+base on this re-run, not the pull's base."* That is right for `unregistered-drift.sh`, whose
+statuses genuinely mean "consumer edits vs base". It is wrong for `layer-drift.sh`, and the wrong
+half is silent: both `ADJUDICATED` clauses — **LC-E4** (`EXTENSION-HOOK-DRIFT`) and **LC-E14**
+(`EXTENSION-ANCHOR-DRIFT`) — are computed over `base..theirs`, and `HARD-LAYER-ADJUDICATION-MISSING`
+(**LC-A1**) is demanded only on rows they produce. With `base == theirs` there is no drift, so no
+duty, so the check cannot fail.
+
+Reproduced on the `layer-adjudication-tier` scratch consumer, same seed, same tree, the two bases
+side by side:
+
+```
+base = the pull's base   EXTENSION-HOOK-DRIFT 1   HARD-LAYER-ADJUDICATION-MISSING 1
+base = theirs            EXTENSION-OK         1   HARD-LAYER-ADJUDICATION-MISSING 0
+```
+
+The degenerate run still emits a row, which is the control that makes its zero readable: the
+disarm is real and not a broken invocation. On the reference consumer the same shape printed
+`0 HARD blockers.` with eighteen adjudications unrecorded.
+
+**The remedy is a mechanism, not only the prose split.** `layer-drift.sh` emits
+`DRIFT-RANGE-DEGENERATE` when its two refs resolve to the same commit, naming the arms that
+cannot fire and saying that a clean sheet from that run is evidence the adjudications were never
+asked for. A row rather than a refusal: this is a classifier whose callers read rows, and the
+`HARD-` arms it can still answer are legitimate — the same posture v0.287.0 took with a validator
+folding three SKIPs into "all checks passed".
+
+**Resolved commit ids, not the argument strings.** In every real invocation `theirs` is a ref name
+and `base` a sha, so `[ "$BASE" = "$THEIRS" ]` would compare `9036e0d` against `origin/main` and
+never fire on the one case it exists for. The fixture drives sha-vs-ref, and the mutant that
+restores a string comparison loses that arm and keeps sha-vs-sha.
+
+**False-positive set: empty, and derived rather than asserted.** Every programmatic caller passes
+the pull's base — `apply.sh`, `emit-report.sh`, `hard-blockers.sh` — and the only invocation that
+made the two equal was the step-7 instruction this release splits.
+
+The status sits deliberately outside the layer-contract clause vocabulary: it is about the
+INVOCATION, names no entry, and no clause could own it without describing a caller error as a
+property of the consumer's layer — the same posture as `INPUT-UNRESOLVED`. That I36's prefix
+scoping also permits this is noted in the file as a pre-existing property, not a licence.
+
+`layer-adjudication-tier` gains a Part 8: five assertions and one guarded mutant, with both arms
+of the pair asserted — a row-always-fires script fails the control, a row-never-fires script fails
+the subject.
+
 ## [0.302.0] — 2026-08-07
 
 ### A STILL-LIVE this pull did not measure now says so, once, with a number

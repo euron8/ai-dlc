@@ -1116,13 +1116,34 @@ prose is itself generated rather than composed.
    you decided it was fine is the check-that-cannot-fail defect, in the tool built to
    prevent it.
 
-   **Pass `theirs` as the base on this re-run, not the pull's base.** Both scripts measure
-   the consumer against `<base-sha>` and presume core still sits there. Core is now at
-   `theirs`, so the pull's original base reports every line upstream ADDED as a consumer
-   addition upstream absorbed — `HARD-CORE-DRIFT-ABSORBED` on a file `apply` just wrote,
-   whose remedy is a revert to what it already is. The post-apply base IS `theirs`; that is
-   the only base against which "consumer edits vs base" means what these status names claim.
-   `CORE-AT-THEIRS` rows are the tell that the base was stale.
+   **THE TWO SCRIPTS TAKE DIFFERENT BASES ON THIS RE-RUN, and one instruction for both
+   disarmed one of them.** This paragraph used to read *"pass `theirs` as the base on this
+   re-run, not the pull's base"* without qualification. That is right for one script and
+   wrong for the other, and the wrong half is silent.
+
+   - **`unregistered-drift.sh` — pass `theirs`.** It measures the consumer against
+     `<base-sha>` and presumes core still sits there. Core is now at `theirs`, so the pull's
+     original base reports every line upstream ADDED as a consumer addition upstream
+     absorbed — `HARD-CORE-DRIFT-ABSORBED` on a file `apply` just wrote, whose remedy is a
+     revert to what it already is. The post-apply base IS `theirs`; that is the only base
+     against which "consumer edits vs base" means what these status names claim.
+     `CORE-AT-THEIRS` rows are the tell that the base was stale.
+   - **`layer-drift.sh` — pass the PULL's base.** Its subject is what moved between base and
+     theirs, not what the consumer edited. Both `ADJUDICATED` clauses — **LC-E4**
+     (`EXTENSION-HOOK-DRIFT`) and **LC-E14** (`EXTENSION-ANCHOR-DRIFT`) — are computed over
+     that range, and `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) is demanded only on rows
+     they produce. With `base == theirs` there is no drift, so no adjudication is demanded,
+     so the check cannot fail, and `hard-blockers.sh` prints a clean sheet on a tree where
+     every verdict is still owed. Reported by the reference consumer — `0 HARD blockers.`
+     with eighteen adjudications unrecorded — and reproduced on a scratch consumer: same
+     tree, the pull's base gives `EXTENSION-HOOK-DRIFT` + `HARD-LAYER-ADJUDICATION-MISSING`,
+     `theirs` gives `EXTENSION-OK` and nothing else. The register's own digest is
+     spend-on-move, so re-running on the pull base cannot re-demand a verdict recorded this
+     run.
+
+   **You do not have to remember this.** `layer-drift.sh` emits `DRIFT-RANGE-DEGENERATE` when
+   its two refs resolve to the same commit, naming the arms that cannot fire. If you see that
+   row, the run said nothing about the layer — re-run it with the pull's base.
 
    **Dispose of every `WORKLIST extension-reread` row — this is *the layer conformance
    adjudication*.** `apply.sh` emits one per `EXTENSION-HOOK-DRIFT`: the core file the extension

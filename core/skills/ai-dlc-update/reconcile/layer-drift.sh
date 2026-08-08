@@ -211,6 +211,57 @@ emit() {
   adj_check "$1" "$2" "$3"
 }
 
+# --- A DEGENERATE RANGE DISARMS EVERY ADJUDICATED ARM, SILENTLY -----------------------------
+#
+# THE STATE THIS MAKES VISIBLE. Two clauses sit at `level: ADJUDICATED` — LC-E4
+# (`EXTENSION-HOOK-DRIFT`) and LC-E14 (`EXTENSION-ANCHOR-DRIFT`) — and BOTH are computed
+# `base..theirs`. `HARD-LAYER-ADJUDICATION-MISSING` (LC-A1) is demanded only on rows those
+# clauses produce. So when BASE and THEIRS resolve to the SAME commit there is no drift, no rows,
+# no duty, and `hard-blockers.sh` prints a clean sheet on a tree where every adjudication is
+# still owed. The check-that-cannot-fail defect, in the tool built to prevent it — which is
+# `SKILL.md` step 7's own phrasing, in the step that was prescribing it.
+#
+# REPORTED BY THE REFERENCE CONSUMER AND REPRODUCED HERE on a scratch consumer before this was
+# written, because a gate that prints zero is the shape this repo keeps shipping and a fix aimed
+# at the wrong layer would leave it. Same seed, same tree, the two bases side by side:
+#
+#   base = the pull's base   EXTENSION-HOOK-DRIFT 1   HARD-LAYER-ADJUDICATION-MISSING 1
+#   base = theirs            EXTENSION-OK         1   HARD-LAYER-ADJUDICATION-MISSING 0
+#
+# The second arm still emits a row, which is the control that the run WORKS: the zero is a real
+# disarm and not a broken invocation.
+#
+# WHY A ROW AND NOT A REFUSAL. This is a classifier whose callers read rows; exiting non-zero
+# would block `apply` on an invocation that is merely uninformative, and the two `HARD-` arms it
+# CAN still answer are legitimate. So it reports what it cannot answer, which is the same remedy
+# v0.287.0 applied to a validator folding three SKIPs into "all checks passed".
+#
+# RESOLVED COMMIT IDS, NOT THE ARGUMENT STRINGS. `theirs` arrives as a ref name and `base` as a
+# sha in every real invocation, so `[ "$BASE" = "$THEIRS" ]` would compare `9036e0d` against
+# `origin/main` and never fire on the one case it exists for.
+#
+# DELIBERATELY OUTSIDE THE CLAUSE VOCABULARY, AND SAID RATHER THAN LEFT TO I36's PREFIXES. Every
+# other status this file emits is a verdict ABOUT AN ENTRY and is claimed by a layer-contract
+# clause, which I36 joins in both directions. This one is about the INVOCATION — it names no
+# entry and no clause could own it — so it takes a prefix outside I36's `HARD-`/`OVERRIDE-`/
+# `EXTENSION-` scan rather than acquiring a clause that would have to describe a caller error as
+# a property of the consumer's layer. Same posture, and the same reason, as `INPUT-UNRESOLVED` in
+# `ledger-reverify.sh`. That the prefix scoping ALSO makes this the way to add an unclaimed
+# status is a pre-existing property of I36, not a licence: a new status about an ENTRY still
+# needs a clause.
+#
+# FALSE-POSITIVE SET: EMPTY, and derived rather than asserted. Every programmatic caller passes
+# the pull's base — `apply.sh`, `emit-report.sh`, `hard-blockers.sh` — and the ONLY invocation
+# that made the two equal was the step-7 instruction this release splits. A run where they are
+# equal has nothing to say about drift by construction.
+if [ "$MODE" = classify ]; then
+  _b="$(git -C "$DIST" rev-parse --verify --quiet "${BASE}^{commit}" 2>/dev/null || true)"
+  _t="$(git -C "$DIST" rev-parse --verify --quiet "${THEIRS}^{commit}" 2>/dev/null || true)"
+  if [ -n "$_b" ] && [ "$_b" = "$_t" ]; then
+    emit DRIFT-RANGE-DEGENERATE "(this run)" "${BASE}..${THEIRS}" "base and theirs resolve to the SAME commit ($_b), so nothing can have drifted between them and EVERY arm keyed on that range is structurally unable to fire — including both ADJUDICATED clauses (EXTENSION-HOOK-DRIFT, EXTENSION-ANCHOR-DRIFT), and therefore HARD-LAYER-ADJUDICATION-MISSING, which is demanded only on their rows. A clean sheet from THIS run is not evidence the adjudications are recorded; it is evidence they were never asked for. Re-run with the PULL's base to adjudicate the layer. Passing theirs as the base is correct for unregistered-drift.sh, whose statuses mean 'consumer edits vs base' — it is not correct here, and SKILL.md step 7 now says so per script."
+  fi
+fi
+
 TAB="$(printf '\t')"
 
 # Every (file, anchor) an override claims, accumulated across ALL entries for the duplicate check
