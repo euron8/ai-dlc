@@ -272,7 +272,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | **17** | **23a** — are the budget thresholds attainable at all? | **← THE NEXT ITEM.** Operator request 2026-08-08. **First measurement says NO**: after 19 passes and a 96.1% reduction the four live artifacts are **117379 tok against a 66000 pool — 178%**. It can invalidate everything below it, which is why it is first |
 | — | **23b** — artifact-consolidation's residue | Bounded and core-side: give the step's outputs a sprint slot, and say whether the drafts are retired or retained. **Derive the re-home refusal set first — at least two of the 33 files carry no recoverable sprint** |
 | — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first |
-| — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report** |
+| — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
 | — | **21** — `apply.sh` overwrites itself mid-run | REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
@@ -721,6 +721,18 @@ before you write code.
     consolidation pass actually dispatches (an `analyst` under Rule 24), and whether it is
     operator-invoked on its own cadence — which it is, and which is the strongest argument FOR.
     **Do not answer it from the size of the file.**
+
+    **AND A "YES" IS NOT SELF-EXECUTING. 23d DELIVERS A DECISION; THE BUILD THAT FOLLOWS IT IS
+    SEPARATE WORK THAT MUST BE WRITTEN INTO THIS PLAN BEFORE IT STARTS.** Standing up
+    `ai-dlc-artifact-consolidation` is a new skill directory, its own install and uninstall
+    wiring, its own entries in the manifest and in `reconcile/setup-sites.md`, its own fixtures,
+    and a migration for every core file that references the step today. **None of that is
+    authorised by 23d**, exactly as item 19 authorised no release. The moment the decision lands,
+    add the implementation to §*Order of execution* and to the numbered list as its own item or
+    items, with their sequencing stated — and if the answer is no, record THAT as the outcome so a
+    later session does not re-open a question that was already settled. **A decision item that
+    quietly becomes a build item is how scope arrives unsequenced**, and this plan has the room to
+    say so in advance.
 
     **ORDER: 23a → 23b → 23c, with 23d after 23b.** Not preference. 23a can invalidate the others
     — if the thresholds are unattainable, a tidier process still fails the gate and the finding is
