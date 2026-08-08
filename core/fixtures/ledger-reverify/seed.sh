@@ -175,6 +175,22 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry SH-CWD is a receipt whose own CLAIM is about absolute-path handling.** `$CONSUMER`
+  is the only one of the four exported values a receipt can read as a path — `$DIST` goes to
+  `git -C` and the two refs are shas — and callers routinely pass `.`, which is a valid
+  consumer root. An entry about absolute-path handling is verified by a two-arm predicate in
+  which the ABSOLUTE arm must behave differently from the relative one, so handing it a root
+  in the wrong form inverts the `&&` chain and the entry reads CLOSE-CANDIDATE while it is
+  still live. Measured on a reference consumer: 74 rows either way, ONE differing, and that
+  one a FALSE CLOSE — the direction this tool's header names as the one that loses
+  information permanently.
+  <br>Exit 0 (STILL-LIVE) when the root arrives absolute, non-zero (a false close) when it
+  arrives as `.`. This entry is what makes the relative-versus-absolute differential in
+  run.sh able to fail at all.
+  verify: sh case "$CONSUMER" in /*) exit 0 ;; *) exit 1 ;; esac
+
+---
+
 ## PC-FIXTURE-HEADING-ABSORBED — the heading entry shape (filed for the fixture)
 
 verify: theirs_lacks core/skills/ai-dlc/SKILL.md "MARKER_B"

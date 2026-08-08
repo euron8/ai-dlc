@@ -118,6 +118,12 @@
 #                    `vacuous predicate:`, `unfalsifiable predicate:`. Hand-review, as an entry
 #                    without a verify line would be.
 #
+#   INPUT-UNRESOLVED an ARGUMENT does not resolve — the consumer root is not a directory, or an
+#                    explicitly-supplied arg-5 ledger path is not a readable file. Run-scoped,
+#                    not entry-scoped: the ENTRY column carries the offending path. Nothing was
+#                    re-verified, and this row exists because that state used to be spelled as
+#                    zero rows and rc=0, which is how a clean corpus is spelled.
+#
 #                    Two of the three were literal prefixes the code emitted; `unresolved` was
 #                    named in SKILL.md and nowhere in this file, spread across four sites that
 #                    emitted four different unlabelled strings. So the mode could not be grepped
@@ -138,20 +144,104 @@ DIST="${1:?usage: ledger-reverify.sh <dist-repo> <base-sha> <consumer-root> <the
 BASE="${2:?}"
 CONSUMER="${3:?}"
 THEIRS="${4:?}"
+
+# NORMALIZED TO A PHYSICAL ABSOLUTE PATH, BECAUSE THE FORM OF THIS ARGUMENT IS PART OF EVERY
+# `sh` RECEIPT'S PREDICATE — and the failure it produced is a FALSE CLOSE, the one verdict this
+# file's header names as the direction that loses information permanently.
+#
+# `$CONSUMER` is the only one of the four exported values a receipt can read AS A PATH: `$DIST`
+# is handed to `git -C` and is form-insensitive, and the two refs are shas. Callers routinely
+# pass `.`, which is a valid consumer root. A receipt whose CLAIM is about absolute-path handling
+# then has its own subject handed to it in the wrong form — the two-arm predicate for
+# `PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH` requires the relative path to pass and the
+# absolute one to fail, and with `CONSUMER=.` the second arm receives `./docs/…`, which is still
+# relative, so it passes too, the `&&` chain inverts and the entry reads CLOSE-CANDIDATE.
+#
+# MEASURED on the reference consumer at 0.300.0, `.` versus the absolute root, same refs, same
+# ledger: 74 rows either way — the control that this is a targeted inversion and not a broken
+# invocation — and exactly ONE row differs, that entry, CLOSE-CANDIDATE against STILL-LIVE.
+#
+# ABSOLUTE, NOT PHYSICAL — `pwd`, deliberately not `pwd -P`. The defect is relativeness; symlink
+# resolution is a second change with its own blast radius, and it is not free: `$CONSUMER` is
+# rendered verbatim into the reachability DETAIL an operator reads, and on macOS `-P` rewrites
+# every root under `/var` as `/private/var`. Measured — with `-P` the fixture's own
+# absolute-root run moved ten rows that have nothing to do with this fix, which is how a
+# one-line correction acquires a regression surface. `ledger_top_dir()` below needs nothing from
+# here either: it resolves BOTH sides with `pwd -P` itself, so its containment test is already
+# self-consistent whatever spelling arrives.
+#
+# A `cd` that fails leaves `$CONSUMER` VERBATIM rather than empty: an empty consumer root would
+# silently re-point every path at the process cwd, and the arm below reports the bad root by
+# name instead.
+_abs_consumer="$(cd "$CONSUMER" 2>/dev/null && pwd)"
+[ -n "$_abs_consumer" ] && CONSUMER="$_abs_consumer"
+
 # ONE HOME for the conventional in-tree ledger path: it is both the default subject and the
 # fallback the reachability exclusion derives from when arg 5 points somewhere else.
 LEDGER_DEFAULT="$CONSUMER/_bmad-output/ai-dlc-update/push-candidate-ledger.md"
 LEDGER="${5:-$LEDGER_DEFAULT}"
 
-# A consumer that never filed a candidate has no ledger and nothing to re-verify.
-[ -f "$LEDGER" ] || exit 0
-
 # RSFX names WHICH receipt produced this row, and is empty for the single-receipt case so output
 # is byte-identical to before for every entry carrying one. Appended here rather than at each call
 # site: there are eight emit() calls across four verbs, and a suffix added to seven of them is a row
 # an operator cannot attribute.
+#
+# DEFINED ABOVE THE BAIL BELOW, DELIBERATELY. The bail is the one place this tool reports without
+# having parsed an entry, and a diagnostic printed through a second, hand-rolled printf is a
+# second output grammar for the same reader.
 RSFX=""
 emit() { printf '%s\t%s\t%s\n' "$1" "$2" "$3$RSFX"; }
+
+# A CALLER ERROR MUST NOT READ AS A CLEAN CORPUS.
+#
+# This was one unconditional line — `[ -f "$LEDGER" ] || exit 0` — and its INTENT is right: a
+# consumer that never filed a candidate has no ledger and nothing to re-verify. But the exit was
+# doing double duty. "Nothing to re-verify" and "I could not find what you named" produced the
+# same silence and the same rc=0, and only the second is a caller error. SKILL.md step 3f calls
+# this tool once and reads its rows; zero rows there reads as *every entry re-verified, nothing
+# to close*.
+#
+# MEASURED at 0.300.0 against the reference consumer, three invocations, same tree, same moment:
+#
+#   bogus arg 5                    0 rows   rc=0   0 bytes of stderr
+#   args swapped (consumer/theirs) 0 rows   rc=0   0 bytes of stderr
+#   correct                       74 rows   rc=0
+#
+# TWO ARMS, BECAUSE ONE DOES NOT COVER THE MISTAKE THAT WAS ACTUALLY MADE. The obvious fix —
+# warn when an EXPLICITLY-supplied arg 5 is unreadable — is silent on the swapped-args case,
+# which is the case the filing calls the natural mistake: this tool takes consumer THIRD and
+# theirs FOURTH while every sibling in `reconcile/` takes `<dist> <base> <theirs> <consumer>`,
+# and `layer-drift.sh`'s own usage line is the opposite order. Swapping them puts a SHA in the
+# consumer slot, `$LEDGER` is then the DEFAULT path under a root that does not exist, and an
+# arg-5-only check never fires. So the consumer ROOT is checked on its own, unconditionally:
+# a root that is not a directory is a caller error whichever ledger path was used, and it is
+# also the case where every `sh` receipt silently resolves against the wrong tree.
+#
+# FALSE-POSITIVE SET, EMPTY BY CONSTRUCTION: every legitimate consumer root is a directory,
+# including `.`, and `-d` follows symlinks.
+#
+# WHAT NEITHER ARM CAN SEE, stated rather than left to read as covered: a consumer root that IS
+# a directory but is the wrong one — the distribution passed twice, say — has no ledger at its
+# default path, and that is genuinely indistinguishable from a consumer that never filed a
+# candidate. Deciding it would need a probe for the machinery home, which is a different claim
+# from "the path you named does not exist".
+#
+# STILL EXIT 0. This is a classifier, not a gate, and its callers depend on that. The row IS the
+# signal, and it goes to STDOUT — the same channel the zero was misread from. A warning on
+# stderr would be correct and unread: `emit-report.sh` discards this tool's stderr, and its row
+# filter is a denylist (`$1!="STILL-LIVE"`), so a status added here reaches the operator's report
+# with no change there.
+if [ ! -d "$CONSUMER" ]; then
+  emit INPUT-UNRESOLVED "$CONSUMER" "unresolved: the consumer root is not a directory, so no ledger can be found under it and every 'verify: sh' receipt would resolve its paths against the wrong tree. This tool takes <dist> <base> CONSUMER <theirs> — consumer THIRD, theirs FOURTH — which is the opposite of every sibling in reconcile/. Check the argument order, then re-run. Nothing was re-verified; a zero row count here is not a clean corpus."
+fi
+if [ ! -f "$LEDGER" ]; then
+  if [ "$LEDGER" != "$LEDGER_DEFAULT" ]; then
+    emit INPUT-UNRESOLVED "$LEDGER" "unresolved: the ledger path given as argument 5 is not a readable file. Nothing was re-verified. Correct the path, or omit argument 5 to use the conventional in-tree ledger, then re-run."
+  fi
+  # The genuine no-ledger case: the DEFAULT path, absent, under a real consumer root. Silent,
+  # exactly as before — a consumer that never filed a candidate has nothing to re-verify.
+  exit 0
+fi
 
 theirs_show() { git -C "$DIST" show "${THEIRS}:$1" 2>/dev/null; }
 theirs_has_path() { git -C "$DIST" cat-file -e "${THEIRS}:$1" 2>/dev/null; }
