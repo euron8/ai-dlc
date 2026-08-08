@@ -270,24 +270,57 @@ hard_verdict() {
 # -----------------------------------------------------------------------------
 WHOLE_READ_SET="prd.md product-brief.md architecture.md carry-over-backlog.md"
 
-# The analyst's context window, from the role file setup writes. `[1m]` is Claude
-# Code's own suffix for the 1M-context variant, which is why it is the token
-# matched rather than a model-name table -- a name table is a hand-maintained list
-# that goes stale silently, and the suffix is the thing that actually selects the
-# window.
+# The analyst's context window, resolved through `aiDlcRoles.analyst` -> `aiDlcModels`
+# in the consumer's settings.json. `[1m]` is Claude Code's own suffix for the
+# 1M-context variant, which is why it is the token matched rather than a model-name
+# table -- a name table is a hand-maintained list that goes stale silently, and the
+# suffix is the thing that actually selects the window.
 #
-# UNRESOLVED FALLS BACK TO 200000, NEVER TO THE LARGER NUMBER. An unfilled
-# template, a missing role file and an unrecognised model all mean the same thing:
-# we do not know. 200K is the standard window and the value the context sensor
-# already defaults to (`*) MODEL_MAX=200000`), so the unknown case tightens the
-# gate rather than opening it. A consumer whose analyst genuinely has more room
-# sets AI_DLC_READER_WINDOW_TOKENS -- and unlike the four constants this replaces,
-# the number being overridden has a derivation to argue against.
+# THIS FUNCTION USED TO GREP THE ROLE FILE FOR `^- Personal:`, AND THAT LINE HAS NOT
+# EXISTED SINCE v0.174.0. It shipped at v0.124.0, when role files carried
+# `- Personal: /model {analyst_model_personal}` filled in by setup. v0.174.0
+# (`989939a`, "model strings move to one consumer-owned config block") deleted the
+# line and v0.175.0 finished the move -- fifty releases before anyone read this
+# function again. Controlled at the time this was fixed: `^- Personal:` matched
+# NOTHING under core/team-roles/ (control: `^- ` bullets in every role file), `[1m]`
+# matched nothing there either, and the ONLY occurrence of the string `Personal:` in
+# core/, templates/, scripts/ and install.sh combined was the grep on this line.
+#
+# So the `1000000` arm was unreachable on every consumer, and every consumer had been
+# silently taking the `200000` fallback -- the branch this derivation deliberately
+# made the TIGHTENING default for the UNKNOWN case, used instead as the only reachable
+# one. Measured on the reference consumer: its analyst resolves to `claude-sonnet-5[1m]`
+# through the config block, a 330,000 pool, and the validator was reporting 66,000 and
+# a 417% breach.
+#
+# The comment two paragraphs up already named `aiDlcModels` as the source of truth; the
+# code simply never read it. The resolution idiom below is the one
+# `core/hooks/ai-dlc-dispatch-guard.sh:203-205` already uses, deliberately, rather than
+# a second reading of the same config.
+#
+# UNRESOLVED FALLS BACK TO 200000, NEVER TO THE LARGER NUMBER. No settings.json, no
+# jq, no `aiDlcRoles.analyst`, a key absent from `aiDlcModels`, and an unrecognised
+# model string all mean the same thing: we do not know. 200K is the standard window and
+# the value the context sensor already defaults to (`*) MODEL_MAX=200000`), so the
+# unknown case tightens the gate rather than opening it. A consumer whose analyst
+# genuinely has more room sets AI_DLC_READER_WINDOW_TOKENS -- and unlike the four
+# constants this replaces, the number being overridden has a derivation to argue
+# against.
+#
+# THE FAILURE MODES ARE NOT SYMMETRIC, which is why the unknown case is stated five
+# times rather than once. Resolving unknown to 1M is a fail-open at a HARD_BLOCK, on
+# the very gate that exists to stop the analyst blowing its window one step later.
+# Resolving a genuine 1M consumer to 200K -- what this function did for fifty releases
+# -- is a gate that cannot be passed, which is the inert-mechanism class and trains the
+# operator to ignore the row. Both are defects; only one is safe to guess.
 resolve_reader_window() {
-  role="$ROOT/.claude/team-roles/analyst.md"
-  [ -f "$role" ] || role="$ROOT/core/team-roles/analyst.md"
-  [ -f "$role" ] || { printf '200000'; return; }
-  case "$(grep -m1 '^- Personal:' "$role" 2>/dev/null)" in
+  settings="$ROOT/.claude/settings.json"
+  [ -r "$settings" ] || { printf '200000'; return; }
+  command -v jq >/dev/null 2>&1 || { printf '200000'; return; }
+  rrw_key="$(jq -r '.aiDlcRoles.analyst.model // empty' "$settings" 2>/dev/null || true)"
+  [ -n "$rrw_key" ] || { printf '200000'; return; }
+  rrw_model="$(jq -r --arg k "$rrw_key" '.aiDlcModels[$k] // empty' "$settings" 2>/dev/null || true)"
+  case "$rrw_model" in
     *'[1m]'*) printf '1000000' ;;
     *)        printf '200000' ;;
   esac
@@ -298,7 +331,7 @@ if [ -n "${AI_DLC_READER_WINDOW_TOKENS:-}" ]; then
   WINDOW_SOURCE="AI_DLC_READER_WINDOW_TOKENS"
 else
   READER_WINDOW_TOKENS="$(resolve_reader_window)"
-  WINDOW_SOURCE="team-roles/analyst.md"
+  WINDOW_SOURCE=".claude/settings.json aiDlcRoles.analyst"
 fi
 ARTIFACT_SHARE_PCT="${AI_DLC_ARTIFACT_SHARE_PCT:-33}"
 WHOLE_READ_POOL=$(( READER_WINDOW_TOKENS * ARTIFACT_SHARE_PCT / 100 ))
