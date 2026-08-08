@@ -723,6 +723,19 @@ prose is itself generated rather than composed.
      above it and says whether a receipt was captured. **Fix the ledger, not the entry** —
      re-indent the annotation so it does not start a line, or drop the bold, then re-run and
      confirm the id reappears. Report-only; it never blocks.
+   - `RECEIPTS-UNDECIDED` → one row per run, emitted only when the count is non-zero: how many
+     `theirs_has` receipts reported `STILL-LIVE` on a substring present at **base as well as
+     theirs**. This pull moved neither side of those predicates, so their verdicts are
+     restatements of the previous run rather than new measurements — the entry may be live or
+     long fixed, and this run did not distinguish them. **A `STILL-LIVE` in that set is not
+     evidence the defect survives.** An anchor on text the fix KEEPS survives the fix, and the
+     entry can then never close. Measured on the reference consumer at 0.301.0: of five
+     `STILL-LIVE` verdicts re-checked against the code by hand, **three were false**, every one
+     anchored on text its own fix keeps, and only one of the three was visible to
+     `NAMED-UPSTREAM`. It is a COUNT, not an accusation against any row — "present at both refs"
+     is also the normal state of a genuinely live entry, so it cannot decide one. Re-anchor the
+     receipts per the rule below, or read the code. **Do not read a zero `CLOSE-CANDIDATE` count
+     from such a run as evidence that nothing was absorbed.**
    - `INPUT-UNRESOLVED` → an ARGUMENT does not resolve, so **nothing was re-verified**. Run-
      scoped rather than entry-scoped: the entry column carries the offending path. Two causes,
      named in the DETAIL — the consumer root is not a directory, or an explicitly-supplied

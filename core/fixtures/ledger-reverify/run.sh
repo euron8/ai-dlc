@@ -422,14 +422,23 @@ else
   # Normalizing collapses it, so ten DETAIL strings change while not one verdict does. Comparing
   # raw output here would score a correct fix as an unclean mutation; comparing (status, label)
   # asserts the property the arm is actually about.
-  mn_abs_v="$(printf '%s\n' "$mn_abs" | awk -F'\t' '{print $1"\t"$2}')"
-  abs_out_v="$(printf '%s\n' "$abs_out" | awk -F'\t' '{print $1"\t"$2}')"
+  # RECEIPTS-UNDECIDED IS EXCLUDED HERE, AND IT IS THE ONE ROW THAT MUST BE. Its ENTRY column is
+  # the LEDGER PATH, which is derived from the consumer root — so normalization rewrites it by
+  # design, and comparing it would score the fix as an unclean mutation for doing exactly what
+  # it exists to do. That the mutant still emits the row at all is asserted on its own below,
+  # so excluding it here cannot hide the row going missing.
+  mn_abs_v="$(printf '%s\n' "$mn_abs" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{print $1"\t"$2}')"
+  abs_out_v="$(printf '%s\n' "$abs_out" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"{print $1"\t"$2}')"
+  mn_und="$(printf '%s\n' "$mn_abs" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
   if [ "$mn_rel" = "$mn_abs" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s without normalization the two forms still agreed — the differential above is vacuous\n' "mutation-normalize"
   elif [ "$mn_cwd" != "CLOSE-CANDIDATE" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the unnormalized run moved SH-CWD to %s, not the FALSE CLOSE the defect produces\n' "mutation-normalize" "${mn_cwd:-<none>}"
+  elif [ "$mn_und" -ne 1 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant emitted %s RECEIPTS-UNDECIDED row(s), want 1 — the row excluded from the comparison below must still be there\n' "mutation-normalize" "$mn_und"
   elif [ "$mn_abs_v" != "$abs_out_v" ]; then
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s the mutant also moved the ABSOLUTE run, so it is not a clean mutation of the normalization alone\n' "mutation-normalize"
@@ -469,6 +478,82 @@ else
     printf '  FAIL  %-22s the mutant produced no rows on a GOOD invocation either, so it is not a clean mutation of the bail alone\n' "mutation-bail"
   else
     printf '  ok    %-22s the unconditional bail silences both caller errors and nothing else (%s rows on a good run)\n' "mutation-bail" "$ml_ok"
+  fi
+fi
+
+# --- RECEIPTS-UNDECIDED: how much of the STILL-LIVE column this pull actually measured ----
+# Both entries are STILL-LIVE, so the status alone cannot separate them. TH-UNDECIDED's
+# substring is at BOTH refs (this pull moved neither side of the predicate); TH-DECIDED's
+# arrived inside base..theirs. The pair is what makes the tally a finding rather than a count
+# of still-live rows.
+row_is "Entry TH-UNDECIDED" STILL-LIVE "present at theirs -> stays open, exactly like the control below"
+row_is "Entry TH-DECIDED"   STILL-LIVE "also STILL-LIVE, so the STATUS cannot be what distinguishes them"
+
+# The numerator and the denominator are both asserted. A row saying "3 of 3" would be a count of
+# still-live theirs_has receipts wearing this row's name; the claim is specifically about the
+# subset whose predicate did not move in range.
+ASSERTIONS=$((ASSERTIONS + 1))
+und="$(printf '%s\n' "$OUT" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
+if grep -q "^1 of 3 'theirs_has' receipt" <<<"$und"; then
+  printf '  ok    %-22s 1 of 3 — the control is excluded and the vacuous entry still counts in the total\n' "undecided-tally"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s want "1 of 3", got: %s\n' "undecided-tally" "${und:-<no row>}"
+fi
+
+# It must reach the operator, which means NOT being STILL-LIVE: emit-report.sh filters that one
+# status out, and that filter is exactly why this confidence has been invisible.
+ASSERTIONS=$((ASSERTIONS + 1))
+if printf '%s\n' "$OUT" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{n++} END{exit !(n==1)}'; then
+  printf '  ok    %-22s exactly one run-scoped row, and its status is not STILL-LIVE\n' "undecided-once"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s want exactly one RECEIPTS-UNDECIDED row\n' "undecided-once"
+fi
+
+# SILENT AT ZERO. A ledger whose receipts are all well-anchored must say nothing, or the row is
+# decoration on every pull and the operator learns to skip it.
+ASSERTIONS=$((ASSERTIONS + 1))
+zled="$CONS/_bmad-output/ai-dlc-update/well-anchored-ledger.md"
+mkdir -p "$(dirname "$zled")"
+printf -- '- **Entry ZA** — anchored on a token that arrived inside base..theirs.\n  verify: theirs_has core/skills/ai-dlc/SKILL.md "MARKER_B"\n' > "$zled"
+z_out="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$zled" 2>/dev/null)"
+z_n="$(printf '%s\n' "$z_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{c++} END{print c+0}')"
+z_live="$(printf '%s\n' "$z_out" | awk -F'\t' '$1=="STILL-LIVE"{c++} END{print c+0}')"
+if [ "$z_n" -eq 0 ] && [ "$z_live" -eq 1 ]; then
+  printf '  ok    %-22s no row when every receipt moved in range (control: the run still emitted its STILL-LIVE)\n' "undecided-silent"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s got %s undecided row(s) and %s still-live on a well-anchored ledger; want 0 and 1\n' "undecided-silent" "$z_n" "$z_live"
+fi
+rm -f "$zled"
+
+# MUTATION — drop the base-side test, so the tally counts every still-live theirs_has receipt.
+# The control entry is then swept in and the row reads "2 of 3": a number that still looks like
+# a finding, which is what makes this mutant worth having.
+MUTU="$(dirname "$DIST")/mut-undecided"
+rm -rf "$MUTU"; mkdir -p "$MUTU"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTU/" 2>/dev/null
+sed 's@^          base_holds "\$path" "\$subs" && th_undecided=@          th_undecided=@' \
+  "$CLOSER" > "$MUTU/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTU/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the tally assertions are unproven\n' "mutation-undecided"
+else
+  mu_out="$(bash "$MUTU/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null)"
+  mu_det="$(printf '%s\n' "$mu_out" | awk -F'\t' '$1=="RECEIPTS-UNDECIDED"{print $3; exit}')"
+  mu_rest="$(printf '%s\n' "$mu_out" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"' | sort)"
+  ok_rest="$(printf '%s\n' "$OUT" | awk -F'\t' '$1!="RECEIPTS-UNDECIDED"' | sort)"
+  if ! grep -q "^2 of 3 'theirs_has' receipt" <<<"$mu_det"; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s without the base test the tally read: %s — want "2 of 3", so the control above is vacuous\n' "mutation-undecided" "${mu_det:-<no row>}"
+  elif [ "$mu_rest" != "$ok_rest" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also moved a non-tally row, so it is not a clean mutation of the base test alone\n' "mutation-undecided"
+  else
+    printf '  ok    %-22s without the base test the control is swept in ("2 of 3") and nothing else moves\n' "mutation-undecided"
   fi
 fi
 
