@@ -50,9 +50,23 @@ clean, and every release this plan produced is merged — the table under §*Whe
 lists all eighteen with their PR numbers. The previously-parked F3 branch shipped after two
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
-**graph is at `0.292.0 / c5e7daa` and is QUIESCENT.** s301 is closed and landed on its `main`;
-s302 has not started. Nothing in the consumer is waiting on this repo, and no graph session is
-running.
+**~~graph is at `0.292.0 / c5e7daa` and is QUIESCENT.~~ NO LONGER TRUE — 8b IS IN FLIGHT.**
+Observed 2026-08-07: graph has landed `0.292.0 → 0.297.0` (its #879) and `0.297.0 → 0.298.0`
+(#880) and was mid-apply toward `0.300.0` with **47 dirty files** and its stamp already rewritten
+to `0.300.0 / 2bc7aa4`. s301 is closed and landed on its `main`; s302 has not started.
+
+**DO NOT MEASURE AGAINST graph WHILE THAT IS TRUE, and check before you do.** This session took
+two consumer measurements that straddled the operator's work and got two different answers from
+what looked like identical invocations — `layer-drift.sh` at the same base and the same theirs
+returned 74 rows / 21 `HARD-LAYER-ADJUDICATION-MISSING` in one run and 50 rows / 0 in the next.
+The first suspicion was that this repo's own releases had disarmed the gate. They had not; the
+subject was moving underneath the probe. `git -C /Users/n8/git/graph status --short | wc -l` is
+the whole check, and a non-zero answer means any consumer figure taken now is unattributable.
+**Every consumer count in this file was taken at `0.292.0` and is a historical record, not a
+current reading** — re-take them once the pull settles.
+
+**And ai-dlc moved DURING that pull:** `0.301.0`, `0.302.0` and `0.303.0` all landed after the
+operator started, so a further hop is owed beyond whatever 8b lands on.
 
 **s302 IS NO LONGER A DEADLINE, by operator direction 2026-08-07.** Earlier revisions of this
 file treated "s302 is held until item 10 lands" as the thing setting the pace, and item 10's
@@ -83,8 +97,17 @@ finding: **three of the five `STILL-LIVE` verdicts were false, not one.** See §
 measured*. Two things now sit with the OPERATOR, and neither is core's to do.
 
 **NEXT ACTION FOR THIS REPO: item 6's UNMEASURED gate** — count the LC-E6 and LC-O15 candidate
-sets against the consumer. Everything ahead of it in the order is blocked on 8b, which is the
-operator's.
+sets. **BLOCKED UNTIL THE PULL SETTLES**, because the count is against the consumer and graph is
+mid-apply; see the block above. A first reading taken during the pull returned **0 and 0** with a
+working control (50 rows across 9 other statuses from the same run), and it is recorded here as
+UNUSABLE rather than as an answer. Two things worth carrying into the re-take: LC-E6's code
+`EXTENSION-RETIRE-CANDIDATE` has **`fixture: none`** in the contract — a declared I65 gap — so
+before promoting it, establish that its code can fire at all, or the promotion promotes a clause
+whose zero has never been shown to mean anything. LC-O15's `OVERRIDE-SUPERSEDED` has
+`layer-readopt-gate` behind it.
+
+**Item 13 was taken ahead of item 6 for exactly that reason** — it needed a scratch consumer, not
+graph — and it shipped as v0.303.0.
 
 ## Session handoff — 2026-08-07, written because context depth was becoming the risk
 
@@ -132,7 +155,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | 10 | **16** — move `planning-artifacts/stories/` under `s<N>/` | **BLOCKED behind 10e**, so behind 8b. Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
 | 11 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | **12** | **6** — promote LC-E6/LC-O15 | **← THE NEXT UNBLOCKED ITEM IN THIS REPO.** Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
-| — | **12**, **13** | neither gates anything; take them when convenient |
+| ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
+| — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
 
 
@@ -276,7 +300,17 @@ before you write code.
     where clearing would break the fixture. Control: **36** fixtures already carry the loop. The
     correct subject set is the declared *consumer-settable* tunables, not any `AI_DLC_*` token —
     derive that side first, then measure the false-positive set again before shipping.
-13. **Verify the reference consumer's step-7 finding, then fix it.** REPORTED BY THE CONSUMER,
+13. ~~**Verify the reference consumer's step-7 finding, then fix it.**~~ **DONE — v0.303.0 (#418).
+    IT REPRODUCED**, on the `layer-adjudication-tier` scratch consumer, exactly as this item
+    required before any fix: the pull's base gives `EXTENSION-HOOK-DRIFT` +
+    `HARD-LAYER-ADJUDICATION-MISSING`, `theirs` as base gives `EXTENSION-OK` and nothing else,
+    and the degenerate run still emits a row — the control that makes its zero readable. Step 7's
+    one instruction covering both scripts is now split per script, and `layer-drift.sh` emits
+    `DRIFT-RANGE-DEGENERATE` when its two refs resolve to the same commit, so the wrong
+    invocation announces itself rather than depending on the prose being read correctly.
+    False-positive set empty and derived: every programmatic caller already passed the pull's
+    base. What follows is the original text.
+    REPORTED BY THE CONSUMER,
     NOT YET REPRODUCED HERE — record it as theirs until it is. They report that step 7's
     post-apply re-run instruction disarms its own check: passing `theirs` as the base makes
     `EXTENSION-HOOK-DRIFT` unable to fire, so `hard-blockers.sh` printed `0 HARD blockers.`
@@ -389,7 +423,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.302.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.303.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -413,6 +447,7 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.303.0 | #418 | **plan item 13.** Step 7 told the operator to re-run BOTH drift scripts with `theirs` as the base; that is right for `unregistered-drift.sh` and disarms `layer-drift.sh`, whose two ADJUDICATED clauses are computed over `base..theirs`, so `HARD-LAYER-ADJUDICATION-MISSING` cannot be demanded and `hard-blockers.sh` prints a clean sheet on a tree where every verdict is owed. Reproduced on a scratch consumer with both arms and a control. The instruction is split per script AND `DRIFT-RANGE-DEGENERATE` makes the wrong invocation self-announcing. Resolved commit ids, not argument strings — theirs is a ref and base a sha in every real call. |
 | v0.302.0 | #416 | **plan item 8c, second half.** `RECEIPTS-UNDECIDED` — one row per run counting the `theirs_has` receipts whose substring is present at BASE as well as theirs, so this pull moved neither side of them and their STILL-LIVE is a restatement rather than a measurement. **24 of 24** on graph. A COUNT, not a verdict: the stronger predicate was built, fires on **15 of 23** including entries confirmed live, and is REFUTED rather than shipped. Silent at zero. Two defects the fixtures caught and review did not — the loop ran in a subshell so the counter was discarded, and the row's entry column was the ledger path, which made a verdict depend on how the ledger was addressed. 61 → 67 assertions. |
 | v0.301.0 | #415 | **plan item 8c, first half.** The consumer root is normalized, because `.` inverts any receipt whose own claim is about absolute paths — measured, 74/74 rows either way with exactly ONE differing, a FALSE CLOSE. And `INPUT-UNRESOLVED`: the unconditional `[ -f "$LEDGER" ] || exit 0` spelled a caller error exactly like a clean corpus (bogus arg 5 and swapped args both gave 0 rows, rc=0, zero bytes of stderr, against 74). Two arms, because an arg-5-only check cannot see the swapped-args case. The fixture had been ASSERTING the defect. 54 → 61 assertions. |
 | v0.300.0 | #412 | **plan item 10d.** `migrate-artifact-paths.sh`: dry run by default, `git mv` only, verified per file as source-absent AND dest-readable AND sha256-identical. Rehearsed on a CLONE of the consumer and the rehearsal found four defects reading could not — a component regex run against whole paths (668 detected instead of 2551, `docs/retro` absent entirely), adjacent tokens hiding each other (a two-sprint file planned as unambiguous), the slot nested inside the token it replaces (53 directories), and a half-migrated story corpus. 2667 moves / 48 refused / 1001 deferred / self-check 0 / idempotent. Every refusal and every inferred area is reported. New fixture `artifact-path-migration` (32 assertions, 3 mutants, 1 control). |
