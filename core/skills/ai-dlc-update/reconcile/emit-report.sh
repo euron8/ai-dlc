@@ -208,7 +208,7 @@ render() {
   # HAND-REVIEW is exempt: its detail is one constant sentence, so carrying it repeats the same
   # line once per manual entry — nine times on the reference consumer — and says nothing the
   # status has not already said.
-  sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NEEDS-REVIEW (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
+  sub "Push-candidate ledger — CLOSE-CANDIDATE / NAMED-UPSTREAM / NEEDS-REVIEW / INPUT-UNRESOLVED (upstream absorbed the entry; the operator confirms and annotates, never auto-closed):"
   local lr
   lr="$(bash "$SELF/ledger-reverify.sh" "$DIST" "$BASE" "$CONSUMER" "$THEIRS" 2>/dev/null | awk -F'\t' '$1!="STILL-LIVE"{ d = ($1=="HAND-REVIEW") ? "" : "  "$3; print $1"  "$2 d }' | sort -u)"
   none_or "$lr"

@@ -305,14 +305,171 @@ else
   printf '  FAIL  %-22s exit=%s want=0  (a close must never block apply)\n' "exit-code" "$rc"
 fi
 
-# A consumer with NO ledger: exit 0, no output.
+# --- A CALLER ERROR MUST NOT READ AS A CLEAN CORPUS --------------------------------------
+# THIS ARM USED TO ASSERT THE DEFECT. It read "a consumer with NO ledger: exit 0, no output"
+# and produced that case by passing an EXPLICIT arg-5 path that does not exist — which is not
+# what a consumer with no ledger does. A consumer with no ledger passes no arg 5 at all. So the
+# assertion pinned the silence of a caller error, and the fixture would have gone red on the
+# fix rather than on the bug.
+#
+# The genuine case is the DEFAULT path, absent, under a real consumer root. That is the arm
+# below, and it is also this change's false-positive control: it is the only shape that stays
+# silent, and it must.
 ASSERTIONS=$((ASSERTIONS + 1))
-empty="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>&1)"
-if [ -z "$empty" ]; then
-  printf '  ok    %-22s silent  (no ledger -> nothing to re-verify)\n' "no-ledger"
+NOLED="$(dirname "$DIST")/consumer-with-no-ledger"
+rm -rf "$NOLED"; mkdir -p "$NOLED"
+empty="$(bash "$CLOSER" "$DIST" "$BASE" "$NOLED" "$THEIRS" 2>&1)"; empty_rc=$?
+if [ -z "$empty" ] && [ "$empty_rc" -eq 0 ]; then
+  printf '  ok    %-22s silent, exit 0  (real consumer root, default ledger absent -> genuinely nothing to re-verify)\n' "no-ledger"
 else
   FAILURES=$((FAILURES + 1))
-  printf '  FAIL  %-22s emitted output on a missing ledger\n' "no-ledger"
+  printf '  FAIL  %-22s rc=%s output=[%s] — a consumer that never filed a candidate must stay silent\n' "no-ledger" "$empty_rc" "$empty"
+fi
+
+# ARM 1 — an explicitly-supplied arg-5 path that is not readable. Nothing was re-verified, and
+# that used to be spelled as zero rows and rc=0, which is how a clean corpus is spelled.
+# Measured at 0.300.0 on the reference consumer: bogus arg 5 gave 0 rows, rc=0 and ZERO bytes of
+# stderr, against 74 rows for the correct invocation.
+ASSERTIONS=$((ASSERTIONS + 1))
+bad5="$(bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null)"
+bad5_n="$(printf '%s\n' "$bad5" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
+if [ "$bad5_n" -eq 1 ] && grep -qF 'nonexistent-ledger.md' <<<"$bad5"; then
+  printf '  ok    %-22s one INPUT-UNRESOLVED row naming the arg-5 path\n' "bad-arg5"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s got %s INPUT-UNRESOLVED row(s); an unreadable arg-5 path must not read as a clean corpus\n' "bad-arg5" "$bad5_n"
+  printf '%s\n' "$bad5" | sed 's/^/          | /'
+fi
+
+# ARM 2 — THE MISTAKE THAT WAS ACTUALLY MADE, and the reason arm 1 alone is not the fix. This
+# tool takes consumer THIRD and theirs FOURTH; every sibling in reconcile/ takes
+# `<dist> <base> <theirs> <consumer>`, and layer-drift.sh's own usage line is the opposite
+# order. Swapping them puts a SHA in the consumer slot, so `$LEDGER` is the DEFAULT path under a
+# root that does not exist and an arg-5-only check never fires. The consumer root is therefore
+# checked on its own.
+ASSERTIONS=$((ASSERTIONS + 1))
+swapped="$(bash "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null)"
+sw_n="$(printf '%s\n' "$swapped" | awk -F'\t' '$1=="INPUT-UNRESOLVED"{c++} END{print c+0}')"
+if [ "$sw_n" -eq 1 ]; then
+  printf '  ok    %-22s swapped args report, though the ledger path is the DEFAULT one\n' "swapped-args"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s got %s INPUT-UNRESOLVED row(s) — an arg-5-only check cannot see this case\n' "swapped-args" "$sw_n"
+  printf '%s\n' "$swapped" | sed 's/^/          | /'
+fi
+
+# BOTH ARMS STILL EXIT 0. This is a classifier and its callers depend on that; the ROW is the
+# signal, not the status code. An arm that reported by exiting non-zero would block `apply`.
+ASSERTIONS=$((ASSERTIONS + 1))
+bash "$CLOSER" "$DIST" "$BASE" "$THEIRS" "$CONS" >/dev/null 2>&1; sw_rc=$?
+bash "$CLOSER" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" >/dev/null 2>&1; b5_rc=$?
+if [ "$sw_rc" -eq 0 ] && [ "$b5_rc" -eq 0 ]; then
+  printf '  ok    %-22s both caller-error arms exit 0  (classifier never blocks)\n' "input-exit-code"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s swapped=%s bad-arg5=%s want 0/0 — reporting by exit code blocks apply\n' "input-exit-code" "$sw_rc" "$b5_rc"
+fi
+
+# --- THE CONSUMER ROOT IS NORMALIZED, AND THE FAILURE WAS A FALSE CLOSE -------------------
+# `.` is a valid consumer root and callers routinely pass it. It is the only one of the four
+# exported values a receipt reads AS A PATH, so a receipt whose own claim is about absolute-path
+# handling has its subject handed to it in the wrong form and its `&&` chain inverts. Entry
+# SH-CWD in the seed is exactly that shape; without it this differential cannot fail.
+#
+# THE ASSERTION IS BYTE-IDENTITY ACROSS THE TWO FORMS, not a verdict on one of them: the claim
+# is that the form of the argument does not decide any row. Measured on the reference consumer
+# at 0.300.0 — 74 rows either way, ONE differing, a CLOSE-CANDIDATE against a STILL-LIVE.
+ASSERTIONS=$((ASSERTIONS + 1))
+rel_out="$(cd "$CONS" && bash "$CLOSER" "$DIST" "$BASE" . "$THEIRS" 2>/dev/null | sort)"
+abs_out="$(printf '%s\n' "$OUT" | sort)"
+rel_n="$(printf '%s\n' "$rel_out" | grep -c . )"
+abs_n="$(printf '%s\n' "$abs_out" | grep -c . )"
+if [ "$rel_n" -eq 0 ] || [ "$abs_n" -eq 0 ]; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s one side produced NO rows (rel=%s abs=%s) — two empty sets agree, which proves nothing\n' "consumer-form" "$rel_n" "$abs_n"
+elif [ "$rel_out" = "$abs_out" ]; then
+  printf '  ok    %-22s %s rows, byte-identical whether the root arrives as "." or absolute\n' "consumer-form" "$rel_n"
+else
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the ROOT ARGUMENT decided a verdict:\n' "consumer-form"
+  diff <(printf '%s\n' "$rel_out") <(printf '%s\n' "$abs_out") | sed 's/^/          | /'
+fi
+
+# SH-CWD must be STILL-LIVE in the normal run, or the differential above could be satisfied by
+# a closer that drops the entry on both sides.
+row_is "Entry SH-CWD" STILL-LIVE "an absolute root makes the absolute arm behave as the entry claims -> stays open"
+
+# MUTATION — remove the normalization. The relative run must then diverge, and SH-CWD must flip
+# to the FALSE CLOSE. Both halves are asserted: a mutant that merely changes the output proves
+# nothing about which direction the defect ran in.
+MUTN="$(dirname "$DIST")/mut-norm"
+rm -rf "$MUTN"; mkdir -p "$MUTN"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTN/" 2>/dev/null
+sed '/^\[ -n "\$_abs_consumer" \] && CONSUMER="\$_abs_consumer"$/d' "$CLOSER" > "$MUTN/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTN/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the normalization assertions are unproven\n' "mutation-normalize"
+else
+  mn_rel="$(cd "$CONS" && bash "$MUTN/ledger-reverify.sh" "$DIST" "$BASE" . "$THEIRS" 2>/dev/null | sort)"
+  mn_abs="$(bash "$MUTN/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null | sort)"
+  mn_cwd="$(printf '%s\n' "$mn_rel" | awk -F'\t' '$2 ~ /Entry SH-CWD/ {print $1; exit}')"
+  # THE "NOTHING ELSE MOVED" ARM COMPARES VERDICTS, NOT RENDERED TEXT, AND THE REASON IS
+  # MEASURED. `$CONSUMER` is printed verbatim into the reachability DETAIL, and this seed's own
+  # root arrives as `$TMPDIR/…` where TMPDIR ends in a slash — a DOUBLED slash, which is one of
+  # the four spellings this closer's header already names as breaking its containment test.
+  # Normalizing collapses it, so ten DETAIL strings change while not one verdict does. Comparing
+  # raw output here would score a correct fix as an unclean mutation; comparing (status, label)
+  # asserts the property the arm is actually about.
+  mn_abs_v="$(printf '%s\n' "$mn_abs" | awk -F'\t' '{print $1"\t"$2}')"
+  abs_out_v="$(printf '%s\n' "$abs_out" | awk -F'\t' '{print $1"\t"$2}')"
+  if [ "$mn_rel" = "$mn_abs" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s without normalization the two forms still agreed — the differential above is vacuous\n' "mutation-normalize"
+  elif [ "$mn_cwd" != "CLOSE-CANDIDATE" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the unnormalized run moved SH-CWD to %s, not the FALSE CLOSE the defect produces\n' "mutation-normalize" "${mn_cwd:-<none>}"
+  elif [ "$mn_abs_v" != "$abs_out_v" ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant also moved the ABSOLUTE run, so it is not a clean mutation of the normalization alone\n' "mutation-normalize"
+  else
+    printf '  ok    %-22s without normalization "." produces a FALSE CLOSE on SH-CWD, and nothing else moves\n' "mutation-normalize"
+  fi
+fi
+
+# MUTATION — restore the unconditional bail. Both caller-error arms must go silent, and the
+# genuine no-ledger arm must be unaffected: the defect was that ONE line answered three
+# questions, so a mutant that also silenced the real case would be mutating the wrong thing.
+MUTL="$(dirname "$DIST")/mut-bail"
+rm -rf "$MUTL"; mkdir -p "$MUTL"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTL/" 2>/dev/null
+awk '
+  /^if \[ ! -d "\$CONSUMER" \]; then$/ { skip=1 }
+  skip && /^fi$/ && !done_d { done_d=1; skip=0; next }
+  /^if \[ ! -f "\$LEDGER" \]; then$/ { skipl=1; print "[ -f \"$LEDGER\" ] || exit 0"; next }
+  skipl && /^fi$/ { skipl=0; next }
+  skip || skipl { next }
+  { print }
+' "$CLOSER" > "$MUTL/ledger-reverify.sh"
+
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTL/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the caller-error arms are unproven\n' "mutation-bail"
+else
+  ml_sw="$(bash "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$THEIRS" "$CONS" 2>/dev/null | grep -c . )"
+  ml_b5="$(bash "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" "$DIST/nonexistent-ledger.md" 2>/dev/null | grep -c . )"
+  ml_ok="$(bash "$MUTL/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>/dev/null | grep -c . )"
+  if [ "$ml_sw" -ne 0 ] || [ "$ml_b5" -ne 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the unconditional bail still reported (swapped=%s arg5=%s) — the arms above are vacuous\n' "mutation-bail" "$ml_sw" "$ml_b5"
+  elif [ "$ml_ok" -eq 0 ]; then
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s the mutant produced no rows on a GOOD invocation either, so it is not a clean mutation of the bail alone\n' "mutation-bail"
+  else
+    printf '  ok    %-22s the unconditional bail silences both caller errors and nothing else (%s rows on a good run)\n' "mutation-bail" "$ml_ok"
+  fi
 fi
 
 # --- THE CLOSE PREDICATE IS ANCHORED, like the verify: predicate beside it -------------

@@ -34,6 +34,77 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.301.0] — 2026-08-07
+
+### A caller error stops reading as a clean corpus, and the consumer root stops deciding verdicts
+
+Plan item **8c**, the first two of the entries graph filed against `ledger-reverify.sh`. Both are
+argument handling, both were reproduced against the live consumer at `0.300.0` before any edit,
+and both manufacture a confident wrong answer rather than an error.
+
+**The consumer root is normalized to an absolute path.** `$CONSUMER` is the only one of the four
+exported values a `verify: sh` receipt can read AS a path — `$DIST` goes to `git -C` and the two
+refs are shas — and callers routinely pass `.`, which is a valid root. A receipt whose own CLAIM
+is about absolute-path handling is verified by a two-arm predicate in which the absolute arm must
+behave differently; hand it `.` and the second arm receives `./docs/…`, which is still relative,
+so the `&&` chain inverts and the entry reads CLOSE-CANDIDATE. **A false close is the worst output
+this tool has**, because a drain retires an entry that is still live.
+
+Measured on the reference consumer, `.` versus the absolute root, same refs, same ledger:
+
+```
+rows          74 / 74      <- CONTROL: same corpus, so this is an inversion, not a broken run
+differing      1           PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH
+                           CLOSE-CANDIDATE (relative)  vs  STILL-LIVE (absolute)
+after the fix  0           and the absolute run is byte-identical to before
+```
+
+`pwd`, deliberately **not** `pwd -P`. The defect is relativeness; symlink resolution is a second
+change, and `$CONSUMER` is rendered verbatim into an operator-facing DETAIL — with `-P`, macOS
+rewrites every root under `/var` as `/private/var` and ten rows moved that have nothing to do with
+this fix.
+
+**A new status, `INPUT-UNRESOLVED`.** The bail was one unconditional line, `[ -f "$LEDGER" ] ||
+exit 0`, and its intent is right: a consumer that never filed a candidate has nothing to
+re-verify. But the exit did double duty — *"nothing to re-verify"* and *"I could not find what you
+named"* produced the same silence and the same rc=0, and step 3f reads this tool's rows, where
+zero rows means *every entry re-verified, nothing to close*. Measured at `0.300.0`, same tree,
+same moment:
+
+```
+bogus arg 5                     0 rows   rc=0   0 bytes of stderr
+args swapped (consumer/theirs)  0 rows   rc=0   0 bytes of stderr
+correct                        74 rows   rc=0
+```
+
+**Two arms, because the obvious one does not cover the mistake that was actually made.** Warning
+only on an explicitly-supplied arg-5 path is silent on the swapped-args case — this tool takes
+consumer THIRD and theirs FOURTH while every sibling in `reconcile/` takes
+`<dist> <base> <theirs> <consumer>`, so a swap puts a SHA in the consumer slot and `$LEDGER` is
+then the DEFAULT path under a root that does not exist. The consumer root is therefore checked on
+its own. False-positive set empty by construction: every legitimate root is a directory,
+including `.`.
+
+The row goes to **stdout**, the channel the zero was misread from — `emit-report.sh` discards this
+tool's stderr and filters rows with a denylist, so the status reaches the operator's report with no
+change there. Exit stays 0: this is a classifier and a close never blocks `apply`. What neither arm
+can see is stated rather than left to read as covered — a root that is a real directory but the
+wrong one is genuinely indistinguishable from a consumer that never filed.
+
+**The fixture asserted the defect.** `ledger-reverify`'s `no-ledger` arm read *"a consumer with NO
+ledger: exit 0, no output"* and produced that case by passing an explicit arg-5 path that does not
+exist — which is not what a consumer with no ledger does. It would have gone red on the fix rather
+than on the bug. Re-aimed at the genuine shape (default path, absent, real root), which is also
+this change's false-positive control.
+
+`ledger-reverify` **54 → 61 assertions** (derived: `run.sh` at `origin/main` reports
+`PASS: all 54 assertions correct`, the same driver on this branch reports 61), with a new seed entry `SH-CWD` whose receipt is
+form-sensitive — without it the relative-versus-absolute differential cannot fail at all — and two
+guarded mutants: dropping the normalization must produce the FALSE CLOSE on `.` and move no verdict
+on the absolute run, and restoring the unconditional bail must silence both caller-error arms and
+nothing else. `INPUT-UNRESOLVED` is documented in SKILL.md step 3f, which **I39** requires, and
+named in `emit-report.sh`'s push-candidate heading.
+
 ## [0.300.0] — 2026-08-07
 
 ### A migration the operator runs, verified per file, that reports everything it refuses

@@ -723,6 +723,15 @@ prose is itself generated rather than composed.
      above it and says whether a receipt was captured. **Fix the ledger, not the entry** —
      re-indent the annotation so it does not start a line, or drop the bold, then re-run and
      confirm the id reappears. Report-only; it never blocks.
+   - `INPUT-UNRESOLVED` → an ARGUMENT does not resolve, so **nothing was re-verified**. Run-
+     scoped rather than entry-scoped: the entry column carries the offending path. Two causes,
+     named in the DETAIL — the consumer root is not a directory, or an explicitly-supplied
+     arg-5 ledger path is not a readable file. This row exists because that state used to be
+     spelled as **zero rows and exit 0**, which is exactly how a clean corpus is spelled, and
+     the argument order is the trap: this tool takes consumer THIRD and theirs FOURTH while
+     every sibling in `reconcile/` takes `<dist> <base> <theirs> <consumer>`. Fix the
+     invocation and re-run before reading any other verdict from that run. **Never drain on a
+     run that emitted this** — a zero close count from it means nothing was examined.
    **Anchor a `theirs_lacks` receipt on a token upstream MUST use, never on predicted
    prose.** The substring for a fix that does not exist yet is a guess at wording upstream
    has not written, so it closes only if upstream happens to pick the same words. Anchor on a
