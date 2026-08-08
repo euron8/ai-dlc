@@ -1,4 +1,14 @@
-# graph: pull 0.300.0 → 0.314.0 — EXECUTE THIS
+# graph: pull 0.300.0 → 0.314.0 — DISCHARGED 2026-08-08, DO NOT EXECUTE
+
+**THIS RUNBOOK IS SPENT. It ran, and graph is at `0.314.0 / f9b8aa4`.** Two hops, graph PRs
+#882/#883/#884, 18 adjudications recorded. Verified from the distribution, not taken on the
+report: `layer-drift.sh` over `2bc7aa4..f9b8aa4` returns **0 `HARD-*`** with 49 rows across 9
+statuses and no `DRIFT-RANGE-DEGENERATE`.
+
+**Its `## Current status` section below still says nothing has been started. That sentence was
+true when written and is now false** — it is left in place because a superseded section that
+disappears takes its reasoning with it, but a session acting on it would redo a landed pull.
+Read the rest as a record of how the pull was taken, never as work outstanding.
 
 ## Start here
 

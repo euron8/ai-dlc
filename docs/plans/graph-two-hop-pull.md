@@ -1,4 +1,7 @@
-# Graph two-hop ai-dlc pull — EXECUTE THIS
+# Graph two-hop ai-dlc pull — DISCHARGED, DO NOT EXECUTE
+
+**SPENT.** That pull ran and landed graph at `0.292.0 / c5e7daa`. Two pulls have landed since;
+graph is at `0.314.0 / f9b8aa4`. Kept for its record of how the hop split was derived.
 
 ## Start here
 

@@ -1,4 +1,7 @@
-# Sprint 301 close-out — EXECUTE THIS
+# Sprint 301 close-out — DISCHARGED, DO NOT EXECUTE
+
+**SPENT.** s301 was closed and archived on graph's `main`. s302 has not started and MAY start.
+Kept for the procedure, which is the model for the next close-out.
 
 ## Start here
 
