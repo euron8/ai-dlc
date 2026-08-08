@@ -38,7 +38,9 @@
 #
 # For each `full_text_source: <artifact>:<anchor>` in a block, three checks:
 #   (a) Source-of-record — the artifact must be the byte-verbatim source of
-#       record (default basename `product-brief.md`, overridable via --sor).
+#       record: basename `locked-requirements.md` (the sprint slot, where
+#       discovery.md §4a now writes the block) or, transitionally, the legacy
+#       `product-brief.md`. `--sor` replaces both with one name.
 #       A citation resolving to any other artifact, or to one that self-declares
 #       `locked_requirements_fidelity: index` / a "condensed index" provenance,
 #       FAILS. Catches "cite prd.md for full text" when prd.md is an index.
@@ -124,10 +126,33 @@ import sys
 story_path = sys.argv[1]
 sor_override = sys.argv[2] or None
 
-# Default source-of-record basename: the artifact where discovery.md §4a
-# extracts the byte-verbatim LOCKED_REQUIREMENTS block by construction.
-DEFAULT_SOR_BASENAME = "product-brief.md"
-sor_basename = os.path.basename(sor_override) if sor_override else DEFAULT_SOR_BASENAME
+# Source-of-record basenames: where discovery.md §4a writes the byte-verbatim
+# LOCKED_REQUIREMENTS block by construction.
+#
+# TWO NAMES, AND THE SECOND ONE IS TRANSITIONAL BY DESIGN. §4a used to append the
+# block to the durable brief, one per sprint; it now writes it to that sprint's own
+# slot as `s<N>/locked-requirements.md`. Accepting ONLY the new name would fail every
+# story already carrying `full_text_source: product-brief.md#LR-...` -- measured on
+# the reference consumer at 31 of 62 anchored citations, all resolvable, none
+# defective. Refusing them would be this check reporting a migration as a fabrication.
+#
+# `prd.md` and every other condensed index stay refused, which is the property this
+# test exists for; widening from one name to two does not weaken it.
+#
+# REMOVE `product-brief.md` WHEN, and not before: a consumer's brief holds no
+# LOCKED_REQUIREMENTS block (`--emit-blocks` over it returns none) and its story
+# corpus carries no `full_text_source` naming it. Both are measurable in one run, so
+# this deprecation has a test rather than a date.
+DEFAULT_SOR_BASENAMES = ("locked-requirements.md", "product-brief.md")
+LEGACY_SOR_BASENAME = "product-brief.md"
+if sor_override:
+    sor_basenames = (os.path.basename(sor_override),)
+else:
+    sor_basenames = DEFAULT_SOR_BASENAMES
+# The name a message NAMES when it has to name one: the override if given, else the
+# current source of record. Never the legacy name -- a remedy telling an author to
+# cite the artifact this release moved the block out of is the wrong instruction.
+sor_basename = sor_basenames[0]
 
 # THE SENTINEL HAS SIX SPELLINGS IN THE FIELD AND THIS USED TO RECOGNISE ONE.
 #
@@ -353,6 +378,11 @@ blocks, dangling = extract_blocks(content)
 failures = []
 claims_checked = 0
 pointers_checked = 0
+# Claims still anchored at the legacy source of record. Reported on the PASS line so a
+# consumer can see its own migration burn down -- and so the removal condition in the
+# DEFAULT_SOR_BASENAMES comment is something a run ANSWERS rather than something an
+# operator estimates. Never a failure: an unmigrated citation is behind, not wrong.
+legacy_claims = 0
 
 # THE UNMATCHED-SENTINEL GUARD. An opener with no closer is not "nothing to check" — it
 # is this script failing to parse a block that is right there, and it used to be
@@ -472,14 +502,18 @@ for bidx, block in enumerate(blocks, start=1):
             continue
 
         # (a) Source-of-record.
-        if os.path.basename(artifact) != sor_basename:
+        cited_base = os.path.basename(artifact)
+        if cited_base not in sor_basenames:
+            accepted = " or ".join(f"'{b}'" for b in sor_basenames)
             failures.append(
                 f"block #{bidx}: full_text_source cites '{artifact}' but the "
-                f"byte-verbatim source of record is '{sor_basename}'. A full-text "
+                f"byte-verbatim source of record is {accepted}. A full-text "
                 f"citation must resolve to the source of record, not a condensed "
                 f"index (e.g. prd.md). Use requires_context: for a load pointer."
             )
             continue
+        if not sor_override and cited_base == LEGACY_SOR_BASENAME:
+            legacy_claims += 1
 
         resolved = resolve_artifact(artifact, story_path)
         if resolved is None:
@@ -546,10 +580,15 @@ if claims_checked == 0 and pointers_checked == 0:
         f"rather than spelled the same as a verified story."
     )
 else:
+    legacy_note = (
+        f", {legacy_claims} of them still at the legacy '{LEGACY_SOR_BASENAME}'"
+        if legacy_claims else ""
+    )
     print(
         f"VALIDATE-LOCKED-ANCHOR: PASS ({story_path}, {len(blocks)} block(s), "
         f"{claims_checked} full_text_source claim(s) verified against "
-        f"'{sor_basename}', {pointers_checked} requires_context pointer(s) resolved)"
+        f"'{sor_basename}'{legacy_note}, {pointers_checked} requires_context "
+        f"pointer(s) resolved)"
     )
 sys.exit(0)
 PYEOF

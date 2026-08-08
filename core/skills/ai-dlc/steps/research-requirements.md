@@ -90,7 +90,8 @@ no story and no test.
 
 ### 2a. Propagate Locked Requirements (Rule 13)
 
-Copy the `LOCKED_REQUIREMENTS` block from the product brief into the PRD.
+Copy the `LOCKED_REQUIREMENTS` block from
+`_bmad-output/planning-artifacts/s<N>/locked-requirements.md` into the PRD.
 If the PRD adds new requirements derived from research, add those to the
 block only if they originated from the user's input (not from research
 findings or agent analysis). Research may inform HOW requirements are met

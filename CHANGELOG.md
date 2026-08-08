@@ -34,6 +34,82 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.322.0] — 2026-08-08
+
+### The sprint's LOCKED block moves into the sprint slot, and the pool arm that keeps the move honest ships with it
+
+Items **23c-3 and 23c-1 together**, and the "together" is the finding. 23c-1 was sequenced first on
+the reasoning that every later release is graded by the budget row it fixes. That was wrong in a way
+worth recording: the right pool change is **not** "stop exempting the live slot" — a slot copy of a
+POOLED basename is that sprint's archive of the durable artifact, and counting it re-creates the
+2.35x overstatement v0.317.0 fixed (graph holds **23** historical `s<N>/architecture.md` copies,
+latest `s288`). The right change is an arm for a per-sprint whole-read basename that **does not
+exist until this release writes it**. Shipped alone it would have been a check with no subject on
+any consumer.
+
+**The inlet.** `discovery.md` §4a wrote each sprint's `LOCKED_REQUIREMENTS` block into
+`product-brief.md`, and said so: *"A brief accumulates one block per sprint."* A durable artifact
+carries no sprint token by rule 3 of the artifact path grammar — that is what makes it durable — so
+this was sprint-scoped content at a sprint-independent path, and Rule 13 makes locked requirements
+cumulative, so it could only grow. Measured on the reference consumer: the live brief is **1030
+lines, 182 (17%) durable current-state, 564 (54%) in-force LOCKED, 223 (21%) changelog** — 76%
+sprint-scoped.
+
+§4a now writes `_bmad-output/planning-artifacts/s<N>/locked-requirements.md` and leaves a pointer in
+the brief. **The in-force set is the union across slots**, which is also why a per-sprint file needs
+no discriminator in its sentinel.
+
+### The source of record is two names, and the second one has a removal test rather than a date
+
+`validate-locked-anchor.sh` accepts `locked-requirements.md` **and** `product-brief.md`.
+Accepting only the new name would fail every story written before the move — **31 of 62 anchored
+citations on the reference consumer, all resolvable, none defective** — which is this check
+reporting a migration as a fabrication. `prd.md` and every other condensed index stay refused, and
+the fixture asserts that in the same run as the widening, because a widening that also lets the
+index through has not widened.
+
+The PASS line now counts the claims still at the legacy name, so **the deprecation condition is
+something a run answers**: remove `product-brief.md` when a consumer's brief holds no LOCKED block
+and its corpus carries no `full_text_source` naming it.
+
+### `is_sprint_slotted` keeps its exemption; the pool gains a second arm
+
+`SPRINT_WHOLE_READ_SET="locked-requirements.md"`, resolved through the sibling
+`sprint-status.sh sprint-id` and pooled **from the live sprint's slot only** — a glob over `s*/`
+would sum every sprint that ever ran, which is the same defect one level along. When the resolver
+cannot answer, the run **says so** rather than contributing zero: a pool arm going quiet for a
+reason unrelated to size is precisely what this arm was written against.
+
+### What each reader cost, against the derivation's prediction
+
+The derivation (#460) said the read side was cheap and it held. `validate-spec-join.sh` needed
+nothing — it anchors on the spec's `.memlog.md`. `validate-request-coverage.sh` needed nothing — its
+`--brief` was already a placeholder in prose, now filled in with the sprint path.
+`validate-locked-anchor.sh` was one default becoming a pair. The prose restatements
+(`stories-test-strategy.md`, `gate-validation.md` Check 3b and Check 33, `discovery.md` §4b,
+`research-requirements.md` §2a) moved with the default rather than after it — leaving one behind is
+item 27's defect exactly.
+
+### Fixtures
+
+`whole-read-pool` gains four arms (live slot pooled, earlier slot not, greenfield loud, and a
+`SPRINT_WHOLE_READ_SET=""` mutant with its unmutated control). **The control earned its keep on the
+first run**: a mutant staged in a scratch directory could not reach `sprint-status.sh`, so it pooled
+nothing and scored a kill it had not earned — and staging the resolver alone was still not enough,
+because `sprint-status.sh` reads `../schemas/sprint-status.json` and refuses to guess without it.
+
+`check-3b-locked-anchor` gains three assertions and a paired mutant: the new name accepted, the
+legacy name accepted **and counted**, `prd.md` still refused, and dropping the legacy name from the
+pair reds the legacy citation while still accepting the new one.
+
+### Owed to the operator, and it is small
+
+Existing in-force blocks are **MOVED into the slot of the sprint they belong to, never deleted**.
+On the reference consumer that is **one block** — S299, 169 lines, already carrying its own
+`END S299 LOCKED_REQUIREMENTS` discriminator (control: `product-brief-history.md` carries 440
+`LOCKED_REQUIREMENTS` mentions, so the count of 1 in the live brief is a real reading). Nothing
+breaks until it is done: the legacy name is still a valid source of record.
+
 ## [0.321.0] — 2026-08-08
 
 ### A changelog entry records one sprint's passes and was being appended to the durable artifact
