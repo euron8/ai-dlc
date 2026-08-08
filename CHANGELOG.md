@@ -34,6 +34,40 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.313.0] — 2026-08-08
+
+### LC-E6's zero was a silence, not a measurement — no run anywhere had ever produced the status
+
+The other half of plan item 6's gate. `EXTENSION-RETIRE-CANDIDATE` [LC-E6] carried
+`fixture: none` — a DECLARED I65 gap, honestly recorded, and v0.273.0 gave the reason the
+obvious home was refused: `layer-title-join` asserts LC-E6's ABSENCE and never makes it fire, and
+*"binding a clause to a fixture that cannot prove it is the gap wearing a receipt."* Correct, and
+it left the clause with no demonstrated firing case at all. **Its 0 on the reference consumer was
+therefore not evidence of anything**, and promoting a clause on that basis promotes a silence.
+
+**It fires.** New fixture `layer-absorption-retire` seeds a distribution where core gains
+`### 9. Absorbed Widget Check.` between base and theirs, and a consumer extension that defines
+the same check. Both emit sites are covered — the same-number path and the RENUMBERED one, which
+is the case a number-keyed join cannot see and which core's own prose records as how a duplicate
+hid across ~35 minor versions.
+
+**The control is the sharp part, because LC-E6 and LC-E5 come out of the SAME comparison and
+differ on ONE bit.** Present at base → PRE-EXISTING → `EXTENSION-RESTATES-CORE`, "you have been
+shipping a duplicate". Absent at base → NEW-THIS-PULL → `EXTENSION-RETIRE-CANDIDATE`, "upstream
+just absorbed this; retire your copy". So the control entry is identical in every respect —
+same shape, same hooked file, same number-and-title agreement with core — except that core's
+anchor existed at base, and it must come back LC-E5. A fixture asserting only "some absorption
+row appeared" would score the wrong status as a pass, and LC-E6 is the one that prescribes
+deletion.
+
+Two `cmp -s`-guarded mutants, each killing exactly one arm: forcing the tag to PRE-EXISTING
+silences LC-E6 while leaving the LC-E5 control unmoved, and disabling the renumbered title search
+removes only the renumbered row. Plus an unmutated control — `layer-drift.sh` sources `lib.sh`
+from beside it, so a lone script copy dies before printing anything, which reads exactly like a
+kill.
+
+`fixture: none` count on the contract: **13 → 12**. LC-N4 is unchanged and still declared.
+
 ## [0.312.0] — 2026-08-08
 
 ### The supersession join read the whole `shadows:` string, so it was blind to exactly the entries it exists for

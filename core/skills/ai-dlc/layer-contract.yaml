@@ -839,7 +839,7 @@ clauses:
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-RETIRE-CANDIDATE
-    fixture: none
+    fixture: layer-absorption-retire
 
   - id: LC-E19
     subject: extension

@@ -91,6 +91,7 @@ core_manifest:
   - core/fixtures/setup-site-drift/**
   - core/fixtures/story-corpus-sprint-slot/**
   - core/fixtures/apply-worklist-rows/**
+  - core/fixtures/layer-absorption-retire/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**
