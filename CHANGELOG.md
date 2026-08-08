@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.311.0] — 2026-08-08
+
+### Every worklist row printed its subject and discarded its instruction, and the ordered sequence never printed its first step
+
+Found by DRIVING `apply.sh` while measuring something else — plan item 6's supersession count —
+not by reading it. Both defects are in the hand-off from detector to operator, and both are the
+shape this repo keeps shipping: a mechanism documented at length, green everywhere, whose output
+never reaches anyone.
+
+**`say()` printed THREE fields; EIGHTEEN of its call sites pass FOUR.** Every `WORKLIST` and
+`DECISION` detail in the file was computed and thrown away. The row the operator read was
+`WORKLIST<TAB>override-retire<TAB><path>` and nothing else — no key to write, no ordering
+constraint, no reason, no `<i>/<n>`. `SKILL.md` step 7 documents that field as contracted (*"a
+row whose detail begins `<i>/<n> ATOMIC` is one step of an ORDERED SEQUENCE… each step states its
+own consequence"*), so the reader was instructed to obey a field that was never emitted. The
+fourth field is now printed when non-empty, which leaves a genuinely 3-argument call site
+(`semantic-merge` with no addendum) byte-identical and gives no reader a trailing tab it did not
+have.
+
+**The per-key loop dropped its last element, and for one key that is all of them.**
+`printf '%s' "$keys" | tr ',' '\n' | while read` writes no trailing newline, so the final element
+reaches `read` at EOF: it is assigned and `read` returns non-zero, so the body never runs on it.
+N keys emitted N−1 rows and the ONE-key case — every keyed supersession core has ever declared —
+emitted ZERO. The sequence therefore printed only its last step, `2/2 … --stamp retire`, while
+its own numbering advertised a `1/2 write the key` step that had never existed. That is the exact
+reverse of the order the block exists to enforce, and its own comment says why: retiring before
+the replacement key is written re-imposes the core constraint the entry was widening and reds the
+next gate. `key_total` was right throughout — `grep -c` counts a final unterminated line — which
+is precisely how the numbering could keep advertising a row nobody printed.
+
+**WHY NOTHING CAUGHT EITHER: no fixture drove `apply.sh`'s worklist rendering at all.** The one
+fixture that greps a `WORKLIST` row (`apply-drift-after-write`) matches on the subject path,
+which is field 3 and survived both defects. `layer-readopt-gate` asserts the `replaces_with=`
+token `layer-drift.sh` emits — the INPUT to this rendering — and stops there. The whole
+detector→operator hand-off was untested end to end.
+
+New fixture `apply-worklist-rows` drives the shipped `apply.sh` with a stubbed `layer-drift.sh`,
+so the worklist is a pure function of a TSV the fixture writes and nothing inside the code under
+test is stubbed. Two assertions, deliberately disentangled: the row COUNT (insensitive to the
+field count) and the LAST row's DETAIL (the last row survives both defects, so it moves only when
+the field is lost). Two `cmp -s`-guarded mutants, each killing exactly one arm and leaving the
+other green, plus an unmutated control — apply.sh loads `map_consumer()` from its sibling
+`preclassify.sh`, so a copy that cannot run emits nothing, which reads exactly like a kill.
+
+**False-positive set: empty, and derived rather than sampled.** Nothing parses this manifest
+programmatically — `SKILL.md` step 7 hands it to the LLM — so no reader has a fixed field count
+to break, and the 3-argument rows are unchanged byte for byte. The six neighbouring fixtures that
+drive `apply.sh` or the layer scripts all still pass.
+
 ## [0.310.0] — 2026-08-08
 
 ### The only close the ledger proposed was false, and the note warning about it was not a mechanism

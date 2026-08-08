@@ -39,7 +39,28 @@ CONSUMER="${3:?}"
 THEIRS="${4:?}"
 
 SELF="$(cd "$(dirname "$0")" && pwd)"
-say() { printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}"; }
+# say — ONE ROW OF THE MANIFEST, AND IT CARRIES ITS DETAIL.
+#
+# This printed THREE fields while EIGHTEEN of its call sites passed FOUR, so every WORKLIST and
+# DECISION detail in this file was computed and then discarded. The rows the operator actually
+# read were `WORKLIST<TAB>override-retire<TAB><path>` and nothing else: no key to write, no
+# ordering constraint, no reason. SKILL.md step 7 documents that field as contracted -- "a row
+# whose detail begins `<i>/<n> ATOMIC` is one step of an ORDERED SEQUENCE... each step states its
+# own consequence" -- so the reader was told to obey a field that was never printed.
+#
+# It was invisible because nothing drove this output. No fixture asserted a WORKLIST row's
+# detail; the one fixture that greps a WORKLIST row (apply-drift-after-write) matches on the
+# subject path, which is field 3 and survived. `core/fixtures/apply-worklist-rows` now drives
+# the real script and asserts the field, with the 3-field spelling as one of its mutants.
+#
+# The fourth field is emitted only when non-empty, so a genuinely 3-argument call site
+# (`semantic-merge` with no addendum) is byte-identical to what it printed before and no reader
+# gains a trailing tab it did not have.
+say() {
+  if [ -n "${4:-}" ]; then printf '%s\t%s\t%s\t%s\n' "$1" "$2" "${3:-}" "$4"
+  else                     printf '%s\t%s\t%s\n'     "$1" "$2" "${3:-}"
+  fi
+}
 err() { echo "apply: $*" >&2; exit 1; }
 
 # --- IN-FLIGHT MARKER: this tree is mid-pull and its self-tests do not hold ----
@@ -327,11 +348,26 @@ while IFS="$TAB_CH" read -r ovr detail; do
     # keys that replace it not yet written, and reds the next gate.
     key_total=$(( $(printf '%s' "$env_key" | tr ',' '\n' | grep -c .) + 1 ))
     key_n=0
-    printf '%s' "$env_key" | tr ',' '\n' | while IFS= read -r one_key; do
+    # `<<<`, NOT `printf | while read`, AND THE DIFFERENCE IS EVERY KEY ROW.
+    #
+    # `printf '%s'` writes NO trailing newline, so the final element reaches `read` at EOF:
+    # `read` assigns it and returns NON-ZERO, and the loop body never runs on it. N keys emitted
+    # N-1 rows -- and the one-key case, which is every supersession core has ever declared with a
+    # key, emitted ZERO. So the sequence printed only its LAST step, `2/2 ATOMIC ... --stamp
+    # retire`, while its own numbering announced a step 1/2 that had never been printed. The
+    # operator was handed the retire and not the write, which is precisely the order this block
+    # exists to forbid: retire first re-imposes the core constraint and reds the next gate.
+    #
+    # `key_total` was RIGHT throughout, because `grep -c` counts a final unterminated line. That
+    # is why the numbering could keep advertising a row nobody emitted.
+    #
+    # A here-string appends the newline the last element needs, and it also drops the subshell
+    # the pipeline created -- so `key_n` now survives the loop instead of being reset per run.
+    while IFS= read -r one_key; do
       [ -n "$one_key" ] || continue
       key_n=$(( key_n + 1 ))
       say WORKLIST override-retire "$ovr" "${key_n}/${key_total} ATOMIC — write ${one_key} into .claude/settings.json \"env\" (derive its value per override_supersessions in layer-contract.yaml; do NOT copy the example). Doing the retire stamp first re-imposes the core constraint this entry was widening and reds the next gate."
-    done
+    done <<< "$(printf '%s' "$env_key" | tr ',' '\n')"
     say WORKLIST override-retire "$ovr" "${key_total}/${key_total} ATOMIC — readopt-override.sh --stamp retire ${ovr}. Same commit as the row(s) above."
   else
     say WORKLIST override-retire "$ovr" "core supersedes this entry: $detail"
