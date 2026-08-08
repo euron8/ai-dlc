@@ -34,6 +34,67 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.324.0] — 2026-08-08
+
+### A per-sprint artifact sat at the durable root for 72 sprints because the check that would have caught it was scoped by PRODUCER
+
+Plan item 25. `stories-test-strategy.md` §5 prescribed **no write path at all** for
+`test-strategy.md`, so the reference consumer invented one — `test-strategy-sprint-<N>.md` at the
+area root, a sprint token in a basename, which `artifact-path-grammar.md` rule 2 forbids. The s<N>/
+migration renamed 72 of them into `s<N>/test-strategy.md` and left one behind, whose own H1 reads
+`# S272 Sprint Test Strategy`: one sprint's document standing in as the durable one, 29 sprints
+stale, and it is exactly what `codebase-inventory.md`'s artifact audit and `bug-investigation.md`'s
+context load were both told to read as "the test strategy".
+
+**The declaration item 25 said did not exist DOES exist, and it decided four of the item's five
+already.** `SKILL.md` Rule 24 and `validate-draft-stamps.sh`'s scope note independently name the
+three one-shot onboarding artifacts and `bug-analysis.md` as out of scope, with reasons, and
+`artifact-consolidation.md` and `validate-artifact-budget.sh`'s `WHOLE_READ_SET` independently name
+the same four durable ones. What the declaration had was a HOLE: it enumerated PRODUCERS — analyst
+drafts, onboarding one-shots, a bug-keyed exception — and `test-strategy.md` is a TEA deliverable, so
+it was in none of the classes and nothing noticed.
+
+- **`stories-test-strategy.md` §5 now prescribes `_bmad-output/planning-artifacts/s<N>/test-strategy.md`**,
+  and says the sub-skills' own defaults are overridden by it.
+- **Both readers move.** `codebase-inventory.md`'s audit reads `s*/test-strategy.md`, matching the
+  `s*/stories/` line directly above it; `bug-investigation.md` composes `s<N>/` from `sprint_id`,
+  falls back to the most recent slot when its own sprint authored none, and must say which sprint it
+  read.
+- **Check 23 is rescoped from `Analyst-draft sprint stamps` to `Per-sprint planning-artifact sprint
+  stamps`**, in `gate-validation.md`, `enforcement-map.yaml` and the enforcer, because the subject is
+  the PATH SHAPE and never was the producer. `test-strategy` joins `DRAFTS`.
+- **The criterion is written down** in `SKILL.md` Rule 24 and restated with its derivation in the
+  enforcer: an area-root path is legitimate iff the project holds exactly ONE instance of that
+  basename for its whole life, and there are exactly three ways that is true — consolidated,
+  live+rotated, one-shot. Over the **10** basenames core prescribes at `planning-artifacts/` root
+  those account for 4, 1 and 3; the one left over is `test-strategy`.
+- **No general lint**, per the item's own terms. The general form has a 12-of-17 false-positive set.
+
+**`bug-analysis.md` stays out, and the exemption is now honest about disagreeing with the
+criterion.** It is the same shape — a second bug sprint destroys the first's analysis (1 root + 1
+slot on the reference consumer) — and it stays out because no bug KEY exists to compose a path from.
+Inventing one is Rule 26(a) speculative mechanism. Reopen when the bug route carries an id.
+
+**Two fixture defects fell out of touching `check-23-draft-stamps`, both pre-existing.** Its `good`
+and `decoy` trees stamped drafts as `s288-<base>.md` — a sprint token in a BASENAME, the spelling the
+check's own error text has always forbidden — and passed anyway, because the disk half only looks for
+the bare name at the root. And the first placement of the new decoy trap was **vacuous**: a step file
+under `steps/`, which neither half scans, so it would have passed however the matching were written.
+Moved into `extensions/`, where the layer half reads, and proven load-bearing.
+
+**Mutation replay.** Reverting `DRAFTS` to the pre-v0.324.0 four flips `bad-test-strategy` to
+accepted and changes nothing else — the arm fails only its own assertion. A second mutant making the
+layer half basename-anchored reds `decoy` on `hooks: steps/stories-test-strategy.md`, which is what
+makes the new trap load-bearing; it reds `good` too, on the same property via
+`hooks: steps/carry-over-evaluation.md`, a pairing that predates this release. Both mutants are
+`cmp -s`-guarded copies run against an unmutated control from the same directory.
+
+**Owed to the operator, and it does not wedge a pull.** `validate-draft-stamps.sh` is absent from the
+consumer pre-push (control: `validate-artifact-paths.sh` is present there), so Check 23 fires at
+PLANNING gates only. graph's stray root copy will block s302's first planning gate until it is moved:
+`git mv _bmad-output/planning-artifacts/test-strategy.md _bmad-output/planning-artifacts/s272/test-strategy.md`
+— s272's slot exists and holds no test strategy. The remedy is one file.
+
 ## [0.323.0] — 2026-08-08
 
 ### A cross-sprint anchor was correct by accident, and v0.322.0 would have made it wrong

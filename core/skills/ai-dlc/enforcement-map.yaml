@@ -387,7 +387,7 @@ checks:
     fixtures: [tests/fixtures/check-22-spawn-ledger, tests/fixtures/dispatch-model-guard, tests/fixtures/subagent-probe]
 
   - id: "23"
-    title: Analyst-draft sprint stamps (Rule 24)
+    title: Per-sprint planning-artifact sprint stamps (Rule 24)
     gate_types: [planning]
     adjudication: script
     hard_block: true

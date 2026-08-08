@@ -493,6 +493,24 @@ sprint's stories — its passes use the **Adversarial review dispatch** and
 
 ### 5. Test Strategy
 
+**WRITE PATH — `_bmad-output/planning-artifacts/s<N>/test-strategy.md`**, where `<N>`
+is `sprint_id` from the pipeline snapshot's Sprint Context (resolved at `route.md`
+Step 6). **The stamp is the DIRECTORY, not the basename** (`artifact-path-grammar.md`
+rule 2). The sub-skills below are told this path; whatever default they carry is
+overridden by it.
+
+**This step once prescribed NO path at all, and the consumer filled the gap for
+72 sprints.** The reference consumer's own convention was
+`test-strategy-sprint-<N>.md` at the area root — a per-sprint artifact spelling its
+sprint in the basename, which rule 2 forbids and which the s<N>/ migration renamed to
+`s<N>/test-strategy.md` for s134 through s297. One copy was left at the area root and
+its own H1 reads `# S272 Sprint Test Strategy`: one sprint's document standing in as
+the durable one, 29 sprints stale, and it is what
+`codebase-inventory.md`'s artifact audit and `bug-investigation.md`'s context load
+both read. **An unprescribed path is not a wrong path — it is the author choosing,
+every sprint, with nothing to be consistent with**, which is the same finding item 23b
+made about this pipeline's consolidation byproducts.
+
 **Intensity gate for carry-over-single.** When
 `validation_intensity == carry-over-single`, skip `/bmad-testarch-test-design`
 (step 1 below) and derive the test strategy directly from the story

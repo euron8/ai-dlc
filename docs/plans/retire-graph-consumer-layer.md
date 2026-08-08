@@ -352,7 +352,8 @@ durable artifact by path. **THE ONE THING THE ITEM DID NOT NAME IS THE WORK:**
 block into a sprint slot drops the pooled sum by three quarters of the brief **with the same bytes
 still read whole at gate time** — the change would grade itself. **Do not reuse the item's two-part
 framing ("the LOCKED block and changelog"); it is four changes** and the sequencing is in the table.
-Item 12, item 22, item 24, item 25, item 26 and item 28 remain available and gate nothing.
+Item 12, item 22, item 24, item 26 and item 28 remain available and gate nothing. (Item 25 shipped
+as v0.324.0.)
 
 **~~NEXT ACTION FOR THIS REPO: 23c-1~~ — 23c-2 WAS TAKEN FIRST AND THE ORDER ABOVE WAS CORRECTED,
 NOT IGNORED. v0.321.0 (#461).** Two things forced it, both measured after the derivation merged:
@@ -419,11 +420,12 @@ list says what to do next, the table says where each item sits in the whole plan
 they ever disagree, the table is the one to fix** — every completed row in it is a receipt with a
 PR number, and this list is derived from what is left.
 
-1. **Item 25 — `test-strategy.md` is prescribed at a durable path with 73 homes.** RECOMMENDED
-   FIRST, because it is item 23b's defect at scale and **the measurement is already done and must
-   not be re-derived** (§*What item 23b measured*). **NOT a general lint** — the general form has a
-   false-positive set of 12 of 17 on today's tree. Three of the five files in scope are decisions,
-   not sweeps, and "leave it and say why" is a legitimate outcome for two of them.
+1. **~~Item 25 — `test-strategy.md` is prescribed at a durable path with 73 homes.~~ — DONE
+   2026-08-08. v0.324.0.** It is **74** homes now, not 73; do not reuse either number. **The item's
+   central claim — that the durable-artifact declaration does not exist — is REFUTED**: it exists
+   twice over and had already decided four of the five, with reasons. What it had was a HOLE, because
+   it enumerated PRODUCERS and `test-strategy.md` is a TEA deliverable rather than an analyst draft.
+   See §*What item 25 measured*.
 2. **Item 24 — the fixture ship-list is four hand-lists.** Ergonomic, not correctness: the join
    already FIRES. Two things must be settled before any code, and both are written into the item.
    Re-derive the 129/117/12 counts; they are from v0.316.0.
@@ -441,10 +443,18 @@ PR number, and this list is derived from what is left.
    — reported mid-pull, never reproduced here. **Its first step is to establish whether an arm is
    addressable at all**, and if it is not, the honest outcome is a smaller change than a new join.
 
-**THE OPERATOR'S SIDE, and neither is yours to do:** take the pull (scope and derivation in the
-status block above), and the two homing jobs it carries. **Nothing breaks before either is done** —
-the legacy source-of-record basename is still accepted, and the changelog change governs future
-passes only. **Do not schedule work in this repo behind them.**
+**THE OPERATOR'S SIDE, and none of it is yours to do:** take the pull (scope and derivation in the
+status block above), and the **three** homing jobs it now carries — the S299 LOCKED block, the
+223-line brief changelog, and, added by v0.324.0, the one stray `test-strategy.md` at the
+`planning-artifacts/` root. **Nothing breaks before the first two are done** — the legacy
+source-of-record basename is still accepted, and the changelog change governs future passes only.
+**The third has a deadline and it is s302's first PLANNING gate**, where Check 23 will block on it;
+it does NOT affect the pull, because `validate-draft-stamps.sh` is not in the consumer pre-push
+(control: `validate-artifact-paths.sh` is, at `core/git-hooks/pre-push:142`). The remedy is one
+file: `git mv _bmad-output/planning-artifacts/test-strategy.md
+_bmad-output/planning-artifacts/s272/test-strategy.md` — the file's own H1 names s272, and that slot
+exists and holds no test strategy. **Move it into the sprint that WROTE it, never into the current
+one.** **Do not schedule work in this repo behind any of them.**
 
 **s302 HAS NOT STARTED AND IS NOT A DEADLINE** (operator direction 2026-08-07, recorded above).
 It MAY start whenever the operator chooses.
@@ -540,7 +550,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
 | ~~20~~ | ~~**27** — the skill stamp has two contradictory instructions and no writer~~ | **DONE — v0.320.0 (#458).** The branch is a flag, `apply.sh --carried-machinery-slice`, and both prose sites now point at it. **No new invariant: I60 already binds the join**, proven by mutating the case-arm name until it fails by name. New fixture `apply-machinery-stamp`; the gap it fills is measured at **0** skill-field assertions across the whole fixture set against a control of 3 on the rulebook pair. See §*What item 27 measured* |
 | ~~21~~ | ~~**23c** — the inlet~~ | **CLOSED — derivation + three releases, v0.321.0 (#461), v0.322.0 (#462), v0.323.0 (#463). ITEM 23 IS CLOSED.** Original row text follows. **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four changes in THREE releases: **23c-2** the changelog — **DONE, v0.321.0 (#461)**, taken first because nothing reads a changelog so it needs no pool arm; **23c-1 + 23c-3** the pool arm with the writer and pin, together because the arm has no subject until the writer creates one; **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
-| **22** | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
+| ~~22~~ | ~~**25** — five more per-sprint artifacts prescribed at durable paths~~ | **DONE — v0.324.0.** `test-strategy.md` moves to `s<N>/`; Check 23 rescoped from producer to path shape; the criterion written down. **The item's premise that no durable declaration exists is REFUTED** — two independent pairs of carriers already agreed, and four of the five were already decided with reasons. **74 homes, not 73.** `bug-analysis` stays out on a stated disagreement rather than a quiet widening. Two pre-existing fixture defects fell out, one of them a vacuous arm caught before it shipped. See §*What item 25 measured* |
 | **23** | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | **24** | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
 | **25** | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
@@ -1112,8 +1122,12 @@ before you write code.
       riskier than maintaining it, the honest outcome is to keep the four lists and ship only the
       written criterion. **That is a legitimate result of this item, not a failure of it.**
 
-25. **Five more per-sprint artifacts are prescribed at durable area paths, and one of them is the
-    same defect at 73 homes.** Surfaced 2026-08-08 while measuring the false-positive set for a
+25. ~~**Five more per-sprint artifacts are prescribed at durable area paths, and one of them is the
+    same defect at 73 homes.**~~ **DONE — v0.324.0. What follows is the ORIGINAL scoping and its
+    instruction is spent.** Two of its claims are refuted by the work: the durable declaration DOES
+    exist (twice over, and it had already decided four of the five with reasons), and the count is
+    **74**, not 73. See §*What item 25 measured*. Original text follows.
+    Surfaced 2026-08-08 while measuring the false-positive set for a
     general version of 23b's check, **and deliberately left out of v0.319.0** — 23b's scope was two
     edits to one step, and five per-file decisions each needing their own evidence is separate work.
     The measurement is done; do not re-derive it. It is in §*What item 23b measured*.
@@ -1297,6 +1311,96 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 25 measured (the declaration existed; it enumerated PRODUCERS and the defect was not one)
+
+v0.324.0. Measured against graph at `54e71012a`, read-only.
+
+**THE ITEM'S PREMISE IS REFUTED.** It said *"what the general form actually needs first is a
+DECLARATION of which artifacts are durable … and that declaration does not exist."* It exists, in two
+independent pairs of carriers that already agree:
+
+```
+durable set     artifact-consolidation.md  "THE AREA ROOT IS FOR DURABLE ARTIFACTS ONLY
+                                            -- the four this step targets"
+                validate-artifact-budget.sh  WHOLE_READ_SET
+                same four: prd - product-brief - architecture - carry-over-backlog
+
+exempt set      core/skills/ai-dlc/SKILL.md  Rule 24 sprint-stamped-drafts paragraph
+                validate-draft-stamps.sh     scope note
+                same four: codebase-analysis - brownfield-inventory - doc-reconciliation
+                           (one-shot onboarding)  +  bug-analysis (bug-keyed)
+```
+
+**Four of item 25's five were therefore ALREADY DECIDED, with reasons, before the item was written**
+— the three "undecidable" ones and `bug-analysis`. The item read them as open because it measured
+the TREE and never asked the rulebook.
+
+**WHAT THE DECLARATION HAS IS A HOLE, AND IT IS THE SHAPE OF THE HOLE THAT GENERALISES.** Both
+carriers enumerate **producers**: analyst drafts (Rule 24), onboarding one-shots, a bug-keyed
+exception. `test-strategy.md` is a TEA deliverable authored at `stories-test-strategy.md` §5, so it
+is in none of the three classes and nothing was wrong. **A classification keyed on who writes a file
+cannot see a file whose writer is not in the list.**
+
+**THE PRESCRIPTION SIDE WAS THE SAME DEFECT ITEM 23b FOUND, not the one item 25 named.** The item
+said the path was durable-and-wrong. It was **absent**: §5 delegated to `/bmad-testarch-test-design`
+and prescribed no path at all. The consumer filled the gap for 72 sprints with
+`test-strategy-sprint-<N>.md` — a sprint token in a basename, which rule 2 forbids — and the s<N>/
+migration renamed all 72 into slots (`git show`, `R100` rows, s134→s297). Core prescribes the
+basename at exactly **two** sites and both are READERS.
+
+**THE ROOT COPY'S OWN FIRST LINE IS THE EVIDENCE.** It reads `# S272 Sprint Test Strategy — AWS
+Cost-Lean Optimization`, `**Sprint:** 272`, last written 2026-06-26 while slots run to s301: one
+sprint's document standing in as the durable one, and precisely what the two readers were told to
+read. Control: `prd.md` is root=1 with no planning slot (its only `s<N>` hit is
+`s271/party-mode-transcripts/prd.md`, a transcript directory) — the durable case behaving as
+expected.
+
+**RE-MEASURED, AND THE ITEM'S FIGURES DRIFTED: 74 homes, not 73** — 72 direct `s<N>/test-strategy.md`
+plus two under consumer archive subdirectories, plus the root copy. Do not carry 73 or 72.
+
+**THE CRITERION, DERIVED RATHER THAN HAND-LISTED, over the 10 basenames core prescribes at
+`_bmad-output/planning-artifacts/` root.** An area-root path is legitimate iff the project holds
+exactly ONE instance of that basename for its whole life, and there are exactly three ways that is
+true, each naming the mechanism that keeps it true:
+
+```
+(a) durable / consolidated    4   prd, product-brief, architecture, carry-over-backlog
+(b) live + rotated            1   sprint-status.yaml  (route.md Step 1; 56 planning +
+                                  47 implementation s<N>/ archives on the consumer)
+(c) one-shot onboarding       3   codebase-analysis, brownfield-inventory, doc-reconciliation
+(x) none of these             1   test-strategy   <- one write per sprint, nothing
+                                  consolidating it and nothing rotating it, so sprint
+                                  N+1's write DESTROYS sprint N's
+```
+
+**`bug-analysis` IS SHAPE (x) AND STAYS OUT, and the exemption now says so instead of implying
+agreement.** A second bug sprint does destroy the first's analysis (root=1, `s292/`=1 on the
+consumer). It stays out because no bug KEY exists to compose a path from, and inventing one is Rule
+26(a) speculative mechanism. Stated as a disagreement with a reopening condition rather than
+absorbed silently.
+
+**TWO PRE-EXISTING FIXTURE DEFECTS FELL OUT OF EDITING `check-23-draft-stamps`.** Its `good` and
+`decoy` trees stamped drafts `s288-<base>.md` — the basename form rule 2 forbids and the check's own
+error text has always contradicted — and passed anyway, because the disk half only looks for the bare
+name at the area root. Both moved to `s288/`. And **the first placement of the new decoy trap was
+vacuous**: a step file under `steps/`, a directory neither half scans, so it would have passed
+however the matching were written. Moved into `extensions/`, and the second mutant below is what
+proves it load-bearing.
+
+**MUTATION REPLAY, both `cmp -s`-guarded copies against an unmutated control from the same
+directory.** Reverting `DRAFTS` to the pre-v0.324.0 four flips `bad-test-strategy` to accepted and
+changes nothing else — **the arm fails only its own assertion.** A second mutant making the layer
+half basename-anchored reds `decoy` on `hooks: steps/stories-test-strategy.md`; it also reds `good`
+on `hooks: steps/carry-over-evaluation.md`, which is two independent witnesses of one property and a
+pairing that predates this release, not two entangled assertions.
+
+**OWED TO THE OPERATOR, AND IT DOES NOT WEDGE A PULL.** `validate-draft-stamps.sh` is absent from
+`core/git-hooks/pre-push` (control: `validate-artifact-paths.sh` is present at :142), so Check 23
+fires at PLANNING gates only. graph's stray root copy blocks s302's first planning gate until it is
+moved: `git mv _bmad-output/planning-artifacts/test-strategy.md
+_bmad-output/planning-artifacts/s272/test-strategy.md` — s272's slot exists and holds no test
+strategy. One file.
 
 ## What item 23c's derivation measured (the sites move; the instrument does not)
 

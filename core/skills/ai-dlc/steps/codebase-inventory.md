@@ -40,7 +40,10 @@ Check for existing planning artifacts:
 - PRD: `_bmad-output/planning-artifacts/prd.md`
 - Architecture: `docs/architecture.md` or `_bmad-output/planning-artifacts/architecture.md`
 - Stories: `_bmad-output/planning-artifacts/s*/stories/`
-- Test strategy: `_bmad-output/planning-artifacts/test-strategy.md`
+- Test strategy: `_bmad-output/planning-artifacts/s*/test-strategy.md` — per
+  sprint, like the stories above it. This audit asks *what exists*, so the
+  cross-sprint `s*` is the right read here; a step needing THE CURRENT one
+  composes `s<N>/` from `sprint_id` instead of searching.
 
 For each existing artifact, note whether it appears current or stale
 relative to the codebase.

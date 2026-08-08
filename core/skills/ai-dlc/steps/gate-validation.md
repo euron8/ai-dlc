@@ -1442,21 +1442,31 @@ derived from the transcript. The dispatch guard already resolves role, pin and
 model at dispatch, so the ledger records that answer rather than reconstructing
 it afterwards. Cite the ledger.
 
-### 23. Analyst-draft sprint stamps (all planning gates).
+### 23. Per-sprint planning-artifact sprint stamps (all planning gates).
 <!-- CHECK_LOADED: 23 -->
 
 **Scope.** Fires at every planning-phase gate. Skips story,
 implementation, sprint-review, and retro gates.
 
 **Check.** Invoke `scripts/ai-dlc/validate-draft-stamps.sh`; exit 0 required.
-It asserts the four per-sprint analyst drafts (Rule 24) are written to
+It asserts the five per-sprint planning artifacts are written to
 their sprint-stamped paths — `planning-artifacts/s<N>/carry-over-evaluation.md`,
 `planning-artifacts/s<N>/discovery-context.md`,
 `planning-artifacts/s<N>/research-notes.md`,
-`planning-artifacts/s<N>/architecture-context.md`, where `<N>` is
+`planning-artifacts/s<N>/architecture-context.md`,
+`planning-artifacts/s<N>/test-strategy.md`, where `<N>` is
 `sprint_id` from the pipeline snapshot's Sprint Context (resolved at
 `route.md` Step 6). **The stamp is the DIRECTORY** — the basename carries
 no sprint token (`artifact-path-grammar.md`).
+
+**The subject is the PATH SHAPE, not the producer.** Four of the five are Rule 24
+analyst drafts; `test-strategy.md` is a TEA deliverable and is read downstream.
+It is here because the failure mode does not depend on who wrote it — one
+basename, one area root, one write per sprint, nothing consolidating and nothing
+rotating. This check was titled and scoped by producer once, and that is what
+kept `test-strategy.md` outside it while the reference consumer accumulated 72
+sprints of it. The criterion that decides membership is in
+`SKILL.md` Rule 24; the enumeration and the exemptions are in the enforcer.
 
 Two halves, because the drift has two surfaces:
 - **Disk.** No unstamped draft may exist in

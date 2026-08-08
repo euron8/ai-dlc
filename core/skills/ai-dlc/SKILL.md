@@ -1014,6 +1014,32 @@ once at the area root, are read by path downstream, and have no sprint
 key — nor to `bug-analysis.md`, which is bug-keyed rather than
 sprint-keyed.
 
+**AND IT APPLIES TO `test-strategy.md`, WHICH IS NOT A DRAFT — THE LIST ABOVE
+ENUMERATED PRODUCERS AND THE RULE IS ABOUT PATHS.** It is a TEA deliverable
+(`stories-test-strategy.md` §5), it is read downstream, and it was in none of
+the three classes above for 72 sprints. Its write path is
+`_bmad-output/planning-artifacts/s<N>/test-strategy.md`.
+
+**THE CRITERION, so the next artifact is decided rather than discovered.** An
+area-root path is legitimate iff the project holds exactly ONE instance of that
+basename for its whole life, and there are exactly three ways that is true, each
+naming the mechanism that keeps it true:
+
+- **durable/consolidated** — every sprint appends to one file and
+  `artifact-consolidation.md` drains it (`prd.md`, `product-brief.md`,
+  `architecture.md`, `carry-over-backlog.md`);
+- **live + rotated** — one live copy, epochs archived into `s<N>/` by a named
+  rotation, Rule 25(c) (`sprint-status.yaml`, `gate-log.md`,
+  `pipeline-snapshot.md`, `audit-anchors.md`);
+- **one-shot** — written once at onboarding and never again (the three above).
+
+Anything else is written once per sprint with nothing draining it and nothing
+archiving it, so sprint N+1's write DESTROYS sprint N's — and it belongs in
+`s<N>/`. **A syntactic path check cannot make this call and is not wrong not to**
+(`artifact-path-grammar.md`): both the area-root and the slotted path conform.
+Only the step that writes the file knows which class it is in, which is why the
+criterion lives here and the enumeration lives with the enforcer.
+
 An unstamped write silently destroys the prior sprint's draft: these
 drafts have no reader in the pipeline and no archive pair, so an
 overwrite is unrecoverable outside git, and any citation into the file
