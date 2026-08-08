@@ -168,6 +168,15 @@ cat > "$LED" <<'LEDGER'
 
 ---
 
+- **Entry SH-SUBJECT-GONE runs an `sh` receipt whose subject MOVED, inside an `&&` chain.**
+  The chain short-circuits on the missing file and the whole receipt exits 1 — the same status
+  a genuine fix produces, which is why the 126/127 guard above cannot see this one. Measured on
+  the reference consumer: an artifact-path migration moved one subject and the entry proposed
+  closing a defect that still reproduced at its new path.
+  verify: sh test -e "$CONSUMER/docs/retro/sprint-249.md" && grep -q x "$CONSUMER/docs/retro/sprint-249.md"
+
+---
+
 - **Entry SH-LIVE runs an `sh` receipt that still reproduces.** Exit 0. Pins the third
   outcome so the two above cannot both be satisfied by a verb that always reports one
   thing.

@@ -34,6 +34,60 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.310.0] — 2026-08-08
+
+### The only close the ledger proposed was false, and the note warning about it was not a mechanism
+
+Plan item 8. Re-ran `ledger-reverify.sh` over the reference consumer's 56-entry push-candidate
+ledger against the current core, read-only. It produced **exactly one `CLOSE-CANDIDATE` in the
+whole run, and that one is FALSE.**
+
+`PC-S312-STRAYS-DOES-NOT-NORMALIZE-AN-ABSOLUTE-PATH`'s receipt names
+`docs/retro/sprint-249.md` — a path **the artifact-path migration moved** to
+`docs/retro/s249/retro.md`. The receipt's first arm exits non-zero on the missing file, the `&&`
+chain short-circuits, and the entry reads *no longer reproduces*. Re-run by hand against the path
+that exists now: **relative rc=0, absolute rc=1** — the defect reproduces exactly as filed. A
+migration inside the consumer had silently proposed closing a live entry, which is the direction
+that loses information permanently.
+
+**THE LIMIT WAS ALREADY KNOWN AND WAS WRITTEN DOWN AS A NOTE.** The `sh` verb has been guarded
+against exit 126/127 (command not found) since it shipped, and the residue — a subject that
+short-circuits an `&&` chain with an ordinary exit 1 — was carried as a sentence in the
+CLOSE-CANDIDATE detail telling the operator to *check the receipt's subject paths still exist
+before draining*. Correct, and not a mechanism. That is this repo's own recurring shape, and this
+is the second release in a row to find it (v0.306.0 found the same thing in §7v criterion 5).
+
+**THE PARSE CAN ONLY DOWNGRADE A CLOSE, NEVER CREATE ONE**, which is what answers the
+false-confidence objection the code had recorded against path-parsing rather than dismissing it. A
+path it fails to spot leaves the verdict exactly where it was; a path it spots that is absent turns
+a close into a `NEEDS-REVIEW`. It adds no confidence in either direction — it withholds the one
+verdict that loses data. A receipt deliberately asserting a file is GONE is downgraded too, and
+that is the safe direction: a review costs a read, a false close costs an entry.
+
+**FALSE-POSITIVE SET MEASURED ON THE REAL LEDGER: exactly one row moved**, and it is the one
+proved false by hand. 75 rows, 2 differing lines, nothing else touched.
+
+**Three counts in the plan's earlier triage are corrected**, each by re-measuring rather than
+re-quoting:
+
+- The receipts are **31 `manual`, 26 `theirs_has`, 21 `sh`, 13 `theirs_lacks`** — not the "several
+  documented as blind" the plan carried. `RECEIPTS-UNDECIDED` reports **24 of 24** `theirs_has`
+  receipts as undecided, so that verb's verdicts remain uninformative in bulk.
+- The verdict spread is now **53 STILL-LIVE, 15 HAND-REVIEW, 5 NAMED-UPSTREAM**, against the
+  plan's 54/15/4.
+- **My own first two measurements here were wrong and are recorded as such.** A receipt-kind tally
+  reported "52 of 53 entries carry no receipt" — the receipts are spelled `<br>verify:`, so the
+  field index was off; and a crude path sweep reported "37 of 65 named paths no longer exist",
+  which swept distribution paths into a consumer-side question. Precisely scoped, **one**
+  `verify: sh` receipt names a migration-moved artifact path, with a control showing the same
+  receipts name paths that do exist.
+
+- `core/skills/ai-dlc-update/reconcile/ledger-reverify.sh` — `receipt_absent_subjects()`; the
+  `sh` fallthrough emits `NEEDS-REVIEW` naming the missing paths instead of proposing a close.
+- `ledger-reverify` fixture 67 → 69 assertions: the moved-subject entry, and a mutant that removes
+  the guard and must move **only** that row — paired with the existing over-fire control, whose
+  receipt names no consumer-relative path and must still close.
+
 ## [0.309.0] — 2026-08-08
 
 ### The stamp carries two shas and the drift scan only ever read one

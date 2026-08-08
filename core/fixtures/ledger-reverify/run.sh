@@ -130,6 +130,12 @@ row_is "Entry L" STILL-LIVE      "two substrings, neither at theirs -> genuinely
 # Three outcomes, because two would let a verb that always reports one thing pass.
 row_is "Entry SH-MOVED" NEEDS-REVIEW "exit 127 = subject renamed/deleted, NOT absorbed. A close here records an absorption that never happened, and closing is the direction that loses information permanently"
 row_is "Entry SH-REAL"  CLOSE-CANDIDATE "OVER-FIRE CONTROL: a plain non-zero exit still closes, or the guard pins every sh entry open forever"
+# A MOVED SUBJECT INSIDE AN && CHAIN IS NOT A FIX, and the exit status cannot say so: the chain
+# short-circuits with 1, exactly like a genuine fix. The 126/127 guard cannot reach it, and the
+# residue used to be a NOTE in the CLOSE-CANDIDATE detail telling the operator to check the paths
+# themselves. SH-REAL above is the paired control: a non-zero exit whose receipt names no
+# consumer-relative path at all must still CLOSE, or this guard pins every sh entry open.
+row_is "Entry SH-SUBJECT-GONE" NEEDS-REVIEW "an && chain short-circuiting on a MOVED subject must not read as a fix"
 row_is "Entry SH-LIVE"  STILL-LIVE "exit 0 still means it reproduces"
 
 row_is "Entry M" CLOSE-CANDIDATE "two substrings, BOTH at theirs -> absorbed, must not stay open"
@@ -795,6 +801,30 @@ else
   else
     FAILURES=$((FAILURES + 1))
     printf '  FAIL  %-22s dropping the colon test did NOT re-fire the prose entry, so the control above is vacuous\n' "mutation-colon"
+  fi
+fi
+
+
+# MUTATION — remove the moved-subject guard. Entry SH-SUBJECT-GONE must fall back to
+# CLOSE-CANDIDATE, and Entry SH-REAL must stay CLOSE-CANDIDATE either way: without the second
+# half, a mutant that broke the sh branch outright would score as a kill of the first.
+MUTG="$(dirname "$DIST")/mut-subject-guard"
+rm -rf "$MUTG"; mkdir -p "$MUTG"
+cp "$(dirname "$CLOSER")"/*.sh "$MUTG/" 2>/dev/null
+sed 's/^          _gone="$(receipt_absent_subjects "$rest")"$/          _gone=""/' "$CLOSER" > "$MUTG/ledger-reverify.sh"
+ASSERTIONS=$((ASSERTIONS + 1))
+if cmp -s "$CLOSER" "$MUTG/ledger-reverify.sh"; then
+  FAILURES=$((FAILURES + 1))
+  printf '  FAIL  %-22s the mutation matched nothing, so the moved-subject assertion is unproven\n' "mutation-subject"
+else
+  mg="$(bash "$MUTG/ledger-reverify.sh" "$DIST" "$BASE" "$CONS" "$THEIRS" 2>&1)"
+  mg_gone="$(printf '%s\n' "$mg" | awk -F'\t' '$2 ~ /SH-SUBJECT-GONE/ {print $1; exit}')"
+  mg_real="$(printf '%s\n' "$mg" | awk -F'\t' '$2 ~ /SH-REAL/ {print $1; exit}')"
+  if [ "$mg_gone" = "CLOSE-CANDIDATE" ] && [ "$mg_real" = "CLOSE-CANDIDATE" ]; then
+    printf '  ok    %-22s guard removed: the moved subject proposes a close again, and only it moved\n' "mutation-subject"
+  else
+    FAILURES=$((FAILURES + 1))
+    printf '  FAIL  %-22s guard removed but SH-SUBJECT-GONE=%s SH-REAL=%s (want CLOSE-CANDIDATE/CLOSE-CANDIDATE) — the assertion is vacuous or the mutant broke the whole branch\n' "mutation-subject" "${mg_gone:-none}" "${mg_real:-none}"
   fi
 fi
 
