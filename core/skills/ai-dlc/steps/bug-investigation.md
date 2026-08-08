@@ -29,7 +29,13 @@ sections inline. Per SKILL.md Rule 24.
 Read planning artifacts:
 - `_bmad-output/planning-artifacts/prd.md`
 - `docs/architecture.md` or `_bmad-output/planning-artifacts/architecture.md`
-- `_bmad-output/planning-artifacts/test-strategy.md` (if exists)
+- `_bmad-output/planning-artifacts/s<N>/test-strategy.md` (if exists), where
+  `<N>` is `sprint_id` from the pipeline snapshot's Sprint Context. A bug route
+  may run in a sprint that authored no test strategy of its own; when that slot
+  is empty, read the most recent `s*/test-strategy.md` and **say which sprint it
+  came from** in the analysis. Do not read
+  `_bmad-output/planning-artifacts/test-strategy.md` — any file at that path is
+  one sprint's strategy stranded at the durable root.
 
 ### 2. Investigation
 

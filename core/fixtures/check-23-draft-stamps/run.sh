@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # Exercise validate-draft-stamps.sh against the check-23 fixture.
 #
-# Builds four throwaway project trees under a temp dir and asserts the validator
-# distinguishes them. Exit 0 iff all four verdicts are correct.
+# Builds five throwaway project trees under a temp dir and asserts the validator
+# distinguishes them. Exit 0 iff all five verdicts are correct.
 #
 #   bad-disk    an UNSTAMPED draft in planning-artifacts        -> must FAIL
 #   bad-layer   a step-domain extension restating the unstamped
 #               Section 0 write path (the real graph consumer's
 #               carry-over-evaluation-domain.md shape)          -> must FAIL
-#   good        stamped draft + stamped layer                   -> must PASS
+#   bad-test-strategy
+#               an UNSTAMPED test-strategy.md at the area root,
+#               its own H1 naming one sprint (the v0.324.0 arm;
+#               red against the pre-v0.324.0 DRAFTS list)       -> must FAIL
+#   good        stamped artifacts + stamped layer               -> must PASS
 #   decoy       a step file naming the STEP `carry-over-evaluation.md`
 #               in a routing table, plus the one-shot onboarding
-#               artifacts that are deliberately out of scope     -> must PASS
+#               artifacts that are deliberately out of scope,
+#               plus the STEP file `stories-test-strategy.md`    -> must PASS
 #
 # The decoy case is the one that decides whether the script is shippable: a
 # naive basename grep flags every step file (each step's own filename collides
@@ -60,6 +65,7 @@ expect_pass() {
 
 expect_fail bad-disk
 expect_fail bad-layer
+expect_fail bad-test-strategy
 expect_pass good
 expect_pass decoy
 
