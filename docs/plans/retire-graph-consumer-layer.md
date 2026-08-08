@@ -69,37 +69,38 @@ consumer-side, bounded, and deliberately NOT scheduled here: it blocks nothing, 
 graph session for it while item 10 is the critical path is churn. Take it when graph is next
 open for another reason.
 
-**~~NEXT ACTION: … 10c~~ / ~~10d~~ — ALL DONE.** 10d shipped as v0.300.0:
-`migrate-artifact-paths.sh` is in core, dry-run by default, rehearsed end to end on a clone of the
-consumer. **NEXT ACTION IS 10e** — the consumer-side validator on real filenames — and it ships
-AFTER the operator has run the migration once, per §*Sub-releases*.
+**~~NEXT ACTION: … 10c~~ / ~~10d~~ — BOTH DONE** (v0.299.0 #411, v0.300.0 #412).
 
-**THE OPERATOR'S MOVE IS NOW UNBLOCKED AND IS THE CRITICAL PATH.** Pull, then run
-`scripts/ai-dlc/migrate-artifact-paths.sh` (dry run first, read the refusals), then commit. Measured
-on a clone of graph at `655fd3acf`: **2667 moves, 48 refused, 1001 deferred, idempotent on a second
-run.** Between the pull and the migration graph's gate-time readers FAIL — loudly and by design.
+**THE CRITICAL PATH IS NOW THE OPERATOR'S, AND IT IS RUNBOOKED.** Everything a graph session needs
+is in [`graph-artifact-path-pull-and-migration.md`](graph-artifact-path-pull-and-migration.md),
+merged as #413. The operator pastes one line into a graph session; nothing there needs this repo.
+**10e cannot ship until that has run once** — a validator landing on ~2700 non-conforming files
+wedges first contact.
 
-**10d IS THE ONE ITEM IN THIS PLAN THAT WRITES TO THE CONSUMER, and its window is now open and
-costly to leave open.** Core's readers expect the new shape as of v0.299.0, so between the pull and
-the migration a consumer's gate-time readers FAIL — loudly and by construction, which is the
-designed behaviour, not a defect. graph is quiescent, so **the operator should pull and run the
-migration in the same sitting.**
+**NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.** See
+§*What item 8's triage measured*. They are small, diagnosed, and in a file core owns.
 
-**A GATE DEFECT WAS FOUND AND CLEARED IN BETWEEN, and it is worth knowing about because it will
-recur.** The 10a+10b push went red on `self-update-join-gate` — not from that work, but because
-touching `audit-rule-files.sh` put it in the self-update gate's probe set, where its BARE default
-(`--fail-on=any`) differs from the flag the hook passes (`--fail-on=deterministic`). It exits 1
-while printing `tier-1 findings: 0`, identically on both sides, and the gate deferred. Shipped
-separately as v0.297.0 (#407): agreement on ANY exit code is now a non-signal. **Expect any future
-release that edits a script the consumer's pre-push invokes to surface this class again** — the
-probe is bare and cannot pass what the hook passes.
+## Session handoff — 2026-08-07, written because context depth was becoming the risk
 
-**~~NEXT ACTION: 10a + 10b, shipped as ONE release.~~ DONE — v0.298.0.** Everything ahead of them in the execution
-order is closed: the close-out landed, the pull is done, item 11 shipped as v0.288.0, the parked
-F3 work shipped as v0.289.0's successor chain, item 15 shipped as v0.296.0. **Item 10 is now the
-only thing holding s302** — though s302 is no longer a deadline; see the paragraph above.
-10a and 10b ship together because `CLAUDE.md` fails builds on a declaration with no enforcer,
-and 10b IS 10a's enforcer.
+**Nothing is in flight. The tree is clean, `main` is at `0.300.0` + #413, and every branch this
+session cut is merged and deleted.** A fresh session starts from `origin/main` with nothing parked.
+
+**TWO ERRORS THIS SESSION MADE, both of the class this repo audits for, recorded so the next one
+does not repeat them:**
+
+1. **"One hop, not two."** Told the operator the 0.292.0 → 0.300.0 pull was a single hop because
+   `--safe-stop` exists. Backwards: `--safe-stop` exists to NAME the split, not to remove it. The
+   operator's own dry run returned `SELF-UPDATE-DEFER rulebook-coupled-fixtures` and named
+   `ef37564` (v0.297.0) as the stop. **Do not reason about a pull's shape from the distribution
+   side; run the dry run and read what the gate says.**
+2. **"Run `/ai-dlc-update`."** Bare is a DRY RUN. `apply` is the word that makes it act. Both
+   errors were corrected in the runbook and the correction is stated in it rather than quietly
+   patched.
+
+**What a fresh session should NOT re-derive** — all of it is recorded below in this file:
+`sprint-id` never fails and returns 1 for greenfield; `sprint-status.sh` resolves its root from
+the process cwd without `--root`; the migration's 2667/48/1001 figures and their PRE-PULL caveat;
+and item 8's blind-receipt finding.
 
 ### Order of execution
 
@@ -119,7 +120,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~6~~ | ~~**7's remainder** — the `validate-layer-entries.sh` sweep~~ | **DONE, and it found NOTHING — measured, with a control.** See §*What item 7's remaining sweep measured*. Item 7 is closed |
 | ~~7~~ | ~~**10c**, with **F4** folded in~~ | **DONE** — v0.299.0. Ledger emptied, readers composed, pointer landed, F4 shipped. See §*What v0.299.0 shipped* |
 | ~~8~~ | ~~**10d**~~ | **DONE** — v0.300.0. See §*What v0.300.0 measured* |
-| **8b** | **operator: pull, then run the migration** | **← THE CRITICAL PATH.** 10e cannot ship until this has run once, or first contact wedges on ~2700 non-conforming files |
+| **8b** | **operator: pull, then run the migration** | **← THE CRITICAL PATH, and it is RUNBOOKED** — `graph-artifact-path-pull-and-migration.md` (#413). Two hops, `apply` on both. 10e cannot ship until this has run once |
+| **8c** | **`ledger-reverify.sh`'s own filed defects** | **← WHAT THIS REPO CAN DO NOW**, unblocked. Five entries filed against one core file; one is already fixed and its receipt cannot say so. See §*What item 8's triage measured* |
 | **9** | **10e** — the consumer pre-push validator | after 8b |
 | 10 | **16** — move `planning-artifacts/stories/` under `s<N>/` | split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
 | 11 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to |
@@ -771,6 +773,53 @@ is the main thing 10c must respect.
 **A syntactic check over prescriptions cannot see a sprint a PLACEHOLDER conceals.**
 `story-<id>-<slug>.md` passes rule 2 — and it is the exact form Check 6's glob broke on. 10e, which
 reads real filenames, is where that is caught. Do not read I82 as covering it.
+
+## What item 8's triage measured (the ledger's own verdicts are partly false)
+
+Ran `reconcile/ledger-reverify.sh` over graph's 56-entry push-candidate ledger with the current
+distribution as `theirs`, read-only:
+
+```
+STILL-LIVE     54
+HAND-REVIEW    15
+NAMED-UPSTREAM  4
+CLOSE-CANDIDATE 0     <- a zero on the only verdict that shows progress
+```
+
+**THE ZERO IS NOT EVIDENCE, AND ONE ENTRY PROVES IT.**
+`PC-S299-LEDGER-REVERIFY-SIGPIPE-FALSE-ABSENT` reports STILL-LIVE and **is already fixed
+upstream**. Its receipt is `theirs_has core/skills/ai-dlc-update/reconcile/ledger-reverify.sh
+"grep -qF -- "`, and that substring occurs exactly ONCE in the file —
+`core/skills/ai-dlc-update/reconcile/ledger-reverify.sh:290`, which is the REPAIRED line
+(`grep -qF -- "$_one" <<<"$_c"`). The defect's own form, `| grep -q`, occurs **zero** times.
+**The anchor survives its own fix, so the entry can never close.** That is the check-that-cannot-
+fire class, living inside the queue whose job is to track absorption.
+
+**Two more receipt defects, same sweep:**
+
+- **One `verify: sh` receipt of 19 scopes no root**, resolving `core/skills/…` against the process
+  cwd. Same class as the two live bugs this session's releases fixed.
+- **One cited path is malformed** — `core/.claude/skills/ai-dlc/steps/retro.md`, which is neither
+  layout (`CLAUDE.md` §*Two layouts*). Its `theirs_lacks` verdict is vacuous.
+
+**THE FIXES SPLIT, AND THE SPLIT IS THE POINT.** The blind RECEIPTS live in graph's ledger, which
+this repo does not write — they go to the operator. What core owns and should fix next:
+
+- `ledger-reverify.sh:147` — `[ -f "$LEDGER" ] || exit 0`. A mistyped argument produces a clean
+  rc=0 over zero rows, indistinguishable from a clean corpus. The consumer measured it: swapped
+  args → 0 rows, correct args → 69 rows, **both exit 0**. Filed as
+  `PC-S316-LEDGER-REVERIFY-EXITS-0-SILENTLY-ON-AN-UNREADABLE-LEDGER-PATH`, and this signature is
+  the natural mistake because every sibling in `reconcile/` takes `<dist> <base> <theirs>
+  <consumer>` while this one takes consumer THIRD.
+- Four sibling entries are also filed against this one file and all report STILL-LIVE:
+  `PC-S299-LEDGER-REVERIFY-MISATTRIBUTES-ABSORBING-VERSION`,
+  `PC-S316-LEDGER-REVERIFY-DOES-NOT-NORMALIZE-CONSUMER-TO-AN-ABSOLUTE-PATH`,
+  `PC-S316-ABSORPTION-DETECTOR-JOINS-ONLY-ON-NUMBERED-ANCHORS`, and the SIGPIPE one above.
+  **Re-verify each against the code before building** — the SIGPIPE one is proof that a
+  STILL-LIVE verdict here is not evidence the defect is live.
+
+**Do not read the 54 STILL-LIVE as a work queue.** Until the receipts are re-anchored, the set is
+a mixture of live entries and entries whose anchor cannot distinguish fixed from broken.
 
 ## What v0.300.0 measured (item 10d — the migration, rehearsed on a clone)
 
