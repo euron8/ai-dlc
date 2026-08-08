@@ -255,6 +255,7 @@ core_manifest:
   - fixtures/apply-worklist-rows/**
   - fixtures/apply-self-overwrite/**
   - fixtures/consolidation-residue/**
+  - fixtures/apply-machinery-stamp/**
   - fixtures/layer-absorption-retire/**
   - fixtures/notify-hook-channel/**
 

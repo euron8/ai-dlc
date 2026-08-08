@@ -305,8 +305,12 @@ prose is itself generated rather than composed.
    - On `SELF-UPDATE-DEFER` or `SELF-UPDATE-UNDECIDED`: **do NOT cut the branch and do NOT push.**
      Report the rows, and carry the machinery slice into the step-7 gated apply so machinery and
      rulebook land on ONE branch — the operator fixes the layer state there, and that is the only
-     ordering in which the pre-push gate can go green. Advance `skill_version`/`skill_commit` with
-     that apply rather than here, and say in one line that step 2 deferred and why.
+     ordering in which the pre-push gate can go green. Say in one line that step 2 deferred and
+     why, and **advance `skill_version`/`skill_commit` with that apply rather than here — by
+     running `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>` at
+     step 7.** That flag is the whole mechanism; do NOT set the two fields by hand, and do not
+     read step 7's "preserve them" as overriding this. The two instructions describe different
+     runs and the flag is what tells them apart — see step 7's re-stamp bullet.
    - On `SELF-UPDATE-OK`: proceed autonomously as below.
 
    The gate's verdict is a DIFFERENTIAL — the incoming script and the consumer's current one, run
@@ -1004,7 +1008,10 @@ prose is itself generated rather than composed.
 
    **First, run the resolution driver — it does the mechanical bulk.**
    `reconcile/apply.sh <dist> <base> <consumer> <theirs>` executes every MECHANICAL resolution and
-   prints a tab-separated manifest:
+   prints a tab-separated manifest. **Add `--carried-machinery-slice` — first, before the four
+   paths — if and only if step 2 deferred its self-update and handed this run the machinery
+   slice**; that is what advances the stamp's `skill_version`/`skill_commit` beside
+   `version`/`commit` (see the re-stamp bullet at the end of this step).
    - `RESOLVED …` — already done, no operator step: pure applies (core overwritten from theirs),
      setup-token defaults (e.g. `gate-adjudicator` ← `adversary`'s model), **known-drift refiles**
      (`provenance-block.json` `known_skills` → `extensions/known-skills.json`, core reverted — the
@@ -1414,6 +1421,26 @@ prose is itself generated rather than composed.
      `<theirs-sha>`, **preserving `skill_version`/`skill_commit`/`installed_at`/
      `upstream`** (rewrite the whole stamp in schema — never collapse it to the
      legacy single line, which would drop the skill version and upstream URL).
+     **`apply.sh` does this; you do not edit the stamp.**
+
+     **THE ONE EXCEPTION, AND IT IS A FLAG RATHER THAN A JUDGEMENT CALL.** If step 2
+     reported `SELF-UPDATE-DEFER`/`SELF-UPDATE-UNDECIDED` and handed its machinery
+     slice to this apply, then this run DID install machinery, and the skill pair
+     must advance with the rulebook pair — run
+     `reconcile/apply.sh --carried-machinery-slice <dist> <base> <consumer> <theirs>`
+     and it writes all four. Preserve is the default because a rulebook-only apply
+     must not claim a machinery version it did not install; advance is correct only
+     when it did. Withholding still applies to BOTH pairs or neither: a mechanical
+     failure holds the machinery pair back exactly as it holds the rulebook pair.
+
+     *Why this is a flag.* A stale `skill_commit` is not cosmetic.
+     `unregistered-drift.sh` suppresses a machinery file as `CORE-AT-SELF-UPDATE`
+     when it is byte-identical to the distribution at `skill_commit`, which it reads
+     from this stamp. Leave the field behind and every machinery file this apply
+     wrote from theirs reads as consumer drift on the next pull, with a printed
+     remedy that reverts upstream's own text. That is the same false-drift failure
+     the intermediate-ref suppression exists to prevent, reaching the operator
+     through the stamp instead of through the scan.
      Write `_bmad-output/ai-dlc-update/reconcile-log-<ts>.md`. **The re-stamp
      fires whenever the consumer core now equals `theirs` — INCLUDING an empty
      reconcile (zero rulebook blocks applied, e.g. a self-update-only pull). In

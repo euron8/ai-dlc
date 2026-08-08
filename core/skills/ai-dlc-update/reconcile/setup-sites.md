@@ -93,6 +93,7 @@ core_manifest:
   - core/fixtures/apply-worklist-rows/**
   - core/fixtures/apply-self-overwrite/**
   - core/fixtures/consolidation-residue/**
+  - core/fixtures/apply-machinery-stamp/**
   - core/fixtures/layer-absorption-retire/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
