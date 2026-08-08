@@ -273,6 +273,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | — | **23b** — artifact-consolidation's residue | Bounded and core-side: give the step's outputs a sprint slot, and say whether the drafts are retired or retained. **Derive the re-home refusal set first — at least two of the 33 files carry no recoverable sprint** |
 | — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report** |
+| — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
 | — | **21** — `apply.sh` overwrites itself mid-run | REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
 | — | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
@@ -725,6 +726,47 @@ before you write code.
     — if the thresholds are unattainable, a tidier process still fails the gate and the finding is
     somewhere else entirely. 23b before 23c because 23c changes what a sprint writes, so doing it
     first means re-homing residue 23c would have stopped producing.
+
+24. **The fixture ship-list is hand-written in FOUR places, and the criterion behind it is written
+    in NONE.** Surfaced by v0.316.0: adding one fixture required four edits, and the two I missed
+    were found by a failed push rather than by anything at authoring time.
+
+    **BE PRECISE ABOUT WHAT IS AND IS NOT BROKEN, because the obvious framing is wrong.** The set
+    IS bound — `scripts/validate-enforcement-map.sh` joins all four and it FIRED, with
+    `install.sh and uninstall.sh fixture loops disagree` and `core_manifest copies diverge
+    (core-manifest.md vs reconcile/setup-sites.md)`. **This is not the silent-rot class**; the
+    ratchet works. What it costs is four edits per fixture and one failed push to learn it.
+
+    **AND IT IS NOT FIXABLE BY GLOBBING THE DIRECTORY.** Measured: **129 fixtures on disk, 117 in
+    the ship list, 12 that deliberately do NOT ship** — `enforcement-map-*`, `plan-shape`,
+    `suite-dispatch-order`, `suite-content-key`, `crosswalk-home-declaration`,
+    `early-exit-reader`, `settings-merge-documented-form`, `story-fields-derive-mutants`,
+    `trunk-audit-mutants`. Every one tests the DISTRIBUTION's own machinery, which a consumer does
+    not have. The four lists agree exactly at 117 today (control: 0 shipped-but-absent entries, so
+    the join is not vacuous).
+
+    **THE REAL DEFECT IS THAT THE 12-ITEM CRITERION IS STATED NOWHERE.** Controlled:
+    `distribution-only|does not ship|not shipped|ship list` over `install.sh`, `core-manifest.md`
+    and `setup-sites.md` returns **zero matches**, while the same phrasing DOES occur in
+    `validate-artifact-budget.sh` and four fixture `run.sh` files — so the grep can fire and the
+    zero is real. A fixture author has no way to learn whether their fixture should ship except by
+    pattern-matching the list or by pushing and reading the gate. **I decided `apply-self-overwrite`
+    ships by inference, not by a rule**, and that is the whole item in one sentence.
+
+    **THE SHAPE TO AIM FOR is this repo's own: one declaration per fixture, colocated with it, and
+    all four sites derive from that** — the `CLAUDE.md` rule about deriving both sides of a join
+    rather than hand-listing either. Then adding a fixture is one edit, in the fixture's own
+    directory, and the criterion is written down where the person making the decision is standing.
+
+    **TWO THINGS TO SETTLE BEFORE WRITING ANY CODE.**
+    - **Say plainly that the win is ERGONOMIC, not correctness.** The join already prevents the
+      failure that matters. An item that oversells itself as closing a hole will get scoped as
+      though it were urgent; it is not, and it gates nothing.
+    - **`setup-sites.md` is a RECONCILE declaration, not just a list.** It is read on every pull,
+      so changing how its fixture block is produced touches the delivery path — the same path
+      items 17, 18 and 21 all landed in. Derive that blast radius first, and if generating it is
+      riskier than maintaining it, the honest outcome is to keep the four lists and ship only the
+      written criterion. **That is a legitimate result of this item, not a failure of it.**
 
 22. **A stale path inside a layer entry goes undetected.** **REPORTED BY THE CONSUMER 2026-08-08,
     NOT YET REPRODUCED HERE.** They cite `tea-consumer.md:18` in their own tree as an entry body
