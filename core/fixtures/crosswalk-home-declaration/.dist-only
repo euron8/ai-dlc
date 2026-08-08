@@ -1,0 +1,5 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is invariant I69 in scripts/validate-enforcement-map.sh, which is not shipped
+to consumers. A fixture whose subject is absent cannot fail on the consumer's tree, and a
+unit that cannot fail scores as a pass in the consumer's own suite verdict.

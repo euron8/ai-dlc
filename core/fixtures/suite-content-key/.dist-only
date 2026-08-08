@@ -1,0 +1,6 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+Its subject is scripts/suite-content-key.sh and .githooks/pre-push -- this repository's
+own suite runner and skip key. The consumer's pre-push is core/git-hooks/pre-push, a
+different program with a different tree to hash, so these arms would be asserting against
+a file the consumer does not have.

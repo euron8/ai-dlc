@@ -80,6 +80,38 @@ because that is a cwd where its decoy files do not exist. A fixture that must ho
 any cwd asserts cwd-invariance itself, in its own arms — it does not get that from how
 the suite is driven.
 
+## Whether a fixture ships is ONE declaration, and it lives in the fixture
+
+A fixture ships to consumers unless its own directory carries a `.dist-only` file.
+**`install.sh` derives its copy loop from that marker**; nothing hand-lists the shipped
+set there any more.
+
+**The criterion: a fixture is `.dist-only` when its SUBJECT is not present on a
+consumer.** Three measured shapes, and they are the whole of today's twelve:
+
+- the subject is a distribution-only program (`scripts/validate-enforcement-map.sh`,
+  `validate-plan-shape.sh`, `suite-content-key.sh`, the distribution `.githooks/pre-push`);
+- the subject is a corpus only this repo holds, so the same run on a consumer scans a
+  smaller set and prints the same clean line — a narrower check reading identically to a
+  full one;
+- it is a MUTATION BATTERY behind a shipped fixture, editing copies of core's own sources.
+
+**Write the reason in the marker.** It is required to be non-empty, because a marker with
+no reason is a decision nobody can audit — and seven of the twelve were zero bytes until
+this rule existed. Getting it wrong in the shipping direction is how a distribution-only
+battery once became the reference consumer's suite pole; getting it wrong the other way
+means a fixture reaches no consumer while this repo's own suite stays green over it.
+
+**Three hand-written lists remain and they are deliberate.** `uninstall.sh` bounds a
+DESTRUCTIVE loop and runs on a consumer where `core/fixtures/` does not exist, so it cannot
+derive and must not glob the consumer's `tests/fixtures/` — that would delete fixtures the
+consumer wrote. `core-manifest.md` and `setup-sites.md` are glob declarations read by
+roughly twenty programs (the core guard hook, `core-paths.sh`, `validate-layer-entries.sh`,
+the drift scan, a dozen fixtures); changing their grammar to a wildcard-with-exclusion
+touches every one of those readers, and that blast radius is larger than the four edits it
+would save. All three are joined to the derived set by **I74**, in both directions — so
+they can be stale for exactly as long as one push.
+
 ## Two layouts
 
 `install.sh` splits what shares a parent here: `core/scripts/<x>` →
