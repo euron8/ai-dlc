@@ -109,8 +109,13 @@ directory and 25 of those already sat under `s<N>/`. The bare-leading-number sha
 761. The difficulty this file predicted was also the wrong one: the ambiguity is real in the NAME
 and was never in the POSITION, and one line of that realisation replaced the whole deferral.
 
-**NEXT ACTION FOR THIS REPO: item 18** — `unregistered-drift.sh` reading an intermediate
-self-update ref as consumer drift. It is next by the order table, and items 8 and 6 follow it.
+**~~NEXT ACTION FOR THIS REPO: item 18~~ — DONE.** v0.309.0 (#430). Reproduced at ground truth
+with a control, and **half its attribution was wrong the same way item 17's was**: `setup-sites.md`
+is not in that script's scan set at all. See §*What item 18 measured*.
+
+**NEXT ACTION FOR THIS REPO: item 8** — push-candidate ledger triage, re-scoped by 8c to the
+entries whose subject is core. Item 6 follows it, and its gate is now takeable (graph is quiescent
+and post-migration).
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -175,8 +180,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~9~~ | ~~**10e** — the consumer pre-push validator~~ | **DONE** — v0.305.0 (#423). Blocks on exactly the set the migration would move (0 on graph today), reports the 48 refusals and the 1024 deferred stories rather than wedging them. See §*What v0.305.0 measured* |
 | ~~10~~ | ~~**17** — a line retained outside the declared setup-site spans~~ | **DONE** — v0.306.0 (#425). **Reproduced at ground truth**, and the report's attribution was WRONG: `apply.sh` has no mask/reinject at all. See §*What item 17 measured* |
 | ~~11~~ | ~~**16** — move `planning-artifacts/stories/` under `s<N>/`~~ | **DONE** — v0.307.0 (#427) readers, v0.308.0 (#428) files. The corpus is **988** flat, not 1024; the restating-reader count was **two**, not three; and the deferral's premise was true about the NAME and never asked about the POSITION. See §*What item 16 measured* |
-| **12** | **18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift | **← THE NEXT ITEM.** Lower severity than 17 — it produces FALSE work, not lost content — but multi-hop is now the norm and it costs adjudication time on every pull |
-| 13 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
+| ~~12~~ | ~~**18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift~~ | **DONE** — v0.309.0 (#430). Reproduced with a control; **28 files** exposed (control: 72 machinery files outside the scan). Half the report's attribution is REFUTED and left open. See §*What item 18 measured* |
+| **13** | **8** — push-candidate ledger triage | **← THE NEXT ITEM.** | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | 14 | **6** — promote LC-E6/LC-O15 | Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first. **No longer blocked** — graph is quiescent and post-migration, so the count is takeable |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
 | — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
@@ -435,7 +440,10 @@ before you write code.
     `apply.sh`**: a mask that keeps a non-site line is a different bug from a site span that is
     mis-derived, and a fix aimed at the wrong one leaves it.
 
-18. **`unregistered-drift.sh` reads an INTERMEDIATE self-update ref as consumer drift.** Same
+18. ~~**`unregistered-drift.sh` reads an INTERMEDIATE self-update ref as consumer drift.**~~
+    **DONE — v0.309.0 (#430). REPRODUCED at ground truth, and the report named TWO files of which
+    only ONE can have come from this script.** See §*What item 18 measured*. What follows is the
+    original report. Same
     report. It measures the consumer against the stamp's `commit`, but a self-update hop advances
     `skill_commit` — so on a multi-hop pull, files byte-identical to the distribution at the
     intermediate ref are reported as consumer edits. Verbatim: *"`core-manifest.md` /
@@ -479,6 +487,38 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 18 measured (reproduced — and half the report was again the wrong program)
+
+**THE MECHANISM IS REAL AND WAS REPRODUCED AT GROUND TRUTH**, on this repo's own history rather
+than a synthetic tree. A consumer holding `core/hooks/ai-dlc-acknowledge.sh` exactly as the
+distribution had it at an intermediate ref draws `HARD-CORE-DRIFT-ABSORBED`, whose printed remedy
+is a **REVERT** — deleting upstream's own content as though the consumer had written it. Control,
+same run, the same file at base: `CORE-OK`.
+
+**THE EXPOSURE IS DERIVED: 28 files** sit in both the machinery set (what step 2's autonomous
+self-update rewrites) and `unregistered-drift.sh`'s scan set — every hook, six schemas, six
+templates, `core-manifest.md`, the `ai-dlc-setup` skill. Control: **72** machinery files sit
+outside the scan, so the two sets are genuinely different and the intersection is not an artefact.
+
+**HALF THE REPORT'S ATTRIBUTION IS REFUTED AND THE OTHER HALF IS NOW OPEN.** The consumer named
+`core-manifest.md` and `setup-sites.md`. The first is in the scan set and is fixed. **The second
+is not in it at all** — it lives under `core/skills/ai-dlc-update/`, which I12 excludes — proven
+with a control (the same pathspec yields 76 files and finds `core-manifest.md`). Nothing in
+`preclassify.sh` or `apply.sh` classifies that subtree as consumer drift either. **What produced
+that row is not established, and a later session should not assume it was this script.** That is
+two consecutive consumer reports naming the wrong program, after item 17's.
+
+**A DIFFERENTIAL AGAINST A COPY RUN FROM OUTSIDE `reconcile/` PROVES NOTHING, and the first one
+taken here did exactly that.** The script resolves its path mapper from a sibling and emits
+nothing without it — so the pre-fix arm came back EMPTY and read like a fix that worked. Re-taken
+with the shipped copy placed back inside `reconcile/`, plus a liveness control on it. This is
+`CLAUDE.md`'s unmutated-control rule arriving in a differential rather than in a mutant harness.
+
+**And a zsh `:c` history modifier ate a character** in the probe that was supposed to prove the
+three blobs were distinct: `"$r:core/..."` printed three distinct ERROR STRINGS and the count
+read 3 of 3. Braced, it really is 3. That is the first false-zero source `CLAUDE.md` lists,
+landing in the verification of a fixture rather than in the fixture.
 
 ## What item 16 measured (the hard part was not the one this plan named)
 
@@ -610,7 +650,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 
 ## Where things stand
 
-**ai-dlc is at `0.308.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.309.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -634,6 +674,7 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
+| v0.309.0 | #430 | **plan item 18.** The consumer's stamp carries TWO advancing shas and the drift scan only ever read one: step 2's autonomous self-update rewrites the whole MACHINERY set and advances `skill_commit`, so on a multi-hop pull those files sit at an INTERMEDIATE ref while `commit` — what every predicate measures against — stays put. Reproduced on this repo's own history: the same file at the intermediate ref gives `HARD-CORE-DRIFT-ABSORBED`, whose remedy is a REVERT of upstream's own content; at base it gives `CORE-OK`. **28 files** in both the machinery set and the scan (control: 72 outside). New non-blocking `CORE-AT-SELF-UPDATE`, with the ref READ FROM THE STAMP rather than passed in — a fifth argument is a fifth thing a caller can omit. `apply-drift-after-write` 11 → 15 assertions. |
 | v0.308.0 | #428 | **plan item 16, second half.** The story corpus migrates. The deferral rested on a TRUE sentence about the NAME and never asked about the POSITION: the grammar places `stories/` only under `s<N>/`, so a `stories/` directory without one predates the grammar and its leading number IS the sprint. A legacy basename is normalised to the explicit `s<N>` spelling and then handled by the SAME transform as every other artifact, rather than by a second one that could drift invisibly. Corroborated first: 786 of 786 leading numbers inside the tree's sprint range, control the 73 explicit-token files. `STORY-NO-SPRINT` replaces `DEFERRED-STORIES` — per FILE, cleared by a rename. **The migration and the pre-push validator agreed EXACTLY on 5148 real files: 951/951 blocking, 72/72, 3/3, 23/23.** |
 | v0.307.0 | #427 | **plan item 16, first half.** `stories_dir` becomes a TEMPLATE the schema owns, carrying the sprint slot; **I84** forbids a second copy and requires every reader to substitute it. The literal had FOUR copies and three would have failed SILENTLY — a protected-path pattern that matches nothing ALLOWS, a story glob that matches nothing prints PASS. Check 6's name-keyed glob is replaced by the sprint's own DIRECTORY, so the 298/299 capital-S defect cannot recur. The story-id join is re-derived: the DECLARED sprint is stripped from the entry key to give the index. **The replacement corpus control was itself blind to an unmigrated tree and reported 988 files as an empty corpus — caught by running it, not by reading it.** New fixture (10 assertions, 5 mutants, 1 control). |
 | v0.306.0 | #425 | **plan item 17.** `reconcile/setup-site-drift.sh` — §7v criterion 5 as a program, on BOTH the ordinary pull's post-write gate (which had nothing) and untangle's §7v (which had prose the transform's own author checks on themselves, already green on one instance of this defect). Reproduced at ground truth: silent on the corrected consumer, `deploy-validate.md:26` on the reconstructed one. **`apply.sh` was NOT the subject** — its two `mask` matches are both `umask`. `deploy-command`'s span had no machine-readable locator and now carries `after_line`; a site that cannot be pinned to one line FAILS rather than being guessed at. New fixture (15 assertions, 3 mutants, 1 control). |
