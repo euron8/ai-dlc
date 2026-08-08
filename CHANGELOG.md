@@ -34,6 +34,57 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.309.0] — 2026-08-08
+
+### The stamp carries two shas and the drift scan only ever read one
+
+Plan item 18. `unregistered-drift.sh` measured the consumer against `commit`, the rulebook
+merge-base — but step 2's **autonomous self-update** rewrites the whole MACHINERY set on its own
+cycle and advances `skill_commit`. On a multi-hop pull those files therefore sit at an
+**intermediate ref that is neither `commit` nor `theirs`**, and every predicate in the scan reads
+the difference as a consumer edit.
+
+**REPRODUCED AT GROUND TRUTH, on this repo's own history, with a control.** A consumer holding
+`core/hooks/ai-dlc-acknowledge.sh` exactly as the distribution had it at the intermediate ref draws
+`HARD-CORE-DRIFT-ABSORBED` — whose printed remedy is a **REVERT**, deleting upstream's own content
+as though the consumer had written it. The same run with that file at base gives `CORE-OK`. The
+before/after differential was taken with the shipped copy placed back **inside `reconcile/`**,
+because a copy run from beside it cannot resolve its path mapper, emits nothing, and "no output"
+otherwise scores as a fix that worked.
+
+**THE EXPOSURE IS DERIVED, NOT ESTIMATED: 28 files** sit in both the machinery set and this
+script's scan set — every hook, six schemas, six templates, `core-manifest.md` and the
+`ai-dlc-setup` skill. Control: 72 machinery files sit outside the scan, so the two sets are
+genuinely different and the intersection is a real subset rather than an artefact.
+
+**`CORE-AT-SELF-UPDATE`** is the new row: byte-identical to the distribution at the stamp's own
+`skill_commit`. Non-blocking — the content is upstream's, `apply` carries it to `theirs` with the
+rest of the machinery, and nothing consumer-authored is at stake. Reported rather than silent,
+because a row the operator can see is how they learn the hop happened.
+
+**THE REF IS READ FROM THE STAMP, NOT PASSED IN, and that is the load-bearing choice.** A fifth
+argument is a fifth thing a caller can omit, and this repo has already shipped that failure:
+v0.303.0 fixed a step-7 instruction that covered two scripts and silently disarmed one of them. The
+stamp is where the fact already lives. Absent stamp, legacy single-line stamp, `skill_commit` equal
+to `commit`, or a ref the distribution cannot resolve: no ref, and every verdict is exactly what it
+was — asserted by its own fixture arm, because a guard that invents a ref would suppress rows it
+never read.
+
+**HALF OF THE REPORT'S ATTRIBUTION IS UNVERIFIED, and it is recorded as open rather than
+repaired.** The consumer named two files, `core-manifest.md` and `setup-sites.md`. The first is in
+this script's scan set and is fixed here. **The second is not in it at all** — `setup-sites.md`
+lives under `core/skills/ai-dlc-update/`, which I12 excludes — established with a control (the same
+pathspec yields 76 files and finds `core-manifest.md`). So `unregistered-drift.sh` cannot have
+produced that row, and what did is not yet established; nothing in `preclassify.sh` or `apply.sh`
+classifies that subtree as consumer drift either. This is the second consecutive consumer report
+whose named program was wrong, after item 17's.
+
+- `core/skills/ai-dlc-update/reconcile/unregistered-drift.sh` — reads `skill_commit`, emits
+  `CORE-AT-SELF-UPDATE` beside `CORE-AT-THEIRS`.
+- `core/skills/ai-dlc-update/SKILL.md` step 3d documents the status and the 28/72 measurement.
+- `apply-drift-after-write` +4 arms (11 → 15): the row fires, it is non-blocking, stripping the
+  guard brings the HARD row back, and a stamp without the field leaves the guard inert.
+
 ## [0.308.0] — 2026-08-08
 
 ### The name could not settle it and the position always could

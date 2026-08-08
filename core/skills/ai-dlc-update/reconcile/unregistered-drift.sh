@@ -76,6 +76,14 @@
 #   CORE-OK                       byte-identical to the distribution at base.
 #   CORE-AT-THEIRS                byte-identical to the distribution at theirs — already
 #                                 applied, not drift. Also the tell for a stale base.
+#   CORE-AT-SELF-UPDATE          byte-identical to the distribution at `skill_commit`, the OTHER sha
+#                                 in the consumer's own stamp. The autonomous self-update (step 2)
+#                                 rewrites the whole MACHINERY set, so on a multi-hop pull those
+#                                 files sit at an INTERMEDIATE ref that is neither `commit` nor
+#                                 `theirs` -- and every other predicate here measures against
+#                                 `commit`. Without this row they read as consumer edits and draw a
+#                                 HARD status whose printed remedy is to revert upstream's own text.
+#                                 Non-blocking: nothing consumer-authored is at stake.
 #   HARD-DRIFT-SCAN-UNAVAILABLE   the path mapper could not be loaded, so NOTHING was
 #                                 scanned. HARD- because a scan that cannot run emits the
 #                                 same empty output as a tree with no drift, and the caller
@@ -86,6 +94,42 @@ DIST="${1:?usage: unregistered-drift.sh <dist-repo> <base-sha> <consumer-root> [
 BASE="${2:?}"
 CONSUMER="${3:?}"
 THEIRS="${4:-}"
+
+# --- the OTHER stamp field, and why this script has to read it itself ---------
+#
+# THE CONSUMER'S STAMP CARRIES TWO INDEPENDENTLY ADVANCING SHAS. `commit` is the rulebook
+# merge-base and is the `<base-sha>` above; `skill_commit` is advanced by the AUTONOMOUS
+# self-update at step 2, which rewrites the whole MACHINERY set -- the manifest, the hooks, the
+# schemas, the ai-dlc-setup subtree, the templates. On a multi-hop pull those files end up
+# byte-identical to the distribution at an INTERMEDIATE ref that is neither `commit` nor
+# `theirs`, and every predicate below measures against `commit` alone.
+#
+# REPRODUCED AT GROUND TRUTH before this guard was written, on this repo's own history with a
+# consumer holding core/hooks/ai-dlc-acknowledge.sh exactly as the distribution had it at the
+# intermediate ref: `HARD-CORE-DRIFT-ABSORBED`, whose printed remedy is to REVERT -- deleting
+# upstream's own content as though the consumer had written it. Control, same run, the same file
+# at base: `CORE-OK`. **28 files sit in both this script's scan set and the machinery set**
+# (control: 72 machinery files sit outside it), so every one of them is exposed on any pull the
+# self-update splits.
+#
+# READ FROM THE STAMP, NOT PASSED IN, and that is the load-bearing choice. A fifth argument is a
+# fifth thing a caller can omit, and this repo has already shipped the failure: step 7's single
+# "pass theirs" instruction covered two scripts and silently disarmed one of them. The stamp is
+# where the fact already lives, so a caller cannot forget it and a fixture cannot fake it by
+# accident. Absent stamp, legacy single-line stamp, or `skill_commit` equal to `commit`: no ref,
+# and every verdict below is exactly what it was.
+SELF_UPDATE_REF=""
+_stamp="$CONSUMER/.claude/.ai-dlc-version"
+if [ -f "$_stamp" ]; then
+  SELF_UPDATE_REF="$(sed -n 's/^skill_commit:[[:space:]]*\([^[:space:]]*\).*/\1/p' "$_stamp" | head -1)"
+  [ "$SELF_UPDATE_REF" = "$BASE" ] && SELF_UPDATE_REF=""
+  # A ref this distribution cannot resolve tells us nothing, and comparing against it would
+  # silently never match -- which reads exactly like a tree with no self-update hop.
+  if [ -n "$SELF_UPDATE_REF" ] \
+     && ! git -C "$DIST" rev-parse --verify --quiet "${SELF_UPDATE_REF}^{commit}" >/dev/null 2>&1; then
+    SELF_UPDATE_REF=""
+  fi
+fi
 
 # Did upstream ABSORB the consumer's in-place delta between base and theirs?
 #
@@ -301,6 +345,18 @@ git -C "$DIST" ls-tree -r --name-only "$BASE" -- \
       if [ -n "$THEIRS" ] && git -C "$DIST" cat-file -e "${THEIRS}:${cp}" 2>/dev/null \
          && git -C "$DIST" show "${THEIRS}:${cp}" | cmp -s - "$cons"; then
         emit CORE-AT-THEIRS "$rel" "byte-identical to ${THEIRS} — already at the incoming core, not drift. If you expected drift here, the base is stale: post-apply, re-run with base == theirs."
+        continue
+      fi
+
+      # ...and byte-identical to the INTERMEDIATE self-update ref is the same answer one hop back.
+      # The autonomous self-update at step 2 rewrote this file from `skill_commit`; the consumer
+      # never touched it, so calling the difference from `commit` a consumer edit produces work
+      # that does not exist. It does not block: the content is upstream's, `apply` overwrites it
+      # with theirs, and nothing consumer-authored is at stake. Reported rather than silent,
+      # because a row the operator can see is how they learn the hop happened.
+      if [ -n "$SELF_UPDATE_REF" ] && git -C "$DIST" cat-file -e "${SELF_UPDATE_REF}:${cp}" 2>/dev/null \
+         && git -C "$DIST" show "${SELF_UPDATE_REF}:${cp}" | cmp -s - "$cons"; then
+        emit CORE-AT-SELF-UPDATE "$rel" "byte-identical to ${SELF_UPDATE_REF}, the \`skill_commit\` in this consumer's own stamp — the autonomous self-update (step 2) wrote it, so it is upstream content at an intermediate ref, not consumer drift. No action: \`apply\` carries it to ${THEIRS:-theirs} with the rest of the machinery."
         continue
       fi
 

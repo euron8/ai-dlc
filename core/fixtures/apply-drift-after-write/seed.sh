@@ -37,7 +37,7 @@ fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/apply-after-write.XXXXXX")" || exit 2
 DIST="$WORK/dist"; CONSUMER="$WORK/consumer"
-mkdir -p "$DIST/core/skills/ai-dlc/steps" "$CONSUMER/.claude/skills/ai-dlc/steps" \
+mkdir -p "$DIST/core/skills/ai-dlc/steps" "$DIST/core/hooks" "$CONSUMER/.claude/skills/ai-dlc/steps" \
          "$CONSUMER/.claude"
 
 # ---- BASE ------------------------------------------------------------------
@@ -53,11 +53,33 @@ cat > "$DIST/core/skills/ai-dlc/steps/beta.md" <<'MD'
 
 The lead reads this file at the top of the beta phase.
 MD
+# gamma: the MACHINERY case. Step 2's autonomous self-update rewrites this set on its own
+# cycle, so on a multi-hop pull the consumer holds it at an INTERMEDIATE ref that is neither
+# `commit` nor `theirs`. Three distinct versions, or the arm proves nothing.
+cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
+#!/usr/bin/env bash
+# The gamma hook fires on every dispatched teammate beat.
+# Its first responsibility is to resolve the declared sprint.
+MD
 printf '9.9.9\n' > "$DIST/VERSION"
 git -C "$DIST" init -q
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m base
 BASE="$(git -C "$DIST" rev-parse HEAD)"
+
+# ---- INTERMEDIATE: what a self-update hop leaves behind ---------------------
+# Only gamma moves here. alpha and beta are untouched, so every assertion built on them is
+# unaffected: a consumer copy equal to BASE hits CORE-OK first, and one equal to THEIRS hits
+# CORE-AT-THEIRS first, both before the self-update guard is ever consulted.
+cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
+#!/usr/bin/env bash
+# The gamma hook fires on every dispatched teammate beat.
+# Its first responsibility is to resolve the declared sprint.
+# It refuses to resolve that sprint from the filesystem's mtime.
+MD
+git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
+git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m intermediate
+INTER="$(git -C "$DIST" rev-parse HEAD)"
 
 # ---- THEIRS ----------------------------------------------------------------
 # alpha: 5 added long lines -> clears `hits >= 3` and the 10% floor -> ABSORBED post-write.
@@ -80,6 +102,13 @@ cat > "$DIST/core/skills/ai-dlc/steps/beta.md" <<'MD'
 The lead reads this file at the top of the beta phase.
 The beta phase closes only after its gate has been adjudicated.
 MD
+cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
+#!/usr/bin/env bash
+# The gamma hook fires on every dispatched teammate beat.
+# Its first responsibility is to resolve the declared sprint.
+# It refuses to resolve that sprint from the filesystem's mtime.
+# The declared sprint is read from the canonical envelope, never searched.
+MD
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m theirs
 THEIRS="$(git -C "$DIST" rev-parse HEAD)"
@@ -87,7 +116,11 @@ THEIRS="$(git -C "$DIST" rev-parse HEAD)"
 # ---- CONSUMER: byte-identical to BASE. Zero drift. -------------------------
 git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/alpha.md" > "$CONSUMER/.claude/skills/ai-dlc/steps/alpha.md"
 git -C "$DIST" show "$BASE:core/skills/ai-dlc/steps/beta.md"  > "$CONSUMER/.claude/skills/ai-dlc/steps/beta.md"
-printf 'version: 0.0.1\ncommit: %s\n' "$BASE" > "$CONSUMER/.claude/.ai-dlc-version"
+mkdir -p "$CONSUMER/.claude/hooks"
+git -C "$DIST" show "$INTER:core/hooks/ai-dlc-gamma.sh" > "$CONSUMER/.claude/hooks/ai-dlc-gamma.sh"
+# BOTH shas, which is the whole point: `commit` is the rulebook merge-base every predicate
+# measures against, `skill_commit` is where step 2's autonomous self-update left the machinery.
+printf 'version: 0.0.1\ncommit: %s\nskill_version: 0.0.2\nskill_commit: %s\n' "$BASE" "$INTER" > "$CONSUMER/.claude/.ai-dlc-version"
 
 # ---- An extension HOOKED to alpha.md, which changes base..theirs. ----------
 # This makes layer-drift emit EXTENSION-HOOK-DRIFT, whose re-read obligation had no actor
@@ -143,9 +176,11 @@ LAYER="$RECONCILE/layer-drift.sh"
 DIST="$DIST"
 BASE="$BASE"
 THEIRS="$THEIRS"
+INTER="$INTER"
 CONSUMER="$CONSUMER"
 ALPHA="$CONSUMER/.claude/skills/ai-dlc/steps/alpha.md"
 BETA="$CONSUMER/.claude/skills/ai-dlc/steps/beta.md"
+GAMMA="$CONSUMER/.claude/hooks/ai-dlc-gamma.sh"
 STAMP="$CONSUMER/.claude/.ai-dlc-version"
 ENV
 
