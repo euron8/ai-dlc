@@ -1141,12 +1141,17 @@ prose is itself generated rather than composed.
      against which "consumer edits vs base" means what these status names claim.
      `CORE-AT-THEIRS` rows are the tell that the base was stale.
    - **`layer-drift.sh` — pass the PULL's base.** Its subject is what moved between base and
-     theirs, not what the consumer edited. Both `ADJUDICATED` clauses — **LC-E4**
-     (`EXTENSION-HOOK-DRIFT`) and **LC-E14** (`EXTENSION-ANCHOR-DRIFT`) — are computed over
+     theirs, not what the consumer edited. Most `ADJUDICATED` clauses are computed over
      that range, and `HARD-LAYER-ADJUDICATION-MISSING` (**LC-A1**) is demanded only on rows
-     they produce. With `base == theirs` there is no drift, so no adjudication is demanded,
-     so the check cannot fail, and `hard-blockers.sh` prints a clean sheet on a tree where
-     every verdict is still owed. Reported by the reference consumer — `0 HARD blockers.`
+     a clause at that level produces. With `base == theirs` those arms find no drift, so no
+     adjudication is demanded, so the check cannot fail, and `hard-blockers.sh` prints a clean
+     sheet on a tree where the verdicts are still owed. **Do not read a clause list here — a
+     list of that set has already gone stale once, on the release that changed it.** Not every
+     clause at this level is range-keyed: **LC-O15** (`OVERRIDE-SUPERSEDED`) compares a
+     declaration at theirs against the entry on disk, so a degenerate range leaves its duty
+     live and its rows above are real. Ask the reader which codes the version you are pulling
+     holds you to: `layer-drift.sh --adjudicated-codes <dist> <theirs>`.
+     Reported by the reference consumer — `0 HARD blockers.`
      with eighteen adjudications unrecorded — and reproduced on a scratch consumer: same
      tree, the pull's base gives `EXTENSION-HOOK-DRIFT` + `HARD-LAYER-ADJUDICATION-MISSING`,
      `theirs` gives `EXTENSION-OK` and nothing else. The register's own digest is

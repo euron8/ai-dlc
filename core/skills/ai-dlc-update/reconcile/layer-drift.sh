@@ -213,13 +213,21 @@ emit() {
 
 # --- A DEGENERATE RANGE DISARMS EVERY ADJUDICATED ARM, SILENTLY -----------------------------
 #
-# THE STATE THIS MAKES VISIBLE. Two clauses sit at `level: ADJUDICATED` — LC-E4
-# (`EXTENSION-HOOK-DRIFT`) and LC-E14 (`EXTENSION-ANCHOR-DRIFT`) — and BOTH are computed
-# `base..theirs`. `HARD-LAYER-ADJUDICATION-MISSING` (LC-A1) is demanded only on rows those
-# clauses produce. So when BASE and THEIRS resolve to the SAME commit there is no drift, no rows,
-# no duty, and `hard-blockers.sh` prints a clean sheet on a tree where every adjudication is
-# still owed. The check-that-cannot-fail defect, in the tool built to prevent it — which is
-# `SKILL.md` step 7's own phrasing, in the step that was prescribing it.
+# THE STATE THIS MAKES VISIBLE. Most clauses at `level: ADJUDICATED` are computed
+# `base..theirs`, and `HARD-LAYER-ADJUDICATION-MISSING` (LC-A1) is demanded only on rows a
+# clause at that level produces. So when BASE and THEIRS resolve to the SAME commit those arms
+# yield no drift, no rows and no duty, and `hard-blockers.sh` prints a clean sheet on a tree
+# where the adjudications are still owed. The check-that-cannot-fail defect, in the tool built
+# to prevent it — which is `SKILL.md` step 7's own phrasing, in the step that was prescribing it.
+#
+# THIS COMMENT AND THE ROW BELOW USED TO NAME THE TWO CLAUSES, AND THAT LIST ROTTED THE FIRST
+# TIME THE LEVEL SET CHANGED. v0.314.0 promoted LC-E6 and LC-O15, and LC-O15 is NOT range-keyed
+# — it compares a declaration at THEIRS against the entry on disk — so "a degenerate range
+# disarms EVERY adjudicated arm" stopped being true while the sentence asserting it stayed. The
+# level set is already derivable (`--adjudicated-codes`, joined at build time by I58); which of
+# those arms is range-keyed is not, so neither is claimed. What is stated is the part that holds
+# for any set: this run cannot answer the drift-keyed questions, so its silence on them is not
+# evidence.
 #
 # REPORTED BY THE REFERENCE CONSUMER AND REPRODUCED HERE on a scratch consumer before this was
 # written, because a gate that prints zero is the shape this repo keeps shipping and a fix aimed
@@ -258,7 +266,7 @@ if [ "$MODE" = classify ]; then
   _b="$(git -C "$DIST" rev-parse --verify --quiet "${BASE}^{commit}" 2>/dev/null || true)"
   _t="$(git -C "$DIST" rev-parse --verify --quiet "${THEIRS}^{commit}" 2>/dev/null || true)"
   if [ -n "$_b" ] && [ "$_b" = "$_t" ]; then
-    emit DRIFT-RANGE-DEGENERATE "(this run)" "${BASE}..${THEIRS}" "base and theirs resolve to the SAME commit ($_b), so nothing can have drifted between them and EVERY arm keyed on that range is structurally unable to fire — including both ADJUDICATED clauses (EXTENSION-HOOK-DRIFT, EXTENSION-ANCHOR-DRIFT), and therefore HARD-LAYER-ADJUDICATION-MISSING, which is demanded only on their rows. A clean sheet from THIS run is not evidence the adjudications are recorded; it is evidence they were never asked for. Re-run with the PULL's base to adjudicate the layer. Passing theirs as the base is correct for unregistered-drift.sh, whose statuses mean 'consumer edits vs base' — it is not correct here, and SKILL.md step 7 now says so per script."
+    emit DRIFT-RANGE-DEGENERATE "(this run)" "${BASE}..${THEIRS}" "base and theirs resolve to the SAME commit ($_b), so nothing can have drifted between them and EVERY arm keyed on that range is structurally unable to fire — including the ADJUDICATED clauses computed base..theirs, and therefore the HARD-LAYER-ADJUDICATION-MISSING duty demanded on their rows. Run \`layer-drift.sh --adjudicated-codes <dist> <theirs>\` for the clause codes this version holds you to; the ones NOT keyed on the range (LC-O15's OVERRIDE-SUPERSEDED compares a declaration at theirs against the entry on disk) are unaffected and their rows above are real. A clean sheet from THIS run is not evidence the adjudications are recorded; it is evidence the drift-keyed ones were never asked for. Re-run with the PULL's base to adjudicate the layer. Passing theirs as the base is correct for unregistered-drift.sh, whose statuses mean 'consumer edits vs base' — it is not correct here, and SKILL.md step 7 now says so per script."
   fi
 fi
 
@@ -949,17 +957,17 @@ while IFS= read -r f; do
       if [ "$ent_nparts" -gt 1 ]; then
         if [ -n "$s_env" ]; then
           emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-            "replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+            "replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records `still-additive` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
         else
           emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-            "retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+            "retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records `still-additive` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
         fi
       elif [ -n "$s_env" ]; then
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-          "replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+          "replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records `still-additive` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       else
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-          "core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. Report-only: the operator decides, and a consumer that still wants the shadow for its own reasons keeps it."
+          "core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records `still-additive` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       fi
     done <<< "$(shadow_parts "$s_shadows")"
   done <<< "$(supersessions_of "$THEIRS")"

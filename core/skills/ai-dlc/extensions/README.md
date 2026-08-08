@@ -83,7 +83,7 @@ push_candidate: false                  # true = generalizable; feeds the ai-dlc-
 fixtures: check-foo-bypass             # OPTIONAL, `kind: check` only — see below
 extends: '#Empirical gate validation'  # OPTIONAL — narrows drift to one section; REQUIRED on kind: qualifier
 position: append                       # `kind: qualifier` ONLY — append | prepend
-conforms_to: 16                         # the contract version you migrated this entry to [LC-C1]
+conforms_to: 17                         # the contract version you migrated this entry to [LC-C1]
 ---
 
 <the additive rule / check / step body>
@@ -321,7 +321,7 @@ times on first contact gets disabled and then catches nothing.
 - **[LC-E5]** WARN — an extension does not restate a core section. A duplicate predating the
   entry's own base has been shipping unreported for some number of releases; retire it, or refile
   it as an override with a `base_sha` if it hardens core.
-- **[LC-E6]** WARN — when upstream absorbs an entry's content, DELETE the entry. Matched by title,
+- **[LC-E6]** ADJUDICATED — when upstream absorbs an entry's content, DELETE the entry. Matched by title,
   so absorption under a different number is still caught. Upstream never writes this directory, so
   it cannot remove the entry for you, and an absorbed-but-kept extension is the single most common
   way a layer rots.
