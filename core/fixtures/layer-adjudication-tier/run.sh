@@ -256,8 +256,10 @@ fi
 
 # --- Part 8: a DEGENERATE RANGE disarms every ADJUDICATED arm, and must say so --------------
 #
-# Both ADJUDICATED clauses are computed base..theirs, and LC-A1's duty is demanded only on rows
-# they produce. So `base == theirs` yields no drift, no duty, and a clean sheet on a tree where
+# THE SEEDED contract puts ONE clause at ADJUDICATED and it is computed base..theirs, which is
+# the shape this arm is about; the REAL contract's set is derived and must not be restated here
+# (v0.314.0 added a clause that is NOT range-keyed, and every hand-list of that set went stale
+# the same day). LC-A1's duty is demanded only on rows an ADJUDICATED clause produces. So `base == theirs` yields no drift, no duty, and a clean sheet on a tree where
 # every verdict is owed — reported by the reference consumer as `0 HARD blockers.` against
 # eighteen unrecorded adjudications, and reproduced here.
 #

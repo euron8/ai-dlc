@@ -156,7 +156,7 @@
 # the same declaration-without-a-mechanism defect wearing a new file's clothes. They are named
 # in the CHANGELOG as the backlog and arrive with their enforcers, one release at a time.
 
-contract_version: 16
+contract_version: 17
 
 # WHERE A CONSUMER'S CROSSWALK ROWS LIVE. Declared here, and here rather than in
 # `core-manifest.md`, for a reason that was measured rather than argued.
@@ -590,7 +590,7 @@ clauses:
 
   - id: LC-O15
     subject: override
-    level: WARN
+    level: ADJUDICATED
     since: 14
     normative: >-
       An override ANY ONE of whose `shadows:` anchors matches a core `override_supersessions:`
@@ -606,6 +606,12 @@ clauses:
       clause exists for. The remedy differs with the count and the row states which applies: a
       one-anchor entry is retired, a multi-anchor entry has that anchor removed from `shadows:`
       and the rest left byte-untouched, because the retire stamp deletes the whole file.
+      ADJUDICATED at contract_version 17. UNLIKE THE OTHER CLAUSES AT THIS LEVEL, THIS ONE IS
+      NOT KEYED ON `base..theirs`: it compares a declaration at THEIRS against the entry on
+      disk, so it is level-triggered and a degenerate range does NOT disarm it. Its duty
+      therefore survives an invocation that silences every drift-keyed arm. Keeping the shadow
+      is a recordable verdict -- a consumer may want it for its own reasons -- so what blocks is
+      the absence of an answer, never the answer itself.
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-SUPERSEDED
@@ -829,13 +835,20 @@ clauses:
 
   - id: LC-E6
     subject: extension
-    level: WARN
+    level: ADJUDICATED
     since: 1
     normative: >-
       When upstream absorbs an entry's content, the entry is DELETED. Matched by title, so
       absorption under a different number is still caught. Upstream never writes this
       directory, so it cannot remove the entry for the consumer, and an absorbed-but-kept
       extension is the single most common way a layer rots.
+      ADJUDICATED at contract_version 17, and the reason is the clause's own trigger: it is
+      EDGE-triggered on `base..theirs`, so it fires on the ONE pull that lands the absorption
+      and never again -- afterwards the same duplicate presents as LC-E5, which prescribes the
+      same deletion in a weaker voice. A WARN on a signal with one chance to be read is a
+      signal that gets read when someone happens to look. The verdict may be `retire`,
+      `still-additive` or `contradicts-core`; keeping the entry is a recordable answer, and
+      that is the difference between adjudication and prohibition.
     prose_home: core/skills/ai-dlc/extensions/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: EXTENSION-RETIRE-CANDIDATE

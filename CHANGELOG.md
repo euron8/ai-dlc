@@ -34,6 +34,50 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.314.0] — 2026-08-08
+
+### LC-E6 and LC-O15 are ADJUDICATED, and promoting them made a hand-list in three files go stale
+
+Plan item 6 / R6, taken only after both halves of its gate were MEASURED rather than guessed —
+this item's gate had already been wrong twice. `contract_version` **16 → 17**.
+
+**THE GATE, ANSWERED.** R6 asks for a candidate-set count before promoting, because
+`level: ADJUDICATED` means an unrecorded row BLOCKS the apply and a large set wedges first
+contact. Measured against the reference consumer over its real pull range:
+
+```
+LC-O15  OVERRIDE-SUPERSEDED         1   true positive (v0.312.0 fixed the join that hid it)
+LC-E6   EXTENSION-RETIRE-CANDIDATE  0   and the code is now PROVEN to fire (v0.313.0)
+HARD-LAYER-ADJUDICATION-MISSING    12 -> 13   the whole cost of this release, on that tree
+```
+
+Both preconditions were shipped first and neither was assumed: LC-O15's zero was FALSE and is
+fixed in v0.312.0; LC-E6's zero was a SILENCE and is now a demonstrated firing case in v0.313.0.
+Promoting on either unexamined zero would have promoted exactly what this repo audits for.
+
+**WHY EACH ONE, IN ITS OWN TERMS.** LC-E6 is EDGE-triggered — it fires on the one pull that lands
+an absorption and never again, after which the same duplicate presents as LC-E5 in a weaker
+voice. A WARN on a signal with one chance to be read is a signal that gets read when someone
+happens to look. LC-O15 is the only override status whose answer is to stop shadowing, and the
+register held **0 `retire` rows across 61 adjudications** while it sat at WARN.
+
+**KEEPING THE THING IS A RECORDABLE VERDICT.** `still-additive` and `contradicts-core` are in the
+vocabulary beside `retire`; what blocks is the absence of an answer, never the answer. The four
+`OVERRIDE-SUPERSEDED` details said *"Report-only: the operator decides"*, which the promotion
+makes false about its own effect, so all four now state the duty and name the escape.
+
+**AND THE PROMOTION BROKE A SENTENCE IN THREE FILES, WHICH IS THE FINDING WORTH KEEPING.**
+`layer-drift.sh`'s `DRIFT-RANGE-DEGENERATE` row, its header comment, and `SKILL.md` step 7 each
+said *"both ADJUDICATED clauses … are computed base..theirs, and
+`HARD-LAYER-ADJUDICATION-MISSING` is demanded only on rows they produce"* — a hand-list of a set
+the reader already derives. **LC-O15 is not range-keyed**: it compares a declaration at THEIRS
+against the entry on disk, so a degenerate range leaves its duty live and "a degenerate range
+disarms EVERY adjudicated arm" stopped being true the moment the level changed. All three now
+point at `layer-drift.sh --adjudicated-codes`, which is the derivation I58 already joins at build
+time, and claim only what holds for any set. The one thing that genuinely is not derivable —
+which arms are range-keyed — is stated as the exception rather than folded into a list that will
+rot again.
+
 ## [0.313.0] — 2026-08-08
 
 ### LC-E6's zero was a silence, not a measurement — no run anywhere had ever produced the status

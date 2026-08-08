@@ -91,7 +91,7 @@ status that stops `apply`); **WARN** reports and never blocks.
 - **[LC-O12]** WARN — every `shadows:` anchor still FORWARD-matches at PULL time. LC-O11 asks the
   same question at authoring time, in a validator you run and can skip; the pull cannot be
   skipped, and it reads the anchor against the INCOMING core rather than the copy on disk.
-- **[LC-O15]** WARN — an entry ANY ONE of whose `shadows:` anchors matches a core
+- **[LC-O15]** ADJUDICATED — an entry ANY ONE of whose `shadows:` anchors matches a core
   `override_supersessions:` declaration is reported RETIRABLE, not merely drifted. Every other
   status here asks whether the entry is still correct; this one asks whether it is still NEEDED,
   and it is the only one whose answer is to stop shadowing. A superseded override otherwise
