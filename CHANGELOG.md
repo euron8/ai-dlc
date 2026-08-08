@@ -34,6 +34,75 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.316.0] — 2026-08-08
+
+### The resolution driver overwrote itself mid-run, and bash resumed at its saved offset inside the new file
+
+**REPORTED BY THE REFERENCE CONSUMER with receipts, and REPRODUCED HERE at ground truth before
+anything was touched.** The attribution was EXACT — the second consumer report in a row to name
+the right program, after three that did not.
+
+**THE MECHANISM WAS SETTLED BY EXPERIMENT FIRST, because the answer decides whether the defect
+is live or latent.** bash executes a script by reading it incrementally and keeping a byte
+offset into the file:
+
+```
+in-place overwrite (cp, same inode)   bash resumed inside the NEW text, ran the
+                                      replacement's tail, and exited rc=0
+atomic replace (mv, new inode)        unaffected; the original ran to completion
+no replacement (control)              unaffected
+```
+
+`skills/*` maps to `.claude/%s`, so `core/skills/ai-dlc-update/reconcile/apply.sh` lands at
+`.claude/skills/ai-dlc-update/reconcile/apply.sh`; it is UPSTREAM-ONLY on any range that changed
+it, so phase 1 writes it; and SKILL.md step 7 tells the session to run `reconcile/apply.sh
+<dist> <base> <consumer> <theirs>` — a relative path inside the installed skill, i.e. that exact
+copy. `overwrite_from_theirs()` wrote with `git show > "$cons"`, a shell redirect:
+open+truncate+write, **same inode**.
+
+**REPRODUCED on a scratch consumer installed at 0.310.0 and pulled to 0.312.0** (apply.sh's
+first differing byte is 2830 of 50463, well before bash's read offset at phase 1). Same dist,
+same range, same tree, same 8 pure-applies; the only variable is where the running copy lives:
+
+```
+running copy = the consumer's own     rc=2, `line 251: syntax error near ';;'`,
+                                      stamp withheld, .ai-dlc-applying LEFT, tree partial
+running copy = out-of-tree (control)  rc=0, no stderr, re-stamped 0.312.0, marker cleared
+```
+
+**THE ABORT IS THE LUCKY END OF THE BAND.** Whether the shifted bytes fail to parse or merely
+parse into something else is not under anyone's control — the bash arm above shows the same
+mechanism producing rc=0 with the wrong code executed. A driver that silently skips phases and
+then re-stamps is the failure this one must not have.
+
+**THE FIX IS THE IDIOM THIS FILE ALREADY USED AT FIVE OTHER WRITE SITES** (`.incoming.$$` + `mv`).
+rename(2) swaps the directory entry and leaves the old inode alive for whoever holds it open, so
+the run finishes on the version the operator invoked and the next run uses the new one. Verified
+by re-running the same ground-truth reproduction with a consumer that carries the fix: rc=0, no
+stderr, theirs landed, stamp advanced, marker cleared, no litter — **identical to the control**.
+
+It also removes a second, quieter defect in the same function: the redirect truncated `$cons`
+BEFORE `git show` ran, so a failed show left an **empty core file** where the working one had
+been. The one other direct redirect (the `provenance-block.json` drift-refile) now routes
+through the same helper, so there is one writer with one set of guarantees.
+
+**AND THE SELF-REPLACEMENT IS NOW REPORTED, not left to be inferred.** A new `RESOLVED
+driver-self-update` row: the rename makes it safe, but every row after phase 1 was produced by
+the OLD driver, so a range that changed how apply.sh classifies or orders work was adjudicated
+by the pre-range rules. Re-running is idempotent and is the only way to see the new driver's
+reading of the same range.
+
+**THE FIX PROTECTS THE NEXT PULL, NOT THE ONE THAT DELIVERS IT** — the running copy comes from
+BASE. Stated because it decides how the verification arm must be built, and the first attempt at
+that arm had it backwards.
+
+New fixture `apply-self-overwrite`: 5 assertions, 3 mutants, 1 unmutated control, driving the
+shipped script through a synthetic pull in which apply.sh is its own write target. **One arm was
+removed for being vacuous rather than shipped** — an assertion that a failed fetch leaves the
+file intact, which a mutant restoring the redirect SURVIVED, because a THEIRS lacking the path
+is not classified as a pure-apply and never reaches the writer at all. That direction is now a
+declared gap with its reason. The three mutants are scoped so each reds exactly one arm.
+
 ## [0.315.0] — 2026-08-08
 
 ### A fixture that ships to every consumer resolved its sources only in the distribution, so it could not run on any of them

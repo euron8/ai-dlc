@@ -183,10 +183,18 @@ and why `--stamp retire` is the WRONG remedy there.
 the item's text ran two of them together; the counterfactual is settled (**96.1%** reduction, 12.0 MB
 → 470 KB) and the defects are all in the RESIDUE and all core's. See §*What item 19 measured*.
 
-**NEXT ACTION FOR THIS REPO: item 21** — `apply.sh` overwrites itself mid-run. It is a reported live
-defect in the one program that delivers every pull, and the plan already states how to open it:
-settle by EXPERIMENT whether bash re-reads a replaced script mid-execution, before touching
-anything. Item 12 and item 22 remain available and gate nothing.
+**~~ITEM 21~~ — DONE.** v0.316.0. `apply.sh` overwrote itself mid-run; **REPRODUCED at ground
+truth with a control** and the report's attribution is EXACT — the second in a row, after three
+that named the wrong program. See §*What item 21 measured*.
+
+**NEXT ACTION FOR THIS REPO: item 23a** — whether the budget thresholds are attainable by
+consolidation at all. **The first measurement says no** (four live artifacts at 117379 tok
+against a 66000-tok pool, 178%, after a 96.1% reduction), and it can invalidate 23b/23c/23d, so
+it goes first. Then 23b — the artifact-consolidation refactor, added 2026-08-08 on operator request out
+of item 19. Read the review before scoping it: **the reduction is not the defect and must not be
+touched**; the residue is. 23b (the inlet) is the real methodology change and is **explicitly not
+sized** — it opens with a derivation, not with code. Item 12 and item 22 remain available and gate
+nothing.
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -260,7 +268,11 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~13~~ | ~~**8** — push-candidate ledger triage~~ | **CORE'S HALF DONE** — v0.310.0 (#432). The run's only CLOSE-CANDIDATE was FALSE; the guard against it existed as a NOTE, not a mechanism. The remaining triage needs the receipts re-anchored, which is the operator's. See §*What item 8's core half measured* | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | ~~14~~ | ~~**6** — promote LC-E6/LC-O15~~ | **DONE** — v0.311.0 (#434), v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). Both zeros were unreadable: LC-O15's was FALSE, LC-E6's was a SILENCE. Two unrelated `apply.sh` defects fell out of driving it. See §*What item 6 measured* |
 | ~~15~~ | ~~**19** — review graph's artifact consolidation~~ | **DONE — no release, by the item's own terms.** `docs/reviews/graph-artifact-consolidation-review.md`. Consolidation is load-bearing and the recurrence is structural; the defects are core's step leaving 33 working files (1.80 MB, 13.7%) in the durable area root and prescribing area-root paths for per-sprint work. See §*What item 19 measured* |
-| **16** | **21** — `apply.sh` overwrites itself mid-run | **← THE NEXT ITEM.** A reported live defect in the program that delivers every pull. Settle the bash-re-reads question by experiment FIRST |
+| ~~16~~ | ~~**21** — `apply.sh` overwrites itself mid-run~~ | **DONE — v0.316.0.** **REPRODUCED at ground truth with a control**, and the report's attribution is EXACT — the second in a row. bash resumes at its saved byte offset inside the new file; the fix is the `.incoming.$$` + `mv` idiom the file already used at five sites. One fixture arm was **removed for being vacuous** rather than shipped. See §*What item 21 measured* |
+| **17** | **23a** — are the budget thresholds attainable at all? | **← THE NEXT ITEM.** Operator request 2026-08-08. **First measurement says NO**: after 19 passes and a 96.1% reduction the four live artifacts are **117379 tok against a 66000 pool — 178%**. It can invalidate everything below it, which is why it is first |
+| — | **23b** — artifact-consolidation's residue | Bounded and core-side: give the step's outputs a sprint slot, and say whether the drafts are retired or retained. **Derive the re-home refusal set first — at least two of the 33 files carry no recoverable sprint** |
+| — | **23c** — the inlet | The real methodology change and **NOT SIZED**. Opens with a derivation over 4 validators + 10 step files, not with code. 23b first |
+| — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report** |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
 | — | **21** — `apply.sh` overwrites itself mid-run | REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
 | — | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
@@ -597,6 +609,123 @@ before you write code.
     file is the question to settle FIRST, by experiment, not by recall: the answer decides whether
     this is a live defect or a latent one, and a fix aimed at the wrong half leaves it.
 
+23. **Refactor `steps/artifact-consolidation.md` so the process stops leaving its residue in the
+    durable area.** **OPERATOR REQUEST, 2026-08-08**, made after reading item 19: *"we need to
+    include the artifact-consolidation refactor as a step in this plan."*
+
+    **THE REVIEW IS THE SPEC AND IT MUST BE READ FIRST** —
+    [`docs/reviews/graph-artifact-consolidation-review.md`](../reviews/graph-artifact-consolidation-review.md),
+    §*What item 19 measured*. Two things in it bind this item's scope. **Do not touch the
+    reduction**: 19 passes over 4 artifacts in 66 days is a drain matched to an inlet, the
+    counterfactual is a 96.1% reduction (12.0 MB → 470 KB), and nothing measured argues for
+    consolidating less often. **And the recurrence is not the defect** — a fix aimed at "make it
+    stop happening so often" is aimed at the wrong half.
+
+    **23a — ARE THE BUDGET THRESHOLDS EVEN ATTAINABLE BY CONSOLIDATION? TAKE THIS FIRST.**
+    **OPERATOR REQUEST, 2026-08-08**, and it names a real gap in item 19's review: *"I did not
+    see an analysis of the maximum artifact sizes that are required to pass gate check and
+    whether or not they are feasible to attain … The maximum size constraints need to be
+    attainable via artifact-consolidation."* Correct — the review measured what consolidation
+    ACHIEVED and never asked what it must achieve. **A first measurement was taken when the
+    request landed; it is a POINTER, and every figure is to be re-derived.**
+
+    ```
+    validate-artifact-budget.sh against graph, 2026-08-08, read-only
+      whole-read pool                          66000 tok  (33% of the analyst's 200000-tok
+                                                           window, from team-roles/analyst.md)
+      REPORTED breach                         275812 tok  417% of the pool
+      the FOUR LIVE artifacts alone           117379 tok  178% of the pool
+        carry-over-backlog.md  42554   prd.md 32619
+        architecture.md        21524   product-brief.md 20682
+    ```
+
+    **THE ANSWER LOOKS LIKE NO, AND THAT IS THE POINT OF THE ITEM.** After 19 passes and a 96.1%
+    reduction the four live artifacts are still **178% of the pool**, and `carry-over-backlog.md`
+    alone is **64% of it**. graph reached the same conclusion from the other side at s286, whose
+    sprint-status records a *"documented irreducible floor (60k non-binding aim)"*. **If the
+    threshold is unreachable, the refactor's shape changes** — a remedy the gate names but no
+    amount of correct execution can satisfy is the inert-mechanism class this repo keeps
+    shipping, and it is worse than no threshold because it trains the operator to ignore the row.
+
+    **AND THE REPORTED NUMBER IS NOT THE ONE TO REASON FROM.** Two defects were visible in the
+    same run and both need confirming before anything is built on them:
+    - **The breach sums 30 FILES under a label reading `(4 planning artifacts)`.** The sweep is
+      basename-keyed, and the artifact-path migration moved every historical
+      `<kind>-s<N>.md` into `s<N>/<kind>.md` — so 25-plus per-sprint `architecture.md` archives
+      now carry the same basename as the live one and are counted as live. **A migration-induced
+      regression in the budget check**, and the count in the label is exactly the underived
+      assertion core Rule 31 exists for, inside the validator that enforces budgets.
+    - **The four artifacts consolidation targets are in no `BUDGETS` table row.** That table
+      names `gate-log.md`, `compaction-log.md`, `pipeline-continuation-log.md`,
+      `context-mode-protection-log.md`, `audit-anchors.md` and `pipeline-snapshot.md` — logs and
+      the snapshot. The planning artifacts are governed only by the pooled sum, so **no single
+      one of them has a threshold it can be measured against**, which is why "what is the maximum
+      size" has no answer to quote today.
+
+    **WHAT 23a MUST PRODUCE.** A stated, derived answer to: what is each artifact's IRREDUCIBLE
+    floor — the current-state content that cannot be relocated without losing something a reader
+    needs — and does the sum of those floors fit the pool? Derive the floor, do not estimate it:
+    Rule 13 locked requirements cannot be retired by consolidation at all, and the remedy text
+    already says so. **If the floors do not fit, say so plainly and the finding is that the
+    threshold, the pool share, or the artifact set is wrong** — not that graph consolidated
+    badly.
+
+    **23b — THE RESIDUE. Bounded, core-side, and shippable on its own.** Two edits to the step,
+    both with their control already measured in item 19:
+    - **Give the step's outputs a sprint slot.** `:41` prescribes
+      `_bmad-output/planning-artifacts/consolidation-manifest-<artifact>.md` — an AREA-ROOT path
+      for a per-sprint work product. Control on the absence: `s<N>|sprint slot` returns **rc=1**
+      over the step and matches five sibling step files. Live consequence today:
+      `consolidation-manifest-prd.md` at the root AND `s300/consolidation-manifest-prd.md`, same
+      basename, two homes, nothing declaring which is current — **the exact condition item 10 was
+      opened to eliminate**, re-created by a step the migration did not touch.
+    - **Say whether the drafts are retired at Step 6 or retained as evidence.** `:51` writes two
+      drafts to disk; `:93` replaces the live artifact and never mentions the draft again.
+      Control: `delete|remove|rm|clean ?up|discard|retire|unlink` returns **rc=1** over the step
+      and matches three sibling steps. Either answer is defensible. **The silence is not**, and it
+      is how eleven drafts accumulated, one of them a 1383-line near-duplicate of the 1530-line
+      live PRD differing on 155 lines.
+
+    **DERIVE THE RE-HOME REFUSAL SET BEFORE WRITING THE EDIT.** The 33 existing root files belong
+    to sprints S243 through S301 and **at least two carry no recoverable sprint at all** (they say
+    `S999`). A mechanical re-home therefore has refusals, and this repo's rule is that they are
+    measured and reported, never assumed empty. **They must NOT be deleted**: `consolidation-
+    coverage-*` and `consolidation-validation-*` cite the draft paths as their no-loss evidence,
+    so deletion breaks the record the pass produced. This is a HOMING problem, not a garbage one.
+
+    **23c — THE INLET. The real methodology change, and it is NOT SIZED.** The durable artifacts
+    refill because every sprint writes its own output into them: **7 of 7 headings added to
+    `product-brief.md` in the six days after its 08-02 pass are sprint-scoped**, five carrying an
+    explicit `S301` token. Move a sprint's LOCKED block and changelog into `s<N>/` — the slot item
+    10 already built — and the inlet closes, at which point consolidation degenerates from a
+    19-pass recurring cost into a rare genuine refactor. graph has already proven the containment
+    half of this itself, in the s300/s301 archive-and-reset.
+
+    **DO NOT START 23c BY WRITING CODE.** `LOCKED_REQUIREMENTS` is read by **four core validators
+    and ten step files**. One datum in its favour: `validate-locked-anchor.sh:129` already
+    parameterises the source-of-record (`DEFAULT_SOR_BASENAME`, overridable `--sor`). Whether the
+    other thirteen sites move is **UNDERIVED, and deriving it is the whole of 23c's first step.**
+    If the derivation says they do not move cheaply, say so and stop — 23b stands alone.
+
+    **23d — SHOULD `artifact-consolidation` BE ITS OWN SKILL (`ai-dlc-artifact-consolidation`)?**
+    **OPERATOR REQUEST, 2026-08-08.** A DECISION, not a build, and **it must not be answered
+    before 23a and 23b report** — the right packaging follows from what the thing turns out to be,
+    and today it is a 103-line step file whose defects are a missing sprint slot and a missing
+    cleanup sentence. Derive rather than assert, and the derivation has a shape this repo already
+    uses: what does `ai-dlc-update` get from being a separate skill that a step does not? Its own
+    resident rulebook, its own fixtures, its own invocation surface, its own version story — and
+    against that, a second skill is a second thing to install, reconcile, drift-check and pull.
+    The honest inputs are: how many core files reference the step (measured: `SKILL.md`,
+    `route.md`, `carry-over-evaluation.md`, `architect.md`, `validate-artifact-budget.sh`), what a
+    consolidation pass actually dispatches (an `analyst` under Rule 24), and whether it is
+    operator-invoked on its own cadence — which it is, and which is the strongest argument FOR.
+    **Do not answer it from the size of the file.**
+
+    **ORDER: 23a → 23b → 23c, with 23d after 23b.** Not preference. 23a can invalidate the others
+    — if the thresholds are unattainable, a tidier process still fails the gate and the finding is
+    somewhere else entirely. 23b before 23c because 23c changes what a sprint writes, so doing it
+    first means re-homing residue 23c would have stopped producing.
+
 22. **A stale path inside a layer entry goes undetected.** **REPORTED BY THE CONSUMER 2026-08-08,
     NOT YET REPRODUCED HERE.** They cite `tea-consumer.md:18` in their own tree as an entry body
     naming a path that no longer resolves, with nothing reporting it. **The citation is into the
@@ -638,6 +767,55 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 21 measured (reproduced, attribution exact, and one fixture arm was vacuous)
+
+v0.316.0. **The consumer was right about the program this time** — the second report in a row,
+after items 13/17/18 each named the wrong one.
+
+**THE MECHANISM WAS SETTLED BY EXPERIMENT BEFORE ANYTHING WAS TOUCHED**, as this item required,
+because the answer decides live-versus-latent. bash reads a script incrementally, keeping a byte
+offset:
+
+```
+in-place overwrite (cp, same inode)   bash resumed inside the NEW text, ran the
+                                      replacement's tail, and exited rc=0
+atomic replace (mv, new inode)        unaffected; the original ran to completion
+no replacement (control)              unaffected
+```
+
+**THEN REPRODUCED AT GROUND TRUTH.** Scratch consumer installed at 0.310.0, pulled to 0.312.0.
+Same dist, same range, same tree, same 8 pure-applies; the ONLY variable is where the running copy
+lives:
+
+```
+running copy = the consumer's own     rc=2, `line 251: syntax error near ';;'`,
+                                      stamp withheld, .ai-dlc-applying LEFT, tree partial
+running copy = out-of-tree (control)  rc=0, no stderr, re-stamped 0.312.0, marker cleared
+```
+
+`overwrite_from_theirs()` wrote with `git show > "$cons"` — open+truncate+write, SAME INODE — and
+`apply.sh` is itself in the set it writes, on the copy SKILL.md step 7 tells the session to run.
+
+**THE ABORT IS THE LUCKY END OF THE BAND.** The bash arm shows the same mechanism producing rc=0
+with the wrong code executed. **Do not remember this defect as "it fails loudly."**
+
+**THE FIX IS THE IDIOM THE FILE ALREADY USED AT FIVE OTHER SITES** — `.incoming.$$` + `mv`.
+Verified by re-running the same reproduction with a consumer carrying the fix: rc=0, no stderr,
+theirs landed, stamp advanced, marker cleared, no litter — **identical to the control**, plus the
+new `driver-self-update` row.
+
+**THE FIX PROTECTS THE NEXT PULL, NOT THE ONE THAT DELIVERS IT.** The running copy comes from
+BASE. The first attempt at the verification arm had this backwards and would have tested nothing.
+
+**AND ONE FIXTURE ARM WAS REMOVED FOR BEING VACUOUS RATHER THAN SHIPPED.** The repair's second
+half — the redirect truncated `$cons` BEFORE `git show` ran, so a failed show left an EMPTY core
+file — was asserted by driving a THEIRS that lacks the path. **A mutant restoring the redirect
+SURVIVED it**, which is what proved the arm could not fire: a THEIRS lacking the path is not
+classified as a pure-apply, so the writer is never reached. The remaining ways to fail a `git
+show` on a path that IS classified are a corrupted or unreadable object, and a permission-based
+arm is exactly the one that passes for the wrong reason when the suite runs as root. It is a
+declared gap with its reason, not an assertion.
 
 ## What item 19 measured (the reduction is fine; the residue is the defect, and it is core's)
 
