@@ -263,17 +263,26 @@ a skill was said to bring buy nothing here, measured, and the decider is the sub
 **70**. See §*What item 23d decided*, **which also states the three things that would re-open it**,
 so the answer is falsifiable rather than permanent.
 
-**NEXT ACTION FOR THIS REPO: item 23c** — the inlet, and the last of item 23. It is the real
+**NEXT ACTION FOR THIS REPO: item 27**, then 23c. **27 jumps the queue and 28 does not.** 27 was
+reported and REPRODUCED on 2026-08-08: a stale `skill_commit` makes 28 machinery files read as
+consumer drift on the NEXT pull, with a printed remedy that reverts upstream's own text — verbatim
+the failure v0.309.0 fixed, arriving through the stamp instead of through the scan. It is on the
+delivery path, where items 17, 18 and 21 all landed. **Item 28 gates nothing and can wait.**
+
+**THEN: item 23c** — the inlet, and the last of item 23. It is the real
 methodology change and is **explicitly NOT SIZED**: it opens with a derivation over 4 validators and
 10 step files, not with code, and if that derivation says the sites do not move cheaply the correct
 outcome is to say so and stop. **23a removed its urgency argument — the pool does not breach — and
-left its correctness one intact.** Item 12, item 22, item 24, item 25 and item 26 remain available and
-gate nothing.
+left its correctness one intact.** Item 12, item 22, item 24, item 25, item 26 and item 28 remain available
+and gate nothing.
 
-**THIS IS THE HANDOFF POINT THE SESSION THAT WROTE 23a/23b/23d RECOMMENDED.** 23c shares almost
-nothing with them: its subject is `LOCKED_REQUIREMENTS` across four core validators and ten step
-files, not the consolidation step or the budget validator. Starting it in a fresh session costs
-little and buys a clean read of this file.
+**THIS IS THE HANDOFF POINT, AND ITEM 27 REINFORCES IT RATHER THAN REPLACING IT.** The session that
+filed 27 and 28 reproduced both and stopped deliberately before building: 27 edits `apply.sh`'s stamp
+write, which is the delivery path items 17, 18 and 21 all landed in, and where a fix aimed at the
+wrong half is expensive. **Everything a fix needs is written into item 27** — both prose sites, the
+failure direction, the branch the fix must have, and the fixture gap that let it ship. 23c likewise
+shares almost nothing with the work above it: its subject is `LOCKED_REQUIREMENTS` across four core
+validators and ten step files. **Start a fresh session at item 27.**
 
 **~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
 v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
@@ -354,6 +363,8 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | **20** | **23c** — the inlet | **← THE NEXT ITEM.** **NOT SIZED.** Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
 | — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
+| **20b** | **27** — the skill stamp has two contradictory instructions and no writer | **REPORTED + REPRODUCED, attribution exact.** `SKILL.md:308` says advance, `:1414` says preserve, `apply.sh` implements preserve by never touching them. **Failure direction is item 18's, re-created through the stamp**: a stale `skill_commit` makes 28 machinery files read as consumer drift with a remedy that reverts upstream text. **Take it before 23c** |
+| — | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
@@ -986,6 +997,76 @@ before you write code.
     keyed to subject STATE, so it must be recorded AFTER any edit to the entry, and it self-expires
     the moment anyone touches it** — which is the property that makes deferring safe rather than
     permanent.
+
+27. **`SKILL.md` tells step 7 two incompatible things about the skill stamp, and `apply.sh`
+    mechanises one of them.** **REPORTED BY THE CONSUMER 2026-08-08 with a control, and REPRODUCED
+    HERE — the attribution is EXACT, the third consumer report in a row that is.**
+
+    **THE REPORT.** `apply.sh` said `RESOLVED restamp` while leaving `skill_version`/`skill_commit`
+    at `0.318.0` and writing the `0.319.0` machinery files. Their control: `apply.sh` names those
+    two fields **0** times against **2** for the rulebook fields it does write. Reproduced here
+    exactly — `grep -c` over `reconcile/apply.sh` gives **0** and **0**, and `:958-959` writes only
+    `commit:` and `version:`. Widened: **NOTHING in the distribution writes either field.** Only two
+    files name them at all — `SKILL.md` (10 mentions, all prose) and `self-update-gate.sh` (1). The
+    fields are advanced by the AGENT following prose, which is a duty with no mechanism.
+
+    **AND THE PROSE CONTRADICTS ITSELF, 1100 LINES APART. THIS IS THE ACTUAL DEFECT.**
+    - `SKILL.md:308` — step 2's defer branch: *"Advance `skill_version`/`skill_commit` with that
+      apply rather than here."*
+    - `SKILL.md:1414` — step 7's re-stamp: *"set `version`/`commit` = theirs, **preserving
+      `skill_version`/`skill_commit`**."*
+
+    Step 7 is told to PRESERVE exactly the fields step 2 delegated to it. Whichever the agent reads,
+    the other is disobeyed, and `apply.sh` implements `:1414` by never touching them. **The consumer
+    hit the seam.** Do not file this as "add a write to `apply.sh`" — that would satisfy `:308` and
+    break `:1414`, which is right on its own terms: **a rulebook-only apply must not claim a
+    machinery version it did not install.**
+
+    **THE FAILURE DIRECTION IS THE ONE ITEM 18 EXISTS FOR, RE-CREATED.**
+    `unregistered-drift.sh` emits `CORE-AT-SELF-UPDATE` — *"Not drift, and no action"* — for a
+    machinery file byte-identical to the distribution at `skill_commit`, and it reads `skill_commit`
+    from the stamp itself. With a STALE `skill_commit`, the machinery files this apply just wrote
+    from THEIRS are no longer byte-identical to that ref, so the suppression does not apply and
+    **each one reads as consumer drift and draws a HARD status whose printed remedy is to revert
+    upstream's own text.** That is verbatim the failure v0.309.0 fixed, arriving through the stamp
+    instead of through the scan. **28 files are in both the machinery set and that scan** (control:
+    72 machinery files outside it). The reference consumer set the fields by hand and is not
+    exposed; the next consumer who does not notice is.
+
+    **THE FIX IS A BRANCH, AND IT BELONGS IN THE PROGRAM RATHER THAN IN TWO PROSE SITES.** Step 7
+    preserves the skill fields normally and advances them ONLY when this apply carried the deferred
+    machinery slice. The caller knows which case it is — step 2 emitted `SELF-UPDATE-DEFER` — so the
+    shape to aim at is an explicit flag `apply.sh` takes, with both prose sites pointing at it
+    instead of at each other. **Derive before building:** whether any existing caller would change
+    behaviour, and whether `mech_fail` interacts (a withheld stamp must withhold BOTH pairs, not
+    one). **A fixture must drive the deferred-slice path specifically** — the existing stamp
+    fixtures drive the rulebook pair only, which is why this shipped.
+
+28. **A `subject_digest` is unreadable once its own row stops blocking.** **REPORTED BY THE CONSUMER
+    2026-08-08 and REPRODUCED HERE — attribution exact.**
+
+    **THE REPORT.** To re-read the digest they had recorded a verdict under, the operator had to
+    **withhold this consumer's LC-O15 rows to re-fire the block**, read the key, then restore the
+    register and verify it byte-identical by sha256. Deliberately breaking your own gate state is
+    not a workaround, it is the absence of a reader.
+
+    **REPRODUCED.** The digest reaches the operator only inside the
+    `HARD-LAYER-ADJUDICATION-MISSING` message `adj_check` emits when `adj_lookup` returns non-zero
+    (`reconcile/layer-drift.sh:483-487`). Once a verdict is recorded `adj_lookup` returns 0 and the
+    function returns before printing anything. **There is no read-only mode, no `--list`, and no way
+    to recompute the key** — controlled: `subject_digest` appears in the script four times, none of
+    them behind a usage flag or a listing mode.
+
+    **WHY IT MATTERS BEYOND ERGONOMICS, and this is the part to lead the fix with.** The verdict is
+    keyed to subject STATE — `layer-adjudication-tier` Part 3 proves one byte of entry change
+    re-fires the block — and the register's `owed` field is designed to be UPDATED as a debt is
+    worked down. **Both operations need the key, and the key is only visible while the row blocks.**
+    So the register is writable exactly when it is empty and unreadable exactly when it is in use.
+
+    **THE SHAPE TO AIM FOR is a listing that needs no gate state**: the adjudicable rows and their
+    digests, printed on request, independent of whether a verdict exists. **Derive the caller set
+    first** — `adj_check` is reached from every clause at ADJUDICATED level, so a listing mode must
+    not itself become a second implementation of the candidate join. Gates nothing.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
