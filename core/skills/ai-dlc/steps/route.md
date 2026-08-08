@@ -156,7 +156,7 @@ Check for existing artifacts on disk:
 1. Check `_bmad-output/planning-artifacts/product-brief.md` — exists and non-empty?
 2. Check `_bmad-output/planning-artifacts/prd.md` — exists and non-empty?
 3. Check `docs/architecture.md` or `_bmad-output/planning-artifacts/architecture.md` — exists?
-4. Check `_bmad-output/planning-artifacts/stories/` — any story files exist?
+4. Check `_bmad-output/planning-artifacts/s*/stories/` — any story files exist?
 5. Check `_bmad-output/planning-artifacts/carry-over-backlog.md` — any OPEN items?
 6. Read `_bmad-output/planning-artifacts/sprint-status.yaml` if it exists — current sprint state?
 7. Read CLAUDE.md for project rules and conventions.

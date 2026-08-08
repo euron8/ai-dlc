@@ -84,7 +84,7 @@ arc() { cat "$RCF"; }
 mkc() { # $1 = dir, $2 = envelope body, $3 = declaration block body
   local d="$1"
   mkdir -p "$d/.claude/skills/ai-dlc" "$d/_bmad-output/implementation-artifacts" \
-           "$d/_bmad-output/planning-artifacts/stories"
+           "$d/_bmad-output/planning-artifacts/s42/stories"
   printf 'contract_version: 13\nconsumer_story_fields_file: .claude/skills/ai-dlc/story-fields.md\n' \
     > "$d/.claude/skills/ai-dlc/layer-contract.yaml"
   [ -n "$3" ] && printf 'prose\n```\n%s\n```\n' "$3" > "$d/.claude/skills/ai-dlc/story-fields.md"
@@ -97,7 +97,7 @@ ENV='sprint: 42
 status: in_progress
 stories:
   story-42-1:
-    file: stories/story-42-1.md
+    file: stories/story-1.md
     status: draft
     priority: low
     effort: 1          # hand-aligned, and this column must survive
@@ -110,7 +110,7 @@ stories:
     priority: high'
 
 seed_stories() { # $1 = dir
-  cat > "$1/_bmad-output/planning-artifacts/stories/story-42-1.md" <<'EOF'
+  cat > "$1/_bmad-output/planning-artifacts/s42/stories/story-1.md" <<'EOF'
 ---
 status: in_review
 priority: high
@@ -119,7 +119,7 @@ capital_path: true
 ---
 # Story one
 EOF
-  cat > "$1/_bmad-output/planning-artifacts/stories/story-42-2.md" <<'EOF'
+  cat > "$1/_bmad-output/planning-artifacts/s42/stories/story-2.md" <<'EOF'
 ---
 status: done
 priority: high
@@ -213,7 +213,7 @@ status: in_progress
 stories:
   story-42-1:
     status: draft' 'field: priority'
-printf 'no frontmatter, no Status header\n' > "$R4/_bmad-output/planning-artifacts/stories/story-42-1.md"
+printf 'no frontmatter, no Status header\n' > "$R4/_bmad-output/planning-artifacts/s42/stories/story-1.md"
 out4b="$(run "$R4")"; rc4b="$(arc)"
 [ "$rc4b" -eq 4 ] && ok "a story that yielded ZERO comparisons exits 4, and 4 is not 3" \
                   || bad "a story compared on nothing exited $rc4b — 'verified nothing' printed as clean"
@@ -271,7 +271,7 @@ stories:
     title: "old"
     priority: low' 'field: title
 field: priority'
-cat > "$RQ/_bmad-output/planning-artifacts/stories/story-42-1.md" <<'EOF'
+cat > "$RQ/_bmad-output/planning-artifacts/s42/stories/story-1.md" <<'EOF'
 ---
 status: draft
 title: "Fix: the direction-flip guard"
@@ -303,7 +303,7 @@ stories:
     status: draft
     title: "old"' 'field: title'
 printf -- '---\nstatus: draft\ntitle: -a"b\n---\n# s\n' \
-  > "$RG/_bmad-output/planning-artifacts/stories/story-42-1.md"
+  > "$RG/_bmad-output/planning-artifacts/s42/stories/story-1.md"
 IG="$RG/_bmad-output/implementation-artifacts/sprint-status.yaml"
 out_rg="$(run "$RG")"; rc_rg="$(arc)"
 grep -q 'could not be written in a form this envelope reads back as itself' <<<"$out_rg" \

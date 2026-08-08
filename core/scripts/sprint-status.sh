@@ -227,8 +227,12 @@ STORIES_RE = re.compile(KEYS["stories_re"])
 STORY_KEY_RE   = re.compile(KEYS["story_key_re"])
 STORY_FIELD_RE = re.compile(KEYS["story_field_re"])
 
-SFILE       = schema["story_file"]
-STORIES_DIR = SFILE["stories_dir"]
+SFILE         = schema["story_file"]
+# A TEMPLATE, NOT A PATH. The sprint slot moved out of the story FILENAME and into the DIRECTORY
+# (artifact-path-grammar.md rule 2), so the corpus location is a function of the sprint rather than
+# a constant. Read from the schema, never restated here: I84 binds the single home.
+STORIES_DIR_T = SFILE["stories_dir"]
+SPRINT_SLOT   = SFILE["stories_dir_sprint_placeholder"]
 FM_STATUS_RE  = re.compile(SFILE["frontmatter_status_re"], re.M)
 HDR_STATUS_RE = re.compile(SFILE["header_status_re"],      re.M)
 HDR_CUT_RE    = re.compile(SFILE["header_value_cut"])
@@ -605,12 +609,41 @@ def story_file_status(path):
     return (None, "no `status:` frontmatter and no `**Status:**` header")
 
 
-def resolve_story_file(view_path, key, declared):
+def stories_dir(sprint):
+    """The corpus location for ONE sprint, or for every sprint when `sprint` is `*`. The template
+    is the schema's; substituting into it is the only way this file names the corpus."""
+    return STORIES_DIR_T.replace(SPRINT_SLOT, str(sprint))
+
+
+def story_key_stem(key, sprint):
+    """The entry KEY still spells the sprint (`story-302-1`, and historically `story-S299-1`); the
+    FILE no longer does. Strip the DECLARED sprint — never a searched or guessed one — from the
+    key's `-` components, and what is left is the story index the filename carries.
+
+    A key that does not name the declared sprint comes back UNCHANGED, so a corpus already keyed
+    `story-<M>` resolves without a second rule, and a key naming some OTHER sprint keeps that
+    number and simply fails to resolve — which is a FINDING here, and is meant to be. Guessing
+    which number in a key was the sprint is exactly the ambiguity this release removed from the
+    filename; it must not be reintroduced in the key."""
+    parts = key.split("-")
+    pat = re.compile(r"[sS]?0*%d" % int(sprint)) if str(sprint).isdigit() else None
+    if pat is None:
+        return key
+    out = [p for p in parts if not pat.fullmatch(p)]
+    return "-".join(out) if out else key
+
+
+def resolve_story_file(view_path, key, declared, sprint):
     """First candidate that exists, never a single guessed path. The two canonicals sit in
     DIFFERENT directories and both name the story corpus with the same relative `file:` value, so
     resolving relative to the canonical alone finds the corpus from one view and nothing from the
-    other."""
-    stories = root / STORIES_DIR
+    other.
+
+    THE SPRINT COMES FROM THE DECLARATION, NOT FROM THE KEY OR THE FILESYSTEM. That is the join
+    this release re-derived: the old form globbed the whole key against one flat directory shared
+    by 56 sprints, which is why `story-S299-1` and `story-297-1` needed two spellings to be
+    findable at all."""
+    stories = root / stories_dir(sprint)
     cands = []
     if declared:
         d = Path(declared)
@@ -618,16 +651,17 @@ def resolve_story_file(view_path, key, declared):
             cands.append(d)
         else:
             cands.append(view_path.parent / declared)
-            cands.append(root / Path(STORIES_DIR).parent / declared)
+            cands.append(root / Path(stories_dir(sprint)).parent / declared)
             cands.append(root / declared)
             cands.append(stories / d.name)
-    # The entry key IS the story id. Exact file first, then `<id>-<slug>.md` — never `<id>*` , which
-    # matches story-289-10 for story-289-1.
-    cands.append(stories / (key + ".md"))
+    # The key's sprint-stripped stem IS the story id within the sprint. Exact file first, then
+    # `<stem>-<slug>.md` — never `<stem>*`, which matches story-10 for story-1.
+    stem = story_key_stem(key, sprint)
+    cands.append(stories / (stem + ".md"))
     for c in cands:
         if c.is_file():
             return c
-    hits = sorted(stories.glob(key + "-*.md")) if stories.is_dir() else []
+    hits = sorted(stories.glob(stem + "-*.md")) if stories.is_dir() else []
     if len(hits) == 1:
         return hits[0]
     if len(hits) > 1:
@@ -712,12 +746,18 @@ def check_stories():
                 findings.append("[%s/%s] entry carries no `status:` field (line %d)."
                                 % (view, key, lineno))
                 continue
-            resolved = resolve_story_file(p, key, fields.get("file"))
+            resolved = resolve_story_file(p, key, fields.get("file"), target)
             if resolved is None:
+                _sd = stories_dir(target)
+                _stem = story_key_stem(key, target)
                 findings.append("[%s/%s] names no readable story file (declared `file: %s`; also "
-                                "looked for %s/%s.md and %s/%s-*.md)."
+                                "looked for %s/%s.md and %s/%s-*.md). The story corpus now lives "
+                                "under the sprint's OWN directory; a tree still holding it in one "
+                                "flat directory shared across sprints has not been migrated — run "
+                                "`scripts/ai-dlc/migrate-artifact-paths.sh` (dry run), then "
+                                "`--apply`."
                                 % (view, key, fields.get("file", "<absent>"),
-                                   STORIES_DIR, key, STORIES_DIR, key))
+                                   _sd, _stem, _sd, _stem))
                 continue
             if isinstance(resolved, list):
                 findings.append("[%s/%s] resolves to %d story files (%s) — ambiguous id."
@@ -980,7 +1020,7 @@ def derive_stories():
             entries_total += 1
             view_entries += 1
             seen_entries.add(key)
-            sf = resolve_story_file(p, key, flds.get("file"))
+            sf = resolve_story_file(p, key, flds.get("file"), target)
             if sf is None or isinstance(sf, list):
                 # Unresolvable, or ambiguous. check-stories already reports this as a FINDING on
                 # the status join; the derive does not double-report it and does not guess.

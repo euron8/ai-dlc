@@ -14,7 +14,7 @@ teammates, create tasks, orchestrate the build/review/QA cycle.
 
 ### 1. Context Loading
 
-Read sprint stories from `_bmad-output/planning-artifacts/stories/`.
+Read sprint stories from `_bmad-output/planning-artifacts/s<N>/stories/`.
 Read `_bmad-output/implementation-artifacts/sprint-status.yaml`.
 Slice-read the architecture document (SKILL.md Rule 25(b)): its current-state
 head plus only the section(s) the sprint's stories name in `architecture_refs`
@@ -233,7 +233,9 @@ siblings) fails gate-validation.
 **Canonical-story-file pre-flight check before dev dispatch.** Before
 dispatching dev for any story, the lead MUST verify two conditions:
 (a) the canonical story file exists at
-`_bmad-output/planning-artifacts/stories/story-<id>-*.md`; (b) the
+`_bmad-output/planning-artifacts/s<N>/stories/story-<M>-*.md`, where `<M>`
+is the story INDEX and the sprint comes from the directory — a story file
+carries no sprint token; (b) the
 canonical story file is reachable on the dev's branch base (on `main`
 or merged into the sprint branch before dev spawn). If (b) fails
 because the canonical spec lives on an unmerged PR, the lead MUST

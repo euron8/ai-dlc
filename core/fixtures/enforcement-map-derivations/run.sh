@@ -313,6 +313,65 @@ A14_i79_gap_count_is_reported() {
   esac
 }
 
+# --- I84: the story corpus location is ONE declaration ------------------------
+# Four arms, because the invariant has four ways to stop meaning anything and three of them
+# are SILENT. The literal it bans had four copies in the tree before it existed.
+
+# A restatement in a shipped program is REPORTED. The mutation is the exact regression: the
+# protect hook's component-keyed pattern put back the way it was, which is the copy that
+# would have gone inert — a protected-path pattern matching nothing ALLOWS.
+A15_i84_restatement_is_reported() {
+  t="$(fresh)"
+  # THE PATH IS ASSEMBLED, NOT SPELLED, and spelling it is what this fixture's own control
+  # caught: I10 scores a fixture that NAMES a hook as one that DRIVES a hook, and this file
+  # deliberately sits outside that set (see A04's `hookish`) because the scrub loop I10 wants
+  # has an ordering hazard against values the worker wrapper has already resolved. Mutating a
+  # file that happens to live under core/hooks/ is not driving a hook.
+  local protect
+  protect="$t/core/hooks/""ai-dlc-protect.sh"
+  if edit "$protect" \
+       '!done && /^  "\*\/stories\/\*\.md"$/ { print "  \"_bmad-output/planning-artifacts/stories/*.md\""; done=1; next } { print }'; then
+    assert_fires "I84 a shipped program restating an area-qualified story path is REPORTED" \
+                 "restate an area-qualified story corpus path"
+  fi
+}
+
+# The TEMPLATE losing its sprint slot is REPORTED. This is the silent one: every sprint then
+# resolves to the same directory, which is the flat cross-sprint corpus rule 2 exists to end,
+# and it resolves to a directory that EXISTS — so every reader reports a full corpus and none
+# of them is looking at this sprint.
+A16_i84_template_without_slot() {
+  t="$(fresh)"
+  if edit "$t/core/schemas/sprint-status.json" \
+       '!done && /"stories_dir":/ { sub(/s\{sprint\}\//, ""); done=1 } { print }'; then
+    assert_fires "I84 a stories_dir template with no sprint slot is REPORTED" \
+                 "does not contain its own sprint slot"
+  fi
+}
+
+# A reader that takes the template and never substitutes is REPORTED. It composes a path
+# containing a literal `{sprint}`, which exists nowhere, so it finds an empty corpus — and an
+# empty corpus is what a clean one looks like.
+A17_i84_reader_never_substitutes() {
+  t="$(fresh)"
+  if edit "$t/core/scripts/validate-mandatory-rules.sh" \
+       '/stories_dir_sprint_placeholder/ { next } { print }'; then
+    assert_fires "I84 a reader of stories_dir that never names the slot is REPORTED" \
+                 "never name its sprint slot"
+  fi
+}
+
+# The declaration going missing from its home is REPORTED, rather than leaving every reader
+# resolving an empty template — which composes the repo root, not nothing.
+A18_i84_declaration_missing() {
+  t="$(fresh)"
+  if edit "$t/core/schemas/sprint-status.json" \
+       '/"stories_dir":/ { next } { print }'; then
+    assert_fires "I84 stories_dir absent from its declared home is REPORTED" \
+                 "Both are required"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # THE DRIVER
 # ---------------------------------------------------------------------------

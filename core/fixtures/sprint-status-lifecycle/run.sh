@@ -186,7 +186,7 @@ fi
 # =============================================================================
 
 CS="$WORK/cs"
-CSTORIES="$CS/_bmad-output/planning-artifacts/stories"
+CSTORIES="$CS/_bmad-output/planning-artifacts/s291/stories"
 CIMPL="$CS/_bmad-output/implementation-artifacts"
 CPLAN="$CS/_bmad-output/planning-artifacts"
 
@@ -208,12 +208,12 @@ cs_battery() {
 
   # A13 — a consistent tree PASSES, and says how many comparisons it made.
   cs_reset
-  story_fm story-291-1 done
+  story_fm story-1 done
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: done'
   cs_run "$T"
   if [ "$CS_RC" -eq 0 ] && grep -q 'PASS — 1 comparison(s)' <<<"$CS_OUT"; then
@@ -221,12 +221,12 @@ stories:
 
   # A14 — a mismatch is REPORTED, not absorbed.
   cs_reset
-  story_fm story-291-1 review
+  story_fm story-1 review
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: done'
   cs_run "$T"
   if [ "$CS_RC" -eq 1 ] && grep -q 'STATUS MISMATCH' <<<"$CS_OUT"; then
@@ -236,12 +236,12 @@ stories:
   # 726 of the reference consumer's 988 story files carry only this spelling; a reader that knows
   # only frontmatter skips them and reports the skip as nothing to do.
   cs_reset
-  story_hdr story-291-1 'done (all three gates green)'
+  story_hdr story-1 'done (all three gates green)'
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: done'
   cs_run "$T"
   if [ "$CS_RC" -eq 0 ] && grep -q 'PASS — 1 comparison(s)' <<<"$CS_OUT"; then
@@ -250,7 +250,7 @@ stories:
   # A16 — THE VACUITY FLOOR. A canonical with no `stories:` key compared nothing, and that is its
   # own exit code. Folding it into 0 is the defect every version of this check has shipped.
   cs_reset
-  story_fm story-291-1 done
+  story_fm story-1 done
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress'
   cs_run "$T"
@@ -270,7 +270,7 @@ stories:
   # A18 — the LIST form. The reference consumer ran a whole sprint on it: its tool compared ZERO
   # fields and reported success, because a list matches no key grammar.
   cs_reset
-  story_fm story-291-1 done
+  story_fm story-1 done
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
@@ -287,7 +287,7 @@ stories:
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: done'
   cs_run "$T"
   if [ "$CS_RC" -eq 1 ] && grep -q 'names no readable story file' <<<"$CS_OUT"; then
@@ -295,15 +295,15 @@ stories:
 
   # A20 — two entries under one id: whichever a reader takes, the other is unenforced.
   cs_reset
-  story_fm story-291-1 done
+  story_fm story-1 done
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: done
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: review'
   cs_run "$T"
   if [ "$CS_RC" -eq 1 ] && grep -q 'duplicate story key' <<<"$CS_OUT"; then
@@ -312,37 +312,42 @@ stories:
   # A21 — the two canonical copies are BOTH authoritative for an entry. Disagreement between them
   # is route.md Step 6 rule 5 one grain down.
   cs_reset
-  story_fm story-291-1 done
+  story_fm story-1 done
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: done'
   # the planning copy is the one that drifts
   put "$CPLAN/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
-    file: stories/story-291-1.md
+    file: stories/story-1.md
     status: review'
   cs_run "$T"
   if [ "$CS_RC" -eq 1 ] && grep -q 'canonical copies disagree' <<<"$CS_OUT"; then
     echo "A21 PASS"; else echo "A21 FAIL"; fi
 
-  # A22 — id-prefix collision. `story-291-1` must never resolve to `story-291-10-...`; a `<id>*`
-  # glob compares one story against ANOTHER story's file. Asserted on the identity of the file the
-  # tool read, not on the finding text A19 also carries — two assertions reading one string is how
-  # one of them ends up proving nothing.
+  # A22 — index-prefix collision. Key `story-291-1` must never resolve to `story-10-...`; a
+  # `<stem>*` glob compares one story against ANOTHER story's file. Asserted on the identity of the
+  # file the tool read, not on the finding text A19 also carries — two assertions reading one
+  # string is how one of them ends up proving nothing.
+  #
+  # THE KEY STILL SPELLS THE SPRINT AND THE FILE NO LONGER DOES, which is the join this release
+  # re-derived: the declared sprint is stripped from the key to give the index, so `story-291-1`
+  # looks for `story-1-*.md` inside `s291/stories/` and the collision is between INDEXES rather
+  # than between whole ids.
   cs_reset
-  story_fm story-291-10-late-arrival review
+  story_fm story-10-late-arrival review
   put "$CIMPL/sprint-status.yaml" 'sprint: 291
 status: in_progress
 stories:
   story-291-1:
     status: done'
   cs_run "$T"
-  if ! grep -q 'story-291-10' <<<"$CS_OUT"; then echo "A22 PASS"; else echo "A22 FAIL"; fi
+  if ! grep -q 'story-10-late-arrival' <<<"$CS_OUT"; then echo "A22 PASS"; else echo "A22 FAIL"; fi
 }
 
 echo
@@ -398,8 +403,8 @@ mutant A19 "unresolvable entry skipped silently" 's/^            if resolved is 
 mutant A20 "duplicate key detection removed" 's/^            if key in seen:$/            if False:/'
 # A21: drop the cross-view comparison.
 mutant A21 "cross-view arm removed" 's/^        if len(vals) > 1 and len(set(vals.values())) > 1:$/        if False:/'
-# A22: widen the id glob to `<id>*`, the collision that compares story-291-1 against story-291-10.
-mutant A22 "id glob widened to a prefix match" 's/stories.glob(key + "-\*.md")/stories.glob(key + "*.md")/'
+# A22: widen the index glob to `<stem>*`, the collision that compares story-1 against story-10.
+mutant A22 "id glob widened to a prefix match" 's/stories.glob(stem + "-\*.md")/stories.glob(stem + "*.md")/'
 
 # --- Unmutated control -------------------------------------------------------
 # A copy in the same directory as the mutants, mutated not at all. If the harness itself is what

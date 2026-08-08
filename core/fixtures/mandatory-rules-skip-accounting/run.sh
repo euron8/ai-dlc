@@ -80,9 +80,16 @@ echo "mandatory-rules-skip-accounting:"
 # run and PASS, and each input can then be withdrawn to make exactly one check SKIP.
 # `schemas/` sits beside every toolchain dir because validate-audit-anchors.sh resolves its
 # schema at $SCRIPT_DIR/../schemas — the relative shape both shipped layouts have.
+#
+# sprint-status.json is there for the SAME reason and was added when Check 6 stopped restating
+# the story corpus path: it now resolves `stories_dir` from the schema (I84), so a toolchain dir
+# with no schema beside it makes Check 6 fail closed on an unresolvable corpus. That is the
+# designed behaviour and not something to work around — the fixture simply has to build a tree
+# that has the schema, which every real layout does.
 # ============================================================================
 mkdir -p "$WORK/schemas" "$WORK/proj/_bmad-output/implementation-artifacts"
 cp "$ANCHOR_SCHEMA" "$WORK/schemas/audit-anchors.json"
+cp "$STATUS_SCHEMA" "$WORK/schemas/sprint-status.json"
 
 P="$WORK/proj"
 export AI_DLC_SPRINT_STATUS_SCHEMA="$STATUS_SCHEMA"
@@ -104,9 +111,9 @@ mkdir -p web/src; echo "console.log('ui')" > web/src/app.js
 # arm below and make this fixture's subject -- the skip accounting for checks 2, 4 and 5 --
 # unreadable through a sixth skip it is not testing. Seeding a conforming story keeps the
 # arms isolated AND drives Check 6's live path instead of its skip path.
-mkdir -p _bmad-output/planning-artifacts/stories
+mkdir -p _bmad-output/planning-artifacts/s900/stories
 printf '# Story 900-1\n\n## Dev Agent Record\n\ndev (delegated) implemented this.\n' \
-  > _bmad-output/planning-artifacts/stories/story-900-1-fixture.md
+  > _bmad-output/planning-artifacts/s900/stories/story-1-fixture.md
 git add -A && git commit -q -m "Sprint 900 web change"
 git checkout -q -b ai-dlc/retro/sprint-900
 

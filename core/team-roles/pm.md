@@ -13,7 +13,7 @@ source; do not infer either value from anywhere else.
 
 - `_bmad-output/planning-artifacts/product-brief.md`
 - `_bmad-output/planning-artifacts/prd.md`
-- `_bmad-output/planning-artifacts/stories/`
+- `_bmad-output/planning-artifacts/s<N>/stories/`
 - `_bmad-output/specs/` — the `bmad-spec` kernel, its `.memlog.md`, and its
   companions. `bmad-spec` is the SOLE writer of `SPEC.md`: it re-derives the
   kernel from the memlog on every run, so an edit made outside it is

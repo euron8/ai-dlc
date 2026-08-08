@@ -94,11 +94,30 @@
 
   "story_entry_fields": {
     "status": { "required": true, "desc": "the story's status; MUST equal the status in the story file this entry names (Check 5)" },
-    "file": { "required": false, "desc": "path to the story file, relative to the canonical's own directory. Absent -> the entry key is globbed against stories_dir." }
+    "file": { "required": false, "desc": "path to the story file, relative to the canonical's own directory. Absent -> the entry key's sprint-stripped stem is globbed against the resolved stories_dir." }
   },
 
+  "$story_file_comment": [
+    "`stories_dir` IS A TEMPLATE, NOT A PATH. `{sprint}` is substituted with the sprint number to",
+    "name one sprint's corpus, or with `*` to name every sprint's at once -- artifact-path-grammar.md",
+    "rule 1 declares `s*` the same reserved slot quantified over every sprint, so the two readings are",
+    "one declaration rather than two keys that drift apart.",
+
+    "IT CARRIES THE SPRINT SLOT BECAUSE THE FILENAME NO LONGER DOES, and that is the whole point.",
+    "Under the flat layout the sprint lived in the basename, which made the corpus unjudgeable: 758 of",
+    "the reference consumer's 988 story files spell it as a BARE LEADING NUMBER (`story-297-1-slug.md`)",
+    "-- character-for-character the `story-<M>-<slug>.md` the grammar prescribes, where `<M>` is the",
+    "story INDEX. No expression separates those two readings. A directory does, and the sprint is",
+    "declared rather than searched for.",
+
+    "NO SHIPPED PROGRAM MAY RESTATE THE RESOLVED LITERAL. This key is the only home; I84 in",
+    "validate-enforcement-map.sh binds it, and the reason is that the four sites that needed this path",
+    "before had four copies of it -- so moving it meant finding them all by memory."
+  ],
+
   "story_file": {
-    "stories_dir": "_bmad-output/planning-artifacts/stories",
+    "stories_dir": "_bmad-output/planning-artifacts/s{sprint}/stories",
+    "stories_dir_sprint_placeholder": "{sprint}",
     "frontmatter_status_re": "^status:[ \\t]*(.*?)[ \\t]*$",
     "header_status_re": "^[ \\t]*(?:[-*][ \\t]+)?\\*\\*[Ss]tatus:\\*\\*[ \\t]*(.*?)[ \\t]*$",
     "header_value_cut": "[(\\u2014\\u2192.,;]"

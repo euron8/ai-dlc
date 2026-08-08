@@ -246,7 +246,56 @@ fi
 # ============================================================================
 echo "[Check 5] Visual UI verification (web/** sprints only)..."
 GATE_LOG="_bmad-output/implementation-artifacts/gate-log.md"
-STORIES_DIR="_bmad-output/planning-artifacts/stories"
+
+# ---- the story corpus location is the SCHEMA's, not this file's ------------
+# `stories_dir` in schemas/sprint-status.json is a TEMPLATE carrying the sprint slot, because
+# artifact-path-grammar.md rule 2 moved the sprint out of the story FILENAME and into the
+# DIRECTORY. This file used to restate the resolved literal, and so did the protect hook and the
+# installer -- three copies, so moving the path meant finding them all from memory. I84 in
+# validate-enforcement-map.sh now binds the single home.
+#
+# THREE CANDIDATES, AND ALL THREE ARE LOAD-BEARING -- install.sh splits what shares a parent in
+# the distribution (`core/scripts/<x>` -> `scripts/ai-dlc/<x>`, `core/schemas/` ->
+# `.claude/schemas/`), so no single relative shape reaches the schema in both layouts:
+#
+#   $SCRIPT_DIR/../schemas   the package this copy shipped in. Correct upstream
+#                            (core/scripts/../schemas) and in a synthetic toolchain dir; it is
+#                            NOT correct in a consumer, where it resolves to scripts/schemas.
+#   .claude/schemas          the consumer, from the project root this script already runs at.
+#   core/schemas             the distribution, from its root.
+#
+# Script-relative FIRST, for sprint-status.sh's reason: a copy should read the schema it shipped
+# beside. The two cwd-relative arms are the layouts where that copy has been split away from it.
+SPRINT_STATUS_SCHEMA=""
+for _sch in "$SCRIPT_DIR/../schemas/sprint-status.json" \
+            ".claude/schemas/sprint-status.json" \
+            "core/schemas/sprint-status.json"; do
+  [ -f "$_sch" ] && { SPRINT_STATUS_SCHEMA="$_sch"; break; }
+done
+STORIES_DIR_T=""
+STORIES_SLOT=""
+if [ -n "$SPRINT_STATUS_SCHEMA" ]; then
+  STORIES_DIR_T="$(sed -n 's/.*"stories_dir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SPRINT_STATUS_SCHEMA" | head -1)"
+  STORIES_SLOT="$(sed -n 's/.*"stories_dir_sprint_placeholder"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$SPRINT_STATUS_SCHEMA" | head -1)"
+fi
+
+# <sprint-number, or `*` for every sprint> -> the corpus directory. Rule 1 declares `s*` the same
+# reserved slot quantified over every sprint, so one template answers both readings.
+stories_dir() { printf '%s' "${STORIES_DIR_T//"$STORIES_SLOT"/$1}"; }
+
+STORIES_DIR=""
+STORIES_DIR_ALL=""
+STORIES_AREA=""
+if [ -n "$STORIES_DIR_T" ] && [ -n "$STORIES_SLOT" ]; then
+  STORIES_DIR="$(stories_dir "$SPRINT_N")"
+  STORIES_DIR_ALL="$(stories_dir '*')"
+  # The AREA the slot sits under -- everything before the component carrying the slot. Derived by
+  # cutting the template at its own placeholder, so it cannot disagree with the template it came
+  # from. Check 6's control needs it: a corpus counted only under the DECLARED location is blind
+  # to a corpus that has not moved there yet, and blind is spelled SKIP.
+  STORIES_AREA="${STORIES_DIR_T%%"$STORIES_SLOT"*}"
+  STORIES_AREA="${STORIES_AREA%/*}"
+fi
 
 # Diff base. This runs at retro time, on a retro branch cut from main AFTER the sprint merged
 # — so the sprint's web/** changes are ancestors of main and `main..HEAD` is EMPTY. Diffing
@@ -343,32 +392,62 @@ ESCALATIONS_FILE="docs/escalations/pending.md"
 CHECK6_FAILURES=0
 
 # THE GLOB'S ZERO CARRIES A SAME-RUN CONTROL, and it is here because the zero was real.
-# Measured on the reference consumer: for sprints 298 and 299 this glob matched ZERO files,
-# the loop body never ran, CHECK6_FAILURES stayed 0 and the check printed PASS -- while 73
-# story files for those sprints sat in the same directory spelled `story-S<N>-` with a
-# capital S. Control on the same directory in the same read: `story-297-*` matched 11. Two
-# closed sprints had their Dev Agent Record compliance verified against nothing.
+# Measured on the reference consumer: for sprints 298 and 299 the old NAME-keyed glob
+# (`story-<N>-*.md` against one flat directory) matched ZERO files, the loop body never ran,
+# CHECK6_FAILURES stayed 0 and the check printed PASS -- while 73 story files for those sprints
+# sat in that same directory spelled `story-S<N>-` with a capital S. Control on the same
+# directory in the same read: `story-297-*` matched 11. Two closed sprints had their Dev Agent
+# Record compliance verified against nothing.
 #
-# The control is the corpus itself. A sprint with no stories in a directory that has none
-# at all is a project before its first story -- reported as a SKIP, not a pass. A sprint
-# with no stories in a directory that HAS them is this defect, and it fails.
+# THE NAME-KEYED GLOB IS GONE, and that is this release's fix rather than a second patch on it.
+# The selector is now the sprint's own DIRECTORY, so it is a TOTAL function of the sprint: every
+# file in it belongs to this sprint whatever it is called, and no spelling of the sprint in a
+# basename can hide a story from the check. A capital S cannot come back.
+#
+# THE CONTROL SPANS THE WHOLE AREA, NOT THE DECLARED SLOT, and that widening was forced by
+# measurement rather than chosen. Counted only under the declared `s*/stories/` location, the
+# control is BLIND to a tree that still holds its corpus in one flat directory -- so an
+# unmigrated consumer with 988 story files reported `corpus is empty` and SKIPped, which is this
+# check's own historical defect wearing the fix's clothes. Counting every `stories/` directory
+# under the area sees both layouts, and the gap between the two numbers is what names the cause.
+#
+# So: no stories anywhere under the area is a project before its first story -- a SKIP. Stories
+# under the area but none in THIS sprint's directory is either the 298/299 shape or an unmigrated
+# tree, and both fail.
 CHECK6_MATCHED=0
 CHECK6_CORPUS=0
+CHECK6_AREA_CORPUS=0
 CHECK6_SKIPPED=0
-if [ -d "$STORIES_DIR" ]; then
-  for _s in "${STORIES_DIR}"/story-*.md; do
-    [ -f "$_s" ] && CHECK6_CORPUS=$((CHECK6_CORPUS + 1))
+CHECK6_UNRESOLVED=0
+if [ -z "$STORIES_DIR" ]; then
+  # Fail closed, loudly. An unresolvable corpus location makes this check unable to fire, and a
+  # check that cannot fire reads exactly like one that passed.
+  CHECK6_UNRESOLVED=1
+else
+  for _d in $STORIES_DIR_ALL; do
+    [ -d "$_d" ] || continue
+    for _s in "$_d"/*.md; do
+      [ -f "$_s" ] && CHECK6_CORPUS=$((CHECK6_CORPUS + 1))
+    done
   done
-  for story_file in "${STORIES_DIR}/story-${SPRINT_N}-"*.md; do
+  if [ -d "$STORIES_AREA" ]; then
+    CHECK6_AREA_CORPUS="$(find "$STORIES_AREA" -type d -name stories -exec find {} -maxdepth 1 -type f -name '*.md' \; 2>/dev/null | grep -c . || true)"
+  fi
+  for story_file in "${STORIES_DIR}"/*.md; do
     if [ ! -f "$story_file" ]; then
       continue
     fi
     CHECK6_MATCHED=$((CHECK6_MATCHED + 1))
 
-    # Extract story ID from filename (story-<n>-<slug>) — filename format
+    # The story id for the ESCALATIONS join is still sprint-qualified (`story-<N>-<M>`), because
+    # that is the vocabulary docs/escalations/pending.md is written in. The FILE no longer carries
+    # the sprint, so the id is COMPOSED from the sprint this run was given plus the index the
+    # filename carries -- the same declared-not-searched direction as everything else here.
     story_basename=$(basename "$story_file" .md)
-    story_id=$(echo "$story_basename" | grep -o "story-${SPRINT_N}-[0-9]*" | head -1)
-    if [ -z "$story_id" ]; then
+    story_index=$(printf '%s' "$story_basename" | sed -n 's/^story-\([0-9][0-9]*\).*/\1/p')
+    if [ -n "$story_index" ]; then
+      story_id="story-${SPRINT_N}-${story_index}"
+    else
       story_id="$story_basename"
     fi
 
@@ -406,20 +485,22 @@ if [ -d "$STORIES_DIR" ]; then
       fi
     fi
   done
-else
-  CHECK6_SKIPPED=1
+  if [ "$CHECK6_AREA_CORPUS" -eq 0 ]; then
+    CHECK6_SKIPPED=1
+  fi
 fi
 
-if [ "$CHECK6_SKIPPED" -eq 1 ]; then
-  echo "  CHECK 6: SKIP — no ${STORIES_DIR} directory"
-  SKIPPED_CHECKS="$SKIPPED_CHECKS 6"
-elif [ "$CHECK6_MATCHED" -eq 0 ] && [ "$CHECK6_CORPUS" -gt 0 ]; then
-  fail "Check6_GLOB_MATCHED_NOTHING" "no story file matches '${STORIES_DIR}/story-${SPRINT_N}-*.md', but ${CHECK6_CORPUS} story file(s) sit in that directory for other sprints. Check 6 would have verified NOTHING and printed PASS. This is the measured 298/299 defect: those stories are spelled 'story-S${SPRINT_N}-' with a capital S. Rename them to the derived form, or the sprint's Dev Agent Record compliance is unverified."
+if [ "$CHECK6_UNRESOLVED" -eq 1 ]; then
+  fail "Check6_STORIES_DIR_UNRESOLVED" "the story corpus location could not be resolved from schemas/sprint-status.json (looked for .claude/schemas/ and core/schemas/ under $(pwd); found '${SPRINT_STATUS_SCHEMA:-<no schema>}', stories_dir template '${STORIES_DIR_T:-<empty>}', slot '${STORIES_SLOT:-<empty>}'). Check 6 has no directory to read, so it verified NOTHING. This fails rather than skipping: an unresolvable subject and a clean one are the same silence."
   CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
-  echo "  CHECK 6: FAIL — 0 of ${CHECK6_CORPUS} story file(s) matched this sprint"
-elif [ "$CHECK6_MATCHED" -eq 0 ]; then
-  echo "  CHECK 6: SKIP — the story corpus is empty (0 story files on disk)"
+  echo "  CHECK 6: FAIL — the corpus location did not resolve"
+elif [ "$CHECK6_SKIPPED" -eq 1 ]; then
+  echo "  CHECK 6: SKIP — the story corpus is empty (0 story files under any stories/ directory in ${STORIES_AREA})"
   SKIPPED_CHECKS="$SKIPPED_CHECKS 6"
+elif [ "$CHECK6_MATCHED" -eq 0 ]; then
+  fail "Check6_GLOB_MATCHED_NOTHING" "no story file sits in '${STORIES_DIR}', but ${CHECK6_AREA_CORPUS} story file(s) sit under a stories/ directory in '${STORIES_AREA}' (${CHECK6_CORPUS} of them under the declared '${STORIES_DIR_ALL}'). Check 6 would have verified NOTHING and printed PASS. Either this sprint wrote its stories somewhere else, or the tree still holds the corpus in ONE flat directory shared across sprints and has not been migrated — run 'scripts/ai-dlc/migrate-artifact-paths.sh' (dry run), then '--apply'. Until then the sprint's Dev Agent Record compliance is unverified."
+  CHECK6_FAILURES=$((CHECK6_FAILURES + 1))
+  echo "  CHECK 6: FAIL — 0 of ${CHECK6_AREA_CORPUS} story file(s) sit in this sprint's directory"
 elif [ $CHECK6_FAILURES -eq 0 ]; then
   echo "  CHECK 6: PASS — ${CHECK6_MATCHED} story file(s) verified"
 else

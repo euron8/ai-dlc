@@ -445,7 +445,7 @@ a story inlines — to satisfy a tooling constraint.
 - Scan all story files in the current sprint for template placeholders:
   `{{...}}`, `[TODO]`, `[TBD]`, `<placeholder>`, empty Dev Agent Record
   fields.
-- Run: `grep -rn '{{.*}}' _bmad-output/planning-artifacts/stories/`
+- Run: `grep -rn '{{.*}}' _bmad-output/planning-artifacts/s<N>/stories/`
 - **Gate FAILS** if any placeholder is found. Dev must populate before
   proceeding. This is not a warning — it is a hard gate blocker.
 - **Evidence:** Log the grep command and its output (or "0 matches") in
