@@ -323,10 +323,40 @@ def anchor_window(source_text, anchor):
     return "\n".join(sections)
 
 
-def resolve_artifact(cited, story_path):
-    """Resolve a cited artifact path/basename to an existing file."""
+ANCHOR_SPRINT_RE = re.compile(r"\bLR-S(\d+)-")
+
+
+def resolve_artifact(cited, story_path, anchor=""):
+    """Resolve a cited artifact path/basename to an existing file.
+
+    THE ANCHOR CAN NAME A SPRINT, AND WHEN IT DOES IT DECIDES WHICH SLOT TO READ.
+    Rule 13 makes locked requirements cumulative, so a story can honestly cite a
+    requirement locked in an EARLIER sprint -- and since discovery.md §4a writes each
+    sprint's block to `s<N>/locked-requirements.md`, the walk-up below would otherwise
+    reach the STORY'S OWN sprint slot and report `anchor not found`. That is a true
+    statement about the wrong file, which is the failure mode this whole function was
+    reordered in v0.263.0 to stop producing.
+
+    Measured on the reference consumer at the time this shipped: `LR-S<n>-` tokens in
+    stories name a sprint other than the story's own **260** times out of 4019, and
+    **0** of the 62 ANCHORED citations did. So the corpus was correct by accident --
+    nothing forbade a cross-sprint anchor, and the first one written would have been
+    rejected for the wrong reason. `s<n>/` is tried FIRST when the anchor names one,
+    because a same-basename file in the story's own slot would otherwise shadow it.
+    """
     story_dir = os.path.dirname(os.path.abspath(story_path))
     candidates = []
+    sprint_m = ANCHOR_SPRINT_RE.search(anchor or "")
+    if sprint_m and not os.path.isabs(cited):
+        slot = "s%s" % sprint_m.group(1)
+        base = os.path.basename(cited)
+        d = story_dir
+        for _ in range(6):
+            candidates.append(os.path.join(d, slot, base))
+            parent = os.path.dirname(d)
+            if parent == d:
+                break
+            d = parent
     if os.path.isabs(cited):
         candidates.append(cited)
     else:
@@ -434,7 +464,7 @@ for bidx, block in enumerate(blocks, start=1):
     for cite in [REQUIRES_CTX_CITE_RE.match(ln).group(1)
                  for ln in lines if REQUIRES_CTX_CITE_RE.match(ln)]:
         artifact, anchor = split_citation(cite)
-        resolved = resolve_artifact(artifact, story_path)
+        resolved = resolve_artifact(artifact, story_path, anchor)
         if resolved is None:
             failures.append(
                 f"block #{bidx}: requires_context artifact '{artifact}' not found on "
@@ -515,7 +545,7 @@ for bidx, block in enumerate(blocks, start=1):
         if not sor_override and cited_base == LEGACY_SOR_BASENAME:
             legacy_claims += 1
 
-        resolved = resolve_artifact(artifact, story_path)
+        resolved = resolve_artifact(artifact, story_path, anchor)
         if resolved is None:
             failures.append(
                 f"block #{bidx}: full_text_source artifact '{artifact}' not found "

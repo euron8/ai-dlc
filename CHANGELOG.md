@@ -34,6 +34,47 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.323.0] — 2026-08-08
+
+### A cross-sprint anchor was correct by accident, and v0.322.0 would have made it wrong
+
+Item **23c-4**, the last of item 23. Rule 13 makes locked requirements cumulative, so a story can
+honestly cite a requirement locked in an earlier sprint. While the block lived in the durable brief
+that resolved by construction — one file, every sprint's blocks in it. **v0.322.0 moved the block
+into `s<N>/locked-requirements.md`, and the walk-up resolver finds the STORY'S OWN slot first**, so
+a `s302/` story citing `LR-S299-4` would have been told `anchor not found`: a true statement about
+the wrong file, which is precisely the failure the v0.263.0 reordering exists to prevent.
+
+**The zero that made this look safe was an accident, and it is why the item did not stop here.**
+Measured on the reference consumer: `LR-S<n>-` tokens in stories name a sprint other than the
+story's own **260 times out of 4019**, and **0 of the 62 ANCHORED citations do**. Nothing forbade a
+cross-sprint anchor — the corpus simply had not written one yet, and the first one would have been
+rejected for the wrong reason.
+
+### The anchor picks the slot
+
+`resolve_artifact` now takes the anchor. When it carries `LR-S<n>-`, the sibling `s<n>/` directory
+is tried at every level of the walk-up **before** the existing candidates — first, because a
+same-basename file in the story's own slot would otherwise shadow it. When the anchor names no
+sprint, the candidate list is byte-for-byte what it was.
+
+**Nothing else widens.** The bullet is still byte-matched against the window the anchor names, so a
+summarized cross-sprint propagation fails exactly as a same-sprint one does — the fixture asserts
+that with a fabricated bullet under the same cross-sprint anchor, because an arm that only shows
+something resolved has not shown the check still fires.
+
+**The prose says prefer re-extraction.** `discovery.md` §4a extracts from carry-over items into THIS
+sprint's block and `carry-over-evaluation.md` routes them there, so a carried requirement normally
+appears verbatim in the current sprint's file and the citation is local. The cross-sprint form is
+there for the corpus that already exists, not as the recommended shape.
+
+### Fixture
+
+`check-3b-locked-anchor` gains four arms: the cross-sprint citation accepted against a story slot
+seeded with a DIFFERENT requirement under a DIFFERENT anchor (so a wrong resolution order fails it),
+the fabricated-bullet control, a mutant that makes `ANCHOR_SPRINT_RE` match nothing, and its pairing
+arm proving the mutant still accepts a same-sprint citation.
+
 ## [0.322.0] — 2026-08-08
 
 ### The sprint's LOCKED block moves into the sprint slot, and the pool arm that keeps the move honest ships with it

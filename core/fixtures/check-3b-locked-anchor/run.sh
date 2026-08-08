@@ -441,6 +441,64 @@ else
   echo "ok: SoR — CONTROL: prd.md is still refused, so accepting two names has not weakened (a)"
 fi
 
+# --- A CROSS-SPRINT ANCHOR READS THE SPRINT THE ANCHOR NAMES --------------------
+# Rule 13 makes locked requirements cumulative, so a story can honestly cite an
+# earlier sprint's requirement. With the block now in `s<N>/locked-requirements.md`
+# the walk-up would reach the STORY'S OWN slot and report `anchor not found` -- a true
+# statement about the wrong file, the failure this function was reordered in v0.263.0
+# to stop producing. The story's own slot is seeded with a DIFFERENT requirement under
+# a DIFFERENT anchor, so the arm below fails if the resolution order is wrong.
+mkdir -p "$SOR/s299" || exit 2
+cat > "$SOR/s299/locked-requirements.md" <<'SOREOF'
+<!-- LOCKED_REQUIREMENTS — DO NOT MODIFY DURING VALIDATION -->
+## LR-S299-1
+- Carried: the rebalancer must publish a per-epoch delta.
+<!-- END LOCKED_REQUIREMENTS -->
+SOREOF
+cat > "$SOR/s302/stories/cross-sprint.md" <<'STOREOF'
+# Story
+<!-- LOCKED_REQUIREMENTS -->
+full_text_source: locked-requirements.md#LR-S299-1
+- Carried: the rebalancer must publish a per-epoch delta.
+<!-- END LOCKED_REQUIREMENTS -->
+STOREOF
+if "$VALIDATOR" "$SOR/s302/stories/cross-sprint.md" >/dev/null 2>&1; then
+  echo "ok: cross-sprint — an anchor naming s299 resolves to s299/, not to the story's own slot"
+else
+  echo "FAIL: cross-sprint — a legal earlier-sprint anchor was rejected" >&2
+  rc=1
+fi
+# CONTROL: the widening must not have disarmed the byte-match. A FABRICATED bullet
+# under the same cross-sprint anchor still has to red, or the arm above only proved
+# that something resolved.
+sed 's/- Carried: the rebalancer must publish a per-epoch delta./- Carried: the rebalancer may publish whatever it likes./' \
+  "$SOR/s302/stories/cross-sprint.md" > "$SOR/s302/stories/cross-sprint-bad.md"
+if "$VALIDATOR" "$SOR/s302/stories/cross-sprint-bad.md" >/dev/null 2>&1; then
+  echo "FAIL: cross-sprint CONTROL — a fabricated bullet passed under a cross-sprint anchor" >&2
+  rc=1
+else
+  echo "ok: cross-sprint — CONTROL: a fabricated bullet still reds, so the byte-match is intact"
+fi
+# MUTATION: drop the sprint-slot candidates and demand the cross-sprint story reds.
+MUT7="$WORK/mut-no-slot-resolve.sh"; cp "$VALIDATOR" "$MUT7"
+sed -i.bak 's/^ANCHOR_SPRINT_RE = .*/ANCHOR_SPRINT_RE = re.compile(r"(?!x)x")/' "$MUT7" && rm -f "$MUT7.bak"
+if cmp -s "$VALIDATOR" "$MUT7"; then
+  echo "FAIL: MUTATION setup — ANCHOR_SPRINT_RE was not mutated, so the arm below proves nothing" >&2
+  rc=1
+elif bash "$MUT7" "$SOR/s302/stories/cross-sprint.md" >/dev/null 2>&1; then
+  echo "FAIL: MUTATION — the cross-sprint story passed with slot resolution disabled; something else resolves it" >&2
+  rc=1
+else
+  echo "ok: MUTATION — disabling sprint-slot resolution reds the cross-sprint story"
+fi
+# PAIRING: the same mutant must still accept a SAME-sprint story, or it died elsewhere.
+if bash "$MUT7" "$SOR/s302/stories/new-sor.md" >/dev/null 2>&1; then
+  echo "ok: MUTATION PAIRING — the same mutant still accepts a same-sprint citation (it fails only its own assertion)"
+else
+  echo "FAIL: MUTATION PAIRING — the mutant rejected the same-sprint story too; the assertions are entangled" >&2
+  rc=1
+fi
+
 # MUTATION: collapse the pair back to one name and demand the OTHER one reds. Built as
 # a copy and guarded with cmp -s so a sed that matched nothing cannot pass as a change.
 MUT6="$WORK/mut-single-sor.sh"; cp "$VALIDATOR" "$MUT6"
