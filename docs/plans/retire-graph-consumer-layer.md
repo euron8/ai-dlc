@@ -267,8 +267,8 @@ so the answer is falsifiable rather than permanent.
 methodology change and is **explicitly NOT SIZED**: it opens with a derivation over 4 validators and
 10 step files, not with code, and if that derivation says the sites do not move cheaply the correct
 outcome is to say so and stop. **23a removed its urgency argument — the pool does not breach — and
-left its correctness one intact.** Item 12, item 22, item 24 and item 25 remain available and gate
-nothing.
+left its correctness one intact.** Item 12, item 22, item 24, item 25 and item 26 remain available and
+gate nothing.
 
 **THIS IS THE HANDOFF POINT THE SESSION THAT WROTE 23a/23b/23d RECOMMENDED.** 23c shares almost
 nothing with them: its subject is `LOCKED_REQUIREMENTS` across four core validators and ten step
@@ -353,6 +353,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~19~~ | ~~**23d** — its own skill?~~ | **DECIDED — NO. No release; nothing added to this table, which is what a "no" looks like.** The FOR argument survived its control (it is the only step route HANDS OVER rather than enters) but three of the four claimed gains buy nothing, measured. The decider is the SUBJECT boundary: setup and update reference `planning-artifacts` **0** times, the pipeline **70**. See §*What item 23d decided*, which also states what would re-open it |
 | **20** | **23c** — the inlet | **← THE NEXT ITEM.** **NOT SIZED.** Opens with a derivation over 4 validators + 10 step files, not with code. **23a removed its urgency argument and left its correctness one intact** |
 | — | **25** — five more per-sprint artifacts prescribed at durable paths | Fell out of 23b's false-positive measurement, **not acted on**. `test-strategy.md` is the same defect at **73 homes** (root=1, `s<N>/` slots=72). Measured set and per-file evidence in §*What item 23b measured* |
+| — | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
 | — | **23d** — its own skill? | Operator question 2026-08-08. A DECISION, not a build, and **not answerable before 23a and 23b report**. **A "yes" produces implementation that must be ADDED TO THIS PLAN as its own sequenced item(s) before it starts; a "no" is recorded so it is not re-opened** |
 | — | **24** — the fixture ship-list is four hand-lists | Surfaced by v0.316.0, added on operator request. **NOT the silent-rot class — the join fires.** 129 on disk, 117 shipped, 12 distribution-only, and the criterion for those 12 is written NOWHERE (controlled). Ergonomic win; gates nothing |
 | ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
@@ -936,6 +937,55 @@ before you write code.
     hand-listed, and that declaration does not exist. **Producing it is most of this item**, and if
     it turns out to cost more than the five per-file fixes are worth, fixing `test-strategy.md` alone
     and writing down the criterion is a legitimate result.
+
+26. **LC-O15 fires ANCHOR-grained, but a supersession can be ARM-grained — and the remedy it
+    prescribes discards the surplus silently.** **REPORTED BY THE CONSUMER 2026-08-08, mid-pull,
+    NOT REPRODUCED HERE — record it as theirs until it is.** This plan has been wrong about a
+    consumer report's attribution three times (items 13, 17, 18) and exact twice (items 20, 21);
+    the run of exactness is not a licence to skip the reproduction.
+
+    **THE REPORT.** `apply.sh`'s worklist step 2/2 tells the operator to narrow
+    `overrides/steps__retro__domain-sections.md`'s `shadows:` by removing
+    `steps/retro.md#4a. Close-Out Sweep`. Core superseded **one arm** of that section — the
+    strikethrough / `--fail-on` machinery, now configured by `AI_DLC_SNAPSHOT_STRIKETHROUGH`, which
+    graph already sets to `forbid`. The entry's body under that anchor carries **119 consumer-only
+    lines core does not have**, including `S286-CO-CLOSURE-EVIDENCE` (a stale-header closure guard)
+    and the `FR-S297-4` ceiling delegation. Narrowing takes core's 4a live and takes all 119 lines
+    out of what the lead reads.
+
+    **THE MECHANISM, AS FAR AS IT IS UNDERSTOOD FROM THIS SIDE AND NO FURTHER.**
+    `replaces_with=<ENV_KEY>` means *"core now configures what your shadow was written to work
+    around."* The narrowing is the right remedy **only when the entry's content under that anchor
+    IS the worked-around behaviour.** When it is a superset, the surplus goes with it and nothing
+    measures the surplus. The clause asks a question about the ANCHOR and core's change was to an
+    ARM inside it.
+
+    **THE PRECEDENT IS THIS PLAN'S OWN, ONE LEVEL DOWN.** v0.312.0 found LC-O15's supersession join
+    comparing `norm()` of the WHOLE `shadows:` value while every drift arm below it read through
+    `shadow_parts` — so an entry bundling anchors could never match a declaration naming one. That
+    fixed the join's grain from ENTRY to ANCHOR. **This report says the same defect survives one
+    level up: ANCHOR where the supersession is ARM.** Whether that is the right reading is the
+    first thing to establish, not to assume.
+
+    **BEFORE BUILDING ANYTHING, DERIVE THE FALSE-POSITIVE SET — and note that the obvious
+    formulation has no subject set yet.** "Warn when the entry's content under a superseded anchor
+    exceeds the superseded arm" needs a measurable notion of *the arm*, and today the declaration
+    names an anchor and an env key, not a span. **Establishing whether an arm is even addressable
+    is the whole of this item's first step.** If it is not, the honest outcome may be that the
+    remedy text must stop prescribing a narrowing it cannot scope, and instead hand the operator a
+    measured surplus to adjudicate — which is a smaller change than a new join, and possibly the
+    right one.
+
+    **IT GATES NOTHING.** `OVERRIDE-SUPERSEDED` is report-only; the blocking row is
+    `HARD-LAYER-ADJUDICATION-MISSING`, and a recorded verdict clears it without touching
+    `shadows:`. **The consumer's disposition, 2026-08-08: defer the narrowing, record
+    `still-additive` against the row's `subject_digest`, and carry the debt in the register's
+    `owed` field** — not in `reason:`, because the schema's own text records that 5 of 46 rows on
+    this consumer encoded owed work in free prose, one of them reading *"Nothing but this reason
+    field is tracking that debt."* `OWED-RETRO-4A-NARROW` continues to track it. **The verdict is
+    keyed to subject STATE, so it must be recorded AFTER any edit to the entry, and it self-expires
+    the moment anyone touches it** — which is the property that makes deferring safe rather than
+    permanent.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
