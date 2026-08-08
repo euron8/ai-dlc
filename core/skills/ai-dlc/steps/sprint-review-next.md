@@ -17,7 +17,7 @@ implementation may have surfaced issues that affect upcoming stories.
 ### 1. Context Loading
 
 Read:
-- The next sprint's stories from `_bmad-output/planning-artifacts/stories/`
+- The next sprint's stories from `_bmad-output/planning-artifacts/s<N>/stories/`
 - The previous sprint's retro (if it exists) or gate log
 - Code reviews from the previous sprint in `docs/reviews/`
 - Escalations from `docs/escalations/pending.md`

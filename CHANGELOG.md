@@ -34,6 +34,81 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.307.0] — 2026-08-08
+
+### The sprint moves out of the story filename and into the directory, and the readers go first
+
+Plan item 16, first half. The story corpus was the one area the artifact path grammar declared and
+did not govern: `planning-artifacts/stories/` was flat and shared across every sprint, and the
+sprint hid inside the FILENAMES. This release moves the READERS onto the grammar. The FILES follow
+in the next one, and that order is deliberate — a reader still pointing at the old place after the
+migration finds nothing and reports it clean, which is the defect this whole item exists to close.
+
+**`stories_dir` is now a TEMPLATE the schema owns**, `_bmad-output/planning-artifacts/s{sprint}/stories`,
+with `{sprint}` substituted as a number for one sprint's corpus or as `*` for every sprint's — rule
+1 already declares `s*` the same reserved slot quantified over every sprint, so one declaration
+answers both readings instead of two keys that drift.
+
+**It had FOUR copies before this, and moving it meant finding them from memory.** `I84` now binds
+the single home, in both directions: no shipped program may restate an area-qualified story path,
+and every program that reads the template must also substitute its slot — a reader that skips the
+substitution composes a directory whose name contains `{sprint}` literally, finds nothing, and
+reports a clean corpus. **Three of the four copies would have failed SILENTLY**: a protected-path
+pattern that matches nothing ALLOWS, a story glob that matches nothing prints PASS, and a
+scaffolded directory nobody writes to is invisible. False-positive set measured at **zero** over 91
+files, with a control proving the expression still matches the 3 files carrying the path in prose.
+
+**Check 6's name-keyed glob is gone rather than patched again.** It selected story files by
+`story-<N>-*.md` against one flat directory, which is how sprints 298 and 299 had their Dev Agent
+Record compliance verified against zero files while 73 of their stories sat in that same directory
+spelled with a capital S. The selector is now the sprint's own DIRECTORY — a total function of the
+sprint, under which every file in it belongs to this sprint whatever it is called, and no spelling
+in a basename can hide one. A capital S cannot come back.
+
+**The story-id join is re-derived, not re-pointed.** The entry KEY still spells the sprint
+(`story-302-1`); the FILE no longer does. The declared sprint — never a searched or guessed one —
+is stripped from the key's components, and what is left is the index the filename carries, so
+`story-302-1` resolves to `s302/stories/story-1-*.md` and the legacy `story-S302-1` resolves to the
+same file. A key naming some other sprint keeps that number and fails to resolve, which is a
+FINDING and is meant to be: guessing which number in a key was the sprint is the ambiguity this
+release removed from the filename.
+
+**THE FIX'S OWN BLIND SPOT HAD THE SHAPE OF THE DEFECT, and only running it found that.** Check 6's
+new corpus control, written the obvious way — count stories under the declared `s*/stories/` — is
+blind to a tree that has not migrated yet, so an unmigrated consumer holding 988 story files
+reported *the corpus is empty* and SKIPped. The control now spans the whole area, derived by
+cutting the template at its own placeholder, and the gap between the two counts is what names the
+cause. Three states that used to print one line are now three: an empty corpus SKIPs, a corpus that
+exists elsewhere FAILS with the migration command, and an unresolvable location FAILS as its own
+verdict rather than as silence.
+
+**Measured against the reference consumer, and the plan's figures were wrong in both directions:**
+the flat corpus is **988** files, not the 1001 or 1024 carried — 1025 is the count under *any*
+`stories/` directory, 25 of which already sit under `s<N>/`. The spelling split is 758
+`story-<N>-<M>-slug`, 73 `story-S<N>-<M>-slug`, 23 `story-<N>-<M>.md` and **134 in at least eight
+further spellings** (`S223-1-`, `s289-1-`, `sprint-208-1-`, `bug-`, `hotfix-`, `192-ff-A-`, and five
+with no number at all).
+
+Also corrected: the plan named `validate-locked-anchor.sh` as one of three shipped readers restating
+the literal. It is not one — the path appears there in a single usage-example COMMENT, and is that
+file's only `_bmad-output` reference at all, because it takes the story file as an argument.
+
+- `core/schemas/sprint-status.json` — `stories_dir` becomes a template; `stories_dir_sprint_placeholder`
+  declares the slot; a `$story_file_comment` block carries the measurement and the ban.
+- `core/scripts/sprint-status.sh` — `stories_dir()` and `story_key_stem()`; `resolve_story_file()`
+  takes the declared sprint; the unresolved finding names the migration.
+- `core/scripts/validate-mandatory-rules.sh` — Check 6 resolves the template (three schema
+  candidates, all load-bearing across the two layouts), selects by directory, composes the
+  escalation id, and fails closed on an unresolvable corpus.
+- `core/hooks/ai-dlc-protect.sh` — story files protected by the reserved `stories/` component,
+  total over both layouts and needing no schema read in a per-tool-call hook.
+- `scripts/install.sh` — scaffolds no flat `stories/`; there is no sprint-independent one to make.
+- 9 step-file and role-file prescriptions rewritten onto `s<N>/stories/` (`s*/stories/` for the two
+  genuine cross-sprint reads), and `story-<id>-*.md` becomes `story-<M>-*.md`.
+- New fixture `story-corpus-sprint-slot`: 10 assertions, 5 mutants each failing exactly its own, 1
+  unmutated control. `enforcement-map-derivations` gains 4 I84 mutants. Three fixtures whose seeds
+  built the old layout moved onto the new one.
+
 ## [0.306.0] — 2026-08-08
 
 ### The rule was right, it was untangle-only, and it was prose the author checks on themselves

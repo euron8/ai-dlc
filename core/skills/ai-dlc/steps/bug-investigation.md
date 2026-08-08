@@ -73,7 +73,7 @@ COMPLETE.
 
 ### 3. Create Fix Story
 
-Create a bug-fix story in `_bmad-output/planning-artifacts/stories/`:
+Create a bug-fix story in `_bmad-output/planning-artifacts/s<N>/stories/`:
 - Source Requirements section quoting the bug report verbatim
 - Root cause description
 - Fix approach

@@ -159,7 +159,7 @@ directory runs them locally only.
 corpus and draft the **descriptive/analytical** sections only — the sprint
 summary, `hard_block_count` + `hard_block_class[]`, and the **Agent-findings
 summary**. It reads:
-- Sprint stories in `_bmad-output/planning-artifacts/stories/`
+- Sprint stories in `_bmad-output/planning-artifacts/s<N>/stories/`
 - Code reviews in `docs/reviews/`
 - Gate log at `_bmad-output/implementation-artifacts/gate-log.md`
 - Escalation log at `docs/escalations/pending.md`

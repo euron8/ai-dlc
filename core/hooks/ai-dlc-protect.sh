@@ -59,7 +59,18 @@ PROTECTED_PATTERNS=(
   "_bmad-output/implementation-artifacts/gate-log.md"
   "_bmad-output/implementation-artifacts/sprint-status.yaml"
   "_bmad-output/planning-artifacts/sprint-status.yaml"
-  "_bmad-output/planning-artifacts/stories/*.md"
+  # STORY FILES, WHEREVER THEY SIT. This used to restate the corpus location
+  # (`_bmad-output/planning-artifacts/stories/*.md`) and would have gone silently
+  # inert the moment artifact-path-grammar.md moved the corpus under `s<N>/` —
+  # a protected-path pattern that matches nothing is indistinguishable from one
+  # that matched and allowed. Keying on the reserved `stories/` component instead
+  # is TOTAL over both layouts and needs no schema read in a hook that runs on
+  # every tool call. It is deliberately WIDER than the declared corpus: a
+  # `stories/` directory anywhere is protected. Over-protecting costs native
+  # Reads; under-protecting costs pipeline integrity, and only one of those is
+  # recoverable. `*` spans `/` in a bash `case` pattern, so this also covers any
+  # nesting below.
+  "*/stories/*.md"
 )
 
 # -----------------------------------------------------------------------------

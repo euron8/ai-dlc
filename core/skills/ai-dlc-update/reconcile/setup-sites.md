@@ -89,6 +89,7 @@ core_manifest:
   - core/fixtures/artifact-path-migration/**
   - core/fixtures/artifact-path-conformance/**
   - core/fixtures/setup-site-drift/**
+  - core/fixtures/story-corpus-sprint-slot/**
   - core/fixtures/audit-anchors-schema/**
   - core/fixtures/blocker-adjudication-record/**
   - core/fixtures/bmad-invocation-resolve/**

@@ -39,7 +39,7 @@ Check for existing planning artifacts:
 - Product brief: `_bmad-output/planning-artifacts/product-brief.md`
 - PRD: `_bmad-output/planning-artifacts/prd.md`
 - Architecture: `docs/architecture.md` or `_bmad-output/planning-artifacts/architecture.md`
-- Stories: `_bmad-output/planning-artifacts/stories/`
+- Stories: `_bmad-output/planning-artifacts/s*/stories/`
 - Test strategy: `_bmad-output/planning-artifacts/test-strategy.md`
 
 For each existing artifact, note whether it appears current or stale

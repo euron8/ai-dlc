@@ -318,10 +318,21 @@ reader can act on it, instead of in a filename nothing parses).
 Three spellings of one `docs/retro/` path (`sprint-<N>.md`, `sprint-N.md`, `sprint-*.md`) collapse
 to one entry when they move, which is the whole argument in miniature.
 
-**One area does NOT move in 10c and says so here rather than being discovered later:**
-`planning-artifacts/stories/` is still flat and shared across sprints. It is syntactically
-conforming — the directory carries no sprint token — and the sprint hides inside the FILENAMES
+**The story corpus was the one area 10c left flat, and the READERS have now moved onto the
+grammar ahead of the files.** `planning-artifacts/stories/` was syntactically conforming — the
+directory carries no sprint token — while the sprint hid inside the FILENAMES
 (`story-<N>-<M>-slug.md`, `story-S<N>-<M>-slug.md`), which is precisely the limit §*What a
-syntactic check CANNOT catch* documents. Moving it to `s<N>/stories/` means moving `stories_dir`,
-which is a SCHEMA declaration (`sprint-status.json`) that three shipped readers restate rather
-than resolve, and re-deriving Check 5's story-id-to-file join. That is its own release.
+syntactic check CANNOT catch* documents.
+
+`stories_dir` is now a TEMPLATE the schema owns (`sprint-status.json`), carrying the sprint slot,
+with `{sprint}` substituted as a number for one sprint's corpus or as `*` for every sprint's.
+Every program that needs the corpus resolves it from there; **I84 forbids a second copy**, which
+is what the old literal had in four places. The story-id join is re-derived in the same direction
+as everything else here: the sprint comes from the DECLARATION and the entry key contributes only
+the index, so `story-302-1` resolves to `s302/stories/story-1-*.md` and no spelling of the sprint
+in a basename can hide a story from Check 6 again.
+
+**The FILES follow in the next release, and until they do a tree still holding them flat reports
+FINDINGS rather than silence** — an unresolvable story entry is a finding by the schema's own
+rule, and Check 6 fails with the migration command in its message. That direction is deliberate:
+the previous shape of this defect was a check that verified nothing and printed PASS.
