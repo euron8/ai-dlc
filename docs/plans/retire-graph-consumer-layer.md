@@ -2,7 +2,7 @@
 
 ---
 
-# RESUME HERE — state as of 2026-08-06
+# RESUME HERE — state as of 2026-08-08, verified for handoff
 
 ## Start here
 
@@ -28,6 +28,13 @@ is a DISCHARGED runbook and each now says so in its own title. They were all tit
 "EXECUTE THIS" and five of them still carried status sections claiming work outstanding —
 a fresh session pointed at the directory would have redone a landed pull. Do not execute
 any of them; read them only as records.
+
+**AND THAT SENTENCE WAS FALSE ABOUT ONE FILE UNTIL 2026-08-08, which is why it is worth
+re-checking rather than trusting.** `s301-close-out-derivation.md` carried no banner while its
+sibling `s301-close-out.md` did, and it opens *"Read this whole file before running anything… It
+is a close-out procedure"* — executable on its face, for a sprint that is closed. Banner added.
+**Verify the claim against `head -1` of every file in the directory before relying on it**; the
+six-of-seven state is what a claim about a set looks like when the set is hand-checked.
 
 Working repo: `/Users/n8/git/ai-dlc` (the distribution). Reference consumer:
 `/Users/n8/git/graph` — **read it, never write it.** The operator owns every consumer-side
@@ -59,7 +66,7 @@ random — `v0.283.0`, `v0.288.0`, `v0.225.0`, `v0.57.0` — all have their CHAN
 do not re-derive this**; two of those branch names are still described as "parked" further down
 this file, in sections that predate their release.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.315.0`**, working tree
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.316.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
 lists them with their PR numbers. **Count them there; do not carry a number in this sentence.**
 It said "eighteen" for eighteen releases after that stopped being true, which is the same
@@ -160,9 +167,18 @@ entry after recording its verdict spends that verdict, because the digest covers
 re-recorded against the moved subject. That is the digest design working, and it is the
 reason the done-when list is re-run post-merge rather than remembered.
 
-**The next pull is small and clean, measured: 4 files, ZERO rulebook files (so one hop), and
-0 `HARD-*` rows over `f9b8aa4..HEAD`.** It carries v0.315.0, which is where item 20's fix
-gets verified by running that fixture from graph's own `tests/fixtures/`.
+**A PULL IS OWED AND ITS SHAPE IS NOW UNMEASURED. Re-measure it; do not reuse the figures
+below.** They were taken when `main` was at 0.315.0 and read *"4 files, ZERO rulebook files (so
+one hop), 0 `HARD-*` rows over `f9b8aa4..HEAD`"*. **v0.316.0 has landed since**, and it changes
+`reconcile/apply.sh` — a machinery file the self-update gate reasons about — so both the hop
+count and the blocking set have to be taken again. The rule this plan already states applies:
+**do not reason about a pull's shape from the distribution side; run the dry run and read what
+the gate says.**
+
+The pull carries two things worth naming for the operator: item 20's fixture fix (v0.315.0),
+verified by running that fixture from graph's own `tests/fixtures/`; and item 21's self-overwrite
+fix (v0.316.0), which **protects the pull AFTER this one, not this one** — the driver that runs
+during this pull is the copy graph already has.
 
 **SUPERSEDED, kept for the runbook it points at.** Runbook:
 [`graph-0300-to-0314-pull.md`](graph-0300-to-0314-pull.md). **The reason is not the diff size** —
@@ -600,7 +616,14 @@ before you write code.
     deliberately not shipped. The honest mechanism — running the shipped fixture set inside an
     install-shaped tree — costs a second full suite and is a declared gap.
 
-21. **`apply.sh` overwrites itself mid-run.** **REPORTED BY THE CONSUMER 2026-08-08 with receipts,
+21. ~~**`apply.sh` overwrites itself mid-run.**~~ **DONE — v0.316.0 (#445). REPRODUCED at ground
+    truth with a control, and the report's attribution was EXACT** — the second in a row. bash
+    resumes at its saved byte offset inside the replacement and **can exit rc=0 having run the
+    wrong code**, so do not remember this as "it fails loudly"; the observed syntax error is the
+    lucky end of the band. Fixed with the `.incoming.$$` + `mv` idiom the file already used at five
+    sites. **The fix protects the NEXT pull, not the one that delivers it.** See §*What item 21
+    measured*. What follows is the original report.
+    **REPORTED BY THE CONSUMER 2026-08-08 with receipts,
     NOT YET REPRODUCED HERE — record it as theirs until it is.** This plan has been wrong about a
     consumer report's attribution three times (items 13, 17, 18), and in two of those the named
     program was not the one at fault. **Reproduce it on a scratch consumer before touching
@@ -609,6 +632,15 @@ before you write code.
     script can be replaced underneath its own interpreter mid-execution. Whether bash re-reads the
     file is the question to settle FIRST, by experiment, not by recall: the answer decides whether
     this is a live defect or a latent one, and a fix aimed at the wrong half leaves it.
+
+22. **A stale path inside a layer entry goes undetected.** **REPORTED BY THE CONSUMER 2026-08-08,
+    NOT YET REPRODUCED HERE.** They cite `tea-consumer.md:18` in their own tree as an entry body
+    naming a path that no longer resolves, with nothing reporting it. **The citation is into the
+    CONSUMER and must be re-read there before acting.** The layer contract checks `hooks:`,
+    `shadows:` and `extends:` targets; a path in an entry's BODY is outside all three. Before
+    building anything, derive the false-positive set: entry bodies quote paths for many reasons —
+    historical notes, examples, other repos — and a checker that resolves every path-shaped token
+    in a body is the unmeasured lint this repo keeps refusing to ship.
 
 23. **Refactor `steps/artifact-consolidation.md` so the process stops leaving its residue in the
     durable area.** **OPERATOR REQUEST, 2026-08-08**, made after reading item 19: *"we need to
@@ -779,15 +811,6 @@ before you write code.
       items 17, 18 and 21 all landed in. Derive that blast radius first, and if generating it is
       riskier than maintaining it, the honest outcome is to keep the four lists and ship only the
       written criterion. **That is a legitimate result of this item, not a failure of it.**
-
-22. **A stale path inside a layer entry goes undetected.** **REPORTED BY THE CONSUMER 2026-08-08,
-    NOT YET REPRODUCED HERE.** They cite `tea-consumer.md:18` in their own tree as an entry body
-    naming a path that no longer resolves, with nothing reporting it. **The citation is into the
-    CONSUMER and must be re-read there before acting.** The layer contract checks `hooks:`,
-    `shadows:` and `extends:` targets; a path in an entry's BODY is outside all three. Before
-    building anything, derive the false-positive set: entry bodies quote paths for many reasons —
-    historical notes, examples, other repos — and a checker that resolves every path-shaped token
-    in a body is the unmeasured lint this repo keeps refusing to ship.
 
 **Do NOT redo R1, R2 or R5** — they are merged as v0.275.0/v0.276.0/v0.277.0, and their
 sections in the design record below are labelled SHIPPED.
@@ -1210,10 +1233,18 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 
 ## Where things stand
 
-**ai-dlc is at `0.310.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**THIS SECTION IS THE RELEASE TABLE, NOT A STATUS RECORD. The live status is at the top of the
+file, under §*Start here*, and it is the only one.** This heading used to open "ai-dlc is at
+`0.310.0`, `contract_version` 16" — a second status record that went stale the moment the next
+release landed and disagreed with the top of the file by six releases and one contract version.
+That is precisely the two-status-records defect `validate-plan-shape.sh` exists for, in the plan
+that documents it. **Read the current version from `VERSION`, and the current
+`contract_version` from `core/skills/ai-dlc/layer-contract.yaml`; do not carry either here.**
+Every release below is merged to `main`:
 
 | release | PR | what it does |
 |---|---|---|
+| v0.316.0 | #445 | **plan item 21.** The resolution driver overwrote ITSELF mid-run: `overwrite_from_theirs()` wrote with `git show > "$cons"` — open+truncate+write, same inode — and `apply.sh` is in the set it writes, on the copy step 7 tells the session to run. **Settled by experiment first**: bash resumes at its saved byte offset inside the new text and **can exit rc=0 having run the replacement's tail**. Reproduced at ground truth, control differing only in where the running copy lived (own copy rc=2 + stamp withheld + tree partial; out-of-tree rc=0 clean). Fixed with the `.incoming.$$` + `mv` idiom already used at five sites; also removes a truncate-before-fetch that left an EMPTY core file on a failed `git show`. New `driver-self-update` row. **One fixture arm was DELETED for being vacuous** after a mutant survived it. |
 | v0.315.0 | #440 | A fixture in `install.sh`'s ship list resolved its SOURCES only in the distribution, so it exited 2 on **every** consumer before an assertion ran, on a file byte-identical to upstream. Reported by the consumer and **reproduced here with a control**. Class sweep: 8 further text-suspects, **all 8 pass when RUN in a consumer-shaped tree**, so the obvious lint (FP set 8 of 8) was deliberately NOT shipped. |
 | v0.314.0 | #437 | **plan item 6.** LC-E6 and LC-O15 promoted to `ADJUDICATED`; `contract_version` 16 → 17. Cost measured on graph: `HARD-LAYER-ADJUDICATION-MISSING` 12 → 13. Promoting them **broke a hand-list in three files** — LC-O15 is not range-keyed, so "a degenerate range disarms every adjudicated arm" stopped being true; all three now derive via `--adjudicated-codes`. |
 | v0.313.0 | #436 | LC-E6's `fixture: none` was honest and left the clause with **no demonstrated firing case anywhere**, so its 0 was a silence. New fixture `layer-absorption-retire` fires it on both emit sites, with the LC-E5 control that separates "core absorbed it" from "you duplicate core" on the one bit that differs. |
