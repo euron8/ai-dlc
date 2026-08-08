@@ -34,6 +34,55 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.315.0] — 2026-08-08
+
+### A fixture that ships to every consumer resolved its sources only in the distribution, so it could not run on any of them
+
+**REPORTED BY THE REFERENCE CONSUMER during the 0.306.0 → 0.314.0 pull, and REPRODUCED HERE
+before anything was touched.** The report was accurate and precisely scoped — worth saying,
+because the last three consumer reports each named the wrong program.
+
+`core/fixtures/story-corpus-sprint-slot/seed.sh` walked `../../..` and then required
+`core/scripts/sprint-status.sh`, `core/scripts/validate-mandatory-rules.sh` and
+`core/schemas/sprint-status.json` beneath it. In the distribution that resolves. Installed, the
+fixture lives at `tests/fixtures/story-corpus-sprint-slot/`, the same walk lands on the
+consumer's repo root, `core/` is absent, and the seed exits **2** before a single assertion runs.
+It is in `install.sh`'s ship list and carries no `.dist-only` marker, so every consumer's
+pre-push suite ran it and every consumer's suite went red on a file byte-identical to upstream,
+with nothing the operator could fix locally.
+
+```
+run from the distribution        rc=0
+run from an install-shaped tree  seed: missing core/scripts/sprint-status.sh under <root>
+                                 FIXTURE ERROR: seed failed
+after the fix, both              PASS
+```
+
+**THE FILE GOT ITS SHAPE RIGHT AND ITS SOURCES WRONG, and its own header says which.** That
+header explains at length that the tree it BUILDS is consumer-shaped *"because the schema
+resolution under test is exactly the thing that differs between the two layouts (I33)"* — and
+then resolved the files it builds that tree FROM in one layout only. Each source is now named
+outright in both, never derived from the other. `run.sh`'s `D_ROOT` was assigned and never read;
+it is gone, because a dead `../../..` beside a live one is how the next reader concludes the
+resolution is fine on the strength of two files agreeing.
+
+**This is the same defect `layer-title-join`'s seed carries a paragraph about having been burned
+by**, reintroduced in a fixture written eight releases later — *"that is invariant I33's rule …
+broken three lines under a helper written for exactly this, and it turned a green machinery pull
+into a red covering fixture on the reference consumer."*
+
+**THE SWEEP FOR THE CLASS, AND THE LINT IT DID NOT PRODUCE.** All 116 shipped fixtures were
+scanned for the same shape, then the 8 the text heuristic flagged were RUN in a consumer-shaped
+tree built from the real ship list. **All 8 pass. The heuristic's false-positive set is 8 of 8**,
+so the obvious guard — "a shipped fixture naming a `<root>/core/` path without naming the
+installed counterpart" — is not shippable and is not shipped; an unmeasured lint is one the
+operator turns off. Controls in the same run: `story-corpus-sprint-slot`, `layer-title-join` and
+`apply-worklist-rows` all PASS in that tree, so the harness could see a green.
+
+**The honest mechanism is a declared gap:** running the shipped fixture set inside an
+install-shaped tree is what would have caught this, and it costs a second full suite. Recorded
+here rather than approximated by a predicate that is wrong 8 times out of 8.
+
 ## [0.314.0] — 2026-08-08
 
 ### LC-E6 and LC-O15 are ADJUDICATED, and promoting them made a hand-list in three files go stale
