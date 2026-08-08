@@ -77,8 +77,14 @@ merged as #413. The operator pastes one line into a graph session; nothing there
 **10e cannot ship until that has run once** — a validator landing on ~2700 non-conforming files
 wedges first contact.
 
-**NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.** See
-§*What item 8's triage measured*. They are small, diagnosed, and in a file core owns.
+**~~NEXT ACTION FOR THIS REPO: the `ledger-reverify.sh` defects item 8 surfaced.~~ DONE —
+v0.301.0 (#415) and v0.302.0 (#416). Item 8c is CLOSED**, and re-verifying it enlarged the
+finding: **three of the five `STILL-LIVE` verdicts were false, not one.** See §*What item 8c
+measured*. Two things now sit with the OPERATOR, and neither is core's to do.
+
+**NEXT ACTION FOR THIS REPO: item 6's UNMEASURED gate** — count the LC-E6 and LC-O15 candidate
+sets against the consumer. Everything ahead of it in the order is blocked on 8b, which is the
+operator's.
 
 ## Session handoff — 2026-08-07, written because context depth was becoming the risk
 
@@ -121,11 +127,11 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~7~~ | ~~**10c**, with **F4** folded in~~ | **DONE** — v0.299.0. Ledger emptied, readers composed, pointer landed, F4 shipped. See §*What v0.299.0 shipped* |
 | ~~8~~ | ~~**10d**~~ | **DONE** — v0.300.0. See §*What v0.300.0 measured* |
 | **8b** | **operator: pull, then run the migration** | **← THE CRITICAL PATH, and it is RUNBOOKED** — `graph-artifact-path-pull-and-migration.md` (#413). Two hops, `apply` on both. 10e cannot ship until this has run once |
-| **8c** | **`ledger-reverify.sh`'s own filed defects** | **← WHAT THIS REPO CAN DO NOW**, unblocked. Five entries filed against one core file; one is already fixed and its receipt cannot say so. See §*What item 8's triage measured* |
-| **9** | **10e** — the consumer pre-push validator | after 8b |
-| 10 | **16** — move `planning-artifacts/stories/` under `s<N>/` | split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
-| 11 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to |
-| 12 | **6** — promote LC-E6/LC-O15 | gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
+| ~~8c~~ | ~~**`ledger-reverify.sh`'s own filed defects**~~ | **DONE** — v0.301.0 (#415) fixed the two that were live; v0.302.0 (#416) shipped the mechanism for the class the other three exposed. The plan said "five entries filed against one core file": it is **four plus one** — the fifth is in `layer-drift.sh`. See §*What item 8c measured* |
+| **9** | **10e** — the consumer pre-push validator | after 8b — **BLOCKED, operator** |
+| 10 | **16** — move `planning-artifacts/stories/` under `s<N>/` | **BLOCKED behind 10e**, so behind 8b. Split out of 10c and deliberately not folded into 10d: it moves a SCHEMA declaration three readers restate, and re-derives Check 5's story-id join |
+| 11 | **8** — push-candidate ledger triage | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
+| **12** | **6** — promote LC-E6/LC-O15 | **← THE NEXT UNBLOCKED ITEM IN THIS REPO.** Gate is UNMEASURED; count the LC-E6/LC-O15 candidate sets first |
 | — | **12**, **13** | neither gates anything; take them when convenient |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
 
@@ -383,7 +389,7 @@ plan that omits it fails the build.**
 
 ## Where things stand
 
-**ai-dlc is at `0.300.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
+**ai-dlc is at `0.302.0`, `contract_version` 16.** Every release below is merged to `main`. The count in this sentence used to be hand-written and went stale three times; it is now stated as "every row below" so the table is the only thing to keep current:
 
 | release | PR | what it does |
 |---|---|---|
@@ -407,8 +413,10 @@ plan that omits it fails the build.**
 | v0.292.0 | #396 | v0.291.0's fixture seed resolved only the distribution layout (I33), so on a consumer it died in its seed and blocked the pull. Fixed via the two-layout `pick` helper the same file already defined. |
 | v0.293.0 | #400 | a plan must tell its executor to ping; `validate-plan-shape.sh` enforces it. **This file is its first subject.** |
 | v0.294.0 | #402 | **plan item 14.** The suite runs only the fixtures a change can affect, keyed on trace-derived read-sets. 118 fixtures, 40 bound in the enforcement map, **78 named nowhere** — a declaration-based skip would have missed **~8000 paths**. Everything that cannot justify a skip runs everything. Wall clock **42%**, not the 76% of work removed: the suite is pole-bound. |
-| v0.300.0 | #TBD | **plan item 10d.** `migrate-artifact-paths.sh`: dry run by default, `git mv` only, verified per file as source-absent AND dest-readable AND sha256-identical. Rehearsed on a CLONE of the consumer and the rehearsal found four defects reading could not — a component regex run against whole paths (668 detected instead of 2551, `docs/retro` absent entirely), adjacent tokens hiding each other (a two-sprint file planned as unambiguous), the slot nested inside the token it replaces (53 directories), and a half-migrated story corpus. 2667 moves / 48 refused / 1001 deferred / self-check 0 / idempotent. Every refusal and every inferred area is reported. New fixture `artifact-path-migration` (32 assertions, 3 mutants, 1 control). |
-| v0.299.0 | #TBD | **plan item 10c, with item 7's F4 folded in.** Readers compose the path from the declared sprint instead of searching it; core's 24 excused prescriptions are rewritten and the migration ledger is **EMPTY**, with both I82 arms re-proven by guarded mutant because an empty join reads like a dead one. Both hooks scope the live-series glob to `s<sprint-id>/` — 135 files across 56 sprints down to one sprint's candidate set — and I81 now binds the whole derivation as a marked BLOCK asserting two properties. Check 6's zero-verification PASS is closed with the corpus count as its control. F4: `validate-ci-gates.sh` reports its inventory on a vacuum and adjudicates via the alias table with no CI directory at all. `I82` added to the `OK:` line. |
+| v0.302.0 | #416 | **plan item 8c, second half.** `RECEIPTS-UNDECIDED` — one row per run counting the `theirs_has` receipts whose substring is present at BASE as well as theirs, so this pull moved neither side of them and their STILL-LIVE is a restatement rather than a measurement. **24 of 24** on graph. A COUNT, not a verdict: the stronger predicate was built, fires on **15 of 23** including entries confirmed live, and is REFUTED rather than shipped. Silent at zero. Two defects the fixtures caught and review did not — the loop ran in a subshell so the counter was discarded, and the row's entry column was the ledger path, which made a verdict depend on how the ledger was addressed. 61 → 67 assertions. |
+| v0.301.0 | #415 | **plan item 8c, first half.** The consumer root is normalized, because `.` inverts any receipt whose own claim is about absolute paths — measured, 74/74 rows either way with exactly ONE differing, a FALSE CLOSE. And `INPUT-UNRESOLVED`: the unconditional `[ -f "$LEDGER" ] || exit 0` spelled a caller error exactly like a clean corpus (bogus arg 5 and swapped args both gave 0 rows, rc=0, zero bytes of stderr, against 74). Two arms, because an arg-5-only check cannot see the swapped-args case. The fixture had been ASSERTING the defect. 54 → 61 assertions. |
+| v0.300.0 | #412 | **plan item 10d.** `migrate-artifact-paths.sh`: dry run by default, `git mv` only, verified per file as source-absent AND dest-readable AND sha256-identical. Rehearsed on a CLONE of the consumer and the rehearsal found four defects reading could not — a component regex run against whole paths (668 detected instead of 2551, `docs/retro` absent entirely), adjacent tokens hiding each other (a two-sprint file planned as unambiguous), the slot nested inside the token it replaces (53 directories), and a half-migrated story corpus. 2667 moves / 48 refused / 1001 deferred / self-check 0 / idempotent. Every refusal and every inferred area is reported. New fixture `artifact-path-migration` (32 assertions, 3 mutants, 1 control). |
+| v0.299.0 | #411 | **plan item 10c, with item 7's F4 folded in.** Readers compose the path from the declared sprint instead of searching it; core's 24 excused prescriptions are rewritten and the migration ledger is **EMPTY**, with both I82 arms re-proven by guarded mutant because an empty join reads like a dead one. Both hooks scope the live-series glob to `s<sprint-id>/` — 135 files across 56 sprints down to one sprint's candidate set — and I81 now binds the whole derivation as a marked BLOCK asserting two properties. Check 6's zero-verification PASS is closed with the corpus count as its control. F4: `validate-ci-gates.sh` reports its inventory on a vacuum and adjudicates via the alias table with no CI directory at all. `I82` added to the `OK:` line. |
 | v0.298.0 | #408 | **plan item 10a + 10b.** `artifact-path-grammar.md` declares one convention — the directory is the only sprint slot — and `validate-enforcement-map.sh` **I82** binds core's own prescriptions to it. Measured first: **65 prescribed paths, 41 conforming, 24 carrying a sprint token outside the reserved slot**, in 4 positions and 5 spellings. The 24 are a migration ledger bound in BOTH directions, so it can only shrink. `contract_version` does NOT move; the precedent was measured. No path moves. |
 | v0.297.0 | #407 | The self-update gate stops reading AGREEMENT as an unattributable failure. Found by the 10a+10b push: a machinery-only pull touching `audit-rule-files.sh` deferred, because bare it defaults to `--fail-on=any` while the hook passes `--fail-on=deterministic` — it fails a threshold the hook never applies, identically on both sides. v0.288.0's fix, one layer up, scoped to `2` alone. Re-measured over **seven** scripts, not five. |
 | v0.296.0 | #405 | **plan item 15.** `core/hooks/ai-dlc-notify.sh` on the `Notification` event — the mechanism behind the plan-shape rule's ping requirement. Platforms decided rather than left open: macOS `osascript`, Linux `notify-send`, anything else no channel, and `install.sh` PROBES and REPORTS which, so the no-channel case is not the inert-mechanism class. New fixture `notify-hook-channel` (9 assertions, 4 mutants, 1 control) shims `$PATH` so the Linux and no-channel branches are driven by the shipping code on a macOS suite. |
@@ -820,6 +828,68 @@ this repo does not write — they go to the operator. What core owns and should 
 
 **Do not read the 54 STILL-LIVE as a work queue.** Until the receipts are re-anchored, the set is
 a mixture of live entries and entries whose anchor cannot distinguish fixed from broken.
+
+## What item 8c measured (CLOSED — and the blindness is three times what this plan recorded)
+
+All five entries were re-verified against the code before anything was built, as the section above
+instructs. **Two were live and are fixed. Three were already fixed and their receipts cannot say
+so.** The plan named ONE blind receipt; it is three of five.
+
+| entry | receipt says | measured |
+|---|---|---|
+| `PC-S299-…-SIGPIPE-FALSE-ABSENT` | STILL-LIVE | **FIXED** — anchored `grep -qF -- `, the REPAIRED line. NAMED-UPSTREAM at v0.300.0 |
+| `PC-S299-…-MISATTRIBUTES-ABSORBING-VERSION` | STILL-LIVE | **FIXED** — `absorbed_at()` ships; the receipt anchors prose the corrected emit still prints. History **silent** |
+| `PC-S316-ABSORPTION-DETECTOR-…-NUMBERED-ANCHORS` | STILL-LIVE | **FIXED** — `layer-drift.sh` grew an unnumbered arm; the receipt anchors the guard the fix deliberately KEPT. History **silent** |
+| `PC-S316-…-EXITS-0-SILENTLY-…` | STILL-LIVE | was LIVE → **v0.301.0** |
+| `PC-S316-…-DOES-NOT-NORMALIZE-CONSUMER-…` | STILL-LIVE | was LIVE → **v0.301.0** |
+
+**Only ONE of the three blind ones is visible to `NAMED-UPSTREAM`.** The other two are invisible to
+every signal the tool has, which is why v0.302.0 exists.
+
+**A CORRECTION TO THIS PLAN'S OWN TEXT.** §*What item 8's triage measured* says "Four sibling
+entries are also filed against this one file". They are not: `PC-S316-ABSORPTION-DETECTOR-…` is
+filed against **`layer-drift.sh`**, a different file. It is four plus one.
+
+**THE THIRD ONE WAS SETTLED BY MEASUREMENT, NOT BY READING, and that is the transferable part.**
+`layer-drift.sh`'s unnumbered arm names the entry id in its own comment — which is suggestive and
+is not evidence. Run against graph:
+
+```
+extension entries scanned                                    37
+  yielding ZERO numbered anchors (the entry's blind set)     26
+CONTROL — core's gate-validation.md yields                   42   <- the harvester works
+entries carrying an absorption row                            7
+  ...of which are IN the blind set                            6   <- incl. SKILL-push.md,
+                                                                     which the entry named
+                                                                     BY NAME as unreachable
+```
+
+My first attempt at that join returned **0** and I nearly reported it: a `grep -qF` inside a
+`while read` that silently matched nothing. It was an absence with no control, in the session
+auditing for absences with no controls. The `comm` join above carries its own — 7 total, 6 blind,
+1 numbered — and that is what made the zero visibly wrong.
+
+**WHAT CORE SHIPPED, AND THE PREDICATE IT REFUSED TO SHIP.** `SKILL.md` step 3f already carries
+the rule — *anchor a `theirs_has` receipt on a token the FIX MUST REMOVE* — and says in the same
+breath that it has no guard. v0.302.0 gives it the only mechanism two refs support:
+`RECEIPTS-UNDECIDED`, one row per run, counting the `theirs_has` receipts whose substring is
+present at **base as well as theirs** — predicates this pull moved neither side of, so their
+STILL-LIVE is a restatement, not a measurement. On graph that is **24 of 24**.
+
+**The obvious stronger predicate was built, measured and REFUTED. Do not rebuild it.** Narrowing
+that bucket to entries whose cited FILE changed in `base..theirs` fires on **15 of 23** and
+includes entries confirmed live (`PC-S302-…-DISARMS-LC-A1`, whose subject sentence is still in
+`SKILL.md` — that is plan item 13). There is no third ref for this verb: the question is *would
+the fix have had to remove this token*, which two trees cannot answer.
+
+**TWO THINGS ARE NOW THE OPERATOR'S, and neither is core's to do:**
+
+1. **Re-anchor or close the three blind entries in graph's ledger.** They are absorbed. Each wants
+   `ADOPTED UPSTREAM (v…, verified <date>)` or a receipt anchored on a token the fix removed. The
+   ledger is the consumer's and this repo does not write it.
+2. **Read `RECEIPTS-UNDECIDED` on the next pull.** It will say 24 of 24 until the receipts are
+   re-anchored, and until then a zero `CLOSE-CANDIDATE` count from that run is not evidence that
+   nothing was absorbed.
 
 ## What v0.300.0 measured (item 10d — the migration, rehearsed on a clone)
 
