@@ -1,4 +1,9 @@
-# graph: pull 0.300.0, then migrate every artifact path — EXECUTE THIS
+# graph: pull 0.300.0, then migrate every artifact path — DISCHARGED, DO NOT EXECUTE
+
+**BOTH STEPS RAN.** The pull landed graph at `0.300.0` and the migration applied 2667 moves
+(48 refused, verified per file). The story corpus that this file left DEFERRED was migrated
+later, in the 0.306.0 → 0.314.0 pull, as 951 further moves. **The header below says step 1 is
+done and to start at step 2; that was true when written and is now false.**
 
 **STEP 1 (the pull) IS DONE as of 2026-08-08. Merge the one unpushed commit, then start at
 STEP 2.** See §*STATE AS OF 2026-08-08* and §*Two things already settled*.

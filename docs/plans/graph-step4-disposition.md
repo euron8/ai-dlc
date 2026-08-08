@@ -1,4 +1,9 @@
-# PR #872 disposition, and step 4 — EXECUTE THIS
+# PR #872 disposition, and step 4 — DISCHARGED, DO NOT EXECUTE
+
+**SPENT.** The disposition was delivered and its finding shipped upstream in v0.290.0. Kept for
+the measurement it records — that `EXTENSION-TITLE-MATCHES-CORE` cannot block, because
+`hard-blockers.sh` selects on the `HARD-` prefix the status does not carry — which is the
+reasoning behind main-plan item 6's gate being restated rather than reused.
 
 ## Start here
 

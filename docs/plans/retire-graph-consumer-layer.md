@@ -23,6 +23,12 @@ The content is unchanged (the archive was `git mv` with per-file sha verificatio
 prefix moved. Re-verify any citation
 below it against the tree before acting on it.
 
+**WHICH PLANS IN `docs/plans/` ARE LIVE: THIS ONE, AND ONLY THIS ONE.** Every other file there
+is a DISCHARGED runbook and each now says so in its own title. They were all titled
+"EXECUTE THIS" and five of them still carried status sections claiming work outstanding —
+a fresh session pointed at the directory would have redone a landed pull. Do not execute
+any of them; read them only as records.
+
 Working repo: `/Users/n8/git/ai-dlc` (the distribution). Reference consumer:
 `/Users/n8/git/graph` — **read it, never write it.** The operator owns every consumer-side
 action: running `/ai-dlc-update`, merging its PR, retiring layer entries. House rules for this
@@ -45,9 +51,11 @@ below, and a session following this file must not re-ask them.**
   their intended effect on a sprint that has already failed once without them. A close-out
   prompt for the graph session is owed as part of this work.
 
-**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.305.0`**, working tree
+**NOTHING IS IN FLIGHT. No branch is parked.** ai-dlc `main` is at **`0.315.0`**, working tree
 clean, and every release this plan produced is merged — the table under §*Where things stand*
-lists all eighteen with their PR numbers. The previously-parked F3 branch shipped after two
+lists them with their PR numbers. **Count them there; do not carry a number in this sentence.**
+It said "eighteen" for eighteen releases after that stopped being true, which is the same
+underived-count defect core Rule 31 exists for, in the file that documents it. The previously-parked F3 branch shipped after two
 renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 
 **~~graph is at `0.292.0 / c5e7daa` and is QUIESCENT.~~ ~~NO LONGER TRUE — 8b IS IN FLIGHT.~~
@@ -89,6 +97,11 @@ graph right away so I'd prefer to keep plowing through the plan."* Item 10's tec
 sequencing constraints are unchanged and still binding — 10b before any migration, readers and
 writers together — but "get it done before s302" is not a reason to cut corners on any of them.
 Work the order below to completion instead of racing a sprint that is not waiting.
+
+**SEVEN consumer obligations are now open, and NONE GATES ANYTHING** — the 0.314.0 pull recorded
+`OWED-RETRO-4A-NARROW` beside the six that existed. All are enumerable in graph's debt audit and
+all are re-raised by every pull until discharged. The paragraph below names the two this plan
+was tracking and is otherwise unchanged.
 
 **Two consumer obligations are open and NEITHER GATES ANYTHING** — `OWED-DEVPUSH-RESTATES-CORE`
 and `OWED-STS-DOMAIN-AB-ABSORBED`, both enumerable in graph's debt audit, both re-raised by every
@@ -232,7 +245,10 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~12~~ | ~~**18** — `unregistered-drift.sh` reads an intermediate self-update ref as consumer drift~~ | **DONE** — v0.309.0 (#430). Reproduced with a control; **28 files** exposed (control: 72 machinery files outside the scan). Half the report's attribution is REFUTED and left open. See §*What item 18 measured* |
 | ~~13~~ | ~~**8** — push-candidate ledger triage~~ | **CORE'S HALF DONE** — v0.310.0 (#432). The run's only CLOSE-CANDIDATE was FALSE; the guard against it existed as a NOTE, not a mechanism. The remaining triage needs the receipts re-anchored, which is the operator's. See §*What item 8's core half measured* | v0.299.0 changed files several `verify:` receipts anchor to. **Re-scoped by 8c**: the receipts are graph's and re-anchoring them is the operator's, so what remains here is adjudicating entries whose subject is core |
 | ~~14~~ | ~~**6** — promote LC-E6/LC-O15~~ | **DONE** — v0.311.0 (#434), v0.312.0 (#435), v0.313.0 (#436), v0.314.0 (#437). Both zeros were unreadable: LC-O15's was FALSE, LC-E6's was a SILENCE. Two unrelated `apply.sh` defects fell out of driving it. See §*What item 6 measured* |
-| **15** | **19** — review graph's artifact consolidation | **← THE NEXT ITEM.** Operator request 2026-08-08. Read-only against the consumer; nothing in this repo gates it |
+| **15** | **19** — review graph's artifact consolidation | **← THE NEXT ITEM.** Operator request 2026-08-08. Read-only against the consumer; nothing gates it, and it is now better positioned: graph is at 0.314.0, so the review reports against the engine it actually runs |
+| ~~—~~ | ~~**20** — a shipped fixture no consumer could run~~ | **DONE** — v0.315.0 (#440). Taken out of order: it was blocking the consumer's pull mid-flight |
+| — | **21** — `apply.sh` overwrites itself mid-run | REPORTED by the consumer with receipts, **NOT reproduced here**. Reproduce first; three earlier consumer reports in this plan had wrong attributions |
+| — | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
 | ~~—~~ | ~~**13**~~ | **DONE** — v0.303.0 (#418). Taken ahead of 6 because 6's gate needs a consumer measurement and graph is mid-pull |
 | — | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | ~~—~~ | ~~**14** — the dependency map~~ | **DONE** — v0.294.0 (#402) + v0.295.0 (#403). Taken out of order on operator direction, ahead of item 10. See §*What v0.294.0 measured* |
@@ -876,6 +892,11 @@ this**; the false-positive measurement `CLAUDE.md` requires did, on the first re
 
 | release | PR | what it does |
 |---|---|---|
+| v0.315.0 | #440 | A fixture in `install.sh`'s ship list resolved its SOURCES only in the distribution, so it exited 2 on **every** consumer before an assertion ran, on a file byte-identical to upstream. Reported by the consumer and **reproduced here with a control**. Class sweep: 8 further text-suspects, **all 8 pass when RUN in a consumer-shaped tree**, so the obvious lint (FP set 8 of 8) was deliberately NOT shipped. |
+| v0.314.0 | #437 | **plan item 6.** LC-E6 and LC-O15 promoted to `ADJUDICATED`; `contract_version` 16 → 17. Cost measured on graph: `HARD-LAYER-ADJUDICATION-MISSING` 12 → 13. Promoting them **broke a hand-list in three files** — LC-O15 is not range-keyed, so "a degenerate range disarms every adjudicated arm" stopped being true; all three now derive via `--adjudicated-codes`. |
+| v0.313.0 | #436 | LC-E6's `fixture: none` was honest and left the clause with **no demonstrated firing case anywhere**, so its 0 was a silence. New fixture `layer-absorption-retire` fires it on both emit sites, with the LC-E5 control that separates "core absorbed it" from "you duplicate core" on the one bit that differs. |
+| v0.312.0 | #435 | The supersession join compared the WHOLE `shadows:` string, so a multi-anchor override could never match a declaration naming one anchor — the blind spot **was** the population the clause exists for. One live miss on graph. `--stamp retire` deletes the whole file, so a multi-anchor hit now carries `retire_anchor=` and prescribes narrowing. |
+| v0.311.0 | #434 | `apply.sh`'s `say()` printed THREE fields while EIGHTEEN call sites passed four, so **every WORKLIST/DECISION detail was discarded**; and `printf '%s' \| while read` dropped its last element, so a one-key ATOMIC sequence emitted only `2/2 --stamp retire` while numbering a `1/2` that never existed. Found by DRIVING it while measuring item 6. New fixture `apply-worklist-rows`. |
 | v0.275.0 | #361 | **enablers.** Unnumbered headings now join (`EXTENSION-TITLE-MATCHES-CORE`, LC-E19, WARN) — 27 of graph's 38 entries were previously invisible. Env-keyless `override_supersessions:` can fire, so "core adopted your prose" is declarable. |
 | v0.276.0 | #362 | absorbs Check 7 non-vacuity, carry-over item-5 sprint boundary, `dev.md` conditional local-launch → **3 overrides retirable** |
 | v0.277.0 | #363 | absorbs qa gate-2 go-signal, code-reviewer context-*shape* severity, pm probabilistic-AC + numeric anchor → **2 extensions retirable** |
