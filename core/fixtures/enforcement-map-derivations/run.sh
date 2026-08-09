@@ -482,6 +482,35 @@ A25_i85_heredoc_narrowing_holds() {
   fi
 }
 
+# --- Assertion 26: I33b — the two-step walk across the install split ---------
+# I33 catches `$(dirname "$X")/../<subtree>/` in ONE expression. The defect does not need
+# one: whole-read-pool shipped the dirname into a variable and walked up off that on the
+# next line, and I33's own pattern returns ZERO on it. The parent holds in core/ and is
+# SPLIT by install.sh on every consumer, so the fixture was green here and exited 2 there —
+# a permanent stop on the consumer's pre-push, which is how it was found (PC-S326).
+A26_i33b_two_step_walk() {
+  t="$(fresh)"
+  if edit "$t/core/fixtures/whole-read-pool/run.sh" \
+       '{ sub(/^  SPRINT_SCHEMA="\$ROOT\/core\/schemas\/sprint-status\.json"$/, "  SPRINT_SCHEMA=\"$SCRIPTS_DIR/../schemas/sprint-status.json\"") } { print }'; then
+    assert_fires "I33b a dirname VARIABLE walked up into a sibling subtree is REPORTED" \
+                 "walking up from a dirname VARIABLE"
+  fi
+}
+
+# --- Assertion 27: I33b — one predicate, and it fails closed when blinded ----
+# THE ASSERTION THAT MATTERS MOST HERE. An earlier draft inlined the detection twice, so
+# blinding the corpus scan left the probe passing against its own private copy — a probe
+# certifying an instrument it never exercised. Scan and probe now call ONE function, so
+# breaking it must surface as the probe failing, not as a clean tree.
+A27_i33b_fails_closed_when_blind() {
+  t="$(fresh)"
+  if edit "$t/scripts/validate-enforcement-map.sh" \
+       '{ if ($0 ~ /grep -qE .*_v.*_f. 2>\/dev\/null && printf/ && !done) { sub(/grep -qE "[^"]*"/, "grep -qE \"ZZNOMATCHZZ\""); done=1 } } { print }'; then
+    assert_fires "I33b a BLINDED predicate reports its own probe rather than a clean tree" \
+                 "positive probe was NOT reported"
+  fi
+}
+
 # `--run-one <assertion>` is one assertion, in one process, against one freshly seeded
 # tree. It is the unit the pool schedules and it is also how a human runs a single
 # assertion while working on it.

@@ -1321,6 +1321,52 @@ when you are done — including when "done" means you stopped early. **This inst
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
 
+## What PC-S326 measured (an invariant blind to its own defect one assignment apart)
+
+v0.327.0. **Filed by the consumer against v0.322.0, reproduced here with a control.** Not a plan
+item — it surfaced when the operator ran the 0.320.0 → 0.326.0 apply and the consumer's pre-push
+blocked on the fixture.
+
+```
+core/fixtures/whole-read-pool/run.sh   consumer layout  rc=2   distribution  rc=0
+```
+
+**THE DEFECT.** Its 10d mutation arm resolved `sprint-status.json` as the validator's dirname plus
+a parent hop into a `schemas` sibling. `install.sh` SPLITS that parent — `core/scripts/<x>` →
+`scripts/ai-dlc/<x>` while `core/schemas/` → `.claude/schemas/` — so the arm was green here and
+dead everywhere it shipped. **The consumer's pre-push blocks on its fixture suite, so this was a
+permanent stop**; the operator pushed with `--no-verify`, on the record, and was right to flag it
+rather than skip the fixture, because a skip reads like a pass.
+
+**WHAT WAS UNREACHABLE IS THE POINT.** That arm proves v0.322.0's `SPRINT_WHOLE_READ_SET` measures
+the pool rather than the file merely existing — **the check that stops the locked-requirements move
+from grading itself**, which is the whole reason 23c-1 and 23c-3 shipped together. It was green
+upstream and could not run anywhere it mattered.
+
+**I33 EXISTS FOR EXACTLY THIS AND WAS BLIND BY CONSTRUCTION.** Its grammar wants the `dirname` call
+and the `/..` walk in ONE expression; this shipped them one assignment apart, and **I33's own
+pattern returns 0 on the defective file.** I33's header records *"this pattern occurs ZERO times"*
+as its false-positive measurement — true of the form it can see, and the same shape as I54 → I54b,
+where the pipeline form sat outside I54's grammar by construction.
+
+**A zero over the wrong grammar reads exactly like a clean tree.** That is the general form, and
+this repo now has three instances of it.
+
+**I33b** covers the variable-in-between form. Measured before shipping: **1** occurrence across
+every `core/fixtures/**/*.sh`, **0** after the fix.
+
+**A DEFECT IN THE GUARD AGAINST THE DEFECT, CAUGHT BEFORE IT SHIPPED.** The first draft inlined the
+detection TWICE, so blinding the corpus scan left the probe passing against its own private copy —
+**a probe certifying an instrument it never exercised.** Scan and probe now call one function.
+Asserted: `enforcement-map-derivations` A26–A27.
+
+**AND THE FIX'S OWN COMMENT TRIPPED THE CHECKER IT WAS EXPLAINING.** Quoting the defective
+expression verbatim made I33 — which scans that file — flag the example. Written out in words
+instead. Third time this repo has paid for quoting a string a checker is hunting.
+
+**ATTRIBUTION CORRECTION for the ledger:** the consumer's report names 0.326.0's arm; `git log -S`
+puts the line in **v0.322.0** (`b2954cc`). Re-anchor the PC-S326 receipt accordingly.
+
 ## What PC-S320 measured (a remediation that ran the operator's own answer)
 
 v0.326.0. **Filed by the consumer, reproduced here exactly, and it is core's.** Not a plan item —
