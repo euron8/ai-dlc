@@ -337,6 +337,19 @@ false in the way a handoff cannot afford.** That section carries the AGGREGATE (
 so a session sent there to do the re-home would have found a summary of a table and nothing to act
 on. The two instruments that get it wrong ARE written into the step itself — that half was true.
 
+**AND THE PASS ITSELF IS A BETWEEN-SPRINTS OPERATION, WHICH IS NOW — NOT s302.** Operator challenge
+2026-08-09, and the step confirms it against the first draft of the runbook: *"Run it at a quiescent
+point (between sprints), not mid-pipeline"* and *"the snapshot may hold a sprint that has closed, or
+one that has not started."* The entanglement that draft claimed with the early roll-forward does not
+exist either: `sprint-id` returns 302 today and would have returned 302 without the roll, because
+`status: done` takes rule 3's `sprint + 1`. **What is missing is a SUBJECT, not a moment** — graph's
+whole-read pool is `ok` at **109623 tok, 33% of 330000**, all four targets inside it, so a pass today
+would rewrite four artifacts that are not over threshold and its done-when could not go green. The
+runbook therefore carries the pass as a one-line CONDITIONAL rather than a schedule. **The one `OVER`
+row on that consumer is `pipeline-continuation-log.md` at 314%, whose remedy is ROTATE and which the
+step excludes by name-class** — it was 309% when the spent runbook called it unrelated, so it is
+growing and it is now named as outstanding rather than as noise.
+
 **RE-DERIVED 2026-08-09 and now written into the runbook's §4 as a per-file table**, which is where a
 consumer session can use it. It came out **32, not 33** (the plan measured at an older sha), and the
 DIRECT/INFERRED split **15/17, not 24/9** — the earlier derivation resolved inferred rows against a
