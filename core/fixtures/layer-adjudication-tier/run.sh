@@ -113,6 +113,34 @@ else
   bad "recording a verdict suppressed the candidate row itself. Then LC-E4's declared code is emitted by nothing, its clause cannot fire, and I36's grep over this script would still pass on the string in a comment"
 fi
 
+# --- Part 2b: and the SURVIVING row SAYS a verdict is recorded ----------------
+# The row printing unchanged is exactly what let `apply.sh` emit `WORKLIST extension-reread` over a
+# recorded verdict: the block cleared, the row looked identical to an undecided one, and the driver
+# had nothing to test. `PC-S331` (apply.sh's extension re-read ignoring a recorded verdict). The token is
+# `layer-drift.sh`'s own `ADJ_ROW_TOKEN`, read from the script rather than restated here, so this
+# arm cannot drift from the string the driver matches on.
+TOKEN="$(sed -n 's/^ADJ_ROW_TOKEN="\([A-Za-z_][A-Za-z0-9_-]*\)".*/\1/p' "$DRIFT" | head -1)"
+if [ -n "$TOKEN" ]; then
+  ok "ADJ_ROW_TOKEN resolved from layer-drift.sh ('$TOKEN') — the arms below match the driver's string, not a copy"
+else
+  bad "ADJ_ROW_TOKEN could not be resolved, so the two arms below would test the empty string and pass on anything"
+fi
+hookdetail() { run | awk -F'\t' '$1 == "EXTENSION-HOOK-DRIFT" {print $4; exit}'; }
+case "$(hookdetail)" in
+  "$TOKEN"=still-additive\ ::\ *)
+    ok "the adjudicated EXTENSION-HOOK-DRIFT row carries '${TOKEN}=still-additive ::' so a driver can tell it from an undecided one" ;;
+  *)
+    bad "the adjudicated row is byte-indistinguishable from an undecided one: $(hookdetail | cut -c1-80)" ;;
+esac
+# CONTROL: with the register cleared the SAME row must NOT carry it. Without this the arm above
+# passes on an implementation that prefixes the token unconditionally, which tells a driver nothing.
+mv "$REG" "$REG.hold"
+case "$(hookdetail)" in
+  "$TOKEN"=*) bad "an UNADJUDICATED row also carries the token — the prefix is unconditional and carries no information" ;;
+  *)          ok "control: with no recorded verdict the same row carries no token" ;;
+esac
+mv "$REG.hold" "$REG"
+
 # --- Part 3: ONE BYTE of entry change RE-FIRES it -----------------------------
 # The arm a path-keyed register fails. Nothing about the register changes here.
 printf '\n' >> "$CONS/$ENTRY"

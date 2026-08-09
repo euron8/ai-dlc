@@ -34,6 +34,54 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.343.0] — 2026-08-09
+
+### A recorded verdict cleared the block and still produced an unclosable work item
+
+Reported by the reference consumer as
+`PC-S331-APPLY-SH-EXTENSION-REREAD-IGNORES-A-RECORDED-VERDICT`, from a run that emitted both shapes
+at once with all three verdicts recorded **before** the driver ran.
+
+`EXTENSION-HOOK-DRIFT` is an ADJUDICATED code, so a register verdict clears its `HARD-` block.
+`apply.sh` then emitted `WORKLIST extension-reread` for it anyway. SKILL.md step 7 says `apply` is
+not clean while a `WORKLIST` row is outstanding, so **the honest reading of a fully-adjudicated run
+was a work item that could not be closed** — and the obvious way to close it is a second register
+row under a digest that already has one, which is `HARD-REGISTER-CONTRADICTION` the moment the
+verdicts differ.
+
+**THE CONSUMER'S DIAGNOSIS WAS RIGHT AND REACHED HALF THE DEFECT.** They identified that the loop
+keeps only the entry path and discards the detail field the token rides in, so there was nothing to
+test — correct, and their conclusion that a fix must stop discarding that field is the fix. What sat
+underneath is that `layer-drift.sh` **never put the token on an extension row at all**: the
+`adjudicated=<verdict> ::` prefix was computed inline in the override-supersession block and nowhere
+else. Fixing only the reader would have left it testing a field that is always empty.
+
+Both sides now go through one `adj_prefix` helper, used by the override site and by
+`EXTENSION-HOOK-DRIFT` and `EXTENSION-ANCHOR-DRIFT`. The override block's own comment already argued
+for this — *"Computed ONCE for all four emits below rather than pasted into each, so a fifth emit
+cannot forget it"* — the scope was one block too small, and the emit that forgot it was in another.
+
+**THE TOKEN'S RESOLUTION GATE WAS WIDENED, and missing that would have been a crash rather than a
+silent miss.** `ADJ_ROW_TOKEN` was resolved only when `OVERRIDE-SUPERSEDED` rows were present — that
+gating is deliberate, because a fixture drives a lone copy of `apply.sh` with no sibling to read.
+A run whose only adjudicated rows are extensions would have left it unset, and this file runs under
+`set -u`.
+
+**A FIXTURE WAS FAILING FOR A REASON THAT HAD NOTHING TO DO WITH THE FIX.**
+`apply-drift-after-write`'s synthetic distribution carried no
+`core/schemas/layer-adjudication-register.json`, and `layer-drift.sh` derives the verdict vocabulary
+from it at `theirs` — so the vocabulary was empty, `adj_lookup` rejected every verdict, and no
+recorded verdict could be honoured in that tree at all. The seed now copies the real schema and
+fails closed if it cannot find it. (Diagnosing it also produced a textbook false zero: the first
+`git cat-file -e "$THEIRS:core/…"` probe hit zsh's `:c` history modifier and reported the schema
+absent for the wrong reason. Braced, with a control on a path known to exist, it was absent for the
+right one.)
+
+Three mutants plus an unmutated control. `H1` — the reader discards the detail field again, the
+filed defect exactly — kills both apply-side arms and leaves the `layer-drift` fixture untouched,
+which is the two halves being tested separately. `H2` (the emit omits the prefix) is seen by both.
+`H3` (the prefix is unconditional) kills the control arm asserting an undecided row carries no token.
+
 ## [0.342.0] — 2026-08-09
 
 ### `SELF-UPDATE-SAFE-STOP` recommended a hop the consumer's machinery already had

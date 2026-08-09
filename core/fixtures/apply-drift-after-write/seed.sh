@@ -62,6 +62,23 @@ cat > "$DIST/core/hooks/ai-dlc-gamma.sh" <<'MD'
 # Its first responsibility is to resolve the declared sprint.
 MD
 printf '9.9.9\n' > "$DIST/VERSION"
+# THE ADJUDICATION VERDICT VOCABULARY, WITHOUT WHICH A RECORDED VERDICT CANNOT BE HONOURED HERE.
+# `layer-drift.sh` derives it from `core/schemas/layer-adjudication-register.json` AT THEIRS, and
+# an absent schema yields an EMPTY vocabulary — so `adj_lookup` rejects every verdict and the
+# adjudicated arms in run.sh would fail for a reason that has nothing to do with what they assert.
+# Diagnosed exactly that way: the arms went red, and the schema was missing rather than the fix
+# being wrong. Copied from the real distribution rather than hand-written, so the enum this fixture
+# tests against is the one consumers are held to.
+_SCHEMA_SRC="$(cd "$(dirname "$0")/../.." && pwd)/schemas/layer-adjudication-register.json"
+if [ -f "$_SCHEMA_SRC" ]; then
+  mkdir -p "$DIST/core/schemas"
+  cp "$_SCHEMA_SRC" "$DIST/core/schemas/layer-adjudication-register.json"
+else
+  echo "seed.sh: FIXTURE BROKEN — cannot locate layer-adjudication-register.json at $_SCHEMA_SRC." >&2
+  echo "  Without it the verdict vocabulary is empty and the adjudicated arms assert nothing." >&2
+  exit 2
+fi
+
 git -C "$DIST" init -q
 git -C "$DIST" -c user.email=f@f -c user.name=fixture add -A
 git -C "$DIST" -c user.email=f@f -c user.name=fixture commit -q -m base
