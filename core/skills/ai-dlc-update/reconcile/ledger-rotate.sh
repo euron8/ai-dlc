@@ -23,9 +23,14 @@
 # v0.135.0, but ..."). Measured on the reference consumer: 47 occurrences, 32 in the annotation
 # form, so 15 are not annotations. A rotation on the loose rule archives those entries.
 #
-# So rotation requires the ANNOTATION FORM this ledger actually writes: bolded, with the
-# version immediately after — `**ADOPTED UPSTREAM (v`. Anything else stays. An entry wrongly
-# kept costs one more pull to notice; an entry wrongly archived costs the work.
+# So rotation requires the ANNOTATION FORM this ledger actually writes: bolded, with a version
+# NUMBER immediately after — `**ADOPTED UPSTREAM (v<digit>`. Anything else stays. An entry
+# wrongly kept costs one more pull to notice; an entry wrongly archived costs the work.
+#
+# THE DIGIT IS LOAD-BEARING AND WAS ADDED AFTER THIS SCRIPT ARCHIVED A LIVE ENTRY. Without it
+# the pattern matches its own quotation — a push candidate filed ABOUT this rule writes the form
+# it describes — and it also matches `(verified`, so a close carrying no version at all passed a
+# rule whose banner promises one. Both are measured at the predicate below.
 #
 # Entry BOUNDARIES are lifted from ledger-reverify's parser unchanged: an entry is a
 # top-level `- **…**` bullet or a `##`-`######` heading, and either one ENDS the entry above.
@@ -104,7 +109,38 @@ awk -v keep="$TMPD/keep" -v move="$TMPD/move" -v names="$TMPD/moved-names" -v st
     sub(/[[:space:]]+$/, "", l); label = l
   }
   { if (ledger_entry_shape($0) != "") { open_entry($0); buf[++n] = $0; next } }
-  /\*\*ADOPTED UPSTREAM \(v/ { closed = 1 }
+  # A DIGIT AFTER `(v`, AND THAT ONE CHARACTER CLASS IS THE WHOLE OF TWO FIXES.
+  #
+  # NO APOSTROPHES IN THIS COMMENT, AND THAT IS NOT STYLE. This awk program sits inside a shell
+  # single-quoted string, so one apostrophe here closes the quote and the whole block becomes
+  # shell words -- which is exactly how the first draft of this comment failed.
+  #
+  # DEFECT 1 (PC-S331): THIS PATTERN ARCHIVED A LIVE ENTRY BECAUSE THE ENTRY QUOTED IT.
+  # The test is per-ENTRY, over every buffered line, so any line anywhere in a body decides the
+  # verdict -- and a push candidate ABOUT this script naturally writes the form it describes.
+  # Reproduced on the reference consumer: --apply archived PC-S330, a live entry, on a line
+  # reading  `**ADOPTED UPSTREAM (v` annotation is a real close.  The entry was matched against
+  # its own quotation of the rule, and the operator caught it only because the byte-identical
+  # acceptance test this script prescribes made the disappearance visible.
+  #
+  # SKIPPING FENCES IS THE OBVIOUS FIX AND IT IS THE WRONG ONE -- measured, because the report
+  # said the quotation was fenced and it is not. Four quotation forms were tried against a
+  # seeded ledger: fenced-with-the-awk-regex does NOT match (the escaped form is not the
+  # literal), while INLINE BACKTICKS and BARE PROSE both do. The live case is inline. A
+  # fence-skipping fix would have shipped green and left the real defect untouched.
+  #
+  # DEFECT 2, FOUND WHILE MEASURING THE FIRST AND REPORTED BY NOBODY: \(v matches (verified.
+  # So an entry annotated  **ADOPTED UPSTREAM (verified 2026-07-21).**  -- a close carrying NO
+  # version -- satisfied a rule whose own banner promises the version immediately after the
+  # parenthesis, and one such entry sits in the reference consumer archive. Under the digit
+  # anchor it becomes a correctly-reported stuck row instead, which is the state v0.330.0 added
+  # the refusal list to make visible.
+  #
+  # FALSE-NEGATIVE SET MEASURED BEFORE SHIPPING, against the reference consumer archive of
+  # genuine closes: 71 lines match the old pattern, 70 match this one, and the single
+  # difference is the versionless close above -- which the rule was never entitled to archive.
+  # Live ledger: 1 false positive before, 0 after.
+  /\*\*ADOPTED UPSTREAM \(v[0-9]/ { closed = 1 }
   # reverify.sh entry_line_closes(), restated as the LOOSE side of the same question.
   /ADOPTED UPSTREAM|WITHDRAWN|\(original text, retained for the record\)/ { loose = 1 }
                      { buf[++n] = $0 }

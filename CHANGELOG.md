@@ -34,6 +34,61 @@ fixture that never ran is indistinguishable from a real count.
 `EXPECT` values are derived from these numbers, and an operator meeting a correct `24` against a
 published `20` would fire a stop condition on a run that was working.
 
+## [0.336.0] — 2026-08-09
+
+### `ledger-rotate.sh --apply` archived a live entry, because the entry quoted the rule
+
+Reported by the reference consumer as **PC-S331**, filed after their own run archived `PC-S330` —
+a live push candidate — and they reverted it. **Reproduced here, and the reported cause is wrong
+in the one detail that decides the fix.**
+
+The closed predicate was `/\*\*ADOPTED UPSTREAM \(v/`, tested per ENTRY across every buffered
+line. **A push candidate filed ABOUT this rule naturally writes the form the rule matches**, so
+the tool archived an entry on its own quotation of itself.
+
+**THE REPORT SAID THE QUOTATION WAS IN A FENCED BLOCK. IT IS NOT, AND FENCE-SKIPPING WOULD HAVE
+SHIPPED GREEN WHILE LEAVING THE DEFECT LIVE.** Four quotation forms measured against a seeded
+ledger:
+
+```
+fenced block carrying the escaped awk form   NOT matched   (`\*\*` is not `**`)
+INLINE backticks                             MATCHED       <- the live case
+bare prose                                   MATCHED
+no quotation (control)                       NOT matched
+```
+
+The live line is `` `**ADOPTED UPSTREAM (v` annotation is a real close `` — inline. Confirmed at
+ground truth: run against the consumer's live ledger before the fix, rotate reported **1 closed
+entry would move** and named `PC-S330`. **The defect was still live at the time of this release**,
+not just at the time of their run.
+
+**A SECOND DEFECT FELL OUT OF MEASURING THE FIRST AND NOBODY HAD REPORTED IT.** `\(v` also matches
+`(verified`. So `**ADOPTED UPSTREAM (verified 2026-07-21).**` — a close carrying **no version** —
+satisfied a rule whose own banner promises *"the version immediately after the parenthesis"*, and
+one such entry is already in that consumer's archive.
+
+**The fix is one character class: `\(v[0-9]`.** A version number is what a genuine annotation
+carries and what a quotation and a placeholder do not.
+
+**FALSE-NEGATIVE SET MEASURED AGAINST THE CONSUMER'S OWN ARCHIVE OF GENUINE CLOSES**, which is the
+population a tightening endangers: **71 lines match the old pattern, 70 match the new one**, and
+the single difference is the versionless close — which the rule was never entitled to archive and
+which now becomes a correctly-reported stuck row. On the live ledger: **1 false positive before,
+0 after**, with the stuck count moving 8 → 9 as `PC-S330` takes its honest place there.
+
+Four new fixture arms in `ledger-rotate`, seeding the genuine close as a positive control, the
+inline quotation as the subject, the fenced escaped form as a control that must stay silent **for
+its own different reason**, and the versionless close — which must be refused **and reported**,
+since refused-and-silent is the state v0.330.0 exists to end. The mutant restores the un-anchored
+pattern and the quoting entry is archived again, with the genuine close still moving so the verdict
+is attributable.
+
+**One neighbouring defect is deliberately NOT fixed here.** `ledger-reverify.sh` skips on the loose
+`/ADOPTED UPSTREAM/`, so it still skips `PC-S330` — that is `PC-S330`'s own subject, its remedy
+scopes only the loose side, and it costs an unverified row rather than lost work. The asymmetry
+this script's header describes is intact; what changed is that the strict side is now actually
+strict.
+
 ## [0.335.0] — 2026-08-09
 
 ### The subject was never a declaration: 19 false positives became 0 by deriving the other side
