@@ -27,8 +27,8 @@ checked examples: `layer-drift.sh:648` was the env-key guard and is now other co
 SHIPPED, so they are records of why a thing was done, not instructions.
 
 **EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
-v0.330.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
-CONSUMER.** Prior readings were 51/46/0/5 (before this handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
+v0.331.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
+CONSUMER.** Prior readings were the same 50/45/0/5 after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
 numbers; re-run the loop.** It is one pass: extract
 `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
 against `git ls-files`, and compare the line number to `wc -l`. Report the count as its own
@@ -125,13 +125,24 @@ four.** The rulebook base and the tool version have agreed since #887; the one l
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — ONE HOP, TO `0.330.0`. The derivation, never the answer, is what to carry:**
+**A PULL IS OWED — ONE HOP, TO `0.331.0`. The derivation, never the answer, is what to carry:**
 `git diff --name-only <graph's stamped sha> HEAD` and read the top-level directories. Measured
-2026-08-09 against `9fc216e`: **5 `core/` files, plus `VERSION` and `CHANGELOG.md`** (control: the
-same command puts 2 paths under `docs/`, so it separates the two kinds rather than reporting
-everything). **No rulebook file and no hooked core file moves**, so expect the self-update to take
-the clean split, **0 `HARD-*` blockers, and no adjudications to record** — graph's eleven recorded
-verdicts are keyed on digests this range does not touch.
+2026-08-09 against `9fc216e`: **8 `core/` files, plus `VERSION` and `CHANGELOG.md`** (control: the
+same command puts 1 path under `docs/`, so it separates the two kinds rather than reporting
+everything). **v0.331.0 enlarged this range and changed its shape** — it moves
+`core/skills/ai-dlc-update/SKILL.md` and `reconcile/layer-drift.sh`, which the 0.330.0-only range
+did not. **Do not carry the earlier "expect the clean split" prediction across that change**: run
+the dry run and read what the gate says, which is this plan's standing rule after being wrong about
+hop counts twice. Still expect **0 `HARD-*` blockers and no adjudications to record** — graph's
+recorded verdicts are keyed on digests this range does not touch, and `layer-drift.sh`'s classify
+output was proven byte-identical across v0.331.0 on a shadow of graph's own layer.
+
+**AND THE PULL CARRIES A NEW READER THE OPERATOR HAS WANTED:**
+`layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>` prints every keyed subject
+with its `subject_digest` and recorded verdict, needing no gate state. **This is the answer to the
+report that they had to withhold their own register to re-read a key.** On graph's layer at
+`9fc216e..HEAD` it names **10** subjects, 10 of them already carrying a verdict — every one of
+which was unreadable before.
 
 **WHAT THE OPERATOR SHOULD EXPECT TO SEE FROM IT, and it is the reason to take it:**
 `ledger-rotate.sh` will start naming the entries that are closed for re-verification but not
@@ -433,31 +444,29 @@ what to do next, the table says where each item sits in the whole plan's history
 disagree, the table is the one to fix** — every completed row in it is a receipt with a PR number,
 and this list is derived from what is left.
 
-**ITEMS 25 AND 24 SHIPPED (v0.324.0, v0.325.0) and have left this list.** Their findings are in
-§*What item 25 measured* and §*What item 24 measured*, and both refuted their own item's central
-claim — in each case the declaration the item said was missing already existed and had a hole.
-**That is the pattern to expect from what is left below**, not an accident of those two.
+**ITEMS 25, 24 AND 28 SHIPPED (v0.324.0, v0.325.0, v0.331.0) and have left this list.** Their
+findings are in §*What item 25 measured*, §*What item 24 measured* and §*What item 28 measured*, and
+all three refuted their own item's central claim — twice the declaration the item said was missing
+already existed and had a hole, and once the item named a candidate population that was one twelfth
+of the real one. **That is the pattern to expect from what is left below**, not an accident.
 
-1. **Item 28 — a `subject_digest` is unreadable once its row stops blocking.** REPRODUCED here,
-   attribution exact. Derive the caller set first so a listing mode does not become a second
-   implementation of the candidate join.
-2. **Item 12 — bind the fixture ambient-env guard.** BLOCKED ON A DERIVATION, not on another item:
+1. **Item 12 — bind the fixture ambient-env guard.** BLOCKED ON A DERIVATION, not on another item:
    the guard is unshippable until the *declared consumer-settable tunables* are derived as a set.
    Requiring the clearing loop wherever a fixture names an `AI_DLC_*` token flags 19 fixtures, most
    of them naming keys they set themselves.
-3. **Item 22 — a stale path in a layer entry BODY goes undetected.** **REPRODUCE IT FIRST; it is
+2. **Item 22 — a stale path in a layer entry BODY goes undetected.** **REPRODUCE IT FIRST; it is
    the consumer's report, and its one citation points into the CONSUMER.** Then derive the
    false-positive set before building: entry bodies quote paths for many reasons.
-4. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
+3. **Item 26 — LC-O15 is anchor-grained, the supersession was arm-grained.** **REPRODUCE IT FIRST**
    — reported mid-pull, never reproduced here. **Its first step is to establish whether an arm is
    addressable at all**, and if it is not, the honest outcome is a smaller change than a new join.
 
-**RECOMMENDED NEXT: item 28**, then 12, 22, 26. None blocks another. **Item 26's subject is now
-partly answered but NOT closed** — v0.328.0 stopped `apply.sh` prescribing a retire over a recorded
-verdict, which is the SYMPTOM the consumer hit; item 26 asks whether an ARM is addressable at all,
-and that is untouched.
+**RECOMMENDED NEXT: item 22**, then 26, then 12. None blocks another; 12 is last only because its
+derivation is the one that is genuinely blocked. **Item 26's subject is now partly answered but NOT
+closed** — v0.328.0 stopped `apply.sh` prescribing a retire over a recorded verdict, which is the
+SYMPTOM the consumer hit; item 26 asks whether an ARM is addressable at all, and that is untouched.
 
-**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull (one hop to `0.330.0`;
+**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull (one hop to `0.331.0`;
 scope and derivation in the status block above), and the **two** homing jobs still open — the S299
 LOCKED block into `s299/locked-requirements.md`, and the brief's `## Changelog` section into
 `s<N>/changelog-product-brief.md`. Both verified still open 2026-08-09. **Nothing breaks before
@@ -565,7 +574,7 @@ keeping: it sequenced on *finish what is started* rather than on *which work inv
 | ~~21~~ | ~~**23c** — the inlet~~ | **CLOSED — derivation + three releases, v0.321.0 (#461), v0.322.0 (#462), v0.323.0 (#463). ITEM 23 IS CLOSED.** Original row text follows. **DERIVATION DONE 2026-08-08 — the stop condition is NOT met, so 23c proceeds.** Finding: [`docs/reviews/artifact-inlet-locked-block-derivation.md`](../reviews/artifact-inlet-locked-block-derivation.md). **The read side is cheap and it was the wrong question**: of the four validators one is not a site, two move for free, one moves on a one-word default. **The real work is a FOURTH change the item never named — `is_sprint_slotted` exempts every `s<N>/` path from the whole-read pool, so the move grades itself green without a byte less being read.** Now four changes in THREE releases: **23c-2** the changelog — **DONE, v0.321.0 (#461)**, taken first because nothing reads a changelog so it needs no pool arm; **23c-1 + 23c-3** the pool arm with the writer and pin, together because the arm has no subject until the writer creates one; **23c-4** cross-sprint anchoring. See §*What item 23c's derivation measured* |
 | ~~22~~ | ~~**25** — five more per-sprint artifacts prescribed at durable paths~~ | **DONE — v0.324.0.** `test-strategy.md` moves to `s<N>/`; Check 23 rescoped from producer to path shape; the criterion written down. **The item's premise that no durable declaration exists is REFUTED** — two independent pairs of carriers already agreed, and four of the five were already decided with reasons. **74 homes, not 73.** `bug-analysis` stays out on a stated disagreement rather than a quiet widening. Two pre-existing fixture defects fell out, one of them a vacuous arm caught before it shipped. See §*What item 25 measured* |
 | ~~23~~ | ~~**24** — the fixture ship-list is four hand-lists~~ | **DONE — v0.325.0.** `install.sh` derives from `.dist-only`; the criterion is in `CLAUDE.md`; all 7 empty markers filled and I74(d) requires a body. **The other three lists STAY, with the blast radius measured** — uninstall bounds a destructive loop on a tree where `core/fixtures/` does not exist, and the two glob declarations are read by ~20 programs. **I74's old join could not survive and was replaced rather than kept as a tautology.** A second extractor (I8) was found by RUNNING. See §*What item 24 measured* |
-| **24** | **28** — a `subject_digest` is unreadable once its row stops blocking | **REPORTED + REPRODUCED.** The key prints only on the blocking row, so the register is readable only when empty and unreadable when in use — and both `owed` updates and re-verification need it. Gates nothing |
+| ~~24~~ | ~~**28** — a `subject_digest` is unreadable once its row stops blocking~~ | **DONE — v0.331.0.** New read-only mode `layer-drift.sh --list-adjudications`, sited on `adj_digest` rather than on `ADJ_CODES`. **The item's own framing would have shipped a listing reporting 1 of 12**: measured on the reference consumer, only ONE keyed subject is an `adj_check` row and eleven are LC-E19 at `level: WARN`, which hides its key harder because a verdict suppresses the whole row. Classify proven byte-identical, 47 rows. Fixture arms in TWO places because the two sites fail differently. See §*What item 28 measured* |
 | **25** | **12** | does not gate anything; take it when convenient. Needs the declared consumer-settable tunables derived first |
 | **26** | **22** — a stale path in a layer entry BODY goes undetected | REPORTED, **NOT reproduced here**. Derive the false-positive set before building: entry bodies quote paths for many reasons |
 | **27** | **26** — LC-O15 is anchor-grained, the supersession was arm-grained | **REPORTED by the consumer mid-pull 2026-08-08, NOT reproduced here.** Narrowing on a partial supersession discards the surplus silently — 119 consumer-only lines in the live case. **Establish whether an arm is addressable at all before proposing a join.** Gates nothing; the consumer deferred with a recorded verdict |
@@ -1329,6 +1338,64 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What item 28 measured (the item named one twelfth of its own subject population)
+
+v0.331.0. **The report reproduced exactly and the item's stated shape of the fix was wrong**, in a
+way that would have shipped a reader reporting 1 of 12 and reading like a complete answer.
+
+**THE REPRODUCTION, with a same-run control.** A shadow of the reference consumer's layer
+(`.claude/skills/ai-dlc/` plus the register, copied to scratch — graph is never written) classified
+at `9fc216e..HEAD`. With the register in place: **0 occurrences of `subject_digest` anywhere in the
+output**, and 11 `EXTENSION-TITLE-MATCHES-CORE` rows absent entirely. With the register withheld —
+the control, and the thing the consumer's operator actually did — **12 occurrences across 12 rows,
+10 distinct subjects**. The two runs differ only in whether a file exists.
+
+**THE ITEM SAID `adj_check` IS REACHED FROM EVERY CLAUSE AT ADJUDICATED LEVEL, WHICH IS TRUE AND IS
+NOT THE POPULATION.** Of the 10 distinct keyed subjects, **one** is an `adj_check` row
+(`OVERRIDE-SUPERSEDED`). The other nine, and 11 of the 12 occurrences, are **LC-E19
+`EXTENSION-TITLE-MATCHES-CORE`** — a clause at `level: WARN` that computes a digest at
+`layer-drift.sh`'s title-join site and `continue`s past its own emit when a verdict exists. So the
+item's "derive the caller set first" instruction, followed literally against the ADJUDICATED code
+set, produces a listing that is silent about 90% of the keys an operator needs.
+
+**AND THAT SITE HIDES ITS KEY HARDER THAN THE ONE THE REPORT WAS FILED ABOUT.** `adj_check` keeps
+printing the candidate row and drops only the blocking message; LC-E19 suppresses the whole row, so
+the digest leaves with it. The consumer's workaround — withhold the register, re-fire, restore,
+sha256 — was the only reader for both.
+
+**THE FIX IS SITED ON `adj_digest`, NOT ON `ADJ_CODES`,** which is what satisfies the item's real
+constraint (do not become a second implementation of the candidate join) rather than its stated
+one. Every keyed row in the script asks that one function for its key, so recording the call
+records the candidate set without restating who is adjudicable, and a digest site added later is
+listed with no edit. Mode: `layer-drift.sh --list-adjudications <dist> <base> <theirs> <consumer>`.
+
+**THREE THINGS THE BUILD HAD TO GET RIGHT AND ONE IT NEARLY GOT WRONG:**
+
+- **The classify path is untouched, PROVEN not assumed** — `layer-drift.sh` at `HEAD` against the
+  working tree, same shadow, same range: 47 rows, byte-identical stdout, 0 bytes of stderr both
+  ways.
+- **No `EXIT` trap.** The accumulator is a file because `adj_digest` runs inside command
+  substitution and a variable set there dies with the subshell — but the comment above
+  `shadow_keys` records that installing a trap in this script made bash report
+  `printf: write error: Broken pipe` from every `printf | grep -q` in it, 90 lines of stderr from
+  pipelines the change never touched. The file is removed at the end of the list block instead.
+- **The count line is on stderr and always printed, including at zero.** This mode's answer is
+  frequently an absence, and an empty stdout is what a broken pass, a wrong consumer root and a
+  genuinely unkeyed layer all look like.
+- **I54b caught three `listing | grep -q` pipelines in the new fixture arm** before it shipped —
+  the EPIPE shape where a match reports as not-found once the writer's remaining output clears the
+  pipe buffer. Converted to here-strings. That is the sixth time a mechanism in this repo has
+  caught a defect in the fix for another one.
+
+**THE FIXTURE ARMS ARE IN TWO PLACES BECAUSE THE TWO SITES FAIL DIFFERENTLY.**
+`layer-adjudication-tier` Part 9 asserts **set equality of the digests across the two register
+states** — asserting merely that a digest prints is satisfied by the build being rejected — plus a
+mutant with `adj_digest`'s recording removed that lists 0 while its classify output is unchanged,
+with an unmutated control from the same copied directory. `layer-title-join` Part 7 carries the
+WARN half, and its seed gives the sharpest available control: that fixture's contract is a stub
+with **no clause at any level**, corroborated against the contract's own text, so an
+`ADJ_CODES`-derived listing could name no subject there at all.
 
 ## The consumer-reported defect run (v0.326.0–v0.330.0) — five reports, five fixes, none a plan item
 

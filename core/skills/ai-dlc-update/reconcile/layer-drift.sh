@@ -166,12 +166,45 @@ set -uo pipefail
 #       the reader against the declaration by RUNNING the reader: a restated extraction in the
 #       invariant would agree with itself while the shipped one had gone inert. Exit 0 with no
 #       output is a legitimate answer (no clause sits at that level).
+#   layer-drift.sh --list-adjudications <dist-repo> <base-sha> <theirs-ref> <consumer-root>
+#       print every KEYED subject this run can see — entry, target, `subject_digest`, and the
+#       verdict recorded against that digest if there is one — and emit no classification rows
+#       and no blockers. Read-only; needs no gate state.
+#
+#       WHY THIS MODE EXISTS. The digest was reachable only from a row that was still BLOCKING.
+#       `adj_check` prints it inside HARD-LAYER-ADJUDICATION-MISSING, and the moment a verdict is
+#       recorded `adj_lookup` answers 0 and the function returns before printing anything; the
+#       LC-E19 site below `continue`s past its own emit for the same reason. So the register was
+#       writable exactly when it was empty and unreadable exactly when it was in use — and the
+#       key is needed AFTER the first write, because `owed` is designed to be updated as a debt
+#       is worked down and because a re-verification has to name the subject it re-read. The
+#       reference consumer's operator got at their own key by withholding the register to
+#       re-fire the block, reading the value, restoring the file and checking it byte-identical
+#       by sha256. Deliberately breaking your own gate state is not a workaround.
+#
+#       MEASURED ON THE REFERENCE CONSUMER before this mode was written, `9fc216e..HEAD`, with
+#       the register withheld as the control: **12 keyed subjects, 12 of them invisible** with
+#       the register in place — and only ONE of the twelve is an `adj_check` row. The other
+#       eleven are LC-E19 `EXTENSION-TITLE-MATCHES-CORE`, which keys on a digest without sitting
+#       at level ADJUDICATED at all. A listing derived from the ADJUDICATED code set would
+#       therefore have reported 1 of 12 and read like a complete answer.
+#
+#       THE SITE IS `adj_digest`, WHICH IS WHY THIS IS NOT A SECOND CANDIDATE JOIN. Every keyed
+#       row in this script gets its key from that one function, so the listing records what the
+#       classifier already computed rather than re-deriving who is adjudicable. A digest site
+#       added tomorrow is listed without an edit here — which is the property the eleven rows
+#       above prove is worth having, since they are exactly the site an ADJ_CODES-derived
+#       listing would have missed.
+#
+#       PASS THE PULL'S BASE, as with classify: BASE decides which rows the pass produces, so a
+#       degenerate range hides every drift-keyed subject. This mode says so on stderr.
 MODE=classify
 if [ "${1:-}" = "--adjudicated-codes" ]; then
   [ $# -eq 3 ] || { echo "usage: layer-drift.sh --adjudicated-codes <dist-repo> <theirs-ref>" >&2; exit 2; }
   MODE=codes; DIST="$2"; THEIRS="$3"; BASE=""; CONSUMER=""
 else
-  [ $# -eq 4 ] || { echo "usage: layer-drift.sh <dist-repo> <base-sha> <theirs-ref> <consumer-root>" >&2; exit 2; }
+  if [ "${1:-}" = "--list-adjudications" ]; then MODE=list; shift; fi
+  [ $# -eq 4 ] || { echo "usage: layer-drift.sh [--list-adjudications] <dist-repo> <base-sha> <theirs-ref> <consumer-root>" >&2; exit 2; }
   DIST="$1"; BASE="$2"; THEIRS="$3"; CONSUMER="$4"
   # ABSOLUTIZE, BECAUSE ONE READER OF $CONSUMER RUNS INSIDE THE OTHER REPO.
   # `adj_digest` hashes the consumer's entry file with `git -C "$DIST" hash-object
@@ -197,6 +230,20 @@ SKILL_DIR="$CONSUMER/.claude/skills/ai-dlc"
 EXT_DIR="$SKILL_DIR/extensions"
 OVR_DIR="$SKILL_DIR/overrides"
 
+# WHERE `--list-adjudications` ACCUMULATES ITS SUBJECTS. `adj_digest` runs inside command
+# substitution at every call site, so a shell variable set there dies with the subshell; a file
+# is the only accumulator that survives. Created ONLY in list mode, so the classify path a pull
+# runs is byte-identical to what it was — no file, nothing to clean up, no behaviour to regress.
+#
+# AND NO `EXIT` TRAP, deliberately: the comment above shadow_keys records what installing one in
+# this script cost — bash then reported `printf: write error: Broken pipe` from every
+# `printf | grep -q` in the file, 90 lines of stderr on a classifier whose stderr the operator is
+# meant to read, from pipelines the change never touched. The file is removed at the end of the
+# list block instead. An aborted list run leaves one file in TMPDIR, which is the price of not
+# reintroducing that.
+ADJ_LIST_FILE=""
+[ "$MODE" = list ] && ADJ_LIST_FILE="$(mktemp)"
+
 # section_of()/norm() — shared with register-drift.sh and readopt-override.sh.
 # Three copies of the section resolver drifted apart twice (v0.52.0, v0.54.2);
 # see lib.sh for the history and why this one is sourced rather than inlined.
@@ -206,8 +253,12 @@ SELF="$(cd "$(dirname "$0")" && pwd)"
 
 # emit() is also where the layer conformance adjudication is applied — see the ADJUDICATION
 # block below for why the duty lives HERE and not at the two drift call sites.
+# In list mode the classification row is SUPPRESSED and adj_check still runs: the pass is what
+# produces the subjects, and the listing is the only thing that mode prints. Suppressing here
+# rather than filtering downstream keeps one producer — a `grep -v` over this stream would be a
+# second statement of which rows are keyed, which is the duplication the mode exists to avoid.
 emit() {
-  printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"
+  [ "$MODE" = list ] || printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"
   adj_check "$1" "$2" "$3"
 }
 
@@ -262,6 +313,17 @@ emit() {
 # the pull's base — `apply.sh`, `emit-report.sh`, `hard-blockers.sh` — and the ONLY invocation
 # that made the two equal was the step-7 instruction this release splits. A run where they are
 # equal has nothing to say about drift by construction.
+#
+# LIST MODE CARRIES THE SAME WARNING, on stderr, because it has the same exposure and a worse
+# failure shape: its whole output is a listing, so a range that produces no drift-keyed rows
+# prints a SHORT listing rather than a visibly missing row, and short reads as complete.
+if [ "$MODE" = list ]; then
+  _b="$(git -C "$DIST" rev-parse --verify --quiet "${BASE}^{commit}" 2>/dev/null || true)"
+  _t="$(git -C "$DIST" rev-parse --verify --quiet "${THEIRS}^{commit}" 2>/dev/null || true)"
+  if [ -n "$_b" ] && [ "$_b" = "$_t" ]; then
+    echo "layer-drift --list-adjudications: base and theirs are the SAME commit ($_b), so every arm keyed on that range produced no row and its subjects are absent from the listing below. Re-run with the PULL's base." >&2
+  fi
+fi
 if [ "$MODE" = classify ]; then
   _b="$(git -C "$DIST" rev-parse --verify --quiet "${BASE}^{commit}" 2>/dev/null || true)"
   _t="$(git -C "$DIST" rev-parse --verify --quiet "${THEIRS}^{commit}" 2>/dev/null || true)"
@@ -442,12 +504,30 @@ fi
 adj_is_adjudicated() { adj_active && grep -qxF -- "$1" <<<"$ADJ_CODES"; }
 
 # (entry file at the consumer) + (target file at THEIRS). Either moving moves the digest.
+#
+# THIS IS ALSO WHERE `--list-adjudications` GETS ITS SUBJECT SET, and siting it here is the whole
+# design. Every keyed row in this script — adj_check's ADJUDICATED arms, the LC-E19 title-join
+# below, the OVERRIDE-SUPERSEDED detail prefix — asks THIS function for its key, so recording the
+# call records the candidate set without restating who is adjudicable. Deriving that set from
+# ADJ_CODES instead would have listed 1 of the reference consumer's 12 keyed subjects, because
+# LC-E19 keys on a digest at level WARN. The listing is a byproduct of the classification, not a
+# second opinion about it.
+#
+# THE UNKEYABLE CASE IS RECORDED TOO, as `-`. A row whose entry or target cannot be read is the
+# one an operator most needs to see named; dropping it would make the listing quietly shorter in
+# exactly the case adj_check itself treats as blocking.
 adj_digest() { # $1 entry (consumer-relative), $2 core-relative target
-  local ef tb
+  local ef tb dg
   ef="$(git -C "$DIST" hash-object "$CONSUMER/$1" 2>/dev/null)"
   tb="$(git -C "$DIST" rev-parse "$THEIRS:$(dist_path "$2")" 2>/dev/null)"
-  [ -n "$ef" ] && [ -n "$tb" ] || return 1
-  printf '%s\n%s\n' "$ef" "$tb" | git -C "$DIST" hash-object --stdin
+  if [ -z "$ef" ] || [ -z "$tb" ]; then
+    [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t-\n' "$1" "$2" >> "$ADJ_LIST_FILE"
+    return 1
+  fi
+  dg="$(printf '%s\n%s\n' "$ef" "$tb" | git -C "$DIST" hash-object --stdin)"
+  [ -n "$dg" ] || return 1
+  [ -n "$ADJ_LIST_FILE" ] && printf '%s\t%s\t%s\n' "$1" "$2" "$dg" >> "$ADJ_LIST_FILE"
+  printf '%s\n' "$dg"
 }
 
 # jq is already a reconcile dependency (preclassify.sh, settings-merge.sh). Its ABSENCE must be
@@ -485,10 +565,14 @@ adj_check() { # $1 status, $2 entry, $3 target
   case "$3" in ''|'?') return 0 ;; esac
   local d rc
   d="$(adj_digest "$2" "$3")" || {
+    # In list mode the unkeyable subject has already been recorded by adj_digest; a blocking row
+    # is the classifier's job, and this mode is a reader.
+    [ "$MODE" = list ] && return 0
     emit_raw HARD-LAYER-ADJUDICATION-MISSING "$2" "$3" \
       "row '$1' is a clause at level ADJUDICATED, but its subject digest could not be computed (entry or target unreadable), so no recorded verdict can be matched against it. This blocks rather than passes: an unkeyable row is the one case where 'no record found' and 'nothing to look up' are indistinguishable."
     return 0
   }
+  [ "$MODE" = list ] && return 0
   adj_lookup "$d"; rc=$?
   case "$rc" in
     0) return 0 ;;
@@ -521,7 +605,10 @@ adj_register_contradictions() {
       { seen[key] = 1; prev[key] = $4 }
     '
 }
-adj_register_contradictions
+# Not in list mode: it prints a HARD- row in the classifier's four-field shape, and the listing
+# is a five-field stream with one producer. The contradiction is a property of the register and
+# is reported by every classify run, which is the run that gates.
+[ "$MODE" = list ] || adj_register_contradictions
 
 # Section anchors a markdown STREAM defines: `### 5c. T` headings + `**7a-post. T**`
 # bold anchors (a layer entry may define 7a-post the bold way; see
@@ -1472,3 +1559,46 @@ while IFS= read -r f; do
     emit EXTENSION-HOOK-DRIFT "$entry" "$hooks" "hooked core file changed ${BASE}..${THEIRS} — this entry declares no extends: anchor, so its drift subject is the whole file; re-read it against the new core text"
   fi
 done < <(layer_files "$EXT_DIR")
+
+# --- `--list-adjudications`: THE REPORT -----------------------------------------------------
+#
+# One line per keyed subject, joined to the register through `adj_verdict` — the SAME reader
+# `adj_lookup` is written in terms of, so the listing and the gate can never disagree about
+# what counts as a record. The join key is the DIGEST ALONE, which is what the register lookup
+# keys on: `clause` is stored in a record but is not part of the key, so a clause column here
+# would suggest a distinction the matching does not make.
+#
+# THE COUNT LINE IS ON STDERR AND IS ALWAYS PRINTED, INCLUDING AT ZERO. This mode's answer is
+# frequently an ABSENCE, and an empty stdout is what a broken pass, a wrong consumer root and a
+# genuinely unkeyed layer all look like. The count states which one it was; a reader that
+# extracted nothing says so in the same words a clean tree does, and this is the repo's rule
+# about a zero being reported with its own control.
+if [ "$MODE" = list ]; then
+  _n=0; _withv=0; _without=0
+  while IFS="$TAB" read -r _e _t _d; do
+    [ -n "$_e" ] || continue
+    _n=$((_n + 1))
+    if [ "$_d" = "-" ]; then
+      printf 'ADJUDICABLE\t%s\t%s\t(unkeyable: entry or target unreadable)\t(none)\n' "$_e" "$_t"
+      _without=$((_without + 1)); continue
+    fi
+    _v="$(adj_verdict "$_d")"; _rc=$?
+    if [ "$_rc" -eq 2 ]; then
+      _v="(register unreadable: jq is not on PATH)"; _without=$((_without + 1))
+    elif [ -z "$_v" ]; then
+      _v="(none)"; _without=$((_without + 1))
+    else
+      # Comma-joined rather than first-wins: two DIFFERING verdicts under one key is the state
+      # adj_register_contradictions blocks on, and a reader that showed one of them would hide
+      # the thing the operator opened the listing to find. Deduped, because this column answers
+      # "which verdict is recorded" — the reference consumer carries one key with the same
+      # verdict written twice, and rendering that as `still-additive,still-additive` reads like
+      # a contradiction when it is a duplicate line.
+      _v="$(printf '%s\n' "$_v" | sort -u | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"; _withv=$((_withv + 1))
+    fi
+    printf 'ADJUDICABLE\t%s\t%s\t%s\t%s\n' "$_e" "$_t" "$_d" "$_v"
+  done < <(sort -u "$ADJ_LIST_FILE" 2>/dev/null)
+  rm -f "$ADJ_LIST_FILE"
+  echo "layer-drift --list-adjudications: ${_n} keyed subject(s) in ${BASE}..${THEIRS} — ${_withv} with a recorded verdict, ${_without} without. A subject is any row this pass asked adj_digest to key; ZERO means the pass produced no keyed row, not that the layer is clean." >&2
+  exit 0
+fi
