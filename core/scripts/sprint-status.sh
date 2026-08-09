@@ -61,7 +61,7 @@
 # and must not infer, which files on disk are stories.
 #
 # ROTATION HAPPENS AT PIPELINE START, NOT AT CLOSE. `roll` freezes the closed sprint to
-# sprint-status/sprint-<N>.yaml and writes the new envelope in ONE step. The reference consumer
+# s<N>/sprint-status.yaml and writes the new envelope in ONE step. The reference consumer
 # rotates at retro-close instead, which prunes the `status: done` block that sprint-id must read and
 # leaves a preamble-only file no rule covers — a window its lead fills BY HAND. Rotating at start
 # keeps the predecessor's terminal state readable exactly until its successor exists.
@@ -251,8 +251,41 @@ VIEWS = {
 # lead at three steps) and where the one unattended runtime reader (ai-dlc-precompact.sh) points.
 PRIMARY = "implementation"
 
-def archive_dir(view):
-    return VIEWS[view].parent / "sprint-status"
+# THE FREEZE DESTINATION IS THE PATH GRAMMAR'S, AND THE OLD SPELLING IS STILL READABLE.
+# `roll` composed `<area>/sprint-status/sprint-<N>.yaml` until v0.341.0 — the PRE-MIGRATION form.
+# `migrate-artifact-paths.sh` maps exactly that path onto `<area>/s<N>/sprint-status.yaml`, and
+# `validate-artifact-paths.sh` BLOCKS on it, so on a migrated consumer the next genuine roll wrote
+# a path that failed their own pre-push. Measured with a control in one tree: the old form was the
+# single BLOCKING row and the migrated sibling was not reported at all.
+#
+# THE WRITER MOVES; THE READER MUST NOT. Every consumer that has not run the migration still holds
+# its history under the old spelling, so `max_frozen` reads BOTH — and that reader is the one whose
+# empty answer falls back to sprint 1, "which would silently re-stamp a live project as greenfield".
+# A writer-only fix would leave a migrated tree's archive invisible to the fallback it guards.
+def frozen_path(view, n):
+    """The grammar form: the sprint slot is the DIRECTORY, never the basename."""
+    return VIEWS[view].parent / ("s%d" % n) / "sprint-status.yaml"
+
+def legacy_frozen_path(view, n):
+    """The pre-migration form. Read, never written."""
+    return VIEWS[view].parent / "sprint-status" / ("sprint-%d.yaml" % n)
+
+def frozen_sprints(view):
+    """Every frozen sprint number this view carries, in EITHER spelling."""
+    parent = VIEWS[view].parent
+    ns = set()
+    if parent.is_dir():
+        for d in parent.glob("s*"):
+            m = re.match(r"^s([0-9]+)$", d.name)
+            if m and (d / "sprint-status.yaml").is_file():
+                ns.add(int(m.group(1)))
+    legacy = parent / "sprint-status"
+    if legacy.is_dir():
+        for f in legacy.glob("sprint-*.yaml"):
+            m = re.match(r"^sprint-([0-9]+)\.yaml$", f.name)
+            if m:
+                ns.add(int(m.group(1)))
+    return ns
 
 def parse(text):
     """Return (sprint:int|None, status:str|None). None means the key is absent — which is a REAL
@@ -269,14 +302,7 @@ def read_view(view):
     return parse(p.read_text())
 
 def max_frozen(view):
-    d = archive_dir(view)
-    if not d.is_dir():
-        return None
-    ns = []
-    for f in d.glob("sprint-*.yaml"):
-        m = re.match(r"^sprint-([0-9]+)\.yaml$", f.name)
-        if m:
-            ns.append(int(m.group(1)))
+    ns = frozen_sprints(view)
     return max(ns) if ns else None
 
 def render_header():
@@ -381,12 +407,16 @@ def roll():
                  "over a sprint that is not closed. Close it first (retro), or fix the envelope."
                  % (view, sprint, status, target), code=3)
 
-        frozen = archive_dir(view) / ("sprint-%d.yaml" % sprint)
-        if frozen.is_file():
-            if frozen.read_text() != text:
+        # An existing freeze in EITHER spelling is a freeze. Writing the grammar form beside a
+        # legacy copy of the same sprint would mint the second archive that idempotency exists to
+        # prevent — and on an unmigrated consumer the legacy copy is the only one there is.
+        frozen = frozen_path(view, sprint)
+        existing = next((p for p in (frozen, legacy_frozen_path(view, sprint)) if p.is_file()), None)
+        if existing is not None:
+            if existing.read_text() != text:
                 fail("%s: %s already exists and DIFFERS from the canonical it would freeze. A "
                      "partial close was completed by hand, or the archive was edited. Refusing to "
-                     "overwrite — reconcile by hand." % (view, frozen), code=3)
+                     "overwrite — reconcile by hand." % (view, existing), code=3)
         else:
             write_verified(frozen, text, "%s freeze" % view)
             moved.append(str(frozen))

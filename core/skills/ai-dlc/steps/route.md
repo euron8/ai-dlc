@@ -397,7 +397,11 @@ archives instead.
 This is the pipeline's ONLY rotation point, and it is idempotent — on a
 re-plan (`sprint_id` unchanged) it is a no-op, so it is always safe to run.
 When the prior sprint is closed it freezes that sprint to
-`sprint-status/sprint-<N>.yaml` and writes the new envelope in ONE step.
+`s<N>/sprint-status.yaml` — the path grammar's slot, not the
+pre-migration `sprint-status/sprint-<N>.yaml` a validator blocks on — and
+writes the new envelope in ONE step. A freeze already present under the
+old spelling is honoured where it lies and never duplicated, so a tree
+that has not run the migration keeps its archive.
 On a greenfield project it creates the file.
 
 Rotation lives HERE, at pipeline start, and not at sprint close, for one

@@ -171,7 +171,7 @@
     "  `closure_evidence`. Check 3 (validate-mandatory-rules.sh) fails closed without it.",
     "",
     "Rotation is MECHANICAL and happens at pipeline START, not at close: `sprint-status.sh",
-    "roll` freezes the closed sprint to `sprint-status/sprint-<N>.yaml` and writes the new",
+    "roll` freezes the closed sprint to `s<N>/sprint-status.yaml` and writes the new",
     "envelope in ONE atomic step. This is why the closed sprint's `status: done` stays",
     "readable until its successor exists — which is exactly what Step 6 reads."
   ]

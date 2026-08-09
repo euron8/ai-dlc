@@ -76,6 +76,37 @@ GOT="$(sid)"
   || bad "preamble-only resolved to '$GOT', expected 291 (1 would destroy the prior sprint's drafts)"
 [ "$GOT" != "1" ] || bad "preamble-only resolved to 1 — the exact silent-destruction defect"
 
+# --- Assertion 4b: the SAME derivation off the MIGRATED spelling -------------
+# `migrate-artifact-paths.sh` maps `sprint-status/sprint-<N>.yaml` onto `s<N>/sprint-status.yaml`,
+# so on a migrated consumer the legacy directory holds only `_preamble.yaml` and the reader above
+# finds NOTHING — falling back to 1, "which would silently re-stamp a live project as greenfield".
+# 4a proves the old spelling still reads; this proves the new one does. Both, or the fix is a
+# writer-only fix that blinds the fallback it was supposed to leave alone.
+reset_tree
+mkdir -p "$IMPL/s289" "$IMPL/s290"
+put "$IMPL/sprint-status.yaml" '# Sprint Status
+# (preamble-only: what a rotate-at-close leaves behind)'
+put "$IMPL/s289/sprint-status.yaml" 'sprint: 289
+status: done'
+put "$IMPL/s290/sprint-status.yaml" 'sprint: 290
+status: done'
+GOT="$(sid)"
+[ "$GOT" = "291" ] && ok "preamble-only -> max_frozen+1 off the MIGRATED spelling (s<N>/ slot)" \
+  || bad "migrated archive resolved to '$GOT', expected 291 — the reader cannot see the slot, and 1 is the silent-greenfield defect"
+
+# --- Assertion 4c: CONTROL — the reader is not matching on the slot alone ----
+# `s<N>/` directories are the grammar's slot for EVERY artifact, so a slot with no
+# `sprint-status.yaml` in it must contribute nothing. Without this arm 4b would pass on a tree
+# whose only evidence is an empty directory, and the reader would report a freeze that is not there.
+reset_tree
+mkdir -p "$IMPL/s289"
+put "$IMPL/sprint-status.yaml" '# Sprint Status
+# (preamble-only)'
+put "$IMPL/s289/architecture.md" 'not a sprint-status envelope'
+GOT="$(sid)"
+[ "$GOT" = "1" ] && ok "control: an s<N>/ slot with no sprint-status.yaml is NOT a freeze" \
+  || bad "an empty s<N>/ slot was counted as a frozen sprint (got '$GOT', expected 1)"
+
 # --- Assertion 5: copies disagree -> HARD_BLOCK exit 3 (route rule 5) --------
 reset_tree
 put "$IMPL/sprint-status.yaml" 'sprint: 291
@@ -95,11 +126,26 @@ stories:
     status: done'
 put "$IMPL/sprint-status.yaml" "$BODY"
 bash "$TOOL" roll --sprint 292 --root "$P" >/dev/null 2>&1
-FROZEN="$IMPL/sprint-status/sprint-291.yaml"
+# Resolve the freeze WHEREVER it landed, so the byte-faithfulness and idempotency arms test BYTES
+# and not location. The destination has its own assertion below; an arm that tests two things
+# cannot say which of them a mutant broke.
+SLOTTED="$IMPL/s291/sprint-status.yaml"
+LEGACY_FROZEN="$IMPL/sprint-status/sprint-291.yaml"
+FROZEN="$SLOTTED"; [ -f "$FROZEN" ] || FROZEN="$LEGACY_FROZEN"
 if [ -f "$FROZEN" ] && [ "$(cat "$FROZEN")" = "$BODY" ]; then
   ok "roll freezes the closed sprint byte-faithfully (no-loss)"
 else
   bad "roll did not freeze byte-faithfully"
+fi
+# THE DEFECT THIS ARM EXISTS FOR. `roll` composed `sprint-status/sprint-<N>.yaml` — the
+# PRE-MIGRATION form — while `validate-artifact-paths.sh` BLOCKS on exactly that path and the
+# reference consumer's own pre-push runs it. The next genuine roll on a migrated consumer wrote a
+# path that failed their push. The byte-faithfulness arm above could not see it: it passed
+# throughout, on the wrong destination.
+if [ -f "$SLOTTED" ] && [ ! -e "$LEGACY_FROZEN" ]; then
+  ok "the freeze lands in the s<N>/ slot, not the pre-migration path a validator blocks on"
+else
+  bad "freeze destination wrong — slotted=$([ -f "$SLOTTED" ] && echo yes || echo no) legacy=$([ -e "$LEGACY_FROZEN" ] && echo yes || echo no)"
 fi
 grep -q '^sprint: 292' "$IMPL/sprint-status.yaml" && grep -q '^status: in_progress' "$IMPL/sprint-status.yaml" \
   && ok "roll writes the new envelope (sprint 292, in_progress)" || bad "roll did not write the new envelope"
@@ -112,6 +158,48 @@ B="$(cat "$FROZEN")"
 bash "$TOOL" roll --sprint 292 --root "$P" >/dev/null 2>&1
 [ "$(cat "$FROZEN")" = "$B" ] && ok "roll is idempotent (re-run does not re-freeze/destroy)" \
   || bad "re-running roll overwrote the frozen archive — data loss"
+
+# --- Assertion 7a: idempotency SURVIVES THE MIGRATION BOUNDARY ---------------
+# On a consumer that has NOT migrated, the only freeze on disk is under the old spelling. A writer
+# that knows one path treats that as absent and writes a SECOND archive of the same sprint in the
+# slot — two records of one sprint, which is the twin the whole rotation guard exists to prevent.
+# The freeze already there is honoured where it lies, and nothing new is written.
+reset_tree
+LEGACY_BODY='sprint: 291
+status: done
+stories:
+  story-291-1:
+    status: done'
+put "$IMPL/sprint-status.yaml" "$LEGACY_BODY"
+put "$IMPL/sprint-status/sprint-291.yaml" "$LEGACY_BODY"
+bash "$TOOL" roll --sprint 292 --root "$P" >/dev/null 2>&1
+[ ! -e "$IMPL/s291/sprint-status.yaml" ] \
+  && ok "a legacy freeze is honoured, not duplicated into the slot (no twin archive)" \
+  || bad "roll minted a second archive of sprint 291 beside the legacy one"
+[ "$(cat "$IMPL/sprint-status/sprint-291.yaml")" = "$LEGACY_BODY" ] \
+  && ok "the legacy freeze is left byte-untouched" || bad "roll rewrote the legacy freeze"
+grep -q '^sprint: 292' "$IMPL/sprint-status.yaml" \
+  && ok "the roll still completes over a legacy freeze" || bad "roll did not advance the canonical"
+
+# --- Assertion 7a-control: a freeze that DIFFERS still HARD_BLOCKs -----------
+# Without this arm, "no twin was minted" passes on a writer that skips the freeze unconditionally —
+# "wrote nothing" and "correctly found it already frozen" look identical from the destination alone.
+# It seeds the divergent freeze under BOTH spellings on purpose. Seeded under only one, the arm
+# also fails whenever a mutant changes WHICH spelling the writer consults — and then it is a second
+# reading of the destination arm rather than an independent check of the divergence guard. Measured:
+# slot-only seeding made the path-revert mutant kill two arms, legacy-only seeding made the
+# ignore-legacy mutant kill two. Under both, each mutant kills exactly its own.
+reset_tree
+mkdir -p "$IMPL/s291"
+put "$IMPL/sprint-status.yaml" "$LEGACY_BODY"
+DIVERGENT='sprint: 291
+status: done
+# edited by hand after the freeze'
+put "$IMPL/s291/sprint-status.yaml" "$DIVERGENT"
+put "$IMPL/sprint-status/sprint-291.yaml" "$DIVERGENT"
+bash "$TOOL" roll --sprint 292 --root "$P" >/dev/null 2>&1
+[ $? -eq 3 ] && ok "control: a freeze that DIFFERS from the canonical -> exit 3" \
+  || bad "a divergent freeze did not HARD_BLOCK — the skip is unconditional"
 
 # --- Assertion 7b: roll CREATES the file on greenfield, and mints no twin ----
 # The artifact never had a creator: no step file, no template, no installer seed.
