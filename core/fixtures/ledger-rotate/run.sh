@@ -187,6 +187,91 @@ else
   ok "  and an archivable entry is not in that list, so the row discriminates"
 fi
 
+# --- THE ENTRY THAT QUOTES THE RULE MUST NOT BE ARCHIVED BY IT (PC-S331) -------------------
+#
+# REPRODUCED ON THE REFERENCE CONSUMER BEFORE THIS EXISTED: `--apply` archived `PC-S330`, a LIVE
+# push candidate, because its body quoted the annotation form this script matches on. The test is
+# per-ENTRY over every buffered line, and a push candidate ABOUT this script naturally writes the
+# form it describes — so the tool matched an entry against its own quotation of the tool.
+#
+# THE QUOTATION IS INLINE, NOT FENCED, and that is why this seeds both. The report said fenced;
+# measured, a fence carrying the ESCAPED awk form does not match at all (`\*\*` is not `**`),
+# while inline backticks and bare prose both do. A fence-skipping fix passes a fenced-only
+# fixture and leaves the live defect untouched — so the fenced case is seeded as a CONTROL that
+# must stay silent for its own reason, and the inline case is the subject.
+#
+# DEFECT 2 IS SEEDED TOO, and nobody reported it: `\(v` also matches `(verified`, so a close
+# carrying NO VERSION satisfied a rule whose banner promises one. It must now be REFUSED and
+# reported as stuck, which is the state v0.330.0 added the refusal list to make visible.
+Q="$WORK/quoting-ledger.md"
+cat > "$Q" <<'QLED'
+# Push-candidate ledger
+
+## PC-Q1 — genuinely closed, the positive control
+**ADOPTED UPSTREAM (v0.200.0, verified 2026-07-21).** really closed.
+
+## PC-Q2 — LIVE, quotes the strict form INLINE (the live defect)
+Filed because rotate archives only on `**ADOPTED UPSTREAM (v` and reverify skips on the loose one.
+STATUS: STILL-LIVE.
+
+## PC-Q3 — LIVE, quotes the ESCAPED awk form in a fence (must be silent for its OWN reason)
+```
+/\*\*ADOPTED UPSTREAM \(v/ { closed = 1 }
+```
+STATUS: STILL-LIVE.
+
+## PC-Q4 — closed with NO VERSION, which the rule is not entitled to archive
+**ADOPTED UPSTREAM (verified 2026-07-21).** absorbed before base.
+QLED
+q_out="$(bash "$ROT" "$Q" --archive "$WORK/quoting-archive.md" 2>&1)"
+q_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$q_out")"
+
+if grep -q 'PC-Q1' <<<"$q_moved"; then
+  ok "PRECONDITION: a genuine close still moves, so the silences below are a real discrimination"
+else
+  bad "PRECONDITION FAILED: the genuine close did not move, so every 'is not archived' assertion here passes vacuously ($(printf '%s' "$q_out" | head -1))"
+fi
+if grep -q 'PC-Q2' <<<"$q_moved"; then
+  bad "a LIVE entry that quotes the strict annotation form INLINE was archived by it. That is PC-S331 verbatim: rotate matched the entry against its own quotation, and --apply deletes live work from the file the pull reads"
+else
+  ok "an entry quoting the strict form INLINE is NOT archived — the match requires a version DIGIT, which a quotation does not carry"
+fi
+if grep -q 'PC-Q3' <<<"$q_moved"; then
+  bad "the fenced ESCAPED form was archived — that is a different match from the live one and means the predicate got looser, not tighter"
+else
+  ok "  and the fenced escaped form stays too (it never matched: the escaped form is not the literal)"
+fi
+if grep -q 'PC-Q4' <<<"$q_moved"; then
+  bad "a close carrying NO VERSION was archived. The banner promises the version immediately after the parenthesis, and \`\\(v\` matching \`(verified\` is how that promise was unenforced"
+else
+  ok "a versionless close is REFUSED rather than archived — the rule now enforces the form its own banner states"
+fi
+q_stuck="$(awk '/NOT archivable/{on=1;next} /^ledger-rotate:/{on=0} on' <<<"$q_out")"
+if grep -q 'PC-Q4' <<<"$q_stuck"; then
+  ok "  and it is REPORTED as stuck, so refusing it does not make it invisible"
+else
+  bad "  the versionless close was refused and NOT reported — refused-and-silent is the exact state v0.330.0 exists to end"
+fi
+
+# MUTATION — restore the un-anchored pattern. PC-Q2 must come back, and PC-Q1 must not move,
+# or the mutant is testing whether the arm RUNS rather than what it matches.
+MUTQ="$WORK/rot-mutant"; rm -rf "$MUTQ"; mkdir -p "$MUTQ"
+cp "$(dirname "$ROT")"/* "$MUTQ"/ 2>/dev/null
+sed 's/ADOPTED UPSTREAM \\(v\[0-9\]/ADOPTED UPSTREAM \\(v/' "$ROT" > "$MUTQ/ledger-rotate.sh"
+if cmp -s "$ROT" "$MUTQ/ledger-rotate.sh"; then
+  bad "  FIXTURE ERROR: the digit-anchor mutation matched nothing, so the assertions above are unproven"
+else
+  m_out="$(bash "$MUTQ/ledger-rotate.sh" "$Q" --archive "$WORK/mut-archive.md" 2>&1)"
+  m_moved="$(awk '/closed entries would move/{on=1;next} /^  archive:/{on=0} on' <<<"$m_out")"
+  if ! grep -q 'PC-Q1' <<<"$m_moved"; then
+    bad "  MUTATION: the unmutated-control entry stopped moving under the mutant, so the copy is broken and its verdict is not attributable"
+  elif grep -q 'PC-Q2' <<<"$m_moved"; then
+    ok "  MUTATION: without the version digit the quoting entry is archived again — the anchor is what stands between a live entry and the archive"
+  else
+    bad "  MUTATION: removing the digit anchor did NOT re-archive the quoting entry, so these assertions are not measuring the anchor"
+  fi
+fi
+
 echo
 if [ "$fails" -eq 0 ]; then
   echo "ledger-rotate: PASS"
