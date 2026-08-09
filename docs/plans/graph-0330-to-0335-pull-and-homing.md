@@ -1,3 +1,21 @@
+# SPENT — the 0.330.0 → 0.335.0 pull and two homing jobs, all five steps COMPLETE
+
+**DO NOT EXECUTE THIS FILE.** It ran on 2026-08-09: one hop, 0 `HARD-*`, 0 new adjudications, the
+12 `W11` rows exactly as described, and both homing jobs done (graph PRs #898, #899, #900; brief
+1030 → 648 lines). It is kept as the record, and for the three things it got WRONG:
+
+- **TWO OF ITS DONE-WHENS COULD NEVER HAVE GONE GREEN.** §3's *"budget green"* was unattainable
+  when written — the only FAIL is `pipeline-continuation-log.md` at 309%, unrelated and
+  byte-identical before and after. §2's *"confirm each still resolves"* was unverifiable — no file
+  in that corpus produces a genuine anchored `LR-S299` resolution. The executor substituted a probe
+  and a negative control, correctly. `CLAUDE.md` now carries the rule this broke.
+- **ITS ONE PREDICTION ABOUT §3 WAS WRONG.** It said not to expect a budget row to move; the
+  brief's own row moved 17170 → 12926 tok.
+- **IT DID NOT WARN ABOUT `ledger-rotate.sh --apply`,** which archived a live entry during the run.
+  Fixed upstream as v0.336.0.
+
+Original text follows.
+
 # EXECUTE THIS in a graph session — the 0.330.0 → 0.335.0 pull, then two homing jobs
 
 ## Start here
