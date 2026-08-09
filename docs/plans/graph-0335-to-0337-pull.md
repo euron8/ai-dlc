@@ -1,4 +1,16 @@
-# EXECUTE THIS in a graph session — the 0.335.0 → 0.337.0 pull
+# EXECUTE THIS in a graph session — the pull from `0.335.0` to distribution HEAD
+
+**HEAD WAS `0.338.0` WHEN THIS LINE WAS LAST TOUCHED, AND THE FILENAME SAYS `0337` BECAUSE IT WAS
+`0.337.0` WHEN THE FILE WAS CREATED.** The filename is not renamed on every release — chasing it is
+a treadmill and it breaks the links pointing here. **Derive the upper bound from
+`/Users/n8/git/ai-dlc/VERSION` when you run**; the scope derivation in §2 takes `HEAD` and does not
+depend on the number in this heading.
+
+**`v0.338.0` SHIPS NOTHING TO YOU**, and that is derived rather than asserted: its whole diff is
+`scripts/validate-plan-shape.sh` (distribution-only), `core/fixtures/plan-shape/` (carries a
+`.dist-only` marker), `CLAUDE.md`, `CHANGELOG.md` and `VERSION`. **The shipped set is the same five
+files §2 lists.** Control: the same classification puts the other two fixtures in the range on the
+SHIPS side, so it separates the two rather than calling everything dist-only.
 
 ## Start here
 
@@ -72,8 +84,8 @@ you need a decision, when a premise here does not hold, and when you are done.
 | | |
 |---|---|
 | graph stamp | `0.335.0 / b324779`, all four fields agreeing |
-| ai-dlc HEAD | `0.337.0` |
-| hops | the dry run decides, not this row. The range is two releases and both are `ai-dlc-update` machinery |
+| ai-dlc HEAD | `0.338.0` — and `v0.338.0` ships nothing to you. Read `VERSION`, do not carry this |
+| hops | the dry run decides, not this row. Everything shipped in the range is `ai-dlc-update` machinery |
 | expected `HARD-*` blockers | **0**, derived below rather than assumed |
 | expected new adjudications | **0** — 10 keyed subjects, 10 with a recorded verdict, and this range touches none of their targets |
 | expected NEW warnings | **0**. `contract_version` stays 18; `W11` already fires 12/43 there and this range does not move it |
@@ -267,7 +279,7 @@ as a finding of this pull.** If the count moves, that IS a finding — report it
 ### What the ledger will say, quoted from the shipped reader rather than predicted
 
 `ledger-reverify.sh` is **byte-identical between your installed copy and the distribution at
-0.337.0** (`cmp -s` — control: `ledger-rotate.sh` and `apply.sh` both differ). So these rows are
+HEAD** (`cmp -s` — control: `ledger-rotate.sh` and `apply.sh` both differ). So these rows are
 exactly what your own copy prints:
 
 ```
@@ -302,7 +314,8 @@ it is an open question on the distribution side.
 
 ### Done-when for §2 — every PASS below was RUN from the distribution side on 2026-08-09
 
-- `sed -n '1,4p' .claude/.ai-dlc-version` reads **`0.337.0`** and theirs' sha **on all four fields**.
+- `sed -n '1,4p' .claude/.ai-dlc-version` reads **the version you pulled to** — `0.338.0` unless the
+  distribution moved again — and theirs' sha **on all four fields**.
   Step 2's self-update writes `skill_version`/`skill_commit`; the step-7 apply writes
   `version`/`commit`. If step 2 deferred, the one run that may claim both is
   `apply.sh --carried-machinery-slice`, and all four still end equal.

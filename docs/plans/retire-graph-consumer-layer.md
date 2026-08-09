@@ -154,8 +154,12 @@ four.** The rulebook base and the tool version have agreed since #887; the one l
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — `0.335.0` → `0.337.0`, AND ~~THERE IS NO RUNBOOK FOR IT YET~~ THE RUNBOOK NOW
-EXISTS: [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), written 2026-08-09.** It is the
+**A PULL IS OWED — `0.335.0` → distribution HEAD, AND ~~THERE IS NO RUNBOOK FOR IT YET~~ THE
+RUNBOOK NOW EXISTS: [`graph-0335-to-0337-pull.md`](graph-0335-to-0337-pull.md), written 2026-08-09.**
+**Its filename says `0337` and HEAD has since moved to `0.338.0`; the file is not renamed per release
+and says why.** `v0.338.0` ships nothing to a consumer — its whole diff is distribution-only
+(`scripts/validate-plan-shape.sh`, a `.dist-only` fixture) plus `CLAUDE.md`/`CHANGELOG`/`VERSION` —
+so the shipped set is unchanged at five files. It is the
 operator's to hand to a graph session; nothing in it is this repo's to run. **Do not predict the hop
 count from this side** — the runbook says the same thing and for the same reason. The previous
 runbook,
