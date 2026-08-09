@@ -27,8 +27,8 @@ checked examples: `layer-drift.sh:648` was the env-key guard and is now other co
 SHIPPED, so they are records of why a thing was done, not instructions.
 
 **EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
-v0.331.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
-CONSUMER.** Prior readings were the same 50/45/0/5 after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
+v0.337.0: 50 distinct citations — 45 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
+CONSUMER.** Prior readings were the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
 numbers; re-run the loop.** It is one pass: extract
 `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
 against `git ls-files`, and compare the line number to `wc -l`. Report the count as its own
@@ -120,24 +120,34 @@ renumbers (0.288.0 → 0.289.0 → its final slot) once item 11 unblocked it.
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
 `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version` gives all four fields, and all four
-must agree unless a deferred slice is mid-flight. **Read 2026-08-09: `0.330.0 / 65c572f` on all
+must agree unless a deferred slice is mid-flight. **Read 2026-08-09, AFTER the graph session took the pull: `0.335.0 / b324779` on all
 four.** The rulebook base and the tool version have agreed since #887; the one legitimate way they
 diverge is a run whose machinery slice was empty, where `--carried-machinery-slice` is correctly
 NOT passed and the skill fields stay behind on purpose.
 
-**A PULL IS OWED — ONE HOP, TO `0.335.0`. IT IS FULLY RUNBOOKED: everything a graph session needs
-is in [`graph-0330-to-0335-pull-and-homing.md`](graph-0330-to-0335-pull-and-homing.md), including
-both homing jobs. Paste that file at a graph session and nothing here is needed.**
+**A PULL IS OWED — ONE HOP, `0.335.0` → `0.337.0`. THERE IS NO RUNBOOK FOR IT YET, AND WRITING ONE
+IS THE FIRST ACTION ON THE LIST BELOW.** The previous runbook,
+[`graph-0330-to-0335-pull-and-homing.md`](graph-0330-to-0335-pull-and-homing.md), is **SPENT** — it
+ran, all five steps completed, and its own header now records the three things it got wrong. Do not
+re-point it at a new range; write a fresh one.
 
-**AND THIS PARAGRAPH WAS DERIVING AGAINST THE WRONG BASE UNTIL 2026-08-09, which is why the
-derivation matters more than the answer.** It carried `9fc216e` (0.329.0) after the operator had
-already taken the 0.330.0 pull, so every scope figure under it described a range that was not the
-owed one. The stamp is the source of truth: `sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version`.
-Re-derived against the real base `65c572f`: **14 `core/` files, 2 distribution-only paths under
-`scripts/`, plus `VERSION` and `CHANGELOG.md`** (control: 2 paths under `docs/`, so the command
-separates the two kinds rather than reporting everything). **No rulebook file moves** — zero paths
-under `steps/`, `SKILL.md` or `team-roles/` — which is also why **0 new adjudications** is a
-derivation rather than a hope: a verdict's digest covers the entry plus the core file it hooks.
+**THE BASE IS `b324779`, AND CONFIRM IT BEFORE DERIVING ANYTHING.** This paragraph has now named
+the wrong base twice — once carrying `9fc216e` after the 0.330.0 pull had landed, and once telling
+the operator the range was `0.330.0 → 0.337.0` after the graph session had already taken it to
+`0.335.0`. Both times the stamp was one command away:
+`sed -n '1,4p' /Users/n8/git/graph/.claude/.ai-dlc-version`. **Read it; do not carry this number.**
+
+**Scope, derived 2026-08-09 against `b324779` — re-derive rather than reuse:** 5 `core/` files
+(`ai-dlc-update/SKILL.md`, `reconcile/apply.sh`, `reconcile/ledger-rotate.sh`, and two fixtures),
+plus `VERSION`, `CHANGELOG.md`, `CLAUDE.md` and one `docs/` path. **No rulebook file moves, no
+`layer-contract.yaml` change** (`contract_version` stays 18, already applied there), and **no
+adjudication digest input moves** — zero paths under `steps/`, `SKILL.md` or `team-roles/`.
+
+**THE REASON TO TAKE IT IS NOT COSMETIC: graph's INSTALLED `ledger-rotate.sh` still archives a live
+entry.** Measured 2026-08-09 against their own copy under `.claude/`: **1 closed entry would move**,
+and it is `PC-S330` — a live push candidate. The distribution copy on the same ledger reports **0**.
+Until this pull lands, `--apply` on that consumer is destructive. See §*What the graph session's
+report measured*.
 
 **AND EXPECT A NEW BLOCK OF WARNINGS — 12 OF THEM — WHICH ARE NOT A REGRESSION.** v0.333.0 adds
 `LC-R4`/`W11`: an artifact path a layer entry PRESCRIBES is held to the path grammar. Run against
@@ -455,26 +465,75 @@ and all four refuted their own item's central claim — twice the declaration th
 already existed and had a hole, and once the item named a candidate population that was one twelfth
 of the real one. **That is the pattern to expect from what is left below**, not an accident.
 
-**THE NUMBERED LIST IS EMPTY. EVERY ITEM ON THIS PLAN HAS SHIPPED OR BEEN DECIDED.** **Item 22 is CLOSED** (derivation #474, hoist v0.332.0 #475, clause `LC-R4`/`W11` v0.333.0 #477), **item 26 is CLOSED** (v0.334.0 #478 — an arm is NOT addressable, measured, so the row states the surplus instead), and **item 12 is CLOSED** (v0.335.0 #479 — I87; the plan chose the wrong side to derive, and deriving the other one took 19 false positives to 0).
+**EVERY ORIGINAL ITEM ON THIS PLAN HAS SHIPPED OR BEEN DECIDED.** Item 22 CLOSED (derivation #474,
+hoist v0.332.0 #475, clause `LC-R4`/`W11` v0.333.0 #477), item 26 CLOSED (v0.334.0 #478 — an arm is
+NOT addressable, measured, so the row states the surplus instead), item 12 CLOSED (v0.335.0 #479 —
+I87; the plan chose the wrong side to derive, and deriving the other one took 19 false positives to
+0), item 28 CLOSED (v0.331.0 #473).
 
-**WHAT REMAINS IS THE OPERATOR'S, and it is listed below.** A session resuming here has no build
-queued. If a new defect arrives from the consumer, file it as its own item rather than reopening
-one of these — every one of them was CLOSED on a measurement, and three of the last four refuted
-the item's own central claim on the way.
+**WHAT IS BELOW CAME FROM THE CONSUMER, NOT FROM THIS PLAN.** v0.336.0 and v0.337.0 answered the
+graph session's completion report; §*What the graph session's report measured* is the record. Five
+of the last nine releases arrived through that channel rather than through this list, which is the
+shape to expect.
 
-**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull (one hop to `0.335.0`;
-scope and derivation in the status block above), and the **two** homing jobs still open — the S299
-LOCKED block into `s299/locked-requirements.md`, and the brief's `## Changelog` section into
-`s<N>/changelog-product-brief.md`. Both verified still open 2026-08-09. **Nothing breaks before
-either is done.** A third, the stray `test-strategy.md`, is DONE and verified from this side.
+1. **WRITE THE FRESH RUNBOOK — `0.335.0` → `0.337.0`. This is the first order of business and the
+   operator has asked for it by name.** File it as `docs/plans/graph-0335-to-0337-pull.md`.
 
-**Three consumer-side items are carried in graph's own ledger, not here, and none is this repo's:**
-`PC-S329`'s disposition (unblocked by v0.330.0, which resolved the contradiction that made it
-ambiguous); `PC-S312`'s receipt, which needs re-anchoring at `docs/retro/s249/retro.md` or it
-reports `NEEDS-REVIEW` on every pull; and the `921.`/`20.` retire-or-refile call, open across five
-reports now. **Do not schedule work in this repo behind any of them.**
+   **THE OPERATOR'S INSTRUCTION SAID `0.330.0 → 0.337.0` AND THAT RANGE IS WRONG — they were
+   working from a summary of mine that quoted a stamp read BEFORE the graph session ran.** The pull
+   landed; graph is at `0.335.0 / b324779`. **Confirm it yourself** rather than trusting this line:
+   the same paragraph has now been wrong about the base twice.
 
-**s302 HAS NOT STARTED AND IS NOT A DEADLINE** (operator direction 2026-08-07, recorded above).
+   What the runbook must carry, and why each part:
+
+   - **The scope, DERIVED in the file**, with a control that separates `core/` from `docs/`. The
+     figures in the status block above are a pointer, not an answer.
+   - **The reason to take it, which is destructive-defect urgency, not housekeeping**: graph's
+     INSTALLED `ledger-rotate.sh` still archives `PC-S330`, a live entry. Measured against their
+     own copy: 1 would move, against 0 for the distribution copy on the same ledger.
+   - **The three candidates it closes** — `PC-S329` (reconcile-log) is already a CLOSE-CANDIDATE at
+     0.337.0, `PC-S330` and `PC-S331` are NAMED-UPSTREAM at 0.336.0. Their shipped
+     `ledger-reverify` says so today; quote the run, do not predict it.
+   - **The receipt re-anchoring the pull will make loud.** `PC-S331`'s verify anchors on the prefix
+     up to `UPSTREAM`, which the fix KEEPS, so it will report STILL-LIVE against a defect that is
+     fixed. `PC-S330`'s anchors on comment text. The run already prints `RECEIPTS-UNDECIDED: 26 of
+     26`, so this is a class and the runbook should say so rather than list two rows.
+   - **NO NEW WARNINGS TO EXPECT.** `contract_version` stays 18 and `W11` is already applied there
+     — it fires 12/43 on their tree today, unchanged by this range. Do not re-describe it as new.
+   - **DONE-WHENS WHOSE PASS YOU HAVE RUN.** `CLAUDE.md` gained this rule because the SPENT runbook
+     broke it twice in one file: *"budget green"* was unattainable when written and *"confirm each
+     still resolves"* was unverifiable. Run each command, or state the expected FAIL and what makes
+     it unrelated.
+
+2. **The 12 `W11` repaths are the OPERATOR's and are deliberately deferred** — they chose to leave
+   them to their own commit so a pull-review diff stays a pull-review diff. The rewrite for each is
+   in the SPENT runbook's table and every replacement was verified to exist. **Do not fold them
+   into the runbook as work; name them as outstanding.**
+
+3. **A derivation, NOT a fix, on the receipt class — OPTIONAL and unscheduled.** `26 of 26
+   theirs_has` receipts restating the previous run is the third appearance of this. Whether the
+   remedy is core's (a receipt form that cannot anchor on text a fix keeps) or authoring discipline
+   is unknown. **If you take it, run the SHIPPED reader from the first measurement** — see the
+   warning below.
+
+**THE OPERATOR'S SIDE, and none of it is yours to do.** Take the pull once the runbook exists
+(`0.335.0` → `0.337.0`; scope in the status block, base to be confirmed from the stamp). **Both
+homing jobs are DONE** — the S299 LOCKED block and the brief's `## Changelog` landed in graph #900,
+brief 1030 → 648 lines. The stray `test-strategy.md` was done earlier. **Nothing on this plan is
+owed to them beyond the pull and the 12 `W11` repaths they deferred by choice.**
+
+**Consumer-side items carried in graph's own ledger, not here, and none is this repo's:**
+**`PC-S329-NAMED-UPSTREAM-…`**'s disposition — spell the SLUG, because the `PC-S329` prefix names
+TWO live candidates and the other one (`…-APPLY-SH-NEVER-WRITES-THE-RECONCILE-LOG`) is answered by
+v0.337.0; `PC-S312`'s receipt, which needs re-anchoring at `docs/retro/s249/retro.md` or it reports
+`NEEDS-REVIEW` on every pull; the `921.`/`20.` retire-or-refile call, open across five reports now;
+and the 48 refused artifact-path migrations plus the 33 byproduct files at the area root, both
+unchanged. **Do not schedule work in this repo behind any of them.**
+
+**s302 HAS STARTED** — `sprint: 302` in graph's `sprint-status.yaml`, read 2026-08-09. The earlier
+line here said it had not, which was true when written and stopped being true without anything
+updating it. **It was never a deadline** (operator direction 2026-08-07) and nothing on this plan
+is on its critical path.
 It MAY start whenever the operator chooses.
 
 **THE PRIOR HANDOFF WORKED AND ITS LESSON IS WHY THIS SECTION EXISTS.** Item 27 and item 23c were
@@ -1392,6 +1451,56 @@ with an unmutated control from the same copied directory. `layer-title-join` Par
 WARN half, and its seed gives the sharpest available control: that fixture's contract is a stub
 with **no clause at any level**, corroborated against the contract's own text, so an
 `ADJ_CODES`-derived listing could name no subject there at all.
+
+## What the graph session's report measured (v0.336.0–v0.337.0, and one finding I fabricated)
+
+The 0.330.0 → 0.335.0 pull and both homing jobs completed: one hop, 0 `HARD-*`, 0 new
+adjudications, the 12 `W11` rows exactly as predicted, brief 1030 → 648 lines, graph PRs #898,
+#899, #900. **Four things came back with it. Two became releases, one became a `CLAUDE.md` rule,
+and one I got wrong.**
+
+**v0.336.0 (#482) — `ledger-rotate.sh --apply` ARCHIVED A LIVE ENTRY, matching it against the
+entry's own QUOTATION of the rule.** A push candidate filed ABOUT a rule writes the form the rule
+matches, and the test is per-ENTRY across every buffered line. **The report said the quotation was
+FENCED. It is INLINE, and that decides the fix** — measured, a fence carrying the ESCAPED awk form
+does not match at all, while inline backticks and bare prose both do, **so a fence-skipping fix
+would have shipped green and left the defect live.** Fix is one character class, `\(v[0-9]`.
+A second defect fell out of measuring the first and nobody had filed it: **`\(v` also matches
+`(verified`**, so a versionless close passed a rule whose banner promises a version. False-negative
+set measured against the ARCHIVE of genuine closes — the population a tightening endangers —
+71 → 70, the single loss being that versionless close.
+
+**v0.337.0 (#484) — the reconcile log, where the OBVIOUS fix was the wrong one.** `apply.sh` never
+wrote the log step 7 mandates (0 occurrences against 9 files naming it). But a real log carries
+eight sections and `apply.sh` can observe two; a skeleton it could fill ships empty sections that
+read as written ones. So the boundary is stated twice — step 7 names the writer, and the tool says
+so on every successful run — with a fixture CONTROL that it must not report the log as `RESOLVED`,
+because a receipt for an unwritten artifact is worse than silence.
+
+**THE `PC-S329` PREFIX NAMES TWO LIVE CANDIDATES**, and this plan's record had only one. The second
+is the reconcile-log one. That is the collision v0.329.0 already documented, arriving again.
+
+**A `CLAUDE.md` RULE CAME OUT OF MY OWN RUNBOOK: TWO DONE-WHENS COULD NEVER HAVE GONE GREEN.**
+*"budget green"* was unattainable when written — the only FAIL is an unrelated artifact at 309%,
+byte-identical before and after. *"confirm each still resolves"* was unverifiable — no file in that
+corpus produces a genuine anchored resolution. The executor substituted a probe and a negative
+control, correctly, both times. **Prove a done-when's PASS is reachable, the same way this repo
+requires proving a new check can fire.**
+
+**AND ONE FINDING IN THIS SECTION IS A FABRICATION I PUBLISHED AND THEN WITHDREW. READ THIS BEFORE
+RE-OPENING `ledger-reverify`.** Asked why I had left its loose close rule alone, I re-measured with
+a PYTHON MODEL of the predicate — a bare phrase match over every line — and reported *"15 live
+entries skipped, 4 of them biased toward candidates about the ledger tooling."* **The shipped rule
+is already anchored**: line-start, optional `<br>`, optional bold-open, and a class excluding
+backticks, so blockquotes, inline backticks and shell lines never closed anything. The numbers were
+my model's, not the program's. I wrote the fix and a fixture arm before the MUTANT caught it — the
+arm passed identically under the pre-fix predicate, which is the definition of vacuous. Reverted;
+nothing shipped. **The tell was one command I skipped: run the shipped reader BEFORE the change.**
+
+**The other deferred item was checked and is NOT a defect.** `LR-S300-2` appears in exactly one
+file, `pipeline-snapshot-history.md`, an archive; `validate-locked-anchor.sh` takes a story file as
+its subject and does not sweep archives. A frozen history citing a requirement that has since moved
+is what a history does.
 
 ## The consumer-reported defect run (v0.326.0–v0.330.0) — five reports, five fixes, none a plan item
 
