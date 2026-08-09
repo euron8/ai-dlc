@@ -1,0 +1,13 @@
+This fixture is DISTRIBUTION-ONLY. It must never be copied to a consumer.
+
+It is the MUTATION BATTERY behind the shipped `updater-session-signals` fixture. It edits
+copies of `core/hooks/ai-dlc-acknowledge.sh` -- core's own source -- to prove that each of
+that fixture's three signal arms is load-bearing rather than redundant. `ai-dlc-core-guard.sh`
+denies a consumer the in-place edit of an installed hook, so the surface these mutants
+perturb cannot change in a consumer tree: proving the assertions can fail is a question
+about a file only this repository edits.
+
+It also re-runs the subject fixture once per mutant, so shipping it would put several times
+the subject's runtime, in a unit the consumer cannot need, into the consumer's suite
+schedule -- the v0.230.0 defect, where a distribution-only battery became the reference
+consumer's suite pole.

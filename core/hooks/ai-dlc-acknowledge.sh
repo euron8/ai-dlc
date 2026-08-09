@@ -86,6 +86,35 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # with. The transcript is self-healing: whichever skill was invoked LAST is the
 # one in play. A session that runs /ai-dlc-update and then /ai-dlc resume is a
 # pipeline session again, and the pause gate applies to it in full.
+#
+# THREE SIGNALS, AND THEY ARE DISJOINT -- NONE OF THEM COVERS BOTH INVOCATION
+# PATHS. This is the whole of the defect the reference consumer filed as
+# PC-S331: the carve-out never fired on a run where the AGENT invoked the skill
+# rather than the operator typing it, so the first dispatch was denied every
+# time. Measured live, one headless session per arm, probe on PreToolUse:
+#
+#   the operator types /ai-dlc-update   marker PRESENT, no Skill tool_use exists
+#                                       at all -- a typed slash command loads the
+#                                       skill directly and calls no tool
+#   the agent calls Skill(ai-dlc-update)  marker NEVER written, not at the
+#                                       dispatch and not anywhere later in the
+#                                       session; and at the dispatch itself the
+#                                       transcript does not yet carry the
+#                                       tool_use line either (12 lines, both
+#                                       absent) -- it is flushed by the time the
+#                                       NEXT tool call runs (17 lines, present)
+#
+# So the transcript cannot answer for the agent-driven dispatch (nothing is
+# there yet) and the payload cannot answer for anything that is not a Skill call
+# (Agent/Task/Write carry no `.tool_input.skill`) -- and the updater's own design
+# is a fan-out of Agent calls, "dispatch ONE generic agent per file". Both are
+# required, and the marker arm stays because it is the ONLY signal a typed
+# invocation produces.
+#
+# THE PAYLOAD IS APPLIED AFTER THE SCAN, AND THE ORDER IS LOAD-BEARING. The
+# transcript is one tool call stale by construction, so on the dispatch that
+# switches skills it still names the PREVIOUS one. The payload is the current
+# call; the recency rule above means it wins.
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # Check 1: no active pipeline -> allow
@@ -103,16 +132,36 @@ TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 UPDATER_SESSION=0
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
-  # ONE scan, not two. The question is "whichever skill was invoked LAST", so the
-  # last line matching EITHER marker is the whole answer -- two separate greps
-  # each read the file to EOF (both take `tail -1`) to reconstruct by line number
-  # what a single alternation reads once and answers directly. The closing tag is
-  # part of both patterns, so `/ai-dlc` cannot match an `/ai-dlc-update` line.
-  LAST_SKILL=$(grep -oE '<command-name>/ai-dlc(-update)?</command-name>' "$TRANSCRIPT" 2>/dev/null | tail -1)
+  # STILL ONE SCAN, now over FOUR forms. The question is "whichever skill was
+  # invoked LAST", so the last line matching ANY marker is the whole answer --
+  # separate greps each read the file to EOF (all take `tail -1`) to reconstruct
+  # by line number what a single alternation reads once and answers directly.
+  #
+  # The closing tag is part of both command-name patterns and the closing QUOTE
+  # is part of both tool_use patterns, so `/ai-dlc` cannot match an
+  # `/ai-dlc-update` line in either family.
+  #
+  # THE TOOL_USE FORM IS STRUCTURAL, NOT A MENTION. `"name":"Skill","input":{` is
+  # the serialization of a real tool_use block; a transcript that merely QUOTES
+  # the string carries it inside a JSON string, where every quote is
+  # backslash-escaped and this pattern cannot match. Measured over 498 local
+  # transcripts: 69 carry a real Skill(ai-dlc*) tool_use, the pattern matches
+  # exactly those 69 and 0 others -- and the control is that the session which
+  # wrote this comment mentions the string four times and matches zero.
+  LAST_SKILL=$(grep -oE '<command-name>/ai-dlc(-update)?</command-name>|"name":"Skill","input":\{"skill":"ai-dlc(-update)?"' "$TRANSCRIPT" 2>/dev/null | tail -1)
   case "$LAST_SKILL" in
     *'/ai-dlc-update</command-name>') UPDATER_SESSION=1 ;;
+    *'"skill":"ai-dlc-update"')       UPDATER_SESSION=1 ;;
   esac
 fi
+
+# THE CURRENT CALL, which is newer than anything the transcript can hold. Only a
+# `Skill` payload carries this field; for every other tool it is empty and the
+# transcript verdict above stands unchanged.
+case "$(echo "$INPUT" | jq -r '.tool_input.skill // empty')" in
+  ai-dlc-update) UPDATER_SESSION=1 ;;
+  ai-dlc)        UPDATER_SESSION=0 ;;
+esac
 
 # -----------------------------------------------------------------------------
 # Check 2a: the adversarial cycle has STOPPED (Rule 8) -- THE TEETH

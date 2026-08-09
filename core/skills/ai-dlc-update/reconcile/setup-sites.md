@@ -192,6 +192,7 @@ core_manifest:
   - core/fixtures/wait-stale-deliverable/**
   - core/fixtures/whole-read-pool/**
   - core/fixtures/notify-hook-channel/**
+  - core/fixtures/updater-session-signals/**
 
 machinery:
   - core/skills/ai-dlc/core-manifest.md

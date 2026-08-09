@@ -260,6 +260,7 @@ core_manifest:
   - fixtures/apply-machinery-stamp/**
   - fixtures/layer-absorption-retire/**
   - fixtures/notify-hook-channel/**
+  - fixtures/updater-session-signals/**
 
 machinery:
   - core-manifest.md
