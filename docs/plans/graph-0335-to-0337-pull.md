@@ -79,7 +79,7 @@ you need a decision, when a premise here does not hold, and when you are done.
 | expected NEW warnings | **0**. `contract_version` stays 18; `W11` already fires 12/43 there and this range does not move it |
 | destructive defect live on graph today | **yes** — their installed `ledger-rotate.sh --apply` would archive `PC-S330`, a live entry |
 | open homing jobs | **0** — both landed in graph #900 |
-| consolidation pass | **scheduled** — target `carry-over-backlog.md`, 58 sprint-scoped headings against 3/1/0 for the other three |
+| consolidation pass | **run it** — target `carry-over-backlog.md`, §4. Nothing gates it |
 | consolidation residue | **32** byproduct files at the planning-artifacts area root. §4 drains them |
 
 **s302 HAS NOT STARTED.** `sprint: 302` in both `sprint-status.yaml` copies is what the roll-forward
@@ -417,75 +417,26 @@ section waits on the pull. What shipped:
   `s<N>/`. **You took that half already, in #900.**
 
 **WHAT HAS NEVER HAPPENED IS A RUN.** No sprint has executed on your tree since v0.319.0, so the
-changed step has never written a file here. Its fixture (`consolidation-residue`) covers it, and its
-red replay was verified drivable in the consumer layout as well as the distribution — but a fixture
-is not a pass.
+changed step has never written a file here. Its fixture covers it; a fixture is not a pass.
 
-**AND NOW IS THE RIGHT MOMENT TO RUN ONE — THE STEP SAYS SO IN ITS OWN WORDS.** An earlier revision
-of this section said to wait for s302's first pass, and that was wrong:
+### RUN A CONSOLIDATION PASS — target `_bmad-output/planning-artifacts/carry-over-backlog.md`
 
-> *"Operator-invoked, not part of the automatic pipeline… Run it at a quiescent point (between
-> sprints), not mid-pipeline."*
-> *"This step is operator-invoked at a QUIESCENT point — between sprints — so the snapshot may hold
-> a sprint that has closed, or one that has not started. Use the `sprint_id` the snapshot holds when
-> the pass runs."*
+**This is an instruction, not a recommendation, and nothing gates it.** Do not run a budget check, a
+threshold check or a size test to decide whether to proceed — the step is operator-invoked on demand
+and the operator has named the target. Work `steps/artifact-consolidation.md` end to end, Steps 1
+through 6.
 
-s301 is closed and s302 has not started, so your tree is exactly the quiescent point the step names.
-**The §1 entanglement that revision claimed does not exist either:** `sprint-status.sh sprint-id`
-returns **302** today, and it would return 302 whether or not the early roll had happened — before
-the roll the canonical read `sprint: 301 / status: done`, and rule 3 returns `sprint + 1`. The roll
-does not change the slot a pass would write to.
+**IT WRITES TO `s302/`**, because `sprint-id` returns 302 and the step says to use the `sprint_id`
+the snapshot holds when the pass runs. That creates `_bmad-output/planning-artifacts/s302/`, which
+today does not exist — and the parent plan uses that directory's absence as its evidence that s302
+has not started. **After this pass that instrument is spent**; the sprint still has not started, and
+the empty `stories:` mapping is what says so afterwards. Say this in your report so nobody reads the
+new directory as a kickoff.
 
-### RUN A PASS. Target: `carry-over-backlog.md`. Operator direction 2026-08-09
-
-**BEING UNDER THRESHOLD IS NOT A REASON TO DEFER, and an earlier revision of this section treated
-it as one.** The step's invocation rule is *"the operator runs it on demand, naming the target
-artifact"*; the Rule 25(d) threshold is what makes the retro size-audit **recommend** a pass, not a
-precondition for running one. Two reasons to run it here: the v0.319.0 change has never executed on
-any consumer, and this is the quiescent point the step asks for.
-
-**THE TARGET IS `_bmad-output/planning-artifacts/carry-over-backlog.md`**, and the choice is
-measured rather than "it is the biggest". It carries the accretion signature item 19 identified —
-per-sprint narrative written into a sprint-independent file — and it carries it alone:
-
-```
-sprint-scoped headings (^#{2,4} .*s<N>)
-  carry-over-backlog.md   58      <- the target
-  product-brief.md         3      the one #900 drained
-  docs/architecture.md     1
-  prd.md                   0
-  sprint-status.yaml       0      control: a file with no sprint narrative by construction
-```
-
-1647 lines, 42554 tok, the largest of the four. **Its no-loss destination already exists** —
-`carry-over-backlog-archive.md` — so Step 2's history draft has somewhere to append.
-
-**IT WILL WRITE TO `s302/`**, because `sprint-id` returns 302 and the step says to use the
-`sprint_id` the snapshot holds when the pass runs. **That creates
-`_bmad-output/planning-artifacts/s302/`, which today does not exist** — and the parent plan uses
-exactly that directory's absence as its evidence that s302 has not started. **After this pass that
-instrument is spent**; the sprint still has not started, and the `stories:` mapping being empty is
-what says so afterwards. Say this in your report so nobody reads the new directory as a kickoff.
-
-**Do not consolidate `pipeline-continuation-log.md`.** It is the one `OVER` row on your tree —
-31457 tok, **314%** of its 10000 budget — and its remedy is `rotate`. The step excludes it by
+**Do not consolidate `_bmad-output/pipeline-continuation-log.md`.** The step excludes it by
 name-class: *"Not a consolidation target: `gate-log.md` (and any similar append-only log). Logs are
-bounded by rotation, not consolidation."* It was 309% when the previous runbook called it unrelated,
-so it is growing, and rotating it is separate real work.
-
-**THE REST OF THE POOL, for the record and not as a gate:** `ok`, 109623 tok, 33% of 330000
-(`carry-over-backlog` 42554, `prd` 32619, `architecture` 21524, `product-brief` 12926). **Record the
-after-reading; do not make a drop the acceptance criterion.** A pass run for fidelity rather than
-for a breach may reduce very little, and a done-when that requires the pool to fall would fail a
-correct pass.
-
-**ONE ROW IS `OVER` TODAY AND IT IS NOT A CONSOLIDATION TARGET.**
-`_bmad-output/pipeline-continuation-log.md`, **31457 tok, 314% of its 10000 budget, remedy
-`rotate`**. The step excludes it by name-class: *"Not a consolidation target: `gate-log.md` (and any
-similar append-only log). Logs are bounded by rotation, not consolidation."* It was 309% when the
-previous runbook called it unrelated, so it is growing. **Rotating it is real outstanding work on
-your side and it is not part of this pull** — named here so it stops reading as background noise in
-every budget run.
+bounded by rotation, not consolidation."* It is over its budget and its remedy is `rotate`, which is
+separate work and not part of this pull.
 
 ### The 32, re-derived 2026-08-09, with the instrument warnings that decide the method
 
@@ -560,7 +511,7 @@ the same discipline the artifact-path migration used.
 **Re-run the collision check before moving anything** — 13 byproducts are already in slots and a
 second pass at any of these basenames would change that.
 
-### Done-when for the consolidation PASS — none of these requires a size reduction
+### Done-when for the consolidation PASS
 
 - **Step 3's no-loss gate passed.** Every Step 1 manifest entry appears in exactly one of the two
   drafts; no Rule 13 locked requirement left the live draft. The step makes an unaccounted entry a
@@ -574,7 +525,7 @@ second pass at any of these basenames would change that.
 - **Rule 20 validation passed** on the consolidated live draft.
 - **`validate-artifact-paths.sh` still PASS**, and `s302/` is a conforming slot so it should be
   untouched by this.
-- **The pool reading before and after, reported, not gated.** 109623 tok / 33% before.
+- **The whole-read pool reading after the pass, reported.**
 
 ### Done-when for the §4 re-home
 
@@ -595,12 +546,12 @@ second pass at any of these basenames would change that.
 - **Rotating `pipeline-continuation-log.md`** (314% of budget, remedy `rotate`). Real, yours, and
   not this pull's — and explicitly NOT a consolidation target.
 - **Consolidating the other three artifacts.** One pass, one named target, per the step's own
-  invocation rule. The other three carry 3, 1 and 0 sprint-scoped headings.
+  invocation rule.
 - **The `sprint-status.sh` freeze-path fix.** Core's, reported, not in this range. §1.
 - **Consumer-side ledger items**, none of which this pull touches: `PC-S329-NAMED-UPSTREAM-…`'s
   disposition, `PC-S312`'s receipt (it reports `NEEDS-REVIEW` on every pull until re-anchored at
   `docs/retro/s249/retro.md`), the `921.`/`20.` retire-or-refile call, the 48 refused artifact-path
-  migrations, and the 33 byproduct files at the area root.
+  migrations. (The byproducts are NOT on that list — they are §4 and you are doing them.)
 - **Both homing jobs.** DONE in graph #900; the brief went 1030 → 648 lines.
 
 ---
