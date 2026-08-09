@@ -56,12 +56,13 @@ checked examples: `layer-drift.sh:648` was the env-key guard and is now other co
 SHIPPED, so they are records of why a thing was done, not instructions.
 
 **EVERY `path:line` ABOVE `## Context` IS RE-CHECKED AT EACH HANDOFF. Re-run 2026-08-09 after
-v0.341.0: 63 distinct citations — 58 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
-CONSUMER.** Prior readings were 62/57/0/5 after the 0.335.0 → 0.337.0 runbook landed, 54/49/0/5 after v0.337.0, the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous.
-**AND THE READING THAT MATTERS THIS TIME IS NOT THE COUNT: v0.341.0 moved all four of item 2's
-citations off their subjects while leaving every one of them in range**, so this loop went green
-over four stale citations in the same run that made them stale. The current subjects are written
-into item 2. That is the second recorded instance, after v0.320.0 did it to item 27. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
+v0.344.0: 66 distinct citations — 61 resolve in range, 0 past end-of-file, 0 ambiguous, 5 into the
+CONSUMER.** Prior readings were 63/58/0/5 after v0.341.0, 62/57/0/5 after the 0.335.0 → 0.337.0 runbook landed, 54/49/0/5 after v0.337.0, the same 50/45/0/5 after v0.331.0 and after v0.330.0, then 51/46/0/5 (before that handoff's own edits changed it), 41/36/0/5, and 40/34/5/3-ambiguous.
+**AND THE READING THAT MATTERS IS NOT THE COUNT: v0.344.0 moved all three of item 6's citations off
+their subjects while leaving every one of them in range, and v0.341.0 did the same to all four of
+item 2's**, so this loop went green over stale citations in the same run that made them stale, twice
+in two releases. The current subjects are written into item 6 and item 2. Those are the third and
+second recorded instances, after v0.320.0 did it to item 27. **That first figure moving while this paragraph was being written is the drift the sentence below describes.** **Do not carry these
 numbers; re-run the loop.** It is one pass: extract
 `[A-Za-z0-9_./-]+\.(md|sh|json|yaml):[0-9]+` from everything above `## Context`, resolve each
 against `git ls-files`, and compare the line number to `wc -l`. Report the count as its own
@@ -159,9 +160,11 @@ this side proposed closing a live entry). **Neither was visible from this side w
 the measurement against their tree**, which is the standing lesson: a report that contradicts a
 figure here is a measurement, not a mistake to correct.
 
-**GRAPH IS CURRENT AT `0.341.0 / 899411a` ON ALL FOUR FIELDS, read 2026-08-09 after their #906.**
-Two releases have landed here since (v0.342.0, v0.343.0), so a pull is owed again and no runbook
-exists for it yet.
+**GRAPH IS CURRENT AT `0.341.0 / 899411a` ON ALL FOUR FIELDS, re-read 2026-08-09 and unchanged, read 2026-08-09 after their #906.**
+**Read the stamp; do not carry that sha** — the derivation is one line below and this paragraph has
+named a wrong one twice. **THREE releases have landed here since** (v0.342.0, v0.343.0, v0.344.0),
+so a pull is owed again and **no runbook exists for it yet**. Whether to write one is the operator's
+call and is not scheduled anywhere in this file.
 
 **GRAPH'S STAMP — READ IT, DO NOT CARRY IT.** Every prior revision of this paragraph named a
 version that was wrong within a day; the derivation is the durable part.
@@ -590,11 +593,50 @@ item 16, item 17, item 18 and item 23c.**
 
 **ITEMS 1 AND 2 CLOSED 2026-08-09** — 1 without a release, because re-measuring found its subject
 already delivered, and 2 as v0.341.0. **THE PULL THEN RAN AND RETURNED THREE NEW DEFECTS, which is
-the channel this list has been fed by for the last eight releases.** Two shipped the same day
-(v0.342.0 #502, v0.343.0 #503). **The third is item 6 below and it is the only live item in this
-file.** Item 5 remains OPTIONAL and unscheduled.
+the channel this list has been fed by for the last eight releases.** All three have now shipped
+(v0.342.0 #502, v0.343.0 #503, v0.344.0 #505). Item 5 remains OPTIONAL and unscheduled.
 
-6. **`ai-dlc-acknowledge.sh`'s updater carve-out never fires on an agent-driven run — AND THE
+**THERE IS NO LIVE ITEM IN THIS FILE. What is outstanding is a PULL — graph is at `0.341.0` and
+three releases have landed here since — and no runbook exists for it.** Writing one is the
+operator's call; nothing in this file schedules it. **Do not read the empty list as "this plan is
+finished"**: every one of the last nine releases entered through the consumer's completion report,
+so the next item arrives when that pull runs.
+
+6. **~~`ai-dlc-acknowledge.sh`'s updater carve-out never fires on an agent-driven run~~ — DONE
+   2026-08-09. v0.344.0 (#505). THE FILED CAUSE WAS RIGHT AND THIS ITEM'S OWN COUNTER-EVIDENCE WAS
+   WRONG.** The item held the fix on *"66 of 66 local sessions carrying a `Skill(ai-dlc-update)`
+   tool_use also carry the human `<command-name>` marker, zero without"*. Re-derived over the same
+   corpus, matching the tool_use as a STRUCTURED block (a `tool_use` content block whose `name` is
+   `Skill`) rather than as two strings anywhere in one file: **66 carry the tool_use and 10 of them
+   carry no marker at all**, eight of those carrying only `<command-name>/clear</command-name>`.
+   **Two of the ten contain the hook's own grep PATTERN quoted as text**, which is one way a looser
+   match manufactures the agreement this item recorded.
+
+   **AND THE LIVE CAPTURE FOUND A THIRD THING NEITHER CANDIDATE MECHANISM PREDICTED**, which is why
+   the item was right to demand it. A PreToolUse probe over two headless sessions, one per
+   invocation path: a typed `/ai-dlc-update` writes the marker and produces **no `Skill` tool_use at
+   all**; an agent-driven dispatch writes the marker **never**, and at that dispatch the transcript
+   does not yet carry the tool_use line either (12 lines, both absent), which is flushed by the next
+   tool call (17 lines, present). Control: the probe reads the marker on the typed arm, so the
+   absences are real.
+
+   So the fix is THREE disjoint arms, not one: `.tool_input.skill` for the dispatch, the serialized
+   tool_use ORed into the transcript scan for the fan-out after it, and the `<command-name>` arm
+   kept because it is the only signal a typed run produces. See §*What the PC-S331 carve-out
+   measured*.
+
+   **AND v0.344.0 MOVED ALL THREE OF THE ORIGINAL ITEM'S CITATIONS OFF THEIR SUBJECTS WHILE LEAVING
+   EVERY ONE OF THEM IN RANGE** — the third recorded instance of the failure the citation-count loop
+   is structurally unable to see, after v0.320.0 did it to item 27 and v0.341.0 to item 2. **The
+   subjects today, found by grepping for them:** the transcript scan is
+   `core/hooks/ai-dlc-acknowledge.sh:151` (it was `:111`), and the two consumption sites are `:200`
+   and `:396` (they were `:151` and `:347`). The payload arm, which did not exist when the item was
+   written, is at `:161`. **Do not re-cite from this paragraph either; it is a dated reading.**
+
+   Original item text follows, unedited, because its instinct — do not write the fix until the
+   mechanism is established — is what found both errors.
+
+   **`ai-dlc-acknowledge.sh`'s updater carve-out never fires on an agent-driven run — AND THE
    FILED CAUSE IS NOT ESTABLISHED. Establish the mechanism BEFORE writing the fix.**
 
    **What is reported.** `PC-S331` (the acknowledge hook's updater carve-out being unreachable via
@@ -1774,6 +1816,70 @@ polling. Say something when you need a decision, when you hit a premise that doe
 when you are done — including when "done" means you stopped early. **This instruction is carried
 forward into every plan in this repo and is enforced by `scripts/validate-plan-shape.sh`; a new
 plan that omits it fails the build.**
+
+## What the PC-S331 carve-out measured (the filed cause was right; the refutation written here was the wrong measurement)
+
+**v0.344.0 (#505).** Subject: `core/hooks/ai-dlc-acknowledge.sh`'s `/ai-dlc-update` exemption from
+the Rule 29 pause deny.
+
+**THE ITEM HELD THE FIX ON A ZERO, AND THE ZERO WAS AN ARTEFACT OF HOW THE TOOL_USE WAS MATCHED.**
+It recorded 66 of 66 sessions carrying both signals and none carrying the tool_use alone, and
+concluded the reported cause was unconfirmed. Re-derived by parsing each transcript line and asking
+for a `tool_use` content block whose `name` is `Skill` and whose `input.skill` is `ai-dlc-update` —
+rather than for the two strings anywhere in one file — the same corpus gives **66 with the tool_use,
+10 of them with no `<command-name>/ai-dlc-update</command-name>` anywhere in the session**. Eight of
+the ten carry only `<command-name>/clear</command-name>`. **Two carry the hook's own grep pattern as
+literal text**, `<command-name>/ai-dlc(-update)?</command-name>`, which a substring match scores as
+a marker.
+
+**THE CONTROL IS THE OTHER 56**, found by the same grep in the same pass, so the ten are a real
+absence and not a broken pattern.
+
+**THE LIVE CAPTURE THE ITEM DEMANDED FOUND WHAT NEITHER CANDIDATE MECHANISM PREDICTED.** A
+PreToolUse probe recording, at hook time, the payload keys and whether the transcript then carried
+each signal; two headless sessions, one per invocation path:
+
+```
+operator types /ai-dlc-update, at the next tool call
+   marker=present   tooluse_line=missing   (a typed slash command calls no tool at all)
+agent calls Skill(ai-dlc-update), at that dispatch
+   marker=missing   tooluse_line=missing   lines=12   tool_input={"skill":"ai-dlc-update"}
+the same session, at the next tool call
+   marker=missing   tooluse_line=present   lines=17
+```
+
+Row 1 is the control for rows 2 and 3. The filed cause — the marker is never written for an
+agent-driven run — is CONFIRMED, and the read-before-write alternative is refuted: the marker never
+arrives, not late and not at all. **What neither reading predicted is row 2's second column.** At
+the moment of the first dispatch the transcript carries no session-level signal whatsoever, because
+the tool_use line for the call being denied has not been flushed yet — so a transcript arm keyed on
+the tool_use, which the item named as the material for the second fix, cannot cover the dispatch
+either. Only the payload can.
+
+**SO THE THREE SIGNALS ARE DISJOINT AND ALL THREE ARE LOAD-BEARING**, which the sibling mutation
+battery asserts one arm at a time: `.tool_input.skill` for the dispatch, the serialized tool_use for
+the updater's own per-file `Agent` fan-out (an `Agent` payload carries no skill field), and the
+`<command-name>` marker for a typed session. The payload is applied AFTER the transcript scan
+because the transcript is one tool call stale by construction and a `Skill(ai-dlc)` resume must
+override an updater tool_use earlier in the same session.
+
+**THE NEW TRANSCRIPT PATTERN IS STRUCTURAL AND ITS FALSE-POSITIVE SET WAS MEASURED BEFORE IT
+SHIPPED.** `"name":"Skill","input":{"skill":"…"` can only appear as a real tool_use block: a
+transcript that QUOTES the string carries it inside a JSON string with every quote
+backslash-escaped. Over 498 local transcripts it matched exactly the 69 carrying a real
+`Skill(ai-dlc*)` tool_use and **0** others, the control being that the session which did the work
+mentions the string four times and matches zero.
+
+**THE CARVE-OUT HAD NO FIXTURE**, in either direction, which is the condition under which an arm
+that cannot fire reads exactly like one that passed. `updater-session-signals` now covers all three
+paths plus five negative arms.
+
+**AND THE BATTERY BEHIND IT PROVED NOTHING ON ITS FIRST RUN, GREEN.** The subject fixture reads its
+mutant seam from an `AI_DLC_USS_HOOK` environment variable and scrubs every `AI_DLC_*` variable for
+I10 hermeticity — written in that order, the scrub unset the seam, every mutant exercised the REAL
+hook, and all five came back with zero reds, which the harness scores as five survivals. **It was
+the unmutated control that made it legible**: the control was green too, and a control that agrees
+with every mutant is the signal that the harness, not the code, is what the run measured.
 
 ## What item 2 measured (the item was right, and the trap was in how the probe was built)
 
