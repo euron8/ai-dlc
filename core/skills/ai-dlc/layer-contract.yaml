@@ -612,6 +612,19 @@ clauses:
       therefore survives an invocation that silences every drift-keyed arm. Keeping the shadow
       is a recordable verdict -- a consumer may want it for its own reasons -- so what blocks is
       the absence of an answer, never the answer itself.
+      THE ROW STATES THE SURPLUS AS A NUMBER, and that is the answer to a report this clause
+      could not otherwise satisfy. Core may supersede ONE ARM of an anchor while the entry's span
+      under it carries lines core does not have; the reported case was 119 of them. AN ARM IS NOT
+      ADDRESSABLE, measured rather than assumed: `override_supersessions` keys on
+      `<file>#<anchor>` and has no span vocabulary, the real case's 231-line core span carries
+      exactly ONE sub-heading with the superseded machinery on both sides of it, and the second
+      superseded arm does not appear in the shadowed file at all. Making an arm addressable would
+      mean restructuring core's rule prose around a declaration format. So the row compares the
+      entry's span against core's AT THE ENTRY'S OWN `base_sha` -- which is what an override
+      froze -- and names the count of lines that appear nowhere in core's. An unquantified warning
+      beside a concrete instruction is one the operator reads past; a number is a decision. When
+      either span is unreadable the row SAYS the surplus could not be measured rather than falling
+      back to the qualitative sentence alone.
     prose_home: core/skills/ai-dlc/overrides/README.md
     enforcer: core/skills/ai-dlc-update/reconcile/layer-drift.sh
     code: OVERRIDE-SUPERSEDED

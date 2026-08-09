@@ -1065,6 +1065,52 @@ while IFS= read -r f; do
         sup_adj="${ADJ_ROW_TOKEN}=$(adj_verdict "$sup_dg" 2>/dev/null | head -1) :: "
       fi
 
+      # THE SURPLUS, MEASURED. Every emit below already said, in prose, that narrowing or
+      # retiring "releases every unrelated line that anchor's span froze at base_sha". It never
+      # said HOW MANY, and an unquantified warning beside a concrete instruction reads as
+      # boilerplate -- the operator does the concrete thing.
+      #
+      # WHY THIS IS THE FIX RATHER THAN AN ARM-GRAINED JOIN, which is what the consumer's report
+      # asked for. Their case: core superseded ONE ARM of `steps/retro.md#4a. Close-Out Sweep`
+      # (the `--fail-on` machinery and a strikethrough posture) while their entry's span under
+      # that anchor carries 119 lines core does not have. The clause asks about the ANCHOR; core's
+      # change was to an arm inside it. So the obvious remedy is "declare the ARM" -- and an arm
+      # IS NOT ADDRESSABLE, measured rather than assumed:
+      #
+      #   * `override_supersessions` keys on `<file>#<anchor>`; there is no span vocabulary, and
+      #     adding one requires the span to exist in core's prose.
+      #   * core's 4a is 231 lines with exactly ONE sub-heading, at offset 207. `--fail-on` and
+      #     `warn-only` occur BOTH inside and outside it, so no sub-anchor names the arm.
+      #   * `strikethrough` does not appear in that span AT ALL -- the second superseded arm lives
+      #     in `validate-artifact-budget.sh`, so no anchor in the shadowed file could name it.
+      #
+      # Making an arm addressable therefore means restructuring core's rule prose around a
+      # declaration format. What the operator actually needs is the size of what they are about to
+      # drop, and that is derivable today from inputs this loop already holds.
+      #
+      # THE COMPARISON IS AGAINST base_sha, NOT THEIRS, and that is the whole point: an override
+      # replaces its WHOLE section, so what it froze is what core said when the entry was written.
+      # Blank lines are excluded from the surplus and counted in neither total.
+      #
+      # UNMEASURABLE IS SAID OUT LOUD. If either span is unreadable the clause states that instead
+      # of falling back to the old qualitative sentence -- a warning that quietly loses its number
+      # reads exactly like one that never had a subject.
+      sup_measure() { # $1 "<core-rel-file>#<anchor>" -> a sentence, always non-empty
+        local a fpart es cs en cn on
+        fpart="${1%%#*}"; a="${1#*#}"
+        es="$(section_of "$a" < "$f" 2>/dev/null)"
+        cs="$(git_show "$base_sha" "$(dist_path "$fpart")" 2>/dev/null | section_of "$a" 2>/dev/null)"
+        if [ -z "$es" ] || [ -z "$cs" ]; then
+          printf '%s' "The surplus under that anchor could NOT be measured here (this entry's span or core's span at ${base_sha} was unreadable), so decide it by reading both rather than by assuming the spans match."
+          return 0
+        fi
+        en="$(printf '%s\n' "$es" | grep -cv '^[[:space:]]*$')"
+        cn="$(printf '%s\n' "$cs" | grep -cv '^[[:space:]]*$')"
+        on="$(printf '%s\n' "$es" | grep -v '^[[:space:]]*$' | grep -Fxv -f <(printf '%s\n' "$cs") | grep -c .)"
+        printf '%s' "MEASURED: your span under that anchor is ${en} non-blank line(s) against core's ${cn} at ${base_sha}, and ${on} of yours appear nowhere in core's -- that is what this action drops out of the rendered rulebook. If those lines are yours and you still want them, the answer is \`still-additive\` with a reason, not a narrowing you undo next sprint."
+      }
+      sup_surplus="$(sup_measure "$sup_raw")"
+
       # ONE ROW PER SUPERSEDED ANCHOR, which is why the old `break` is gone. Two anchors of one
       # entry can be superseded by two different core releases needing two different keys;
       # collapsing them to one row would hand the operator one of the two actions and drop the
@@ -1072,17 +1118,17 @@ while IFS= read -r f; do
       if [ "$ent_nparts" -gt 1 ]; then
         if [ -n "$s_env" ]; then
           emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-            "${sup_adj}replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+            "${sup_adj}replaces_with=${s_env} :: retire_anchor=${sup_raw} :: core ${s_since} provides what this entry's \`${sup_raw}\` shadow was written to work around, so that ANCHOR can be dropped rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value), then remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. ${sup_surplus} The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
         else
           emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-            "${sup_adj}retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+            "${sup_adj}retire_anchor=${sup_raw} :: core ${s_since} ADOPTED what this entry says under \`${sup_raw}\`, so that ANCHOR can be dropped rather than re-adopted -- and there is nothing to configure first: remove \`${sup_raw}\` from this entry's shadows: and leave its other $(( ent_nparts - 1 )) anchor(s) exactly as they are. DO NOT run readopt-override.sh --stamp retire on this entry: that deletes the whole file, and core has superseded only ${sup_raw} of its ${ent_nparts} anchors. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Narrowing still releases every unrelated line that anchor's span froze at base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. ${sup_surplus} The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
         fi
       elif [ -n "$s_env" ]; then
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-          "${sup_adj}replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+          "${sup_adj}replaces_with=${s_env} :: core ${s_since} provides what this entry was written to work around, so it can be RETIRED rather than re-adopted: set ${s_env} in .claude/settings.json (see override_supersessions in layer-contract.yaml for how to derive its value) and run readopt-override.sh --stamp retire. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. ${sup_surplus} The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       else
         emit OVERRIDE-SUPERSEDED "$entry" "$tgt" \
-          "${sup_adj}core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
+          "${sup_adj}core ${s_since} ADOPTED what this entry says, so it can be RETIRED rather than re-adopted -- and there is nothing to configure first: run readopt-override.sh --stamp retire on its own. See override_supersessions in layer-contract.yaml for the reason core recorded and the verify: command that checks the adoption landed. Retiring it also releases every unrelated line this entry froze at its base_sha -- an override replaces its WHOLE section, so those lines stop shadowing away later core fixes. ${sup_surplus} The clause is ADJUDICATED, so this row needs a RECORDED verdict before the pull applies -- and keeping the shadow IS one of them: a consumer that still wants it for its own reasons records \`still-additive\` with a reason and the block clears. What is refused is proceeding without an answer, never the answer."
       fi
     done <<< "$(shadow_parts "$s_shadows")"
   done <<< "$(supersessions_of "$THEIRS")"

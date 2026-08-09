@@ -103,6 +103,17 @@ status that stops `apply`); **WARN** reports and never blocks.
   `shadows:` and leave the rest byte-untouched, because that stamp deletes the whole file and
   core has superseded only one of the anchors. The row tells you which case you are in, and
   `apply.sh` renders the action rather than the choice.
+  **And it tells you the SIZE of what you are about to drop, because core may have superseded one
+  ARM of an anchor while your span under it carries lines core does not have.** The row compares
+  your span against core's *at your entry's own `base_sha`* — that is what an override froze — and
+  names how many of your lines appear nowhere in core's. On the consumer that reported this, the
+  count was 119, against a remedy that read like housekeeping. If those lines are yours and you
+  still want them, the answer is `still-additive` with a reason, not a narrowing you undo next
+  sprint. **Do not expect core to declare the arm instead**: `override_supersessions` names a
+  file and an anchor, the real case's core span carries one sub-heading with the superseded
+  machinery on both sides of it, and the other superseded arm is not in that file at all — so the
+  number is the mechanism, and the reading is yours. If either span cannot be read the row says
+  so rather than going quiet.
 
 - **[LC-O13]** WARN — no two entries declare the same (target file, normalised anchor). Both
   bodies claim that span and precedence picks one silently, so which one governs is an ordering
